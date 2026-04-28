@@ -7,6 +7,9 @@ import { displayCode, displayText, formatDate } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
 
 const SEASON_CODE = "UEHM-S11";
+const OPERATIONAL_MONTH_START = "2025-10";
+const OPERATIONAL_MONTH_END = "2026-06";
+const OUTLIER_RECAP_LIMIT = 50;
 const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
 
 type TopMentorRow = {
@@ -36,6 +39,10 @@ type RecentRecapRow = MentoringRecap & {
   mentor?: Person;
 };
 
+type OutlierRecapRow = RecentRecapRow & {
+  profilePersonId: string | null;
+};
+
 function normalizeStatus(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -62,6 +69,14 @@ function addMonths(month: string, delta: number) {
   return date.toISOString().slice(0, 7);
 }
 
+function operationalMonths() {
+  const months: string[] = [];
+  for (let month = OPERATIONAL_MONTH_START; month <= OPERATIONAL_MONTH_END; month = addMonths(month, 1)) {
+    months.push(month);
+  }
+  return months;
+}
+
 function monthDiff(laterMonth: string, earlierMonth: string) {
   const later = monthDate(laterMonth);
   const earlier = monthDate(earlierMonth);
@@ -79,6 +94,15 @@ function monthFromDate(value: unknown) {
 
 function eventMonth(event: Event) {
   return monthFromDate(event.starts_at);
+}
+
+function isOperationalMonth(month: unknown) {
+  const value = String(month ?? "").trim();
+  return /^\d{4}-\d{2}$/.test(value) && value >= OPERATIONAL_MONTH_START && value <= OPERATIONAL_MONTH_END;
+}
+
+function isOutlierRecap(recap: MentoringRecap) {
+  return !isOperationalMonth(recap.meeting_month);
 }
 
 function percent(numerator: number, denominator: number) {
@@ -99,7 +123,7 @@ function selectedSearchMonth(value: string | string[] | undefined) {
 
 function sanitizeMonthParam(value: string | string[] | undefined) {
   const raw = selectedSearchMonth(value);
-  const match = String(raw ?? "").trim().match(/^(\d{4}-\d{2})/);
+  const match = String(raw ?? "").trim().match(/^(\d{4}-(0[1-9]|1[0-2]))/);
   return match?.[1] ?? null;
 }
 
@@ -128,14 +152,22 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   ].filter(Boolean);
 
   const validRecaps = data.recaps.data.filter(isValidRecapActivity);
-  const availableMonths = Array.from(new Set(validRecaps.map((recap) => recap.meeting_month).filter((month): month is string => /^\d{4}-\d{2}$/.test(String(month)))))
-    .sort((a, b) => b.localeCompare(a));
+  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
+  const outlierRecaps = validRecaps.filter(isOutlierRecap);
+  const seasonMonths = operationalMonths();
+  const validEventMonths = data.events.data.map(eventMonth).filter((month): month is string => isOperationalMonth(month));
+  const monthsWithOperationalData = new Set([
+    ...validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)),
+    ...validEventMonths
+  ]);
+  const availableMonths = seasonMonths.filter((month) => monthsWithOperationalData.has(month)).sort((a, b) => b.localeCompare(a));
   const nowMonth = currentMonth();
   const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
-  const defaultMonth = latestNonFutureMonth ?? availableMonths[0] ?? nowMonth;
-  const monthOptions = availableMonths.length ? availableMonths : [defaultMonth];
+  const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
+  const defaultMonth = latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const monthOptions = (availableMonths.length ? availableMonths : seasonMonths).sort((a, b) => b.localeCompare(a));
   const requestedMonth = sanitizeMonthParam(searchParams?.month);
-  const selectedMonth = requestedMonth && monthOptions.includes(requestedMonth) ? requestedMonth : defaultMonth;
+  const selectedMonth = requestedMonth ?? defaultMonth;
   const previousMonth = addMonths(selectedMonth, -1);
 
   const peopleById = keyById(data.people.data);
@@ -168,11 +200,11 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const registeredAbsentCount = eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "registered_absent").length;
 
   const recapByMonth = Array.from(
-    validRecaps.reduce((counts, recap) => {
-      if (!recap.meeting_month) return counts;
+    validOperationalRecaps.reduce((counts, recap) => {
+      if (!recap.meeting_month || !isOperationalMonth(recap.meeting_month)) return counts;
       counts.set(recap.meeting_month, (counts.get(recap.meeting_month) ?? 0) + 1);
       return counts;
-    }, new Map<string, number>())
+    }, new Map<string, number>(seasonMonths.map((month) => [month, 0])))
   )
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, value]) => ({ name, value }));
@@ -240,6 +272,20 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     .sort((a, b) => String(b.meeting_date ?? "").localeCompare(String(a.meeting_date ?? "")))
     .slice(0, 30);
 
+  const outlierRecapRows: OutlierRecapRow[] = outlierRecaps
+    .map((recap) => {
+      const mentee = recap.mentee_person_id ? peopleById.get(recap.mentee_person_id) : undefined;
+      const mentor = recap.mentor_person_id ? peopleById.get(recap.mentor_person_id) : undefined;
+      return {
+        ...recap,
+        mentee,
+        mentor,
+        profilePersonId: recap.mentee_person_id ?? recap.mentor_person_id ?? null
+      };
+    })
+    .sort((a, b) => String(a.meeting_month ?? "").localeCompare(String(b.meeting_month ?? "")) || String(b.meeting_date ?? "").localeCompare(String(a.meeting_date ?? "")))
+    .slice(0, OUTLIER_RECAP_LIMIT);
+
   const healthData = [
     { name: "Active tháng này", value: activeMenteeCount },
     { name: "Silent 1 tháng", value: silentOneMonthCount },
@@ -262,6 +308,13 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
           </p>
         </div>
       </Card>
+
+      {outlierRecaps.length ? (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Có dữ liệu recap nằm ngoài khung mùa vận hành, cần rà soát thủ công. Số recap cần rà soát:{" "}
+          <span className="font-semibold">{outlierRecaps.length}</span>.
+        </div>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Số recap trong tháng" value={selectedRecaps.length} />
@@ -337,6 +390,39 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
           ]}
         />
       </section>
+
+      {outlierRecaps.length ? (
+        <section className="mt-6">
+          <h2 className="mb-3 text-lg font-semibold text-vam-ink">Recap cần rà soát ngày/tháng</h2>
+          <SimpleTable
+            rows={outlierRecapRows}
+            columns={[
+              { key: "meeting_date", label: "meeting_date", render: (row) => formatDate(row.meeting_date) },
+              { key: "meeting_month", label: "meeting_month", render: (row) => displayText(row.meeting_month) },
+              { key: "mentee", label: "mentee", render: (row) => displayText(row.mentee?.full_name ?? row.mentee?.email_primary) },
+              { key: "mentor", label: "mentor", render: (row) => displayText(row.mentor?.full_name ?? row.mentor?.email_primary) },
+              { key: "recap_url", label: "recap_url", render: (row) => <ExternalLinkButton href={row.recap_url} label="Mở recap" /> },
+              { key: "recap_note", label: "recap_note", render: (row) => displayText(row.recap_note) },
+              { key: "admin_notes", label: "admin_notes", render: (row) => displayText(row.admin_notes) },
+              {
+                key: "profile",
+                label: "profile link",
+                render: (row) =>
+                  row.profilePersonId ? (
+                    <Link href={`/people/${row.profilePersonId}`} className="text-sm font-medium text-vam-green">
+                      Xem profile
+                    </Link>
+                  ) : (
+                    "-"
+                  )
+              }
+            ]}
+          />
+          {outlierRecaps.length > OUTLIER_RECAP_LIMIT ? (
+            <p className="mt-2 text-sm text-slate-500">Đang hiển thị 50 recap đầu tiên cần rà soát.</p>
+          ) : null}
+        </section>
+      ) : null}
     </>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 function sanitizeMonthParam(value: string | null) {
-  const match = String(value ?? "").trim().match(/^(\d{4}-\d{2})/);
+  const match = String(value ?? "").trim().match(/^(\d{4}-(0[1-9]|1[0-2]))/);
   return match?.[1] ?? null;
 }
 
@@ -13,6 +13,7 @@ export function MonthSelector({ months, selectedMonth }: { months: string[]; sel
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentMonthParam = searchParams.get("month");
+  const selectedMonthIsInOptions = months.includes(selectedMonth);
 
   useEffect(() => {
     const sanitizedMonth = sanitizeMonthParam(currentMonthParam);
@@ -34,6 +35,11 @@ export function MonthSelector({ months, selectedMonth }: { months: string[]; sel
             {month}
           </option>
         ))}
+        {!selectedMonthIsInOptions ? (
+          <optgroup label="Tháng cần rà soát">
+            <option value={selectedMonth}>{selectedMonth}</option>
+          </optgroup>
+        ) : null}
       </select>
     </label>
   );
