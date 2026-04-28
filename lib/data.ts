@@ -152,6 +152,39 @@ export async function getEventParticipationsByPersonId(personId: string) {
   return { data: (data ?? []) as EventParticipation[], error: null };
 }
 
+export async function getOperationsData() {
+  const [
+    seasons,
+    people,
+    mentees,
+    matches,
+    recaps,
+    events,
+    eventParticipations
+  ] = await Promise.all([
+    selectAllTable<Season>("seasons", "id,code,name"),
+    selectAllTable<Person>("people", "id,full_name,email_primary"),
+    selectAllTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code"),
+    selectAllTable<Match>("matches", "id,season_id,status,match_type,mentor_person_id,mentee_person_id"),
+    selectAllTable<MentoringRecap>(
+      "mentoring_recaps",
+      "id,season_id,match_id,mentor_person_id,mentee_person_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,meeting_type,captured_by,issue_flag,status,admin_notes"
+    ),
+    selectAllTable<Event>("events", "id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes"),
+    selectAllTable<EventParticipation>("event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in")
+  ]);
+
+  return {
+    seasons,
+    people,
+    mentees,
+    matches,
+    recaps,
+    events,
+    eventParticipations
+  };
+}
+
 export async function getDashboardData() {
   // Use exact count queries for KPI cards to avoid Supabase default 1000-row limit.
   const [
