@@ -120,3 +120,16 @@ export type ActivityCorrectionLog = JsonRecord & {
   corrected_by: string | null;
   created_at: string;
 };
+
+export type OperationalTeamAssignment = JsonRecord & {
+  id: string;
+  person_id: string;
+  source_role_group: string | null;
+  operational_role: string | null;
+  functional_team: string | null;
+  team_name: string | null;
+  assigned_scope: string | null;
+  role_note: string | null;
+  status: string | null;
+  notes: string | null;
+};

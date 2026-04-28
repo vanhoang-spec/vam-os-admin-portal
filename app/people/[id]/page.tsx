@@ -9,13 +9,14 @@ import {
   getMentoringRecapsByMenteePersonId,
   getMentoringRecapsByMentorPersonId,
   getMentorProfiles,
+  getOperationalTeamAssignmentsByPerson,
   getPeople,
   getPerson,
   getRolesForPerson,
   getSeasons,
   keyById
 } from "@/lib/data";
-import type { Event, EventParticipation, Match, MenteeProfile, MentorProfile, MentoringRecap, Person, Season } from "@/lib/types";
+import type { Event, EventParticipation, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 
 type MentorMenteeRow = Match & {
@@ -41,6 +42,8 @@ type MentorRecapRow = MentoringRecap & {
 type EventActivityRow = EventParticipation & {
   event?: Event;
 };
+
+type OperationalTeamAssignmentRow = OperationalTeamAssignment;
 
 function actionLink(href: string, label: string) {
   return (
@@ -106,8 +109,52 @@ function eventDate(row: EventActivityRow) {
   return formatDate(row.event?.event_date ?? row.event?.date ?? row.attendance_date);
 }
 
+function sourceRoleGroupLabel(value: unknown) {
+  const normalized = normalizeStatus(value);
+  if (normalized === "coreteam") return "Coreteam";
+  if (normalized === "support_team") return "Support team";
+  return displayText(value);
+}
+
+function functionalTeamLabel(value: unknown) {
+  const normalized = normalizeStatus(value);
+  if (normalized === "project_coordination") return "Project Co-ordination";
+  if (normalized === "communication_media") return "Communication / Content & Media";
+  if (normalized === "event") return "Event";
+  if (normalized === "design") return "Design";
+  if (normalized === "other") return "Khác";
+  if (normalized === "unknown") return "Chưa xác định";
+  return displayText(value);
+}
+
+function operationalRoleLabel(value: unknown) {
+  const normalized = normalizeStatus(value);
+  if (normalized === "core_team") return "Coreteam";
+  if (normalized === "project_coordination_support") return "Điều phối dự án";
+  if (normalized === "communication_support") return "Truyền thông / Nội dung";
+  if (normalized === "event_support") return "Sự kiện";
+  if (normalized === "design_support") return "Thiết kế";
+  if (normalized === "support_team_member") return "Thành viên support team";
+  if (normalized === "other") return "Khác";
+  return displayText(value);
+}
+
 export default async function PersonDetailPage({ params }: { params: { id: string } }) {
-  const [person, roles, people, mentors, mentees, applications, matches, seasons, menteeRecaps, mentorRecaps, eventParticipations, events] = await Promise.all([
+  const [
+    person,
+    roles,
+    people,
+    mentors,
+    mentees,
+    applications,
+    matches,
+    seasons,
+    menteeRecaps,
+    mentorRecaps,
+    eventParticipations,
+    events,
+    operationalAssignments
+  ] = await Promise.all([
     getPerson(params.id),
     getRolesForPerson(params.id),
     getPeople(),
@@ -119,7 +166,8 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     getMentoringRecapsByMenteePersonId(params.id),
     getMentoringRecapsByMentorPersonId(params.id),
     getEventParticipationsByPersonId(params.id),
-    getEvents()
+    getEvents(),
+    getOperationalTeamAssignmentsByPerson(params.id)
   ]);
   const personApplications = applications.data.filter((application) => application.person_id === params.id);
   const peopleById = keyById(people.data);
@@ -155,6 +203,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     ...participation,
     event: participation.event_id ? eventsById.get(participation.event_id) : undefined
   }));
+  const operationalAssignmentRows: OperationalTeamAssignmentRow[] = operationalAssignments.data;
   const currentMeetingMonth = currentMonth();
   const relatedMatches = Array.from(new Map([...mentorMatches, ...menteeMatches].map((match) => [match.id, match])).values());
   const activeMatchCount = relatedMatches.filter((match) => normalizeStatus(match.status) === "active").length;
@@ -176,7 +225,8 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     menteeRecaps.error ||
     mentorRecaps.error ||
     eventParticipations.error ||
-    events.error;
+    events.error ||
+    operationalAssignments.error;
 
   if (!person.data) {
     return (
@@ -213,6 +263,26 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
             <div className="mt-1 text-2xl font-semibold text-vam-ink">{activeMatchCount}</div>
           </div>
         </div>
+      </Card>
+
+      <Card className="mb-4">
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">Vai trò vận hành VAM</h2>
+        {operationalAssignmentRows.length > 0 ? (
+          <SimpleTable
+            rows={operationalAssignmentRows}
+            columns={[
+              { key: "source_role_group", label: "Nhóm", render: (row) => sourceRoleGroupLabel(row.source_role_group) },
+              { key: "functional_team", label: "Team chức năng", render: (row) => functionalTeamLabel(row.functional_team) },
+              { key: "operational_role", label: "Vai trò vận hành", render: (row) => operationalRoleLabel(row.operational_role) },
+              { key: "role_note", label: "Vai trò trong team", render: (row) => displayText(row.role_note) },
+              { key: "assigned_scope", label: "Phạm vi phụ trách", render: (row) => displayText(row.assigned_scope) },
+              { key: "status", label: "Trạng thái", render: (row) => displayText(row.status) },
+              { key: "notes", label: "Ghi chú", render: (row) => displayText(row.notes) }
+            ]}
+          />
+        ) : (
+          <EmptyState message="Chưa có vai trò vận hành được ghi nhận." />
+        )}
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">

@@ -1,5 +1,18 @@
 import { supabase } from "@/lib/supabase";
-import type { ActivityCorrectionLog, Application, Event, EventParticipation, JsonRecord, Match, MenteeProfile, MentorProfile, MentoringRecap, Person, Season } from "@/lib/types";
+import type {
+  ActivityCorrectionLog,
+  Application,
+  Event,
+  EventParticipation,
+  JsonRecord,
+  Match,
+  MenteeProfile,
+  MentorProfile,
+  MentoringRecap,
+  OperationalTeamAssignment,
+  Person,
+  Season
+} from "@/lib/types";
 
 export type QueryResult<T> = { data: T; error: string | null };
 
@@ -280,6 +293,20 @@ export async function getEventParticipationsByPersonId(personId: string) {
     .order("attendance_date", { ascending: false });
   if (error) return { data: [], error: `${VI_ERROR} (event_participations: ${error.message})` };
   return { data: (data ?? []) as EventParticipation[], error: null };
+}
+
+export async function getOperationalTeamAssignmentsByPerson(personId: string) {
+  if (!supabase) return envError<OperationalTeamAssignment[]>([]);
+  const { data, error } = await supabase
+    .from("operational_team_assignments")
+    .select("id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes")
+    .eq("person_id", personId)
+    .order("source_role_group", { ascending: true })
+    .order("functional_team", { ascending: true })
+    .order("role_note", { ascending: true })
+    .order("operational_role", { ascending: true });
+  if (error) return { data: [], error: `${VI_ERROR} (operational_team_assignments: ${error.message})` };
+  return { data: (data ?? []) as OperationalTeamAssignment[], error: null };
 }
 
 export async function getOperationsData() {
