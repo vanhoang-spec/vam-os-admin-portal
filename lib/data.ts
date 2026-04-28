@@ -47,7 +47,7 @@ async function countTable(table: string, filter?: (query: any) => any): Promise<
 }
 
 export async function getPeople() {
-  return selectTable<Person>("people");
+  return selectAllTable<Person>("people");
 }
 
 export async function getMentorProfiles() {

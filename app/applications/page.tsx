@@ -92,15 +92,12 @@ export default async function ApplicationsPage() {
         columns={[
           { key: "sbd", label: "SBD", displayKey: "sbd_display" },
           { key: "short_application_id", label: "Mã đơn" },
-          { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
-          { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
-          { key: "short_person_id", label: "Mã person" },
-          { key: "season_code", label: "Mùa", displayKey: "season_code_display" },
+          { key: "full_name", label: "Họ tên", displayKey: "full_name_display", secondaryKey: "short_person_id", secondaryLabel: "Mã person" },
+          { key: "email_primary", label: "Email", displayKey: "email_primary_display", nowrap: true },
           { key: "role_applied", label: "Vai trò", displayKey: "role_applied_display" },
-          { key: "final_status", label: "Trạng thái", displayKey: "final_status_display" },
+          { key: "final_status", label: "Trạng thái", displayKey: "final_status_display", badge: true },
           { key: "submitted_at", label: "Ngày nộp", displayKey: "submitted_at_display" },
-          { key: "acquisition_channel", label: "Nguồn biết đến", displayKey: "acquisition_channel_display" },
-          { key: "consent_pdpa", label: "PDPA", displayKey: "consent_pdpa_display" },
+          { key: "consent_pdpa", label: "PDPA", displayKey: "consent_pdpa_display", badge: true },
           { key: "detail", label: "Chi tiết", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem chi tiết" }
         ]}
       />

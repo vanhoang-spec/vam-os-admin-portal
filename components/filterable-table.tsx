@@ -16,6 +16,10 @@ type Column = {
   internalHrefPrefix?: string;
   internalLabel?: string;
   displayKey?: string;
+  secondaryKey?: string;
+  secondaryLabel?: string;
+  nowrap?: boolean;
+  badge?: boolean;
 };
 type SortOption = { label: string; key: string; direction?: "asc" | "desc"; type?: "number" | "text" };
 

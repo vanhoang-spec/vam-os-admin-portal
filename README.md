@@ -31,6 +31,8 @@ The portal connects to Supabase production data and currently supports:
 - [VAM OS Admin User Guide](docs/VAM_OS_ADMIN_USER_GUIDE.md)
 - [Deployment Notes](docs/DEPLOYMENT_NOTES.md)
 - [Roadmap](docs/VAM_OS_ROADMAP.md)
+- [Phase 2 Activity & Event Tracking Plan Draft](docs/PHASE_2_ACTIVITY_AND_EVENT_TRACKING_PLAN_DRAFT.md)
+- [Activity Import Guide Draft](docs/ACTIVITY_IMPORT_GUIDE_DRAFT.md)
 
 ## Setup
 

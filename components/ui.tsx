@@ -86,6 +86,10 @@ export function SimpleTable<T>({
     internalHrefPrefix?: string;
     internalLabel?: string;
     displayKey?: string;
+    secondaryKey?: string;
+    secondaryLabel?: string;
+    nowrap?: boolean;
+    badge?: boolean;
   }>;
   getHref?: (row: T) => string;
 }) {
@@ -114,8 +118,20 @@ export function SimpleTable<T>({
                       href={(row as any)[column.internalHrefKey] ? `${column.internalHrefPrefix ?? ""}${(row as any)[column.internalHrefKey]}` : ""}
                       label={column.internalLabel ?? "Xem"}
                     />
+                  ) : column.badge ? (
+                    <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-vam-ink">
+                      {displayText((row as any)[column.displayKey ?? column.key])}
+                    </span>
+                  ) : column.secondaryKey ? (
+                    <div className={column.nowrap ? "whitespace-nowrap" : undefined}>
+                      <div className="font-medium text-vam-ink">{displayText((row as any)[column.displayKey ?? column.key])}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {column.secondaryLabel ? `${column.secondaryLabel}: ` : ""}
+                        {displayText((row as any)[column.secondaryKey])}
+                      </div>
+                    </div>
                   ) : (
-                    displayText((row as any)[column.displayKey ?? column.key])
+                    <span className={column.nowrap ? "whitespace-nowrap" : undefined}>{displayText((row as any)[column.displayKey ?? column.key])}</span>
                   )}
                 </td>
               ));
@@ -134,8 +150,20 @@ export function SimpleTable<T>({
                             href={(row as any)[column.internalHrefKey] ? `${column.internalHrefPrefix ?? ""}${(row as any)[column.internalHrefKey]}` : ""}
                             label={column.internalLabel ?? "Xem"}
                           />
+                        ) : column.badge ? (
+                          <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-vam-ink">
+                            {displayText((row as any)[column.displayKey ?? column.key])}
+                          </span>
+                        ) : column.secondaryKey ? (
+                          <Link href={href} className={column.nowrap ? "block whitespace-nowrap" : "block"}>
+                            <span className="font-medium text-vam-ink">{displayText((row as any)[column.displayKey ?? column.key])}</span>
+                            <span className="mt-1 block text-xs text-slate-500">
+                              {column.secondaryLabel ? `${column.secondaryLabel}: ` : ""}
+                              {displayText((row as any)[column.secondaryKey])}
+                            </span>
+                          </Link>
                         ) : (
-                          <Link href={href} className="block">
+                          <Link href={href} className={column.nowrap ? "block whitespace-nowrap" : "block"}>
                             {displayText((row as any)[column.displayKey ?? column.key])}
                           </Link>
                         )}
