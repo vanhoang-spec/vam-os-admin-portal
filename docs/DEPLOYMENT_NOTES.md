@@ -7,9 +7,12 @@ Set these variables in local `.env.local` and in the deployment platform:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+VAM_OS_ADMIN_PASSWORD=
 ```
 
 Use only the Supabase anon/publishable key.
+
+`VAM_OS_ADMIN_PASSWORD` is a temporary internal access gate for MVP Preview deployments. It protects the app before Supabase Auth/RLS is implemented, but it is not a long-term security model.
 
 ## Security Warning
 
@@ -47,6 +50,7 @@ npm.cmd run build
 4. Add environment variables:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `VAM_OS_ADMIN_PASSWORD`
 5. Run the default build command:
    - `npm run build`
 6. Deploy Preview first.
@@ -72,6 +76,7 @@ app.alumni-mentoring.edu.vn
 
 - [ ] `npm.cmd run build` passes.
 - [ ] `.env.local` does not contain service role key.
+- [ ] `VAM_OS_ADMIN_PASSWORD` is set for Vercel Preview.
 - [ ] Dashboard counts match production Supabase counts.
 - [ ] Applications list does not fetch all `application_answers`.
 - [ ] Data Issues page does not fetch `application_answers`.

@@ -45,9 +45,12 @@ Create `.env.local` from `.env.local.example`:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-anon-key
+VAM_OS_ADMIN_PASSWORD=temporary-internal-password
 ```
 
 Use only the Supabase anon/publishable key.
+
+`VAM_OS_ADMIN_PASSWORD` enables a temporary internal password gate for the whole app. It is not a replacement for Supabase Auth/RLS.
 
 ## Local Development
 
@@ -74,6 +77,8 @@ npm.cmd run build
 Never put a Supabase `service_role` key, database password, or any secret key in frontend environment variables.
 
 Because auth/RLS is not enabled yet, do not share a deployed public URL widely. Treat the app as an internal MVP for VAM core-team review only.
+
+The temporary password gate should be enabled on Vercel Preview by setting `VAM_OS_ADMIN_PASSWORD`. Replace it with Supabase Auth, role-based access, and RLS before broad usage.
 
 ## Current Limitations
 

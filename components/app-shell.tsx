@@ -18,6 +18,8 @@ const navItems = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
+  if (pathname === "/unlock") return <>{children}</>;
+
   return (
     <div className="min-h-screen bg-[#f7faf8]">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-72 border-r border-vam-line bg-white lg:block">
