@@ -1,2 +1,1 @@
-season_code,mentee_email,mentee_code,mentor_email,mentor_code,match_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,issue_flag,admin_notes
-
+season_code,mentee_email,mentee_code,mentor_email,mentor_code,match_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,issue_flag,admin_notes,meeting_type,captured_by

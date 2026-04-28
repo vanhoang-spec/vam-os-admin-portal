@@ -21,7 +21,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 RUNNER_DIR = Path(__file__).resolve().parent
 REPORTS_DIR = RUNNER_DIR / "reports"
 
-RECAP_COLUMNS = [
+RECAP_REQUIRED_COLUMNS = [
     "season_code",
     "mentee_email",
     "mentee_code",
@@ -37,7 +37,12 @@ RECAP_COLUMNS = [
     "admin_notes",
 ]
 
-EVENT_COLUMNS = [
+RECAP_OPTIONAL_COLUMNS = [
+    "meeting_type",
+    "captured_by",
+]
+
+EVENT_REQUIRED_COLUMNS = [
     "season_code",
     "event_code",
     "event_name",
@@ -52,11 +57,21 @@ EVENT_COLUMNS = [
     "admin_notes",
 ]
 
+EVENT_OPTIONAL_COLUMNS = [
+    "captured_by",
+    "walk_in",
+]
+
+RECAP_COLUMNS = RECAP_REQUIRED_COLUMNS + RECAP_OPTIONAL_COLUMNS
+EVENT_COLUMNS = EVENT_REQUIRED_COLUMNS + EVENT_OPTIONAL_COLUMNS
+
 ALLOWED_RECAP_SOURCES = {"facebook_group", "google_sheet", "admin_input"}
 ALLOWED_ISSUE_FLAGS = {"true", "false"}
+ALLOWED_MEETING_TYPES = {"1on1_primary", "1on1_cross", "group", "online", "offline", "unknown"}
 ALLOWED_REGISTRATION_STATUSES = {"registered", "unknown"}
 ALLOWED_ATTENDANCE_STATUSES = {"attended", "registered_absent"}
 ALLOWED_EVENT_ROLES = {"mentor", "mentee", "core_team", "speaker", "trainer", "guest", "unknown"}
+ALLOWED_WALK_IN_VALUES = {"true", "false", "yes", "no", "1", "0"}
 PHASE_2_EVENT_NAMES = {"Mentee Orientation", "Kickoff", "Tổng kết"}
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 SEASON_LOOKUP_COLUMNS = ["code", "season_code", "slug", "name"]
@@ -95,6 +110,15 @@ def parse_bool(value: str) -> bool | None:
     return None
 
 
+def parse_walk_in(value: str) -> bool | None:
+    text = clean(value).lower()
+    if text in {"true", "yes", "1"}:
+        return True
+    if text in {"false", "no", "0"}:
+        return False
+    return None
+
+
 def is_uuid(value: str) -> bool:
     try:
         UUID(clean(value))
@@ -123,9 +147,9 @@ def read_csv(path: Path) -> tuple[list[dict[str, str]], list[str]]:
         return rows, reader.fieldnames or []
 
 
-def validate_columns(found: list[str], expected: list[str]) -> list[str]:
-    missing = [column for column in expected if column not in found]
-    extra = [column for column in found if column not in expected]
+def validate_columns(found: list[str], required: list[str], known: list[str]) -> list[str]:
+    missing = [column for column in required if column not in found]
+    extra = [column for column in found if column not in known]
     issues = []
     if missing:
         issues.append(f"Missing columns: {', '.join(missing)}")
@@ -348,6 +372,7 @@ def prepare_recap_row(conn: psycopg.Connection, row: dict[str, str], row_number:
     recap_url = clean(row.get("recap_url"))
     recap_source = clean(row.get("recap_source")) or "facebook_group"
     issue_flag_text = clean(row.get("issue_flag")) or "false"
+    meeting_type = clean(row.get("meeting_type")) or "1on1_primary"
 
     meeting_date = require_date(clean(row.get("meeting_date")), "meeting_date", prepared.errors)
     if not meeting_month:
@@ -360,6 +385,8 @@ def prepare_recap_row(conn: psycopg.Connection, row: dict[str, str], row_number:
         prepared.errors.append(f"recap_source must be one of: {', '.join(sorted(ALLOWED_RECAP_SOURCES))}")
     if issue_flag_text.lower() not in ALLOWED_ISSUE_FLAGS:
         prepared.errors.append("issue_flag must be true or false")
+    if meeting_type not in ALLOWED_MEETING_TYPES:
+        prepared.errors.append(f"meeting_type must be one of: {', '.join(sorted(ALLOWED_MEETING_TYPES))}")
 
     season_id = resolve_season_id(conn, season_code, prepared.warnings)
     mentee_person_id = resolve_mentee_person_id(conn, mentee_code, mentee_email)
@@ -389,6 +416,8 @@ def prepare_recap_row(conn: psycopg.Connection, row: dict[str, str], row_number:
         "issue_flag": parse_bool(issue_flag_text) or False,
         "status": "submitted",
         "admin_notes": optional_text(row.get("admin_notes")),
+        "meeting_type": meeting_type,
+        "captured_by": optional_text(row.get("captured_by")),
     }
     return prepared
 
@@ -404,6 +433,7 @@ def prepare_event_row(conn: psycopg.Connection, row: dict[str, str], row_number:
     role_at_event = clean(row.get("role_at_event")) or "unknown"
     registration_status = clean(row.get("registration_status")) or "registered"
     attendance_status = clean(row.get("attendance_status")) or "registered_absent"
+    walk_in_text = clean(row.get("walk_in")) or "false"
 
     event_date = require_date(clean(row.get("event_date")), "event_date", prepared.errors)
     if not event_code and not event_name:
@@ -416,6 +446,8 @@ def prepare_event_row(conn: psycopg.Connection, row: dict[str, str], row_number:
         prepared.errors.append(f"attendance_status must be one of: {', '.join(sorted(ALLOWED_ATTENDANCE_STATUSES))}")
     if role_at_event not in ALLOWED_EVENT_ROLES:
         prepared.errors.append(f"role_at_event must be one of: {', '.join(sorted(ALLOWED_EVENT_ROLES))}")
+    if walk_in_text.lower() not in ALLOWED_WALK_IN_VALUES:
+        prepared.errors.append("walk_in must be true, false, yes, no, 1, or 0")
     if event_name and event_name not in PHASE_2_EVENT_NAMES:
         prepared.warnings.append(f"event_name is outside Phase 2 scope: {event_name}")
 
@@ -441,6 +473,8 @@ def prepare_event_row(conn: psycopg.Connection, row: dict[str, str], row_number:
         "recap_url": optional_text(row.get("recap_url")),
         "excuse_reason": optional_text(row.get("excuse_reason")),
         "admin_notes": optional_text(row.get("admin_notes")),
+        "captured_by": optional_text(row.get("captured_by")),
+        "walk_in": parse_walk_in(walk_in_text) or False,
     }
     return prepared
 
@@ -452,12 +486,14 @@ def insert_recap(conn: psycopg.Connection, payload: dict[str, Any]) -> None:
             insert into mentoring_recaps (
               season_id, match_id, mentor_person_id, mentee_person_id,
               meeting_date, meeting_month, recap_url, recap_source,
-              recap_note, issue_flag, status, admin_notes
+              recap_note, issue_flag, status, admin_notes,
+              meeting_type, captured_by
             )
             values (
               %(season_id)s, %(match_id)s, %(mentor_person_id)s, %(mentee_person_id)s,
               %(meeting_date)s, %(meeting_month)s, %(recap_url)s, %(recap_source)s,
-              %(recap_note)s, %(issue_flag)s, %(status)s, %(admin_notes)s
+              %(recap_note)s, %(issue_flag)s, %(status)s, %(admin_notes)s,
+              %(meeting_type)s, %(captured_by)s
             )
             """,
             payload,
@@ -471,12 +507,14 @@ def insert_event_participation(conn: psycopg.Connection, payload: dict[str, Any]
             insert into event_participations (
               event_id, season_id, person_id, role_at_event,
               registration_status, attendance_status, attendance_date,
-              recap_url, excuse_reason, admin_notes
+              recap_url, excuse_reason, admin_notes,
+              captured_by, walk_in
             )
             values (
               %(event_id)s, %(season_id)s, %(person_id)s, %(role_at_event)s,
               %(registration_status)s, %(attendance_status)s, %(attendance_date)s,
-              %(recap_url)s, %(excuse_reason)s, %(admin_notes)s
+              %(recap_url)s, %(excuse_reason)s, %(admin_notes)s,
+              %(captured_by)s, %(walk_in)s
             )
             """,
             payload,
@@ -593,8 +631,13 @@ def main() -> int:
         return 2
 
     source_rows, fieldnames = read_csv(csv_path)
-    expected_columns = RECAP_COLUMNS if args.type == "mentoring_recaps" else EVENT_COLUMNS
-    column_issues = validate_columns(fieldnames, expected_columns)
+    if args.type == "mentoring_recaps":
+        required_columns = RECAP_REQUIRED_COLUMNS
+        known_columns = RECAP_COLUMNS
+    else:
+        required_columns = EVENT_REQUIRED_COLUMNS
+        known_columns = EVENT_COLUMNS
+    column_issues = validate_columns(fieldnames, required_columns, known_columns)
     if any(issue.startswith("Missing") for issue in column_issues):
         print("CSV column validation failed:")
         for issue in column_issues:

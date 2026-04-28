@@ -44,6 +44,8 @@ Quy tắc chính:
 - `recap_note`: ghi chú ngắn về recap nếu cần.
 - `issue_flag`: đánh dấu cần rà soát.
 - `admin_notes`: ghi chú nội bộ.
+- `meeting_type`: optional operational classification for the mentoring session. Defaults to `1on1_primary` when omitted.
+- `captured_by`: optional steward/import source that captured the row.
 
 ### Trường Bắt Buộc Đề Xuất
 
@@ -66,6 +68,17 @@ Quy tắc chính:
 
 - `true`
 - `false`
+
+`meeting_type`:
+
+- `1on1_primary`: primary mentor-mentee 1:1 session.
+- `1on1_cross`: cross-mentor or non-primary 1:1 session.
+- `group`: group mentoring session.
+- `online`: online mentoring session.
+- `offline`: offline mentoring session.
+- `unknown`: session type is not known yet.
+
+For historical tracking imports, use `captured_by='tracking_file_import'` unless the specific Recap Steward is known.
 
 ## Event Participations
 
@@ -91,6 +104,8 @@ Một dòng tương ứng một người trong một event/training.
 - `recap_url`: link recap event nếu có.
 - `excuse_reason`: lý do vắng nếu cần ghi nhận.
 - `admin_notes`: ghi chú nội bộ.
+- `captured_by`: optional steward/import source that captured the row.
+- `walk_in`: optional marker for attendance without prior registration. Defaults to `false` when omitted.
 
 ### Trường Bắt Buộc Đề Xuất
 
@@ -113,6 +128,17 @@ Một dòng tương ứng một người trong một event/training.
 - `registered_absent`: Đăng ký nhưng không tham dự
 
 `recap_url` của event là tùy chọn.
+
+`walk_in` accepts:
+
+- `true`
+- `false`
+- `yes`
+- `no`
+- `1`
+- `0`
+
+For historical tracking imports, use `captured_by='tracking_file_import'` unless the specific Event Steward is known.
 
 ## Cách Lấy Link Recap Facebook
 
