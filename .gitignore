@@ -10,3 +10,6 @@ coverage
 *.log
 
 *.log
+
+__pycache__/
+*.pyc
