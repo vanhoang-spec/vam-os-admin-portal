@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: Home },
+  { href: "/operations", label: "Operations", icon: LineChart },
   { href: "/people", label: "People", icon: Users },
   { href: "/mentors", label: "Mentors", icon: UserRoundCheck },
   { href: "/mentees", label: "Mentees", icon: UserRoundSearch },
