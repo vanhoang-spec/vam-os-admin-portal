@@ -75,6 +75,7 @@ ALLOWED_WALK_IN_VALUES = {"true", "false", "yes", "no", "1", "0"}
 PHASE_2_EVENT_NAMES = {"Mentee Orientation", "Kickoff", "Tổng kết"}
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 SEASON_LOOKUP_COLUMNS = ["code", "season_code", "slug", "name"]
+EVENT_LOOKUP_COLUMNS = ["legacy_event_temp_id", "event_code", "code", "slug", "event_name", "name"]
 
 
 @dataclass
@@ -306,21 +307,38 @@ def resolve_event_id(
     conn: psycopg.Connection,
     event_code: str,
     event_name: str,
-    event_date: str,
-    warnings: list[str],
+    season_id: str | None,
+    errors: list[str],
 ) -> str | None:
-    if event_code:
-        event_id = fetch_one_value(conn, "select id from events where event_code = %s limit 1", (event_code,))
-        if event_id:
-            return event_id
-        warnings.append(f"event_code not found: {event_code}")
+    existing_columns = get_existing_columns(conn, "events")
+    checked_columns = [column for column in EVENT_LOOKUP_COLUMNS if column in existing_columns]
+    season_filter = " and season_id = %s" if season_id and "season_id" in existing_columns else ""
 
-    if event_name and event_date:
+    def lookup_event(column: str, value: str) -> str | None:
+        params: tuple[Any, ...] = (value, season_id) if season_filter else (value,)
         return fetch_one_value(
             conn,
-            "select id from events where event_name = %s and event_date = %s limit 1",
-            (event_name, event_date),
+            f"select id from events where {column} = %s{season_filter} limit 1",
+            params,
         )
+
+    if event_code:
+        for column in [column for column in checked_columns if column in {"legacy_event_temp_id", "event_code", "code", "slug"}]:
+            event_id = lookup_event(column, event_code)
+            if event_id:
+                return event_id
+
+    if event_name:
+        for column in [column for column in checked_columns if column in {"event_name", "name"}]:
+            event_id = lookup_event(column, event_name)
+            if event_id:
+                return event_id
+
+    checked_message = ", ".join(checked_columns) if checked_columns else "none of legacy_event_temp_id, event_code, code, slug, event_name, name exist"
+    errors.append(
+        f"Cannot resolve event for event_code={event_code or '-'}, event_name={event_name or '-'}. "
+        f"Checked events columns: {checked_message}"
+    )
     return None
 
 
@@ -452,10 +470,8 @@ def prepare_event_row(conn: psycopg.Connection, row: dict[str, str], row_number:
         prepared.warnings.append(f"event_name is outside Phase 2 scope: {event_name}")
 
     season_id = resolve_season_id(conn, season_code, prepared.warnings)
-    event_id = resolve_event_id(conn, event_code, event_name, event_date or "", prepared.warnings)
+    event_id = resolve_event_id(conn, event_code, event_name, season_id, prepared.errors)
     person_id = resolve_person_id(conn, person_code, person_email)
-    if not event_id:
-        prepared.errors.append("Could not resolve event_id from event_code or event_name + event_date")
     if not person_id:
         prepared.errors.append("Could not resolve person_id from person_code or person_email")
 
