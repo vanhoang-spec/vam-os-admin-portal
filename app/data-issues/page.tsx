@@ -22,9 +22,67 @@ function shortId(value: unknown) {
   return text ? text.slice(0, 8) : "-";
 }
 
-function IssueSection<T>({ title, rows, columns }: { title: string; rows: T[]; columns: React.ComponentProps<typeof SimpleTable<T>>["columns"] }) {
+const ISSUE_CONFIG = {
+  missing_phone: {
+    label: "People thiếu số điện thoại",
+    sectionId: "issue-missing-phone"
+  },
+  applications_missing_identity: {
+    label: "Đơn ứng tuyển thiếu tên/email",
+    sectionId: "issue-applications-missing-identity"
+  },
+  missing_school_code: {
+    label: "Mentee cần rà soát trường học",
+    sectionId: "issue-missing-school-code"
+  },
+  missing_mentor_bio_url: {
+    label: "Mentor thiếu profile link",
+    sectionId: "issue-missing-mentor-bio-url"
+  },
+  mentee_without_active_mentor: {
+    label: "Mentee chưa có mentor active",
+    sectionId: "issue-mentee-without-active-mentor"
+  },
+  active_match_missing_person: {
+    label: "Match active lỗi",
+    sectionId: "issue-active-match-missing-person"
+  },
+  duplicate_email: {
+    label: "Email trùng",
+    sectionId: "issue-duplicate-email"
+  }
+} as const;
+
+type IssueKey = keyof typeof ISSUE_CONFIG;
+
+function isIssueKey(value: unknown): value is IssueKey {
+  return typeof value === "string" && value in ISSUE_CONFIG;
+}
+
+function shouldOpenIssue(selectedIssue: IssueKey | null, issueKey: IssueKey) {
+  return !selectedIssue || selectedIssue === issueKey;
+}
+
+function IssueSection<T>({
+  title,
+  rows,
+  columns,
+  issueKey,
+  selectedIssue
+}: {
+  title: string;
+  rows: T[];
+  columns: React.ComponentProps<typeof SimpleTable<T>>["columns"];
+  issueKey: IssueKey;
+  selectedIssue: IssueKey | null;
+}) {
+  const isSelected = selectedIssue === issueKey;
   return (
-    <details open className="rounded-lg border border-vam-line bg-white p-4 shadow-soft">
+    <details
+      id={ISSUE_CONFIG[issueKey].sectionId}
+      open={shouldOpenIssue(selectedIssue, issueKey)}
+      className={`scroll-mt-6 rounded-lg border bg-white p-4 shadow-soft ${isSelected ? "border-vam-green ring-2 ring-vam-mint" : "border-vam-line"}`}
+    >
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-vam-ink">{title}</h2>
         <span className="rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">{rows.length} vấn đề</span>
@@ -36,7 +94,8 @@ function IssueSection<T>({ title, rows, columns }: { title: string; rows: T[]; c
   );
 }
 
-export default async function DataIssuesPage() {
+export default async function DataIssuesPage({ searchParams }: { searchParams?: { issue?: string } }) {
+  const selectedIssue = isIssueKey(searchParams?.issue) ? searchParams.issue : null;
   const [people, applications, mentees, mentors, matches] = await Promise.all([
     selectAllRows<Person>("people", "id,full_name,email_primary,phone_primary,source_sheets"),
     getApplications(),
@@ -150,6 +209,16 @@ export default async function DataIssuesPage() {
       <div className="mb-4 rounded-lg border border-vam-line bg-white p-4 text-sm text-slate-600 shadow-soft">
         Trang này giúp rà soát dữ liệu cần làm sạch. Ở MVP hiện tại, các vấn đề được tính động từ dữ liệu Supabase; chức năng sửa trực tiếp sẽ bổ sung ở giai đoạn sau.
       </div>
+      {selectedIssue ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-vam-green bg-vam-mint px-4 py-3 text-sm text-vam-ink">
+          <span>
+            Đang xem cảnh báo: <strong>{ISSUE_CONFIG[selectedIssue].label}</strong>
+          </span>
+          <Link href="/data-issues" className="font-medium text-vam-green">
+            Xem tất cả cảnh báo
+          </Link>
+        </div>
+      ) : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
       ))}
@@ -166,6 +235,8 @@ export default async function DataIssuesPage() {
 
       <div className="mt-6 grid gap-4">
         <IssueSection
+          issueKey="missing_phone"
+          selectedIssue={selectedIssue}
           title="A. People thiếu số điện thoại"
           rows={peopleMissingPhone}
           columns={[
@@ -178,6 +249,8 @@ export default async function DataIssuesPage() {
         />
 
         <IssueSection
+          issueKey="applications_missing_identity"
+          selectedIssue={selectedIssue}
           title="B. Applications thiếu tên/email ứng viên"
           rows={applicationsMissingIdentity}
           columns={[
@@ -194,6 +267,8 @@ export default async function DataIssuesPage() {
         />
 
         <IssueSection
+          issueKey="missing_school_code"
+          selectedIssue={selectedIssue}
           title="C. Mentees cần rà soát trường học"
           rows={menteesMissingSchool}
           columns={[
@@ -208,6 +283,8 @@ export default async function DataIssuesPage() {
         />
 
         <IssueSection
+          issueKey="missing_mentor_bio_url"
+          selectedIssue={selectedIssue}
           title="D. Mentors thiếu profile link"
           rows={mentorsMissingBio}
           columns={[
@@ -221,6 +298,8 @@ export default async function DataIssuesPage() {
         />
 
         <IssueSection
+          issueKey="mentee_without_active_mentor"
+          selectedIssue={selectedIssue}
           title="E. Mentees chưa có active mentor"
           rows={menteesWithoutActiveMentor}
           columns={[
@@ -234,6 +313,8 @@ export default async function DataIssuesPage() {
         />
 
         <IssueSection
+          issueKey="active_match_missing_person"
+          selectedIssue={selectedIssue}
           title="F. Active match thiếu mentor/mentee"
           rows={activeMatchMissingPerson}
           columns={[
@@ -246,7 +327,11 @@ export default async function DataIssuesPage() {
           ]}
         />
 
-        <details open className="rounded-lg border border-vam-line bg-white p-4 shadow-soft">
+        <details
+          id={ISSUE_CONFIG.duplicate_email.sectionId}
+          open={shouldOpenIssue(selectedIssue, "duplicate_email")}
+          className={`scroll-mt-6 rounded-lg border bg-white p-4 shadow-soft ${selectedIssue === "duplicate_email" ? "border-vam-green ring-2 ring-vam-mint" : "border-vam-line"}`}
+        >
           <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-vam-ink">G. Email trùng</h2>
             <span className="rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">{duplicateEmails.length} vấn đề</span>

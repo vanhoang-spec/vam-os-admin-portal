@@ -113,12 +113,12 @@ export default async function DashboardPage() {
   ];
 
   const warningRows = [
-    { label: "People thiếu số điện thoại", count: peopleMissingPhone, href: "/people" },
-    { label: "Mentee thiếu school_code hoặc school_code OTHER/blank", count: menteesMissingSchool, href: "/mentees" },
-    { label: "Mentor thiếu bio_url", count: mentorsMissingBioUrl, href: "/mentors" },
-    { label: "Mentee chưa có active mentor", count: menteesWithoutMentor, href: "/mentees?has_mentor=no" },
-    { label: "Active match thiếu mentor/mentee", count: activeMatchesMissingMentorOrMentee, href: "/matches" },
-    { label: "Email trùng cần rà soát", count: data.duplicateEmails.data, href: "/people" }
+    { label: "People thiếu số điện thoại", count: peopleMissingPhone, href: "/data-issues?issue=missing_phone#issue-missing-phone" },
+    { label: "Mentee thiếu school_code hoặc school_code OTHER/blank", count: menteesMissingSchool, href: "/data-issues?issue=missing_school_code#issue-missing-school-code" },
+    { label: "Mentor thiếu bio_url", count: mentorsMissingBioUrl, href: "/data-issues?issue=missing_mentor_bio_url#issue-missing-mentor-bio-url" },
+    { label: "Mentee chưa có active mentor", count: menteesWithoutMentor, href: "/data-issues?issue=mentee_without_active_mentor#issue-mentee-without-active-mentor" },
+    { label: "Active match thiếu mentor/mentee", count: activeMatchesMissingMentorOrMentee, href: "/data-issues?issue=active_match_missing_person#issue-active-match-missing-person" },
+    { label: "Email trùng cần rà soát", count: data.duplicateEmails.data, href: "/data-issues?issue=duplicate_email#issue-duplicate-email" }
   ];
 
   return (

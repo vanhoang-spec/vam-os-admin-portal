@@ -13,3 +13,6 @@ coverage
 
 __pycache__/
 *.pyc
+
+activity_import_runner/reports/
+activity_import_runner/test_*.csv
