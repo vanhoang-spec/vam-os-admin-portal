@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { Application, JsonRecord, Match, MenteeProfile, MentorProfile, Person, Season } from "@/lib/types";
+import type { Application, Event, EventParticipation, JsonRecord, Match, MenteeProfile, MentorProfile, MentoringRecap, Person, Season } from "@/lib/types";
 
 export type QueryResult<T> = { data: T; error: string | null };
 
@@ -66,6 +66,10 @@ export async function getMatches() {
   return selectTable<Match>("matches");
 }
 
+export async function getEvents() {
+  return selectTable<Event>("events");
+}
+
 export async function getSeasons() {
   return selectTable<Season>("seasons");
 }
@@ -113,6 +117,39 @@ export async function getMatch(id: string) {
   const { data, error } = await supabase.from("matches").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (matches: ${error.message})` };
   return { data: data as Match | null, error: null };
+}
+
+export async function getMentoringRecapsByMenteePersonId(personId: string) {
+  if (!supabase) return envError<MentoringRecap[]>([]);
+  const { data, error } = await supabase
+    .from("mentoring_recaps")
+    .select("*")
+    .eq("mentee_person_id", personId)
+    .order("meeting_date", { ascending: false });
+  if (error) return { data: [], error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
+  return { data: (data ?? []) as MentoringRecap[], error: null };
+}
+
+export async function getMentoringRecapsByMentorPersonId(personId: string) {
+  if (!supabase) return envError<MentoringRecap[]>([]);
+  const { data, error } = await supabase
+    .from("mentoring_recaps")
+    .select("*")
+    .eq("mentor_person_id", personId)
+    .order("meeting_date", { ascending: false });
+  if (error) return { data: [], error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
+  return { data: (data ?? []) as MentoringRecap[], error: null };
+}
+
+export async function getEventParticipationsByPersonId(personId: string) {
+  if (!supabase) return envError<EventParticipation[]>([]);
+  const { data, error } = await supabase
+    .from("event_participations")
+    .select("*")
+    .eq("person_id", personId)
+    .order("attendance_date", { ascending: false });
+  if (error) return { data: [], error: `${VI_ERROR} (event_participations: ${error.message})` };
+  return { data: (data ?? []) as EventParticipation[], error: null };
 }
 
 export async function getDashboardData() {

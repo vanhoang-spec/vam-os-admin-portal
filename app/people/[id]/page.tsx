@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import {
-  getAnswersForApplications,
   getApplications,
+  getEventParticipationsByPersonId,
+  getEvents,
   getMatches,
   getMenteeProfiles,
+  getMentoringRecapsByMenteePersonId,
+  getMentoringRecapsByMentorPersonId,
   getMentorProfiles,
   getPeople,
   getPerson,
@@ -12,7 +15,7 @@ import {
   getSeasons,
   keyById
 } from "@/lib/data";
-import type { Match, MenteeProfile, MentorProfile, Person, Season } from "@/lib/types";
+import type { Event, EventParticipation, Match, MenteeProfile, MentorProfile, MentoringRecap, Person, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 
 type MentorMenteeRow = Match & {
@@ -25,6 +28,18 @@ type MenteeMentorRow = Match & {
   mentor?: Person;
   mentorProfile?: MentorProfile;
   season?: Season;
+};
+
+type MenteeRecapRow = MentoringRecap & {
+  mentor?: Person;
+};
+
+type MentorRecapRow = MentoringRecap & {
+  mentee?: Person;
+};
+
+type EventActivityRow = EventParticipation & {
+  event?: Event;
 };
 
 function actionLink(href: string, label: string) {
@@ -43,8 +58,56 @@ function hasRole(rows: Array<Record<string, unknown>>, roleName: string) {
   return rows.some((row) => normalizeStatus(row.role) === roleName);
 }
 
+function currentMonth() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${now.getFullYear()}-${month}`;
+}
+
+function latestDate(rows: Array<{ meeting_date?: string | null }>) {
+  const dates = rows.map((row) => row.meeting_date).filter(Boolean).sort().reverse();
+  return dates[0] ? formatDate(dates[0]) : "-";
+}
+
+function activityKpi(label: string, value: number | string) {
+  return (
+    <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+      <div className="text-xs font-medium uppercase text-slate-500">{label}</div>
+      <div className="mt-1 text-2xl font-semibold text-vam-ink">{value}</div>
+    </div>
+  );
+}
+
+function recapStatusLabel(status: unknown) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "submitted") return "Đã ghi nhận";
+  if (normalized === "needs_review") return "Cần rà soát";
+  if (normalized === "invalid") return "Không hợp lệ";
+  if (normalized === "duplicate") return "Trùng";
+  return displayText(status);
+}
+
+function attendanceStatusLabel(status: unknown) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "attended") return "Tham dự";
+  if (normalized === "registered_absent") return "Đăng ký nhưng không tham dự";
+  return displayText(status);
+}
+
+function issueLabel(value: unknown) {
+  return value === true ? "Cần theo dõi" : "-";
+}
+
+function eventName(row: EventActivityRow) {
+  return displayText(row.event?.event_name ?? row.event?.name);
+}
+
+function eventDate(row: EventActivityRow) {
+  return formatDate(row.event?.event_date ?? row.event?.date ?? row.attendance_date);
+}
+
 export default async function PersonDetailPage({ params }: { params: { id: string } }) {
-  const [person, roles, people, mentors, mentees, applications, matches, seasons] = await Promise.all([
+  const [person, roles, people, mentors, mentees, applications, matches, seasons, menteeRecaps, mentorRecaps, eventParticipations, events] = await Promise.all([
     getPerson(params.id),
     getRolesForPerson(params.id),
     getPeople(),
@@ -52,12 +115,16 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     getMenteeProfiles(),
     getApplications(),
     getMatches(),
-    getSeasons()
+    getSeasons(),
+    getMentoringRecapsByMenteePersonId(params.id),
+    getMentoringRecapsByMentorPersonId(params.id),
+    getEventParticipationsByPersonId(params.id),
+    getEvents()
   ]);
   const personApplications = applications.data.filter((application) => application.person_id === params.id);
-  const answers = await getAnswersForApplications(personApplications.map((application) => application.id));
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
+  const eventsById = keyById(events.data);
   const mentorProfilesByPersonId = new Map(mentors.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
   const menteeProfilesByPersonId = new Map(mentees.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
   const mentorProfile = mentorProfilesByPersonId.get(params.id);
@@ -76,6 +143,19 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     mentorProfile: match.mentor_person_id ? mentorProfilesByPersonId.get(match.mentor_person_id) : undefined,
     season: match.season_id ? seasonsById.get(match.season_id) : undefined
   }));
+  const menteeActivityRows: MenteeRecapRow[] = menteeRecaps.data.map((recap) => ({
+    ...recap,
+    mentor: recap.mentor_person_id ? peopleById.get(recap.mentor_person_id) : undefined
+  }));
+  const mentorActivityRows: MentorRecapRow[] = mentorRecaps.data.map((recap) => ({
+    ...recap,
+    mentee: recap.mentee_person_id ? peopleById.get(recap.mentee_person_id) : undefined
+  }));
+  const eventActivityRows: EventActivityRow[] = eventParticipations.data.map((participation) => ({
+    ...participation,
+    event: participation.event_id ? eventsById.get(participation.event_id) : undefined
+  }));
+  const currentMeetingMonth = currentMonth();
   const relatedMatches = Array.from(new Map([...mentorMatches, ...menteeMatches].map((match) => [match.id, match])).values());
   const activeMatchCount = relatedMatches.filter((match) => normalizeStatus(match.status) === "active").length;
   const menteeCount = new Set(mentorMatches.map((match) => match.mentee_person_id).filter(Boolean)).size;
@@ -93,7 +173,10 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     applications.error ||
     matches.error ||
     seasons.error ||
-    answers.error;
+    menteeRecaps.error ||
+    mentorRecaps.error ||
+    eventParticipations.error ||
+    events.error;
 
   if (!person.data) {
     return (
@@ -210,10 +293,6 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
             ]}
           />
         </Card>
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Application answers</h2>
-          <SimpleTable rows={answers.data} columns={[{ key: "question_label", label: "question_label" }, { key: "value_text", label: "value_text" }]} />
-        </Card>
         {hasMentorSide ? (
           <Card>
             <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentees đang được mentor này phụ trách</h2>
@@ -274,6 +353,85 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
               />
             ) : (
               <EmptyState message="Chưa có mentor nào được ghép với mentee này." />
+            )}
+          </Card>
+        ) : null}
+        {hasMenteeSide ? (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Hoạt động mentoring</h2>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {activityKpi("Tổng số recap", menteeActivityRows.length)}
+              {activityKpi("Ngày gặp gần nhất", latestDate(menteeActivityRows))}
+              {activityKpi("Recap tháng hiện tại", menteeActivityRows.some((row) => row.meeting_month === currentMeetingMonth) ? "Có" : "Chưa có")}
+              {activityKpi("Issue cần theo dõi", menteeActivityRows.filter((row) => row.issue_flag === true).length)}
+            </div>
+            {menteeActivityRows.length > 0 ? (
+              <SimpleTable
+                rows={menteeActivityRows}
+                columns={[
+                  { key: "meeting_month", label: "Tháng", render: (row) => displayText(row.meeting_month) },
+                  { key: "meeting_date", label: "Ngày gặp", render: (row) => formatDate(row.meeting_date) },
+                  { key: "mentor", label: "Mentor", render: (row) => displayText(row.mentor?.full_name ?? row.mentor?.email_primary) },
+                  { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Xem recap" /> },
+                  { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
+                  { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
+                  { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) }
+                ]}
+              />
+            ) : (
+              <EmptyState message="Chưa có hoạt động được ghi nhận." />
+            )}
+          </Card>
+        ) : null}
+        {hasMentorSide ? (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Hoạt động mentor</h2>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {activityKpi("Tổng số buổi gặp được ghi nhận", mentorActivityRows.length)}
+              {activityKpi("Số mentee có recap", new Set(mentorActivityRows.map((row) => row.mentee_person_id).filter(Boolean)).size)}
+              {activityKpi("Ngày hoạt động gần nhất", latestDate(mentorActivityRows))}
+              {activityKpi("Issue cần theo dõi", mentorActivityRows.filter((row) => row.issue_flag === true).length)}
+            </div>
+            {mentorActivityRows.length > 0 ? (
+              <SimpleTable
+                rows={mentorActivityRows}
+                columns={[
+                  { key: "meeting_month", label: "Tháng", render: (row) => displayText(row.meeting_month) },
+                  { key: "meeting_date", label: "Ngày gặp", render: (row) => formatDate(row.meeting_date) },
+                  { key: "mentee", label: "Mentee", render: (row) => displayText(row.mentee?.full_name ?? row.mentee?.email_primary) },
+                  { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Xem recap" /> },
+                  { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
+                  { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
+                  { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) }
+                ]}
+              />
+            ) : (
+              <EmptyState message="Chưa có hoạt động được ghi nhận." />
+            )}
+          </Card>
+        ) : null}
+        {hasMentorSide || hasMenteeSide ? (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Hoạt động sự kiện</h2>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {activityKpi("Tổng sự kiện ghi nhận", eventActivityRows.length)}
+              {activityKpi("Tham dự", eventActivityRows.filter((row) => normalizeStatus(row.attendance_status) === "attended").length)}
+              {activityKpi("Đăng ký nhưng không tham dự", eventActivityRows.filter((row) => normalizeStatus(row.attendance_status) === "registered_absent").length)}
+            </div>
+            {eventActivityRows.length > 0 ? (
+              <SimpleTable
+                rows={eventActivityRows}
+                columns={[
+                  { key: "event", label: "Sự kiện", render: (row) => eventName(row) },
+                  { key: "event_date", label: "Ngày", render: (row) => eventDate(row) },
+                  { key: "role_at_event", label: "Vai trò", render: (row) => displayText(row.role_at_event) },
+                  { key: "attendance_status", label: "Trạng thái tham dự", render: (row) => attendanceStatusLabel(row.attendance_status) },
+                  { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Xem recap" /> },
+                  { key: "admin_notes", label: "Ghi chú", render: (row) => displayText(row.admin_notes ?? row.excuse_reason) }
+                ]}
+              />
+            ) : (
+              <EmptyState message="Chưa có hoạt động được ghi nhận." />
             )}
           </Card>
         ) : null}

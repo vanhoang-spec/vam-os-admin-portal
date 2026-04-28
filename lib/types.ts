@@ -63,3 +63,42 @@ export type Season = JsonRecord & {
   code: string | null;
   name: string | null;
 };
+
+export type Event = JsonRecord & {
+  id: string;
+  event_code?: string | null;
+  event_name?: string | null;
+  name?: string | null;
+  event_date?: string | null;
+  date?: string | null;
+};
+
+export type MentoringRecap = JsonRecord & {
+  id: string;
+  season_id: string | null;
+  match_id: string | null;
+  mentor_person_id: string | null;
+  mentee_person_id: string | null;
+  meeting_date: string | null;
+  meeting_month: string | null;
+  recap_url: string | null;
+  recap_source: string | null;
+  recap_note: string | null;
+  issue_flag: boolean | null;
+  status: string | null;
+  admin_notes: string | null;
+};
+
+export type EventParticipation = JsonRecord & {
+  id: string;
+  event_id: string | null;
+  season_id: string | null;
+  person_id: string | null;
+  role_at_event: string | null;
+  registration_status: string | null;
+  attendance_status: string | null;
+  attendance_date: string | null;
+  recap_url: string | null;
+  excuse_reason: string | null;
+  admin_notes: string | null;
+};
