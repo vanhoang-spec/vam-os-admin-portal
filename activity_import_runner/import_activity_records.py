@@ -59,6 +59,7 @@ ALLOWED_ATTENDANCE_STATUSES = {"attended", "registered_absent"}
 ALLOWED_EVENT_ROLES = {"mentor", "mentee", "core_team", "speaker", "trainer", "guest", "unknown"}
 PHASE_2_EVENT_NAMES = {"Mentee Orientation", "Kickoff", "Tổng kết"}
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+SEASON_LOOKUP_COLUMNS = ["code", "season_code", "slug", "name"]
 
 
 @dataclass
@@ -142,17 +143,46 @@ def fetch_one_value(conn: psycopg.Connection, query: str, params: tuple[Any, ...
         return next(iter(row.values()))
 
 
+def get_existing_columns(conn: psycopg.Connection, table_name: str) -> set[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select column_name
+            from information_schema.columns
+            where table_schema = 'public'
+              and table_name = %s
+            """,
+            (table_name,),
+        )
+        return {row["column_name"] for row in cur.fetchall()}
+
+
 def resolve_season_id(conn: psycopg.Connection, season_code: str, warnings: list[str]) -> str | None:
     if not season_code:
         return None
-    season_id = fetch_one_value(
-        conn,
-        "select id from seasons where season_code = %s limit 1",
-        (season_code,),
-    )
-    if not season_id:
-        warnings.append(f"season_code not found: {season_code}")
-    return season_id
+
+    existing_columns = get_existing_columns(conn, "seasons")
+    checked_columns = [column for column in SEASON_LOOKUP_COLUMNS if column in existing_columns]
+    for column in checked_columns:
+        season_id = fetch_one_value(
+            conn,
+            f"select id from seasons where {column} = %s limit 1",
+            (season_code,),
+        )
+        if season_id:
+            return season_id
+
+    if checked_columns:
+        warnings.append(
+            f"Cannot resolve season for season_code={season_code}. "
+            f"Checked seasons columns: {', '.join(checked_columns)}"
+        )
+    else:
+        warnings.append(
+            f"Cannot resolve season for season_code={season_code}. "
+            "Checked seasons columns: none of code, season_code, slug, name exist"
+        )
+    return None
 
 
 def resolve_mentee_person_id(conn: psycopg.Connection, mentee_code: str, mentee_email: str) -> str | None:
