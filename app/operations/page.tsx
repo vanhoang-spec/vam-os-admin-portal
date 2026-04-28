@@ -415,6 +415,15 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
                   ) : (
                     "-"
                   )
+              },
+              {
+                key: "edit",
+                label: "Correction",
+                render: (row) => (
+                  <Link href={`/recaps/${row.id}/edit`} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
+                    Sửa
+                  </Link>
+                )
               }
             ]}
           />

@@ -375,7 +375,8 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                   { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Xem recap" /> },
                   { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
                   { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
-                  { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) }
+                  { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) },
+                  { key: "edit", label: "Sửa", render: (row) => actionLink(`/recaps/${row.id}/edit`, "Sửa") }
                 ]}
               />
             ) : (
@@ -402,7 +403,8 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                   { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Xem recap" /> },
                   { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
                   { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
-                  { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) }
+                  { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) },
+                  { key: "edit", label: "Sửa", render: (row) => actionLink(`/recaps/${row.id}/edit`, "Sửa") }
                 ]}
               />
             ) : (

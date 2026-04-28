@@ -107,3 +107,16 @@ export type EventParticipation = JsonRecord & {
   captured_by?: string | null;
   walk_in?: boolean | null;
 };
+
+export type ActivityCorrectionLog = JsonRecord & {
+  id: string;
+  target_table: "mentoring_recaps" | "event_participations";
+  target_id: string;
+  correction_type: "update_field" | "status_change" | "issue_flag_change" | "admin_note" | "manual_review" | "other";
+  field_name: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  reason: string | null;
+  corrected_by: string | null;
+  created_at: string;
+};

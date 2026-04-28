@@ -1,7 +1,20 @@
 import { supabase } from "@/lib/supabase";
-import type { Application, Event, EventParticipation, JsonRecord, Match, MenteeProfile, MentorProfile, MentoringRecap, Person, Season } from "@/lib/types";
+import type { ActivityCorrectionLog, Application, Event, EventParticipation, JsonRecord, Match, MenteeProfile, MentorProfile, MentoringRecap, Person, Season } from "@/lib/types";
 
 export type QueryResult<T> = { data: T; error: string | null };
+
+const ALLOWED_RECAP_STATUSES = new Set(["submitted", "needs_review", "invalid", "duplicate"]);
+
+export type MentoringRecapCorrectionInput = {
+  id: string;
+  meeting_date?: string | null;
+  meeting_month?: string | null;
+  status?: string | null;
+  issue_flag?: boolean | null;
+  admin_notes?: string | null;
+  reason?: string | null;
+  corrected_by?: string | null;
+};
 
 const VI_ERROR = "Không thể tải dữ liệu. Vui lòng kiểm tra cấu hình Supabase và quyền đọc bảng.";
 
@@ -139,6 +152,123 @@ export async function getMentoringRecapsByMentorPersonId(personId: string) {
     .order("meeting_date", { ascending: false });
   if (error) return { data: [], error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
   return { data: (data ?? []) as MentoringRecap[], error: null };
+}
+
+export async function getMentoringRecapById(id: string) {
+  if (!supabase) return envError<MentoringRecap | null>(null);
+  const { data, error } = await supabase.from("mentoring_recaps").select("*").eq("id", id).maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
+  return { data: data as MentoringRecap | null, error: null };
+}
+
+export async function getActivityCorrectionLogs(targetTable: "mentoring_recaps" | "event_participations", targetId: string) {
+  if (!supabase) return envError<ActivityCorrectionLog[]>([]);
+  const { data, error } = await supabase
+    .from("activity_correction_log")
+    .select("*")
+    .eq("target_table", targetTable)
+    .eq("target_id", targetId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) return { data: [], error: `${VI_ERROR} (activity_correction_log: ${error.message})` };
+  return { data: (data ?? []) as ActivityCorrectionLog[], error: null };
+}
+
+function cleanCorrectionText(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+}
+
+function valueForAudit(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
+function validateDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validateMonth(value: string) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+
+function correctionTypeForField(field: string): ActivityCorrectionLog["correction_type"] {
+  if (field === "status") return "status_change";
+  if (field === "issue_flag") return "issue_flag_change";
+  if (field === "admin_notes") return "admin_note";
+  return "update_field";
+}
+
+export async function updateMentoringRecapCorrection(input: MentoringRecapCorrectionInput): Promise<QueryResult<MentoringRecap | null>> {
+  if (!supabase) return envError<MentoringRecap | null>(null);
+  const recapId = String(input.id ?? "").trim();
+  if (!recapId) return { data: null, error: "Thiếu recap id." };
+
+  const current = await getMentoringRecapById(recapId);
+  if (current.error) return { data: null, error: current.error };
+  if (!current.data) return { data: null, error: "Không tìm thấy recap cần sửa." };
+
+  const updates: Partial<MentoringRecap> = {};
+
+  if (Object.prototype.hasOwnProperty.call(input, "meeting_date")) {
+    const meetingDate = cleanCorrectionText(input.meeting_date);
+    if (!meetingDate || !validateDate(meetingDate)) return { data: null, error: "meeting_date phải đúng định dạng YYYY-MM-DD." };
+    updates.meeting_date = meetingDate;
+    updates.meeting_month = meetingDate.slice(0, 7);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "meeting_month") && !Object.prototype.hasOwnProperty.call(input, "meeting_date")) {
+    const meetingMonth = cleanCorrectionText(input.meeting_month);
+    if (!meetingMonth || !validateMonth(meetingMonth)) return { data: null, error: "meeting_month phải đúng định dạng YYYY-MM." };
+    updates.meeting_month = meetingMonth;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "status")) {
+    const status = cleanCorrectionText(input.status);
+    if (!status || !ALLOWED_RECAP_STATUSES.has(status)) return { data: null, error: "status không hợp lệ." };
+    updates.status = status;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "issue_flag")) {
+    if (typeof input.issue_flag !== "boolean") return { data: null, error: "issue_flag phải là boolean." };
+    updates.issue_flag = input.issue_flag;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "admin_notes")) {
+    updates.admin_notes = cleanCorrectionText(input.admin_notes);
+  }
+
+  const changedEntries = Object.entries(updates).filter(([field, nextValue]) => valueForAudit(current.data?.[field]) !== valueForAudit(nextValue));
+  if (!changedEntries.length) return { data: current.data, error: null };
+
+  const { data: updated, error: updateError } = await supabase
+    .from("mentoring_recaps")
+    .update(Object.fromEntries(changedEntries))
+    .eq("id", recapId)
+    .select("*")
+    .maybeSingle();
+  if (updateError) return { data: null, error: `${VI_ERROR} (mentoring_recaps update: ${updateError.message})` };
+
+  const reason = cleanCorrectionText(input.reason);
+  const correctedBy = cleanCorrectionText(input.corrected_by) ?? "admin";
+  const logs = changedEntries.map(([field, nextValue]) => ({
+    target_table: "mentoring_recaps",
+    target_id: recapId,
+    correction_type: correctionTypeForField(field),
+    field_name: field,
+    old_value: valueForAudit(current.data?.[field]),
+    new_value: valueForAudit(nextValue),
+    reason,
+    corrected_by: correctedBy
+  }));
+
+  const { error: logError } = await supabase.from("activity_correction_log").insert(logs);
+  if (logError) return { data: updated as MentoringRecap, error: `${VI_ERROR} (activity_correction_log insert: ${logError.message})` };
+
+  return { data: updated as MentoringRecap, error: null };
 }
 
 export async function getEventParticipationsByPersonId(personId: string) {
