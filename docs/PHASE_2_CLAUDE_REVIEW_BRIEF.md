@@ -1,5 +1,7 @@
 # VAM OS Phase 2 Claude Review Brief
 
+Superseded: The key business decisions have been finalized and incorporated into [Phase 2 Activity & Event Tracking Plan](PHASE_2_ACTIVITY_AND_EVENT_TRACKING_PLAN.md) and [Activity Import Guide](ACTIVITY_IMPORT_GUIDE.md). Keep this file as an archive of the Claude review package.
+
 This brief is for Claude’s business/SOP review. It is intentionally concise and does not include the full repo.
 
 ## 1. Current VAM OS Status
@@ -137,4 +139,3 @@ Claude should focus on:
 - Confirming what is required before database schema or app implementation begins.
 
 No SQL migration or app implementation should happen until the SOP decisions are finalized.
-

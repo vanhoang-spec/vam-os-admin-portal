@@ -1,5 +1,7 @@
 # Phase 2 Activity & Event Tracking Plan Draft
 
+Superseded: This draft has been superseded by [Phase 2 Activity & Event Tracking Plan](PHASE_2_ACTIVITY_AND_EVENT_TRACKING_PLAN.md). Keep this file as an archive only.
+
 Status: Draft only. Do not implement schema until the business SOP is reviewed and finalized.
 
 ## Context
@@ -367,4 +369,3 @@ Recommended next step:
 2. Confirm definitions, statuses, and ownership.
 3. Finalize CSV import process.
 4. Only then create database migrations and app UI changes.
-
