@@ -49,7 +49,7 @@ select
   seed_events.legacy_event_temp_id,
   target_season.id,
   seed_events.event_name,
-  seed_events.event_type,
+  seed_events.event_type::event_type,
   seed_events.starts_at,
   seed_events.source_notes
 from seed_events
