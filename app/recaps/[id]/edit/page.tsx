@@ -7,7 +7,7 @@ import { displayText, formatDate } from "@/lib/utils";
 import { RecapCorrectionForm } from "./correction-form";
 
 export default async function EditRecapPage({ params }: { params: { id: string } }) {
-  const adminUser = await getCurrentAdminUser({ allowPasswordGateFallback: true });
+  const adminUser = await getCurrentAdminUser();
   if (!canEditRecaps(adminUser)) {
     return (
       <>

@@ -19,14 +19,24 @@ const navItems = [
   { href: "/data-issues", label: "Data Issues", icon: DatabaseZap }
 ];
 
-function roleDisplay(adminUser: CurrentAdminUser) {
-  return adminUser.isPasswordGateFallback ? "Password gate fallback" : roleLabel(adminUser.role);
-}
-
 export function AppShell({ children, adminUser }: { children: React.ReactNode; adminUser: CurrentAdminUser | null }) {
   const pathname = usePathname();
 
   if (pathname === "/unlock" || pathname === "/login") return <>{children}</>;
+
+  if (!adminUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f7faf8] px-4 py-10">
+        <section className="w-full max-w-md rounded-lg border border-vam-line bg-white p-6 shadow-soft">
+          <h1 className="text-xl font-semibold text-vam-ink">Cần đăng nhập Supabase Auth</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Vui lòng đăng nhập bằng tài khoản admin đã được cấp quyền active.</p>
+          <Link href="/login" className="mt-4 inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-ink">
+            Đến trang đăng nhập
+          </Link>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f7faf8]">
@@ -57,12 +67,10 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
           </nav>
           <div className="border-t border-vam-line px-6 py-4 text-xs text-slate-500">
             <div>UEH Mentoring Season 11</div>
-            {adminUser ? (
-              <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
-                <div className="truncate font-medium text-vam-ink">{adminUser.email}</div>
-                <div>{roleDisplay(adminUser)}</div>
-              </div>
-            ) : null}
+            <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+              <div className="truncate font-medium text-vam-ink">{adminUser.email}</div>
+              <div>{roleLabel(adminUser.role)}</div>
+            </div>
           </div>
         </div>
       </aside>
@@ -70,7 +78,7 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
         <header className="sticky top-0 z-10 border-b border-vam-line bg-white/95 backdrop-blur">
           <div className="px-4 py-3 sm:px-6 lg:px-8">
             <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-              MVP nội bộ - Sprint 1A dùng Supabase Auth ở app layer, RLS chưa bật. Password gate vẫn là fallback chuyển tiếp.
+              MVP nội bộ - Sprint 1A dùng Supabase Auth ở app layer, RLS chưa bật. Password gate chỉ là lớp chuyển tiếp, không cấp quyền admin.
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -78,12 +86,10 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
                 <div className="text-sm text-slate-500">Cổng quản trị dữ liệu Vietnam Alumni Mentoring</div>
               </div>
               <div className="flex items-center gap-3">
-                {adminUser ? (
-                  <div className="hidden text-right text-xs text-slate-500 sm:block">
-                    <div className="max-w-60 truncate font-medium text-vam-ink">{adminUser.email}</div>
-                    <div>{roleDisplay(adminUser)}</div>
-                  </div>
-                ) : null}
+                <div className="hidden text-right text-xs text-slate-500 sm:block">
+                  <div className="max-w-60 truncate font-medium text-vam-ink">{adminUser.email}</div>
+                  <div>{roleLabel(adminUser.role)}</div>
+                </div>
                 <form action={logoutAction}>
                   <button type="submit" className="inline-flex h-9 items-center gap-2 rounded-md border border-vam-line bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
                     <LogOut className="h-4 w-4" />

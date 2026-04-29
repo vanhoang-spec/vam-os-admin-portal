@@ -11,7 +11,7 @@ function safeNext(value: string | string[] | undefined) {
 }
 
 export default async function LoginPage({ searchParams }: { searchParams?: { next?: string | string[] } }) {
-  const adminUser = await getCurrentAdminUser({ allowPasswordGateFallback: true });
+  const adminUser = await getCurrentAdminUser();
   if (adminUser) redirect(safeNext(searchParams?.next));
 
   return (

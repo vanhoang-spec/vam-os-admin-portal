@@ -17,6 +17,13 @@ function redirectToLogin(request: NextRequest) {
   return NextResponse.redirect(url);
 }
 
+function redirectToUnlock(request: NextRequest) {
+  const url = request.nextUrl.clone();
+  url.pathname = "/unlock";
+  url.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return NextResponse.redirect(url);
+}
+
 async function fetchAuthUser(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -121,9 +128,9 @@ export async function middleware(request: NextRequest) {
   const expectedToken = await unlockToken(password);
   const currentToken = request.cookies.get(ADMIN_UNLOCK_COOKIE)?.value;
 
-  if (currentToken === expectedToken) return NextResponse.next();
+  if (currentToken === expectedToken) return redirectToLogin(request);
 
-  return redirectToLogin(request);
+  return redirectToUnlock(request);
 }
 
 export const config = {

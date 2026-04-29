@@ -23,17 +23,6 @@ export function hasPasswordGateFallback() {
   return cookies().get(ADMIN_UNLOCK_COOKIE)?.value === passwordGateToken(configuredPassword);
 }
 
-function fallbackAdminUser(): CurrentAdminUser {
-  return {
-    email: "password-gate@vam-os.local",
-    full_name: "Temporary password gate",
-    role: "super_admin",
-    status: "active",
-    auth_user_id: null,
-    isPasswordGateFallback: true
-  };
-}
-
 function authClient(accessToken?: string) {
   if (!supabaseUrl || !supabaseAnonKey) return null;
   return createClient(supabaseUrl, supabaseAnonKey, {
@@ -83,7 +72,7 @@ async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null
   return row;
 }
 
-export async function getCurrentAdminUser(options: { allowPasswordGateFallback?: boolean } = {}): Promise<CurrentAdminUser | null> {
+export async function getCurrentAdminUser(): Promise<CurrentAdminUser | null> {
   const authUser = await getCurrentSupabaseAuthUser();
   if (authUser) {
     const adminUser = await findAdminUserForAuthUser(authUser);
@@ -96,10 +85,6 @@ export async function getCurrentAdminUser(options: { allowPasswordGateFallback?:
         auth_user_id: adminUser.auth_user_id
       };
     }
-  }
-
-  if (options.allowPasswordGateFallback && hasPasswordGateFallback()) {
-    return fallbackAdminUser();
   }
 
   return null;

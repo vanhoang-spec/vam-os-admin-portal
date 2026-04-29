@@ -18,7 +18,7 @@ export async function correctMentoringRecapAction(
   _previousState: CorrectionActionState,
   formData: FormData
 ): Promise<CorrectionActionState> {
-  const adminUser = await getCurrentAdminUser({ allowPasswordGateFallback: true });
+  const adminUser = await getCurrentAdminUser();
   if (!canEditRecaps(adminUser)) {
     return { ok: false, message: "Bạn không có quyền sửa mentoring recap." };
   }
@@ -27,11 +27,7 @@ export async function correctMentoringRecapAction(
   const personId = formText(formData, "person_id");
   const issueFlagValue = formData.get("issue_flag");
   const correctedByFromForm = formText(formData, "corrected_by");
-  const correctedBy = adminUser?.isPasswordGateFallback
-    ? correctedByFromForm || adminUser.email
-    : adminUser?.full_name
-      ? `${adminUser.full_name} <${adminUser.email}>`
-      : adminUser?.email;
+  const correctedBy = adminUser?.full_name ? `${adminUser.full_name} <${adminUser.email}>` : adminUser?.email;
 
   const result = await updateMentoringRecapCorrection({
     id,
