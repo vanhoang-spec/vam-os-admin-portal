@@ -1,20 +1,34 @@
 import { supabase } from "@/lib/supabase";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 import type {
   ActivityCorrectionLog,
   Application,
   Event,
   EventParticipation,
+  FounderIntelligenceDashboard,
   JsonRecord,
   Match,
   MenteeProfile,
   MentorProfile,
   MentoringRecap,
   OperationalTeamAssignment,
+  OperationsWorkflowData,
   Person,
   Season
 } from "@/lib/types";
 
 export type QueryResult<T> = { data: T; error: string | null };
+
+export type OperationsDashboardKpis = {
+  selectedMonth: string;
+  recapCount: number;
+  activeMenteeCount: number;
+  activeMentorCount: number;
+  mentorWithoutRecapCount: number;
+  eventTrainingCount: number;
+  eventAttendanceCount: number;
+  followUpCount: number;
+};
 
 const ALLOWED_RECAP_STATUSES = new Set(["submitted", "needs_review", "invalid", "duplicate"]);
 
@@ -38,19 +52,128 @@ export function envError<T>(fallback: T): QueryResult<T> {
   };
 }
 
+function dataClient() {
+  return getSupabaseServerClient() ?? supabase;
+}
+
+const OPERATIONAL_MONTH_START = "2025-10";
+const OPERATIONAL_MONTH_END = "2026-06";
+const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
+
+function normalizeStatus(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function monthDate(month: string) {
+  return new Date(`${month}-01T00:00:00Z`);
+}
+
+function addMonths(month: string, delta: number) {
+  const date = monthDate(month);
+  date.setUTCMonth(date.getUTCMonth() + delta);
+  return date.toISOString().slice(0, 7);
+}
+
+function operationalMonths() {
+  const months: string[] = [];
+  for (let month = OPERATIONAL_MONTH_START; month <= OPERATIONAL_MONTH_END; month = addMonths(month, 1)) {
+    months.push(month);
+  }
+  return months;
+}
+
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function monthFromDate(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}/.test(raw)) return raw.slice(0, 7);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 7);
+}
+
+function isOperationalMonth(month: unknown) {
+  const value = String(month ?? "").trim();
+  return /^\d{4}-\d{2}$/.test(value) && value >= OPERATIONAL_MONTH_START && value <= OPERATIONAL_MONTH_END;
+}
+
+function isValidRecapActivity(recap: MentoringRecap) {
+  return VALID_ACTIVITY_STATUSES.has(normalizeStatus(recap.status));
+}
+
+function computeOperationsDashboardKpis(input: {
+  seasons: Season[];
+  matches: Match[];
+  recaps: MentoringRecap[];
+  events: Event[];
+  eventParticipations: EventParticipation[];
+  seasonCode?: string;
+}): OperationsDashboardKpis {
+  const validRecaps = input.recaps.filter(isValidRecapActivity);
+  const seasonMonths = operationalMonths();
+  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
+  const validEventMonths = input.events.map((event) => monthFromDate(event.starts_at)).filter((month): month is string => isOperationalMonth(month));
+  const monthsWithOperationalData = new Set([
+    ...validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)),
+    ...validEventMonths
+  ]);
+  const availableMonths = seasonMonths.filter((month) => monthsWithOperationalData.has(month)).sort((a, b) => b.localeCompare(a));
+  const nowMonth = currentMonth();
+  const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
+  const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
+  const selectedMonth = latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const previousMonth = addMonths(selectedMonth, -1);
+  const season = input.seasons.find((row) => row.code === (input.seasonCode ?? "UEHM-S11"));
+
+  const activeMatches = input.matches.filter((match) => {
+    if (normalizeStatus(match.status) !== "active") return false;
+    if (season?.id) return match.season_id === season.id;
+    return true;
+  });
+  const activeMatchesWithPeople = activeMatches.filter((match) => match.mentor_person_id && match.mentee_person_id);
+  const activeMenteeIds = new Set(activeMatchesWithPeople.map((match) => match.mentee_person_id).filter(Boolean));
+  const activeMentorIds = new Set(activeMatchesWithPeople.map((match) => match.mentor_person_id).filter(Boolean));
+
+  const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
+  const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === previousMonth);
+  const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+  const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
+  const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+
+  const eventsInMonth = input.events.filter((event) => monthFromDate(event.starts_at) === selectedMonth);
+  const eventIdsInMonth = new Set(eventsInMonth.map((event) => event.id));
+  const eventParticipationsInMonth = input.eventParticipations.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
+
+  return {
+    selectedMonth,
+    recapCount: selectedRecaps.length,
+    activeMenteeCount: selectedMenteeIds.size,
+    activeMentorCount: selectedMentorIds.size,
+    mentorWithoutRecapCount: Array.from(activeMentorIds).filter((id) => !selectedMentorIds.has(id)).length,
+    eventTrainingCount: eventsInMonth.length,
+    eventAttendanceCount: eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "attended").length,
+    followUpCount: Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && !previousMenteeIds.has(id)).length
+  };
+}
+
 async function selectTable<T>(table: string, columns = "*", fallback: T[] = []): Promise<QueryResult<T[]>> {
-  if (!supabase) return envError(fallback);
-  const { data, error } = await supabase.from(table).select(columns);
+  const client = dataClient();
+  if (!client) return envError(fallback);
+  const { data, error } = await client.from(table).select(columns);
   if (error) return { data: fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
   return { data: (data ?? []) as T[], error: null };
 }
 
 async function selectAllTable<T>(table: string, columns = "*", fallback: T[] = [], pageSize = 1000): Promise<QueryResult<T[]>> {
-  if (!supabase) return envError(fallback);
+  const client = dataClient();
+  if (!client) return envError(fallback);
   const rows: T[] = [];
   for (let from = 0; ; from += pageSize) {
     const to = from + pageSize - 1;
-    const { data, error } = await supabase.from(table).select(columns).range(from, to);
+    const { data, error } = await client.from(table).select(columns).range(from, to);
     if (error) return { data: rows.length ? rows : fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
     const page = (data ?? []) as T[];
     rows.push(...page);
@@ -64,8 +187,9 @@ export async function selectAllRows<T>(table: string, columns = "*", fallback: T
 }
 
 async function countTable(table: string, filter?: (query: any) => any): Promise<QueryResult<number>> {
-  if (!supabase) return envError(0);
-  let query = supabase.from(table).select("id", { count: "exact", head: true });
+  const client = dataClient();
+  if (!client) return envError(0);
+  let query = client.from(table).select("id", { count: "exact", head: true });
   if (filter) query = filter(query);
   const { count, error } = await query;
   if (error) return { data: 0, error: `${VI_ERROR} (${table}: ${error.message})` };
@@ -110,8 +234,9 @@ export async function getRolesForPerson(personId: string) {
 export async function getAnswersForApplications(applicationIds: string[]) {
   const empty: JsonRecord[] = [];
   if (!applicationIds.length) return { data: empty, error: null };
-  if (!supabase) return envError(empty);
-  const { data, error } = await supabase.from("application_answers").select("*").in("application_id", applicationIds);
+  const client = dataClient();
+  if (!client) return envError(empty);
+  const { data, error } = await client.from("application_answers").select("*").in("application_id", applicationIds);
   if (error) return { data: empty, error: `${VI_ERROR} (application_answers: ${error.message})` };
   return { data: data ?? empty, error: null };
 }
@@ -121,15 +246,17 @@ export async function getDataIssues() {
 }
 
 export async function getPerson(id: string) {
-  if (!supabase) return envError<Person | null>(null);
-  const { data, error } = await supabase.from("people").select("*").eq("id", id).maybeSingle();
+  const client = dataClient();
+  if (!client) return envError<Person | null>(null);
+  const { data, error } = await client.from("people").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (people: ${error.message})` };
   return { data: data as Person | null, error: null };
 }
 
 export async function getApplication(id: string) {
-  if (!supabase) return envError<Application | null>(null);
-  const { data, error } = await supabase.from("applications").select("*").eq("id", id).maybeSingle();
+  const client = dataClient();
+  if (!client) return envError<Application | null>(null);
+  const { data, error } = await client.from("applications").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (applications: ${error.message})` };
   return { data: data as Application | null, error: null };
 }
@@ -139,15 +266,17 @@ export async function getAnswersForApplication(applicationId: string) {
 }
 
 export async function getMatch(id: string) {
-  if (!supabase) return envError<Match | null>(null);
-  const { data, error } = await supabase.from("matches").select("*").eq("id", id).maybeSingle();
+  const client = dataClient();
+  if (!client) return envError<Match | null>(null);
+  const { data, error } = await client.from("matches").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (matches: ${error.message})` };
   return { data: data as Match | null, error: null };
 }
 
 export async function getMentoringRecapsByMenteePersonId(personId: string) {
-  if (!supabase) return envError<MentoringRecap[]>([]);
-  const { data, error } = await supabase
+  const client = dataClient();
+  if (!client) return envError<MentoringRecap[]>([]);
+  const { data, error } = await client
     .from("mentoring_recaps")
     .select("*")
     .eq("mentee_person_id", personId)
@@ -157,8 +286,9 @@ export async function getMentoringRecapsByMenteePersonId(personId: string) {
 }
 
 export async function getMentoringRecapsByMentorPersonId(personId: string) {
-  if (!supabase) return envError<MentoringRecap[]>([]);
-  const { data, error } = await supabase
+  const client = dataClient();
+  if (!client) return envError<MentoringRecap[]>([]);
+  const { data, error } = await client
     .from("mentoring_recaps")
     .select("*")
     .eq("mentor_person_id", personId)
@@ -168,15 +298,17 @@ export async function getMentoringRecapsByMentorPersonId(personId: string) {
 }
 
 export async function getMentoringRecapById(id: string) {
-  if (!supabase) return envError<MentoringRecap | null>(null);
-  const { data, error } = await supabase.from("mentoring_recaps").select("*").eq("id", id).maybeSingle();
+  const client = dataClient();
+  if (!client) return envError<MentoringRecap | null>(null);
+  const { data, error } = await client.from("mentoring_recaps").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
   return { data: data as MentoringRecap | null, error: null };
 }
 
 export async function getActivityCorrectionLogs(targetTable: "mentoring_recaps" | "event_participations", targetId: string) {
-  if (!supabase) return envError<ActivityCorrectionLog[]>([]);
-  const { data, error } = await supabase
+  const client = dataClient();
+  if (!client) return envError<ActivityCorrectionLog[]>([]);
+  const { data, error } = await client
     .from("activity_correction_log")
     .select("*")
     .eq("target_table", targetTable)
@@ -216,7 +348,8 @@ function correctionTypeForField(field: string): ActivityCorrectionLog["correctio
 }
 
 export async function updateMentoringRecapCorrection(input: MentoringRecapCorrectionInput): Promise<QueryResult<MentoringRecap | null>> {
-  if (!supabase) return envError<MentoringRecap | null>(null);
+  const client = dataClient();
+  if (!client) return envError<MentoringRecap | null>(null);
   const recapId = String(input.id ?? "").trim();
   if (!recapId) return { data: null, error: "Thiếu recap id." };
 
@@ -257,7 +390,7 @@ export async function updateMentoringRecapCorrection(input: MentoringRecapCorrec
   const changedEntries = Object.entries(updates).filter(([field, nextValue]) => valueForAudit(current.data?.[field]) !== valueForAudit(nextValue));
   if (!changedEntries.length) return { data: current.data, error: null };
 
-  const { data: updated, error: updateError } = await supabase
+  const { data: updated, error: updateError } = await client
     .from("mentoring_recaps")
     .update(Object.fromEntries(changedEntries))
     .eq("id", recapId)
@@ -278,15 +411,16 @@ export async function updateMentoringRecapCorrection(input: MentoringRecapCorrec
     corrected_by: correctedBy
   }));
 
-  const { error: logError } = await supabase.from("activity_correction_log").insert(logs);
+  const { error: logError } = await client.from("activity_correction_log").insert(logs);
   if (logError) return { data: updated as MentoringRecap, error: `${VI_ERROR} (activity_correction_log insert: ${logError.message})` };
 
   return { data: updated as MentoringRecap, error: null };
 }
 
 export async function getEventParticipationsByPersonId(personId: string) {
-  if (!supabase) return envError<EventParticipation[]>([]);
-  const { data, error } = await supabase
+  const client = dataClient();
+  if (!client) return envError<EventParticipation[]>([]);
+  const { data, error } = await client
     .from("event_participations")
     .select("*")
     .eq("person_id", personId)
@@ -296,8 +430,9 @@ export async function getEventParticipationsByPersonId(personId: string) {
 }
 
 export async function getOperationalTeamAssignmentsByPerson(personId: string) {
-  if (!supabase) return envError<OperationalTeamAssignment[]>([]);
-  const { data, error } = await supabase
+  const client = dataClient();
+  if (!client) return envError<OperationalTeamAssignment[]>([]);
+  const { data, error } = await client
     .from("operational_team_assignments")
     .select("id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes")
     .eq("person_id", personId)
@@ -309,7 +444,54 @@ export async function getOperationalTeamAssignmentsByPerson(personId: string) {
   return { data: (data ?? []) as OperationalTeamAssignment[], error: null };
 }
 
+async function getOperationsDataFromRpc() {
+  const client = dataClient();
+  if (!client) return null;
+
+  const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: "UEHM-S11" });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") {
+      console.warn("[operations] get_operations_dashboard_data unavailable; using temporary raw-read fallback.");
+      return null;
+    }
+    const empty = { data: [], error: `${VI_ERROR} (get_operations_dashboard_data: ${error.message})` };
+    const emptyKpis = { data: null, error: `${VI_ERROR} (get_operations_dashboard_data: ${error.message})` };
+    return {
+      seasons: empty as QueryResult<Season[]>,
+      people: empty as QueryResult<Person[]>,
+      mentees: empty as QueryResult<MenteeProfile[]>,
+      matches: empty as QueryResult<Match[]>,
+      recaps: empty as QueryResult<MentoringRecap[]>,
+      events: empty as QueryResult<Event[]>,
+      eventParticipations: empty as QueryResult<EventParticipation[]>,
+      kpis: emptyKpis as QueryResult<OperationsDashboardKpis | null>
+    };
+  }
+
+  const payload = (data ?? {}) as Record<string, unknown>;
+  console.info("[operations] get_operations_dashboard_data RPC used.");
+  const seasons = (payload.seasons ?? []) as Season[];
+  const matches = (payload.matches ?? []) as Match[];
+  const recaps = (payload.recaps ?? []) as MentoringRecap[];
+  const events = (payload.events ?? []) as Event[];
+  const eventParticipations = (payload.eventParticipations ?? []) as EventParticipation[];
+  const kpis = (payload.kpis ?? computeOperationsDashboardKpis({ seasons, matches, recaps, events, eventParticipations })) as OperationsDashboardKpis;
+  return {
+    seasons: { data: seasons, error: null },
+    people: { data: (payload.people ?? []) as Person[], error: null },
+    mentees: { data: (payload.mentees ?? []) as MenteeProfile[], error: null },
+    matches: { data: matches, error: null },
+    recaps: { data: recaps, error: null },
+    events: { data: events, error: null },
+    eventParticipations: { data: eventParticipations, error: null },
+    kpis: { data: kpis, error: null }
+  };
+}
+
 export async function getOperationsData() {
+  const rpcData = await getOperationsDataFromRpc();
+  if (rpcData) return rpcData;
+
   const [
     seasons,
     people,
@@ -338,8 +520,119 @@ export async function getOperationsData() {
     matches,
     recaps,
     events,
-    eventParticipations
+    eventParticipations,
+    kpis: {
+      data: computeOperationsDashboardKpis({
+        seasons: seasons.data,
+        matches: matches.data,
+        recaps: recaps.data,
+        events: events.data,
+        eventParticipations: eventParticipations.data
+      }),
+      error: seasons.error || matches.error || recaps.error || events.error || eventParticipations.error
+    }
   };
+}
+
+export async function getOperationsWorkflowData(seasonCode = "UEHM-S11", selectedMonth?: string | null): Promise<QueryResult<OperationsWorkflowData | null>> {
+  const client = dataClient();
+  if (!client) return envError<OperationsWorkflowData | null>(null);
+  const { data, error } = await client.rpc("get_operations_workflow_data", {
+    p_season_code: seasonCode,
+    p_selected_month: selectedMonth ?? null
+  });
+  if (error) return { data: null, error: `${VI_ERROR} (get_operations_workflow_data: ${error.message})` };
+  return { data: data as OperationsWorkflowData, error: null };
+}
+
+export async function getFounderIntelligenceDashboard(seasonCode = "UEHM-S11"): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
+  const client = dataClient();
+  if (!client) return envError<FounderIntelligenceDashboard | null>(null);
+  const { data, error } = await client.rpc("get_founder_intelligence_dashboard", {
+    p_season_code: seasonCode
+  });
+  if (error) return { data: null, error: `${VI_ERROR} (get_founder_intelligence_dashboard: ${error.message})` };
+  return { data: data as FounderIntelligenceDashboard, error: null };
+}
+
+export type CreateActionItemInput = {
+  season_code?: string;
+  action_type: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  title: string;
+  description?: string | null;
+  priority?: string | null;
+  owner_admin_user_id?: string | null;
+  due_date?: string | null;
+  source?: string | null;
+  metadata?: JsonRecord | null;
+};
+
+export async function createWorkflowActionItem(input: CreateActionItemInput): Promise<QueryResult<JsonRecord | null>> {
+  const client = dataClient();
+  if (!client) return envError<JsonRecord | null>(null);
+  const { data, error } = await client.rpc("create_action_item", {
+    p_season_code: input.season_code ?? "UEHM-S11",
+    p_action_type: input.action_type,
+    p_entity_type: input.entity_type ?? null,
+    p_entity_id: input.entity_id || null,
+    p_title: input.title,
+    p_description: input.description ?? null,
+    p_priority: input.priority ?? "medium",
+    p_owner_admin_user_id: input.owner_admin_user_id || null,
+    p_due_date: input.due_date || null,
+    p_source: input.source ?? "manual",
+    p_metadata: input.metadata ?? {}
+  });
+  if (error) return { data: null, error: `${VI_ERROR} (create_action_item: ${error.message})` };
+  return { data: data as JsonRecord, error: null };
+}
+
+export async function updateWorkflowActionItem(input: {
+  id: string;
+  status?: string | null;
+  owner_admin_user_id?: string | null;
+  priority?: string | null;
+  due_date?: string | null;
+  description?: string | null;
+  metadata?: JsonRecord | null;
+}): Promise<QueryResult<JsonRecord | null>> {
+  const client = dataClient();
+  if (!client) return envError<JsonRecord | null>(null);
+  const { data, error } = await client.rpc("update_action_item", {
+    p_action_item_id: input.id,
+    p_status: input.status ?? null,
+    p_owner_admin_user_id: input.owner_admin_user_id || null,
+    p_priority: input.priority ?? null,
+    p_due_date: input.due_date || null,
+    p_description: input.description ?? null,
+    p_metadata: input.metadata ?? null
+  });
+  if (error) return { data: null, error: `${VI_ERROR} (update_action_item: ${error.message})` };
+  return { data: data as JsonRecord, error: null };
+}
+
+export async function addWorkflowActionItemComment(input: { id: string; comment_text: string }): Promise<QueryResult<JsonRecord | null>> {
+  const client = dataClient();
+  if (!client) return envError<JsonRecord | null>(null);
+  const { data, error } = await client.rpc("add_action_item_comment", {
+    p_action_item_id: input.id,
+    p_comment_text: input.comment_text
+  });
+  if (error) return { data: null, error: `${VI_ERROR} (add_action_item_comment: ${error.message})` };
+  return { data: data as JsonRecord, error: null };
+}
+
+export async function generateMonthlyFollowupActions(input: { season_code?: string; selected_month: string }): Promise<QueryResult<JsonRecord | null>> {
+  const client = dataClient();
+  if (!client) return envError<JsonRecord | null>(null);
+  const { data, error } = await client.rpc("generate_monthly_followup_actions", {
+    p_season_code: input.season_code ?? "UEHM-S11",
+    p_selected_month: input.selected_month
+  });
+  if (error) return { data: null, error: `${VI_ERROR} (generate_monthly_followup_actions: ${error.message})` };
+  return { data: data as JsonRecord, error: null };
 }
 
 export async function getDashboardData() {

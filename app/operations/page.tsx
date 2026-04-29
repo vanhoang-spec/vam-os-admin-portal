@@ -154,7 +154,8 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     data.matches.error,
     data.recaps.error,
     data.events.error,
-    data.eventParticipations.error
+    data.eventParticipations.error,
+    data.kpis.error
   ].filter(Boolean);
 
   const validRecaps = data.recaps.data.filter(isValidRecapActivity);
@@ -204,6 +205,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const eventParticipationsInMonth = data.eventParticipations.data.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
   const attendedCount = eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "attended").length;
   const registeredAbsentCount = eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "registered_absent").length;
+  const rpcKpis = data.kpis.data?.selectedMonth === selectedMonth ? data.kpis.data : null;
 
   const recapByMonth = Array.from(
     validOperationalRecaps.reduce((counts, recap) => {
@@ -323,16 +325,31 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Số recap trong tháng" value={selectedRecaps.length} />
-        <KpiCard label="Mentee active" value={selectedMenteeIds.size} />
-        <KpiCard label="Mentor active" value={selectedMentorIds.size} />
+        <KpiCard label="Số recap trong tháng" value={rpcKpis?.recapCount ?? selectedRecaps.length} />
+        <KpiCard label="Mentee active" value={rpcKpis?.activeMenteeCount ?? selectedMenteeIds.size} />
+        <KpiCard label="Mentor active" value={rpcKpis?.activeMentorCount ?? selectedMentorIds.size} />
         <KpiCard label="Tỷ lệ mentee active" value={percent(activeMenteeCount, activeMenteeIds.size)} />
-        <KpiCard label="Mentor chưa có recap" value={mentorWithoutRecapCount} />
-        <KpiCard label="Event/training trong tháng" value={eventsInMonth.length} />
-        <KpiCard label="Lượt tham dự event" value={attendedCount} />
+        <KpiCard label="Mentor chưa có recap" value={rpcKpis?.mentorWithoutRecapCount ?? mentorWithoutRecapCount} />
+        <KpiCard label="Event/training trong tháng" value={rpcKpis?.eventTrainingCount ?? eventsInMonth.length} />
+        <KpiCard label="Lượt tham dự event" value={rpcKpis?.eventAttendanceCount ?? attendedCount} />
         <KpiCard label="Tỷ lệ attendance" value={attendanceRate(attendedCount, registeredAbsentCount)} />
         <KpiCard label="Feedback count" value="Chưa triển khai" />
-        <KpiCard label="Mentee cần follow-up" value={followUpCount} />
+        <KpiCard label="Mentee cần follow-up" value={rpcKpis?.followUpCount ?? followUpCount} />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <Link href="/operations/intelligence" className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+          Phân tích cộng đồng mentor/mentee
+        </Link>
+        <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&type=followup_no_recap`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+          Xem danh sách cần follow-up
+        </Link>
+        <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&type=data_issue`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+          Xem lỗi dữ liệu
+        </Link>
+        <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&overdue=true`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+          Công việc quá hạn
+        </Link>
       </div>
 
       <section className="mt-6 grid gap-4 xl:grid-cols-2">

@@ -2,9 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { clearAuthCookies, getSupabaseAuthClientForPasswordSignIn, setAuthCookies } from "@/lib/admin-auth";
+import { clearAuthCookies, getSupabaseAuthClientForPasswordSignIn, getSupabaseAuthClientWithAccessToken, setAuthCookies } from "@/lib/admin-auth";
 import { ADMIN_UNLOCK_COOKIE } from "@/lib/password-gate";
-import { supabase } from "@/lib/supabase";
 
 export type LoginActionState = {
   error: string | null;
@@ -27,7 +26,7 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
   }
 
   const client = getSupabaseAuthClientForPasswordSignIn();
-  if (!client || !supabase) {
+  if (!client) {
     return { error: "Thiếu cấu hình Supabase. Cần NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY." };
   }
 
@@ -37,7 +36,13 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
     return { error: "Đăng nhập không thành công. Vui lòng kiểm tra email/mật khẩu." };
   }
 
-  const { data: adminUser, error: adminError } = await supabase
+  const authedClient = getSupabaseAuthClientWithAccessToken(data.session.access_token);
+  if (!authedClient) {
+    await clearAuthCookies();
+    return { error: "Thiáº¿u cáº¥u hĂ¬nh Supabase. Cáº§n NEXT_PUBLIC_SUPABASE_URL vĂ  NEXT_PUBLIC_SUPABASE_ANON_KEY." };
+  }
+
+  const { data: adminUser, error: adminError } = await authedClient
     .from("admin_users")
     .select("email,status")
     .eq("status", "active")
@@ -51,7 +56,7 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
     return { error: "Tài khoản này chưa có quyền active trong VAM OS." };
   }
 
-  await supabase
+  await authedClient
     .from("admin_users")
     .update({ auth_user_id: data.user.id })
     .eq("email", data.user.email)

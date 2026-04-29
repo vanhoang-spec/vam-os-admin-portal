@@ -6,6 +6,7 @@ export const ADMIN_ROLES = ["viewer", "reviewer", "admin", "super_admin"] as con
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 export type CurrentAdminUser = {
+  id?: string | null;
   email: string;
   full_name: string | null;
   role: AdminRole;
@@ -14,6 +15,10 @@ export type CurrentAdminUser = {
 };
 
 export function canEditRecaps(adminUser: Pick<CurrentAdminUser, "role"> | null) {
+  return adminUser?.role === "admin" || adminUser?.role === "super_admin";
+}
+
+export function canManageWorkflow(adminUser: Pick<CurrentAdminUser, "role"> | null) {
   return adminUser?.role === "admin" || adminUser?.role === "super_admin";
 }
 

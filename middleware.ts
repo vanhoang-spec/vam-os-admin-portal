@@ -60,7 +60,7 @@ async function refreshAccessToken(refreshToken: string) {
   return (await response.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
 }
 
-async function hasActiveAdminUser(user: { id?: string; email?: string }) {
+async function hasActiveAdminUser(user: { id?: string; email?: string }, accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey || !user.id || !user.email) return false;
@@ -71,7 +71,7 @@ async function hasActiveAdminUser(user: { id?: string; email?: string }) {
     {
       headers: {
         apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`
+        Authorization: `Bearer ${accessToken}`
       },
       cache: "no-store"
     }
@@ -86,7 +86,7 @@ async function authAllowsRequest(request: NextRequest) {
   const accessToken = request.cookies.get(AUTH_ACCESS_COOKIE)?.value;
   if (accessToken) {
     const user = await fetchAuthUser(accessToken);
-    if (user && (await hasActiveAdminUser(user))) return NextResponse.next();
+    if (user && (await hasActiveAdminUser(user, accessToken))) return NextResponse.next();
   }
 
   const refreshToken = request.cookies.get(AUTH_REFRESH_COOKIE)?.value;
@@ -96,7 +96,7 @@ async function authAllowsRequest(request: NextRequest) {
   if (!refreshed?.access_token) return null;
 
   const user = await fetchAuthUser(refreshed.access_token);
-  if (!user || !(await hasActiveAdminUser(user))) return null;
+  if (!user || !(await hasActiveAdminUser(user, refreshed.access_token))) return null;
 
   const response = NextResponse.next();
   response.cookies.set(AUTH_ACCESS_COOKIE, refreshed.access_token, {

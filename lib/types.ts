@@ -121,6 +121,62 @@ export type ActivityCorrectionLog = JsonRecord & {
   created_at: string;
 };
 
+export type WorkflowOwner = JsonRecord & {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+};
+
+export type WorkflowQueueItem = JsonRecord & {
+  id: string;
+  action_type: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  owner_name: string | null;
+  due_date: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  mentee_name?: string | null;
+  mentee_email?: string | null;
+  mentor_name?: string | null;
+  created_at: string;
+  updated_at: string;
+  metadata: JsonRecord;
+};
+
+export type WorkflowCorrectionLog = JsonRecord & {
+  id: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  correction_type: string;
+  reason: string | null;
+  requested_by_name: string | null;
+  reviewed_by_name: string | null;
+  status: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+};
+
+export type OperationsWorkflowData = JsonRecord & {
+  summary: {
+    openActionCount: number;
+    overdueActionCount: number;
+    followUpOpenCount: number;
+    followUpResolvedCount: number;
+    dataIssueOpenCount: number;
+    correctionsThisMonth: number;
+  };
+  followUpQueue: WorkflowQueueItem[];
+  dataIssuesQueue: WorkflowQueueItem[];
+  correctionLog: WorkflowCorrectionLog[];
+  myTasks: WorkflowQueueItem[];
+  owners: WorkflowOwner[];
+  currentAdmin?: { id: string; role: string };
+};
+
 export type OperationalTeamAssignment = JsonRecord & {
   id: string;
   person_id: string;
@@ -132,4 +188,63 @@ export type OperationalTeamAssignment = JsonRecord & {
   role_note: string | null;
   status: string | null;
   notes: string | null;
+};
+
+export type IntelligenceCountRow = JsonRecord & {
+  count: number;
+};
+
+export type FounderIntelligenceDashboard = JsonRecord & {
+  definitions: {
+    selectedMonth: string;
+    activeMentor: string;
+    silentMentee: string;
+    overloadedMentor: string;
+    validRecapStatuses: string[];
+  };
+  mentorProfile: JsonRecord & {
+    totalMentors: number;
+    activeMentors: number;
+    inactiveMentors: number;
+    byIndustry: Array<{ industry: string; count: number }>;
+    byFunction: Array<{ functionArea: string; count: number }>;
+    byExperienceBand: Array<{ band: string; count: number }>;
+    byVamSeniority: Array<{ band: string; count: number }>;
+    bySeniorityLevel: Array<{ level: string; count: number }>;
+    overloadedMentors: Array<JsonRecord>;
+    inactiveMentorsWithMentees: Array<JsonRecord>;
+  };
+  menteeProfile: JsonRecord & {
+    totalMentees: number;
+    activeMentees: number;
+    silentMentees: number;
+    byMajor: Array<{ major: string; count: number }>;
+    byUniversity: Array<{ university: string; count: number }>;
+    byCareerInterest: Array<{ careerInterest: string; count: number }>;
+    byTargetIndustry: Array<{ targetIndustry: string; count: number }>;
+    byYearOfStudy: Array<{ yearOfStudy: string; count: number }>;
+    bySupportTeam: Array<{ supportTeam: string; count: number }>;
+  };
+  matchingIntelligence: JsonRecord & {
+    totalActiveMatches: number;
+    mentorMenteeRatio: string;
+    matchesByIndustryAlignment: Array<{ alignment: string; count: number }>;
+    matchesByFunctionAlignment: Array<{ alignment: string; count: number }>;
+    unmatchedOrWeakSegments: Array<JsonRecord>;
+    menteesWithoutIndustryMentor: number;
+    mentorSupplyVsMenteeDemand: Array<{ segment: string; mentorSupply: number; menteeDemand: number; gap: number }>;
+  };
+  activityBySegment: JsonRecord & {
+    activeMenteeRateByMajor: Array<JsonRecord>;
+    recapRateBySupportTeam: Array<JsonRecord>;
+    activeMentorRateByIndustry: Array<JsonRecord>;
+    silentMenteeByCareerInterest: Array<JsonRecord>;
+  };
+  recommendedActions: Array<{
+    priority: string;
+    title: string;
+    reason: string;
+    suggestedOwner: string;
+    suggestedAction: string;
+  }>;
 };

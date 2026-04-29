@@ -3,9 +3,11 @@ import { cookies } from "next/headers";
 import { createClient, type User } from "@supabase/supabase-js";
 import { ADMIN_UNLOCK_COOKIE, ADMIN_UNLOCK_SALT } from "@/lib/password-gate";
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE, type CurrentAdminUser } from "@/lib/auth-constants";
 
 type AdminUserRow = {
+  id: string;
   auth_user_id: string | null;
   email: string;
   full_name: string | null;
@@ -47,11 +49,12 @@ export async function getCurrentSupabaseAuthUser(): Promise<User | null> {
 }
 
 async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null> {
-  if (!supabase || !user.email) return null;
+  const client = getSupabaseServerClient() ?? supabase;
+  if (!client || !user.email) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from("admin_users")
-    .select("auth_user_id,email,full_name,role,status")
+    .select("id,auth_user_id,email,full_name,role,status")
     .eq("status", "active")
     .or(`auth_user_id.eq.${user.id},email.eq.${user.email}`)
     .limit(1)
@@ -61,7 +64,7 @@ async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null
 
   const row = data as AdminUserRow;
   if (!row.auth_user_id) {
-    await supabase
+    await client
       .from("admin_users")
       .update({ auth_user_id: user.id })
       .eq("email", row.email)
@@ -78,6 +81,7 @@ export async function getCurrentAdminUser(): Promise<CurrentAdminUser | null> {
     const adminUser = await findAdminUserForAuthUser(authUser);
     if (adminUser) {
       return {
+        id: adminUser.id,
         email: adminUser.email,
         full_name: adminUser.full_name,
         role: adminUser.role,
@@ -115,4 +119,8 @@ export async function setAuthCookies(accessToken: string, refreshToken: string, 
 
 export function getSupabaseAuthClientForPasswordSignIn() {
   return authClient();
+}
+
+export function getSupabaseAuthClientWithAccessToken(accessToken: string) {
+  return authClient(accessToken);
 }

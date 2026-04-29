@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
@@ -21,6 +21,9 @@ const navItems = [
 
 export function AppShell({ children, adminUser }: { children: React.ReactNode; adminUser: CurrentAdminUser | null }) {
   const pathname = usePathname();
+  const visibleNavItems = adminUser?.role === "super_admin"
+    ? [...navItems, { href: "/admin/users", label: "Quản lý người dùng", icon: UserCog }]
+    : navItems;
 
   if (pathname === "/unlock" || pathname === "/login") return <>{children}</>;
 
@@ -47,7 +50,7 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
             <div className="text-sm text-slate-500">Admin Portal</div>
           </div>
           <nav className="flex-1 space-y-1 px-3 py-4">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
               return (
@@ -100,7 +103,7 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
               </div>
             </div>
             <nav className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:hidden">
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
