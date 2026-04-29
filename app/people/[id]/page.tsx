@@ -158,7 +158,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     events,
     operationalAssignments
   ] = await Promise.all([
-    getCurrentAdminUser({ allowPasswordGateFallback: true }),
+    getCurrentAdminUser(),
     getPerson(params.id),
     getRolesForPerson(params.id),
     getPeople(),

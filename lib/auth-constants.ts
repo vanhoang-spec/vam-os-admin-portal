@@ -11,7 +11,6 @@ export type CurrentAdminUser = {
   role: AdminRole;
   status: "active";
   auth_user_id: string | null;
-  isPasswordGateFallback?: boolean;
 };
 
 export function canEditRecaps(adminUser: Pick<CurrentAdminUser, "role"> | null) {

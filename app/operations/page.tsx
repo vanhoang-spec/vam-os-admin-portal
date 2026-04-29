@@ -144,7 +144,7 @@ function monthLabel(month: string) {
 export default async function OperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
   const [data, adminUser] = await Promise.all([
     getOperationsData(),
-    getCurrentAdminUser({ allowPasswordGateFallback: true })
+    getCurrentAdminUser()
   ]);
   const allowRecapEdit = canEditRecaps(adminUser);
   const errors = [
