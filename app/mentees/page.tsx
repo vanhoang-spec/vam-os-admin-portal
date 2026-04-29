@@ -90,21 +90,22 @@ export default async function MenteesPage() {
         searchPlaceholder="Tìm theo tên, email, mentee_code, MSSV, ngành hoặc mentor"
         searchKeys={["full_name", "email_primary", "mentee_code", "mssv", "major", "mentor_name", "mentor_email"]}
         filters={[
-          { key: "school_code", label: "school_code", valueKey: "school_code" },
+          { key: "school_code", label: "Mã trường", valueKey: "school_code" },
           {
             key: "has_mentor",
             label: "Mentor",
             valueKey: "has_mentor_filter",
             options: [
-              { label: "Has mentor", value: "yes" },
-              { label: "No mentor", value: "no" }
+              { label: "Có mentor", value: "yes" },
+              { label: "Chưa có mentor", value: "no" }
             ]
           },
           { key: "match_status", label: "Trạng thái match", valueKey: "match_status" },
           { key: "major", label: "Ngành", valueKey: "major" }
         ]}
         sortOptions={[
-          { label: "school_code A-Z", key: "school_code", direction: "asc", type: "text" },
+          { label: "Mã trường A-Z", key: "school_code", direction: "asc", type: "text", emptyLast: true, secondaryKey: "full_name" },
+          { label: "Mã trường Z-A", key: "school_code", direction: "desc", type: "text", emptyLast: true, secondaryKey: "full_name" },
           { label: "Tên mentee A-Z", key: "full_name", direction: "asc", type: "text" },
           { label: "Độ tin cậy giảm dần", key: "match_confidence", direction: "desc", type: "number" }
         ]}
@@ -113,7 +114,7 @@ export default async function MenteesPage() {
           { key: "full_name", label: "full_name" },
           { key: "email_primary", label: "email_primary" },
           { key: "mentee_code", label: "mentee_code", displayKey: "mentee_code_display" },
-          { key: "school_code", label: "school_code", displayKey: "school_code_display" },
+          { key: "school_code", label: "Mã trường", displayKey: "school_code_display" },
           { key: "school_raw", label: "school_raw", displayKey: "school_raw_display" },
           { key: "major", label: "major", displayKey: "major_display" },
           { key: "class_cohort", label: "class_cohort", displayKey: "class_cohort_display" },
