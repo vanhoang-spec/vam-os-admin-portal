@@ -21,7 +21,19 @@ type Column = {
   nowrap?: boolean;
   badge?: boolean;
 };
-type SortOption = { label: string; key: string; direction?: "asc" | "desc"; type?: "number" | "text" };
+type SortOption = {
+  label: string;
+  key: string;
+  direction?: "asc" | "desc";
+  type?: "number" | "text";
+  emptyLast?: boolean;
+  secondaryKey?: string;
+};
+
+function isEmptySortValue(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  return !normalized || normalized === "-";
+}
 
 export function FilterableTable<T>({
   rows,
@@ -77,13 +89,22 @@ export function FilterableTable<T>({
     return [...filtered].sort((a, b) => {
       const aValue = (a as any)[selectedSort.key];
       const bValue = (b as any)[selectedSort.key];
+      if (selectedSort.emptyLast) {
+        const aEmpty = isEmptySortValue(aValue);
+        const bEmpty = isEmptySortValue(bValue);
+        if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+      }
       if (selectedSort.type === "number") {
         const aNumber = Number(aValue ?? 0);
         const bNumber = Number(bValue ?? 0);
-        return selectedSort.direction === "desc" ? bNumber - aNumber : aNumber - bNumber;
+        const numberResult = selectedSort.direction === "desc" ? bNumber - aNumber : aNumber - bNumber;
+        if (numberResult !== 0 || !selectedSort.secondaryKey) return numberResult;
+        return String((a as any)[selectedSort.secondaryKey] ?? "").localeCompare(String((b as any)[selectedSort.secondaryKey] ?? ""), "vi", { sensitivity: "base" });
       }
       const result = String(aValue ?? "").localeCompare(String(bValue ?? ""), "vi", { sensitivity: "base" });
-      return selectedSort.direction === "desc" ? -result : result;
+      const textResult = selectedSort.direction === "desc" ? -result : result;
+      if (textResult !== 0 || !selectedSort.secondaryKey) return textResult;
+      return String((a as any)[selectedSort.secondaryKey] ?? "").localeCompare(String((b as any)[selectedSort.secondaryKey] ?? ""), "vi", { sensitivity: "base" });
     });
   }, [rows, query, filterValues, resolvedFilters, searchKeys, sortKey, sortOptions]);
 
