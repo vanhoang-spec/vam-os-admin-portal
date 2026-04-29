@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, EmptyState, ErrorBox, ExternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData, keyById } from "@/lib/data";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
@@ -140,7 +142,11 @@ function monthLabel(month: string) {
 }
 
 export default async function OperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
-  const data = await getOperationsData();
+  const [data, adminUser] = await Promise.all([
+    getOperationsData(),
+    getCurrentAdminUser({ allowPasswordGateFallback: true })
+  ]);
+  const allowRecapEdit = canEditRecaps(adminUser);
   const errors = [
     data.seasons.error,
     data.people.error,
@@ -419,11 +425,14 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
               {
                 key: "edit",
                 label: "Correction",
-                render: (row) => (
-                  <Link href={`/recaps/${row.id}/edit`} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
-                    Sửa
-                  </Link>
-                )
+                render: (row) =>
+                  allowRecapEdit ? (
+                    <Link href={`/recaps/${row.id}/edit`} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
+                      Sửa
+                    </Link>
+                  ) : (
+                    "-"
+                  )
               }
             ]}
           />

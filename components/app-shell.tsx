@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { logoutAction } from "@/app/login/actions";
+import type { CurrentAdminUser } from "@/lib/auth-constants";
+import { roleLabel } from "@/lib/auth-constants";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -16,10 +19,14 @@ const navItems = [
   { href: "/data-issues", label: "Data Issues", icon: DatabaseZap }
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+function roleDisplay(adminUser: CurrentAdminUser) {
+  return adminUser.isPasswordGateFallback ? "Password gate fallback" : roleLabel(adminUser.role);
+}
+
+export function AppShell({ children, adminUser }: { children: React.ReactNode; adminUser: CurrentAdminUser | null }) {
   const pathname = usePathname();
 
-  if (pathname === "/unlock") return <>{children}</>;
+  if (pathname === "/unlock" || pathname === "/login") return <>{children}</>;
 
   return (
     <div className="min-h-screen bg-[#f7faf8]">
@@ -49,7 +56,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="border-t border-vam-line px-6 py-4 text-xs text-slate-500">
-            UEH Mentoring Season 11
+            <div>UEH Mentoring Season 11</div>
+            {adminUser ? (
+              <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+                <div className="truncate font-medium text-vam-ink">{adminUser.email}</div>
+                <div>{roleDisplay(adminUser)}</div>
+              </div>
+            ) : null}
           </div>
         </div>
       </aside>
@@ -57,14 +70,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-10 border-b border-vam-line bg-white/95 backdrop-blur">
           <div className="px-4 py-3 sm:px-6 lg:px-8">
             <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
-              MVP nội bộ - chưa bật phân quyền người dùng.
+              MVP nội bộ - Sprint 1A dùng Supabase Auth ở app layer, RLS chưa bật. Password gate vẫn là fallback chuyển tiếp.
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-xl font-semibold text-vam-ink">VAM OS Admin Portal</div>
                 <div className="text-sm text-slate-500">Cổng quản trị dữ liệu Vietnam Alumni Mentoring</div>
               </div>
-              <BarChart3 className="h-6 w-6 text-vam-green" />
+              <div className="flex items-center gap-3">
+                {adminUser ? (
+                  <div className="hidden text-right text-xs text-slate-500 sm:block">
+                    <div className="max-w-60 truncate font-medium text-vam-ink">{adminUser.email}</div>
+                    <div>{roleDisplay(adminUser)}</div>
+                  </div>
+                ) : null}
+                <form action={logoutAction}>
+                  <button type="submit" className="inline-flex h-9 items-center gap-2 rounded-md border border-vam-line bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <LogOut className="h-4 w-4" />
+                    Đăng xuất
+                  </button>
+                </form>
+                <BarChart3 className="h-6 w-6 text-vam-green" />
+              </div>
             </div>
             <nav className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:hidden">
               {navItems.map((item) => (

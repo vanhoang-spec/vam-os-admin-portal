@@ -9,7 +9,7 @@ const initialState: CorrectionActionState = {
   message: null
 };
 
-export function RecapCorrectionForm({ recap, personId }: { recap: MentoringRecap; personId?: string | null }) {
+export function RecapCorrectionForm({ recap, personId, correctedByDefault }: { recap: MentoringRecap; personId?: string | null; correctedByDefault?: string }) {
   const [state, formAction] = useFormState(correctMentoringRecapAction, initialState);
 
   return (
@@ -83,7 +83,7 @@ export function RecapCorrectionForm({ recap, personId }: { recap: MentoringRecap
         <span className="text-xs font-medium uppercase text-slate-500">corrected_by</span>
         <input
           name="corrected_by"
-          defaultValue="admin"
+          defaultValue={correctedByDefault ?? "admin"}
           placeholder="admin"
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />

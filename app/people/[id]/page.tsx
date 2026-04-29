@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import {
   getApplications,
   getEventParticipationsByPersonId,
@@ -141,6 +143,7 @@ function operationalRoleLabel(value: unknown) {
 
 export default async function PersonDetailPage({ params }: { params: { id: string } }) {
   const [
+    adminUser,
     person,
     roles,
     people,
@@ -155,6 +158,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     events,
     operationalAssignments
   ] = await Promise.all([
+    getCurrentAdminUser({ allowPasswordGateFallback: true }),
     getPerson(params.id),
     getRolesForPerson(params.id),
     getPeople(),
@@ -169,6 +173,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     getEvents(),
     getOperationalTeamAssignmentsByPerson(params.id)
   ]);
+  const allowRecapEdit = canEditRecaps(adminUser);
   const personApplications = applications.data.filter((application) => application.person_id === params.id);
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
@@ -446,7 +451,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                   { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
                   { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
                   { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) },
-                  { key: "edit", label: "Sửa", render: (row) => actionLink(`/recaps/${row.id}/edit`, "Sửa") }
+                  { key: "edit", label: "Sửa", render: (row) => (allowRecapEdit ? actionLink(`/recaps/${row.id}/edit`, "Sửa") : "-") }
                 ]}
               />
             ) : (
@@ -474,7 +479,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                   { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
                   { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
                   { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) },
-                  { key: "edit", label: "Sửa", render: (row) => actionLink(`/recaps/${row.id}/edit`, "Sửa") }
+                  { key: "edit", label: "Sửa", render: (row) => (allowRecapEdit ? actionLink(`/recaps/${row.id}/edit`, "Sửa") : "-") }
                 ]}
               />
             ) : (

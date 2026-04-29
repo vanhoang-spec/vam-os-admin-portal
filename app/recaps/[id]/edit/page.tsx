@@ -1,10 +1,22 @@
 import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import { getActivityCorrectionLogs, getMentoringRecapById, getPeople, keyById } from "@/lib/data";
 import { displayText, formatDate } from "@/lib/utils";
 import { RecapCorrectionForm } from "./correction-form";
 
 export default async function EditRecapPage({ params }: { params: { id: string } }) {
+  const adminUser = await getCurrentAdminUser({ allowPasswordGateFallback: true });
+  if (!canEditRecaps(adminUser)) {
+    return (
+      <>
+        <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được sử dụng correction workflow." />
+        <ErrorBox message="Bạn có thể xem dữ liệu ở chế độ read-only, nhưng không có quyền sửa mentoring recap." />
+      </>
+    );
+  }
+
   const [recap, people, logs] = await Promise.all([
     getMentoringRecapById(params.id),
     getPeople(),
@@ -15,6 +27,7 @@ export default async function EditRecapPage({ params }: { params: { id: string }
   const mentee = recap.data?.mentee_person_id ? peopleById.get(recap.data.mentee_person_id) : undefined;
   const mentor = recap.data?.mentor_person_id ? peopleById.get(recap.data.mentor_person_id) : undefined;
   const profilePersonId = recap.data?.mentee_person_id ?? recap.data?.mentor_person_id ?? null;
+  const correctedByDefault = adminUser?.full_name ? `${adminUser.full_name} <${adminUser.email}>` : adminUser?.email ?? "admin";
 
   if (!recap.data) {
     return (
@@ -69,7 +82,7 @@ export default async function EditRecapPage({ params }: { params: { id: string }
 
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Correction form</h2>
-          <RecapCorrectionForm recap={recap.data} personId={profilePersonId} />
+          <RecapCorrectionForm recap={recap.data} personId={profilePersonId} correctedByDefault={correctedByDefault} />
         </Card>
       </div>
 
