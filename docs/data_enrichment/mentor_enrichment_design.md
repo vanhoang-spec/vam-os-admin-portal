@@ -106,3 +106,42 @@ Future dashboard work should treat primary fields as summary labels, not complet
 - No backfill without approval.
 - No UI changes until the data model direction is approved.
 - If normalizing later, preserve all multi-value labels rather than choosing only the primary fields.
+
+## Local Sample Pipeline
+
+The local helper script creates a first-pass manual QA sample from a Production mentor CSV export. It does not update Supabase and does not read `bio_url` content.
+
+Input file:
+
+- `docs/data_enrichment/production_mentor_export.csv`
+
+Output file:
+
+- `docs/data_enrichment/mentor_enrichment_sample_50.csv`
+
+Run:
+
+```bash
+node scripts/enrich_mentor_sample.mjs
+```
+
+If `production_mentor_export.csv` is missing, export it from Supabase Production SQL Editor:
+
+```sql
+select
+  mp.person_id,
+  p.full_name,
+  p.email_primary as email,
+  mp.company_current,
+  mp.title_current,
+  mp.bio_url
+from public.mentor_profiles mp
+left join public.people p on p.id = mp.person_id
+order by p.full_name nulls last, mp.person_id;
+```
+
+Download the SQL result as CSV and save it at `docs/data_enrichment/production_mentor_export.csv`.
+
+The script uses deterministic keyword rules from `company_current` and `title_current` only. If the result is unclear, it leaves industry/function blank and sets `confidence` to `low`.
+
+Google Drive CV/Profile PDFs should be reviewed later only for low-confidence rows. Do not scrape or read those PDFs in this pipeline.
