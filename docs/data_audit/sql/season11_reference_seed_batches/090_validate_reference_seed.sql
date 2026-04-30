@@ -117,15 +117,15 @@ DECLARE
   v_count int;
 BEGIN
   SELECT
-    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
-    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(quote_ident(allowed.column_name), ', ' ORDER BY allowed.ordinal_position),
+    string_agg(allowed.select_expression, ', ' ORDER BY allowed.ordinal_position),
     string_agg(
       CASE
-        WHEN column_name IN ('id', 'created_at') THEN NULL
-        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
-        ELSE format('%I = COALESCE(EXCLUDED.%I, public.people.%I)', column_name, column_name, column_name)
+        WHEN allowed.column_name IN ('id', 'created_at') THEN NULL
+        WHEN allowed.column_name = 'updated_at' THEN format('%I = now()', allowed.column_name)
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.people.%I)', allowed.column_name, allowed.column_name, allowed.column_name)
       END,
-      ', ' ORDER BY ordinal_position
+      ', ' ORDER BY allowed.ordinal_position
     )
     INTO v_columns, v_selects, v_update_set
   FROM (
@@ -181,16 +181,16 @@ BEGIN
   VALUES ('people', v_columns);
 
   SELECT
-    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
-    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(quote_ident(allowed.column_name), ', ' ORDER BY allowed.ordinal_position),
+    string_agg(allowed.select_expression, ', ' ORDER BY allowed.ordinal_position),
     string_agg(
       CASE
-        WHEN column_name IN ('id', 'created_at') THEN NULL
-        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
-        WHEN column_name = 'person_id' THEN 'person_id = EXCLUDED.person_id'
-        ELSE format('%I = COALESCE(EXCLUDED.%I, public.mentor_profiles.%I)', column_name, column_name, column_name)
+        WHEN allowed.column_name IN ('id', 'created_at') THEN NULL
+        WHEN allowed.column_name = 'updated_at' THEN format('%I = now()', allowed.column_name)
+        WHEN allowed.column_name = 'person_id' THEN 'person_id = EXCLUDED.person_id'
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.mentor_profiles.%I)', allowed.column_name, allowed.column_name, allowed.column_name)
       END,
-      ', ' ORDER BY ordinal_position
+      ', ' ORDER BY allowed.ordinal_position
     )
     INTO v_columns, v_selects, v_update_set
   FROM (
@@ -249,16 +249,16 @@ BEGIN
   VALUES ('mentor_profiles', v_columns);
 
   SELECT
-    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
-    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(quote_ident(allowed.column_name), ', ' ORDER BY allowed.ordinal_position),
+    string_agg(allowed.select_expression, ', ' ORDER BY allowed.ordinal_position),
     string_agg(
       CASE
-        WHEN column_name IN ('id', 'created_at') THEN NULL
-        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
-        WHEN column_name = 'person_id' THEN 'person_id = EXCLUDED.person_id'
-        ELSE format('%I = COALESCE(EXCLUDED.%I, public.mentee_profiles.%I)', column_name, column_name, column_name)
+        WHEN allowed.column_name IN ('id', 'created_at') THEN NULL
+        WHEN allowed.column_name = 'updated_at' THEN format('%I = now()', allowed.column_name)
+        WHEN allowed.column_name = 'person_id' THEN 'person_id = EXCLUDED.person_id'
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.mentee_profiles.%I)', allowed.column_name, allowed.column_name, allowed.column_name)
       END,
-      ', ' ORDER BY ordinal_position
+      ', ' ORDER BY allowed.ordinal_position
     )
     INTO v_columns, v_selects, v_update_set
   FROM (
@@ -312,16 +312,16 @@ BEGIN
   VALUES ('mentee_profiles', v_columns);
 
   SELECT
-    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
-    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(quote_ident(allowed.column_name), ', ' ORDER BY allowed.ordinal_position),
+    string_agg(allowed.select_expression, ', ' ORDER BY allowed.ordinal_position),
     string_agg(
       CASE
-        WHEN column_name IN ('id', 'created_at') THEN NULL
-        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
-        WHEN column_name IN ('season_id', 'mentee_person_id', 'mentor_person_id') THEN format('%I = EXCLUDED.%I', column_name, column_name)
-        ELSE format('%I = COALESCE(EXCLUDED.%I, public.matches.%I)', column_name, column_name, column_name)
+        WHEN allowed.column_name IN ('id', 'created_at') THEN NULL
+        WHEN allowed.column_name = 'updated_at' THEN format('%I = now()', allowed.column_name)
+        WHEN allowed.column_name IN ('season_id', 'mentee_person_id', 'mentor_person_id') THEN format('%I = EXCLUDED.%I', allowed.column_name, allowed.column_name)
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.matches.%I)', allowed.column_name, allowed.column_name, allowed.column_name)
       END,
-      ', ' ORDER BY ordinal_position
+      ', ' ORDER BY allowed.ordinal_position
     )
     INTO v_columns, v_selects, v_update_set
   FROM (
