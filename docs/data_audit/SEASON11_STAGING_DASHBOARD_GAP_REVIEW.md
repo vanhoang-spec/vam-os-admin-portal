@@ -8,7 +8,7 @@ Because April is an open, ongoing month with only 1 early/test recap submitted, 
 
 ## 2. Likely Root Causes
 
-1.  **Date-Math vs. Business Logic**: The frontend or RPC logic is likely using `new Date()` or similar raw date math to determine "tháng này" (this month) rather than looking for a specific `closed = TRUE` database flag.
+1.  **Date-Math vs. Business Logic**: The frontend or RPC logic is likely using `new Date()` or similar raw date math to determine "tháng này" (this month) rather than looking for a specific `closed = TRUE` database flag. *(Update: This is confirmed. See `SEASON11_CONFIRMED_SUPABASE_INSPECTION_FINDINGS.md` - the RPC `get_operations_dashboard_data` sets the selected month using `max(month_value)` across recaps and events, and April 2026 events exist).*
 2.  **Missing March Data**: The Excel audit shows ~286 recaps for March, but the database currently has 0. The import has not been executed yet.
 3.  **Cascading Follow-up Failure**: Because March data is 0, the "Silent 2 months" query looks at February (which had a legitimate drop to 126 recaps) and March (0 recaps), resulting in a massive false-positive list of 573 mentees.
 
