@@ -3,18 +3,32 @@ import path from "node:path";
 
 const ROOT = process.cwd();
 const IMPORT_DIR = path.resolve(ROOT, "data_imports", "season11");
-const REF_DIR = path.join(IMPORT_DIR, "reference_exports");
 
 const SOURCE_CSV = path.join(IMPORT_DIR, "season11_march_source_review.csv");
 const OUTPUT_CSV = path.join(IMPORT_DIR, "season11_march_ready_for_import.csv");
 const REPORT_PATH = path.resolve(ROOT, "docs", "data_audit", "SEASON11_MARCH_MAPPING_RESULT_REPORT.md");
 
-const REFERENCE_FILES = {
-  people: path.join(REF_DIR, "people_staging.csv"),
-  mentees: path.join(REF_DIR, "mentee_profiles_staging.csv"),
-  mentors: path.join(REF_DIR, "mentor_profiles_staging.csv"),
-  matches: path.join(REF_DIR, "matches_uehm_s11_staging.csv"),
-  existingRecaps: path.join(REF_DIR, "mentoring_recaps_march_2026_staging.csv")
+const REFERENCE_SOURCES = {
+  staging: {
+    dir: path.join(IMPORT_DIR, "reference_exports"),
+    files: {
+      people: "people_staging.csv",
+      mentees: "mentee_profiles_staging.csv",
+      mentors: "mentor_profiles_staging.csv",
+      matches: "matches_uehm_s11_staging.csv",
+      existingRecaps: "mentoring_recaps_march_2026_staging.csv"
+    }
+  },
+  production: {
+    dir: path.join(IMPORT_DIR, "reference_exports_production"),
+    files: {
+      people: "people_production.csv",
+      mentees: "mentee_profiles_production.csv",
+      mentors: "mentor_profiles_production.csv",
+      matches: "matches_uehm_s11_production.csv",
+      existingRecaps: "mentoring_recaps_march_2026_production.csv"
+    }
+  }
 };
 
 const OUTPUT_HEADERS = [
@@ -88,6 +102,23 @@ function readCsv(filePath) {
     throw new Error(`Required CSV not found: ${filePath}`);
   }
   return parseCsv(fs.readFileSync(filePath, "utf8"));
+}
+
+function parseReferenceSource() {
+  const sourceArg = process.argv.find((arg) => arg.startsWith("--reference-source="));
+  const positionalSource = process.argv.find((arg) => ["staging", "production"].includes(arg));
+  const selected = clean(sourceArg?.split("=")[1] ?? positionalSource ?? process.env.SEASON11_REFERENCE_SOURCE ?? "staging").toLowerCase();
+  if (!REFERENCE_SOURCES[selected]) {
+    throw new Error(`Unsupported reference source "${selected}". Use "staging" or "production".`);
+  }
+  return selected;
+}
+
+function referenceFiles(referenceSource) {
+  const config = REFERENCE_SOURCES[referenceSource];
+  return Object.fromEntries(
+    Object.entries(config.files).map(([key, fileName]) => [key, path.join(config.dir, fileName)])
+  );
 }
 
 function clean(value) {
@@ -180,12 +211,13 @@ function resolveOne(candidates, notes, label, method) {
   return { id: "", ambiguous: false };
 }
 
-function buildReferences() {
-  const people = readCsv(REFERENCE_FILES.people);
-  const mentees = readCsv(REFERENCE_FILES.mentees);
-  const mentors = readCsv(REFERENCE_FILES.mentors);
-  const matches = readCsv(REFERENCE_FILES.matches);
-  const existingRecaps = readCsv(REFERENCE_FILES.existingRecaps);
+function buildReferences(referenceSource) {
+  const files = referenceFiles(referenceSource);
+  const people = readCsv(files.people);
+  const mentees = readCsv(files.mentees);
+  const mentors = readCsv(files.mentors);
+  const matches = readCsv(files.matches);
+  const existingRecaps = readCsv(files.existingRecaps);
 
   const peopleById = new Map(people.map((person) => [clean(person.id), person]));
   const menteeProfilePersonIds = new Set(mentees.map((profile) => clean(profile.person_id)).filter(Boolean));
@@ -373,7 +405,43 @@ function countWhere(rows, predicate) {
   return rows.reduce((count, row) => count + (predicate(row) ? 1 : 0), 0);
 }
 
-function summarize(sourceRows, outputRows, refs) {
+function uniqueSet(values) {
+  return new Set(values.map((value) => clean(value)).filter(Boolean));
+}
+
+function intersectionCount(left, right) {
+  let count = 0;
+  for (const value of left) {
+    if (right.has(value)) count += 1;
+  }
+  return count;
+}
+
+function referenceQuality(sourceRows, refs) {
+  const sourceMenteeCodes = uniqueSet(
+    sourceRows.flatMap((row) => [normalizeCode(row.mentee_identifier_mssv), normalizeCode(row.mentee_identifier_edit)])
+  );
+  const profileCodes = uniqueSet(
+    refs.mentees.flatMap((profile) => [normalizeCode(profile.mssv), normalizeCode(profile.mentee_code), normalizeCode(profile.student_code)])
+  );
+  const sourceMentorNames = uniqueSet(sourceRows.map((row) => normalizeKey(row.mentor_identifier_name)));
+  const peopleNames = uniqueSet(refs.people.map((person) => normalizeKey(person.full_name)));
+
+  return {
+    sourceMenteeCodeKeys: sourceMenteeCodes.size,
+    profileCodeKeys: profileCodes.size,
+    sourceToProfileCodeMatches: intersectionCount(sourceMenteeCodes, profileCodes),
+    sourceMentorNameKeys: sourceMentorNames.size,
+    peopleNameKeys: peopleNames.size,
+    sourceToPeopleMentorNameMatches: intersectionCount(sourceMentorNames, peopleNames),
+    syntheticPeopleNameRows: countWhere(refs.people, (person) => /staging|validation/i.test(clean(person.full_name))),
+    syntheticEmailRows: countWhere(refs.people, (person) => /@vam\.test|@ops-validation\.vam\.test/i.test(clean(person.email_primary))),
+    syntheticMenteeCodeRows: countWhere(refs.mentees, (profile) => /^(SE|VE)-\d+/i.test(clean(profile.mentee_code))),
+    syntheticMentorCodeRows: countWhere(refs.mentors, (profile) => /^(SM|VM)-\d+/i.test(clean(profile.mentor_code)))
+  };
+}
+
+function summarize(sourceRows, outputRows, refs, referenceSource) {
   const statusCounts = outputRows.reduce((acc, row) => {
     acc[row.mapping_status] = (acc[row.mapping_status] ?? 0) + 1;
     return acc;
@@ -399,6 +467,8 @@ function summarize(sourceRows, outputRows, refs) {
     readyForImportRows,
     blockerRows,
     mappingSuccessRate,
+    referenceSource,
+    referenceQuality: referenceQuality(sourceRows, refs),
     statusCounts,
     references: {
       people: refs.people.length,
@@ -436,6 +506,8 @@ Generated: 2026-04-30
 
 This report was generated offline from local CSV exports only. No Supabase writes, imports, dashboard RPC changes, deploys, commits, or pushes were performed.
 
+Reference source: \`${summary.referenceSource}\`
+
 ## Reference Inputs
 
 ${markdownTable([
@@ -444,6 +516,21 @@ ${markdownTable([
     ["Mentor profile reference rows", summary.references.mentorProfiles],
     ["UEHM-S11 match reference rows", summary.references.matches],
     ["Existing March recap reference rows", summary.references.existingMarchRecaps]
+  ])}
+
+## Reference Quality Checks
+
+${markdownTable([
+    ["Unique source mentee code keys", summary.referenceQuality.sourceMenteeCodeKeys],
+    ["Reference profile code keys", summary.referenceQuality.profileCodeKeys],
+    ["Source-to-profile code matches", summary.referenceQuality.sourceToProfileCodeMatches],
+    ["Unique source mentor name keys", summary.referenceQuality.sourceMentorNameKeys],
+    ["Reference people name keys", summary.referenceQuality.peopleNameKeys],
+    ["Source-to-people mentor name matches", summary.referenceQuality.sourceToPeopleMentorNameMatches],
+    ["Synthetic-looking people names", summary.referenceQuality.syntheticPeopleNameRows],
+    ["Synthetic/test email rows", summary.referenceQuality.syntheticEmailRows],
+    ["Synthetic-looking mentee codes", summary.referenceQuality.syntheticMenteeCodeRows],
+    ["Synthetic-looking mentor codes", summary.referenceQuality.syntheticMentorCodeRows]
   ])}
 
 ## Mapping Summary
@@ -491,16 +578,18 @@ function writeOutputCsv(rows) {
 }
 
 function main() {
+  const referenceSource = parseReferenceSource();
   const sourceRows = readCsv(SOURCE_CSV);
-  const refs = buildReferences();
+  const refs = buildReferences(referenceSource);
   const outputRows = sourceRows.map((row) => mapRow(row, refs));
-  const summary = summarize(sourceRows, outputRows, refs);
+  const summary = summarize(sourceRows, outputRows, refs, referenceSource);
 
   writeOutputCsv(outputRows);
   writeReport(summary);
 
   console.log(`Wrote ${OUTPUT_CSV}`);
   console.log(`Wrote ${REPORT_PATH}`);
+  console.log(`Reference source: ${summary.referenceSource}`);
   console.log(`Rows: ${summary.totalRows}`);
   console.log(`Mapping success rate: ${summary.mappingSuccessRate.toFixed(2)}%`);
   console.log(JSON.stringify(summary.statusCounts, null, 2));

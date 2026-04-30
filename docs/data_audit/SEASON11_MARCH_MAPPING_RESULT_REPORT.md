@@ -6,6 +6,8 @@ Generated: 2026-04-30
 
 This report was generated offline from local CSV exports only. No Supabase writes, imports, dashboard RPC changes, deploys, commits, or pushes were performed.
 
+Reference source: `production`
+
 ## Reference Inputs
 
 | Metric | Count |
@@ -15,6 +17,21 @@ This report was generated offline from local CSV exports only. No Supabase write
 | Mentor profile reference rows | 17 |
 | UEHM-S11 match reference rows | 30 |
 | Existing March recap reference rows | 23 |
+
+## Reference Quality Checks
+
+| Metric | Count |
+| --- | ---: |
+| Unique source mentee code keys | 220 |
+| Reference profile code keys | 33 |
+| Source-to-profile code matches | 0 |
+| Unique source mentor name keys | 184 |
+| Reference people name keys | 50 |
+| Source-to-people mentor name matches | 0 |
+| Synthetic-looking people names | 50 |
+| Synthetic/test email rows | 50 |
+| Synthetic-looking mentee codes | 33 |
+| Synthetic-looking mentor codes | 17 |
 
 ## Mapping Summary
 

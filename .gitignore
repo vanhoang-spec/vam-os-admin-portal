@@ -20,3 +20,4 @@ team_assignment_import_runner/.env
 team_assignment_import_runner/reports/
 team_assignment_import_runner/__pycache__/
 data_imports/season11/reference_exports/
+data_imports/season11/reference_exports_production/
