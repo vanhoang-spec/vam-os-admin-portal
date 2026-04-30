@@ -19,6 +19,8 @@ export type MentorProfile = JsonRecord & {
   title_current: string | null;
   years_experience_min: number | null;
   years_experience_text: string | null;
+  years_in_vam?: number | null;
+  first_vam_season?: string | null;
   industry: string | null;
   function_area: string | null;
 };
