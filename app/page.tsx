@@ -147,13 +147,14 @@ export default async function DashboardPage() {
   const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
   const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
   
-  const seasonLatestClosedMonth = data.latestClosedMonth.data.find((row) => row.season_id === season?.id);
-  const rpcSelectedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
+  const seasonLatestClosedMonth = data.latestClosedMonth?.data?.find((row: any) => row.season_id === season?.id);
+  const officialClosedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
   
-  const defaultMonth = rpcSelectedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const rpcSelectedMonth = data.recaps.data.length ? null : null; // home doesn't use kpis.data.selectedMonth
+  const defaultMonth = officialClosedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
   const selectedMonth = defaultMonth;
   
-  const closedMonth = rpcSelectedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
+  const closedMonth = officialClosedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
   const closedPreviousMonth = typeof seasonLatestClosedMonth?.previous_closed_month === "string" ? seasonLatestClosedMonth.previous_closed_month : addMonths(closedMonth, -1);
   const previousMonth = addMonths(selectedMonth, -1);
   
@@ -288,15 +289,15 @@ export default async function DashboardPage() {
       ))}
 
       <div className="mb-4 text-sm">
-        <p className="text-slate-600 font-medium">Tháng đã chốt: {rpcSelectedMonth ?? "Chưa có"}</p>
-        {selectedMonth > (rpcSelectedMonth ?? "") ? (
+        <p className="text-slate-600 font-medium">Tháng đã chốt: {officialClosedMonth ?? "Chưa có"}</p>
+        {selectedMonth > (officialClosedMonth ?? "") ? (
           <p className="text-amber-600 mt-1">Dữ liệu tháng mở không dùng cho KPI chính thức</p>
         ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Số recap tháng này" value={typeof seasonLatestClosedMonth?.total_recap_entries === "number" && selectedMonth === rpcSelectedMonth ? seasonLatestClosedMonth.total_recap_entries : selectedRecaps.length} />
-        <KpiCard label="Mentee active tháng này" value={typeof seasonLatestClosedMonth?.distinct_mentees_with_recap === "number" && selectedMonth === rpcSelectedMonth ? seasonLatestClosedMonth.distinct_mentees_with_recap : activeMenteeThisMonthCount} />
+        <KpiCard label="Số recap tháng này" value={typeof seasonLatestClosedMonth?.total_recap_entries === "number" && selectedMonth === officialClosedMonth ? seasonLatestClosedMonth.total_recap_entries : selectedRecaps.length} />
+        <KpiCard label="Mentee active tháng này" value={typeof seasonLatestClosedMonth?.distinct_mentees_with_recap === "number" && selectedMonth === officialClosedMonth ? seasonLatestClosedMonth.distinct_mentees_with_recap : activeMenteeThisMonthCount} />
         <KpiCard label="Mentor active tháng này" value={activeMentorThisMonthCount} />
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
         <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />

@@ -916,7 +916,7 @@ export async function getDashboardData() {
     selectTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code,school_code"),
     selectTable<Application>("applications", "id,final_status").then((res) => ({ data: res.data, error: null })),
     selectTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
-    getSeasons(),
+    selectAllTable<Season>("seasons", "id,code,name"),
     selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,meeting_date,status"),
     selectTable<JsonRecord>("v_season_latest_closed_month")
   ]);
