@@ -95,228 +95,297 @@ BEGIN
   END IF;
 END $$;
 
-WITH person_roles AS (
+CREATE TEMP TABLE IF NOT EXISTS _season11_apply_counts (
+  metric text PRIMARY KEY,
+  row_count int NOT NULL
+) ON COMMIT DROP;
+
+TRUNCATE TABLE _season11_apply_counts;
+
+CREATE TEMP TABLE IF NOT EXISTS _season11_apply_column_plan (
+  table_name text PRIMARY KEY,
+  target_columns text NOT NULL
+) ON COMMIT DROP;
+
+TRUNCATE TABLE _season11_apply_column_plan;
+
+DO $$
+DECLARE
+  v_columns text;
+  v_selects text;
+  v_update_set text;
+  v_count int;
+BEGIN
   SELECT
-    p.id,
-    EXISTS (SELECT 1 FROM public.staging_reference_seed_mentor_profiles mp WHERE mp.person_id = p.id) AS is_mentor,
-    EXISTS (SELECT 1 FROM public.staging_reference_seed_mentee_profiles mp WHERE mp.person_id = p.id) AS is_mentee
-  FROM public.staging_reference_seed_people p
-), upsert_people AS (
-  INSERT INTO public.people (
-    id,
-    legacy_person_temp_id,
-    full_name,
-    full_name_normalized,
-    email_primary,
-    phone_primary,
-    phone_raw,
-    gender,
-    date_of_birth,
-    facebook_url,
-    preferred_language,
-    consent_pdpa,
-    consent_pdpa_at,
-    consent_marketing_email,
-    source_sheets,
-    source_sheet,
-    source_row_id,
-    created_at,
-    updated_at
-  )
+    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
+    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(
+      CASE
+        WHEN column_name IN ('id', 'created_at') THEN NULL
+        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.people.%I)', column_name, column_name, column_name)
+      END,
+      ', ' ORDER BY ordinal_position
+    )
+    INTO v_columns, v_selects, v_update_set
+  FROM (
+    VALUES
+      (1, 'id', 'p.id::uuid'),
+      (2, 'full_name', 'pg_temp._season11_nullish(p.full_name)'),
+      (3, 'email_primary', 'pg_temp._season11_nullish(p.email_primary)'),
+      (4, 'phone_primary', 'pg_temp._season11_nullish(p.phone_primary)'),
+      (5, 'gender', 'pg_temp._season11_nullish(p.gender)'),
+      (6, 'source_sheets', 'pg_temp._season11_nullish(p.source_sheets)'),
+      (7, 'data_quality_flags', 'pg_temp._season11_nullish(p.data_quality_flags)'),
+      (8, 'created_at', 'COALESCE(pg_temp._season11_nullish(p.created_at)::timestamptz, now())'),
+      (9, 'updated_at', 'COALESCE(pg_temp._season11_nullish(p.updated_at)::timestamptz, now())')
+  ) AS allowed(ordinal_position, column_name, select_expression)
+  JOIN information_schema.columns c
+    ON c.table_schema = 'public'
+   AND c.table_name = 'people'
+   AND c.column_name = allowed.column_name;
+
+  IF v_columns IS NULL OR position('id' IN v_columns) = 0 THEN
+    RAISE EXCEPTION 'Guardrail failed: public.people target column plan is empty or missing id.';
+  END IF;
+
+  EXECUTE format($sql$
+    WITH person_roles AS (
+      SELECT
+        p.id,
+        EXISTS (
+          SELECT 1 FROM public.staging_reference_seed_mentor_profiles mp
+          WHERE mp.person_id = p.id
+        ) AS is_mentor,
+        EXISTS (
+          SELECT 1 FROM public.staging_reference_seed_mentee_profiles mp
+          WHERE mp.person_id = p.id
+        ) AS is_mentee
+      FROM public.staging_reference_seed_people p
+    ), upsert_people AS (
+      INSERT INTO public.people (%s)
+      SELECT %s
+      FROM public.staging_reference_seed_people p
+      JOIN person_roles pr ON pr.id = p.id
+      ON CONFLICT (id) DO UPDATE SET %s
+      RETURNING id
+    )
+    SELECT count(*) FROM upsert_people
+  $sql$, v_columns, v_selects, v_update_set)
+  INTO v_count;
+
+  INSERT INTO _season11_apply_counts(metric, row_count)
+  VALUES ('people_upserted', v_count);
+
+  INSERT INTO _season11_apply_column_plan(table_name, target_columns)
+  VALUES ('people', v_columns);
+
   SELECT
-    p.id::uuid,
-    pg_temp._season11_nullish(p.legacy_person_temp_id),
-    pg_temp._season11_nullish(p.full_name),
-    pg_temp._season11_nullish(p.full_name_normalized),
-    pg_temp._season11_nullish(p.email_primary),
-    pg_temp._season11_nullish(p.phone_primary),
-    pg_temp._season11_nullish(p.phone_raw),
-    pg_temp._season11_nullish(p.gender),
-    CASE WHEN pg_temp._season11_nullish(p.date_of_birth) IS NULL THEN NULL ELSE p.date_of_birth::date END,
-    pg_temp._season11_nullish(p.facebook_url),
-    pg_temp._season11_nullish(p.preferred_language),
-    CASE lower(trim(p.consent_pdpa)) WHEN 'true' THEN true WHEN 'false' THEN false ELSE NULL END,
-    CASE WHEN pg_temp._season11_nullish(p.consent_pdpa_at) IS NULL THEN NULL ELSE p.consent_pdpa_at::timestamptz END,
-    CASE lower(trim(p.consent_marketing_email)) WHEN 'true' THEN true WHEN 'false' THEN false ELSE NULL END,
-    pg_temp._season11_nullish(p.source_sheets),
-    pg_temp._season11_nullish(p.source_sheet),
-    pg_temp._season11_nullish(p.source_row_id),
-    COALESCE(pg_temp._season11_nullish(p.created_at)::timestamptz, now()),
-    COALESCE(pg_temp._season11_nullish(p.updated_at)::timestamptz, now())
-  FROM public.staging_reference_seed_people p
-  JOIN person_roles pr ON pr.id = p.id
-  ON CONFLICT (id) DO UPDATE SET
-    legacy_person_temp_id = COALESCE(EXCLUDED.legacy_person_temp_id, public.people.legacy_person_temp_id),
-    full_name = COALESCE(EXCLUDED.full_name, public.people.full_name),
-    full_name_normalized = COALESCE(EXCLUDED.full_name_normalized, public.people.full_name_normalized),
-    email_primary = COALESCE(EXCLUDED.email_primary, public.people.email_primary),
-    phone_primary = COALESCE(EXCLUDED.phone_primary, public.people.phone_primary),
-    phone_raw = COALESCE(EXCLUDED.phone_raw, public.people.phone_raw),
-    gender = COALESCE(EXCLUDED.gender, public.people.gender),
-    date_of_birth = COALESCE(EXCLUDED.date_of_birth, public.people.date_of_birth),
-    facebook_url = COALESCE(EXCLUDED.facebook_url, public.people.facebook_url),
-    preferred_language = COALESCE(EXCLUDED.preferred_language, public.people.preferred_language),
-    consent_pdpa = COALESCE(EXCLUDED.consent_pdpa, public.people.consent_pdpa),
-    consent_pdpa_at = COALESCE(EXCLUDED.consent_pdpa_at, public.people.consent_pdpa_at),
-    consent_marketing_email = COALESCE(EXCLUDED.consent_marketing_email, public.people.consent_marketing_email),
-    source_sheets = COALESCE(EXCLUDED.source_sheets, public.people.source_sheets),
-    source_sheet = COALESCE(EXCLUDED.source_sheet, public.people.source_sheet),
-    source_row_id = COALESCE(EXCLUDED.source_row_id, public.people.source_row_id),
-    updated_at = now()
-  RETURNING id
-), upsert_mentor_profiles AS (
-  INSERT INTO public.mentor_profiles (
-    id, person_id, mentor_code, bio_url, company_current, title_current, alma_mater,
-    first_joined_year, years_experience_min, years_experience_text, interests_text,
-    support_team_lead, admin_notes, source_sheet, source_row_id, created_at, updated_at,
-    current_company, current_title, industry, function_area, years_of_experience,
-    years_in_vam, capacity_target, seniority_level
-  )
+    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
+    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(
+      CASE
+        WHEN column_name IN ('id', 'created_at') THEN NULL
+        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
+        WHEN column_name = 'person_id' THEN 'person_id = EXCLUDED.person_id'
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.mentor_profiles.%I)', column_name, column_name, column_name)
+      END,
+      ', ' ORDER BY ordinal_position
+    )
+    INTO v_columns, v_selects, v_update_set
+  FROM (
+    VALUES
+      (1, 'id', 'id::uuid'),
+      (2, 'person_id', 'person_id::uuid'),
+      (3, 'mentor_code', 'pg_temp._season11_nullish(mentor_code)'),
+      (4, 'bio_url', 'pg_temp._season11_nullish(bio_url)'),
+      (5, 'company_current', 'pg_temp._season11_nullish(company_current)'),
+      (6, 'title_current', 'pg_temp._season11_nullish(title_current)'),
+      (7, 'alma_mater', 'pg_temp._season11_nullish(alma_mater)'),
+      (8, 'first_joined_year', 'CASE WHEN pg_temp._season11_nullish(first_joined_year) ~ ''^[0-9]+$'' THEN first_joined_year::int ELSE NULL END'),
+      (9, 'years_experience_min', 'CASE WHEN pg_temp._season11_nullish(years_experience_min) ~ ''^[0-9]+$'' THEN years_experience_min::int ELSE NULL END'),
+      (10, 'years_experience_text', 'pg_temp._season11_nullish(years_experience_text)'),
+      (11, 'interests_text', 'pg_temp._season11_nullish(interests_text)'),
+      (12, 'support_team_lead', 'pg_temp._season11_nullish(support_team_lead)'),
+      (13, 'admin_notes', 'pg_temp._season11_nullish(admin_notes)'),
+      (14, 'source_sheet', 'pg_temp._season11_nullish(source_sheet)'),
+      (15, 'source_row_id', 'pg_temp._season11_nullish(source_row_id)'),
+      (16, 'created_at', 'COALESCE(pg_temp._season11_nullish(created_at)::timestamptz, now())'),
+      (17, 'updated_at', 'COALESCE(pg_temp._season11_nullish(updated_at)::timestamptz, now())'),
+      (18, 'current_company', 'pg_temp._season11_nullish(current_company)'),
+      (19, 'current_title', 'pg_temp._season11_nullish(current_title)'),
+      (20, 'industry', 'pg_temp._season11_nullish(industry)'),
+      (21, 'function_area', 'pg_temp._season11_nullish(function_area)'),
+      (22, 'years_of_experience', 'CASE WHEN pg_temp._season11_nullish(years_of_experience) ~ ''^[0-9]+$'' THEN years_of_experience::int ELSE NULL END'),
+      (23, 'years_in_vam', 'CASE WHEN pg_temp._season11_nullish(years_in_vam) ~ ''^[0-9]+$'' THEN years_in_vam::int ELSE NULL END'),
+      (24, 'capacity_target', 'CASE WHEN pg_temp._season11_nullish(capacity_target) ~ ''^[0-9]+$'' THEN capacity_target::int ELSE NULL END'),
+      (25, 'seniority_level', 'pg_temp._season11_nullish(seniority_level)')
+  ) AS allowed(ordinal_position, column_name, select_expression)
+  JOIN information_schema.columns c
+    ON c.table_schema = 'public'
+   AND c.table_name = 'mentor_profiles'
+   AND c.column_name = allowed.column_name;
+
+  IF v_columns IS NULL OR position('id' IN v_columns) = 0 OR position('person_id' IN v_columns) = 0 THEN
+    RAISE EXCEPTION 'Guardrail failed: public.mentor_profiles target column plan is empty or missing id/person_id.';
+  END IF;
+
+  EXECUTE format($sql$
+    WITH upsert_mentor_profiles AS (
+      INSERT INTO public.mentor_profiles (%s)
+      SELECT %s
+      FROM public.staging_reference_seed_mentor_profiles
+      ON CONFLICT (id) DO UPDATE SET %s
+      RETURNING id
+    )
+    SELECT count(*) FROM upsert_mentor_profiles
+  $sql$, v_columns, v_selects, v_update_set)
+  INTO v_count;
+
+  INSERT INTO _season11_apply_counts(metric, row_count)
+  VALUES ('mentor_profiles_upserted', v_count);
+
+  INSERT INTO _season11_apply_column_plan(table_name, target_columns)
+  VALUES ('mentor_profiles', v_columns);
+
   SELECT
-    id::uuid,
-    person_id::uuid,
-    pg_temp._season11_nullish(mentor_code),
-    pg_temp._season11_nullish(bio_url),
-    pg_temp._season11_nullish(company_current),
-    pg_temp._season11_nullish(title_current),
-    pg_temp._season11_nullish(alma_mater),
-    CASE WHEN pg_temp._season11_nullish(first_joined_year) ~ '^[0-9]+$' THEN first_joined_year::int ELSE NULL END,
-    CASE WHEN pg_temp._season11_nullish(years_experience_min) ~ '^[0-9]+$' THEN years_experience_min::int ELSE NULL END,
-    pg_temp._season11_nullish(years_experience_text),
-    pg_temp._season11_nullish(interests_text),
-    pg_temp._season11_nullish(support_team_lead),
-    pg_temp._season11_nullish(admin_notes),
-    pg_temp._season11_nullish(source_sheet),
-    pg_temp._season11_nullish(source_row_id),
-    COALESCE(pg_temp._season11_nullish(created_at)::timestamptz, now()),
-    COALESCE(pg_temp._season11_nullish(updated_at)::timestamptz, now()),
-    pg_temp._season11_nullish(current_company),
-    pg_temp._season11_nullish(current_title),
-    pg_temp._season11_nullish(industry),
-    pg_temp._season11_nullish(function_area),
-    CASE WHEN pg_temp._season11_nullish(years_of_experience) ~ '^[0-9]+$' THEN years_of_experience::int ELSE NULL END,
-    CASE WHEN pg_temp._season11_nullish(years_in_vam) ~ '^[0-9]+$' THEN years_in_vam::int ELSE NULL END,
-    CASE WHEN pg_temp._season11_nullish(capacity_target) ~ '^[0-9]+$' THEN capacity_target::int ELSE NULL END,
-    pg_temp._season11_nullish(seniority_level)
-  FROM public.staging_reference_seed_mentor_profiles
-  ON CONFLICT (id) DO UPDATE SET
-    person_id = EXCLUDED.person_id,
-    mentor_code = COALESCE(EXCLUDED.mentor_code, public.mentor_profiles.mentor_code),
-    bio_url = COALESCE(EXCLUDED.bio_url, public.mentor_profiles.bio_url),
-    company_current = COALESCE(EXCLUDED.company_current, public.mentor_profiles.company_current),
-    title_current = COALESCE(EXCLUDED.title_current, public.mentor_profiles.title_current),
-    alma_mater = COALESCE(EXCLUDED.alma_mater, public.mentor_profiles.alma_mater),
-    first_joined_year = COALESCE(EXCLUDED.first_joined_year, public.mentor_profiles.first_joined_year),
-    years_experience_min = COALESCE(EXCLUDED.years_experience_min, public.mentor_profiles.years_experience_min),
-    years_experience_text = COALESCE(EXCLUDED.years_experience_text, public.mentor_profiles.years_experience_text),
-    interests_text = COALESCE(EXCLUDED.interests_text, public.mentor_profiles.interests_text),
-    support_team_lead = COALESCE(EXCLUDED.support_team_lead, public.mentor_profiles.support_team_lead),
-    admin_notes = COALESCE(EXCLUDED.admin_notes, public.mentor_profiles.admin_notes),
-    source_sheet = COALESCE(EXCLUDED.source_sheet, public.mentor_profiles.source_sheet),
-    source_row_id = COALESCE(EXCLUDED.source_row_id, public.mentor_profiles.source_row_id),
-    current_company = COALESCE(EXCLUDED.current_company, public.mentor_profiles.current_company),
-    current_title = COALESCE(EXCLUDED.current_title, public.mentor_profiles.current_title),
-    industry = COALESCE(EXCLUDED.industry, public.mentor_profiles.industry),
-    function_area = COALESCE(EXCLUDED.function_area, public.mentor_profiles.function_area),
-    years_of_experience = COALESCE(EXCLUDED.years_of_experience, public.mentor_profiles.years_of_experience),
-    years_in_vam = COALESCE(EXCLUDED.years_in_vam, public.mentor_profiles.years_in_vam),
-    capacity_target = COALESCE(EXCLUDED.capacity_target, public.mentor_profiles.capacity_target),
-    seniority_level = COALESCE(EXCLUDED.seniority_level, public.mentor_profiles.seniority_level),
-    updated_at = now()
-  RETURNING id
-), upsert_mentee_profiles AS (
-  INSERT INTO public.mentee_profiles (
-    id, person_id, mentee_code, school_code, school_raw, mssv, mssv_raw, major,
-    class_cohort, gpa_4, has_prior_season, source_sheet, source_row_id, created_at,
-    updated_at, university, career_interest, target_industry, year_of_study, support_team
-  )
+    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
+    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(
+      CASE
+        WHEN column_name IN ('id', 'created_at') THEN NULL
+        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
+        WHEN column_name = 'person_id' THEN 'person_id = EXCLUDED.person_id'
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.mentee_profiles.%I)', column_name, column_name, column_name)
+      END,
+      ', ' ORDER BY ordinal_position
+    )
+    INTO v_columns, v_selects, v_update_set
+  FROM (
+    VALUES
+      (1, 'id', 'id::uuid'),
+      (2, 'person_id', 'person_id::uuid'),
+      (3, 'mentee_code', 'pg_temp._season11_nullish(mentee_code)'),
+      (4, 'school_code', 'pg_temp._season11_nullish(school_code)'),
+      (5, 'school_raw', 'pg_temp._season11_nullish(school_raw)'),
+      (6, 'mssv', 'pg_temp._season11_nullish(mssv)'),
+      (7, 'mssv_raw', 'pg_temp._season11_nullish(mssv_raw)'),
+      (8, 'major', 'pg_temp._season11_nullish(major)'),
+      (9, 'class_cohort', 'pg_temp._season11_nullish(class_cohort)'),
+      (10, 'gpa_4', 'CASE WHEN pg_temp._season11_nullish(gpa_4) ~ ''^[0-9]+(\.[0-9]+)?$'' THEN gpa_4::numeric ELSE NULL END'),
+      (11, 'has_prior_season', 'CASE lower(trim(has_prior_season)) WHEN ''true'' THEN true WHEN ''false'' THEN false ELSE NULL END'),
+      (12, 'source_sheet', 'pg_temp._season11_nullish(source_sheet)'),
+      (13, 'source_row_id', 'pg_temp._season11_nullish(source_row_id)'),
+      (14, 'created_at', 'COALESCE(pg_temp._season11_nullish(created_at)::timestamptz, now())'),
+      (15, 'updated_at', 'COALESCE(pg_temp._season11_nullish(updated_at)::timestamptz, now())'),
+      (16, 'university', 'pg_temp._season11_nullish(university)'),
+      (17, 'career_interest', 'pg_temp._season11_nullish(career_interest)'),
+      (18, 'target_industry', 'pg_temp._season11_nullish(target_industry)'),
+      (19, 'year_of_study', 'pg_temp._season11_nullish(year_of_study)'),
+      (20, 'support_team', 'pg_temp._season11_nullish(support_team)')
+  ) AS allowed(ordinal_position, column_name, select_expression)
+  JOIN information_schema.columns c
+    ON c.table_schema = 'public'
+   AND c.table_name = 'mentee_profiles'
+   AND c.column_name = allowed.column_name;
+
+  IF v_columns IS NULL OR position('id' IN v_columns) = 0 OR position('person_id' IN v_columns) = 0 THEN
+    RAISE EXCEPTION 'Guardrail failed: public.mentee_profiles target column plan is empty or missing id/person_id.';
+  END IF;
+
+  EXECUTE format($sql$
+    WITH upsert_mentee_profiles AS (
+      INSERT INTO public.mentee_profiles (%s)
+      SELECT %s
+      FROM public.staging_reference_seed_mentee_profiles
+      ON CONFLICT (id) DO UPDATE SET %s
+      RETURNING id
+    )
+    SELECT count(*) FROM upsert_mentee_profiles
+  $sql$, v_columns, v_selects, v_update_set)
+  INTO v_count;
+
+  INSERT INTO _season11_apply_counts(metric, row_count)
+  VALUES ('mentee_profiles_upserted', v_count);
+
+  INSERT INTO _season11_apply_column_plan(table_name, target_columns)
+  VALUES ('mentee_profiles', v_columns);
+
   SELECT
-    id::uuid,
-    person_id::uuid,
-    pg_temp._season11_nullish(mentee_code),
-    pg_temp._season11_nullish(school_code),
-    pg_temp._season11_nullish(school_raw),
-    pg_temp._season11_nullish(mssv),
-    pg_temp._season11_nullish(mssv_raw),
-    pg_temp._season11_nullish(major),
-    pg_temp._season11_nullish(class_cohort),
-    CASE WHEN pg_temp._season11_nullish(gpa_4) ~ '^[0-9]+(\.[0-9]+)?$' THEN gpa_4::numeric ELSE NULL END,
-    CASE lower(trim(has_prior_season)) WHEN 'true' THEN true WHEN 'false' THEN false ELSE NULL END,
-    pg_temp._season11_nullish(source_sheet),
-    pg_temp._season11_nullish(source_row_id),
-    COALESCE(pg_temp._season11_nullish(created_at)::timestamptz, now()),
-    COALESCE(pg_temp._season11_nullish(updated_at)::timestamptz, now()),
-    pg_temp._season11_nullish(university),
-    pg_temp._season11_nullish(career_interest),
-    pg_temp._season11_nullish(target_industry),
-    pg_temp._season11_nullish(year_of_study),
-    pg_temp._season11_nullish(support_team)
-  FROM public.staging_reference_seed_mentee_profiles
-  ON CONFLICT (id) DO UPDATE SET
-    person_id = EXCLUDED.person_id,
-    mentee_code = COALESCE(EXCLUDED.mentee_code, public.mentee_profiles.mentee_code),
-    school_code = COALESCE(EXCLUDED.school_code, public.mentee_profiles.school_code),
-    school_raw = COALESCE(EXCLUDED.school_raw, public.mentee_profiles.school_raw),
-    mssv = COALESCE(EXCLUDED.mssv, public.mentee_profiles.mssv),
-    mssv_raw = COALESCE(EXCLUDED.mssv_raw, public.mentee_profiles.mssv_raw),
-    major = COALESCE(EXCLUDED.major, public.mentee_profiles.major),
-    class_cohort = COALESCE(EXCLUDED.class_cohort, public.mentee_profiles.class_cohort),
-    gpa_4 = COALESCE(EXCLUDED.gpa_4, public.mentee_profiles.gpa_4),
-    has_prior_season = COALESCE(EXCLUDED.has_prior_season, public.mentee_profiles.has_prior_season),
-    source_sheet = COALESCE(EXCLUDED.source_sheet, public.mentee_profiles.source_sheet),
-    source_row_id = COALESCE(EXCLUDED.source_row_id, public.mentee_profiles.source_row_id),
-    university = COALESCE(EXCLUDED.university, public.mentee_profiles.university),
-    career_interest = COALESCE(EXCLUDED.career_interest, public.mentee_profiles.career_interest),
-    target_industry = COALESCE(EXCLUDED.target_industry, public.mentee_profiles.target_industry),
-    year_of_study = COALESCE(EXCLUDED.year_of_study, public.mentee_profiles.year_of_study),
-    support_team = COALESCE(EXCLUDED.support_team, public.mentee_profiles.support_team),
-    updated_at = now()
-  RETURNING id
-), target_season AS (
-  SELECT id FROM public.seasons WHERE code = 'UEHM-S11' LIMIT 1
-), upsert_matches AS (
-  INSERT INTO public.matches (
-    id, legacy_match_temp_id, season_id, mentee_person_id, mentor_person_id, match_type,
-    match_source_raw, match_confidence, status, notes, source_sheet, source_row_id,
-    created_at, updated_at
-  )
-  SELECT
-    m.id::uuid,
-    pg_temp._season11_nullish(m.legacy_match_temp_id),
-    ts.id,
-    m.mentee_person_id::uuid,
-    m.mentor_person_id::uuid,
-    pg_temp._season11_nullish(m.match_type),
-    pg_temp._season11_nullish(m.match_source_raw),
-    CASE WHEN pg_temp._season11_nullish(m.match_confidence) ~ '^[0-9]+(\.[0-9]+)?$' THEN m.match_confidence::numeric ELSE NULL END,
-    COALESCE(pg_temp._season11_nullish(m.status), 'active'),
-    pg_temp._season11_nullish(m.notes),
-    pg_temp._season11_nullish(m.source_sheet),
-    pg_temp._season11_nullish(m.source_row_id),
-    COALESCE(pg_temp._season11_nullish(m.created_at)::timestamptz, now()),
-    COALESCE(pg_temp._season11_nullish(m.updated_at)::timestamptz, now())
-  FROM public.staging_reference_seed_matches m
-  CROSS JOIN target_season ts
-  ON CONFLICT (id) DO UPDATE SET
-    legacy_match_temp_id = COALESCE(EXCLUDED.legacy_match_temp_id, public.matches.legacy_match_temp_id),
-    season_id = EXCLUDED.season_id,
-    mentee_person_id = EXCLUDED.mentee_person_id,
-    mentor_person_id = EXCLUDED.mentor_person_id,
-    match_type = COALESCE(EXCLUDED.match_type, public.matches.match_type),
-    match_source_raw = COALESCE(EXCLUDED.match_source_raw, public.matches.match_source_raw),
-    match_confidence = COALESCE(EXCLUDED.match_confidence, public.matches.match_confidence),
-    status = COALESCE(EXCLUDED.status, public.matches.status),
-    notes = COALESCE(EXCLUDED.notes, public.matches.notes),
-    source_sheet = COALESCE(EXCLUDED.source_sheet, public.matches.source_sheet),
-    source_row_id = COALESCE(EXCLUDED.source_row_id, public.matches.source_row_id),
-    updated_at = now()
-  RETURNING id
-)
+    string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
+    string_agg(select_expression, ', ' ORDER BY ordinal_position),
+    string_agg(
+      CASE
+        WHEN column_name IN ('id', 'created_at') THEN NULL
+        WHEN column_name = 'updated_at' THEN format('%I = now()', column_name)
+        WHEN column_name IN ('season_id', 'mentee_person_id', 'mentor_person_id') THEN format('%I = EXCLUDED.%I', column_name, column_name)
+        ELSE format('%I = COALESCE(EXCLUDED.%I, public.matches.%I)', column_name, column_name, column_name)
+      END,
+      ', ' ORDER BY ordinal_position
+    )
+    INTO v_columns, v_selects, v_update_set
+  FROM (
+    VALUES
+      (1, 'id', 'm.id::uuid'),
+      (2, 'legacy_match_temp_id', 'pg_temp._season11_nullish(m.legacy_match_temp_id)'),
+      (3, 'season_id', 'ts.id'),
+      (4, 'mentee_person_id', 'm.mentee_person_id::uuid'),
+      (5, 'mentor_person_id', 'm.mentor_person_id::uuid'),
+      (6, 'match_type', 'pg_temp._season11_nullish(m.match_type)'),
+      (7, 'match_source_raw', 'pg_temp._season11_nullish(m.match_source_raw)'),
+      (8, 'match_confidence', 'CASE WHEN pg_temp._season11_nullish(m.match_confidence) ~ ''^[0-9]+(\.[0-9]+)?$'' THEN m.match_confidence::numeric ELSE NULL END'),
+      (9, 'status', 'COALESCE(pg_temp._season11_nullish(m.status), ''active'')'),
+      (10, 'notes', 'pg_temp._season11_nullish(m.notes)'),
+      (11, 'source_sheet', 'pg_temp._season11_nullish(m.source_sheet)'),
+      (12, 'source_row_id', 'pg_temp._season11_nullish(m.source_row_id)'),
+      (13, 'created_at', 'COALESCE(pg_temp._season11_nullish(m.created_at)::timestamptz, now())'),
+      (14, 'updated_at', 'COALESCE(pg_temp._season11_nullish(m.updated_at)::timestamptz, now())')
+  ) AS allowed(ordinal_position, column_name, select_expression)
+  JOIN information_schema.columns c
+    ON c.table_schema = 'public'
+   AND c.table_name = 'matches'
+   AND c.column_name = allowed.column_name;
+
+  IF v_columns IS NULL
+     OR position('id' IN v_columns) = 0
+     OR position('season_id' IN v_columns) = 0
+     OR position('mentee_person_id' IN v_columns) = 0
+     OR position('mentor_person_id' IN v_columns) = 0 THEN
+    RAISE EXCEPTION 'Guardrail failed: public.matches target column plan is empty or missing required IDs.';
+  END IF;
+
+  EXECUTE format($sql$
+    WITH target_season AS (
+      SELECT id FROM public.seasons WHERE code = 'UEHM-S11' LIMIT 1
+    ), upsert_matches AS (
+      INSERT INTO public.matches (%s)
+      SELECT %s
+      FROM public.staging_reference_seed_matches m
+      CROSS JOIN target_season ts
+      ON CONFLICT (id) DO UPDATE SET %s
+      RETURNING id
+    )
+    SELECT count(*) FROM upsert_matches
+  $sql$, v_columns, v_selects, v_update_set)
+  INTO v_count;
+
+  INSERT INTO _season11_apply_counts(metric, row_count)
+  VALUES ('uehm_s11_matches_upserted', v_count);
+
+  INSERT INTO _season11_apply_column_plan(table_name, target_columns)
+  VALUES ('matches', v_columns);
+END $$;
+
+-- Review the exact application-table columns selected from the live staging schema.
+SELECT table_name, target_columns
+FROM _season11_apply_column_plan
+ORDER BY table_name;
+
 SELECT
-  (SELECT count(*) FROM upsert_people) AS people_upserted,
-  (SELECT count(*) FROM upsert_mentor_profiles) AS mentor_profiles_upserted,
-  (SELECT count(*) FROM upsert_mentee_profiles) AS mentee_profiles_upserted,
-  (SELECT count(*) FROM upsert_matches) AS uehm_s11_matches_upserted;
+  (SELECT row_count FROM _season11_apply_counts WHERE metric = 'people_upserted') AS people_upserted,
+  (SELECT row_count FROM _season11_apply_counts WHERE metric = 'mentor_profiles_upserted') AS mentor_profiles_upserted,
+  (SELECT row_count FROM _season11_apply_counts WHERE metric = 'mentee_profiles_upserted') AS mentee_profiles_upserted,
+  (SELECT row_count FROM _season11_apply_counts WHERE metric = 'uehm_s11_matches_upserted') AS uehm_s11_matches_upserted;
 
 -- Validation summary: expected all counts to match MVP export row counts.
 WITH target_season AS (

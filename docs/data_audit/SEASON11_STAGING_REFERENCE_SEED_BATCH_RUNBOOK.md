@@ -48,6 +48,7 @@ Stop if `090_validate_reference_seed.sql` raises any guardrail exception, report
 
 After the first `090` run, review:
 
+- target application-table columns selected from the live staging schema
 - upsert counts
 - validation summary counts
 - approved March sample ID checks
@@ -58,6 +59,8 @@ If everything is correct, run `090_validate_reference_seed.sql` again after chan
 - uncomment `COMMIT;`
 
 If anything is unexpected, keep `ROLLBACK;` and investigate before retrying.
+
+If all `001` and `010`/`020`/`030`/`040` helper batches already loaded successfully and only `090_validate_reference_seed.sql` failed, do not rerun the helper batches. Fix/review `090_validate_reference_seed.sql`, then rerun `090` only.
 
 ## After Successful Seed
 
