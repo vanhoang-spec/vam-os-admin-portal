@@ -192,12 +192,13 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const nowMonth = currentMonth();
   const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
   const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
-  const defaultMonth = latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const rpcSelectedMonth = data.kpis.data?.selectedMonth;
+  const defaultMonth = rpcSelectedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
   const monthOptions = (availableMonths.length ? availableMonths : seasonMonths).sort((a, b) => b.localeCompare(a));
   const requestedMonth = sanitizeMonthParam(searchParams?.month);
   const selectedMonth = requestedMonth ?? defaultMonth;
   const previousMonth = addMonths(selectedMonth, -1);
-  const closedMonth = selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth;
+  const closedMonth = rpcSelectedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
   const closedPreviousMonth = addMonths(closedMonth, -1);
 
   const activeMatches = seasonMatches.filter(isActiveMatch);
@@ -334,12 +335,15 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
       <Card className="mb-4">
         <div className="grid gap-4 md:grid-cols-[minmax(220px,320px)_1fr] md:items-end">
           <MonthSelector months={monthOptions} selectedMonth={selectedMonth} />
-          <p className="text-sm text-slate-600">
-            Follow-up là danh sách gợi ý dựa trên dữ liệu recap, chưa phải trạng thái xử lý chính thức.
-          </p>
-          <p className="text-xs text-slate-500">
-            Luu y: thang dang van hanh chua dong so, nen recap/KPI co the thap hon tong thuc te cuoi thang.
-          </p>
+          <div className="text-sm">
+            <p className="text-slate-600 font-medium">Tháng đã chốt: {rpcSelectedMonth ?? "Chưa có"}</p>
+            {selectedMonth > (rpcSelectedMonth ?? "") ? (
+              <p className="text-amber-600 mt-1">Dữ liệu tháng mở không dùng cho KPI chính thức</p>
+            ) : null}
+            <p className="text-slate-500 mt-1">
+              Follow-up là danh sách gợi ý dựa trên dữ liệu recap, chưa phải trạng thái xử lý chính thức.
+            </p>
+          </div>
         </div>
       </Card>
 
