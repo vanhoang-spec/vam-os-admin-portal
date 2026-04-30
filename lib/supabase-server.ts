@@ -5,7 +5,11 @@ import { createClient } from "@supabase/supabase-js";
 import { AUTH_ACCESS_COOKIE } from "@/lib/auth-constants";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SERVICE_ROLE_ENV_NAME = "SUPABASE_SERVICE_ROLE_KEY";
+
+function supabaseServiceRoleKey() {
+  return process.env[SERVICE_ROLE_ENV_NAME]?.trim();
+}
 
 export function getSupabaseServerClient() {
   if (!supabaseUrl || !supabaseAnonKey) return null;
@@ -27,12 +31,23 @@ export function getSupabaseServerClient() {
 }
 
 export function getSupabaseServiceRoleClient() {
-  if (!supabaseUrl || !supabaseServiceRoleKey) return null;
+  const serviceRoleKey = supabaseServiceRoleKey();
+  if (!supabaseUrl || !serviceRoleKey) return null;
 
-  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+  return createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       fetch: (input, init) => fetch(input, { ...init, cache: "no-store" })
     }
   });
+}
+
+export function getSupabaseServiceRoleEnvStatus() {
+  const serviceRoleKey = supabaseServiceRoleKey();
+  return {
+    envName: SERVICE_ROLE_ENV_NAME,
+    loaded: Boolean(serviceRoleKey),
+    usesPublicPrefix: SERVICE_ROLE_ENV_NAME.startsWith("NEXT_PUBLIC_"),
+    sameAsAnonKey: Boolean(serviceRoleKey && supabaseAnonKey && serviceRoleKey === supabaseAnonKey)
+  };
 }
