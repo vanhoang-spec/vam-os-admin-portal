@@ -1,52 +1,122 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 import { listAdminAuditLogs, listManagedAdminUsers, requireSuperAdmin, type ManagedAdminUser } from "@/lib/admin-users";
 import { displayText, formatDate } from "@/lib/utils";
-import { deactivateAdminUserAction } from "./actions";
-import { CreateAdminUserForm, EditAdminUserForm } from "./user-management-forms";
+import { CreateAdminUserForm, EditAdminUserForm, RemoveAccessForm, StatusToggleForm, SyncAuthForm } from "./user-management-forms";
 
-function roleLabel(role: string) {
+export const dynamic = "force-dynamic";
+
+function single(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function roleLabel(role: unknown) {
   if (role === "super_admin") return "Super admin";
   if (role === "admin") return "Admin";
   if (role === "reviewer") return "Reviewer";
   return "Viewer";
 }
 
-function statusLabel(status: string) {
+function statusLabel(status: unknown) {
   if (status === "active") return "Kích hoạt";
   if (status === "suspended") return "Tạm khóa";
   if (status === "invited") return "Đã mời";
-  if (status === "inactive") return "Không hoạt động";
+  if (status === "inactive") return "Tạm khóa";
   return displayText(status);
 }
 
+function StatusBadges({ user }: { user: ManagedAdminUser }) {
+  const active = user.status === "active";
+  return (
+    <div className="flex flex-wrap gap-1">
+      <span className={active ? "rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700" : "rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700"}>
+        {statusLabel(user.status)}
+      </span>
+      {!user.auth_user_id ? (
+        <span className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700">
+          Chưa liên kết Auth
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function scopeText(user: ManagedAdminUser) {
-  if (!user.scopes.length) return "-";
-  return user.scopes
+  const scopes = Array.isArray(user.scopes) ? user.scopes : [];
+  if (!user.auth_user_id) return "Chưa liên kết Auth";
+  if (!scopes.length) return "Chưa có scope (bấm Sửa để tạo)";
+  return scopes
     .map((scope) => {
-      const program = scope.program_id || "all programs";
-      const season = scope.season_id || "all seasons";
-      return `${program} / ${season} / ${scope.role} / ${statusLabel(scope.status)}`;
+      const program = scope.program_id || scope.program || "all programs";
+      const season = scope.season_id || scope.season_code || "all seasons";
+      const level = scope.role || scope.scope_level || "read";
+      return `${program} / ${season} / ${level} / ${statusLabel(scope.status)}`;
     })
     .join("; ");
 }
 
-function DeactivateForm({ id, disabled }: { id: string; disabled: boolean }) {
+function canRemoveOrDeactivate(user: ManagedAdminUser, activeSuperAdminCount: number) {
+  return !(user.role === "super_admin" && user.status === "active" && activeSuperAdminCount <= 1);
+}
+
+function safeJson(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {});
+  } catch {
+    return "{}";
+  }
+}
+
+function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedAdminUser[]; activeSuperAdminCount: number }) {
+  if (!users.length) return <EmptyState message="Chưa có admin user để hiển thị." />;
   return (
-    <form action={deactivateAdminUserAction}>
-      <input type="hidden" name="id" value={id} />
-      <button
-        type="submit"
-        disabled={disabled}
-        className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Tạm khóa
-      </button>
-    </form>
+    <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
+      <div className="overflow-x-auto">
+        <table className="min-w-[1280px] divide-y divide-vam-line text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Họ tên</th>
+              <th className="px-4 py-3">Vai trò</th>
+              <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3">Auth user id</th>
+              <th className="px-4 py-3">Scope hiện tại</th>
+              <th className="sticky right-0 z-10 w-64 border-l border-vam-line bg-slate-50 px-4 py-3">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-vam-line">
+            {users.map((user) => {
+              const safe = canRemoveOrDeactivate(user, activeSuperAdminCount);
+              return (
+                <tr key={user.id} className="align-top">
+                  <td className="max-w-64 break-words px-4 py-3 font-medium text-vam-ink">{displayText(user.email)}</td>
+                  <td className="max-w-48 break-words px-4 py-3 text-slate-700">{displayText(user.full_name)}</td>
+                  <td className="px-4 py-3 text-slate-700">{roleLabel(user.role)}</td>
+                  <td className="px-4 py-3"><StatusBadges user={user} /></td>
+                  <td className="max-w-64 break-all px-4 py-3 font-mono text-xs text-slate-700">{displayText(user.auth_user_id)}</td>
+                  <td className="max-w-80 break-words px-4 py-3 text-slate-700">{scopeText(user)}</td>
+                  <td className="sticky right-0 z-10 w-64 min-w-64 border-l border-vam-line bg-white px-4 py-3 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">
+                    <div className="grid gap-2">
+                      <Link href={`/admin/users?edit=${user.id}`} className="inline-flex justify-center rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
+                        Sửa
+                      </Link>
+                      <SyncAuthForm user={user} />
+                      <StatusToggleForm user={user} disabled={!safe} />
+                      <RemoveAccessForm user={user} disabled={!safe} />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
-export default async function AdminUsersPage() {
+export default async function AdminUsersPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const adminUser = await requireSuperAdmin();
   if (!adminUser) notFound();
 
@@ -56,6 +126,8 @@ export default async function AdminUsersPage() {
   ]);
   const users = usersResult.data;
   const activeSuperAdminCount = users.filter((user) => user.role === "super_admin" && user.status === "active").length;
+  const selectedEditId = single(searchParams?.edit);
+  const selectedUser = selectedEditId ? users.find((user) => user.id === selectedEditId) : null;
 
   return (
     <>
@@ -64,60 +136,34 @@ export default async function AdminUsersPage() {
       {auditResult.error ? <ErrorBox message={auditResult.error} /> : null}
 
       <Card className="mb-6">
-        <h2 className="mb-3 text-base font-semibold text-vam-ink">Tạo / mời admin user</h2>
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">Thêm user quản trị</h2>
         <p className="mb-4 text-sm text-slate-600">
-          Invite Supabase Auth được chạy bằng server-only service-role key. Service-role key không được gửi xuống trình duyệt.
+          Luồng tạo user sẽ tìm hoặc mời Supabase Auth user trước, sau đó lưu admin_users với auth_user_id và cập nhật scope. Service-role key chỉ chạy server-side.
         </p>
         <CreateAdminUserForm />
       </Card>
 
-      <section className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Danh sách người dùng</h2>
-        <SimpleTable
-          rows={users}
-          columns={[
-            { key: "email", label: "Email", render: (row) => displayText(row.email) },
-            { key: "full_name", label: "Họ tên", render: (row) => displayText(row.full_name) },
-            { key: "role", label: "Vai trò", render: (row) => roleLabel(row.role) },
-            { key: "status", label: "Trạng thái", render: (row) => statusLabel(row.status) },
-            { key: "auth_user_id", label: "auth_user_id", render: (row) => displayText(row.auth_user_id) },
-            { key: "scope", label: "Mùa/Chương trình được truy cập", render: (row) => scopeText(row) },
-            { key: "created_at", label: "created_at", render: (row) => formatDate(row.created_at) },
-            { key: "updated_at", label: "last updated", render: (row) => formatDate(row.updated_at) },
-            {
-              key: "deactivate",
-              label: "Tạm khóa",
-              render: (row) => (
-                <DeactivateForm
-                  id={row.id}
-                  disabled={row.role === "super_admin" && row.status === "active" && activeSuperAdminCount <= 1}
-                />
-              )
-            }
-          ]}
-        />
-      </section>
+      {selectedUser ? (
+        <section className="mb-6">
+          <h2 className="mb-3 text-lg font-semibold text-vam-ink">Sửa người dùng</h2>
+          <Card>
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-vam-ink">{displayText(selectedUser.email)}</div>
+                <div className="mt-1"><StatusBadges user={selectedUser} /></div>
+              </div>
+              <Link href="/admin/users" className="rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
+                Đóng form sửa
+              </Link>
+            </div>
+            <EditAdminUserForm user={selectedUser} />
+          </Card>
+        </section>
+      ) : null}
 
       <section className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Chỉnh sửa vai trò và phân quyền</h2>
-        {users.length ? (
-          <div className="grid gap-4">
-            {users.map((user) => (
-              <Card key={user.id}>
-                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-vam-ink">{displayText(user.email)}</div>
-                    <div className="text-xs text-slate-500">{roleLabel(user.role)} / {statusLabel(user.status)}</div>
-                  </div>
-                  <div className="max-w-xl text-xs text-slate-500">Phân quyền hiện tại: {scopeText(user)}</div>
-                </div>
-                <EditAdminUserForm user={user} />
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <EmptyState message="Chưa có admin user để hiển thị." />
-        )}
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Danh sách người dùng</h2>
+        <UserManagementTable users={users} activeSuperAdminCount={activeSuperAdminCount} />
       </section>
 
       <section className="mb-6">
@@ -129,7 +175,7 @@ export default async function AdminUsersPage() {
             { key: "action_type", label: "Hành động", render: (row) => displayText(row.action_type) },
             { key: "actor_admin_user_id", label: "Người thực hiện", render: (row) => displayText(row.actor_admin_user_id) },
             { key: "target_admin_user_id", label: "Người bị thay đổi", render: (row) => displayText(row.target_admin_user_id) },
-            { key: "after_data", label: "Sau thay đổi", render: (row) => displayText(JSON.stringify(row.after_data ?? {})) }
+            { key: "after_data", label: "Sau thay đổi", render: (row) => displayText(safeJson(row.after_data)) }
           ]}
         />
       </section>
