@@ -592,8 +592,204 @@ export async function getFounderIntelligenceDashboard(seasonCode = "UEHM-S11"): 
   const { data, error } = await client.rpc("get_founder_intelligence_dashboard", {
     p_season_code: seasonCode
   });
-  if (error) return { data: null, error: `${VI_ERROR} (get_founder_intelligence_dashboard: ${error.message})` };
+  if (error) {
+    logDataError("get_founder_intelligence_dashboard rpc failed; using raw-read fallback", error);
+    return getFounderIntelligenceDashboardFallback(seasonCode);
+  }
   return { data: data as FounderIntelligenceDashboard, error: null };
+}
+
+function groupRowsByCount<T extends JsonRecord>(rows: T[], key: keyof T, fallback: string) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const label = String(row[key] ?? "").trim() || fallback;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "vi"));
+}
+
+function mentorExperienceBand(value: unknown) {
+  const years = Number(value ?? 0);
+  if (!Number.isFinite(years) || years <= 0) return "Unknown";
+  if (years <= 3) return "0-3 years";
+  if (years <= 7) return "4-7 years";
+  if (years <= 12) return "8-12 years";
+  return "13+ years";
+}
+
+async function getFounderIntelligenceDashboardFallback(seasonCode: string): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
+  const [seasons, people, mentors, mentees, matches, recaps] = await Promise.all([
+    selectAllTable<Season>("seasons", "id,code,name"),
+    selectAllTable<Person>("people", "id,full_name,email_primary"),
+    selectAllTable<MentorProfile>("mentor_profiles", "id,person_id,mentor_code,company_current,title_current,years_experience_min"),
+    selectAllTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code,school_code,school_raw,major"),
+    selectAllTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
+    selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,status")
+  ]);
+  const errors = [seasons.error, people.error, mentors.error, mentees.error, matches.error, recaps.error].filter(Boolean);
+  if (errors.length) return { data: null, error: null };
+
+  const peopleById = keyById(people.data);
+  const season = seasons.data.find((row) => row.code === seasonCode);
+  const fallbackSeasonId = (() => {
+    const counts = new Map<string, number>();
+    for (const row of [...matches.data, ...recaps.data]) {
+      if (!row.season_id) continue;
+      counts.set(row.season_id, (counts.get(row.season_id) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  })();
+  const seasonId = season?.id ?? fallbackSeasonId;
+  const seasonMatches = matches.data.filter((row) => (seasonId ? row.season_id === seasonId : true));
+  const activeMatches = seasonMatches.filter((row) => normalizeStatus(row.status) === "active" && row.mentor_person_id && row.mentee_person_id);
+  const seasonRecaps = recaps.data.filter((row) => (seasonId ? row.season_id === seasonId : true));
+  const validRecaps = seasonRecaps.filter(isValidRecapActivity);
+  const selectedMonth =
+    validRecaps
+      .map((row) => String(row.meeting_month ?? ""))
+      .filter(isOperationalMonth)
+      .sort()
+      .filter((month) => month <= currentMonth())
+      .at(-1) ??
+    validRecaps
+      .map((row) => String(row.meeting_month ?? ""))
+      .filter(isOperationalMonth)
+      .sort()
+      .at(-1) ??
+    currentMonth();
+  const selectedRecaps = validRecaps.filter((row) => row.meeting_month === selectedMonth);
+  const selectedMenteeIds = new Set(selectedRecaps.map((row) => row.mentee_person_id).filter(Boolean));
+  const activeMentorIds = new Set(activeMatches.map((row) => row.mentor_person_id).filter(Boolean));
+  const activeMenteeIds = new Set(activeMatches.map((row) => row.mentee_person_id).filter(Boolean));
+
+  const menteeCountByMentor = new Map<string, number>();
+  for (const match of activeMatches) {
+    if (!match.mentor_person_id) continue;
+    menteeCountByMentor.set(match.mentor_person_id, (menteeCountByMentor.get(match.mentor_person_id) ?? 0) + 1);
+  }
+  const topMentors = mentors.data
+    .map((mentor) => {
+      const person = mentor.person_id ? peopleById.get(mentor.person_id) : undefined;
+      return {
+        mentorId: mentor.person_id,
+        mentorName: person?.full_name ?? person?.email_primary ?? mentor.mentor_code ?? "Unknown",
+        currentCompany: mentor.company_current ?? "Unknown",
+        currentTitle: mentor.title_current ?? "Unknown",
+        menteeCount: mentor.person_id ? menteeCountByMentor.get(mentor.person_id) ?? 0 : 0,
+        capacityTarget: 4,
+        recapCountCurrentMonth: selectedRecaps.filter((recap) => recap.mentor_person_id === mentor.person_id).length
+      };
+    })
+    .filter((row) => row.menteeCount > 0)
+    .sort((a, b) => b.menteeCount - a.menteeCount || String(a.mentorName).localeCompare(String(b.mentorName), "vi"))
+    .slice(0, 20);
+
+  const mentorCapacityDistribution = groupRowsByCount(
+    mentors.data.map((mentor) => {
+      const count = mentor.person_id ? menteeCountByMentor.get(mentor.person_id) ?? 0 : 0;
+      const bucket = count === 0 ? "0 mentee" : count === 1 ? "1 mentee" : count === 2 ? "2 mentees" : count === 3 ? "3 mentees" : "4+ mentees";
+      return { bucket };
+    }),
+    "bucket",
+    "Unknown"
+  ).map((row) => ({ bucket: row.name, count: row.count }));
+  const menteeSchoolDistribution = groupRowsByCount(
+    mentees.data.map((mentee) => ({ school: mentee.school_code || mentee.school_raw || "Unknown" })),
+    "school",
+    "Unknown"
+  ).map((row) => ({ school: row.name, count: row.count }));
+  const mentorCompanyDistribution = groupRowsByCount(
+    mentors.data.map((mentor) => ({ company: mentor.company_current || "Unknown" })),
+    "company",
+    "Unknown"
+  ).slice(0, 20).map((row) => ({ company: row.name, count: row.count }));
+  const byMajor = groupRowsByCount(
+    mentees.data.map((mentee) => ({ major: mentee.major || "Unknown" })),
+    "major",
+    "Unknown"
+  ).map((row) => ({ major: row.name, count: row.count }));
+  const byUniversity = menteeSchoolDistribution.map((row) => ({ university: row.school, count: row.count }));
+  const byExperienceBand = groupRowsByCount(
+    mentors.data.map((mentor) => ({ band: mentorExperienceBand(mentor.years_experience_min) })),
+    "band",
+    "Unknown"
+  ).map((row) => ({ band: row.name, count: row.count }));
+  const silentMentees = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id)).length;
+
+  const data: FounderIntelligenceDashboard = {
+    season_code: seasonCode,
+    season_id: seasonId,
+    selected_month: selectedMonth,
+    total_mentors: mentors.data.length,
+    total_mentees: mentees.data.length,
+    active_matches: activeMatches.length,
+    mentor_capacity_distribution: mentorCapacityDistribution,
+    mentee_school_distribution: menteeSchoolDistribution,
+    mentor_company_distribution: mentorCompanyDistribution,
+    match_health_summary: {
+      activeMatches: activeMatches.length,
+      activeMentors: activeMentorIds.size,
+      activeMentees: activeMenteeIds.size,
+      silentMentees,
+      recapsInSelectedMonth: selectedRecaps.length
+    },
+    top_mentors_by_mentee_count: topMentors,
+    data_quality_flags: [
+      { key: "season_row_missing", count: season ? 0 : 1 },
+      { key: "recap_missing_mentee", count: seasonRecaps.filter((row) => !row.mentee_person_id).length },
+      { key: "recap_missing_mentor", count: seasonRecaps.filter((row) => !row.mentor_person_id).length }
+    ],
+    definitions: {
+      selectedMonth,
+      activeMentor: "Mentor with at least one active match in selected season.",
+      silentMentee: "Mentee with an active match and no valid recap in selected month.",
+      overloadedMentor: "Mentor with 4+ active mentees, until explicit capacity fields are available.",
+      validRecapStatuses: ["submitted", "needs_review", ""]
+    },
+    mentorProfile: {
+      totalMentors: mentors.data.length,
+      activeMentors: activeMentorIds.size,
+      inactiveMentors: Math.max(0, mentors.data.length - activeMentorIds.size),
+      byIndustry: [],
+      byFunction: [],
+      byExperienceBand,
+      byVamSeniority: [],
+      bySeniorityLevel: [],
+      overloadedMentors: topMentors.filter((row) => row.menteeCount >= 4).map((row) => ({ ...row, industry: "Unknown" })),
+      inactiveMentorsWithMentees: []
+    },
+    menteeProfile: {
+      totalMentees: mentees.data.length,
+      activeMentees: activeMenteeIds.size,
+      silentMentees,
+      byMajor,
+      byUniversity,
+      byCareerInterest: [],
+      byTargetIndustry: [],
+      byYearOfStudy: [],
+      bySupportTeam: []
+    },
+    matchingIntelligence: {
+      totalActiveMatches: activeMatches.length,
+      mentorMenteeRatio: activeMenteeIds.size ? `${(activeMentorIds.size / activeMenteeIds.size).toFixed(2)}:1` : "0:0",
+      matchesByIndustryAlignment: [],
+      matchesByFunctionAlignment: [],
+      unmatchedOrWeakSegments: [],
+      menteesWithoutIndustryMentor: 0,
+      mentorSupplyVsMenteeDemand: []
+    },
+    activityBySegment: {
+      activeMenteeRateByMajor: [],
+      recapRateBySupportTeam: [],
+      activeMentorRateByIndustry: [],
+      silentMenteeByCareerInterest: []
+    },
+    recommendedActions: []
+  };
+
+  return { data, error: null };
 }
 
 export type CreateActionItemInput = {

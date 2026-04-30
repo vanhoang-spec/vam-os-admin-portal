@@ -328,6 +328,9 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
           <p className="text-sm text-slate-600">
             Follow-up là danh sách gợi ý dựa trên dữ liệu recap, chưa phải trạng thái xử lý chính thức.
           </p>
+          <p className="text-xs text-slate-500">
+            Luu y: thang dang van hanh chua dong so, nen recap/KPI co the thap hon tong thuc te cuoi thang.
+          </p>
         </div>
       </Card>
 
