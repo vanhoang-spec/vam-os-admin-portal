@@ -110,7 +110,8 @@ export default async function DashboardPage() {
     data.counts.matches.error,
     data.counts.activeMatches.error,
     data.duplicateEmails.error,
-    data.activeMissing.error
+    data.activeMissing.error,
+    data.latestClosedMonth.error
   ].filter(Boolean);
 
   const peopleById = keyById(data.people.data);
@@ -143,10 +144,19 @@ export default async function DashboardPage() {
   const monthsWithData = new Set(validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)));
   const availableMonths = seasonMonths.filter((month) => monthsWithData.has(month)).sort((a, b) => b.localeCompare(a));
   const nowMonth = currentMonth();
-  const selectedMonth = availableMonths.find((month) => month <= nowMonth) ?? (isOperationalMonth(nowMonth) ? nowMonth : null) ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
+  const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
+  
+  const seasonLatestClosedMonth = data.latestClosedMonth.data.find((row) => row.season_id === season?.id);
+  const rpcSelectedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
+  
+  const defaultMonth = rpcSelectedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const selectedMonth = defaultMonth;
+  
+  const closedMonth = rpcSelectedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
+  const closedPreviousMonth = typeof seasonLatestClosedMonth?.previous_closed_month === "string" ? seasonLatestClosedMonth.previous_closed_month : addMonths(closedMonth, -1);
   const previousMonth = addMonths(selectedMonth, -1);
-  const closedMonth = selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth;
-  const closedPreviousMonth = addMonths(closedMonth, -1);
+  
   const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
   const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === previousMonth);
   const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
@@ -277,9 +287,16 @@ export default async function DashboardPage() {
         <ErrorBox key={error} message={error} />
       ))}
 
+      <div className="mb-4 text-sm">
+        <p className="text-slate-600 font-medium">Tháng đã chốt: {rpcSelectedMonth ?? "Chưa có"}</p>
+        {selectedMonth > (rpcSelectedMonth ?? "") ? (
+          <p className="text-amber-600 mt-1">Dữ liệu tháng mở không dùng cho KPI chính thức</p>
+        ) : null}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Số recap tháng này" value={selectedRecaps.length} />
-        <KpiCard label="Mentee active tháng này" value={activeMenteeThisMonthCount} />
+        <KpiCard label="Số recap tháng này" value={typeof seasonLatestClosedMonth?.total_recap_entries === "number" && selectedMonth === rpcSelectedMonth ? seasonLatestClosedMonth.total_recap_entries : selectedRecaps.length} />
+        <KpiCard label="Mentee active tháng này" value={typeof seasonLatestClosedMonth?.distinct_mentees_with_recap === "number" && selectedMonth === rpcSelectedMonth ? seasonLatestClosedMonth.distinct_mentees_with_recap : activeMenteeThisMonthCount} />
         <KpiCard label="Mentor active tháng này" value={activeMentorThisMonthCount} />
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
         <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />

@@ -896,7 +896,8 @@ export async function getDashboardData() {
     applications,
     matches,
     seasons,
-    recaps
+    recaps,
+    latestClosedMonth
   ] = await Promise.all([
     countTable("people"),
     countTable("mentor_profiles"),
@@ -910,7 +911,8 @@ export async function getDashboardData() {
     selectTable<Application>("applications", "id,final_status"),
     selectTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
     getSeasons(),
-    selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,meeting_date,status")
+    selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,meeting_date,status"),
+    selectTable<JsonRecord>("v_season_latest_closed_month")
   ]);
   const duplicateEmails = { data: getDuplicateEmailCountFromRows(people.data), error: people.error };
   const activeMissing = await countTable("matches", (q) => q.eq("status", "active").or("mentor_person_id.is.null,mentee_person_id.is.null"));
@@ -932,7 +934,8 @@ export async function getDashboardData() {
       activeMatches: totalActiveMatches
     },
     duplicateEmails,
-    activeMissing
+    activeMissing,
+    latestClosedMonth
   };
 }
 
