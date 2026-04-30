@@ -1,54 +1,102 @@
 -- Season 11 March 2026 Import Draft
 -- REVIEW ONLY. DO NOT EXECUTE UNTIL STAGING APPROVAL.
 --
--- Purpose:
--- - Prepare a controlled March 2026 import into existing public.mentoring_recaps.
--- - Create a pending data_import_batches row.
--- - Validate ID mapping against people, mentor_profiles, mentee_profiles, and matches.
--- - Detect exact duplicate candidates.
--- - Log blockers/warnings to data_quality_issues.
--- - Insert only cleaned non-blocked rows.
--- - Upsert the official March 2026 KPI snapshot into season_monthly_kpis.
+-- This is not a migration and not an automated import script.
+-- Intended target: Supabase STAGING only.
 --
--- Guardrails:
--- - Staging only.
--- - Do not run on production.
--- - Do not run until _season11_march_source has been reviewed and populated in this session.
--- - This file is not a migration.
--- - This file does not rewrite dashboard RPCs.
+-- Business decision recorded 2026-04-30:
+-- - Import approved/import-eligible March rows into public.mentoring_recaps.
+-- - Do not import missing_mentor, missing_mentee, duplicate_existing, or hard needs_review blockers.
+-- - Import missing_match rows only when mentor_person_id and mentee_person_id are valid; set match_id = null and log warning.
+-- - Placeholder recap URLs are accepted for staging, but must be logged as warning/info.
+-- - Log excluded rows to public.data_quality_issues.
+-- - Upsert the official March KPI snapshot as closed.
+-- - Do not touch April.
+-- - Do not rewrite dashboard RPCs.
 --
--- Expected source relation in the same session:
+-- Source artifacts:
+-- - data_imports/season11/season11_march_import_approved_rows.csv
+-- - data_imports/season11/season11_march_import_excluded_qa_rows.csv
 --
--- CREATE TEMP TABLE _season11_march_source (
---   source_row_id text not null,
---   source_sheet text not null,
---   source_file text not null,
---   meeting_date date not null,
---   mentor_person_id uuid,
---   mentee_person_id uuid,
---   match_id uuid,
+-- Current source counts:
+-- - approved/import-eligible rows: 236
+--   - mapped: 20
+--   - mapped_with_warnings: 205
+--   - missing_match imported with match_id = null: 11
+-- - excluded QA rows: 50
+--   - missing_mentor: 42
+--   - missing_mentee: 4
+--   - needs_review: 4
+--
+-- Manual loading requirement:
+-- Before running the transaction, create and populate these TEMP tables
+-- from the two CSV files in the same SQL session. The easiest path depends
+-- on the SQL client. In psql, use \copy after creating the temp tables.
+--
+-- CREATE TEMP TABLE _season11_march_import_approved (
+--   source_row_id text,
+--   source_sheet text,
+--   source_file text,
+--   meeting_date text,
+--   meeting_month text,
+--   mentor_person_id text,
+--   mentee_person_id text,
+--   match_id text,
 --   recap_url text,
 --   recap_note text,
 --   meeting_type text,
---   captured_by text,
---   raw_payload jsonb default '{}'::jsonb
+--   mapping_status text,
+--   mapping_notes text,
+--   approved_for_import text,
+--   review_note text
 -- ) ON COMMIT DROP;
 --
--- Populate _season11_march_source from the reviewed cleaned March 2026 source rows
--- before running the transaction below. Do not use mentee/month as a uniqueness key.
+-- CREATE TEMP TABLE _season11_march_import_excluded (
+--   source_row_id text,
+--   source_sheet text,
+--   source_file text,
+--   meeting_date text,
+--   meeting_month text,
+--   mentor_person_id text,
+--   mentee_person_id text,
+--   match_id text,
+--   recap_url text,
+--   recap_note text,
+--   meeting_type text,
+--   mapping_status text,
+--   mapping_notes text,
+--   approved_for_import text,
+--   review_note text
+-- ) ON COMMIT DROP;
+--
+-- Example psql load commands, adjusted for local paths:
+-- \copy _season11_march_import_approved from 'data_imports/season11/season11_march_import_approved_rows.csv' with (format csv, header true)
+-- \copy _season11_march_import_excluded from 'data_imports/season11/season11_march_import_excluded_qa_rows.csv' with (format csv, header true)
 
 BEGIN;
 
--- 0. Hard guard: source rows must be present in this session.
+-- 0. Guardrails: required temp tables and expected source counts.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM _season11_march_source) THEN
-    RAISE EXCEPTION '_season11_march_source is empty or missing. Populate reviewed source rows before running this import draft.';
+  IF to_regclass('pg_temp._season11_march_import_approved') IS NULL THEN
+    RAISE EXCEPTION 'Temp table _season11_march_import_approved is missing. Load approved CSV before running.';
+  END IF;
+
+  IF to_regclass('pg_temp._season11_march_import_excluded') IS NULL THEN
+    RAISE EXCEPTION 'Temp table _season11_march_import_excluded is missing. Load excluded QA CSV before running.';
+  END IF;
+
+  IF (SELECT count(*) FROM _season11_march_import_approved) <> 236 THEN
+    RAISE EXCEPTION 'Expected 236 approved/import-eligible rows, found %.', (SELECT count(*) FROM _season11_march_import_approved);
+  END IF;
+
+  IF (SELECT count(*) FROM _season11_march_import_excluded) <> 50 THEN
+    RAISE EXCEPTION 'Expected 50 excluded QA rows, found %.', (SELECT count(*) FROM _season11_march_import_excluded);
   END IF;
 END;
 $$;
 
--- 1. Create import context and pending batch.
+-- 1. Create import batch as pending.
 CREATE TEMP TABLE _season11_march_import_context ON COMMIT DROP AS
 WITH target_season AS (
   SELECT id AS season_id
@@ -67,7 +115,7 @@ batch AS (
   SELECT
     target_season.season_id,
     'pending',
-    'TRACKING _ SEASON 11.xlsx',
+    'season11_march_import_approved_rows.csv',
     'manual_staging_review',
     0
   FROM target_season
@@ -87,94 +135,128 @@ BEGIN
 END;
 $$;
 
--- 2. Normalize source rows and attach mapping signals.
-CREATE TEMP TABLE _season11_march_candidate_rows ON COMMIT DROP AS
-WITH normalized AS (
-  SELECT
-    ctx.batch_id,
-    ctx.season_id,
-    src.source_row_id,
-    src.source_sheet,
-    src.source_file,
-    src.meeting_date,
-    to_char(src.meeting_date, 'YYYY-MM') AS meeting_month,
-    src.mentor_person_id,
-    src.mentee_person_id,
-    src.match_id,
-    nullif(trim(src.recap_url), '') AS recap_url,
-    nullif(trim(src.recap_note), '') AS recap_note,
-    coalesce(nullif(trim(src.meeting_type), ''), '1on1_primary') AS meeting_type,
-    coalesce(nullif(trim(src.captured_by), ''), 'season11_march_import') AS captured_by,
-    coalesce(src.raw_payload, '{}'::jsonb) AS raw_payload,
-    mentor_person.id IS NOT NULL AS mentor_person_exists,
-    mentee_person.id IS NOT NULL AS mentee_person_exists,
-    mentor_profile.person_id IS NOT NULL AS mentor_profile_exists,
-    mentee_profile.person_id IS NOT NULL AS mentee_profile_exists,
-    matched.id IS NOT NULL AS supplied_match_exists,
-    (
-      src.match_id IS NULL
-      OR (
-        matched.id IS NOT NULL
-        AND matched.season_id = ctx.season_id
-        AND matched.mentor_person_id = src.mentor_person_id
-        AND matched.mentee_person_id = src.mentee_person_id
+-- 2. Normalize approved/import-eligible rows.
+CREATE TEMP TABLE _season11_march_approved_normalized ON COMMIT DROP AS
+SELECT
+  ctx.batch_id,
+  ctx.season_id,
+  nullif(trim(src.source_row_id), '') AS source_row_id,
+  nullif(trim(src.source_sheet), '') AS source_sheet,
+  nullif(trim(src.source_file), '') AS source_file,
+  nullif(trim(src.meeting_date), '')::date AS meeting_date,
+  coalesce(nullif(trim(src.meeting_month), ''), '2026-03') AS meeting_month,
+  nullif(trim(src.mentor_person_id), '')::uuid AS mentor_person_id,
+  nullif(trim(src.mentee_person_id), '')::uuid AS mentee_person_id,
+  CASE
+    WHEN src.mapping_status = 'missing_match' THEN NULL::uuid
+    ELSE nullif(trim(src.match_id), '')::uuid
+  END AS match_id,
+  nullif(trim(src.recap_url), '') AS recap_url,
+  nullif(trim(src.recap_note), '') AS recap_note,
+  coalesce(nullif(trim(src.meeting_type), ''), 'mentoring') AS meeting_type,
+  nullif(trim(src.mapping_status), '') AS mapping_status,
+  nullif(trim(src.mapping_notes), '') AS mapping_notes,
+  coalesce(nullif(trim(src.approved_for_import), ''), 'false') AS approved_for_import,
+  nullif(trim(src.review_note), '') AS review_note,
+  src.recap_url LIKE 'https://system.local/missing-url%' AS uses_placeholder_url,
+  src.mapping_status = 'missing_match' AS imported_without_match
+FROM _season11_march_import_approved src
+CROSS JOIN _season11_march_import_context ctx;
+
+-- 3. Validate approved/import-eligible rows before any insert.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM _season11_march_approved_normalized
+    WHERE meeting_month <> '2026-03'
+       OR meeting_date < date '2026-03-01'
+       OR meeting_date >= date '2026-04-01'
+  ) THEN
+    RAISE EXCEPTION 'Approved rows include non-March meeting dates.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM _season11_march_approved_normalized
+    WHERE mapping_status IN ('missing_mentor', 'missing_mentee', 'duplicate_existing', 'needs_review')
+  ) THEN
+    RAISE EXCEPTION 'Approved rows include hard blocker mapping statuses.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM _season11_march_approved_normalized
+    WHERE mentor_person_id IS NULL
+       OR mentee_person_id IS NULL
+       OR recap_url IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Approved rows include missing mentor_person_id, mentee_person_id, or recap_url.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM _season11_march_approved_normalized approved
+    LEFT JOIN public.people mentor ON mentor.id = approved.mentor_person_id
+    LEFT JOIN public.people mentee ON mentee.id = approved.mentee_person_id
+    LEFT JOIN public.mentor_profiles mentor_profile ON mentor_profile.person_id = approved.mentor_person_id
+    LEFT JOIN public.mentee_profiles mentee_profile ON mentee_profile.person_id = approved.mentee_person_id
+    WHERE mentor.id IS NULL
+       OR mentee.id IS NULL
+       OR mentor_profile.person_id IS NULL
+       OR mentee_profile.person_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Approved rows include mentor/mentee IDs that do not exist in people/profile tables.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM _season11_march_approved_normalized approved
+    LEFT JOIN public.matches m ON m.id = approved.match_id
+    WHERE approved.match_id IS NOT NULL
+      AND (
+        m.id IS NULL
+        OR m.season_id <> approved.season_id
+        OR m.mentor_person_id <> approved.mentor_person_id
+        OR m.mentee_person_id <> approved.mentee_person_id
       )
-    ) AS supplied_match_is_consistent
-  FROM _season11_march_source src
-  CROSS JOIN _season11_march_import_context ctx
-  LEFT JOIN public.people mentor_person ON mentor_person.id = src.mentor_person_id
-  LEFT JOIN public.people mentee_person ON mentee_person.id = src.mentee_person_id
-  LEFT JOIN public.mentor_profiles mentor_profile ON mentor_profile.person_id = src.mentor_person_id
-  LEFT JOIN public.mentee_profiles mentee_profile ON mentee_profile.person_id = src.mentee_person_id
-  LEFT JOIN public.matches matched ON matched.id = src.match_id
+  ) THEN
+    RAISE EXCEPTION 'Approved rows include match_id values that do not match season/mentor/mentee.';
+  END IF;
+END;
+$$;
+
+-- 4. Log excluded rows as QA issues.
+INSERT INTO public.data_quality_issues (
+  batch_id,
+  entity_type,
+  entity_id,
+  issue_type,
+  severity,
+  description,
+  raw_data
 )
 SELECT
-  normalized.*,
-  row_number() OVER (
-    PARTITION BY season_id, meeting_date, mentor_person_id, mentee_person_id, recap_url
-    ORDER BY source_row_id
-  ) AS source_exact_duplicate_rank
-FROM normalized;
+  ctx.batch_id,
+  'recap_source_row',
+  NULL,
+  coalesce(nullif(trim(excluded.mapping_status), ''), 'excluded_from_march_import') AS issue_type,
+  'block' AS severity,
+  CASE coalesce(nullif(trim(excluded.mapping_status), ''), 'excluded_from_march_import')
+    WHEN 'missing_mentor' THEN 'Excluded from staging import: mentor_person_id unresolved.'
+    WHEN 'missing_mentee' THEN 'Excluded from staging import: mentee_person_id unresolved.'
+    WHEN 'duplicate_existing' THEN 'Excluded from staging import: duplicate existing recap candidate.'
+    WHEN 'needs_review' THEN 'Excluded from staging import: hard needs_review blocker.'
+    ELSE 'Excluded from staging import by manual review policy.'
+  END AS description,
+  to_jsonb(excluded) || jsonb_build_object(
+    'source_row_id', excluded.source_row_id,
+    'policy', 'season11_march_staging_import_2026_04_30'
+  ) AS raw_data
+FROM _season11_march_import_excluded excluded
+CROSS JOIN _season11_march_import_context ctx;
 
--- 3. Exact duplicate candidates inside source.
-CREATE TEMP TABLE _season11_march_source_duplicate_candidates ON COMMIT DROP AS
-SELECT
-  season_id,
-  meeting_date,
-  mentor_person_id,
-  mentee_person_id,
-  recap_url,
-  count(*) AS duplicate_candidate_count,
-  array_agg(source_row_id ORDER BY source_row_id) AS source_row_ids
-FROM _season11_march_candidate_rows
-GROUP BY
-  season_id,
-  meeting_date,
-  mentor_person_id,
-  mentee_person_id,
-  recap_url
-HAVING count(*) > 1;
-
--- 4. Exact duplicate candidates already present in mentoring_recaps.
-CREATE TEMP TABLE _season11_march_existing_duplicate_candidates ON COMMIT DROP AS
-SELECT
-  candidate.source_row_id,
-  existing.id AS existing_recap_id,
-  candidate.season_id,
-  candidate.meeting_date,
-  candidate.mentor_person_id,
-  candidate.mentee_person_id,
-  candidate.recap_url
-FROM _season11_march_candidate_rows candidate
-JOIN public.mentoring_recaps existing
-  ON existing.season_id = candidate.season_id
- AND existing.meeting_date = candidate.meeting_date
- AND existing.mentor_person_id = candidate.mentor_person_id
- AND existing.mentee_person_id = candidate.mentee_person_id
- AND existing.recap_url = candidate.recap_url
- AND coalesce(trim(lower(existing.status)), '') NOT IN ('deleted', 'invalid');
-
--- 5. Log blocker/warning issues.
+-- 5. Log imported missing-match rows as warnings.
 INSERT INTO public.data_quality_issues (
   batch_id,
   entity_type,
@@ -187,153 +269,15 @@ INSERT INTO public.data_quality_issues (
 SELECT
   batch_id,
   'recap_source_row',
-  null,
-  issue_type,
-  severity,
-  description,
-  raw_data
-FROM (
-  SELECT
-    batch_id,
-    source_row_id,
-    'invalid_month' AS issue_type,
-    'block' AS severity,
-    'Source row meeting_date is not in March 2026.' AS description,
-    raw_payload || jsonb_build_object('source_row_id', source_row_id, 'meeting_date', meeting_date)
-  FROM _season11_march_candidate_rows
-  WHERE meeting_month <> '2026-03'
+  NULL,
+  'missing_match_imported_with_null_match_id',
+  'warning',
+  'Imported staging recap with valid mentor_person_id and mentee_person_id but null match_id by approved March policy.',
+  to_jsonb(approved) || jsonb_build_object('source_row_id', source_row_id)
+FROM _season11_march_approved_normalized approved
+WHERE imported_without_match;
 
-  UNION ALL
-
-  SELECT
-    batch_id,
-    source_row_id,
-    'missing_recap_url',
-    'block',
-    'Source row is missing recap_url required by mentoring_recaps.',
-    raw_payload || jsonb_build_object('source_row_id', source_row_id)
-  FROM _season11_march_candidate_rows
-  WHERE recap_url IS NULL
-
-  UNION ALL
-
-  SELECT
-    batch_id,
-    source_row_id,
-    'missing_or_invalid_mentor',
-    'block',
-    'mentor_person_id is null, missing from people, or missing mentor profile.',
-    raw_payload || jsonb_build_object('source_row_id', source_row_id, 'mentor_person_id', mentor_person_id)
-  FROM _season11_march_candidate_rows
-  WHERE mentor_person_id IS NULL
-     OR NOT mentor_person_exists
-     OR NOT mentor_profile_exists
-
-  UNION ALL
-
-  SELECT
-    batch_id,
-    source_row_id,
-    'missing_or_invalid_mentee',
-    'block',
-    'mentee_person_id is null, missing from people, or missing mentee profile.',
-    raw_payload || jsonb_build_object('source_row_id', source_row_id, 'mentee_person_id', mentee_person_id)
-  FROM _season11_march_candidate_rows
-  WHERE mentee_person_id IS NULL
-     OR NOT mentee_person_exists
-     OR NOT mentee_profile_exists
-
-  UNION ALL
-
-  SELECT
-    batch_id,
-    source_row_id,
-    'match_mismatch',
-    'warning',
-    'Supplied match_id is missing or does not match season/mentor/mentee. Row may still import without match_id if accepted.',
-    raw_payload || jsonb_build_object('source_row_id', source_row_id, 'match_id', match_id)
-  FROM _season11_march_candidate_rows
-  WHERE match_id IS NOT NULL
-    AND NOT supplied_match_is_consistent
-
-  UNION ALL
-
-  SELECT
-    ctx.batch_id,
-    unnest(source_row_ids),
-    'duplicate_source_candidate',
-    'warning',
-    'Exact duplicate candidate appears more than once in the reviewed source.',
-    jsonb_build_object(
-      'source_row_ids', source_row_ids,
-      'duplicate_candidate_count', duplicate_candidate_count,
-      'meeting_date', meeting_date,
-      'mentor_person_id', mentor_person_id,
-      'mentee_person_id', mentee_person_id,
-      'recap_url', recap_url
-    )
-  FROM _season11_march_source_duplicate_candidates dup
-  CROSS JOIN _season11_march_import_context ctx
-
-  UNION ALL
-
-  SELECT
-    ctx.batch_id,
-    existing_dup.source_row_id,
-    'existing_recap_duplicate_candidate',
-    'warning',
-    'Exact duplicate candidate already exists in mentoring_recaps and will be skipped by insert.',
-    jsonb_build_object(
-      'source_row_id', existing_dup.source_row_id,
-      'existing_recap_id', existing_dup.existing_recap_id,
-      'meeting_date', existing_dup.meeting_date,
-      'mentor_person_id', existing_dup.mentor_person_id,
-      'mentee_person_id', existing_dup.mentee_person_id,
-      'recap_url', existing_dup.recap_url
-    )
-  FROM _season11_march_existing_duplicate_candidates existing_dup
-  CROSS JOIN _season11_march_import_context ctx
-) issue_rows;
-
--- 6. Prepare cleaned rows.
-CREATE TEMP TABLE _season11_march_cleaned_recaps ON COMMIT DROP AS
-SELECT
-  candidate.season_id,
-  CASE
-    WHEN candidate.supplied_match_is_consistent THEN candidate.match_id
-    ELSE NULL
-  END AS match_id,
-  candidate.mentor_person_id,
-  candidate.mentee_person_id,
-  candidate.meeting_date,
-  '2026-03'::text AS meeting_month,
-  candidate.recap_url,
-  'google_sheet'::text AS recap_source,
-  candidate.recap_note,
-  candidate.meeting_type,
-  candidate.captured_by,
-  false AS issue_flag,
-  'submitted'::text AS status,
-  concat(
-    'Season 11 March staging import; source_row_id=',
-    candidate.source_row_id,
-    '; batch_id=',
-    candidate.batch_id
-  ) AS admin_notes,
-  candidate.source_row_id,
-  candidate.batch_id
-FROM _season11_march_candidate_rows candidate
-WHERE candidate.meeting_month = '2026-03'
-  AND candidate.recap_url IS NOT NULL
-  AND candidate.mentor_person_id IS NOT NULL
-  AND candidate.mentee_person_id IS NOT NULL
-  AND candidate.mentor_person_exists
-  AND candidate.mentee_person_exists
-  AND candidate.mentor_profile_exists
-  AND candidate.mentee_profile_exists
-  AND candidate.source_exact_duplicate_rank = 1;
-
--- 6b. Log official/source count reconciliation for human acceptance.
+-- 6. Log placeholder URLs as info.
 INSERT INTO public.data_quality_issues (
   batch_id,
   entity_type,
@@ -344,66 +288,106 @@ INSERT INTO public.data_quality_issues (
   raw_data
 )
 SELECT
-  ctx.batch_id,
-  'season_monthly_kpi',
-  null,
-  'march_count_reconciliation',
-  'warning',
-  'March source/count reconciliation must be accepted before dashboard rewiring. Official Bao cao Recap total is 271; Mentee Tracking is 275; Cleaning data is 286.',
-  jsonb_build_object(
-    'official_bao_cao_recap', 271,
-    'mentee_tracking', 275,
-    'cleaning_data', 286,
-    'reviewed_source_rows', (SELECT count(*) FROM _season11_march_candidate_rows),
-    'cleaned_rows_prepared', (SELECT count(*) FROM _season11_march_cleaned_recaps)
-  )
-FROM _season11_march_import_context ctx;
+  batch_id,
+  'recap_source_row',
+  NULL,
+  'placeholder_recap_url',
+  'info',
+  'Imported staging recap uses a generated placeholder recap URL accepted by staging policy.',
+  to_jsonb(approved) || jsonb_build_object('source_row_id', source_row_id, 'recap_url', recap_url)
+FROM _season11_march_approved_normalized approved
+WHERE uses_placeholder_url;
 
--- 7. Insert cleaned rows, preserving legitimate multiple recaps and skipping only exact existing duplicates.
-INSERT INTO public.mentoring_recaps (
-  season_id,
-  match_id,
-  mentor_person_id,
-  mentee_person_id,
-  meeting_date,
-  meeting_month,
-  recap_url,
-  recap_source,
-  recap_note,
-  meeting_type,
-  captured_by,
-  issue_flag,
-  status,
-  admin_notes
+-- 7. Insert approved/import-eligible rows into mentoring_recaps.
+-- Exact existing duplicates are skipped defensively even though current duplicate_existing count is zero.
+CREATE TEMP TABLE _season11_march_inserted_recaps ON COMMIT DROP AS
+WITH inserted AS (
+  INSERT INTO public.mentoring_recaps (
+    match_id,
+    meeting_month,
+    season_id,
+    status,
+    mentor_person_id,
+    mentee_person_id,
+    meeting_date,
+    recap_url,
+    recap_source,
+    recap_note,
+    meeting_type,
+    captured_by,
+    issue_flag,
+    admin_notes
+  )
+  SELECT
+    approved.match_id,
+    '2026-03',
+    approved.season_id,
+    'submitted',
+    approved.mentor_person_id,
+    approved.mentee_person_id,
+    approved.meeting_date,
+    approved.recap_url,
+    'season11_march_staging_import',
+    approved.recap_note,
+    approved.meeting_type,
+    'manual_staging_review',
+    approved.uses_placeholder_url OR approved.imported_without_match,
+    concat_ws(
+      ' ',
+      'Season 11 March staging import.',
+      'source_row_id=' || approved.source_row_id || '.',
+      CASE WHEN approved.uses_placeholder_url THEN 'placeholder_url_accepted.' END,
+      CASE WHEN approved.imported_without_match THEN 'imported_with_null_match_id.' END,
+      'Official KPI snapshot differs from raw imported count by accepted business decision.'
+    )
+  FROM _season11_march_approved_normalized approved
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.mentoring_recaps existing
+    WHERE existing.season_id = approved.season_id
+      AND existing.meeting_date = approved.meeting_date
+      AND existing.mentor_person_id = approved.mentor_person_id
+      AND existing.mentee_person_id = approved.mentee_person_id
+      AND existing.recap_url = approved.recap_url
+      AND coalesce(trim(lower(existing.status)), '') NOT IN ('deleted', 'invalid')
+  )
+  RETURNING id
+)
+SELECT id FROM inserted;
+
+-- 8. Log defensive duplicate skips, if any.
+INSERT INTO public.data_quality_issues (
+  batch_id,
+  entity_type,
+  entity_id,
+  issue_type,
+  severity,
+  description,
+  raw_data
 )
 SELECT
-  clean.season_id,
-  clean.match_id,
-  clean.mentor_person_id,
-  clean.mentee_person_id,
-  clean.meeting_date,
-  clean.meeting_month,
-  clean.recap_url,
-  clean.recap_source,
-  clean.recap_note,
-  clean.meeting_type,
-  clean.captured_by,
-  clean.issue_flag,
-  clean.status,
-  clean.admin_notes
-FROM _season11_march_cleaned_recaps clean
-WHERE NOT EXISTS (
+  approved.batch_id,
+  'recap_source_row',
+  NULL,
+  'duplicate_existing_skipped',
+  'warning',
+  'Approved row was not inserted because an exact existing recap already exists.',
+  to_jsonb(approved) || jsonb_build_object('source_row_id', approved.source_row_id)
+FROM _season11_march_approved_normalized approved
+WHERE EXISTS (
   SELECT 1
   FROM public.mentoring_recaps existing
-  WHERE existing.season_id = clean.season_id
-    AND existing.meeting_date = clean.meeting_date
-    AND existing.mentor_person_id = clean.mentor_person_id
-    AND existing.mentee_person_id = clean.mentee_person_id
-    AND existing.recap_url = clean.recap_url
+  WHERE existing.season_id = approved.season_id
+    AND existing.meeting_date = approved.meeting_date
+    AND existing.mentor_person_id = approved.mentor_person_id
+    AND existing.mentee_person_id = approved.mentee_person_id
+    AND existing.recap_url = approved.recap_url
+    AND existing.recap_source <> 'season11_march_staging_import'
     AND coalesce(trim(lower(existing.status)), '') NOT IN ('deleted', 'invalid')
 );
 
--- 8. Upsert official March 2026 KPI snapshot from Bao cao Recap.
+-- 9. Upsert official March KPI snapshot as closed.
+-- This is intentionally based on Bao cao Recap official KPI, not raw inserted row count.
 INSERT INTO public.season_monthly_kpis (
   season_id,
   month_value,
@@ -426,19 +410,19 @@ SELECT
   593,
   271,
   224,
-  (
-    SELECT count(distinct mentor_person_id)::int
-    FROM public.mentoring_recaps
-    WHERE season_id = ctx.season_id
-      AND meeting_month = '2026-03'
-      AND mentor_person_id IS NOT NULL
-      AND coalesce(trim(lower(status)), '') IN ('', 'submitted', 'needs_review')
-  ),
+  0,
   37.8,
   'Bao cao Recap',
   'TRACKING _ SEASON 11.xlsx',
   ctx.batch_id,
-  'Official March 2026 KPI snapshot from Bao cao Recap. Cleaning data and Mentee Tracking discrepancies must remain documented in QA.',
+  concat_ws(
+    ' ',
+    'Official March KPI snapshot accepted for Season 11 staging import.',
+    'Raw Cleaning data extraction has 286 March rows.',
+    'Approved/import-eligible staging import set has 236 rows, including 11 missing_match rows imported with null match_id if transaction is executed.',
+    'Rows excluded from import are logged to data_quality_issues.',
+    'Discrepancy from raw imported count is accepted by business decision.'
+  ),
   now()
 FROM _season11_march_import_context ctx
 ON CONFLICT (season_id, month_value)
@@ -456,84 +440,31 @@ DO UPDATE SET
   closed_at = EXCLUDED.closed_at,
   updated_at = now();
 
--- 9. Update batch row count. Keep status pending until manual validation accepts the run.
+-- 10. Mark batch completed with actual inserted row count.
 UPDATE public.data_import_batches batch
 SET
-  rows_processed = (
-    SELECT count(*)::int
-    FROM _season11_march_cleaned_recaps
-  ),
+  status = 'completed',
+  rows_processed = (SELECT count(*) FROM _season11_march_inserted_recaps),
   updated_at = now()
 FROM _season11_march_import_context ctx
 WHERE batch.id = ctx.batch_id;
 
--- 10. Manual validation queries to review before COMMIT.
-SELECT
-  'batch' AS check_name,
-  ctx.batch_id,
-  ctx.season_id,
-  batch.status,
-  batch.rows_processed
-FROM _season11_march_import_context ctx
-JOIN public.data_import_batches batch ON batch.id = ctx.batch_id;
+-- 11. Manual review summary. Inspect these result sets before COMMIT.
+SELECT 'approved_source_rows' AS metric, count(*) AS value FROM _season11_march_approved_normalized
+UNION ALL
+SELECT 'excluded_source_rows', count(*) FROM _season11_march_import_excluded
+UNION ALL
+SELECT 'inserted_recaps', count(*) FROM _season11_march_inserted_recaps
+UNION ALL
+SELECT 'placeholder_url_rows', count(*) FROM _season11_march_approved_normalized WHERE uses_placeholder_url
+UNION ALL
+SELECT 'missing_match_imported_rows', count(*) FROM _season11_march_approved_normalized WHERE imported_without_match;
 
-SELECT
-  'qa_issues_by_severity' AS check_name,
-  severity,
-  issue_type,
-  count(*) AS issue_count
-FROM public.data_quality_issues
-WHERE batch_id = (SELECT batch_id FROM _season11_march_import_context)
-GROUP BY severity, issue_type
-ORDER BY severity, issue_type;
-
-SELECT
-  'march_recap_distribution_after_import' AS check_name,
-  s.code AS season_code,
-  mr.meeting_month,
-  count(*) AS total_recap_entries,
-  count(*) FILTER (
-    WHERE coalesce(trim(lower(mr.status)), '') IN ('', 'submitted', 'needs_review')
-  ) AS valid_recap_entries,
-  count(distinct mr.mentee_person_id) FILTER (
-    WHERE mr.mentee_person_id IS NOT NULL
-      AND coalesce(trim(lower(mr.status)), '') IN ('', 'submitted', 'needs_review')
-  ) AS distinct_mentees_with_valid_recap
-FROM public.mentoring_recaps mr
-JOIN public.seasons s ON s.id = mr.season_id
-WHERE s.code = 'UEHM-S11'
-  AND mr.meeting_month = '2026-03'
-GROUP BY s.code, mr.meeting_month;
-
-SELECT
-  'march_kpi_snapshot' AS check_name,
-  s.code AS season_code,
-  kpi.month_value,
-  kpi.closed,
-  kpi.total_recap_entries,
-  kpi.distinct_mentees_with_recap,
-  kpi.total_mentees,
-  kpi.pct_mentees_with_recap,
-  kpi.source_name
+SELECT *
 FROM public.season_monthly_kpis kpi
-JOIN public.seasons s ON s.id = kpi.season_id
-WHERE s.code = 'UEHM-S11'
-  AND kpi.month_value IN ('2026-02', '2026-03', '2026-04')
-ORDER BY kpi.month_value;
+JOIN _season11_march_import_context ctx ON ctx.season_id = kpi.season_id
+WHERE kpi.month_value = '2026-03';
 
-SELECT
-  'latest_closed_month_view' AS check_name,
-  s.code AS season_code,
-  latest.latest_closed_month,
-  latest.previous_closed_month,
-  latest.total_recap_entries,
-  latest.distinct_mentees_with_recap
-FROM public.v_season_latest_closed_month latest
-JOIN public.seasons s ON s.id = latest.season_id
-WHERE s.code = 'UEHM-S11';
-
--- If validation passes, manually COMMIT.
--- If validation fails, manually ROLLBACK.
---
--- COMMIT;
+-- COMMIT only after manual staging review approves the summary above.
 -- ROLLBACK;
+-- COMMIT;
