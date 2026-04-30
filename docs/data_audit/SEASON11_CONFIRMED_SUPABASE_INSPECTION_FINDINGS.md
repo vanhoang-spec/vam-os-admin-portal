@@ -1,35 +1,53 @@
 # Season 11 Confirmed Supabase Inspection Findings
 
-Generated: 2026-04-30
+## 1. Executive conclusion
+The dashboard issue is caused by both:
+* incomplete March 2026 recap import
+* open-month bleed from Operations RPC selecting max month with recap/event data
 
-## 1. Confirmed Inspection Result
-The Supabase inspection confirms exactly how the dashboard selects its default month. The RPC `get_operations_dashboard_data` builds a `months_with_data` set by combining two sources:
-1. `public.mentoring_recaps.meeting_month`
-2. `public.events.starts_at` (converted to `YYYY-MM`)
+## 2. Confirmed March 2026 Supabase state
+* UEHM-S11 / 2026-03:
+  * total_recap_entries = 23
+  * valid_recap_entries = 23
+  * distinct_mentees_with_valid_recap = 15
+  * distinct_mentor_mentee_pairs_with_valid_recap = 15
 
-It then sets `v_selected_month` by calculating `max(month_value)` from the combined `months_with_data` set.
+## 3. Expected March 2026 from Excel audit
+* Báo cáo Recap = 271
+* Mentee Tracking = 275
+* Cleaning data = 286
 
-## 2. Root Cause
-The Season 11 (`UEHM-S11`) dataset contains 2 records in the `public.events` table with `starts_at` dates in `2026-04`. 
+## 4. Confirmed April 2026 Supabase state
+* UEHM-S11 / 2026-04:
+  * total_recap_entries = 25
+  * valid_recap_entries = 25
+  * distinct_mentees_with_valid_recap = 10
+  * distinct_mentor_mentee_pairs_with_valid_recap = 10
+* UEHM-S11 has 2 events in April 2026.
 
-## 3. Trigger
-Because those 2 events exist in `2026-04`, the `max(month_value)` calculation evaluates to `2026-04`. The presence of these event records triggers the dashboard to automatically roll over to April.
+## 5. Confirmed RPC logic
+* `get_operations_dashboard_data` builds `months_with_data` from:
+  * `mentoring_recaps.meeting_month`
+  * `events.starts_at` converted to YYYY-MM
+* It selects `v_selected_month` from max available month.
+* This causes April 2026 to be selected when April has recap/event data.
 
-## 4. Dashboard Impact
-The Operations dashboard selects `2026-04` as the default month. This confirms the **open-month bleed**. Because April 2026 has virtually no recap data (as it is currently ongoing), the dashboard calculates that nearly the entire program is failing (massive false positives for missing recaps and silent mentees).
+## 6. Business risk
+* false-positive missing recap counts
+* false-positive silent 2-month follow-up list
+* founder dashboard panic
+* operational misdirection
 
-## 5. Business Risk
-April 2026 is an open, ongoing month and **must not** drive official KPI cards or follow-up logic. Relying on available event or recap data to define the "current reporting month" fundamentally mismatches the business requirement, creating panic and operational misdirection.
+## 7. Correct fix principle
+* Do not simply remove events.
+* Do not hardcode March 2026.
+* Create explicit closed-month / KPI layer.
+* Then import/validate March.
+* Then rewire dashboard RPC to latest closed month.
 
-## 6. Recommended Fix Principle
-The correct target is **not** to simply ignore the `events` table in the query. The correct target is to abandon the `max(month_value)` heuristic entirely for official KPIs. Instead, the logic must select the **latest explicit closed reporting month** from a dedicated closed-month/KPI source (e.g., a `season_monthly_kpis` table where `closed = TRUE`).
-
-## 7. What NOT to Do
-* **Do NOT simply remove events from the query** as the long-term fix (this is a band-aid, not a cure).
-* **Do NOT hardcode March 2026 (`2026-03`)** in the production logic.
-* **Do NOT import March 2026 recap data** until the closed-month, import batch, and QA controls are fully ready.
-
-## 8. Next Codex Task
-* Prepare a minimal closed-month fix plan.
-* **No production changes.**
-* Provide a staging-only migration plan first (focusing on `season_monthly_kpis`, `data_import_batches`, and `data_quality_issues`).
+## 8. Recommended sequence
+* Create minimal staging-only closed-month/import/QA migration.
+* Prepare March import into `mentoring_recaps` with batch tracking and QA.
+* Insert official March KPI snapshot.
+* Rewire dashboard RPC to latest closed month.
+* Validate staging before production.
