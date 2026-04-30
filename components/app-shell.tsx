@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Settings2, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
@@ -19,11 +19,15 @@ const navItems = [
   { href: "/data-issues", label: "Data Issues", icon: DatabaseZap }
 ];
 
+const adminCorrectionNavItem = { href: "/admin", label: "Admin Workflow", icon: Settings2 };
+
 export function AppShell({ children, adminUser }: { children: React.ReactNode; adminUser: CurrentAdminUser | null }) {
   const pathname = usePathname();
   const visibleNavItems = adminUser?.role === "super_admin"
-    ? [...navItems, { href: "/admin/users", label: "Quản lý người dùng", icon: UserCog }]
-    : navItems;
+    ? [...navItems, adminCorrectionNavItem, { href: "/admin/users", label: "Quản lý người dùng", icon: UserCog }]
+    : adminUser?.role === "admin"
+      ? [...navItems, adminCorrectionNavItem]
+      : navItems;
 
   if (pathname === "/unlock" || pathname === "/login") return <>{children}</>;
 

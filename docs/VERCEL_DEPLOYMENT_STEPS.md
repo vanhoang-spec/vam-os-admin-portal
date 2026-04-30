@@ -31,6 +31,7 @@ Chỉ thêm:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
 VAM_OS_ADMIN_PASSWORD
 ```
 
@@ -119,5 +120,7 @@ Kiểm tra:
 - `/applications/[id]` tải đúng câu trả lời của một application.
 - `/data-issues` tính động từ Supabase và không tải `application_answers`.
 - Các link profile/application/match hoạt động.
-- Không có secret key trong Vercel environment variables.
+- Với VAM OS staging hiện tại, dùng `NEXT_PUBLIC_SUPABASE_ANON_KEY` từ tab `Legacy anon, service_role API keys -> anon` của Supabase staging. Không trộn `sb_publishable_...` từ project khác với URL staging.
+- `SUPABASE_SERVICE_ROLE_KEY` chỉ được cấu hình dạng server-side env var, không dùng tiền tố `NEXT_PUBLIC_`.
+- Không có secret key trong Vercel public environment variables.
 - Truy cập Preview yêu cầu mật khẩu nội bộ nếu `VAM_OS_ADMIN_PASSWORD` đã được cấu hình.

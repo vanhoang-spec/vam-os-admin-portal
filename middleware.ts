@@ -25,8 +25,8 @@ function redirectToUnlock(request: NextRequest) {
 }
 
 async function fetchAuthUser(accessToken: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)?.trim();
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -42,8 +42,8 @@ async function fetchAuthUser(accessToken: string) {
 }
 
 async function refreshAccessToken(refreshToken: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)?.trim();
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
@@ -61,8 +61,8 @@ async function refreshAccessToken(refreshToken: string) {
 }
 
 async function hasActiveAdminUser(user: { id?: string; email?: string }, accessToken: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)?.trim();
   if (!supabaseUrl || !supabaseAnonKey || !user.id || !user.email) return false;
 
   const filter = encodeURIComponent(`(auth_user_id.eq.${user.id},email.eq.${user.email})`);

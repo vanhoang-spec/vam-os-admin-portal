@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { getSupabasePublicEnvDiagnostics } from "@/lib/supabase";
 import { LoginForm } from "./login-form";
 
 function safeNext(value: string | string[] | undefined) {
@@ -13,6 +14,7 @@ function safeNext(value: string | string[] | undefined) {
 export default async function LoginPage({ searchParams }: { searchParams?: { next?: string | string[] } }) {
   const adminUser = await getCurrentAdminUser();
   if (adminUser) redirect(safeNext(searchParams?.next));
+  const diagnostics = getSupabasePublicEnvDiagnostics();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f7faf8] px-4 py-10">
@@ -27,6 +29,11 @@ export default async function LoginPage({ searchParams }: { searchParams?: { nex
         <p className="mt-4 text-xs leading-5 text-slate-500">
           Sprint 1A dùng đăng nhập bằng email/mật khẩu. Admin user phải được tạo trong Supabase Auth Dashboard với email khớp admin_users.
         </p>
+        <div className="mt-4 rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+          <div>Supabase host: {diagnostics.host}</div>
+          <div>Project ref: {diagnostics.projectRef}</div>
+          <div>Anon key type: {diagnostics.keyType}</div>
+        </div>
       </section>
     </main>
   );

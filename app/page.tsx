@@ -4,12 +4,21 @@ import { Card, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/u
 import { getDashboardData, keyById } from "@/lib/data";
 import { displayCode, displayText } from "@/lib/utils";
 
+const SEASON_CODE = "UEHM-S11";
+const OPERATIONAL_MONTH_START = "2025-10";
+const OPERATIONAL_MONTH_END = "2026-06";
+const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
+
 function statusKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
 }
 
 function isActive(value: unknown) {
   return statusKey(value) === "active";
+}
+
+function isValidRecapActivity(value: unknown) {
+  return VALID_ACTIVITY_STATUSES.has(statusKey(value));
 }
 
 function isBlank(value: unknown) {
@@ -32,6 +41,47 @@ function average(numerator: number, denominator: number) {
   return (numerator / denominator).toFixed(1);
 }
 
+function monthDate(month: string) {
+  return new Date(`${month}-01T00:00:00Z`);
+}
+
+function addMonths(month: string, delta: number) {
+  const date = monthDate(month);
+  date.setUTCMonth(date.getUTCMonth() + delta);
+  return date.toISOString().slice(0, 7);
+}
+
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function operationalMonths() {
+  const months: string[] = [];
+  for (let month = OPERATIONAL_MONTH_START; month <= OPERATIONAL_MONTH_END; month = addMonths(month, 1)) {
+    months.push(month);
+  }
+  return months;
+}
+
+function isOperationalMonth(month: unknown) {
+  const value = String(month ?? "").trim();
+  return /^\d{4}-\d{2}$/.test(value) && value >= OPERATIONAL_MONTH_START && value <= OPERATIONAL_MONTH_END;
+}
+
+function latestRecapDate(recaps: Array<{ meeting_date?: string | null }>) {
+  const dates = recaps
+    .map((recap) => String(recap.meeting_date ?? "").slice(0, 10))
+    .filter(Boolean)
+    .sort();
+  return dates.at(-1) ?? null;
+}
+
+function monthDiff(laterMonth: string, earlierMonth: string) {
+  const later = monthDate(laterMonth);
+  const earlier = monthDate(earlierMonth);
+  return (later.getUTCFullYear() - earlier.getUTCFullYear()) * 12 + later.getUTCMonth() - earlier.getUTCMonth();
+}
+
 function countByLabel(rows: Array<Record<string, unknown>>, key: string, fallback = "Chưa rõ") {
   const counts = new Map<string, number>();
   for (const row of rows) {
@@ -52,6 +102,7 @@ export default async function DashboardPage() {
     data.mentees.error,
     data.applications.error,
     data.matches.error,
+    data.recaps.error,
     data.counts.people.error,
     data.counts.mentors.error,
     data.counts.mentees.error,
@@ -63,17 +114,61 @@ export default async function DashboardPage() {
   ].filter(Boolean);
 
   const peopleById = keyById(data.people.data);
-  const activeMatches = data.matches.data.filter((match) => isActive(match.status));
+  const season = data.seasons.data.find((row) => row.code === SEASON_CODE);
+  const seasonMatches = data.matches.data.filter((match) => {
+    if (season?.id) return match.season_id === season.id;
+    return true;
+  });
+  const seasonRecaps = data.recaps.data.filter((recap) => {
+    if (season?.id) return recap.season_id === season.id;
+    return true;
+  });
+  const activeMatches = seasonMatches.filter((match) => isActive(match.status));
   const activeMatchesWithMentorAndMentee = activeMatches.filter((match) => match.mentor_person_id && match.mentee_person_id);
   const activeMenteeIds = new Set(activeMatchesWithMentorAndMentee.map((match) => match.mentee_person_id).filter(Boolean));
   const activeMentorIds = new Set(activeMatchesWithMentorAndMentee.map((match) => match.mentor_person_id).filter(Boolean));
   const activeMenteeCountByMentor = new Map<string, Set<string>>();
+  const recapsByMentee = new Map<string, typeof data.recaps.data>();
 
   for (const match of activeMatchesWithMentorAndMentee) {
     if (!match.mentor_person_id || !match.mentee_person_id) continue;
     const menteeIds = activeMenteeCountByMentor.get(match.mentor_person_id) ?? new Set<string>();
     menteeIds.add(match.mentee_person_id);
     activeMenteeCountByMentor.set(match.mentor_person_id, menteeIds);
+  }
+
+  const seasonMonths = operationalMonths();
+  const validRecaps = seasonRecaps.filter((recap) => isValidRecapActivity(recap.status));
+  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
+  const monthsWithData = new Set(validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)));
+  const availableMonths = seasonMonths.filter((month) => monthsWithData.has(month)).sort((a, b) => b.localeCompare(a));
+  const nowMonth = currentMonth();
+  const selectedMonth = availableMonths.find((month) => month <= nowMonth) ?? (isOperationalMonth(nowMonth) ? nowMonth : null) ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const previousMonth = addMonths(selectedMonth, -1);
+  const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
+  const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === previousMonth);
+  const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+  const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
+  const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+  const recapByMonth = seasonMonths.map((name) => ({
+    name,
+    value: validOperationalRecaps.filter((recap) => recap.meeting_month === name).length
+  }));
+  const activeMenteeThisMonthCount = Array.from(selectedMenteeIds).filter((id) => activeMenteeIds.has(id)).length;
+  const activeMentorThisMonthCount = Array.from(selectedMentorIds).filter((id) => activeMentorIds.has(id)).length;
+  const silentOneMonthCount = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && previousMenteeIds.has(id)).length;
+  const followUpCount = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && !previousMenteeIds.has(id)).length;
+  const menteeHealthData = [
+    { name: "Hoạt động tháng này", value: activeMenteeThisMonthCount },
+    { name: "Im lặng 1 tháng", value: silentOneMonthCount },
+    { name: "Im lặng 2+ tháng / cần follow-up", value: followUpCount }
+  ];
+
+  for (const recap of validRecaps) {
+    if (!recap.mentee_person_id) continue;
+    const rows = recapsByMentee.get(recap.mentee_person_id) ?? [];
+    rows.push(recap);
+    recapsByMentee.set(recap.mentee_person_id, rows);
   }
 
   const menteesWithMentor = activeMenteeIds.size;
@@ -83,7 +178,7 @@ export default async function DashboardPage() {
   const peopleMissingPhone = data.people.data.filter((person) => isBlank(person.phone_primary)).length;
   const menteesMissingSchool = data.mentees.data.filter((mentee) => isMissingSchoolCode(mentee.school_code)).length;
   const mentorsMissingBioUrl = data.mentors.data.filter((mentor) => isBlank(mentor.bio_url)).length;
-  const activeMatchesMissingMentorOrMentee = data.activeMissing.data;
+  const activeMatchesMissingMentorOrMentee = activeMatches.filter((match) => !match.mentor_person_id || !match.mentee_person_id).length;
   const warningCount =
     peopleMissingPhone + menteesMissingSchool + mentorsMissingBioUrl + menteesWithoutMentor + activeMatchesMissingMentorOrMentee + data.duplicateEmails.data;
 
@@ -104,6 +199,52 @@ export default async function DashboardPage() {
     .filter((mentor) => mentor.assigned_mentee_count > 0)
     .sort((a, b) => b.assigned_mentee_count - a.assigned_mentee_count || String(a.full_name ?? "").localeCompare(String(b.full_name ?? ""), "vi"))
     .slice(0, 10);
+
+  const topMentorRecapRows = Array.from(
+    selectedRecaps.reduce((rows, recap) => {
+      if (!recap.mentor_person_id) return rows;
+      const current = rows.get(recap.mentor_person_id) ?? {
+        mentor_id: recap.mentor_person_id,
+        mentor_name: peopleById.get(recap.mentor_person_id)?.full_name ?? null,
+        mentor_email: peopleById.get(recap.mentor_person_id)?.email_primary ?? null,
+        recap_count: 0,
+        menteeIds: new Set<string>()
+      };
+      current.recap_count += 1;
+      if (recap.mentee_person_id) current.menteeIds.add(recap.mentee_person_id);
+      rows.set(recap.mentor_person_id, current);
+      return rows;
+    }, new Map<string, { mentor_id: string; mentor_name: string | null; mentor_email: string | null; recap_count: number; menteeIds: Set<string> }>())
+  )
+    .map(([, row]) => ({ ...row, mentee_count: row.menteeIds.size }))
+    .sort((a, b) => b.recap_count - a.recap_count || b.mentee_count - a.mentee_count || String(a.mentor_name ?? "").localeCompare(String(b.mentor_name ?? ""), "vi"))
+    .slice(0, 8);
+
+  const followUpRows = activeMatchesWithMentorAndMentee
+    .filter((match) => match.mentee_person_id && !selectedMenteeIds.has(match.mentee_person_id) && !previousMenteeIds.has(match.mentee_person_id))
+    .map((match) => {
+      const menteeId = match.mentee_person_id!;
+      const mentorId = match.mentor_person_id!;
+      const mentee = peopleById.get(menteeId);
+      const mentor = peopleById.get(mentorId);
+      const recapsBeforeSelectedMonth = (recapsByMentee.get(menteeId) ?? []).filter((recap) => String(recap.meeting_month ?? "") <= selectedMonth);
+      const lastDate = latestRecapDate(recapsBeforeSelectedMonth);
+      const lastMonth = lastDate ? lastDate.slice(0, 7) : null;
+      return {
+        mentee_id: menteeId,
+        mentee_name: mentee?.full_name ?? null,
+        mentee_email: mentee?.email_primary ?? null,
+        mentor_name: mentor?.full_name ?? null,
+        last_recap_date: lastDate ?? "Chưa có recap",
+        months_silent: lastMonth ? Math.max(0, monthDiff(selectedMonth, lastMonth)) : "Chưa có recap"
+      };
+    })
+    .sort((a, b) => {
+      const aMonths = typeof a.months_silent === "number" ? a.months_silent : 999;
+      const bMonths = typeof b.months_silent === "number" ? b.months_silent : 999;
+      return bMonths - aMonths || String(a.mentee_name ?? "").localeCompare(String(b.mentee_name ?? ""), "vi");
+    })
+    .slice(0, 8);
 
   const mentorBuckets = [
     { name: "0 mentee", value: mentorsWithoutAssignedMentees },
@@ -130,24 +271,100 @@ export default async function DashboardPage() {
       ))}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Tổng thành viên" value={data.counts.people.data} />
-        <KpiCard label="Mentor" value={data.counts.mentors.data} />
-        <KpiCard label="Mentee" value={data.counts.mentees.data} />
-        <KpiCard label="Ứng tuyển" value={data.counts.applications.data} />
-        <KpiCard label="Tổng match" value={data.counts.matches.data} />
-        <KpiCard label="Match active" value={data.counts.activeMatches.data} />
-        <KpiCard label="Mentee đã có mentor" value={menteesWithMentor} />
-        <KpiCard label="Mentee chưa có mentor" value={menteesWithoutMentor} />
-        <KpiCard label="Mentor đang phụ trách mentee" value={mentorsWithAssignedMentees} />
-        <KpiCard label="Mentor chưa có mentee" value={mentorsWithoutAssignedMentees} />
+        <KpiCard label="Số recap tháng này" value={selectedRecaps.length} />
+        <KpiCard label="Mentee active tháng này" value={activeMenteeThisMonthCount} />
+        <KpiCard label="Mentor active tháng này" value={activeMentorThisMonthCount} />
+        <KpiCard label="Mentee im lặng 1 tháng" value={silentOneMonthCount} />
+        <KpiCard label="Cần follow-up" value={followUpCount} />
       </div>
 
       <section className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Tình trạng vận hành</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Sức khỏe mentoring</h2>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
+            <div className="mb-3">
+              <h3 className="text-base font-semibold text-vam-ink">Recap mentoring theo tháng</h3>
+              <p className="mt-1 text-sm text-slate-500">Số recap phản ánh số buổi mentoring 1-on-1 được ghi nhận.</p>
+            </div>
+            <BarSummary data={recapByMonth} highlightedName={selectedMonth} tooltipLabelPrefix="Tháng" valueLabel="Số recap" />
+          </Card>
+          <Card>
+            <div className="mb-3">
+              <h3 className="text-base font-semibold text-vam-ink">Sức khỏe mentee - {selectedMonth}</h3>
+              <p className="mt-1 text-sm text-slate-500">Dựa trên active match và recap được ghi nhận trong tháng.</p>
+            </div>
+            <DonutSummary data={menteeHealthData} />
+          </Card>
+        </div>
+      </section>
+
+      <section className="mt-6 grid gap-4 xl:grid-cols-2">
+        <Card>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-vam-ink">Top mentor theo số recap tháng này</h2>
+              <p className="mt-1 text-sm text-slate-500">Mentor có nhiều buổi mentoring 1-on-1 được ghi nhận nhất trong {selectedMonth}.</p>
+            </div>
+            <Link href={`/operations?month=${selectedMonth}`} className="rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
+              Xem Operations
+            </Link>
+          </div>
+          <SimpleTable
+            rows={topMentorRecapRows}
+            columns={[
+              { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
+              { key: "mentor_email", label: "Email", render: (row) => displayText(row.mentor_email) },
+              { key: "recap_count", label: "Số recap" },
+              { key: "mentee_count", label: "Số mentee" },
+              { key: "mentor_link", label: "Profile", render: (row) => <Link href={`/people/${row.mentor_id}`} className="text-sm font-medium text-vam-green">Xem mentor</Link> }
+            ]}
+          />
+        </Card>
+        <Card>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-vam-ink">Mentee cần follow-up</h2>
+              <p className="mt-1 text-sm text-slate-500">Mentee có active match nhưng chưa có recap trong tháng này và tháng trước.</p>
+            </div>
+            <Link href={`/operations/tasks?month=${selectedMonth}&type=followup_no_recap`} className="rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
+              Mở queue
+            </Link>
+          </div>
+          <SimpleTable
+            rows={followUpRows}
+            columns={[
+              { key: "mentee_name", label: "Mentee", render: (row) => displayText(row.mentee_name) },
+              { key: "mentee_email", label: "Email", render: (row) => displayText(row.mentee_email) },
+              { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
+              { key: "months_silent", label: "Số tháng im lặng" },
+              { key: "profile", label: "Profile", render: (row) => <Link href={`/people/${row.mentee_id}`} className="text-sm font-medium text-vam-green">Xem mentee</Link> }
+            ]}
+          />
+        </Card>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Quy mô dữ liệu / Master data</h2>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <KpiCard label="Tổng người" value={data.counts.people.data} />
+          <KpiCard label="Tổng mentor" value={data.counts.mentors.data} />
+          <KpiCard label="Tổng mentee" value={data.counts.mentees.data} />
+          <KpiCard label="Ứng tuyển" value={data.counts.applications.data} />
+          <KpiCard label="Match active" value={activeMatches.length} />
+          <KpiCard label="Tổng match" value={seasonMatches.length} />
+          <KpiCard label="Mentee đã có mentor" value={menteesWithMentor} />
+          <KpiCard label="Mentee chưa có mentor" value={menteesWithoutMentor} />
+          <KpiCard label="Mentor đang phụ trách mentee" value={mentorsWithAssignedMentees} />
+          <KpiCard label="Mentor chưa có mentee" value={mentorsWithoutAssignedMentees} />
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Tình trạng vận hành dữ liệu</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Tỷ lệ mentee đã có mentor" value={percent(menteesWithMentor, data.counts.mentees.data)} />
-          <KpiCard label="Tỷ lệ mentor đang hoạt động" value={percent(mentorsWithAssignedMentees, data.counts.mentors.data)} />
-          <KpiCard label="Số mentee trung bình / mentor active" value={average(menteesWithMentor, mentorsWithAssignedMentees)} />
+          <KpiCard label="Tỷ lệ mentor có mentee" value={percent(mentorsWithAssignedMentees, data.counts.mentors.data)} />
+          <KpiCard label="Số mentee trung bình / mentor có mentee" value={average(menteesWithMentor, mentorsWithAssignedMentees)} />
           <KpiCard label="Cảnh báo dữ liệu" value={warningCount} />
         </div>
       </section>
@@ -159,10 +376,10 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Match theo trạng thái</h2>
-          <DonutSummary data={countByLabel(data.matches.data, "status")} />
+          <DonutSummary data={countByLabel(seasonMatches, "status")} />
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Ứng tuyển theo final_status</h2>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Ứng tuyển theo trạng thái cuối</h2>
           <DonutSummary data={countByLabel(data.applications.data, "final_status")} />
         </Card>
         <Card>
@@ -176,9 +393,9 @@ export default async function DashboardPage() {
         <SimpleTable
           rows={topMentorRows}
           columns={[
-            { key: "full_name", label: "Mentor name" },
+            { key: "full_name", label: "Mentor" },
             { key: "email_primary", label: "Email" },
-            { key: "company_current", label: "Company", displayKey: "company_current_display" },
+            { key: "company_current", label: "Công ty", displayKey: "company_current_display" },
             { key: "assigned_mentee_count", label: "Số mentee" },
             { key: "active_match_count", label: "Match active" },
             { key: "mentor_link", label: "Profile", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem mentor" }

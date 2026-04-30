@@ -9,7 +9,14 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const adminUser = await getCurrentAdminUser();
+  let adminUser = null;
+  try {
+    adminUser = await getCurrentAdminUser();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("Dynamic server usage")) throw error;
+    console.error("[layout] getCurrentAdminUser failed", message);
+  }
 
   return (
     <html lang="vi">

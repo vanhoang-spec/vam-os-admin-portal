@@ -15,6 +15,16 @@ type AdminUserRow = {
   status: CurrentAdminUser["status"];
 };
 
+function logAdminAuthError(scope: string, error: unknown) {
+  const err = error as { code?: string; message?: string; hint?: string; details?: string };
+  console.error("[admin-auth]", scope, {
+    code: err?.code,
+    message: err?.message ?? String(error),
+    hint: err?.hint,
+    details: err?.details
+  });
+}
+
 function passwordGateToken(password: string) {
   return createHash("sha256").update(`${ADMIN_UNLOCK_SALT}:${password}`).digest("hex");
 }
@@ -44,7 +54,10 @@ export async function getCurrentSupabaseAuthUser(): Promise<User | null> {
   if (!client) return null;
 
   const { data, error } = await client.auth.getUser();
-  if (error) return null;
+  if (error) {
+    logAdminAuthError("getUser failed", error);
+    return null;
+  }
   return data.user ?? null;
 }
 
@@ -60,15 +73,20 @@ async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null
     .limit(1)
     .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    logAdminAuthError("admin_users lookup failed", error);
+    return null;
+  }
+  if (!data) return null;
 
   const row = data as AdminUserRow;
   if (!row.auth_user_id) {
-    await client
+    const { error: updateError } = await client
       .from("admin_users")
       .update({ auth_user_id: user.id })
       .eq("email", row.email)
       .is("auth_user_id", null);
+    if (updateError) logAdminAuthError("admin_users auth_user_id backfill failed", updateError);
     row.auth_user_id = user.id;
   }
 
