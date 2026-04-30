@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
-import { getDashboardData, keyById } from "@/lib/data";
+import { getDashboardData, getOperationsData, keyById } from "@/lib/data";
 import { displayCode, displayText } from "@/lib/utils";
 
 const SEASON_CODE = "UEHM-S11";
@@ -95,7 +95,10 @@ function countByLabel(rows: Array<Record<string, unknown>>, key: string, fallbac
 }
 
 export default async function DashboardPage() {
-  const data = await getDashboardData();
+  const [data, opsData] = await Promise.all([
+    getDashboardData(),
+    getOperationsData()
+  ]);
   const errors = [
     data.people.error,
     data.mentors.error,
@@ -147,40 +150,55 @@ export default async function DashboardPage() {
   const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
   const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
   
-  const seasonLatestClosedMonth = data.latestClosedMonth?.data?.find((row: any) => row.season_id === season?.id);
+  const opsSeason = opsData.seasons.data.find((row) => row.code === SEASON_CODE);
+  const seasonLatestClosedMonth = opsData.latestClosedMonth?.data?.find((row: any) => row.season_id === (season?.id || opsSeason?.id));
   const officialClosedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
+  const officialPreviousClosedMonth = typeof seasonLatestClosedMonth?.previous_closed_month === "string" ? seasonLatestClosedMonth.previous_closed_month : null;
+
+  const opsSelectedMonth = opsData.kpis.data?.selectedMonth ?? latestNonFutureMonth ?? OPERATIONAL_MONTH_START;
+  const healthMonthLabel = officialClosedMonth ?? opsSelectedMonth;
+
+  // KPIs derived directly from official governance data where available
+  const homeRecapKpi = typeof seasonLatestClosedMonth?.total_recap_entries === "number" ? seasonLatestClosedMonth.total_recap_entries : (opsData.kpis.data?.recapCount ?? 0);
+  const homeMenteeActiveKpi = typeof seasonLatestClosedMonth?.distinct_mentees_with_recap === "number" ? seasonLatestClosedMonth.distinct_mentees_with_recap : (opsData.kpis.data?.activeMenteeCount ?? 0);
+  const homeMentorActiveKpi = opsData.kpis.data?.activeMentorCount ?? 0;
+
+  // Replicate Operations follow-up logic exactly
+  const closedMonth = officialClosedMonth ?? (opsSelectedMonth >= nowMonth ? addMonths(nowMonth, -1) : opsSelectedMonth);
+  const closedPreviousMonth = officialPreviousClosedMonth ?? addMonths(closedMonth, -1);
   
-  const rpcSelectedMonth = data.recaps.data.length ? null : null; // home doesn't use kpis.data.selectedMonth
-  const defaultMonth = officialClosedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
-  const selectedMonth = defaultMonth;
+  const opsValidRecaps = opsData.recaps.data.filter((recap) => isValidRecapActivity(recap.status));
+  const closedRecaps = opsValidRecaps.filter((recap) => recap.meeting_month === closedMonth);
+  const closedPreviousRecaps = opsValidRecaps.filter((recap) => recap.meeting_month === closedPreviousMonth);
   
-  const closedMonth = officialClosedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
-  const closedPreviousMonth = typeof seasonLatestClosedMonth?.previous_closed_month === "string" ? seasonLatestClosedMonth.previous_closed_month : addMonths(closedMonth, -1);
-  const previousMonth = addMonths(selectedMonth, -1);
+  const opsActiveMatches = opsData.matches.data.filter((m) => isActive(m.status) && m.mentor_person_id && m.mentee_person_id);
+  const opsActiveMenteeIds = new Set(opsActiveMatches.map((m) => m.mentee_person_id).filter(Boolean));
   
-  const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
-  const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === previousMonth);
-  const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
-  const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
-  const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
-  const closedRecaps = validRecaps.filter((recap) => recap.meeting_month === closedMonth);
-  const closedPreviousRecaps = validRecaps.filter((recap) => recap.meeting_month === closedPreviousMonth);
   const closedMenteeIds = new Set(closedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
   const closedPreviousMenteeIds = new Set(closedPreviousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+
+  const opsValidOperationalRecaps = opsValidRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
   const recapByMonth = seasonMonths.map((name) => ({
     name,
-    value: validOperationalRecaps.filter((recap) => recap.meeting_month === name).length
+    value: opsValidOperationalRecaps.filter((recap) => recap.meeting_month === name).length
   }));
-  const activeMenteeThisMonthCount = Array.from(selectedMenteeIds).filter((id) => activeMenteeIds.has(id)).length;
-  const activeMentorThisMonthCount = Array.from(selectedMentorIds).filter((id) => activeMentorIds.has(id)).length;
-  const activeClosedMonthCount = Array.from(activeMenteeIds).filter((id) => closedMenteeIds.has(id)).length;
-  const missingClosedMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id)).length;
-  const followUpTwoMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id) && !closedPreviousMenteeIds.has(id)).length;
+
+  const activeClosedMonthCount = Array.from(opsActiveMenteeIds).filter((id) => closedMenteeIds.has(id)).length;
+  const missingClosedMonthCount = Array.from(opsActiveMenteeIds).filter((id) => !closedMenteeIds.has(id)).length;
+  const homeFollowUpKpi = Array.from(opsActiveMenteeIds).filter((id) => !closedMenteeIds.has(id) && !closedPreviousMenteeIds.has(id)).length;
+  
   const menteeHealthData = [
     { name: "Mentee active tháng đã đóng", value: activeClosedMonthCount },
     { name: "Chưa có recap tháng gần nhất", value: missingClosedMonthCount },
-    { name: "Im lặng 2 tháng liên tiếp / cần follow-up", value: followUpTwoMonthCount }
+    { name: "Im lặng 2 tháng liên tiếp / cần follow-up", value: homeFollowUpKpi }
   ];
+
+  const selectedMonth = officialClosedMonth ?? opsSelectedMonth; // for backward compatibility with secondary charts
+  const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
+  const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === closedPreviousMonth);
+  const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+  const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
+  const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
 
   for (const recap of validRecaps) {
     if (!recap.mentee_person_id) continue;
@@ -290,18 +308,30 @@ export default async function DashboardPage() {
 
       <div className="mb-4 text-sm">
         <p className="text-slate-600 font-medium">Tháng đã chốt: {officialClosedMonth ?? "Chưa có"}</p>
-        {selectedMonth > (officialClosedMonth ?? "") ? (
-          <p className="text-amber-600 mt-1">Dữ liệu tháng mở không dùng cho KPI chính thức</p>
+        {!officialClosedMonth && opsSelectedMonth ? (
+          <p className="text-amber-600 mt-1">Đang hiển thị tháng mở {opsSelectedMonth} do chưa có dữ liệu chốt</p>
         ) : null}
       </div>
 
+      {process.env.NODE_ENV === "development" || true ? (
+        <div className="mb-4 rounded-md bg-slate-900 p-4 text-xs font-mono text-emerald-400 opacity-75 hover:opacity-100 transition-opacity">
+          <div>[DEBUG DIAGNOSTICS]</div>
+          <div>homeOfficialClosedMonth: {officialClosedMonth ?? "null"}</div>
+          <div>homeOperationsSelectedMonth: {opsSelectedMonth ?? "null"}</div>
+          <div>homeRecapKpi: {homeRecapKpi}</div>
+          <div>homeMenteeActiveKpi: {homeMenteeActiveKpi}</div>
+          <div>homeMentorActiveKpi: {homeMentorActiveKpi}</div>
+          <div>homeFollowUpKpi: {homeFollowUpKpi}</div>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Số recap tháng này" value={typeof seasonLatestClosedMonth?.total_recap_entries === "number" && selectedMonth === officialClosedMonth ? seasonLatestClosedMonth.total_recap_entries : selectedRecaps.length} />
-        <KpiCard label="Mentee active tháng này" value={typeof seasonLatestClosedMonth?.distinct_mentees_with_recap === "number" && selectedMonth === officialClosedMonth ? seasonLatestClosedMonth.distinct_mentees_with_recap : activeMenteeThisMonthCount} />
-        <KpiCard label="Mentor active tháng này" value={activeMentorThisMonthCount} />
+        <KpiCard label="Số recap tháng này" value={homeRecapKpi} />
+        <KpiCard label="Mentee active tháng này" value={homeMenteeActiveKpi} />
+        <KpiCard label="Mentor active tháng này" value={homeMentorActiveKpi} />
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
         <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
-        <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={followUpTwoMonthCount} />
+        <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={homeFollowUpKpi} />
       </div>
 
       <section className="mt-6">
@@ -316,7 +346,7 @@ export default async function DashboardPage() {
           </Card>
           <Card>
             <div className="mb-3">
-              <h3 className="text-base font-semibold text-vam-ink">Sức khỏe mentee - {selectedMonth}</h3>
+              <h3 className="text-base font-semibold text-vam-ink">Sức khỏe mentee - {healthMonthLabel}</h3>
               <p className="mt-1 text-sm text-slate-500">Dựa trên active match và recap được ghi nhận trong tháng.</p>
             </div>
             <DonutSummary data={menteeHealthData} />
