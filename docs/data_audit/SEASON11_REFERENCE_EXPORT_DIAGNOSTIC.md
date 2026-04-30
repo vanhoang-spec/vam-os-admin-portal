@@ -4,218 +4,146 @@ Generated: 2026-04-30
 
 ## Executive Finding
 
-The March 2026 offline mapper was rerun with `--reference-source=production`, but mapping still returned **0.00% success**:
+Important correction: March 2026 was **not** missing from the raw tracking workbook. It was present in raw tracking / `Cleaning data`, and source prep extracted 286 March rows into `data_imports/season11/season11_march_source_review.csv`.
+
+The gap is in VAM OS MVP / Supabase `mentoring_recaps`: UEHM-S11 has no `2026-03` rows there because March has not been imported yet.
+
+Therefore:
+
+- `season11_march_source_review.csv` is the March recap source of truth for offline mapping.
+- MVP reference exports should be used for people/profile/match ID mapping.
+- `mentoring_recaps_march_2026_mvp.csv` is duplicate-check-only.
+- An empty MVP March existing-recap export is acceptable and should produce `duplicate_existing = 0`.
+
+No Supabase writes, import execution, dashboard RPC changes, deploys, commits, pushes, or sensitive export edits were performed.
+
+## Current MVP Mapping Result
+
+The mapper was run with:
+
+```powershell
+node .\scripts\map-season11-march-offline.mjs --reference-source=mvp
+```
+
+Result:
 
 | Metric | Count |
 | --- | ---: |
 | Total March source rows | 286 |
-| Mapped rows | 0 |
-| Mapped with warnings rows | 0 |
-| Missing mentor rows | 286 |
-| Missing mentee rows | 286 |
-| Ready for import rows | 0 |
+| Mapped rows | 20 |
+| Mapped with warnings rows | 205 |
+| Missing mentor status rows | 42 |
+| Missing mentee status rows | 4 |
+| Missing match rows | 11 |
+| Duplicate existing candidates | 0 |
+| Placeholder URL rows | 257 |
+| Ready for import rows | 225 |
+| Mapping success rate | 78.67% |
 
-The selected production reference exports do **not** appear to contain real Season 11 reference data. They still look like validation/test fixture exports, so the March import remains blocked.
+The report also counts unresolved-review blockers by review note:
 
-This diagnostic is documentation-only. No Supabase writes, import execution, dashboard RPC changes, deploys, commits, pushes, or sensitive reference export edits were performed.
-
-## Evidence
-
-The regenerated mapping report identifies `production` as the reference source:
-
-```powershell
-node .\scripts\map-season11-march-offline.mjs --reference-source=production
-```
-
-Reference inputs loaded:
-
-| Production export | Rows loaded |
+| Blocker | Count |
 | --- | ---: |
-| `people_production.csv` | 50 |
-| `mentee_profiles_production.csv` | 33 |
-| `mentor_profiles_production.csv` | 17 |
-| `matches_uehm_s11_production.csv` | 30 |
-| `mentoring_recaps_march_2026_production.csv` | 23 |
+| Rows still needing mentor resolution | 46 |
+| Rows still needing mentee resolution | 22 |
+| Rows with mapped mentor/mentee but no UEHM-S11 match ID | 11 |
+| Ambiguous or structurally incomplete rows | 4 |
 
-Non-sensitive quality checks from the mapping report:
+Human review remains required before any import execution.
+
+## Corrected Data Lineage
+
+| Layer | March 2026 status | Role in workflow |
+| --- | --- | --- |
+| Raw tracking workbook / `Cleaning data` | March rows present | Original March recap source |
+| `season11_march_source_review.csv` | 286 extracted March rows | Offline mapping source of truth |
+| `Báo cáo Recap` official KPI | March KPI = 271 | Official benchmark for review/reconciliation |
+| `Mentee Tracking` | March = 275 | Operational comparison point |
+| MVP `mentoring_recaps` | No UEHM-S11 `2026-03` rows | Not a March source; only existing-duplicate reference |
+| `mentoring_recaps_march_2026_mvp.csv` | May be empty | Duplicate-check-only input |
+
+The missing March issue is an import coverage gap in `mentoring_recaps`, not an absence in the source workbook.
+
+## MVP Reference Export Use
+
+Use MVP exports for ID mapping:
+
+- `people_mvp.csv`
+- `mentee_profiles_mvp.csv`
+- `mentor_profiles_mvp.csv`
+- `matches_uehm_s11_mvp.csv`
+
+Use the MVP March recap export only for duplicate detection:
+
+- `mentoring_recaps_march_2026_mvp.csv`
+
+If `mentoring_recaps_march_2026_mvp.csv` has only headers or no rows, the mapper should continue and set duplicate-existing candidates to zero.
+
+## Evidence That MVP References Are Real Mapping Data
+
+The MVP reference set has real scale and source overlap:
 
 | Check | Count |
 | --- | ---: |
+| People reference rows | 1331 |
+| Mentee profile reference rows | 654 |
+| Mentor profile reference rows | 448 |
+| UEHM-S11 match reference rows | 637 |
+| Existing March recap reference rows | 0 |
 | Unique source mentee code keys | 220 |
-| Reference profile code keys | 33 |
-| Source-to-profile code matches | 0 |
+| Reference profile code keys | 1254 |
+| Source-to-profile code matches | 218 |
 | Unique source mentor name keys | 184 |
-| Reference people name keys | 50 |
-| Source-to-people mentor name matches | 0 |
-| Synthetic-looking people names | 50 |
-| Synthetic/test email rows | 50 |
-| Synthetic-looking mentee codes | 33 |
-| Synthetic-looking mentor codes | 17 |
+| Reference people name keys | 1292 |
+| Source-to-people mentor name matches | 175 |
+| Synthetic-looking people names | 0 |
+| Synthetic/test email rows | 0 |
+| Synthetic-looking mentee codes | 0 |
+| Synthetic-looking mentor codes | 0 |
 
-Additional local file comparison found that several `reference_exports_production` files are byte-identical to the staging fixture exports:
+This is materially different from the earlier validation/test exports and is suitable as reference data for offline ID mapping.
 
-| File pair | Same content |
-| --- | --- |
-| `mentee_profiles_staging.csv` / `mentee_profiles_production.csv` | Yes |
-| `mentor_profiles_staging.csv` / `mentor_profiles_production.csv` | Yes |
-| `matches_uehm_s11_staging.csv` / `matches_uehm_s11_production.csv` | Yes |
-| `mentoring_recaps_march_2026_staging.csv` / `mentoring_recaps_march_2026_production.csv` | Yes |
+## Why Empty MVP March Recaps Are Acceptable
 
-The local exports show validation/test signals such as staging/validation identity labels, test email domains, and validation code prefixes. Real March source mentee identifiers use `UEH*`-style codes, but the loaded reference profile code set has no overlap.
+The MVP `mentoring_recaps` table is not the source for March recap content in this workflow. It is only used to identify rows that already exist so the import plan can avoid duplicates.
 
-## Why Mapping Cannot Proceed
+Because MVP currently has no UEHM-S11 `2026-03` recaps:
 
-The mapper depends on real identity overlap:
-
-- Mentees must resolve from source `mentee_identifier_mssv` / `mentee_identifier_edit` to `mentee_profiles.mssv`, `mentee_profiles.mentee_code`, or equivalent real student-code field.
-- Mentors must resolve from source `mentor_identifier_name` to `people.full_name` or email.
-- Match IDs must resolve from mapped `mentor_person_id + mentee_person_id` against UEHM-S11 matches.
-
-With the current production export files:
-
-- zero source mentee codes match profile code keys;
-- zero source mentor names match people names;
-- all rows remain without usable `mentor_person_id` and `mentee_person_id`;
-- no match IDs or duplicate checks can be meaningfully resolved.
-
-Changing import logic would not fix this. The blocker is the reference data content.
-
-## Supabase Production Checks To Run
-
-Run these checks in the Supabase production SQL editor or another approved read-only production connection. Do not paste sensitive result rows into Git-tracked files.
-
-### Verify Project Ref
-
-Confirm you are connected to the intended production project before exporting:
-
-```sql
-select current_database() as database_name, current_schema() as schema_name;
-```
-
-Also verify the project ref in the Supabase dashboard URL and compare it against the known production project ref from the team's credential vault.
-
-### Sample People
-
-Use this only as a screen check. Do not commit the output.
-
-```sql
-select
-  id,
-  full_name,
-  role,
-  email_primary,
-  created_at
-from public.people
-order by created_at desc
-limit 20;
-```
-
-Expected: real people names/emails from the Season 11 dataset, not validation/test identities.
-
-### Counts For People, Profiles, Matches
-
-```sql
-select 'people' as table_name, count(*) as row_count from public.people
-union all
-select 'mentee_profiles', count(*) from public.mentee_profiles
-union all
-select 'mentor_profiles', count(*) from public.mentor_profiles
-union all
-select 'matches', count(*) from public.matches
-union all
-select 'mentoring_recaps', count(*) from public.mentoring_recaps
-order by table_name;
-```
-
-Expected: production-scale counts, not tiny validation fixture counts such as 50 people, 33 mentee profiles, 17 mentor profiles, and 30 matches.
-
-### Season Counts
-
-```sql
-select
-  s.code,
-  count(distinct m.id) as match_count,
-  count(distinct m.mentor_person_id) as mentor_count,
-  count(distinct m.mentee_person_id) as mentee_count
-from public.seasons s
-left join public.matches m on m.season_id = s.id
-group by s.code
-order by s.code;
-```
-
-Expected: `UEHM-S11` should appear with real operational scale.
-
-### UEHM-S11 Match Count
-
-```sql
-select
-  s.code,
-  count(*) as match_count,
-  count(distinct m.mentor_person_id) as mentor_count,
-  count(distinct m.mentee_person_id) as mentee_count
-from public.matches m
-join public.seasons s on s.id = m.season_id
-where s.code = 'UEHM-S11'
-group by s.code;
-```
-
-Expected: hundreds-scale Season 11 match/participant data, not validation-pair fixtures.
-
-### Spot Check UEHM-S11 Match Identities
-
-Use for visual confirmation only. Do not commit output.
-
-```sql
-select
-  m.id as match_id,
-  mentor.full_name as mentor_name,
-  mentor.email_primary as mentor_email,
-  mentee.full_name as mentee_name,
-  mp.mentee_code,
-  mp.mssv,
-  m.status
-from public.matches m
-join public.seasons s on s.id = m.season_id
-left join public.people mentor on mentor.id = m.mentor_person_id
-left join public.people mentee on mentee.id = m.mentee_person_id
-left join public.mentee_profiles mp on mp.person_id = m.mentee_person_id
-where s.code = 'UEHM-S11'
-order by mentor.full_name nulls last, mentee.full_name nulls last
-limit 25;
-```
-
-Expected: real mentor names and `UEH*`-style mentee identifiers that can overlap with `season11_march_source_review.csv`.
-
-## Minimum Expected Real-Data Signals
-
-Before rerunning the mapper, the reference exports should show these signals:
-
-- Real names and emails, not `Staging Mentee`, `Validation Mentor`, `@vam.test`, or `@ops-validation.vam.test`.
-- Mentee identifiers that overlap the March source, especially `UEHEF*`, `UEHEM*`, or `UEHSF*` values in `mssv`, `mentee_code`, or the real student-code field.
-- UEHM-S11 matches connecting real `mentor_person_id` and `mentee_person_id`.
-- Season 11 scale roughly in the hundreds of people/profiles/matches, not the current small validation fixture counts.
-- Existing March recap exports, if any, should be from real March 2026 recaps, not `ops_validation` fixtures.
+- duplicate-existing detection has no existing March rows to compare against;
+- `duplicate_existing` should be zero unless a future export includes March rows;
+- the empty file should not block mapping;
+- the 286 extracted source rows remain the source of truth for March import review.
 
 ## Go / No-Go
 
-**March import: No-Go.**
+**Offline mapping: Go for human review.**
 
-The ready-for-import CSV currently has 0 import-ready rows. Executing an import from this mapped output would either import nothing useful or require unsafe manual overrides.
+The MVP-backed mapping output now contains 225 ready-for-import rows, but they require human review because many rows use placeholder URLs and some rows have missing matches or unresolved IDs.
 
-**Dashboard RPC rewrite: blocked.**
+**Manual March import execution: No-Go until review approval.**
 
-The dashboard closed-month rewrite should remain blocked until the March import and/or closed KPI rows are valid and reviewed. Rewriting dashboard RPCs before a trustworthy March closed-month dataset exists risks formalizing bad or empty operational data.
+Do not execute import until Operations reviews:
+
+- placeholder URL acceptance;
+- missing mentor and mentee rows;
+- missing match rows;
+- `needs_review` rows;
+- reconciliation against the official March KPI of 271 and Mentee Tracking value of 275.
+
+**Dashboard RPC rewrite: blocked until March import / closed KPI is valid.**
+
+The dashboard closed-month rewrite should wait until March import decisions and closed KPI governance are reviewed and approved.
 
 ## Next Steps
 
-1. Obtain real production read-only exports, or seed staging with real Season 11 people, profiles, and matches from an approved source.
-2. Keep those exports under an ignored local folder such as `data_imports/season11/reference_exports_production/`.
-3. Confirm the exports show real-data signals and have source identifier overlap before mapping.
-4. Rerun the mapper only after real reference exports are available:
+1. Keep using `season11_march_source_review.csv` as the March recap source of truth.
+2. Keep using MVP people/profiles/matches as reference data for ID mapping.
+3. Treat the MVP March existing recap export as duplicate-check-only.
+4. Rerun mapping after any reference export refresh:
 
 ```powershell
-node .\scripts\map-season11-march-offline.mjs --reference-source=production
+node .\scripts\map-season11-march-offline.mjs --reference-source=mvp
 ```
 
-5. Review `docs/data_audit/SEASON11_MARCH_MAPPING_RESULT_REPORT.md` and `data_imports/season11/season11_march_ready_for_import.csv`.
-6. Proceed toward import planning only after mapped rows, warnings, duplicate candidates, missing matches, and placeholder URLs are explicitly reviewed and approved.
+5. Review `data_imports/season11/season11_march_ready_for_import.csv`.
+6. Resolve or explicitly approve blocker categories before any staging import execution.

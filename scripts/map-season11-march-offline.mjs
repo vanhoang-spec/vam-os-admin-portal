@@ -28,6 +28,19 @@ const REFERENCE_SOURCES = {
       matches: "matches_uehm_s11_production.csv",
       existingRecaps: "mentoring_recaps_march_2026_production.csv"
     }
+  },
+  mvp: {
+    dirs: [
+      path.join(IMPORT_DIR, "reference_exports_mvp"),
+      path.join(IMPORT_DIR, "reference_exports_production")
+    ],
+    files: {
+      people: "people_mvp.csv",
+      mentees: "mentee_profiles_mvp.csv",
+      mentors: "mentor_profiles_mvp.csv",
+      matches: "matches_uehm_s11_mvp.csv",
+      existingRecaps: "mentoring_recaps_march_2026_mvp.csv"
+    }
   }
 };
 
@@ -106,19 +119,26 @@ function readCsv(filePath) {
 
 function parseReferenceSource() {
   const sourceArg = process.argv.find((arg) => arg.startsWith("--reference-source="));
-  const positionalSource = process.argv.find((arg) => ["staging", "production"].includes(arg));
+  const positionalSource = process.argv.find((arg) => Object.keys(REFERENCE_SOURCES).includes(arg));
   const selected = clean(sourceArg?.split("=")[1] ?? positionalSource ?? process.env.SEASON11_REFERENCE_SOURCE ?? "staging").toLowerCase();
   if (!REFERENCE_SOURCES[selected]) {
-    throw new Error(`Unsupported reference source "${selected}". Use "staging" or "production".`);
+    throw new Error(`Unsupported reference source "${selected}". Use one of: ${Object.keys(REFERENCE_SOURCES).join(", ")}.`);
   }
   return selected;
 }
 
 function referenceFiles(referenceSource) {
   const config = REFERENCE_SOURCES[referenceSource];
-  return Object.fromEntries(
-    Object.entries(config.files).map(([key, fileName]) => [key, path.join(config.dir, fileName)])
-  );
+  const dirs = config.dirs ?? [config.dir];
+  const dir = dirs.find((candidateDir) =>
+    Object.values(config.files).every((fileName) => fs.existsSync(path.join(candidateDir, fileName)))
+  ) ?? dirs[0];
+  return {
+    __dir: dir,
+    ...Object.fromEntries(
+    Object.entries(config.files).map(([key, fileName]) => [key, path.join(dir, fileName)])
+    )
+  };
 }
 
 function clean(value) {
@@ -274,6 +294,7 @@ function buildReferences(referenceSource) {
     mentors,
     matches,
     existingRecaps,
+    referenceDir: files.__dir,
     menteeProfilePersonIds,
     mentorProfilePersonIds,
     menteeByCode,
@@ -468,6 +489,8 @@ function summarize(sourceRows, outputRows, refs, referenceSource) {
     blockerRows,
     mappingSuccessRate,
     referenceSource,
+    referenceDir: refs.referenceDir,
+    emptyExistingMarchRecapFileHandled: refs.existingRecaps.length === 0,
     referenceQuality: referenceQuality(sourceRows, refs),
     statusCounts,
     references: {
@@ -507,6 +530,16 @@ Generated: 2026-04-30
 This report was generated offline from local CSV exports only. No Supabase writes, imports, dashboard RPC changes, deploys, commits, or pushes were performed.
 
 Reference source: \`${summary.referenceSource}\`
+
+Reference directory used: \`${path.relative(ROOT, summary.referenceDir)}\`
+
+## March Source And Duplicate-Check Assumptions
+
+- March 2026 was present in the raw tracking workbook and was extracted from \`Cleaning data\` into \`season11_march_source_review.csv\`.
+- \`season11_march_source_review.csv\` is the March recap source of truth for this offline mapping pass.
+- The MVP \`mentoring_recaps_march_2026_mvp.csv\` file is used only for duplicate-existing detection.
+- An empty MVP March existing-recap export is expected when MVP/Supabase has not imported UEHM-S11 March recaps yet.
+- Empty existing-recap export handled safely: \`${summary.emptyExistingMarchRecapFileHandled ? "yes" : "not empty"}\`.
 
 ## Reference Inputs
 
