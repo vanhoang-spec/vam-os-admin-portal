@@ -197,6 +197,8 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const requestedMonth = sanitizeMonthParam(searchParams?.month);
   const selectedMonth = requestedMonth ?? defaultMonth;
   const previousMonth = addMonths(selectedMonth, -1);
+  const closedMonth = selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth;
+  const closedPreviousMonth = addMonths(closedMonth, -1);
 
   const activeMatches = seasonMatches.filter(isActiveMatch);
   const activeMatchesWithPeople = activeMatches.filter((match) => match.mentor_person_id && match.mentee_person_id);
@@ -209,9 +211,16 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
   const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
 
+  const closedRecaps = seasonRecaps.filter((recap) => isValidRecapActivity(recap) && recap.meeting_month === closedMonth);
+  const closedPreviousRecaps = seasonRecaps.filter((recap) => isValidRecapActivity(recap) && recap.meeting_month === closedPreviousMonth);
+  const closedMenteeIds = new Set(closedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+  const closedPreviousMenteeIds = new Set(closedPreviousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+
+  const activeClosedMonthCount = Array.from(activeMenteeIds).filter((id) => closedMenteeIds.has(id)).length;
+  const missingClosedMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id)).length;
+  const followUpTwoMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id) && !closedPreviousMenteeIds.has(id)).length;
+
   const activeMenteeCount = Array.from(selectedMenteeIds).filter((id) => activeMenteeIds.has(id)).length;
-  const silentOneMonthCount = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && previousMenteeIds.has(id)).length;
-  const followUpCount = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && !previousMenteeIds.has(id)).length;
   const mentorWithoutRecapCount = Array.from(activeMentorIds).filter((id) => !selectedMentorIds.has(id)).length;
 
   const eventsInMonth = seasonEvents.filter((event) => eventMonth(event) === selectedMonth);
@@ -259,8 +268,8 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     recapsByMentee.set(recap.mentee_person_id, rows);
   }
 
-  const followUpRows: FollowUpRow[] = activeMatchesWithPeople
-    .filter((match) => match.mentee_person_id && !selectedMenteeIds.has(match.mentee_person_id) && !previousMenteeIds.has(match.mentee_person_id))
+  const followUpTwoMonthRows: FollowUpRow[] = activeMatchesWithPeople
+    .filter((match) => match.mentee_person_id && !closedMenteeIds.has(match.mentee_person_id) && !closedPreviousMenteeIds.has(match.mentee_person_id))
     .map((match) => {
       const menteeId = match.mentee_person_id!;
       const mentee = peopleById.get(menteeId);
@@ -309,9 +318,9 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     .slice(0, OUTLIER_RECAP_LIMIT);
 
   const healthData = [
-    { name: "Hoạt động tháng này", value: activeMenteeCount },
-    { name: "Im lặng 1 tháng", value: silentOneMonthCount },
-    { name: "Im lặng 2+ tháng / cần follow-up", value: followUpCount }
+    { name: "Mentee active tháng đã đóng", value: activeClosedMonthCount },
+    { name: "Chưa có recap tháng gần nhất", value: missingClosedMonthCount },
+    { name: "Im lặng 2 tháng liên tiếp / cần follow-up", value: followUpTwoMonthCount }
   ];
 
   return (
@@ -350,8 +359,9 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <KpiCard label="Event/training trong tháng" value={rpcKpis?.eventTrainingCount ?? eventsInMonth.length} />
         <KpiCard label="Lượt tham dự event" value={rpcKpis?.eventAttendanceCount ?? attendedCount} />
         <KpiCard label="Tỷ lệ attendance" value={attendanceRate(attendedCount, registeredAbsentCount)} />
-        <KpiCard label="Feedback count" value="Chưa triển khai" />
-        <KpiCard label="Mentee cần follow-up" value={rpcKpis?.followUpCount ?? followUpCount} />
+        <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
+        <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
+        <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={followUpTwoMonthCount} />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-4">
@@ -397,7 +407,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Mentee cần follow-up</h2>
         <SimpleTable
-          rows={followUpRows}
+          rows={followUpTwoMonthRows}
           columns={[
             { key: "mentee_name", label: "Mentee", render: (row) => displayText(row.mentee_name) },
             { key: "mentee_email", label: "Email", render: (row) => displayText(row.mentee_email) },

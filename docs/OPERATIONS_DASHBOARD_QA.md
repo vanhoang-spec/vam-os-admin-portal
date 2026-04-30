@@ -15,15 +15,35 @@
 | KPI | Dinh nghia hien tai trong app | Logic SQL tuong duong | Trang thai QA |
 | --- | --- | --- | --- |
 | So recap trong thang | Dem `mentoring_recaps` co `meeting_month = selectedMonth` va `status` trong `submitted`, `needs_review`, hoac rong. | `count(*) from mentoring_recaps where meeting_month = :month and status in ('submitted','needs_review')` | Dat cho du lieu import hien tai. App cho phep status rong de chong du lieu cu, nhung schema Phase 2 mac dinh `submitted`. |
-| Mentee active | Dem distinct `mentee_person_id` trong recap hop le cua thang. | `count(distinct mentee_person_id)` voi cung filter recap hop le. | Dat. Kien nghi doi label thanh "Mentee co recap" neu can phan biet voi active match. |
-| Mentor active | Dem distinct `mentor_person_id` trong recap hop le cua thang. | `count(distinct mentor_person_id)` voi cung filter recap hop le. | Dat. Kien nghi doi label thanh "Mentor co recap" neu can phan biet voi active match. |
+| Current-month activity | Dem distinct `mentee_person_id` va `mentor_person_id` trong recap hop le cua selected month. | `count(distinct mentee_person_id)`, `count(distinct mentor_person_id)` voi filter recap hop le trong `selectedMonth`. | Day la activity KPI cua thang dang xem, khong phai follow-up trigger. |
 | Ty le mentee active | Tu so: mentee co recap trong thang va nam trong tap active matched mentees. Mau so: distinct mentees trong active matches cua season `UEHM-S11`. | `count(distinct recap.mentee_person_id join active matches) / count(distinct active_matches.mentee_person_id)` | Dat ve mat operational health. Luu y tu so khac voi card "Mentee active" neu co recap ngoai active match. |
 | Mentor chua co recap | Distinct active matched mentors cua season `UEHM-S11` khong xuat hien trong selected recap mentor set. | `active_matched_mentors except distinct recap.mentor_person_id` | Dat. Mau/tap nen dung active matched mentors, app dang lam dung. |
 | Event/training trong thang | Dem `events` co `starts_at` roi map ve `YYYY-MM = selectedMonth`. | `count(*) from events where starts_at >= month_start and starts_at < next_month` | Tam dat. Event data chua seed/import day du; app khong con dung `event_code`/`event_date`. |
 | Luot tham du event | Dem `event_participations` co `event_id` nam trong event cua thang va `attendance_status = 'attended'`. | join `event_participations.event_id = events.id`, filter `events.starts_at` theo thang va `attendance_status='attended'` | Tam dat. Chua co import event participation nen co the la 0. |
 | Ty le attendance | `attended / (attended + registered_absent)` tren participation cua event trong thang. Neu mau so 0 thi hien "Chua co du lieu". | `attended_count / (attended_count + registered_absent_count)` | Tam dat. Dinh nghia phu hop voi status MVP. |
 | Feedback count | Hien "Chua trien khai". | Chua co bang/module feedback. | Dung voi scope hien tai. |
-| Mentee can follow-up | Active matched mentees khong co recap trong selected month va cung khong co recap trong previous month. | `active_matched_mentees where not exists recap(month=:selected) and not exists recap(month=:previous)` | Dat theo dinh nghia candidate list. Chua phai workflow/action state. |
+| Closed-month missing recap | Active matched mentees khong co recap trong thang da dong gan nhat. Neu selected month la thang hien tai hoac tuong lai, dung thang truoc hien tai lam closed month. | `active_matched_mentees where not exists recap(month=:closed_month)` | Day la warning KPI, chua tao action item. |
+| 2-month consecutive silent warning | Active matched mentees khong co recap trong closed month va cung khong co recap trong closed previous month. | `active_matched_mentees where not exists recap(month=:closed_month) and not exists recap(month=:closed_previous_month)` | Day la danh sach can follow-up chinh thuc trong dashboard, khong phai workflow/action state. |
+
+## Official KPI Logic After Phase 2 Stabilization
+
+1. Current-month activity
+   - Uses selected month.
+   - Counts valid recaps in that month.
+   - Valid recap statuses are `submitted`, `needs_review`, or blank legacy status.
+   - This supports activity reporting while the month is still open.
+
+2. Closed-month missing recap
+   - Uses the latest closed month.
+   - If selected month is the current calendar month or later, closed month is previous calendar month.
+   - If selected month is already in the past, closed month is selected month.
+   - Counts active matched mentees with no valid recap in that closed month.
+
+3. 2-month consecutive silent warning
+   - Uses closed month plus the month before it.
+   - Counts active matched mentees with no valid recap in both months.
+   - This is the official follow-up warning list for the dashboard.
+   - A warning row does not mutate data and does not create an action item by itself.
 
 ## Doi chieu voi logic Supabase
 
@@ -59,13 +79,13 @@ Gia tri mong doi de test:
 - `needs_review` recaps duoc tinh vao KPI, dung voi view monthly summary va scope Phase 2.
 - Mau so ty le mentee active dung active matched mentees trong season `UEHM-S11`.
 - Mentor without recap dung active matched mentors trong season `UEHM-S11`.
-- Follow-up candidate hien co nghia la thieu recap hai thang lien tiep: thang dang xem va thang lien truoc. Day la candidate list, khong phai action workflow.
+- Follow-up candidate hien co nghia la thieu recap hai thang lien tiep: closed month va closed previous month. Day la candidate list, khong phai action workflow.
 
 ## Gioi han da biet
 
 - Event participation chua import, nen event attendance KPI co the hien 0 hoac "Chua co du lieu".
 - Feedback module chua trien khai.
-- Follow-up chua co bang `action_items`, owner, status, due date, hay lich su xu ly.
+- Dashboard follow-up warning khong tu dong tao `action_items`, owner, status, due date, hay lich su xu ly.
 - Mot so date outliers trong recap history co the can review thu cong.
 - Auth/RLS chua trien khai; hien moi co temporary password gate.
 - App tinh KPI o server component bang du lieu da fetch ve, chua dung SQL aggregate truc tiep. Cach nay on cho MVP, nhung nen can nhac aggregate/view khi du lieu lon hon.

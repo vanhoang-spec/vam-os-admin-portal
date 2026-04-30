@@ -176,12 +176,21 @@ async function writeActivityAudit(client: any, input: {
 }
 
 async function selectAll<T>(client: any, table: string, columns = "*") {
-  const { data, error } = await client.from(table).select(columns).limit(2000);
-  if (error) {
-    log(`${table} select failed`, error);
-    return { data: [] as T[], error: error.message as string };
+  let allData: T[] = [];
+  let from = 0;
+  const step = 1000;
+  while (true) {
+    const { data, error } = await client.from(table).select(columns).range(from, from + step - 1);
+    if (error) {
+      log(`${table} select failed`, error);
+      return { data: allData, error: error.message as string };
+    }
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data as T[]);
+    if (data.length < step) break;
+    from += step;
   }
-  return { data: (data ?? []) as T[], error: null };
+  return { data: allData, error: null };
 }
 
 function buildIssues(input: {

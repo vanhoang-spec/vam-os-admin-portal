@@ -478,7 +478,6 @@ async function getOperationsDataFromRpc() {
   const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: "UEHM-S11" });
   if (error) {
     if (error.code === "PGRST202" || error.code === "42883") {
-      console.warn("[operations] get_operations_dashboard_data unavailable; using temporary raw-read fallback.");
       return null;
     }
     const empty = { data: [], error: `${VI_ERROR} (get_operations_dashboard_data: ${error.message})` };
@@ -506,11 +505,9 @@ async function getOperationsDataFromRpc() {
     Array.isArray(payload.eventParticipations);
 
   if (!hasExpectedPayloadShape) {
-    console.warn("[operations] get_operations_dashboard_data returned an incompatible payload shape; using temporary raw-read fallback.");
     return null;
   }
 
-  console.info("[operations] get_operations_dashboard_data RPC used.");
   const seasons = (payload.seasons ?? []) as Season[];
   const matches = (payload.matches ?? []) as Match[];
   const recaps = (payload.recaps ?? []) as MentoringRecap[];
@@ -593,7 +590,9 @@ export async function getFounderIntelligenceDashboard(seasonCode = "UEHM-S11"): 
     p_season_code: seasonCode
   });
   if (error) {
-    logDataError("get_founder_intelligence_dashboard rpc failed; using raw-read fallback", error);
+    if (!isNextDynamicUsageError(error)) {
+      logDataError("get_founder_intelligence_dashboard rpc failed; using raw-read fallback", error);
+    }
     return getFounderIntelligenceDashboardFallback(seasonCode);
   }
   return { data: data as FounderIntelligenceDashboard, error: null };
@@ -623,7 +622,7 @@ async function getFounderIntelligenceDashboardFallback(seasonCode: string): Prom
   const [seasons, people, mentors, mentees, matches, recaps] = await Promise.all([
     selectAllTable<Season>("seasons", "id,code,name"),
     selectAllTable<Person>("people", "id,full_name,email_primary"),
-    selectAllTable<MentorProfile>("mentor_profiles", "id,person_id,mentor_code,company_current,title_current,years_experience_min"),
+    selectAllTable<MentorProfile>("mentor_profiles", "id,person_id,mentor_code,company_current,title_current,years_experience_min,industry,function_area"),
     selectAllTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code,school_code,school_raw,major"),
     selectAllTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
     selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,status")
@@ -651,7 +650,7 @@ async function getFounderIntelligenceDashboardFallback(seasonCode: string): Prom
       .map((row) => String(row.meeting_month ?? ""))
       .filter(isOperationalMonth)
       .sort()
-      .filter((month) => month <= currentMonth())
+      .filter((month) => month < currentMonth())
       .at(-1) ??
     validRecaps
       .map((row) => String(row.meeting_month ?? ""))
@@ -716,6 +715,16 @@ async function getFounderIntelligenceDashboardFallback(seasonCode: string): Prom
     "band",
     "Unknown"
   ).map((row) => ({ band: row.name, count: row.count }));
+  const byIndustry = groupRowsByCount(
+    mentors.data.map((mentor) => ({ industry: mentor.industry || "Chưa rõ" })),
+    "industry",
+    "Chưa rõ"
+  ).map((row) => ({ industry: row.name, count: row.count }));
+  const byFunction = groupRowsByCount(
+    mentors.data.map((mentor) => ({ functionArea: mentor.function_area || "Chưa rõ" })),
+    "functionArea",
+    "Chưa rõ"
+  ).map((row) => ({ functionArea: row.name, count: row.count }));
   const silentMentees = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id)).length;
 
   const data: FounderIntelligenceDashboard = {
@@ -752,8 +761,8 @@ async function getFounderIntelligenceDashboardFallback(seasonCode: string): Prom
       totalMentors: mentors.data.length,
       activeMentors: activeMentorIds.size,
       inactiveMentors: Math.max(0, mentors.data.length - activeMentorIds.size),
-      byIndustry: [],
-      byFunction: [],
+      byIndustry,
+      byFunction,
       byExperienceBand,
       byVamSeniority: [],
       bySeniorityLevel: [],

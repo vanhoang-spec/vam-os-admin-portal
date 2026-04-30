@@ -27,6 +27,7 @@ Core principles:
 | D | Season 12 Mentor Recruitment & Re-activation | New mentor intake and existing mentor continuation. |
 | E | Season 12 Matching & Kickoff | Build approved matching pool, approve matches, run kickoff. |
 | F | Monthly Operations Report | Repeatable monthly reporting across active seasons. |
+| Phase 3F | CRM & Relationship History | Track contact history, feedback, follow-up, mentor reactivation, and person timeline across seasons. |
 
 ## Module A. Historical Import Season 1-10
 
@@ -381,6 +382,82 @@ Produce repeatable monthly reports for active seasons, starting with Season 11 a
 - Season selector support.
 - Action item production migration.
 
+## Phase 3F. CRM & Relationship History
+
+### Goal
+
+Turn VAM OS into a lightweight CRM for mentors, mentees, support team, core team, and alumni so core team can preserve relationship memory across seasons.
+
+This layer is especially important for inactive mentor reactivation, feedback tracking, sensitive concerns, and handover when new core team members join.
+
+### Tables Needed
+
+- `people`
+- `person_roles`
+- `admin_users`
+- `seasons`
+- `contact_logs`
+- `feedback_items`
+- `relationship_tasks`
+- `mentor_reactivation_campaigns`
+- `campaign_participants`
+- `action_items`
+- `events`
+- `event_participations`
+- `mentoring_recaps`
+- `matches`
+
+### Screens Needed
+
+- Person Profile Timeline.
+- Mentor CRM tab.
+- Inactive Mentor Reactivation Board.
+- Feedback Inbox.
+- Relationship Task Board.
+- Campaign Detail.
+
+### User Flow
+
+1. Admin opens a person profile and reviews the full timeline across seasons.
+2. Admin adds contact log after calling/emailing/messaging a mentor or mentee.
+3. Admin records outcome such as interested, maybe later, not interested, no response, needs follow-up, or concern raised.
+4. Admin assigns relationship follow-up task with owner and due date.
+5. For inactive mentors, campaign owner creates reactivation campaign and assigns participants to core team members or active mentors.
+6. Assignees contact mentors and update campaign participant status.
+7. Interested mentors enter mentor continuation/application review; only approved mentors get target-season `person_roles`.
+8. Feedback items are triaged, escalated if urgent, and resolved with notes.
+
+### Admin Actions
+
+- Add contact log.
+- Assign relationship owner.
+- Create follow-up task.
+- Record mentor response and reactivation intent.
+- Record feedback from mentor/mentee/support team.
+- Escalate urgent feedback.
+- Resolve or drop CRM tasks.
+- View full person timeline.
+- Export campaign progress.
+
+### Data Risks
+
+- Sensitive feedback exposed too broadly.
+- Outreach interest treated as official reactivation.
+- Notes overwritten instead of appended.
+- Duplicate tasks in `relationship_tasks` and `action_items`.
+- CRM records attached to duplicate `people` rows.
+- Inactive mentor status confused with global person status.
+
+### Migration If Needed
+
+- `contact_logs`.
+- `feedback_items`.
+- `relationship_tasks` or `action_items` CRM extension.
+- `mentor_reactivation_campaigns`.
+- `campaign_participants`.
+- Timeline view or RPC aggregating person history.
+- Permission/visibility fields for sensitive records.
+
 ## Suggested Delivery Order
 
 1. Stabilize Season 11 operations and production workflow table.
@@ -390,11 +467,14 @@ Produce repeatable monthly reports for active seasons, starting with Season 11 a
 5. Build matching pool and draft/approval workflow.
 6. Add historical import tooling after dedupe and rollback are ready.
 7. Generalize monthly reports across seasons.
+8. Add CRM & Relationship History after identity, roles, and admin ownership are stable.
 
 ## Do Not Do Yet
 
 - Do not import Season 1-10 without dry-run dedupe.
 - Do not create official Season 12 roles from submitted applications.
 - Do not treat mentor continuation response as automatic approval unless founder/core team explicitly accepts that policy.
+- Do not treat mentor reactivation interest as official Season 12 mentor role until approved.
 - Do not count draft matches as active matches.
 - Do not overwrite current Season 11 profile data with old historical source values.
+- Do not overwrite relationship notes; append contact logs or feedback updates.

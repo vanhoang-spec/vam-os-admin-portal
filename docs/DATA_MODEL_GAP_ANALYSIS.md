@@ -14,13 +14,21 @@ VAM OS already has the core identity and operations spine for multi-season data:
 - `matches`, `mentoring_recaps`, `events`, and `event_participations` already carry or can carry `season_id`.
 - `action_items` is designed for operations workflow, but production was previously observed missing this table in schema cache.
 
-The main gap is recruitment lifecycle. Current `applications` appears mentee-oriented and does not fully separate:
+The main gap is recruitment lifecycle and relationship history. Current `applications` appears mentee-oriented and does not fully separate:
 
 - mentee application vs official mentee role
 - mentor application vs official mentor role
 - mentor continuation from one season to the next
 - mentor orientation attendance before official approval
 - review/interview decisions before role creation
+
+VAM OS also does not yet have a CRM layer for long-term relationship memory:
+
+- contact history with mentors/mentees/support/alumni
+- mentor inactive reactivation outreach
+- feedback and concern triage
+- relationship follow-up ownership
+- full person timeline across roles, events, recaps, contact logs, and feedback
 
 The most important design rule: applications and continuation signals are candidates, not official roles. Only approved records should create `person_roles` for the target season.
 
@@ -42,6 +50,11 @@ The most important design rule: applications and continuation signals are candid
 | `event_participations` | Good attendance table. | May need registration/check-in source, required/optional flag, no-show reason. | Reuse for orientation, training, kickoff, graduation attendance. |
 | `mentoring_recaps` | Good for S11 monthly operations. | Needs season filtering everywhere and historical import provenance. | Keep one row per recap; ensure S1-10 imports map season and match/person safely. |
 | `action_items` | Good workflow model. | Production deploy gap observed; may need entity links for application/interview/mentor continuation. | Apply workflow migration before relying on it; use for recruitment follow-ups. |
+| `contact_logs` | Missing. | Needed for CRM touchpoints, especially inactive mentor outreach and core team handover. | Add append-first contact history linked to `people`, optional `season_id`, owner, outcome, and next follow-up. |
+| `feedback_items` | Missing. | Needed to track mentor/mentee feedback, concerns, compliments, and escalations. | Add feedback inbox model with severity/status/owner and links to person/match/event/recap. |
+| `relationship_tasks` | Missing as CRM-specific task model. | `action_items` can cover some workflow, but CRM needs person-centric follow-up, due dates, owners, and campaign context. | Either extend `action_items` with CRM action types or add `relationship_tasks` and mirror high-priority items. |
+| `mentor_reactivation_campaigns` | Missing. | Needed for annual inactive mentor reactivation workflow. | Add campaign header table for target season, owner, status, target segment. |
+| `campaign_participants` | Missing. | Needed to track each inactive mentor's outreach state, response, reason, and next follow-up. | Add participant table linked to campaign and person; do not create official roles until approved. |
 
 ## Proposed Data Model
 
@@ -277,6 +290,130 @@ Recommended additional entity support:
 - `season_id`
 - `action_type`: include `application_review`, `interview_schedule`, `mentor_confirmation`, `orientation_followup`, `matching_review`
 
+### `contact_logs`
+
+Purpose: append-first CRM contact history.
+
+Recommended fields:
+
+- `id`
+- `person_id`
+- `season_id` nullable
+- `related_role_id` nullable
+- `contacted_by_admin_user_id`
+- `contact_owner_admin_user_id`
+- `contact_type`: `email`, `phone`, `zalo`, `facebook`, `linkedin`, `in_person`, `event`, `other`
+- `direction`: `outbound`, `inbound`, `internal_note`
+- `contacted_at`
+- `subject`
+- `summary`
+- `outcome`: `interested`, `not_interested`, `maybe_later`, `no_response`, `wrong_contact`, `needs_followup`, `concern_raised`, `info_updated`
+- `next_follow_up_at`
+- `visibility`: `core_team`, `admins_only`, `restricted`
+- `source_type`, `source_id`
+- `created_at`, `updated_at`
+
+Rule: do not overwrite old contact history. Add new logs for new interactions or corrections.
+
+### `feedback_items`
+
+Purpose: mentor/mentee/support/alumni feedback and concern tracking.
+
+Recommended fields:
+
+- `id`
+- `person_id`
+- `season_id` nullable
+- `submitted_by_person_id` nullable
+- `submitted_by_admin_user_id` nullable
+- `target_person_id` nullable
+- `related_match_id` nullable
+- `related_event_id` nullable
+- `related_recap_id` nullable
+- `feedback_type`: `mentor_feedback`, `mentee_feedback`, `event_feedback`, `program_feedback`, `concern`, `compliment`, `suggestion`, `other`
+- `sentiment`: `positive`, `neutral`, `negative`, `mixed`, `unknown`
+- `severity`: `low`, `medium`, `high`, `urgent`
+- `status`: `new`, `triaged`, `in_progress`, `resolved`, `closed`, `dismissed`
+- `title`
+- `body`
+- `owner_admin_user_id`
+- `escalated_to_admin_user_id`
+- `escalated_at`
+- `resolved_at`
+- `resolution_notes`
+- `visibility`
+- `created_at`, `updated_at`
+
+Rule: high/urgent feedback should create or link a follow-up task and should support restricted visibility later.
+
+### `relationship_tasks`
+
+Purpose: person-centric CRM follow-up queue.
+
+Recommended fields:
+
+- `id`
+- `person_id`
+- `season_id` nullable
+- `assigned_to_admin_user_id`
+- `created_by_admin_user_id`
+- `task_type`: `mentor_reactivation`, `feedback_followup`, `check_in`, `profile_update`, `event_followup`, `concern_escalation`, `other`
+- `priority`: `low`, `medium`, `high`, `urgent`
+- `status`: `open`, `in_progress`, `waiting`, `resolved`, `dropped`, `no_response`
+- `due_at`
+- `completed_at`
+- `title`
+- `description`
+- `related_contact_log_id`
+- `related_feedback_item_id`
+- `related_campaign_id`
+- `action_item_id`
+- `metadata jsonb`
+- `created_at`, `updated_at`
+
+Recommendation: avoid duplicate task ownership. Decide whether CRM tasks live directly in `action_items` or whether `relationship_tasks` mirrors into `action_items`.
+
+### `mentor_reactivation_campaigns`
+
+Purpose: annual or targeted outreach campaign for inactive mentors.
+
+Recommended fields:
+
+- `id`
+- `season_id` nullable, target season
+- `source_season_id` nullable
+- `campaign_code`
+- `name`
+- `goal`
+- `status`: `draft`, `active`, `paused`, `completed`, `archived`
+- `owner_admin_user_id`
+- `starts_at`, `ends_at`
+- `target_segment`
+- `template_notes`
+- `created_at`, `updated_at`
+
+### `campaign_participants`
+
+Purpose: track one person's state inside a campaign.
+
+Recommended fields:
+
+- `id`
+- `campaign_id`
+- `person_id`
+- `previous_role_id`
+- `assigned_to_admin_user_id`
+- `participant_status`: `not_started`, `contacted`, `responded`, `interested`, `maybe_later`, `not_interested`, `no_response`, `reactivated`, `do_not_contact`
+- `last_contact_log_id`
+- `next_follow_up_at`
+- `response_summary`
+- `reason_not_joining`
+- `preferred_future_season_code`
+- `capacity_signal`
+- `created_at`, `updated_at`
+
+Rule: campaign interest is not official reactivation. Only approved reactivation creates a target-season `person_roles` row.
+
 ## Key Gaps Before Season 12
 
 P0 gaps:
@@ -293,12 +430,15 @@ P1 gaps:
 - Match draft/proposed/approval workflow.
 - Event type/status coverage for orientation/kickoff/graduation.
 - Action item production availability.
+- CRM contact history and relationship tasks.
+- Feedback inbox and escalation path.
 
 P2 gaps:
 
 - Import provenance/audit for S1-10.
 - Longitudinal person journey views.
 - Cross-season reports and archival rules.
+- Inactive mentor reactivation campaigns and campaign analytics.
 
 ## Recommended Migration Bundles Later
 
@@ -310,3 +450,5 @@ Do not implement yet, but plan migrations in these bundles:
 4. Matching lifecycle: statuses and approval metadata.
 5. Event lifecycle/type cleanup.
 6. Import provenance/logging for historical seasons.
+7. CRM relationship history: `contact_logs`, `feedback_items`, `relationship_tasks`.
+8. Mentor reactivation campaigns: `mentor_reactivation_campaigns`, `campaign_participants`.

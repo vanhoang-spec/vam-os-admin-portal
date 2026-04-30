@@ -145,23 +145,30 @@ export default async function DashboardPage() {
   const nowMonth = currentMonth();
   const selectedMonth = availableMonths.find((month) => month <= nowMonth) ?? (isOperationalMonth(nowMonth) ? nowMonth : null) ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
   const previousMonth = addMonths(selectedMonth, -1);
+  const closedMonth = selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth;
+  const closedPreviousMonth = addMonths(closedMonth, -1);
   const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
   const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === previousMonth);
   const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
   const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
   const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+  const closedRecaps = validRecaps.filter((recap) => recap.meeting_month === closedMonth);
+  const closedPreviousRecaps = validRecaps.filter((recap) => recap.meeting_month === closedPreviousMonth);
+  const closedMenteeIds = new Set(closedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
+  const closedPreviousMenteeIds = new Set(closedPreviousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
   const recapByMonth = seasonMonths.map((name) => ({
     name,
     value: validOperationalRecaps.filter((recap) => recap.meeting_month === name).length
   }));
   const activeMenteeThisMonthCount = Array.from(selectedMenteeIds).filter((id) => activeMenteeIds.has(id)).length;
   const activeMentorThisMonthCount = Array.from(selectedMentorIds).filter((id) => activeMentorIds.has(id)).length;
-  const silentOneMonthCount = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && previousMenteeIds.has(id)).length;
-  const followUpCount = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && !previousMenteeIds.has(id)).length;
+  const activeClosedMonthCount = Array.from(activeMenteeIds).filter((id) => closedMenteeIds.has(id)).length;
+  const missingClosedMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id)).length;
+  const followUpTwoMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id) && !closedPreviousMenteeIds.has(id)).length;
   const menteeHealthData = [
-    { name: "Hoạt động tháng này", value: activeMenteeThisMonthCount },
-    { name: "Im lặng 1 tháng", value: silentOneMonthCount },
-    { name: "Im lặng 2+ tháng / cần follow-up", value: followUpCount }
+    { name: "Mentee active tháng đã đóng", value: activeClosedMonthCount },
+    { name: "Chưa có recap tháng gần nhất", value: missingClosedMonthCount },
+    { name: "Im lặng 2 tháng liên tiếp / cần follow-up", value: followUpTwoMonthCount }
   ];
 
   for (const recap of validRecaps) {
@@ -220,8 +227,8 @@ export default async function DashboardPage() {
     .sort((a, b) => b.recap_count - a.recap_count || b.mentee_count - a.mentee_count || String(a.mentor_name ?? "").localeCompare(String(b.mentor_name ?? ""), "vi"))
     .slice(0, 8);
 
-  const followUpRows = activeMatchesWithMentorAndMentee
-    .filter((match) => match.mentee_person_id && !selectedMenteeIds.has(match.mentee_person_id) && !previousMenteeIds.has(match.mentee_person_id))
+  const followUpTwoMonthRows = activeMatchesWithMentorAndMentee
+    .filter((match) => match.mentee_person_id && !closedMenteeIds.has(match.mentee_person_id) && !closedPreviousMenteeIds.has(match.mentee_person_id))
     .map((match) => {
       const menteeId = match.mentee_person_id!;
       const mentorId = match.mentor_person_id!;
@@ -274,8 +281,9 @@ export default async function DashboardPage() {
         <KpiCard label="Số recap tháng này" value={selectedRecaps.length} />
         <KpiCard label="Mentee active tháng này" value={activeMenteeThisMonthCount} />
         <KpiCard label="Mentor active tháng này" value={activeMentorThisMonthCount} />
-        <KpiCard label="Mentee im lặng 1 tháng" value={silentOneMonthCount} />
-        <KpiCard label="Cần follow-up" value={followUpCount} />
+        <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
+        <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
+        <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={followUpTwoMonthCount} />
       </div>
 
       <section className="mt-6">
@@ -331,7 +339,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <SimpleTable
-            rows={followUpRows}
+            rows={followUpTwoMonthRows}
             columns={[
               { key: "mentee_name", label: "Mentee", render: (row) => displayText(row.mentee_name) },
               { key: "mentee_email", label: "Email", render: (row) => displayText(row.mentee_email) },
