@@ -192,14 +192,17 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const nowMonth = currentMonth();
   const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
   const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
+  const seasonLatestClosedMonth = data.latestClosedMonth?.data?.find((row: any) => row.season_id === season?.id);
+  const officialClosedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
+
   const rpcSelectedMonth = data.kpis.data?.selectedMonth;
-  const defaultMonth = rpcSelectedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const defaultMonth = officialClosedMonth ?? rpcSelectedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
   const monthOptions = (availableMonths.length ? availableMonths : seasonMonths).sort((a, b) => b.localeCompare(a));
   const requestedMonth = sanitizeMonthParam(searchParams?.month);
   const selectedMonth = requestedMonth ?? defaultMonth;
   const previousMonth = addMonths(selectedMonth, -1);
-  const closedMonth = rpcSelectedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
-  const closedPreviousMonth = addMonths(closedMonth, -1);
+  const closedMonth = officialClosedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
+  const closedPreviousMonth = typeof seasonLatestClosedMonth?.previous_closed_month === "string" ? seasonLatestClosedMonth.previous_closed_month : addMonths(closedMonth, -1);
 
   const activeMatches = seasonMatches.filter(isActiveMatch);
   const activeMatchesWithPeople = activeMatches.filter((match) => match.mentor_person_id && match.mentee_person_id);
@@ -336,8 +339,8 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <div className="grid gap-4 md:grid-cols-[minmax(220px,320px)_1fr] md:items-end">
           <MonthSelector months={monthOptions} selectedMonth={selectedMonth} />
           <div className="text-sm">
-            <p className="text-slate-600 font-medium">Tháng đã chốt: {rpcSelectedMonth ?? "Chưa có"}</p>
-            {selectedMonth > (rpcSelectedMonth ?? "") ? (
+            <p className="text-slate-600 font-medium">Tháng đã chốt: {officialClosedMonth ?? "Chưa có"}</p>
+            {selectedMonth > (officialClosedMonth ?? "") ? (
               <p className="text-amber-600 mt-1">Dữ liệu tháng mở không dùng cho KPI chính thức</p>
             ) : null}
             <p className="text-slate-500 mt-1">

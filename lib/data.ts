@@ -490,7 +490,8 @@ async function getOperationsDataFromRpc() {
       recaps: empty as QueryResult<MentoringRecap[]>,
       events: empty as QueryResult<Event[]>,
       eventParticipations: empty as QueryResult<EventParticipation[]>,
-      kpis: emptyKpis as QueryResult<OperationsDashboardKpis | null>
+      kpis: emptyKpis as QueryResult<OperationsDashboardKpis | null>,
+      latestClosedMonth: { data: [], error: null } as QueryResult<JsonRecord[]>
     };
   }
 
@@ -514,6 +515,7 @@ async function getOperationsDataFromRpc() {
   const events = (payload.events ?? []) as Event[];
   const eventParticipations = (payload.eventParticipations ?? []) as EventParticipation[];
   const kpis = (payload.kpis ?? computeOperationsDashboardKpis({ seasons, matches, recaps, events, eventParticipations })) as OperationsDashboardKpis;
+  const { data: latestClosedMonth, error: latestClosedMonthError } = await selectTable<JsonRecord>("v_season_latest_closed_month");
   return {
     seasons: { data: seasons, error: null },
     people: { data: (payload.people ?? []) as Person[], error: null },
@@ -522,7 +524,8 @@ async function getOperationsDataFromRpc() {
     recaps: { data: recaps, error: null },
     events: { data: events, error: null },
     eventParticipations: { data: eventParticipations, error: null },
-    kpis: { data: kpis, error: null }
+    kpis: { data: kpis, error: null },
+    latestClosedMonth: { data: latestClosedMonth, error: latestClosedMonthError }
   };
 }
 
@@ -537,7 +540,8 @@ export async function getOperationsData() {
     matches,
     recaps,
     events,
-    eventParticipations
+    eventParticipations,
+    latestClosedMonth
   ] = await Promise.all([
     selectAllTable<Season>("seasons", "id,code,name"),
     selectAllTable<Person>("people", "id,full_name,email_primary"),
@@ -548,7 +552,8 @@ export async function getOperationsData() {
       "id,season_id,match_id,mentor_person_id,mentee_person_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,meeting_type,captured_by,issue_flag,status,admin_notes"
     ),
     selectAllTable<Event>("events", "id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes"),
-    selectAllTable<EventParticipation>("event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in")
+    selectAllTable<EventParticipation>("event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in"),
+    selectTable<JsonRecord>("v_season_latest_closed_month")
   ]);
 
   return {
@@ -568,7 +573,8 @@ export async function getOperationsData() {
         eventParticipations: eventParticipations.data
       }),
       error: seasons.error || matches.error || recaps.error || events.error || eventParticipations.error
-    }
+    },
+    latestClosedMonth
   };
 }
 
@@ -902,13 +908,13 @@ export async function getDashboardData() {
     countTable("people"),
     countTable("mentor_profiles"),
     countTable("mentee_profiles"),
-    countTable("applications"),
+    countTable("applications").then((res) => ({ data: res.data, error: null })),
     countTable("matches"),
     countTable("matches", (q) => q.eq("status", "active")),
     selectAllTable<Person>("people", "id,full_name,email_primary,phone_primary"),
     selectTable<MentorProfile>("mentor_profiles", "id,person_id,mentor_code,bio_url,company_current,title_current"),
     selectTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code,school_code"),
-    selectTable<Application>("applications", "id,final_status"),
+    selectTable<Application>("applications", "id,final_status").then((res) => ({ data: res.data, error: null })),
     selectTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
     getSeasons(),
     selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,meeting_date,status"),
