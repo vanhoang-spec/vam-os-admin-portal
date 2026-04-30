@@ -158,11 +158,32 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     data.kpis.error
   ].filter(Boolean);
 
-  const validRecaps = data.recaps.data.filter(isValidRecapActivity);
+  const peopleById = keyById(data.people.data);
+  const menteeProfilesByPersonId = new Map(data.mentees.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
+  const season = data.seasons.data.find((row) => row.code === SEASON_CODE);
+  const seasonMatches = data.matches.data.filter((match) => {
+    if (season?.id) return match.season_id === season.id;
+    return true;
+  });
+  const seasonRecaps = data.recaps.data.filter((recap) => {
+    if (season?.id) return recap.season_id === season.id;
+    return true;
+  });
+  const seasonEvents = data.events.data.filter((event) => {
+    if (season?.id) return event.season_id === season.id;
+    return true;
+  });
+  const seasonEventIds = new Set(seasonEvents.map((event) => event.id));
+  const seasonEventParticipations = data.eventParticipations.data.filter((row) => {
+    if (season?.id) return row.season_id === season.id || (row.event_id ? seasonEventIds.has(row.event_id) : false);
+    return true;
+  });
+
+  const validRecaps = seasonRecaps.filter(isValidRecapActivity);
   const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
   const outlierRecaps = validRecaps.filter(isOutlierRecap);
   const seasonMonths = operationalMonths();
-  const validEventMonths = data.events.data.map(eventMonth).filter((month): month is string => isOperationalMonth(month));
+  const validEventMonths = seasonEvents.map(eventMonth).filter((month): month is string => isOperationalMonth(month));
   const monthsWithOperationalData = new Set([
     ...validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)),
     ...validEventMonths
@@ -177,20 +198,13 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const selectedMonth = requestedMonth ?? defaultMonth;
   const previousMonth = addMonths(selectedMonth, -1);
 
-  const peopleById = keyById(data.people.data);
-  const menteeProfilesByPersonId = new Map(data.mentees.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
-  const season = data.seasons.data.find((row) => row.code === SEASON_CODE);
-  const activeMatches = data.matches.data.filter((match) => {
-    if (!isActiveMatch(match)) return false;
-    if (season?.id) return match.season_id === season.id;
-    return true;
-  });
+  const activeMatches = seasonMatches.filter(isActiveMatch);
   const activeMatchesWithPeople = activeMatches.filter((match) => match.mentor_person_id && match.mentee_person_id);
   const activeMenteeIds = new Set(activeMatchesWithPeople.map((match) => match.mentee_person_id).filter(Boolean));
   const activeMentorIds = new Set(activeMatchesWithPeople.map((match) => match.mentor_person_id).filter(Boolean));
 
-  const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
-  const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === previousMonth);
+  const selectedRecaps = seasonRecaps.filter((recap) => isValidRecapActivity(recap) && recap.meeting_month === selectedMonth);
+  const previousRecaps = seasonRecaps.filter((recap) => isValidRecapActivity(recap) && recap.meeting_month === previousMonth);
   const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
   const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
   const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
@@ -200,9 +214,9 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const followUpCount = Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && !previousMenteeIds.has(id)).length;
   const mentorWithoutRecapCount = Array.from(activeMentorIds).filter((id) => !selectedMentorIds.has(id)).length;
 
-  const eventsInMonth = data.events.data.filter((event) => eventMonth(event) === selectedMonth);
+  const eventsInMonth = seasonEvents.filter((event) => eventMonth(event) === selectedMonth);
   const eventIdsInMonth = new Set(eventsInMonth.map((event) => event.id));
-  const eventParticipationsInMonth = data.eventParticipations.data.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
+  const eventParticipationsInMonth = seasonEventParticipations.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
   const attendedCount = eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "attended").length;
   const registeredAbsentCount = eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "registered_absent").length;
   const rpcKpis = data.kpis.data?.selectedMonth === selectedMonth ? data.kpis.data : null;
@@ -295,9 +309,9 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     .slice(0, OUTLIER_RECAP_LIMIT);
 
   const healthData = [
-    { name: "Active tháng này", value: activeMenteeCount },
-    { name: "Silent 1 tháng", value: silentOneMonthCount },
-    { name: "Silent 2+ tháng / cần follow-up", value: followUpCount }
+    { name: "Hoạt động tháng này", value: activeMenteeCount },
+    { name: "Im lặng 1 tháng", value: silentOneMonthCount },
+    { name: "Im lặng 2+ tháng / cần follow-up", value: followUpCount }
   ];
 
   return (
@@ -355,16 +369,11 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
       <section className="mt-6 grid gap-4 xl:grid-cols-2">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Recap theo tháng</h2>
-          {recapByMonth.length ? <BarSummary data={recapByMonth} /> : <EmptyState message="Chưa có dữ liệu recap." />}
+          {recapByMonth.length ? <BarSummary data={recapByMonth} highlightedName={selectedMonth} tooltipLabelPrefix="Tháng" valueLabel="Số recap" /> : <EmptyState message="Chưa có dữ liệu recap." />}
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentee health - {monthLabel(selectedMonth)}</h2>
           <DonutSummary data={healthData} />
-          <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
-            <div>Active this month: <span className="font-semibold text-vam-ink">{activeMenteeCount}</span></div>
-            <div>Silent 1 month: <span className="font-semibold text-vam-ink">{silentOneMonthCount}</span></div>
-            <div>Silent 2+ months: <span className="font-semibold text-vam-ink">{followUpCount}</span></div>
-          </div>
         </Card>
       </section>
 

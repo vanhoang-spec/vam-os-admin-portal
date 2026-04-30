@@ -56,6 +56,21 @@ function dataClient() {
   return getSupabaseServerClient() ?? supabase;
 }
 
+function logDataError(scope: string, error: unknown) {
+  const err = error as { code?: string; message?: string; hint?: string; details?: string };
+  console.error("[data]", scope, {
+    code: err?.code,
+    message: err?.message ?? String(error),
+    hint: err?.hint,
+    details: err?.details
+  });
+}
+
+function isNextDynamicUsageError(error: unknown) {
+  const err = error as { message?: string; details?: string };
+  return `${err?.message ?? ""} ${err?.details ?? ""}`.includes("Dynamic server usage");
+}
+
 const OPERATIONAL_MONTH_START = "2025-10";
 const OPERATIONAL_MONTH_END = "2026-06";
 const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
@@ -163,7 +178,11 @@ async function selectTable<T>(table: string, columns = "*", fallback: T[] = []):
   const client = dataClient();
   if (!client) return envError(fallback);
   const { data, error } = await client.from(table).select(columns);
-  if (error) return { data: fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
+  if (error) {
+    if (isNextDynamicUsageError(error)) throw error;
+    logDataError(`${table}.select`, error);
+    return { data: fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
+  }
   return { data: (data ?? []) as T[], error: null };
 }
 
@@ -174,7 +193,11 @@ async function selectAllTable<T>(table: string, columns = "*", fallback: T[] = [
   for (let from = 0; ; from += pageSize) {
     const to = from + pageSize - 1;
     const { data, error } = await client.from(table).select(columns).range(from, to);
-    if (error) return { data: rows.length ? rows : fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
+    if (error) {
+      if (isNextDynamicUsageError(error)) throw error;
+      logDataError(`${table}.selectAll`, error);
+      return { data: rows.length ? rows : fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
+    }
     const page = (data ?? []) as T[];
     rows.push(...page);
     if (page.length < pageSize) break;
@@ -192,7 +215,11 @@ async function countTable(table: string, filter?: (query: any) => any): Promise<
   let query = client.from(table).select("id", { count: "exact", head: true });
   if (filter) query = filter(query);
   const { count, error } = await query;
-  if (error) return { data: 0, error: `${VI_ERROR} (${table}: ${error.message})` };
+  if (error) {
+    if (isNextDynamicUsageError(error)) throw error;
+    logDataError(`${table}.count`, error);
+    return { data: 0, error: `${VI_ERROR} (${table}: ${error.message})` };
+  }
   return { data: count ?? 0, error: null };
 }
 
@@ -469,6 +496,20 @@ async function getOperationsDataFromRpc() {
   }
 
   const payload = (data ?? {}) as Record<string, unknown>;
+  const hasExpectedPayloadShape =
+    Array.isArray(payload.seasons) &&
+    Array.isArray(payload.people) &&
+    Array.isArray(payload.mentees) &&
+    Array.isArray(payload.matches) &&
+    Array.isArray(payload.recaps) &&
+    Array.isArray(payload.events) &&
+    Array.isArray(payload.eventParticipations);
+
+  if (!hasExpectedPayloadShape) {
+    console.warn("[operations] get_operations_dashboard_data returned an incompatible payload shape; using temporary raw-read fallback.");
+    return null;
+  }
+
   console.info("[operations] get_operations_dashboard_data RPC used.");
   const seasons = (payload.seasons ?? []) as Season[];
   const matches = (payload.matches ?? []) as Match[];
@@ -649,7 +690,8 @@ export async function getDashboardData() {
     mentees,
     applications,
     matches,
-    seasons
+    seasons,
+    recaps
   ] = await Promise.all([
     countTable("people"),
     countTable("mentor_profiles"),
@@ -661,8 +703,9 @@ export async function getDashboardData() {
     selectTable<MentorProfile>("mentor_profiles", "id,person_id,mentor_code,bio_url,company_current,title_current"),
     selectTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code,school_code"),
     selectTable<Application>("applications", "id,final_status"),
-    selectTable<Match>("matches", "id,status,mentor_person_id,mentee_person_id"),
-    getSeasons()
+    selectTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
+    getSeasons(),
+    selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,meeting_date,status")
   ]);
   const duplicateEmails = { data: getDuplicateEmailCountFromRows(people.data), error: people.error };
   const activeMissing = await countTable("matches", (q) => q.eq("status", "active").or("mentor_person_id.is.null,mentee_person_id.is.null"));
@@ -674,6 +717,7 @@ export async function getDashboardData() {
     applications,
     matches,
     seasons,
+    recaps,
     counts: {
       people: totalPeople,
       mentors: totalMentors,
