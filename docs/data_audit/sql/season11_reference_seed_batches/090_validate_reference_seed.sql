@@ -1,4 +1,4 @@
-﻿-- Season 11 Staging Reference Seed Batch Pack
+-- Season 11 Staging Reference Seed Batch Pack
 -- REVIEW ONLY. STAGING ONLY. DO NOT RUN ON PRODUCTION.
 --
 -- Contains sensitive MVP reference seed data. Keep local and do not commit unless explicitly approved.
@@ -95,12 +95,6 @@ BEGIN
   END IF;
 END $$;
 
-DROP TABLE IF EXISTS pg_temp._season11_apply_counts;
-CREATE TEMP TABLE _season11_apply_counts (
-  metric text PRIMARY KEY,
-  row_count int NOT NULL
-) ON COMMIT DROP;
-
 DROP TABLE IF EXISTS pg_temp._season11_apply_column_plan;
 CREATE TEMP TABLE _season11_apply_column_plan (
   table_name text PRIMARY KEY,
@@ -172,8 +166,6 @@ BEGIN
   $sql$, v_columns, v_selects, v_update_set)
   INTO v_count;
 
-  INSERT INTO pg_temp._season11_apply_counts(metric, row_count)
-  VALUES ('people_upserted', v_count);
 
   INSERT INTO pg_temp._season11_apply_column_plan(table_name, target_columns)
   VALUES ('people', v_columns);
@@ -240,8 +232,6 @@ BEGIN
   $sql$, v_columns, v_selects, v_update_set)
   INTO v_count;
 
-  INSERT INTO pg_temp._season11_apply_counts(metric, row_count)
-  VALUES ('mentor_profiles_upserted', v_count);
 
   INSERT INTO pg_temp._season11_apply_column_plan(table_name, target_columns)
   VALUES ('mentor_profiles', v_columns);
@@ -303,8 +293,6 @@ BEGIN
   $sql$, v_columns, v_selects, v_update_set)
   INTO v_count;
 
-  INSERT INTO pg_temp._season11_apply_counts(metric, row_count)
-  VALUES ('mentee_profiles_upserted', v_count);
 
   INSERT INTO pg_temp._season11_apply_column_plan(table_name, target_columns)
   VALUES ('mentee_profiles', v_columns);
@@ -367,8 +355,6 @@ BEGIN
   $sql$, v_columns, v_selects, v_update_set)
   INTO v_count;
 
-  INSERT INTO pg_temp._season11_apply_counts(metric, row_count)
-  VALUES ('uehm_s11_matches_upserted', v_count);
 
   INSERT INTO pg_temp._season11_apply_column_plan(table_name, target_columns)
   VALUES ('matches', v_columns);
@@ -379,11 +365,7 @@ SELECT table_name, target_columns
 FROM pg_temp._season11_apply_column_plan
 ORDER BY table_name;
 
-SELECT
-  (SELECT row_count FROM pg_temp._season11_apply_counts WHERE metric = 'people_upserted') AS people_upserted,
-  (SELECT row_count FROM pg_temp._season11_apply_counts WHERE metric = 'mentor_profiles_upserted') AS mentor_profiles_upserted,
-  (SELECT row_count FROM pg_temp._season11_apply_counts WHERE metric = 'mentee_profiles_upserted') AS mentee_profiles_upserted,
-  (SELECT row_count FROM pg_temp._season11_apply_counts WHERE metric = 'uehm_s11_matches_upserted') AS uehm_s11_matches_upserted;
+
 
 -- Validation summary: expected all counts to match MVP export row counts.
 WITH target_season AS (
