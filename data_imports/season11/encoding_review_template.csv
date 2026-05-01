@@ -1,0 +1,4 @@
+record_id,entity_type,corrupted_value,corrected_value,matching_key,confidence,review_status
+00000000-0000-0000-0000-000000000000,people,HoĂ ng BĂch Thá»§y,Hoàng Bích Thủy,hoangbichthuy@example.com,high,pending
+00000000-0000-0000-0000-000000000000,people,Nguyá»…n ÄĂ¬nh TuĂ¢n,Nguyễn Đình Tuân,nguyendinhtuan@example.com,high,pending
+00000000-0000-0000-0000-000000000000,people,Äá»— KhĂ¡nh Linh,Đỗ Khánh Linh,dokhanhlinh@example.com,high,pending
