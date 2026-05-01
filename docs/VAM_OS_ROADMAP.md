@@ -1,66 +1,39 @@
-# VAM OS Roadmap
+# VAM OS Roadmap & Execution Plan
 
-## Phase 0: Data Import and Admin Read-Only MVP — Completed
+## Context
+Production core dashboard is now working.
+March 2026 closed-month data has been rolled out:
+- `season_monthly_kpis` 2026-03 = 271 / 224
+- March clean recaps imported = 236
+- Dashboard and Operations now load production data
+- RPC `match_status` enum issue has been fixed
 
-- Cleaned and imported core Season 11 data.
-- Built read-only Admin Portal MVP.
-- Connected Supabase production data.
-- Implemented Dashboard, People, Mentors, Mentees, Applications, Matches, Person Detail, Match Detail, Application Detail, and Data Issues.
-- Added display cleanup and operational summaries.
+**Remaining issue:**
+- `/admin/users` and `/admin` workflow show Invalid API key
+- Likely missing or wrong `SUPABASE_SERVICE_ROLE_KEY` in Vercel production env
 
-## Phase 1: Stabilize and Deploy Internal Admin Portal
+---
 
-- Complete QA checklist.
-- Deploy internal preview.
-- Gather feedback from VAM core team.
-- Fix critical usability and data review issues.
-- Add basic operational documentation.
+## PHASE A — Production Stabilization
+**Goal:** Stabilize the production environment and ensure all administrative and tracking workflows are functional.
+*See [Production Stabilization Checklist](PRODUCTION_STABILIZATION_CHECKLIST.md)*
 
-## Phase 2: Edit/Update Profile and Issue Resolution Workflow
+## PHASE B — Monthly Operations Workflow
+**Goal:** Establish a rigorous, predictable monthly rhythm for data collection, quality assurance, and KPI generation.
+*See [Monthly Operations SOP](MONTHLY_OPERATIONS_SOP.md)*
 
-- Add authenticated admin access.
-- Add safe edit forms for selected fields.
-- Add issue statuses, reviewer notes, and resolution workflow.
-- Add audit trail for edits.
-- Add export/import support for review workflows.
+## PHASE C — Admin Correction Workflow
+**Goal:** Provide clear protocols and tools for administrators to rectify data discrepancies and manage ongoing issues.
+*See [Admin Correction Workflow](ADMIN_CORRECTION_WORKFLOW.md)*
 
-## Phase 3: Event Management and RSVP
+## PHASE D — Event & Activity Tracking
+**Goal:** Standardize the management of events, training sessions, and participant engagement.
+*See [Event & Activity Tracking Blueprint](EVENT_ACTIVITY_TRACKING_BLUEPRINT.md)*
 
-- Model events, sessions, workshops, and attendance.
-- Add RSVP tracking.
-- Add participant views by event.
-- Add attendance and follow-up reporting.
+## PHASE E — Season 12 Lifecycle
+**Goal:** Design the end-to-end system and process flow for launching, managing, and transitioning into Season 12.
+*See [Season 12 Lifecycle Blueprint](SEASON_12_LIFECYCLE_BLUEPRINT.md)*
 
-## Phase 4: Mentor/Mentee Login Portal
-
-- Add mentor and mentee authentication.
-- Add self-service profile review.
-- Add limited update workflows.
-- Add personal match/session dashboards.
-
-## Phase 5: Session, Recap, Feedback Workflow
-
-- Track mentoring sessions.
-- Capture recaps and action items.
-- Collect mentor/mentee feedback.
-- Monitor relationship health and intervention signals.
-
-## Phase 6: Email Automation and Notifications
-
-- Add template-based email notifications.
-- Notify mentors/mentees about matches, sessions, RSVP, and reminders.
-- Add delivery status and resend workflow.
-
-## Phase 7: Role-Based Access, RLS, Audit Log
-
-- Design admin, core team, mentor, mentee, and reviewer roles.
-- Enable Supabase RLS policies.
-- Add audit logging for sensitive reads and all writes.
-- Add production security review.
-
-## Phase 8: AI Matching/Support
-
-- Add AI-assisted matching review.
-- Add profile summarization.
-- Add data quality suggestions.
-- Add admin copilot for search, triage, and communication drafting.
+## PHASE F — Environment Safety System
+**Goal:** Implement strict deployment and environmental guardrails to prevent data loss or unauthorized access in production.
+*See [Environment Safety Checklist](ENVIRONMENT_SAFETY_CHECKLIST.md)*
