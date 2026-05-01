@@ -313,7 +313,7 @@ export default async function DashboardPage() {
         ) : null}
       </div>
 
-      {process.env.NODE_ENV === "development" || true ? (
+      {process.env.NODE_ENV === "development" ? (
         <div className="mb-4 rounded-md bg-slate-900 p-4 text-xs font-mono text-emerald-400 opacity-75 hover:opacity-100 transition-opacity">
           <div>[DEBUG DIAGNOSTICS]</div>
           <div>homeOfficialClosedMonth: {officialClosedMonth ?? "null"}</div>

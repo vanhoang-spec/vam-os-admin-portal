@@ -33,7 +33,7 @@ Because `app/page.tsx` was still pulling raw client-side fetched data, it silent
 
 ## Manual QA Checklist (Post-Redeploy)
 - [ ] Hard refresh `/`.
-- [ ] Look at the `[DEBUG DIAGNOSTICS]` block. Verify `homeOfficialClosedMonth` is `2026-03`.
+- [ ] Ensure the `[DEBUG DIAGNOSTICS]` block is hidden in staging/production (it is now behind a `process.env.NODE_ENV === "development"` flag).
 - [ ] Verify the label explicitly states `Tháng đã chốt: 2026-03`.
 - [ ] Verify `Số recap tháng này = 271`.
 - [ ] Verify `Mentee active tháng này = 224`.
