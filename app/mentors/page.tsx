@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import { getMatches, getMentorProfiles, getPeople, keyById } from "@/lib/data";
 import { Match, MentorProfile, Person } from "@/lib/types";
 import { displayOptional, displayText } from "@/lib/utils";
@@ -41,7 +44,8 @@ function vamSeniorityDisplay(mentor: MentorProfile, mentorMatches: Match[]) {
 }
 
 export default async function MentorsPage() {
-  const [mentors, people, matches] = await Promise.all([getMentorProfiles(), getPeople(), getMatches()]);
+  const [mentors, people, matches, adminUser] = await Promise.all([getMentorProfiles(), getPeople(), getMatches(), getCurrentAdminUser()]);
+  const allowCreate = canEditRecaps(adminUser);
   const peopleById = keyById(people.data);
   const matchesByMentor = new Map<string, Match[]>();
   for (const match of matches.data) {
@@ -86,6 +90,13 @@ export default async function MentorsPage() {
   return (
     <>
       <PageHeader title="Mentors" description="Hồ sơ mentor đã được import vào VAM OS." />
+      {allowCreate ? (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Link href="/mentors/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+            Tạo mentor mới
+          </Link>
+        </div>
+      ) : null}
       <ErrorBox message={mentors.error || people.error || matches.error} />
       <FilterableTable
         rows={rows}

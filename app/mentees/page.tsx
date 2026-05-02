@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import { getMatches, getMenteeProfiles, getMentorProfiles, getPeople, keyById } from "@/lib/data";
 import { Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayOptional, displayText } from "@/lib/utils";
@@ -30,7 +33,8 @@ function statusRank(match: Match) {
 }
 
 export default async function MenteesPage() {
-  const [mentees, people, mentors, matches] = await Promise.all([getMenteeProfiles(), getPeople(), getMentorProfiles(), getMatches()]);
+  const [mentees, people, mentors, matches, adminUser] = await Promise.all([getMenteeProfiles(), getPeople(), getMentorProfiles(), getMatches(), getCurrentAdminUser()]);
+  const allowCreate = canEditRecaps(adminUser);
   const peopleById = keyById(people.data);
   const mentorProfilesByPersonId = new Map(mentors.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
   const matchesByMentee = new Map<string, Match[]>();
@@ -84,6 +88,13 @@ export default async function MenteesPage() {
   return (
     <>
       <PageHeader title="Mentees" description="Hồ sơ mentee và thông tin học tập." />
+      {allowCreate ? (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Link href="/mentees/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+            Tạo mentee mới
+          </Link>
+        </div>
+      ) : null}
       <ErrorBox message={mentees.error || people.error || mentors.error || matches.error} />
       <FilterableTable
         rows={rows}
