@@ -6,14 +6,20 @@ import type {
   Event,
   EventParticipation,
   FounderIntelligenceDashboard,
+  FunctionArea,
+  Industry,
   JsonRecord,
   Match,
   MenteeProfile,
+  MentorFunctionAreaLink,
+  MentorIndustryLink,
   MentorProfile,
+  MentorProgramParticipation,
   MentoringRecap,
   OperationalTeamAssignment,
   OperationsWorkflowData,
   Person,
+  Program,
   Season
 } from "@/lib/types";
 
@@ -249,6 +255,36 @@ export async function getEvents() {
 
 export async function getSeasons() {
   return selectTable<Season>("seasons");
+}
+
+export async function getPrograms() {
+  return selectAllTable<Program>("programs", "id,code,name,is_active");
+}
+
+export async function getIndustries() {
+  return selectAllTable<Industry>("industries", "id,code,name,is_active");
+}
+
+export async function getFunctionAreas() {
+  return selectAllTable<FunctionArea>("function_areas", "id,code,name,is_active");
+}
+
+export async function getMentorProgramParticipations() {
+  return selectAllTable<MentorProgramParticipation>(
+    "mentor_program_participations",
+    "id,mentor_profile_id,program_id,status,role"
+  );
+}
+
+export async function getMentorIndustryLinks() {
+  return selectAllTable<MentorIndustryLink>("mentor_industries", "mentor_profile_id,industry_id");
+}
+
+export async function getMentorFunctionAreaLinks() {
+  return selectAllTable<MentorFunctionAreaLink>(
+    "mentor_function_areas",
+    "mentor_profile_id,function_area_id"
+  );
 }
 
 export async function getRolesForPerson(personId: string) {

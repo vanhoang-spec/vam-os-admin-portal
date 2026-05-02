@@ -68,6 +68,45 @@ export type Season = JsonRecord & {
   name: string | null;
 };
 
+export type Program = JsonRecord & {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+};
+
+export type Industry = JsonRecord & {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+};
+
+export type FunctionArea = JsonRecord & {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+};
+
+export type MentorProgramParticipation = JsonRecord & {
+  id: string;
+  mentor_profile_id: string;
+  program_id: string;
+  status: string | null;
+  role: string | null;
+};
+
+export type MentorIndustryLink = JsonRecord & {
+  mentor_profile_id: string;
+  industry_id: string;
+};
+
+export type MentorFunctionAreaLink = JsonRecord & {
+  mentor_profile_id: string;
+  function_area_id: string;
+};
+
 export type Event = JsonRecord & {
   id: string;
   legacy_event_temp_id?: string | null;

@@ -6,19 +6,25 @@ import {
   getApplications,
   getEventParticipationsByPersonId,
   getEvents,
+  getFunctionAreas,
+  getIndustries,
   getMatches,
   getMenteeProfiles,
   getMentoringRecapsByMenteePersonId,
   getMentoringRecapsByMentorPersonId,
+  getMentorFunctionAreaLinks,
+  getMentorIndustryLinks,
   getMentorProfiles,
+  getMentorProgramParticipations,
   getOperationalTeamAssignmentsByPerson,
   getPeople,
   getPerson,
+  getPrograms,
   getRolesForPerson,
   getSeasons,
   keyById
 } from "@/lib/data";
-import type { Event, EventParticipation, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Season } from "@/lib/types";
+import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 
 type MentorMenteeRow = Match & {
@@ -156,7 +162,13 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     mentorRecaps,
     eventParticipations,
     events,
-    operationalAssignments
+    operationalAssignments,
+    programs,
+    industries,
+    functionAreas,
+    programLinks,
+    industryLinks,
+    functionLinks
   ] = await Promise.all([
     getCurrentAdminUser(),
     getPerson(params.id),
@@ -171,7 +183,13 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     getMentoringRecapsByMentorPersonId(params.id),
     getEventParticipationsByPersonId(params.id),
     getEvents(),
-    getOperationalTeamAssignmentsByPerson(params.id)
+    getOperationalTeamAssignmentsByPerson(params.id),
+    getPrograms(),
+    getIndustries(),
+    getFunctionAreas(),
+    getMentorProgramParticipations(),
+    getMentorIndustryLinks(),
+    getMentorFunctionAreaLinks()
   ]);
   const allowRecapEdit = canEditRecaps(adminUser);
   const personApplications = applications.data.filter((application) => application.person_id === params.id);
@@ -182,6 +200,30 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
   const menteeProfilesByPersonId = new Map(mentees.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
   const mentorProfile = mentorProfilesByPersonId.get(params.id);
   const menteeProfile = menteeProfilesByPersonId.get(params.id);
+  const programsById = new Map<string, Program>(programs.data.map((row) => [row.id, row]));
+  const industriesById = new Map<string, Industry>(industries.data.map((row) => [row.id, row]));
+  const functionAreasById = new Map<string, FunctionArea>(functionAreas.data.map((row) => [row.id, row]));
+  const mentorProgramTags = mentorProfile
+    ? programLinks.data
+        .filter((link) => link.mentor_profile_id === mentorProfile.id)
+        .map((link) => programsById.get(link.program_id))
+        .filter((row): row is Program => Boolean(row))
+        .sort((a, b) => a.name.localeCompare(b.name, "vi"))
+    : [];
+  const mentorIndustryTags = mentorProfile
+    ? industryLinks.data
+        .filter((link) => link.mentor_profile_id === mentorProfile.id)
+        .map((link) => industriesById.get(link.industry_id))
+        .filter((row): row is Industry => Boolean(row))
+        .sort((a, b) => a.name.localeCompare(b.name, "vi"))
+    : [];
+  const mentorFunctionTags = mentorProfile
+    ? functionLinks.data
+        .filter((link) => link.mentor_profile_id === mentorProfile.id)
+        .map((link) => functionAreasById.get(link.function_area_id))
+        .filter((row): row is FunctionArea => Boolean(row))
+        .sort((a, b) => a.name.localeCompare(b.name, "vi"))
+    : [];
   const mentorMatches = matches.data.filter((match) => match.mentor_person_id === params.id);
   const menteeMatches = matches.data.filter((match) => match.mentee_person_id === params.id);
   const menteesForMentor: MentorMenteeRow[] = mentorMatches.map((match) => ({
@@ -309,9 +351,61 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
           <SimpleTable rows={roles.data} columns={[{ key: "role", label: "role" }, { key: "status", label: "status" }, { key: "notes", label: "notes" }]} />
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentor profile</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-vam-ink">Mentor profile</h2>
+            {mentorProfile && allowRecapEdit ? (
+              <Link
+                href={`/mentors/${mentorProfile.id}/edit`}
+                className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1.5 text-xs font-medium text-white hover:bg-vam-green/90"
+              >
+                Sửa hồ sơ
+              </Link>
+            ) : null}
+          </div>
           {mentorProfile ? (
             <div className="grid gap-3">
+              <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+                <div className="text-xs font-medium uppercase text-slate-500">Chương trình mentoring</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {mentorProgramTags.length === 0 ? (
+                    <span className="text-xs text-slate-500">Chưa gán chương trình.</span>
+                  ) : (
+                    mentorProgramTags.map((row) => (
+                      <span key={row.id} className="inline-flex rounded bg-vam-mint px-2 py-0.5 text-xs font-medium text-vam-green">
+                        {row.name}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+                <div className="text-xs font-medium uppercase text-slate-500">Ngành nghề</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {mentorIndustryTags.length === 0 ? (
+                    <span className="text-xs text-slate-500">Chưa có ngành.</span>
+                  ) : (
+                    mentorIndustryTags.map((row) => (
+                      <span key={row.id} className="inline-flex rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
+                        {row.name}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+                <div className="text-xs font-medium uppercase text-slate-500">Chức năng chuyên môn</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {mentorFunctionTags.length === 0 ? (
+                    <span className="text-xs text-slate-500">Chưa có chức năng.</span>
+                  ) : (
+                    mentorFunctionTags.map((row) => (
+                      <span key={row.id} className="inline-flex rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                        {row.name}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
               <DetailGrid
                 rows={[
                   ["mentor_code", mentorProfile.mentor_code],
