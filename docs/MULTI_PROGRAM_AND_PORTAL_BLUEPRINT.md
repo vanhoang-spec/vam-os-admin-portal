@@ -1,4 +1,4 @@
-# PHASE G: Multi-Program Architecture & Mentor/Mentee Portal Blueprint
+# PHASE H: Multi-Program Architecture & Mentor/Mentee Portal Blueprint
 
 This blueprint outlines the vision and requirements for scaling VAM OS into a multi-program platform and introducing an external-facing portal for mentors and mentees.
 

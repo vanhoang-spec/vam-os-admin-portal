@@ -5,17 +5,18 @@ This blueprint governs the end-to-end management of a new season (Season 12), fr
 ## 1. Create New Season
 - **System Initialization**: Define Season 12 parameters in the database under a specific `program_id` (e.g., UEH Mentoring, Hanoi Alumni Mentoring), including start dates, target KPIs, and configuration settings distinct from Season 11.
 
-## 2. Import Applications
-- **Data Intake**: Facilitate the secure import of new mentor and mentee applications via CSV or direct form API integration.
-- **Validation**: Ensure all required fields are present before accepting the records into the staging area.
+## 2. Intake Applications
+- **Application Portal**: Accept applications via native VAM OS forms (e.g., `/apply/[program]/[season]/mentor`). See [Application Portal Blueprint](APPLICATION_PORTAL_AND_INTAKE_BLUEPRINT.md).
+- **Data Intake**: As a fallback, facilitate the secure import of new mentor and mentee applications via CSV.
+- **Validation**: Ensure all required fields are present before creating the `new` application record in the staging area.
 
 ## 3. Classify Mentor/Mentee
 - **Categorization**: Route applications into respective mentor or mentee pools based on form responses or predefined criteria.
 - **Tagging**: Apply relevant tags (e.g., industry, experience level) to aid in the matching process.
 
 ## 4. Review Workflow
-- **Application Statuses**: Applications transition through states: `Pending` -> `Accepted` / `Rejected`.
-- **Interface**: Provide a dedicated review screen for the core team to evaluate applications and append internal notes.
+- **Application Statuses**: Applications transition through detailed states: `new` -> `reviewed` -> `interviewing` -> `accepted` / `rejected` / `waitlisted`.
+- **Interface**: Provide a dedicated review screen for the core team to evaluate applications, append internal notes, and manage duplicates before converting them to profiles.
 
 ## 5. Matching Workflow
 - **Drafting**: Create proposed mentor-mentee pairs in a sandbox environment without notifying users.
