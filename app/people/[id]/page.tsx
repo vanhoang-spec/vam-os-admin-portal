@@ -429,7 +429,17 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
           )}
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentee profile</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-vam-ink">Mentee profile</h2>
+            {menteeProfile && allowRecapEdit ? (
+              <Link
+                href={`/mentees/${menteeProfile.id}/edit`}
+                className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1.5 text-xs font-medium text-white hover:bg-vam-green/90"
+              >
+                Sửa hồ sơ mentee
+              </Link>
+            ) : null}
+          </div>
           {menteeProfile ? (
             <DetailGrid
               rows={[

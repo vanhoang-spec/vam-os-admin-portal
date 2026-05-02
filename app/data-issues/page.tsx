@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import { getApplications, getMatches, getMenteeProfiles, getMentorProfiles, keyById, selectAllRows } from "@/lib/data";
 import type { Application, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
@@ -96,13 +98,15 @@ function IssueSection<T>({
 
 export default async function DataIssuesPage({ searchParams }: { searchParams?: { issue?: string } }) {
   const selectedIssue = isIssueKey(searchParams?.issue) ? searchParams.issue : null;
-  const [people, applications, mentees, mentors, matches] = await Promise.all([
+  const [people, applications, mentees, mentors, matches, adminUser] = await Promise.all([
     selectAllRows<Person>("people", "id,full_name,email_primary,phone_primary,source_sheets"),
     getApplications(),
     getMenteeProfiles(),
     getMentorProfiles(),
-    getMatches()
+    getMatches(),
+    getCurrentAdminUser()
   ]);
+  const allowEdit = canEditRecaps(adminUser);
   const peopleById = keyById(people.data);
   const activeMatches = matches.data.filter((match) => statusKey(match.status) === "active");
   const activeMenteeIds = new Set(activeMatches.map((match) => match.mentee_person_id).filter(Boolean));
@@ -214,9 +218,11 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
           <p className="text-xs italic text-slate-500 max-w-2xl">
             * Use this form when an admin needs to manually add a missing mentoring recap. This action should use recap_source = admin_input and be audit logged.
           </p>
-          <Link href="/recaps/create" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
-            Thêm recap thủ công
-          </Link>
+          {allowEdit ? (
+            <Link href="/recaps/create" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+              Thêm recap thủ công
+            </Link>
+          ) : null}
         </div>
       </div>
       {selectedIssue ? (

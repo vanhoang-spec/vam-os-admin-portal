@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData } from "@/lib/data";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
@@ -67,7 +69,8 @@ type EventRow = Event & {
 };
 
 export default async function MonthlyOperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
-  const data = await getOperationsData();
+  const [data, adminUser] = await Promise.all([getOperationsData(), getCurrentAdminUser()]);
+  const allowEdit = canEditRecaps(adminUser);
   const errors = [
     data.seasons.error,
     data.recaps.error,
@@ -227,9 +230,11 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
             Recap &quot;valid&quot; gồm status: submitted hoặc needs_review (theo định nghĩa hiện hành của Operations).
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link href="/recaps/create" className="inline-flex rounded-md border border-vam-line bg-white px-3 py-2 text-xs font-medium text-vam-green hover:bg-vam-mint">
-              Tạo recap thủ công
-            </Link>
+            {allowEdit ? (
+              <Link href="/recaps/create" className="inline-flex rounded-md border border-vam-line bg-white px-3 py-2 text-xs font-medium text-vam-green hover:bg-vam-mint">
+                Tạo recap thủ công
+              </Link>
+            ) : null}
             <Link href={`/operations?month=${encodeURIComponent(selectedMonth)}`} className="inline-flex rounded-md border border-vam-line bg-white px-3 py-2 text-xs font-medium text-vam-green hover:bg-vam-mint">
               Mở Operations chi tiết
             </Link>
@@ -260,9 +265,11 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
             <Link href="/events" className="inline-flex rounded-md border border-vam-line bg-white px-3 py-2 text-xs font-medium text-vam-green hover:bg-vam-mint">
               Quản lý sự kiện
             </Link>
-            <Link href="/events/create" className="inline-flex rounded-md border border-vam-line bg-white px-3 py-2 text-xs font-medium text-vam-green hover:bg-vam-mint">
-              Tạo sự kiện
-            </Link>
+            {allowEdit ? (
+              <Link href="/events/create" className="inline-flex rounded-md border border-vam-line bg-white px-3 py-2 text-xs font-medium text-vam-green hover:bg-vam-mint">
+                Tạo sự kiện
+              </Link>
+            ) : null}
           </div>
         </Card>
       </section>

@@ -3,7 +3,7 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { isValidUuid } from "@/lib/events";
-import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 const SAFE_ERROR = "Không thể thực hiện tác vụ. Vui lòng kiểm tra cấu hình Supabase và server logs.";
@@ -70,6 +70,22 @@ export type CreateMenteeInput = {
   career_interests?: unknown;
 };
 
+export type UpdateMenteeInput = {
+  mentee_profile_id: string;
+  full_name?: unknown;
+  email?: unknown;
+  phone?: unknown;
+  gender?: unknown;
+  mentee_code?: unknown;
+  school_code?: unknown;
+  school_raw?: unknown;
+  major?: unknown;
+  class_cohort?: unknown;
+  mssv?: unknown;
+  year_of_study?: unknown;
+  career_interests?: unknown;
+};
+
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string; details?: string };
   console.error("[people-create]", scope, {
@@ -100,7 +116,26 @@ function cleanInt(value: unknown) {
 
 function clientResult() {
   const client = getSupabaseServiceRoleClient();
-  if (!client) return { client: null, error: "Thiếu SUPABASE_SERVICE_ROLE_KEY trên server." as string | null };
+  if (!client) {
+    // DEBUG (temporary): expose env status so we know exactly why
+    console.error("[people-create] service-role client is null", getSupabaseServiceRoleEnvStatus());
+    return { client: null, error: "Thiếu SUPABASE_SERVICE_ROLE_KEY trên server." as string | null };
+  }
+  // DEBUG (temporary): warn if the service role key is mistakenly set to anon
+  const envStatus = getSupabaseServiceRoleEnvStatus();
+  if (envStatus.sameAsAnonKey) {
+    console.error(
+      "[people-create] SUPABASE_SERVICE_ROLE_KEY equals anon key — RLS will silently block writes",
+      envStatus
+    );
+    return {
+      client: null,
+      error:
+        "Cấu hình sai: SUPABASE_SERVICE_ROLE_KEY đang trùng với anon key. RLS sẽ chặn ghi. Vui lòng đặt service role key thật." as
+          | string
+          | null
+    };
+  }
   return { client, error: null as string | null };
 }
 
@@ -480,13 +515,16 @@ export async function updateMentorProfile(input: UpdateMentorInput): Promise<Mut
   }
   if (Object.prototype.hasOwnProperty.call(input, "email")) {
     const newEmail = cleanEmail(input.email);
-    if (newEmail && newEmail !== (personBefore.email_primary ?? "").toLowerCase()) {
-      const dup = await findPersonByEmail(client, newEmail);
-      if (dup && dup.id !== personBefore.id) {
-        return { ok: false, message: `Email "${newEmail}" đã được dùng bởi người khác.` };
+    // Only update email if a non-empty value is submitted — people.email_primary is NOT NULL
+    if (newEmail) {
+      if (newEmail !== (personBefore.email_primary ?? "").toLowerCase()) {
+        const dup = await findPersonByEmail(client, newEmail);
+        if (dup && dup.id !== personBefore.id) {
+          return { ok: false, message: `Email "${newEmail}" đã được dùng bởi người khác.` };
+        }
       }
+      personUpdates.email_primary = newEmail;
     }
-    personUpdates.email_primary = newEmail;
   }
   if (Object.prototype.hasOwnProperty.call(input, "phone")) personUpdates.phone_primary = clean(input.phone);
   if (Object.prototype.hasOwnProperty.call(input, "gender")) personUpdates.gender = clean(input.gender);
@@ -503,7 +541,7 @@ export async function updateMentorProfile(input: UpdateMentorInput): Promise<Mut
       log("update person failed", personError);
       return { ok: false, message: `${SAFE_ERROR} (people update: ${personError.message})` };
     }
-    personAfter = updatedPerson as Person;
+    personAfter = (updatedPerson as Person) ?? personBefore;
   }
 
   const mentorUpdates: JsonRecord = {
@@ -528,6 +566,10 @@ export async function updateMentorProfile(input: UpdateMentorInput): Promise<Mut
   if (updateError) {
     log("update mentor_profile failed", updateError);
     return { ok: false, message: `${SAFE_ERROR} (mentor_profiles update: ${updateError.message})` };
+  }
+  if (!after) {
+    log("update mentor_profile returned no row", { mentorProfileId });
+    return { ok: false, message: "Không tìm thấy hồ sơ mentor khi lưu. Vui lòng thử lại." };
   }
 
   const linkErrors: string[] = [];
@@ -613,5 +655,143 @@ export async function createMenteeProfile(input: CreateMenteeInput): Promise<Mut
     ok: true,
     message: person.created ? "Đã tạo person và hồ sơ mentee mới." : "Đã liên kết người sẵn có và tạo hồ sơ mentee.",
     data: { mentee_profile: data, person: person.person, person_created: person.created }
+  };
+}
+
+export async function updateMenteeProfile(input: UpdateMenteeInput): Promise<MutationResult> {
+  const access = await requireAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const menteeProfileId = String(input.mentee_profile_id ?? "").trim();
+  // DEBUG (temporary)
+  console.log("[updateMenteeProfile] called", {
+    menteeProfileId,
+    hasMajor: Object.prototype.hasOwnProperty.call(input, "major"),
+    rawMajor: input.major
+  });
+  if (!isValidUuid(menteeProfileId)) {
+    return { ok: false, message: "ID hồ sơ mentee không hợp lệ." };
+  }
+
+  const { data: before, error: beforeError } = await client
+    .from("mentee_profiles")
+    .select("*")
+    .eq("id", menteeProfileId)
+    .maybeSingle();
+  if (beforeError) {
+    log("load mentee_profile failed", beforeError);
+    return { ok: false, message: `${SAFE_ERROR} (mentee_profiles: ${beforeError.message})` };
+  }
+  if (!before) return { ok: false, message: "Không tìm thấy hồ sơ mentee." };
+  // DEBUG (temporary)
+  console.log("[updateMenteeProfile] before row", { id: before.id, major: before.major, school_raw: before.school_raw });
+
+  const personBeforeRes = await client
+    .from("people")
+    .select("id,full_name,email_primary,phone_primary,gender")
+    .eq("id", before.person_id)
+    .maybeSingle();
+  if (personBeforeRes.error || !personBeforeRes.data) {
+    log("load person failed", personBeforeRes.error);
+    return { ok: false, message: "Không tìm thấy person liên kết với mentee." };
+  }
+  const personBefore = personBeforeRes.data as Person;
+
+  const personUpdates: JsonRecord = {};
+  if (Object.prototype.hasOwnProperty.call(input, "full_name")) {
+    const fullName = clean(input.full_name);
+    if (!fullName) return { ok: false, message: "Họ tên không được để trống." };
+    personUpdates.full_name = fullName;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "email")) {
+    const newEmail = cleanEmail(input.email);
+    // Only update email if a non-empty value is submitted — people.email_primary is NOT NULL
+    if (newEmail) {
+      if (newEmail !== (personBefore.email_primary ?? "").toLowerCase()) {
+        const dup = await findPersonByEmail(client, newEmail);
+        if (dup && dup.id !== personBefore.id) {
+          return { ok: false, message: `Email "${newEmail}" đã được dùng bởi người khác.` };
+        }
+      }
+      personUpdates.email_primary = newEmail;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "phone")) personUpdates.phone_primary = clean(input.phone);
+  if (Object.prototype.hasOwnProperty.call(input, "gender")) personUpdates.gender = clean(input.gender);
+
+  let personAfter: Person = personBefore;
+  if (Object.keys(personUpdates).length) {
+    const { data: updatedPerson, error: personError } = await client
+      .from("people")
+      .update(personUpdates)
+      .eq("id", personBefore.id)
+      .select("*")
+      .maybeSingle();
+    if (personError) {
+      log("update person failed", personError);
+      return { ok: false, message: `${SAFE_ERROR} (people update: ${personError.message})` };
+    }
+    personAfter = (updatedPerson as Person) ?? personBefore;
+  }
+
+  const yearOfStudy = clean(input.year_of_study);
+  const careerInterests = clean(input.career_interests);
+
+  const menteeUpdates: JsonRecord = {
+    mentee_code: clean(input.mentee_code),
+    school_code: clean(input.school_code),
+    school_raw: clean(input.school_raw),
+    major: clean(input.major),
+    class_cohort: clean(input.class_cohort),
+    mssv: clean(input.mssv)
+  };
+  // DEBUG (temporary)
+  console.log("[updateMenteeProfile] about to update", { menteeProfileId, menteeUpdates });
+
+  const { data: after, error: updateError } = await client
+    .from("mentee_profiles")
+    .update(menteeUpdates)
+    .eq("id", menteeProfileId)
+    .select("*")
+    .maybeSingle();
+  // DEBUG (temporary)
+  console.log("[updateMenteeProfile] update result", {
+    menteeProfileId,
+    updateError: updateError ? { code: (updateError as any).code, message: updateError.message, details: (updateError as any).details } : null,
+    afterRow: after ? { id: (after as any).id, major: (after as any).major, school_raw: (after as any).school_raw } : null
+  });
+  if (updateError) {
+    log("update mentee_profile failed", updateError);
+    return { ok: false, message: `${SAFE_ERROR} (mentee_profiles update: ${updateError.message})` };
+  }
+  if (!after) {
+    log("update mentee_profile returned no row", { menteeProfileId });
+    return {
+      ok: false,
+      message:
+        "Không tìm thấy mentee để cập nhật. Có thể do RLS chặn UPDATE (kiểm tra SUPABASE_SERVICE_ROLE_KEY) hoặc id không khớp."
+    };
+  }
+
+  await writeAdminAudit(client, {
+    actionType: "update_mentee_profile",
+    afterData: {
+      mentee_profile_before: before,
+      mentee_profile_after: after,
+      person_before: personBefore,
+      person_after: personAfter
+    },
+    details:
+      yearOfStudy || careerInterests
+        ? { note: "year_of_study/career_interests audit-only — schema gap", year_of_study: yearOfStudy, career_interests: careerInterests }
+        : null
+  });
+
+  return {
+    ok: true,
+    message: "Đã cập nhật hồ sơ mentee.",
+    data: { mentee_profile: after, person: personAfter }
   };
 }
