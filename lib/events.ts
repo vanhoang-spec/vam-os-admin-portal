@@ -13,7 +13,7 @@ import {
   type RegistrationStatusValue
 } from "@/lib/event-constants";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import type { Event, EventParticipation, JsonRecord, Person, Season } from "@/lib/types";
+import type { Event, EventParticipation, JsonRecord, MenteeProfile, MentorProfile, Person, Season } from "@/lib/types";
 
 export type {
   AttendanceStatusValue,
@@ -41,6 +41,8 @@ export type EventDetailData = {
   participations: EventParticipation[];
   seasons: Season[];
   people: Person[];
+  mentorProfiles: MentorProfile[];
+  menteeProfiles: MenteeProfile[];
 };
 
 export type MutationResult = {
@@ -235,28 +237,31 @@ export async function getEventListData(): Promise<EventListData> {
 }
 
 export async function getEventDetailData(eventId: string): Promise<EventDetailData> {
+  const empty = { event: null, participations: [], seasons: [], people: [], mentorProfiles: [], menteeProfiles: [] };
   const { client, error } = clientResult();
-  if (!client) return { ok: false, error, event: null, participations: [], seasons: [], people: [] };
+  if (!client) return { ok: false, error, ...empty };
 
   const id = clean(eventId);
-  if (!id) return { ok: false, error: "Thiếu event id.", event: null, participations: [], seasons: [], people: [] };
+  if (!id) return { ok: false, error: "Thiếu event id.", ...empty };
   if (!isValidUuid(id)) {
-    return { ok: false, error: "ID sự kiện không hợp lệ.", event: null, participations: [], seasons: [], people: [] };
+    return { ok: false, error: "ID sự kiện không hợp lệ.", ...empty };
   }
 
-  const [eventRes, partsRes, seasonsRes, peopleRes] = await Promise.all([
+  const [eventRes, partsRes, seasonsRes, peopleRes, mentorsRes, menteesRes] = await Promise.all([
     client.from("events").select("id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes").eq("id", id).maybeSingle(),
     selectAll<EventParticipation>(client, "event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in"),
     selectAll<Season>(client, "seasons", "id,code,name"),
-    selectAll<Person>(client, "people", "id,full_name,email_primary")
+    selectAll<Person>(client, "people", "id,full_name,email_primary"),
+    selectAll<MentorProfile>(client, "mentor_profiles", "id,person_id,mentor_code,company_current,title_current"),
+    selectAll<MenteeProfile>(client, "mentee_profiles", "id,person_id,mentee_code,school_code,school_raw,major")
   ]);
 
   if (eventRes.error) {
     log("event load failed", eventRes.error);
-    return { ok: false, error: eventRes.error.message, event: null, participations: [], seasons: seasonsRes.data, people: peopleRes.data };
+    return { ok: false, error: eventRes.error.message, event: null, participations: [], seasons: seasonsRes.data, people: peopleRes.data, mentorProfiles: mentorsRes.data, menteeProfiles: menteesRes.data };
   }
 
-  const errors = [partsRes.error, seasonsRes.error, peopleRes.error].filter(Boolean);
+  const errors = [partsRes.error, seasonsRes.error, peopleRes.error, mentorsRes.error, menteesRes.error].filter(Boolean);
   const eventParticipations = partsRes.data.filter((row) => row.event_id === id);
   return {
     ok: !errors.length,
@@ -264,7 +269,9 @@ export async function getEventDetailData(eventId: string): Promise<EventDetailDa
     event: (eventRes.data as Event) ?? null,
     participations: eventParticipations,
     seasons: seasonsRes.data,
-    people: peopleRes.data
+    people: peopleRes.data,
+    mentorProfiles: mentorsRes.data,
+    menteeProfiles: menteesRes.data
   };
 }
 

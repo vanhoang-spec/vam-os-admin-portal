@@ -81,6 +81,8 @@ export default async function EventAttendancePage({ params }: { params: { id: st
           <AddParticipantForm
             eventId={detail.event.id}
             people={detail.people}
+            mentorProfiles={detail.mentorProfiles}
+            menteeProfiles={detail.menteeProfiles}
             existingPersonIds={existingPersonIds}
           />
         </Card>

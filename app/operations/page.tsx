@@ -372,6 +372,9 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
+        <Link href={`/operations/monthly?month=${encodeURIComponent(selectedMonth)}`} className="rounded-md border border-transparent bg-vam-ink px-4 py-3 text-sm font-medium text-white shadow-soft hover:bg-vam-ink/90">
+          Tổng quan tháng (CEO view)
+        </Link>
         <Link href="/operations/intelligence" className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
           Phân tích cộng đồng mentor/mentee
         </Link>
