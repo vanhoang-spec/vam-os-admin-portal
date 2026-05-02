@@ -128,6 +128,13 @@ function validateDate(value: string | null) {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUuid(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  return UUID_REGEX.test(value);
+}
+
 function parseDateTime(value: string | null): string | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -233,6 +240,9 @@ export async function getEventDetailData(eventId: string): Promise<EventDetailDa
 
   const id = clean(eventId);
   if (!id) return { ok: false, error: "Thiếu event id.", event: null, participations: [], seasons: [], people: [] };
+  if (!isValidUuid(id)) {
+    return { ok: false, error: "ID sự kiện không hợp lệ.", event: null, participations: [], seasons: [], people: [] };
+  }
 
   const [eventRes, partsRes, seasonsRes, peopleRes] = await Promise.all([
     client.from("events").select("id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes").eq("id", id).maybeSingle(),
@@ -303,6 +313,7 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   if (!client) return { ok: false, message: error ?? SAFE_ERROR };
   const id = clean(input.id);
   if (!id) return { ok: false, message: "Thiếu event id." };
+  if (!isValidUuid(id)) return { ok: false, message: "ID sự kiện không hợp lệ." };
 
   const { data: before, error: beforeError } = await client.from("events").select("*").eq("id", id).maybeSingle();
   if (beforeError) {
@@ -354,8 +365,10 @@ export async function addParticipation(input: ParticipationInput): Promise<Mutat
 
   const eventId = clean(input.event_id);
   if (!eventId) return { ok: false, message: "Thiếu event id." };
+  if (!isValidUuid(eventId)) return { ok: false, message: "ID sự kiện không hợp lệ." };
   const personId = clean(input.person_id);
   if (!personId) return { ok: false, message: "Thiếu person id." };
+  if (!isValidUuid(personId)) return { ok: false, message: "ID người tham gia không hợp lệ." };
 
   const role = validRole(input.role_at_event);
   if (!role) return { ok: false, message: "Vai trò không hợp lệ." };
@@ -434,6 +447,7 @@ export async function updateParticipation(input: ParticipationUpdateInput): Prom
 
   const id = clean(input.id);
   if (!id) return { ok: false, message: "Thiếu participation id." };
+  if (!isValidUuid(id)) return { ok: false, message: "ID người tham gia không hợp lệ." };
 
   const { data: before, error: beforeError } = await client.from("event_participations").select("*").eq("id", id).maybeSingle();
   if (beforeError) {
@@ -505,6 +519,7 @@ export async function removeParticipation(input: { id?: unknown; reason?: unknow
 
   const id = clean(input.id);
   if (!id) return { ok: false, message: "Thiếu participation id." };
+  if (!isValidUuid(id)) return { ok: false, message: "ID người tham gia không hợp lệ." };
 
   const { data: before, error: beforeError } = await client.from("event_participations").select("*").eq("id", id).maybeSingle();
   if (beforeError || !before) {

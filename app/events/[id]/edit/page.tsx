@@ -3,7 +3,7 @@ import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getSeasons } from "@/lib/data";
-import { getEventDetailData } from "@/lib/events";
+import { getEventDetailData, isValidUuid } from "@/lib/events";
 import { EventForm } from "../../event-form";
 
 export default async function EditEventPage({ params }: { params: { id: string } }) {
@@ -13,6 +13,18 @@ export default async function EditEventPage({ params }: { params: { id: string }
       <>
         <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được sửa sự kiện." />
         <ErrorBox message="Bạn không có quyền sửa sự kiện." />
+      </>
+    );
+  }
+
+  if (!isValidUuid(params.id)) {
+    return (
+      <>
+        <PageHeader title="ID sự kiện không hợp lệ" description="Đường dẫn không chứa UUID sự kiện hợp lệ." />
+        <ErrorBox message="ID sự kiện không hợp lệ. Vui lòng quay lại danh sách sự kiện và mở lại từ liên kết chính thức." />
+        <Link href="/events" className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          ← Danh sách sự kiện
+        </Link>
       </>
     );
   }

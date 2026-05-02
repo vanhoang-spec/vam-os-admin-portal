@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getEventDetailData } from "@/lib/events";
+import { getEventDetailData, isValidUuid } from "@/lib/events";
 import { displayText, formatDate } from "@/lib/utils";
 import { AddParticipantForm, ParticipationRow } from "./attendance-forms";
 
@@ -13,6 +13,18 @@ export default async function EventAttendancePage({ params }: { params: { id: st
       <>
         <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được quản lý tham gia sự kiện." />
         <ErrorBox message="Bạn không có quyền sử dụng chức năng này." />
+      </>
+    );
+  }
+
+  if (!isValidUuid(params.id)) {
+    return (
+      <>
+        <PageHeader title="ID sự kiện không hợp lệ" description="Đường dẫn không chứa UUID sự kiện hợp lệ." />
+        <ErrorBox message="ID sự kiện không hợp lệ. Vui lòng quay lại danh sách sự kiện và mở lại từ liên kết chính thức." />
+        <Link href="/events" className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          ← Danh sách sự kiện
+        </Link>
       </>
     );
   }

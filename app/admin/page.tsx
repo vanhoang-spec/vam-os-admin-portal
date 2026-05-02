@@ -4,7 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageWorkflow } from "@/lib/auth-constants";
 import { getAdminCorrectionData, type AdminActionItem, type AdminDataIssue } from "@/lib/admin-corrections";
 import { displayText, formatDate } from "@/lib/utils";
-import { ActionItemUpdateForm, AddManualRecapForm, CreateIssueActionForm, EditRecapInlineForm, QuickResolveForm } from "./admin-correction-forms";
+import { ActionItemUpdateForm, CreateIssueActionForm, EditRecapInlineForm, QuickResolveForm } from "./admin-correction-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +86,15 @@ function DataIssuesTab({ issues }: { issues: AdminDataIssue[] }) {
 
       <Card>
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Thêm recap manual</h2>
-        <AddManualRecapForm />
+        <p className="mb-3 text-sm text-slate-600">
+          Chức năng tạo recap thủ công đã được hợp nhất tại trang <strong>/recaps/create</strong> (giao diện tìm kiếm mentor/mentee và auto-detect match_id).
+        </p>
+        <Link
+          href="/recaps/create"
+          className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+        >
+          Mở trang Tạo mentoring recap
+        </Link>
       </Card>
 
       <section>

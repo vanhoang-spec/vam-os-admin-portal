@@ -2,7 +2,6 @@
 
 import { useFormState } from "react-dom";
 import {
-  addManualRecapAction,
   createActionItemAction,
   editRecapAction,
   softDeleteRecapAction,
@@ -96,69 +95,6 @@ export function QuickResolveForm({ id }: { id: string }) {
         <textarea name="note" rows={2} className={inputClass} />
       </label>
       <button type="submit" className={buttonClass}>Resolve</button>
-    </form>
-  );
-}
-
-export function AddManualRecapForm() {
-  const [state, formAction] = useFormState(addManualRecapAction, initialState);
-  return (
-    <form action={formAction} className="grid gap-3 md:grid-cols-2">
-      <div className="md:col-span-2"><StateMessage state={state} /></div>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Season code</span>
-        <input name="season_code" defaultValue="UEHM-S11" className={inputClass} />
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Meeting date</span>
-        <input name="meeting_date" type="date" className={inputClass} required />
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Mentor person id</span>
-        <input name="mentor_person_id" className={inputClass} />
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Mentee person id</span>
-        <input name="mentee_person_id" className={inputClass} />
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Match id</span>
-        <input name="match_id" className={inputClass} />
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Recap URL</span>
-        <input name="recap_url" className={inputClass} placeholder="https://..." />
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Meeting type</span>
-        <select name="meeting_type" defaultValue="1on1_primary" className={inputClass}>
-          <option value="1on1_primary">1on1_primary</option>
-          <option value="1on1_cross">1on1_cross</option>
-          <option value="group">group</option>
-          <option value="online">online</option>
-          <option value="offline">offline</option>
-          <option value="other">other</option>
-        </select>
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Status</span>
-        <select name="status" defaultValue="submitted" className={inputClass}>
-          <option value="submitted">submitted</option>
-          <option value="needs_review">needs_review</option>
-          <option value="invalid">invalid</option>
-          <option value="duplicate">duplicate</option>
-        </select>
-      </label>
-      <label className="block md:col-span-2">
-        <span className="text-xs font-medium uppercase text-slate-500">Recap note</span>
-        <textarea name="recap_note" rows={3} className={inputClass} />
-      </label>
-      <label className="block md:col-span-2">
-        <span className="text-xs font-medium uppercase text-slate-500">Admin notes</span>
-        <textarea name="admin_notes" rows={3} className={inputClass} />
-      </label>
-      <input type="hidden" name="issue_flag" value="false" />
-      <button type="submit" className={buttonClass}>Thêm recap manual</button>
     </form>
   );
 }

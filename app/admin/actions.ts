@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  addManualRecap,
   createActionItem,
   editRecap,
   softDeleteRecap,
@@ -67,30 +66,6 @@ export async function updateActionItemAction(
   }
 }
 
-export async function addManualRecapAction(
-  _previousState: AdminCorrectionActionState = initialState,
-  formData: FormData
-): Promise<AdminCorrectionActionState> {
-  try {
-    const result = await addManualRecap({
-      season_code: text(formData, "season_code"),
-      match_id: text(formData, "match_id"),
-      mentor_person_id: text(formData, "mentor_person_id"),
-      mentee_person_id: text(formData, "mentee_person_id"),
-      meeting_date: text(formData, "meeting_date"),
-      recap_url: text(formData, "recap_url"),
-      recap_note: text(formData, "recap_note"),
-      meeting_type: text(formData, "meeting_type"),
-      issue_flag: text(formData, "issue_flag"),
-      status: text(formData, "status"),
-      admin_notes: text(formData, "admin_notes")
-    });
-    revalidateAdminCorrectionPaths();
-    return result;
-  } catch (error) {
-    return actionError(error);
-  }
-}
 
 export async function editRecapAction(
   _previousState: AdminCorrectionActionState = initialState,
