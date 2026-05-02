@@ -1,7 +1,7 @@
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getMatches, getPeople, getSeasons } from "@/lib/data";
+import { getMatches, getMenteeProfiles, getMentorProfiles, getPeople, getSeasons } from "@/lib/data";
 import { RecapCreateForm } from "./create-form";
 
 export default async function CreateRecapPage() {
@@ -15,13 +15,15 @@ export default async function CreateRecapPage() {
     );
   }
 
-  const [people, matches, seasons] = await Promise.all([
+  const [people, matches, seasons, mentorProfiles, menteeProfiles] = await Promise.all([
     getPeople(),
     getMatches(),
-    getSeasons()
+    getSeasons(),
+    getMentorProfiles(),
+    getMenteeProfiles()
   ]);
 
-  const error = people.error || matches.error || seasons.error;
+  const error = people.error || matches.error || seasons.error || mentorProfiles.error || menteeProfiles.error;
 
   return (
     <>
@@ -49,10 +51,12 @@ export default async function CreateRecapPage() {
 
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Biểu mẫu tạo Recap</h2>
-          <RecapCreateForm 
+          <RecapCreateForm
             seasons={seasons.data || []}
             matches={matches.data || []}
             people={people.data || []}
+            mentorProfiles={mentorProfiles.data || []}
+            menteeProfiles={menteeProfiles.data || []}
           />
         </Card>
       </div>
