@@ -1,0 +1,63 @@
+import Link from "next/link";
+import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
+import { getSeasons } from "@/lib/data";
+import { getEventDetailData } from "@/lib/events";
+import { EventForm } from "../../event-form";
+
+export default async function EditEventPage({ params }: { params: { id: string } }) {
+  const adminUser = await getCurrentAdminUser();
+  if (!canEditRecaps(adminUser)) {
+    return (
+      <>
+        <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được sửa sự kiện." />
+        <ErrorBox message="Bạn không có quyền sửa sự kiện." />
+      </>
+    );
+  }
+
+  const [detail, seasons] = await Promise.all([getEventDetailData(params.id), getSeasons()]);
+
+  if (!detail.event) {
+    return (
+      <>
+        <PageHeader title="Không tìm thấy sự kiện" />
+        {detail.error ? <ErrorBox message={detail.error} /> : null}
+        <EmptyState message="Không tìm thấy sự kiện cần chỉnh sửa." />
+      </>
+    );
+  }
+
+  const seasonsList = seasons.data || detail.seasons;
+
+  return (
+    <>
+      <PageHeader title="Sửa sự kiện" description="Cập nhật thông tin sự kiện. Mọi thay đổi sẽ được ghi vào audit log." />
+      {detail.error ? <ErrorBox message={detail.error} /> : null}
+      {seasons.error ? <ErrorBox message={seasons.error} /> : null}
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Biểu mẫu chỉnh sửa</h2>
+          <EventForm mode="edit" event={detail.event} seasons={seasonsList} />
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết nhanh</h2>
+          <div className="space-y-3 text-sm text-slate-600">
+            <Link href={`/events/${detail.event.id}/attendance`} className="block rounded-md border border-vam-line bg-slate-50 px-3 py-2 font-medium text-vam-green hover:bg-vam-mint">
+              Quản lý tham gia
+            </Link>
+            <Link href="/events" className="block rounded-md border border-vam-line bg-white px-3 py-2 font-medium text-slate-700 hover:bg-slate-50">
+              Quay lại danh sách sự kiện
+            </Link>
+            <p className="text-xs text-slate-500">
+              ID: <span className="font-mono">{detail.event.id}</span>
+            </p>
+          </div>
+        </Card>
+      </div>
+    </>
+  );
+}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Settings2, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { BarChart3, CalendarRange, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Settings2, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
@@ -16,6 +16,7 @@ const navItems = [
   { href: "/mentees", label: "Mentees", icon: UserRoundSearch },
   { href: "/applications", label: "Applications", icon: ClipboardList },
   { href: "/matches", label: "Matches", icon: Handshake },
+  { href: "/events", label: "Sự kiện", icon: CalendarRange },
   { href: "/data-issues", label: "Data Issues", icon: DatabaseZap }
 ];
 

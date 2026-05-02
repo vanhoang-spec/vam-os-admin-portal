@@ -384,6 +384,9 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&overdue=true`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
           Công việc quá hạn
         </Link>
+        <Link href="/events" className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+          Quản lý sự kiện & tham gia
+        </Link>
         {allowRecapEdit ? (
           <Link href="/recaps/create" className="rounded-md border border-transparent bg-vam-green px-4 py-3 text-sm font-medium text-white shadow-soft hover:bg-vam-green/90">
             Thêm recap thủ công

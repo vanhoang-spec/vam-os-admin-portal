@@ -1,0 +1,45 @@
+export type EventTypeValue =
+  | "orientation"
+  | "training"
+  | "workshop"
+  | "community"
+  | "matching"
+  | "other";
+
+export type AttendanceStatusValue = "attended" | "registered_absent";
+export type RegistrationStatusValue = "registered" | "unknown";
+export type EventRoleValue = "mentor" | "mentee" | "core_team" | "speaker" | "trainer" | "guest" | "unknown";
+
+export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }> = [
+  { value: "training", label: "Training (đào tạo)" },
+  { value: "workshop", label: "Workshop" },
+  { value: "orientation", label: "Orientation (định hướng)" },
+  { value: "community", label: "Community (cộng đồng)" },
+  { value: "matching", label: "Matching" },
+  { value: "other", label: "Khác (closing/other)" }
+];
+
+export const ATTENDANCE_STATUS_OPTIONS: Array<{ value: AttendanceStatusValue; label: string }> = [
+  { value: "attended", label: "Đã tham gia" },
+  { value: "registered_absent", label: "Đăng ký nhưng không tham gia" }
+];
+
+export const REGISTRATION_STATUS_OPTIONS: Array<{ value: RegistrationStatusValue; label: string }> = [
+  { value: "registered", label: "Đã đăng ký" },
+  { value: "unknown", label: "Chưa rõ" }
+];
+
+export const EVENT_ROLE_OPTIONS: Array<{ value: EventRoleValue; label: string }> = [
+  { value: "mentee", label: "Mentee" },
+  { value: "mentor", label: "Mentor" },
+  { value: "core_team", label: "Core team" },
+  { value: "speaker", label: "Speaker" },
+  { value: "trainer", label: "Trainer" },
+  { value: "guest", label: "Khách mời" },
+  { value: "unknown", label: "Chưa rõ" }
+];
+
+export const EVENT_TYPE_VALUES = new Set<EventTypeValue>(EVENT_TYPE_OPTIONS.map((option) => option.value));
+export const ATTENDANCE_STATUS_VALUES = new Set<AttendanceStatusValue>(ATTENDANCE_STATUS_OPTIONS.map((option) => option.value));
+export const REGISTRATION_STATUS_VALUES = new Set<RegistrationStatusValue>(REGISTRATION_STATUS_OPTIONS.map((option) => option.value));
+export const EVENT_ROLE_VALUES = new Set<EventRoleValue>(EVENT_ROLE_OPTIONS.map((option) => option.value));
