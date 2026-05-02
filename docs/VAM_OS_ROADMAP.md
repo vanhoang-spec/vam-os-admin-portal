@@ -37,3 +37,7 @@ March 2026 closed-month data has been rolled out:
 ## PHASE F — Environment Safety System
 **Goal:** Implement strict deployment and environmental guardrails to prevent data loss or unauthorized access in production.
 *See [Environment Safety Checklist](ENVIRONMENT_SAFETY_CHECKLIST.md)*
+
+## PHASE G — Multi-Program Architecture & Mentor/Mentee Portal
+**Goal:** Expand VAM OS to support multiple mentoring programs (e.g., UEH Mentoring, Hanoi Alumni Mentoring) and introduce external portal access for mentors and mentees. This phase is targeted after current production stabilization and before/alongside Season 12 scaling.
+*See [Multi-Program & Portal Blueprint](MULTI_PROGRAM_AND_PORTAL_BLUEPRINT.md)*

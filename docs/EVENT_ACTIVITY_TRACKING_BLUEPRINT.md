@@ -3,7 +3,7 @@
 This blueprint details the capabilities for managing auxiliary events, workshops, and training sessions within the VAM OS platform.
 
 ## Create Event/Training
-- **Functionality**: Admins can create new scheduled events, specifying Title, Description, Date, Time, Location (or Link), and Event Type (e.g., Training, Workshop, Social).
+- **Functionality**: Admins can create new scheduled events, specifying Title, Description, Date, Time, Location (or Link), Event Type (e.g., Training, Workshop, Social), and linking it to a specific `program_id` and `season_id`.
 
 ## Track Registration
 - **Process**: Users can register (RSVP) for upcoming events.
@@ -19,7 +19,7 @@ This blueprint details the capabilities for managing auxiliary events, workshops
 - **Aggregation**: Collect ratings and qualitative comments linked to the specific event record.
 
 ## Event KPI Cards
-- **Visibility**: Dashboard components specifically dedicated to event health.
+- **Visibility**: Dashboard components specifically dedicated to event health, strictly filtered by `program_id` and `season_id`.
 - **Metrics**: Total Events Held, Total Unique Attendees, Average Registration-to-Attendance Rate, Average Event Satisfaction Score.
 
 ## Monthly Event Reporting

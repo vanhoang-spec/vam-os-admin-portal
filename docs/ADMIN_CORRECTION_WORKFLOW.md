@@ -3,7 +3,7 @@
 This document outlines the procedures and requirements for data correction within the Admin portal, ensuring data integrity is maintained while correcting operational errors.
 
 ## Data Issue Queue
-- **Purpose**: A centralized inbox displaying flagged data anomalies (e.g., mismatched IDs, failed imports, incomplete records).
+- **Purpose**: A centralized inbox displaying flagged data anomalies (e.g., mismatched IDs, failed imports, incomplete records), filtered by the admin's assigned `program_id` and `season_id`.
 - **Process**: Administrators claim issues, review the flagged discrepancy, apply the fix, and mark the issue as resolved.
 
 ## Manual Recap Creation
@@ -26,4 +26,4 @@ This document outlines the procedures and requirements for data correction withi
 - **Data Points**: The log must capture the Admin User ID, Timestamp, Target Record ID, Original Value, and New Value.
 
 ## Role Permissions
-- **Access Control**: Only designated "Data Admins" or "Super Admins" should have write access to the correction workflows. Standard viewers are restricted to read-only access.
+- **Access Control**: Super Admins and VAM Admins have broad access. Program Operations Admins can only have write access and handle correction workflows within their assigned `program_id` and `season_id`. Standard viewers are restricted to read-only access.

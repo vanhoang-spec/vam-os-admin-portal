@@ -3,7 +3,7 @@
 This blueprint governs the end-to-end management of a new season (Season 12), from initialization through matching and active monitoring.
 
 ## 1. Create New Season
-- **System Initialization**: Define Season 12 parameters in the database, including start dates, target KPIs, and configuration settings distinct from Season 11.
+- **System Initialization**: Define Season 12 parameters in the database under a specific `program_id` (e.g., UEH Mentoring, Hanoi Alumni Mentoring), including start dates, target KPIs, and configuration settings distinct from Season 11.
 
 ## 2. Import Applications
 - **Data Intake**: Facilitate the secure import of new mentor and mentee applications via CSV or direct form API integration.
@@ -27,7 +27,7 @@ This blueprint governs the end-to-end management of a new season (Season 12), fr
 
 ## 7. Season-Specific Dashboard
 - **Context Switching**: Ensure the Admin portal allows seamless toggling between Season 11 historical data and active Season 12 metrics.
-- **Data Isolation**: Verify that KPIs, charts, and issue queues strictly filter data to the currently selected season.
+- **Data Isolation**: Verify that KPIs, charts, and issue queues strictly filter data to the currently selected season and assigned `program_id`.
 
 ## 8. Transition from Season 11 to Season 12
 - **Offboarding**: Formalize the closure of Season 11 relationships (e.g., mark as `Completed` or `Alumni`).

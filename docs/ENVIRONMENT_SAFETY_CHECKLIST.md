@@ -17,3 +17,8 @@ This deployment checklist is mandatory for all infrastructure and code changes t
 
 ## 4. Post-Deployment Verification
 - [ ] **Post-deploy QA checklist**: After a production rollout, conduct a controlled smoke test to verify authentication, core dashboard rendering, and standard read/write operations before announcing the release to the broader admin team.
+
+## 5. Row Level Security (RLS) & Multi-Program Guardrails (Future Phase)
+- [ ] **RLS Policy Enforcement**: Ensure RLS policies enforce access strictly by `user_id`, `role`, `program_id`, `season_id`, and `match_id`.
+- [ ] **Data Isolation Check**: Verify Program Admins cannot access other programs.
+- [ ] **External User Restrictions**: Verify external users (Mentors/Mentees) can only access their own match-related data and allowed aggregate dashboards, and cannot access admin notes or sensitive data.
