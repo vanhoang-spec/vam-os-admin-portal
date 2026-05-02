@@ -409,11 +409,32 @@ export async function addManualRecap(input: JsonRecord): Promise<MutationResult>
   if (!validateDate(meetingDate)) return { ok: false, message: "meeting_date phải đúng định dạng YYYY-MM-DD." };
   const seasonCode = clean(input.season_code) ?? DEFAULT_SEASON_CODE;
   const { data: season } = await client.from("seasons").select("id,code").eq("code", seasonCode).maybeSingle();
+  const matchId = clean(input.match_id);
+  const mentorId = clean(input.mentor_person_id);
+  const menteeId = clean(input.mentee_person_id);
+
+  if (!matchId && !mentorId && !menteeId) {
+    return { ok: false, message: "Phải chọn ít nhất Mentor, Mentee hoặc Match." };
+  }
+
+  if (matchId && meetingDate) {
+    const { data: existing } = await client.from("mentoring_recaps")
+      .select("id")
+      .eq("match_id", matchId)
+      .eq("meeting_date", meetingDate)
+      .limit(1)
+      .maybeSingle();
+    
+    if (existing) {
+      return { ok: false, message: `Hệ thống đã có recap cho match này vào ngày ${meetingDate}.` };
+    }
+  }
+
   const payload = {
     season_id: season?.id ?? null,
-    match_id: clean(input.match_id),
-    mentor_person_id: clean(input.mentor_person_id),
-    mentee_person_id: clean(input.mentee_person_id),
+    match_id: matchId,
+    mentor_person_id: mentorId,
+    mentee_person_id: menteeId,
     meeting_date: meetingDate,
     meeting_month: meetingDate!.slice(0, 7),
     recap_url: clean(input.recap_url) ?? "manual://missing-recap-url",

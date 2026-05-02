@@ -371,7 +371,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={followUpTwoMonthCount} />
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="mt-4 flex flex-wrap gap-3">
         <Link href="/operations/intelligence" className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
           Phân tích cộng đồng mentor/mentee
         </Link>
@@ -384,6 +384,11 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&overdue=true`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
           Công việc quá hạn
         </Link>
+        {allowRecapEdit ? (
+          <Link href="/recaps/create" className="rounded-md border border-transparent bg-vam-green px-4 py-3 text-sm font-medium text-white shadow-soft hover:bg-vam-green/90">
+            Thêm recap thủ công
+          </Link>
+        ) : null}
       </div>
 
       <section className="mt-6 grid gap-4 xl:grid-cols-2">

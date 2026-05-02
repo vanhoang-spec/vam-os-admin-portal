@@ -207,7 +207,17 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
     <>
       <PageHeader title="Data Issues" description="Các vấn đề dữ liệu cần rà soát từ dữ liệu Supabase hiện tại." />
       <div className="mb-4 rounded-lg border border-vam-line bg-white p-4 text-sm text-slate-600 shadow-soft">
-        Trang này giúp rà soát dữ liệu cần làm sạch. Ở MVP hiện tại, các vấn đề được tính động từ dữ liệu Supabase; chức năng sửa trực tiếp sẽ bổ sung ở giai đoạn sau.
+        <p className="mb-3">
+          Trang này giúp rà soát dữ liệu cần làm sạch. Ở MVP hiện tại, các vấn đề được tính động từ dữ liệu Supabase; chức năng sửa trực tiếp sẽ bổ sung ở giai đoạn sau.
+        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-vam-line pt-3">
+          <p className="text-xs italic text-slate-500 max-w-2xl">
+            * Use this form when an admin needs to manually add a missing mentoring recap. This action should use recap_source = admin_input and be audit logged.
+          </p>
+          <Link href="/recaps/create" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+            Thêm recap thủ công
+          </Link>
+        </div>
       </div>
       {selectedIssue ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-vam-green bg-vam-mint px-4 py-3 text-sm text-vam-ink">
