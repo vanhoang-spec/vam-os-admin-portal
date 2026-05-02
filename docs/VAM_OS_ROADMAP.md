@@ -8,10 +8,6 @@ March 2026 closed-month data has been rolled out:
 - Dashboard and Operations now load production data
 - RPC `match_status` enum issue has been fixed
 
-**Remaining issue:**
-- `/admin/users` and `/admin` workflow show Invalid API key
-- Likely missing or wrong `SUPABASE_SERVICE_ROLE_KEY` in Vercel production env
-
 ---
 
 ## PHASE A — Production Stabilization
