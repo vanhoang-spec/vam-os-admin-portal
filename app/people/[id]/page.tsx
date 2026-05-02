@@ -290,6 +290,27 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
       <PageHeader title={text(person.data.full_name, "Hồ sơ cá nhân")} description={text(person.data.email_primary)} />
       <ErrorBox message={error} />
 
+      {allowRecapEdit && (menteeProfile || mentorProfile) ? (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {menteeProfile ? (
+            <Link
+              href={`/mentees/${menteeProfile.id}/edit`}
+              className="inline-flex items-center rounded-md bg-vam-green px-3 py-1.5 text-xs font-medium text-white hover:bg-vam-green/90"
+            >
+              Sửa hồ sơ mentee
+            </Link>
+          ) : null}
+          {mentorProfile ? (
+            <Link
+              href={`/mentors/${mentorProfile.id}/edit`}
+              className="inline-flex items-center rounded-md border border-vam-line bg-white px-3 py-1.5 text-xs font-medium text-vam-green hover:bg-vam-mint"
+            >
+              Sửa hồ sơ mentor
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt quan hệ mentoring</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
