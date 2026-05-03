@@ -41,13 +41,28 @@ export type Application = JsonRecord & {
   person_id: string | null;
   season_id: string | null;
   role_applied: string | null;
+  // Legacy status field (Season 11 and earlier)
   final_status: string | null;
   submitted_at: string | null;
   sbd: string | null;
+  // Legacy PDPA fields
   consent_pdpa: boolean | string | null;
   consent_pdpa_at: string | null;
   acquisition_channel: string | null;
   profile_url: string | null;
+  // S12 native form fields (added in migration 038)
+  full_name: string | null;
+  email_primary: string | null;
+  phone_primary: string | null;
+  gender: string | null;
+  intake_batch_id: string | null;
+  status: string | null;
+  raw_payload: Record<string, unknown> | null;
+  consent_data_storage: boolean | null;
+  source: string | null;
+  score_total: number | null;
+  score_breakdown: Record<string, unknown> | null;
+  internal_notes: Record<string, unknown> | null;
 };
 
 export type Match = JsonRecord & {

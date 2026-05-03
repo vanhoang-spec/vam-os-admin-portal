@@ -7,9 +7,12 @@ import { displayCode, displayConsent, displayText, formatDate } from "@/lib/util
 type Row = Application & {
   person?: Person;
   season?: Season;
+  // Coalesced identity — application-level fields (S12) take precedence over person-level (S11)
   full_name?: string | null;
   email_primary?: string | null;
   season_code?: string | null;
+  // Unified status — application.status (S12) ?? application.final_status (S11)
+  status_unified: string | null;
   short_application_id: string;
   short_person_id: string;
   sbd_display: string;
@@ -17,11 +20,12 @@ type Row = Application & {
   email_primary_display: string;
   season_code_display: string;
   role_applied_display: string;
-  final_status_display: string;
+  status_display: string;
   submitted_at_display: string;
   acquisition_channel_display: string;
-  consent_pdpa_display: string;
-  consent_pdpa_filter: string;
+  consent_display: string;
+  consent_filter: string;
+  source_display: string;
 };
 
 function consentFilter(value: unknown) {
@@ -35,29 +39,43 @@ export default async function ApplicationsPage() {
   const [applications, people, seasons] = await Promise.all([getApplications(), getPeople(), getSeasons()]);
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
+
   const rows: Row[] = applications.data.map((application) => {
     const person = application.person_id ? peopleById.get(application.person_id) : undefined;
     const season = application.season_id ? seasonsById.get(application.season_id) : undefined;
     const seasonCode = season?.code ?? season?.name ?? null;
+
+    // Identity: application-level (S12 native form) takes precedence over person-level (S11 legacy)
+    const fullName = application.full_name ?? person?.full_name ?? null;
+    const emailPrimary = application.email_primary ?? person?.email_primary ?? null;
+
+    // Status: new pipeline status (S12) takes precedence over legacy final_status (S11)
+    const statusUnified = application.status ?? application.final_status ?? null;
+
+    // Consent: new consent_data_storage (S12) takes precedence over legacy consent_pdpa (S11)
+    const consentUnified = application.consent_data_storage ?? application.consent_pdpa;
+
     return {
       ...application,
       person,
       season,
-      full_name: person?.full_name,
-      email_primary: person?.email_primary,
+      full_name: fullName,
+      email_primary: emailPrimary,
       season_code: seasonCode,
+      status_unified: statusUnified,
       short_application_id: application.id.slice(0, 8),
       short_person_id: application.person_id ? application.person_id.slice(0, 8) : "-",
       sbd_display: displayText(application.sbd),
-      full_name_display: displayText(person?.full_name),
-      email_primary_display: displayText(person?.email_primary),
+      full_name_display: displayText(fullName),
+      email_primary_display: displayText(emailPrimary),
       season_code_display: displayCode(seasonCode),
       role_applied_display: displayText(application.role_applied),
-      final_status_display: displayText(application.final_status),
+      status_display: displayText(statusUnified),
       submitted_at_display: formatDate(application.submitted_at),
       acquisition_channel_display: displayText(application.acquisition_channel),
-      consent_pdpa_display: displayConsent(application.consent_pdpa),
-      consent_pdpa_filter: consentFilter(application.consent_pdpa)
+      consent_display: displayConsent(consentUnified),
+      consent_filter: consentFilter(consentUnified),
+      source_display: displayText(application.source)
     };
   });
 
@@ -70,13 +88,13 @@ export default async function ApplicationsPage() {
         searchPlaceholder="Tìm theo tên, email, SBD hoặc mã đơn"
         searchKeys={["full_name", "email_primary", "sbd", "id", "person_id"]}
         filters={[
-          { key: "final_status", label: "Trạng thái", valueKey: "final_status" },
+          { key: "status_unified", label: "Trạng thái", valueKey: "status_unified" },
           { key: "role_applied", label: "Vai trò ứng tuyển", valueKey: "role_applied" },
           { key: "season_code", label: "Mùa", valueKey: "season_code" },
           {
-            key: "consent_pdpa",
-            label: "Đồng ý PDPA",
-            valueKey: "consent_pdpa_filter",
+            key: "consent",
+            label: "Đồng ý lưu trữ",
+            valueKey: "consent_filter",
             options: [
               { label: "Có", value: "yes" },
               { label: "Không", value: "no" },
@@ -87,7 +105,7 @@ export default async function ApplicationsPage() {
         sortOptions={[
           { label: "Ngày nộp mới nhất", key: "submitted_at", direction: "desc", type: "text" },
           { label: "Tên ứng viên A-Z", key: "full_name", direction: "asc", type: "text" },
-          { label: "Trạng thái A-Z", key: "final_status", direction: "asc", type: "text" }
+          { label: "Trạng thái A-Z", key: "status_unified", direction: "asc", type: "text" }
         ]}
         columns={[
           { key: "sbd", label: "SBD", displayKey: "sbd_display" },
@@ -95,9 +113,10 @@ export default async function ApplicationsPage() {
           { key: "full_name", label: "Họ tên", displayKey: "full_name_display", secondaryKey: "short_person_id", secondaryLabel: "Mã person" },
           { key: "email_primary", label: "Email", displayKey: "email_primary_display", nowrap: true },
           { key: "role_applied", label: "Vai trò", displayKey: "role_applied_display" },
-          { key: "final_status", label: "Trạng thái", displayKey: "final_status_display", badge: true },
+          { key: "status_unified", label: "Trạng thái", displayKey: "status_display", badge: true },
+          { key: "source", label: "Nguồn", displayKey: "source_display" },
           { key: "submitted_at", label: "Ngày nộp", displayKey: "submitted_at_display" },
-          { key: "consent_pdpa", label: "PDPA", displayKey: "consent_pdpa_display", badge: true },
+          { key: "consent_display", label: "Consent", displayKey: "consent_display", badge: true },
           { key: "detail", label: "Chi tiết", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem chi tiết" }
         ]}
       />

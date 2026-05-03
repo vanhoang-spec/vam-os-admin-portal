@@ -95,18 +95,39 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
     );
   }
 
+  // Coalesced display values:
+  //   Identity — application-level (S12 native form) takes precedence over person-level (S11 legacy)
+  //   Status   — application.status (S12 pipeline) ?? application.final_status (S11 legacy)
+  //   Consent  — application.consent_data_storage (S12) ?? application.consent_pdpa (S11)
+  const displayFullName   = application.data.full_name    ?? person?.full_name    ?? null;
+  const displayEmail      = application.data.email_primary ?? person?.email_primary ?? null;
+  const displayPhone      = application.data.phone_primary ?? person?.phone_primary ?? null;
+  const displayGender     = application.data.gender        ?? person?.gender        ?? null;
+  const displayStatus     = application.data.status        ?? application.data.final_status ?? null;
+  const displayConsentVal = application.data.consent_data_storage ?? application.data.consent_pdpa;
+
+  // raw_payload from native S12 form — entries rendered when no legacy answers exist
+  const rawPayloadEntries = ((): [string, string][] => {
+    const payload = application.data.raw_payload;
+    if (!payload || typeof payload !== "object") return [];
+    return Object.entries(payload)
+      .filter(([, v]) => v !== null && v !== undefined && v !== "")
+      .map(([k, v]): [string, string] => [k, Array.isArray(v) ? (v as string[]).join(", ") : String(v)]);
+  })();
+
   return (
     <>
-      <PageHeader title="Chi tiết ứng tuyển" description={displayText(person?.full_name, "Ứng viên chưa rõ")} />
+      <PageHeader title="Chi tiết ứng tuyển" description={displayText(displayFullName, "Ứng viên chưa rõ")} />
       <ErrorBox message={error} />
 
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt nhanh</h2>
         <DetailGrid
           rows={[
-            ["số câu trả lời", sortedAnswers.length],
-            ["câu trả lời dài", longAnswerCount],
-            ["final_status", displayText(application.data.final_status)],
+            ["status", displayText(displayStatus)],
+            ["source", displayText(application.data.source)],
+            ["câu trả lời legacy", sortedAnswers.length > 0 ? sortedAnswers.length : "-"],
+            ["raw_payload fields (S12)", rawPayloadEntries.length > 0 ? rawPayloadEntries.length : "-"],
             ["mentor/match", relatedMatch ? `${displayText(relatedMentor?.full_name)} - ${displayText(relatedMatch.status)}` : "-"]
           ]}
         />
@@ -117,11 +138,11 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin ứng viên</h2>
           <DetailGrid
             rows={[
-              ["full_name", displayText(person?.full_name)],
-              ["email_primary", displayText(person?.email_primary)],
-              ["phone_primary", displayText(person?.phone_primary)],
-              ["gender", displayText(person?.gender)],
-              ["source_sheets", displayText(person?.source_sheets)]
+              ["full_name", displayText(displayFullName)],
+              ["email_primary", displayText(displayEmail)],
+              ["phone_primary", displayText(displayPhone)],
+              ["gender", displayText(displayGender)],
+              ["source_sheets (person)", displayText(person?.source_sheets)]
             ]}
           />
         </Card>
@@ -133,11 +154,14 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
               ["season_code", displayCode(season?.code ?? season?.name)],
               ["role_applied", displayText(application.data.role_applied)],
               ["submitted_at", formatDate(application.data.submitted_at)],
+              ["status (S12)", displayText(application.data.status)],
+              ["final_status (S11)", displayText(application.data.final_status)],
+              ["source", displayText(application.data.source)],
               ["sbd", displayText(application.data.sbd)],
-              ["consent_pdpa", displayConsent(application.data.consent_pdpa)],
+              ["consent_data_storage (S12)", displayConsent(application.data.consent_data_storage)],
+              ["consent_pdpa (S11)", displayConsent(application.data.consent_pdpa)],
               ["consent_pdpa_at", formatDate(application.data.consent_pdpa_at)],
-              ["acquisition_channel", displayText(application.data.acquisition_channel)],
-              ["final_status", displayText(application.data.final_status)]
+              ["acquisition_channel", displayText(application.data.acquisition_channel)]
             ]}
           />
           <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
@@ -199,9 +223,10 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           )}
         </Card>
 
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Câu trả lời ứng tuyển</h2>
-          {sortedAnswers.length ? (
+        {/* Legacy answer table (Season 11 and earlier) */}
+        {sortedAnswers.length > 0 && (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Câu trả lời ứng tuyển (legacy)</h2>
             <div className="grid gap-3">
               {sortedAnswers.map((answer, index) => (
                 <ApplicationAnswerCard
@@ -212,10 +237,24 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
                 />
               ))}
             </div>
-          ) : (
+          </Card>
+        )}
+
+        {/* Native S12 form payload — shown when raw_payload is populated */}
+        {rawPayloadEntries.length > 0 && (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Nội dung đơn (S12 native form)</h2>
+            <DetailGrid rows={rawPayloadEntries} />
+          </Card>
+        )}
+
+        {/* Empty state only when neither legacy answers nor raw_payload exist */}
+        {sortedAnswers.length === 0 && rawPayloadEntries.length === 0 && (
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Câu trả lời ứng tuyển</h2>
             <EmptyState message="Chưa có câu trả lời ứng tuyển." />
-          )}
-        </Card>
+          </Card>
+        )}
       </div>
 
       <div className="mt-4 flex gap-4">
