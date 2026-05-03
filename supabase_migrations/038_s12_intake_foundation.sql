@@ -154,7 +154,7 @@ create index if not exists applications_status_idx
 -- ----------------------------------------------------------------
 
 insert into public.seasons (code, name, status, program_id)
-select 'UEHM-S12', 'UEH Mentoring Season 12', 'active', p.id
+select 'UEHM-S12', 'UEH Mentoring Season 12', 'running', p.id
 from public.programs p
 where p.code = 'UEHM'
 on conflict (code) do nothing;
