@@ -27,6 +27,29 @@ export type CurrentAdminUser = {
   auth_user_id: string | null;
 };
 
+/**
+ * Legacy compatibility shims.
+ *
+ * The Phase 2 work moved permission logic to `lib/permissions.ts`
+ * (canEditRecap, canAccessAdmin, canEditMentee, canEditMentor, ...),
+ * but a number of files on the deployed branch still import the old
+ * names (`canEditRecaps`, `canManageWorkflow`) from this module.
+ * Removing the exports here breaks the production Vercel build with
+ * "Module ... has no exported member 'canEditRecaps'".
+ *
+ * These shims restore the old exports so the legacy call sites
+ * compile, while applying the updated role allowlist (now also
+ * including `core_team`). Once every legacy call site has been
+ * migrated to `lib/permissions.ts`, these can be deleted.
+ */
+export function canEditRecaps(adminUser: { role?: string | null } | null | undefined) {
+  return ["super_admin", "admin", "core_team"].includes(adminUser?.role ?? "");
+}
+
+export function canManageWorkflow(adminUser: { role?: string | null } | null | undefined) {
+  return ["super_admin", "admin", "core_team"].includes(adminUser?.role ?? "");
+}
+
 export function roleLabel(role: AdminRole | string | null | undefined) {
   // Exact match per known role. The default branch used to silently
   // return "Viewer" for ANY unknown / missing / corrupted value, which
