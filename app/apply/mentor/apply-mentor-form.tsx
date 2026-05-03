@@ -3,11 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFormState } from "react-dom";
-import {
-  initialApplyActionState,
-  submitMentorApplicationAction,
-  type ApplyActionState
-} from "@/app/actions/apply";
+import { submitMentorApplicationAction } from "@/app/actions/apply";
+import { initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import {
   CheckboxGroupField,
   ConsentCheckbox,

@@ -6,17 +6,10 @@ import {
   type ApplicationRole,
   type ApplicationSubmissionResult
 } from "@/lib/applications-create";
+import type { ApplyActionState } from "@/lib/apply-types";
 
 const SEASON_CODE = "UEHM-S12";
 const INTAKE_BATCH_CODE = "UEHM-S12-B1";
-
-export type ApplyActionState = {
-  ok: boolean;
-  message: string | null;
-  applicationId?: string;
-};
-
-const initialState: ApplyActionState = { ok: false, message: null };
 
 function formText(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -297,4 +290,3 @@ export async function submitMenteeApplicationAction(
   }
 }
 
-export { initialState as initialApplyActionState };
