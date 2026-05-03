@@ -2,8 +2,10 @@ import Link from "next/link";
 import { ApplicationAnswerCard } from "@/components/application-answer-card";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import {
+  getActiveAdminUsers,
   getAnswersForApplication,
   getApplication,
+  getApplicationReviewsForApplication,
   getMatches,
   getMenteeProfiles,
   getMentorProfiles,
@@ -11,8 +13,11 @@ import {
   getSeasons,
   keyById
 } from "@/lib/data";
-import { Match } from "@/lib/types";
-import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canAssignReview } from "@/lib/permissions";
+import type { ApplicationReview, Match } from "@/lib/types";
+import { displayText, formatDate } from "@/lib/utils";
+import { AssignReviewerForm } from "./assign-reviewer-form";
 
 const QUESTION_ORDER = [
   "consent_marketing_email",
@@ -50,16 +55,35 @@ function matchRank(match: Match) {
   return 2;
 }
 
+function reviewStatusLabel(status: string) {
+  if (status === "assigned") return "Chưa bắt đầu";
+  if (status === "in_progress") return "Đang làm";
+  if (status === "submitted") return "Đã nộp";
+  if (status === "returned_for_clarification") return "Cần làm rõ";
+  if (status === "cancelled") return "Đã huỷ";
+  return status;
+}
+
+function roundLabel(round: string) {
+  if (round === "profile_screening") return "Hồ sơ";
+  if (round === "interview") return "Phỏng vấn";
+  return round;
+}
+
 export default async function ApplicationDetailPage({ params }: { params: { id: string } }) {
-  const [application, people, seasons, mentees, mentors, matches, answers] = await Promise.all([
-    getApplication(params.id),
-    getPeople(),
-    getSeasons(),
-    getMenteeProfiles(),
-    getMentorProfiles(),
-    getMatches(),
-    getAnswersForApplication(params.id)
-  ]);
+  const [adminUser, application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult] =
+    await Promise.all([
+      getCurrentAdminUser(),
+      getApplication(params.id),
+      getPeople(),
+      getSeasons(),
+      getMenteeProfiles(),
+      getMentorProfiles(),
+      getMatches(),
+      getAnswersForApplication(params.id),
+      getApplicationReviewsForApplication(params.id),
+      getActiveAdminUsers()
+    ]);
 
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
@@ -81,7 +105,6 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
       if (aOrder !== bOrder) return aOrder - bOrder;
       return a.original_index - b.original_index;
     });
-  const longAnswerCount = sortedAnswers.filter((answer) => displayText(answer.value_text).length > 800).length;
   const error =
     application.error || people.error || seasons.error || mentees.error || mentors.error || matches.error || answers.error;
 
@@ -115,10 +138,83 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
       .map(([k, v]): [string, string] => [k, Array.isArray(v) ? (v as string[]).join(", ") : String(v)]);
   })();
 
+  const reviews: ApplicationReview[] = reviewsResult.data ?? [];
+  const canAssign = canAssignReview(adminUser?.role);
+
   return (
     <>
       <PageHeader title="Chi tiết ứng tuyển" description={displayText(displayFullName, "Ứng viên chưa rõ")} />
       <ErrorBox message={error} />
+
+      {/* ── Assign reviewer (admin / core_team only) ─────────────────────────── */}
+      {canAssign && (
+        <Card className="mb-4">
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Giao Review</h2>
+          {reviewersResult.error && (
+            <ErrorBox message={`Không thể tải danh sách reviewer: ${reviewersResult.error}`} />
+          )}
+          <AssignReviewerForm
+            applicationId={application.data.id}
+            reviewers={reviewersResult.data}
+          />
+        </Card>
+      )}
+
+      {/* ── Review history ─────────────────────────────────────────────────────── */}
+      <Card className="mb-4">
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">
+          Lịch sử Review{reviews.length > 0 ? ` (${reviews.length})` : ""}
+        </h2>
+        {reviews.length === 0 ? (
+          <EmptyState message="Chưa có review nào cho đơn này." />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-vam-line">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-vam-line text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Vòng</th>
+                    <th className="px-4 py-3">Trạng thái</th>
+                    <th className="px-4 py-3">Hạn nộp</th>
+                    <th className="px-4 py-3">Điểm tổng</th>
+                    <th className="px-4 py-3">Đề xuất</th>
+                    <th className="px-4 py-3">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-vam-line">
+                  {reviews.map((review) => (
+                    <tr key={review.id} className="hover:bg-vam-mint/40">
+                      <td className="px-4 py-3 text-slate-700">{roundLabel(review.review_round)}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
+                          {reviewStatusLabel(review.status)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {review.due_at ? formatDate(review.due_at) : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {review.total_score !== null ? review.total_score : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {displayText(review.recommendation)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/reviews/${review.id}`}
+                          className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                        >
+                          {review.status === "submitted" ? "Xem" : "Làm review"}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Card>
 
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt nhanh</h2>
@@ -151,15 +247,15 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt ứng tuyển</h2>
           <DetailGrid
             rows={[
-              ["season_code", displayCode(season?.code ?? season?.name)],
+              ["season_code", displayText(season?.code ?? season?.name)],
               ["role_applied", displayText(application.data.role_applied)],
               ["submitted_at", formatDate(application.data.submitted_at)],
               ["status (S12)", displayText(application.data.status)],
               ["final_status (S11)", displayText(application.data.final_status)],
               ["source", displayText(application.data.source)],
               ["sbd", displayText(application.data.sbd)],
-              ["consent_data_storage (S12)", displayConsent(application.data.consent_data_storage)],
-              ["consent_pdpa (S11)", displayConsent(application.data.consent_pdpa)],
+              ["consent_data_storage (S12)", String(displayConsentVal ?? "-")],
+              ["consent_pdpa (S11)", displayText(application.data.consent_pdpa)],
               ["consent_pdpa_at", formatDate(application.data.consent_pdpa_at)],
               ["acquisition_channel", displayText(application.data.acquisition_channel)]
             ]}
@@ -177,8 +273,8 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           {menteeProfile ? (
             <DetailGrid
               rows={[
-                ["mentee_code", displayCode(menteeProfile.mentee_code)],
-                ["school_code", displayCode(menteeProfile.school_code)],
+                ["mentee_code", displayText(menteeProfile.mentee_code)],
+                ["school_code", displayText(menteeProfile.school_code)],
                 ["major", displayText(menteeProfile.major)],
                 ["class_cohort", displayText(menteeProfile.class_cohort)],
                 ["mssv", displayText(menteeProfile.mssv)]
@@ -194,7 +290,7 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           {mentorProfile ? (
             <DetailGrid
               rows={[
-                ["mentor_code", displayCode(mentorProfile.mentor_code)],
+                ["mentor_code", displayText(mentorProfile.mentor_code)],
                 ["company_current", displayText(mentorProfile.company_current)],
                 ["title_current", displayText(mentorProfile.title_current)]
               ]}

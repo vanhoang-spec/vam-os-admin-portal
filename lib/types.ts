@@ -77,6 +77,38 @@ export type Match = JsonRecord & {
   notes: string | null;
 };
 
+/** Lightweight admin_users projection used for reviewer assignment dropdowns. */
+export type AdminUserPublic = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+};
+
+/** One review assignment + scoring record in public.application_reviews. */
+export type ApplicationReview = JsonRecord & {
+  id: string;
+  application_id: string;
+  review_round: string; // 'profile_screening' | 'interview'
+  reviewer_admin_user_id: string | null;
+  reviewer_person_id: string | null;
+  assigned_by: string | null;
+  assigned_at: string | null;
+  due_at: string | null;
+  status: string; // 'assigned' | 'in_progress' | 'submitted' | 'returned_for_clarification' | 'cancelled'
+  score_motivation: number | null;
+  score_goal_clarity: number | null;
+  score_commitment: number | null;
+  score_fit: number | null;
+  score_communication: number | null;
+  total_score: number | null;
+  recommendation: string | null;
+  reviewer_note: string | null;
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Season = JsonRecord & {
   id: string;
   code: string | null;

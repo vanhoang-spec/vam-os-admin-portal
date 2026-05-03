@@ -1,8 +1,10 @@
 import { supabase } from "@/lib/supabase";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type {
   ActivityCorrectionLog,
+  AdminUserPublic,
   Application,
+  ApplicationReview,
   Event,
   EventParticipation,
   FounderIntelligenceDashboard,
@@ -998,6 +1000,70 @@ function getDuplicateEmailCountFromRows(people: Person[]) {
 
 export function keyById<T extends { id: string }>(rows: T[]) {
   return new Map(rows.map((row) => [row.id, row]));
+}
+
+// ----------------------------------------------------------------
+// Application review data fetchers
+// ----------------------------------------------------------------
+
+export async function getApplicationReviewsForApplication(applicationId: string): Promise<QueryResult<ApplicationReview[]>> {
+  const client = dataClient(); // RLS: admin sees all, reviewer sees own
+  if (!client) return envError<ApplicationReview[]>([]);
+  const { data, error } = await client
+    .from("application_reviews")
+    .select("*")
+    .eq("application_id", applicationId)
+    .order("created_at", { ascending: false });
+  if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
+  return { data: (data ?? []) as ApplicationReview[], error: null };
+}
+
+/** Reviews assigned to a specific admin user — used for reviewer's /reviews page. */
+export async function getMyApplicationReviews(adminUserId: string): Promise<QueryResult<ApplicationReview[]>> {
+  const client = dataClient();
+  if (!client) return envError<ApplicationReview[]>([]);
+  const { data, error } = await client
+    .from("application_reviews")
+    .select("*")
+    .eq("reviewer_admin_user_id", adminUserId)
+    .neq("status", "cancelled")
+    .order("due_at", { ascending: true });
+  if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
+  return { data: (data ?? []) as ApplicationReview[], error: null };
+}
+
+/** All reviews — used for admin/core_team /reviews page (RLS allows this). */
+export async function getAllApplicationReviews(): Promise<QueryResult<ApplicationReview[]>> {
+  return selectTable<ApplicationReview>("application_reviews", "*");
+}
+
+export async function getApplicationReviewById(id: string): Promise<QueryResult<ApplicationReview | null>> {
+  const client = dataClient();
+  if (!client) return envError<ApplicationReview | null>(null);
+  const { data, error } = await client
+    .from("application_reviews")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (application_reviews: ${error.message})` };
+  return { data: data as ApplicationReview | null, error: null };
+}
+
+/**
+ * Returns all active admin_users for the assign-reviewer dropdown.
+ * Must use service-role client because admin_users RLS restricts each
+ * user to reading only their own row.
+ */
+export async function getActiveAdminUsers(): Promise<QueryResult<AdminUserPublic[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<AdminUserPublic[]>([]);
+  const { data, error } = await client
+    .from("admin_users")
+    .select("id,email,full_name,role")
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+  if (error) return { data: [], error: `${VI_ERROR} (admin_users: ${error.message})` };
+  return { data: (data ?? []) as AdminUserPublic[], error: null };
 }
 
 export function groupCount(rows: JsonRecord[], key: string) {

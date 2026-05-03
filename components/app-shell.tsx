@@ -2,23 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarRange, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Settings2, ShieldCheck, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { BarChart3, CalendarRange, ClipboardCheck, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Settings2, ShieldCheck, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
 import { cn } from "@/lib/utils";
 
-// Local role helpers — kept inline (not imported from @/lib/permissions)
-// because the centralized helper module is not yet committed to git, and
-// Vercel's build was failing with "Module not found: Can't resolve
-// '@/lib/permissions'". Once the centralized module is committed, the
-// import can be restored and these duplicates removed.
+// Local role helpers — kept inline to avoid adding a client-boundary import
+// to @/lib/permissions (which uses "server-only" transitively).
 function canAccessAdminUser(adminUser: CurrentAdminUser | null) {
   return ["super_admin", "admin", "core_team"].includes(adminUser?.role ?? "");
 }
 
 function canManageUsers(adminUser: CurrentAdminUser | null) {
   return ["super_admin", "admin"].includes(adminUser?.role ?? "");
+}
+
+/** Reviewer + all admin tiers can access /reviews. */
+function canReview(adminUser: CurrentAdminUser | null) {
+  return ["super_admin", "admin", "core_team", "reviewer"].includes(adminUser?.role ?? "");
 }
 
 // Items visible to every authenticated admin user (any role).
@@ -33,6 +35,9 @@ const navItems = [
   { href: "/events", label: "Sự kiện", icon: CalendarRange },
   { href: "/data-issues", label: "Data Issues", icon: DatabaseZap }
 ];
+
+// Gated by canReview (reviewer + admin tiers).
+const reviewsNavItem = { href: "/reviews", label: "Reviews", icon: ClipboardCheck };
 
 // Gated by canAccessAdminUser (super_admin / admin / core_team).
 const teamNavItem = { href: "/team", label: "Team & Trách nhiệm", icon: ShieldCheck };
@@ -59,8 +64,10 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
   //       → Quản lý người dùng
   const showAdminTier = canAccessAdminUser(adminUser);
   const showUserMgmt = canManageUsers(adminUser);
+  const showReviews = canReview(adminUser);
   const visibleNavItems = [
     ...navItems,
+    ...(showReviews ? [reviewsNavItem] : []),
     ...(showAdminTier ? [teamNavItem, adminCorrectionNavItem] : []),
     ...(showUserMgmt ? [userManagementNavItem] : [])
   ];
