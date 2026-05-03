@@ -9,14 +9,23 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  let adminUser = null;
-  try {
-    adminUser = await getCurrentAdminUser();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("Dynamic server usage")) throw error;
-    console.error("[layout] getCurrentAdminUser failed", message);
-  }
+  // No silent fallback. If getCurrentAdminUser() throws (env mis-config,
+  // DB error, mis-linked admin_users row), we let the error propagate to
+  // Next.js so the failure is loudly visible instead of demoting every
+  // visitor to a viewer-equivalent UI. The earlier swallowing try/catch
+  // here was the exact reason core_team users were rendering as "Viewer"
+  // even though server-side resolution succeeded — the throw from the
+  // resolver was caught here and replaced with `null`.
+  //
+  // The only re-raise we used to honor was Next.js's "Dynamic server
+  // usage" sentinel, but `getCurrentAdminUser` always reads cookies, so
+  // the layout is dynamic by construction and that sentinel never fires.
+  const adminUser = await getCurrentAdminUser();
+
+  // ROLE DEBUG — server log on every layout render so we can confirm
+  // exactly what shape (and which role string) is being passed to the
+  // client AppShell. Remove once the production behavior is verified.
+  console.log("ROLE DEBUG (layout):", adminUser);
 
   return (
     <html lang="vi">

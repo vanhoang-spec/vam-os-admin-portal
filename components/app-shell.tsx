@@ -6,6 +6,7 @@ import { BarChart3, CalendarRange, ClipboardList, DatabaseZap, Handshake, Home, 
 import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
+import { canAccessAdmin, canManageUsers } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -25,11 +26,26 @@ const adminCorrectionNavItem = { href: "/admin", label: "Admin Workflow", icon: 
 
 export function AppShell({ children, adminUser }: { children: React.ReactNode; adminUser: CurrentAdminUser | null }) {
   const pathname = usePathname();
-  const visibleNavItems = adminUser?.role === "super_admin"
-    ? [...navItems, adminCorrectionNavItem, { href: "/admin/users", label: "Quản lý người dùng", icon: UserCog }]
-    : adminUser?.role === "admin"
-      ? [...navItems, adminCorrectionNavItem]
-      : navItems;
+
+  // ROLE DEBUG — confirms the prop arrived at the client component with
+  // the right role string. Browser console only — remove after the
+  // production behavior is verified.
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log("ROLE DEBUG (AppShell):", adminUser);
+  }
+
+  // Sidebar nav visibility uses the centralized permission helpers
+  // (lib/permissions.ts) instead of inlining role string lists. The
+  // previous hard-coded `role === "super_admin" || role === "admin"`
+  // check silently excluded core_team from the Admin Workflow item.
+  const showAdminWorkflow = canAccessAdmin(adminUser);
+  const showUserManagement = canManageUsers(adminUser);
+  const visibleNavItems = [
+    ...navItems,
+    ...(showAdminWorkflow ? [adminCorrectionNavItem] : []),
+    ...(showUserManagement ? [{ href: "/admin/users", label: "Quản lý người dùng", icon: UserCog }] : [])
+  ];
 
   if (pathname === "/unlock" || pathname === "/login") return <>{children}</>;
 
