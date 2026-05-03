@@ -189,7 +189,7 @@ export async function submitPilotApplication(
     gender,
     consent_data_storage: input.consentDataStorage,
     raw_payload: input.rawPayload,
-    submitted_at: new Date().toISOString()
+    submitted_at: new Date().toISOString().slice(0, 10)
   };
 
   const { data: inserted, error: insertErr } = await client
