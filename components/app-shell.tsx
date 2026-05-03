@@ -6,9 +6,22 @@ import { BarChart3, CalendarRange, ClipboardList, DatabaseZap, Handshake, Home, 
 import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
-import { canAccessAdmin, canManageUsers } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
+// Local role helpers — kept inline (not imported from @/lib/permissions)
+// because the centralized helper module is not yet committed to git, and
+// Vercel's build was failing with "Module not found: Can't resolve
+// '@/lib/permissions'". Once the centralized module is committed, the
+// import can be restored and these duplicates removed.
+function canAccessAdminUser(adminUser: CurrentAdminUser | null) {
+  return ["super_admin", "admin", "core_team"].includes(adminUser?.role ?? "");
+}
+
+function canManageUsers(adminUser: CurrentAdminUser | null) {
+  return ["super_admin", "admin"].includes(adminUser?.role ?? "");
+}
+
+// Items visible to every authenticated admin user (any role).
 const navItems = [
   { href: "/", label: "Dashboard", icon: Home },
   { href: "/operations", label: "Operations", icon: LineChart },
@@ -18,11 +31,15 @@ const navItems = [
   { href: "/applications", label: "Applications", icon: ClipboardList },
   { href: "/matches", label: "Matches", icon: Handshake },
   { href: "/events", label: "Sự kiện", icon: CalendarRange },
-  { href: "/team", label: "Team & Trách nhiệm", icon: ShieldCheck },
   { href: "/data-issues", label: "Data Issues", icon: DatabaseZap }
 ];
 
+// Gated by canAccessAdminUser (super_admin / admin / core_team).
+const teamNavItem = { href: "/team", label: "Team & Trách nhiệm", icon: ShieldCheck };
 const adminCorrectionNavItem = { href: "/admin", label: "Admin Workflow", icon: Settings2 };
+
+// Gated by canManageUsers (super_admin / admin only).
+const userManagementNavItem = { href: "/admin/users", label: "Quản lý người dùng", icon: UserCog };
 
 export function AppShell({ children, adminUser }: { children: React.ReactNode; adminUser: CurrentAdminUser | null }) {
   const pathname = usePathname();
@@ -35,16 +52,17 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
     console.log("ROLE DEBUG (AppShell):", adminUser);
   }
 
-  // Sidebar nav visibility uses the centralized permission helpers
-  // (lib/permissions.ts) instead of inlining role string lists. The
-  // previous hard-coded `role === "super_admin" || role === "admin"`
-  // check silently excluded core_team from the Admin Workflow item.
-  const showAdminWorkflow = canAccessAdmin(adminUser);
-  const showUserManagement = canManageUsers(adminUser);
+  // Sidebar visibility per role:
+  //   - canAccessAdminUser (super_admin / admin / core_team)
+  //       → Team & Trách nhiệm + Admin Workflow
+  //   - canManageUsers (super_admin / admin)
+  //       → Quản lý người dùng
+  const showAdminTier = canAccessAdminUser(adminUser);
+  const showUserMgmt = canManageUsers(adminUser);
   const visibleNavItems = [
     ...navItems,
-    ...(showAdminWorkflow ? [adminCorrectionNavItem] : []),
-    ...(showUserManagement ? [{ href: "/admin/users", label: "Quản lý người dùng", icon: UserCog }] : [])
+    ...(showAdminTier ? [teamNavItem, adminCorrectionNavItem] : []),
+    ...(showUserMgmt ? [userManagementNavItem] : [])
   ];
 
   if (pathname === "/unlock" || pathname === "/login") return <>{children}</>;
