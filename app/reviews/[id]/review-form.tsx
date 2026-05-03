@@ -192,11 +192,10 @@ export function ReviewForm({
             className="mt-2 w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink focus:outline-none focus:ring-1 focus:ring-vam-green disabled:bg-slate-100 disabled:text-slate-500"
           >
             <option value="">-- Chọn kết quả --</option>
-            <option value="pass">Pass — Chấp nhận</option>
-            <option value="pass_with_note">Pass with note — Chấp nhận có ghi chú</option>
-            <option value="waitlist">Waitlist — Dự bị</option>
-            <option value="reject">Reject — Từ chối</option>
-            <option value="need_more_info">Need more info — Cần thêm thông tin</option>
+            <option value="pass_to_interview">Mời vào vòng phỏng vấn</option>
+            <option value="waitlist">Đưa vào danh sách chờ</option>
+            <option value="reject">Không phù hợp / từ chối</option>
+            <option value="needs_admin_review">Cần core team/admin xem thêm</option>
           </select>
         </div>
 
