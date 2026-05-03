@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import {
   submitPilotApplication,
   type ApplicationRole,
@@ -158,14 +159,18 @@ export async function submitMentorApplicationAction(
       rawPayload
     });
 
-    if (result.ok) {
-      revalidatePath("/admin/applications");
-    }
-
-    return resultToState(result);
+    // On failure return the error state immediately.
+    // On success fall through — redirect() must be called outside try/catch
+    // because it throws NEXT_REDIRECT internally, which the catch block
+    // would otherwise swallow and convert into a generic error state.
+    if (!result.ok) return resultToState(result);
+    revalidatePath("/admin/applications");
   } catch (err) {
     return fail("submitMentorApplicationAction", err);
   }
+
+  // Reached only when result.ok === true.
+  redirect("/apply/thanks?role=mentor");
 }
 
 /**
@@ -280,13 +285,12 @@ export async function submitMenteeApplicationAction(
       rawPayload
     });
 
-    if (result.ok) {
-      revalidatePath("/admin/applications");
-    }
-
-    return resultToState(result);
+    if (!result.ok) return resultToState(result);
+    revalidatePath("/admin/applications");
   } catch (err) {
     return fail("submitMenteeApplicationAction", err);
   }
+
+  redirect("/apply/thanks?role=mentee");
 }
 

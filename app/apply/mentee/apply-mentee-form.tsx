@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useFormState } from "react-dom";
 import { submitMenteeApplicationAction } from "@/app/actions/apply";
 import { initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
@@ -140,17 +138,12 @@ const REFERRER_OPTIONS = [
 ];
 
 export function ApplyMenteeForm() {
+  // Redirect on success is handled server-side via redirect() in the action.
+  // useFormState is kept only to surface error states (validation / duplicate / db).
   const [state, formAction] = useFormState<ApplyActionState, FormData>(
     submitMenteeApplicationAction,
     initialApplyActionState
   );
-  const router = useRouter();
-
-  useEffect(() => {
-    if (state.ok && state.applicationId) {
-      router.push("/apply/thanks?role=mentee");
-    }
-  }, [state.ok, state.applicationId, router]);
 
   return (
     <form action={formAction} className="grid gap-6">
