@@ -1,11 +1,11 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
+import { handleReviewFormAction } from "@/app/actions/application-reviews";
 import {
-  handleReviewFormAction,
   initialReviewActionState
-} from "@/app/actions/application-reviews";
-import type { ReviewActionState } from "@/app/actions/application-reviews";
+} from "@/lib/review-action-types";
+import type { ReviewActionState } from "@/lib/review-action-types";
 
 // ---------------------------------------------------------------------------
 // Score radio group (1–5)

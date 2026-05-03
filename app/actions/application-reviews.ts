@@ -9,14 +9,7 @@ import {
   updateApplicationStatus
 } from "@/lib/application-reviews";
 import { canAssignReview, canReview } from "@/lib/permissions";
-
-export type ReviewActionState = {
-  ok: boolean;
-  message: string | null;
-  reviewId?: string;
-};
-
-const initialState: ReviewActionState = { ok: false, message: null };
+import type { ReviewActionState } from "@/lib/review-action-types";
 
 function fail(message: string): ReviewActionState {
   return { ok: false, message };
@@ -182,8 +175,6 @@ function parseScore(value: FormDataEntryValue | null): number | null {
   if (isNaN(n) || n < 1 || n > 5) return null;
   return n;
 }
-
-export { initialState as initialReviewActionState };
 
 // ----------------------------------------------------------------
 // Combined draft + submit action — driven by _intent field value.

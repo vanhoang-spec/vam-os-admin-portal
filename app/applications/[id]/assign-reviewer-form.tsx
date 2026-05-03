@@ -1,10 +1,8 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import {
-  assignApplicationReviewAction,
-  initialReviewActionState
-} from "@/app/actions/application-reviews";
+import { assignApplicationReviewAction } from "@/app/actions/application-reviews";
+import { initialReviewActionState } from "@/lib/review-action-types";
 import type { AdminUserPublic } from "@/lib/types";
 
 function SubmitButton() {
