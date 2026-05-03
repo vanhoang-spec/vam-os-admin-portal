@@ -65,7 +65,7 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
     ...(showUserMgmt ? [userManagementNavItem] : [])
   ];
 
-  if (pathname === "/unlock" || pathname === "/login") return <>{children}</>;
+  if (pathname === "/unlock" || pathname === "/login" || pathname.startsWith("/apply")) return <>{children}</>;
 
   if (!adminUser) {
     return (
