@@ -47,3 +47,11 @@ export function canDecide(role?: string | null) {
 export function canBulkAssignReviews(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can enable a mentor as a reviewer (create/upgrade their admin_users row).
+ * Same role set as canBulkAssignReviews — separate name for semantic clarity.
+ */
+export function canManageReviewers(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

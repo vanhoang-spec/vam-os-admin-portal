@@ -27,6 +27,7 @@ import type {
   ReviewAssignableApplication,
   ReviewAssignmentBatch,
   ReviewEligibleReviewer,
+  ReviewerPoolRow,
   ReviewProgressRow,
   Season
 } from "@/lib/types";
@@ -1387,4 +1388,103 @@ export async function getReviewAssignmentProgress(filters: {
     });
 
   return { data, error: null };
+}
+
+// ----------------------------------------------------------------
+// Phase 044A-2 — Reviewer pool fetcher (service-role)
+// ----------------------------------------------------------------
+
+/**
+ * All mentor profiles enriched with their current reviewer/admin account status.
+ *
+ * Three-query pattern:
+ *   1. mentor_profiles (id, person_id, mentor_code, intake_batch_id)
+ *   2. people (id, full_name, email_primary) — only those linked to mentors
+ *   3. admin_users (id, email, role, status) — full set, joined in JS by email
+ *
+ * Optionally filtered by intake_batch_id for scoping to one season.
+ * Rows without email_primary are excluded (cannot create an account without email).
+ */
+export async function getReviewerPool(filters?: {
+  intakeBatchId?: string | null;
+}): Promise<QueryResult<ReviewerPoolRow[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<ReviewerPoolRow[]>([]);
+
+  // --- Query 1: mentor profiles (conditionally filtered)
+  let mentorQuery = client
+    .from("mentor_profiles")
+    .select("id,person_id,mentor_code,intake_batch_id")
+    .not("person_id", "is", null)
+    .order("id");
+
+  if (filters?.intakeBatchId) {
+    mentorQuery = mentorQuery.eq("intake_batch_id", filters.intakeBatchId);
+  }
+
+  const [mentorRes, adminRes] = await Promise.all([
+    mentorQuery,
+    client.from("admin_users").select("id,email,role,status,auth_user_id")
+  ]);
+
+  if (mentorRes.error) {
+    logDataError("getReviewerPool.mentor_profiles", mentorRes.error);
+    return { data: [], error: `${VI_ERROR} (mentor_profiles: ${mentorRes.error.message})` };
+  }
+
+  const mentors = (mentorRes.data ?? []) as {
+    id: string;
+    person_id: string | null;
+    mentor_code: string | null;
+    intake_batch_id: string | null;
+  }[];
+
+  if (!mentors.length) return { data: [], error: null };
+
+  // --- Query 2: people (only linked person_ids)
+  const personIds = Array.from(
+    new Set(mentors.map((m) => m.person_id).filter((id): id is string => Boolean(id)))
+  );
+
+  const { data: peopleRows } = await client
+    .from("people")
+    .select("id,full_name,email_primary")
+    .in("id", personIds);
+
+  const peopleById = new Map(
+    (peopleRows ?? []).map((p) => [
+      p.id as string,
+      p as { id: string; full_name: string | null; email_primary: string | null }
+    ])
+  );
+
+  // --- Build email → admin_user map from Query 3
+  const adminByEmail = new Map(
+    (adminRes.data ?? []).map((a) => [
+      String((a as { email: string }).email ?? "").toLowerCase(),
+      a as { id: string; email: string; role: string | null; status: string | null; auth_user_id: string | null }
+    ])
+  );
+
+  // --- Join and return
+  const rows: ReviewerPoolRow[] = mentors
+    .map((mentor) => {
+      const person = mentor.person_id ? peopleById.get(mentor.person_id) : undefined;
+      const email = String(person?.email_primary ?? "").trim().toLowerCase();
+      const adminUser = email ? adminByEmail.get(email) : undefined;
+      return {
+        mentor_profile_id: mentor.id,
+        person_id: mentor.person_id,
+        full_name: person?.full_name ?? null,
+        email_primary: person?.email_primary ?? null,
+        mentor_code: mentor.mentor_code,
+        intake_batch_id: mentor.intake_batch_id,
+        admin_user_id: adminUser?.id ?? null,
+        admin_user_role: adminUser?.role ?? null,
+        admin_user_status: adminUser?.status ?? null
+      };
+    })
+    .filter((row) => Boolean(row.email_primary));
+
+  return { data: rows, error: null };
 }

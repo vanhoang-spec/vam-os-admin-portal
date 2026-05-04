@@ -199,6 +199,24 @@ export type IntakeBatch = JsonRecord & {
   is_active: boolean;
 };
 
+/**
+ * One mentor enriched with their current admin_user reviewer status.
+ * Used in the /reviews/reviewer-pool page.
+ * Joined in JS: mentor_profiles → people (person_id) → admin_users (email).
+ */
+export type ReviewerPoolRow = {
+  mentor_profile_id: string;
+  person_id: string | null;
+  full_name: string | null;
+  email_primary: string | null;
+  mentor_code: string | null;
+  intake_batch_id: string | null;
+  /** null when no admin_users row exists for this mentor's email. */
+  admin_user_id: string | null;
+  admin_user_role: string | null;
+  admin_user_status: string | null;
+};
+
 export type Program = JsonRecord & {
   id: string;
   code: string;

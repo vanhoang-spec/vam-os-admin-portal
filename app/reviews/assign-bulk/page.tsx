@@ -43,9 +43,14 @@ export default async function AssignBulkPage({
         <Card>
           <div className="mb-4 flex items-center justify-between">
           <p className="text-sm font-medium text-slate-700">Bước 1 — Chọn batch và role ứng tuyển</p>
-          <Link href="/reviews/guide" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
-            Hướng dẫn vận hành
-          </Link>
+          <div className="flex gap-3">
+            <Link href="/reviews/reviewer-pool" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
+              Quản lý reviewer pool
+            </Link>
+            <Link href="/reviews/guide" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
+              Hướng dẫn vận hành
+            </Link>
+          </div>
         </div>
           <form method="GET" className="flex flex-wrap gap-3">
             <div className="flex flex-col gap-1">
