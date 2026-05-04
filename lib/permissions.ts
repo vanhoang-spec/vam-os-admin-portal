@@ -64,3 +64,12 @@ export function canManageReviewers(role?: string | null) {
 export function canSelfClaimInterview(role?: string | null) {
   return ["super_admin", "admin", "core_team", "reviewer"].includes(role || "");
 }
+
+/**
+ * Can create, view, and cancel mentor–mentee matches.
+ * Reviewer role is excluded — only core_team and above.
+ * Phase 046A: manual matching foundation.
+ */
+export function canManageMatches(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

@@ -83,6 +83,16 @@ export type Match = JsonRecord & {
   match_source_raw: string | null;
   match_confidence: number | null;
   notes: string | null;
+  /** Phase 046A — manual matching foundation */
+  mentor_profile_id?: string | null;
+  mentee_profile_id?: string | null;
+  intake_batch_id?: string | null;
+  match_source?: string | null;
+  matched_by?: string | null;
+  matched_at?: string | null;
+  ended_at?: string | null;
+  end_reason?: string | null;
+  admin_notes?: string | null;
 };
 
 /** Lightweight admin_users projection used for reviewer assignment dropdowns. */

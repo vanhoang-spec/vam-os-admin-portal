@@ -1,48 +1,265 @@
-import { FilterableTable } from "@/components/filterable-table";
-import { ErrorBox, PageHeader } from "@/components/ui";
-import { getMatches, getPeople, getSeasons, keyById } from "@/lib/data";
-import { Match, Person, Season } from "@/lib/types";
+import Link from "next/link";
+import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { getIntakeBatches } from "@/lib/data";
+import { getManualMatchingCandidates, getMatchList } from "@/lib/matches";
+import { canManageMatches } from "@/lib/permissions";
+import { displayText, formatDate } from "@/lib/utils";
+import { ManualMatchForm, MatchCancelForm } from "./matches-client";
 
-type Row = Match & { mentor?: Person; mentee?: Person; season?: Season };
+function selectedParam(v: string | string[] | undefined) {
+  return (Array.isArray(v) ? v[0] : v) ?? "";
+}
 
-export default async function MatchesPage() {
-  const [matches, people, seasons] = await Promise.all([getMatches(), getPeople(), getSeasons()]);
-  const peopleById = keyById(people.data);
-  const seasonsById = keyById(seasons.data);
-  const rows = matches.data.map((match) => {
-    const mentor = match.mentor_person_id ? peopleById.get(match.mentor_person_id) : undefined;
-    const mentee = match.mentee_person_id ? peopleById.get(match.mentee_person_id) : undefined;
-    const season = match.season_id ? seasonsById.get(match.season_id) : undefined;
-    return {
-      ...match,
-      mentor_name: mentor?.full_name,
-      mentee_name: mentee?.full_name,
-      season_code: season?.code
-    };
+function StatusBadge({ status }: { status: string | null }) {
+  const s = String(status ?? "").toLowerCase();
+  if (s === "active")
+    return <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">Đang active</span>;
+  if (s === "cancelled")
+    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">Đã hủy</span>;
+  if (s === "inactive")
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">Inactive</span>;
+  return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{status ?? "—"}</span>;
+}
+
+export default async function MatchesPage({
+  searchParams
+}: {
+  searchParams?: {
+    batch?: string | string[];
+    status?: string | string[];
+  };
+}) {
+  const [adminUser, intakeBatchesRes] = await Promise.all([
+    getCurrentAdminUser(),
+    getIntakeBatches()
+  ]);
+  const allowManage = canManageMatches(adminUser?.role);
+
+  const batchFilter = selectedParam(searchParams?.batch).trim();
+  const rawStatus = selectedParam(searchParams?.status).trim();
+  const statusFilter = rawStatus || "active"; // default to showing active matches
+
+  // Always load matches (filtered by batch/status if provided)
+  const matchListRes = await getMatchList({
+    intakeBatchId: batchFilter || null,
+    status: statusFilter !== "all" ? statusFilter : null
   });
+
+  // Load candidates only when a batch is selected
+  const candidatesRes =
+    batchFilter && allowManage
+      ? await getManualMatchingCandidates(batchFilter)
+      : null;
+
+  const batches = intakeBatchesRes.data ?? [];
+  const selectedBatch = batches.find((b) => b.id === batchFilter) ?? null;
+
   return (
     <>
-      <PageHeader title="Matches" description="Danh sách ghép cặp mentor - mentee, mặc định hiển thị active." />
-      <ErrorBox message={matches.error || people.error || seasons.error} />
-      <FilterableTable
-        rows={rows}
-        searchPlaceholder="Tìm theo tên mentor hoặc mentee"
-        searchKeys={["mentor_name", "mentee_name"]}
-        filters={[
-          { key: "status", label: "status", valueKey: "status", defaultValue: "active" },
-          { key: "match_type", label: "match_type", valueKey: "match_type" }
-        ]}
-        getHref={{ prefix: "/matches/", key: "id" }}
-        columns={[
-          { key: "season_code", label: "season_code" },
-          { key: "status", label: "status" },
-          { key: "match_type", label: "match_type" },
-          { key: "mentor_name", label: "mentor_name" },
-          { key: "mentee_name", label: "mentee_name" },
-          { key: "match_source_raw", label: "match_source_raw" },
-          { key: "match_confidence", label: "match_confidence" }
-        ]}
+      <PageHeader
+        title="Matching Mentor – Mentee"
+        description="Tạo và quản lý ghép cặp thủ công theo batch. S11 legacy matches vẫn hiển thị đầy đủ."
       />
+      {matchListRes.error ? <ErrorBox message={matchListRes.error} /> : null}
+      {intakeBatchesRes.error ? <ErrorBox message={intakeBatchesRes.error} /> : null}
+
+      {/* ── Filter bar ── */}
+      <Card className="mb-4">
+        <form className="flex flex-wrap items-end gap-3">
+          <label className="block min-w-[200px] flex-1">
+            <span className="text-xs font-medium uppercase text-slate-500">Intake Batch</span>
+            <select
+              name="batch"
+              defaultValue={batchFilter}
+              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+            >
+              <option value="">-- Tất cả batch --</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.id}>{b.code ?? b.name ?? b.id}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block min-w-[160px] flex-1">
+            <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
+            <select
+              name="status"
+              defaultValue={rawStatus}
+              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+            >
+              <option value="active">Đang active</option>
+              <option value="cancelled">Đã hủy</option>
+              <option value="inactive">Inactive</option>
+              <option value="all">Tất cả</option>
+            </select>
+          </label>
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+            >
+              Lọc
+            </button>
+            <Link
+              href="/matches"
+              className="inline-flex items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Xoá lọc
+            </Link>
+          </div>
+        </form>
+      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+        {/* ── Left: manual create (only when batch selected + allowed) ── */}
+        <div className="flex flex-col gap-4">
+          {allowManage && batchFilter && candidatesRes ? (
+            <Card>
+              <h2 className="mb-1 text-base font-semibold text-vam-ink">Tạo matching thủ công</h2>
+              <p className="mb-3 text-xs text-slate-500">
+                Batch: <strong>{selectedBatch?.code ?? batchFilter}</strong> ·{" "}
+                {candidatesRes.mentors.length} mentor · {candidatesRes.mentees.length} mentee
+              </p>
+              {candidatesRes.error ? (
+                <ErrorBox message={candidatesRes.error} />
+              ) : candidatesRes.mentors.length === 0 && candidatesRes.mentees.length === 0 ? (
+                <EmptyState message="Chưa có mentor hoặc mentee nào trong batch này. Hoàn tất quy trình xét duyệt trước khi matching." />
+              ) : (
+                <ManualMatchForm
+                  intakeBatchId={batchFilter}
+                  mentors={candidatesRes.mentors}
+                  mentees={candidatesRes.mentees}
+                />
+              )}
+            </Card>
+          ) : allowManage ? (
+            <Card>
+              <h2 className="mb-1 text-base font-semibold text-slate-400">Tạo matching thủ công</h2>
+              <p className="text-sm text-slate-400">
+                Chọn một Intake Batch ở bộ lọc để bắt đầu tạo match.
+              </p>
+            </Card>
+          ) : (
+            <Card>
+              <h2 className="mb-1 text-base font-semibold text-slate-400">Tạo matching thủ công</h2>
+              <p className="text-sm text-slate-500">
+                Chỉ admin hoặc core team được tạo match.
+              </p>
+            </Card>
+          )}
+
+          {/* Capacity summary for selected batch */}
+          {candidatesRes && candidatesRes.mentors.length > 0 ? (
+            <Card>
+              <h2 className="mb-3 text-base font-semibold text-vam-ink">Tải mentor trong batch</h2>
+              <div className="space-y-1.5">
+                {candidatesRes.mentors.map((m) => {
+                  const count = m.active_match_count;
+                  const pct = Math.round((count / 3) * 100);
+                  return (
+                    <div key={m.profile_id} className="flex items-center gap-2 text-xs">
+                      <div className="w-32 truncate font-medium text-vam-ink" title={m.full_name ?? ""}>
+                        {m.full_name ?? m.email_primary ?? "—"}
+                      </div>
+                      <div className="flex-1 overflow-hidden rounded-full bg-slate-100" style={{ height: 6 }}>
+                        <div
+                          className={`h-full rounded-full ${count >= 3 ? "bg-red-400" : count >= 2 ? "bg-amber-400" : "bg-green-400"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className={`w-12 text-right font-semibold ${count >= 3 ? "text-red-600" : count > 0 ? "text-amber-600" : "text-green-600"}`}>
+                        {count}/3
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : null}
+        </div>
+
+        {/* ── Right: matches table ── */}
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">
+            Danh sách matching{" "}
+            <span className="text-sm font-normal text-slate-500">
+              ({matchListRes.data.length} {statusFilter !== "all" ? statusFilter : "tổng cộng"})
+            </span>
+          </h2>
+
+          {matchListRes.data.length === 0 ? (
+            <EmptyState message="Chưa có match nào phù hợp với bộ lọc." />
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-vam-line text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Mentor</th>
+                      <th className="px-4 py-3">Mentee</th>
+                      <th className="px-4 py-3">Batch / Nguồn</th>
+                      <th className="px-4 py-3">Trạng thái</th>
+                      <th className="px-4 py-3">Thời điểm</th>
+                      <th className="px-4 py-3">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-vam-line">
+                    {matchListRes.data.map((row) => (
+                      <tr key={row.id} className="hover:bg-vam-mint/30">
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium text-vam-ink">
+                            {displayText(row.mentor_name)}
+                          </div>
+                          <div className="text-xs text-slate-500">{displayText(row.mentor_email)}</div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium text-vam-ink">
+                            {displayText(row.mentee_name)}
+                          </div>
+                          <div className="text-xs text-slate-500">{displayText(row.mentee_email)}</div>
+                        </td>
+                        <td className="px-4 py-3 align-top text-xs text-slate-600">
+                          <div>{row.batch_code ?? row.match_type ?? "—"}</div>
+                          <div className="text-slate-400">
+                            {row.match_source ?? row.match_source_raw ?? "—"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <StatusBadge status={row.status} />
+                          {row.end_reason ? (
+                            <div className="mt-1 text-[11px] text-slate-500">{row.end_reason}</div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 align-top text-xs text-slate-500">
+                          <div>{formatDate(row.matched_at) || formatDate(row.starts_at as string | null | undefined)}</div>
+                          {row.ended_at ? (
+                            <div className="text-red-500">Kết thúc: {formatDate(row.ended_at)}</div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex flex-wrap gap-2">
+                            <Link
+                              href={`/matches/${row.id}`}
+                              className="inline-flex rounded border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                            >
+                              Chi tiết
+                            </Link>
+                            {allowManage && row.status === "active" ? (
+                              <MatchCancelForm matchId={row.id} />
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
     </>
   );
 }
