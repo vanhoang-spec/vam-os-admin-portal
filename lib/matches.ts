@@ -404,7 +404,7 @@ export async function createManualMatch(input: {
     status: "active",
     match_source: "manual",
     match_source_raw: "manual",
-    match_type: "manual",
+    match_type: "primary",
     matched_by: access.admin?.id ?? null,
     matched_at: new Date().toISOString(),
     admin_notes: clean(input.adminNotes)
