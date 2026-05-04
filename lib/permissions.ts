@@ -39,3 +39,11 @@ export function isReviewerOnly(role?: string | null) {
 export function canDecide(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can bulk-assign applications to reviewers.
+ * Same role set as canAssignReview — reviewer role cannot bulk-assign.
+ */
+export function canBulkAssignReviews(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

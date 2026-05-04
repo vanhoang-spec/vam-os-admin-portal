@@ -6,7 +6,7 @@ import {
   getApplication,
   getMyApplicationReviews
 } from "@/lib/data";
-import { canReview, isReviewerOnly } from "@/lib/permissions";
+import { canBulkAssignReviews, canReview, isReviewerOnly } from "@/lib/permissions";
 import type { ApplicationReview } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
@@ -48,6 +48,7 @@ export default async function ReviewsPage() {
   if (!canReview(adminUser.role)) redirect("/");
 
   const reviewerOnly = isReviewerOnly(adminUser.role);
+  const canBulkAssign = canBulkAssignReviews(adminUser.role);
 
   const result = reviewerOnly
     ? await getMyApplicationReviews(adminUser.id)
@@ -88,6 +89,25 @@ export default async function ReviewsPage() {
             : "Toàn bộ review assignment trong hệ thống."
         }
       />
+
+      {/* Admin action bar */}
+      {canBulkAssign && (
+        <div className="mb-5 flex flex-wrap gap-3">
+          <Link
+            href="/reviews/assign-bulk"
+            className="inline-flex items-center gap-1.5 rounded-md bg-vam-green px-4 py-1.5 text-sm font-medium text-white hover:bg-vam-green/90"
+          >
+            Chia hồ sơ review
+          </Link>
+          <Link
+            href="/reviews/progress"
+            className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Tiến độ review
+          </Link>
+        </div>
+      )}
+
       <ErrorBox message={result.error} />
 
       {/* Summary pills */}

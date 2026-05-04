@@ -115,6 +115,61 @@ export type ApplicationReview = JsonRecord & {
   submitted_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Phase 044a: which bulk-assignment batch created this review row. */
+  assignment_batch_id?: string | null;
+};
+
+/** Audit record for one bulk-assignment operation. */
+export type ReviewAssignmentBatch = JsonRecord & {
+  id: string;
+  intake_batch_id: string | null;
+  review_round: string;
+  created_by: string | null;
+  created_at: string;
+  due_at: string | null;
+  assignment_note: string | null;
+  application_count: number | null;
+  reviewer_count: number | null;
+};
+
+/**
+ * Lightweight application row used in the bulk-assignment UI.
+ * Includes a pre-computed count of existing profile_screening reviews.
+ */
+export type ReviewAssignableApplication = {
+  id: string;
+  full_name: string | null;
+  email_primary: string | null;
+  role_applied: string | null;
+  status: string | null;
+  submitted_at: string | null;
+  intake_batch_id: string | null;
+  existing_review_count: number;
+};
+
+/**
+ * Active admin user enriched with current review workload.
+ * Used in the bulk-assignment reviewer checklist.
+ */
+export type ReviewEligibleReviewer = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  current_workload: number;
+};
+
+/** Per-reviewer progress row for the /reviews/progress dashboard. */
+export type ReviewProgressRow = {
+  reviewer_admin_user_id: string | null;
+  reviewer_name: string | null;
+  reviewer_email: string | null;
+  assigned_count: number;
+  submitted_count: number;
+  in_progress_count: number;
+  pending_count: number;
+  cancelled_count: number;
+  latest_submitted_at: string | null;
 };
 
 /** One admin/core-team decision recorded against an application. */

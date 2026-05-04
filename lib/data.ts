@@ -24,6 +24,10 @@ import type {
   OperationsWorkflowData,
   Person,
   Program,
+  ReviewAssignableApplication,
+  ReviewAssignmentBatch,
+  ReviewEligibleReviewer,
+  ReviewProgressRow,
   Season
 } from "@/lib/types";
 
@@ -1096,4 +1100,291 @@ export function groupCount(rows: JsonRecord[], key: string) {
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   return Array.from(counts.entries()).map(([name, value]) => ({ name, value }));
+}
+
+// ----------------------------------------------------------------
+// Phase 044a — Bulk-assignment data fetchers (service-role only)
+// ----------------------------------------------------------------
+
+/**
+ * Applications eligible for bulk profile-screening assignment.
+ * Optionally filtered by intake batch and/or role applied.
+ * Returns each app enriched with a count of existing non-cancelled
+ * profile_screening review rows so the UI can show "already assigned" state.
+ * Uses service-role client to bypass RLS on admin_users / application_reviews.
+ */
+export async function getReviewAssignableApplications(filters: {
+  intakeBatchId?: string | null;
+  roleApplied?: string | null;
+}): Promise<QueryResult<ReviewAssignableApplication[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<ReviewAssignableApplication[]>([]);
+
+  let appsQuery = client
+    .from("applications")
+    .select("id,full_name,email_primary,role_applied,status,submitted_at,intake_batch_id")
+    .order("submitted_at", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (filters.intakeBatchId) {
+    appsQuery = appsQuery.eq("intake_batch_id", filters.intakeBatchId);
+  }
+  if (filters.roleApplied) {
+    appsQuery = appsQuery.eq("role_applied", filters.roleApplied);
+  }
+
+  const { data: appRows, error: appsErr } = await appsQuery;
+  if (appsErr) {
+    logDataError("getReviewAssignableApplications.apps", appsErr);
+    return { data: [], error: `${VI_ERROR} (applications: ${appsErr.message})` };
+  }
+
+  const appList = (appRows ?? []) as {
+    id: string;
+    full_name: string | null;
+    email_primary: string | null;
+    role_applied: string | null;
+    status: string | null;
+    submitted_at: string | null;
+    intake_batch_id: string | null;
+  }[];
+
+  if (!appList.length) return { data: [], error: null };
+
+  const appIds = appList.map((a) => a.id);
+  const { data: reviewRows } = await client
+    .from("application_reviews")
+    .select("application_id")
+    .eq("review_round", "profile_screening")
+    .neq("status", "cancelled")
+    .in("application_id", appIds);
+
+  const reviewCountByAppId = new Map<string, number>();
+  for (const row of reviewRows ?? []) {
+    const id = row.application_id as string | null;
+    if (id) reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
+  }
+
+  const data: ReviewAssignableApplication[] = appList.map((a) => ({
+    ...a,
+    existing_review_count: reviewCountByAppId.get(a.id) ?? 0
+  }));
+
+  return { data, error: null };
+}
+
+/**
+ * Admin users eligible to be assigned as reviewers, enriched with their
+ * current active profile_screening workload count.
+ * Uses service-role client because admin_users RLS restricts row visibility.
+ */
+export async function getReviewEligibleReviewers(): Promise<QueryResult<ReviewEligibleReviewer[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<ReviewEligibleReviewer[]>([]);
+
+  const { data: adminRows, error: adminErr } = await client
+    .from("admin_users")
+    .select("id,email,full_name,role")
+    .in("role", ["super_admin", "admin", "core_team", "reviewer"])
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+
+  if (adminErr) {
+    logDataError("getReviewEligibleReviewers.admin_users", adminErr);
+    return { data: [], error: `${VI_ERROR} (admin_users: ${adminErr.message})` };
+  }
+
+  const reviewers = (adminRows ?? []) as {
+    id: string;
+    email: string;
+    full_name: string | null;
+    role: string;
+  }[];
+
+  if (!reviewers.length) return { data: [], error: null };
+
+  const reviewerIds = reviewers.map((r) => r.id);
+  const { data: workloadRows } = await client
+    .from("application_reviews")
+    .select("reviewer_admin_user_id")
+    .eq("review_round", "profile_screening")
+    .neq("status", "cancelled")
+    .in("reviewer_admin_user_id", reviewerIds);
+
+  const workloadById = new Map<string, number>();
+  for (const row of workloadRows ?? []) {
+    const id = row.reviewer_admin_user_id as string | null;
+    if (id) workloadById.set(id, (workloadById.get(id) ?? 0) + 1);
+  }
+
+  const data: ReviewEligibleReviewer[] = reviewers.map((r) => ({
+    ...r,
+    current_workload: workloadById.get(r.id) ?? 0
+  }));
+
+  return { data, error: null };
+}
+
+/**
+ * Audit log of all bulk-assignment batch operations, newest first.
+ * Used in the assignment history panel.
+ */
+export async function getReviewAssignmentBatches(): Promise<QueryResult<ReviewAssignmentBatch[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<ReviewAssignmentBatch[]>([]);
+
+  const { data, error } = await client
+    .from("review_assignment_batches")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    logDataError("getReviewAssignmentBatches", error);
+    return { data: [], error: `${VI_ERROR} (review_assignment_batches: ${error.message})` };
+  }
+
+  return { data: (data ?? []) as ReviewAssignmentBatch[], error: null };
+}
+
+/**
+ * Per-reviewer review progress, optionally scoped to one intake batch and/or
+ * review round (defaults to profile_screening).
+ *
+ * Three-query pattern:
+ *   1. If intakeBatchId is provided, fetch matching app IDs from applications.
+ *   2. Fetch application_reviews rows (filtered by round + optional app IDs).
+ *   3. Fetch reviewer names/emails from admin_users.
+ * Counts are aggregated in JS.
+ *
+ * Column semantics:
+ *   assigned_count  — total review rows for this reviewer (all statuses)
+ *   pending_count   — status = 'assigned' (not yet opened)
+ *   in_progress_count — status = 'in_progress'
+ *   submitted_count — status = 'submitted'
+ *   cancelled_count — status = 'cancelled'
+ */
+export async function getReviewAssignmentProgress(filters: {
+  intakeBatchId?: string | null;
+  reviewRound?: string | null;
+}): Promise<QueryResult<ReviewProgressRow[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<ReviewProgressRow[]>([]);
+
+  const reviewRound = filters.reviewRound?.trim() || "profile_screening";
+
+  // Step 1: resolve app IDs if batch filter is active
+  let appIdFilter: string[] | null = null;
+  if (filters.intakeBatchId) {
+    const { data: appRows, error: appErr } = await client
+      .from("applications")
+      .select("id")
+      .eq("intake_batch_id", filters.intakeBatchId);
+    if (appErr) {
+      logDataError("getReviewAssignmentProgress.apps", appErr);
+      return { data: [], error: `${VI_ERROR} (applications: ${appErr.message})` };
+    }
+    appIdFilter = (appRows ?? []).map((a) => a.id as string);
+    if (!appIdFilter.length) return { data: [], error: null };
+  }
+
+  // Step 2: fetch review rows
+  let reviewsQuery = client
+    .from("application_reviews")
+    .select("reviewer_admin_user_id,status,submitted_at,application_id")
+    .eq("review_round", reviewRound);
+
+  if (appIdFilter) {
+    reviewsQuery = reviewsQuery.in("application_id", appIdFilter);
+  }
+
+  const { data: reviewRows, error: reviewErr } = await reviewsQuery;
+  if (reviewErr) {
+    logDataError("getReviewAssignmentProgress.reviews", reviewErr);
+    return { data: [], error: `${VI_ERROR} (application_reviews: ${reviewErr.message})` };
+  }
+
+  const reviews = (reviewRows ?? []) as {
+    reviewer_admin_user_id: string | null;
+    status: string;
+    submitted_at: string | null;
+    application_id: string;
+  }[];
+
+  if (!reviews.length) return { data: [], error: null };
+
+  // Step 3: fetch reviewer names and emails
+  const reviewerIds = Array.from(
+    new Set(reviews.map((r) => r.reviewer_admin_user_id).filter((id): id is string => Boolean(id)))
+  );
+
+  const { data: adminRows } = await client
+    .from("admin_users")
+    .select("id,full_name,email")
+    .in("id", reviewerIds);
+
+  const nameById = new Map<string, string | null>(
+    (adminRows ?? []).map((r) => [r.id as string, (r.full_name as string | null) ?? null])
+  );
+  const emailById = new Map<string, string | null>(
+    (adminRows ?? []).map((r) => [r.id as string, (r.email as string | null) ?? null])
+  );
+
+  // Aggregate counts per reviewer
+  type Stats = {
+    assigned_count: number;
+    submitted_count: number;
+    in_progress_count: number;
+    pending_count: number;
+    cancelled_count: number;
+    latest_submitted_at: string | null;
+  };
+
+  const statsMap = new Map<string, Stats>();
+
+  for (const review of reviews) {
+    const id = review.reviewer_admin_user_id ?? "__unassigned__";
+    if (!statsMap.has(id)) {
+      statsMap.set(id, {
+        assigned_count: 0,
+        submitted_count: 0,
+        in_progress_count: 0,
+        pending_count: 0,
+        cancelled_count: 0,
+        latest_submitted_at: null
+      });
+    }
+    const stats = statsMap.get(id)!;
+    stats.assigned_count += 1;
+    const s = (review.status ?? "").toLowerCase();
+    if (s === "submitted") {
+      stats.submitted_count += 1;
+      if (!stats.latest_submitted_at || (review.submitted_at && review.submitted_at > stats.latest_submitted_at)) {
+        stats.latest_submitted_at = review.submitted_at;
+      }
+    } else if (s === "in_progress") {
+      stats.in_progress_count += 1;
+    } else if (s === "assigned") {
+      stats.pending_count += 1;
+    } else if (s === "cancelled") {
+      stats.cancelled_count += 1;
+    }
+  }
+
+  const data: ReviewProgressRow[] = Array.from(statsMap.entries())
+    .map(([id, stats]) => {
+      const realId = id === "__unassigned__" ? null : id;
+      return {
+        reviewer_admin_user_id: realId,
+        reviewer_name: realId ? (nameById.get(realId) ?? null) : null,
+        reviewer_email: realId ? (emailById.get(realId) ?? null) : null,
+        ...stats
+      };
+    })
+    .sort((a, b) => {
+      const nameA = a.reviewer_name ?? a.reviewer_email ?? "";
+      const nameB = b.reviewer_name ?? b.reviewer_email ?? "";
+      return nameA.localeCompare(nameB, "vi");
+    });
+
+  return { data, error: null };
 }
