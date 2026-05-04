@@ -1,8 +1,33 @@
 import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
-import { getApplications, getPeople, getSeasons, keyById } from "@/lib/data";
+import { getApplications, getIntakeBatches, getPeople, getSeasons, keyById } from "@/lib/data";
 import { Application, Person, Season } from "@/lib/types";
 import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
+
+// ── Status label helpers ──────────────────────────────────────────────────────
+
+function applicationStatusLabel(status: string | null): string {
+  const s = String(status ?? "").trim().toLowerCase();
+  if (s === "submitted") return "Đã nộp / Chờ xử lý";
+  if (s === "ready_for_screening") return "Sẵn sàng review";
+  if (s === "screening_assigned") return "Đã giao review";
+  if (s === "under_review") return "Đang review hồ sơ";
+  if (s === "screening_completed") return "Đã chấm hồ sơ";
+  if (s === "needs_more_review") return "Cần xem thêm";
+  if (s === "under_data_check") return "Đang kiểm tra dữ liệu";
+  if (s === "invited_to_interview") return "Mời phỏng vấn";
+  if (s === "interview_in_progress") return "Đang phỏng vấn";
+  if (s === "interview_completed") return "Hoàn tất phỏng vấn";
+  if (s === "approved_as_mentor") return "Đã duyệt — Mentor";
+  if (s === "approved_as_mentee") return "Đã duyệt — Mentee";
+  if (s === "rejected") return "Không phù hợp";
+  if (s === "waitlisted") return "Danh sách chờ";
+  if (s === "withdrawn") return "Rút đơn";
+  if (!status || !s) return "—";
+  return status; // Fallback: show raw value so nothing is silently lost
+}
+
+// ── Row type ──────────────────────────────────────────────────────────────────
 
 type Row = Application & {
   person?: Person;
@@ -26,6 +51,8 @@ type Row = Application & {
   consent_display: string;
   consent_filter: string;
   source_display: string;
+  /** Batch code for filter (resolved from intake_batch_id) */
+  intake_batch_code: string;
 };
 
 function consentFilter(value: unknown) {
@@ -36,9 +63,15 @@ function consentFilter(value: unknown) {
 }
 
 export default async function ApplicationsPage() {
-  const [applications, people, seasons] = await Promise.all([getApplications(), getPeople(), getSeasons()]);
+  const [applications, people, seasons, intakeBatchesRes] = await Promise.all([
+    getApplications(),
+    getPeople(),
+    getSeasons(),
+    getIntakeBatches()
+  ]);
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
+  const batchById = new Map(intakeBatchesRes.data.map((b) => [b.id, b]));
 
   const rows: Row[] = applications.data.map((application) => {
     const person = application.person_id ? peopleById.get(application.person_id) : undefined;
@@ -55,6 +88,10 @@ export default async function ApplicationsPage() {
     // Consent: new consent_data_storage (S12) takes precedence over legacy consent_pdpa (S11)
     const consentUnified = application.consent_data_storage ?? application.consent_pdpa;
 
+    // Batch code: resolved from intake_batch_id for filter
+    const batch = application.intake_batch_id ? batchById.get(application.intake_batch_id) : undefined;
+    const intakeBatchCode = batch?.code ?? batch?.name ?? (application.intake_batch_id ? "Batch không rõ" : "Chưa gán");
+
     return {
       ...application,
       person,
@@ -70,19 +107,20 @@ export default async function ApplicationsPage() {
       email_primary_display: displayText(emailPrimary),
       season_code_display: displayCode(seasonCode),
       role_applied_display: displayText(application.role_applied),
-      status_display: displayText(statusUnified),
+      status_display: applicationStatusLabel(statusUnified),
       submitted_at_display: formatDate(application.submitted_at),
       acquisition_channel_display: displayText(application.acquisition_channel),
       consent_display: displayConsent(consentUnified),
       consent_filter: consentFilter(consentUnified),
-      source_display: displayText(application.source)
+      source_display: displayText(application.source),
+      intake_batch_code: intakeBatchCode
     };
   });
 
   return (
     <>
       <PageHeader title="Applications" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
-      <ErrorBox message={applications.error || people.error || seasons.error} />
+      <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />
       <FilterableTable
         rows={rows}
         searchPlaceholder="Tìm theo tên, email, SBD hoặc mã đơn"
@@ -91,6 +129,7 @@ export default async function ApplicationsPage() {
           { key: "status_unified", label: "Trạng thái", valueKey: "status_unified" },
           { key: "role_applied", label: "Vai trò ứng tuyển", valueKey: "role_applied" },
           { key: "season_code", label: "Mùa", valueKey: "season_code" },
+          { key: "intake_batch", label: "Intake Batch", valueKey: "intake_batch_code" },
           {
             key: "consent",
             label: "Đồng ý lưu trữ",

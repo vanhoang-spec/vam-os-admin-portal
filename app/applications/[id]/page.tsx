@@ -298,13 +298,10 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
       {/* ── Final approval (admin / core-team only) ───────────────────────────── */}
       {canMakeDecision && (
         <Card className="mb-4 border-vam-green/30">
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-3">
             <h2 className="text-base font-semibold text-vam-ink">
               Duyệt thành viên chính thức
             </h2>
-            <span className="inline-flex rounded-full border border-vam-green/40 bg-vam-mint px-2 py-0.5 text-xs font-medium text-vam-green">
-              Phase 042
-            </span>
           </div>
           <p className="mb-4 text-sm text-slate-500">
             Tạo hồ sơ <strong>people</strong> và <strong>mentor_profiles / mentee_profiles</strong> từ
@@ -326,52 +323,54 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
         </Card>
       )}
 
+      {/* ── Thông tin ứng viên — moved to top so operator knows who they're reviewing ── */}
       <Card className="mb-4">
-        <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt nhanh</h2>
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin ứng viên</h2>
         <DetailGrid
           rows={[
-            ["status", displayText(displayStatus)],
-            ["source", displayText(application.data.source)],
-            ["câu trả lời legacy", sortedAnswers.length > 0 ? sortedAnswers.length : "-"],
-            ["raw_payload fields (S12)", rawPayloadEntries.length > 0 ? rawPayloadEntries.length : "-"],
-            ["mentor/match", relatedMatch ? `${displayText(relatedMentor?.full_name)} - ${displayText(relatedMatch.status)}` : "-"]
+            ["Họ tên", displayText(displayFullName)],
+            ["Email", displayText(displayEmail)],
+            ["Số điện thoại", displayText(displayPhone)],
+            ["Giới tính", displayText(displayGender)]
           ]}
         />
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin ứng viên</h2>
-          <DetailGrid
-            rows={[
-              ["full_name", displayText(displayFullName)],
-              ["email_primary", displayText(displayEmail)],
-              ["phone_primary", displayText(displayPhone)],
-              ["gender", displayText(displayGender)],
-              ["source_sheets (person)", displayText(person?.source_sheets)]
-            ]}
-          />
-        </Card>
+      {/* ── Quick summary ── */}
+      <Card className="mb-4">
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt nhanh</h2>
+        <DetailGrid
+          rows={[
+            ["Trạng thái hồ sơ", displayText(displayStatus)],
+            ["Nguồn dữ liệu", displayText(application.data.source)],
+            ["Câu trả lời (dữ liệu cũ)", sortedAnswers.length > 0 ? sortedAnswers.length : "-"],
+            ["Nội dung form đăng ký", rawPayloadEntries.length > 0 ? rawPayloadEntries.length : "-"],
+            ["Mentor / Match", relatedMatch ? `${displayText(relatedMentor?.full_name)} — ${displayText(relatedMatch.status)}` : "-"]
+          ]}
+        />
+      </Card>
 
+      {/* ── Detailed info ── */}
+      <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt ứng tuyển</h2>
           <DetailGrid
             rows={[
-              ["season_code", displayText(season?.code ?? season?.name)],
-              ["role_applied", displayText(application.data.role_applied)],
-              ["submitted_at", formatDate(application.data.submitted_at)],
-              ["status (S12)", displayText(application.data.status)],
-              ["final_status (S11)", displayText(application.data.final_status)],
-              ["source", displayText(application.data.source)],
-              ["sbd", displayText(application.data.sbd)],
-              ["consent_data_storage (S12)", String(displayConsentVal ?? "-")],
-              ["consent_pdpa (S11)", displayText(application.data.consent_pdpa)],
-              ["consent_pdpa_at", formatDate(application.data.consent_pdpa_at)],
-              ["acquisition_channel", displayText(application.data.acquisition_channel)]
+              ["Mùa tuyển sinh", displayText(season?.code ?? season?.name)],
+              ["Vai trò ứng tuyển", displayText(application.data.role_applied)],
+              ["Ngày nộp đơn", formatDate(application.data.submitted_at)],
+              ["Trạng thái hồ sơ", displayText(application.data.status)],
+              ["Trạng thái cũ", displayText(application.data.final_status)],
+              ["Nguồn dữ liệu", displayText(application.data.source)],
+              ["SBD (Số báo danh)", displayText(application.data.sbd)],
+              ["Đồng ý lưu dữ liệu", String(displayConsentVal ?? "-")],
+              ["Đồng ý PDPA (cũ)", displayText(application.data.consent_pdpa)],
+              ["Thời điểm đồng ý PDPA", formatDate(application.data.consent_pdpa_at)],
+              ["Kênh tiếp cận", displayText(application.data.acquisition_channel)]
             ]}
           />
           <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
-            <div className="text-xs font-medium uppercase text-slate-500">profile_url</div>
+            <div className="text-xs font-medium uppercase text-slate-500">Link hồ sơ ứng viên</div>
             <div className="mt-1">
               <ExternalLinkButton href={application.data.profile_url} label="Xem profile ứng viên" />
             </div>
@@ -383,11 +382,11 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           {menteeProfile ? (
             <DetailGrid
               rows={[
-                ["mentee_code", displayText(menteeProfile.mentee_code)],
-                ["school_code", displayText(menteeProfile.school_code)],
-                ["major", displayText(menteeProfile.major)],
-                ["class_cohort", displayText(menteeProfile.class_cohort)],
-                ["mssv", displayText(menteeProfile.mssv)]
+                ["Mã mentee", displayText(menteeProfile.mentee_code)],
+                ["Mã trường", displayText(menteeProfile.school_code)],
+                ["Ngành học", displayText(menteeProfile.major)],
+                ["Khóa / Lớp", displayText(menteeProfile.class_cohort)],
+                ["MSSV", displayText(menteeProfile.mssv)]
               ]}
             />
           ) : (
@@ -400,9 +399,9 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           {mentorProfile ? (
             <DetailGrid
               rows={[
-                ["mentor_code", displayText(mentorProfile.mentor_code)],
-                ["company_current", displayText(mentorProfile.company_current)],
-                ["title_current", displayText(mentorProfile.title_current)]
+                ["Mã mentor", displayText(mentorProfile.mentor_code)],
+                ["Công ty hiện tại", displayText(mentorProfile.company_current)],
+                ["Chức danh", displayText(mentorProfile.title_current)]
               ]}
             />
           ) : (
@@ -411,6 +410,7 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
         </Card>
       </div>
 
+      {/* ── Match + Answers ── */}
       <div className="mt-4 grid gap-4">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Match liên quan</h2>
@@ -429,10 +429,10 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           )}
         </Card>
 
-        {/* Legacy answer table (Season 11 and earlier) */}
+        {/* Câu trả lời (dữ liệu cũ — Season 11 và trước đó) */}
         {sortedAnswers.length > 0 && (
           <Card>
-            <h2 className="mb-3 text-base font-semibold text-vam-ink">Câu trả lời ứng tuyển (legacy)</h2>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Câu trả lời ứng tuyển</h2>
             <div className="grid gap-3">
               {sortedAnswers.map((answer, index) => (
                 <ApplicationAnswerCard
@@ -446,15 +446,15 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           </Card>
         )}
 
-        {/* Native S12 form payload — shown when raw_payload is populated */}
+        {/* Nội dung form đăng ký native (raw_payload) */}
         {rawPayloadEntries.length > 0 && (
           <Card>
-            <h2 className="mb-3 text-base font-semibold text-vam-ink">Nội dung đơn (S12 native form)</h2>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Nội dung form đăng ký</h2>
             <DetailGrid rows={rawPayloadEntries} />
           </Card>
         )}
 
-        {/* Empty state only when neither legacy answers nor raw_payload exist */}
+        {/* Empty state chỉ khi không có cả hai */}
         {sortedAnswers.length === 0 && rawPayloadEntries.length === 0 && (
           <Card>
             <h2 className="mb-3 text-base font-semibold text-vam-ink">Câu trả lời ứng tuyển</h2>

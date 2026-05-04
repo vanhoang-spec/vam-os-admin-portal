@@ -38,6 +38,22 @@ function statusBadgeClass(status: string) {
   return "bg-slate-50 text-slate-500 border-vam-line";
 }
 
+/** Returns true when a review is past its deadline and not yet submitted. */
+function isOverdue(dueAt: string | null | undefined, status: string): boolean {
+  if (!dueAt || status === "submitted" || status === "cancelled") return false;
+  return new Date(dueAt) < new Date();
+}
+
+/** Returns true when the deadline is today or tomorrow and review is not done. */
+function isDueSoon(dueAt: string | null | undefined, status: string): boolean {
+  if (!dueAt || status === "submitted" || status === "cancelled") return false;
+  const due = new Date(dueAt);
+  const now = new Date();
+  if (due < now) return false; // already overdue
+  const msTomorrow = now.getTime() + 2 * 24 * 60 * 60 * 1000;
+  return due.getTime() <= msTomorrow;
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -165,8 +181,11 @@ export default async function ReviewsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-vam-line">
-                  {tableRows.map((row) => (
-                    <tr key={row.id} className="hover:bg-vam-mint/40">
+                  {tableRows.map((row) => {
+                    const overdue = isOverdue(row.due_at, row.status);
+                    const dueSoon = !overdue && isDueSoon(row.due_at, row.status);
+                    return (
+                    <tr key={row.id} className={`hover:bg-vam-mint/40 ${overdue ? "bg-red-50/60" : ""}`}>
                       <td className="px-4 py-3 font-medium text-vam-ink">
                         <Link
                           href={`/applications/${row.application_id}`}
@@ -186,7 +205,18 @@ export default async function ReviewsPage() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {row.due_at ? formatDate(row.due_at) : "-"}
+                        <div className="flex flex-col gap-1">
+                          <span>{row.due_at ? formatDate(row.due_at) : "-"}</span>
+                          {overdue ? (
+                            <span className="inline-flex w-fit rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                              Quá hạn
+                            </span>
+                          ) : dueSoon ? (
+                            <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                              Sắp đến hạn
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {row.submitted_at ? formatDate(row.submitted_at) : "-"}
@@ -206,7 +236,8 @@ export default async function ReviewsPage() {
                         </Link>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>
