@@ -71,6 +71,33 @@ export type ApproveApplicationResult =
   | { ok: false; message: string };
 
 // ---------------------------------------------------------------------------
+// Gender normalization
+//
+// public.people.gender uses the gender_type enum: male | female | other | undisclosed
+// S12 native application forms submit "prefer_not_say" which is not a valid
+// enum value. Normalize the raw application gender before inserting into people.
+//
+// Mapping:
+//   "male"           → "male"
+//   "female"         → "female"
+//   "other"          → "other"
+//   "prefer_not_say" → "undisclosed"
+//   "undisclosed"    → "undisclosed"
+//   empty / unknown  → null  (safer than storing garbage in the enum column)
+// ---------------------------------------------------------------------------
+
+const VALID_PEOPLE_GENDER = new Set(["male", "female", "other", "undisclosed"]);
+
+function normalizeGenderForPeople(value: string | null | undefined): string | null {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "prefer_not_say") return "undisclosed";
+  if (VALID_PEOPLE_GENDER.has(raw)) return raw;
+  // Unknown value — omit rather than write an invalid string into the enum column
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -181,7 +208,7 @@ export async function approveApplication(
         full_name: input.fullName.trim(),
         email_primary: emailNorm,
         phone_primary: input.phonePrimary?.trim() ?? null,
-        gender: input.gender?.trim() ?? null,
+        gender: normalizeGenderForPeople(input.gender),
         source_sheets: "s12_native_application"
       })
       .select("id,full_name,email_primary,phone_primary,gender")
