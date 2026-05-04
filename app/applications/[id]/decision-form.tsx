@@ -1,0 +1,176 @@
+"use client";
+
+import { useFormState, useFormStatus } from "react-dom";
+import { updateApplicationDecisionAction } from "@/app/actions/application-decisions";
+import {
+  initialDecisionActionState
+} from "@/lib/decision-action-types";
+
+// ---------------------------------------------------------------------------
+// Options — values must exactly match migration 041 allowed statuses
+// ---------------------------------------------------------------------------
+
+const DECISION_OPTIONS: { value: string; label: string }[] = [
+  { value: "screening_passed",    label: "Pass screening — Hồ sơ đạt" },
+  { value: "invited_to_interview", label: "Mời phỏng vấn" },
+  { value: "waitlisted",          label: "Đưa vào danh sách chờ" },
+  { value: "rejected_or_not_fit", label: "Không phù hợp / từ chối" },
+  { value: "under_data_check",    label: "Cần kiểm tra dữ liệu" },
+  { value: "needs_more_review",   label: "Cần review thêm" },
+  { value: "withdrawn",           label: "Ứng viên rút đơn" },
+  { value: "interview_scheduled", label: "Đã đặt lịch phỏng vấn" },
+  { value: "interview_completed", label: "Đã phỏng vấn xong" }
+];
+
+// Decisions that advance to a positive outcome — warn if no submitted review
+const POSITIVE_DECISIONS = new Set([
+  "screening_passed",
+  "invited_to_interview",
+  "interview_scheduled",
+  "interview_completed"
+]);
+
+// ---------------------------------------------------------------------------
+// Submit button
+// ---------------------------------------------------------------------------
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="inline-flex h-9 items-center gap-2 rounded-md bg-vam-green px-4 text-sm font-medium text-white hover:bg-vam-ink disabled:opacity-50"
+    >
+      {pending ? "Đang lưu…" : "Ghi nhận quyết định"}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+export type DecisionFormProps = {
+  applicationId: string;
+  currentStatus: string | null;
+  hasSubmittedReview: boolean;
+  latestRecommendation?: string | null;
+  latestTotalScore?: number | null;
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function DecisionForm({
+  applicationId,
+  currentStatus,
+  hasSubmittedReview,
+  latestRecommendation,
+  latestTotalScore
+}: DecisionFormProps) {
+  const [state, action] = useFormState(
+    updateApplicationDecisionAction,
+    initialDecisionActionState
+  );
+
+  // Track selected value for the warning logic
+  // (we can't use useState easily without a controlled select, so we use
+  //  a data attribute approach — just show the warning permanently when
+  //  no submitted review exists, since it's always potentially relevant)
+  const showNoReviewWarning = !hasSubmittedReview;
+
+  return (
+    <div className="space-y-4">
+      {/* Action feedback banner */}
+      {state.message && (
+        <div
+          className={`rounded-md border px-3 py-2 text-sm ${
+            state.ok
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {state.message}
+        </div>
+      )}
+
+      {/* Context: current status + latest review summary */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+          <div className="text-xs font-medium uppercase text-slate-500">Trạng thái hiện tại</div>
+          <div className="mt-1 text-sm font-medium text-vam-ink">
+            {currentStatus ?? "-"}
+          </div>
+        </div>
+        <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+          <div className="text-xs font-medium uppercase text-slate-500">Review mới nhất</div>
+          <div className="mt-1 text-sm text-vam-ink">
+            {hasSubmittedReview ? (
+              <>
+                {latestRecommendation ?? "-"}
+                {latestTotalScore !== null && latestTotalScore !== undefined
+                  ? ` · Điểm: ${latestTotalScore}`
+                  : ""}
+              </>
+            ) : (
+              <span className="text-slate-400 italic">Chưa có review được nộp</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Warning when advancing without a submitted review */}
+      {showNoReviewWarning && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          Chưa có review nào được nộp cho đơn này. Bạn vẫn có thể đặt trạng thái
+          nhưng nên có review trước khi chọn screening_passed hoặc invited_to_interview.
+        </div>
+      )}
+
+      {/* Decision form */}
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="application_id" value={applicationId} />
+        <input
+          type="hidden"
+          name="previous_status"
+          value={currentStatus ?? ""}
+        />
+
+        <div>
+          <label className="block text-xs font-medium uppercase text-slate-500">
+            Quyết định <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="new_status"
+            required
+            defaultValue=""
+            className="mt-1 w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink focus:outline-none focus:ring-1 focus:ring-vam-green"
+          >
+            <option value="" disabled>-- Chọn quyết định --</option>
+            {DECISION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium uppercase text-slate-500">
+            Ghi chú (tuỳ chọn)
+          </label>
+          <textarea
+            name="decision_note"
+            rows={3}
+            placeholder="Lý do, ghi chú thêm về quyết định này…"
+            className="mt-1 w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-vam-green"
+          />
+        </div>
+
+        <SubmitButton />
+      </form>
+    </div>
+  );
+}

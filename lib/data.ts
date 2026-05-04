@@ -4,6 +4,7 @@ import type {
   ActivityCorrectionLog,
   AdminUserPublic,
   Application,
+  ApplicationDecision,
   ApplicationReview,
   Event,
   EventParticipation,
@@ -1064,6 +1065,23 @@ export async function getActiveAdminUsers(): Promise<QueryResult<AdminUserPublic
     .order("full_name", { ascending: true });
   if (error) return { data: [], error: `${VI_ERROR} (admin_users: ${error.message})` };
   return { data: (data ?? []) as AdminUserPublic[], error: null };
+}
+
+/** All admin decisions recorded against an application, newest first. */
+export async function getApplicationDecisions(
+  applicationId: string
+): Promise<QueryResult<ApplicationDecision[]>> {
+  const client = dataClient();
+  if (!client) return envError<ApplicationDecision[]>([]);
+  const { data, error } = await client
+    .from("application_decisions")
+    .select("*")
+    .eq("application_id", applicationId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    return { data: [], error: `${VI_ERROR} (application_decisions: ${error.message})` };
+  }
+  return { data: (data ?? []) as ApplicationDecision[], error: null };
 }
 
 export function groupCount(rows: JsonRecord[], key: string) {

@@ -109,6 +109,19 @@ export type ApplicationReview = JsonRecord & {
   updated_at: string;
 };
 
+/** One admin/core-team decision recorded against an application. */
+export type ApplicationDecision = JsonRecord & {
+  id: string;
+  application_id: string;
+  decided_by: string | null;
+  decided_by_name: string | null;
+  decision: string;
+  previous_status: string | null;
+  new_status: string;
+  decision_note: string | null;
+  created_at: string;
+};
+
 export type Season = JsonRecord & {
   id: string;
   code: string | null;

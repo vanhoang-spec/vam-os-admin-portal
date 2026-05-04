@@ -31,3 +31,11 @@ export function canReview(role?: string | null) {
 export function isReviewerOnly(role?: string | null) {
   return role === "reviewer";
 }
+
+/**
+ * Can make and record an application decision (status transition + audit row).
+ * Intentionally excludes reviewer, support_team, and viewer.
+ */
+export function canDecide(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

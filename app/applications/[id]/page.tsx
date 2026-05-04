@@ -5,6 +5,7 @@ import {
   getActiveAdminUsers,
   getAnswersForApplication,
   getApplication,
+  getApplicationDecisions,
   getApplicationReviewsForApplication,
   getMatches,
   getMenteeProfiles,
@@ -14,10 +15,11 @@ import {
   keyById
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canAssignReview } from "@/lib/permissions";
-import type { ApplicationReview, Match } from "@/lib/types";
+import { canAssignReview, canDecide } from "@/lib/permissions";
+import type { ApplicationDecision, ApplicationReview, Match } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 import { AssignReviewerForm } from "./assign-reviewer-form";
+import { DecisionForm } from "./decision-form";
 
 const QUESTION_ORDER = [
   "consent_marketing_email",
@@ -71,7 +73,7 @@ function roundLabel(round: string) {
 }
 
 export default async function ApplicationDetailPage({ params }: { params: { id: string } }) {
-  const [adminUser, application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult] =
+  const [adminUser, application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =
     await Promise.all([
       getCurrentAdminUser(),
       getApplication(params.id),
@@ -82,7 +84,8 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
       getMatches(),
       getAnswersForApplication(params.id),
       getApplicationReviewsForApplication(params.id),
-      getActiveAdminUsers()
+      getActiveAdminUsers(),
+      getApplicationDecisions(params.id)
     ]);
 
   const peopleById = keyById(people.data);
@@ -139,7 +142,13 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
   })();
 
   const reviews: ApplicationReview[] = reviewsResult.data ?? [];
+  const decisions: ApplicationDecision[] = decisionsResult.data ?? [];
   const canAssign = canAssignReview(adminUser?.role);
+  const canMakeDecision = canDecide(adminUser?.role);
+
+  // Latest submitted review (for the decision form context)
+  const latestSubmittedReview = reviews.find((r) => r.status === "submitted");
+  const hasSubmittedReview = !!latestSubmittedReview;
 
   return (
     <>
@@ -206,6 +215,75 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
                         >
                           {review.status === "submitted" ? "Xem" : "Làm review"}
                         </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Admin/core-team decision ──────────────────────────────────────────── */}
+      <Card className="mb-4">
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">
+          Quyết định của Admin / Core team
+        </h2>
+        {canMakeDecision ? (
+          <DecisionForm
+            applicationId={application.data.id}
+            currentStatus={displayStatus}
+            hasSubmittedReview={hasSubmittedReview}
+            latestRecommendation={latestSubmittedReview?.recommendation}
+            latestTotalScore={latestSubmittedReview?.total_score}
+          />
+        ) : (
+          <p className="text-sm text-slate-500">
+            Chỉ admin / core team mới có thể ra quyết định cho đơn này.
+          </p>
+        )}
+      </Card>
+
+      {/* ── Decision history ──────────────────────────────────────────────────── */}
+      <Card className="mb-4">
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">
+          Lịch sử quyết định{decisions.length > 0 ? ` (${decisions.length})` : ""}
+        </h2>
+        {decisions.length === 0 ? (
+          <EmptyState message="Chưa có quyết định nào được ghi nhận." />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-vam-line">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-vam-line text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Thời gian</th>
+                    <th className="px-4 py-3">Người quyết định</th>
+                    <th className="px-4 py-3">Trước</th>
+                    <th className="px-4 py-3">Sau</th>
+                    <th className="px-4 py-3">Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-vam-line">
+                  {decisions.map((d) => (
+                    <tr key={d.id} className="hover:bg-vam-mint/40">
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {formatDate(d.created_at)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {displayText(d.decided_by_name)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 italic">
+                        {displayText(d.previous_status)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
+                          {d.new_status}
+                        </span>
+                      </td>
+                      <td className="max-w-xs break-words px-4 py-3 text-slate-600">
+                        {displayText(d.decision_note)}
                       </td>
                     </tr>
                   ))}
