@@ -464,14 +464,14 @@ export async function cancelMatch(input: {
   if (!before) return { ok: false, message: "Không tìm thấy match." };
 
   const beforeRecord = before as JsonRecord;
-  if (beforeRecord.status === "cancelled" || beforeRecord.status === "inactive") {
-    return { ok: true, message: "Match này đã được hủy trước đó." };
+  if (beforeRecord.status === "dropped") {
+    return { ok: true, message: "Match này đã được hủy / dừng trước đó." };
   }
 
   const { data: after, error: updateErr } = await client
     .from("matches")
     .update({
-      status: "cancelled",
+      status: "dropped",
       ended_at: new Date().toISOString(),
       end_reason: clean(input.endReason)
     })

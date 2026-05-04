@@ -15,10 +15,12 @@ function StatusBadge({ status }: { status: string | null }) {
   const s = String(status ?? "").toLowerCase();
   if (s === "active")
     return <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">Đang active</span>;
-  if (s === "cancelled")
-    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">Đã hủy</span>;
-  if (s === "inactive")
-    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">Inactive</span>;
+  if (s === "dropped")
+    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">Đã hủy / Dừng match</span>;
+  if (s === "completed")
+    return <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">Đã hoàn thành</span>;
+  if (s === "unmatched_review")
+    return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Cần xem lại / Chưa match phù hợp</span>;
   return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{status ?? "—"}</span>;
 }
 
@@ -89,8 +91,9 @@ export default async function MatchesPage({
               className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
             >
               <option value="active">Đang active</option>
-              <option value="cancelled">Đã hủy</option>
-              <option value="inactive">Inactive</option>
+              <option value="dropped">Đã hủy / Dừng match</option>
+              <option value="completed">Đã hoàn thành</option>
+              <option value="unmatched_review">Cần xem lại / Chưa match phù hợp</option>
               <option value="all">Tất cả</option>
             </select>
           </label>
