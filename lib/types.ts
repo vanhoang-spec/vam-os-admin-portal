@@ -285,8 +285,12 @@ export type Event = JsonRecord & {
   id: string;
   legacy_event_temp_id?: string | null;
   season_id?: string | null;
+  /** Phase 045A: optional link to a specific intake batch. */
+  intake_batch_id?: string | null;
   event_name?: string | null;
   event_type?: string | null;
+  /** Phase 045A: "active" (default) | "cancelled". */
+  status?: "active" | "cancelled" | string | null;
   starts_at?: string | null;
   source_notes?: string | null;
 };

@@ -55,6 +55,8 @@ export type EventInput = {
   event_name?: unknown;
   event_type?: unknown;
   season_code?: unknown;
+  /** Phase 045A: UUID of intake_batches row, or null/empty to leave unlinked. */
+  intake_batch_id?: unknown;
   starts_at?: unknown;
   source_notes?: unknown;
   legacy_event_temp_id?: unknown;
@@ -219,7 +221,7 @@ export async function getEventListData(): Promise<EventListData> {
   if (!client) return { ok: false, error, events: [], participations: [], seasons: [], people: [] };
 
   const [events, participations, seasons, people] = await Promise.all([
-    selectAll<Event>(client, "events", "id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes"),
+    selectAll<Event>(client, "events", "id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes"),
     selectAll<EventParticipation>(client, "event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in"),
     selectAll<Season>(client, "seasons", "id,code,name"),
     selectAll<Person>(client, "people", "id,full_name,email_primary")
@@ -247,9 +249,8 @@ export async function getEventDetailData(eventId: string): Promise<EventDetailDa
     return { ok: false, error: "ID sự kiện không hợp lệ.", ...empty };
   }
 
-  const [eventRes, partsRes, seasonsRes, peopleRes, mentorsRes, menteesRes] = await Promise.all([
-    client.from("events").select("id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes").eq("id", id).maybeSingle(),
-    selectAll<EventParticipation>(client, "event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in"),
+  const [eventRes, seasonsRes, peopleRes, mentorsRes, menteesRes] = await Promise.all([
+    client.from("events").select("id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes").eq("id", id).maybeSingle(),
     selectAll<Season>(client, "seasons", "id,code,name"),
     selectAll<Person>(client, "people", "id,full_name,email_primary"),
     selectAll<MentorProfile>(client, "mentor_profiles", "id,person_id,mentor_code,company_current,title_current"),
@@ -261,13 +262,22 @@ export async function getEventDetailData(eventId: string): Promise<EventDetailDa
     return { ok: false, error: eventRes.error.message, event: null, participations: [], seasons: seasonsRes.data, people: peopleRes.data, mentorProfiles: mentorsRes.data, menteeProfiles: menteesRes.data };
   }
 
+  // Phase 045A: scope participations to this event only (was: load all then filter in JS)
+  const { data: partsData, error: partsErr } = await client
+    .from("event_participations")
+    .select("id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in")
+    .eq("event_id", id);
+  if (partsErr) {
+    log("event_participations load failed", partsErr);
+  }
+  const partsRes = { data: (partsData ?? []) as EventParticipation[], error: partsErr ? partsErr.message : null };
+
   const errors = [partsRes.error, seasonsRes.error, peopleRes.error, mentorsRes.error, menteesRes.error].filter(Boolean);
-  const eventParticipations = partsRes.data.filter((row) => row.event_id === id);
   return {
     ok: !errors.length,
     error: errors.join(" | ") || null,
     event: (eventRes.data as Event) ?? null,
-    participations: eventParticipations,
+    participations: partsRes.data,
     seasons: seasonsRes.data,
     people: peopleRes.data,
     mentorProfiles: mentorsRes.data,
@@ -295,8 +305,14 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   if (seasonError) return { ok: false, message: `${SAFE_ERROR} (seasons: ${seasonError})` };
   if (!seasonId) return { ok: false, message: `Không tìm thấy season ${seasonCode}.` };
 
+  // Phase 045A: resolve optional intake_batch_id
+  const intakeBatchIdRaw = clean(input.intake_batch_id);
+  const intakeBatchId =
+    intakeBatchIdRaw && isValidUuid(intakeBatchIdRaw) ? intakeBatchIdRaw : null;
+
   const payload: JsonRecord = {
     season_id: seasonId,
+    intake_batch_id: intakeBatchId,
     event_name: eventName,
     event_type: eventType,
     starts_at: startsAt,
@@ -353,6 +369,12 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   updates.source_notes = clean(input.source_notes);
   if (Object.prototype.hasOwnProperty.call(input, "legacy_event_temp_id")) {
     updates.legacy_event_temp_id = clean(input.legacy_event_temp_id);
+  }
+
+  // Phase 045A: intake_batch_id (nullable — empty string clears it)
+  if (Object.prototype.hasOwnProperty.call(input, "intake_batch_id")) {
+    const raw = clean(input.intake_batch_id);
+    updates.intake_batch_id = raw && isValidUuid(raw) ? raw : null;
   }
 
   const { data: after, error: updateError } = await client.from("events").update(updates).eq("id", id).select("*").maybeSingle();
@@ -550,6 +572,56 @@ export async function removeParticipation(input: { id?: unknown; reason?: unknow
   });
   await writeAdminAudit(client, { actionType: "remove_event_participation", beforeData: before });
   return { ok: true, message: "Đã xoá người tham gia." };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 045A — Cancel event
+// ---------------------------------------------------------------------------
+
+export async function cancelEvent(input: { id?: unknown; reason?: unknown }): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const id = clean(input.id);
+  if (!id) return { ok: false, message: "Thiếu event id." };
+  if (!isValidUuid(id)) return { ok: false, message: "ID sự kiện không hợp lệ." };
+
+  const { data: before, error: beforeError } = await client
+    .from("events")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (beforeError) {
+    log("load event for cancel failed", beforeError);
+    return { ok: false, message: `${SAFE_ERROR} (${beforeError.message})` };
+  }
+  if (!before) return { ok: false, message: "Không tìm thấy sự kiện." };
+  if ((before as JsonRecord).status === "cancelled") {
+    return { ok: true, message: "Sự kiện đã ở trạng thái đã hủy." };
+  }
+
+  const { data: after, error: updateError } = await client
+    .from("events")
+    .update({ status: "cancelled" })
+    .eq("id", id)
+    .select("*")
+    .maybeSingle();
+
+  if (updateError) {
+    log("cancel event failed", updateError);
+    return { ok: false, message: `${SAFE_ERROR} (${updateError.message})` };
+  }
+
+  await writeAdminAudit(client, {
+    actionType: "cancel_event",
+    beforeData: before,
+    afterData: after,
+    details: { reason: clean(input.reason) }
+  });
+  return { ok: true, message: "Đã hủy sự kiện.", data: after };
 }
 
 export {

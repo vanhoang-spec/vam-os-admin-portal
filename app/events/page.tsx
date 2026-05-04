@@ -2,12 +2,14 @@ import Link from "next/link";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { getIntakeBatches } from "@/lib/data";
 import { EVENT_TYPE_OPTIONS, getEventListData } from "@/lib/events";
-import type { Event, EventParticipation, Season } from "@/lib/types";
+import type { Event, EventParticipation, IntakeBatch, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 
 type EventRow = Event & {
   season_code: string | null;
+  batch_code: string | null;
   participant_total: number;
   attended_count: number;
   registered_absent_count: number;
@@ -20,8 +22,14 @@ function selectedParam(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-function buildEventRows(events: Event[], participations: EventParticipation[], seasons: Season[]): EventRow[] {
+function buildEventRows(
+  events: Event[],
+  participations: EventParticipation[],
+  seasons: Season[],
+  batches: IntakeBatch[]
+): EventRow[] {
   const seasonsById = new Map(seasons.map((season) => [season.id, season]));
+  const batchesById = new Map(batches.map((b) => [b.id, b]));
   const partsByEvent = new Map<string, EventParticipation[]>();
   for (const part of participations) {
     if (!part.event_id) continue;
@@ -35,7 +43,8 @@ function buildEventRows(events: Event[], participations: EventParticipation[], s
       const rows = partsByEvent.get(event.id) ?? [];
       return {
         ...event,
-        season_code: event.season_id ? seasonsById.get(event.season_id)?.code ?? null : null,
+        season_code: event.season_id ? (seasonsById.get(event.season_id)?.code ?? null) : null,
+        batch_code: event.intake_batch_id ? (batchesById.get(event.intake_batch_id)?.code ?? null) : null,
         participant_total: rows.length,
         attended_count: rows.filter((row) => String(row.attendance_status ?? "").trim() === "attended").length,
         registered_absent_count: rows.filter((row) => String(row.attendance_status ?? "").trim() === "registered_absent").length
@@ -44,17 +53,41 @@ function buildEventRows(events: Event[], participations: EventParticipation[], s
     .sort((a, b) => String(b.starts_at ?? "").localeCompare(String(a.starts_at ?? "")));
 }
 
-export default async function EventsPage({ searchParams }: { searchParams?: { season?: string | string[]; type?: string | string[] } }) {
-  const [data, adminUser] = await Promise.all([getEventListData(), getCurrentAdminUser()]);
+export default async function EventsPage({
+  searchParams
+}: {
+  searchParams?: {
+    season?: string | string[];
+    type?: string | string[];
+    batch?: string | string[];
+    status?: string | string[];
+  };
+}) {
+  const [data, intakeBatchesRes, adminUser] = await Promise.all([
+    getEventListData(),
+    getIntakeBatches(),
+    getCurrentAdminUser()
+  ]);
   const allowEdit = canEditRecaps(adminUser);
 
   const seasonFilter = selectedParam(searchParams?.season).trim();
   const typeFilter = selectedParam(searchParams?.type).trim();
+  const batchFilter = selectedParam(searchParams?.batch).trim();
+  // Default to "active" when no status param is provided
+  const rawStatus = selectedParam(searchParams?.status).trim();
+  const statusFilter = rawStatus || "active";
 
-  const allRows = buildEventRows(data.events, data.participations, data.seasons);
+  const batchOptions = intakeBatchesRes.data ?? [];
+
+  const allRows = buildEventRows(data.events, data.participations, data.seasons, batchOptions);
   const filteredRows = allRows.filter((row) => {
     if (seasonFilter && row.season_code !== seasonFilter) return false;
     if (typeFilter && row.event_type !== typeFilter) return false;
+    if (batchFilter && row.intake_batch_id !== batchFilter) return false;
+    if (statusFilter && statusFilter !== "all") {
+      const rowStatus = row.status ?? "active";
+      if (rowStatus !== statusFilter) return false;
+    }
     return true;
   });
 
@@ -62,12 +95,16 @@ export default async function EventsPage({ searchParams }: { searchParams?: { se
 
   return (
     <>
-      <PageHeader title="Danh sách sự kiện" description="Quản lý sự kiện và hoạt động (training, workshop, orientation, ...) trong mùa." />
+      <PageHeader
+        title="Danh sách sự kiện"
+        description="Quản lý sự kiện và hoạt động (training, workshop, orientation, ...) trong mùa."
+      />
       {data.error ? <ErrorBox message={data.error} /> : null}
+      {intakeBatchesRes.error ? <ErrorBox message={intakeBatchesRes.error} /> : null}
 
       <Card className="mb-4">
-        <form className="grid gap-3 sm:grid-cols-[200px_200px_1fr_auto] sm:items-end">
-          <label className="block">
+        <form className="flex flex-wrap items-end gap-3">
+          <label className="block min-w-[160px] flex-1">
             <span className="text-xs font-medium uppercase text-slate-500">Mùa</span>
             <select
               name="season"
@@ -80,7 +117,8 @@ export default async function EventsPage({ searchParams }: { searchParams?: { se
               ))}
             </select>
           </label>
-          <label className="block">
+
+          <label className="block min-w-[160px] flex-1">
             <span className="text-xs font-medium uppercase text-slate-500">Loại sự kiện</span>
             <select
               name="type"
@@ -93,15 +131,52 @@ export default async function EventsPage({ searchParams }: { searchParams?: { se
               ))}
             </select>
           </label>
-          <div className="flex flex-wrap gap-2 sm:justify-end">
-            <button type="submit" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+
+          <label className="block min-w-[160px] flex-1">
+            <span className="text-xs font-medium uppercase text-slate-500">Intake Batch</span>
+            <select
+              name="batch"
+              defaultValue={batchFilter}
+              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+            >
+              <option value="">-- Tất cả --</option>
+              {batchOptions.map((b) => (
+                <option key={b.id} value={b.id}>{b.code ?? b.name ?? b.id}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block min-w-[140px] flex-1">
+            <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
+            <select
+              name="status"
+              defaultValue={rawStatus}
+              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+            >
+              <option value="active">Đang hoạt động</option>
+              <option value="cancelled">Đã hủy</option>
+              <option value="all">Tất cả</option>
+            </select>
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+            >
               Lọc
             </button>
-            <Link href="/events" className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <Link
+              href="/events"
+              className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
               Xoá lọc
             </Link>
             {allowEdit ? (
-              <Link href="/events/create" className="inline-flex w-fit items-center justify-center rounded-md border border-transparent bg-vam-ink px-4 py-2 text-sm font-medium text-white hover:bg-vam-ink/90">
+              <Link
+                href="/events/create"
+                className="inline-flex w-fit items-center justify-center rounded-md border border-transparent bg-vam-ink px-4 py-2 text-sm font-medium text-white hover:bg-vam-ink/90"
+              >
                 Tạo sự kiện
               </Link>
             ) : null}
@@ -120,18 +195,45 @@ export default async function EventsPage({ searchParams }: { searchParams?: { se
               label: "Sự kiện",
               render: (row) => (
                 <div>
-                  <div className="font-medium text-vam-ink">{displayText(row.event_name)}</div>
-                  <div className="mt-1 text-xs text-slate-500">{displayText(row.season_code)}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-vam-ink">{displayText(row.event_name)}</span>
+                    {row.status === "cancelled" && (
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+                        Đã hủy
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {[row.season_code, row.batch_code].filter(Boolean).join(" · ") || "—"}
+                  </div>
                 </div>
               )
             },
-            { key: "starts_at", label: "Thời gian", render: (row) => formatDate(row.starts_at) },
-            { key: "event_type", label: "Loại", render: (row) => displayText(TYPE_LABELS.get(String(row.event_type ?? "")) ?? row.event_type) },
-            { key: "participant_total", label: "Tổng người tham gia", render: (row) => row.participant_total },
+            {
+              key: "starts_at",
+              label: "Thời gian",
+              render: (row) => formatDate(row.starts_at)
+            },
+            {
+              key: "event_type",
+              label: "Loại",
+              render: (row) => displayText(TYPE_LABELS.get(String(row.event_type ?? "")) ?? row.event_type)
+            },
+            {
+              key: "participant_total",
+              label: "Tổng SL",
+              render: (row) => row.participant_total
+            },
             {
               key: "attendance_summary",
-              label: "Đã tham gia / Đăng ký không tham gia",
-              render: (row) => `${row.attended_count} / ${row.registered_absent_count}`
+              label: "Đã tham gia / Vắng mặt",
+              render: (row) => (
+                <span>
+                  <span className="font-medium text-vam-green">{row.attended_count}</span>
+                  <span className="mx-1 text-slate-400">/</span>
+                  <span className="text-slate-600">{row.registered_absent_count}</span>
+                </span>
+              )
             },
             {
               key: "actions",

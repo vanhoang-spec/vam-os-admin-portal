@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useFormState } from "react-dom";
 import { createEventAction, updateEventAction, type EventActionState } from "@/app/actions/events";
 import { EVENT_TYPE_OPTIONS } from "@/lib/event-constants";
-import type { Event, Season } from "@/lib/types";
+import type { Event, IntakeBatch, Season } from "@/lib/types";
 
 const initialState: EventActionState = { ok: false, message: null };
 
@@ -20,11 +20,14 @@ export function EventForm({
   mode,
   event,
   seasons,
+  intakeBatches = [],
   defaultSeasonCode = "UEHM-S11"
 }: {
   mode: "create" | "edit";
   event?: Event | null;
   seasons: Season[];
+  /** Phase 045A: list of available intake batches for the selector. */
+  intakeBatches?: IntakeBatch[];
   defaultSeasonCode?: string;
 }) {
   const action = mode === "create" ? createEventAction : updateEventAction;
@@ -83,6 +86,34 @@ export function EventForm({
           </select>
         </label>
       </div>
+
+      {/* Phase 045A: cancelled badge in edit mode */}
+      {mode === "edit" && event?.status === "cancelled" && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+          Sự kiện này đã bị hủy (status: cancelled).
+        </div>
+      )}
+
+      {/* Phase 045A: intake_batch_id selector */}
+      <label className="block">
+        <span className="text-xs font-medium uppercase text-slate-500">Intake Batch (tuỳ chọn)</span>
+        <select
+          name="intake_batch_id"
+          defaultValue={event?.intake_batch_id ?? ""}
+          className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+        >
+          <option value="">Không gắn batch cụ thể</option>
+          {intakeBatches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.code ?? b.name ?? b.id}
+              {b.name && b.code ? ` — ${b.name}` : ""}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-[11px] text-slate-500">
+          Chỉ chọn nếu sự kiện dành riêng cho một batch. Để trống nếu áp dụng cho cả mùa.
+        </span>
+      </label>
 
       <label className="block">
         <span className="text-xs font-medium uppercase text-slate-500">Thời điểm bắt đầu (*)</span>

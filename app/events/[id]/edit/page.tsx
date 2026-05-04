@@ -2,9 +2,10 @@ import Link from "next/link";
 import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getSeasons } from "@/lib/data";
+import { getIntakeBatches, getSeasons } from "@/lib/data";
 import { getEventDetailData, isValidUuid } from "@/lib/events";
 import { EventForm } from "../../event-form";
+import { CancelEventButton } from "./cancel-event-button";
 
 export default async function EditEventPage({ params }: { params: { id: string } }) {
   const adminUser = await getCurrentAdminUser();
@@ -29,7 +30,11 @@ export default async function EditEventPage({ params }: { params: { id: string }
     );
   }
 
-  const [detail, seasons] = await Promise.all([getEventDetailData(params.id), getSeasons()]);
+  const [detail, seasons, intakeBatches] = await Promise.all([
+    getEventDetailData(params.id),
+    getSeasons(),
+    getIntakeBatches()
+  ]);
 
   if (!detail.event) {
     return (
@@ -43,16 +48,24 @@ export default async function EditEventPage({ params }: { params: { id: string }
 
   const seasonsList = seasons.data || detail.seasons;
 
+  const isCancelled = detail.event.status === "cancelled";
+
   return (
     <>
       <PageHeader title="Sửa sự kiện" description="Cập nhật thông tin sự kiện. Mọi thay đổi sẽ được ghi vào audit log." />
       {detail.error ? <ErrorBox message={detail.error} /> : null}
       {seasons.error ? <ErrorBox message={seasons.error} /> : null}
+      {intakeBatches.error ? <ErrorBox message={intakeBatches.error} /> : null}
 
       <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Biểu mẫu chỉnh sửa</h2>
-          <EventForm mode="edit" event={detail.event} seasons={seasonsList} />
+          <EventForm
+            mode="edit"
+            event={detail.event}
+            seasons={seasonsList}
+            intakeBatches={intakeBatches.data || []}
+          />
         </Card>
 
         <Card>
@@ -67,6 +80,16 @@ export default async function EditEventPage({ params }: { params: { id: string }
             <p className="text-xs text-slate-500">
               ID: <span className="font-mono">{detail.event.id}</span>
             </p>
+
+            {/* Phase 045A: cancel button (active events only) */}
+            {!isCancelled && (
+              <div className="border-t border-vam-line pt-3">
+                <p className="mb-2 text-xs text-slate-500">
+                  Hủy sự kiện sẽ đánh dấu là cancelled và ẩn khỏi danh sách mặc định. Dữ liệu tham gia không bị xóa.
+                </p>
+                <CancelEventButton eventId={detail.event.id} />
+              </div>
+            )}
           </div>
         </Card>
       </div>

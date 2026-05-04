@@ -1,7 +1,7 @@
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getSeasons } from "@/lib/data";
+import { getIntakeBatches, getSeasons } from "@/lib/data";
 import { EventForm } from "../event-form";
 
 export default async function CreateEventPage() {
@@ -15,12 +15,13 @@ export default async function CreateEventPage() {
     );
   }
 
-  const seasons = await getSeasons();
+  const [seasons, intakeBatches] = await Promise.all([getSeasons(), getIntakeBatches()]);
 
   return (
     <>
       <PageHeader title="Tạo sự kiện" description="Ghi nhận sự kiện/hoạt động mới (training, workshop, orientation, ...)." />
       {seasons.error ? <ErrorBox message={seasons.error} /> : null}
+      {intakeBatches.error ? <ErrorBox message={intakeBatches.error} /> : null}
 
       <div className="grid gap-4 xl:grid-cols-[400px_1fr]">
         <Card>
@@ -31,17 +32,20 @@ export default async function CreateEventPage() {
               <strong>Bắt buộc:</strong> Tên sự kiện, Loại, Mùa và Thời điểm bắt đầu.
             </p>
             <p>
+              <strong>Intake Batch</strong> (tuỳ chọn): chỉ chọn nếu sự kiện dành riêng cho một batch cụ thể, ví dụ Orientation cho UEHM-S12-B1.
+            </p>
+            <p>
               Sau khi tạo, bạn có thể chuyển sang trang <em>Quản lý tham gia</em> để thêm mentor/mentee và đánh dấu trạng thái tham gia.
             </p>
             <p className="text-xs text-slate-500">
-              Lưu ý: chương trình (program) hiện được suy ra từ Mùa. Trường địa điểm/mô tả được gộp trong &quot;Ghi chú&quot;.
+              Địa điểm và mô tả được gộp trong trường &quot;Ghi chú&quot;.
             </p>
           </div>
         </Card>
 
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Biểu mẫu tạo sự kiện</h2>
-          <EventForm mode="create" seasons={seasons.data || []} />
+          <EventForm mode="create" seasons={seasons.data || []} intakeBatches={intakeBatches.data || []} />
         </Card>
       </div>
     </>

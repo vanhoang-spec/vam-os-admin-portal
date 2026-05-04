@@ -1,5 +1,7 @@
 export type EventTypeValue =
   | "orientation"
+  | "kickoff"
+  | "tong_ket"
   | "training"
   | "workshop"
   | "community"
@@ -11,12 +13,14 @@ export type RegistrationStatusValue = "registered" | "unknown";
 export type EventRoleValue = "mentor" | "mentee" | "core_team" | "speaker" | "trainer" | "guest" | "unknown";
 
 export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }> = [
+  { value: "orientation", label: "Orientation (định hướng)" },
+  { value: "kickoff", label: "Kickoff" },
+  { value: "tong_ket", label: "Tổng kết / Closing" },
   { value: "training", label: "Training (đào tạo)" },
   { value: "workshop", label: "Workshop" },
-  { value: "orientation", label: "Orientation (định hướng)" },
   { value: "community", label: "Community (cộng đồng)" },
   { value: "matching", label: "Matching" },
-  { value: "other", label: "Khác (closing/other)" }
+  { value: "other", label: "Khác" }
 ];
 
 export const ATTENDANCE_STATUS_OPTIONS: Array<{ value: AttendanceStatusValue; label: string }> = [

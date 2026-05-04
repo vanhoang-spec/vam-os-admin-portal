@@ -5,6 +5,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import {
   addParticipation,
+  cancelEvent,
   createEvent,
   removeParticipation,
   updateEvent,
@@ -42,6 +43,7 @@ export async function createEventAction(
     event_name: formText(formData, "event_name"),
     event_type: formText(formData, "event_type"),
     season_code: formText(formData, "season_code"),
+    intake_batch_id: formText(formData, "intake_batch_id"),
     starts_at: formText(formData, "starts_at"),
     source_notes: formText(formData, "source_notes"),
     legacy_event_temp_id: formText(formData, "legacy_event_temp_id")
@@ -74,6 +76,7 @@ export async function updateEventAction(
     event_name: formText(formData, "event_name"),
     event_type: formText(formData, "event_type"),
     season_code: formText(formData, "season_code"),
+    intake_batch_id: formText(formData, "intake_batch_id"),
     starts_at: formText(formData, "starts_at"),
     source_notes: formText(formData, "source_notes"),
     legacy_event_temp_id: formText(formData, "legacy_event_temp_id")
@@ -175,6 +178,26 @@ export async function removeParticipationAction(
     revalidatePath(`/events/${eventId}/attendance`);
   }
   revalidatePath("/events");
+  revalidatePath("/operations");
+  return { ok: true, message: result.message };
+}
+
+export async function cancelEventAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const id = formText(formData, "id");
+  if (!id) return { ok: false, message: "Thiếu event id." };
+
+  const result = await cancelEvent({ id, reason: formText(formData, "reason") });
+  if (!result.ok) return { ok: false, message: result.message };
+
+  revalidatePath("/events");
+  revalidatePath(`/events/${id}/edit`);
+  revalidatePath(`/events/${id}/attendance`);
   revalidatePath("/operations");
   return { ok: true, message: result.message };
 }
