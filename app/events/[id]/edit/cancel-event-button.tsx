@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { cancelEventAction } from "@/app/actions/events";
-import type { EventActionState } from "@/app/actions/events";
+import type { EventActionState } from "@/lib/event-action-types";
 
 const initialState: EventActionState = { ok: false, message: null };
 

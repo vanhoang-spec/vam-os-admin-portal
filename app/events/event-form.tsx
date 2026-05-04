@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useFormState } from "react-dom";
-import { createEventAction, updateEventAction, type EventActionState } from "@/app/actions/events";
+import { createEventAction, updateEventAction } from "@/app/actions/events";
+import type { EventActionState } from "@/lib/event-action-types";
 import { EVENT_TYPE_OPTIONS } from "@/lib/event-constants";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
 

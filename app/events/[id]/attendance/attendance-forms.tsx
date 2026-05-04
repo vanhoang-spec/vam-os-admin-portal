@@ -5,9 +5,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   addParticipationAction,
   removeParticipationAction,
-  updateParticipationAction,
-  type EventActionState
+  updateParticipationAction
 } from "@/app/actions/events";
+import type { EventActionState } from "@/lib/event-action-types";
 import {
   ATTENDANCE_STATUS_OPTIONS,
   EVENT_ROLE_OPTIONS,

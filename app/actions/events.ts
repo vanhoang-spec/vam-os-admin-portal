@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import type { EventActionState } from "@/lib/event-action-types";
 import {
   addParticipation,
   cancelEvent,
@@ -11,12 +12,6 @@ import {
   updateEvent,
   updateParticipation
 } from "@/lib/events";
-
-export type EventActionState = {
-  ok: boolean;
-  message: string | null;
-  createdEventId?: string | null;
-};
 
 const initialState: EventActionState = { ok: false, message: null };
 
@@ -202,4 +197,4 @@ export async function cancelEventAction(
   return { ok: true, message: result.message };
 }
 
-export { initialState as initialEventActionState };
+// NOTE: EventActionState type and initialEventActionState are in lib/event-action-types.ts
