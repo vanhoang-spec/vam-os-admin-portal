@@ -23,6 +23,10 @@ export type MentorProfile = JsonRecord & {
   first_vam_season?: string | null;
   industry: string | null;
   function_area: string | null;
+  /** Phase 043: which application created this profile (null for S11 legacy rows). */
+  source_application_id?: string | null;
+  /** Phase 043: intake batch the applicant came from (null for S11 legacy rows). */
+  intake_batch_id?: string | null;
 };
 
 export type MenteeProfile = JsonRecord & {
@@ -34,6 +38,10 @@ export type MenteeProfile = JsonRecord & {
   major: string | null;
   class_cohort: string | null;
   mssv: string | null;
+  /** Phase 043: which application created this profile (null for S11 legacy rows). */
+  source_application_id?: string | null;
+  /** Phase 043: intake batch the applicant came from (null for S11 legacy rows). */
+  intake_batch_id?: string | null;
 };
 
 export type Application = JsonRecord & {
@@ -126,6 +134,14 @@ export type Season = JsonRecord & {
   id: string;
   code: string | null;
   name: string | null;
+};
+
+export type IntakeBatch = JsonRecord & {
+  id: string;
+  season_id: string | null;
+  code: string | null;
+  name: string | null;
+  is_active: boolean;
 };
 
 export type Program = JsonRecord & {

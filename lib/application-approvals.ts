@@ -53,6 +53,8 @@ export type ApproveApplicationInput = {
   gender: string | null;
   /** The season code to tag on the profile source (e.g. "UEHM-S12"). */
   seasonCode: string | null;
+  /** Phase 043: intake_batch_id from the source application row. */
+  intakeBatchId: string | null;
   /** "mentor" or "mentee" — drives which profile table is written. */
   targetRole: "mentor" | "mentee";
   previousStatus: string | null;
@@ -216,7 +218,9 @@ export async function approveApplication(
         .from("mentor_profiles")
         .insert({
           person_id: person.id,
-          mentor_code: null // Admin sets via /mentors/[id]/edit
+          mentor_code: null, // Admin sets via /mentors/[id]/edit
+          source_application_id: input.applicationId,
+          intake_batch_id: input.intakeBatchId ?? null
         })
         .select("id")
         .maybeSingle();
@@ -241,7 +245,9 @@ export async function approveApplication(
         .from("mentee_profiles")
         .insert({
           person_id: person.id,
-          mentee_code: null // Admin sets via /mentees/[id]/edit
+          mentee_code: null, // Admin sets via /mentees/[id]/edit
+          source_application_id: input.applicationId,
+          intake_batch_id: input.intakeBatchId ?? null
         })
         .select("id")
         .maybeSingle();

@@ -319,6 +319,7 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
             gender={displayGender}
             roleApplied={application.data.role_applied}
             seasonCode={season?.code ?? null}
+            intakeBatchId={application.data.intake_batch_id}
             alreadyApproved={!!application.data.person_id}
             personId={application.data.person_id}
           />

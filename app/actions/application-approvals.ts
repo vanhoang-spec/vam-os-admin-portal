@@ -28,6 +28,7 @@ export async function approveApplicationAction(
     const phonePrimary = String(formData.get("phone_primary") ?? "").trim() || null;
     const gender = String(formData.get("gender") ?? "").trim() || null;
     const seasonCode = String(formData.get("season_code") ?? "").trim() || null;
+    const intakeBatchId = String(formData.get("intake_batch_id") ?? "").trim() || null;
     const previousStatus = String(formData.get("previous_status") ?? "").trim() || null;
 
     if (!applicationId) return fail("Thiếu application_id.");
@@ -48,6 +49,7 @@ export async function approveApplicationAction(
       phonePrimary,
       gender,
       seasonCode,
+      intakeBatchId,
       targetRole,
       previousStatus
     });

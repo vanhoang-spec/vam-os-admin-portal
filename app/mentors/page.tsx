@@ -3,7 +3,7 @@ import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getMatches, getMentorProfiles, getPeople, keyById } from "@/lib/data";
+import { getIntakeBatches, getMatches, getMentorProfiles, getPeople, getSeasons, keyById } from "@/lib/data";
 import { Match, MentorProfile, Person } from "@/lib/types";
 import { displayOptional, displayText } from "@/lib/utils";
 
@@ -20,6 +20,10 @@ type Row = MentorProfile & {
   years_in_vam_display: string;
   years_in_vam_source: string;
   has_assigned_mentees: string;
+  /** Phase 043: batch code for filter, "Chưa gán" for legacy S11 rows */
+  intake_batch_code: string;
+  /** Phase 043: season code for filter, "Chưa gán" for legacy S11 rows */
+  intake_season_code: string;
 };
 
 function matchStatus(match: Match) {
@@ -44,9 +48,18 @@ function vamSeniorityDisplay(mentor: MentorProfile, mentorMatches: Match[]) {
 }
 
 export default async function MentorsPage() {
-  const [mentors, people, matches, adminUser] = await Promise.all([getMentorProfiles(), getPeople(), getMatches(), getCurrentAdminUser()]);
+  const [mentors, people, matches, intakeBatches, seasons, adminUser] = await Promise.all([
+    getMentorProfiles(),
+    getPeople(),
+    getMatches(),
+    getIntakeBatches(),
+    getSeasons(),
+    getCurrentAdminUser()
+  ]);
   const allowCreate = canEditRecaps(adminUser);
   const peopleById = keyById(people.data);
+  const intakeBatchById = new Map(intakeBatches.data.map((b) => [b.id, b]));
+  const seasonById = new Map(seasons.data.map((s) => [s.id, s]));
   const matchesByMentor = new Map<string, Match[]>();
   for (const match of matches.data) {
     if (!match.mentor_person_id) continue;
@@ -65,6 +78,9 @@ export default async function MentorsPage() {
       return status === "completed" || status === "dropped";
     }).length;
     const vamSeniority = vamSeniorityDisplay(mentor, mentorMatches);
+    // Phase 043: resolve intake batch → season for filter columns
+    const batch = mentor.intake_batch_id ? intakeBatchById.get(mentor.intake_batch_id) : undefined;
+    const batchSeason = batch?.season_id ? seasonById.get(batch.season_id) : undefined;
     return {
       ...mentor,
       full_name: person?.full_name,
@@ -84,7 +100,9 @@ export default async function MentorsPage() {
       mentor_status_filter: isActiveMentor ? "active" : "inactive",
       mentee_count_filter: menteeCountFilter(assignedMenteeCount),
       has_assigned_mentees: assignedMenteeCount > 0 ? "Có mentee" : "Chưa có mentee",
-      has_assigned_mentees_filter: assignedMenteeCount > 0 ? "yes" : "no"
+      has_assigned_mentees_filter: assignedMenteeCount > 0 ? "yes" : "no",
+      intake_batch_code: batch?.code ?? "Chưa gán",
+      intake_season_code: batchSeason?.code ?? "Chưa gán"
     };
   });
   return (
@@ -97,7 +115,7 @@ export default async function MentorsPage() {
           </Link>
         </div>
       ) : null}
-      <ErrorBox message={mentors.error || people.error || matches.error} />
+      <ErrorBox message={mentors.error || people.error || matches.error || intakeBatches.error || seasons.error} />
       <FilterableTable
         rows={rows}
         searchPlaceholder="Tìm theo tên, email, công ty, chức danh, ngành hoặc chức năng"
@@ -134,7 +152,9 @@ export default async function MentorsPage() {
               { label: "Chưa có mentee", value: "no" }
             ]
           },
-          { key: "company_current", label: "Công ty", valueKey: "company_current" }
+          { key: "company_current", label: "Công ty", valueKey: "company_current" },
+          { key: "intake_season", label: "Mùa intake", valueKey: "intake_season_code" },
+          { key: "intake_batch", label: "Batch intake", valueKey: "intake_batch_code" }
         ]}
         sortOptions={[
           { label: "Số mentee giảm dần", key: "assigned_mentee_count", direction: "desc", type: "number" },

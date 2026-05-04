@@ -36,6 +36,8 @@ export type ApprovalFormProps = {
   gender: string | null;
   roleApplied: string | null;
   seasonCode: string | null;
+  /** Phase 043: intake batch id from application.intake_batch_id */
+  intakeBatchId?: string | null;
   /** True when application already has a person_id set */
   alreadyApproved: boolean;
   personId?: string | null;
@@ -54,6 +56,7 @@ export function ApprovalForm({
   gender,
   roleApplied,
   seasonCode,
+  intakeBatchId,
   alreadyApproved,
   personId
 }: ApprovalFormProps) {
@@ -154,6 +157,7 @@ export function ApprovalForm({
         <input type="hidden" name="phone_primary" value={phonePrimary ?? ""} />
         <input type="hidden" name="gender" value={gender ?? ""} />
         <input type="hidden" name="season_code" value={seasonCode ?? ""} />
+        <input type="hidden" name="intake_batch_id" value={intakeBatchId ?? ""} />
         <input type="hidden" name="previous_status" value={currentStatus ?? ""} />
 
         <div>

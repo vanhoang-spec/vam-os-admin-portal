@@ -3,7 +3,7 @@ import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getMatches, getMenteeProfiles, getMentorProfiles, getPeople, keyById } from "@/lib/data";
+import { getIntakeBatches, getMatches, getMenteeProfiles, getMentorProfiles, getPeople, getSeasons, keyById } from "@/lib/data";
 import { Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayOptional, displayText } from "@/lib/utils";
 
@@ -22,6 +22,10 @@ type Row = MenteeProfile & {
   match_type?: string | null;
   match_confidence?: number | null;
   has_mentor: string;
+  /** Phase 043: batch code for filter, "Chưa gán" for legacy S11 rows */
+  intake_batch_code: string;
+  /** Phase 043: season code for filter, "Chưa gán" for legacy S11 rows */
+  intake_season_code: string;
 };
 
 function statusRank(match: Match) {
@@ -33,9 +37,19 @@ function statusRank(match: Match) {
 }
 
 export default async function MenteesPage() {
-  const [mentees, people, mentors, matches, adminUser] = await Promise.all([getMenteeProfiles(), getPeople(), getMentorProfiles(), getMatches(), getCurrentAdminUser()]);
+  const [mentees, people, mentors, matches, intakeBatches, seasons, adminUser] = await Promise.all([
+    getMenteeProfiles(),
+    getPeople(),
+    getMentorProfiles(),
+    getMatches(),
+    getIntakeBatches(),
+    getSeasons(),
+    getCurrentAdminUser()
+  ]);
   const allowCreate = canEditRecaps(adminUser);
   const peopleById = keyById(people.data);
+  const intakeBatchById = new Map(intakeBatches.data.map((b) => [b.id, b]));
+  const seasonById = new Map(seasons.data.map((s) => [s.id, s]));
   const mentorProfilesByPersonId = new Map(mentors.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
   const matchesByMentee = new Map<string, Match[]>();
   for (const match of matches.data) {
@@ -54,6 +68,9 @@ export default async function MenteesPage() {
     })[0];
     const mentor = selectedMatch?.mentor_person_id ? peopleById.get(selectedMatch.mentor_person_id) : undefined;
     const mentorProfile = selectedMatch?.mentor_person_id ? mentorProfilesByPersonId.get(selectedMatch.mentor_person_id) : undefined;
+    // Phase 043: resolve intake batch → season for filter columns
+    const batch = mentee.intake_batch_id ? intakeBatchById.get(mentee.intake_batch_id) : undefined;
+    const batchSeason = batch?.season_id ? seasonById.get(batch.season_id) : undefined;
     return {
       ...mentee,
       full_name: person?.full_name,
@@ -82,7 +99,9 @@ export default async function MenteesPage() {
       match_type_display: displayText(selectedMatch?.match_type),
       match_confidence_display: displayOptional(selectedMatch?.match_confidence),
       has_mentor: selectedMatch?.mentor_person_id ? "Có mentor" : "Chưa có mentor",
-      has_mentor_filter: selectedMatch?.mentor_person_id ? "yes" : "no"
+      has_mentor_filter: selectedMatch?.mentor_person_id ? "yes" : "no",
+      intake_batch_code: batch?.code ?? "Chưa gán",
+      intake_season_code: batchSeason?.code ?? "Chưa gán"
     };
   });
   return (
@@ -95,7 +114,7 @@ export default async function MenteesPage() {
           </Link>
         </div>
       ) : null}
-      <ErrorBox message={mentees.error || people.error || mentors.error || matches.error} />
+      <ErrorBox message={mentees.error || people.error || mentors.error || matches.error || intakeBatches.error || seasons.error} />
       <FilterableTable
         rows={rows}
         searchPlaceholder="Tìm theo tên, email, mentee_code, MSSV, ngành hoặc mentor"
@@ -112,7 +131,9 @@ export default async function MenteesPage() {
             ]
           },
           { key: "match_status", label: "Trạng thái match", valueKey: "match_status" },
-          { key: "major", label: "Ngành", valueKey: "major" }
+          { key: "major", label: "Ngành", valueKey: "major" },
+          { key: "intake_season", label: "Mùa intake", valueKey: "intake_season_code" },
+          { key: "intake_batch", label: "Batch intake", valueKey: "intake_batch_code" }
         ]}
         sortOptions={[
           { label: "Mã trường A-Z", key: "school_code", direction: "asc", type: "text", emptyLast: true, secondaryKey: "full_name" },

@@ -11,6 +11,7 @@ import type {
   FounderIntelligenceDashboard,
   FunctionArea,
   Industry,
+  IntakeBatch,
   JsonRecord,
   Match,
   MenteeProfile,
@@ -258,6 +259,10 @@ export async function getEvents() {
 
 export async function getSeasons() {
   return selectTable<Season>("seasons");
+}
+
+export async function getIntakeBatches() {
+  return selectAllTable<IntakeBatch>("intake_batches", "id,season_id,code,name,is_active");
 }
 
 export async function getPrograms() {
