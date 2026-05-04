@@ -105,6 +105,12 @@ export default async function ReviewsPage() {
           >
             Tiến độ review
           </Link>
+          <Link
+            href="/reviews/guide"
+            className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Hướng dẫn vận hành
+          </Link>
         </div>
       )}
 

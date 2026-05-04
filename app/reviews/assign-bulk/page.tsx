@@ -41,7 +41,12 @@ export default async function AssignBulkPage({
         <ErrorBox message={intakeBatches.error || seasons.error} />
 
         <Card>
-          <p className="mb-4 text-sm font-medium text-slate-700">Bước 1 — Chọn batch và role ứng tuyển</p>
+          <div className="mb-4 flex items-center justify-between">
+          <p className="text-sm font-medium text-slate-700">Bước 1 — Chọn batch và role ứng tuyển</p>
+          <Link href="/reviews/guide" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
+            Hướng dẫn vận hành
+          </Link>
+        </div>
           <form method="GET" className="flex flex-wrap gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-500">Intake Batch</label>
