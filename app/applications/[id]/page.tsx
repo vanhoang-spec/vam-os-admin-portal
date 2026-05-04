@@ -20,6 +20,7 @@ import type { ApplicationDecision, ApplicationReview, Match } from "@/lib/types"
 import { displayText, formatDate } from "@/lib/utils";
 import { AssignReviewerForm } from "./assign-reviewer-form";
 import { DecisionForm } from "./decision-form";
+import { ApprovalForm } from "./approval-form";
 
 const QUESTION_ORDER = [
   "consent_marketing_email",
@@ -293,6 +294,36 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           </div>
         )}
       </Card>
+
+      {/* ── Final approval (admin / core-team only) ───────────────────────────── */}
+      {canMakeDecision && (
+        <Card className="mb-4 border-vam-green/30">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-base font-semibold text-vam-ink">
+              Duyệt thành viên chính thức
+            </h2>
+            <span className="inline-flex rounded-full border border-vam-green/40 bg-vam-mint px-2 py-0.5 text-xs font-medium text-vam-green">
+              Phase 042
+            </span>
+          </div>
+          <p className="mb-4 text-sm text-slate-500">
+            Tạo hồ sơ <strong>people</strong> và <strong>mentor_profiles / mentee_profiles</strong> từ
+            đơn ứng tuyển này. Sau khi duyệt, admin có thể bổ sung thông tin chi tiết trên trang chỉnh sửa hồ sơ.
+          </p>
+          <ApprovalForm
+            applicationId={application.data.id}
+            currentStatus={displayStatus}
+            fullName={displayFullName}
+            emailPrimary={displayEmail}
+            phonePrimary={displayPhone}
+            gender={displayGender}
+            roleApplied={application.data.role_applied}
+            seasonCode={season?.code ?? null}
+            alreadyApproved={!!application.data.person_id}
+            personId={application.data.person_id}
+          />
+        </Card>
+      )}
 
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt nhanh</h2>
