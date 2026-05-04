@@ -253,8 +253,9 @@ export async function getEventDetailData(eventId: string): Promise<EventDetailDa
     client.from("events").select("id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes").eq("id", id).maybeSingle(),
     selectAll<Season>(client, "seasons", "id,code,name"),
     selectAll<Person>(client, "people", "id,full_name,email_primary"),
-    selectAll<MentorProfile>(client, "mentor_profiles", "id,person_id,mentor_code,company_current,title_current"),
-    selectAll<MenteeProfile>(client, "mentee_profiles", "id,person_id,mentee_code,school_code,school_raw,major")
+    // Phase 045B: include intake_batch_id so combobox can prioritise batch members
+    selectAll<MentorProfile>(client, "mentor_profiles", "id,person_id,mentor_code,company_current,title_current,intake_batch_id"),
+    selectAll<MenteeProfile>(client, "mentee_profiles", "id,person_id,mentee_code,school_code,school_raw,major,intake_batch_id")
   ]);
 
   if (eventRes.error) {
@@ -622,6 +623,145 @@ export async function cancelEvent(input: { id?: unknown; reason?: unknown }): Pr
     details: { reason: clean(input.reason) }
   });
   return { ok: true, message: "Đã hủy sự kiện.", data: after };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 045B — Bulk add participants from a batch
+// ---------------------------------------------------------------------------
+
+export type BulkAddGroup = "approved_mentees_in_batch" | "approved_mentors_in_batch";
+
+export type BulkAddResult = MutationResult & {
+  addedCount?: number;
+  skippedCount?: number;
+};
+
+export async function bulkAddEventParticipants(input: {
+  event_id?: unknown;
+  group?: unknown;
+}): Promise<BulkAddResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const eventId = clean(input.event_id);
+  if (!eventId) return { ok: false, message: "Thiếu event id." };
+  if (!isValidUuid(eventId)) return { ok: false, message: "ID sự kiện không hợp lệ." };
+
+  const group = String(input.group ?? "").trim() as BulkAddGroup;
+  if (group !== "approved_mentees_in_batch" && group !== "approved_mentors_in_batch") {
+    return { ok: false, message: "Nhóm không hợp lệ." };
+  }
+
+  // Load event for intake_batch_id + season_id
+  const { data: event, error: eventError } = await client
+    .from("events")
+    .select("id,season_id,intake_batch_id")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (eventError) {
+    log("load event for bulk add failed", eventError);
+    return { ok: false, message: `${SAFE_ERROR} (${eventError.message})` };
+  }
+  if (!event) return { ok: false, message: "Không tìm thấy sự kiện." };
+
+  const intakeBatchId = (event as JsonRecord).intake_batch_id as string | null;
+  if (!intakeBatchId) {
+    return {
+      ok: false,
+      message: "Sự kiện này chưa được gắn với Intake Batch. Vui lòng sửa sự kiện và chọn batch trước."
+    };
+  }
+
+  // Load profiles for this batch
+  const profileTable = group === "approved_mentees_in_batch" ? "mentee_profiles" : "mentor_profiles";
+  const roleValue: EventRoleValue = group === "approved_mentees_in_batch" ? "mentee" : "mentor";
+
+  const { data: profiles, error: profileError } = await client
+    .from(profileTable)
+    .select("id,person_id")
+    .eq("intake_batch_id", intakeBatchId);
+  if (profileError) {
+    log(`load ${profileTable} for bulk add failed`, profileError);
+    return { ok: false, message: `${SAFE_ERROR} (${profileError.message})` };
+  }
+
+  const profileList = (profiles ?? []) as Array<{ id: string; person_id: string | null }>;
+  const candidatePersonIds = profileList
+    .map((p) => p.person_id)
+    .filter((id): id is string => Boolean(id) && isValidUuid(id));
+
+  if (!candidatePersonIds.length) {
+    return {
+      ok: true,
+      message: "Không có hồ sơ nào trong batch này.",
+      addedCount: 0,
+      skippedCount: 0
+    };
+  }
+
+  // Load existing participations for this event to detect duplicates
+  const { data: existing, error: existingError } = await client
+    .from("event_participations")
+    .select("person_id")
+    .eq("event_id", eventId);
+  if (existingError) {
+    log("load existing participations for bulk add failed", existingError);
+    return { ok: false, message: `${SAFE_ERROR} (${existingError.message})` };
+  }
+
+  const alreadyIn = new Set(
+    (existing ?? []).map((r: JsonRecord) => r.person_id as string).filter(Boolean)
+  );
+  const newPersonIds = candidatePersonIds.filter((id) => !alreadyIn.has(id));
+  const skippedCount = candidatePersonIds.length - newPersonIds.length;
+
+  if (!newPersonIds.length) {
+    return {
+      ok: true,
+      message: `Tất cả ${candidatePersonIds.length} người trong batch đã có trong sự kiện.`,
+      addedCount: 0,
+      skippedCount
+    };
+  }
+
+  const capturedBy = access.admin?.email ?? "admin";
+  const eventSeasonId = (event as JsonRecord).season_id as string | null;
+  const rows: JsonRecord[] = newPersonIds.map((personId) => ({
+    event_id: eventId,
+    season_id: eventSeasonId,
+    person_id: personId,
+    role_at_event: roleValue,
+    attendance_status: "registered_absent",
+    registration_status: "registered",
+    captured_by: capturedBy,
+    walk_in: false
+  }));
+
+  const { error: insertError } = await client.from("event_participations").insert(rows);
+  if (insertError) {
+    log("bulk add event_participations failed", insertError);
+    return { ok: false, message: `${SAFE_ERROR} (${insertError.message})` };
+  }
+
+  await writeAdminAudit(client, {
+    actionType: "bulk_add_event_participants",
+    afterData: {
+      event_id: eventId,
+      group,
+      intake_batch_id: intakeBatchId,
+      added: newPersonIds.length,
+      skipped: skippedCount
+    }
+  });
+
+  return {
+    ok: true,
+    message: `Đã thêm ${newPersonIds.length} người. Bỏ qua ${skippedCount} người đã có trong sự kiện.`,
+    addedCount: newPersonIds.length,
+    skippedCount
+  };
 }
 
 export {

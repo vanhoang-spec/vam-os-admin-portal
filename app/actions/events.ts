@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import type { EventActionState } from "@/lib/event-action-types";
+import type { BulkAddActionState, EventActionState } from "@/lib/event-action-types";
 import {
   addParticipation,
+  bulkAddEventParticipants,
   cancelEvent,
   createEvent,
   removeParticipation,
@@ -195,6 +196,63 @@ export async function cancelEventAction(
   revalidatePath(`/events/${id}/attendance`);
   revalidatePath("/operations");
   return { ok: true, message: result.message };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 045B — Quick mark (attendance status only, preserves role and notes)
+// ---------------------------------------------------------------------------
+
+export async function quickMarkParticipationAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const id = formText(formData, "id");
+  const eventId = formText(formData, "event_id");
+  if (!id) return { ok: false, message: "Thiếu participation id." };
+
+  // Only pass attendance_status — updateParticipation uses hasOwnProperty checks,
+  // so role_at_event and admin_notes are deliberately NOT included here.
+  const result = await updateParticipation({
+    id,
+    attendance_status: formText(formData, "attendance_status") || "registered_absent"
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+
+  if (eventId) revalidatePath(`/events/${eventId}/attendance`);
+  revalidatePath("/events");
+  revalidatePath("/operations");
+  return { ok: true, message: result.message };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 045B — Bulk add participants from a batch
+// ---------------------------------------------------------------------------
+
+export async function bulkAddEventParticipantsAction(
+  _previousState: BulkAddActionState,
+  formData: FormData
+): Promise<BulkAddActionState> {
+  const denied = await ensureAuth();
+  if (denied) return { ok: false, message: denied.message };
+
+  const eventId = formText(formData, "event_id");
+  const group = formText(formData, "group");
+
+  const result = await bulkAddEventParticipants({ event_id: eventId, group });
+  if (!result.ok) return { ok: false, message: result.message };
+
+  revalidatePath(`/events/${eventId}/attendance`);
+  revalidatePath("/events");
+  revalidatePath("/operations");
+  return {
+    ok: true,
+    message: result.message,
+    addedCount: result.addedCount,
+    skippedCount: result.skippedCount
+  };
 }
 
 // NOTE: EventActionState type and initialEventActionState are in lib/event-action-types.ts

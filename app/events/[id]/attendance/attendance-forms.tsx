@@ -1,13 +1,15 @@
 "use client";
 
-import { useFormState } from "react-dom";
+import { useFormState, useFormStatus } from "react-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   addParticipationAction,
+  bulkAddEventParticipantsAction,
+  quickMarkParticipationAction,
   removeParticipationAction,
   updateParticipationAction
 } from "@/app/actions/events";
-import type { EventActionState } from "@/lib/event-action-types";
+import type { BulkAddActionState, EventActionState } from "@/lib/event-action-types";
 import {
   ATTENDANCE_STATUS_OPTIONS,
   EVENT_ROLE_OPTIONS,
@@ -19,6 +21,11 @@ import type { EventParticipation, MenteeProfile, MentorProfile, Person } from "@
 import { displayText, formatDate } from "@/lib/utils";
 
 const initialState: EventActionState = { ok: false, message: null };
+const initialBulkState: BulkAddActionState = { ok: false, message: null };
+
+// ---------------------------------------------------------------------------
+// Participant option model
+// ---------------------------------------------------------------------------
 
 type ParticipantOption = {
   id: string;
@@ -28,6 +35,7 @@ type ParticipantOption = {
   searchKey: string;
   defaultRole: EventRoleValue;
   knownAs: "mentor" | "mentee" | "other";
+  inPriorityBatch: boolean;
 };
 
 function normalize(value: unknown) {
@@ -38,7 +46,8 @@ function buildParticipantOptions(
   people: Person[],
   mentorProfiles: MentorProfile[],
   menteeProfiles: MenteeProfile[],
-  excludePersonIds: Set<string>
+  excludePersonIds: Set<string>,
+  priorityBatchId: string | null = null
 ): ParticipantOption[] {
   const mentorByPersonId = new Map<string, MentorProfile>();
   for (const profile of mentorProfiles) {
@@ -90,6 +99,11 @@ function buildParticipantOptions(
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
+
+      const inPriorityBatch = priorityBatchId
+        ? (mentor?.intake_batch_id === priorityBatchId || mentee?.intake_batch_id === priorityBatchId)
+        : false;
+
       return {
         id: person.id,
         primary,
@@ -97,20 +111,34 @@ function buildParticipantOptions(
         hint: hintParts.join(" · ") || null,
         searchKey,
         defaultRole,
-        knownAs
+        knownAs,
+        inPriorityBatch
       };
     })
-    .sort((a, b) => a.primary.localeCompare(b.primary, "vi"));
+    .sort((a, b) => {
+      // Batch members first when a priority batch is set
+      if (priorityBatchId) {
+        if (a.inPriorityBatch && !b.inPriorityBatch) return -1;
+        if (!a.inPriorityBatch && b.inPriorityBatch) return 1;
+      }
+      return a.primary.localeCompare(b.primary, "vi");
+    });
 }
+
+// ---------------------------------------------------------------------------
+// Participant combobox
+// ---------------------------------------------------------------------------
 
 function ParticipantCombobox({
   options,
   value,
-  onSelect
+  onSelect,
+  priorityBatchId
 }: {
   options: ParticipantOption[];
   value: string;
   onSelect: (option: ParticipantOption | null) => void;
+  priorityBatchId: string | null;
 }) {
   const inputId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -136,14 +164,21 @@ function ParticipantCombobox({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q || q === selected?.primary.toLowerCase()) return options.slice(0, 50);
-    return options.filter((option) => option.searchKey.includes(q)).slice(0, 50);
+    if (!q || q === selected?.primary.toLowerCase()) return options.slice(0, 60);
+    return options.filter((option) => option.searchKey.includes(q)).slice(0, 60);
   }, [options, query, selected?.primary]);
+
+  // Find where non-batch entries start for showing a separator
+  const firstNonBatchIdx = priorityBatchId
+    ? filtered.findIndex((o) => !o.inPriorityBatch)
+    : -1;
 
   return (
     <div ref={containerRef} className="relative">
       <label htmlFor={inputId} className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Người tham gia (*) — tìm theo tên / email / công ty / trường</span>
+        <span className="text-xs font-medium uppercase text-slate-500">
+          Người tham gia (*) — tìm theo tên / email / công ty / trường
+        </span>
         <input
           id={inputId}
           type="search"
@@ -185,8 +220,19 @@ function ParticipantCombobox({
             <div className="px-3 py-2 text-xs text-slate-500">Không tìm thấy người phù hợp.</div>
           ) : (
             <ul className="divide-y divide-vam-line">
-              {filtered.map((option) => (
+              {filtered.map((option, idx) => (
                 <li key={option.id}>
+                  {/* Separator between batch-priority and rest */}
+                  {priorityBatchId && idx === firstNonBatchIdx && firstNonBatchIdx > 0 ? (
+                    <div className="bg-slate-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Ngoài batch
+                    </div>
+                  ) : null}
+                  {priorityBatchId && idx === 0 && option.inPriorityBatch ? (
+                    <div className="bg-vam-mint/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-vam-green">
+                      Trong batch (ưu tiên)
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => {
@@ -209,6 +255,11 @@ function ParticipantCombobox({
                       >
                         {option.knownAs === "mentor" ? "Mentor" : option.knownAs === "mentee" ? "Mentee" : "Khác"}
                       </span>
+                      {option.inPriorityBatch ? (
+                        <span className="rounded bg-vam-mint px-1.5 py-0.5 text-[10px] font-medium text-vam-green">
+                          batch
+                        </span>
+                      ) : null}
                     </span>
                     {option.secondary ? <span className="text-xs text-slate-500">{option.secondary}</span> : null}
                     {option.hint ? <span className="text-xs text-slate-500">{option.hint}</span> : null}
@@ -223,24 +274,31 @@ function ParticipantCombobox({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Add participant form (one at a time)
+// ---------------------------------------------------------------------------
+
 export function AddParticipantForm({
   eventId,
   people,
   mentorProfiles,
   menteeProfiles,
-  existingPersonIds
+  existingPersonIds,
+  intakeBatchId = null
 }: {
   eventId: string;
   people: Person[];
   mentorProfiles: MentorProfile[];
   menteeProfiles: MenteeProfile[];
   existingPersonIds: Set<string>;
+  /** Phase 045B: when set, batch members are sorted to the top of the combobox. */
+  intakeBatchId?: string | null;
 }) {
   const [state, formAction] = useFormState(addParticipationAction, initialState);
 
   const options = useMemo(
-    () => buildParticipantOptions(people, mentorProfiles, menteeProfiles, existingPersonIds),
-    [people, mentorProfiles, menteeProfiles, existingPersonIds]
+    () => buildParticipantOptions(people, mentorProfiles, menteeProfiles, existingPersonIds, intakeBatchId),
+    [people, mentorProfiles, menteeProfiles, existingPersonIds, intakeBatchId]
   );
 
   const [personId, setPersonId] = useState("");
@@ -260,13 +318,9 @@ export function AddParticipantForm({
   }
 
   const roleOptionsForUI = useMemo(() => {
-    if (knownAs === "mentor") {
-      return EVENT_ROLE_OPTIONS.filter((option) => option.value !== "mentee");
-    }
-    if (knownAs === "mentee") {
-      return EVENT_ROLE_OPTIONS.filter((option) => option.value !== "mentor");
-    }
-    return EVENT_ROLE_OPTIONS.filter((option) => option.value !== "mentor" && option.value !== "mentee");
+    if (knownAs === "mentor") return EVENT_ROLE_OPTIONS.filter((o) => o.value !== "mentee");
+    if (knownAs === "mentee") return EVENT_ROLE_OPTIONS.filter((o) => o.value !== "mentor");
+    return EVENT_ROLE_OPTIONS.filter((o) => o.value !== "mentor" && o.value !== "mentee");
   }, [knownAs]);
 
   return (
@@ -275,15 +329,29 @@ export function AddParticipantForm({
       <input type="hidden" name="person_id" value={personId} />
 
       {state.message ? (
-        <div className={state.ok ? "rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"}>
+        <div
+          className={
+            state.ok
+              ? "rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700"
+              : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          }
+        >
           {state.message}
         </div>
       ) : null}
 
-      <ParticipantCombobox options={options} value={personId} onSelect={handleSelect} />
+      <ParticipantCombobox
+        options={options}
+        value={personId}
+        onSelect={handleSelect}
+        priorityBatchId={intakeBatchId}
+      />
 
       <p className="text-xs text-slate-500">
-        Tổng: {options.length} người chưa có mặt trong sự kiện. Có thể thêm cả người không phải mentor/mentee (core team, diễn giả, trainer, khách mời).
+        {intakeBatchId
+          ? `Thành viên trong batch hiển thị trước. `
+          : null}
+        Tổng: {options.length} người chưa có mặt trong sự kiện.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -292,7 +360,7 @@ export function AddParticipantForm({
           <select
             name="role_at_event"
             value={role}
-            onChange={(event) => setRole(event.target.value as EventRoleValue)}
+            onChange={(e) => setRole(e.target.value as EventRoleValue)}
             className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           >
             {roleOptionsForUI.map((option) => (
@@ -342,21 +410,140 @@ export function AddParticipantForm({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Bulk add form (Phase 045B)
+// ---------------------------------------------------------------------------
+
+function BulkAddGroupSubmit({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="inline-flex w-fit rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink hover:bg-vam-mint disabled:opacity-50"
+    >
+      {pending ? "Đang thêm..." : label}
+    </button>
+  );
+}
+
+function BulkAddGroupForm({
+  eventId,
+  group,
+  label
+}: {
+  eventId: string;
+  group: "approved_mentees_in_batch" | "approved_mentors_in_batch";
+  label: string;
+}) {
+  const [state, formAction] = useFormState(bulkAddEventParticipantsAction, initialBulkState);
+  return (
+    <form action={formAction} className="flex flex-wrap items-center gap-3">
+      <input type="hidden" name="event_id" value={eventId} />
+      <input type="hidden" name="group" value={group} />
+      <BulkAddGroupSubmit label={label} />
+      {state.message ? (
+        <span
+          className={
+            state.ok ? "text-sm font-medium text-green-700" : "text-sm text-red-700"
+          }
+        >
+          {state.message}
+          {state.ok && state.addedCount !== undefined
+            ? ` (+${state.addedCount} mới, bỏ qua ${state.skippedCount ?? 0})`
+            : null}
+        </span>
+      ) : null}
+    </form>
+  );
+}
+
+export function BulkAddForm({ eventId }: { eventId: string }) {
+  return (
+    <div className="grid gap-3">
+      <p className="text-xs text-slate-500">
+        Chỉ thêm người chưa có trong sự kiện. Chạy nhiều lần không tạo bản ghi trùng.
+        Trạng thái mặc định: <em>Đã đăng ký / Vắng</em> — cập nhật sau khi điểm danh xong.
+      </p>
+      <BulkAddGroupForm
+        eventId={eventId}
+        group="approved_mentees_in_batch"
+        label="Thêm tất cả Mentee trong batch"
+      />
+      <BulkAddGroupForm
+        eventId={eventId}
+        group="approved_mentors_in_batch"
+        label="Thêm tất cả Mentor trong batch"
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Per-row badges
+// ---------------------------------------------------------------------------
+
 function roleBadgeClass(role: unknown) {
   const value = String(role ?? "").trim();
   if (value === "mentor") return "rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700";
   if (value === "mentee") return "rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700";
   if (value === "core_team") return "rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700";
-  if (value === "speaker" || value === "trainer") return "rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700";
-  if (value === "guest") return "rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600";
+  if (value === "speaker" || value === "trainer")
+    return "rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700";
   return "rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600";
 }
 
 function statusBadgeClass(status: unknown) {
   const value = String(status ?? "").trim();
   if (value === "attended") return "rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700";
-  return "rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700";
+  if (value === "registered_absent")
+    return "rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700";
+  return "rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500";
 }
+
+// ---------------------------------------------------------------------------
+// Quick mark (Phase 045B): one-click attended / vắng, preserves role + notes
+// ---------------------------------------------------------------------------
+
+function QuickMarkForm({
+  id,
+  eventId,
+  targetStatus,
+  label,
+  activeClass,
+  currentStatus
+}: {
+  id: string;
+  eventId: string;
+  targetStatus: string;
+  label: string;
+  activeClass: string;
+  currentStatus: string;
+}) {
+  const [state, formAction] = useFormState(quickMarkParticipationAction, initialState);
+  const isActive = currentStatus === targetStatus;
+  return (
+    <form action={formAction} className="inline">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="event_id" value={eventId} />
+      <input type="hidden" name="attendance_status" value={targetStatus} />
+      <button
+        type="submit"
+        title={isActive ? `Đang là: ${label}` : `Đánh dấu: ${label}`}
+        className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+          isActive ? activeClass : "border border-vam-line bg-white text-slate-500 hover:bg-slate-50"
+        }`}
+      >
+        {label}
+        {state.ok ? " ✓" : ""}
+      </button>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Participation row
+// ---------------------------------------------------------------------------
 
 export function ParticipationRow({
   eventId,
@@ -372,19 +559,51 @@ export function ParticipationRow({
 
   const displayName = person?.full_name || person?.email_primary || row.person_id || "Chưa rõ";
   const currentRole = String(row.role_at_event ?? "unknown");
-  const currentStatus = String(row.attendance_status ?? "registered_absent");
+  const currentStatus = String(row.attendance_status ?? "");
+  const isWalkIn = row.walk_in === true || String(row.walk_in) === "true";
 
   return (
     <tr className="hover:bg-vam-mint/40">
+      {/* Column 1: identity + badges */}
       <td className="px-4 py-3 align-top">
         <div className="font-medium text-vam-ink">{displayText(displayName)}</div>
-        <div className="mt-1 text-xs text-slate-500">{displayText(person?.email_primary)}</div>
+        <div className="mt-0.5 text-xs text-slate-500">{displayText(person?.email_primary)}</div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           <span className={roleBadgeClass(currentRole)}>{eventRoleLabel(currentRole)}</span>
-          <span className={statusBadgeClass(currentStatus)}>{attendanceStatusLabel(currentStatus)}</span>
+          <span className={statusBadgeClass(currentStatus)}>
+            {currentStatus ? attendanceStatusLabel(currentStatus) : "Chưa cập nhật"}
+          </span>
+          {isWalkIn ? (
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+              Walk-in
+            </span>
+          ) : null}
         </div>
       </td>
+
+      {/* Column 2: quick mark + full edit form */}
       <td className="px-4 py-3 align-top">
+        {/* Quick mark buttons */}
+        <div className="mb-3 flex flex-wrap gap-2">
+          <QuickMarkForm
+            id={row.id}
+            eventId={eventId}
+            targetStatus="attended"
+            label="✓ Đã tham gia"
+            activeClass="bg-green-100 text-green-700 border border-green-200"
+            currentStatus={currentStatus}
+          />
+          <QuickMarkForm
+            id={row.id}
+            eventId={eventId}
+            targetStatus="registered_absent"
+            label="✗ Vắng"
+            activeClass="bg-amber-100 text-amber-700 border border-amber-200"
+            currentStatus={currentStatus}
+          />
+        </div>
+
+        {/* Full edit form */}
         <form action={updateAction} className="grid gap-2">
           <input type="hidden" name="id" value={row.id} />
           <input type="hidden" name="event_id" value={eventId} />
@@ -399,7 +618,7 @@ export function ParticipationRow({
           </select>
           <select
             name="attendance_status"
-            defaultValue={currentStatus}
+            defaultValue={currentStatus || "registered_absent"}
             className="w-full rounded-md border border-vam-line bg-white px-2 py-1 text-xs text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           >
             {ATTENDANCE_STATUS_OPTIONS.map((option) => (
@@ -413,18 +632,31 @@ export function ParticipationRow({
             placeholder="Ghi chú (tuỳ chọn)"
             className="w-full rounded-md border border-vam-line bg-white px-2 py-1 text-xs text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           />
-          <button type="submit" className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1 text-xs font-medium text-white hover:bg-vam-green/90">
-            Cập nhật
+          <button
+            type="submit"
+            className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1 text-xs font-medium text-white hover:bg-vam-green/90"
+          >
+            Cập nhật chi tiết
           </button>
           {updateState.message ? (
-            <span className={updateState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>{updateState.message}</span>
+            <span className={updateState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>
+              {updateState.message}
+            </span>
           ) : null}
         </form>
       </td>
+
+      {/* Column 3: metadata */}
       <td className="px-4 py-3 text-xs text-slate-500 align-top">
-        <div>updated_by: {displayText(row.captured_by)}</div>
-        <div className="mt-1">attendance_date: {formatDate(row.attendance_date)}</div>
+        {row.attendance_date ? (
+          <div>Ngày tham gia: {formatDate(row.attendance_date)}</div>
+        ) : null}
+        {row.captured_by ? (
+          <div className="mt-1">Ghi nhận bởi: {displayText(row.captured_by)}</div>
+        ) : null}
       </td>
+
+      {/* Column 4: remove */}
       <td className="px-4 py-3 align-top">
         <form action={removeAction} className="grid gap-2">
           <input type="hidden" name="id" value={row.id} />
@@ -435,11 +667,16 @@ export function ParticipationRow({
             placeholder="Lý do xoá"
             className="w-full rounded-md border border-vam-line bg-white px-2 py-1 text-xs text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           />
-          <button type="submit" className="inline-flex w-fit rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100">
+          <button
+            type="submit"
+            className="inline-flex w-fit rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+          >
             Xoá
           </button>
           {removeState.message ? (
-            <span className={removeState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>{removeState.message}</span>
+            <span className={removeState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>
+              {removeState.message}
+            </span>
           ) : null}
         </form>
       </td>
