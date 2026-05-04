@@ -19,7 +19,7 @@ export default async function CreateEventPage() {
 
   return (
     <>
-      <PageHeader title="Tạo sự kiện" description="Ghi nhận sự kiện/hoạt động mới (training, workshop, orientation, ...)." />
+      <PageHeader title="Tạo sự kiện" description="Ghi nhận sự kiện/hoạt động mới (orientation, training, networking, closing, ...)." />
       {seasons.error ? <ErrorBox message={seasons.error} /> : null}
       {intakeBatches.error ? <ErrorBox message={intakeBatches.error} /> : null}
 

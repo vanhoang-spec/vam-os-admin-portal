@@ -1,11 +1,11 @@
 export type EventTypeValue =
   | "orientation"
-  | "kickoff"
-  | "tong_ket"
   | "training"
-  | "workshop"
-  | "community"
-  | "matching"
+  | "company_tour"
+  | "networking"
+  | "closing"
+  | "business_case"
+  | "job_shadowing"
   | "other";
 
 export type AttendanceStatusValue = "attended" | "registered_absent";
@@ -13,13 +13,13 @@ export type RegistrationStatusValue = "registered" | "unknown";
 export type EventRoleValue = "mentor" | "mentee" | "core_team" | "speaker" | "trainer" | "guest" | "unknown";
 
 export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }> = [
-  { value: "orientation", label: "Orientation (định hướng)" },
-  { value: "kickoff", label: "Kickoff" },
-  { value: "tong_ket", label: "Tổng kết / Closing" },
-  { value: "training", label: "Training (đào tạo)" },
-  { value: "workshop", label: "Workshop" },
-  { value: "community", label: "Community (cộng đồng)" },
-  { value: "matching", label: "Matching" },
+  { value: "orientation", label: "Orientation / Định hướng" },
+  { value: "training", label: "Training / Đào tạo" },
+  { value: "company_tour", label: "Company tour / Tham quan doanh nghiệp" },
+  { value: "networking", label: "Networking / Giao lưu - Kickoff" },
+  { value: "closing", label: "Tổng kết / Closing" },
+  { value: "business_case", label: "Business case" },
+  { value: "job_shadowing", label: "Job shadowing" },
   { value: "other", label: "Khác" }
 ];
 

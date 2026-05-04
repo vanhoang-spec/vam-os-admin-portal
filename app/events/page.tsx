@@ -97,7 +97,7 @@ export default async function EventsPage({
     <>
       <PageHeader
         title="Danh sách sự kiện"
-        description="Quản lý sự kiện và hoạt động (training, workshop, orientation, ...) trong mùa."
+        description="Quản lý sự kiện và hoạt động (orientation, training, networking, closing, ...) trong mùa."
       />
       {data.error ? <ErrorBox message={data.error} /> : null}
       {intakeBatchesRes.error ? <ErrorBox message={intakeBatchesRes.error} /> : null}
