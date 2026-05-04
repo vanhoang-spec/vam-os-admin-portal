@@ -12,6 +12,7 @@ import type {
   FunctionArea,
   Industry,
   IntakeBatch,
+  InterviewCandidateRow,
   JsonRecord,
   Match,
   MenteeProfile,
@@ -1487,4 +1488,115 @@ export async function getReviewerPool(filters?: {
     .filter((row) => Boolean(row.email_primary));
 
   return { data: rows, error: null };
+}
+
+// ----------------------------------------------------------------
+// Phase 044B — Interview candidates fetcher (service-role)
+// ----------------------------------------------------------------
+
+/** Application statuses that make a candidate eligible to be interviewed. */
+const INTERVIEW_POOL_STATUSES = [
+  "invited_to_interview",
+  "interview_scheduled",
+  "interview_in_progress",
+  "interview_completed"
+] as const;
+
+/**
+ * Applications that are in an interview-eligible status, enriched with their
+ * first active (non-cancelled) interview review row.
+ *
+ * Two-query pattern:
+ *   1. applications filtered by status + optional intakeBatchId/roleApplied.
+ *   2. application_reviews (interview round, non-cancelled) for those app IDs.
+ * Merged in JS: interview review attached to each row.
+ *
+ * Defaults: roleApplied = "mentee", includeCompleted = true.
+ */
+export async function getInterviewCandidates(filters?: {
+  intakeBatchId?: string | null;
+  roleApplied?: string | null;
+  includeCompleted?: boolean;
+}): Promise<QueryResult<InterviewCandidateRow[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<InterviewCandidateRow[]>([]);
+
+  // Status set — optionally exclude interview_completed
+  const statuses =
+    filters?.includeCompleted === false
+      ? (INTERVIEW_POOL_STATUSES.slice(0, 3) as unknown as string[])
+      : (INTERVIEW_POOL_STATUSES as unknown as string[]);
+
+  let appsQuery = client
+    .from("applications")
+    .select("id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at")
+    .in("status", statuses)
+    .order("submitted_at", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (filters?.intakeBatchId) {
+    appsQuery = appsQuery.eq("intake_batch_id", filters.intakeBatchId);
+  }
+
+  // Default to mentee unless explicitly overridden
+  const roleApplied = filters?.roleApplied ?? "mentee";
+  appsQuery = appsQuery.eq("role_applied", roleApplied);
+
+  const { data: appRows, error: appsErr } = await appsQuery;
+  if (appsErr) {
+    logDataError("getInterviewCandidates.applications", appsErr);
+    return { data: [], error: `${VI_ERROR} (applications: ${appsErr.message})` };
+  }
+
+  const appList = (appRows ?? []) as {
+    id: string;
+    full_name: string | null;
+    email_primary: string | null;
+    phone_primary: string | null;
+    status: string | null;
+    intake_batch_id: string | null;
+    role_applied: string | null;
+    sbd: string | null;
+    submitted_at: string | null;
+  }[];
+
+  if (!appList.length) return { data: [], error: null };
+
+  // Fetch active interview reviews for these applications
+  const appIds = appList.map((a) => a.id);
+  const { data: reviewRows } = await client
+    .from("application_reviews")
+    .select("id,application_id,status,reviewer_admin_user_id")
+    .eq("review_round", "interview")
+    .neq("status", "cancelled")
+    .in("application_id", appIds)
+    .order("created_at", { ascending: true }); // oldest first → consistent "primary" review
+
+  // Map application_id → first active interview review
+  const reviewByAppId = new Map<
+    string,
+    { id: string; status: string; reviewer_admin_user_id: string | null }
+  >();
+  for (const row of reviewRows ?? []) {
+    const appId = row.application_id as string;
+    if (!reviewByAppId.has(appId)) {
+      reviewByAppId.set(appId, {
+        id: String(row.id),
+        status: String(row.status ?? ""),
+        reviewer_admin_user_id: (row.reviewer_admin_user_id as string | null) ?? null
+      });
+    }
+  }
+
+  const data: InterviewCandidateRow[] = appList.map((a) => {
+    const review = reviewByAppId.get(a.id) ?? null;
+    return {
+      ...a,
+      interview_review_id: review?.id ?? null,
+      interview_review_status: review?.status ?? null,
+      interview_reviewer_admin_user_id: review?.reviewer_admin_user_id ?? null
+    };
+  });
+
+  return { data, error: null };
 }

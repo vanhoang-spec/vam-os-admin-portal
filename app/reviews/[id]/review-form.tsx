@@ -103,6 +103,8 @@ function FormButtons({ isSubmitted }: { isSubmitted: boolean }) {
 
 export type ReviewFormProps = {
   reviewId: string;
+  /** "profile_screening" | "interview" — controls recommendation options. */
+  reviewRound?: string | null;
   isSubmitted: boolean;
   defaultScoreMotivation?: number | null;
   defaultScoreGoalClarity?: number | null;
@@ -119,6 +121,7 @@ export type ReviewFormProps = {
 
 export function ReviewForm({
   reviewId,
+  reviewRound,
   isSubmitted,
   defaultScoreMotivation,
   defaultScoreGoalClarity,
@@ -128,6 +131,7 @@ export function ReviewForm({
   defaultRecommendation,
   defaultReviewerNote
 }: ReviewFormProps) {
+  const isInterview = reviewRound === "interview";
   const [state, action] = useFormState(
     handleReviewFormAction,
     initialReviewActionState
@@ -192,10 +196,21 @@ export function ReviewForm({
             className="mt-2 w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink focus:outline-none focus:ring-1 focus:ring-vam-green disabled:bg-slate-100 disabled:text-slate-500"
           >
             <option value="">-- Chọn kết quả --</option>
-            <option value="pass_to_interview">Mời vào vòng phỏng vấn</option>
-            <option value="waitlist">Đưa vào danh sách chờ</option>
-            <option value="reject">Không phù hợp / từ chối</option>
-            <option value="needs_admin_review">Cần core team/admin xem thêm</option>
+            {isInterview ? (
+              <>
+                <option value="approve_recommended">Đề xuất duyệt</option>
+                <option value="waitlist">Danh sách chờ</option>
+                <option value="reject">Không phù hợp / từ chối</option>
+                <option value="needs_admin_review">Cần core team xem thêm</option>
+              </>
+            ) : (
+              <>
+                <option value="pass_to_interview">Mời vào vòng phỏng vấn</option>
+                <option value="waitlist">Đưa vào danh sách chờ</option>
+                <option value="reject">Không phù hợp / từ chối</option>
+                <option value="needs_admin_review">Cần core team/admin xem thêm</option>
+              </>
+            )}
           </select>
         </div>
 

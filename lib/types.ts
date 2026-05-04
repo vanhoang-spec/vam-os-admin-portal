@@ -117,6 +117,10 @@ export type ApplicationReview = JsonRecord & {
   updated_at: string;
   /** Phase 044a: which bulk-assignment batch created this review row. */
   assignment_batch_id?: string | null;
+  /** Phase 044B: timestamp when reviewer self-claimed this review. */
+  claimed_at?: string | null;
+  /** Phase 044B: "self_claim" | "bulk_assign" | null (legacy). */
+  claim_source?: string | null;
 };
 
 /** Audit record for one bulk-assignment operation. */
@@ -215,6 +219,27 @@ export type ReviewerPoolRow = {
   admin_user_id: string | null;
   admin_user_role: string | null;
   admin_user_status: string | null;
+};
+
+/**
+ * One application candidate eligible for interview self-claim.
+ * Enriched with the first active (non-cancelled) interview review for the app.
+ * Used in the /interviews self-claim page.
+ */
+export type InterviewCandidateRow = {
+  id: string;
+  full_name: string | null;
+  email_primary: string | null;
+  phone_primary: string | null;
+  status: string | null;
+  intake_batch_id: string | null;
+  role_applied: string | null;
+  sbd: string | null;
+  submitted_at: string | null;
+  /** null when no active interview review exists yet. */
+  interview_review_id: string | null;
+  interview_review_status: string | null;
+  interview_reviewer_admin_user_id: string | null;
 };
 
 export type Program = JsonRecord & {

@@ -90,6 +90,16 @@ export default async function ReviewsPage() {
         }
       />
 
+      {/* Reviewer quick-link bar (all reviewer tiers) */}
+      <div className="mb-3 flex flex-wrap gap-3">
+        <Link
+          href="/interviews"
+          className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-vam-green hover:bg-vam-mint"
+        >
+          Phỏng vấn ứng viên
+        </Link>
+      </div>
+
       {/* Admin action bar */}
       {canBulkAssign && (
         <div className="mb-5 flex flex-wrap gap-3">

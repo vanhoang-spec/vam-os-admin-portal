@@ -203,7 +203,7 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
     return { ok: false, message: `${SAFE_ERROR} (${error.message})` };
   }
 
-  // Advance application.status to screening_completed after profile_screening submit
+  // Advance application.status based on review_round
   if (existing.review_round === "profile_screening") {
     const { error: statusErr } = await client
       .from("applications")
@@ -212,6 +212,15 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
       .in("status", ["screening_assigned", "screening_in_progress"]);
     if (statusErr) {
       log("update application status to screening_completed failed", statusErr);
+    }
+  } else if (existing.review_round === "interview") {
+    const { error: statusErr } = await client
+      .from("applications")
+      .update({ status: "interview_completed" })
+      .eq("id", existing.application_id)
+      .in("status", ["interview_in_progress"]);
+    if (statusErr) {
+      log("update application status to interview_completed failed", statusErr);
     }
   }
 

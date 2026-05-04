@@ -190,6 +190,7 @@ export default async function ReviewDetailPage({
         {canEdit ? (
           <ReviewForm
             reviewId={review.id}
+            reviewRound={review.review_round}
             isSubmitted={isSubmitted}
             defaultScoreMotivation={review.score_motivation}
             defaultScoreGoalClarity={review.score_goal_clarity}
@@ -207,9 +208,15 @@ export default async function ReviewDetailPage({
       </Card>
 
       <div className="flex gap-4">
-        <Link href="/reviews" className="text-sm font-medium text-vam-green">
-          Quay lại Reviews
-        </Link>
+        {review.review_round === "interview" ? (
+          <Link href="/interviews" className="text-sm font-medium text-vam-green">
+            ← Quay lại Phỏng vấn
+          </Link>
+        ) : (
+          <Link href="/reviews" className="text-sm font-medium text-vam-green">
+            ← Quay lại Reviews
+          </Link>
+        )}
         {app && (
           <Link
             href={`/applications/${app.id}`}

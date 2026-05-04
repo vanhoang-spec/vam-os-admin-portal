@@ -55,3 +55,12 @@ export function canBulkAssignReviews(role?: string | null) {
 export function canManageReviewers(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can self-claim an interview review from /interviews.
+ * Includes reviewer role in addition to all admin tiers.
+ * Viewer and support_team cannot self-claim.
+ */
+export function canSelfClaimInterview(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "reviewer"].includes(role || "");
+}

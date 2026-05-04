@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarRange, ClipboardCheck, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Settings2, ShieldCheck, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
+import { BarChart3, CalendarRange, ClipboardCheck, ClipboardList, DatabaseZap, Handshake, Home, LineChart, LogOut, Mic, Settings2, ShieldCheck, UserCog, Users, UserRoundCheck, UserRoundSearch } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
@@ -38,6 +38,7 @@ const navItems = [
 
 // Gated by canReview (reviewer + admin tiers).
 const reviewsNavItem = { href: "/reviews", label: "Reviews", icon: ClipboardCheck };
+const interviewsNavItem = { href: "/interviews", label: "Phỏng vấn", icon: Mic };
 
 // Gated by canAccessAdminUser (super_admin / admin / core_team).
 const teamNavItem = { href: "/team", label: "Team & Trách nhiệm", icon: ShieldCheck };
@@ -67,7 +68,7 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
   const showReviews = canReview(adminUser);
   const visibleNavItems = [
     ...navItems,
-    ...(showReviews ? [reviewsNavItem] : []),
+    ...(showReviews ? [reviewsNavItem, interviewsNavItem] : []),
     ...(showAdminTier ? [teamNavItem, adminCorrectionNavItem] : []),
     ...(showUserMgmt ? [userManagementNavItem] : [])
   ];
