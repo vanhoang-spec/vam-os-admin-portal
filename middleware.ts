@@ -175,5 +175,5 @@ export const config = {
   // /apply/mentee) bypass the admin auth + unlock gate. Those routes
   // are protected by their own per-route token check (see
   // `app/apply/*/page.tsx` + `VAM_OS_APPLICATION_PILOT_TOKEN`).
-  matcher: ["/((?!login|unlock|apply|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
+  matcher: ["/((?!login|unlock|apply|reset-password|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
 };
