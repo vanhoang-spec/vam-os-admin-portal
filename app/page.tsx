@@ -177,10 +177,19 @@ export default async function DashboardPage() {
   const closedMenteeIds = new Set(closedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
   const closedPreviousMenteeIds = new Set(closedPreviousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
 
-  const opsValidOperationalRecaps = opsValidRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
+  // Recap-by-month chart: use validOperationalRecaps (season-scoped, direct DB read via
+  // getDashboardData) rather than opsValidRecaps (may come from RPC with different filters).
+  // This keeps the chart consistent with the KPI cards and follow-up metrics which all
+  // derive from the season-filtered data.recaps feed.
+  //
+  // DATA COMPLETENESS NOTE: chart counts reflect only what is currently in the
+  // mentoring_recaps table.  Historical months (Nov 2025 – Feb 2026) show lower counts
+  // than the raw tracking Excel because the import was run on a partial subset of
+  // submissions.  See tracking_audit_output/ for import status of the full dataset.
+  // TODO: complete the import of remaining Season 11 recaps and re-run this page to verify.
   const recapByMonth = seasonMonths.map((name) => ({
     name,
-    value: opsValidOperationalRecaps.filter((recap) => recap.meeting_month === name).length
+    value: validOperationalRecaps.filter((recap) => recap.meeting_month === name).length
   }));
 
   const activeClosedMonthCount = Array.from(opsActiveMenteeIds).filter((id) => closedMenteeIds.has(id)).length;
@@ -289,6 +298,15 @@ export default async function DashboardPage() {
     { name: "3+ mentees", value: data.mentors.data.filter((mentor) => mentor.person_id && (activeMenteeCountByMentor.get(mentor.person_id)?.size ?? 0) >= 3).length }
   ];
 
+  // Data-completeness check: raw Season 11 "Báo cáo Recap" reports ~1,735 mentoring sessions
+  // for the operational period Nov 2025–Mar 2026.  The production DB currently holds a partial
+  // import (DRAFT_REVIEWED batch + March batch).  Show a banner so operators and founders know
+  // the chart / KPI numbers are preliminary until the full import is complete.
+  // TODO: remove threshold once all Season 11 recaps have been imported.
+  const S11_EXPECTED_RECAP_MINIMUM = 1500; // conservative; full raw report = ~1,735
+  const totalDbOperationalRecaps = validOperationalRecaps.length;
+  const recapImportIncomplete = totalDbOperationalRecaps < S11_EXPECTED_RECAP_MINIMUM;
+
   const warningRows = [
     { label: "People thiếu số điện thoại", count: peopleMissingPhone, href: "/data-issues?issue=missing_phone#issue-missing-phone" },
     { label: "Mentee thiếu school_code hoặc school_code OTHER/blank", count: menteesMissingSchool, href: "/data-issues?issue=missing_school_code#issue-missing-school-code" },
@@ -312,6 +330,23 @@ export default async function DashboardPage() {
           <p className="text-amber-600 mt-1">Đang hiển thị tháng mở {opsSelectedMonth} do chưa có dữ liệu chốt</p>
         ) : null}
       </div>
+
+      {/* Data-completeness notice — shown until the full Season 11 recap import is done.
+          Raw "Báo cáo Recap" shows ~1,735 mentoring sessions (Nov 2025 – Mar 2026).
+          DB currently has {totalDbOperationalRecaps} operational recaps (partial import).
+          Dec 2025, Jan 2026, Feb 2026 are most affected; Mar 2026 is correct.
+          Remove this banner and the S11_EXPECTED_RECAP_MINIMUM constant once import is complete. */}
+      {recapImportIncomplete ? (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">Dữ liệu recap chưa đầy đủ — biểu đồ và KPI phản ánh database hiện tại, chưa phải số liệu thực tế hoàn chỉnh.</p>
+          <p className="mt-1">
+            Hệ thống đang có <strong>{totalDbOperationalRecaps.toLocaleString("vi")}</strong> recap trong giai đoạn vận hành.
+            Báo cáo theo dõi cho biết mùa 11 có khoảng{" "}
+            <strong>1.735</strong> buổi mentoring — phần còn lại chưa được nhập vào database.
+            Các tháng 12/2025, 01/2026, 02/2026 bị ảnh hưởng nhiều nhất; tháng 03/2026 đã đúng.
+          </p>
+        </div>
+      ) : null}
 
       {process.env.NODE_ENV === "development" ? (
         <div className="mb-4 rounded-md bg-slate-900 p-4 text-xs font-mono text-emerald-400 opacity-75 hover:opacity-100 transition-opacity">
