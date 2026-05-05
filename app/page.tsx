@@ -298,14 +298,14 @@ export default async function DashboardPage() {
     { name: "3+ mentees", value: data.mentors.data.filter((mentor) => mentor.person_id && (activeMenteeCountByMentor.get(mentor.person_id)?.size ?? 0) >= 3).length }
   ];
 
-  // Data-completeness check: raw Season 11 "Báo cáo Recap" reports ~1,735 mentoring sessions
-  // for the operational period Nov 2025–Mar 2026.  The production DB currently holds a partial
-  // import (DRAFT_REVIEWED batch + March batch).  Show a banner so operators and founders know
-  // the chart / KPI numbers are preliminary until the full import is complete.
-  // TODO: remove threshold once all Season 11 recaps have been imported.
-  const S11_EXPECTED_RECAP_MINIMUM = 1500; // conservative; full raw report = ~1,735
+  // Season 11 data reconciliation note (updated 2026-05-05 after backfill).
+  // Two backfill waves added 281 recaps (61 URL-backed + 220 no-URL flagged, issue_flag=TRUE).
+  // DB now holds ~1,405 of the ~1,735 sessions in the raw Báo cáo Recap report.
+  // Remaining 330-row gap is structurally unresolvable from current tracking data
+  // (Zalo recaps, verbal reports, missing mentee codes, no active match).
+  // TODO: set showS11ReconciliationNote = false when the team closes out the gap investigation.
   const totalDbOperationalRecaps = validOperationalRecaps.length;
-  const recapImportIncomplete = totalDbOperationalRecaps < S11_EXPECTED_RECAP_MINIMUM;
+  const showS11ReconciliationNote = true;
 
   const warningRows = [
     { label: "People thiếu số điện thoại", count: peopleMissingPhone, href: "/data-issues?issue=missing_phone#issue-missing-phone" },
@@ -331,19 +331,19 @@ export default async function DashboardPage() {
         ) : null}
       </div>
 
-      {/* Data-completeness notice — shown until the full Season 11 recap import is done.
-          Raw "Báo cáo Recap" shows ~1,735 mentoring sessions (Nov 2025 – Mar 2026).
-          DB currently has {totalDbOperationalRecaps} operational recaps (partial import).
-          Dec 2025, Jan 2026, Feb 2026 are most affected; Mar 2026 is correct.
-          Remove this banner and the S11_EXPECTED_RECAP_MINIMUM constant once import is complete. */}
-      {recapImportIncomplete ? (
+      {/* Season 11 data reconciliation note — updated 2026-05-05 after backfill completion.
+          281 recaps added across two waves (61 URL-backed + 220 no-URL flagged).
+          DB now holds ~1,405 / 1,735 sessions; remaining 330-row gap is structural.
+          TODO: set showS11ReconciliationNote = false to dismiss when no longer needed. */}
+      {showS11ReconciliationNote ? (
         <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p className="font-semibold">Dữ liệu recap chưa đầy đủ — biểu đồ và KPI phản ánh database hiện tại, chưa phải số liệu thực tế hoàn chỉnh.</p>
+          <p className="font-semibold">Lưu ý dữ liệu Season 11</p>
           <p className="mt-1">
-            Hệ thống đang có <strong>{totalDbOperationalRecaps.toLocaleString("vi")}</strong> recap trong giai đoạn vận hành.
-            Báo cáo theo dõi cho biết mùa 11 có khoảng{" "}
-            <strong>1.735</strong> buổi mentoring — phần còn lại chưa được nhập vào database.
-            Các tháng 12/2025, 01/2026, 02/2026 bị ảnh hưởng nhiều nhất; tháng 03/2026 đã đúng.
+            Hệ thống đã backfill thêm 281 recap từ file tracking, bao gồm cả các recap không có URL nhưng được đánh dấu để audit.
+            Tổng recap hiện có trong DB là{" "}
+            <strong>{totalDbOperationalRecaps.toLocaleString("vi")}/1.735</strong> theo báo cáo tracking gốc.
+            Phần chênh lệch còn lại chủ yếu đến từ recap qua Zalo, báo cáo miệng, thiếu mã mentee hoặc không map được với match đang hoạt động, nên chưa thể tự động khôi phục.
+            Dashboard hiện phản ánh dữ liệu đã được chuẩn hóa trong DB.
           </p>
         </div>
       ) : null}
