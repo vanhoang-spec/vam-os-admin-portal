@@ -28,3 +28,30 @@ scripts/*.js
 .env.vercel
 .env.vercel.prod
 tsconfig.tsbuildinfo
+
+# ── Sensitive local data artifacts — do not commit PII/import workbooks/exports ──
+
+# Season 11 recap backfill — contains staging SQL with person UUIDs and mentee codes
+data_imports/season11/backfill/
+
+# UEHM S11 Events — participant PII CSVs (name, email, phone, MSSV)
+data_imports/uehm_s11_events/*.csv
+
+# UEHM S11 Events — scratch/log/temp files generated during audit
+data_imports/uehm_s11_events/_*.txt
+data_imports/uehm_s11_events/_*.log
+data_imports/uehm_s11_events/_*.json
+data_imports/uehm_s11_events/_*.py
+
+# HAM — people, match, recap, identity CSVs with real personal data
+data_imports/ham/ham_*_clean.csv
+data_imports/ham/ham_identity*.csv
+data_imports/ham/ham_manual_review_issues.csv
+data_imports/ham/ham_identity_duplicate_names.csv
+
+# All data_imports subdirs — scratch log/txt files
+data_imports/**/_*.txt
+data_imports/**/_*.log
+
+# Exports — binary team guides and generated documents (not source code)
+exports/
