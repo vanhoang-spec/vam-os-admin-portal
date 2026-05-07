@@ -1,24 +1,24 @@
 import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader } from "@/components/ui";
-import { getMatch, getMenteeProfiles, getMentorProfiles, getPeople, getSeasons, keyById } from "@/lib/data";
+import { getMatch, getSeasons, keyById } from "@/lib/data";
+import { getMatchRelatedDisplayData } from "@/lib/matches";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
 
 export default async function MatchDetailPage({ params }: { params: { id: string } }) {
-  const [match, people, seasons, mentors, mentees] = await Promise.all([
-    getMatch(params.id),
-    getPeople(),
-    getSeasons(),
-    getMentorProfiles(),
-    getMenteeProfiles()
+  const scope = await getScopeFilter(await getAdminScopeContext());
+  const [match, seasons] = await Promise.all([
+    getMatch(params.id, scope),
+    getSeasons(scope)
   ]);
-  const peopleById = keyById(people.data);
+  const related = await getMatchRelatedDisplayData(match.data);
   const seasonsById = keyById(seasons.data);
-  const mentor = match.data?.mentor_person_id ? peopleById.get(match.data.mentor_person_id) : undefined;
-  const mentee = match.data?.mentee_person_id ? peopleById.get(match.data.mentee_person_id) : undefined;
-  const mentorProfile = mentors.data.find((profile) => profile.person_id === match.data?.mentor_person_id);
-  const menteeProfile = mentees.data.find((profile) => profile.person_id === match.data?.mentee_person_id);
+  const mentor = related.mentor ?? undefined;
+  const mentee = related.mentee ?? undefined;
+  const mentorProfile = related.mentorProfile ?? undefined;
+  const menteeProfile = related.menteeProfile ?? undefined;
   const season = match.data?.season_id ? seasonsById.get(match.data.season_id) : undefined;
-  const error = match.error || people.error || seasons.error || mentors.error || mentees.error;
+  const error = match.error || seasons.error;
 
   if (!match.data) {
     return (

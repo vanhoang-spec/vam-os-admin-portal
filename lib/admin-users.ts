@@ -127,6 +127,13 @@ function validScopeStatus(value: unknown): ScopeStatus {
   return SCOPE_STATUSES.has(status) ? (status as ScopeStatus) : "active";
 }
 
+function scopeRoleForAdminRole(role: AdminRole | string | null | undefined): ScopeRole {
+  if (role === "admin" || role === "super_admin") return "full_access";
+  if (role === "core_team" || role === "support_team") return "operations";
+  if (role === "reviewer") return "review";
+  return "read";
+}
+
 function normalizeScopeRow(row: JsonRecord): AdminScopeAccessRow {
   return {
     id: String(row.id ?? ""),
@@ -351,12 +358,17 @@ async function upsertScope(client: any, input: {
     return;
   }
 
-  const { data: existing } = await client
+  const { data: existingRows, error: existingError } = await client
     .from("admin_scope_access")
     .select("id")
     .eq("user_id", input.authUserId)
-    .limit(1)
-    .maybeSingle();
+    .eq("program_id", payload.program_id)
+    .eq("season_id", payload.season_id)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (existingError) throw new Error(`KhĂ´ng thá»ƒ kiá»ƒm tra phĂ¢n quyá»n hiá»‡n cĂ³: ${existingError.message}`);
+
+  const existing = existingRows?.[0];
 
   const result = existing?.id
     ? await client.from("admin_scope_access").update(payload).eq("id", existing.id)
@@ -595,7 +607,7 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
       authUserId: auth.authUserId,
       programId: "VAM",
       seasonId: "UEHM-S11",
-      role: before.user.role === "super_admin" ? "full_access" : before.user.role === "admin" ? "operations" : "read",
+      role: scopeRoleForAdminRole(before.user.role),
       status: before.user.status === "active" ? "active" : "inactive"
     });
   } catch (scopeError: any) {

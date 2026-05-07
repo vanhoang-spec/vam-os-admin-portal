@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches } from "@/lib/data";
 import { getManualMatchingCandidates, getMatchList } from "@/lib/matches";
 import { canManageMatches } from "@/lib/permissions";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDate } from "@/lib/utils";
 import { ManualMatchForm, MatchCancelForm } from "./matches-client";
 
@@ -32,11 +33,13 @@ export default async function MatchesPage({
     status?: string | string[];
   };
 }) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [adminUser, intakeBatchesRes] = await Promise.all([
     getCurrentAdminUser(),
-    getIntakeBatches()
+    getIntakeBatches(scope)
   ]);
-  const allowManage = canManageMatches(adminUser?.role);
+  const allowManage = canManageMatches(adminUser?.role) && canOperateAnyScope(scopeContext);
 
   const batchFilter = selectedParam(searchParams?.batch).trim();
   const rawStatus = selectedParam(searchParams?.status).trim();
@@ -45,13 +48,14 @@ export default async function MatchesPage({
   // Always load matches (filtered by batch/status if provided)
   const matchListRes = await getMatchList({
     intakeBatchId: batchFilter || null,
-    status: statusFilter !== "all" ? statusFilter : null
+    status: statusFilter !== "all" ? statusFilter : null,
+    scope
   });
 
   // Load candidates only when a batch is selected
   const candidatesRes =
     batchFilter && allowManage
-      ? await getManualMatchingCandidates(batchFilter)
+      ? await getManualMatchingCandidates(batchFilter, scope)
       : null;
 
   const batches = intakeBatchesRes.data ?? [];
@@ -115,7 +119,7 @@ export default async function MatchesPage({
         </form>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+      <div className="flex flex-col gap-4">
         {/* ── Left: manual create (only when batch selected + allowed) ── */}
         <div className="flex flex-col gap-4">
           {allowManage && batchFilter && candidatesRes ? (
@@ -197,11 +201,19 @@ export default async function MatchesPage({
           ) : (
             <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-vam-line text-sm">
+                <table className="min-w-full table-fixed divide-y divide-vam-line text-sm">
+                  <colgroup>
+                    <col className="w-[24%]" />
+                    <col className="w-[24%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[10%]" />
+                  </colgroup>
                   <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                     <tr>
-                      <th className="px-4 py-3">Mentor</th>
-                      <th className="px-4 py-3">Mentee</th>
+                      <th className="w-[24%] px-4 py-3">Mentor</th>
+                      <th className="w-[24%] px-4 py-3">Mentee</th>
                       <th className="px-4 py-3">Batch / Nguồn</th>
                       <th className="px-4 py-3">Trạng thái</th>
                       <th className="px-4 py-3">Thời điểm</th>
@@ -212,16 +224,16 @@ export default async function MatchesPage({
                     {matchListRes.data.map((row) => (
                       <tr key={row.id} className="hover:bg-vam-mint/30">
                         <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-vam-ink">
+                          <div className="break-words font-medium leading-5 text-vam-ink">
                             {displayText(row.mentor_name)}
                           </div>
-                          <div className="text-xs text-slate-500">{displayText(row.mentor_email)}</div>
+                          <div className="mt-0.5 break-all text-xs leading-4 text-slate-500">{displayText(row.mentor_email)}</div>
                         </td>
                         <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-vam-ink">
+                          <div className="break-words font-medium leading-5 text-vam-ink">
                             {displayText(row.mentee_name)}
                           </div>
-                          <div className="text-xs text-slate-500">{displayText(row.mentee_email)}</div>
+                          <div className="mt-0.5 break-all text-xs leading-4 text-slate-500">{displayText(row.mentee_email)}</div>
                         </td>
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
                           <div>{row.batch_code ?? row.match_type ?? "—"}</div>
@@ -242,7 +254,7 @@ export default async function MatchesPage({
                           ) : null}
                         </td>
                         <td className="px-4 py-3 align-top">
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-col gap-2 2xl:flex-row 2xl:flex-wrap">
                             <Link
                               href={`/matches/${row.id}`}
                               className="inline-flex rounded border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"

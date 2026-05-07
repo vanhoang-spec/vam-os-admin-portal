@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getInterviewCandidates } from "@/lib/data";
 import { canSelfClaimInterview } from "@/lib/permissions";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { InterviewsClient } from "./interviews-client";
 
@@ -26,12 +27,13 @@ export default async function InterviewsPage({
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
   const roleApplied = searchParams.role_applied?.trim() || null;
+  const scope = await getScopeFilter(await getAdminScopeContext());
 
   const [intakeBatches, candidates] = await Promise.all([
-    getIntakeBatches(),
+    getIntakeBatches(scope),
     // Only fetch candidates when a batch is selected (to avoid showing all seasons)
     intakeBatchId
-      ? getInterviewCandidates({ intakeBatchId, roleApplied })
+      ? getInterviewCandidates({ intakeBatchId, roleApplied, scope })
       : Promise.resolve({ data: [] as Awaited<ReturnType<typeof getInterviewCandidates>>["data"], error: null })
   ]);
 

@@ -3,12 +3,15 @@ import { Card, EmptyState, ErrorBox, KpiCard, PageHeader } from "@/components/ui
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getEventDetailData, isEventAbsenceStatus, isEventAttendedStatus, isValidUuid } from "@/lib/events";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDate } from "@/lib/utils";
 import { AddParticipantForm, BulkAddForm, ParticipationRow } from "./attendance-forms";
 
 export default async function EventAttendancePage({ params }: { params: { id: string } }) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const adminUser = await getCurrentAdminUser();
-  if (!canEditRecaps(adminUser)) {
+  if (!canEditRecaps(adminUser) || !canOperateAnyScope(scopeContext)) {
     return (
       <>
         <PageHeader
@@ -38,7 +41,7 @@ export default async function EventAttendancePage({ params }: { params: { id: st
     );
   }
 
-  const detail = await getEventDetailData(params.id);
+  const detail = await getEventDetailData(params.id, scope);
 
   if (!detail.event) {
     return (

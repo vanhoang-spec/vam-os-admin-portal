@@ -2,11 +2,14 @@ import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getIntakeBatches, getSeasons } from "@/lib/data";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { EventForm } from "../event-form";
 
 export default async function CreateEventPage() {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const adminUser = await getCurrentAdminUser();
-  if (!canEditRecaps(adminUser)) {
+  if (!canEditRecaps(adminUser) || !canOperateAnyScope(scopeContext)) {
     return (
       <>
         <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được tạo sự kiện." />
@@ -15,7 +18,7 @@ export default async function CreateEventPage() {
     );
   }
 
-  const [seasons, intakeBatches] = await Promise.all([getSeasons(), getIntakeBatches()]);
+  const [seasons, intakeBatches] = await Promise.all([getSeasons(scope), getIntakeBatches(scope)]);
 
   return (
     <>

@@ -4,6 +4,7 @@ import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getIntakeBatches, getMatches, getMenteeProfiles, getMentorProfiles, getPeople, getSeasons, keyById } from "@/lib/data";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayOptional, displayText } from "@/lib/utils";
 
@@ -37,16 +38,18 @@ function statusRank(match: Match) {
 }
 
 export default async function MenteesPage() {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [mentees, people, mentors, matches, intakeBatches, seasons, adminUser] = await Promise.all([
-    getMenteeProfiles(),
-    getPeople(),
-    getMentorProfiles(),
-    getMatches(),
-    getIntakeBatches(),
-    getSeasons(),
+    getMenteeProfiles(scope),
+    getPeople(scope),
+    getMentorProfiles(scope),
+    getMatches(scope),
+    getIntakeBatches(scope),
+    getSeasons(scope),
     getCurrentAdminUser()
   ]);
-  const allowCreate = canEditRecaps(adminUser);
+  const allowCreate = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
   const peopleById = keyById(people.data);
   const intakeBatchById = new Map(intakeBatches.data.map((b) => [b.id, b]));
   const seasonById = new Map(seasons.data.map((s) => [s.id, s]));

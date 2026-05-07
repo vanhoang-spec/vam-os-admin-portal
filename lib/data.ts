@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import type { ScopeFilter } from "@/lib/program-scope";
 import type {
   ActivityCorrectionLog,
   AdminUserPublic,
@@ -225,6 +226,103 @@ export async function selectAllRows<T>(table: string, columns = "*", fallback: T
   return selectAllTable<T>(table, columns, fallback);
 }
 
+function hasSeasonScope(scope?: ScopeFilter) {
+  return Array.isArray(scope?.allowedSeasonIds);
+}
+
+function hasProgramScope(scope?: ScopeFilter) {
+  return Array.isArray(scope?.allowedProgramIds);
+}
+
+function noAllowedRows(scope?: ScopeFilter) {
+  return (hasSeasonScope(scope) && scope?.allowedSeasonIds?.length === 0) || (hasProgramScope(scope) && scope?.allowedProgramIds?.length === 0);
+}
+
+async function selectScopedBySeason<T>(
+  table: string,
+  columns = "*",
+  scope?: ScopeFilter,
+  fallback: T[] = []
+): Promise<QueryResult<T[]>> {
+  if (!hasSeasonScope(scope)) return selectAllTable<T>(table, columns, fallback);
+  if (!scope?.allowedSeasonIds?.length) return { data: fallback, error: null };
+  const client = dataClient();
+  if (!client) return envError(fallback);
+  const { data, error } = await client.from(table).select(columns).in("season_id", scope.allowedSeasonIds);
+  if (error) {
+    if (isNextDynamicUsageError(error)) throw error;
+    logDataError(`${table}.selectScopedBySeason`, error);
+    return { data: fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
+  }
+  return { data: (data ?? []) as T[], error: null };
+}
+
+async function getScopedIntakeBatchIds(scope?: ScopeFilter) {
+  if (!scope) return null;
+  if (noAllowedRows(scope)) return [];
+  const client = dataClient();
+  if (!client) return [];
+
+  let query = client.from("intake_batches").select("id,season_id");
+  if (scope.allowedSeasonIds?.length) {
+    query = query.in("season_id", scope.allowedSeasonIds);
+  }
+  const { data, error } = await query;
+  if (error) {
+    logDataError("intake_batches.scope", error);
+    return [];
+  }
+
+  return ((data ?? []) as JsonRecord[])
+    .map((row) => String(row.id))
+    .filter(Boolean);
+}
+
+async function getScopedPersonIds(scope?: ScopeFilter) {
+  if (!scope) return null;
+  if (noAllowedRows(scope)) return [];
+  const client = dataClient();
+  if (!client) return [];
+
+  const ids = new Set<string>();
+  if (scope.allowedSeasonIds?.length) {
+    const [matchesRes, recapsRes, partsRes, appsRes] = await Promise.all([
+      client.from("matches").select("mentor_person_id,mentee_person_id").in("season_id", scope.allowedSeasonIds),
+      client.from("mentoring_recaps").select("mentor_person_id,mentee_person_id").in("season_id", scope.allowedSeasonIds),
+      client.from("event_participations").select("person_id").in("season_id", scope.allowedSeasonIds),
+      client.from("applications").select("person_id").in("season_id", scope.allowedSeasonIds)
+    ]);
+    for (const row of (matchesRes.data ?? []) as JsonRecord[]) {
+      if (row.mentor_person_id) ids.add(String(row.mentor_person_id));
+      if (row.mentee_person_id) ids.add(String(row.mentee_person_id));
+    }
+    for (const row of (recapsRes.data ?? []) as JsonRecord[]) {
+      if (row.mentor_person_id) ids.add(String(row.mentor_person_id));
+      if (row.mentee_person_id) ids.add(String(row.mentee_person_id));
+    }
+    for (const row of (partsRes.data ?? []) as JsonRecord[]) {
+      if (row.person_id) ids.add(String(row.person_id));
+    }
+    for (const row of (appsRes.data ?? []) as JsonRecord[]) {
+      if (row.person_id) ids.add(String(row.person_id));
+    }
+  }
+
+  const batchIds = await getScopedIntakeBatchIds(scope);
+  if (batchIds?.length) {
+    const [mentorProfilesRes, menteeProfilesRes, appsRes] = await Promise.all([
+      client.from("mentor_profiles").select("person_id").in("intake_batch_id", batchIds),
+      client.from("mentee_profiles").select("person_id").in("intake_batch_id", batchIds),
+      client.from("applications").select("person_id").in("intake_batch_id", batchIds)
+    ]);
+    for (const row of (mentorProfilesRes.data ?? []) as JsonRecord[]) if (row.person_id) ids.add(String(row.person_id));
+    for (const row of (menteeProfilesRes.data ?? []) as JsonRecord[]) if (row.person_id) ids.add(String(row.person_id));
+    for (const row of (appsRes.data ?? []) as JsonRecord[]) if (row.person_id) ids.add(String(row.person_id));
+  }
+
+  return Array.from(ids);
+}
+
 async function countTable(table: string, filter?: (query: any) => any): Promise<QueryResult<number>> {
   const client = dataClient();
   if (!client) return envError(0);
@@ -239,36 +337,87 @@ async function countTable(table: string, filter?: (query: any) => any): Promise<
   return { data: count ?? 0, error: null };
 }
 
-export async function getPeople() {
-  return selectAllTable<Person>("people");
+export async function getPeople(scope?: ScopeFilter) {
+  const personIds = await getScopedPersonIds(scope);
+  if (personIds && personIds.length === 0) return { data: [] as Person[], error: null };
+  if (!personIds) return selectAllTable<Person>("people");
+  const client = dataClient();
+  if (!client) return envError<Person[]>([]);
+  const { data, error } = await client.from("people").select("*").in("id", personIds);
+  if (error) return { data: [], error: `${VI_ERROR} (people: ${error.message})` };
+  return { data: (data ?? []) as Person[], error: null };
 }
 
-export async function getMentorProfiles() {
-  return selectTable<MentorProfile>("mentor_profiles");
+export async function getMentorProfiles(scope?: ScopeFilter) {
+  const personIds = await getScopedPersonIds(scope);
+  if (personIds && personIds.length === 0) return { data: [] as MentorProfile[], error: null };
+  if (!personIds) return selectTable<MentorProfile>("mentor_profiles");
+  const batchIds = await getScopedIntakeBatchIds(scope);
+  const client = dataClient();
+  if (!client) return envError<MentorProfile[]>([]);
+  const filters = [`person_id.in.(${personIds.join(",")})`];
+  if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
+  const { data, error } = await client.from("mentor_profiles").select("*").or(filters.join(","));
+  if (error) return { data: [], error: `${VI_ERROR} (mentor_profiles: ${error.message})` };
+  return { data: (data ?? []) as MentorProfile[], error: null };
 }
 
-export async function getMenteeProfiles() {
-  return selectTable<MenteeProfile>("mentee_profiles");
+export async function getMenteeProfiles(scope?: ScopeFilter) {
+  const personIds = await getScopedPersonIds(scope);
+  if (personIds && personIds.length === 0) return { data: [] as MenteeProfile[], error: null };
+  if (!personIds) return selectTable<MenteeProfile>("mentee_profiles");
+  const batchIds = await getScopedIntakeBatchIds(scope);
+  const client = dataClient();
+  if (!client) return envError<MenteeProfile[]>([]);
+  const filters = [`person_id.in.(${personIds.join(",")})`];
+  if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
+  const { data, error } = await client.from("mentee_profiles").select("*").or(filters.join(","));
+  if (error) return { data: [], error: `${VI_ERROR} (mentee_profiles: ${error.message})` };
+  return { data: (data ?? []) as MenteeProfile[], error: null };
 }
 
-export async function getApplications() {
-  return selectAllTable<Application>("applications");
+export async function getApplications(scope?: ScopeFilter) {
+  if (!scope) return selectAllTable<Application>("applications");
+  if (noAllowedRows(scope)) return { data: [] as Application[], error: null };
+  const client = dataClient();
+  if (!client) return envError<Application[]>([]);
+  const batchIds = await getScopedIntakeBatchIds(scope);
+  const filters: string[] = [];
+  if (scope.allowedSeasonIds?.length) filters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
+  if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
+  if (!filters.length) return { data: [], error: null };
+  const { data, error } = await client.from("applications").select("*").or(filters.join(","));
+  if (error) return { data: [], error: `${VI_ERROR} (applications: ${error.message})` };
+  return { data: (data ?? []) as Application[], error: null };
 }
 
-export async function getMatches() {
-  return selectTable<Match>("matches");
+export async function getMatches(scope?: ScopeFilter) {
+  return selectScopedBySeason<Match>("matches", "*", scope);
 }
 
-export async function getEvents() {
-  return selectTable<Event>("events");
+export async function getEvents(scope?: ScopeFilter) {
+  return selectScopedBySeason<Event>("events", "*", scope);
 }
 
-export async function getSeasons() {
-  return selectTable<Season>("seasons");
+export async function getSeasons(scope?: ScopeFilter) {
+  if (!hasSeasonScope(scope)) return selectTable<Season>("seasons");
+  if (!scope?.allowedSeasonIds?.length) return { data: [] as Season[], error: null };
+  const client = dataClient();
+  if (!client) return envError<Season[]>([]);
+  const { data, error } = await client.from("seasons").select("id,code,name").in("id", scope.allowedSeasonIds);
+  if (error) return { data: [], error: `${VI_ERROR} (seasons: ${error.message})` };
+  return { data: (data ?? []) as Season[], error: null };
 }
 
-export async function getIntakeBatches() {
-  return selectAllTable<IntakeBatch>("intake_batches", "id,season_id,code,name,is_active");
+export async function getIntakeBatches(scope?: ScopeFilter) {
+  if (!scope) return selectAllTable<IntakeBatch>("intake_batches", "id,season_id,code,name,is_active");
+  const batchIds = await getScopedIntakeBatchIds(scope);
+  if (!batchIds?.length) return { data: [] as IntakeBatch[], error: null };
+  const client = dataClient();
+  if (!client) return envError<IntakeBatch[]>([]);
+  const { data, error } = await client.from("intake_batches").select("id,season_id,code,name,is_active").in("id", batchIds);
+  if (error) return { data: [], error: `${VI_ERROR} (intake_batches: ${error.message})` };
+  return { data: (data ?? []) as IntakeBatch[], error: null };
 }
 
 export async function getPrograms() {
@@ -322,7 +471,9 @@ export async function getDataIssues() {
   return selectTable<JsonRecord>("data_issues");
 }
 
-export async function getPerson(id: string) {
+export async function getPerson(id: string, scope?: ScopeFilter) {
+  const personIds = await getScopedPersonIds(scope);
+  if (personIds && !personIds.includes(id)) return { data: null, error: null };
   const client = dataClient();
   if (!client) return envError<Person | null>(null);
   const { data, error } = await client.from("people").select("*").eq("id", id).maybeSingle();
@@ -330,11 +481,15 @@ export async function getPerson(id: string) {
   return { data: data as Person | null, error: null };
 }
 
-export async function getApplication(id: string) {
+export async function getApplication(id: string, scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return envError<Application | null>(null);
   const { data, error } = await client.from("applications").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (applications: ${error.message})` };
+  if (scope && data) {
+    const allowedApps = await getApplications(scope);
+    if (!allowedApps.data.some((row) => row.id === id)) return { data: null, error: null };
+  }
   return { data: data as Application | null, error: null };
 }
 
@@ -342,34 +497,47 @@ export async function getAnswersForApplication(applicationId: string) {
   return getAnswersForApplications([applicationId]);
 }
 
-export async function getMatch(id: string) {
+export async function getMatch(id: string, scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return envError<Match | null>(null);
   const { data, error } = await client.from("matches").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (matches: ${error.message})` };
+  if (scope?.allowedSeasonIds && data?.season_id && !scope.allowedSeasonIds.includes(data.season_id)) {
+    return { data: null, error: null };
+  }
   return { data: data as Match | null, error: null };
 }
 
-export async function getMentoringRecapsByMenteePersonId(personId: string) {
+export async function getMentoringRecapsByMenteePersonId(personId: string, scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return envError<MentoringRecap[]>([]);
-  const { data, error } = await client
+  let query = client
     .from("mentoring_recaps")
     .select("*")
     .eq("mentee_person_id", personId)
     .order("meeting_date", { ascending: false });
+  if (scope?.allowedSeasonIds) {
+    if (!scope.allowedSeasonIds.length) return { data: [], error: null };
+    query = query.in("season_id", scope.allowedSeasonIds);
+  }
+  const { data, error } = await query;
   if (error) return { data: [], error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
   return { data: (data ?? []) as MentoringRecap[], error: null };
 }
 
-export async function getMentoringRecapsByMentorPersonId(personId: string) {
+export async function getMentoringRecapsByMentorPersonId(personId: string, scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return envError<MentoringRecap[]>([]);
-  const { data, error } = await client
+  let query = client
     .from("mentoring_recaps")
     .select("*")
     .eq("mentor_person_id", personId)
     .order("meeting_date", { ascending: false });
+  if (scope?.allowedSeasonIds) {
+    if (!scope.allowedSeasonIds.length) return { data: [], error: null };
+    query = query.in("season_id", scope.allowedSeasonIds);
+  }
+  const { data, error } = await query;
   if (error) return { data: [], error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
   return { data: (data ?? []) as MentoringRecap[], error: null };
 }
@@ -494,14 +662,19 @@ export async function updateMentoringRecapCorrection(input: MentoringRecapCorrec
   return { data: updated as MentoringRecap, error: null };
 }
 
-export async function getEventParticipationsByPersonId(personId: string) {
+export async function getEventParticipationsByPersonId(personId: string, scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return envError<EventParticipation[]>([]);
-  const { data, error } = await client
+  let query = client
     .from("event_participations")
     .select("*")
     .eq("person_id", personId)
     .order("attendance_date", { ascending: false });
+  if (scope?.allowedSeasonIds) {
+    if (!scope.allowedSeasonIds.length) return { data: [], error: null };
+    query = query.in("season_id", scope.allowedSeasonIds);
+  }
+  const { data, error } = await query;
   if (error) return { data: [], error: `${VI_ERROR} (event_participations: ${error.message})` };
   return { data: (data ?? []) as EventParticipation[], error: null };
 }
@@ -579,8 +752,8 @@ async function getOperationsDataFromRpc() {
   };
 }
 
-export async function getOperationsData() {
-  const rpcData = await getOperationsDataFromRpc();
+export async function getOperationsData(scope?: ScopeFilter) {
+  const rpcData = scope ? null : await getOperationsDataFromRpc();
   if (rpcData) return rpcData;
 
   const [
@@ -593,16 +766,17 @@ export async function getOperationsData() {
     eventParticipations,
     latestClosedMonth
   ] = await Promise.all([
-    selectAllTable<Season>("seasons", "id,code,name"),
-    selectAllTable<Person>("people", "id,full_name,email_primary"),
-    selectAllTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code"),
-    selectAllTable<Match>("matches", "id,season_id,status,match_type,mentor_person_id,mentee_person_id"),
-    selectAllTable<MentoringRecap>(
+    getSeasons(scope),
+    getPeople(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, full_name: row.full_name, email_primary: row.email_primary }) as Person) })),
+    getMenteeProfiles(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, person_id: row.person_id, mentee_code: row.mentee_code }) as MenteeProfile) })),
+    selectScopedBySeason<Match>("matches", "id,season_id,status,match_type,mentor_person_id,mentee_person_id", scope),
+    selectScopedBySeason<MentoringRecap>(
       "mentoring_recaps",
-      "id,season_id,match_id,mentor_person_id,mentee_person_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,meeting_type,captured_by,issue_flag,status,admin_notes"
+      "id,season_id,match_id,mentor_person_id,mentee_person_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,meeting_type,captured_by,issue_flag,status,admin_notes",
+      scope
     ),
-    selectAllTable<Event>("events", "id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes"),
-    selectAllTable<EventParticipation>("event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in"),
+    selectScopedBySeason<Event>("events", "id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes", scope),
+    selectScopedBySeason<EventParticipation>("event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in", scope),
     selectTable<JsonRecord>("v_season_latest_closed_month")
   ]);
 
@@ -937,15 +1111,9 @@ export async function generateMonthlyFollowupActions(input: { season_code?: stri
   return { data: data as JsonRecord, error: null };
 }
 
-export async function getDashboardData() {
+export async function getDashboardData(scope?: ScopeFilter) {
   // Use exact count queries for KPI cards to avoid Supabase default 1000-row limit.
   const [
-    totalPeople,
-    totalMentors,
-    totalMentees,
-    totalApplications,
-    totalMatches,
-    totalActiveMatches,
     people,
     mentors,
     mentees,
@@ -955,23 +1123,20 @@ export async function getDashboardData() {
     recaps,
     latestClosedMonth
   ] = await Promise.all([
-    countTable("people"),
-    countTable("mentor_profiles"),
-    countTable("mentee_profiles"),
-    countTable("applications").then((res) => ({ data: res.data, error: null })),
-    countTable("matches"),
-    countTable("matches", (q) => q.eq("status", "active")),
-    selectAllTable<Person>("people", "id,full_name,email_primary,phone_primary"),
-    selectTable<MentorProfile>("mentor_profiles", "id,person_id,mentor_code,bio_url,company_current,title_current"),
-    selectTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code,school_code"),
-    selectTable<Application>("applications", "id,final_status").then((res) => ({ data: res.data, error: null })),
-    selectTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
-    selectAllTable<Season>("seasons", "id,code,name"),
-    selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,meeting_date,status"),
+    getPeople(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, full_name: row.full_name, email_primary: row.email_primary, phone_primary: row.phone_primary }) as Person) })),
+    getMentorProfiles(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, person_id: row.person_id, mentor_code: row.mentor_code, bio_url: row.bio_url, company_current: row.company_current, title_current: row.title_current }) as MentorProfile) })),
+    getMenteeProfiles(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, person_id: row.person_id, mentee_code: row.mentee_code, school_code: row.school_code }) as MenteeProfile) })),
+    getApplications(scope).then((res) => ({ data: res.data.map((row) => ({ id: row.id, final_status: row.final_status }) as Application), error: null })),
+    selectScopedBySeason<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id", scope),
+    getSeasons(scope),
+    selectScopedBySeason<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,meeting_date,status", scope),
     selectTable<JsonRecord>("v_season_latest_closed_month")
   ]);
   const duplicateEmails = { data: getDuplicateEmailCountFromRows(people.data), error: people.error };
-  const activeMissing = await countTable("matches", (q) => q.eq("status", "active").or("mentor_person_id.is.null,mentee_person_id.is.null"));
+  const activeMissing = {
+    data: matches.data.filter((match) => normalizeStatus(match.status) === "active" && (!match.mentor_person_id || !match.mentee_person_id)).length,
+    error: matches.error
+  };
 
   return {
     people,
@@ -982,12 +1147,12 @@ export async function getDashboardData() {
     seasons,
     recaps,
     counts: {
-      people: totalPeople,
-      mentors: totalMentors,
-      mentees: totalMentees,
-      applications: totalApplications,
-      matches: totalMatches,
-      activeMatches: totalActiveMatches
+      people: { data: people.data.length, error: people.error },
+      mentors: { data: mentors.data.length, error: mentors.error },
+      mentees: { data: mentees.data.length, error: mentees.error },
+      applications: { data: applications.data.length, error: applications.error },
+      matches: { data: matches.data.length, error: matches.error },
+      activeMatches: { data: matches.data.filter((match) => normalizeStatus(match.status) === "active").length, error: matches.error }
     },
     duplicateEmails,
     activeMissing,
@@ -1031,22 +1196,37 @@ export async function getApplicationReviewsForApplication(applicationId: string)
 }
 
 /** Reviews assigned to a specific admin user — used for reviewer's /reviews page. */
-export async function getMyApplicationReviews(adminUserId: string): Promise<QueryResult<ApplicationReview[]>> {
+export async function getMyApplicationReviews(adminUserId: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
   const client = dataClient();
   if (!client) return envError<ApplicationReview[]>([]);
-  const { data, error } = await client
+  let query = client
     .from("application_reviews")
     .select("*")
     .eq("reviewer_admin_user_id", adminUserId)
     .neq("status", "cancelled")
     .order("due_at", { ascending: true });
+  if (scope) {
+    const apps = await getApplications(scope);
+    const appIds = apps.data.map((app) => app.id);
+    if (!appIds.length) return { data: [], error: apps.error };
+    query = query.in("application_id", appIds);
+  }
+  const { data, error } = await query;
   if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
   return { data: (data ?? []) as ApplicationReview[], error: null };
 }
 
 /** All reviews — used for admin/core_team /reviews page (RLS allows this). */
-export async function getAllApplicationReviews(): Promise<QueryResult<ApplicationReview[]>> {
-  return selectTable<ApplicationReview>("application_reviews", "*");
+export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
+  if (!scope) return selectTable<ApplicationReview>("application_reviews", "*");
+  const apps = await getApplications(scope);
+  const appIds = apps.data.map((app) => app.id);
+  if (!appIds.length) return { data: [], error: apps.error };
+  const client = dataClient();
+  if (!client) return envError<ApplicationReview[]>([]);
+  const { data, error } = await client.from("application_reviews").select("*").in("application_id", appIds);
+  if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
+  return { data: (data ?? []) as ApplicationReview[], error: apps.error };
 }
 
 export async function getApplicationReviewById(id: string): Promise<QueryResult<ApplicationReview | null>> {
@@ -1517,6 +1697,7 @@ export async function getInterviewCandidates(filters?: {
   intakeBatchId?: string | null;
   roleApplied?: string | null;
   includeCompleted?: boolean;
+  scope?: ScopeFilter;
 }): Promise<QueryResult<InterviewCandidateRow[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<InterviewCandidateRow[]>([]);
@@ -1535,7 +1716,15 @@ export async function getInterviewCandidates(filters?: {
     .order("id", { ascending: true });
 
   if (filters?.intakeBatchId) {
+    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
+      return { data: [], error: null };
+    }
     appsQuery = appsQuery.eq("intake_batch_id", filters.intakeBatchId);
+  } else if (filters?.scope) {
+    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    if (!scopedBatchIds?.length) return { data: [], error: null };
+    appsQuery = appsQuery.in("intake_batch_id", scopedBatchIds);
   }
 
   // Default to mentee unless explicitly overridden

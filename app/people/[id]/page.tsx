@@ -25,6 +25,7 @@ import {
   keyById
 } from "@/lib/data";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 
@@ -153,6 +154,7 @@ function operationalRoleLabel(value: unknown) {
 }
 
 export default async function PersonDetailPage({ params }: { params: { id: string } }) {
+  const scope = await getScopeFilter(await getAdminScopeContext());
   const [
     adminUser,
     person,
@@ -176,18 +178,18 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     functionLinks
   ] = await Promise.all([
     getCurrentAdminUser(),
-    getPerson(params.id),
+    getPerson(params.id, scope),
     getRolesForPerson(params.id),
-    getPeople(),
-    getMentorProfiles(),
-    getMenteeProfiles(),
-    getApplications(),
-    getMatches(),
-    getSeasons(),
-    getMentoringRecapsByMenteePersonId(params.id),
-    getMentoringRecapsByMentorPersonId(params.id),
-    getEventParticipationsByPersonId(params.id),
-    getEvents(),
+    getPeople(scope),
+    getMentorProfiles(scope),
+    getMenteeProfiles(scope),
+    getApplications(scope),
+    getMatches(scope),
+    getSeasons(scope),
+    getMentoringRecapsByMenteePersonId(params.id, scope),
+    getMentoringRecapsByMentorPersonId(params.id, scope),
+    getEventParticipationsByPersonId(params.id, scope),
+    getEvents(scope),
     getOperationalTeamAssignmentsByPerson(params.id),
     getPrograms(),
     getIndustries(),

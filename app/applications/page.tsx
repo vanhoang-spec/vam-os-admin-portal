@@ -1,6 +1,7 @@
 import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getApplications, getIntakeBatches, getPeople, getSeasons, keyById } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Application, Person, Season } from "@/lib/types";
 import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
 
@@ -63,11 +64,12 @@ function consentFilter(value: unknown) {
 }
 
 export default async function ApplicationsPage() {
+  const scope = await getScopeFilter(await getAdminScopeContext());
   const [applications, people, seasons, intakeBatchesRes] = await Promise.all([
-    getApplications(),
-    getPeople(),
-    getSeasons(),
-    getIntakeBatches()
+    getApplications(scope),
+    getPeople(scope),
+    getSeasons(scope),
+    getIntakeBatches(scope)
   ]);
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);

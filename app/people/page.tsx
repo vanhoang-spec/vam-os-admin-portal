@@ -1,8 +1,10 @@
 import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getPeople } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 export default async function PeoplePage() {
-  const people = await getPeople();
+  const scope = await getScopeFilter(await getAdminScopeContext());
+  const people = await getPeople(scope);
   return (
     <>
       <PageHeader title="People" description="Danh sách hồ sơ người tham gia trong hệ thống." />

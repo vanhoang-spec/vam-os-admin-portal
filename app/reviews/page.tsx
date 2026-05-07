@@ -7,6 +7,7 @@ import {
   getMyApplicationReviews
 } from "@/lib/data";
 import { canBulkAssignReviews, canReview, isReviewerOnly } from "@/lib/permissions";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationReview } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
@@ -65,10 +66,11 @@ export default async function ReviewsPage() {
 
   const reviewerOnly = isReviewerOnly(adminUser.role);
   const canBulkAssign = canBulkAssignReviews(adminUser.role);
+  const scope = await getScopeFilter(await getAdminScopeContext());
 
   const result = reviewerOnly
-    ? await getMyApplicationReviews(adminUser.id)
-    : await getAllApplicationReviews();
+    ? await getMyApplicationReviews(adminUser.id, scope)
+    : await getAllApplicationReviews(scope);
 
   const reviews = result.data;
 
@@ -76,7 +78,7 @@ export default async function ReviewsPage() {
   // the applicant name and application link in the table. We deduplicate by
   // application_id to avoid redundant requests.
   const uniqueAppIds = Array.from(new Set(reviews.map((r) => r.application_id)));
-  const appResults = await Promise.all(uniqueAppIds.map((id) => getApplication(id)));
+  const appResults = await Promise.all(uniqueAppIds.map((id) => getApplication(id, scope)));
   const appMap = new Map(
     appResults
       .filter((r) => r.data)

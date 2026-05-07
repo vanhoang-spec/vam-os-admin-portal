@@ -2,8 +2,9 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageMatches } from "@/lib/permissions";
+import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import type { JsonRecord, Match } from "@/lib/types";
+import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,8 @@ export type MatchCandidates = {
 };
 
 export type EnrichedMatch = Match & {
+  mentor_profile_code: string | null;
+  mentee_profile_code: string | null;
   mentor_name: string | null;
   mentor_email: string | null;
   mentee_name: string | null;
@@ -59,6 +62,13 @@ export type MatchListResult = {
   ok: boolean;
   error: string | null;
   data: EnrichedMatch[];
+};
+
+export type MatchRelatedDisplayData = {
+  mentor: Person | null;
+  mentee: Person | null;
+  mentorProfile: MentorProfile | null;
+  menteeProfile: MenteeProfile | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -84,10 +94,34 @@ function isValidUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_REGEX.test(value);
 }
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+async function selectPeopleByIds(client: any, ids: string[]) {
+  const rows: JsonRecord[] = [];
+  const step = 200;
+  for (let index = 0; index < ids.length; index += step) {
+    const chunk = ids.slice(index, index + step);
+    if (!chunk.length) continue;
+    const { data, error } = await client.from("people").select("id,full_name,email_primary,phone_primary").in("id", chunk);
+    if (error) {
+      log("people chunk lookup failed", error);
+      continue;
+    }
+    rows.push(...((data ?? []) as JsonRecord[]));
+  }
+  return rows;
+}
+
 async function requireMatchAdmin() {
   const admin = await getCurrentAdminUser();
   if (!canManageMatches(admin?.role)) {
     return { ok: false as const, message: "Bạn không có quyền quản lý matching." };
+  }
+  const ctx = await getAdminScopeContext();
+  if (!canOperateAnyScope(ctx)) {
+    return { ok: false as const, message: "Ban khong co quyen operations trong pham vi chuong trinh." };
   }
   return { ok: true as const, admin };
 }
@@ -123,6 +157,7 @@ async function writeAdminAudit(client: ReturnType<typeof getSupabaseServiceRoleC
 export async function getMatchList(filters?: {
   intakeBatchId?: string | null;
   status?: string | null;
+  scope?: ScopeFilter;
 }): Promise<MatchListResult> {
   const { client, error } = clientResult();
   if (!client) return { ok: false, error, data: [] };
@@ -139,6 +174,10 @@ export async function getMatchList(filters?: {
   if (filters?.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
   }
+  if (filters?.scope?.allowedSeasonIds) {
+    if (!filters.scope.allowedSeasonIds.length) return { ok: true, error: null, data: [] };
+    query = query.in("season_id", filters.scope.allowedSeasonIds);
+  }
 
   const { data: matchRows, error: matchErr } = await query;
   if (matchErr) {
@@ -150,9 +189,13 @@ export async function getMatchList(filters?: {
 
   // Collect person IDs to resolve names
   const personIds = new Set<string>();
+  const mentorProfileIds = new Set<string>();
+  const menteeProfileIds = new Set<string>();
   for (const m of matches) {
     if (m.mentor_person_id) personIds.add(m.mentor_person_id);
     if (m.mentee_person_id) personIds.add(m.mentee_person_id);
+    if (m.mentor_profile_id) mentorProfileIds.add(m.mentor_profile_id);
+    if (m.mentee_profile_id) menteeProfileIds.add(m.mentee_profile_id);
   }
 
   // Collect batch IDs to resolve codes
@@ -161,27 +204,51 @@ export async function getMatchList(filters?: {
     if (m.intake_batch_id) batchIds.add(m.intake_batch_id);
   }
 
-  const [peopleRes, batchesRes] = await Promise.all([
-    personIds.size > 0
-      ? client.from("people").select("id,full_name,email_primary").in("id", Array.from(personIds))
+  const [mentorProfilesRes, menteeProfilesRes, batchesRes] = await Promise.all([
+    mentorProfileIds.size > 0
+      ? client.from("mentor_profiles").select("id,person_id,mentor_code").in("id", Array.from(mentorProfileIds))
+      : Promise.resolve({ data: [], error: null }),
+    menteeProfileIds.size > 0
+      ? client.from("mentee_profiles").select("id,person_id,mentee_code").in("id", Array.from(menteeProfileIds))
       : Promise.resolve({ data: [], error: null }),
     batchIds.size > 0
       ? client.from("intake_batches").select("id,code").in("id", Array.from(batchIds))
       : Promise.resolve({ data: [], error: null })
   ]);
 
-  const peopleById = new Map((peopleRes.data ?? []).map((p: JsonRecord) => [p.id as string, p]));
+  const mentorProfileById = new Map((mentorProfilesRes.data ?? []).map((p: JsonRecord) => [p.id as string, p]));
+  const menteeProfileById = new Map((menteeProfilesRes.data ?? []).map((p: JsonRecord) => [p.id as string, p]));
+  for (const profile of mentorProfilesRes.data ?? []) {
+    if ((profile as JsonRecord).person_id) personIds.add((profile as JsonRecord).person_id as string);
+  }
+  for (const profile of menteeProfilesRes.data ?? []) {
+    if ((profile as JsonRecord).person_id) personIds.add((profile as JsonRecord).person_id as string);
+  }
+
+  const peopleRows = personIds.size > 0
+    ? await selectPeopleByIds(client, Array.from(personIds))
+    : [];
+
+  const peopleById = new Map(peopleRows.map((p: JsonRecord) => [p.id as string, p]));
   const batchById = new Map((batchesRes.data ?? []).map((b: JsonRecord) => [b.id as string, b]));
 
   const enriched: EnrichedMatch[] = matches.map((m) => {
-    const mentor = m.mentor_person_id ? peopleById.get(m.mentor_person_id) : undefined;
-    const mentee = m.mentee_person_id ? peopleById.get(m.mentee_person_id) : undefined;
+    const mentorProfile = m.mentor_profile_id ? mentorProfileById.get(m.mentor_profile_id) : undefined;
+    const menteeProfile = m.mentee_profile_id ? menteeProfileById.get(m.mentee_profile_id) : undefined;
+    const mentorPersonId = m.mentor_person_id ?? ((mentorProfile?.person_id as string | null) ?? null);
+    const menteePersonId = m.mentee_person_id ?? ((menteeProfile?.person_id as string | null) ?? null);
+    const mentor = mentorPersonId ? peopleById.get(mentorPersonId) : undefined;
+    const mentee = menteePersonId ? peopleById.get(menteePersonId) : undefined;
     const batch = m.intake_batch_id ? batchById.get(m.intake_batch_id) : undefined;
     return {
       ...m,
-      mentor_name: (mentor?.full_name as string | null) ?? null,
+      mentor_profile_code: (mentorProfile?.mentor_code as string | null) ?? null,
+      mentee_profile_code: (menteeProfile?.mentee_code as string | null) ?? null,
+      mentor_person_id: mentorPersonId,
+      mentee_person_id: menteePersonId,
+      mentor_name: (mentor?.full_name as string | null) ?? ((mentorProfile?.mentor_code as string | null) ?? null),
       mentor_email: (mentor?.email_primary as string | null) ?? null,
-      mentee_name: (mentee?.full_name as string | null) ?? null,
+      mentee_name: (mentee?.full_name as string | null) ?? ((menteeProfile?.mentee_code as string | null) ?? null),
       mentee_email: (mentee?.email_primary as string | null) ?? null,
       batch_code: (batch?.code as string | null) ?? null
     };
@@ -195,10 +262,23 @@ export async function getMatchList(filters?: {
  * "Approved" = has a profile row with intake_batch_id set (profiles are only
  * created for accepted applicants in Phase 041/043).
  */
-export async function getManualMatchingCandidates(intakeBatchId: string): Promise<MatchCandidates> {
+export async function getManualMatchingCandidates(intakeBatchId: string, scope?: ScopeFilter): Promise<MatchCandidates> {
   const empty: MatchCandidates = { ok: false, error: null, mentors: [], mentees: [] };
   const { client, error } = clientResult();
   if (!client) return { ...empty, error };
+
+  if (scope?.allowedSeasonIds) {
+    const { data: batch, error: batchError } = await client
+      .from("intake_batches")
+      .select("season_id")
+      .eq("id", intakeBatchId)
+      .maybeSingle();
+    if (batchError) return { ...empty, error: batchError.message };
+    const seasonId = (batch as JsonRecord | null)?.season_id as string | null;
+    if (!seasonId || !scope.allowedSeasonIds.includes(seasonId)) {
+      return { ok: true, error: null, mentors: [], mentees: [] };
+    }
+  }
 
   const [mentorProfilesRes, menteeProfilesRes, activeMatchesRes] = await Promise.all([
     client
@@ -285,6 +365,50 @@ export async function getManualMatchingCandidates(intakeBatchId: string): Promis
   }).sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "vi"));
 
   return { ok: true, error: null, mentors, mentees };
+}
+
+export async function getMatchRelatedDisplayData(match: Match | null | undefined): Promise<MatchRelatedDisplayData> {
+  const empty: MatchRelatedDisplayData = {
+    mentor: null,
+    mentee: null,
+    mentorProfile: null,
+    menteeProfile: null
+  };
+  if (!match) return empty;
+  const { client } = clientResult();
+  if (!client) return empty;
+
+  const [mentorProfileRes, menteeProfileRes] = await Promise.all([
+    match.mentor_profile_id
+      ? client
+          .from("mentor_profiles")
+          .select("id,person_id,mentor_code,bio_url,company_current,title_current")
+          .eq("id", match.mentor_profile_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    match.mentee_profile_id
+      ? client
+          .from("mentee_profiles")
+          .select("id,person_id,mentee_code,school_code,major,mssv")
+          .eq("id", match.mentee_profile_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null })
+  ]);
+
+  const mentorProfile = (mentorProfileRes.data as MentorProfile | null) ?? null;
+  const menteeProfile = (menteeProfileRes.data as MenteeProfile | null) ?? null;
+  const mentorPersonId = match.mentor_person_id ?? mentorProfile?.person_id ?? null;
+  const menteePersonId = match.mentee_person_id ?? menteeProfile?.person_id ?? null;
+  const personIds = uniqueStrings([mentorPersonId, menteePersonId]);
+  const peopleRows = personIds.length ? await selectPeopleByIds(client, personIds) : [];
+  const peopleById = new Map(peopleRows.map((person: JsonRecord) => [person.id as string, person as Person]));
+
+  return {
+    mentor: mentorPersonId ? peopleById.get(mentorPersonId) ?? null : null,
+    mentee: menteePersonId ? peopleById.get(menteePersonId) ?? null : null,
+    mentorProfile,
+    menteeProfile
+  };
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
@@ -392,6 +516,11 @@ export async function createManualMatch(input: {
     log("load intake_batch for match failed", batchErr);
   }
   const seasonId = (batch as JsonRecord | null)?.season_id ?? null;
+  const ctx = await getAdminScopeContext();
+  const allowedSeasonIds = await getAllowedSeasonIds(ctx);
+  if (!canAccessSeason(ctx, seasonId as string | null, allowedSeasonIds)) {
+    return { ok: false, message: "Ban khong co quyen tao match trong mua nay." };
+  }
 
   // Insert match
   const payload: JsonRecord = {
@@ -462,6 +591,12 @@ export async function cancelMatch(input: {
     return { ok: false, message: `${SAFE_ERROR} (${loadErr.message})` };
   }
   if (!before) return { ok: false, message: "Không tìm thấy match." };
+
+  const ctx = await getAdminScopeContext();
+  const allowedSeasonIds = await getAllowedSeasonIds(ctx);
+  if (!canAccessSeason(ctx, (before as JsonRecord).season_id as string | null, allowedSeasonIds)) {
+    return { ok: false, message: "Ban khong co quyen huy match trong mua nay." };
+  }
 
   const beforeRecord = before as JsonRecord;
   if (beforeRecord.status === "dropped") {

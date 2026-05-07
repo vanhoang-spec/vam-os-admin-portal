@@ -2,6 +2,7 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import {
   ATTENDANCE_STATUS_VALUES,
   EVENT_ROLE_VALUES,
@@ -102,6 +103,8 @@ function clientResult() {
 async function requireEventAdmin(): Promise<{ ok: true; admin: Awaited<ReturnType<typeof getCurrentAdminUser>> } | { ok: false; message: string }> {
   const admin = await getCurrentAdminUser();
   if (!canEditRecaps(admin)) return { ok: false, message: "Bạn không có quyền quản lý sự kiện." };
+  const ctx = await getAdminScopeContext();
+  if (!canOperateAnyScope(ctx)) return { ok: false, message: "Ban khong co quyen operations trong pham vi chuong trinh." };
   return { ok: true, admin };
 }
 
@@ -164,6 +167,17 @@ async function selectAll<T>(client: any, table: string, columns = "*") {
   return { data: allData, error: null as string | null };
 }
 
+async function selectAllScopedBySeason<T>(client: any, table: string, columns: string, allowedSeasonIds?: string[]) {
+  if (!allowedSeasonIds) return selectAll<T>(client, table, columns);
+  if (allowedSeasonIds.length === 0) return { data: [] as T[], error: null as string | null };
+  const { data, error } = await client.from(table).select(columns).in("season_id", allowedSeasonIds);
+  if (error) {
+    log(`${table} scoped select failed`, error);
+    return { data: [] as T[], error: error.message as string };
+  }
+  return { data: (data ?? []) as T[], error: null as string | null };
+}
+
 async function writeAdminAudit(client: any, input: {
   actionType: string;
   beforeData?: unknown;
@@ -216,14 +230,19 @@ async function resolveSeasonId(client: any, seasonCode: string | null): Promise<
   return { seasonId: data?.id ?? null, error: null };
 }
 
-export async function getEventListData(): Promise<EventListData> {
+export async function getEventListData(scope?: ScopeFilter): Promise<EventListData> {
   const { client, error } = clientResult();
   if (!client) return { ok: false, error, events: [], participations: [], seasons: [], people: [] };
 
+  const allowedSeasonIds = scope?.allowedSeasonIds;
   const [events, participations, seasons, people] = await Promise.all([
-    selectAll<Event>(client, "events", "id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes"),
-    selectAll<EventParticipation>(client, "event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in"),
-    selectAll<Season>(client, "seasons", "id,code,name"),
+    selectAllScopedBySeason<Event>(client, "events", "id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes", allowedSeasonIds),
+    selectAllScopedBySeason<EventParticipation>(client, "event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in", allowedSeasonIds),
+    allowedSeasonIds
+      ? allowedSeasonIds.length
+        ? client.from("seasons").select("id,code,name").in("id", allowedSeasonIds).then((res: any) => ({ data: (res.data ?? []) as Season[], error: res.error?.message ?? null }))
+        : Promise.resolve({ data: [] as Season[], error: null })
+      : selectAll<Season>(client, "seasons", "id,code,name"),
     selectAll<Person>(client, "people", "id,full_name,email_primary")
   ]);
 
@@ -238,7 +257,7 @@ export async function getEventListData(): Promise<EventListData> {
   };
 }
 
-export async function getEventDetailData(eventId: string): Promise<EventDetailData> {
+export async function getEventDetailData(eventId: string, scope?: ScopeFilter): Promise<EventDetailData> {
   const empty = { event: null, participations: [], seasons: [], people: [], mentorProfiles: [], menteeProfiles: [] };
   const { client, error } = clientResult();
   if (!client) return { ok: false, error, ...empty };
@@ -261,6 +280,9 @@ export async function getEventDetailData(eventId: string): Promise<EventDetailDa
   if (eventRes.error) {
     log("event load failed", eventRes.error);
     return { ok: false, error: eventRes.error.message, event: null, participations: [], seasons: seasonsRes.data, people: peopleRes.data, mentorProfiles: mentorsRes.data, menteeProfiles: menteesRes.data };
+  }
+  if (scope?.allowedSeasonIds && eventRes.data?.season_id && !scope.allowedSeasonIds.includes(eventRes.data.season_id)) {
+    return { ok: false, error: null, event: null, participations: [], seasons: seasonsRes.data, people: [], mentorProfiles: [], menteeProfiles: [] };
   }
 
   // Phase 045A: scope participations to this event only (was: load all then filter in JS)
@@ -306,6 +328,11 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   if (seasonError) return { ok: false, message: `${SAFE_ERROR} (seasons: ${seasonError})` };
   if (!seasonId) return { ok: false, message: `Không tìm thấy season ${seasonCode}.` };
 
+  const ctx = await getAdminScopeContext();
+  const allowedSeasonIds = await getAllowedSeasonIds(ctx);
+  if (!canAccessSeason(ctx, seasonId, allowedSeasonIds)) {
+    return { ok: false, message: "Ban khong co quyen tao su kien trong mua nay." };
+  }
   // Phase 045A: resolve optional intake_batch_id
   const intakeBatchIdRaw = clean(input.intake_batch_id);
   const intakeBatchId =
@@ -365,6 +392,11 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   const { seasonId, error: seasonError } = await resolveSeasonId(client, seasonCode);
   if (seasonError) return { ok: false, message: `${SAFE_ERROR} (seasons: ${seasonError})` };
   if (!seasonId) return { ok: false, message: `Không tìm thấy season ${seasonCode}.` };
+  const ctx = await getAdminScopeContext();
+  const allowedSeasonIds = await getAllowedSeasonIds(ctx);
+  if (!canAccessSeason(ctx, seasonId, allowedSeasonIds) || !canAccessSeason(ctx, clean(before.season_id), allowedSeasonIds)) {
+    return { ok: false, message: "Ban khong co quyen sua su kien trong mua nay." };
+  }
   updates.season_id = seasonId;
 
   updates.source_notes = clean(input.source_notes);

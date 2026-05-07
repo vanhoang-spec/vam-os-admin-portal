@@ -16,6 +16,7 @@ import {
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationDecision, ApplicationReview, Match } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 import { AssignReviewerForm } from "./assign-reviewer-form";
@@ -74,15 +75,17 @@ function roundLabel(round: string) {
 }
 
 export default async function ApplicationDetailPage({ params }: { params: { id: string } }) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [adminUser, application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =
     await Promise.all([
       getCurrentAdminUser(),
-      getApplication(params.id),
-      getPeople(),
-      getSeasons(),
-      getMenteeProfiles(),
-      getMentorProfiles(),
-      getMatches(),
+      getApplication(params.id, scope),
+      getPeople(scope),
+      getSeasons(scope),
+      getMenteeProfiles(scope),
+      getMentorProfiles(scope),
+      getMatches(scope),
       getAnswersForApplication(params.id),
       getApplicationReviewsForApplication(params.id),
       getActiveAdminUsers(),
@@ -144,8 +147,8 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
 
   const reviews: ApplicationReview[] = reviewsResult.data ?? [];
   const decisions: ApplicationDecision[] = decisionsResult.data ?? [];
-  const canAssign = canAssignReview(adminUser?.role);
-  const canMakeDecision = canDecide(adminUser?.role);
+  const canAssign = canAssignReview(adminUser?.role) && canOperateAnyScope(scopeContext);
+  const canMakeDecision = canDecide(adminUser?.role) && canOperateAnyScope(scopeContext);
 
   // Latest submitted review (for the decision form context)
   const latestSubmittedReview = reviews.find((r) => r.status === "submitted");

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getDashboardData, getOperationsData, keyById } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
 
 const SEASON_CODE = "UEHM-S11";
@@ -95,9 +96,10 @@ function countByLabel(rows: Array<Record<string, unknown>>, key: string, fallbac
 }
 
 export default async function DashboardPage() {
+  const scope = await getScopeFilter(await getAdminScopeContext());
   const [data, opsData] = await Promise.all([
-    getDashboardData(),
-    getOperationsData()
+    getDashboardData(scope),
+    getOperationsData(scope)
   ]);
   const errors = [
     data.people.error,
@@ -345,18 +347,6 @@ export default async function DashboardPage() {
             Phần chênh lệch còn lại chủ yếu đến từ recap qua Zalo, báo cáo miệng, thiếu mã mentee hoặc không map được với match đang hoạt động, nên chưa thể tự động khôi phục.
             Dashboard hiện phản ánh dữ liệu đã được chuẩn hóa trong DB.
           </p>
-        </div>
-      ) : null}
-
-      {process.env.NODE_ENV === "development" ? (
-        <div className="mb-4 rounded-md bg-slate-900 p-4 text-xs font-mono text-emerald-400 opacity-75 hover:opacity-100 transition-opacity">
-          <div>[DEBUG DIAGNOSTICS]</div>
-          <div>homeOfficialClosedMonth: {officialClosedMonth ?? "null"}</div>
-          <div>homeOperationsSelectedMonth: {opsSelectedMonth ?? "null"}</div>
-          <div>homeRecapKpi: {homeRecapKpi}</div>
-          <div>homeMenteeActiveKpi: {homeMenteeActiveKpi}</div>
-          <div>homeMentorActiveKpi: {homeMentorActiveKpi}</div>
-          <div>homeFollowUpKpi: {homeFollowUpKpi}</div>
         </div>
       ) : null}
 

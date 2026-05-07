@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getIntakeBatches } from "@/lib/data";
 import { EVENT_TYPE_OPTIONS, getEventListData, isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, IntakeBatch, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 
@@ -70,12 +71,14 @@ export default async function EventsPage({
     status?: string | string[];
   };
 }) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [data, intakeBatchesRes, adminUser] = await Promise.all([
-    getEventListData(),
-    getIntakeBatches(),
+    getEventListData(scope),
+    getIntakeBatches(scope),
     getCurrentAdminUser()
   ]);
-  const allowEdit = canEditRecaps(adminUser);
+  const allowEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
 
   const seasonFilter = selectedParam(searchParams?.season).trim();
   const typeFilter = selectedParam(searchParams?.type).trim();
