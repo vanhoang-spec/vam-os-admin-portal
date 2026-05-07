@@ -16,12 +16,11 @@ export default async function PeoplePage() {
         filters={[{ key: "gender", label: "Gender", valueKey: "gender" }]}
         getHref={{ prefix: "/people/", key: "id" }}
         columns={[
-          { key: "full_name", label: "full_name" },
-          { key: "email_primary", label: "email_primary" },
-          { key: "phone_primary", label: "phone_primary" },
-          { key: "gender", label: "gender" },
-          { key: "source_sheets", label: "source_sheets" },
-          { key: "data_quality_flags", label: "data_quality_flags" }
+          { key: "full_name", label: "Họ và tên" },
+          { key: "email_primary", label: "Email" },
+          { key: "phone_primary", label: "Điện thoại" },
+          { key: "gender", label: "Giới tính" },
+          { key: "source_sheets", label: "Nguồn" }
         ]}
       />
     </>

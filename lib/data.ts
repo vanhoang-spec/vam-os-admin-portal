@@ -66,6 +66,7 @@ export type MentoringRecapCorrectionInput = {
 };
 
 const VI_ERROR = "Không thể tải dữ liệu. Vui lòng kiểm tra cấu hình Supabase và quyền đọc bảng.";
+const IN_FILTER_CHUNK_SIZE = 200;
 
 export function envError<T>(fallback: T): QueryResult<T> {
   return {
@@ -75,7 +76,7 @@ export function envError<T>(fallback: T): QueryResult<T> {
 }
 
 function dataClient() {
-  return getSupabaseServerClient() ?? supabase;
+  return getSupabaseServiceRoleClient() ?? getSupabaseServerClient() ?? supabase;
 }
 
 function logDataError(scope: string, error: unknown) {
@@ -91,6 +92,53 @@ function logDataError(scope: string, error: unknown) {
 function isNextDynamicUsageError(error: unknown) {
   const err = error as { message?: string; details?: string };
   return `${err?.message ?? ""} ${err?.details ?? ""}`.includes("Dynamic server usage");
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function chunkValues<T>(values: T[], size = IN_FILTER_CHUNK_SIZE) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function selectInChunks<T>(
+  table: string,
+  column: string,
+  values: string[],
+  columns = "*"
+): Promise<{ data: T[]; error: unknown | null }> {
+  const client = dataClient();
+  if (!client) return { data: [], error: null };
+
+  const rows: T[] = [];
+  for (const chunk of chunkValues(uniqueStrings(values))) {
+    if (!chunk.length) continue;
+    const { data, error } = await client.from(table).select(columns).in(column, chunk);
+    if (error) return { data: rows, error };
+    rows.push(...((data ?? []) as T[]));
+  }
+
+  return { data: rows, error: null };
+}
+
+function mergeRowsById<T extends { id?: string | null }>(rows: T[]) {
+  const byId = new Map<string, T>();
+  const withoutId: T[] = [];
+
+  for (const row of rows) {
+    if (row.id) {
+      byId.set(row.id, row);
+    } else {
+      withoutId.push(row);
+    }
+  }
+
+  return Array.from(byId.values()).concat(withoutId);
 }
 
 const OPERATIONAL_MONTH_START = "2025-10";
@@ -251,15 +299,14 @@ async function selectScopedBySeason<T>(
 ): Promise<QueryResult<T[]>> {
   if (!hasSeasonScope(scope)) return selectAllTable<T>(table, columns, fallback);
   if (!scope?.allowedSeasonIds?.length) return { data: fallback, error: null };
-  const client = dataClient();
-  if (!client) return envError(fallback);
-  const { data, error } = await client.from(table).select(columns).in("season_id", scope.allowedSeasonIds);
+  const { data, error } = await selectInChunks<T>(table, "season_id", scope.allowedSeasonIds, columns);
   if (error) {
     if (isNextDynamicUsageError(error)) throw error;
     logDataError(`${table}.selectScopedBySeason`, error);
-    return { data: fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
+    const err = error as { message?: string };
+    return { data: fallback, error: `${VI_ERROR} (${table}: ${err.message ?? "Bad Request"})` };
   }
-  return { data: (data ?? []) as T[], error: null };
+  return { data, error: null };
 }
 
 async function getScopedIntakeBatchIds(scope?: ScopeFilter) {
@@ -268,17 +315,24 @@ async function getScopedIntakeBatchIds(scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return [];
 
-  let query = client.from("intake_batches").select("id,season_id");
+  let data: JsonRecord[] = [];
   if (scope.allowedSeasonIds?.length) {
-    query = query.in("season_id", scope.allowedSeasonIds);
-  }
-  const { data, error } = await query;
-  if (error) {
-    logDataError("intake_batches.scope", error);
-    return [];
+    const result = await selectInChunks<JsonRecord>("intake_batches", "season_id", scope.allowedSeasonIds, "id,season_id");
+    if (result.error) {
+      logDataError("intake_batches.scope", result.error);
+      return [];
+    }
+    data = result.data;
+  } else {
+    const { data: rows, error } = await client.from("intake_batches").select("id,season_id");
+    if (error) {
+      logDataError("intake_batches.scope", error);
+      return [];
+    }
+    data = (rows ?? []) as JsonRecord[];
   }
 
-  return ((data ?? []) as JsonRecord[])
+  return data
     .map((row) => String(row.id))
     .filter(Boolean);
 }
@@ -286,29 +340,27 @@ async function getScopedIntakeBatchIds(scope?: ScopeFilter) {
 export async function getScopedPersonIds(scope?: ScopeFilter) {
   if (!scope) return null;
   if (noAllowedRows(scope)) return [];
-  const client = dataClient();
-  if (!client) return [];
 
   const ids = new Set<string>();
   if (scope.allowedSeasonIds?.length) {
     const [matchesRes, recapsRes, partsRes, appsRes] = await Promise.all([
-      client.from("matches").select("mentor_person_id,mentee_person_id").in("season_id", scope.allowedSeasonIds),
-      client.from("mentoring_recaps").select("mentor_person_id,mentee_person_id").in("season_id", scope.allowedSeasonIds),
-      client.from("event_participations").select("person_id").in("season_id", scope.allowedSeasonIds),
-      client.from("applications").select("person_id").in("season_id", scope.allowedSeasonIds)
+      selectInChunks<JsonRecord>("matches", "season_id", scope.allowedSeasonIds, "mentor_person_id,mentee_person_id"),
+      selectInChunks<JsonRecord>("mentoring_recaps", "season_id", scope.allowedSeasonIds, "mentor_person_id,mentee_person_id"),
+      selectInChunks<JsonRecord>("event_participations", "season_id", scope.allowedSeasonIds, "person_id"),
+      selectInChunks<JsonRecord>("applications", "season_id", scope.allowedSeasonIds, "person_id")
     ]);
-    for (const row of (matchesRes.data ?? []) as JsonRecord[]) {
+    for (const row of matchesRes.data) {
       if (row.mentor_person_id) ids.add(String(row.mentor_person_id));
       if (row.mentee_person_id) ids.add(String(row.mentee_person_id));
     }
-    for (const row of (recapsRes.data ?? []) as JsonRecord[]) {
+    for (const row of recapsRes.data) {
       if (row.mentor_person_id) ids.add(String(row.mentor_person_id));
       if (row.mentee_person_id) ids.add(String(row.mentee_person_id));
     }
-    for (const row of (partsRes.data ?? []) as JsonRecord[]) {
+    for (const row of partsRes.data) {
       if (row.person_id) ids.add(String(row.person_id));
     }
-    for (const row of (appsRes.data ?? []) as JsonRecord[]) {
+    for (const row of appsRes.data) {
       if (row.person_id) ids.add(String(row.person_id));
     }
   }
@@ -316,13 +368,13 @@ export async function getScopedPersonIds(scope?: ScopeFilter) {
   const batchIds = await getScopedIntakeBatchIds(scope);
   if (batchIds?.length) {
     const [mentorProfilesRes, menteeProfilesRes, appsRes] = await Promise.all([
-      client.from("mentor_profiles").select("person_id").in("intake_batch_id", batchIds),
-      client.from("mentee_profiles").select("person_id").in("intake_batch_id", batchIds),
-      client.from("applications").select("person_id").in("intake_batch_id", batchIds)
+      selectInChunks<JsonRecord>("mentor_profiles", "intake_batch_id", batchIds, "person_id"),
+      selectInChunks<JsonRecord>("mentee_profiles", "intake_batch_id", batchIds, "person_id"),
+      selectInChunks<JsonRecord>("applications", "intake_batch_id", batchIds, "person_id")
     ]);
-    for (const row of (mentorProfilesRes.data ?? []) as JsonRecord[]) if (row.person_id) ids.add(String(row.person_id));
-    for (const row of (menteeProfilesRes.data ?? []) as JsonRecord[]) if (row.person_id) ids.add(String(row.person_id));
-    for (const row of (appsRes.data ?? []) as JsonRecord[]) if (row.person_id) ids.add(String(row.person_id));
+    for (const row of mentorProfilesRes.data) if (row.person_id) ids.add(String(row.person_id));
+    for (const row of menteeProfilesRes.data) if (row.person_id) ids.add(String(row.person_id));
+    for (const row of appsRes.data) if (row.person_id) ids.add(String(row.person_id));
   }
 
   return Array.from(ids);
@@ -346,11 +398,13 @@ export async function getPeople(scope?: ScopeFilter) {
   const personIds = await getScopedPersonIds(scope);
   if (personIds && personIds.length === 0) return { data: [] as Person[], error: null };
   if (!personIds) return selectAllTable<Person>("people");
-  const client = dataClient();
-  if (!client) return envError<Person[]>([]);
-  const { data, error } = await client.from("people").select("*").in("id", personIds);
-  if (error) return { data: [], error: `${VI_ERROR} (people: ${error.message})` };
-  return { data: (data ?? []) as Person[], error: null };
+  const { data, error } = await selectInChunks<Person>("people", "id", personIds);
+  if (error) {
+    logDataError("people.selectScopedByPerson", error);
+    const err = error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (people: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 export async function getMentorProfiles(scope?: ScopeFilter) {
@@ -358,13 +412,19 @@ export async function getMentorProfiles(scope?: ScopeFilter) {
   if (personIds && personIds.length === 0) return { data: [] as MentorProfile[], error: null };
   if (!personIds) return selectTable<MentorProfile>("mentor_profiles");
   const batchIds = await getScopedIntakeBatchIds(scope);
-  const client = dataClient();
-  if (!client) return envError<MentorProfile[]>([]);
-  const filters = [`person_id.in.(${personIds.join(",")})`];
-  if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
-  const { data, error } = await client.from("mentor_profiles").select("*").or(filters.join(","));
-  if (error) return { data: [], error: `${VI_ERROR} (mentor_profiles: ${error.message})` };
-  return { data: (data ?? []) as MentorProfile[], error: null };
+  const [byPerson, byBatch] = await Promise.all([
+    selectInChunks<MentorProfile>("mentor_profiles", "person_id", personIds),
+    batchIds?.length
+      ? selectInChunks<MentorProfile>("mentor_profiles", "intake_batch_id", batchIds)
+      : Promise.resolve({ data: [] as MentorProfile[], error: null })
+  ]);
+  const error = byPerson.error ?? byBatch.error;
+  if (error) {
+    logDataError("mentor_profiles.selectScoped", error);
+    const err = error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (mentor_profiles: ${err.message ?? "Bad Request"})` };
+  }
+  return { data: mergeRowsById([...byPerson.data, ...byBatch.data]), error: null };
 }
 
 export async function getMenteeProfiles(scope?: ScopeFilter) {
@@ -372,13 +432,19 @@ export async function getMenteeProfiles(scope?: ScopeFilter) {
   if (personIds && personIds.length === 0) return { data: [] as MenteeProfile[], error: null };
   if (!personIds) return selectTable<MenteeProfile>("mentee_profiles");
   const batchIds = await getScopedIntakeBatchIds(scope);
-  const client = dataClient();
-  if (!client) return envError<MenteeProfile[]>([]);
-  const filters = [`person_id.in.(${personIds.join(",")})`];
-  if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
-  const { data, error } = await client.from("mentee_profiles").select("*").or(filters.join(","));
-  if (error) return { data: [], error: `${VI_ERROR} (mentee_profiles: ${error.message})` };
-  return { data: (data ?? []) as MenteeProfile[], error: null };
+  const [byPerson, byBatch] = await Promise.all([
+    selectInChunks<MenteeProfile>("mentee_profiles", "person_id", personIds),
+    batchIds?.length
+      ? selectInChunks<MenteeProfile>("mentee_profiles", "intake_batch_id", batchIds)
+      : Promise.resolve({ data: [] as MenteeProfile[], error: null })
+  ]);
+  const error = byPerson.error ?? byBatch.error;
+  if (error) {
+    logDataError("mentee_profiles.selectScoped", error);
+    const err = error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (mentee_profiles: ${err.message ?? "Bad Request"})` };
+  }
+  return { data: mergeRowsById([...byPerson.data, ...byBatch.data]), error: null };
 }
 
 export async function getApplications(scope?: ScopeFilter) {
@@ -746,7 +812,9 @@ export async function getOperationalTeamAssignments(scope?: ScopeFilter) {
 }
 
 async function getOperationsDataFromRpc() {
-  const client = dataClient();
+  // This RPC uses SECURITY DEFINER and checks auth.uid() internally.
+  // Must be called with the server auth client (user JWT), NOT service role (auth.uid() = NULL there).
+  const client = getSupabaseServerClient() ?? supabase;
   if (!client) return null;
 
   const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: "UEHM-S11" });
@@ -754,6 +822,8 @@ async function getOperationsDataFromRpc() {
     if (error.code === "PGRST202" || error.code === "42883") {
       return null;
     }
+    // auth.uid() = NULL inside RPC (session missing or wrong client); fall through to app-layer silently
+    if (error.message?.includes("VAM OS admin access required")) return null;
     const empty = { data: [], error: `${VI_ERROR} (get_operations_dashboard_data: ${error.message})` };
     const emptyKpis = { data: null, error: `${VI_ERROR} (get_operations_dashboard_data: ${error.message})` };
     return {
