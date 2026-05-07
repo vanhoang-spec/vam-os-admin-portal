@@ -5,7 +5,8 @@
 --
 -- Prerequisite:
 --   1. Apply supabase_migrations/048_add_kickoff_event_type.sql on staging.
---   2. Run this script only after reviewing docs/UEHM_S11_EVENTS_STAGING_IMPORT_PLAN.md.
+--   2. Apply supabase_migrations/049_expand_event_participation_status_model.sql on staging.
+--   3. Run this script only after reviewing docs/UEHM_S11_EVENTS_STAGING_IMPORT_PLAN.md.
 --
 -- Suggested command from repo root:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f data_imports/uehm_s11_events/scripts/048_stage_uehm_s11_events_import.sql
@@ -262,7 +263,7 @@ best_candidates as (
 )
 select
   source_row_no,
-  case when count(distinct person_id) = 1 then min(person_id) end as person_id,
+  case when count(distinct person_id) = 1 then (array_agg(distinct person_id))[1] end as person_id,
   case when count(distinct person_id) = 1 then min(match_method) end as match_method,
   count(distinct person_id) as candidate_count
 from best_candidates
@@ -385,10 +386,17 @@ select
 from _uehm_s11_participation_ready ready
 where not exists (
   select 1
-  from public.event_participations existing
-  where existing.event_id = ready.event_id
-    and existing.person_id = ready.person_id
-);
+  from _uehm_s11_participation_ready duplicate_ready
+  where duplicate_ready.event_id = ready.event_id
+    and duplicate_ready.person_id = ready.person_id
+    and duplicate_ready.source_row_no < ready.source_row_no
+)
+  and not exists (
+    select 1
+    from public.event_participations existing
+    where existing.event_id = ready.event_id
+      and existing.person_id = ready.person_id
+  );
 
 select 'import_run_key' as metric, import_run_key as value
 from _uehm_s11_import_context
