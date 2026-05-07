@@ -42,6 +42,8 @@ function RoleSelect({ defaultValue }: { defaultValue: string }) {
     <select name="role" defaultValue={defaultValue} className={inputClass}>
       <option value="viewer">Viewer</option>
       <option value="reviewer">Reviewer</option>
+      <option value="support_team">Support team</option>
+      <option value="core_team">Core team</option>
       <option value="admin">Admin</option>
       <option value="super_admin">Super admin</option>
     </select>

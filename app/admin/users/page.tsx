@@ -14,6 +14,8 @@ function single(value: string | string[] | undefined) {
 function roleLabel(role: unknown) {
   if (role === "super_admin") return "Super admin";
   if (role === "admin") return "Admin";
+  if (role === "core_team") return "Core team";
+  if (role === "support_team") return "Support team";
   if (role === "reviewer") return "Reviewer";
   return "Viewer";
 }

@@ -50,7 +50,7 @@ export type AdminUserMutationResult = {
   message: string;
 };
 
-const ADMIN_ROLES = new Set(["viewer", "reviewer", "admin", "super_admin"]);
+const ADMIN_ROLES = new Set(["viewer", "reviewer", "support_team", "core_team", "admin", "super_admin"]);
 const ADMIN_STATUSES = new Set(["invited", "active", "suspended", "inactive"]);
 const SCOPE_ROLES = new Set(["full_access", "operations", "review", "read"]);
 const SCOPE_STATUSES = new Set(["active", "inactive"]);
