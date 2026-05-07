@@ -19,7 +19,11 @@ Included in first staging import:
 
 Expected in-scope dedup rows: 1,275.
 
-Orientation is explicitly held because the official event date is still unknown.
+Orientation is explicitly held from `event_participations` import.
+
+Mentee Orientation is a program introduction / pre-application activity. It is simple, optional, and primarily tracked through form registration using name, email, or MSSV. Some participants may later receive additional points or a positive signal in the application process, but it is not mandatory and should not be treated as official mentee event attendance.
+
+Future modeling should use a pre-application engagement or application scoring model rather than official event attendance. Until that model exists, Orientation should not be imported into `event_participations` and should not affect attendance/no-show KPIs.
 
 ## Schema Findings
 
@@ -233,14 +237,41 @@ Migration 048 rollback:
 
 ## Production Go / No-Go Checklist
 
-Production remains blocked until all are true:
+Production schema readiness inspection found production is ready for this import except:
 
-- Migration 048 applied and verified on staging.
-- Staging import script runs successfully.
-- Verification queries show no duplicate `(event_id, person_id)` participation rows.
-- Kickoff imports as `event_type = kickoff`, not `networking`.
-- Orientation is absent from imported event rows.
-- Skipped identity rows are reviewed and accepted.
-- `/events` and event detail pages load on staging.
-- Counts are signed off by operations owner.
-- A separate production import script/runbook is prepared and reviewed.
+- `public.event_type` is an enum and does not yet include `kickoff`.
+- `event_participations_registration_status_check` still allows only `registered`, `unknown`.
+- `event_participations_attendance_status_check` still allows only `attended`, `registered_absent`.
+
+Do not apply production import until all are true:
+
+- Apply migration 048 on production and verify `kickoff` exists in `public.event_type`.
+- Apply migration 049 on production and verify expanded participation status constraints.
+- Confirm existing production row `UEHM-S11-KICKOFF` exists as `training` with 0 participants.
+- Confirm existing production row `UEHM-S11-ORIENTATION` exists with 3 participants and must not be touched.
+- Confirm import script will canonicalize/reuse old hyphenated Kickoff as `UEHM_S11_KICKOFF`.
+- Confirm import script filters source rows to `UEHM_S11_KICKOFF`, `UEHM_S11_TRAINING01`, `UEHM_S11_TRAINING02`.
+- Confirm import script does not touch `UEHM_S11_ORIENTATION` or `UEHM-S11-ORIENTATION`.
+- Confirm registered-only rows map to `registered_no_response`, not `registered_absent`.
+- Confirm confirmed-only rows map to `registration_status = confirmed` and `attendance_status = unknown`, not `registered_absent`.
+- Confirm explicit absence only maps to `absent_excused` or `absent_unexcused`.
+- Confirm attended rows map to `attended`.
+- Confirm expected production inserted participation counts:
+  - Kickoff: 627
+  - Training 01: 175
+  - Training 02: 134
+- Verification queries show no unexpected statuses and no duplicate `(event_id, person_id)` participation rows.
+- Orientation remains absent from canonical imported event rows.
+- `/events` and event attendance pages load after import.
+
+Production migration recommendation:
+
+- Apply `048_add_kickoff_event_type.sql`.
+- Apply `049_expand_event_participation_status_model.sql`.
+- Do not apply `036`, `043`, `045a`, or staging-only `050` for this import unless a fresh production schema inspection proves they are needed.
+
+Final production dry-run prompt before import:
+
+```text
+Codex, apply migrations 048 and 049 on PRODUCTION only, then run the UEHM S11 Events import for Kickoff, Training 01, and Training 02 only. Do not import Orientation. Verify event counts, participation counts, status breakdowns, duplicates, skipped rows, and that Orientation remains untouched.
+```
