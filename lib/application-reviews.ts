@@ -1,5 +1,6 @@
 import "server-only";
 
+import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // All writes use service-role to bypass RLS.
@@ -25,6 +26,24 @@ function log(scope: string, error: unknown) {
   });
 }
 
+async function canWriteReviewWorkflowForApplication(client: any, applicationId: string) {
+  const { data: application, error } = await client
+    .from("applications")
+    .select("id,season_id")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (error) {
+    log("load application for review scope failed", error);
+    return { ok: false as const, message: SAFE_ERROR };
+  }
+  if (!application) return { ok: false as const, message: "KhĂ´ng tĂ¬m tháº¥y Ä‘Æ¡n á»©ng tuyá»ƒn." };
+  const ctx = await getAdminScopeContext();
+  if (!(await canReviewSeason(ctx, application.season_id as string | null))) {
+    return { ok: false as const, message: "Ban khong co quyen review trong mua cua don nay." };
+  }
+  return { ok: true as const };
+}
+
 export type ReviewActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string };
@@ -44,6 +63,8 @@ export type AssignReviewInput = {
 export async function assignApplicationReview(input: AssignReviewInput): Promise<ReviewActionResult> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, input.applicationId);
+  if (!scopeAccess.ok) return scopeAccess;
 
   const { data, error } = await client
     .from("application_reviews")
@@ -105,7 +126,7 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
   // Verify ownership — reviewer can only edit their own review
   const { data: existing, error: fetchErr } = await client
     .from("application_reviews")
-    .select("id,reviewer_admin_user_id,status")
+    .select("id,reviewer_admin_user_id,status,application_id")
     .eq("id", input.reviewId)
     .maybeSingle();
 
@@ -120,6 +141,9 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
   if (existing.status === "submitted") {
     return { ok: false, message: "Review đã được submit, không thể chỉnh sửa." };
   }
+
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
+  if (!scopeAccess.ok) return scopeAccess;
 
   const { error } = await client
     .from("application_reviews")
@@ -170,6 +194,9 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
   if (existing.status === "submitted") {
     return { ok: false, message: "Review đã được submit rồi." };
   }
+
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
+  if (!scopeAccess.ok) return scopeAccess;
 
   // Calculate total_score from available dimensions
   const scores = [
@@ -254,6 +281,9 @@ export async function updateApplicationStatus(input: UpdateApplicationStatusInpu
   if (!ALLOWED_ADMIN_STATUS_TRANSITIONS.has(input.newStatus)) {
     return { ok: false, message: `Trạng thái không hợp lệ: ${input.newStatus}` };
   }
+
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, input.applicationId);
+  if (!scopeAccess.ok) return scopeAccess;
 
   const { error } = await client
     .from("applications")

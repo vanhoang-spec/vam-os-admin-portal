@@ -1,5 +1,6 @@
 import "server-only";
 
+import { canReviewSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // ---------------------------------------------------------------------------
@@ -89,18 +90,35 @@ export async function bulkAssignApplicationReviews(
 
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
 
   // --- 1. Fetch eligible applications
   let appQuery = client
     .from("applications")
-    .select("id,submitted_at,status")
+    .select("id,submitted_at,status,season_id")
     .eq("role_applied", input.roleApplied.trim())
     .in("status", input.statuses)
     .order("submitted_at", { ascending: true })
     .order("id", { ascending: true });
 
   if (input.intakeBatchId) {
+    const { data: batch, error: batchErr } = await client
+      .from("intake_batches")
+      .select("id,season_id")
+      .eq("id", input.intakeBatchId)
+      .maybeSingle();
+    if (batchErr) {
+      log("fetch intake batch", batchErr);
+      return { ok: false, message: SAFE_ERROR };
+    }
+    if (!batch || !(await canReviewSeason(scopeContext, batch.season_id as string | null))) {
+      return { ok: false, message: "Ban khong co quyen review trong batch nay." };
+    }
     appQuery = appQuery.eq("intake_batch_id", input.intakeBatchId);
+  } else if (scope?.allowedSeasonIds) {
+    if (!scope.allowedSeasonIds.length) return { ok: false, message: "Ban khong co scope review nao de giao ho so." };
+    appQuery = appQuery.in("season_id", scope.allowedSeasonIds);
   }
 
   const { data: rawApps, error: appsErr } = await appQuery;
@@ -109,7 +127,11 @@ export async function bulkAssignApplicationReviews(
     return { ok: false, message: `Không thể tải danh sách hồ sơ: ${appsErr.message}` };
   }
 
-  const allApps = (rawApps ?? []) as { id: string; submitted_at: string | null; status: string }[];
+  const allFetchedApps = (rawApps ?? []) as { id: string; submitted_at: string | null; status: string; season_id: string | null }[];
+  const allowedAppChecks = await Promise.all(
+    allFetchedApps.map(async (app) => ((await canReviewSeason(scopeContext, app.season_id)) ? app : null))
+  );
+  const allApps = allowedAppChecks.filter((app): app is { id: string; submitted_at: string | null; status: string; season_id: string | null } => Boolean(app));
   if (!allApps.length) {
     return { ok: false, message: "Không có hồ sơ nào phù hợp với bộ lọc đã chọn." };
   }

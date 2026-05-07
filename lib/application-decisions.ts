@@ -1,5 +1,6 @@
 import "server-only";
 
+import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // All writes use service-role to bypass RLS.
@@ -51,6 +52,22 @@ export async function recordApplicationDecision(
 ): Promise<DecisionResult> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const { data: application, error: appErr } = await client
+    .from("applications")
+    .select("id,season_id")
+    .eq("id", input.applicationId)
+    .maybeSingle();
+  if (appErr) {
+    log("load application for decision scope failed", appErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!application) return { ok: false, message: "KhĂ´ng tĂ¬m tháº¥y Ä‘Æ¡n á»©ng tuyá»ƒn." };
+
+  const ctx = await getAdminScopeContext();
+  if (!(await canReviewSeason(ctx, application.season_id as string | null))) {
+    return { ok: false, message: "Ban khong co quyen review trong mua cua don nay." };
+  }
 
   // 1. Update application status
   const { error: statusErr } = await client

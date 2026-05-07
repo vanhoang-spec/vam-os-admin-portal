@@ -3,6 +3,7 @@ import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader,
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getActivityCorrectionLogs, getMentoringRecapById, getPeople, keyById } from "@/lib/data";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDate } from "@/lib/utils";
 import { RecapCorrectionForm } from "./correction-form";
 
@@ -16,10 +17,20 @@ export default async function EditRecapPage({ params }: { params: { id: string }
       </>
     );
   }
+  const scopeContext = await getAdminScopeContext();
+  if (!canOperateAnyScope(scopeContext)) {
+    return (
+      <>
+        <PageHeader title="KhĂ´ng cĂ³ quyá»n truy cáº­p" description="Chá»‰ ngÆ°á»i cĂ³ operations/full_access trong scope má»›i Ä‘Æ°á»£c sá»­a recap." />
+        <ErrorBox message="Báº¡n khĂ´ng cĂ³ quyá»n operations trong báº¥t ká»³ program/season nĂ o." />
+      </>
+    );
+  }
+  const scope = await getScopeFilter(scopeContext);
 
   const [recap, people, logs] = await Promise.all([
-    getMentoringRecapById(params.id),
-    getPeople(),
+    getMentoringRecapById(params.id, scope),
+    getPeople(scope),
     getActivityCorrectionLogs("mentoring_recaps", params.id)
   ]);
   const error = recap.error || people.error || logs.error;

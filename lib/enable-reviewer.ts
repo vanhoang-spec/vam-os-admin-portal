@@ -2,6 +2,7 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageReviewers } from "@/lib/permissions";
+import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // ---------------------------------------------------------------------------
@@ -89,6 +90,31 @@ export async function enableMentorAsReviewer(input: {
     return { ok: false, message: `Không thể tải thông tin người: ${personErr.message}` };
   }
   if (!person) return { ok: false, message: "Không tìm thấy người trong hệ thống." };
+
+  const { data: mentorProfiles, error: mentorProfileErr } = await client
+    .from("mentor_profiles")
+    .select("id,intake_batch_id")
+    .eq("person_id", input.personId.trim());
+  if (mentorProfileErr) {
+    log("mentor profile scope lookup", mentorProfileErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const batchIds = (mentorProfiles ?? [])
+    .map((profile: { intake_batch_id?: string | null }) => profile.intake_batch_id)
+    .filter((id: string | null | undefined): id is string => Boolean(id));
+  if (!batchIds.length) return { ok: false, message: "KhĂ´ng tĂ¬m tháº¥y mentor profile trong scope review." };
+  const { data: batches, error: batchErr } = await client.from("intake_batches").select("id,season_id").in("id", batchIds);
+  if (batchErr) {
+    log("mentor batch scope lookup", batchErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const scopeContext = await getAdminScopeContext();
+  const canManageThisMentor = await Promise.all(
+    (batches ?? []).map((batch: { season_id?: string | null }) => canReviewSeason(scopeContext, batch.season_id ?? null))
+  );
+  if (!canManageThisMentor.some(Boolean)) {
+    return { ok: false, message: "Ban khong co quyen review trong mua cua mentor nay." };
+  }
 
   const email = String(person.email_primary ?? "").trim().toLowerCase();
   if (!email || !email.includes("@")) {

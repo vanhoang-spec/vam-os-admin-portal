@@ -87,9 +87,9 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
       getMentorProfiles(scope),
       getMatches(scope),
       getAnswersForApplication(params.id),
-      getApplicationReviewsForApplication(params.id),
+      getApplicationReviewsForApplication(params.id, scope),
       getActiveAdminUsers(),
-      getApplicationDecisions(params.id)
+      getApplicationDecisions(params.id, scope)
     ]);
 
   const peopleById = keyById(people.data);

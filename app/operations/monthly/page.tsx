@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData } from "@/lib/data";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 
@@ -70,8 +71,10 @@ type EventRow = Event & {
 };
 
 export default async function MonthlyOperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
-  const [data, adminUser] = await Promise.all([getOperationsData(), getCurrentAdminUser()]);
-  const allowEdit = canEditRecaps(adminUser);
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const [data, adminUser] = await Promise.all([getOperationsData(scope), getCurrentAdminUser()]);
+  const allowEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
   const errors = [
     data.seasons.error,
     data.recaps.error,

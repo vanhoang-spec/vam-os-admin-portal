@@ -2,6 +2,7 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageWorkflow } from "@/lib/auth-constants";
+import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { JsonRecord, MentoringRecap, Person, Season } from "@/lib/types";
 
@@ -92,7 +93,15 @@ function clientResult() {
 async function requireWorkflowAdmin(): Promise<{ ok: true; admin: Awaited<ReturnType<typeof getCurrentAdminUser>> } | { ok: false; message: string }> {
   const admin = await getCurrentAdminUser();
   if (!canManageWorkflow(admin)) return { ok: false, message: "Bạn không có quyền quản lý correction workflow." };
+  const ctx = await getAdminScopeContext();
+  if (!canOperateAnyScope(ctx)) return { ok: false, message: "Ban khong co quyen operations trong pham vi chuong trinh." };
   return { ok: true, admin };
+}
+
+async function requireOperationsForSeason(seasonId: string | null | undefined) {
+  const ctx = await getAdminScopeContext();
+  if (await canOperateSeason(ctx, seasonId)) return { ok: true as const };
+  return { ok: false as const, message: "Ban khong co quyen operations trong mua nay." };
 }
 
 function clean(value: unknown) {
@@ -288,6 +297,7 @@ function buildIssues(input: {
 export async function getAdminCorrectionData(): Promise<AdminCorrectionData> {
   const { client, error } = clientResult();
   if (!client) return { ok: false, error, issues: [], followups: [], actionItems: [], recaps: [], people: [], seasons: [] };
+  const scope = await getScopeFilter(await getAdminScopeContext());
 
   const [recaps, people, seasons, actionItems] = await Promise.all([
     selectAll<MentoringRecap>(client, "mentoring_recaps", "id,season_id,match_id,mentor_person_id,mentee_person_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,meeting_type,captured_by,issue_flag,status,admin_notes"),
@@ -295,24 +305,33 @@ export async function getAdminCorrectionData(): Promise<AdminCorrectionData> {
     selectAll<Season>(client, "seasons", "id,code,name"),
     selectAll<AdminActionItem>(client, "action_items", "id,type,target_person_id,season_code,status,owner_email,created_at,updated_at,notes,metadata")
   ]);
+  const allowedSeasonIds = scope?.allowedSeasonIds;
+  const scopedSeasons = allowedSeasonIds ? seasons.data.filter((season) => allowedSeasonIds.includes(season.id)) : seasons.data;
+  const scopedSeasonCodes = new Set(scopedSeasons.map((season) => season.code).filter(Boolean));
+  const scopedRecaps = allowedSeasonIds ? recaps.data.filter((recap) => recap.season_id && allowedSeasonIds.includes(recap.season_id)) : recaps.data;
+  const scopedPersonIds = new Set(scopedRecaps.flatMap((recap) => [recap.mentor_person_id, recap.mentee_person_id]).filter(Boolean) as string[]);
+  const scopedPeople = allowedSeasonIds ? people.data.filter((person) => scopedPersonIds.has(person.id)) : people.data;
+  const scopedActionItems = allowedSeasonIds
+    ? actionItems.data.filter((item) => item.season_code && scopedSeasonCodes.has(item.season_code))
+    : actionItems.data;
 
   const errors = [recaps.error, people.error, seasons.error, actionItems.error].filter(Boolean);
   const issues = buildIssues({
-    recaps: recaps.data,
-    people: people.data,
-    seasons: seasons.data,
-    actionItems: actionItems.data
+    recaps: scopedRecaps,
+    people: scopedPeople,
+    seasons: scopedSeasons,
+    actionItems: scopedActionItems
   });
 
   return {
     ok: !errors.length,
     error: errors.join(" | ") || null,
     issues,
-    followups: actionItems.data.filter((item) => item.type === "followup_no_recap"),
-    actionItems: actionItems.data,
-    recaps: recaps.data,
-    people: people.data,
-    seasons: seasons.data
+    followups: scopedActionItems.filter((item) => item.type === "followup_no_recap"),
+    actionItems: scopedActionItems,
+    recaps: scopedRecaps,
+    people: scopedPeople,
+    seasons: scopedSeasons
   };
 }
 
@@ -331,12 +350,24 @@ export async function createActionItem(input: {
 
   const type = validType(input.type);
   const notes = clean(input.notes);
+  const seasonCode = clean(input.seasonCode) ?? DEFAULT_SEASON_CODE;
+  const { data: seasonForScope, error: seasonScopeError } = await client
+    .from("seasons")
+    .select("id,code")
+    .eq("code", seasonCode)
+    .maybeSingle();
+  if (seasonScopeError) {
+    log("load season for action item scope failed", seasonScopeError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const seasonAccess = await requireOperationsForSeason((seasonForScope as JsonRecord | null)?.id as string | null);
+  if (!seasonAccess.ok) return { ok: false, message: seasonAccess.message };
   const payload = {
     type,
     action_type: type,
     title: type.replaceAll("_", " "),
     target_person_id: clean(input.targetPersonId),
-    season_code: clean(input.seasonCode) ?? DEFAULT_SEASON_CODE,
+    season_code: seasonCode,
     status: "open",
     owner_email: clean(input.ownerEmail),
     notes,
@@ -378,6 +409,18 @@ export async function updateActionItem(input: {
   }
   if (!before) return { ok: false, message: "Không tìm thấy action item." };
 
+  const { data: seasonForScope, error: seasonScopeError } = await client
+    .from("seasons")
+    .select("id,code")
+    .eq("code", clean(before.season_code) ?? DEFAULT_SEASON_CODE)
+    .maybeSingle();
+  if (seasonScopeError) {
+    log("load season for action item update scope failed", seasonScopeError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const seasonAccess = await requireOperationsForSeason((seasonForScope as JsonRecord | null)?.id as string | null);
+  if (!seasonAccess.ok) return { ok: false, message: seasonAccess.message };
+
   const appendedNote = clean(input.noteToAppend);
   const existingNotes = clean(before.notes);
   const updates: JsonRecord = {};
@@ -409,6 +452,8 @@ export async function addManualRecap(input: JsonRecord): Promise<MutationResult>
   if (!validateDate(meetingDate)) return { ok: false, message: "meeting_date phải đúng định dạng YYYY-MM-DD." };
   const seasonCode = clean(input.season_code) ?? DEFAULT_SEASON_CODE;
   const { data: season } = await client.from("seasons").select("id,code").eq("code", seasonCode).maybeSingle();
+  const seasonAccess = await requireOperationsForSeason((season as JsonRecord | null)?.id as string | null);
+  if (!seasonAccess.ok) return { ok: false, message: seasonAccess.message };
   const matchId = clean(input.match_id);
   const mentorId = clean(input.mentor_person_id);
   const menteeId = clean(input.mentee_person_id);
@@ -481,6 +526,9 @@ export async function editRecap(input: JsonRecord): Promise<MutationResult> {
   const meetingDate = clean(input.meeting_date);
   if (meetingDate && !validateDate(meetingDate)) return { ok: false, message: "meeting_date phải đúng định dạng YYYY-MM-DD." };
 
+  const seasonAccess = await requireOperationsForSeason(clean(before.season_id));
+  if (!seasonAccess.ok) return { ok: false, message: seasonAccess.message };
+
   const updates: JsonRecord = {
     match_id: clean(input.match_id),
     mentor_person_id: clean(input.mentor_person_id),
@@ -528,6 +576,9 @@ export async function softDeleteRecap(input: { id: unknown; reason?: unknown }):
     if (beforeError) log("load recap for delete failed", beforeError);
     return { ok: false, message: beforeError ? `${SAFE_ERROR} (${beforeError.message})` : "Không tìm thấy recap." };
   }
+
+  const seasonAccess = await requireOperationsForSeason(clean(before.season_id));
+  if (!seasonAccess.ok) return { ok: false, message: seasonAccess.message };
 
   const nextNotes = [clean(before.admin_notes), `Soft deleted by ${access.admin?.email ?? "admin"}: ${clean(input.reason) ?? "No reason provided"}`].filter(Boolean).join("\n");
   const { data: after, error: updateError } = await client

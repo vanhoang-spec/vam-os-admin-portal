@@ -2,6 +2,7 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canSelfClaimInterview } from "@/lib/permissions";
+import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ export async function claimInterviewReview(input: {
   // --- Load and validate application
   const { data: app, error: appErr } = await client
     .from("applications")
-    .select("id,status,full_name,email_primary")
+    .select("id,status,full_name,email_primary,season_id")
     .eq("id", appId)
     .maybeSingle();
 
@@ -87,6 +88,11 @@ export async function claimInterviewReview(input: {
     return { ok: false, message: `Không thể tải thông tin đơn: ${appErr.message}` };
   }
   if (!app) return { ok: false, message: "Không tìm thấy đơn ứng tuyển." };
+
+  const scopeContext = await getAdminScopeContext();
+  if (!(await canReviewSeason(scopeContext, app.season_id as string | null))) {
+    return { ok: false, message: "Ban khong co quyen review trong mua cua don nay." };
+  }
 
   const appStatus = String(app.status ?? "").trim();
   if (!INTERVIEW_ELIGIBLE_STATUSES.has(appStatus)) {

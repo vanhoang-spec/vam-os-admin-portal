@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getApplications, getMatches, getMenteeProfiles, getMentorProfiles, keyById, selectAllRows } from "@/lib/data";
+import { getApplications, getMatches, getMenteeProfiles, getMentorProfiles, getPeople, keyById } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Application, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
 
@@ -98,12 +99,14 @@ function IssueSection<T>({
 
 export default async function DataIssuesPage({ searchParams }: { searchParams?: { issue?: string } }) {
   const selectedIssue = isIssueKey(searchParams?.issue) ? searchParams.issue : null;
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [people, applications, mentees, mentors, matches, adminUser] = await Promise.all([
-    selectAllRows<Person>("people", "id,full_name,email_primary,phone_primary,source_sheets"),
-    getApplications(),
-    getMenteeProfiles(),
-    getMentorProfiles(),
-    getMatches(),
+    getPeople(scope),
+    getApplications(scope),
+    getMenteeProfiles(scope),
+    getMentorProfiles(scope),
+    getMatches(scope),
     getCurrentAdminUser()
   ]);
   const allowEdit = canEditRecaps(adminUser);

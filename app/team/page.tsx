@@ -8,6 +8,7 @@ import {
   keyById,
   selectAllRows
 } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { MenteeProfile, MentorProfile, OperationalTeamAssignment, Person, Season } from "@/lib/types";
 import { displayCode, displayText } from "@/lib/utils";
 
@@ -104,15 +105,17 @@ export default async function TeamViewPage({
 }: {
   searchParams?: { q?: string | string[]; group?: string | string[]; functional?: string | string[]; status?: string | string[] };
 }) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [assignments, people, mentors, mentees, seasons] = await Promise.all([
     selectAllRows<OperationalTeamAssignment>(
       "operational_team_assignments",
       "id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes"
     ),
-    getPeople(),
-    getMentorProfiles(),
-    getMenteeProfiles(),
-    getSeasons()
+    getPeople(scope),
+    getMentorProfiles(scope),
+    getMenteeProfiles(scope),
+    getSeasons(scope)
   ]);
 
   const errors = [assignments.error, people.error, mentors.error, mentees.error, seasons.error].filter(Boolean);
@@ -133,7 +136,10 @@ export default async function TeamViewPage({
   const functionalFilter = single(searchParams?.functional).trim();
   const statusFilter = single(searchParams?.status).trim();
 
-  const filtered = assignments.data.filter((row) => {
+  const scopedPersonIds = new Set(people.data.map((person) => person.id));
+  const visibleAssignments = scope ? assignments.data.filter((row) => scopedPersonIds.has(row.person_id)) : assignments.data;
+
+  const filtered = visibleAssignments.filter((row) => {
     if (groupFilter) {
       if (groupFilter === "coreteam" && !isCoreTeam(row)) return false;
       if (groupFilter === "support_team" && !isSupportTeam(row)) return false;

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getReviewerPool } from "@/lib/data";
 import { canManageReviewers } from "@/lib/permissions";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewerPoolClient } from "./reviewer-pool-client";
 
@@ -21,10 +22,12 @@ export default async function ReviewerPoolPage({
   if (!canManageReviewers(adminUser.role)) redirect("/reviews");
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
 
   const [intakeBatches, pool] = await Promise.all([
-    getIntakeBatches(),
-    getReviewerPool({ intakeBatchId })
+    getIntakeBatches(scope),
+    getReviewerPool({ intakeBatchId, scope })
   ]);
 
   return (

@@ -8,6 +8,7 @@ import {
   getSeasons
 } from "@/lib/data";
 import { canBulkAssignReviews } from "@/lib/permissions";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { AssignBulkForm } from "./assign-bulk-form";
 
@@ -26,9 +27,11 @@ export default async function AssignBulkPage({
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
   const roleApplied = searchParams.role_applied?.trim() || null;
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
 
   // Always fetch batches + seasons for the selector dropdowns
-  const [intakeBatches, seasons] = await Promise.all([getIntakeBatches(), getSeasons()]);
+  const [intakeBatches, seasons] = await Promise.all([getIntakeBatches(scope), getSeasons(scope)]);
 
   // If no batch or role is selected, show the filter selector only
   if (!intakeBatchId || !roleApplied) {
@@ -96,7 +99,7 @@ export default async function AssignBulkPage({
 
   // Load application pool and reviewer list in parallel
   const [appsResult, reviewersResult] = await Promise.all([
-    getReviewAssignableApplications({ intakeBatchId, roleApplied }),
+    getReviewAssignableApplications({ intakeBatchId, roleApplied, scope }),
     getReviewEligibleReviewers()
   ]);
 

@@ -214,6 +214,51 @@ export function hasScopeLevel(ctx: AdminScopeContext, programId: string | null |
   return SCOPE_RANK[level] >= SCOPE_RANK[requiredLevel];
 }
 
+function bestScopeLevel(levels: ScopeLevel[]) {
+  return levels.sort((a, b) => SCOPE_RANK[b] - SCOPE_RANK[a])[0] ?? null;
+}
+
+export async function getScopeLevelForSeason(
+  ctx: AdminScopeContext,
+  seasonId: string | null | undefined
+): Promise<ScopeLevel | null> {
+  if (ctx.isSuperAdmin) return "full_access";
+  if (!seasonId) return null;
+
+  const { seasons, programs } = await loadSeasonsAndPrograms();
+  const season = seasons.find((row) => row.id === seasonId || row.code === seasonId);
+  const resolvedSeasonId = clean(season?.id) ?? seasonId;
+  const seasonCode = clean(season?.code);
+  const seasonProgramId = clean(season?.program_id);
+  const program = programs.find((row) => row.id === seasonProgramId || row.code === seasonProgramId);
+  const programCode = clean(program?.code);
+
+  const matchingLevels = ctx.programScopes
+    .filter((scope) => {
+      if (scope.seasonId) return scope.seasonId === resolvedSeasonId || scope.seasonId === seasonCode;
+      if (scope.programId) return scope.programId === seasonProgramId || scope.programId === programCode;
+      return false;
+    })
+    .map((scope) => scope.scopeLevel);
+
+  return bestScopeLevel(matchingLevels);
+}
+
+export async function canReadSeason(ctx: AdminScopeContext, seasonId: string | null | undefined) {
+  const level = await getScopeLevelForSeason(ctx, seasonId);
+  return Boolean(level);
+}
+
+export async function canOperateSeason(ctx: AdminScopeContext, seasonId: string | null | undefined) {
+  const level = await getScopeLevelForSeason(ctx, seasonId);
+  return level === "full_access" || level === "operations";
+}
+
+export async function canReviewSeason(ctx: AdminScopeContext, seasonId: string | null | undefined) {
+  const level = await getScopeLevelForSeason(ctx, seasonId);
+  return level === "full_access" || level === "review";
+}
+
 export function canReadAnyScope(ctx: AdminScopeContext) {
   return ctx.isSuperAdmin || ctx.programScopes.some((scope) => SCOPE_RANK[scope.scopeLevel] >= SCOPE_RANK.read);
 }

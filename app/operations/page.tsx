@@ -114,10 +114,10 @@ function percent(numerator: number, denominator: number) {
   return `${Math.round((numerator / denominator) * 100)}%`;
 }
 
-function attendanceRate(attended: number, registeredAbsent: number) {
-  const denominator = attended + registeredAbsent;
-  if (!denominator) return "Chưa có dữ liệu";
-  return percent(attended, denominator);
+function attendanceRateOverTotal(attended: number, totalParticipants: number) {
+  if (!totalParticipants) return "Chưa có dữ liệu";
+  const value = (attended / totalParticipants) * 100;
+  return `${value.toFixed(1).replace(/\.0$/, "")}%`;
 }
 
 function selectedSearchMonth(value: string | string[] | undefined) {
@@ -236,6 +236,8 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const eventParticipationsInMonth = seasonEventParticipations.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
   const attendedCount = eventParticipationsInMonth.filter((row) => isEventAttendedStatus(row.attendance_status)).length;
   const registeredAbsentCount = eventParticipationsInMonth.filter((row) => isEventAbsenceStatus(row.attendance_status)).length;
+  const totalEventParticipantCount = eventParticipationsInMonth.length;
+  const notUpdatedAttendanceCount = Math.max(0, totalEventParticipantCount - attendedCount - registeredAbsentCount);
   const rpcKpis = data.kpis.data?.selectedMonth === selectedMonth ? data.kpis.data : null;
 
   const recapByMonth = Array.from(
@@ -369,7 +371,12 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <KpiCard label="Mentor chưa có recap" value={rpcKpis?.mentorWithoutRecapCount ?? mentorWithoutRecapCount} />
         <KpiCard label="Event/training trong tháng" value={rpcKpis?.eventTrainingCount ?? eventsInMonth.length} />
         <KpiCard label="Lượt tham dự event" value={rpcKpis?.eventAttendanceCount ?? attendedCount} />
-        <KpiCard label="Tỷ lệ attendance" value={attendanceRate(attendedCount, registeredAbsentCount)} />
+        <Card>
+          <div className="text-sm text-slate-500">Tỷ lệ tham dự / tổng đăng ký</div>
+          <div className="mt-2 text-3xl font-semibold text-vam-ink">{attendanceRateOverTotal(attendedCount, totalEventParticipantCount)}</div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">Bao gồm cả các lượt chưa cập nhật trạng thái trong mẫu số.</p>
+          <p className="mt-1 text-xs font-medium text-slate-600">Chưa cập nhật: {notUpdatedAttendanceCount}</p>
+        </Card>
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
         <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
         <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={followUpTwoMonthCount} />

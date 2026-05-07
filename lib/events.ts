@@ -2,7 +2,8 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
+import { getMenteeProfiles, getMentorProfiles, getPeople, getSeasons } from "@/lib/data";
+import { canAccessSeason, canOperateAnyScope, canOperateSeason, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import {
   ATTENDANCE_STATUS_VALUES,
   EVENT_ROLE_VALUES,
@@ -268,14 +269,18 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
     return { ok: false, error: "ID sự kiện không hợp lệ.", ...empty };
   }
 
-  const [eventRes, seasonsRes, peopleRes, mentorsRes, menteesRes] = await Promise.all([
-    client.from("events").select("id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes").eq("id", id).maybeSingle(),
-    selectAll<Season>(client, "seasons", "id,code,name"),
-    selectAll<Person>(client, "people", "id,full_name,email_primary"),
-    // Phase 045B: include intake_batch_id so combobox can prioritise batch members
-    selectAll<MentorProfile>(client, "mentor_profiles", "id,person_id,mentor_code,company_current,title_current,intake_batch_id"),
-    selectAll<MenteeProfile>(client, "mentee_profiles", "id,person_id,mentee_code,school_code,school_raw,major,intake_batch_id")
+  const eventRes = await client
+    .from("events")
+    .select("id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes")
+    .eq("id", id)
+    .maybeSingle();
+  const scopedLookups = await Promise.all([
+    getSeasons(scope),
+    getPeople(scope),
+    getMentorProfiles(scope),
+    getMenteeProfiles(scope)
   ]);
+  const [seasonsRes, peopleRes, mentorsRes, menteesRes] = scopedLookups;
 
   if (eventRes.error) {
     log("event load failed", eventRes.error);
@@ -330,7 +335,7 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
 
   const ctx = await getAdminScopeContext();
   const allowedSeasonIds = await getAllowedSeasonIds(ctx);
-  if (!canAccessSeason(ctx, seasonId, allowedSeasonIds)) {
+  if (!canAccessSeason(ctx, seasonId, allowedSeasonIds) || !(await canOperateSeason(ctx, seasonId))) {
     return { ok: false, message: "Ban khong co quyen tao su kien trong mua nay." };
   }
   // Phase 045A: resolve optional intake_batch_id
@@ -373,6 +378,11 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   }
   if (!before) return { ok: false, message: "Không tìm thấy sự kiện." };
 
+  const participationScopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(participationScopeContext, clean(before.season_id)))) {
+    return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
+  }
+
   const updates: JsonRecord = {};
 
   const eventName = clean(input.event_name);
@@ -394,7 +404,12 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   if (!seasonId) return { ok: false, message: `Không tìm thấy season ${seasonCode}.` };
   const ctx = await getAdminScopeContext();
   const allowedSeasonIds = await getAllowedSeasonIds(ctx);
-  if (!canAccessSeason(ctx, seasonId, allowedSeasonIds) || !canAccessSeason(ctx, clean(before.season_id), allowedSeasonIds)) {
+  if (
+    !canAccessSeason(ctx, seasonId, allowedSeasonIds) ||
+    !canAccessSeason(ctx, clean(before.season_id), allowedSeasonIds) ||
+    !(await canOperateSeason(ctx, seasonId)) ||
+    !(await canOperateSeason(ctx, clean(before.season_id)))
+  ) {
     return { ok: false, message: "Ban khong co quyen sua su kien trong mua nay." };
   }
   updates.season_id = seasonId;
@@ -441,6 +456,11 @@ export async function addParticipation(input: ParticipationInput): Promise<Mutat
     return { ok: false, message: `${SAFE_ERROR} (${eventError.message})` };
   }
   if (!event) return { ok: false, message: "Sự kiện không tồn tại." };
+
+  const eventScopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(eventScopeContext, clean(event.season_id)))) {
+    return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
+  }
 
   const { data: person, error: personError } = await client.from("people").select("id").eq("id", personId).maybeSingle();
   if (personError) {
@@ -589,6 +609,11 @@ export async function removeParticipation(input: { id?: unknown; reason?: unknow
     return { ok: false, message: beforeError ? `${SAFE_ERROR} (${beforeError.message})` : "Không tìm thấy người tham gia." };
   }
 
+  const participationScopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(participationScopeContext, clean(before.season_id)))) {
+    return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
+  }
+
   const { error: deleteError } = await client.from("event_participations").delete().eq("id", id);
   if (deleteError) {
     log("delete participation failed", deleteError);
@@ -634,6 +659,11 @@ export async function cancelEvent(input: { id?: unknown; reason?: unknown }): Pr
   if (!before) return { ok: false, message: "Không tìm thấy sự kiện." };
   if ((before as JsonRecord).status === "cancelled") {
     return { ok: true, message: "Sự kiện đã ở trạng thái đã hủy." };
+  }
+
+  const eventScopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(eventScopeContext, clean((before as JsonRecord).season_id)))) {
+    return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
   }
 
   const { data: after, error: updateError } = await client
@@ -697,6 +727,11 @@ export async function bulkAddEventParticipants(input: {
     return { ok: false, message: `${SAFE_ERROR} (${eventError.message})` };
   }
   if (!event) return { ok: false, message: "Không tìm thấy sự kiện." };
+
+  const eventScopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(eventScopeContext, clean((event as JsonRecord).season_id)))) {
+    return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
+  }
 
   const intakeBatchId = (event as JsonRecord).intake_batch_id as string | null;
   if (!intakeBatchId) {

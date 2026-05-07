@@ -2,6 +2,7 @@ import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getMatches, getMenteeProfiles, getMentorProfiles, getPeople, getSeasons } from "@/lib/data";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { RecapCreateForm } from "./create-form";
 
 export default async function CreateRecapPage() {
@@ -14,13 +15,23 @@ export default async function CreateRecapPage() {
       </>
     );
   }
+  const scopeContext = await getAdminScopeContext();
+  if (!canOperateAnyScope(scopeContext)) {
+    return (
+      <>
+        <PageHeader title="KhĂ´ng cĂ³ quyá»n truy cáº­p" description="Chá»‰ ngÆ°á»i cĂ³ operations/full_access trong scope má»›i Ä‘Æ°á»£c táº¡o recap." />
+        <ErrorBox message="Báº¡n khĂ´ng cĂ³ quyá»n operations trong báº¥t ká»³ program/season nĂ o." />
+      </>
+    );
+  }
+  const scope = await getScopeFilter(scopeContext);
 
   const [people, matches, seasons, mentorProfiles, menteeProfiles] = await Promise.all([
-    getPeople(),
-    getMatches(),
-    getSeasons(),
-    getMentorProfiles(),
-    getMenteeProfiles()
+    getPeople(scope),
+    getMatches(scope),
+    getSeasons(scope),
+    getMentorProfiles(scope),
+    getMenteeProfiles(scope)
   ]);
 
   const error = people.error || matches.error || seasons.error || mentorProfiles.error || menteeProfiles.error;

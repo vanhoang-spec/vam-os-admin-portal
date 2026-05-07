@@ -1,6 +1,11 @@
 import { supabase } from "@/lib/supabase";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import type { ScopeFilter } from "@/lib/program-scope";
+import {
+  canOperateSeason,
+  getAdminScopeContext,
+  getScopeFilter,
+  type ScopeFilter
+} from "@/lib/program-scope";
 import type {
   ActivityCorrectionLog,
   AdminUserPublic,
@@ -542,11 +547,14 @@ export async function getMentoringRecapsByMentorPersonId(personId: string, scope
   return { data: (data ?? []) as MentoringRecap[], error: null };
 }
 
-export async function getMentoringRecapById(id: string) {
+export async function getMentoringRecapById(id: string, scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return envError<MentoringRecap | null>(null);
   const { data, error } = await client.from("mentoring_recaps").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
+  if (scope?.allowedSeasonIds && data?.season_id && !scope.allowedSeasonIds.includes(data.season_id)) {
+    return { data: null, error: null };
+  }
   return { data: data as MentoringRecap | null, error: null };
 }
 
@@ -598,9 +606,15 @@ export async function updateMentoringRecapCorrection(input: MentoringRecapCorrec
   const recapId = String(input.id ?? "").trim();
   if (!recapId) return { data: null, error: "Thiếu recap id." };
 
-  const current = await getMentoringRecapById(recapId);
+  const scopeContext = await getAdminScopeContext();
+  const currentScope = await getScopeFilter(scopeContext);
+  const current = await getMentoringRecapById(recapId, currentScope);
   if (current.error) return { data: null, error: current.error };
   if (!current.data) return { data: null, error: "Không tìm thấy recap cần sửa." };
+
+  if (!(await canOperateSeason(scopeContext, current.data.season_id))) {
+    return { data: null, error: "Ban khong co quyen operations trong mua cua recap nay." };
+  }
 
   const updates: Partial<MentoringRecap> = {};
 
@@ -1183,9 +1197,13 @@ export function keyById<T extends { id: string }>(rows: T[]) {
 // Application review data fetchers
 // ----------------------------------------------------------------
 
-export async function getApplicationReviewsForApplication(applicationId: string): Promise<QueryResult<ApplicationReview[]>> {
+export async function getApplicationReviewsForApplication(applicationId: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
   const client = dataClient(); // RLS: admin sees all, reviewer sees own
   if (!client) return envError<ApplicationReview[]>([]);
+  if (scope) {
+    const app = await getApplication(applicationId, scope);
+    if (app.error || !app.data) return { data: [], error: app.error };
+  }
   const { data, error } = await client
     .from("application_reviews")
     .select("*")
@@ -1229,7 +1247,7 @@ export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<Que
   return { data: (data ?? []) as ApplicationReview[], error: apps.error };
 }
 
-export async function getApplicationReviewById(id: string): Promise<QueryResult<ApplicationReview | null>> {
+export async function getApplicationReviewById(id: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview | null>> {
   const client = dataClient();
   if (!client) return envError<ApplicationReview | null>(null);
   const { data, error } = await client
@@ -1238,6 +1256,10 @@ export async function getApplicationReviewById(id: string): Promise<QueryResult<
     .eq("id", id)
     .maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (application_reviews: ${error.message})` };
+  if (scope && data?.application_id) {
+    const app = await getApplication(data.application_id as string, scope);
+    if (app.error || !app.data) return { data: null, error: app.error };
+  }
   return { data: data as ApplicationReview | null, error: null };
 }
 
@@ -1260,10 +1282,15 @@ export async function getActiveAdminUsers(): Promise<QueryResult<AdminUserPublic
 
 /** All admin decisions recorded against an application, newest first. */
 export async function getApplicationDecisions(
-  applicationId: string
+  applicationId: string,
+  scope?: ScopeFilter
 ): Promise<QueryResult<ApplicationDecision[]>> {
   const client = dataClient();
   if (!client) return envError<ApplicationDecision[]>([]);
+  if (scope) {
+    const app = await getApplication(applicationId, scope);
+    if (app.error || !app.data) return { data: [], error: app.error };
+  }
   const { data, error } = await client
     .from("application_decisions")
     .select("*")
@@ -1298,18 +1325,26 @@ export function groupCount(rows: JsonRecord[], key: string) {
 export async function getReviewAssignableApplications(filters: {
   intakeBatchId?: string | null;
   roleApplied?: string | null;
+  scope?: ScopeFilter;
 }): Promise<QueryResult<ReviewAssignableApplication[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewAssignableApplication[]>([]);
 
   let appsQuery = client
     .from("applications")
-    .select("id,full_name,email_primary,role_applied,status,submitted_at,intake_batch_id")
+    .select("id,full_name,email_primary,role_applied,status,submitted_at,intake_batch_id,season_id")
     .order("submitted_at", { ascending: true })
     .order("id", { ascending: true });
 
   if (filters.intakeBatchId) {
+    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
+      return { data: [], error: null };
+    }
     appsQuery = appsQuery.eq("intake_batch_id", filters.intakeBatchId);
+  } else if (filters.scope?.allowedSeasonIds) {
+    if (!filters.scope.allowedSeasonIds.length) return { data: [], error: null };
+    appsQuery = appsQuery.in("season_id", filters.scope.allowedSeasonIds);
   }
   if (filters.roleApplied) {
     appsQuery = appsQuery.eq("role_applied", filters.roleApplied);
@@ -1448,6 +1483,7 @@ export async function getReviewAssignmentBatches(): Promise<QueryResult<ReviewAs
 export async function getReviewAssignmentProgress(filters: {
   intakeBatchId?: string | null;
   reviewRound?: string | null;
+  scope?: ScopeFilter;
 }): Promise<QueryResult<ReviewProgressRow[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewProgressRow[]>([]);
@@ -1457,6 +1493,10 @@ export async function getReviewAssignmentProgress(filters: {
   // Step 1: resolve app IDs if batch filter is active
   let appIdFilter: string[] | null = null;
   if (filters.intakeBatchId) {
+    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
+      return { data: [], error: null };
+    }
     const { data: appRows, error: appErr } = await client
       .from("applications")
       .select("id")
@@ -1467,6 +1507,10 @@ export async function getReviewAssignmentProgress(filters: {
     }
     appIdFilter = (appRows ?? []).map((a) => a.id as string);
     if (!appIdFilter.length) return { data: [], error: null };
+  } else if (filters.scope) {
+    const apps = await getApplications(filters.scope);
+    if (apps.error || !apps.data.length) return { data: [], error: apps.error };
+    appIdFilter = apps.data.map((app) => app.id);
   }
 
   // Step 2: fetch review rows
@@ -1588,6 +1632,7 @@ export async function getReviewAssignmentProgress(filters: {
  */
 export async function getReviewerPool(filters?: {
   intakeBatchId?: string | null;
+  scope?: ScopeFilter;
 }): Promise<QueryResult<ReviewerPoolRow[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewerPoolRow[]>([]);
@@ -1600,7 +1645,17 @@ export async function getReviewerPool(filters?: {
     .order("id");
 
   if (filters?.intakeBatchId) {
+    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
+      return { data: [], error: null };
+    }
     mentorQuery = mentorQuery.eq("intake_batch_id", filters.intakeBatchId);
+  } else {
+    const scopedBatchIds = await getScopedIntakeBatchIds(filters?.scope);
+    if (scopedBatchIds) {
+      if (!scopedBatchIds.length) return { data: [], error: null };
+      mentorQuery = mentorQuery.in("intake_batch_id", scopedBatchIds);
+    }
   }
 
   const [mentorRes, adminRes] = await Promise.all([

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getReviewAssignmentProgress, getSeasons } from "@/lib/data";
 import { canAssignReview } from "@/lib/permissions";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { formatDate } from "@/lib/utils";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 
@@ -31,11 +32,13 @@ export default async function ReviewProgressPage({
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
   const reviewRound = searchParams.review_round?.trim() || "profile_screening";
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
 
   const [intakeBatches, seasons, progressResult] = await Promise.all([
-    getIntakeBatches(),
-    getSeasons(),
-    getReviewAssignmentProgress({ intakeBatchId, reviewRound })
+    getIntakeBatches(scope),
+    getSeasons(scope),
+    getReviewAssignmentProgress({ intakeBatchId, reviewRound, scope })
   ]);
 
   const rows = progressResult.data;

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Card, DetailGrid, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser, getCurrentSupabaseAuthUser } from "@/lib/admin-auth";
 import { getOperationsData } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getSupabasePublicEnvDiagnostics } from "@/lib/supabase";
 
 export default async function DebugAuthPage() {
@@ -10,10 +11,12 @@ export default async function DebugAuthPage() {
     getCurrentAdminUser()
   ]);
 
-  if (process.env.NODE_ENV === "production" && !adminUser) notFound();
+  if (!adminUser || adminUser.role !== "super_admin") notFound();
 
   const diagnostics = getSupabasePublicEnvDiagnostics();
-  const operationsProbe = adminUser ? await getOperationsData() : null;
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const operationsProbe = await getOperationsData(scope);
   const operationErrors = operationsProbe
     ? [
         operationsProbe.seasons.error,

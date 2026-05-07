@@ -4,6 +4,7 @@ import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAccessAdminUser } from "@/lib/permissions";
 import { getApplications, getSeasons, keyById } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Application, Season } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
 
@@ -61,7 +62,9 @@ export default async function AdminApplicationsPage() {
     );
   }
 
-  const [applicationsResult, seasonsResult] = await Promise.all([getApplications(), getSeasons()]);
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const [applicationsResult, seasonsResult] = await Promise.all([getApplications(scope), getSeasons(scope)]);
   const seasonsByCode = new Map<string, Season>(
     seasonsResult.data.filter((s) => s.code).map((s) => [s.code as string, s])
   );

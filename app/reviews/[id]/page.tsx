@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import {
   getApplication,
   getApplicationReviewById,
@@ -45,10 +46,12 @@ export default async function ReviewDetailPage({
   if (!adminUser?.id) redirect("/login");
   if (!canReview(adminUser.role)) redirect("/");
 
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [reviewResult, people, seasons] = await Promise.all([
-    getApplicationReviewById(params.id),
-    getPeople(),
-    getSeasons()
+    getApplicationReviewById(params.id, scope),
+    getPeople(scope),
+    getSeasons(scope)
   ]);
 
   const review = reviewResult.data;
@@ -69,7 +72,7 @@ export default async function ReviewDetailPage({
   }
 
   // Fetch application for this review
-  const appResult = await getApplication(review.application_id);
+  const appResult = await getApplication(review.application_id, scope);
   const app = appResult.data;
 
   const peopleById = keyById(people.data);
