@@ -13,6 +13,7 @@ type EventRow = Event & {
   participant_total: number;
   attended_count: number;
   registered_absent_count: number;
+  pending_count: number;
 };
 
 const TYPE_LABELS = new Map<string, string>(EVENT_TYPE_OPTIONS.map((option) => [option.value, option.label]));
@@ -20,6 +21,11 @@ const TYPE_LABELS = new Map<string, string>(EVENT_TYPE_OPTIONS.map((option) => [
 function selectedParam(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
+}
+
+function isEventPendingStatus(value: unknown) {
+  const status = String(value ?? "").trim();
+  return status === "registered_no_response" || status === "unknown";
 }
 
 function buildEventRows(
@@ -47,7 +53,8 @@ function buildEventRows(
         batch_code: event.intake_batch_id ? (batchesById.get(event.intake_batch_id)?.code ?? null) : null,
         participant_total: rows.length,
         attended_count: rows.filter((row) => isEventAttendedStatus(row.attendance_status)).length,
-        registered_absent_count: rows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length
+        registered_absent_count: rows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length,
+        pending_count: rows.filter((row) => isEventPendingStatus(row.attendance_status)).length
       };
     })
     .sort((a, b) => String(b.starts_at ?? "").localeCompare(String(a.starts_at ?? "")));
@@ -226,12 +233,14 @@ export default async function EventsPage({
             },
             {
               key: "attendance_summary",
-              label: "Đã tham gia / Vắng mặt",
+              label: "Đã tham gia / Vắng / Chưa cập nhật",
               render: (row) => (
                 <span>
                   <span className="font-medium text-vam-green">{row.attended_count}</span>
                   <span className="mx-1 text-slate-400">/</span>
-                  <span className="text-slate-600">{row.registered_absent_count}</span>
+                  <span className="text-amber-700">{row.registered_absent_count}</span>
+                  <span className="mx-1 text-slate-400">/</span>
+                  <span className="text-slate-600">{row.pending_count}</span>
                 </span>
               )
             },
