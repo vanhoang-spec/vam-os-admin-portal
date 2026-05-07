@@ -104,7 +104,7 @@ export async function addParticipationAction(
     event_id: eventId,
     person_id: personId,
     role_at_event: formText(formData, "role_at_event") || "mentee",
-    attendance_status: formText(formData, "attendance_status") || "registered_absent",
+    attendance_status: formText(formData, "attendance_status") || "unknown",
     registration_status: formText(formData, "registration_status") || "registered",
     attendance_date: formText(formData, "attendance_date"),
     admin_notes: formText(formData, "admin_notes"),
@@ -133,7 +133,7 @@ export async function updateParticipationAction(
 
   const updates: Record<string, unknown> = {
     id,
-    attendance_status: formText(formData, "attendance_status") || "registered_absent",
+    attendance_status: formText(formData, "attendance_status") || "unknown",
     role_at_event: formText(formData, "role_at_event") || "mentee",
     admin_notes: formText(formData, "admin_notes")
   };
@@ -217,7 +217,7 @@ export async function quickMarkParticipationAction(
   // so role_at_event and admin_notes are deliberately NOT included here.
   const result = await updateParticipation({
     id,
-    attendance_status: formText(formData, "attendance_status") || "registered_absent"
+    attendance_status: formText(formData, "attendance_status") || "unknown"
   });
   if (!result.ok) return { ok: false, message: result.message };
 

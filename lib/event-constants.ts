@@ -9,8 +9,15 @@ export type EventTypeValue =
   | "job_shadowing"
   | "other";
 
-export type AttendanceStatusValue = "attended" | "registered_absent";
-export type RegistrationStatusValue = "registered" | "unknown";
+export type AttendanceStatusValue =
+  | "attended"
+  | "absent_excused"
+  | "absent_unexcused"
+  | "registered_no_response"
+  | "walk_in"
+  | "unknown"
+  | "registered_absent";
+export type RegistrationStatusValue = "registered" | "confirmed" | "declined" | "no_response" | "cancelled" | "unknown";
 export type EventRoleValue = "mentor" | "mentee" | "core_team" | "speaker" | "trainer" | "guest" | "unknown";
 
 export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }> = [
@@ -27,11 +34,20 @@ export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }>
 
 export const ATTENDANCE_STATUS_OPTIONS: Array<{ value: AttendanceStatusValue; label: string }> = [
   { value: "attended", label: "Đã tham gia" },
-  { value: "registered_absent", label: "Đăng ký nhưng không tham gia" }
+  { value: "absent_excused", label: "Vắng có phép" },
+  { value: "absent_unexcused", label: "Vắng không phép" },
+  { value: "registered_no_response", label: "Đã đăng ký - chưa phản hồi" },
+  { value: "walk_in", label: "Walk-in" },
+  { value: "unknown", label: "Chưa rõ" },
+  { value: "registered_absent", label: "Đăng ký nhưng không tham gia (legacy)" }
 ];
 
 export const REGISTRATION_STATUS_OPTIONS: Array<{ value: RegistrationStatusValue; label: string }> = [
   { value: "registered", label: "Đã đăng ký" },
+  { value: "confirmed", label: "Đã xác nhận" },
+  { value: "declined", label: "Từ chối tham gia" },
+  { value: "no_response", label: "Không phản hồi" },
+  { value: "cancelled", label: "Đã hủy" },
   { value: "unknown", label: "Chưa rõ" }
 ];
 
@@ -61,3 +77,16 @@ export const EVENT_TYPE_VALUES = new Set<EventTypeValue>(EVENT_TYPE_OPTIONS.map(
 export const ATTENDANCE_STATUS_VALUES = new Set<AttendanceStatusValue>(ATTENDANCE_STATUS_OPTIONS.map((option) => option.value));
 export const REGISTRATION_STATUS_VALUES = new Set<RegistrationStatusValue>(REGISTRATION_STATUS_OPTIONS.map((option) => option.value));
 export const EVENT_ROLE_VALUES = new Set<EventRoleValue>(EVENT_ROLE_OPTIONS.map((option) => option.value));
+export const EVENT_ABSENCE_STATUS_VALUES = new Set<AttendanceStatusValue>([
+  "absent_excused",
+  "absent_unexcused",
+  "registered_absent"
+]);
+
+export function isEventAttendedStatus(value: unknown): boolean {
+  return String(value ?? "").trim() === "attended";
+}
+
+export function isEventAbsenceStatus(value: unknown): boolean {
+  return EVENT_ABSENCE_STATUS_VALUES.has(String(value ?? "").trim() as AttendanceStatusValue);
+}

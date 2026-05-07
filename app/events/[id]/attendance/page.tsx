@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getEventDetailData, isValidUuid } from "@/lib/events";
+import { getEventDetailData, isEventAbsenceStatus, isEventAttendedStatus, isValidUuid } from "@/lib/events";
 import { displayText, formatDate } from "@/lib/utils";
 import { AddParticipantForm, BulkAddForm, ParticipationRow } from "./attendance-forms";
 
@@ -59,15 +59,10 @@ export default async function EventAttendancePage({ params }: { params: { id: st
 
   // KPI calculations
   const totalCount = detail.participations.length;
-  const attendedCount = detail.participations.filter(
-    (row) => String(row.attendance_status ?? "").trim() === "attended"
-  ).length;
-  const absentCount = detail.participations.filter(
-    (row) => String(row.attendance_status ?? "").trim() === "registered_absent"
-  ).length;
+  const attendedCount = detail.participations.filter((row) => isEventAttendedStatus(row.attendance_status)).length;
+  const absentCount = detail.participations.filter((row) => isEventAbsenceStatus(row.attendance_status)).length;
   const notUpdatedCount = detail.participations.filter((row) => {
-    const s = String(row.attendance_status ?? "").trim();
-    return s !== "attended" && s !== "registered_absent";
+    return !isEventAttendedStatus(row.attendance_status) && !isEventAbsenceStatus(row.attendance_status);
   }).length;
   const walkInCount = detail.participations.filter(
     (row) => row.walk_in === true || String(row.walk_in) === "true"
@@ -108,7 +103,7 @@ export default async function EventAttendancePage({ params }: { params: { id: st
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Tổng trong danh sách" value={totalCount} />
         <KpiCard label="Đã tham gia" value={attendedCount} />
-        <KpiCard label="Vắng / Đăng ký không tham gia" value={absentCount} />
+        <KpiCard label="Vắng" value={absentCount} />
         <KpiCard label="Chưa cập nhật trạng thái" value={notUpdatedCount} />
         <KpiCard label="Walk-in" value={walkInCount} />
       </div>

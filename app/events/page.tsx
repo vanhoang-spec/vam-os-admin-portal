@@ -3,7 +3,7 @@ import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/component
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getIntakeBatches } from "@/lib/data";
-import { EVENT_TYPE_OPTIONS, getEventListData } from "@/lib/events";
+import { EVENT_TYPE_OPTIONS, getEventListData, isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import type { Event, EventParticipation, IntakeBatch, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 
@@ -46,8 +46,8 @@ function buildEventRows(
         season_code: event.season_id ? (seasonsById.get(event.season_id)?.code ?? null) : null,
         batch_code: event.intake_batch_id ? (batchesById.get(event.intake_batch_id)?.code ?? null) : null,
         participant_total: rows.length,
-        attended_count: rows.filter((row) => String(row.attendance_status ?? "").trim() === "attended").length,
-        registered_absent_count: rows.filter((row) => String(row.attendance_status ?? "").trim() === "registered_absent").length
+        attended_count: rows.filter((row) => isEventAttendedStatus(row.attendance_status)).length,
+        registered_absent_count: rows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length
       };
     })
     .sort((a, b) => String(b.starts_at ?? "").localeCompare(String(a.starts_at ?? "")));

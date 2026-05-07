@@ -24,6 +24,7 @@ import {
   getSeasons,
   keyById
 } from "@/lib/data";
+import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 
@@ -101,6 +102,10 @@ function recapStatusLabel(status: unknown) {
 function attendanceStatusLabel(status: unknown) {
   const normalized = normalizeStatus(status);
   if (normalized === "attended") return "Tham dự";
+  if (normalized === "absent_excused") return "Vắng có phép";
+  if (normalized === "absent_unexcused") return "Vắng không phép";
+  if (normalized === "registered_no_response") return "Đã đăng ký - chưa phản hồi";
+  if (normalized === "walk_in") return "Walk-in";
   if (normalized === "registered_absent") return "Đăng ký nhưng không tham dự";
   return displayText(status);
 }
@@ -617,8 +622,8 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
             <h2 className="mb-3 text-base font-semibold text-vam-ink">Hoạt động sự kiện</h2>
             <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {activityKpi("Tổng sự kiện ghi nhận", eventActivityRows.length)}
-              {activityKpi("Tham dự", eventActivityRows.filter((row) => normalizeStatus(row.attendance_status) === "attended").length)}
-              {activityKpi("Đăng ký nhưng không tham dự", eventActivityRows.filter((row) => normalizeStatus(row.attendance_status) === "registered_absent").length)}
+              {activityKpi("Tham dự", eventActivityRows.filter((row) => isEventAttendedStatus(row.attendance_status)).length)}
+              {activityKpi("Vắng", eventActivityRows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length)}
             </div>
             {eventActivityRows.length > 0 ? (
               <SimpleTable

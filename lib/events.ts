@@ -112,7 +112,7 @@ function validEventType(value: unknown): EventTypeValue | null {
 
 function validAttendanceStatus(value: unknown): AttendanceStatusValue {
   const text = String(value ?? "").trim();
-  return ATTENDANCE_STATUS_VALUES.has(text as AttendanceStatusValue) ? (text as AttendanceStatusValue) : "registered_absent";
+  return ATTENDANCE_STATUS_VALUES.has(text as AttendanceStatusValue) ? (text as AttendanceStatusValue) : "unknown";
 }
 
 function validRegistrationStatus(value: unknown): RegistrationStatusValue {
@@ -733,7 +733,7 @@ export async function bulkAddEventParticipants(input: {
     season_id: eventSeasonId,
     person_id: personId,
     role_at_event: roleValue,
-    attendance_status: "registered_absent",
+    attendance_status: "unknown",
     registration_status: "registered",
     captured_by: capturedBy,
     walk_in: false
@@ -768,5 +768,7 @@ export {
   ATTENDANCE_STATUS_OPTIONS,
   EVENT_ROLE_OPTIONS,
   EVENT_TYPE_OPTIONS,
+  isEventAbsenceStatus,
+  isEventAttendedStatus,
   REGISTRATION_STATUS_OPTIONS
 } from "@/lib/event-constants";

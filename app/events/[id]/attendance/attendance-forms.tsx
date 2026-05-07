@@ -379,7 +379,7 @@ export function AddParticipantForm({
           <span className="text-xs font-medium uppercase text-slate-500">Trạng thái tham gia</span>
           <select
             name="attendance_status"
-            defaultValue="registered_absent"
+            defaultValue="unknown"
             className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           >
             {ATTENDANCE_STATUS_OPTIONS.map((option) => (
@@ -463,7 +463,7 @@ export function BulkAddForm({ eventId }: { eventId: string }) {
     <div className="grid gap-3">
       <p className="text-xs text-slate-500">
         Chỉ thêm người chưa có trong sự kiện. Chạy nhiều lần không tạo bản ghi trùng.
-        Trạng thái mặc định: <em>Đã đăng ký / Vắng</em> — cập nhật sau khi điểm danh xong.
+        Trạng thái mặc định: <em>Chưa rõ</em> — cập nhật sau khi điểm danh xong.
       </p>
       <BulkAddGroupForm
         eventId={eventId}
@@ -496,8 +496,10 @@ function roleBadgeClass(role: unknown) {
 function statusBadgeClass(status: unknown) {
   const value = String(status ?? "").trim();
   if (value === "attended") return "rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700";
-  if (value === "registered_absent")
+  if (value === "absent_excused" || value === "absent_unexcused" || value === "registered_absent")
     return "rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700";
+  if (value === "registered_no_response")
+    return "rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700";
   return "rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500";
 }
 
@@ -596,7 +598,7 @@ export function ParticipationRow({
           <QuickMarkForm
             id={row.id}
             eventId={eventId}
-            targetStatus="registered_absent"
+            targetStatus="absent_unexcused"
             label="✗ Vắng"
             activeClass="bg-amber-100 text-amber-700 border border-amber-200"
             currentStatus={currentStatus}
@@ -618,7 +620,7 @@ export function ParticipationRow({
           </select>
           <select
             name="attendance_status"
-            defaultValue={currentStatus || "registered_absent"}
+            defaultValue={currentStatus || "unknown"}
             className="w-full rounded-md border border-vam-line bg-white px-2 py-1 text-xs text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           >
             {ATTENDANCE_STATUS_OPTIONS.map((option) => (

@@ -3,6 +3,7 @@ import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData } from "@/lib/data";
+import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 
@@ -104,8 +105,8 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
   const eventIdsInMonth = new Set(eventsInMonth.map((event) => event.id));
   const participationsInMonth = seasonParticipations.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
 
-  const attendedCount = participationsInMonth.filter((row) => normalize(row.attendance_status) === "attended").length;
-  const absentCount = participationsInMonth.filter((row) => normalize(row.attendance_status) === "registered_absent").length;
+  const attendedCount = participationsInMonth.filter((row) => isEventAttendedStatus(row.attendance_status)).length;
+  const absentCount = participationsInMonth.filter((row) => isEventAbsenceStatus(row.attendance_status)).length;
   const totalAttendance = participationsInMonth.length;
   const attendanceRate = percent(attendedCount, attendedCount + absentCount);
 
@@ -114,8 +115,8 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
       const rows = participationsInMonth.filter((row) => row.event_id === event.id);
       return {
         ...event,
-        attended: rows.filter((row) => normalize(row.attendance_status) === "attended").length,
-        absent: rows.filter((row) => normalize(row.attendance_status) === "registered_absent").length,
+        attended: rows.filter((row) => isEventAttendedStatus(row.attendance_status)).length,
+        absent: rows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length,
         total: rows.length
       };
     })
@@ -171,7 +172,7 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
           <KpiCard label="Tổng lượt tham gia" value={totalAttendance} />
           <KpiCard label="Tỷ lệ tham gia" value={attendanceRate} />
           <KpiCard label="Đã tham gia" value={attendedCount} />
-          <KpiCard label="Đăng ký nhưng không tham gia" value={absentCount} />
+          <KpiCard label="Vắng" value={absentCount} />
           <KpiCard label="Recap chưa khớp match" value={unmatchedRecapsInMonth.length} />
           <KpiCard label="Trạng thái" value={isClosed ? "Đã chốt" : "Đang mở"} />
         </div>
@@ -197,7 +198,7 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
               },
               { key: "starts_at", label: "Ngày", render: (row) => formatDate(row.starts_at) },
               { key: "attended", label: "Đã tham gia", render: (row) => row.attended },
-              { key: "absent", label: "Đăng ký nhưng vắng", render: (row) => row.absent },
+              { key: "absent", label: "Vắng", render: (row) => row.absent },
               { key: "total", label: "Tổng", render: (row) => row.total },
               {
                 key: "actions",
@@ -257,7 +258,7 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
               <dd className="mt-1 text-2xl font-semibold text-emerald-700">{attendedCount}</dd>
             </div>
             <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
-              <dt className="text-xs font-medium uppercase text-slate-500">Đăng ký nhưng vắng</dt>
+              <dt className="text-xs font-medium uppercase text-slate-500">Vắng</dt>
               <dd className="mt-1 text-2xl font-semibold text-amber-700">{absentCount}</dd>
             </div>
           </dl>

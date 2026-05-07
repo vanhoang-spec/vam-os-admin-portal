@@ -4,6 +4,7 @@ import { Card, EmptyState, ErrorBox, ExternalLinkButton, KpiCard, PageHeader, Si
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData, keyById } from "@/lib/data";
+import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
@@ -230,8 +231,8 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const eventsInMonth = seasonEvents.filter((event) => eventMonth(event) === selectedMonth);
   const eventIdsInMonth = new Set(eventsInMonth.map((event) => event.id));
   const eventParticipationsInMonth = seasonEventParticipations.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
-  const attendedCount = eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "attended").length;
-  const registeredAbsentCount = eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "registered_absent").length;
+  const attendedCount = eventParticipationsInMonth.filter((row) => isEventAttendedStatus(row.attendance_status)).length;
+  const registeredAbsentCount = eventParticipationsInMonth.filter((row) => isEventAbsenceStatus(row.attendance_status)).length;
   const rpcKpis = data.kpis.data?.selectedMonth === selectedMonth ? data.kpis.data : null;
 
   const recapByMonth = Array.from(
