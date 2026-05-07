@@ -13,11 +13,14 @@ import {
   getPrograms
 } from "@/lib/data";
 import { isValidUuid } from "@/lib/events";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { EditMentorForm } from "./edit-mentor-form";
 
 export default async function EditMentorPage({ params }: { params: { id: string } }) {
-  const adminUser = await getCurrentAdminUser();
-  if (!canEditRecaps(adminUser)) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const adminUser = scopeContext.adminUser ?? (await getCurrentAdminUser());
+  if (!canEditRecaps(adminUser) || !canOperateAnyScope(scopeContext)) {
     return (
       <>
         <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được sửa hồ sơ mentor." />
@@ -38,16 +41,7 @@ export default async function EditMentorPage({ params }: { params: { id: string 
     );
   }
 
-  const [mentors, programs, industries, functionAreas, programLinks, industryLinks, functionLinks] = await Promise.all([
-    getMentorProfiles(),
-    getPrograms(),
-    getIndustries(),
-    getFunctionAreas(),
-    getMentorProgramParticipations(),
-    getMentorIndustryLinks(),
-    getMentorFunctionAreaLinks()
-  ]);
-
+  const mentors = await getMentorProfiles(scope);
   const mentor = mentors.data.find((row) => row.id === params.id);
   if (!mentor || !mentor.person_id) {
     return (
@@ -59,7 +53,15 @@ export default async function EditMentorPage({ params }: { params: { id: string 
     );
   }
 
-  const person = await getPerson(mentor.person_id);
+  const [programs, industries, functionAreas, programLinks, industryLinks, functionLinks, person] = await Promise.all([
+    getPrograms(scope),
+    getIndustries(),
+    getFunctionAreas(),
+    getMentorProgramParticipations([mentor.id]),
+    getMentorIndustryLinks([mentor.id]),
+    getMentorFunctionAreaLinks([mentor.id]),
+    getPerson(mentor.person_id, scope)
+  ]);
   if (!person.data) {
     return (
       <>

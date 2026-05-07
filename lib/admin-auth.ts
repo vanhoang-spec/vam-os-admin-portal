@@ -83,7 +83,7 @@ export async function getCurrentSupabaseAuthUser(): Promise<User | null> {
  *                          no silent viewer fallback)
  *   - row genuinely not found → return null (legitimate "not an
  *                               admin" — caller treats as denied)
- *   - row found → return it; log resolved id+role+match-mode
+ *   - row found → return it
  */
 async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null> {
   const client = getSupabaseServiceRoleClient();
@@ -122,8 +122,8 @@ async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null
   const rows = (data ?? []) as AdminUserRow[];
   if (rows.length === 0) {
     console.warn("[admin-auth] no active admin_users row for auth user", {
-      authUserId: user.id,
-      email: user.email
+      hasAuthUserId: Boolean(user.id),
+      hasEmail: Boolean(user.email)
     });
     return null;
   }
@@ -137,8 +137,6 @@ async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null
 
   if (!row) {
     console.warn("[admin-auth] admin_users rows present but none matched the auth user identity", {
-      authUserId: user.id,
-      email: user.email,
       rowsSeen: rows.length
     });
     return null;
@@ -157,13 +155,6 @@ async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null
     }
     row.auth_user_id = user.id;
   }
-
-  console.log("[admin-auth] resolved admin user", {
-    adminId: row.id,
-    email: row.email,
-    role: row.role,
-    matchMode: linked ? "auth_user_id" : "email_backfill"
-  });
 
   return row;
 }

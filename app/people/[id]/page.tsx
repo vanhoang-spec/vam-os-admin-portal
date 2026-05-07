@@ -191,7 +191,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     getEventParticipationsByPersonId(params.id, scope),
     getEvents(scope),
     getOperationalTeamAssignmentsByPerson(params.id),
-    getPrograms(),
+    getPrograms(scope),
     getIndustries(),
     getFunctionAreas(),
     getMentorProgramParticipations(),

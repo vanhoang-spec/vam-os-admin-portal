@@ -2,11 +2,14 @@ import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getFunctionAreas, getIndustries, getPeople, getPrograms } from "@/lib/data";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { CreateMentorForm } from "./create-mentor-form";
 
 export default async function CreateMentorPage() {
-  const adminUser = await getCurrentAdminUser();
-  if (!canEditRecaps(adminUser)) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const adminUser = scopeContext.adminUser ?? (await getCurrentAdminUser());
+  if (!canEditRecaps(adminUser) || !canOperateAnyScope(scopeContext)) {
     return (
       <>
         <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được tạo hồ sơ mentor." />
@@ -16,8 +19,8 @@ export default async function CreateMentorPage() {
   }
 
   const [people, programs, industries, functionAreas] = await Promise.all([
-    getPeople(),
-    getPrograms(),
+    getPeople(scope),
+    getPrograms(scope),
     getIndustries(),
     getFunctionAreas()
   ]);

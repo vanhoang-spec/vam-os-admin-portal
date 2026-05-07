@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { createMenteeProfile, createMentorProfile, updateMenteeProfile, updateMentorProfile } from "@/lib/people-create";
+import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
 
 export type PeopleActionState = {
   ok: boolean;
@@ -22,8 +23,9 @@ function formArray(formData: FormData, key: string) {
 }
 
 async function ensureAuth(): Promise<PeopleActionState | null> {
-  const adminUser = await getCurrentAdminUser();
-  if (!canEditRecaps(adminUser)) {
+  const scopeContext = await getAdminScopeContext();
+  const adminUser = scopeContext.adminUser ?? (await getCurrentAdminUser());
+  if (!canEditRecaps(adminUser) || !canOperateAnyScope(scopeContext)) {
     return { ok: false, message: "Bạn không có quyền tạo hồ sơ mentor/mentee." };
   }
   return null;

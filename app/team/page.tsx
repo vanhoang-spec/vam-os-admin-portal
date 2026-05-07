@@ -3,10 +3,10 @@ import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/
 import {
   getMenteeProfiles,
   getMentorProfiles,
+  getOperationalTeamAssignments,
   getPeople,
   getSeasons,
-  keyById,
-  selectAllRows
+  keyById
 } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { MenteeProfile, MentorProfile, OperationalTeamAssignment, Person, Season } from "@/lib/types";
@@ -108,10 +108,7 @@ export default async function TeamViewPage({
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const [assignments, people, mentors, mentees, seasons] = await Promise.all([
-    selectAllRows<OperationalTeamAssignment>(
-      "operational_team_assignments",
-      "id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes"
-    ),
+    getOperationalTeamAssignments(scope),
     getPeople(scope),
     getMentorProfiles(scope),
     getMenteeProfiles(scope),

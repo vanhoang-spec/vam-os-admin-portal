@@ -283,7 +283,7 @@ async function getScopedIntakeBatchIds(scope?: ScopeFilter) {
     .filter(Boolean);
 }
 
-async function getScopedPersonIds(scope?: ScopeFilter) {
+export async function getScopedPersonIds(scope?: ScopeFilter) {
   if (!scope) return null;
   if (noAllowedRows(scope)) return [];
   const client = dataClient();
@@ -425,8 +425,14 @@ export async function getIntakeBatches(scope?: ScopeFilter) {
   return { data: (data ?? []) as IntakeBatch[], error: null };
 }
 
-export async function getPrograms() {
-  return selectAllTable<Program>("programs", "id,code,name,is_active");
+export async function getPrograms(scope?: ScopeFilter) {
+  const programs = await selectAllTable<Program>("programs", "id,code,name,is_active");
+  if (!scope?.allowedProgramIds) return programs;
+  const allowed = new Set(scope.allowedProgramIds);
+  return {
+    ...programs,
+    data: programs.data.filter((program) => allowed.has(program.id) || allowed.has(program.code))
+  };
 }
 
 export async function getIndustries() {
@@ -437,22 +443,31 @@ export async function getFunctionAreas() {
   return selectAllTable<FunctionArea>("function_areas", "id,code,name,is_active");
 }
 
-export async function getMentorProgramParticipations() {
-  return selectAllTable<MentorProgramParticipation>(
+export async function getMentorProgramParticipations(mentorProfileIds?: string[]) {
+  const result = await selectAllTable<MentorProgramParticipation>(
     "mentor_program_participations",
     "id,mentor_profile_id,program_id,status,role"
   );
+  if (!mentorProfileIds) return result;
+  const allowed = new Set(mentorProfileIds);
+  return { ...result, data: result.data.filter((row) => allowed.has(row.mentor_profile_id)) };
 }
 
-export async function getMentorIndustryLinks() {
-  return selectAllTable<MentorIndustryLink>("mentor_industries", "mentor_profile_id,industry_id");
+export async function getMentorIndustryLinks(mentorProfileIds?: string[]) {
+  const result = await selectAllTable<MentorIndustryLink>("mentor_industries", "mentor_profile_id,industry_id");
+  if (!mentorProfileIds) return result;
+  const allowed = new Set(mentorProfileIds);
+  return { ...result, data: result.data.filter((row) => allowed.has(row.mentor_profile_id)) };
 }
 
-export async function getMentorFunctionAreaLinks() {
-  return selectAllTable<MentorFunctionAreaLink>(
+export async function getMentorFunctionAreaLinks(mentorProfileIds?: string[]) {
+  const result = await selectAllTable<MentorFunctionAreaLink>(
     "mentor_function_areas",
     "mentor_profile_id,function_area_id"
   );
+  if (!mentorProfileIds) return result;
+  const allowed = new Set(mentorProfileIds);
+  return { ...result, data: result.data.filter((row) => allowed.has(row.mentor_profile_id)) };
 }
 
 export async function getRolesForPerson(personId: string) {
@@ -708,6 +723,28 @@ export async function getOperationalTeamAssignmentsByPerson(personId: string) {
   return { data: (data ?? []) as OperationalTeamAssignment[], error: null };
 }
 
+export async function getOperationalTeamAssignments(scope?: ScopeFilter) {
+  const columns = "id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes";
+  if (!scope) return selectAllTable<OperationalTeamAssignment>("operational_team_assignments", columns);
+
+  const personIds = await getScopedPersonIds(scope);
+  if (!personIds?.length) return { data: [] as OperationalTeamAssignment[], error: null };
+
+  const client = dataClient();
+  if (!client) return envError<OperationalTeamAssignment[]>([]);
+  const rows: OperationalTeamAssignment[] = [];
+  for (let i = 0; i < personIds.length; i += 500) {
+    const chunk = personIds.slice(i, i + 500);
+    const { data, error } = await client
+      .from("operational_team_assignments")
+      .select(columns)
+      .in("person_id", chunk);
+    if (error) return { data: rows, error: `${VI_ERROR} (operational_team_assignments: ${error.message})` };
+    rows.push(...((data ?? []) as OperationalTeamAssignment[]));
+  }
+  return { data: rows, error: null };
+}
+
 async function getOperationsDataFromRpc() {
   const client = dataClient();
   if (!client) return null;
@@ -827,7 +864,10 @@ export async function getOperationsWorkflowData(seasonCode = "UEHM-S11", selecte
   return { data: data as OperationsWorkflowData, error: null };
 }
 
-export async function getFounderIntelligenceDashboard(seasonCode = "UEHM-S11"): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
+export async function getFounderIntelligenceDashboard(seasonCode = "UEHM-S11", scope?: ScopeFilter): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
+  if (scope) {
+    return getFounderIntelligenceDashboardFallback(seasonCode, scope);
+  }
   const client = dataClient();
   if (!client) return envError<FounderIntelligenceDashboard | null>(null);
   const { data, error } = await client.rpc("get_founder_intelligence_dashboard", {
@@ -862,20 +902,21 @@ function mentorExperienceBand(value: unknown) {
   return "13+ years";
 }
 
-async function getFounderIntelligenceDashboardFallback(seasonCode: string): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
+async function getFounderIntelligenceDashboardFallback(seasonCode: string, scope?: ScopeFilter): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
   const [seasons, people, mentors, mentees, matches, recaps] = await Promise.all([
-    selectAllTable<Season>("seasons", "id,code,name"),
-    selectAllTable<Person>("people", "id,full_name,email_primary"),
-    selectAllTable<MentorProfile>("mentor_profiles", "id,person_id,mentor_code,company_current,title_current,years_experience_min,industry,function_area"),
-    selectAllTable<MenteeProfile>("mentee_profiles", "id,person_id,mentee_code,school_code,school_raw,major"),
-    selectAllTable<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id"),
-    selectAllTable<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,status")
+    getSeasons(scope),
+    getPeople(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, full_name: row.full_name, email_primary: row.email_primary }) as Person) })),
+    getMentorProfiles(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, person_id: row.person_id, mentor_code: row.mentor_code, company_current: row.company_current, title_current: row.title_current, years_experience_min: row.years_experience_min, industry: row.industry, function_area: row.function_area }) as MentorProfile) })),
+    getMenteeProfiles(scope).then((res) => ({ ...res, data: res.data.map((row) => ({ id: row.id, person_id: row.person_id, mentee_code: row.mentee_code, school_code: row.school_code, school_raw: row.school_raw, major: row.major }) as MenteeProfile) })),
+    selectScopedBySeason<Match>("matches", "id,season_id,status,mentor_person_id,mentee_person_id", scope),
+    selectScopedBySeason<MentoringRecap>("mentoring_recaps", "id,season_id,mentor_person_id,mentee_person_id,meeting_month,status", scope)
   ]);
   const errors = [seasons.error, people.error, mentors.error, mentees.error, matches.error, recaps.error].filter(Boolean);
   if (errors.length) return { data: null, error: null };
 
   const peopleById = keyById(people.data);
   const season = seasons.data.find((row) => row.code === seasonCode);
+  if (scope && !season) return { data: null, error: null };
   const fallbackSeasonId = (() => {
     const counts = new Map<string, number>();
     for (const row of [...matches.data, ...recaps.data]) {
@@ -1174,8 +1215,8 @@ export async function getDashboardData(scope?: ScopeFilter) {
   };
 }
 
-async function getDuplicateEmailCount() {
-  const people = await getPeople();
+async function getDuplicateEmailCount(scope?: ScopeFilter) {
+  const people = await getPeople(scope);
   if (people.error) return { data: 0, error: people.error };
   return { data: getDuplicateEmailCountFromRows(people.data), error: null };
 }

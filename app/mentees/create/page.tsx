@@ -2,11 +2,14 @@ import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getPeople } from "@/lib/data";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { CreateMenteeForm } from "./create-mentee-form";
 
 export default async function CreateMenteePage() {
-  const adminUser = await getCurrentAdminUser();
-  if (!canEditRecaps(adminUser)) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const adminUser = scopeContext.adminUser ?? (await getCurrentAdminUser());
+  if (!canEditRecaps(adminUser) || !canOperateAnyScope(scopeContext)) {
     return (
       <>
         <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được tạo hồ sơ mentee." />
@@ -15,7 +18,7 @@ export default async function CreateMenteePage() {
     );
   }
 
-  const people = await getPeople();
+  const people = await getPeople(scope);
 
   return (
     <>

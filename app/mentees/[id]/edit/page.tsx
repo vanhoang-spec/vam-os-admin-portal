@@ -4,11 +4,14 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getMenteeProfiles, getPerson } from "@/lib/data";
 import { isValidUuid } from "@/lib/events";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { EditMenteeForm } from "./edit-mentee-form";
 
 export default async function EditMenteePage({ params }: { params: { id: string } }) {
-  const adminUser = await getCurrentAdminUser();
-  if (!canEditRecaps(adminUser)) {
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const adminUser = scopeContext.adminUser ?? (await getCurrentAdminUser());
+  if (!canEditRecaps(adminUser) || !canOperateAnyScope(scopeContext)) {
     return (
       <>
         <PageHeader title="Không có quyền truy cập" description="Chỉ admin hoặc super_admin được sửa hồ sơ mentee." />
@@ -29,7 +32,7 @@ export default async function EditMenteePage({ params }: { params: { id: string 
     );
   }
 
-  const mentees = await getMenteeProfiles();
+  const mentees = await getMenteeProfiles(scope);
   const mentee = mentees.data.find((row) => row.id === params.id);
   if (!mentee || !mentee.person_id) {
     return (
@@ -41,7 +44,7 @@ export default async function EditMenteePage({ params }: { params: { id: string 
     );
   }
 
-  const person = await getPerson(mentee.person_id);
+  const person = await getPerson(mentee.person_id, scope);
   if (!person.data) {
     return (
       <>

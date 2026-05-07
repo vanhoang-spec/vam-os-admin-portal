@@ -22,11 +22,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // the layout is dynamic by construction and that sentinel never fires.
   const adminUser = await getCurrentAdminUser();
 
-  // ROLE DEBUG — server log on every layout render so we can confirm
-  // exactly what shape (and which role string) is being passed to the
-  // client AppShell. Remove once the production behavior is verified.
-  console.log("ROLE DEBUG (layout):", adminUser);
-
   return (
     <html lang="vi">
       <body>

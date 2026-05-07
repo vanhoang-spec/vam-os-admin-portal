@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getFounderIntelligenceDashboard } from "@/lib/data";
+import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { FounderIntelligenceDashboard, JsonRecord } from "@/lib/types";
 import { displayText } from "@/lib/utils";
 import { CsvExportButton } from "./export-buttons";
@@ -63,7 +64,9 @@ function SegmentGapTable({ rows }: { rows: FounderIntelligenceDashboard["matchin
 }
 
 export default async function FounderIntelligencePage() {
-  const result = await getFounderIntelligenceDashboard("UEHM-S11");
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
+  const result = await getFounderIntelligenceDashboard("UEHM-S11", scope);
   const data = result.data;
 
   return (

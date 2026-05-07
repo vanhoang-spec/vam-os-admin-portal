@@ -2,7 +2,9 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { getScopedPersonIds } from "@/lib/data";
 import { isValidUuid } from "@/lib/events";
+import { canOperateAnyScope, getAdminScopeContext, getScopeFilter, getAllowedProgramIds, type AdminScopeContext, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
@@ -139,10 +141,15 @@ function clientResult() {
   return { client, error: null as string | null };
 }
 
-async function requireAdmin(): Promise<{ ok: true; admin: Awaited<ReturnType<typeof getCurrentAdminUser>> } | { ok: false; message: string }> {
-  const admin = await getCurrentAdminUser();
-  if (!canEditRecaps(admin)) return { ok: false, message: "Bạn không có quyền tạo hồ sơ mentor/mentee." };
-  return { ok: true, admin };
+async function requireAdmin(): Promise<
+  { ok: true; admin: Awaited<ReturnType<typeof getCurrentAdminUser>>; scopeContext: AdminScopeContext; scope?: ScopeFilter } | { ok: false; message: string }
+> {
+  const scopeContext = await getAdminScopeContext();
+  const admin = scopeContext.adminUser ?? (await getCurrentAdminUser());
+  if (!canEditRecaps(admin) || !canOperateAnyScope(scopeContext)) {
+    return { ok: false, message: "Bạn không có quyền tạo/sửa hồ sơ mentor/mentee." };
+  }
+  return { ok: true, admin, scopeContext, scope: await getScopeFilter(scopeContext) };
 }
 
 async function writeAdminAudit(client: any, input: { actionType: string; afterData?: unknown; details?: unknown }) {
@@ -189,15 +196,30 @@ async function findPersonById(client: any, id: string): Promise<Person | null> {
   return (data as Person) ?? null;
 }
 
+async function personIsInScope(personId: string, scope?: ScopeFilter) {
+  const scopedPersonIds = await getScopedPersonIds(scope);
+  return !scopedPersonIds || scopedPersonIds.includes(personId);
+}
+
+async function validateProgramSelection(ctx: AdminScopeContext, programIds: string[]) {
+  if (ctx.isSuperAdmin) return true;
+  const allowed = new Set(await getAllowedProgramIds(ctx));
+  return programIds.every((id) => allowed.has(id));
+}
+
 async function resolvePerson(
   client: any,
-  input: { link_to_person_id?: unknown; full_name?: unknown; email?: unknown; phone?: unknown; gender?: unknown; person_notes?: unknown }
+  input: { link_to_person_id?: unknown; full_name?: unknown; email?: unknown; phone?: unknown; gender?: unknown; person_notes?: unknown },
+  scope?: ScopeFilter
 ): Promise<{ ok: true; person: Person; created: boolean } | { ok: false; message: string; existing?: Person }> {
   const linkId = clean(input.link_to_person_id);
   if (linkId) {
     if (!isValidUuid(linkId)) return { ok: false, message: "ID người được liên kết không hợp lệ." };
     const existing = await findPersonById(client, linkId);
     if (!existing) return { ok: false, message: "Không tìm thấy người để liên kết." };
+    if (!(await personIsInScope(existing.id, scope))) {
+      return { ok: false, message: "Nguoi duoc lien ket khong nam trong pham vi chuong trinh cua ban." };
+    }
     return { ok: true, person: existing, created: false };
   }
 
@@ -376,7 +398,7 @@ export async function createMentorProfile(input: CreateMentorInput): Promise<Mut
   const { client, error } = clientResult();
   if (!client) return { ok: false, message: error ?? SAFE_ERROR };
 
-  const person = await resolvePerson(client, input);
+  const person = await resolvePerson(client, input, access.scope);
   if (!person.ok) return { ok: false, message: person.message };
 
   const dup = await existingMentorProfile(client, person.person.id);
@@ -385,6 +407,9 @@ export async function createMentorProfile(input: CreateMentorInput): Promise<Mut
   const programIds = uniqueValidUuids(input.program_ids);
   const industryIds = uniqueValidUuids(input.industry_ids);
   const functionAreaIds = uniqueValidUuids(input.function_area_ids);
+  if (!(await validateProgramSelection(access.scopeContext, programIds))) {
+    return { ok: false, message: "Mot hoac nhieu chuong trinh duoc chon nam ngoai pham vi cua ban." };
+  }
 
   const [industriesPicked, functionsPicked, programsPicked] = await Promise.all([
     fetchIndustriesByIds(client, industryIds),
@@ -490,11 +515,17 @@ export async function updateMentorProfile(input: UpdateMentorInput): Promise<Mut
     return { ok: false, message: "Không tìm thấy person liên kết." };
   }
   const personBefore = personBeforeRes.data as Person;
+  if (!(await personIsInScope(personBefore.id, access.scope))) {
+    return { ok: false, message: "Ho so mentor khong nam trong pham vi chuong trinh cua ban." };
+  }
   const linksBefore = await loadMentorProfileLinks(client, mentorProfileId);
 
   const programIds = uniqueValidUuids(input.program_ids);
   const industryIds = uniqueValidUuids(input.industry_ids);
   const functionAreaIds = uniqueValidUuids(input.function_area_ids);
+  if (!(await validateProgramSelection(access.scopeContext, programIds))) {
+    return { ok: false, message: "Mot hoac nhieu chuong trinh duoc chon nam ngoai pham vi cua ban." };
+  }
 
   const [industriesPicked, functionsPicked, programsPicked] = await Promise.all([
     fetchIndustriesByIds(client, industryIds),
@@ -618,7 +649,7 @@ export async function createMenteeProfile(input: CreateMenteeInput): Promise<Mut
   const { client, error } = clientResult();
   if (!client) return { ok: false, message: error ?? SAFE_ERROR };
 
-  const person = await resolvePerson(client, input);
+  const person = await resolvePerson(client, input, access.scope);
   if (!person.ok) return { ok: false, message: person.message };
 
   const dup = await existingMenteeProfile(client, person.person.id);
@@ -698,6 +729,9 @@ export async function updateMenteeProfile(input: UpdateMenteeInput): Promise<Mut
     return { ok: false, message: "Không tìm thấy person liên kết với mentee." };
   }
   const personBefore = personBeforeRes.data as Person;
+  if (!(await personIsInScope(personBefore.id, access.scope))) {
+    return { ok: false, message: "Ho so mentee khong nam trong pham vi chuong trinh cua ban." };
+  }
 
   const personUpdates: JsonRecord = {};
   if (Object.prototype.hasOwnProperty.call(input, "full_name")) {
