@@ -1,6 +1,7 @@
 export type EventTypeValue =
   | "orientation"
   | "training"
+  | "kickoff"
   | "company_tour"
   | "networking"
   | "closing"
@@ -15,8 +16,9 @@ export type EventRoleValue = "mentor" | "mentee" | "core_team" | "speaker" | "tr
 export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }> = [
   { value: "orientation", label: "Orientation / Định hướng" },
   { value: "training", label: "Training / Đào tạo" },
+  { value: "kickoff", label: "Kickoff / Lễ phát động" },
   { value: "company_tour", label: "Company tour / Tham quan doanh nghiệp" },
-  { value: "networking", label: "Networking / Giao lưu - Kickoff" },
+  { value: "networking", label: "Networking / Giao lưu" },
   { value: "closing", label: "Tổng kết / Closing" },
   { value: "business_case", label: "Business case" },
   { value: "job_shadowing", label: "Job shadowing" },
