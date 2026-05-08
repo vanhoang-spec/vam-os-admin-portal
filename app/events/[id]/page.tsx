@@ -17,6 +17,25 @@ function getRequestOrigin() {
   return `${proto}://${host}`;
 }
 
+function attendanceLabel(value: unknown) {
+  const status = String(value ?? "").trim();
+  if (status === "pending") return "Chưa check-in";
+  if (status === "checked_in") return "Đã check-in";
+  if (status === "cancelled") return "Đã hủy";
+  if (status === "no_show") return "Không tham dự";
+  return displayText(status);
+}
+
+function matchReviewLabel(value: unknown) {
+  const status = String(value ?? "").trim();
+  if (status === "pending_review") return "Chờ rà soát";
+  if (status === "auto_linked") return "Đã khớp hồ sơ";
+  if (status === "confirmed") return "Đã xác nhận";
+  if (status === "rejected") return "Đã từ chối";
+  if (status === "unlinked") return "Chưa khớp hồ sơ";
+  return displayText(status);
+}
+
 export default async function EventDetailPage({ params }: { params: { id: string } }) {
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
@@ -56,7 +75,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
   const origin = getRequestOrigin();
   const registrationUrl = detail.registrationLink?.token ? `${origin}/register/${detail.registrationLink.token}` : null;
   const checkinUrl = detail.checkinLink?.token ? `${origin}/checkin/${detail.checkinLink.token}` : null;
-  const checkinQrDataUrl = checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 220 }) : null;
+  const checkinQrDataUrl = checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 200 }) : null;
   const canCreateLink = await canOperateSeason(scopeContext, detail.event.season_id ?? null);
   const activeRegistrations = detail.registrations.filter((row) => row.registration_status !== "cancelled");
   const checkedInRegistrations = activeRegistrations.filter((row) => row.attendance_status === "checked_in");
@@ -109,9 +128,6 @@ export default async function EventDetailPage({ params }: { params: { id: string
               registrationUrl={registrationUrl}
               canCreate={canCreateLink}
             />
-            <p className="mt-3 text-xs text-slate-500">
-              Link này chỉ cho phép gửi đăng ký, không hiển thị danh sách người tham dự công khai.
-            </p>
           </Card>
 
           <Card>
@@ -122,15 +138,12 @@ export default async function EventDetailPage({ params }: { params: { id: string
               canCreate={canCreateLink}
               qrDataUrl={checkinQrDataUrl}
             />
-            <p className="mt-3 text-xs text-slate-500">
-              QR này mở form check-in công khai, không hiển thị danh sách người tham dự.
-            </p>
           </Card>
         </div>
 
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">
-            Danh sách đăng ký <span className="text-sm font-normal text-slate-500">({activeRegistrations.length})</span>
+            Danh sách đăng ký & check-in <span className="text-sm font-normal text-slate-500">({activeRegistrations.length})</span>
           </h2>
           {activeRegistrations.length === 0 ? (
             <EmptyState message="Chưa có đăng ký nào cho sự kiện này." />
@@ -164,13 +177,13 @@ export default async function EventDetailPage({ params }: { params: { id: string
                   render: (row) => (
                     <div className="flex flex-wrap gap-1.5">
                       <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-                        {displayText(row.attendance_status)}
+                        {attendanceLabel(row.attendance_status)}
                       </span>
                       {row.is_walk_in ? (
-                        <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">walk-in</span>
+                        <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">Walk-in</span>
                       ) : null}
                       <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-                        {displayText(row.match_review_status)}
+                        {matchReviewLabel(row.match_review_status)}
                       </span>
                     </div>
                   )

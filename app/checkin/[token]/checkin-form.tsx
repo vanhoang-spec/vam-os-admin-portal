@@ -60,6 +60,11 @@ export function CheckinForm({ token }: { token: string }) {
         </div>
       ) : null}
 
+      <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <p>Nếu bạn đã đăng ký trước, chỉ cần nhập email.</p>
+        <p className="mt-1">Nếu bạn chưa đăng ký trước, vui lòng nhập thêm họ và tên để check-in walk-in.</p>
+      </div>
+
       <Field label="Email" name="email" type="email" required autoComplete="email" defaultValue={state.values?.email} />
       <Field label="Họ và tên" name="full_name" autoComplete="name" defaultValue={state.values?.full_name} />
       <Field label="Số điện thoại" name="phone" type="tel" autoComplete="tel" defaultValue={state.values?.phone} />
@@ -74,10 +79,6 @@ export function CheckinForm({ token }: { token: string }) {
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2.5 text-base text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint sm:text-sm"
         />
       </label>
-
-      <p className="text-xs text-slate-500">
-        Nếu bạn chưa đăng ký trước, vui lòng nhập họ và tên để check-in walk-in.
-      </p>
 
       <SubmitButton />
     </form>

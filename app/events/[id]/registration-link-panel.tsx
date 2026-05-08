@@ -27,6 +27,8 @@ function PublicLinkPanel({
   action,
   createLabel,
   noPermissionMessage,
+  copyLabel,
+  helperText,
   qrDataUrl = null
 }: {
   eventId: string;
@@ -35,6 +37,8 @@ function PublicLinkPanel({
   action: typeof createRegistrationLinkAction;
   createLabel: string;
   noPermissionMessage: string;
+  copyLabel: string;
+  helperText: string;
   qrDataUrl?: string | null;
 }) {
   const [state, formAction] = useFormState(action, initialState);
@@ -53,19 +57,25 @@ function PublicLinkPanel({
       <div className="grid gap-3">
         {qrDataUrl ? (
           <div className="flex justify-center rounded-md border border-vam-line bg-white p-3">
-            <Image src={qrDataUrl} alt="QR check-in" width={192} height={192} unoptimized />
+            <Image src={qrDataUrl} alt="QR check-in" width={176} height={176} unoptimized />
           </div>
         ) : null}
-        <div className="break-all rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          {url}
+        <p className="text-xs text-slate-500">{helperText}</p>
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <input
+            readOnly
+            value={url}
+            className="w-full rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-slate-700"
+            aria-label={copyLabel}
+          />
+          <button
+            type="button"
+            onClick={copyUrl}
+            className="inline-flex w-full items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint sm:w-fit"
+          >
+            {copied ? "Đã sao chép" : copyLabel}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={copyUrl}
-          className="inline-flex w-fit rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
-        >
-          {copied ? "Đã sao chép" : "Sao chép link"}
-        </button>
       </div>
     );
   }
@@ -102,6 +112,8 @@ export function RegistrationLinkPanel({
       action={createRegistrationLinkAction}
       createLabel="Tạo link đăng ký"
       noPermissionMessage="Bạn có thể xem sự kiện này nhưng không có quyền tạo link đăng ký."
+      copyLabel="Sao chép link đăng ký"
+      helperText="Dùng link này để người tham dự đăng ký trước sự kiện."
     />
   );
 }
@@ -125,6 +137,8 @@ export function CheckinLinkPanel({
       action={createCheckinLinkAction}
       createLabel="Tạo link check-in"
       noPermissionMessage="Bạn có thể xem sự kiện này nhưng không có quyền tạo link check-in."
+      copyLabel="Sao chép link check-in"
+      helperText="Dùng QR hoặc link này để người tham dự check-in tại sự kiện."
       qrDataUrl={qrDataUrl}
     />
   );
