@@ -305,6 +305,47 @@ export type Event = JsonRecord & {
   source_notes?: string | null;
 };
 
+export type EventLink = JsonRecord & {
+  id: string;
+  event_id: string;
+  link_type: "registration" | "checkin" | string;
+  token: string;
+  is_active: boolean;
+  opens_at: string | null;
+  closes_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EventRegistration = JsonRecord & {
+  id: string;
+  event_id: string;
+  event_link_id: string | null;
+  linked_person_id: string | null;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  student_id: string | null;
+  school: string | null;
+  program_of_study: string | null;
+  role_text: string | null;
+  notes: string | null;
+  consent_given: boolean;
+  registration_source: "public_form" | "admin_input" | "walk_in" | "imported" | string;
+  registration_status: "registered" | "cancelled" | string;
+  attendance_status: "pending" | "checked_in" | "no_show" | "cancelled" | string;
+  is_walk_in: boolean;
+  registered_at: string;
+  checked_in_at: string | null;
+  checkin_source: "self_qr" | "admin_manual" | "imported" | string | null;
+  match_method: "exact_email" | "mssv" | "phone_pending" | "manual" | "unlinked" | string;
+  match_review_status: "auto_linked" | "pending_review" | "confirmed" | "rejected" | string;
+  matched_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type MentoringRecap = JsonRecord & {
   id: string;
   season_id: string | null;

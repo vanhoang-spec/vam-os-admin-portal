@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
@@ -9,6 +10,15 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const isPublicRegisterRoute = headers().get("x-vam-public-route") === "register";
+  if (isPublicRegisterRoute) {
+    return (
+      <html lang="vi">
+        <body>{children}</body>
+      </html>
+    );
+  }
+
   // No silent fallback. If getCurrentAdminUser() throws (env mis-config,
   // DB error, mis-linked admin_users row), we let the error propagate to
   // Next.js so the failure is loudly visible instead of demoting every

@@ -206,7 +206,9 @@ export default async function EventsPage({
               render: (row) => (
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-vam-ink">{displayText(row.event_name)}</span>
+                    <Link href={`/events/${row.id}`} className="font-medium text-vam-ink hover:text-vam-green">
+                      {displayText(row.event_name)}
+                    </Link>
                     {row.status === "cancelled" && (
                       <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">
                         Đã hủy
@@ -252,6 +254,12 @@ export default async function EventsPage({
               label: "Hành động",
               render: (row) => (
                 <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={`/events/${row.id}`}
+                    className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                  >
+                    Chi tiáº¿t
+                  </Link>
                   <Link
                     href={`/events/${row.id}/attendance`}
                     className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"

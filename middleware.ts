@@ -147,6 +147,12 @@ async function authAllowsRequest(request: NextRequest) {
 }
 
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/register/")) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-vam-public-route", "register");
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
   // Stage 2 first: if a real Supabase session resolves to an active
   // admin_users row, the request is allowed through and the unlock
   // gate is not re-checked. This is intentional — real auth is

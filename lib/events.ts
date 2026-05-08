@@ -15,7 +15,18 @@ import {
   type RegistrationStatusValue
 } from "@/lib/event-constants";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import type { Event, EventParticipation, JsonRecord, MenteeProfile, MentorProfile, Person, Season } from "@/lib/types";
+import type { RegistrationActionStatus } from "@/lib/event-action-types";
+import type {
+  Event,
+  EventLink,
+  EventParticipation,
+  EventRegistration,
+  JsonRecord,
+  MenteeProfile,
+  MentorProfile,
+  Person,
+  Season
+} from "@/lib/types";
 
 export type {
   AttendanceStatusValue,
@@ -41,16 +52,33 @@ export type EventDetailData = {
   error: string | null;
   event: Event | null;
   participations: EventParticipation[];
+  registrationLink: EventLink | null;
+  registrations: EventRegistration[];
   seasons: Season[];
   people: Person[];
   mentorProfiles: MentorProfile[];
   menteeProfiles: MenteeProfile[];
 };
 
+export type PublicRegistrationStatus = "ready" | "not_found" | "inactive" | "not_open" | "closed" | "cancelled" | "error";
+
+export type PublicRegistrationData = {
+  ok: boolean;
+  status: PublicRegistrationStatus;
+  message: string;
+  event: Pick<Event, "id" | "event_name" | "event_type" | "starts_at" | "status"> | null;
+  eventLink: Pick<EventLink, "id" | "event_id" | "token" | "opens_at" | "closes_at" | "is_active"> | null;
+};
+
 export type MutationResult = {
   ok: boolean;
   message: string;
   data?: JsonRecord | null;
+};
+
+export type PublicRegistrationResult = MutationResult & {
+  status: Exclude<RegistrationActionStatus, "idle">;
+  eventName?: string | null;
 };
 
 export type EventInput = {
@@ -78,6 +106,19 @@ export type ParticipationInput = {
 
 export type ParticipationUpdateInput = ParticipationInput & {
   id?: unknown;
+};
+
+export type PublicRegistrationInput = {
+  token?: unknown;
+  full_name?: unknown;
+  email?: unknown;
+  phone?: unknown;
+  student_id?: unknown;
+  school?: unknown;
+  program_of_study?: unknown;
+  role_text?: unknown;
+  notes?: unknown;
+  consent_given?: unknown;
 };
 
 function log(scope: string, error: unknown) {
@@ -168,6 +209,28 @@ async function selectAll<T>(client: any, table: string, columns = "*") {
   return { data: allData, error: null as string | null };
 }
 
+function normalizeEmail(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function publicLinkWindowStatus(link: Pick<EventLink, "is_active" | "opens_at" | "closes_at">) {
+  if (!link.is_active) return { status: "inactive" as const, message: "Liên kết đăng ký hiện không hoạt động." };
+  const now = Date.now();
+  if (link.opens_at) {
+    const opensAt = new Date(link.opens_at).getTime();
+    if (!Number.isNaN(opensAt) && now < opensAt) {
+      return { status: "not_open" as const, message: "Đăng ký sự kiện chưa mở." };
+    }
+  }
+  if (link.closes_at) {
+    const closesAt = new Date(link.closes_at).getTime();
+    if (!Number.isNaN(closesAt) && now > closesAt) {
+      return { status: "closed" as const, message: "Đăng ký sự kiện đã đóng." };
+    }
+  }
+  return { status: "ready" as const, message: "Sẵn sàng đăng ký." };
+}
+
 async function selectAllScopedBySeason<T>(client: any, table: string, columns: string, allowedSeasonIds?: string[]) {
   if (!allowedSeasonIds) return selectAll<T>(client, table, columns);
   if (allowedSeasonIds.length === 0) return { data: [] as T[], error: null as string | null };
@@ -192,8 +255,7 @@ async function writeAdminAudit(client: any, input: {
       action_type: input.actionType,
       target_admin_user_id: null,
       before_data: input.beforeData ?? null,
-      after_data: input.afterData ?? null,
-      details: input.details ?? null
+      after_data: input.afterData ?? null
     });
     if (error) log("admin_audit_log insert failed", error);
   } catch (error) {
@@ -259,7 +321,16 @@ export async function getEventListData(scope?: ScopeFilter): Promise<EventListDa
 }
 
 export async function getEventDetailData(eventId: string, scope?: ScopeFilter): Promise<EventDetailData> {
-  const empty = { event: null, participations: [], seasons: [], people: [], mentorProfiles: [], menteeProfiles: [] };
+  const empty = {
+    event: null,
+    participations: [],
+    registrationLink: null,
+    registrations: [],
+    seasons: [],
+    people: [],
+    mentorProfiles: [],
+    menteeProfiles: []
+  };
   const { client, error } = clientResult();
   if (!client) return { ok: false, error, ...empty };
 
@@ -284,10 +355,32 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
 
   if (eventRes.error) {
     log("event load failed", eventRes.error);
-    return { ok: false, error: eventRes.error.message, event: null, participations: [], seasons: seasonsRes.data, people: peopleRes.data, mentorProfiles: mentorsRes.data, menteeProfiles: menteesRes.data };
+    return {
+      ok: false,
+      error: eventRes.error.message,
+      event: null,
+      participations: [],
+      registrationLink: null,
+      registrations: [],
+      seasons: seasonsRes.data,
+      people: peopleRes.data,
+      mentorProfiles: mentorsRes.data,
+      menteeProfiles: menteesRes.data
+    };
   }
   if (scope?.allowedSeasonIds && eventRes.data?.season_id && !scope.allowedSeasonIds.includes(eventRes.data.season_id)) {
-    return { ok: false, error: null, event: null, participations: [], seasons: seasonsRes.data, people: [], mentorProfiles: [], menteeProfiles: [] };
+    return {
+      ok: false,
+      error: null,
+      event: null,
+      participations: [],
+      registrationLink: null,
+      registrations: [],
+      seasons: seasonsRes.data,
+      people: [],
+      mentorProfiles: [],
+      menteeProfiles: []
+    };
   }
 
   // Phase 045A: scope participations to this event only (was: load all then filter in JS)
@@ -300,17 +393,299 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
   }
   const partsRes = { data: (partsData ?? []) as EventParticipation[], error: partsErr ? partsErr.message : null };
 
-  const errors = [partsRes.error, seasonsRes.error, peopleRes.error, mentorsRes.error, menteesRes.error].filter(Boolean);
+  const [{ data: linkData, error: linkErr }, { data: registrationData, error: registrationErr }] = await Promise.all([
+    client
+      .from("event_links")
+      .select("id,event_id,link_type,token,is_active,opens_at,closes_at,created_by,created_at,updated_at")
+      .eq("event_id", id)
+      .eq("link_type", "registration")
+      .maybeSingle(),
+    client
+      .from("event_registrations")
+      .select("id,event_id,event_link_id,linked_person_id,full_name,email,phone,student_id,school,program_of_study,role_text,notes,consent_given,registration_source,registration_status,attendance_status,is_walk_in,registered_at,checked_in_at,checkin_source,match_method,match_review_status,matched_at,created_at,updated_at")
+      .eq("event_id", id)
+      .order("registered_at", { ascending: false })
+  ]);
+  if (linkErr) log("event_links load failed", linkErr);
+  if (registrationErr) log("event_registrations load failed", registrationErr);
+
+  const errors = [
+    partsRes.error,
+    linkErr?.message,
+    registrationErr?.message,
+    seasonsRes.error,
+    peopleRes.error,
+    mentorsRes.error,
+    menteesRes.error
+  ].filter(Boolean);
   return {
     ok: !errors.length,
     error: errors.join(" | ") || null,
     event: (eventRes.data as Event) ?? null,
     participations: partsRes.data,
+    registrationLink: (linkData as EventLink) ?? null,
+    registrations: (registrationData ?? []) as EventRegistration[],
     seasons: seasonsRes.data,
     people: peopleRes.data,
     mentorProfiles: mentorsRes.data,
     menteeProfiles: menteesRes.data
   };
+}
+
+export async function getPublicRegistrationData(token: string): Promise<PublicRegistrationData> {
+  const { client, error } = clientResult();
+  if (!client) {
+    return {
+      ok: false,
+      status: "error",
+      message: error ?? SAFE_ERROR,
+      event: null,
+      eventLink: null
+    };
+  }
+
+  const cleanToken = clean(token);
+  if (!cleanToken || !isValidUuid(cleanToken)) {
+    return {
+      ok: false,
+      status: "not_found",
+      message: "Không tìm thấy liên kết đăng ký.",
+      event: null,
+      eventLink: null
+    };
+  }
+
+  const { data, error: linkError } = await client
+    .from("event_links")
+    .select("id,event_id,link_type,token,is_active,opens_at,closes_at,events(id,event_name,event_type,starts_at,status)")
+    .eq("token", cleanToken)
+    .eq("link_type", "registration")
+    .maybeSingle();
+
+  if (linkError) {
+    log("public registration link load failed", linkError);
+    return {
+      ok: false,
+      status: "error",
+      message: "Không thể tải liên kết đăng ký.",
+      event: null,
+      eventLink: null
+    };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      status: "not_found",
+      message: "Không tìm thấy liên kết đăng ký.",
+      event: null,
+      eventLink: null
+    };
+  }
+
+  const event = Array.isArray((data as JsonRecord).events)
+    ? ((data as JsonRecord).events[0] as Event | undefined)
+    : ((data as JsonRecord).events as Event | undefined);
+  const link = data as unknown as Pick<EventLink, "id" | "event_id" | "token" | "opens_at" | "closes_at" | "is_active">;
+  if (!event) {
+    return {
+      ok: false,
+      status: "not_found",
+      message: "Không tìm thấy sự kiện cho liên kết này.",
+      event: null,
+      eventLink: link
+    };
+  }
+  if (event.status === "cancelled") {
+    return {
+      ok: false,
+      status: "cancelled",
+      message: "Sự kiện này đã hủy đăng ký.",
+      event,
+      eventLink: link
+    };
+  }
+
+  const window = publicLinkWindowStatus(link);
+  return {
+    ok: window.status === "ready",
+    status: window.status,
+    message: window.message,
+    event,
+    eventLink: link
+  };
+}
+
+export async function registerForEvent(input: PublicRegistrationInput): Promise<PublicRegistrationResult> {
+  const token = clean(input.token);
+  if (!token || !isValidUuid(token)) {
+    return { ok: false, status: "link_error", message: "Liên kết đăng ký không hợp lệ." };
+  }
+
+  const fullName = clean(input.full_name);
+  const emailRaw = clean(input.email);
+  const email = normalizeEmail(emailRaw);
+  const consentGiven = input.consent_given === true || String(input.consent_given ?? "").trim() === "on";
+
+  if (!fullName) return { ok: false, status: "validation_error", message: "Vui lòng nhập họ và tên." };
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, status: "validation_error", message: "Vui lòng nhập email hợp lệ." };
+  }
+  if (!consentGiven) {
+    return { ok: false, status: "validation_error", message: "Vui lòng xác nhận đồng ý trước khi đăng ký." };
+  }
+
+  const registrationData = await getPublicRegistrationData(token);
+  if (!registrationData.ok || !registrationData.event || !registrationData.eventLink) {
+    return { ok: false, status: "link_error", message: registrationData.message, eventName: registrationData.event?.event_name ?? null };
+  }
+
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
+
+  const eventId = registrationData.event.id;
+  const { data: existingRows, error: existingError } = await client
+    .from("event_registrations")
+    .select("id,email,registration_status")
+    .eq("event_id", eventId)
+    .neq("registration_status", "cancelled");
+
+  if (existingError) {
+    log("public registration duplicate check failed", existingError);
+    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
+  }
+
+  const duplicate = ((existingRows ?? []) as Array<{ email: string | null }>).some((row) => normalizeEmail(row.email) === email);
+  if (duplicate) {
+    return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: registrationData.event.event_name ?? null };
+  }
+
+  const { data: peopleData, error: peopleError } = await client
+    .from("people")
+    .select("id,email_primary")
+    .ilike("email_primary", email);
+  if (peopleError) {
+    log("public registration people match failed", peopleError);
+    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
+  }
+
+  const matchedPerson = ((peopleData ?? []) as Array<{ id: string; email_primary: string | null }>).find(
+    (person) => normalizeEmail(person.email_primary) === email
+  );
+  const nowIso = matchedPerson ? new Date().toISOString() : null;
+
+  const payload: JsonRecord = {
+    event_id: eventId,
+    event_link_id: registrationData.eventLink.id,
+    linked_person_id: matchedPerson?.id ?? null,
+    full_name: fullName,
+    email,
+    phone: clean(input.phone),
+    student_id: clean(input.student_id),
+    school: clean(input.school),
+    program_of_study: clean(input.program_of_study),
+    role_text: clean(input.role_text),
+    notes: clean(input.notes),
+    consent_given: true,
+    registration_source: "public_form",
+    registration_status: "registered",
+    attendance_status: "pending",
+    is_walk_in: false,
+    match_method: matchedPerson ? "exact_email" : "unlinked",
+    match_review_status: matchedPerson ? "auto_linked" : "pending_review",
+    matched_at: nowIso
+  };
+
+  const { data, error: insertError } = await client
+    .from("event_registrations")
+    .insert(payload)
+    .select("id")
+    .maybeSingle();
+
+  if (insertError) {
+    if ((insertError as { code?: string }).code === "23505") {
+      return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: registrationData.event.event_name ?? null };
+    }
+    log("public registration insert failed", insertError);
+    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
+  }
+
+  return {
+    ok: true,
+    status: "success",
+    message: "Đăng ký thành công",
+    eventName: registrationData.event.event_name ?? null,
+    data
+  };
+}
+
+export async function createRegistrationLinkForEvent(eventId: unknown): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const id = clean(eventId);
+  if (!id) return { ok: false, message: "Thiếu event id." };
+  if (!isValidUuid(id)) return { ok: false, message: "ID sự kiện không hợp lệ." };
+
+  const { data: event, error: eventError } = await client
+    .from("events")
+    .select("id,season_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (eventError) {
+    log("load event for registration link failed", eventError);
+    return { ok: false, message: `${SAFE_ERROR} (${eventError.message})` };
+  }
+  if (!event) return { ok: false, message: "Không tìm thấy sự kiện." };
+
+  const ctx = await getAdminScopeContext();
+  if (!(await canOperateSeason(ctx, clean((event as JsonRecord).season_id)))) {
+    return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
+  }
+
+  const { data: existing, error: existingError } = await client
+    .from("event_links")
+    .select("id,event_id,link_type,token,is_active,opens_at,closes_at,created_by,created_at,updated_at")
+    .eq("event_id", id)
+    .eq("link_type", "registration")
+    .maybeSingle();
+  if (existingError) {
+    log("load existing registration link failed", existingError);
+    return { ok: false, message: `${SAFE_ERROR} (${existingError.message})` };
+  }
+  if (existing) {
+    return { ok: true, message: "Liên kết đăng ký đã tồn tại.", data: existing as EventLink };
+  }
+
+  const { data, error: insertError } = await client
+    .from("event_links")
+    .insert({
+      event_id: id,
+      link_type: "registration",
+      created_by: access.admin?.id ?? null
+    })
+    .select("id,event_id,link_type,token,is_active,opens_at,closes_at,created_by,created_at,updated_at")
+    .maybeSingle();
+  if (insertError) {
+    if ((insertError as { code?: string }).code === "23505") {
+      const { data: retry } = await client
+        .from("event_links")
+        .select("id,event_id,link_type,token,is_active,opens_at,closes_at,created_by,created_at,updated_at")
+        .eq("event_id", id)
+        .eq("link_type", "registration")
+        .maybeSingle();
+      if (retry) return { ok: true, message: "Liên kết đăng ký đã tồn tại.", data: retry as EventLink };
+    }
+    log("create registration link failed", insertError);
+    return { ok: false, message: `${SAFE_ERROR} (${insertError.message})` };
+  }
+
+  await writeAdminAudit(client, {
+    actionType: "create_event_registration_link",
+    afterData: { event_id: id, link_type: "registration" }
+  });
+  return { ok: true, message: "Đã tạo liên kết đăng ký.", data: data as EventLink };
 }
 
 export async function createEvent(input: EventInput): Promise<MutationResult> {

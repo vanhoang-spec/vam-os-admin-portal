@@ -21,3 +21,35 @@ export type BulkAddActionState = {
 };
 
 export const initialBulkAddActionState: BulkAddActionState = { ok: false, message: null };
+
+export type RegistrationActionStatus =
+  | "idle"
+  | "success"
+  | "already_registered"
+  | "validation_error"
+  | "link_error"
+  | "server_error";
+
+export type PublicRegistrationActionState = {
+  ok: boolean;
+  status: RegistrationActionStatus;
+  message: string | null;
+  eventName?: string | null;
+  values?: {
+    full_name?: string;
+    email?: string;
+    phone?: string;
+    student_id?: string;
+    school?: string;
+    program_of_study?: string;
+    role_text?: string;
+    notes?: string;
+  };
+};
+
+export const initialPublicRegistrationActionState: PublicRegistrationActionState = {
+  ok: false,
+  status: "idle",
+  message: null,
+  values: {}
+};

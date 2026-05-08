@@ -8,6 +8,7 @@ import {
   addParticipation,
   bulkAddEventParticipants,
   cancelEvent,
+  createRegistrationLinkForEvent,
   createEvent,
   removeParticipation,
   updateEvent,
@@ -195,6 +196,24 @@ export async function cancelEventAction(
   revalidatePath(`/events/${id}/edit`);
   revalidatePath(`/events/${id}/attendance`);
   revalidatePath("/operations");
+  return { ok: true, message: result.message };
+}
+
+export async function createRegistrationLinkAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const eventId = formText(formData, "event_id");
+  if (!eventId) return { ok: false, message: "Thiáº¿u event id." };
+
+  const result = await createRegistrationLinkForEvent(eventId);
+  if (!result.ok) return { ok: false, message: result.message };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
   return { ok: true, message: result.message };
 }
 
