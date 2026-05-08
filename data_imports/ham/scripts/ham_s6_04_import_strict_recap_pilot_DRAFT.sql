@@ -1,6 +1,6 @@
 -- HAM Season 6 strict recap pilot import.
 --
--- DRAFT ONLY / DO NOT RUN until explicitly approved.
+-- DRAFT ONLY / DO NOT RUN UNTIL APPROVED.
 --
 -- STAGING ONLY. Do not run on production.
 -- Does not import events or group activities.
@@ -14,6 +14,17 @@
 --   It does not embed participant names, emails, phones, profile links, source URLs,
 --   or raw recap notes as literal data in this file.
 --   Exclusion audit rows store sanitized source references and reason codes only.
+--
+-- Manual preflight before execution:
+--   1. Confirm the connected database is STAGING, not production.
+--   2. Confirm the intended Supabase project ref is ljfneyuvpxrmejpxsmpz.
+--   3. Confirm HAM-S6 foundation import and access isolation QA have passed.
+--   4. Confirm HAM event/group activity import remains out of scope.
+--   5. Confirm expected first-run strict recap insert count is 29.
+--
+-- Runtime context guard:
+--   SQL cannot directly verify the Supabase project ref. This draft checks the
+--   HAM/HAM-S6/HAM-S6-B1 context and stops if it is missing or inconsistent.
 
 begin;
 
@@ -66,16 +77,29 @@ create temp table _ham_recap_source (
 create temp table _ham_context as
 select
   p.id as program_id,
-  s.id as season_id
+  s.id as season_id,
+  ib.id as intake_batch_id
 from public.programs p
 join public.seasons s on s.program_id = p.id and s.code = 'HAM-S6'
+join public.intake_batches ib on ib.season_id = s.id and ib.code = 'HAM-S6-B1'
 where p.code = 'HAM'
 limit 1;
 
 do $$
+declare
+  v_active_match_count integer;
 begin
   if not exists (select 1 from _ham_context) then
-    raise exception 'HAM-S6 staging context was not found. Stop.';
+    raise exception 'HAM/HAM-S6/HAM-S6-B1 context was not found. Stop.';
+  end if;
+
+  select count(*) into v_active_match_count
+  from public.matches m
+  where m.season_id = (select season_id from _ham_context)
+    and m.status = 'active';
+
+  if v_active_match_count <> 52 then
+    raise exception 'Expected 52 active HAM-S6 matches, got %. Stop.', v_active_match_count;
   end if;
 end;
 $$;
@@ -270,3 +294,57 @@ order by metric;
 
 -- DRAFT ONLY: leave uncommitted until explicitly approved.
 commit;
+
+-- Post-execution verification SQL.
+-- Run only after approved staging execution.
+-- Expected:
+--   ham_s6_strict_pilot_recaps = 29
+--   non_ham_or_missing_match_rows = 0
+
+select
+  count(*)::int as ham_s6_strict_pilot_recaps
+from public.mentoring_recaps mr
+join public.seasons s on s.id = mr.season_id
+where s.code = 'HAM-S6'
+  and mr.admin_notes like '%HAM-S6 strict recap pilot import.%';
+
+select
+  reason_code,
+  count(*)::int as excluded_count
+from public.staging_ham_s6_recap_pilot_audit
+where import_step = 'ham_s6_strict_recap_pilot'
+  and decision = 'excluded'
+group by reason_code
+order by reason_code;
+
+select
+  count(*)::int as non_ham_or_missing_match_rows
+from public.mentoring_recaps mr
+left join public.matches m on m.id = mr.match_id
+left join public.seasons s on s.id = mr.season_id
+where mr.admin_notes like '%HAM-S6 strict recap pilot import.%'
+  and (
+    s.code <> 'HAM-S6'
+    or m.id is null
+    or m.season_id <> mr.season_id
+    or m.status <> 'active'
+  );
+
+-- Rollback SQL if needed.
+-- This rolls back only strict recap pilot rows and strict recap pilot audit rows.
+-- It does not delete HAM foundation people, profiles, matches, seasons, programs,
+-- intake batches, events, event participations, or RLS settings.
+-- To use rollback, copy this block into a separate reviewed staging-only execution:
+--
+-- begin;
+--
+-- delete from public.mentoring_recaps mr
+-- using public.seasons s
+-- where mr.season_id = s.id
+--   and s.code = 'HAM-S6'
+--   and mr.admin_notes like '%HAM-S6 strict recap pilot import.%';
+--
+-- delete from public.staging_ham_s6_recap_pilot_audit
+-- where import_step = 'ham_s6_strict_recap_pilot';
+--
+-- commit;
