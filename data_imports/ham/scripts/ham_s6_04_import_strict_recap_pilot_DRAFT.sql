@@ -37,6 +37,24 @@
 
 begin;
 
+create or replace function pg_temp.ham_s6_recap_name_key(input_text text)
+returns text
+language sql
+immutable
+as $$
+  select trim(regexp_replace(
+    lower(regexp_replace(
+      translate(
+        coalesce(input_text, ''),
+        U&'\00C1\00C0\1EA2\00C3\1EA0\0102\1EAE\1EB0\1EB2\1EB4\1EB6\00C2\1EA4\1EA6\1EA8\1EAA\1EAC\0110\00C9\00C8\1EBA\1EBC\1EB8\00CA\1EBE\1EC0\1EC2\1EC4\1EC6\00CD\00CC\1EC8\0128\1ECA\00D3\00D2\1ECE\00D5\1ECC\00D4\1ED0\1ED2\1ED4\1ED6\1ED8\01A0\1EDA\1EDC\1EDE\1EE0\1EE2\00DA\00D9\1EE6\0168\1EE4\01AF\1EE8\1EEA\1EEC\1EEE\1EF0\00DD\1EF2\1EF6\1EF8\1EF4\00E1\00E0\1EA3\00E3\1EA1\0103\1EAF\1EB1\1EB3\1EB5\1EB7\00E2\1EA5\1EA7\1EA9\1EAB\1EAD\0111\00E9\00E8\1EBB\1EBD\1EB9\00EA\1EBF\1EC1\1EC3\1EC5\1EC7\00ED\00EC\1EC9\0129\1ECB\00F3\00F2\1ECF\00F5\1ECD\00F4\1ED1\1ED3\1ED5\1ED7\1ED9\01A1\1EDB\1EDD\1EDF\1EE1\1EE3\00FA\00F9\1EE7\0169\1EE5\01B0\1EE9\1EEB\1EED\1EEF\1EF1\00FD\1EF3\1EF7\1EF9\1EF5',
+        'AAAAAAAAAAAAAAAAADEEEEEEEEEEEIIIIIOOOOOOOOOOOOOOOOOUUUUUUUUUUUYYYYYaaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
+      ),
+      '\([^)]*\)', ' ', 'g'
+    )),
+    '[^[:alnum:]]+', ' ', 'g'
+  ));
+$$;
+
 create table if not exists public.staging_ham_s6_recap_pilot_audit (
   id uuid primary key default gen_random_uuid(),
   import_step text not null,
@@ -121,8 +139,8 @@ with normalized_source as (
     nullif(trim(rs.fb_post_link), '') as recap_url,
     nullif(trim(rs.post_date), '')::date as meeting_date,
     to_char(nullif(trim(rs.post_date), '')::date, 'YYYY-MM') as meeting_month,
-    lower(regexp_replace(regexp_replace(translate(rs.mentor_name, 'ÄÄ‘', 'Dd'), '\([^)]*\)', ' ', 'g'), '[^[:alnum:]]+', ' ', 'g')) as mentor_name_key,
-    lower(regexp_replace(regexp_replace(translate(coalesce(nullif(rs.mentees_extracted, ''), rs.mentee_names_raw), 'ÄÄ‘', 'Dd'), '\([^)]*\)', ' ', 'g'), '[^[:alnum:]]+', ' ', 'g')) as mentee_name_key,
+    pg_temp.ham_s6_recap_name_key(rs.mentor_name) as mentor_name_key,
+    pg_temp.ham_s6_recap_name_key(coalesce(nullif(rs.mentees_extracted, ''), rs.mentee_names_raw)) as mentee_name_key,
     (
       coalesce(nullif(rs.mentees_extracted, ''), rs.mentee_names_raw) ~ '(;|\||,|/|&|\+|\sand\s)'
     ) as needs_human_interpretation
@@ -138,7 +156,7 @@ mentor_candidates as (
   left join public.staging_ham_s6_people_identity_map m
     on m.ham_role = 'mentor'
    and m.person_id is not null
-   and lower(regexp_replace(regexp_replace(translate(m.full_name, 'ÄÄ‘', 'Dd'), '\([^)]*\)', ' ', 'g'), '[^[:alnum:]]+', ' ', 'g')) = ns.mentor_name_key
+   and pg_temp.ham_s6_recap_name_key(m.full_name) = ns.mentor_name_key
   group by ns.source_row
 ),
 mentee_candidates as (
@@ -150,7 +168,7 @@ mentee_candidates as (
   left join public.staging_ham_s6_people_identity_map m
     on m.ham_role = 'mentee'
    and m.person_id is not null
-   and lower(regexp_replace(regexp_replace(translate(m.full_name, 'ÄÄ‘', 'Dd'), '\([^)]*\)', ' ', 'g'), '[^[:alnum:]]+', ' ', 'g')) = ns.mentee_name_key
+   and pg_temp.ham_s6_recap_name_key(m.full_name) = ns.mentee_name_key
   group by ns.source_row
 ),
 joined as (
@@ -194,6 +212,17 @@ select
     else 'include_strict_pilot'
   end as dry_run_decision
 from joined;
+
+select 'preflight_strict_recap_pilot_candidates' as metric, count(*)::text as value
+from _ham_resolved_recap_candidates
+where dry_run_decision = 'include_strict_pilot'
+  and activity_type in ('1on1_primary', '1on1_cross')
+union all
+select 'preflight_' || dry_run_decision, count(*)::text
+from _ham_resolved_recap_candidates
+where dry_run_decision <> 'include_strict_pilot'
+group by dry_run_decision
+order by metric;
 
 do $$
 declare
