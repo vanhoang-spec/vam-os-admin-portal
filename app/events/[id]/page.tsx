@@ -1,12 +1,13 @@
 import { headers } from "next/headers";
 import Link from "next/link";
+import QRCode from "qrcode";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getEventDetailData, isValidUuid } from "@/lib/events";
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDate } from "@/lib/utils";
-import { RegistrationLinkPanel } from "./registration-link-panel";
+import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 
 function getRequestOrigin() {
   const h = headers();
@@ -20,9 +21,8 @@ export default async function EventDetailPage({ params }: { params: { id: string
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const adminUser = await getCurrentAdminUser();
-  const allowAdminEventAccess = canEditRecaps(adminUser);
 
-  if (!allowAdminEventAccess) {
+  if (!canEditRecaps(adminUser)) {
     return (
       <>
         <PageHeader title="Không có quyền truy cập" />
@@ -54,11 +54,13 @@ export default async function EventDetailPage({ params }: { params: { id: string
   const seasonsById = new Map(detail.seasons.map((season) => [season.id, season]));
   const seasonCode = detail.event.season_id ? (seasonsById.get(detail.event.season_id)?.code ?? null) : null;
   const origin = getRequestOrigin();
-  const registrationUrl = detail.registrationLink?.token
-    ? `${origin}/register/${detail.registrationLink.token}`
-    : null;
+  const registrationUrl = detail.registrationLink?.token ? `${origin}/register/${detail.registrationLink.token}` : null;
+  const checkinUrl = detail.checkinLink?.token ? `${origin}/checkin/${detail.checkinLink.token}` : null;
+  const checkinQrDataUrl = checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 220 }) : null;
   const canCreateLink = await canOperateSeason(scopeContext, detail.event.season_id ?? null);
   const activeRegistrations = detail.registrations.filter((row) => row.registration_status !== "cancelled");
+  const checkedInRegistrations = activeRegistrations.filter((row) => row.attendance_status === "checked_in");
+  const walkInRegistrations = activeRegistrations.filter((row) => row.is_walk_in === true || String(row.is_walk_in) === "true");
 
   return (
     <>
@@ -91,24 +93,40 @@ export default async function EventDetailPage({ params }: { params: { id: string
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Đăng ký" value={activeRegistrations.length} />
-        <KpiCard label="Đã liên kết người" value={activeRegistrations.filter((row) => row.linked_person_id).length} />
+        <KpiCard label="Đã check-in" value={checkedInRegistrations.length} />
+        <KpiCard label="Walk-in" value={walkInRegistrations.length} />
         <KpiCard label="Chờ rà soát" value={activeRegistrations.filter((row) => row.match_review_status === "pending_review").length} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">
-        <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Link đăng ký công khai</h2>
-          <RegistrationLinkPanel
-            eventId={detail.event.id}
-            registrationUrl={registrationUrl}
-            canCreate={canCreateLink}
-          />
-          <p className="mt-3 text-xs text-slate-500">
-            Link này chỉ cho phép gửi đăng ký, không hiển thị danh sách người tham dự công khai.
-          </p>
-        </Card>
+        <div className="grid gap-4">
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Link đăng ký công khai</h2>
+            <RegistrationLinkPanel
+              eventId={detail.event.id}
+              registrationUrl={registrationUrl}
+              canCreate={canCreateLink}
+            />
+            <p className="mt-3 text-xs text-slate-500">
+              Link này chỉ cho phép gửi đăng ký, không hiển thị danh sách người tham dự công khai.
+            </p>
+          </Card>
+
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Link check-in / QR check-in</h2>
+            <CheckinLinkPanel
+              eventId={detail.event.id}
+              checkinUrl={checkinUrl}
+              canCreate={canCreateLink}
+              qrDataUrl={checkinQrDataUrl}
+            />
+            <p className="mt-3 text-xs text-slate-500">
+              QR này mở form check-in công khai, không hiển thị danh sách người tham dự.
+            </p>
+          </Card>
+        </div>
 
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">
@@ -141,12 +159,20 @@ export default async function EventDetailPage({ params }: { params: { id: string
                   )
                 },
                 {
-                  key: "match_review_status",
-                  label: "Khớp hồ sơ",
+                  key: "status",
+                  label: "Trạng thái",
                   render: (row) => (
-                    <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-                      {displayText(row.match_review_status)}
-                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                        {displayText(row.attendance_status)}
+                      </span>
+                      {row.is_walk_in ? (
+                        <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">walk-in</span>
+                      ) : null}
+                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                        {displayText(row.match_review_status)}
+                      </span>
+                    </div>
                   )
                 },
                 {

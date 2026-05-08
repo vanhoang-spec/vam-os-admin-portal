@@ -8,6 +8,7 @@ import {
   addParticipation,
   bulkAddEventParticipants,
   cancelEvent,
+  createCheckinLinkForEvent,
   createRegistrationLinkForEvent,
   createEvent,
   removeParticipation,
@@ -210,6 +211,24 @@ export async function createRegistrationLinkAction(
   if (!eventId) return { ok: false, message: "Thiáº¿u event id." };
 
   const result = await createRegistrationLinkForEvent(eventId);
+  if (!result.ok) return { ok: false, message: result.message };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  return { ok: true, message: result.message };
+}
+
+export async function createCheckinLinkAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const eventId = formText(formData, "event_id");
+  if (!eventId) return { ok: false, message: "Thiáº¿u event id." };
+
+  const result = await createCheckinLinkForEvent(eventId);
   if (!result.ok) return { ok: false, message: result.message };
 
   revalidatePath(`/events/${eventId}`);

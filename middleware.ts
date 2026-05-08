@@ -147,9 +147,9 @@ async function authAllowsRequest(request: NextRequest) {
 }
 
 export async function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/register/")) {
+  if (request.nextUrl.pathname.startsWith("/register/") || request.nextUrl.pathname.startsWith("/checkin/")) {
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-vam-public-route", "register");
+    requestHeaders.set("x-vam-public-route", request.nextUrl.pathname.startsWith("/checkin/") ? "checkin" : "register");
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 

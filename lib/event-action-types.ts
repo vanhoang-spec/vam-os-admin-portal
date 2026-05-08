@@ -53,3 +53,32 @@ export const initialPublicRegistrationActionState: PublicRegistrationActionState
   message: null,
   values: {}
 };
+
+export type CheckinActionStatus =
+  | "idle"
+  | "success"
+  | "already_checked_in"
+  | "validation_error"
+  | "link_error"
+  | "server_error";
+
+export type PublicCheckinActionState = {
+  ok: boolean;
+  status: CheckinActionStatus;
+  message: string | null;
+  eventName?: string | null;
+  values?: {
+    email?: string;
+    full_name?: string;
+    phone?: string;
+    student_id?: string;
+    notes?: string;
+  };
+};
+
+export const initialPublicCheckinActionState: PublicCheckinActionState = {
+  ok: false,
+  status: "idle",
+  message: null,
+  values: {}
+};
