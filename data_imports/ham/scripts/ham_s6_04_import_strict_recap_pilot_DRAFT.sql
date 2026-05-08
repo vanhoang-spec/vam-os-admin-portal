@@ -21,6 +21,15 @@
 --   3. Confirm HAM-S6 foundation import and access isolation QA have passed.
 --   4. Confirm HAM event/group activity import remains out of scope.
 --   5. Confirm expected first-run strict recap insert count is 29.
+--   6. After any failed pre-commit attempt, verify no partial pilot rows exist:
+--
+--      select count(*)::int as ham_s6_strict_pilot_recaps
+--      from public.mentoring_recaps mr
+--      join public.seasons s on s.id = mr.season_id
+--      where s.code = 'HAM-S6'
+--        and mr.admin_notes like '%HAM-S6 strict recap pilot import.%';
+--
+--      Expected before rerun after failed transaction: 0.
 --
 -- Runtime context guard:
 --   SQL cannot directly verify the Supabase project ref. This draft checks the
@@ -124,7 +133,7 @@ mentor_candidates as (
   select
     ns.source_row,
     count(distinct m.person_id) as mentor_candidate_count,
-    min(m.person_id) as mentor_person_id
+    min(m.person_id::text)::uuid as mentor_person_id
   from normalized_source ns
   left join public.staging_ham_s6_people_identity_map m
     on m.ham_role = 'mentor'
@@ -136,7 +145,7 @@ mentee_candidates as (
   select
     ns.source_row,
     count(distinct m.person_id) as mentee_candidate_count,
-    min(m.person_id) as mentee_person_id
+    min(m.person_id::text)::uuid as mentee_person_id
   from normalized_source ns
   left join public.staging_ham_s6_people_identity_map m
     on m.ham_role = 'mentee'
