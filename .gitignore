@@ -55,3 +55,8 @@ data_imports/**/_*.log
 
 # Exports — binary team guides and generated documents (not source code)
 exports/
+# HAM raw local workbooks / source exports
+data_imports/ham/*.xlsx
+data_imports/ham/*.xls
+data_imports/ham/*raw*
+data_imports/ham/*source*
