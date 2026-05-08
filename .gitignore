@@ -60,3 +60,4 @@ data_imports/ham/*.xlsx
 data_imports/ham/*.xls
 data_imports/ham/*raw*
 data_imports/ham/*source*
+.vercel
