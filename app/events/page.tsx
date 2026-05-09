@@ -258,7 +258,7 @@ export default async function EventsPage({
                     href={`/events/${row.id}`}
                     className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
                   >
-                    Chi tiáº¿t
+                    Chi tiết
                   </Link>
                   <Link
                     href={`/events/${row.id}/attendance`}
