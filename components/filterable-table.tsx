@@ -20,6 +20,7 @@ type Column = {
   secondaryLabel?: string;
   nowrap?: boolean;
   badge?: boolean;
+  truncate?: boolean;
 };
 type SortOption = {
   label: string;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
+import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, PageHeader, SimpleTable, TruncatedText } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import {
@@ -56,6 +56,7 @@ type EventActivityRow = EventParticipation & {
 type OperationalTeamAssignmentRow = OperationalTeamAssignment;
 
 function actionLink(href: string, label: string) {
+  if (label.startsWith("Xem")) return <InternalLinkButton href={href} label={label} />;
   return (
     <Link href={href} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
       {label}
@@ -365,18 +366,18 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin person</h2>
           <DetailGrid
             rows={[
-              ["full_name", person.data.full_name],
-              ["email_primary", person.data.email_primary],
-              ["phone_primary", person.data.phone_primary],
-              ["gender", person.data.gender],
-              ["source_sheets", person.data.source_sheets],
-              ["data_quality_flags", person.data.data_quality_flags]
+              ["Họ và tên", person.data.full_name],
+              ["Email", person.data.email_primary],
+              ["Điện thoại", person.data.phone_primary],
+              ["Giới tính", person.data.gender],
+              ["Nguồn dữ liệu", person.data.source_sheets],
+              ["Cờ chất lượng dữ liệu", person.data.data_quality_flags]
             ]}
           />
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Roles</h2>
-          <SimpleTable rows={roles.data} columns={[{ key: "role", label: "role" }, { key: "status", label: "status" }, { key: "notes", label: "notes" }]} />
+          <SimpleTable rows={roles.data} columns={[{ key: "role", label: "Vai trò" }, { key: "status", label: "Trạng thái" }, { key: "notes", label: "Ghi chú" }]} />
         </Card>
         <Card>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -436,17 +437,17 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
               </div>
               <DetailGrid
                 rows={[
-                  ["mentor_code", mentorProfile.mentor_code],
-                  ["company_current", mentorProfile.company_current],
-                  ["title_current", mentorProfile.title_current],
-                  ["years_experience_min", mentorProfile.years_experience_min],
-                  ["years_experience_text", mentorProfile.years_experience_text],
-                  ["interests_text", mentorProfile.interests_text],
-                  ["admin_notes", displayAdminNote(mentorProfile.admin_notes)]
+                  ["Mã mentor", mentorProfile.mentor_code],
+                  ["Công ty hiện tại", mentorProfile.company_current],
+                  ["Chức danh hiện tại", mentorProfile.title_current],
+                  ["Số năm kinh nghiệm", mentorProfile.years_experience_min],
+                  ["Mô tả kinh nghiệm", mentorProfile.years_experience_text],
+                  ["Mối quan tâm", mentorProfile.interests_text],
+                  ["Ghi chú admin", displayAdminNote(mentorProfile.admin_notes)]
                 ]}
               />
               <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
-                <div className="text-xs font-medium uppercase text-slate-500">profile mentor</div>
+                <div className="text-xs font-medium uppercase text-slate-500">Hồ sơ mentor</div>
                 <div className="mt-1">
                   <ExternalLinkButton href={mentorProfile.bio_url} label="Xem profile mentor" />
                 </div>
@@ -471,13 +472,13 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
           {menteeProfile ? (
             <DetailGrid
               rows={[
-                ["mentee_code", menteeProfile.mentee_code],
-                ["school_code", displayCode(menteeProfile.school_code)],
-                ["school_raw", displayText(menteeProfile.school_raw)],
-                ["major", displayText(menteeProfile.major)],
-                ["class_cohort", displayText(menteeProfile.class_cohort)],
-                ["mssv", displayText(menteeProfile.mssv)],
-                ["gpa_4", displayOptional(menteeProfile.gpa_4)]
+                ["Mã mentee", menteeProfile.mentee_code],
+                ["Mã trường", displayCode(menteeProfile.school_code)],
+                ["Trường theo dữ liệu gốc", displayText(menteeProfile.school_raw)],
+                ["Ngành học", displayText(menteeProfile.major)],
+                ["Lớp / khóa", displayText(menteeProfile.class_cohort)],
+                ["MSSV", displayText(menteeProfile.mssv)],
+                ["GPA hệ 4", displayOptional(menteeProfile.gpa_4)]
               ]}
             />
           ) : (
@@ -491,11 +492,11 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
           <SimpleTable
             rows={personApplications.map((application) => ({ ...application, season_code: application.season_id ? seasonsById.get(application.season_id)?.code : "-" }))}
             columns={[
-              { key: "season_code", label: "season_code" },
-              { key: "role_applied", label: "role_applied" },
-              { key: "final_status", label: "final_status" },
-              { key: "submitted_at", label: "submitted_at", render: (row) => formatDate(row.submitted_at) },
-              { key: "acquisition_channel", label: "acquisition_channel" },
+              { key: "season_code", label: "Mùa" },
+              { key: "role_applied", label: "Vai trò ứng tuyển" },
+              { key: "final_status", label: "Trạng thái cuối" },
+              { key: "submitted_at", label: "Ngày nộp", render: (row) => formatDate(row.submitted_at) },
+              { key: "acquisition_channel", label: "Kênh biết đến" },
               { key: "application_link", label: "Chi tiết", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem chi tiết" }
             ]}
           />
@@ -508,7 +509,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                 rows={menteesForMentor}
                 columns={[
                   { key: "mentee_name", label: "Tên mentee", render: (row) => displayText(row.mentee?.full_name) },
-                  { key: "mentee_email", label: "Email mentee", render: (row) => displayText(row.mentee?.email_primary) },
+                  { key: "mentee_email", label: "Email mentee", render: (row) => <TruncatedText value={row.mentee?.email_primary} truncate /> },
                   { key: "mentee_code", label: "Mã mentee", render: (row) => displayCode(row.menteeProfile?.mentee_code) },
                   { key: "school_code", label: "Mã trường", render: (row) => displayCode(row.menteeProfile?.school_code) },
                   { key: "major", label: "Ngành học", render: (row) => displayText(row.menteeProfile?.major) },
@@ -537,7 +538,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                 rows={mentorsForMentee}
                 columns={[
                   { key: "mentor_name", label: "Tên mentor", render: (row) => displayText(row.mentor?.full_name) },
-                  { key: "mentor_email", label: "Email mentor", render: (row) => displayText(row.mentor?.email_primary) },
+                  { key: "mentor_email", label: "Email mentor", render: (row) => <TruncatedText value={row.mentor?.email_primary} truncate /> },
                   { key: "mentor_code", label: "Mã mentor", render: (row) => displayCode(row.mentorProfile?.mentor_code) },
                   { key: "company_current", label: "Công ty hiện tại", render: (row) => displayText(row.mentorProfile?.company_current) },
                   { key: "title_current", label: "Chức danh hiện tại", render: (row) => displayText(row.mentorProfile?.title_current) },
@@ -547,7 +548,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                   { key: "match_confidence", label: "Độ tin cậy", render: (row) => displayOptional(row.match_confidence) },
                   {
                     key: "mentor_profile",
-                    label: "Profile mentor",
+                    label: "Hồ sơ mentor",
                     render: (row) => <ExternalLinkButton href={row.mentorProfile?.bio_url} label="Xem profile mentor" />
                   },
                   { key: "match_link", label: "Match", render: (row) => actionLink(`/matches/${row.id}`, "Xem match") },
@@ -581,7 +582,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                   { key: "mentor", label: "Mentor", render: (row) => displayText(row.mentor?.full_name ?? row.mentor?.email_primary) },
                   { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Xem recap" /> },
                   { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
-                  { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
+                  { key: "issue_flag", label: "Theo dõi", render: (row) => issueLabel(row.issue_flag) },
                   { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) },
                   { key: "edit", label: "Sửa", render: (row) => (allowRecapEdit ? actionLink(`/recaps/${row.id}/edit`, "Sửa") : "-") }
                 ]}
@@ -609,7 +610,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                   { key: "mentee", label: "Mentee", render: (row) => displayText(row.mentee?.full_name ?? row.mentee?.email_primary) },
                   { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Xem recap" /> },
                   { key: "recap_note", label: "Ghi chú", render: (row) => displayText(row.recap_note) },
-                  { key: "issue_flag", label: "Issue", render: (row) => issueLabel(row.issue_flag) },
+                  { key: "issue_flag", label: "Theo dõi", render: (row) => issueLabel(row.issue_flag) },
                   { key: "status", label: "Trạng thái", render: (row) => recapStatusLabel(row.status) },
                   { key: "edit", label: "Sửa", render: (row) => (allowRecapEdit ? actionLink(`/recaps/${row.id}/edit`, "Sửa") : "-") }
                 ]}

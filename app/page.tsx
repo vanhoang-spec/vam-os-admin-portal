@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
-import { Card, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
+import { Card, ErrorBox, InternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getDashboardData, getOperationsData, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
@@ -379,7 +379,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-4 xl:grid-cols-2">
+      <section className="mt-6 grid gap-4">
         <Card>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -394,10 +394,10 @@ export default async function DashboardPage() {
             rows={topMentorRecapRows}
             columns={[
               { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
-              { key: "mentor_email", label: "Email", render: (row) => displayText(row.mentor_email) },
+              { key: "mentor_email", label: "Email" },
               { key: "recap_count", label: "Số recap" },
               { key: "mentee_count", label: "Số mentee" },
-              { key: "mentor_link", label: "Profile", render: (row) => <Link href={`/people/${row.mentor_id}`} className="text-sm font-medium text-vam-green">Xem mentor</Link> }
+              { key: "mentor_link", label: "Hồ sơ", render: (row) => <InternalLinkButton href={`/people/${row.mentor_id}`} label="Xem mentor" /> }
             ]}
           />
         </Card>
@@ -415,10 +415,10 @@ export default async function DashboardPage() {
             rows={followUpTwoMonthRows}
             columns={[
               { key: "mentee_name", label: "Mentee", render: (row) => displayText(row.mentee_name) },
-              { key: "mentee_email", label: "Email", render: (row) => displayText(row.mentee_email) },
+              { key: "mentee_email", label: "Email" },
               { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
               { key: "months_silent", label: "Số tháng im lặng" },
-              { key: "profile", label: "Profile", render: (row) => <Link href={`/people/${row.mentee_id}`} className="text-sm font-medium text-vam-green">Xem mentee</Link> }
+              { key: "profile", label: "Hồ sơ", render: (row) => <InternalLinkButton href={`/people/${row.mentee_id}`} label="Xem mentee" /> }
             ]}
           />
         </Card>
@@ -479,7 +479,7 @@ export default async function DashboardPage() {
             { key: "company_current", label: "Công ty", displayKey: "company_current_display" },
             { key: "assigned_mentee_count", label: "Số mentee" },
             { key: "active_match_count", label: "Match active" },
-            { key: "mentor_link", label: "Profile", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem mentor" }
+            { key: "mentor_link", label: "Hồ sơ", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem mentor" }
           ]}
         />
       </section>

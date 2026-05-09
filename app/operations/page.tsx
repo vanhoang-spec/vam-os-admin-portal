@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
-import { Card, EmptyState, ErrorBox, ExternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
+import { Card, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, KpiCard, PageHeader, ProgressiveTable, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData, keyById } from "@/lib/data";
@@ -115,7 +115,7 @@ function percent(numerator: number, denominator: number) {
 }
 
 function attendanceRateOverTotal(attended: number, totalParticipants: number) {
-  if (!totalParticipants) return "Chưa có dữ liệu";
+  if (!totalParticipants) return "—";
   const value = (attended / totalParticipants) * 100;
   return `${value.toFixed(1).replace(/\.0$/, "")}%`;
 }
@@ -238,6 +238,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const registeredAbsentCount = eventParticipationsInMonth.filter((row) => isEventAbsenceStatus(row.attendance_status)).length;
   const totalEventParticipantCount = eventParticipationsInMonth.length;
   const notUpdatedAttendanceCount = Math.max(0, totalEventParticipantCount - attendedCount - registeredAbsentCount);
+  const hasEventCheckinData = totalEventParticipantCount > 0;
   const rpcKpis = data.kpis.data?.selectedMonth === selectedMonth ? data.kpis.data : null;
 
   const recapByMonth = Array.from(
@@ -374,38 +375,48 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <Card>
           <div className="text-sm text-slate-500">Tỷ lệ tham dự / tổng đăng ký</div>
           <div className="mt-2 text-3xl font-semibold text-vam-ink">{attendanceRateOverTotal(attendedCount, totalEventParticipantCount)}</div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">Bao gồm cả các lượt chưa cập nhật trạng thái trong mẫu số.</p>
-          <p className="mt-1 text-xs font-medium text-slate-600">Chưa cập nhật: {notUpdatedAttendanceCount}</p>
+          {hasEventCheckinData ? (
+            <>
+              <p className="mt-2 text-xs leading-5 text-slate-500">Bao gồm cả các lượt chưa cập nhật trạng thái trong mẫu số.</p>
+              <p className="mt-1 text-xs font-medium text-slate-600">Chưa cập nhật: {notUpdatedAttendanceCount}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-xs leading-5 text-slate-500">Chưa có dữ liệu event/check-in cho tháng đang xem.</p>
+          )}
         </Card>
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
         <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
         <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={followUpTwoMonthCount} />
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Link href={`/operations/monthly?month=${encodeURIComponent(selectedMonth)}`} className="rounded-md border border-transparent bg-vam-ink px-4 py-3 text-sm font-medium text-white shadow-soft hover:bg-vam-ink/90">
-          Tổng quan tháng (CEO view)
-        </Link>
-        <Link href="/operations/intelligence" className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
-          Phân tích cộng đồng mentor/mentee
-        </Link>
-        <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&type=followup_no_recap`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
-          Xem danh sách cần follow-up
-        </Link>
-        <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&type=data_issue`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
-          Xem lỗi dữ liệu
-        </Link>
-        <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&overdue=true`} className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
-          Công việc quá hạn
-        </Link>
-        <Link href="/events" className="rounded-md border border-vam-line bg-white px-4 py-3 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
-          Quản lý sự kiện & tham gia
-        </Link>
-        {allowRecapEdit ? (
-          <Link href="/recaps/create" className="rounded-md border border-transparent bg-vam-green px-4 py-3 text-sm font-medium text-white shadow-soft hover:bg-vam-green/90">
-            Thêm recap thủ công
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+        <nav aria-label="Operations views" className="flex flex-wrap gap-2 rounded-lg border border-vam-line bg-slate-50 p-2">
+          <Link href={`/operations/monthly?month=${encodeURIComponent(selectedMonth)}`} className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink shadow-sm hover:bg-vam-mint">
+            Tổng quan tháng (CEO view)
           </Link>
-        ) : null}
+          <Link href="/operations/intelligence" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink shadow-sm hover:bg-vam-mint">
+            Phân tích cộng đồng mentor/mentee
+          </Link>
+          <Link href="/events" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink shadow-sm hover:bg-vam-mint">
+            Quản lý sự kiện & tham gia
+          </Link>
+        </nav>
+        <div aria-label="Operations actions" className="flex flex-wrap gap-2 lg:justify-end">
+          <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&type=followup_no_recap`} className="rounded-md border border-vam-green/30 bg-white px-3 py-2 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+            Xem danh sách cần follow-up
+          </Link>
+          <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&type=data_issue`} className="rounded-md border border-vam-green/30 bg-white px-3 py-2 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+            Xem lỗi dữ liệu
+          </Link>
+          <Link href={`/operations/tasks?month=${encodeURIComponent(selectedMonth)}&overdue=true`} className="rounded-md border border-vam-green/30 bg-white px-3 py-2 text-sm font-medium text-vam-green shadow-soft hover:bg-vam-mint">
+            Công việc quá hạn
+          </Link>
+          {allowRecapEdit ? (
+            <Link href="/recaps/create" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+              Thêm recap thủ công
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       <section className="mt-6 grid gap-4 xl:grid-cols-2">
@@ -425,34 +436,38 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
           rows={topMentorRows}
           columns={[
             { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
-            { key: "mentor_email", label: "Email", render: (row) => displayText(row.mentor_email) },
+            { key: "mentor_email", label: "Email" },
             { key: "recap_count", label: "Số recap" },
             { key: "distinct_mentee_count", label: "Số mentee" },
-            { key: "profile", label: "Profile", render: (row) => <Link href={`/people/${row.mentor_id}`} className="text-sm font-medium text-vam-green">Xem mentor</Link> }
+            { key: "profile", label: "Hồ sơ", render: (row) => <InternalLinkButton href={`/people/${row.mentor_id}`} label="Xem mentor" /> }
           ]}
         />
       </section>
 
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Mentee cần follow-up</h2>
-        <SimpleTable
+        <ProgressiveTable
           rows={followUpTwoMonthRows}
+          initialCount={20}
+          summaryLabel={`Xem thêm ${Math.max(0, followUpTwoMonthRows.length - 20)} mentee cần follow-up`}
           columns={[
             { key: "mentee_name", label: "Mentee", render: (row) => displayText(row.mentee_name) },
-            { key: "mentee_email", label: "Email", render: (row) => displayText(row.mentee_email) },
+            { key: "mentee_email", label: "Email" },
             { key: "mentee_code", label: "Mã mentee", render: (row) => displayCode(row.mentee_code) },
             { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
             { key: "last_recap_date", label: "Recap gần nhất", render: (row) => (row.last_recap_date ? formatDate(row.last_recap_date) : "Chưa có recap") },
             { key: "months_silent", label: "Số tháng silent" },
-            { key: "profile", label: "Profile", render: (row) => <Link href={`/people/${row.mentee_id}`} className="text-sm font-medium text-vam-green">Xem mentee</Link> }
+            { key: "profile", label: "Hồ sơ", render: (row) => <InternalLinkButton href={`/people/${row.mentee_id}`} label="Xem mentee" /> }
           ]}
         />
       </section>
 
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Recap gần đây trong tháng</h2>
-        <SimpleTable
+        <ProgressiveTable
           rows={recentRecapRows}
+          initialCount={20}
+          summaryLabel={`Xem thêm ${Math.max(0, recentRecapRows.length - 20)} recap`}
           columns={[
             { key: "meeting_date", label: "Ngày gặp", render: (row) => formatDate(row.meeting_date) },
             { key: "mentee", label: "Mentee", render: (row) => displayText(row.mentee?.full_name ?? row.mentee?.email_primary) },
@@ -468,31 +483,31 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
       {outlierRecaps.length ? (
         <section className="mt-6">
           <h2 className="mb-3 text-lg font-semibold text-vam-ink">Recap cần rà soát ngày/tháng</h2>
-          <SimpleTable
+          <ProgressiveTable
             rows={outlierRecapRows}
+            initialCount={20}
+            summaryLabel={`Xem thêm ${Math.max(0, outlierRecapRows.length - 20)} recap cần rà soát`}
             columns={[
-              { key: "meeting_date", label: "meeting_date", render: (row) => formatDate(row.meeting_date) },
-              { key: "meeting_month", label: "meeting_month", render: (row) => displayText(row.meeting_month) },
-              { key: "mentee", label: "mentee", render: (row) => displayText(row.mentee?.full_name ?? row.mentee?.email_primary) },
-              { key: "mentor", label: "mentor", render: (row) => displayText(row.mentor?.full_name ?? row.mentor?.email_primary) },
-              { key: "recap_url", label: "recap_url", render: (row) => <ExternalLinkButton href={row.recap_url} label="Mở recap" /> },
-              { key: "recap_note", label: "recap_note", render: (row) => displayText(row.recap_note) },
-              { key: "admin_notes", label: "admin_notes", render: (row) => displayText(row.admin_notes) },
+              { key: "meeting_date", label: "Ngày gặp", render: (row) => formatDate(row.meeting_date) },
+              { key: "meeting_month", label: "Tháng ghi nhận", render: (row) => displayText(row.meeting_month) },
+              { key: "mentee", label: "Mentee", render: (row) => displayText(row.mentee?.full_name ?? row.mentee?.email_primary) },
+              { key: "mentor", label: "Mentor", render: (row) => displayText(row.mentor?.full_name ?? row.mentor?.email_primary) },
+              { key: "recap_url", label: "Link recap", render: (row) => <ExternalLinkButton href={row.recap_url} label="Mở recap" /> },
+              { key: "recap_note", label: "Ghi chú recap" },
+              { key: "admin_notes", label: "Ghi chú admin" },
               {
                 key: "profile",
-                label: "profile link",
+                label: "Hồ sơ",
                 render: (row) =>
                   row.profilePersonId ? (
-                    <Link href={`/people/${row.profilePersonId}`} className="text-sm font-medium text-vam-green">
-                      Xem profile
-                    </Link>
+                    <InternalLinkButton href={`/people/${row.profilePersonId}`} label="Xem hồ sơ" />
                   ) : (
                     "-"
                   )
               },
               {
                 key: "edit",
-                label: "Correction",
+                label: "Chỉnh sửa",
                 render: (row) =>
                   allowRecapEdit ? (
                     <Link href={`/recaps/${row.id}/edit`} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">

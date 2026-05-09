@@ -40,10 +40,10 @@ function Snapshot({ data }: { data: FounderIntelligenceDashboard }) {
       <KpiCard label="Mentor active" value={data.mentorProfile.activeMentors} />
       <KpiCard label="Tổng mentee" value={data.menteeProfile.totalMentees} />
       <KpiCard label="Mentee active" value={data.menteeProfile.activeMentees} />
-      <KpiCard label="Mentor/mentee ratio" value={data.matchingIntelligence.mentorMenteeRatio} />
+      <KpiCard label="Tỷ lệ mentor/mentee" value={data.matchingIntelligence.mentorMenteeRatio} />
       <KpiCard label="Segment thiếu mentor" value={gaps} />
-      <KpiCard label="Mentor overloaded" value={overloaded} />
-      <KpiCard label="Mentee silent" value={data.menteeProfile.silentMentees} />
+      <KpiCard label="Mentor quá tải" value={overloaded} />
+      <KpiCard label="Mentee im lặng" value={data.menteeProfile.silentMentees} />
     </div>
   );
 }
@@ -53,11 +53,11 @@ function SegmentGapTable({ rows }: { rows: FounderIntelligenceDashboard["matchin
     <SimpleTable
       rows={rows}
       columns={[
-        { key: "segment", label: "Segment", render: (row) => displayText(row.segment) },
-        { key: "mentorSupply", label: "Mentor supply" },
-        { key: "menteeDemand", label: "Mentee demand" },
-        { key: "gap", label: "Gap" },
-        { key: "action", label: "Recommended action", render: (row) => actionForGap(Number(row.gap)) }
+        { key: "segment", label: "Phân khúc", render: (row) => displayText(row.segment) },
+        { key: "mentorSupply", label: "Nguồn mentor" },
+        { key: "menteeDemand", label: "Nhu cầu mentee" },
+        { key: "gap", label: "Chênh lệch" },
+        { key: "action", label: "Hành động đề xuất", render: (row) => actionForGap(Number(row.gap)) }
       ]}
     />
   );
@@ -125,10 +125,10 @@ export default async function FounderIntelligencePage() {
                   rows={data.mentorProfile.overloadedMentors}
                   columns={[
                     { key: "mentorName", label: "Mentor", render: (row) => displayText(row.mentorName) },
-                    { key: "industry", label: "Industry", render: (row) => displayText(row.industry) },
-                    { key: "currentTitle", label: "Title", render: (row) => displayText(row.currentTitle) },
-                    { key: "menteeCount", label: "Mentee" },
-                    { key: "capacityTarget", label: "Capacity" },
+                    { key: "industry", label: "Ngành", render: (row) => displayText(row.industry) },
+                    { key: "currentTitle", label: "Chức danh", render: (row) => displayText(row.currentTitle) },
+                    { key: "menteeCount", label: "Số mentee" },
+                    { key: "capacityTarget", label: "Sức chứa mục tiêu" },
                     { key: "recapCountCurrentMonth", label: "Recap tháng" }
                   ]}
                 />
@@ -139,9 +139,9 @@ export default async function FounderIntelligencePage() {
                   rows={data.mentorProfile.inactiveMentorsWithMentees}
                   columns={[
                     { key: "mentorName", label: "Mentor", render: (row) => displayText(row.mentorName) },
-                    { key: "industry", label: "Industry", render: (row) => displayText(row.industry) },
-                    { key: "currentCompany", label: "Company", render: (row) => displayText(row.currentCompany) },
-                    { key: "menteeCount", label: "Mentee" },
+                    { key: "industry", label: "Ngành", render: (row) => displayText(row.industry) },
+                    { key: "currentCompany", label: "Công ty", render: (row) => displayText(row.currentCompany) },
+                    { key: "menteeCount", label: "Số mentee" },
                     { key: "recapCountCurrentMonth", label: "Recap tháng" }
                   ]}
                 />
@@ -179,8 +179,8 @@ export default async function FounderIntelligencePage() {
               <SimpleTable
                 rows={data.activityBySegment.silentMenteeByCareerInterest}
                 columns={[
-                  { key: "careerInterest", label: "Career interest", render: (row) => displayText(row.careerInterest) },
-                  { key: "silentMentees", label: "Mentee silent" }
+                  { key: "careerInterest", label: "Định hướng nghề nghiệp", render: (row) => displayText(row.careerInterest) },
+                  { key: "silentMentees", label: "Mentee im lặng" }
                 ]}
               />
             </Card>
@@ -212,10 +212,10 @@ export default async function FounderIntelligencePage() {
                 <SimpleTable
                   rows={data.activityBySegment.activeMenteeRateByMajor}
                   columns={[
-                    { key: "major", label: "Major", render: (row) => displayText(row.major) },
-                    { key: "mentees", label: "Mentee" },
-                    { key: "activeMentees", label: "Active" },
-                    { key: "activeRate", label: "Rate", render: (row) => rateText(row.activeRate) }
+                    { key: "major", label: "Ngành học", render: (row) => displayText(row.major) },
+                    { key: "mentees", label: "Tổng mentee" },
+                    { key: "activeMentees", label: "Mentee active" },
+                    { key: "activeRate", label: "Tỷ lệ active", render: (row) => rateText(row.activeRate) }
                   ]}
                 />
               </Card>
@@ -225,9 +225,9 @@ export default async function FounderIntelligencePage() {
                   rows={data.activityBySegment.recapRateBySupportTeam}
                   columns={[
                     { key: "supportTeam", label: "Support team", render: (row) => displayText(row.supportTeam) },
-                    { key: "activeMentees", label: "Active" },
+                    { key: "activeMentees", label: "Mentee active" },
                     { key: "menteesWithRecap", label: "Có recap" },
-                    { key: "recapRate", label: "Rate", render: (row) => rateText(row.recapRate) }
+                    { key: "recapRate", label: "Tỷ lệ recap", render: (row) => rateText(row.recapRate) }
                   ]}
                 />
               </Card>
@@ -236,10 +236,10 @@ export default async function FounderIntelligencePage() {
                 <SimpleTable
                   rows={data.activityBySegment.activeMentorRateByIndustry}
                   columns={[
-                    { key: "industry", label: "Industry", render: (row) => displayText(row.industry) },
-                    { key: "mentors", label: "Mentor" },
-                    { key: "activeMentors", label: "Active" },
-                    { key: "activeRate", label: "Rate", render: (row) => rateText(row.activeRate) }
+                    { key: "industry", label: "Ngành", render: (row) => displayText(row.industry) },
+                    { key: "mentors", label: "Tổng mentor" },
+                    { key: "activeMentors", label: "Mentor active" },
+                    { key: "activeRate", label: "Tỷ lệ active", render: (row) => rateText(row.activeRate) }
                   ]}
                 />
               </Card>

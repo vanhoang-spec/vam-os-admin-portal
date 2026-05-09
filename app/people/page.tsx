@@ -13,7 +13,7 @@ export default async function PeoplePage() {
         rows={people.data}
         searchPlaceholder="Tìm theo tên, email hoặc số điện thoại"
         searchKeys={["full_name", "email_primary", "phone_primary"]}
-        filters={[{ key: "gender", label: "Gender", valueKey: "gender" }]}
+        filters={[{ key: "gender", label: "Giới tính", valueKey: "gender" }]}
         getHref={{ prefix: "/people/", key: "id" }}
         columns={[
           { key: "full_name", label: "Họ và tên" },

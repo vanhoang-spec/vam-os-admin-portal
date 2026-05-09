@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Eye } from "lucide-react";
 import { cn, displayText, externalUrl } from "@/lib/utils";
 
 export function PageHeader({ title, description }: { title: string; description?: string }) {
@@ -31,9 +32,11 @@ export function ExternalLinkButton({ href, label }: { href: unknown; label: stri
       href={normalizedHref}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+      title={label}
+      className="inline-flex items-center gap-1 rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
     >
-      {label}
+      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>Xem</span>
     </a>
   );
 }
@@ -42,8 +45,9 @@ export function InternalLinkButton({ href, label }: { href: unknown; label: stri
   const resolvedHref = String(href ?? "").trim();
   if (!resolvedHref) return <span>-</span>;
   return (
-    <Link href={resolvedHref} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
-      {label}
+    <Link href={resolvedHref} title={label} className="inline-flex items-center gap-1 rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
+      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>Xem</span>
     </Link>
   );
 }
@@ -70,30 +74,90 @@ export function DetailGrid({ rows }: { rows: Array<[string, unknown]> }) {
   );
 }
 
+type SimpleTableColumn<T> = {
+  key: string;
+  label: string;
+  render?: (row: T) => React.ReactNode;
+  externalHrefKey?: string;
+  externalLabel?: string;
+  internalHrefKey?: string;
+  internalHrefPrefix?: string;
+  internalLabel?: string;
+  displayKey?: string;
+  secondaryKey?: string;
+  secondaryLabel?: string;
+  nowrap?: boolean;
+  badge?: boolean;
+  truncate?: boolean;
+};
+
+function shouldTruncateColumn(column: SimpleTableColumn<any>) {
+  if (typeof column.truncate === "boolean") return column.truncate;
+  return /email|note|notes|url|link|text|title|reason|source|quality|channel/i.test(`${column.key} ${column.displayKey ?? ""}`);
+}
+
+export function TruncatedText({ value, truncate, className }: { value: unknown; truncate?: boolean; className?: string }) {
+  const content = displayText(value);
+  return (
+    <span title={content !== "-" ? content : undefined} className={cn("block", truncate ? "max-w-[18rem] truncate" : undefined, className)}>
+      {content}
+    </span>
+  );
+}
+
 export function SimpleTable<T>({
   rows,
   columns,
   getHref
 }: {
   rows: T[];
-  columns: Array<{
-    key: string;
-    label: string;
-    render?: (row: T) => React.ReactNode;
-    externalHrefKey?: string;
-    externalLabel?: string;
-    internalHrefKey?: string;
-    internalHrefPrefix?: string;
-    internalLabel?: string;
-    displayKey?: string;
-    secondaryKey?: string;
-    secondaryLabel?: string;
-    nowrap?: boolean;
-    badge?: boolean;
-  }>;
+  columns: Array<SimpleTableColumn<T>>;
   getHref?: (row: T) => string;
 }) {
   if (!rows.length) return <EmptyState />;
+  const renderCell = (row: T, column: SimpleTableColumn<T>, href?: string) => {
+    if (column.render) return column.render(row);
+    if (column.externalHrefKey) return <ExternalLinkButton href={(row as any)[column.externalHrefKey]} label={column.externalLabel ?? "Xem"} />;
+    if (column.internalHrefKey) {
+      return (
+        <InternalLinkButton
+          href={(row as any)[column.internalHrefKey] ? `${column.internalHrefPrefix ?? ""}${(row as any)[column.internalHrefKey]}` : ""}
+          label={column.internalLabel ?? "Xem"}
+        />
+      );
+    }
+    if (column.badge) {
+      return (
+        <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-vam-ink">
+          {displayText((row as any)[column.displayKey ?? column.key])}
+        </span>
+      );
+    }
+    const truncate = shouldTruncateColumn(column);
+    if (column.secondaryKey) {
+      const primary = (row as any)[column.displayKey ?? column.key];
+      const secondary = (row as any)[column.secondaryKey];
+      const content = (
+        <>
+          <TruncatedText value={primary} truncate={truncate} className={cn("font-medium text-vam-ink", column.nowrap ? "whitespace-nowrap" : undefined)} />
+          <div className="mt-1 text-xs text-slate-500">
+            {column.secondaryLabel ? `${column.secondaryLabel}: ` : ""}
+            <TruncatedText value={secondary} truncate={truncate} />
+          </div>
+        </>
+      );
+      return href ? <Link href={href} className="block">{content}</Link> : <div>{content}</div>;
+    }
+    const value = (row as any)[column.displayKey ?? column.key];
+    if (href) {
+      return (
+        <Link href={href} className="block">
+          <TruncatedText value={value} truncate={truncate} className={column.nowrap ? "whitespace-nowrap" : undefined} />
+        </Link>
+      );
+    }
+    return <TruncatedText value={value} truncate={truncate} className={column.nowrap ? "whitespace-nowrap" : undefined} />;
+  };
   return (
     <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
       <div className="overflow-x-auto">
@@ -107,76 +171,62 @@ export function SimpleTable<T>({
           </thead>
           <tbody className="divide-y divide-vam-line">
             {rows.map((row, index) => {
-              const content = columns.map((column) => (
-                <td key={column.key} className="max-w-xs break-words px-4 py-3 text-slate-700">
-                  {column.render ? (
-                    column.render(row)
-                  ) : column.externalHrefKey ? (
-                    <ExternalLinkButton href={(row as any)[column.externalHrefKey]} label={column.externalLabel ?? "Xem"} />
-                  ) : column.internalHrefKey ? (
-                    <InternalLinkButton
-                      href={(row as any)[column.internalHrefKey] ? `${column.internalHrefPrefix ?? ""}${(row as any)[column.internalHrefKey]}` : ""}
-                      label={column.internalLabel ?? "Xem"}
-                    />
-                  ) : column.badge ? (
-                    <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-vam-ink">
-                      {displayText((row as any)[column.displayKey ?? column.key])}
-                    </span>
-                  ) : column.secondaryKey ? (
-                    <div className={column.nowrap ? "whitespace-nowrap" : undefined}>
-                      <div className="font-medium text-vam-ink">{displayText((row as any)[column.displayKey ?? column.key])}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {column.secondaryLabel ? `${column.secondaryLabel}: ` : ""}
-                        {displayText((row as any)[column.secondaryKey])}
-                      </div>
-                    </div>
-                  ) : (
-                    <span className={column.nowrap ? "whitespace-nowrap" : undefined}>{displayText((row as any)[column.displayKey ?? column.key])}</span>
-                  )}
-                </td>
-              ));
               const href = getHref?.(row);
               if (href) {
                 return (
                   <tr key={href} className="hover:bg-vam-mint/50">
                     {columns.map((column) => (
                       <td key={column.key} className="max-w-xs break-words px-4 py-3 text-slate-700">
-                        {column.render ? (
-                          column.render(row)
-                        ) : column.externalHrefKey ? (
-                          <ExternalLinkButton href={(row as any)[column.externalHrefKey]} label={column.externalLabel ?? "Xem"} />
-                        ) : column.internalHrefKey ? (
-                          <InternalLinkButton
-                            href={(row as any)[column.internalHrefKey] ? `${column.internalHrefPrefix ?? ""}${(row as any)[column.internalHrefKey]}` : ""}
-                            label={column.internalLabel ?? "Xem"}
-                          />
-                        ) : column.badge ? (
-                          <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-vam-ink">
-                            {displayText((row as any)[column.displayKey ?? column.key])}
-                          </span>
-                        ) : column.secondaryKey ? (
-                          <Link href={href} className={column.nowrap ? "block whitespace-nowrap" : "block"}>
-                            <span className="font-medium text-vam-ink">{displayText((row as any)[column.displayKey ?? column.key])}</span>
-                            <span className="mt-1 block text-xs text-slate-500">
-                              {column.secondaryLabel ? `${column.secondaryLabel}: ` : ""}
-                              {displayText((row as any)[column.secondaryKey])}
-                            </span>
-                          </Link>
-                        ) : (
-                          <Link href={href} className={column.nowrap ? "block whitespace-nowrap" : "block"}>
-                            {displayText((row as any)[column.displayKey ?? column.key])}
-                          </Link>
-                        )}
+                        {renderCell(row, column, href)}
                       </td>
                     ))}
                   </tr>
                 );
               }
-              return <tr key={index}>{content}</tr>;
+              return (
+                <tr key={index}>
+                  {columns.map((column) => (
+                    <td key={column.key} className="max-w-xs break-words px-4 py-3 text-slate-700">
+                      {renderCell(row, column)}
+                    </td>
+                  ))}
+                </tr>
+              );
             })}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+export function ProgressiveTable<T>({
+  rows,
+  columns,
+  getHref,
+  initialCount = 20,
+  summaryLabel
+}: {
+  rows: T[];
+  columns: Array<SimpleTableColumn<T>>;
+  getHref?: (row: T) => string;
+  initialCount?: number;
+  summaryLabel?: string;
+}) {
+  if (rows.length <= initialCount) return <SimpleTable rows={rows} columns={columns} getHref={getHref} />;
+  const firstRows = rows.slice(0, initialCount);
+  const remainingRows = rows.slice(initialCount);
+  return (
+    <div className="grid gap-3">
+      <SimpleTable rows={firstRows} columns={columns} getHref={getHref} />
+      <details className="rounded-lg border border-dashed border-vam-line bg-white px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium text-vam-green">
+          {summaryLabel ?? `Xem thêm ${remainingRows.length} dòng`}
+        </summary>
+        <div className="mt-3">
+          <SimpleTable rows={remainingRows} columns={columns} getHref={getHref} />
+        </div>
+      </details>
     </div>
   );
 }
