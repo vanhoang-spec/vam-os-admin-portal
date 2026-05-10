@@ -38,7 +38,7 @@ mentor_match_candidates as (
     m.mentor_person_id as person_id,
     s.program_id,
     s.id as season_id,
-    m.intake_batch_id,
+    null::uuid as intake_batch_id,
     'mentor'::text as role,
     case
       when lower(coalesce(m.status, '')) = 'active' then 'active'
@@ -55,7 +55,7 @@ mentor_match_chosen as (
     person_id,
     program_id,
     season_id,
-    (array_agg(intake_batch_id order by intake_batch_id nulls last))[1] as intake_batch_id,
+    null::uuid as intake_batch_id,
     role,
     case
       when bool_or(status = 'active') then 'active'
@@ -203,14 +203,15 @@ on conflict (person_id, season_id, role) do nothing;
 
 -- Mentors from season-scoped matches.
 -- Choose one deterministic row per mentor x season. If any match is active,
--- the membership is active; otherwise it is completed. For intake_batch_id,
--- use the first non-null UUID in ascending order as a stable representative.
+-- the membership is active; otherwise it is completed. matches.intake_batch_id
+-- is not present in active staging, so match-inferred mentor rows leave
+-- intake_batch_id null.
 with mentor_match_candidates as (
   select
     m.mentor_person_id as person_id,
     s.program_id,
     s.id as season_id,
-    m.intake_batch_id,
+    null::uuid as intake_batch_id,
     case
       when lower(coalesce(m.status, '')) = 'active' then 'active'
       else 'completed'
@@ -225,7 +226,7 @@ mentor_match_chosen as (
     person_id,
     program_id,
     season_id,
-    (array_agg(intake_batch_id order by intake_batch_id nulls last))[1] as intake_batch_id,
+    null::uuid as intake_batch_id,
     'mentor' as role,
     case
       when bool_or(status = 'active') then 'active'
