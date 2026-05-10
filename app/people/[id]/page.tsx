@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, PageHeader, SimpleTable, TruncatedText } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { createCrmNoteFormAction, getCrmNotesByPerson, getPersonSeasonMemberships, type CrmNote, type PersonSeasonMembership } from "@/lib/lifecycle-crm";
 import {
   getApplications,
   getEventParticipationsByPersonId,
@@ -20,7 +21,6 @@ import {
   getPeople,
   getPerson,
   getPrograms,
-  getRolesForPerson,
   getSeasons,
   keyById
 } from "@/lib/data";
@@ -54,6 +54,16 @@ type EventActivityRow = EventParticipation & {
 };
 
 type OperationalTeamAssignmentRow = OperationalTeamAssignment;
+type SeasonMembershipRow = PersonSeasonMembership & {
+  season?: Season;
+  program?: Program;
+};
+
+type CrmNoteRow = CrmNote & {
+  season?: Season;
+  program?: Program;
+  match?: Match;
+};
 
 function actionLink(href: string, label: string) {
   if (label.startsWith("Xem")) return <InternalLinkButton href={href} label={label} />;
@@ -66,10 +76,6 @@ function actionLink(href: string, label: string) {
 
 function normalizeStatus(status: unknown) {
   return String(status ?? "").trim().toLowerCase();
-}
-
-function hasRole(rows: Array<Record<string, unknown>>, roleName: string) {
-  return rows.some((row) => normalizeStatus(row.role) === roleName);
 }
 
 function currentMonth() {
@@ -154,12 +160,86 @@ function operationalRoleLabel(value: unknown) {
   return displayText(value);
 }
 
+function membershipRoleLabel(value: unknown) {
+  const normalized = normalizeStatus(value);
+  if (normalized === "mentee") return "Mentee";
+  if (normalized === "mentor") return "Mentor";
+  if (normalized === "supporter") return "Supporter";
+  if (normalized === "reviewer") return "Reviewer";
+  if (normalized === "interviewer") return "Interviewer";
+  if (normalized === "coreteam") return "Coreteam";
+  if (normalized === "advisor") return "Advisor";
+  if (normalized === "alumni_mentee") return "Alumni mentee";
+  if (normalized === "guest") return "Khách mời";
+  return displayText(value);
+}
+
+function membershipStatusLabel(value: unknown) {
+  const normalized = normalizeStatus(value);
+  if (normalized === "invited") return "Được mời";
+  if (normalized === "active") return "Đang tham gia";
+  if (normalized === "paused") return "Tạm nghỉ";
+  if (normalized === "withdrawn") return "Đã rút";
+  if (normalized === "completed") return "Hoàn thành";
+  if (normalized === "graduated") return "Tốt nghiệp";
+  if (normalized === "opted_out") return "Không tiếp tục";
+  if (normalized === "cancelled") return "Đã hủy";
+  return displayText(value);
+}
+
+function crmNoteTypeLabel(value: unknown) {
+  const normalized = normalizeStatus(value);
+  if (normalized === "contact_outbound") return "Liên hệ đi";
+  if (normalized === "contact_inbound") return "Liên hệ đến";
+  if (normalized === "re_engagement") return "Tái kết nối";
+  if (normalized === "feedback_from_mentor") return "Feedback từ mentor";
+  if (normalized === "feedback_from_mentee") return "Feedback từ mentee";
+  if (normalized === "feedback_about_mentor") return "Feedback về mentor";
+  if (normalized === "feedback_about_mentee") return "Feedback về mentee";
+  if (normalized === "program_feedback") return "Feedback chương trình";
+  if (normalized === "pause_intent") return "Ý định tạm nghỉ";
+  if (normalized === "withdrawal_intent") return "Ý định dừng tham gia";
+  if (normalized === "return_intent") return "Ý định quay lại";
+  if (normalized === "application_intent") return "Ý định ứng tuyển";
+  if (normalized === "observation") return "Quan sát";
+  if (normalized === "escalation") return "Can escalate";
+  if (normalized === "resolution") return "Kết quả xử lý";
+  if (normalized === "handover") return "Bàn giao";
+  if (normalized.startsWith("system_")) return "Hệ thống";
+  return displayText(value);
+}
+
+function visibilityLabel(value: unknown) {
+  const normalized = normalizeStatus(value);
+  if (normalized === "private") return "Riêng tư";
+  if (normalized === "ops_only") return "Ops only";
+  if (normalized === "team") return "Team";
+  if (normalized === "system") return "Hệ thống";
+  return displayText(value);
+}
+
+function selectClassName() {
+  return "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink";
+}
+
+function inputClassName() {
+  return "w-full rounded-md border border-vam-line px-3 py-2 text-sm text-vam-ink";
+}
+
+function isMissingOptionalTableError(error: string | null, tableName: string) {
+  return Boolean(
+    error &&
+      error.includes(tableName) &&
+      (error.includes("Could not find the table") || error.includes("schema cache"))
+  );
+}
+
 export default async function PersonDetailPage({ params }: { params: { id: string } }) {
-  const scope = await getScopeFilter(await getAdminScopeContext());
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext);
   const [
     adminUser,
     person,
-    roles,
     people,
     mentors,
     mentees,
@@ -176,11 +256,12 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     functionAreas,
     programLinks,
     industryLinks,
-    functionLinks
+    functionLinks,
+    seasonMemberships,
+    crmNotes
   ] = await Promise.all([
     getCurrentAdminUser(),
     getPerson(params.id, scope),
-    getRolesForPerson(params.id),
     getPeople(scope),
     getMentorProfiles(scope),
     getMenteeProfiles(scope),
@@ -197,7 +278,9 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     getFunctionAreas(),
     getMentorProgramParticipations(),
     getMentorIndustryLinks(),
-    getMentorFunctionAreaLinks()
+    getMentorFunctionAreaLinks(),
+    getPersonSeasonMemberships(params.id, scope),
+    getCrmNotesByPerson(params.id, scopeContext, scope)
   ]);
   const allowRecapEdit = canEditRecaps(adminUser);
   const personApplications = applications.data.filter((application) => application.person_id === params.id);
@@ -234,6 +317,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     : [];
   const mentorMatches = matches.data.filter((match) => match.mentor_person_id === params.id);
   const menteeMatches = matches.data.filter((match) => match.mentee_person_id === params.id);
+  const matchesById = keyById(matches.data);
   const menteesForMentor: MentorMenteeRow[] = mentorMatches.map((match) => ({
     ...match,
     mentee: match.mentee_person_id ? peopleById.get(match.mentee_person_id) : undefined,
@@ -259,29 +343,46 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     event: participation.event_id ? eventsById.get(participation.event_id) : undefined
   }));
   const operationalAssignmentRows: OperationalTeamAssignmentRow[] = operationalAssignments.data;
+  const seasonMembershipRows: SeasonMembershipRow[] = seasonMemberships.data.map((membership) => ({
+    ...membership,
+    season: membership.season_id ? seasonsById.get(membership.season_id) : undefined,
+    program: membership.program_id ? programsById.get(membership.program_id) : undefined
+  }));
+  const crmNoteRows: CrmNoteRow[] = crmNotes.data.map((note) => ({
+    ...note,
+    season: note.season_id ? seasonsById.get(note.season_id) : undefined,
+    program: note.program_id ? programsById.get(note.program_id) : undefined,
+    match: note.match_id ? matchesById.get(note.match_id) : undefined
+  }));
   const currentMeetingMonth = currentMonth();
   const relatedMatches = Array.from(new Map([...mentorMatches, ...menteeMatches].map((match) => [match.id, match])).values());
   const activeMatchCount = relatedMatches.filter((match) => normalizeStatus(match.status) === "active").length;
   const menteeCount = new Set(mentorMatches.map((match) => match.mentee_person_id).filter(Boolean)).size;
   const mentorCount = new Set(menteeMatches.map((match) => match.mentor_person_id).filter(Boolean)).size;
-  const isMentor = hasRole(roles.data, "mentor");
-  const isMentee = hasRole(roles.data, "mentee");
+  const isMentor = Boolean(mentorProfile) || mentorMatches.length > 0 || seasonMembershipRows.some((row) => normalizeStatus(row.role) === "mentor");
+  const isMentee = Boolean(menteeProfile) || menteeMatches.length > 0 || seasonMembershipRows.some((row) => normalizeStatus(row.role) === "mentee");
   const hasMentorSide = Boolean(mentorProfile) || mentorMatches.length > 0;
   const hasMenteeSide = Boolean(menteeProfile) || menteeMatches.length > 0;
+  const canCreateCrmNote =
+    scopeContext.isSuperAdmin ||
+    scopeContext.programScopes.some((programScope) => programScope.scopeLevel === "full_access" || programScope.scopeLevel === "operations" || programScope.scopeLevel === "review");
+  const applicationsTableMissing = isMissingOptionalTableError(applications.error, "applications");
+  const operationalAssignmentsTableMissing = isMissingOptionalTableError(operationalAssignments.error, "operational_team_assignments");
   const error =
     person.error ||
-    roles.error ||
     people.error ||
     mentors.error ||
     mentees.error ||
-    applications.error ||
+    (applicationsTableMissing ? null : applications.error) ||
     matches.error ||
     seasons.error ||
     menteeRecaps.error ||
     mentorRecaps.error ||
     eventParticipations.error ||
     events.error ||
-    operationalAssignments.error;
+    (operationalAssignmentsTableMissing ? null : operationalAssignments.error) ||
+    seasonMemberships.error ||
+    crmNotes.error;
 
   if (!person.data) {
     return (
@@ -361,6 +462,159 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
         )}
       </Card>
 
+      <Card className="mb-4">
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">Lịch sử VAM</h2>
+        {seasonMembershipRows.length > 0 ? (
+          <SimpleTable
+            rows={seasonMembershipRows}
+            columns={[
+              { key: "program", label: "Chương trình", render: (row) => displayText(row.program?.name ?? row.program?.code) },
+              { key: "season", label: "Mùa", render: (row) => displayCode(row.season?.code ?? row.season?.name) },
+              { key: "role", label: "Vai trò", render: (row) => membershipRoleLabel(row.role) },
+              { key: "status", label: "Trạng thái", render: (row) => membershipStatusLabel(row.status) },
+              { key: "source", label: "Nguồn", render: (row) => displayText(row.source) },
+              { key: "start_date", label: "Bắt đầu", render: (row) => formatDate(row.start_date) },
+              { key: "end_date", label: "Kết thúc", render: (row) => formatDate(row.end_date) },
+              { key: "notes", label: "Ghi chú", render: (row) => displayText(row.notes) }
+            ]}
+          />
+        ) : (
+          <EmptyState message="Chưa có lịch sử thành viên theo mùa." />
+        )}
+      </Card>
+
+      <Card className="mb-4">
+        <h2 className="mb-3 text-base font-semibold text-vam-ink">Ghi chú CRM</h2>
+        {canCreateCrmNote ? (
+          <form action={createCrmNoteFormAction} className="mb-4 grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3">
+            <input type="hidden" name="person_id" value={params.id} />
+            <input type="hidden" name="owner_admin_user_id" value={adminUser?.id ?? ""} />
+            <div className="grid gap-3 md:grid-cols-4">
+              <label className="text-xs font-medium text-slate-600">
+                Loại ghi chú
+                <select name="note_type" defaultValue="contact_outbound" className={selectClassName()}>
+                  <option value="contact_outbound">Liên hệ đi</option>
+                  <option value="contact_inbound">Liên hệ đến</option>
+                  <option value="re_engagement">Tái kết nối</option>
+                  <option value="program_feedback">Feedback chương trình</option>
+                  <option value="pause_intent">Ý định tạm nghỉ</option>
+                  <option value="return_intent">Ý định quay lại</option>
+                  <option value="withdrawal_intent">Ý định dừng tham gia</option>
+                  <option value="application_intent">Ý định ứng tuyển</option>
+                  <option value="observation">Quan sát</option>
+                  <option value="handover">Bàn giao</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Hiển thị
+                <select name="visibility" defaultValue="team" className={selectClassName()}>
+                  <option value="team">Team</option>
+                  <option value="ops_only">Ops only</option>
+                  <option value="private">Riêng tư</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Kênh
+                <select name="channel" defaultValue="" className={selectClassName()}>
+                  <option value="">-</option>
+                  <option value="zalo">Zalo</option>
+                  <option value="phone">Điện thoại</option>
+                  <option value="email">Email</option>
+                  <option value="in_person">Gặp trực tiếp</option>
+                  <option value="video_call">Video call</option>
+                  <option value="form">Form</option>
+                  <option value="event">Sự kiện</option>
+                  <option value="other">Khác</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Ưu tiên
+                <select name="priority" defaultValue="normal" className={selectClassName()}>
+                  <option value="low">Thấp</option>
+                  <option value="normal">Bình thường</option>
+                  <option value="high">Cao</option>
+                  <option value="urgent">Khẩn cấp</option>
+                </select>
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <label className="text-xs font-medium text-slate-600">
+                Program
+                <select name="program_id" defaultValue="" className={selectClassName()}>
+                  <option value="">-</option>
+                  {programs.data.map((program) => (
+                    <option key={program.id} value={program.id}>{program.name ?? program.code}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Season
+                <select name="season_id" defaultValue="" className={selectClassName()}>
+                  <option value="">-</option>
+                  {seasons.data.map((season) => (
+                    <option key={season.id} value={season.id}>{season.code ?? season.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Match
+                <select name="match_id" defaultValue="" className={selectClassName()}>
+                  <option value="">-</option>
+                  {relatedMatches.map((match) => (
+                    <option key={match.id} value={match.id}>{displayCode(seasonsById.get(match.season_id ?? "")?.code)} - {displayText(match.status)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Sentiment
+                <select name="sentiment" defaultValue="" className={selectClassName()}>
+                  <option value="">-</option>
+                  <option value="positive">Positive</option>
+                  <option value="neutral">Neutral</option>
+                  <option value="concern">Concern</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+            </div>
+            <label className="text-xs font-medium text-slate-600">
+              Nội dung
+              <textarea name="content" required rows={3} className={inputClassName()} />
+            </label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-medium text-slate-600">
+                Next action
+                <input name="next_action_text" className={inputClassName()} />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Hạn next action
+                <input name="next_action_due_date" type="date" className={inputClassName()} />
+              </label>
+            </div>
+            <button type="submit" className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1.5 text-xs font-medium text-white hover:bg-vam-green/90">
+              Thêm ghi chú CRM
+            </button>
+          </form>
+        ) : null}
+        {crmNoteRows.length > 0 ? (
+          <SimpleTable
+            rows={crmNoteRows}
+            columns={[
+              { key: "created_at", label: "Ngày", render: (row) => formatDate(row.created_at) },
+              { key: "note_type", label: "Loại", render: (row) => crmNoteTypeLabel(row.note_type) },
+              { key: "visibility", label: "Hiển thị", render: (row) => visibilityLabel(row.visibility) },
+              { key: "scope", label: "Phạm vi", render: (row) => displayText(row.season?.code ?? row.program?.name ?? row.program?.code) },
+              { key: "channel", label: "Kênh", render: (row) => displayText(row.channel) },
+              { key: "priority", label: "Ưu tiên", render: (row) => displayText(row.priority) },
+              { key: "content", label: "Nội dung", render: (row) => <TruncatedText value={row.content} truncate /> },
+              { key: "next_action", label: "Next action", render: (row) => displayText(row.next_action_text) },
+              { key: "due", label: "Hạn", render: (row) => formatDate(row.next_action_due_date) }
+            ]}
+          />
+        ) : (
+          <EmptyState message="Chưa có ghi chú CRM trong phạm vi bạn có thể xem." />
+        )}
+      </Card>
+
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin person</h2>
@@ -376,8 +630,19 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
           />
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Roles</h2>
-          <SimpleTable rows={roles.data} columns={[{ key: "role", label: "Vai trò" }, { key: "status", label: "Trạng thái" }, { key: "notes", label: "Ghi chú" }]} />
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Vai trò theo mùa</h2>
+          {seasonMembershipRows.length > 0 ? (
+            <SimpleTable
+              rows={seasonMembershipRows}
+              columns={[
+                { key: "season", label: "Mùa", render: (row) => displayCode(row.season?.code ?? row.season?.name) },
+                { key: "role", label: "Vai trò", render: (row) => membershipRoleLabel(row.role) },
+                { key: "status", label: "Trạng thái", render: (row) => membershipStatusLabel(row.status) }
+              ]}
+            />
+          ) : (
+            <EmptyState message="Chưa có vai trò theo mùa." />
+          )}
         </Card>
         <Card>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -489,17 +754,23 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
       <div className="mt-4 grid gap-4">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Applications</h2>
-          <SimpleTable
-            rows={personApplications.map((application) => ({ ...application, season_code: application.season_id ? seasonsById.get(application.season_id)?.code : "-" }))}
-            columns={[
-              { key: "season_code", label: "Mùa" },
-              { key: "role_applied", label: "Vai trò ứng tuyển" },
-              { key: "final_status", label: "Trạng thái cuối" },
-              { key: "submitted_at", label: "Ngày nộp", render: (row) => formatDate(row.submitted_at) },
-              { key: "acquisition_channel", label: "Kênh biết đến" },
-              { key: "application_link", label: "Chi tiết", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem chi tiết" }
-            ]}
-          />
+          {applicationsTableMissing ? (
+            <EmptyState message="Chưa có dữ liệu ứng tuyển trong schema staging hiện tại." />
+          ) : personApplications.length > 0 ? (
+            <SimpleTable
+              rows={personApplications.map((application) => ({ ...application, season_code: application.season_id ? seasonsById.get(application.season_id)?.code : "-" }))}
+              columns={[
+                { key: "season_code", label: "Mùa" },
+                { key: "role_applied", label: "Vai trò ứng tuyển" },
+                { key: "final_status", label: "Trạng thái cuối" },
+                { key: "submitted_at", label: "Ngày nộp", render: (row) => formatDate(row.submitted_at) },
+                { key: "acquisition_channel", label: "Kênh biết đến" },
+                { key: "application_link", label: "Chi tiết", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem chi tiết" }
+              ]}
+            />
+          ) : (
+            <EmptyState message="Chưa có hồ sơ ứng tuyển được ghi nhận." />
+          )}
         </Card>
         {hasMentorSide ? (
           <Card>
