@@ -698,7 +698,51 @@ async function syncCheckedInParticipation(client: any, input: {
   return { ok: true };
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2A: check-in rules engine helpers
+// ---------------------------------------------------------------------------
+
+type EventConfig = {
+  season_id: string | null;
+  checkin_mode: string;
+  checkin_window_enabled: boolean;
+  checkin_opens_at: string | null;
+  checkin_closes_at: string | null;
+  allow_walk_in: boolean;
+  registration_required: boolean;
+  approval_required: boolean;
+  capacity_limit_enabled: boolean;
+  capacity_limit: number | null;
+};
+
+function readEventConfig(ev: JsonRecord): EventConfig {
+  return {
+    season_id:              (ev.season_id as string | null) ?? null,
+    checkin_mode:           String(ev.checkin_mode ?? "open").trim() || "open",
+    checkin_window_enabled: ev.checkin_window_enabled === true,
+    checkin_opens_at:       (ev.checkin_opens_at as string | null) ?? null,
+    checkin_closes_at:      (ev.checkin_closes_at as string | null) ?? null,
+    allow_walk_in:          ev.allow_walk_in !== false,   // default true
+    registration_required:  ev.registration_required === true,
+    approval_required:      ev.approval_required === true,
+    capacity_limit_enabled: ev.capacity_limit_enabled === true,
+    capacity_limit:         ev.capacity_limit != null ? Number(ev.capacity_limit) : null,
+  };
+}
+
+/**
+ * Determine whether an existing registration grants access in confirmed_only mode.
+ * Returns true when the admin has explicitly confirmed the registration, OR when
+ * the event does not require approval (in which case 'registered' is implicitly confirmed).
+ */
+function isConfirmedForCheckin(regStatus: string, approvalRequired: boolean): boolean {
+  if (regStatus === "confirmed") return true;
+  if (!approvalRequired && regStatus === "registered") return true;
+  return false;
+}
+
 export async function checkInForEvent(input: PublicCheckinInput): Promise<PublicCheckinResult> {
+  // ── 1. Basic input validation ─────────────────────────────────────────────
   const token = clean(input.token);
   if (!token || !isValidUuid(token)) {
     return { ok: false, status: "link_error", message: "Liên kết check-in không hợp lệ." };
@@ -709,46 +753,162 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
     return { ok: false, status: "validation_error", message: "Vui lòng nhập email hợp lệ." };
   }
 
+  // ── 2. Validate public link (time window, active flag, event status) ───────
   const linkData = await getPublicCheckinData(token);
   if (!linkData.ok || !linkData.event || !linkData.eventLink) {
-    return { ok: false, status: "link_error", message: linkData.message, eventName: linkData.event?.event_name ?? null };
+    return {
+      ok: false,
+      status: "link_error",
+      message: linkData.message,
+      eventName: linkData.event?.event_name ?? null
+    };
   }
 
   const { client, error } = clientResult();
-  if (!client) return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: linkData.event.event_name ?? null };
+  if (!client) {
+    return {
+      ok: false,
+      status: "server_error",
+      message: "Không thể check-in lúc này.",
+      eventName: linkData.event.event_name ?? null
+    };
+  }
 
   const eventId = linkData.event.id;
-  const { data: event, error: eventError } = await client
+  const displayName = linkData.event.event_name ?? null;
+
+  // ── 3. Load event with Phase 2 config fields ──────────────────────────────
+  const { data: eventRow, error: eventError } = await client
     .from("events")
-    .select("id,season_id")
+    .select([
+      "id", "season_id",
+      // Phase 2 config
+      "checkin_mode", "checkin_window_enabled", "checkin_opens_at", "checkin_closes_at",
+      "allow_walk_in", "registration_required", "approval_required",
+      "capacity_limit_enabled", "capacity_limit"
+    ].join(","))
     .eq("id", eventId)
     .maybeSingle();
-  if (eventError || !event) {
-    if (eventError) log("load event for check-in failed", eventError);
-    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: linkData.event.event_name ?? null };
+
+  if (eventError || !eventRow) {
+    if (eventError) log("load event config for check-in failed", eventError);
+    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: displayName };
   }
 
-  const { data: existingRows, error: existingError } = await client
+  const cfg = readEventConfig(eventRow as JsonRecord);
+
+  // ── 4. Rule: manual_admin_only blocks all public self-check-in ────────────
+  if (cfg.checkin_mode === "manual_admin_only") {
+    return {
+      ok: false,
+      status: "self_checkin_disabled",
+      message: "Sự kiện này không hỗ trợ tự check-in. Vui lòng liên hệ ban tổ chức tại sự kiện.",
+      eventName: displayName
+    };
+  }
+
+  // ── 5. Rule: check-in window (secondary time gate) ────────────────────────
+  if (cfg.checkin_window_enabled) {
+    const now = Date.now();
+    if (cfg.checkin_opens_at) {
+      const opensAt = new Date(cfg.checkin_opens_at).getTime();
+      if (!Number.isNaN(opensAt) && now < opensAt) {
+        return {
+          ok: false,
+          status: "checkin_not_open",
+          message: "Check-in chưa bắt đầu. Vui lòng quay lại đúng giờ.",
+          eventName: displayName
+        };
+      }
+    }
+    if (cfg.checkin_closes_at) {
+      const closesAt = new Date(cfg.checkin_closes_at).getTime();
+      if (!Number.isNaN(closesAt) && now > closesAt) {
+        return {
+          ok: false,
+          status: "checkin_closed",
+          message: "Thời gian check-in đã kết thúc.",
+          eventName: displayName
+        };
+      }
+    }
+  }
+
+  // ── 6. Load all registrations for this event (all statuses) ──────────────
+  // We load all (including cancelled) so we can return specific messages for
+  // cancelled / rejected / waitlisted registrants instead of "not registered".
+  const { data: allRows, error: allRowsError } = await client
     .from("event_registrations")
-    .select("id,email,attendance_status,linked_person_id,registration_status,is_walk_in")
-    .eq("event_id", eventId)
-    .neq("registration_status", "cancelled");
-  if (existingError) {
-    log("check existing registration for check-in failed", existingError);
-    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: linkData.event.event_name ?? null };
+    .select("id,email,attendance_status,linked_person_id,registration_status,is_walk_in,review_status")
+    .eq("event_id", eventId);
+
+  if (allRowsError) {
+    log("check existing registration for check-in failed", allRowsError);
+    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: displayName };
   }
 
-  const existingRegistration = ((existingRows ?? []) as EventRegistration[]).find((row) => normalizeEmail(row.email) === email);
-  if (existingRegistration) {
-    if (existingRegistration.attendance_status === "checked_in") {
+  const allRegistrations = (allRows ?? []) as EventRegistration[];
+
+  // Find the best-matching registration for this email:
+  //   prefer non-cancelled (could be any Phase 2 status), fall back to cancelled.
+  const activeReg = allRegistrations.find(
+    (r) => normalizeEmail(r.email) === email && r.registration_status !== "cancelled"
+  ) ?? null;
+  const cancelledReg = !activeReg
+    ? (allRegistrations.find((r) => normalizeEmail(r.email) === email && r.registration_status === "cancelled") ?? null)
+    : null;
+
+  // ── 7. Mode-specific rules for participants who have a registration ────────
+  if (activeReg) {
+    const regStatus = String(activeReg.registration_status ?? "registered").trim();
+
+    // confirmed_only: must be explicitly confirmed (or implicitly via no approval required)
+    if (cfg.checkin_mode === "confirmed_only") {
+      if (!isConfirmedForCheckin(regStatus, cfg.approval_required)) {
+        if (regStatus === "pending_review") {
+          return {
+            ok: false,
+            status: "pending_approval",
+            message: "Đăng ký của bạn đang chờ xác nhận từ ban tổ chức. Vui lòng chờ thông báo.",
+            eventName: displayName
+          };
+        }
+        if (regStatus === "waitlisted") {
+          return {
+            ok: false,
+            status: "registration_waitlisted",
+            message: "Bạn đang trong danh sách dự phòng. Vui lòng liên hệ ban tổ chức để biết thêm thông tin.",
+            eventName: displayName
+          };
+        }
+        if (regStatus === "rejected") {
+          return {
+            ok: false,
+            status: "registration_rejected",
+            message: "Đăng ký của bạn đã bị từ chối. Vui lòng liên hệ ban tổ chức nếu bạn có thắc mắc.",
+            eventName: displayName
+          };
+        }
+        return {
+          ok: false,
+          status: "not_confirmed",
+          message: "Đăng ký của bạn chưa được xác nhận. Vui lòng liên hệ ban tổ chức.",
+          eventName: displayName
+        };
+      }
+    }
+
+    // Duplicate check-in (must come after mode checks so we give the right error first)
+    if (activeReg.attendance_status === "checked_in") {
       return {
         ok: true,
         status: "already_checked_in",
-        message: "Bạn đã check-in sự kiện này rồi",
-        eventName: linkData.event.event_name ?? null
+        message: "Bạn đã check-in sự kiện này rồi.",
+        eventName: displayName
       };
     }
 
+    // ── 8. Update attendance for pre-registered participant ────────────────
     const { data: updated, error: updateError } = await client
       .from("event_registrations")
       .update({
@@ -756,36 +916,79 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
         checked_in_at: new Date().toISOString(),
         checkin_source: "self_qr"
       })
-      .eq("id", existingRegistration.id)
+      .eq("id", activeReg.id)
       .select("id,linked_person_id")
       .maybeSingle();
+
     if (updateError) {
       log("update registration check-in failed", updateError);
-      return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: linkData.event.event_name ?? null };
+      return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: displayName };
     }
 
     const linkedPersonId = (updated as JsonRecord | null)?.linked_person_id as string | null;
     await syncCheckedInParticipation(client, {
       eventId,
-      seasonId: (event as JsonRecord).season_id as string | null,
+      seasonId: cfg.season_id,
       personId: linkedPersonId
     });
 
+    return { ok: true, status: "success", message: "Check-in thành công!", eventName: displayName };
+  }
+
+  // ── 9. No active registration found — walk-in path ───────────────────────
+
+  // If there is a cancelled registration, provide a specific message for
+  // restricted modes rather than the generic "not registered".
+  if (cancelledReg && (cfg.checkin_mode === "registration_required" || cfg.checkin_mode === "confirmed_only")) {
     return {
-      ok: true,
-      status: "success",
-      message: "Check-in thành công",
-      eventName: linkData.event.event_name ?? null
+      ok: false,
+      status: "registration_cancelled_status",
+      message: "Đăng ký của bạn đã bị hủy. Vui lòng liên hệ ban tổ chức.",
+      eventName: displayName
     };
   }
 
+  // registration_required and confirmed_only block all walk-ins
+  if (cfg.checkin_mode === "registration_required" || cfg.checkin_mode === "confirmed_only") {
+    return {
+      ok: false,
+      status: "not_registered",
+      message: "Email của bạn chưa có trong danh sách đăng ký sự kiện này. Vui lòng đăng ký trước.",
+      eventName: displayName
+    };
+  }
+
+  // allow_walk_in = false blocks walk-in (open mode only reaches here)
+  if (!cfg.allow_walk_in) {
+    return {
+      ok: false,
+      status: "walk_in_blocked",
+      message: "Sự kiện này không nhận walk-in. Vui lòng đăng ký trước hoặc liên hệ ban tổ chức.",
+      eventName: displayName
+    };
+  }
+
+  // Capacity check for walk-ins (existing registrants hold their slot regardless)
+  if (cfg.capacity_limit_enabled && cfg.capacity_limit != null) {
+    const activeCount = allRegistrations.filter((r) => r.registration_status !== "cancelled").length;
+    if (activeCount >= cfg.capacity_limit) {
+      return {
+        ok: false,
+        status: "event_full",
+        message: "Sự kiện đã đủ chỗ. Không thể check-in walk-in.",
+        eventName: displayName
+      };
+    }
+  }
+
+  // ── 10. Create walk-in registration ───────────────────────────────────────
   const fullName = clean(input.full_name);
   if (!fullName) {
     return {
       ok: false,
       status: "validation_error",
       message: "Vui lòng nhập họ và tên để check-in walk-in.",
-      eventName: linkData.event.event_name ?? null
+      eventName: displayName
     };
   }
 
@@ -795,12 +998,14 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
     .ilike("email_primary", email);
   if (peopleError) {
     log("people match for walk-in check-in failed", peopleError);
-    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: linkData.event.event_name ?? null };
+    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: displayName };
   }
+
   const matchedPerson = ((peopleData ?? []) as Array<{ id: string; email_primary: string | null }>).find(
     (person) => normalizeEmail(person.email_primary) === email
   );
   const nowIso = new Date().toISOString();
+
   const payload: JsonRecord = {
     event_id: eventId,
     event_link_id: linkData.eventLink.id,
@@ -830,27 +1035,23 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
     .insert(payload)
     .select("id,linked_person_id")
     .maybeSingle();
+
   if (insertError) {
     if ((insertError as { code?: string }).code === "23505") {
-      return { ok: true, status: "already_checked_in", message: "Bạn đã check-in sự kiện này rồi", eventName: linkData.event.event_name ?? null };
+      return { ok: true, status: "already_checked_in", message: "Bạn đã check-in sự kiện này rồi.", eventName: displayName };
     }
     log("insert walk-in check-in failed", insertError);
-    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: linkData.event.event_name ?? null };
+    return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: displayName };
   }
 
   const linkedPersonId = (inserted as JsonRecord | null)?.linked_person_id as string | null;
   await syncCheckedInParticipation(client, {
     eventId,
-    seasonId: (event as JsonRecord).season_id as string | null,
+    seasonId: cfg.season_id,
     personId: linkedPersonId
   });
 
-  return {
-    ok: true,
-    status: "success",
-    message: "Check-in thành công",
-    eventName: linkData.event.event_name ?? null
-  };
+  return { ok: true, status: "success", message: "Check-in thành công!", eventName: displayName };
 }
 
 async function createEventLinkForEvent(eventId: unknown, linkType: "registration" | "checkin"): Promise<MutationResult> {

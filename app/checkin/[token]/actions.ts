@@ -27,11 +27,18 @@ export async function submitEventCheckinAction(
     redirect(`/checkin/${token}?status=${result.status}`);
   }
 
+  // For all error statuses, stay on the form and show the message.
+  // Preserve field values only for form-level validation errors so the user
+  // can correct and resubmit. Phase 2 registration-state errors (not_registered,
+  // pending_approval, etc.) are informational — no values needed.
+  const preserveValues =
+    result.status === "validation_error" || result.status === "server_error";
+
   return {
     ok: result.ok,
     status: result.status,
     message: result.message,
     eventName: result.eventName ?? null,
-    values: result.status === "validation_error" || result.status === "server_error" ? values : {}
+    values: preserveValues ? values : {}
   };
 }

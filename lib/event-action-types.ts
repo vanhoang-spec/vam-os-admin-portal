@@ -23,12 +23,20 @@ export type BulkAddActionState = {
 export const initialBulkAddActionState: BulkAddActionState = { ok: false, message: null };
 
 export type RegistrationActionStatus =
+  // ── existing ──────────────────────────────────────────────────────────────
   | "idle"
   | "success"
   | "already_registered"
   | "validation_error"
   | "link_error"
-  | "server_error";
+  | "server_error"
+  // ── Phase 2: approval / capacity outcomes ─────────────────────────────────
+  /** Registration accepted but requires admin review (approval_required = true). */
+  | "pending_review"
+  /** Capacity full; registration placed on waitlist (waitlist_enabled = true). */
+  | "waitlisted"
+  /** Capacity full and waitlist disabled; registration rejected. */
+  | "capacity_full";
 
 export type PublicRegistrationActionState = {
   ok: boolean;
@@ -55,12 +63,37 @@ export const initialPublicRegistrationActionState: PublicRegistrationActionState
 };
 
 export type CheckinActionStatus =
+  // ── existing ──────────────────────────────────────────────────────────────
   | "idle"
   | "success"
   | "already_checked_in"
   | "validation_error"
   | "link_error"
-  | "server_error";
+  | "server_error"
+  // ── Phase 2: registration-state errors ────────────────────────────────────
+  /** Email not found in registrations for this event. */
+  | "not_registered"
+  /** Registration exists but is pending admin approval. */
+  | "pending_approval"
+  /** Registration was rejected by admin. */
+  | "registration_rejected"
+  /** Registration is on the waitlist. */
+  | "registration_waitlisted"
+  /** Registration was cancelled. */
+  | "registration_cancelled_status"
+  /** Generic: registration not in a confirmed state (confirmed_only mode). */
+  | "not_confirmed"
+  // ── Phase 2: time-window & mode errors ────────────────────────────────────
+  /** Check-in window has not opened yet (checkin_opens_at in the future). */
+  | "checkin_not_open"
+  /** Check-in window has closed (now > checkin_closes_at). */
+  | "checkin_closed"
+  /** Capacity reached; walk-in blocked. */
+  | "event_full"
+  /** allow_walk_in = false; walk-in blocked. */
+  | "walk_in_blocked"
+  /** checkin_mode = 'manual_admin_only'; public self check-in disabled. */
+  | "self_checkin_disabled";
 
 export type PublicCheckinActionState = {
   ok: boolean;

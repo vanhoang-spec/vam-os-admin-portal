@@ -303,6 +303,75 @@ export type Event = JsonRecord & {
   status?: "active" | "cancelled" | string | null;
   starts_at?: string | null;
   source_notes?: string | null;
+
+  // ── Phase 2: configurable registration & check-in fields ─────────────────
+  /** If true, a pre-existing non-cancelled registration is required to check in. */
+  registration_required?: boolean | null;
+  /** If true, new public registrations start as pending_review. */
+  approval_required?: boolean | null;
+  /** Master toggle for capacity enforcement. */
+  capacity_limit_enabled?: boolean | null;
+  /** Max number of confirmed/registered registrants (enforced when capacity_limit_enabled). */
+  capacity_limit?: number | null;
+  /** When capacity is full, route new registrations to waitlisted. */
+  waitlist_enabled?: boolean | null;
+  /** If false, walk-in check-in is blocked. Default: true (open behaviour). */
+  allow_walk_in?: boolean | null;
+  /**
+   * Check-in mode:
+   *   "open"                 — anyone with the link may check in (default)
+   *   "registration_required"— must have a non-cancelled registration
+   *   "confirmed_only"       — must have registration_status = 'confirmed'
+   *   "manual_admin_only"    — public check-in is entirely disabled
+   */
+  checkin_mode?: "open" | "registration_required" | "confirmed_only" | "manual_admin_only" | string | null;
+  /** Enable checkin_opens_at / checkin_closes_at time gates. */
+  checkin_window_enabled?: boolean | null;
+  /** Earliest time check-in is accepted (when checkin_window_enabled). */
+  checkin_opens_at?: string | null;
+  /** Latest time check-in is accepted (when checkin_window_enabled). */
+  checkin_closes_at?: string | null;
+  /** Master toggle for proof/evidence collection. */
+  proof_required?: boolean | null;
+  /** Custom label for the proof field shown on the public form. */
+  proof_label?: string | null;
+  /** Helper text explaining what proof is required. */
+  proof_description?: string | null;
+  /** If true, proof must be submitted at registration time. */
+  proof_required_for_registration?: boolean | null;
+  /** If true, proof must be submitted/accepted before check-in is allowed. */
+  proof_required_for_checkin?: boolean | null;
+  /** If true, a question-to-speaker/organiser field appears on the form. */
+  question_collection_enabled?: boolean | null;
+  /** Custom label for the speaker question field. */
+  speaker_question_label?: string | null;
+  /** If true, display no_show_policy_text prominently on the registration form. */
+  no_show_policy_enabled?: boolean | null;
+  /** Policy text warning about consequences for confirmed no-shows. */
+  no_show_policy_text?: string | null;
+  /** Master toggle for fee collection. */
+  fee_required?: boolean | null;
+  /** Fee amount (in fee_currency). */
+  fee_amount?: number | null;
+  /** Currency code, e.g. "VND". */
+  fee_currency?: string | null;
+  /** Description of what the fee covers. */
+  fee_description?: string | null;
+  /** How to pay — bank account, QR description, contact person, etc. */
+  payment_instruction?: string | null;
+  /** If true, payment proof URL must be submitted with registration. */
+  payment_proof_required?: boolean | null;
+  /** Public-facing event description (distinct from admin-only source_notes). */
+  event_description?: string | null;
+  // Field-visibility toggles
+  show_student_id_field?: boolean | null;
+  student_id_required?: boolean | null;
+  show_mentee_code_field?: boolean | null;
+  mentee_code_required?: boolean | null;
+  show_school_field?: boolean | null;
+  show_program_field?: boolean | null;
+  show_role_text_field?: boolean | null;
+  show_notes_field?: boolean | null;
 };
 
 export type EventLink = JsonRecord & {
@@ -333,7 +402,23 @@ export type EventRegistration = JsonRecord & {
   notes: string | null;
   consent_given: boolean;
   registration_source: "public_form" | "admin_input" | "walk_in" | "imported" | string;
-  registration_status: "registered" | "cancelled" | string;
+  /**
+   * Phase 2 expanded values:
+   *   "registered"    — accepted, no review needed (open events)
+   *   "pending_review"— submitted, awaiting admin confirmation
+   *   "confirmed"     — admin confirmed; required for confirmed_only check-in
+   *   "waitlisted"    — capacity full; may be promoted if slot opens
+   *   "rejected"      — admin rejected; may not attend
+   *   "cancelled"     — registrant or admin cancelled
+   */
+  registration_status:
+    | "registered"
+    | "cancelled"
+    | "pending_review"
+    | "confirmed"
+    | "waitlisted"
+    | "rejected"
+    | string;
   attendance_status: "pending" | "checked_in" | "no_show" | "cancelled" | string;
   is_walk_in: boolean;
   registered_at: string;
@@ -344,6 +429,52 @@ export type EventRegistration = JsonRecord & {
   matched_at: string | null;
   created_at: string;
   updated_at: string;
+
+  // ── Phase 2 fields (all optional / nullable) ──────────────────────────────
+  /** VAM-assigned mentee code (collected when show_mentee_code_field = true). */
+  mentee_code?: string | null;
+  /** Registrant's question for the speaker / organiser. */
+  speaker_question?: string | null;
+  /** URL of proof submitted by registrant (Phase 2A: external link). */
+  proof_url?: string | null;
+  /** Optional note accompanying the proof submission. */
+  proof_note?: string | null;
+  /** not_required | submitted | accepted | rejected */
+  proof_status?: "not_required" | "submitted" | "accepted" | "rejected" | string | null;
+  /** When an admin reviewed the proof. */
+  proof_reviewed_at?: string | null;
+  /** admin_users.id of the reviewer. */
+  proof_reviewed_by?: string | null;
+  /** Admin's note on proof acceptance or rejection. */
+  proof_review_note?: string | null;
+  /**
+   * Admin review workflow status (separate from registration_status).
+   *   pending | approved | rejected | null
+   */
+  review_status?: "pending" | "approved" | "rejected" | string | null;
+  /** Admin note when confirming or rejecting. */
+  review_note?: string | null;
+  confirmed_at?: string | null;
+  confirmed_by?: string | null;
+  waitlisted_at?: string | null;
+  rejected_at?: string | null;
+  /** not_required | pending | submitted | confirmed | rejected */
+  payment_status?: "not_required" | "pending" | "submitted" | "confirmed" | "rejected" | string | null;
+  /** URL of payment proof (Phase 2A: external link). */
+  payment_proof_url?: string | null;
+  payment_proof_note?: string | null;
+  payment_confirmed_at?: string | null;
+  payment_confirmed_by?: string | null;
+  payment_rejected_at?: string | null;
+  payment_rejected_by?: string | null;
+  payment_rejection_note?: string | null;
+  /** True when admin flags this as a no-show post-event. */
+  no_show_flagged?: boolean | null;
+  no_show_flagged_at?: string | null;
+  no_show_flagged_by?: string | null;
+  /** Escalation from no_show_flagged. Manual admin action only. */
+  blacklist_flag?: boolean | null;
+  blacklist_note?: string | null;
 };
 
 export type MentoringRecap = JsonRecord & {
