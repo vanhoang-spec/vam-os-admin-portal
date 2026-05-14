@@ -67,7 +67,7 @@ export type PublicRegistrationData = {
   ok: boolean;
   status: PublicRegistrationStatus;
   message: string;
-  event: Pick<Event, "id" | "event_name" | "event_type" | "starts_at" | "status"> | null;
+  event: Event | null;
   eventLink: Pick<EventLink, "id" | "event_id" | "token" | "opens_at" | "closes_at" | "is_active"> | null;
 };
 
@@ -98,6 +98,40 @@ export type EventInput = {
   starts_at?: unknown;
   source_notes?: unknown;
   legacy_event_temp_id?: unknown;
+  registration_required?: unknown;
+  approval_required?: unknown;
+  capacity_limit_enabled?: unknown;
+  capacity_limit?: unknown;
+  waitlist_enabled?: unknown;
+  allow_walk_in?: unknown;
+  checkin_mode?: unknown;
+  checkin_window_enabled?: unknown;
+  checkin_opens_at?: unknown;
+  checkin_closes_at?: unknown;
+  proof_required?: unknown;
+  proof_label?: unknown;
+  proof_description?: unknown;
+  proof_required_for_registration?: unknown;
+  proof_required_for_checkin?: unknown;
+  question_collection_enabled?: unknown;
+  speaker_question_label?: unknown;
+  no_show_policy_enabled?: unknown;
+  no_show_policy_text?: unknown;
+  fee_required?: unknown;
+  fee_amount?: unknown;
+  fee_currency?: unknown;
+  fee_description?: unknown;
+  payment_instruction?: unknown;
+  payment_proof_required?: unknown;
+  event_description?: unknown;
+  show_student_id_field?: unknown;
+  student_id_required?: unknown;
+  show_mentee_code_field?: unknown;
+  mentee_code_required?: unknown;
+  show_school_field?: unknown;
+  show_program_field?: unknown;
+  show_role_text_field?: unknown;
+  show_notes_field?: unknown;
 };
 
 export type ParticipationInput = {
@@ -127,6 +161,12 @@ export type PublicRegistrationInput = {
   role_text?: unknown;
   notes?: unknown;
   consent_given?: unknown;
+  mentee_code?: unknown;
+  proof_url?: unknown;
+  proof_note?: unknown;
+  speaker_question?: unknown;
+  payment_proof_url?: unknown;
+  payment_proof_note?: unknown;
 };
 
 export type PublicCheckinInput = {
@@ -485,7 +525,7 @@ async function getPublicEventLinkData(token: string, linkType: "registration" | 
 
   const { data, error: linkError } = await client
     .from("event_links")
-    .select("id,event_id,link_type,token,is_active,opens_at,closes_at,events(id,event_name,event_type,starts_at,status)")
+    .select("id,event_id,link_type,token,is_active,opens_at,closes_at,events(*)")
     .eq("token", cleanToken)
     .eq("link_type", linkType)
     .maybeSingle();
@@ -601,6 +641,18 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   );
   const nowIso = matchedPerson ? new Date().toISOString() : null;
 
+  const cfg = readEventConfig(registrationData.event as JsonRecord);
+  const activeRegistrationsCount = (existingRows ?? []).length;
+  const isFull = cfg.capacity_limit_enabled && cfg.capacity_limit != null && activeRegistrationsCount >= cfg.capacity_limit;
+
+  if (isFull && !cfg.waitlist_enabled) {
+    return { ok: false, status: "capacity_full", message: "Sự kiện đã đủ chỗ. Đăng ký đã đóng.", eventName: registrationData.event.event_name ?? null };
+  }
+
+  const baseStatus = isFull ? "waitlisted" : (cfg.approval_required ? "pending_review" : "registered");
+  const proofUrl = clean(input.proof_url);
+  const paymentProofUrl = clean(input.payment_proof_url);
+
   const payload: JsonRecord = {
     event_id: eventId,
     event_link_id: registrationData.eventLink.id,
@@ -615,12 +667,21 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     notes: clean(input.notes),
     consent_given: true,
     registration_source: "public_form",
-    registration_status: "registered",
+    registration_status: baseStatus,
     attendance_status: "pending",
     is_walk_in: false,
     match_method: matchedPerson ? "exact_email" : "unlinked",
     match_review_status: matchedPerson ? "auto_linked" : "pending_review",
-    matched_at: nowIso
+    matched_at: nowIso,
+    mentee_code: clean(input.mentee_code),
+    proof_url: proofUrl,
+    proof_note: clean(input.proof_note),
+    speaker_question: clean(input.speaker_question),
+    payment_proof_url: paymentProofUrl,
+    payment_proof_note: clean(input.payment_proof_note),
+    proof_status: proofUrl ? "submitted" : "not_required",
+    payment_status: paymentProofUrl ? "submitted" : (registrationData.event.fee_required ? "pending" : "not_required"),
+    review_status: cfg.approval_required ? "pending" : "not_required"
   };
 
   const { data, error: insertError } = await client
@@ -713,6 +774,7 @@ type EventConfig = {
   approval_required: boolean;
   capacity_limit_enabled: boolean;
   capacity_limit: number | null;
+  waitlist_enabled: boolean;
 };
 
 function readEventConfig(ev: JsonRecord): EventConfig {
@@ -727,6 +789,7 @@ function readEventConfig(ev: JsonRecord): EventConfig {
     approval_required:      ev.approval_required === true,
     capacity_limit_enabled: ev.capacity_limit_enabled === true,
     capacity_limit:         ev.capacity_limit != null ? Number(ev.capacity_limit) : null,
+    waitlist_enabled:       ev.waitlist_enabled === true,
   };
 }
 
@@ -1171,7 +1234,41 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     event_type: eventType,
     starts_at: startsAt,
     source_notes: clean(input.source_notes),
-    legacy_event_temp_id: clean(input.legacy_event_temp_id)
+    legacy_event_temp_id: clean(input.legacy_event_temp_id),
+    registration_required: String(input.registration_required) === "true",
+    approval_required: String(input.approval_required) === "true",
+    capacity_limit_enabled: String(input.capacity_limit_enabled) === "true",
+    capacity_limit: input.capacity_limit ? Number(input.capacity_limit) : null,
+    waitlist_enabled: String(input.waitlist_enabled) === "true",
+    allow_walk_in: String(input.allow_walk_in) !== "false",
+    checkin_mode: clean(input.checkin_mode) ?? "open",
+    checkin_window_enabled: String(input.checkin_window_enabled) === "true",
+    checkin_opens_at: parseDateTime(clean(input.checkin_opens_at)),
+    checkin_closes_at: parseDateTime(clean(input.checkin_closes_at)),
+    proof_required: String(input.proof_required) === "true",
+    proof_label: clean(input.proof_label),
+    proof_description: clean(input.proof_description),
+    proof_required_for_registration: String(input.proof_required_for_registration) === "true",
+    proof_required_for_checkin: String(input.proof_required_for_checkin) === "true",
+    question_collection_enabled: String(input.question_collection_enabled) === "true",
+    speaker_question_label: clean(input.speaker_question_label),
+    no_show_policy_enabled: String(input.no_show_policy_enabled) === "true",
+    no_show_policy_text: clean(input.no_show_policy_text),
+    fee_required: String(input.fee_required) === "true",
+    fee_amount: input.fee_amount ? Number(input.fee_amount) : null,
+    fee_currency: clean(input.fee_currency),
+    fee_description: clean(input.fee_description),
+    payment_instruction: clean(input.payment_instruction),
+    payment_proof_required: String(input.payment_proof_required) === "true",
+    event_description: clean(input.event_description),
+    show_student_id_field: String(input.show_student_id_field) !== "false",
+    student_id_required: String(input.student_id_required) === "true",
+    show_mentee_code_field: String(input.show_mentee_code_field) === "true",
+    mentee_code_required: String(input.mentee_code_required) === "true",
+    show_school_field: String(input.show_school_field) === "true",
+    show_program_field: String(input.show_program_field) === "true",
+    show_role_text_field: String(input.show_role_text_field) === "true",
+    show_notes_field: String(input.show_notes_field) === "true"
   };
 
   const { data, error: insertError } = await client.from("events").insert(payload).select("*").maybeSingle();
@@ -1245,6 +1342,52 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
     const raw = clean(input.intake_batch_id);
     updates.intake_batch_id = raw && isValidUuid(raw) ? raw : null;
   }
+
+  const checkFields = [
+    "registration_required", "approval_required", "capacity_limit_enabled", "waitlist_enabled",
+    "checkin_window_enabled", "proof_required", "proof_required_for_registration",
+    "proof_required_for_checkin", "question_collection_enabled", "no_show_policy_enabled",
+    "fee_required", "payment_proof_required", "show_mentee_code_field", "mentee_code_required",
+    "show_school_field", "show_program_field", "show_role_text_field", "show_notes_field", "student_id_required"
+  ];
+  checkFields.forEach(f => {
+    if (Object.prototype.hasOwnProperty.call(input, f)) {
+      updates[f] = String(input[f as keyof EventInput]) === "true";
+    }
+  });
+
+  if (Object.prototype.hasOwnProperty.call(input, "allow_walk_in")) {
+    updates.allow_walk_in = String(input.allow_walk_in) !== "false";
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "show_student_id_field")) {
+    updates.show_student_id_field = String(input.show_student_id_field) !== "false";
+  }
+
+  const textFields = [
+    "checkin_mode", "proof_label", "proof_description", "speaker_question_label",
+    "no_show_policy_text", "fee_currency", "fee_description", "payment_instruction",
+    "event_description"
+  ];
+  textFields.forEach(f => {
+    if (Object.prototype.hasOwnProperty.call(input, f)) {
+      updates[f] = clean(input[f as keyof EventInput]);
+    }
+  });
+
+  const numFields = ["capacity_limit", "fee_amount"];
+  numFields.forEach(f => {
+    if (Object.prototype.hasOwnProperty.call(input, f)) {
+      const v = input[f as keyof EventInput];
+      updates[f] = v ? Number(v) : null;
+    }
+  });
+
+  const dateFields = ["checkin_opens_at", "checkin_closes_at"];
+  dateFields.forEach(f => {
+    if (Object.prototype.hasOwnProperty.call(input, f)) {
+      updates[f] = parseDateTime(clean(input[f as keyof EventInput]));
+    }
+  });
 
   const { data: after, error: updateError } = await client.from("events").update(updates).eq("id", id).select("*").maybeSingle();
   if (updateError) {

@@ -21,7 +21,13 @@ export async function submitEventRegistrationAction(
     school: formText(formData, "school"),
     program_of_study: formText(formData, "program_of_study"),
     role_text: formText(formData, "role_text"),
-    notes: formText(formData, "notes")
+    notes: formText(formData, "notes"),
+    mentee_code: formText(formData, "mentee_code"),
+    proof_url: formText(formData, "proof_url"),
+    proof_note: formText(formData, "proof_note"),
+    speaker_question: formText(formData, "speaker_question"),
+    payment_proof_url: formText(formData, "payment_proof_url"),
+    payment_proof_note: formText(formData, "payment_proof_note")
   };
   const result = await registerForEvent({
     token,

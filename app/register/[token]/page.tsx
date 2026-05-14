@@ -58,14 +58,20 @@ export default async function PublicEventRegistrationPage({
             <p className="mt-1 text-sm text-slate-200">{formatDate(data.event.starts_at)}</p>
           ) : null}
         </div>
+        
+        {data.event?.event_description && (
+          <div className="rounded-lg bg-white p-5 text-sm text-slate-700 shadow-sm border border-slate-200 whitespace-pre-wrap">
+            {data.event.event_description}
+          </div>
+        )}
 
         <Card>
           {showResult && data.event ? (
             <RegistrationResult status={resultStatus} eventName={eventName} />
-          ) : data.ok ? (
+          ) : data.ok && data.event ? (
             <>
               <h2 className="mb-4 text-lg font-semibold text-vam-ink">Đăng ký tham gia</h2>
-              <RegistrationForm token={params.token} eventName={eventName} />
+              <RegistrationForm token={params.token} eventName={eventName} event={data.event} />
             </>
           ) : (
             <div className="py-6 text-center">

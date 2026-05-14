@@ -52,6 +52,12 @@ export type PublicRegistrationActionState = {
     program_of_study?: string;
     role_text?: string;
     notes?: string;
+    mentee_code?: string;
+    proof_url?: string;
+    proof_note?: string;
+    speaker_question?: string;
+    payment_proof_url?: string;
+    payment_proof_note?: string;
   };
 };
 
