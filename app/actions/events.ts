@@ -159,7 +159,7 @@ export async function updateEventAction(
   revalidatePath(`/events/${id}/attendance`);
   revalidatePath("/operations");
 
-  return { ok: true, message: result.message };
+  return { ok: true, message: "Đã lưu thay đổi sự kiện thành công." };
 }
 
 export async function addParticipationAction(

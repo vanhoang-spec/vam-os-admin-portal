@@ -386,6 +386,12 @@ export function EventForm({
 
       </div>
 
+      {state.ok && state.message && mode === "edit" ? (
+        <div className="mt-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+          {state.message}
+        </div>
+      ) : null}
+
       <div className="mt-2 flex flex-wrap gap-3">
         <button type="submit" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
           {mode === "create" ? "Tạo sự kiện" : "Lưu thay đổi"}
