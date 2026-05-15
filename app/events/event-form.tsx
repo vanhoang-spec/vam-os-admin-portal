@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormState } from "react-dom";
 import { createEventAction, updateEventAction } from "@/app/actions/events";
 import type { EventActionState } from "@/lib/event-action-types";
@@ -49,6 +49,20 @@ export function EventForm({
   const [menteeCodeEnabled, setMenteeCodeEnabled] = useState(event?.show_mentee_code_field === true);
   // SF-1: track approval_required to show coupling hint
   const [approvalRequired, setApprovalRequired] = useState(event?.approval_required === true);
+
+  // Track save success independently of useFormState, which can be reset by
+  // revalidatePath('/events/[id]/edit') triggering a Next.js router refresh.
+  // Rule: set true on ok=true; clear only when there is an explicit error message
+  // (state reset to {ok:false, message:null} must NOT clear the banner).
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (state.ok && mode === "edit") {
+      setSaved(true);
+    } else if (!state.ok && state.message !== null) {
+      // An actual server error arrived — hide the stale success banner.
+      setSaved(false);
+    }
+  }, [state.ok, state.message, mode]);
 
   return (
     <form action={formAction} className="grid gap-4">
@@ -386,9 +400,9 @@ export function EventForm({
 
       </div>
 
-      {state.ok && state.message && mode === "edit" ? (
+      {saved ? (
         <div className="mt-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
-          {state.message}
+          Đã lưu thay đổi sự kiện thành công.
         </div>
       ) : null}
 
