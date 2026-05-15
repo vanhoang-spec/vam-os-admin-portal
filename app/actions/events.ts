@@ -50,7 +50,9 @@ export async function createEventAction(
     capacity_limit_enabled: formText(formData, "capacity_limit_enabled"),
     capacity_limit: formText(formData, "capacity_limit"),
     waitlist_enabled: formText(formData, "waitlist_enabled"),
-    allow_walk_in: formData.has("allow_walk_in") ? formText(formData, "allow_walk_in") : undefined,
+    // Checkboxes that default-true use has() to distinguish "unchecked" from "absent":
+    // pass explicit "true"/"false" so the lib function never receives undefined.
+    allow_walk_in: formData.has("allow_walk_in") ? "true" : "false",
     checkin_mode: formText(formData, "checkin_mode"),
     checkin_window_enabled: formText(formData, "checkin_window_enabled"),
     checkin_opens_at: formText(formData, "checkin_opens_at"),
@@ -71,7 +73,7 @@ export async function createEventAction(
     payment_instruction: formText(formData, "payment_instruction"),
     payment_proof_required: formText(formData, "payment_proof_required"),
     event_description: formText(formData, "event_description"),
-    show_student_id_field: formData.has("show_student_id_field") ? formText(formData, "show_student_id_field") : undefined,
+    show_student_id_field: formData.has("show_student_id_field") ? "true" : "false",
     student_id_required: formText(formData, "student_id_required"),
     show_mentee_code_field: formText(formData, "show_mentee_code_field"),
     mentee_code_required: formText(formData, "mentee_code_required"),
@@ -117,7 +119,9 @@ export async function updateEventAction(
     capacity_limit_enabled: formText(formData, "capacity_limit_enabled"),
     capacity_limit: formText(formData, "capacity_limit"),
     waitlist_enabled: formText(formData, "waitlist_enabled"),
-    allow_walk_in: formData.has("allow_walk_in") ? formText(formData, "allow_walk_in") : undefined,
+    // Checkboxes that default-true use has() to distinguish "unchecked" from "absent":
+    // pass explicit "true"/"false" so the lib function never receives undefined.
+    allow_walk_in: formData.has("allow_walk_in") ? "true" : "false",
     checkin_mode: formText(formData, "checkin_mode"),
     checkin_window_enabled: formText(formData, "checkin_window_enabled"),
     checkin_opens_at: formText(formData, "checkin_opens_at"),
@@ -138,7 +142,7 @@ export async function updateEventAction(
     payment_instruction: formText(formData, "payment_instruction"),
     payment_proof_required: formText(formData, "payment_proof_required"),
     event_description: formText(formData, "event_description"),
-    show_student_id_field: formData.has("show_student_id_field") ? formText(formData, "show_student_id_field") : undefined,
+    show_student_id_field: formData.has("show_student_id_field") ? "true" : "false",
     student_id_required: formText(formData, "student_id_required"),
     show_mentee_code_field: formText(formData, "show_mentee_code_field"),
     mentee_code_required: formText(formData, "mentee_code_required"),

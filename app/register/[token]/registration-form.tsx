@@ -92,10 +92,10 @@ export function RegistrationForm({ token, eventName, event }: { token: string; e
       {event.show_mentee_code_field && (
         <Field label="Mã Mentee (Mentee Code)" name="mentee_code" required={event.mentee_code_required === true} defaultValue={state.values?.mentee_code} />
       )}
-      {event.show_school_field && (
+      {event.show_school_field !== false && (
         <Field label="Trường" name="school" autoComplete="organization" defaultValue={state.values?.school} />
       )}
-      {event.show_program_field && (
+      {event.show_program_field !== false && (
         <Field label="Ngành học" name="program_of_study" defaultValue={state.values?.program_of_study} />
       )}
       {event.show_role_text_field && (
@@ -147,7 +147,7 @@ export function RegistrationForm({ token, eventName, event }: { token: string; e
         </div>
       )}
 
-      {event.show_notes_field && (
+      {event.show_notes_field !== false && (
         <label className="block">
           <span className="text-sm font-medium text-slate-700">Ghi chú chung</span>
           <textarea

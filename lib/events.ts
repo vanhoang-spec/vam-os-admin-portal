@@ -400,7 +400,7 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
 
   const eventRes = await client
     .from("events")
-    .select("id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes")
+    .select("*")
     .eq("id", id)
     .maybeSingle();
   const scopedLookups = await Promise.all([
@@ -461,7 +461,7 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
       .in("link_type", ["registration", "checkin"]),
     client
       .from("event_registrations")
-      .select("id,event_id,event_link_id,linked_person_id,full_name,email,phone,student_id,school,program_of_study,role_text,notes,consent_given,registration_source,registration_status,attendance_status,is_walk_in,registered_at,checked_in_at,checkin_source,match_method,match_review_status,matched_at,created_at,updated_at")
+      .select("id,event_id,event_link_id,linked_person_id,full_name,email,phone,student_id,school,program_of_study,role_text,notes,consent_given,registration_source,registration_status,attendance_status,is_walk_in,registered_at,checked_in_at,checkin_source,match_method,match_review_status,matched_at,created_at,updated_at,mentee_code,proof_url,proof_note,proof_status,review_status,review_note,confirmed_at,waitlisted_at,rejected_at,payment_status,payment_proof_url,no_show_flagged,blacklist_flag")
       .eq("event_id", id)
       .order("registered_at", { ascending: false })
   ]);
@@ -642,6 +642,15 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   const nowIso = matchedPerson ? new Date().toISOString() : null;
 
   const cfg = readEventConfig(registrationData.event as JsonRecord);
+
+  // SF-3: server-side proof / payment validation (HTML `required` alone is bypassable)
+  if (registrationData.event.proof_required_for_registration && !clean(input.proof_url)) {
+    return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn minh chứng.", eventName: registrationData.event.event_name ?? null };
+  }
+  if (registrationData.event.payment_proof_required && !clean(input.payment_proof_url)) {
+    return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn ảnh chuyển khoản.", eventName: registrationData.event.event_name ?? null };
+  }
+
   const activeRegistrationsCount = (existingRows ?? []).length;
   const isFull = cfg.capacity_limit_enabled && cfg.capacity_limit != null && activeRegistrationsCount >= cfg.capacity_limit;
 
@@ -1256,7 +1265,7 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     no_show_policy_text: clean(input.no_show_policy_text),
     fee_required: String(input.fee_required) === "true",
     fee_amount: input.fee_amount ? Number(input.fee_amount) : null,
-    fee_currency: clean(input.fee_currency),
+    fee_currency: clean(input.fee_currency) || "VND",
     fee_description: clean(input.fee_description),
     payment_instruction: clean(input.payment_instruction),
     payment_proof_required: String(input.payment_proof_required) === "true",
@@ -1373,6 +1382,10 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
       updates[f] = clean(input[f as keyof EventInput]);
     }
   });
+
+  // NOT NULL columns: guard against null from hidden/conditional form sections
+  if ("fee_currency" in updates && !updates.fee_currency) updates.fee_currency = "VND";
+  if ("checkin_mode" in updates && !updates.checkin_mode) updates.checkin_mode = "open";
 
   const numFields = ["capacity_limit", "fee_amount"];
   numFields.forEach(f => {

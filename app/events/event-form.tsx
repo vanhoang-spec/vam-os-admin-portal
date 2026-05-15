@@ -47,6 +47,8 @@ export function EventForm({
   const [feeEnabled, setFeeEnabled] = useState(event?.fee_required === true);
   const [studentIdEnabled, setStudentIdEnabled] = useState(event?.show_student_id_field !== false);
   const [menteeCodeEnabled, setMenteeCodeEnabled] = useState(event?.show_mentee_code_field === true);
+  // SF-1: track approval_required to show coupling hint
+  const [approvalRequired, setApprovalRequired] = useState(event?.approval_required === true);
 
   return (
     <form action={formAction} className="grid gap-4">
@@ -171,10 +173,13 @@ export function EventForm({
             </div>
           </label>
           <label className="flex items-start gap-2">
-            <input type="checkbox" name="approval_required" value="true" defaultChecked={event?.approval_required === true} className="mt-1" />
+            <input type="checkbox" name="approval_required" value="true" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} className="mt-1" />
             <div>
               <span className="text-sm font-medium">Cần Admin phê duyệt</span>
               <p className="text-xs text-slate-500">Đăng ký mới sẽ ở trạng thái pending_review.</p>
+              {approvalRequired && (
+                <p className="mt-1 text-xs font-medium text-amber-700">⚠ Nên chọn chế độ Check-in &ldquo;Chỉ người đã xác nhận&rdquo; để chỉ cho check-in sau khi được duyệt.</p>
+              )}
             </div>
           </label>
         </div>
@@ -193,7 +198,7 @@ export function EventForm({
               <option value="open">Mở (Open)</option>
               <option value="registration_required">Bắt buộc đăng ký (Registration Required)</option>
               <option value="confirmed_only">Chỉ người đã xác nhận (Confirmed Only)</option>
-              <option value="manual_admin_only">Chỉ Admin thao tác (Manual Admin Only)</option>
+              <option value="manual_admin_only">Chỉ admin duyệt thủ công</option>
             </select>
           </label>
         </div>
@@ -212,7 +217,7 @@ export function EventForm({
               </label>
               <label className="flex items-center gap-2 mt-6">
                 <input type="checkbox" name="waitlist_enabled" value="true" defaultChecked={event?.waitlist_enabled === true} />
-                <span className="text-sm">Tự động chuyển vào Waitlist khi đầy</span>
+                <span className="text-sm">Cho phép danh sách chờ (Waitlist) khi đầy</span>
               </label>
             </div>
           )}
@@ -355,11 +360,11 @@ export function EventForm({
             
             <div className="space-y-2">
               <label className="flex items-center gap-2">
-                <input type="checkbox" name="show_school_field" value="true" defaultChecked={event?.show_school_field === true} />
+                <input type="checkbox" name="show_school_field" value="true" defaultChecked={event ? event.show_school_field !== false : true} />
                 <span className="text-sm">Hiển thị Trường</span>
               </label>
               <label className="flex items-center gap-2">
-                <input type="checkbox" name="show_program_field" value="true" defaultChecked={event?.show_program_field === true} />
+                <input type="checkbox" name="show_program_field" value="true" defaultChecked={event ? event.show_program_field !== false : true} />
                 <span className="text-sm">Hiển thị Ngành học</span>
               </label>
               <label className="flex items-center gap-2">
@@ -367,7 +372,7 @@ export function EventForm({
                 <span className="text-sm">Hiển thị Vai trò</span>
               </label>
               <label className="flex items-center gap-2">
-                <input type="checkbox" name="show_notes_field" value="true" defaultChecked={event?.show_notes_field === true} />
+                <input type="checkbox" name="show_notes_field" value="true" defaultChecked={event ? event.show_notes_field !== false : true} />
                 <span className="text-sm">Hiển thị Ghi chú</span>
               </label>
             </div>
