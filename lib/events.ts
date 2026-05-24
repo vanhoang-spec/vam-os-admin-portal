@@ -139,6 +139,13 @@ export type EventInput = {
   show_program_field?: unknown;
   show_role_text_field?: unknown;
   show_notes_field?: unknown;
+  // ── Phase 2B: optional meal add-on ───────────────────────────────────────
+  meal_option_enabled?: unknown;
+  meal_label?: unknown;
+  meal_fee_amount?: unknown;
+  meal_fee_currency?: unknown;
+  meal_payment_instruction?: unknown;
+  meal_payment_proof_required?: unknown;
 };
 
 export type ParticipationInput = {
@@ -174,6 +181,7 @@ export type PublicRegistrationInput = {
   speaker_question?: unknown;
   payment_proof_url?: unknown;
   payment_proof_note?: unknown;
+  meal_selected?: unknown;
 };
 
 export type PublicCheckinInput = {
@@ -702,7 +710,13 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   if (registrationData.event.proof_required_for_registration && !clean(input.proof_url)) {
     return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn minh chứng.", eventName: registrationData.event.event_name ?? null };
   }
-  if (registrationData.event.payment_proof_required && !clean(input.payment_proof_url)) {
+  // Phase 2B: meal selection drives payment proof requirement
+  const mealSelected = String(input.meal_selected ?? "").trim() === "true";
+  const mealPaymentProofRequired =
+    registrationData.event.meal_option_enabled === true &&
+    mealSelected &&
+    registrationData.event.meal_payment_proof_required !== false;
+  if ((registrationData.event.payment_proof_required || mealPaymentProofRequired) && !clean(input.payment_proof_url)) {
     return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn ảnh chuyển khoản.", eventName: registrationData.event.event_name ?? null };
   }
 
@@ -744,8 +758,13 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     payment_proof_url: paymentProofUrl,
     payment_proof_note: clean(input.payment_proof_note),
     proof_status: proofUrl ? "submitted" : "not_required",
-    payment_status: paymentProofUrl ? "submitted" : (registrationData.event.fee_required ? "pending" : "not_required"),
-    review_status: cfg.approval_required ? "pending" : "not_required"
+    payment_status: paymentProofUrl ? "submitted" : ((registrationData.event.fee_required || mealSelected) ? "pending" : "not_required"),
+    review_status: cfg.approval_required ? "pending" : "not_required",
+    // Phase 2B: denormalize meal config into registration record
+    meal_selected: mealSelected,
+    meal_label: mealSelected ? (clean(registrationData.event.meal_label) ?? null) : null,
+    meal_fee_amount: mealSelected ? (registrationData.event.meal_fee_amount ?? null) : null,
+    meal_fee_currency: mealSelected ? (clean(registrationData.event.meal_fee_currency) ?? "VND") : null
   };
 
   const { data, error: insertError } = await client
@@ -1324,6 +1343,13 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     fee_description: clean(input.fee_description),
     payment_instruction: clean(input.payment_instruction),
     payment_proof_required: String(input.payment_proof_required) === "true",
+    // Phase 2B: optional meal add-on
+    meal_option_enabled: String(input.meal_option_enabled) === "true",
+    meal_label: clean(input.meal_label),
+    meal_fee_amount: input.meal_fee_amount ? Number(input.meal_fee_amount) : null,
+    meal_fee_currency: clean(input.meal_fee_currency) || "VND",
+    meal_payment_instruction: clean(input.meal_payment_instruction),
+    meal_payment_proof_required: String(input.meal_payment_proof_required) !== "false",
     event_description: clean(input.event_description),
     show_student_id_field: String(input.show_student_id_field) !== "false",
     student_id_required: String(input.student_id_required) === "true",
@@ -1412,7 +1438,8 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
     "checkin_window_enabled", "proof_required", "proof_required_for_registration",
     "proof_required_for_checkin", "question_collection_enabled", "no_show_policy_enabled",
     "fee_required", "payment_proof_required", "show_mentee_code_field", "mentee_code_required",
-    "show_school_field", "show_program_field", "show_role_text_field", "show_notes_field", "student_id_required"
+    "show_school_field", "show_program_field", "show_role_text_field", "show_notes_field", "student_id_required",
+    "meal_option_enabled"
   ];
   checkFields.forEach(f => {
     if (Object.prototype.hasOwnProperty.call(input, f)) {
@@ -1426,11 +1453,16 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   if (Object.prototype.hasOwnProperty.call(input, "show_student_id_field")) {
     updates.show_student_id_field = String(input.show_student_id_field) !== "false";
   }
+  // Phase 2B: meal_payment_proof_required defaults true — use !== "false" pattern
+  if (Object.prototype.hasOwnProperty.call(input, "meal_payment_proof_required")) {
+    updates.meal_payment_proof_required = String(input.meal_payment_proof_required) !== "false";
+  }
 
   const textFields = [
     "checkin_mode", "proof_label", "proof_description", "speaker_question_label",
     "no_show_policy_text", "fee_currency", "fee_description", "payment_instruction",
-    "event_description"
+    "event_description",
+    "meal_label", "meal_fee_currency", "meal_payment_instruction"
   ];
   textFields.forEach(f => {
     if (Object.prototype.hasOwnProperty.call(input, f)) {
@@ -1441,8 +1473,9 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   // NOT NULL columns: guard against null from hidden/conditional form sections
   if ("fee_currency" in updates && !updates.fee_currency) updates.fee_currency = "VND";
   if ("checkin_mode" in updates && !updates.checkin_mode) updates.checkin_mode = "open";
+  if ("meal_fee_currency" in updates && !updates.meal_fee_currency) updates.meal_fee_currency = "VND";
 
-  const numFields = ["capacity_limit", "fee_amount"];
+  const numFields = ["capacity_limit", "fee_amount", "meal_fee_amount"];
   numFields.forEach(f => {
     if (Object.prototype.hasOwnProperty.call(input, f)) {
       const v = input[f as keyof EventInput];

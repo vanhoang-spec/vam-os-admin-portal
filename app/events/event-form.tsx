@@ -45,6 +45,7 @@ export function EventForm({
   const [questionEnabled, setQuestionEnabled] = useState(event?.question_collection_enabled === true);
   const [noShowEnabled, setNoShowEnabled] = useState(event?.no_show_policy_enabled === true);
   const [feeEnabled, setFeeEnabled] = useState(event?.fee_required === true);
+  const [mealOptionEnabled, setMealOptionEnabled] = useState(event?.meal_option_enabled === true);
   const [studentIdEnabled, setStudentIdEnabled] = useState(event?.show_student_id_field !== false);
   const [menteeCodeEnabled, setMenteeCodeEnabled] = useState(event?.show_mentee_code_field === true);
   // SF-1: track approval_required to show coupling hint
@@ -314,6 +315,40 @@ export function EventForm({
               <label className="flex items-center gap-2">
                 <input type="checkbox" name="payment_proof_required" value="true" defaultChecked={event?.payment_proof_required === true} />
                 <span className="text-sm">Bắt buộc tải ảnh minh chứng chuyển khoản</span>
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* Tuỳ chọn bữa trưa / Meal add-on (Phase 2B) */}
+        <div className="mb-4 border-t border-slate-200 pt-4">
+          <label className="flex items-start gap-2 mb-2">
+            <input type="checkbox" name="meal_option_enabled" value="true" checked={mealOptionEnabled} onChange={(e) => setMealOptionEnabled(e.target.checked)} className="mt-1" />
+            <span className="text-sm font-medium">Bật tuỳ chọn bữa trưa / meal add-on</span>
+          </label>
+          {mealOptionEnabled && (
+            <div className="ml-6 grid gap-4">
+              <label className="block">
+                <span className="text-xs text-slate-500">Nhãn hiển thị (ví dụ: Cơm trưa)</span>
+                <input type="text" name="meal_label" defaultValue={event?.meal_label ?? ""} className="mt-1 w-full rounded border px-3 py-1.5 text-sm" />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs text-slate-500">Phí bữa trưa</span>
+                  <input type="number" name="meal_fee_amount" defaultValue={event?.meal_fee_amount ?? ""} className="mt-1 w-full rounded border px-3 py-1.5 text-sm" />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-slate-500">Tiền tệ</span>
+                  <input type="text" name="meal_fee_currency" defaultValue={event?.meal_fee_currency ?? "VND"} className="mt-1 w-full rounded border px-3 py-1.5 text-sm" />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs text-slate-500">Thông tin chuyển khoản bữa trưa</span>
+                <textarea name="meal_payment_instruction" defaultValue={event?.meal_payment_instruction ?? ""} rows={2} className="mt-1 w-full rounded border px-3 py-1.5 text-sm" />
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="meal_payment_proof_required" value="true" defaultChecked={event?.meal_payment_proof_required !== false} />
+                <span className="text-sm">Bắt buộc minh chứng chuyển khoản khi chọn bữa trưa</span>
               </label>
             </div>
           )}

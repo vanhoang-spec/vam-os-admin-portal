@@ -361,6 +361,19 @@ export type Event = JsonRecord & {
   payment_instruction?: string | null;
   /** If true, payment proof URL must be submitted with registration. */
   payment_proof_required?: boolean | null;
+  // ── Phase 2B: optional meal / lunch add-on ───────────────────────────────
+  /** If true, a meal/lunch choice is shown on the public registration form. */
+  meal_option_enabled?: boolean | null;
+  /** Label for the meal option shown on the form (e.g. "Cơm trưa"). */
+  meal_label?: string | null;
+  /** Fee for the meal add-on (in meal_fee_currency). */
+  meal_fee_amount?: number | null;
+  /** Currency code for the meal fee, e.g. "VND". */
+  meal_fee_currency?: string | null;
+  /** Payment/transfer instructions specific to the meal add-on. */
+  meal_payment_instruction?: string | null;
+  /** If true, payment proof must be submitted at registration when meal is selected. */
+  meal_payment_proof_required?: boolean | null;
   /** Public-facing event description (distinct from admin-only source_notes). */
   event_description?: string | null;
   // Field-visibility toggles
@@ -484,6 +497,15 @@ export type EventRegistration = JsonRecord & {
   /** Escalation from no_show_flagged. Manual admin action only. */
   blacklist_flag?: boolean | null;
   blacklist_note?: string | null;
+  // ── Phase 2B: optional meal / lunch add-on ───────────────────────────────
+  /** Whether the registrant selected the meal/lunch add-on. */
+  meal_selected?: boolean | null;
+  /** Denormalized meal label from event config at registration time. */
+  meal_label?: string | null;
+  /** Denormalized meal fee amount from event config at registration time. */
+  meal_fee_amount?: number | null;
+  /** Denormalized meal fee currency from event config at registration time. */
+  meal_fee_currency?: string | null;
 };
 
 export type MentoringRecap = JsonRecord & {

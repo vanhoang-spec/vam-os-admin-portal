@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { initialPublicRegistrationActionState } from "@/lib/event-action-types";
 import { submitEventRegistrationAction } from "./actions";
@@ -51,6 +52,7 @@ import type { Event } from "@/lib/types";
 
 export function RegistrationForm({ token, eventName, event }: { token: string; eventName: string; event: Event }) {
   const [state, formAction] = useFormState(submitEventRegistrationAction, initialPublicRegistrationActionState);
+  const [mealSelected, setMealSelected] = useState(false);
   const displayEventName = state.eventName || eventName;
 
   if (state.status === "success") {
@@ -124,19 +126,59 @@ export function RegistrationForm({ token, eventName, event }: { token: string; e
         </label>
       )}
 
-      {(event.fee_required || event.payment_proof_required) && (
+      {/* Phase 2B: optional meal / lunch add-on */}
+      {event.meal_option_enabled && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={mealSelected}
+              onChange={(e) => setMealSelected(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-vam-green focus:ring-vam-green shrink-0"
+            />
+            <div>
+              <span className="text-sm font-medium text-slate-800">
+                {event.meal_label || "Đăng ký bữa trưa"}
+                {event.meal_fee_amount ? (
+                  <> &mdash; {new Intl.NumberFormat("vi-VN").format(event.meal_fee_amount)}&nbsp;{event.meal_fee_currency || "VND"}</>
+                ) : null}
+              </span>
+            </div>
+          </label>
+        </div>
+      )}
+      {/* Hidden input carries meal_selected regardless of whether event has meal option */}
+      <input type="hidden" name="meal_selected" value={mealSelected ? "true" : "false"} />
+
+      {/* Payment section: shown when event fee applies OR meal is selected */}
+      {(event.fee_required || event.payment_proof_required || (mealSelected && event.meal_option_enabled)) && (
         <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
           <p className="mb-2 text-sm font-medium text-slate-800">Thông tin thanh toán</p>
           {event.fee_amount && (
-            <p className="mb-1 text-sm"><span className="font-medium">Số tiền:</span> {new Intl.NumberFormat("vi-VN").format(event.fee_amount)} {event.fee_currency || "VND"}</p>
+            <p className="mb-1 text-sm">
+              <span className="font-medium">Phí sự kiện:</span>{" "}
+              {new Intl.NumberFormat("vi-VN").format(event.fee_amount)}&nbsp;{event.fee_currency || "VND"}
+            </p>
+          )}
+          {mealSelected && event.meal_fee_amount && (
+            <p className="mb-1 text-sm">
+              <span className="font-medium">Phí bữa trưa:</span>{" "}
+              {new Intl.NumberFormat("vi-VN").format(event.meal_fee_amount)}&nbsp;{event.meal_fee_currency || "VND"}
+            </p>
           )}
           {event.fee_description && <p className="mb-2 text-sm text-slate-600">{event.fee_description}</p>}
           {event.payment_instruction && (
-            <div className="mb-4 rounded bg-white p-3 text-sm whitespace-pre-wrap border border-slate-200">
+            <div className="mb-3 rounded bg-white p-3 text-sm whitespace-pre-wrap border border-slate-200">
               {event.payment_instruction}
             </div>
           )}
-          {event.payment_proof_required && (
+          {mealSelected && event.meal_payment_instruction && (
+            <div className="mb-3 rounded bg-white p-3 text-sm whitespace-pre-wrap border border-slate-200">
+              <p className="mb-1 font-medium text-slate-700">Thanh toán bữa trưa:</p>
+              {event.meal_payment_instruction}
+            </div>
+          )}
+          {(event.payment_proof_required || (mealSelected && event.meal_option_enabled && event.meal_payment_proof_required !== false)) && (
             <>
               <Field label="Đường dẫn ảnh chuyển khoản (Screenshot URL) *" name="payment_proof_url" required />
               <div className="mt-3">

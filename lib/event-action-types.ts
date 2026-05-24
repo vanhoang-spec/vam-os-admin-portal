@@ -58,6 +58,7 @@ export type PublicRegistrationActionState = {
     speaker_question?: string;
     payment_proof_url?: string;
     payment_proof_note?: string;
+    meal_selected?: string;
   };
 };
 

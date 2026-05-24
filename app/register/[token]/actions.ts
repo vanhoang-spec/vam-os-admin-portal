@@ -27,7 +27,8 @@ export async function submitEventRegistrationAction(
     proof_note: formText(formData, "proof_note"),
     speaker_question: formText(formData, "speaker_question"),
     payment_proof_url: formText(formData, "payment_proof_url"),
-    payment_proof_note: formText(formData, "payment_proof_note")
+    payment_proof_note: formText(formData, "payment_proof_note"),
+    meal_selected: formText(formData, "meal_selected")
   };
   const result = await registerForEvent({
     token,

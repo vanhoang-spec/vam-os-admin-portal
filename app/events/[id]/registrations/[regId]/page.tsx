@@ -176,6 +176,7 @@ export default async function RegistrationDetailPage({
   const reg: EventRegistration = detail.registration;
   const eventName = displayText(detail.event?.event_name, "Sự kiện");
 
+  const hasMeal = reg.meal_selected === true;
   const hasProof =
     reg.proof_url ||
     reg.proof_note ||
@@ -267,6 +268,27 @@ export default async function RegistrationDetailPage({
             </Row>
           </dl>
         </Section>
+
+        {/* ─── C2: Tuỳ chọn bữa trưa (Phase 2B) ─── */}
+        {hasMeal && (
+          <Section title="C2 · Bữa trưa / Meal add-on">
+            <dl className="divide-y divide-vam-line">
+              <Row label="Đăng ký bữa trưa">
+                <span className="inline-block rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                  Có đăng ký bữa trưa
+                </span>
+              </Row>
+              {reg.meal_label ? (
+                <Row label="Tuỳ chọn">{reg.meal_label}</Row>
+              ) : null}
+              {reg.meal_fee_amount != null ? (
+                <Row label="Phí bữa trưa">
+                  {new Intl.NumberFormat("vi-VN").format(reg.meal_fee_amount)}&nbsp;{reg.meal_fee_currency || "VND"}
+                </Row>
+              ) : null}
+            </dl>
+          </Section>
+        )}
 
         {/* ─── D: Minh chứng & thanh toán ─── */}
         {hasProof || hasPayment ? (
