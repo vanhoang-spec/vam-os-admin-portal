@@ -457,7 +457,16 @@ export type EventRegistration = JsonRecord & {
   confirmed_at?: string | null;
   confirmed_by?: string | null;
   waitlisted_at?: string | null;
+  /** Position in the waitlist queue (1-based). */
+  waitlist_position?: number | null;
+  waitlisted_by?: string | null;
   rejected_at?: string | null;
+  rejected_by?: string | null;
+  reject_reason?: string | null;
+  /** Timestamp when admin or registrant cancelled the registration. */
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancel_reason?: string | null;
   /** not_required | pending | submitted | confirmed | rejected */
   payment_status?: "not_required" | "pending" | "submitted" | "confirmed" | "rejected" | string | null;
   /** URL of payment proof (Phase 2A: external link). */

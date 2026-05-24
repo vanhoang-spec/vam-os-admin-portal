@@ -61,6 +61,13 @@ export type EventDetailData = {
   menteeProfiles: MenteeProfile[];
 };
 
+export type RegistrationDetailData = {
+  ok: boolean;
+  error: string | null;
+  registration: EventRegistration | null;
+  event: Event | null;
+};
+
 export type PublicRegistrationStatus = "ready" | "not_found" | "inactive" | "not_open" | "closed" | "cancelled" | "error";
 
 export type PublicRegistrationData = {
@@ -489,6 +496,54 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
     people: peopleRes.data,
     mentorProfiles: mentorsRes.data,
     menteeProfiles: menteesRes.data
+  };
+}
+
+/**
+ * Fetch a single registration record (all columns via "*") and its parent event.
+ * Used by the admin registration detail / review page.
+ */
+export async function getRegistrationDetail(
+  eventId: string,
+  registrationId: string,
+  scope?: ScopeFilter
+): Promise<RegistrationDetailData> {
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, error, registration: null, event: null };
+
+  const [regRes, eventRes] = await Promise.all([
+    client
+      .from("event_registrations")
+      .select("*")
+      .eq("id", registrationId)
+      .eq("event_id", eventId)
+      .maybeSingle(),
+    client
+      .from("events")
+      .select("id,event_name,starts_at,season_id,event_type")
+      .eq("id", eventId)
+      .maybeSingle()
+  ]);
+
+  if (regRes.error) {
+    log("registration detail load failed", regRes.error);
+    return { ok: false, error: regRes.error.message, registration: null, event: eventRes.data as Event | null };
+  }
+
+  // Scope guard: ensure event belongs to an allowed season
+  if (
+    scope?.allowedSeasonIds &&
+    eventRes.data?.season_id &&
+    !scope.allowedSeasonIds.includes(eventRes.data.season_id)
+  ) {
+    return { ok: false, error: null, registration: null, event: null };
+  }
+
+  return {
+    ok: true,
+    error: eventRes.error?.message ?? null,
+    registration: (regRes.data as EventRegistration) ?? null,
+    event: (eventRes.data as Event) ?? null
   };
 }
 

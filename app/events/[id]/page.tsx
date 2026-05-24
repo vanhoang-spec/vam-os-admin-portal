@@ -192,6 +192,18 @@ export default async function EventDetailPage({ params }: { params: { id: string
                   key: "registered_at",
                   label: "Thời gian",
                   render: (row) => formatDate(row.registered_at)
+                },
+                {
+                  key: "actions",
+                  label: "",
+                  render: (row) => (
+                    <Link
+                      href={`/events/${detail.event!.id}/registrations/${row.id}`}
+                      className="inline-flex items-center rounded border border-vam-line bg-white px-2 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                    >
+                      Xem →
+                    </Link>
+                  )
                 }
               ]}
             />
