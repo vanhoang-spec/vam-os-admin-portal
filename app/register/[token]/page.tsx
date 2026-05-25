@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui";
-import { getPublicRegistrationData } from "@/lib/events";
+import { getPublicRegistrationData, verifyPublicRegistrationId } from "@/lib/events";
 import { displayText, formatDate } from "@/lib/utils";
 import { RegistrationForm } from "./registration-form";
 
@@ -41,12 +41,25 @@ export default async function PublicEventRegistrationPage({
   searchParams
 }: {
   params: { token: string };
-  searchParams?: { status?: string | string[] };
+  searchParams?: { status?: string | string[]; registration_id?: string | string[] };
 }) {
   const data = await getPublicRegistrationData(params.token);
   const eventName = displayText(data.event?.event_name, "Sự kiện");
+
   const resultStatus = selectedParam(searchParams?.status);
-  const showResult = resultStatus === "success" || resultStatus === "already_registered";
+  const rawRegistrationId = selectedParam(searchParams?.registration_id);
+
+  // Success is only shown when we can verify the registration_id server-side.
+  // ?status=success in the URL is intentionally ignored — it is no longer issued.
+  const isVerifiedSuccess = rawRegistrationId
+    ? await verifyPublicRegistrationId(params.token, rawRegistrationId)
+    : false;
+
+  // already_registered keeps the URL-param path (no false-success risk; duplicate warning preserved).
+  const showAlreadyRegistered = resultStatus === "already_registered";
+
+  const showResult = isVerifiedSuccess || showAlreadyRegistered;
+  const showResultStatus: "success" | "already_registered" = isVerifiedSuccess ? "success" : "already_registered";
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6">
@@ -58,7 +71,7 @@ export default async function PublicEventRegistrationPage({
             <p className="mt-1 text-sm text-slate-200">{formatDate(data.event.starts_at)}</p>
           ) : null}
         </div>
-        
+
         {data.event?.event_description && (
           <div className="rounded-lg bg-white p-5 text-sm text-slate-700 shadow-sm border border-slate-200 whitespace-pre-wrap">
             {data.event.event_description}
@@ -67,7 +80,7 @@ export default async function PublicEventRegistrationPage({
 
         <Card>
           {showResult && data.event ? (
-            <RegistrationResult status={resultStatus} eventName={eventName} />
+            <RegistrationResult status={showResultStatus} eventName={eventName} />
           ) : data.ok && data.event ? (
             <>
               <h2 className="mb-4 text-lg font-semibold text-vam-ink">Đăng ký tham gia</h2>

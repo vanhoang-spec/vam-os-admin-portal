@@ -36,8 +36,14 @@ export async function submitEventRegistrationAction(
     consent_given: formData.get("consent_given")
   });
 
-  if (result.status === "success" || result.status === "already_registered") {
-    redirect(`/register/${token}?status=${result.status}`);
+  if (result.status === "success") {
+    // Redirect with the real registration ID so the page can verify server-side.
+    // Never redirect to ?status=success — that param is no longer trusted.
+    const regId = result.registrationId;
+    redirect(regId ? `/register/${token}?registration_id=${regId}` : `/register/${token}`);
+  }
+  if (result.status === "already_registered") {
+    redirect(`/register/${token}?status=already_registered`);
   }
 
   return {

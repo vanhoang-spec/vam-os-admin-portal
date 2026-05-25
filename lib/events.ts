@@ -45,6 +45,7 @@ export type EventListData = {
   participations: EventParticipation[];
   seasons: Season[];
   people: Person[];
+  registrationRows: { event_id: string; registration_status: string | null }[];
 };
 
 export type EventDetailData = {
@@ -89,6 +90,8 @@ export type MutationResult = {
 export type PublicRegistrationResult = MutationResult & {
   status: Exclude<RegistrationActionStatus, "idle">;
   eventName?: string | null;
+  /** Returned only on status === "success"; used to verify the redirect URL server-side. */
+  registrationId?: string | null;
 };
 
 export type PublicCheckinResult = MutationResult & {
@@ -367,28 +370,41 @@ async function resolveSeasonId(client: any, seasonCode: string | null): Promise<
 
 export async function getEventListData(scope?: ScopeFilter): Promise<EventListData> {
   const { client, error } = clientResult();
-  if (!client) return { ok: false, error, events: [], participations: [], seasons: [], people: [] };
+  if (!client) return { ok: false, error, events: [], participations: [], seasons: [], people: [], registrationRows: [] };
 
   const allowedSeasonIds = scope?.allowedSeasonIds;
-  const [events, participations, seasons, people] = await Promise.all([
-    selectAllScopedBySeason<Event>(client, "events", "id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes", allowedSeasonIds),
+
+  // Phase 1: load events first to get IDs for registration count query
+  const events = await selectAllScopedBySeason<Event>(client, "events", "id,legacy_event_temp_id,season_id,intake_batch_id,status,event_name,event_type,starts_at,source_notes", allowedSeasonIds);
+  const eventIds = events.data.map((e) => e.id);
+
+  // Phase 2: load everything else in parallel
+  const [participations, seasons, people, registrations] = await Promise.all([
     selectAllScopedBySeason<EventParticipation>(client, "event_participations", "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in", allowedSeasonIds),
     allowedSeasonIds
       ? allowedSeasonIds.length
         ? client.from("seasons").select("id,code,name").in("id", allowedSeasonIds).then((res: any) => ({ data: (res.data ?? []) as Season[], error: res.error?.message ?? null }))
         : Promise.resolve({ data: [] as Season[], error: null })
       : selectAll<Season>(client, "seasons", "id,code,name"),
-    selectAll<Person>(client, "people", "id,full_name,email_primary")
+    selectAll<Person>(client, "people", "id,full_name,email_primary"),
+    eventIds.length
+      ? client
+          .from("event_registrations")
+          .select("event_id,registration_status")
+          .in("event_id", eventIds)
+          .then((res: any) => ({ data: (res.data ?? []) as { event_id: string; registration_status: string | null }[], error: res.error?.message ?? null }))
+      : Promise.resolve({ data: [] as { event_id: string; registration_status: string | null }[], error: null as string | null })
   ]);
 
-  const errors = [events.error, participations.error, seasons.error, people.error].filter(Boolean);
+  const errors = [events.error, participations.error, seasons.error, people.error, registrations.error].filter(Boolean);
   return {
     ok: !errors.length,
     error: errors.join(" | ") || null,
     events: events.data,
     participations: participations.data,
     seasons: seasons.data,
-    people: people.data
+    people: people.data,
+    registrationRows: registrations.data
   };
 }
 
@@ -476,7 +492,7 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
       .in("link_type", ["registration", "checkin"]),
     client
       .from("event_registrations")
-      .select("id,event_id,event_link_id,linked_person_id,full_name,email,phone,student_id,school,program_of_study,role_text,notes,consent_given,registration_source,registration_status,attendance_status,is_walk_in,registered_at,checked_in_at,checkin_source,match_method,match_review_status,matched_at,created_at,updated_at,mentee_code,proof_url,proof_note,proof_status,review_status,review_note,confirmed_at,waitlisted_at,rejected_at,payment_status,payment_proof_url,no_show_flagged,blacklist_flag")
+      .select("id,event_id,event_link_id,linked_person_id,full_name,email,phone,student_id,school,program_of_study,role_text,notes,consent_given,registration_source,registration_status,attendance_status,is_walk_in,registered_at,checked_in_at,checkin_source,match_method,match_review_status,matched_at,created_at,updated_at,mentee_code,proof_url,proof_note,proof_status,review_status,review_note,confirmed_at,waitlisted_at,rejected_at,payment_status,payment_proof_url,no_show_flagged,blacklist_flag,meal_selected,meal_fee_amount,meal_fee_currency")
       .eq("event_id", id)
       .order("registered_at", { ascending: false })
   ]);
@@ -561,6 +577,38 @@ export async function getPublicRegistrationData(token: string): Promise<PublicRe
 
 export async function getPublicCheckinData(token: string): Promise<PublicCheckinData> {
   return getPublicEventLinkData(token, "checkin");
+}
+
+/**
+ * Server-side check: confirm that `registrationId` exists in event_registrations
+ * AND belongs to the event linked by `token`. Returns false for any invalid input.
+ * Used by the public registration page to guard the success banner.
+ */
+export async function verifyPublicRegistrationId(token: string, registrationId: string): Promise<boolean> {
+  if (!isValidUuid(token) || !isValidUuid(registrationId)) return false;
+  const { client } = clientResult();
+  if (!client) return false;
+
+  // Resolve event_id from the registration link token
+  const { data: linkData } = await client
+    .from("event_links")
+    .select("event_id")
+    .eq("token", token)
+    .eq("link_type", "registration")
+    .maybeSingle();
+
+  const eventId = (linkData as { event_id?: string } | null)?.event_id;
+  if (!eventId) return false;
+
+  // Confirm the registration row exists and belongs to this event
+  const { data: regData } = await client
+    .from("event_registrations")
+    .select("id")
+    .eq("id", registrationId)
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  return !!(regData as { id?: string } | null)?.id;
 }
 
 async function getPublicEventLinkData(token: string, linkType: "registration" | "checkin"): Promise<PublicRegistrationData> {
@@ -786,7 +834,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     status: "success",
     message: "Đăng ký thành công",
     eventName: registrationData.event.event_name ?? null,
-    data
+    registrationId: (data as { id?: string } | null)?.id ?? null
   };
 }
 

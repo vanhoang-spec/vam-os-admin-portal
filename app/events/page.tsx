@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getIntakeBatches } from "@/lib/data";
 import { EVENT_TYPE_OPTIONS, getEventListData, isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import type { EventListData } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, IntakeBatch, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
@@ -15,6 +16,8 @@ type EventRow = Event & {
   attended_count: number;
   registered_absent_count: number;
   pending_count: number;
+  reg_count: number;
+  reg_pending_review_count: number;
 };
 
 const TYPE_LABELS = new Map<string, string>(EVENT_TYPE_OPTIONS.map((option) => [option.value, option.label]));
@@ -33,7 +36,8 @@ function buildEventRows(
   events: Event[],
   participations: EventParticipation[],
   seasons: Season[],
-  batches: IntakeBatch[]
+  batches: IntakeBatch[],
+  registrationRows: EventListData["registrationRows"]
 ): EventRow[] {
   const seasonsById = new Map(seasons.map((season) => [season.id, season]));
   const batchesById = new Map(batches.map((b) => [b.id, b]));
@@ -43,6 +47,17 @@ function buildEventRows(
     const arr = partsByEvent.get(part.event_id) ?? [];
     arr.push(part);
     partsByEvent.set(part.event_id, arr);
+  }
+
+  // Count public registrations per event (exclude cancelled)
+  const regCountByEvent = new Map<string, number>();
+  const regPendingByEvent = new Map<string, number>();
+  for (const row of registrationRows) {
+    if (!row.event_id || row.registration_status === "cancelled") continue;
+    regCountByEvent.set(row.event_id, (regCountByEvent.get(row.event_id) ?? 0) + 1);
+    if (row.registration_status === "pending_review") {
+      regPendingByEvent.set(row.event_id, (regPendingByEvent.get(row.event_id) ?? 0) + 1);
+    }
   }
 
   return events
@@ -55,7 +70,9 @@ function buildEventRows(
         participant_total: rows.length,
         attended_count: rows.filter((row) => isEventAttendedStatus(row.attendance_status)).length,
         registered_absent_count: rows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length,
-        pending_count: rows.filter((row) => isEventPendingStatus(row.attendance_status)).length
+        pending_count: rows.filter((row) => isEventPendingStatus(row.attendance_status)).length,
+        reg_count: regCountByEvent.get(event.id) ?? 0,
+        reg_pending_review_count: regPendingByEvent.get(event.id) ?? 0
       };
     })
     .sort((a, b) => String(b.starts_at ?? "").localeCompare(String(a.starts_at ?? "")));
@@ -89,7 +106,7 @@ export default async function EventsPage({
 
   const batchOptions = intakeBatchesRes.data ?? [];
 
-  const allRows = buildEventRows(data.events, data.participations, data.seasons, batchOptions);
+  const allRows = buildEventRows(data.events, data.participations, data.seasons, batchOptions, data.registrationRows);
   const filteredRows = allRows.filter((row) => {
     if (seasonFilter && row.season_code !== seasonFilter) return false;
     if (typeFilter && row.event_type !== typeFilter) return false;
@@ -230,6 +247,26 @@ export default async function EventsPage({
               key: "event_type",
               label: "Loại",
               render: (row) => displayText(TYPE_LABELS.get(String(row.event_type ?? "")) ?? row.event_type)
+            },
+            {
+              key: "reg_count",
+              label: "Đăng ký",
+              render: (row) => (
+                <span className="tabular-nums">
+                  {row.reg_count > 0 ? (
+                    <>
+                      {row.reg_count}
+                      {row.reg_pending_review_count > 0 ? (
+                        <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          {row.reg_pending_review_count} chờ
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </span>
+              )
             },
             {
               key: "participant_total",

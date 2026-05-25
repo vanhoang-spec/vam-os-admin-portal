@@ -180,9 +180,19 @@ export function RegistrationForm({ token, eventName, event }: { token: string; e
           )}
           {(event.payment_proof_required || (mealSelected && event.meal_option_enabled && event.meal_payment_proof_required !== false)) && (
             <>
-              <Field label="Đường dẫn ảnh chuyển khoản (Screenshot URL) *" name="payment_proof_url" required />
+              <div className="rounded bg-slate-100 p-3 text-xs text-slate-700 leading-relaxed">
+                <p className="font-semibold mb-1">📸 Cách lấy link ảnh biên lai:</p>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Chụp màn hình biên lai chuyển khoản.</li>
+                  <li>Tải ảnh lên <strong>Google Drive</strong> hoặc <strong>Google Photos</strong>.</li>
+                  <li>Nhấn chuột phải → <em>Lấy liên kết / Get link</em> → chọn <strong>Bất kỳ ai có đường link</strong>.</li>
+                  <li>Dán link vào ô bên dưới.</li>
+                </ol>
+                <p className="mt-1 text-slate-500">Nếu không có Google Drive, bạn có thể dùng <strong>Imgur</strong> (imgur.com) hoặc gửi ảnh qua Zalo cho ban tổ chức và ghi chú tên + SĐT vào ô ghi chú.</p>
+              </div>
+              <Field label="Link ảnh biên lai chuyển khoản *" name="payment_proof_url" required />
               <div className="mt-3">
-                <Field label="Ghi chú thanh toán (tuỳ chọn)" name="payment_proof_note" />
+                <Field label="Ghi chú thanh toán (tuỳ chọn — ví dụ: tên người chuyển, thời gian)" name="payment_proof_note" />
               </div>
             </>
           )}

@@ -189,6 +189,30 @@ export default async function EventDetailPage({ params }: { params: { id: string
                   )
                 },
                 {
+                  key: "meal_payment",
+                  label: "Ăn trưa / Thanh toán",
+                  render: (row) => (
+                    <div className="flex flex-wrap gap-1">
+                      {row.meal_selected === true ? (
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium text-blue-800">
+                          🍱{row.meal_fee_amount ? ` ${new Intl.NumberFormat("vi-VN").format(row.meal_fee_amount)}` : ""}
+                        </span>
+                      ) : null}
+                      {row.payment_status && row.payment_status !== "not_required" ? (
+                        <span className={
+                          row.payment_status === "confirmed"
+                            ? "rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-800"
+                            : row.payment_status === "submitted"
+                              ? "rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800"
+                              : "rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
+                        }>
+                          {row.payment_status === "confirmed" ? "✓ TT" : row.payment_status === "submitted" ? "⏳ TT" : row.payment_status}
+                        </span>
+                      ) : null}
+                    </div>
+                  )
+                },
+                {
                   key: "registered_at",
                   label: "Thời gian",
                   render: (row) => formatDate(row.registered_at)
