@@ -722,6 +722,9 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   if (!client) return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
 
   const eventId = registrationData.event.id;
+  // Load all non-cancelled registrations for duplicate check AND capacity count.
+  // 'rejected' rows are excluded from duplicate check so a previously-rejected person
+  // could re-register, but currently they remain in this list (neq cancelled only).
   const { data: existingRows, error: existingError } = await client
     .from("event_registrations")
     .select("id,email,registration_status")
@@ -733,7 +736,9 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
   }
 
-  const duplicate = ((existingRows ?? []) as Array<{ email: string | null }>).some((row) => normalizeEmail(row.email) === email);
+  const duplicate = ((existingRows ?? []) as Array<{ email: string | null; registration_status: string | null }>).some(
+    (row) => normalizeEmail(row.email) === email
+  );
   if (duplicate) {
     return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: registrationData.event.event_name ?? null };
   }
@@ -768,11 +773,21 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn ảnh chuyển khoản.", eventName: registrationData.event.event_name ?? null };
   }
 
-  const activeRegistrationsCount = (existingRows ?? []).length;
-  const isFull = cfg.capacity_limit_enabled && cfg.capacity_limit != null && activeRegistrationsCount >= cfg.capacity_limit;
+  // Active seats = registered + pending_review + confirmed (not waitlisted, not rejected).
+  // Waitlisted registrations do not occupy a confirmed seat; rejected ones are vacated.
+  const SEAT_STATUSES = new Set(["registered", "pending_review", "confirmed"]);
+  const activeSeatsCount = ((existingRows ?? []) as Array<{ registration_status: string | null }>).filter(
+    (row) => SEAT_STATUSES.has(String(row.registration_status ?? ""))
+  ).length;
+  const isFull = cfg.capacity_limit_enabled && cfg.capacity_limit != null && activeSeatsCount >= cfg.capacity_limit;
 
   if (isFull && !cfg.waitlist_enabled) {
-    return { ok: false, status: "capacity_full", message: "Sự kiện đã đủ chỗ. Đăng ký đã đóng.", eventName: registrationData.event.event_name ?? null };
+    return {
+      ok: false,
+      status: "capacity_full",
+      message: "Sự kiện đã đủ số lượng đăng ký. Vui lòng liên hệ BTC nếu cần hỗ trợ.",
+      eventName: registrationData.event.event_name ?? null
+    };
   }
 
   const baseStatus = isFull ? "waitlisted" : (cfg.approval_required ? "pending_review" : "registered");
@@ -1326,6 +1341,72 @@ export async function createRegistrationLinkForEvent(eventId: unknown): Promise<
 
 export async function createCheckinLinkForEvent(eventId: unknown): Promise<MutationResult> {
   return createEventLinkForEvent(eventId, "checkin");
+}
+
+/**
+ * Toggle the is_active flag on an event's registration link.
+ * When is_active = false, publicLinkWindowStatus() returns "inactive" and
+ * public registration is blocked server-side.
+ * No schema changes required — is_active already exists on event_links.
+ */
+export async function setRegistrationLinkActive(
+  eventId: unknown,
+  isActive: boolean
+): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const id = clean(eventId);
+  if (!id) return { ok: false, message: "Thiếu event id." };
+  if (!isValidUuid(id)) return { ok: false, message: "ID sự kiện không hợp lệ." };
+
+  const { data: event, error: eventError } = await client
+    .from("events")
+    .select("id,season_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (eventError) {
+    log("load event for link toggle failed", eventError);
+    return { ok: false, message: `${SAFE_ERROR} (${eventError.message})` };
+  }
+  if (!event) return { ok: false, message: "Không tìm thấy sự kiện." };
+
+  const ctx = await getAdminScopeContext();
+  if (!(await canOperateSeason(ctx, clean((event as JsonRecord).season_id)))) {
+    return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
+  }
+
+  const { data: link, error: linkError } = await client
+    .from("event_links")
+    .select("id")
+    .eq("event_id", id)
+    .eq("link_type", "registration")
+    .maybeSingle();
+  if (linkError) {
+    log("load registration link for toggle failed", linkError);
+    return { ok: false, message: `${SAFE_ERROR} (${linkError.message})` };
+  }
+  if (!link) return { ok: false, message: "Chưa có link đăng ký cho sự kiện này." };
+
+  const { error: updateError } = await client
+    .from("event_links")
+    .update({ is_active: isActive })
+    .eq("id", (link as EventLink).id);
+  if (updateError) {
+    log("toggle registration link is_active failed", updateError);
+    return { ok: false, message: `${SAFE_ERROR} (${updateError.message})` };
+  }
+
+  await writeAdminAudit(client, {
+    actionType: isActive ? "open_event_registration" : "close_event_registration",
+    afterData: { event_id: id, is_active: isActive }
+  });
+  return {
+    ok: true,
+    message: isActive ? "Đã mở đăng ký sự kiện." : "Đã đóng đăng ký sự kiện."
+  };
 }
 
 export async function createEvent(input: EventInput): Promise<MutationResult> {

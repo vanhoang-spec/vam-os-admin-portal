@@ -36,6 +36,17 @@ function matchReviewLabel(value: unknown) {
   return displayText(status);
 }
 
+function registrationStatusLabel(value: unknown) {
+  const status = String(value ?? "").trim();
+  if (status === "registered") return { label: "Đã đăng ký", color: "bg-slate-100 text-slate-700" };
+  if (status === "pending_review") return { label: "Chờ duyệt", color: "bg-amber-100 text-amber-800" };
+  if (status === "confirmed") return { label: "Đã xác nhận", color: "bg-green-100 text-green-800" };
+  if (status === "waitlisted") return { label: "Danh sách chờ", color: "bg-blue-100 text-blue-800" };
+  if (status === "rejected") return { label: "Bị từ chối", color: "bg-red-100 text-red-700" };
+  if (status === "cancelled") return { label: "Đã hủy", color: "bg-red-100 text-red-700" };
+  return { label: displayText(status), color: "bg-slate-100 text-slate-700" };
+}
+
 export default async function EventDetailPage({ params }: { params: { id: string } }) {
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
@@ -77,9 +88,35 @@ export default async function EventDetailPage({ params }: { params: { id: string
   const checkinUrl = detail.checkinLink?.token ? `${origin}/checkin/${detail.checkinLink.token}` : null;
   const checkinQrDataUrl = checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 200 }) : null;
   const canCreateLink = await canOperateSeason(scopeContext, detail.event.season_id ?? null);
-  const activeRegistrations = detail.registrations.filter((row) => row.registration_status !== "cancelled");
+
+  // Registration breakdown by status
+  const allRegistrations = detail.registrations;
+  const activeRegistrations = allRegistrations.filter((row) => row.registration_status !== "cancelled");
+  const confirmedRegistrations = activeRegistrations.filter(
+    (row) => row.registration_status === "registered" || row.registration_status === "confirmed"
+  );
+  const pendingReviewRegistrations = activeRegistrations.filter(
+    (row) => row.registration_status === "pending_review"
+  );
+  const waitlistedRegistrations = activeRegistrations.filter(
+    (row) => row.registration_status === "waitlisted"
+  );
   const checkedInRegistrations = activeRegistrations.filter((row) => row.attendance_status === "checked_in");
-  const walkInRegistrations = activeRegistrations.filter((row) => row.is_walk_in === true || String(row.is_walk_in) === "true");
+  const walkInRegistrations = activeRegistrations.filter(
+    (row) => row.is_walk_in === true || String(row.is_walk_in) === "true"
+  );
+
+  // Capacity info
+  const capacityEnabled = detail.event.capacity_limit_enabled === true;
+  const capacityLimit = detail.event.capacity_limit ?? null;
+  const waitlistEnabled = detail.event.waitlist_enabled === true;
+  // Confirmed seats = registered + pending_review + confirmed (not waitlisted, not rejected)
+  const confirmedSeatsCount = confirmedRegistrations.length + pendingReviewRegistrations.length;
+  const isOverCapacity = capacityEnabled && capacityLimit != null && confirmedSeatsCount > capacityLimit;
+
+  // Registration link active status (null = no link exists yet)
+  const regLinkIsActive: boolean | null =
+    detail.registrationLink != null ? (detail.registrationLink.is_active !== false) : null;
 
   return (
     <>
@@ -88,6 +125,36 @@ export default async function EventDetailPage({ params }: { params: { id: string
         description={`${displayText(seasonCode)} · ${formatDate(detail.event.starts_at)} · ${displayText(detail.event.event_type)}`}
       />
       {detail.error ? <ErrorBox message={detail.error} /> : null}
+
+      {/* Capacity / waitlist info banner */}
+      {capacityEnabled && capacityLimit != null && (
+        <div className={`mb-4 flex flex-wrap items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+          isOverCapacity
+            ? "border-red-300 bg-red-50 text-red-800"
+            : confirmedSeatsCount >= capacityLimit
+            ? "border-amber-300 bg-amber-50 text-amber-800"
+            : "border-slate-200 bg-slate-50 text-slate-700"
+        }`}>
+          <span className="font-semibold">Sức chứa:</span>
+          <span>{confirmedSeatsCount} / {capacityLimit} ghế (đã đăng ký / xác nhận)</span>
+          {waitlistedRegistrations.length > 0 && (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
+              {waitlistedRegistrations.length} danh sách chờ
+            </span>
+          )}
+          {isOverCapacity && (
+            <span className="font-semibold text-red-700">
+              ⚠️ Vượt quá giới hạn! ({confirmedSeatsCount - capacityLimit} người thừa so với cap)
+            </span>
+          )}
+          {!waitlistEnabled && confirmedSeatsCount >= capacityLimit && (
+            <span className="text-amber-700">— Waitlist tắt: đăng ký mới sẽ bị chặn.</span>
+          )}
+          {waitlistEnabled && (
+            <span className="text-blue-700">— Waitlist bật: đăng ký vượt cap sẽ xếp hàng chờ.</span>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-3">
         <Link
@@ -112,11 +179,12 @@ export default async function EventDetailPage({ params }: { params: { id: string
         ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Đăng ký" value={activeRegistrations.length} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <KpiCard label="Tổng đăng ký (không hủy)" value={activeRegistrations.length} />
+        <KpiCard label="Giữ ghế (đăng ký / xác nhận)" value={confirmedSeatsCount} />
+        <KpiCard label="Danh sách chờ" value={waitlistedRegistrations.length} />
         <KpiCard label="Đã check-in" value={checkedInRegistrations.length} />
         <KpiCard label="Walk-in" value={walkInRegistrations.length} />
-        <KpiCard label="Chờ rà soát" value={activeRegistrations.filter((row) => row.match_review_status === "pending_review").length} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">
@@ -126,6 +194,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
             <RegistrationLinkPanel
               eventId={detail.event.id}
               registrationUrl={registrationUrl}
+              registrationLinkIsActive={regLinkIsActive}
               canCreate={canCreateLink}
             />
           </Card>
@@ -143,7 +212,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
 
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">
-            Danh sách đăng ký & check-in <span className="text-sm font-normal text-slate-500">({activeRegistrations.length})</span>
+            Danh sách đăng ký &amp; check-in <span className="text-sm font-normal text-slate-500">({activeRegistrations.length})</span>
           </h2>
           {activeRegistrations.length === 0 ? (
             <EmptyState message="Chưa có đăng ký nào cho sự kiện này." />
@@ -174,19 +243,25 @@ export default async function EventDetailPage({ params }: { params: { id: string
                 {
                   key: "status",
                   label: "Trạng thái",
-                  render: (row) => (
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-                        {attendanceLabel(row.attendance_status)}
-                      </span>
-                      {row.is_walk_in ? (
-                        <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">Walk-in</span>
-                      ) : null}
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-                        {matchReviewLabel(row.match_review_status)}
-                      </span>
-                    </div>
-                  )
+                  render: (row) => {
+                    const regBadge = registrationStatusLabel(row.registration_status);
+                    return (
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className={`rounded px-2 py-1 text-xs font-medium ${regBadge.color}`}>
+                          {regBadge.label}
+                        </span>
+                        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                          {attendanceLabel(row.attendance_status)}
+                        </span>
+                        {row.is_walk_in ? (
+                          <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">Walk-in</span>
+                        ) : null}
+                        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                          {matchReviewLabel(row.match_review_status)}
+                        </span>
+                      </div>
+                    );
+                  }
                 },
                 {
                   key: "meal_payment",

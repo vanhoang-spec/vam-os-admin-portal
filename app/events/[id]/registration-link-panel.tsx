@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { createCheckinLinkAction, createRegistrationLinkAction } from "@/app/actions/events";
+import { createCheckinLinkAction, createRegistrationLinkAction, toggleRegistrationLinkAction } from "@/app/actions/events";
 
 const initialState = { ok: false, message: null as string | null };
 
@@ -95,26 +95,79 @@ function PublicLinkPanel({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Toggle button for the registration link is_active flag
+// ---------------------------------------------------------------------------
+
+function ToggleRegLinkButton({ isCurrentlyActive }: { isCurrentlyActive: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={
+        isCurrentlyActive
+          ? "inline-flex w-fit rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+          : "inline-flex w-fit rounded-md border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-60"
+      }
+    >
+      {pending
+        ? "Đang cập nhật..."
+        : isCurrentlyActive
+        ? "🔒 Đóng đăng ký"
+        : "🔓 Mở lại đăng ký"}
+    </button>
+  );
+}
+
 export function RegistrationLinkPanel({
   eventId,
   registrationUrl,
+  registrationLinkIsActive,
   canCreate
 }: {
   eventId: string;
   registrationUrl: string | null;
+  /** is_active value from the event_links row; null when no link exists yet */
+  registrationLinkIsActive: boolean | null;
   canCreate: boolean;
 }) {
+  const [toggleState, toggleAction] = useFormState(toggleRegistrationLinkAction, initialState);
+
+  // null means no link yet → treat as open for status label
+  const isActive = registrationLinkIsActive !== false;
+
   return (
-    <PublicLinkPanel
-      eventId={eventId}
-      url={registrationUrl}
-      canCreate={canCreate}
-      action={createRegistrationLinkAction}
-      createLabel="Tạo link đăng ký"
-      noPermissionMessage="Bạn có thể xem sự kiện này nhưng không có quyền tạo link đăng ký."
-      copyLabel="Sao chép link đăng ký"
-      helperText="Dùng link này để người tham dự đăng ký trước sự kiện."
-    />
+    <div className="grid gap-3">
+      <PublicLinkPanel
+        eventId={eventId}
+        url={registrationUrl}
+        canCreate={canCreate}
+        action={createRegistrationLinkAction}
+        createLabel="Tạo link đăng ký"
+        noPermissionMessage="Bạn có thể xem sự kiện này nhưng không có quyền tạo link đăng ký."
+        copyLabel="Sao chép link đăng ký"
+        helperText="Dùng link này để người tham dự đăng ký trước sự kiện."
+      />
+
+      {/* Admin toggle: only shown when a link exists and admin has create/edit permission */}
+      {registrationUrl && canCreate ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
+          <span className={isActive ? "text-xs font-medium text-green-700" : "text-xs font-medium text-red-700"}>
+            {isActive ? "✅ Đăng ký đang mở" : "🔒 Đăng ký đã đóng"}
+          </span>
+          <form action={toggleAction}>
+            <input type="hidden" name="event_id" value={eventId} />
+            {/* Pass the desired NEW state (opposite of current) */}
+            <input type="hidden" name="is_active" value={isActive ? "false" : "true"} />
+            <ToggleRegLinkButton isCurrentlyActive={isActive} />
+          </form>
+          {toggleState.message ? (
+            <p className={toggleState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>{toggleState.message}</p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

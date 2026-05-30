@@ -36,6 +36,38 @@ function RegistrationResult({
   );
 }
 
+/**
+ * Shown when the registration link is inactive/closed, expired, or event is cancelled.
+ * Replaces the generic "Không thể đăng ký" heading with a clear Vietnamese message.
+ */
+function RegistrationBlocked({
+  status,
+  message
+}: {
+  status: string;
+  message: string;
+}) {
+  const isClosed = status === "inactive" || status === "closed";
+  return (
+    <div className={isClosed
+      ? "rounded-lg border border-red-200 bg-red-50 p-5 text-red-800"
+      : "rounded-lg border border-slate-200 bg-slate-50 p-5 text-slate-700"
+    }>
+      <h2 className="text-lg font-semibold">
+        {isClosed ? "Đăng ký đã đóng" : "Không thể đăng ký"}
+      </h2>
+      <p className="mt-2 text-sm">
+        {isClosed ? "Sự kiện hiện đã đóng đăng ký." : message}
+      </p>
+      {isClosed && (
+        <p className="mt-1 text-sm text-red-700">
+          Vui lòng liên hệ BTC nếu cần hỗ trợ.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default async function PublicEventRegistrationPage({
   params,
   searchParams
@@ -87,10 +119,7 @@ export default async function PublicEventRegistrationPage({
               <RegistrationForm token={params.token} eventName={eventName} event={data.event} />
             </>
           ) : (
-            <div className="py-6 text-center">
-              <h2 className="text-lg font-semibold text-vam-ink">Không thể đăng ký</h2>
-              <p className="mt-2 text-sm text-slate-600">{data.message}</p>
-            </div>
+            <RegistrationBlocked status={data.status} message={data.message} />
           )}
         </Card>
       </div>

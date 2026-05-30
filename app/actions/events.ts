@@ -12,6 +12,7 @@ import {
   createRegistrationLinkForEvent,
   createEvent,
   removeParticipation,
+  setRegistrationLinkActive,
   updateEvent,
   updateParticipation
 } from "@/lib/events";
@@ -315,6 +316,25 @@ export async function createCheckinLinkAction(
   if (!eventId) return { ok: false, message: "Thiáº¿u event id." };
 
   const result = await createCheckinLinkForEvent(eventId);
+  if (!result.ok) return { ok: false, message: result.message };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  return { ok: true, message: result.message };
+}
+
+export async function toggleRegistrationLinkAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const eventId = formText(formData, "event_id");
+  if (!eventId) return { ok: false, message: "Thiếu event id." };
+
+  const isActive = formText(formData, "is_active") === "true";
+  const result = await setRegistrationLinkActive(eventId, isActive);
   if (!result.ok) return { ok: false, message: result.message };
 
   revalidatePath(`/events/${eventId}`);
