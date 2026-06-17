@@ -549,8 +549,8 @@ Same reasoning applies — registration uses service-role. If registration myste
 | 2 | Rotate the exposed key? | HIGH | ✅ **RESOLVED** — rotated and revoked by Thang 2026-06-17 |
 | 3 | Clean `.env.local.example` and commit? | LOW | ✅ **RESOLVED** — committed in this session |
 | 4 | Git history purge (force-push)? | LOW-MEDIUM | ⏳ Deferred — key is invalid; purge requires separate approval |
-| 5 | Proceed to Phase 2 (backup)? | MEDIUM | ⏳ Pending — requires Supabase CLI install or dashboard backup |
-| 6 | Staging schema comparison before applying migration 057? | MEDIUM | ⏳ Pending — confirm staging accessible |
+| 5 | Proceed to Phase 2 (backup)? | MEDIUM | ✅ **RESOLVED** — pg_dump backups created securely 2026-06-17 |
+| 6 | Staging schema comparison before applying migration 057? | MEDIUM | ⏳ Pending — Phase 3 schema comparison |
 | 7 | Apply migration 057 to staging? | HIGH | ⏳ Pending — after Phase 3 diff review |
 | 8 | Apply migration 057 to production? | 🔴 CRITICAL | ⏳ Pending — requires explicit Thang approval after staging tests pass |
 
@@ -560,11 +560,11 @@ Same reasoning applies — registration uses service-role. If registration myste
 
 | Phase | Readiness | Blockers |
 |---|---|---|
-| Phase 2 — Backup | 🟡 Blocked | Supabase CLI not installed; npx blocked by PS policy. Need: install CLI or use dashboard backup. |
-| Phase 3 — Staging prep | 🟡 Conditional | Need staging to be accessible (last known status: up). Need schema diff query. |
-| Phase 4 — Remediation design | 🟢 Ready to begin | Can create migration 057 file without applying. |
+| Phase 2 — Backup | ✅ Completed | pg_dump logical backups securely created and validated 2026-06-17. |
+| Phase 3 — Staging prep | 🟢 Ready | Staging is accessible. Proceeding to schema diff. |
+| Phase 4 — Remediation design | 🟢 Ready | Can create migration 057 file without applying. |
 
 ---
 
 *Audit completed: 2026-06-17. No production changes were made. This report is read-only.*
-*Next action: Thang must review the exposed key finding and provide decisions on items 1–4 before any further phases proceed.*
+*Next action: Proceed to Phase 3 read-only schema comparison between production and staging.*
