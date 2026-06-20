@@ -5,6 +5,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { createMenteeProfile, createMentorProfile, updateMenteeProfile, updateMentorProfile } from "@/lib/people-create";
 import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
+import { logActionTiming, normalizeActionError } from "@/lib/action-feedback";
 
 export type PeopleActionState = {
   ok: boolean;
@@ -130,29 +131,18 @@ export async function updateMentorAction(_previous: PeopleActionState, formData:
     revalidatePath(`/mentors/${mentorProfileId}/edit`, "page");
     return { ok: true, message: result.message, createdPersonId: personId };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[updateMentorAction] unhandled error", err);
-    return { ok: false, message: `Lỗi hệ thống: ${msg}` };
+    console.error("[updateMentorAction] unhandled error", { message: normalizeActionError(err) });
+    return { ok: false, message: normalizeActionError(err, "Lỗi hệ thống. Vui lòng thử lại.") };
   }
 }
 
 export async function updateMenteeAction(_previous: PeopleActionState, formData: FormData): Promise<PeopleActionState> {
+  const startedAt = Date.now();
   try {
-    // DEBUG (temporary): dump every FormData key/value so we can verify the
-    // browser is actually submitting mentee_profile_id, person_id and major.
-    try {
-      const debugEntries: Record<string, string> = {};
-      formData.forEach((v, k) => {
-        debugEntries[k] = typeof v === "string" ? v : `[File:${(v as File).name}]`;
-      });
-      console.log("[updateMenteeAction] received FormData", debugEntries);
-    } catch (e) {
-      console.warn("[updateMenteeAction] could not enumerate FormData", e);
-    }
 
     const denied = await ensureAuth();
     if (denied) {
-      console.warn("[updateMenteeAction] auth denied", denied);
+      console.warn("[updateMenteeAction] auth denied", { ok: denied.ok, hasMessage: Boolean(denied.message) });
       return denied;
     }
 
@@ -184,7 +174,8 @@ export async function updateMenteeAction(_previous: PeopleActionState, formData:
     });
 
     if (!result.ok) {
-      console.warn("[updateMenteeAction] updateMenteeProfile returned not-ok", result.message);
+      console.warn("[updateMenteeAction] updateMenteeProfile returned not-ok", { hasMessage: Boolean(result.message) });
+      logActionTiming("people.mentee.update.server", { durationMs: Date.now() - startedAt, ok: false });
       return { ok: false, message: result.message };
     }
 
@@ -193,12 +184,12 @@ export async function updateMenteeAction(_previous: PeopleActionState, formData:
     const resolvedPersonId = (result.data?.person as { id?: string })?.id ?? personId ?? null;
     if (resolvedPersonId) revalidatePath(`/people/${resolvedPersonId}`, "page");
     revalidatePath(`/mentees/${menteeProfileId}/edit`, "page");
-    console.log("[updateMenteeAction] success", { menteeProfileId, personId: resolvedPersonId });
+    logActionTiming("people.mentee.update.server", { durationMs: Date.now() - startedAt, ok: true });
     return { ok: true, message: result.message, createdPersonId: resolvedPersonId };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[updateMenteeAction] unhandled error", err);
-    return { ok: false, message: `Lỗi hệ thống: ${msg}` };
+    console.error("[updateMenteeAction] unhandled error", { message: normalizeActionError(err) });
+    logActionTiming("people.mentee.update.server", { durationMs: Date.now() - startedAt, ok: false });
+    return { ok: false, message: normalizeActionError(err, "Lỗi hệ thống. Vui lòng thử lại.") };
   }
 }
 

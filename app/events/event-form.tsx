@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useFormState } from "react-dom";
 import { createEventAction, updateEventAction } from "@/app/actions/events";
+import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import type { EventActionState } from "@/lib/event-action-types";
 import { EVENT_TYPE_OPTIONS } from "@/lib/event-constants";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
@@ -34,6 +35,7 @@ export function EventForm({
 }) {
   const action = mode === "create" ? createEventAction : updateEventAction;
   const [state, formAction] = useFormState(action, initialState);
+  const timing = useActionTiming(mode === "create" ? "event.create" : "event.update", state);
 
   const seasonsById = new Map(seasons.map((season) => [season.id, season]));
   const eventSeasonCode = event?.season_id ? seasonsById.get(event.season_id)?.code ?? "" : "";
@@ -66,14 +68,15 @@ export function EventForm({
   }, [state.ok, state.message, mode]);
 
   return (
-    <form action={formAction} className="grid gap-4">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-4">
       {mode === "edit" && event ? <input type="hidden" name="id" value={event.id} /> : null}
 
-      {state.message ? (
-        <div className={state.ok ? "rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"}>
-          {state.message}
-        </div>
-      ) : null}
+      <InlineActionMessage
+        state={state}
+        successFallback={mode === "create" ? "Đã tạo sự kiện." : "Đã lưu thay đổi sự kiện."}
+        errorFallback="Không thể lưu sự kiện. Vui lòng thử lại."
+        showSavedAt={mode === "edit"}
+      />
 
       <label className="block">
         <span className="text-xs font-medium uppercase text-slate-500">Tên sự kiện (*)</span>
@@ -435,16 +438,16 @@ export function EventForm({
 
       </div>
 
-      {saved ? (
+      {saved && !state.message ? (
         <div className="mt-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
           Đã lưu thay đổi sự kiện thành công.
         </div>
       ) : null}
 
       <div className="mt-2 flex flex-wrap gap-3">
-        <button type="submit" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+        <LoadingButton pendingLabel={mode === "create" ? "Đang tạo..." : "Đang lưu..."} className="w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
           {mode === "create" ? "Tạo sự kiện" : "Lưu thay đổi"}
-        </button>
+        </LoadingButton>
         {state.ok && mode === "create" && state.createdEventId ? (
           <Link
             href={`/events/${state.createdEventId}/attendance`}

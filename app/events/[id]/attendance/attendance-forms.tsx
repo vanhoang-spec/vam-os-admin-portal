@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormState } from "react-dom";
+import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   addParticipationAction,
@@ -295,6 +296,7 @@ export function AddParticipantForm({
   intakeBatchId?: string | null;
 }) {
   const [state, formAction] = useFormState(addParticipationAction, initialState);
+  const timing = useActionTiming("event.attendance.add", state);
 
   const options = useMemo(
     () => buildParticipantOptions(people, mentorProfiles, menteeProfiles, existingPersonIds, intakeBatchId),
@@ -324,7 +326,7 @@ export function AddParticipantForm({
   }, [knownAs]);
 
   return (
-    <form action={formAction} className="grid gap-3">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-3">
       <input type="hidden" name="event_id" value={eventId} />
       <input type="hidden" name="person_id" value={personId} />
 
@@ -399,13 +401,9 @@ export function AddParticipantForm({
         />
       </label>
 
-      <button
-        type="submit"
-        disabled={!personId}
-        className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90 disabled:opacity-50"
-      >
+      <LoadingButton pendingLabel="Đang thêm..." disabled={!personId} className="w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
         Thêm người tham gia
-      </button>
+      </LoadingButton>
     </form>
   );
 }
@@ -415,15 +413,10 @@ export function AddParticipantForm({
 // ---------------------------------------------------------------------------
 
 function BulkAddGroupSubmit({ label }: { label: string }) {
-  const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="inline-flex w-fit rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink hover:bg-vam-mint disabled:opacity-50"
-    >
-      {pending ? "Đang thêm..." : label}
-    </button>
+    <LoadingButton pendingLabel="Đang thêm..." className="w-fit rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink hover:bg-vam-mint">
+      {label}
+    </LoadingButton>
   );
 }
 
@@ -437,8 +430,9 @@ function BulkAddGroupForm({
   label: string;
 }) {
   const [state, formAction] = useFormState(bulkAddEventParticipantsAction, initialBulkState);
+  const timing = useActionTiming(`event.attendance.bulk.${group}`, state);
   return (
-    <form action={formAction} className="flex flex-wrap items-center gap-3">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="event_id" value={eventId} />
       <input type="hidden" name="group" value={group} />
       <BulkAddGroupSubmit label={label} />
@@ -523,22 +517,23 @@ function QuickMarkForm({
   currentStatus: string;
 }) {
   const [state, formAction] = useFormState(quickMarkParticipationAction, initialState);
+  const timing = useActionTiming(`event.attendance.quick.${targetStatus}`, state);
   const isActive = currentStatus === targetStatus;
   return (
-    <form action={formAction} className="inline">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="inline-grid gap-1">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="event_id" value={eventId} />
       <input type="hidden" name="attendance_status" value={targetStatus} />
-      <button
-        type="submit"
+      <LoadingButton
+        pendingLabel="Đang cập nhật..."
         title={isActive ? `Đang là: ${label}` : `Đánh dấu: ${label}`}
         className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
           isActive ? activeClass : "border border-vam-line bg-white text-slate-500 hover:bg-slate-50"
         }`}
       >
-        {label}
-        {state.ok ? " ✓" : ""}
-      </button>
+        {label}{state.ok ? " ✓" : ""}
+      </LoadingButton>
+      <InlineActionMessage state={state} errorFallback="Không thể cập nhật điểm danh. Vui lòng thử lại." className="px-2 py-1 text-xs" />
     </form>
   );
 }
@@ -558,6 +553,8 @@ export function ParticipationRow({
 }) {
   const [updateState, updateAction] = useFormState(updateParticipationAction, initialState);
   const [removeState, removeAction] = useFormState(removeParticipationAction, initialState);
+  const updateTiming = useActionTiming("event.attendance.update", updateState);
+  const removeTiming = useActionTiming("event.attendance.remove", removeState);
 
   const displayName = person?.full_name || person?.email_primary || row.person_id || "Chưa rõ";
   const currentRole = String(row.role_at_event ?? "unknown");
@@ -606,7 +603,7 @@ export function ParticipationRow({
         </div>
 
         {/* Full edit form */}
-        <form action={updateAction} className="grid gap-2">
+        <form action={updateAction} onSubmit={updateTiming.markSubmitStart} className="grid gap-2">
           <input type="hidden" name="id" value={row.id} />
           <input type="hidden" name="event_id" value={eventId} />
           <select
@@ -634,17 +631,10 @@ export function ParticipationRow({
             placeholder="Ghi chú (tuỳ chọn)"
             className="w-full rounded-md border border-vam-line bg-white px-2 py-1 text-xs text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           />
-          <button
-            type="submit"
-            className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1 text-xs font-medium text-white hover:bg-vam-green/90"
-          >
+          <LoadingButton pendingLabel="Đang cập nhật..." className="w-fit rounded-md bg-vam-green px-3 py-1 text-xs font-medium text-white hover:bg-vam-green/90">
             Cập nhật chi tiết
-          </button>
-          {updateState.message ? (
-            <span className={updateState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>
-              {updateState.message}
-            </span>
-          ) : null}
+          </LoadingButton>
+          <InlineActionMessage state={updateState} errorFallback="Không thể cập nhật người tham gia. Vui lòng thử lại." className="px-2 py-1 text-xs" />
         </form>
       </td>
 
@@ -660,7 +650,7 @@ export function ParticipationRow({
 
       {/* Column 4: remove */}
       <td className="px-4 py-3 align-top">
-        <form action={removeAction} className="grid gap-2">
+        <form action={removeAction} onSubmit={removeTiming.markSubmitStart} className="grid gap-2">
           <input type="hidden" name="id" value={row.id} />
           <input type="hidden" name="event_id" value={eventId} />
           <input
@@ -669,17 +659,10 @@ export function ParticipationRow({
             placeholder="Lý do xoá"
             className="w-full rounded-md border border-vam-line bg-white px-2 py-1 text-xs text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           />
-          <button
-            type="submit"
-            className="inline-flex w-fit rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
-          >
+          <LoadingButton pendingLabel="Đang xoá..." className="w-fit rounded-md border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100">
             Xoá
-          </button>
-          {removeState.message ? (
-            <span className={removeState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>
-              {removeState.message}
-            </span>
-          ) : null}
+          </LoadingButton>
+          <InlineActionMessage state={removeState} errorFallback="Không thể xoá người tham gia. Vui lòng thử lại." className="px-2 py-1 text-xs" />
         </form>
       </td>
     </tr>

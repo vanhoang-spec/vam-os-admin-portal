@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useFormState } from "react-dom";
+import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import { updateMenteeAction, type PeopleActionState } from "@/app/actions/people";
 import type { MenteeProfile, Person } from "@/lib/types";
 
@@ -18,17 +19,18 @@ export function EditMenteeForm({
   person: Person;
 }) {
   const [state, formAction] = useFormState(updateMenteeAction, initialState);
+  const timing = useActionTiming("people.mentee.update", state);
 
   return (
-    <form action={formAction} className="grid gap-6">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-6">
       <input type="hidden" name="mentee_profile_id" defaultValue={mentee.id} />
       <input type="hidden" name="person_id" defaultValue={person.id} />
 
-      {state.message ? (
-        <div className={state.ok ? "rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"}>
-          {state.message}
-        </div>
-      ) : null}
+      <InlineActionMessage
+        state={state}
+        errorFallback="Không thể lưu hồ sơ. Vui lòng thử lại."
+        showSavedAt={state.ok}
+      />
 
       <section className="rounded-md border border-vam-line bg-slate-50 px-4 py-3">
         <h3 className={sectionTitle}>1. Người (person)</h3>
@@ -103,9 +105,9 @@ export function EditMenteeForm({
       </section>
 
       <div className="flex flex-wrap gap-3">
-        <button type="submit" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+        <LoadingButton pendingLabel="Đang lưu..." className="w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
           Lưu thay đổi
-        </button>
+        </LoadingButton>
         <Link href={`/people/${person.id}`} className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
           Hủy
         </Link>

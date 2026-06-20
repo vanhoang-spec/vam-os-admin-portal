@@ -117,6 +117,10 @@ export default async function EventDetailPage({ params }: { params: { id: string
   // Registration link active status (null = no link exists yet)
   const regLinkIsActive: boolean | null =
     detail.registrationLink != null ? (detail.registrationLink.is_active !== false) : null;
+  const reopenCapacityWarning =
+    capacityEnabled && capacityLimit != null && confirmedSeatsCount >= capacityLimit
+      ? `Sức chứa hiện tại: ${confirmedSeatsCount}/${capacityLimit}. Mở lại đăng ký có thể đưa đăng ký mới vào waitlist hoặc bị chặn theo cấu hình hiện tại.`
+      : null;
 
   return (
     <>
@@ -196,6 +200,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
               registrationUrl={registrationUrl}
               registrationLinkIsActive={regLinkIsActive}
               canCreate={canCreateLink}
+              capacityWarning={reopenCapacityWarning}
             />
           </Card>
 

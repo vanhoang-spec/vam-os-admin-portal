@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useFormState } from "react-dom";
+import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import { useMemo, useState } from "react";
 import { createMentorAction, type PeopleActionState } from "@/app/actions/people";
 import type { FunctionArea, Industry, Person, Program } from "@/lib/types";
@@ -25,6 +26,7 @@ export function CreateMentorForm({
   functionAreas: FunctionArea[];
 }) {
   const [state, formAction] = useFormState(createMentorAction, initialState);
+  const timing = useActionTiming("people.mentor.create", state);
 
   const peopleByEmail = useMemo(() => {
     const map = new Map<string, Person>();
@@ -53,14 +55,14 @@ export function CreateMentorForm({
   const sectionTitle = "mb-3 text-base font-semibold text-vam-ink";
 
   return (
-    <form action={formAction} className="grid gap-6">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-6">
       <input type="hidden" name="link_to_person_id" value={linkPersonId} />
 
-      {state.message ? (
-        <div className={state.ok ? "rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"}>
-          {state.message}
-        </div>
-      ) : null}
+      <InlineActionMessage
+        state={state}
+        errorFallback="Không thể lưu hồ sơ. Vui lòng thử lại."
+        showSavedAt={state.ok}
+      />
 
       <section className="rounded-md border border-vam-line bg-slate-50 px-4 py-3">
         <h3 className={sectionTitle}>1. Người (person)</h3>
@@ -190,9 +192,9 @@ export function CreateMentorForm({
       </section>
 
       <div className="flex flex-wrap gap-3">
-        <button type="submit" disabled={state.ok} className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90 disabled:opacity-50">
+        <LoadingButton pendingLabel="Đang tạo..." disabled={state.ok} className="w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
           Tạo hồ sơ mentor
-        </button>
+        </LoadingButton>
         {state.ok && state.createdPersonId ? (
           <Link href={`/people/${state.createdPersonId}`} className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
             Mở hồ sơ vừa tạo

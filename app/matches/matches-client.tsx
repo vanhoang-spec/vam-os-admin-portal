@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormState } from "react-dom";
 import { cancelMatchAction, createManualMatchAction } from "@/app/actions/matches";
+import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import type { MatchActionState } from "@/lib/match-action-types";
 import type { MenteeCandidate, MentorCandidate } from "@/lib/matches";
 
@@ -21,28 +22,18 @@ function loadBar(count: number) {
 // ── Submit buttons ────────────────────────────────────────────────────────────
 
 function CreateSubmit() {
-  const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90 disabled:opacity-50"
-    >
-      {pending ? "Đang tạo..." : "Tạo matching"}
-    </button>
+    <LoadingButton pendingLabel="Đang tạo..." className="rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+      Tạo matching
+    </LoadingButton>
   );
 }
 
 function CancelSubmit() {
-  const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="inline-flex rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-    >
-      {pending ? "..." : "Hủy match"}
-    </button>
+    <LoadingButton pendingLabel="Đang hủy ghép cặp..." className="rounded border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">
+      Xác nhận hủy
+    </LoadingButton>
   );
 }
 
@@ -59,6 +50,7 @@ export function ManualMatchForm({
 }) {
   const router = useRouter();
   const [state, formAction] = useFormState(createManualMatchAction, initialState);
+  const timing = useActionTiming("match.create", state);
   const [selectedMentorId, setSelectedMentorId] = useState("");
   const [selectedMenteeId, setSelectedMenteeId] = useState("");
 
@@ -78,7 +70,7 @@ export function ManualMatchForm({
   const availableMentees = mentees.filter((m) => !m.has_active_match);
 
   return (
-    <form action={formAction} className="grid gap-4">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-4">
       <input type="hidden" name="intake_batch_id" value={intakeBatchId} />
 
       {state.message ? (
@@ -211,6 +203,7 @@ export function ManualMatchForm({
 export function MatchCancelForm({ matchId }: { matchId: string }) {
   const router = useRouter();
   const [state, formAction] = useFormState(cancelMatchAction, initialState);
+  const timing = useActionTiming("match.cancel", state);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -233,8 +226,9 @@ export function MatchCancelForm({ matchId }: { matchId: string }) {
   }
 
   return (
-    <form action={formAction} className="grid gap-1.5">
+    <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-1.5">
       <input type="hidden" name="match_id" value={matchId} />
+      <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">Hủy ghép cặp sẽ chuyển match khỏi trạng thái active. Lịch sử ghép cặp không bị xóa.</p>
       <input
         type="text"
         name="end_reason"
@@ -252,9 +246,7 @@ export function MatchCancelForm({ matchId }: { matchId: string }) {
           Không
         </button>
       </div>
-      {state.message && !state.ok ? (
-        <span className="text-xs text-red-700">{state.message}</span>
-      ) : null}
+      <InlineActionMessage state={state} errorFallback="Không thể hủy ghép cặp. Vui lòng thử lại." className="px-2 py-1 text-xs" />
     </form>
   );
 }

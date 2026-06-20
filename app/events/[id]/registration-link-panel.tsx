@@ -2,21 +2,17 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormState } from "react-dom";
 import { createCheckinLinkAction, createRegistrationLinkAction, toggleRegistrationLinkAction } from "@/app/actions/events";
+import { ConfirmActionDialog, InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 
 const initialState = { ok: false, message: null as string | null };
 
 function CreateLinkButton({ label }: { label: string }) {
-  const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90 disabled:opacity-60"
-    >
-      {pending ? "Đang tạo..." : label}
-    </button>
+    <LoadingButton pendingLabel="Đang tạo..." className="w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+      {label}
+    </LoadingButton>
   );
 }
 
@@ -99,24 +95,26 @@ function PublicLinkPanel({
 // Toggle button for the registration link is_active flag
 // ---------------------------------------------------------------------------
 
-function ToggleRegLinkButton({ isCurrentlyActive }: { isCurrentlyActive: boolean }) {
-  const { pending } = useFormStatus();
+function ToggleRegLinkButton({ isCurrentlyActive, capacityWarning }: { isCurrentlyActive: boolean; capacityWarning?: string | null }) {
+  const triggerClassName = isCurrentlyActive
+    ? "w-fit rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+    : "w-fit rounded-md border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100";
+
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className={
+    <ConfirmActionDialog
+      triggerLabel={isCurrentlyActive ? "Đóng đăng ký" : "Mở lại đăng ký"}
+      pendingLabel={isCurrentlyActive ? "Đang đóng đăng ký..." : "Đang mở đăng ký..."}
+      title={isCurrentlyActive ? "Đóng đăng ký công khai?" : "Mở lại đăng ký công khai?"}
+      description={
         isCurrentlyActive
-          ? "inline-flex w-fit rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
-          : "inline-flex w-fit rounded-md border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-60"
+          ? "Đóng đăng ký sẽ ngăn tất cả đăng ký công khai mới. Các đăng ký hiện có không bị xóa."
+          : "Mở lại đăng ký sẽ cho phép người dùng có link công khai gửi đăng ký mới cho sự kiện này."
       }
-    >
-      {pending
-        ? "Đang cập nhật..."
-        : isCurrentlyActive
-        ? "🔒 Đóng đăng ký"
-        : "🔓 Mở lại đăng ký"}
-    </button>
+      warning={!isCurrentlyActive ? capacityWarning : null}
+      confirmLabel={isCurrentlyActive ? "Đóng đăng ký" : "Mở lại đăng ký"}
+      triggerClassName={triggerClassName}
+      confirmClassName={isCurrentlyActive ? "bg-red-600 text-white hover:bg-red-700" : "bg-vam-green text-white hover:bg-vam-green/90"}
+    />
   );
 }
 
@@ -124,18 +122,20 @@ export function RegistrationLinkPanel({
   eventId,
   registrationUrl,
   registrationLinkIsActive,
-  canCreate
+  canCreate,
+  capacityWarning = null
 }: {
   eventId: string;
   registrationUrl: string | null;
   /** is_active value from the event_links row; null when no link exists yet */
   registrationLinkIsActive: boolean | null;
   canCreate: boolean;
+  capacityWarning?: string | null;
 }) {
   const [toggleState, toggleAction] = useFormState(toggleRegistrationLinkAction, initialState);
-
-  // null means no link yet → treat as open for status label
+  // null means no link yet -> treat as open for status label
   const isActive = registrationLinkIsActive !== false;
+  const timing = useActionTiming(isActive ? "event.registration.close" : "event.registration.reopen", toggleState);
 
   return (
     <div className="grid gap-3">
@@ -156,15 +156,13 @@ export function RegistrationLinkPanel({
           <span className={isActive ? "text-xs font-medium text-green-700" : "text-xs font-medium text-red-700"}>
             {isActive ? "✅ Đăng ký đang mở" : "🔒 Đăng ký đã đóng"}
           </span>
-          <form action={toggleAction}>
+          <form action={toggleAction} onSubmit={timing.markSubmitStart}>
             <input type="hidden" name="event_id" value={eventId} />
             {/* Pass the desired NEW state (opposite of current) */}
             <input type="hidden" name="is_active" value={isActive ? "false" : "true"} />
-            <ToggleRegLinkButton isCurrentlyActive={isActive} />
+            <ToggleRegLinkButton isCurrentlyActive={isActive} capacityWarning={capacityWarning} />
           </form>
-          {toggleState.message ? (
-            <p className={toggleState.ok ? "text-xs text-green-700" : "text-xs text-red-700"}>{toggleState.message}</p>
-          ) : null}
+          <InlineActionMessage state={toggleState} errorFallback="Không thể cập nhật trạng thái đăng ký. Vui lòng thử lại." className="py-1 text-xs" />
         </div>
       ) : null}
     </div>
