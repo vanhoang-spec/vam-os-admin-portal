@@ -6,6 +6,7 @@ import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getRegistrationDetail, isValidUuid } from "@/lib/events";
 import { displayText, formatDate } from "@/lib/utils";
 import type { EventRegistration } from "@/lib/types";
+import { RegistrationActionsPanel } from "./registration-actions";
 
 // ---------------------------------------------------------------------------
 // Local display helpers
@@ -478,10 +479,7 @@ export default async function RegistrationDetailPage({
           </Section>
         ) : null}
 
-        {/* ─── Placeholder for admin actions (next pass) ─── */}
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>Admin actions</strong> (Duyệt / Từ chối / Waitlist / Rà soát minh chứng / Thanh toán) sẽ được triển khai ở phase tiếp theo.
-        </div>
+        <RegistrationActionsPanel eventId={params.id} registration={reg} />
       </div>
 
       {/* Bottom navigation */}

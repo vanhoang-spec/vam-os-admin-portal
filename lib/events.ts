@@ -1409,6 +1409,378 @@ export async function setRegistrationLinkActive(
   };
 }
 
+
+type RegistrationOperationInput = {
+  event_id?: unknown;
+  registration_id?: unknown;
+  note?: unknown;
+};
+
+type LoadedRegistrationOperation = {
+  client: any;
+  adminId: string | null;
+  registration: JsonRecord;
+  event: JsonRecord;
+};
+
+const ACTIVE_REGISTRATION_STATUSES = new Set(["registered", "pending_review", "confirmed", "waitlisted"]);
+const CONFIRMABLE_REGISTRATION_STATUSES = new Set(["registered", "pending_review", "waitlisted"]);
+const WAITLISTABLE_REGISTRATION_STATUSES = new Set(["registered", "pending_review", "confirmed"]);
+const TERMINAL_REGISTRATION_STATUSES = new Set(["rejected", "cancelled"]);
+const CAPACITY_CONSUMING_REGISTRATION_STATUSES = new Set(["registered", "pending_review", "confirmed"]);
+const PAYMENT_CONFIRMABLE_STATUSES = new Set(["pending", "submitted", "rejected"]);
+const PAYMENT_REJECTABLE_STATUSES = new Set(["pending", "submitted", "confirmed"]);
+const PROOF_REVIEWABLE_STATUSES = new Set(["submitted", "accepted", "rejected"]);
+
+function operationNote(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function safeOperationError(scope: string, error: unknown) {
+  log(scope, error);
+  return "Không thể lưu thay đổi lúc này. Vui lòng thử lại.";
+}
+
+async function loadRegistrationOperation(input: RegistrationOperationInput): Promise<
+  | { ok: true; data: LoadedRegistrationOperation }
+  | { ok: false; message: string }
+> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const eventId = clean(input.event_id);
+  const registrationId = clean(input.registration_id);
+  if (!eventId || !registrationId) return { ok: false, message: "Thiếu thông tin đăng ký." };
+  if (!isValidUuid(eventId) || !isValidUuid(registrationId)) {
+    return { ok: false, message: "ID đăng ký hoặc sự kiện không hợp lệ." };
+  }
+
+  const [{ data: registration, error: regError }, { data: event, error: eventError }] = await Promise.all([
+    client.from("event_registrations").select("*").eq("id", registrationId).eq("event_id", eventId).maybeSingle(),
+    client.from("events").select("id,season_id,capacity_limit_enabled,capacity_limit,event_name").eq("id", eventId).maybeSingle()
+  ]);
+
+  if (regError) return { ok: false, message: safeOperationError("load registration operation row failed", regError) };
+  if (eventError) return { ok: false, message: safeOperationError("load registration operation event failed", eventError) };
+  if (!registration || !event) return { ok: false, message: "Không tìm thấy đăng ký trong sự kiện này." };
+
+  const ctx = await getAdminScopeContext();
+  if (!(await canOperateSeason(ctx, clean((event as JsonRecord).season_id)))) {
+    return { ok: false, message: "Bạn không có quyền thao tác trên mùa của sự kiện này." };
+  }
+
+  return {
+    ok: true,
+    data: {
+      client,
+      adminId: access.admin?.id ?? null,
+      registration: registration as JsonRecord,
+      event: event as JsonRecord
+    }
+  };
+}
+
+async function ensureRegistrationCapacityForConfirm(
+  client: any,
+  event: JsonRecord,
+  registration: JsonRecord
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (CAPACITY_CONSUMING_REGISTRATION_STATUSES.has(String(registration.registration_status ?? ""))) {
+    return { ok: true };
+  }
+
+  if (event.capacity_limit_enabled !== true) return { ok: true };
+  if (event.capacity_limit === null || event.capacity_limit === undefined) return { ok: true };
+  const capacity = Number(event.capacity_limit);
+  if (!Number.isFinite(capacity) || capacity <= 0) return { ok: true };
+
+  const { data, error } = await client
+    .from("event_registrations")
+    .select("id,registration_status")
+    .eq("event_id", event.id)
+    .in("registration_status", Array.from(CAPACITY_CONSUMING_REGISTRATION_STATUSES));
+
+  if (error) return { ok: false, message: safeOperationError("registration capacity check failed", error) };
+
+  const currentRegistrationId = String(registration.id ?? "");
+  const consumingCount = ((data ?? []) as Array<{ id: string; registration_status: string | null }>).filter(
+    (row) => row.id !== currentRegistrationId && CAPACITY_CONSUMING_REGISTRATION_STATUSES.has(String(row.registration_status ?? ""))
+  ).length;
+
+  if (consumingCount >= capacity) {
+    return {
+      ok: false,
+      message: "Không thể xác nhận đăng ký vì sự kiện đã đủ chỗ. Hãy chuyển người đăng ký vào danh sách chờ hoặc kiểm tra lại sức chứa."
+    };
+  }
+  return { ok: true };
+}
+
+async function updateRegistrationRow(
+  client: any,
+  registrationId: string,
+  updates: JsonRecord,
+  audit: { actionType: string; afterData: JsonRecord }
+): Promise<MutationResult> {
+  const { data, error } = await client
+    .from("event_registrations")
+    .update(updates)
+    .eq("id", registrationId)
+    .select("id,registration_status,payment_status,proof_status,review_status,updated_at")
+    .maybeSingle();
+
+  if (error) return { ok: false, message: safeOperationError("update registration operation failed", error) };
+  if (!data) return { ok: false, message: "Không tìm thấy đăng ký để cập nhật." };
+  await writeAdminAudit(client, { actionType: audit.actionType, afterData: audit.afterData });
+  return { ok: true, message: "Đã lưu thay đổi đăng ký.", data: data as JsonRecord };
+}
+
+export async function confirmEventRegistration(input: RegistrationOperationInput): Promise<MutationResult> {
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const currentStatus = String(registration.registration_status ?? "");
+  if (TERMINAL_REGISTRATION_STATUSES.has(currentStatus)) {
+    return { ok: false, message: "Không thể kích hoạt lại đăng ký đã bị từ chối hoặc đã hủy trong sprint này." };
+  }
+  if (!CONFIRMABLE_REGISTRATION_STATUSES.has(currentStatus)) {
+    return { ok: false, message: "Trạng thái hiện tại không hỗ trợ xác nhận đăng ký." };
+  }
+
+  const capacity = await ensureRegistrationCapacityForConfirm(client, event, registration);
+  if (!capacity.ok) return { ok: false, message: capacity.message };
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    registration_status: "confirmed",
+    review_status: "approved",
+    confirmed_at: now,
+    confirmed_by: adminId
+  };
+  if (currentStatus === "waitlisted") {
+    updates.waitlisted_at = null;
+    updates.waitlisted_by = null;
+    updates.waitlist_position = null;
+  }
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "confirm_event_registration",
+    afterData: { id: registration.id, event_id: event.id, registration_status: "confirmed", confirmed_at: now, confirmed_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã xác nhận đăng ký." } : result;
+}
+
+export async function waitlistEventRegistration(input: RegistrationOperationInput): Promise<MutationResult> {
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const currentStatus = String(registration.registration_status ?? "");
+  if (TERMINAL_REGISTRATION_STATUSES.has(currentStatus)) {
+    return { ok: false, message: "Không thể chuyển đăng ký đã kết thúc vào danh sách chờ." };
+  }
+  if (!WAITLISTABLE_REGISTRATION_STATUSES.has(currentStatus)) {
+    return { ok: false, message: "Trạng thái hiện tại không hỗ trợ chuyển vào danh sách chờ." };
+  }
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    registration_status: "waitlisted",
+    review_status: "pending",
+    waitlisted_at: now,
+    waitlisted_by: adminId
+  };
+  if (currentStatus === "confirmed") {
+    updates.confirmed_at = null;
+    updates.confirmed_by = null;
+  }
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "waitlist_event_registration",
+    afterData: { id: registration.id, event_id: event.id, registration_status: "waitlisted", waitlisted_at: now, waitlisted_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã chuyển đăng ký vào danh sách chờ." } : result;
+}
+
+export async function rejectEventRegistration(input: RegistrationOperationInput): Promise<MutationResult> {
+  const reason = operationNote(input.note);
+  if (!reason) return { ok: false, message: "Vui lòng nhập lý do từ chối đăng ký." };
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const currentStatus = String(registration.registration_status ?? "");
+  if (!ACTIVE_REGISTRATION_STATUSES.has(currentStatus)) {
+    return { ok: false, message: "Chỉ có thể từ chối đăng ký đang hoạt động." };
+  }
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    registration_status: "rejected",
+    review_status: "rejected",
+    rejected_at: now,
+    rejected_by: adminId,
+    reject_reason: reason
+  };
+  if (currentStatus === "confirmed") {
+    updates.confirmed_at = null;
+    updates.confirmed_by = null;
+  } else if (currentStatus === "waitlisted") {
+    updates.waitlisted_at = null;
+    updates.waitlisted_by = null;
+    updates.waitlist_position = null;
+  }
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "reject_event_registration",
+    afterData: { id: registration.id, event_id: event.id, registration_status: "rejected", rejected_at: now, rejected_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã từ chối đăng ký." } : result;
+}
+
+export async function cancelEventRegistration(input: RegistrationOperationInput): Promise<MutationResult> {
+  const reason = operationNote(input.note);
+  if (!reason) return { ok: false, message: "Vui lòng nhập lý do hủy đăng ký." };
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const currentStatus = String(registration.registration_status ?? "");
+  if (!ACTIVE_REGISTRATION_STATUSES.has(currentStatus)) {
+    return { ok: false, message: "Chỉ có thể hủy đăng ký đang hoạt động." };
+  }
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    registration_status: "cancelled",
+    review_status: "rejected",
+    cancelled_at: now,
+    cancelled_by: adminId,
+    cancel_reason: reason
+  };
+  if (currentStatus === "confirmed") {
+    updates.confirmed_at = null;
+    updates.confirmed_by = null;
+  } else if (currentStatus === "waitlisted") {
+    updates.waitlisted_at = null;
+    updates.waitlisted_by = null;
+    updates.waitlist_position = null;
+  }
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "cancel_event_registration",
+    afterData: { id: registration.id, event_id: event.id, registration_status: "cancelled", cancelled_at: now, cancelled_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã hủy đăng ký." } : result;
+}
+
+export async function confirmRegistrationPayment(input: RegistrationOperationInput): Promise<MutationResult> {
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const paymentStatus = String(registration.payment_status ?? "not_required");
+  if (!PAYMENT_CONFIRMABLE_STATUSES.has(paymentStatus)) {
+    return { ok: false, message: "Trạng thái thanh toán hiện tại không hỗ trợ xác nhận." };
+  }
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    payment_status: "confirmed",
+    payment_confirmed_at: now,
+    payment_confirmed_by: adminId,
+    payment_rejected_at: null,
+    payment_rejected_by: null,
+    payment_rejection_note: null
+  };
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "confirm_registration_payment",
+    afterData: { id: registration.id, event_id: event.id, payment_status: "confirmed", payment_confirmed_at: now, payment_confirmed_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã xác nhận thanh toán." } : result;
+}
+
+export async function rejectRegistrationPayment(input: RegistrationOperationInput): Promise<MutationResult> {
+  const note = operationNote(input.note);
+  if (!note) return { ok: false, message: "Vui lòng nhập lý do từ chối thanh toán." };
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const paymentStatus = String(registration.payment_status ?? "not_required");
+  if (!PAYMENT_REJECTABLE_STATUSES.has(paymentStatus)) {
+    return { ok: false, message: "Trạng thái thanh toán hiện tại không hỗ trợ từ chối." };
+  }
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    payment_status: "rejected",
+    payment_rejected_at: now,
+    payment_rejected_by: adminId,
+    payment_rejection_note: note,
+    payment_confirmed_at: null,
+    payment_confirmed_by: null
+  };
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "reject_registration_payment",
+    afterData: { id: registration.id, event_id: event.id, payment_status: "rejected", payment_rejected_at: now, payment_rejected_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã từ chối thanh toán." } : result;
+}
+
+export async function acceptRegistrationProof(input: RegistrationOperationInput): Promise<MutationResult> {
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const proofStatus = String(registration.proof_status ?? "not_required");
+  if (!PROOF_REVIEWABLE_STATUSES.has(proofStatus)) {
+    return { ok: false, message: "Trạng thái minh chứng hiện tại không hỗ trợ chấp nhận." };
+  }
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    proof_status: "accepted",
+    proof_reviewed_at: now,
+    proof_reviewed_by: adminId,
+    proof_review_note: null
+  };
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "accept_registration_proof",
+    afterData: { id: registration.id, event_id: event.id, proof_status: "accepted", proof_reviewed_at: now, proof_reviewed_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã chấp nhận minh chứng." } : result;
+}
+
+export async function rejectRegistrationProof(input: RegistrationOperationInput): Promise<MutationResult> {
+  const note = operationNote(input.note);
+  if (!note) return { ok: false, message: "Vui lòng nhập ghi chú từ chối minh chứng." };
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const proofStatus = String(registration.proof_status ?? "not_required");
+  if (!PROOF_REVIEWABLE_STATUSES.has(proofStatus)) {
+    return { ok: false, message: "Trạng thái minh chứng hiện tại không hỗ trợ từ chối." };
+  }
+
+  const now = new Date().toISOString();
+  const updates: JsonRecord = {
+    proof_status: "rejected",
+    proof_reviewed_at: now,
+    proof_reviewed_by: adminId,
+    proof_review_note: note
+  };
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "reject_registration_proof",
+    afterData: { id: registration.id, event_id: event.id, proof_status: "rejected", proof_reviewed_at: now, proof_reviewed_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã từ chối minh chứng." } : result;
+}
+
+export async function updateRegistrationReviewNote(input: RegistrationOperationInput): Promise<MutationResult> {
+  const loaded = await loadRegistrationOperation(input);
+  if (!loaded.ok) return { ok: false, message: loaded.message };
+  const { client, adminId, registration, event } = loaded.data;
+  const note = operationNote(input.note);
+  const updates: JsonRecord = { review_note: note || null };
+  const result = await updateRegistrationRow(client, String(registration.id), updates, {
+    actionType: "update_registration_review_note",
+    afterData: { id: registration.id, event_id: event.id, review_note_updated: true, updated_by: adminId }
+  });
+  return result.ok ? { ...result, message: "Đã cập nhật ghi chú rà soát." } : result;
+}
 export async function createEvent(input: EventInput): Promise<MutationResult> {
   const access = await requireEventAdmin();
   if (!access.ok) return { ok: false, message: access.message };

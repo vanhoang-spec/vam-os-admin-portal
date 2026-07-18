@@ -12,6 +12,16 @@ export type EventActionState = {
 
 export const initialEventActionState: EventActionState = { ok: false, message: null };
 
+export type RegistrationOperationActionState = {
+  ok: boolean;
+  message: string | null;
+};
+
+export const initialRegistrationOperationActionState: RegistrationOperationActionState = {
+  ok: false,
+  message: null
+};
+
 /** Phase 045B: state for bulk-add-participants action. */
 export type BulkAddActionState = {
   ok: boolean;
