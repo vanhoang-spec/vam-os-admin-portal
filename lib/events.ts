@@ -15,6 +15,7 @@ import {
   type RegistrationStatusValue
 } from "@/lib/event-constants";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
 import type {
   Event,
@@ -35,7 +36,7 @@ export type {
   RegistrationStatusValue
 } from "@/lib/event-constants";
 
-const DEFAULT_SEASON_CODE = "UEHM-S11";
+const DEFAULT_SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 const SAFE_ERROR = "Không thể thực hiện tác vụ. Vui lòng kiểm tra cấu hình Supabase và server logs.";
 
 export type EventListData = {

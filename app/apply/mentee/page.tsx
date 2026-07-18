@@ -15,7 +15,7 @@ export default function ApplyMenteePage({
   searchParams?: { token?: string | string[] };
 }) {
   const tokenRaw = Array.isArray(searchParams?.token) ? searchParams?.token[0] : searchParams?.token;
-  const gate = evaluateApplyGate(tokenRaw);
+  const gate = evaluateApplyGate(tokenRaw, "mentee");
 
   if (gate.status === "closed") {
     return <ClosedFormView />;

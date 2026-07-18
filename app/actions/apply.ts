@@ -8,9 +8,10 @@ import {
   type ApplicationSubmissionResult
 } from "@/lib/applications-create";
 import type { ApplyActionState } from "@/lib/apply-types";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
-const SEASON_CODE = "UEHM-S12";
-const INTAKE_BATCH_CODE = "UEHM-S12-B1";
+const SEASON_CODE = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
+const INTAKE_BATCH_CODE = SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE;
 
 function formText(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();

@@ -5,6 +5,7 @@ import { canManageWorkflow } from "@/lib/auth-constants";
 import { getOperationsWorkflowData } from "@/lib/data";
 import type { WorkflowOwner, WorkflowQueueItem } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import { TaskExportButton } from "./task-export-button";
 import { AddCommentForm, CreateActionItemForm, GenerateFollowupForm, UpdateActionItemForm } from "./workflow-forms";
 
@@ -219,7 +220,7 @@ function WorkflowTable({
 export default async function OperationsTasksPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const selectedMonth = cleanMonth(searchParams?.month);
   const [workflow, adminUser] = await Promise.all([
-    getOperationsWorkflowData("UEHM-S11", selectedMonth),
+    getOperationsWorkflowData(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, selectedMonth),
     getCurrentAdminUser()
   ]);
   const canManage = canManageWorkflow(adminUser);

@@ -7,11 +7,12 @@ import { getApplications, getSeasons, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Application, Season } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
 export const dynamic = "force-dynamic";
 
-const PILOT_SEASON_CODE = "UEHM-S12";
-const PILOT_BATCH_CODE = "UEHM-S12-B1";
+const PILOT_SEASON_CODE = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
+const PILOT_BATCH_CODE = SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE;
 
 type Row = Application & {
   short_application_id: string;

@@ -5,6 +5,7 @@ import { getFounderIntelligenceDashboard } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { FounderIntelligenceDashboard, JsonRecord } from "@/lib/types";
 import { displayText } from "@/lib/utils";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import { CsvExportButton } from "./export-buttons";
 
 function countChart(rows: Array<Record<string, unknown>>, labelKey: string) {
@@ -66,7 +67,7 @@ function SegmentGapTable({ rows }: { rows: FounderIntelligenceDashboard["matchin
 export default async function FounderIntelligencePage() {
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const result = await getFounderIntelligenceDashboard("UEHM-S11", scope);
+  const result = await getFounderIntelligenceDashboard(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, scope);
   const data = result.data;
 
   return (

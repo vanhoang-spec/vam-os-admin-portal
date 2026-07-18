@@ -3,6 +3,7 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import type { JsonRecord } from "@/lib/types";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
@@ -346,7 +347,7 @@ async function upsertScope(client: any, input: {
   const payload = {
     user_id: input.authUserId,
     program_id: scopeText(input.programId, "VAM"),
-    season_id: scopeText(input.seasonId, "UEHM-S11"),
+    season_id: scopeText(input.seasonId, SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE),
     role: validScopeRole(input.role),
     status: validScopeStatus(input.status)
   };
@@ -606,7 +607,7 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
     await upsertScope(client, {
       authUserId: auth.authUserId,
       programId: "VAM",
-      seasonId: "UEHM-S11",
+      seasonId: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
       role: scopeRoleForAdminRole(before.user.role),
       status: before.user.status === "active" ? "active" : "inactive"
     });

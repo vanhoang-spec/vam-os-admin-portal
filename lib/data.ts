@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import {
   canOperateSeason,
   getAdminScopeContext,
@@ -211,7 +212,7 @@ function computeOperationsDashboardKpis(input: {
   const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
   const selectedMonth = latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
   const previousMonth = addMonths(selectedMonth, -1);
-  const season = input.seasons.find((row) => row.code === (input.seasonCode ?? "UEHM-S11"));
+  const season = input.seasons.find((row) => row.code === (input.seasonCode ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE));
 
   const activeMatches = input.matches.filter((match) => {
     if (normalizeStatus(match.status) !== "active") return false;
@@ -817,7 +818,7 @@ async function getOperationsDataFromRpc() {
   const client = getSupabaseServerClient() ?? supabase;
   if (!client) return null;
 
-  const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: "UEHM-S11" });
+  const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE });
   if (error) {
     if (error.code === "PGRST202" || error.code === "42883") {
       return null;
@@ -923,7 +924,7 @@ export async function getOperationsData(scope?: ScopeFilter) {
   };
 }
 
-export async function getOperationsWorkflowData(seasonCode = "UEHM-S11", selectedMonth?: string | null): Promise<QueryResult<OperationsWorkflowData | null>> {
+export async function getOperationsWorkflowData(seasonCode = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, selectedMonth?: string | null): Promise<QueryResult<OperationsWorkflowData | null>> {
   const client = dataClient();
   if (!client) return envError<OperationsWorkflowData | null>(null);
   const { data, error } = await client.rpc("get_operations_workflow_data", {
@@ -934,7 +935,7 @@ export async function getOperationsWorkflowData(seasonCode = "UEHM-S11", selecte
   return { data: data as OperationsWorkflowData, error: null };
 }
 
-export async function getFounderIntelligenceDashboard(seasonCode = "UEHM-S11", scope?: ScopeFilter): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
+export async function getFounderIntelligenceDashboard(seasonCode = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, scope?: ScopeFilter): Promise<QueryResult<FounderIntelligenceDashboard | null>> {
   if (scope) {
     return getFounderIntelligenceDashboardFallback(seasonCode, scope);
   }
@@ -1174,7 +1175,7 @@ export async function createWorkflowActionItem(input: CreateActionItemInput): Pr
   const client = dataClient();
   if (!client) return envError<JsonRecord | null>(null);
   const { data, error } = await client.rpc("create_action_item", {
-    p_season_code: input.season_code ?? "UEHM-S11",
+    p_season_code: input.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
     p_action_type: input.action_type,
     p_entity_type: input.entity_type ?? null,
     p_entity_id: input.entity_id || null,
@@ -1229,7 +1230,7 @@ export async function generateMonthlyFollowupActions(input: { season_code?: stri
   const client = dataClient();
   if (!client) return envError<JsonRecord | null>(null);
   const { data, error } = await client.rpc("generate_monthly_followup_actions", {
-    p_season_code: input.season_code ?? "UEHM-S11",
+    p_season_code: input.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
     p_selected_month: input.selected_month
   });
   if (error) return { data: null, error: `${VI_ERROR} (generate_monthly_followup_actions: ${error.message})` };

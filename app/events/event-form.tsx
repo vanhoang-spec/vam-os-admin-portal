@@ -8,6 +8,7 @@ import { InlineActionMessage, LoadingButton, useActionTiming } from "@/component
 import type { EventActionState } from "@/lib/event-action-types";
 import { EVENT_TYPE_OPTIONS } from "@/lib/event-constants";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
 const initialState: EventActionState = { ok: false, message: null };
 
@@ -24,7 +25,7 @@ export function EventForm({
   event,
   seasons,
   intakeBatches = [],
-  defaultSeasonCode = "UEHM-S11"
+  defaultSeasonCode = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE
 }: {
   mode: "create" | "edit";
   event?: Event | null;

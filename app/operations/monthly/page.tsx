@@ -7,8 +7,9 @@ import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
-const SEASON_CODE = "UEHM-S11";
+const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 const OPERATIONAL_MONTH_START = "2025-10";
 const OPERATIONAL_MONTH_END = "2026-06";
 const VALID_RECAP_STATUSES = new Set(["", "submitted", "needs_review"]);

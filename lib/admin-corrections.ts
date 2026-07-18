@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageWorkflow } from "@/lib/auth-constants";
 import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import type { JsonRecord, MentoringRecap, Person, Season } from "@/lib/types";
 
 export type AdminWorkflowStatus = "open" | "in_progress" | "resolved" | "dropped" | "no_response";
@@ -60,7 +61,7 @@ export type MutationResult = {
   message: string;
 };
 
-const DEFAULT_SEASON_CODE = "UEHM-S11";
+const DEFAULT_SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 const SAFE_ERROR = "Không thể thực hiện tác vụ. Vui lòng kiểm tra migration Phase 2D và server logs.";
 const RECAP_STATUSES = new Set(["submitted", "needs_review", "invalid", "duplicate", "deleted"]);
 const ACTION_STATUSES = new Set(["open", "in_progress", "resolved", "dropped", "no_response"]);

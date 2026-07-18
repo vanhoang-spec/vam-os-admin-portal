@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageWorkflow } from "@/lib/auth-constants";
 import { getAdminCorrectionData, type AdminActionItem, type AdminDataIssue } from "@/lib/admin-corrections";
 import { displayText, formatDate } from "@/lib/utils";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import { ActionItemUpdateForm, CreateIssueActionForm, EditRecapInlineForm, QuickResolveForm } from "./admin-correction-forms";
 
 export const dynamic = "force-dynamic";
@@ -150,7 +151,7 @@ function FollowUpTab({ items }: { items: AdminActionItem[] }) {
 
       <Card>
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Tạo follow-up thủ công</h2>
-        <CreateIssueActionForm type="followup_no_recap" seasonCode="UEHM-S11" defaultNotes="Manual follow-up from /admin" />
+        <CreateIssueActionForm type="followup_no_recap" seasonCode={SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} defaultNotes="Manual follow-up from /admin" />
       </Card>
 
       <section>

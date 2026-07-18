@@ -9,8 +9,9 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
-const SEASON_CODE = "UEHM-S11";
+const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 const OPERATIONAL_MONTH_START = "2025-10";
 const OPERATIONAL_MONTH_END = "2026-06";
 const OUTLIER_RECAP_LIMIT = 50;

@@ -15,7 +15,7 @@ export default function ApplyMentorPage({
   searchParams?: { token?: string | string[] };
 }) {
   const tokenRaw = Array.isArray(searchParams?.token) ? searchParams?.token[0] : searchParams?.token;
-  const gate = evaluateApplyGate(tokenRaw);
+  const gate = evaluateApplyGate(tokenRaw, "mentor");
 
   if (gate.status === "closed") {
     return <ClosedFormView />;

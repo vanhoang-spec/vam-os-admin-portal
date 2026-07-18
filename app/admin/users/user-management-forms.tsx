@@ -12,6 +12,7 @@ import {
   updateAdminUserAction,
   type AdminUserActionState
 } from "./actions";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
 const initialState: AdminUserActionState = { ok: false, message: "" };
 const inputClass = "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -103,7 +104,7 @@ export function CreateAdminUserForm() {
         </label>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">season_code</span>
-          <input name="season_code" className={inputClass} defaultValue="UEHM-S11" placeholder="UEHM-S11" />
+          <input name="season_code" className={inputClass} defaultValue={SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} placeholder={SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} />
         </label>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Program</span>
@@ -131,7 +132,7 @@ export function EditAdminUserForm({ user }: { user: ManagedAdminUser }) {
   const scope = scopes[0];
   const canSaveScope = Boolean(user.auth_user_id);
   const scopeProgram = scope?.program_id ?? scope?.program ?? "VAM";
-  const scopeSeason = scope?.season_id ?? scope?.season_code ?? "UEHM-S11";
+  const scopeSeason = scope?.season_id ?? scope?.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
   const scopeLevel = scope?.role ?? scope?.scope_level ?? "read";
   return (
     <div className="grid gap-3">
@@ -167,7 +168,7 @@ export function EditAdminUserForm({ user }: { user: ManagedAdminUser }) {
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">season_code</span>
-            <input name="season_code" defaultValue={scopeSeason} disabled={!canSaveScope} className={inputClass} placeholder="UEHM-S11" />
+            <input name="season_code" defaultValue={scopeSeason} disabled={!canSaveScope} className={inputClass} placeholder={SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">scope_level</span>

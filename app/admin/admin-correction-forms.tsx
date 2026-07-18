@@ -8,6 +8,7 @@ import {
   updateActionItemAction,
   type AdminCorrectionActionState
 } from "./actions";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
 const initialState: AdminCorrectionActionState = { ok: false, message: "" };
 const inputClass = "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -41,7 +42,7 @@ export function CreateIssueActionForm({
       <StateMessage state={state} />
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="target_person_id" value={targetPersonId ?? ""} />
-      <input type="hidden" name="season_code" value={seasonCode ?? "UEHM-S11"} />
+      <input type="hidden" name="season_code" value={seasonCode ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} />
       <input type="hidden" name="issue_key" value={issueKey ?? ""} />
       <input type="hidden" name="notes" value={defaultNotes ?? ""} />
       <label className="block">
