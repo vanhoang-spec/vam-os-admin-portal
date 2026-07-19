@@ -374,6 +374,99 @@ async function preflightPayloads(client, resolvedInserts, seasonId) {
   return { srcVerified, srcEstimated, phCount };
 }
 
+// ── Offline Regression Fixture (Req 10) ──────────────────────────────────────
+// Simulates the post-apply DB state and proves the reconciliation produces a no-op.
+// Uses the EXACT bug-triggering ordering: the non-provenance slot (ordinal 1) is
+// processed FIRST, while the two provenance rows have EARLIER estimated dates than the
+// pre-existing row. Without the fix, P1 for slot-1 would steal a provenance row
+// (earliest date), leaving the pre-existing row unassigned → excessExisting.
+function runOfflineRegressionFixture() {
+  const SLOT_RE = /UEHM-S11\|official-ledger\|[^|]+\|\d{4}-\d{2}\|\d+/;
+
+  // Slots: ordinals 1, 2, 3. Slot 1 has NO provenance row (P1 territory).
+  // Slots 2 and 3 have provenance rows inserted with earlier estimated dates.
+  const syntheticSlots = [
+    { slotKey: 'UEHM-S11|official-ledger|TST01|2025-12|1', mentee_code: 'TST01', month: '2025-12', ordinal: 1 },
+    { slotKey: 'UEHM-S11|official-ledger|TST01|2025-12|2', mentee_code: 'TST01', month: '2025-12', ordinal: 2 },
+    { slotKey: 'UEHM-S11|official-ledger|TST01|2025-12|3', mentee_code: 'TST01', month: '2025-12', ordinal: 3 },
+  ];
+
+  // existingRows sorted by (month, date, id) — provenance rows (1001, 1002) have
+  // earlier estimated dates (Dec-10, Dec-15) than the pre-existing row (Dec-20, id 1003).
+  // Bug condition: without the fix, P1 for slot-1 would pick row 1001 (earliest), then
+  // P0 for slot-2 finds row 1001 already assigned → skip → row 1003 → excessExisting.
+  const existingRows = [
+    { id: 1001, mentee_code: 'TST01', meeting_month: '2025-12', meeting_date: '2025-12-10',
+      admin_notes: 'S11 ledger sync. slot_key=UEHM-S11|official-ledger|TST01|2025-12|2. plan_hash=abc.' },
+    { id: 1002, mentee_code: 'TST01', meeting_month: '2025-12', meeting_date: '2025-12-15',
+      admin_notes: 'S11 ledger sync. slot_key=UEHM-S11|official-ledger|TST01|2025-12|3. plan_hash=abc.' },
+    { id: 1003, mentee_code: 'TST01', meeting_month: '2025-12', meeting_date: '2025-12-20',
+      admin_notes: 'Manual recap.' },
+  ];
+
+  // Build officialLedgerRowIds (provenance rows — ids 1001 and 1002 only)
+  const officialLedgerRowIds = new Set(
+    existingRows.filter(r => (r.admin_notes || '').includes('UEHM-S11|official-ledger|')).map(r => r.id)
+  );
+  if (officialLedgerRowIds.size !== 2) throw new Error(`Fixture: expected 2 provenance rows, got ${officialLedgerRowIds.size}`);
+
+  // Build slotKeyToExistingId (only slots 2 and 3 have provenance rows)
+  const slotKeyToExistingId = new Map();
+  for (const row of existingRows) {
+    const m = SLOT_RE.exec(row.admin_notes || '');
+    if (m) slotKeyToExistingId.set(m[0], row.id);
+  }
+  if (slotKeyToExistingId.size !== 2) throw new Error(`Fixture: expected 2 slot_key entries, got ${slotKeyToExistingId.size}`);
+
+  // Build existingByKey EXCLUDING provenance rows (the fix).
+  // Without this exclusion, P1 for slot-1 would steal row 1001 (earliest date),
+  // triggering the 59-row bug. With the fix, only row 1003 is available via P1.
+  const existingByKey = new Map();
+  for (const row of existingRows) {
+    if (officialLedgerRowIds.has(row.id)) continue;
+    const key = 'tst01|2025-12';
+    if (!existingByKey.has(key)) existingByKey.set(key, []);
+    existingByKey.get(key).push(row);
+  }
+
+  const assignedDbIds    = new Set();
+  const assignedSlotKeys = new Set();
+  const existing_assigned = [];
+
+  for (const slot of syntheticSlots) {
+    const mapKey = 'tst01|2025-12';
+    if (slotKeyToExistingId.has(slot.slotKey)) {
+      const rowId = slotKeyToExistingId.get(slot.slotKey);
+      if (assignedDbIds.has(rowId)) throw new Error(`Fixture: duplicate P0 rowId=${rowId}`);
+      assignedDbIds.add(rowId);
+      assignedSlotKeys.add(slot.slotKey);
+      existing_assigned.push({ slot, dbRow: existingRows.find(r => r.id === rowId) });
+      continue;
+    }
+    const pool = existingByKey.get(mapKey) || [];
+    const free = pool.filter(r => !assignedDbIds.has(r.id));
+    if (free.length > 0) {
+      assignedDbIds.add(free[0].id);
+      assignedSlotKeys.add(slot.slotKey);
+      existing_assigned.push({ slot, dbRow: free[0] });
+      continue;
+    }
+    throw new Error(`Fixture: slot ${slot.slotKey} could not be assigned — should not happen in no-op state`);
+  }
+
+  // Verify: all 3 slots assigned, no excess
+  if (assignedSlotKeys.size !== 3) throw new Error(`Fixture: assignedSlotKeys=${assignedSlotKeys.size}, expected 3`);
+  if (assignedDbIds.size !== 3) throw new Error(`Fixture: assignedDbIds=${assignedDbIds.size}, expected 3`);
+  if (existing_assigned.length !== 3) throw new Error(`Fixture: existing_assigned=${existing_assigned.length}, expected 3`);
+
+  const excessExisting = existingRows.filter(r => r.meeting_month === '2025-12' && !assignedDbIds.has(r.id));
+  if (excessExisting.length !== 0) {
+    throw new Error(`Fixture: excessExisting=${excessExisting.length}, expected 0. ids=${excessExisting.map(r => r.id).join(',')}`);
+  }
+
+  return { ok: true, assignedCount: assignedDbIds.size, excessCount: excessExisting.length };
+}
+
 // Full-batch rollback rehearsal — runs the COMPLETE DML plan and intentionally
 // rolls back. Proves the whole batch passes before the production COMMIT.
 async function fullBatchRehearsal(client, seasonId, resolvedInserts, allExcessIds, planHash, csvHashes, pre) {
@@ -1370,11 +1463,33 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
   log(`  Already-excluded rows (not re-proposed): ${alreadyExcludedRows.length}`);
 
   // Idempotency: index slot_key → existing row id (for re-runs after apply)
+  const SLOT_KEY_RE = /UEHM-S11\|official-ledger\|[^|]+\|\d{4}-\d{2}\|\d+/;
   const slotKeyToExistingId = new Map();
   for (const row of existingRows) {
-    const m = /UEHM-S11\|official-ledger\|[^|]+\|\d{4}-\d{2}\|\d+/.exec(row.admin_notes || '');
+    const m = SLOT_KEY_RE.exec(row.admin_notes || '');
     if (m) slotKeyToExistingId.set(m[0], row.id);
   }
+
+  // officialLedgerRowIds: countable rows with official-ledger provenance (inserted by this sync).
+  // Reserved exclusively for P0 (slot_key match). Excluding them from the P1 pool prevents P1
+  // from claiming a provenance row before P0 processes its slot, which would leave the matching
+  // P0 slot abandoned and push an unrelated pre-existing row into excessExisting (59-row bug).
+  const officialLedgerRowIds = new Set(
+    existingRows
+      .filter(r => (r.admin_notes || '').includes('UEHM-S11|official-ledger|'))
+      .map(r => r.id)
+  );
+  // Every provenance row must have a parseable slot_key; throw BLOCKER if not
+  for (const row of existingRows) {
+    if (!officialLedgerRowIds.has(row.id)) continue;
+    if (!SLOT_KEY_RE.test(row.admin_notes || '')) {
+      throw new Error(
+        `BLOCKER: UNPARSEABLE_OFFICIAL_LEDGER_PROVENANCE: row id=${row.id} has ` +
+        `'UEHM-S11|official-ledger|' in admin_notes but slot_key cannot be parsed.`
+      );
+    }
+  }
+  log(`  Official-ledger provenance rows (countable, reserved for P0): ${officialLedgerRowIds.size}`);
 
   // Date anomalies: countable rows whose meeting_month is outside the 9 S11 months.
   // Already-excluded anomaly rows are not re-proposed.
@@ -1396,10 +1511,12 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
     }
   }
 
-  // Group valid-month existing rows: normalizedCode|month → rows[]
+  // Group valid-month existing rows for P1 assignment: normalizedCode|month → rows[]
+  // Provenance rows (officialLedgerRowIds) are excluded — they belong to P0 only.
   const existingByKey = new Map();
   for (const row of existingRows) {
     if (!validMonthSet.has(row.meeting_month)) continue;
+    if (officialLedgerRowIds.has(row.id)) continue;
     const code = normalizeKey(row.mentee_code || '');
     if (!code) continue;
     const key = `${code}|${row.meeting_month}`;
@@ -1421,8 +1538,9 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
   }
 
   // ── Per-slot reconciliation (ledger-first) ────────────────────────────────────
-  const assignedDbIds   = new Set();
-  const assignedSrcRows = new Set();
+  const assignedDbIds    = new Set();
+  const assignedSrcRows  = new Set();
+  const assignedSlotKeys = new Set();
 
   const R = {
     existing_assigned: [],  // { slot, dbRow }             → no write needed
@@ -1435,22 +1553,30 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
     const codeNorm = normalizeKey(slot.mentee_code);
     const mapKey   = `${codeNorm}|${slot.month}`;
 
-    // Priority 0: slot_key already in an existing row's admin_notes (idempotent re-run)
+    // Priority 0: slot_key already in an existing row's admin_notes (idempotent re-run).
+    // officialLedgerRowIds are excluded from existingByKey, so only P0 can claim them.
     if (slotKeyToExistingId.has(slot.slotKey)) {
       const rowId = slotKeyToExistingId.get(slot.slotKey);
-      if (!assignedDbIds.has(rowId)) {
-        assignedDbIds.add(rowId);
-        R.existing_assigned.push({ slot, dbRow: existingRows.find(r => r.id === rowId) });
+      if (assignedDbIds.has(rowId)) {
+        throw new Error(`REGRESSION: P0 rowId=${rowId} already assigned; slot_key=${slot.slotKey} has a duplicate provenance row in DB.`);
       }
+      if (assignedSlotKeys.has(slot.slotKey)) {
+        throw new Error(`REGRESSION: Duplicate officialSlot key ${slot.slotKey} in officialSlots array.`);
+      }
+      assignedDbIds.add(rowId);
+      assignedSlotKeys.add(slot.slotKey);
+      R.existing_assigned.push({ slot, dbRow: existingRows.find(r => r.id === rowId) });
       continue;
     }
 
-    // Priority 1: Unassigned existing DB row by (mentee_code, meeting_month)
+    // Priority 1: Unassigned existing DB row by (mentee_code, meeting_month).
+    // Pool excludes officialLedgerRowIds (those are reserved for P0 only).
     const existingPool = existingByKey.get(mapKey) || [];
     const freeExisting = existingPool.filter(r => !assignedDbIds.has(r.id));
     if (freeExisting.length > 0) {
       const dbRow = freeExisting[0];
       assignedDbIds.add(dbRow.id);
+      assignedSlotKeys.add(slot.slotKey);
       R.existing_assigned.push({ slot, dbRow });
       continue;
     }
@@ -1494,6 +1620,7 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
         slot, src, menteePersonId, mentorPersonId, matchId, matchRow, meetingType,
         hasIssue: !mentorPersonId && (src.meetingType === '1on1_primary' || src.meetingType === '1on1_cross'),
       });
+      assignedSlotKeys.add(slot.slotKey);
       continue;
     }
 
@@ -1503,9 +1630,26 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
       menteePersonId: menteeCands.length === 1 ? menteeCands[0] : null,
       unresolvable:   menteeCands.length !== 1,
     });
+    assignedSlotKeys.add(slot.slotKey);
     if (menteeCands.length !== 1) {
       R.unresolved_slot.push({ slot, candidateCount: menteeCands.length });
     }
+  }
+
+  // ── Post-assignment invariants ────────────────────────────────────────────────
+  // Every official slot must have been handled exactly once (P0/P1/P2/P3).
+  if (assignedSlotKeys.size !== officialSlots.length) {
+    throw new Error(
+      `FATAL: assignedSlotKeys.size=${assignedSlotKeys.size} ≠ officialSlots.length=${officialSlots.length}. ` +
+      `Some official slots were handled zero or more than once.`
+    );
+  }
+  // No duplicate DB row assignments (R.existing_assigned entries must be unique by id).
+  if (assignedDbIds.size !== R.existing_assigned.length) {
+    throw new Error(
+      `FATAL: assignedDbIds.size=${assignedDbIds.size} ≠ R.existing_assigned.length=${R.existing_assigned.length}. ` +
+      `Duplicate row assignments detected.`
+    );
   }
 
   // ── Excess rows ───────────────────────────────────────────────────────────────
@@ -1530,6 +1674,30 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
     }
   }
 
+  // Provenance guard: official-ledger rows must never enter excessExisting.
+  // If any provenance row is unassigned here it means its slot_key was absent from officialSlots
+  // (stale DB state) — throw BLOCKER so the owner can investigate before any write occurs.
+  {
+    const excessWithProvenance    = excessExisting.filter(r => (r.admin_notes || '').includes('UEHM-S11|official-ledger|'));
+    const excessWithoutProvenance = excessExisting.filter(r => !(r.admin_notes || '').includes('UEHM-S11|official-ledger|'));
+    if (excessWithProvenance.length > 0) {
+      for (const r of excessWithProvenance) {
+        const m = SLOT_KEY_RE.exec(r.admin_notes || '');
+        if (!m) {
+          throw new Error(`BLOCKER: UNPARSEABLE_OFFICIAL_LEDGER_PROVENANCE: row id=${r.id} proposed as excess but slot_key is unparseable.`);
+        }
+        throw new Error(
+          `BLOCKER: Official-ledger row id=${r.id} (slot_key=${m[0]}) would be proposed for exclusion. ` +
+          `This must never happen — investigate slot_key mismatch between officialSlots and DB.`
+        );
+      }
+    }
+    log(`  Excess classification: with-provenance=${excessWithProvenance.length} (must be 0), without-provenance=${excessWithoutProvenance.length}`);
+    if (excessWithProvenance.length === 0 && excessExisting.length === 0) {
+      log(`  ✓ Provenance guard passed: no official-ledger rows in excessExisting`);
+    }
+  }
+
   // Disjoint partition invariant: every physical row accounted for exactly once
   {
     const iAssigned        = R.existing_assigned.length;
@@ -1542,7 +1710,16 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
         `FATAL: Partition invariant violated: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) + alreadyExcluded(${iAlreadyExcl}) + other(${iOtherNonCounted}) = ${partSum} ≠ physical(${pre.total}).`
       );
     }
+    // assigned + newlyProposed must equal current report-counted
+    const iReportCounted = asNonNegativeInt(pre.report_counted, 'partition.report_counted');
+    if (iAssigned + iNewlyProposed !== iReportCounted) {
+      throw new Error(
+        `FATAL: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) = ${iAssigned + iNewlyProposed} ≠ report_counted(${iReportCounted}). ` +
+        `A countable row is unaccounted for in both assignment and exclusion pools.`
+      );
+    }
     log(`  ✓ Partition: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) + alreadyExcluded(${iAlreadyExcl}) + other(${iOtherNonCounted}) = ${pre.total}`);
+    log(`  ✓ Assigned + newlyProposed = report_counted: ${iAssigned} + ${iNewlyProposed} = ${iReportCounted}`);
   }
 
   const excessSource = [];
@@ -1729,7 +1906,7 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
     log(`  Applied payload fingerprint (production commit): e5d8958254631f906baaf674eeafac347fb29db9f225576bca08e8958d95cd64`);
   }
 
-  return { R, mTbl, allReconcile: allReconcile && grandOk, pre, existingRows, alreadyExcludedRows, excessExisting, excessSource, dateAnomalyRows, matchMap };
+  return { R, mTbl, allReconcile: allReconcile && grandOk, pre, existingRows, alreadyExcludedRows, excessExisting, excessSource, dateAnomalyRows, matchMap, assignedCount: assignedDbIds.size, officialLedgerCount: officialLedgerRowIds.size };
 }
 
 // ─── Phase 10: Full Atomic Transaction (UPDATE excluded + INSERT new rows) ────
@@ -1954,6 +2131,15 @@ async function verifyPostApply(client, seasonId, inserted, pre) {
 async function main() {
   banner(`VAM OS – UEHM-S11 Recap Sync  |  ${MODE}  |  ${IMPORT_BATCH}`);
 
+  // Req 10: Offline regression fixture — proves post-apply no-op logic before DB connection
+  {
+    const fix = runOfflineRegressionFixture();
+    if (!fix.ok || fix.excessCount !== 0 || fix.assignedCount !== 3) {
+      throw new Error(`FATAL: Offline regression fixture failed: ${JSON.stringify(fix)}`);
+    }
+    log('  ✓ Offline regression fixture passed (post-apply no-op scenario: 0 excess, 3 assigned)');
+  }
+
   // Phase 2: Source CSV — also capture file hash for plan fingerprint
   const { validDataRows, fileHash: sourceHash } = loadAndValidateCSV();
 
@@ -2087,13 +2273,40 @@ async function main() {
 
     // Phase 9: Ledger reconciliation
     const reconcile = await runLedgerDBReconcile(client, seasonId, officialSlots, records);
-    const { R, allReconcile, pre, excessExisting, dateAnomalyRows, alreadyExcludedRows, matchMap } = reconcile;
+    const { R, allReconcile, pre, excessExisting, dateAnomalyRows, alreadyExcludedRows, matchMap, assignedCount, officialLedgerCount } = reconcile;
 
     const allExcessIds    = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
     const csvHashes       = { source: sourceHash, ledger: ledgerHash };
     const derivedDates    = resolveDates(R);
     const planHash        = computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes, derivedDates);
     const resolvedInserts = buildResolvedInsertRows(R, derivedDates, planHash);
+
+    // Req 4: Offline round-trip regression — every resolved insert must carry a
+    // parseable, unique slot_key. This runs without DB access and validates the
+    // in-memory payload before any rehearsal or apply.
+    {
+      section('Offline Round-Trip Regression (slot_key extraction)');
+      const RT_RE = /UEHM-S11\|official-ledger\|[^|]+\|\d{4}-\d{2}\|\d+/;
+      const rtSeen = new Set();
+      let rtFailed = 0;
+      for (const row of resolvedInserts) {
+        const m = RT_RE.exec(row.adminNotes || '');
+        if (!m) { rtFailed++; continue; }
+        if (rtSeen.has(m[0])) { rtFailed++; } else { rtSeen.add(m[0]); }
+      }
+      log(`  Resolved inserts:  ${resolvedInserts.length}`);
+      log(`  Parsed slot_keys:  ${rtSeen.size + (rtFailed > 0 ? rtFailed : 0)}`);
+      log(`  Unique slot_keys:  ${rtSeen.size}`);
+      log(`  Failures/dupes:    ${rtFailed}`);
+      if (rtFailed > 0) {
+        throw new Error(`FATAL: Round-trip regression: ${rtFailed} insert(s) have unparseable or duplicate slot_keys in admin_notes.`);
+      }
+      if (resolvedInserts.length > 0) {
+        log(`  ✓ All ${resolvedInserts.length} resolved inserts have parseable unique slot_keys`);
+      } else {
+        log(`  ✓ No inserts (no-op) — round-trip trivially passes`);
+      }
+    }
 
     // Arithmetic invariants — FATAL if any constraint is violated
     // Uses partition-based accounting: every physical row falls into exactly one set.
@@ -2108,7 +2321,15 @@ async function main() {
     const iNewlyProposed   = asNonNegativeInt(excessExisting.length + dateAnomalyRows.length, 'newlyProposed');
     const iAssigned        = asNonNegativeInt(R.existing_assigned.length, 'existing_assigned');
 
-    // 1. Partition invariant: no row counted twice, no row missed
+    // 1. Shared assigned-ID set must match result bucket (no duplicate assignments)
+    if (assignedCount !== iAssigned) {
+      throw new Error(
+        `FATAL: assignedDbIds.size(${assignedCount}) ≠ R.existing_assigned.length(${iAssigned}). ` +
+        `Duplicate row assignment detected.`
+      );
+    }
+
+    // 2. Partition invariant: no row counted twice, no row missed
     const partSum = iAssigned + iNewlyProposed + iAlreadyExcl + iOtherNonCounted;
     if (partSum !== iPreTotal) {
       throw new Error(
@@ -2116,7 +2337,14 @@ async function main() {
       );
     }
 
-    // 2. Projected report-counted must equal CHECKPOINT_TOTAL
+    // 3. assigned + newlyProposed = current report-counted (all countable rows accounted for)
+    if (iAssigned + iNewlyProposed !== iReportCounted) {
+      throw new Error(
+        `FATAL: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) = ${iAssigned + iNewlyProposed} ≠ report_counted(${iReportCounted}).`
+      );
+    }
+
+    // 4. Projected report-counted must equal CHECKPOINT_TOTAL
     const iProjReportCounted = asNonNegativeInt(iReportCounted - iNewlyProposed + iTotalInserts, 'projectedReportCounted');
     if (iProjReportCounted !== CHECKPOINT_TOTAL) {
       throw new Error(
@@ -2129,7 +2357,10 @@ async function main() {
     const iProjected = asNonNegativeInt(iPreTotal + iTotalInserts, 'projectedPhysical');
     const iProjExcl  = asNonNegativeInt(iAlreadyExcl + iNewlyProposed, 'projectedExcluded');
 
+    log(`  Shared assignedDbIds: ${assignedCount} (matches R.existing_assigned) ✓`);
+    log(`  Official-ledger provenance rows in DB: ${officialLedgerCount}`);
     log(`  Partition: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) + alreadyExcluded(${iAlreadyExcl}) + other(${iOtherNonCounted}) = ${iPreTotal} ✓`);
+    log(`  Assigned + newlyProposed = report_counted: ${iAssigned} + ${iNewlyProposed} = ${iReportCounted} ✓`);
     log(`  Projected physical:       ${iProjected} (current ${iPreTotal} + ${iTotalInserts} inserts)`);
     log(`  Projected excluded:       ${iProjExcl} (current ${iAlreadyExcl} + ${iNewlyProposed} newly proposed)`);
     log(`  Projected report-counted: ${iProjReportCounted} = CHECKPOINT_TOTAL ✓`);
@@ -2138,27 +2369,53 @@ async function main() {
     // Phase 9c: Schema-driven nullability preflight — blocks apply if any required field is null
     const { srcVerified, srcEstimated, phCount } = await preflightPayloads(client, resolvedInserts, seasonId);
 
-    // Phase 9d: Provenance check — read-only aggregate over applied-batch rows (req 10)
+    // Phase 9d: Provenance check — read-only aggregate over applied-batch rows (req 5)
     section('Phase 9d: Applied-Batch Provenance Check (read-only)');
     const APPLIED_HASH_PREFIX = 'e5d895825463';
     const provRes = await client.query(`
+      WITH prov AS (
+        SELECT
+          admin_notes,
+          coalesce(trim(lower(status)),'') AS st,
+          (regexp_match(admin_notes,
+            'UEHM-S11[|]official-ledger[|][^|]+[|][0-9]{4}-[0-9]{2}[|][0-9]+')
+          )[1] AS slot_key
+        FROM mentoring_recaps
+        WHERE season_id = $1
+          AND admin_notes LIKE '%UEHM-S11|official-ledger|%'
+      )
       SELECT
-        count(*)::int                                                       AS total_official_ledger,
-        count(*) FILTER (WHERE admin_notes LIKE $2)::int                    AS with_applied_hash,
-        count(*) FILTER (WHERE admin_notes NOT LIKE $2)::int               AS without_applied_hash
-      FROM mentoring_recaps
-      WHERE season_id = $1
-        AND admin_notes LIKE '%slot_key=UEHM-S11|official-ledger|%'
+        count(*)::int                                                           AS total_official_ledger,
+        count(*) FILTER (WHERE st IN ('','submitted','needs_review'))::int      AS countable,
+        count(*) FILTER (WHERE admin_notes LIKE $2)::int                        AS with_applied_hash,
+        count(*) FILTER (WHERE admin_notes NOT LIKE $2)::int                    AS without_applied_hash,
+        count(slot_key)::int                                                    AS parseable_slot_keys,
+        count(DISTINCT slot_key)::int                                           AS unique_slot_keys
+      FROM prov
     `, [seasonId, `%plan_hash=${APPLIED_HASH_PREFIX}%`]);
     const prov = provRes.rows[0];
-    log(`  Official-ledger rows (slot_key in admin_notes): ${prov.total_official_ledger}`);
-    log(`    with applied payload hash (${APPLIED_HASH_PREFIX}…): ${prov.with_applied_hash}`);
-    log(`    without applied hash:                            ${prov.without_applied_hash}`);
+    const provExcessCount = excessExisting.filter(r => (r.admin_notes || '').includes('UEHM-S11|official-ledger|')).length;
+    log(`  Official-ledger rows (all statuses):            ${prov.total_official_ledger}`);
+    log(`    countable (assigned to official slots):       ${prov.countable}`);
+    log(`    with applied payload hash (${APPLIED_HASH_PREFIX}…):  ${prov.with_applied_hash}`);
+    log(`    without applied hash:                         ${prov.without_applied_hash}`);
+    log(`    parseable slot_keys:                          ${prov.parseable_slot_keys}`);
+    log(`    unique slot_keys:                             ${prov.unique_slot_keys}`);
+    log(`    proposed as excess (must be 0):               ${provExcessCount}`);
+    const provOk = (prov.without_applied_hash ?? 0) === 0
+      && (prov.total_official_ledger ?? 0) > 0
+      && prov.parseable_slot_keys === prov.total_official_ledger
+      && prov.unique_slot_keys    === prov.total_official_ledger
+      && provExcessCount          === 0;
     if ((prov.without_applied_hash ?? 0) > 0) {
       log(`  ⚠ Some official-ledger rows lack the applied payload fingerprint — manual review advised`);
-    } else if (prov.total_official_ledger > 0) {
-      log(`  ✓ All ${prov.total_official_ledger} official-ledger rows carry the expected applied payload fingerprint`);
-    } else {
+    }
+    if (provExcessCount > 0) {
+      log(`  ✗ BLOCKER: ${provExcessCount} official-ledger row(s) proposed as excess — provenance-protection failed`);
+    }
+    if (provOk) {
+      log(`  ✓ All ${prov.total_official_ledger} official-ledger rows: applied hash ✓, slot_keys parseable ✓, unique ✓, none proposed as excess ✓`);
+    } else if ((prov.total_official_ledger ?? 0) === 0) {
       log(`  ℹ No official-ledger rows found (expected before --apply)`);
     }
 
@@ -2197,7 +2454,11 @@ async function main() {
       else log(`  ✗ WARNING: ${newIn2} records still proposed — idempotency NOT confirmed.`);
 
     } else {
-      await fullBatchRehearsal(client, seasonId, resolvedInserts, allExcessIds, planHash, csvHashes, pre);
+      const isNoOp = resolvedInserts.length === 0 && iNewlyProposed === 0;
+      if (!isNoOp) {
+        // Rehearsal only needed when there are actual writes to validate
+        await fullBatchRehearsal(client, seasonId, resolvedInserts, allExcessIds, planHash, csvHashes, pre);
+      }
       log('');
       log('  ┌─────────────────────────────────────────────────────────────────────┐');
       log('  │  [DRY-RUN COMPLETE] No data written to the database.                │');
@@ -2215,8 +2476,10 @@ async function main() {
       log(`    report-counted:        ${iProjReportCounted}  (= CHECKPOINT_TOTAL)`);
       log(`  Applied payload fingerprint: e5d8958254631f906baaf674eeafac347fb29db9f225576bca08e8958d95cd64`);
       log(`  Current plan fingerprint:    ${planHash}`);
-      if (resolvedInserts.length === 0 && iNewlyProposed === 0) {
-        log(`  ℹ No-op plan: all official slots already filled, no exclusions proposed.`);
+      if (isNoOp) {
+        log(`  ℹ No-op plan: DB already in target state. No rehearsal required.`);
+        log(`    assigned=${iAssigned}  inserts=0  exclusions=0  report-counted=${iReportCounted}=${CHECKPOINT_TOTAL} ✓`);
+        log(`    provenance rows in DB: ${officialLedgerCount}. Rehearsal skipped — nothing to do.`);
         log(`    Current plan fingerprint differs from applied payload hash — this is expected.`);
       }
       log('');
