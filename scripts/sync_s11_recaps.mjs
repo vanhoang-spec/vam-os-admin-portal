@@ -668,9 +668,7 @@ async function resolveAndAuditSeason(client) {
 async function backupExistingRecaps(client, seasonId) {
   section('C8: Pre-Apply Backup');
   const rows = await client.query(
-    `SELECT id, meeting_date, meeting_month, meeting_type,
-            mentor_person_id, mentee_person_id, match_id,
-            recap_source, issue_flag, status, admin_notes, created_at
+    `SELECT *
      FROM mentoring_recaps WHERE season_id = $1
      ORDER BY meeting_date, id`, [seasonId]
   );
@@ -719,7 +717,7 @@ async function runDBDryRun(client, seasonId, records) {
   // Identity lookups
   const menteeRows = (await client.query(
     `SELECT DISTINCT pr.mentee_code, p.id AS person_id
-     FROM profiles pr JOIN people p ON p.id = pr.person_id
+     FROM public.mentee_profiles pr JOIN public.people p ON p.id = pr.person_id
      WHERE pr.mentee_code IS NOT NULL AND pr.season_id = $1`, [seasonId]
   )).rows;
   const menteeMap = new Map();
@@ -732,8 +730,8 @@ async function runDBDryRun(client, seasonId, records) {
 
   const mentorRows = (await client.query(
     `SELECT DISTINCT p.full_name, p.id AS person_id
-     FROM profiles pr JOIN people p ON p.id = pr.person_id
-     WHERE pr.season_id = $1 AND pr.role = 'mentor'`, [seasonId]
+     FROM public.mentor_profiles pr JOIN public.people p ON p.id = pr.person_id
+     WHERE pr.season_id = $1`, [seasonId]
   )).rows;
   const mentorMap = new Map();
   for (const r of mentorRows) {
@@ -757,7 +755,7 @@ async function runDBDryRun(client, seasonId, records) {
 
   // Buckets
   const B = {
-    already_exists_exact: [], new_valid: [], source_duplicate: [],
+    already_exists_exact: [], existing_but_changed: [], new_valid: [], source_duplicate: [],
     unresolved_mentee: [], unresolved_mentor: [], unresolved_match: [],
     ambiguous_date: [], out_of_range_date: [], ambiguous_type: [],
     excluded_non_recap: [], invalid: [],
@@ -810,17 +808,31 @@ async function runDBDryRun(client, seasonId, records) {
       matchId = validMatch[0].id;
     }
 
-    // Idempotency check
+    // Idempotency and out-of-range date check
+    // We match EXACT meeting_date + type, OR we match by source provenance if it was imported with a different date
     const existing = (await client.query(
-      `SELECT id FROM mentoring_recaps
-       WHERE season_id = $1 AND mentee_person_id = $2
-         AND ($3::uuid IS NULL OR mentor_person_id = $3)
-         AND meeting_date = $4 AND meeting_type = $5
-         AND coalesce(status,'') NOT IN ('invalid','deleted')
+      `SELECT id, meeting_date, admin_notes, recap_note FROM mentoring_recaps
+       WHERE season_id = $1 AND coalesce(status,'') NOT IN ('invalid','deleted')
+         AND (
+           (mentee_person_id = $2 AND ($3::uuid IS NULL OR mentor_person_id = $3) AND meeting_date = $4 AND meeting_type = $5)
+           OR
+           (admin_notes LIKE $6 OR recap_note LIKE $7)
+         )
        LIMIT 1`,
-      [seasonId, menteePersonId, mentorPersonId, r.meetingDate, r.meetingType]
+      [seasonId, menteePersonId, mentorPersonId, r.meetingDate, r.meetingType,
+       `%source_row=${r.sheetRow}%`, `%row=${r.sheetRow} %`]
     )).rows;
-    if (existing.length > 0) { B.already_exists_exact.push(r.sheetRow); continue; }
+
+    if (existing.length > 0) {
+      const ext = existing[0];
+      const extDate = toISO(ext.meeting_date);
+      if (extDate !== r.meetingDate) {
+        B.existing_but_changed.push(r.sheetRow);
+      } else {
+        B.already_exists_exact.push(r.sheetRow);
+      }
+      continue;
+    }
 
     // Valid new record
     const meetingMonth = `${r.year}-${r.month}`;
@@ -853,11 +865,12 @@ async function runDBDryRun(client, seasonId, records) {
     log(`  ${bucket.padEnd(28)}: ${rows.length}`);
   }
   const quarantined = Object.entries(B)
-    .filter(([k]) => k !== 'already_exists_exact' && k !== 'new_valid')
+    .filter(([k]) => k !== 'already_exists_exact' && k !== 'existing_but_changed' && k !== 'new_valid')
     .reduce((a, [,v]) => a + v.length, 0);
   log('');
   log(`  Raw source posts:         ${records.length}`);
   log(`  Already in DB (exact):    ${B.already_exists_exact.length}`);
+  log(`  Existing but changed:     ${B.existing_but_changed.length}`);
   log(`  Source duplicates:        ${B.source_duplicate.length}`);
   log(`  Proposed new inserts:     ${newValidRows.length}`);
   log(`  Total quarantined:        ${quarantined}`);
@@ -980,6 +993,43 @@ async function main() {
 
   const client = await connectDB();
   try {
+    // Phase 6a: Schema Guard
+    section('Phase 6a: Schema Guard');
+    const requiredTables = {
+      mentee_profiles: ['id', 'person_id', 'mentee_code', 'season_id'],
+      mentor_profiles: ['id', 'person_id', 'season_id'],
+      people: ['id', 'full_name'],
+      matches: ['id', 'mentor_person_id', 'mentee_person_id', 'start_date', 'end_date', 'season_id', 'status'],
+      mentoring_recaps: [
+        'id', 'season_id', 'match_id', 'mentor_person_id', 'mentee_person_id',
+        'meeting_date', 'meeting_month', 'recap_url', 'recap_source', 'recap_note',
+        'issue_flag', 'status', 'admin_notes', 'created_at', 'updated_at',
+        'meeting_type', 'captured_by'
+      ]
+    };
+
+    let schemaValid = true;
+    for (const [tbl, cols] of Object.entries(requiredTables)) {
+      const tblRes = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+        ['public', tbl]
+      );
+      if (tblRes.rows.length === 0) {
+        err(`Missing relation: public.${tbl}`);
+        schemaValid = false;
+        continue;
+      }
+      const actualCols = tblRes.rows.map(r => r.column_name);
+      for (const c of cols) {
+        if (!actualCols.includes(c)) {
+          err(`Missing column in ${tbl}: ${c}`);
+          schemaValid = false;
+        }
+      }
+      if (schemaValid) log(`  ✓ ${tbl} has all required columns`);
+    }
+    if (!schemaValid) throw new Error('BLOCKER: Schema guard failed. Relation or column missing. Do not proceed.');
+
     // C7: Season audit
     const season   = await resolveAndAuditSeason(client);
     const seasonId = season.id;
@@ -994,6 +1044,7 @@ async function main() {
       // Phase 9: Write gates
       section('Phase 9: Automatic Write Gates');
       const gates = [
+        ['Schema guard passed',                              schemaValid],
         ['Source row count = 2,371',                         validDataRows.length === REQUIRED_RAW_ROWS],
         ['Serial-date row 1,488 recovered',                  records.some(r => r.isSerialDate)],
         ['Target season confirmed UEHM-S11',                 season.code === SEASON_CODE],
