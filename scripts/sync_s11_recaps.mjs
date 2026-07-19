@@ -106,18 +106,24 @@ function sha256(s) {
 // computePlanHash fingerprints the complete --apply plan so that the apply
 // execution can be traced back to the specific dry-run output reviewed by the owner.
 // Covers: sorted excess row IDs, sorted slot keys, and both CSV hashes.
-function computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes) {
+// derivedDates: array of { slotKey, meetingDate, status } from resolveDates()
+function computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes, derivedDates) {
   const excessIds = [...excessExisting, ...dateAnomalyRows]
     .map(r => r.id).sort().join(',');
   const slotKeys = [
     ...R.source_new.map(s => s.slot.slotKey),
     ...R.placeholder.map(p => p.slot.slotKey),
   ].sort().join(',');
+  const dateEntries = derivedDates
+    .slice().sort((a, b) => a.slotKey.localeCompare(b.slotKey))
+    .map(d => `${d.slotKey}:${d.meetingDate}:${d.status}`)
+    .join(',');
   return sha256([
     `source_csv:${csvHashes.source}`,
     `ledger_csv:${csvHashes.ledger}`,
     `excess_ids:${excessIds}`,
     `slot_keys:${slotKeys}`,
+    `derived_dates:${dateEntries}`,
   ].join('|'));
 }
 
@@ -130,6 +136,381 @@ function asNonNegativeInt(value, label) {
     throw new Error(`FATAL: Invalid integer for ${label}: ${JSON.stringify(value)}`);
   }
   return n;
+}
+
+// ─── Meeting date resolution ──────────────────────────────────────────────────
+// Returns { date: 'YYYY-MM-DD', estimated: boolean }.
+// Uses the source date when it belongs to slotMonth; otherwise derives a
+// deterministic fallback clamped to the match's active window within the month.
+function resolveMeetingDate(srcDate, slotMonth, matchRow) {
+  if (srcDate && String(srcDate).slice(0, 7) === slotMonth) {
+    return { date: String(srcDate), estimated: false };
+  }
+  // Build month window [first, last] day
+  const y = parseInt(slotMonth.slice(0, 4), 10);
+  const m = parseInt(slotMonth.slice(5, 7), 10);  // 1-indexed
+  const monthFirst = new Date(Date.UTC(y, m - 1, 1));
+  const monthLast  = new Date(Date.UTC(y, m, 0));  // day 0 of next month = last day of this month
+
+  let candidate = new Date(Date.UTC(y, m - 1, 15));  // start from the 15th
+
+  if (matchRow) {
+    const mStart = matchRow.matched_at ? new Date(matchRow.matched_at) : monthFirst;
+    const mEnd   = matchRow.ended_at   ? new Date(matchRow.ended_at)   : monthLast;
+    const effStart = new Date(Math.max(monthFirst.getTime(), mStart.getTime()));
+    const effEnd   = new Date(Math.min(monthLast.getTime(),  mEnd.getTime()));
+    if (effStart <= effEnd) {
+      if      (candidate < effStart) candidate = effStart;
+      else if (candidate > effEnd)   candidate = effEnd;
+    }
+  }
+  return { date: candidate.toISOString().slice(0, 10), estimated: true };
+}
+
+// Resolves dates for all proposed inserts before planHash is known.
+// Used as input to computePlanHash so derived dates are part of the fingerprint.
+function resolveDates(R) {
+  const derived = [];
+  for (const { slot, src, mentorPersonId, menteePersonId, matchRow, hasIssue } of R.source_new) {
+    const { date, estimated } = resolveMeetingDate(src.meetingDate, slot.month, matchRow);
+    const status = (estimated || hasIssue) ? 'needs_review' : 'submitted';
+    derived.push({ slotKey: slot.slotKey, meetingDate: date, status, estimated });
+  }
+  for (const { slot } of R.placeholder) {
+    const { date } = resolveMeetingDate(null, slot.month, null);
+    derived.push({ slotKey: slot.slotKey, meetingDate: date, status: 'needs_review', estimated: true });
+  }
+  return derived;
+}
+
+// Builds the complete INSERT payload for every proposed row using resolved dates.
+// planHash must already be computed (from resolveDates → computePlanHash).
+// This is the single source of truth for INSERT values — used by preflight,
+// fullBatchRehearsal, and applyFullTransaction without divergence.
+function buildResolvedInsertRows(R, derivedDates, planHash) {
+  const dateMap = new Map(derivedDates.map(d => [d.slotKey, d]));
+  const rows = [];
+
+  for (const { slot, src, menteePersonId, mentorPersonId, matchId, meetingType, hasIssue } of R.source_new) {
+    const { meetingDate, status, estimated } = dateMap.get(slot.slotKey)
+      ?? (() => { throw new Error(`FATAL: no derived date for slot ${slot.slotKey}`); })();
+    const adminNotes = [
+      `S11 ledger sync ${IMPORT_BATCH}.`,
+      `slot_key=${slot.slotKey}.`,
+      `source_row=${src.sheetRow}.`,
+      `date_source=${estimated ? 'estimated_official_month_match_overlap' : src.dateSource}.`,
+      estimated ? 'meeting_date_estimated=true.' : '',
+      estimated ? 'date_basis=official_ledger_month_match_overlap.' : '',
+      `plan_hash=${planHash.slice(0, 12)}.`,
+      `missing_original_url=true.`,
+      hasIssue    ? 'unresolved_mentor=true. needs_manual_review=true.' : '',
+      estimated   ? 'needs_manual_review=true.' : '',
+    ].filter(Boolean).join(' ');
+    rows.push({
+      type:          'source_backed',
+      slot,
+      meetingDate,
+      meetingMonth:  slot.month,
+      meetingType,
+      status,
+      issueFlag:     true,
+      recapSource:   'google_sheet',
+      recapNote:     `spreadsheet_id=${SOURCE_SHEET_ID} tab="${SOURCE_TAB}" row=${src.sheetRow} hash=${src.contentHash}`,
+      capturedBy:    IMPORT_BATCH,
+      menteePersonId,
+      mentorPersonId,
+      matchId,
+      adminNotes,
+      dateEstimated: estimated,
+      hasIssue,
+      srcSheetRow:   src.sheetRow,
+    });
+  }
+
+  for (const { slot, menteePersonId } of R.placeholder) {
+    const { meetingDate } = dateMap.get(slot.slotKey)
+      ?? (() => { throw new Error(`FATAL: no derived date for placeholder slot ${slot.slotKey}`); })();
+    const adminNotes = [
+      `S11 ledger sync ${IMPORT_BATCH}.`,
+      `slot_key=${slot.slotKey}.`,
+      `mentee_code=${slot.mentee_code}.`,
+      `official_month=${slot.month}.`,
+      `ordinal=${slot.ordinal}.`,
+      `meeting_date_estimated=true.`,
+      `date_basis=official_ledger_month_15th.`,
+      `plan_hash=${planHash.slice(0, 12)}.`,
+      `missing_url=true.`,
+      `needs_manual_review=true.`,
+      `source_spreadsheet=${SOURCE_SHEET_ID}.`,
+      `ledger_tab=Mentee_Tracking.`,
+      !menteePersonId ? 'mentee_person_id=unresolved.' : '',
+    ].filter(Boolean).join(' ');
+    rows.push({
+      type:          'placeholder',
+      slot,
+      meetingDate,
+      meetingMonth:  slot.month,
+      meetingType:   'unknown',
+      status:        'needs_review',
+      issueFlag:     true,
+      recapSource:   'admin_input',
+      recapNote:     `ledger_placeholder slot_key=${slot.slotKey} date_quality=month_only_estimated`,
+      capturedBy:    IMPORT_BATCH,
+      menteePersonId,
+      mentorPersonId: null,
+      matchId:        null,
+      adminNotes,
+      dateEstimated: true,
+      hasIssue:      false,
+      srcSheetRow:   null,
+    });
+  }
+
+  return rows;
+}
+
+// Centralized INSERT executor — identical SQL used by rehearsal and apply.
+// Returns { inserted, srcInserted, phInserted }.
+async function doInsertBatch(client, seasonId, resolvedInserts) {
+  let inserted = 0, srcInserted = 0, phInserted = 0;
+  for (const row of resolvedInserts) {
+    const r = await client.query(
+      `INSERT INTO mentoring_recaps (
+         season_id, match_id, mentor_person_id, mentee_person_id,
+         meeting_date, meeting_month, meeting_type,
+         recap_url, recap_source, recap_note, captured_by,
+         issue_flag, admin_notes, status
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,$13)
+       ON CONFLICT DO NOTHING RETURNING id`,
+      [seasonId, row.matchId, row.mentorPersonId, row.menteePersonId,
+       row.meetingDate, row.meetingMonth, row.meetingType,
+       MISSING_URL, row.recapSource, row.recapNote, row.capturedBy,
+       row.adminNotes, row.status]
+    );
+    if (r.rows.length > 0) {
+      inserted++;
+      if (row.type === 'source_backed') srcInserted++; else phInserted++;
+    }
+  }
+  return { inserted, srcInserted, phInserted };
+}
+
+// Queries production NOT NULL columns for mentoring_recaps and verifies every
+// resolved row satisfies them before any transaction begins.
+async function preflightPayloads(client, resolvedInserts, seasonId) {
+  section('Phase 9c: Payload Nullability Preflight');
+
+  // Query schema for NOT NULL columns on the INSERT column set
+  const nnRes = await client.query(`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'mentoring_recaps'
+      AND is_nullable = 'NO'
+      AND column_name NOT IN ('id','created_at','updated_at')
+    ORDER BY ordinal_position
+  `);
+  const notNullCols = nnRes.rows.map(r => r.column_name);
+  log(`  NOT NULL payload columns in mentoring_recaps: ${notNullCols.join(', ')}`);
+
+  // Query CHECK constraints
+  const ckRes = await client.query(`
+    SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+    WHERE conrelid = 'public.mentoring_recaps'::regclass AND contype = 'c'
+    ORDER BY conname
+  `);
+  for (const { conname, def } of ckRes.rows) log(`  CHECK ${conname}: ${def}`);
+
+  // Map INSERT column → row field value
+  const colVal = (col, row) => {
+    switch (col) {
+      case 'season_id':        return seasonId;
+      case 'match_id':         return row.matchId;
+      case 'mentor_person_id': return row.mentorPersonId;
+      case 'mentee_person_id': return row.menteePersonId;
+      case 'meeting_date':     return row.meetingDate;
+      case 'meeting_month':    return row.meetingMonth;
+      case 'meeting_type':     return row.meetingType;
+      case 'recap_url':        return MISSING_URL;
+      case 'recap_source':     return row.recapSource;
+      case 'recap_note':       return row.recapNote;
+      case 'captured_by':      return row.capturedBy;
+      case 'issue_flag':       return row.issueFlag;
+      case 'admin_notes':      return row.adminNotes;
+      case 'status':           return row.status;
+      default:                 return undefined;
+    }
+  };
+
+  let violations = 0;
+  for (const col of notNullCols) {
+    const nullRows = resolvedInserts.filter(row => {
+      const v = colVal(col, row);
+      return v === null || v === undefined;
+    });
+    if (nullRows.length > 0) {
+      violations++;
+      err(`BLOCKER: Column '${col}' (NOT NULL) is null in ${nullRows.length} payload row(s).`);
+      for (const r of nullRows.slice(0, 5)) {
+        err(`  slot=${r.slot.slotKey} type=${r.type} srcRow=${r.srcSheetRow ?? 'n/a'}`);
+      }
+    }
+  }
+  if (violations > 0) {
+    throw new Error(`BLOCKER: ${violations} NOT NULL violation(s) in INSERT payload. Fix before running --apply.`);
+  }
+
+  // Aggregate date stats (requirement 7)
+  const srcVerified  = resolvedInserts.filter(r => r.type === 'source_backed' && !r.dateEstimated).length;
+  const srcEstimated = resolvedInserts.filter(r => r.type === 'source_backed' &&  r.dateEstimated).length;
+  const phCount      = resolvedInserts.filter(r => r.type === 'placeholder').length;
+  log(`  ✓ All ${resolvedInserts.length} rows pass NOT NULL preflight`);
+  log(`  Insert breakdown by date quality:`);
+  log(`    source-backed, verified date:  ${srcVerified}`);
+  log(`    source-backed, estimated date: ${srcEstimated}`);
+  log(`    ledger placeholders (all estimated): ${phCount}`);
+  log(`    total: ${srcVerified + srcEstimated + phCount}`);
+  if (srcVerified + srcEstimated + phCount !== resolvedInserts.length) {
+    throw new Error('FATAL: insert breakdown does not sum to resolvedInserts.length');
+  }
+  return { srcVerified, srcEstimated, phCount };
+}
+
+// Full-batch rollback rehearsal — runs the COMPLETE DML plan and intentionally
+// rolls back. Proves the whole batch passes before the production COMMIT.
+async function fullBatchRehearsal(client, seasonId, resolvedInserts, allExcessIds, planHash, csvHashes, pre) {
+  section('Full-Batch Rollback Rehearsal');
+  log('  Running complete batch (UPDATE + all INSERTs) inside a transaction that is');
+  log('  always intentionally ROLLED BACK. Proves the full payload passes production');
+  log('  constraints, count gates, and advisory lock before any real commit.');
+  log('');
+
+  // 1. Trigger audit — block if any trigger can cause non-transactional side effects
+  const trigRes = await client.query(`
+    SELECT t.tgname, t.tgenabled, p.proname,
+           LEFT(p.prosrc, 120) AS src_excerpt
+    FROM   pg_trigger t
+    JOIN   pg_proc p ON p.oid = t.tgfoid
+    WHERE  t.tgrelid = 'public.mentoring_recaps'::regclass
+      AND  NOT t.tgisinternal
+    ORDER  BY t.tgname
+  `);
+  if (trigRes.rows.length === 0) {
+    log('  ✓ No non-internal triggers on mentoring_recaps');
+  }
+  for (const tr of trigRes.rows) {
+    const src = String(tr.src_excerpt || '').toLowerCase();
+    log(`  Trigger: ${tr.tgname}  fn=${tr.proname}  enabled=${tr.tgenabled}`);
+    const sideEffectPats = ['http','pg_net','net.http','supabase_functions','send_email','webhook','notify '];
+    const flagged = sideEffectPats.filter(p => src.includes(p));
+    if (flagged.length > 0) {
+      throw new Error(
+        `BLOCKER: Trigger '${tr.tgname}' (fn: ${tr.proname}) contains pattern(s) ` +
+        `[${flagged.join(', ')}] suggesting non-transactional side effects. ` +
+        `Review the trigger before running --apply.`
+      );
+    }
+  }
+  log(`  ✓ Trigger audit complete — ${trigRes.rows.length} trigger(s), none flagged`);
+
+  const s12Pre = asNonNegativeInt((await client.query(
+    `SELECT COUNT(*)::int AS cnt FROM mentoring_recaps mr
+     JOIN seasons s ON s.id = mr.season_id WHERE s.code = ANY($1)`,
+    [FORBIDDEN_SEASONS]
+  )).rows[0].cnt, 'rehearsal.s12Pre');
+
+  log('');
+  log(`  Plan fingerprint: ${planHash}`);
+  log(`  UPDATE → excluded: ${allExcessIds.length} rows`);
+  log(`  INSERT total:      ${resolvedInserts.length} rows`);
+
+  await client.query('BEGIN');
+  try {
+    // Advisory lock
+    const lockRes = await client.query(
+      `SELECT pg_try_advisory_xact_lock(hashtext('UEHM-S11-sync-v1')) AS acquired`
+    );
+    if (!lockRes.rows[0]?.acquired) {
+      throw new Error('Rehearsal: advisory lock held by another session.');
+    }
+    log('  ✓ Advisory lock acquired');
+
+    // Re-verify row count
+    const preTxTotal = asNonNegativeInt((await client.query(
+      `SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1`, [seasonId]
+    )).rows[0].n, 'rehearsal.preTxTotal');
+    if (preTxTotal !== asNonNegativeInt(pre.total, 'rehearsal.pre.total')) {
+      throw new Error(`Rehearsal: row count changed since dry-run: expected ${pre.total}, found ${preTxTotal}.`);
+    }
+    log(`  ✓ Pre-transaction row count: ${preTxTotal}`);
+
+    // Lock excess rows FOR UPDATE NOWAIT
+    if (allExcessIds.length > 0) {
+      const phs = allExcessIds.map((_, i) => `$${i + 1}`).join(',');
+      const lk = await client.query(
+        `SELECT id FROM mentoring_recaps WHERE id IN (${phs}) FOR UPDATE NOWAIT`, allExcessIds
+      );
+      if (lk.rows.length !== allExcessIds.length) {
+        throw new Error(`Rehearsal: expected to lock ${allExcessIds.length} excess rows, found ${lk.rows.length}.`);
+      }
+      log(`  ✓ ${lk.rows.length} excess rows locked FOR UPDATE NOWAIT`);
+
+      // UPDATE 125 → excluded
+      const auditNote = `s11_reporting_excluded=true. reason=exceeds_official_ledger_count. excluded_by=${IMPORT_BATCH}.`;
+      const phs2 = allExcessIds.map((_, i) => `$${i + 2}`).join(',');
+      const upd = await client.query(
+        `UPDATE mentoring_recaps SET status='excluded',
+            admin_notes = concat_ws(' ', admin_notes,
+              CASE WHEN admin_notes NOT LIKE '%s11_reporting_excluded=true%' THEN $1 ELSE NULL END)
+         WHERE id IN (${phs2}) AND status != 'excluded' RETURNING id`,
+        [auditNote, ...allExcessIds]
+      );
+      log(`  ✓ Rehearsal UPDATE: ${upd.rows.length} rows → excluded (${allExcessIds.length - upd.rows.length} already excluded)`);
+    }
+
+    // INSERT all 1028 rows using identical doInsertBatch
+    const { inserted, srcInserted, phInserted } = await doInsertBatch(client, seasonId, resolvedInserts);
+    log(`  ✓ Rehearsal INSERT: ${inserted} total (${srcInserted} source-backed + ${phInserted} placeholder)`);
+
+    // Run every verification gate (same as applyFullTransaction)
+    const expectedPhysical = asNonNegativeInt(pre.total, 'reh.pre.total') + resolvedInserts.length;
+    const [physR, excR, rptR, moR, s12R] = await Promise.all([
+      client.query(`SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1`, [seasonId]),
+      client.query(`SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1 AND status='excluded'`, [seasonId]),
+      client.query(`SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1 AND coalesce(trim(lower(status)),'') IN ('','submitted','needs_review')`, [seasonId]),
+      client.query(`SELECT meeting_month, COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1 AND coalesce(trim(lower(status)),'') IN ('','submitted','needs_review') GROUP BY meeting_month ORDER BY meeting_month`, [seasonId]),
+      client.query(`SELECT COUNT(*)::int AS cnt FROM mentoring_recaps mr JOIN seasons s ON s.id=mr.season_id WHERE s.code=ANY($1)`, [FORBIDDEN_SEASONS]),
+    ]);
+
+    let allGates = true;
+    function rehGate(label, got, expected) {
+      const g = asNonNegativeInt(got, `rehearsal.${label}`);
+      const ok = g === expected;
+      log(`  [${ok ? 'PASS' : 'FAIL'}] ${label}: ${g} (expected ${expected})`);
+      if (!ok) allGates = false;
+    }
+    rehGate('physical rows',    physR.rows[0].n,   expectedPhysical);
+    rehGate('excluded rows',    excR.rows[0].n,    allExcessIds.length);
+    rehGate('report-counted',   rptR.rows[0].n,    CHECKPOINT_TOTAL);
+    rehGate('S12 unchanged',    s12R.rows[0].cnt,  s12Pre);
+    const moMap = new Map(moR.rows.map(r => [r.meeting_month, asNonNegativeInt(r.n, `reh.mo.${r.meeting_month}`)]));
+    for (const mo of OFFICIAL_MONTHS) {
+      rehGate(`report-counted ${mo}`, moMap.get(mo) ?? 0, CHECKPOINT_OFFICIAL[mo]);
+    }
+
+    if (!allGates) {
+      throw new Error('Rehearsal: one or more verification gates FAILED. See output above. Do not run --apply.');
+    }
+
+    log('');
+    log('  ✓ ALL rehearsal gates passed.');
+    await client.query('ROLLBACK');
+    log('  ✓ ROLLED BACK intentionally — zero rows persisted.');
+    log(`  The production --apply is authorised to proceed (pending owner review).`);
+
+  } catch (e) {
+    await client.query('ROLLBACK');
+    log(`  ✗ ROLLED BACK (rehearsal error): ${e.message}`);
+    throw e;
+  }
 }
 
 // ─── Text normalization ───────────────────────────────────────────────────────
@@ -1049,30 +1430,33 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
       assignedSrcRows.add(src.sheetRow);
       const menteePersonId = menteeCands[0];
 
-      let mentorPersonId = null, matchId = null;
+      let mentorPersonId = null, matchId = null, matchRow = null;
       let meetingType    = src.meetingType || 'unknown';
       if (src.meetingType === '1on1_primary' || src.meetingType === '1on1_cross') {
         const mKey   = normalizeKey(src.mentorName);
         const mCands = mKey ? (mentorMap.get(mKey) || []) : [];
         if (mCands.length === 1) {
           mentorPersonId = mCands[0];
+          const mk      = `${mentorPersonId}|${menteePersonId}`;
+          const allMs   = matchMap.get(mk) || [];
           if (src.meetingType === '1on1_primary' && src.meetingDate) {
-            const mk      = `${mentorPersonId}|${menteePersonId}`;
             const meetDt  = new Date(src.meetingDate);
-            const validMs = (matchMap.get(mk) || []).filter(m => {
+            const validMs = allMs.filter(m => {
               const s = m.matched_at ? new Date(m.matched_at) : SEASON_START;
               const e = m.ended_at   ? new Date(m.ended_at)   : SEASON_END;
               return meetDt >= s && meetDt <= e;
             });
-            if (validMs.length === 1) matchId = validMs[0].id;
+            if (validMs.length === 1) { matchId = validMs[0].id; matchRow = validMs[0]; }
           }
+          // For date estimation, pick any match between this pair even if date unknown
+          if (!matchRow && allMs.length === 1) matchRow = allMs[0];
         } else {
           meetingType = 'unknown'; // mentor unresolvable — downgrade type
         }
       }
 
       R.source_new.push({
-        slot, src, menteePersonId, mentorPersonId, matchId, meetingType,
+        slot, src, menteePersonId, mentorPersonId, matchId, matchRow, meetingType,
         hasIssue: !mentorPersonId && (src.meetingType === '1on1_primary' || src.meetingType === '1on1_cross'),
       });
       continue;
@@ -1260,22 +1644,18 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
   log(`  Plan fingerprint: computed in main() and shown in DRY-RUN COMPLETE summary below.`);
   log(`  To execute: node sync_s11_recaps.mjs --apply`);
 
-  return { R, mTbl, allReconcile: allReconcile && grandOk, pre, existingRows, excessExisting, excessSource, dateAnomalyRows };
+  return { R, mTbl, allReconcile: allReconcile && grandOk, pre, existingRows, excessExisting, excessSource, dateAnomalyRows, matchMap };
 }
 
 // ─── Phase 10: Full Atomic Transaction (UPDATE excluded + INSERT new rows) ────
-async function applyFullTransaction(client, seasonId, R, excessExisting, dateAnomalyRows, planHash, csvHashes, pre) {
+async function applyFullTransaction(client, seasonId, resolvedInserts, allExcessIds, planHash, csvHashes, pre) {
   section('Phase 10: Full Atomic Transaction');
-
-  const allExcessIds   = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
-  const totalToInsert  = R.source_new.length + R.placeholder.length;
 
   log(`  Plan fingerprint: ${planHash}`);
   log(`  Source CSV hash:  ${csvHashes.source}`);
   log(`  Ledger CSV hash:  ${csvHashes.ledger}`);
   log(`  UPDATE → excluded: ${allExcessIds.length} rows`);
-  log(`  INSERT source-backed: ${R.source_new.length} rows`);
-  log(`  INSERT placeholder:   ${R.placeholder.length} rows`);
+  log(`  INSERT total:      ${resolvedInserts.length} rows`);
   log('');
 
   // Gate 0: Migration 058 must be installed before any writes
@@ -1295,7 +1675,7 @@ async function applyFullTransaction(client, seasonId, R, excessExisting, dateAno
   }
   log(`  ✓ Gate 0: Migration 058 confirmed — status='excluded' accepted by constraint`);
 
-  if (totalToInsert === 0 && allExcessIds.length === 0) {
+  if (resolvedInserts.length === 0 && allExcessIds.length === 0) {
     log('  Nothing to do — all official slots filled and no excess rows to exclude.');
     return { updated: 0, inserted: 0 };
   }
@@ -1365,72 +1745,16 @@ async function applyFullTransaction(client, seasonId, R, excessExisting, dateAno
       log(`  ✓ Updated ${updated} → excluded${alreadyExcluded > 0 ? `, ${alreadyExcluded} already excluded (idempotent)` : ''}`);
     }
 
-    // Step 5: INSERT source-backed rows (ON CONFLICT DO NOTHING = idempotent)
-    for (const { slot, src, menteePersonId, mentorPersonId, matchId, meetingType, hasIssue } of R.source_new) {
-      const recapNote  = `spreadsheet_id=${SOURCE_SHEET_ID} tab="${SOURCE_TAB}" row=${src.sheetRow} hash=${src.contentHash}`;
-      const adminNotes = [
-        `S11 ledger sync ${IMPORT_BATCH}.`,
-        `slot_key=${slot.slotKey}.`,
-        `source_row=${src.sheetRow}.`,
-        `date_source=${src.dateSource}.`,
-        `plan_hash=${planHash.slice(0, 12)}.`,
-        `missing_original_url=true.`,
-        hasIssue ? 'unresolved_mentor=true. needs_manual_review=true.' : '',
-      ].filter(Boolean).join(' ');
-      const r = await client.query(
-        `INSERT INTO mentoring_recaps (
-           season_id, match_id, mentor_person_id, mentee_person_id,
-           meeting_date, meeting_month, meeting_type,
-           recap_url, recap_source, recap_note, captured_by,
-           issue_flag, admin_notes, status
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'google_sheet',$9,$10,true,$11,'submitted')
-         ON CONFLICT DO NOTHING RETURNING id`,
-        [seasonId, matchId, mentorPersonId, menteePersonId,
-         src.meetingDate, slot.month, meetingType,
-         MISSING_URL, recapNote, IMPORT_BATCH, adminNotes]
-      );
-      if (r.rows.length > 0) inserted++;
-    }
-    log(`  ✓ Source-backed: ${inserted} inserted, ${R.source_new.length - inserted} skipped (ON CONFLICT DO NOTHING)`);
-
-    // Step 6: INSERT placeholder rows (ON CONFLICT DO NOTHING = idempotent)
-    let phInserted = 0;
-    for (const { slot, menteePersonId } of R.placeholder) {
-      const placeholderDate = `${slot.month}-15`;
-      const recapNote  = `ledger_placeholder slot_key=${slot.slotKey} date_quality=month_only_estimated`;
-      const adminNotes = [
-        `S11 ledger sync ${IMPORT_BATCH}.`,
-        `slot_key=${slot.slotKey}.`,
-        `mentee_code=${slot.mentee_code}.`,
-        `official_month=${slot.month}.`,
-        `ordinal=${slot.ordinal}.`,
-        `date_quality=month_only_estimated.`,
-        `plan_hash=${planHash.slice(0, 12)}.`,
-        `missing_url=true.`,
-        `needs_manual_review=true.`,
-        `source_spreadsheet=${SOURCE_SHEET_ID}.`,
-        `ledger_tab=Mentee_Tracking.`,
-        !menteePersonId ? 'mentee_person_id=unresolved.' : '',
-      ].filter(Boolean).join(' ');
-      const r = await client.query(
-        `INSERT INTO mentoring_recaps (
-           season_id, match_id, mentor_person_id, mentee_person_id,
-           meeting_date, meeting_month, meeting_type,
-           recap_url, recap_source, recap_note, captured_by,
-           issue_flag, admin_notes, status
-         ) VALUES ($1,NULL,NULL,$2,$3,$4,'unknown',$5,'admin_input',$6,$7,true,$8,'needs_review')
-         ON CONFLICT DO NOTHING RETURNING id`,
-        [seasonId, menteePersonId, placeholderDate, slot.month,
-         MISSING_URL, recapNote, IMPORT_BATCH, adminNotes]
-      );
-      if (r.rows.length > 0) phInserted++;
-    }
-    log(`  ✓ Placeholders: ${phInserted} inserted, ${R.placeholder.length - phInserted} skipped (ON CONFLICT DO NOTHING)`);
-    inserted += phInserted;
+    // Step 5+6: INSERT all rows via centralized doInsertBatch (byte-identical to rehearsal)
+    const { inserted: batchInserted, srcInserted, phInserted } = await doInsertBatch(client, seasonId, resolvedInserts);
+    inserted = batchInserted;
+    log(`  ✓ Source-backed: ${srcInserted} inserted`);
+    log(`  ✓ Placeholders:  ${phInserted} inserted`);
+    log(`  ✓ Total:         ${inserted} inserted (${resolvedInserts.length - inserted} skipped via ON CONFLICT DO NOTHING)`);
 
     // Step 7: In-transaction verification before COMMIT
     section('Pre-COMMIT Verification (all gates must pass)');
-    const expectedPhysical = Number(pre.total) + R.source_new.length + R.placeholder.length;
+    const expectedPhysical = Number(pre.total) + resolvedInserts.length;
     const expectedExcluded = allExcessIds.length;
 
     const [physRes, excRes, rptRes, monthRes, s12PostRes] = await Promise.all([
@@ -1488,124 +1812,6 @@ async function applyFullTransaction(client, seasonId, R, excessExisting, dateAno
     throw e;
   }
   return { updated, inserted };
-}
-
-// ─── Smoke Test: BEGIN/ROLLBACK constraint check (Point 13) ──────────────────
-async function smokeTestInserts(client, seasonId, R) {
-  section('Smoke Test: BEGIN/ROLLBACK Constraint Check (no persistence)');
-  log('  Tests one source-backed and one placeholder INSERT inside a transaction that is');
-  log('  always ROLLED BACK. Purpose: verify production CHECK constraints accept the field');
-  log('  values used by --apply before any real write is attempted.');
-  log('');
-
-  const srcSample = R.source_new.find(s => s.menteePersonId) ?? R.source_new[0] ?? null;
-  const phSample  = R.placeholder[0] ?? null;
-
-  if (!srcSample && !phSample) {
-    log('  Nothing to test (no new inserts proposed).'); return;
-  }
-
-  await client.query('BEGIN');
-  let tested = 0, passed = 0;
-  try {
-    if (srcSample) {
-      tested++;
-      const { slot, src, menteePersonId, mentorPersonId, matchId, meetingType } = srcSample;
-      const recapNote  = `SMOKE_TEST spreadsheet_id=${SOURCE_SHEET_ID} tab="${SOURCE_TAB}" row=${src.sheetRow}`;
-      const adminNotes = `SMOKE_TEST slot_key=${slot.slotKey} ROLLED_BACK=true`;
-      const r = await client.query(
-        `INSERT INTO mentoring_recaps (
-           season_id, match_id, mentor_person_id, mentee_person_id,
-           meeting_date, meeting_month, meeting_type,
-           recap_url, recap_source, recap_note, captured_by,
-           issue_flag, admin_notes, status
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'google_sheet',$9,'SMOKE_TEST',true,$10,'submitted')
-         RETURNING id`,
-        [seasonId, matchId || null, mentorPersonId || null, menteePersonId,
-         src.meetingDate, slot.month, meetingType,
-         MISSING_URL, recapNote, adminNotes]
-      );
-      log(`  ✓ source_new INSERT: PASSED (recap_source=google_sheet  status=submitted  meeting_type=${meetingType})`);
-      if (r.rows[0]) log(`    would-be id=${r.rows[0].id}`);
-      passed++;
-    }
-
-    if (phSample) {
-      tested++;
-      const { slot, menteePersonId } = phSample;
-      const placeholderDate = `${slot.month}-15`;
-      const recapNote  = `SMOKE_TEST ledger_placeholder slot_key=${slot.slotKey}`;
-      const adminNotes = `SMOKE_TEST slot_key=${slot.slotKey} ROLLED_BACK=true`;
-      const r = await client.query(
-        `INSERT INTO mentoring_recaps (
-           season_id, match_id, mentor_person_id, mentee_person_id,
-           meeting_date, meeting_month, meeting_type,
-           recap_url, recap_source, recap_note, captured_by,
-           issue_flag, admin_notes, status
-         ) VALUES ($1,NULL,NULL,$2,$3,$4,'unknown',$5,'admin_input',$6,'SMOKE_TEST',true,$7,'needs_review')
-         RETURNING id`,
-        [seasonId, menteePersonId || null, placeholderDate, slot.month,
-         MISSING_URL, recapNote, adminNotes]
-      );
-      log(`  ✓ placeholder INSERT: PASSED (recap_source=admin_input  status=needs_review  meeting_type=unknown)`);
-      if (r.rows[0]) log(`    would-be id=${r.rows[0].id}`);
-      passed++;
-    }
-
-    await client.query('ROLLBACK');
-    log('');
-    log(`  ✓ ROLLED BACK — zero rows persisted. ${passed}/${tested} constraint checks PASSED.`);
-    log(`  Confirmed valid by production DB: recap_source ('google_sheet', 'admin_input'),`);
-    log(`  status ('submitted', 'needs_review'), meeting_type ('unknown').`);
-  } catch (e) {
-    await client.query('ROLLBACK');
-    log(`  ✗ ROLLED BACK — smoke test FAILED: ${e.message}`);
-    log(`    Fix the constraint violation above before running --apply.`);
-    throw e;
-  }
-
-  // Additional smoke test: verify status='excluded' is accepted by the DB constraint.
-  // Only runs if Migration 058 is already installed — skipped otherwise with a note.
-  const conRes = await client.query(`
-    SELECT pg_get_constraintdef(oid) AS def
-    FROM pg_constraint
-    WHERE conname = 'mentoring_recaps_status_check'
-      AND conrelid = 'public.mentoring_recaps'::regclass
-  `);
-  const constraintDef = conRes.rows[0]?.def ?? '';
-  if (constraintDef.includes("'excluded'")) {
-    const srcSample2 = R.source_new[0] ?? R.placeholder[0] ?? null;
-    if (srcSample2) {
-      await client.query('BEGIN');
-      try {
-        const { slot, src, menteePersonId } = srcSample2.src
-          ? srcSample2
-          : { slot: srcSample2.slot, src: null, menteePersonId: srcSample2.menteePersonId };
-        const placeholderDate = `${slot.month}-15`;
-        const r = await client.query(
-          `INSERT INTO mentoring_recaps (
-             season_id, match_id, mentor_person_id, mentee_person_id,
-             meeting_date, meeting_month, meeting_type,
-             recap_url, recap_source, recap_note, captured_by,
-             issue_flag, admin_notes, status
-           ) VALUES ($1,NULL,NULL,$2,$3,$4,'unknown',$5,'admin_input','SMOKE_TEST_EXCLUDED','SMOKE_TEST',true,'SMOKE_TEST','excluded')
-           RETURNING id`,
-          [seasonId, menteePersonId || null, placeholderDate, slot.month, MISSING_URL]
-        );
-        log(`  ✓ status='excluded' INSERT: PASSED (Migration 058 confirmed in constraint)`);
-        if (r.rows[0]) log(`    would-be id=${r.rows[0].id} — rolled back`);
-        await client.query('ROLLBACK');
-      } catch (e) {
-        await client.query('ROLLBACK');
-        log(`  ✗ status='excluded' INSERT FAILED: ${e.message}`);
-        log(`    Migration 058 may be malformed. Check pg_constraint before running --apply.`);
-        throw e;
-      }
-    }
-  } else {
-    log(`  ℹ status='excluded' smoke test SKIPPED — Migration 058 not yet in constraint.`);
-    log(`    Apply supabase_migrations/058_add_excluded_status.sql, then re-run dry-run.`);
-  }
 }
 
 // ─── Post-apply verification ──────────────────────────────────────────────────
@@ -1795,10 +2001,13 @@ async function main() {
 
     // Phase 9: Ledger reconciliation
     const reconcile = await runLedgerDBReconcile(client, seasonId, officialSlots, records);
-    const { R, allReconcile, pre, excessExisting, dateAnomalyRows } = reconcile;
+    const { R, allReconcile, pre, excessExisting, dateAnomalyRows, matchMap } = reconcile;
 
-    const csvHashes = { source: sourceHash, ledger: ledgerHash };
-    const planHash  = computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes);
+    const allExcessIds  = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
+    const csvHashes     = { source: sourceHash, ledger: ledgerHash };
+    const derivedDates  = resolveDates(R);
+    const planHash      = computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes, derivedDates);
+    const resolvedInserts = buildResolvedInsertRows(R, derivedDates, planHash);
 
     // Arithmetic invariants — FATAL if any constraint is violated
     section('Arithmetic Invariant Check');
@@ -1826,6 +2035,9 @@ async function main() {
     log(`  ✓ excluded + reportCounted = ${iExcessTotal} + ${CHECKPOINT_TOTAL} = ${iExcessTotal + CHECKPOINT_TOTAL} = projectedPhysical`);
     log(`  ✓ All values are safe non-negative integers`);
 
+    // Phase 9c: Schema-driven nullability preflight — blocks apply if any required field is null
+    const { srcVerified, srcEstimated, phCount } = await preflightPayloads(client, resolvedInserts, seasonId);
+
     if (IS_APPLY) {
       // Write gates
       section('Phase 9b: Automatic Write Gates');
@@ -1850,7 +2062,7 @@ async function main() {
       }
       if (!allPass) { log('\n  BLOCKED: Gate(s) failed. No data written.'); return; }
 
-      const { updated, inserted } = await applyFullTransaction(client, seasonId, R, excessExisting, dateAnomalyRows, planHash, csvHashes, pre);
+      const { updated, inserted } = await applyFullTransaction(client, seasonId, resolvedInserts, allExcessIds, planHash, csvHashes, pre);
       await verifyPostApply(client, seasonId, inserted, pre);
 
       // Idempotency check — second reconcile pass should propose 0 new inserts
@@ -1861,24 +2073,28 @@ async function main() {
       else log(`  ✗ WARNING: ${newIn2} records still proposed — idempotency NOT confirmed.`);
 
     } else {
-      await smokeTestInserts(client, seasonId, R);
-      const excessTotal = excessExisting.length + dateAnomalyRows.length;
+      await fullBatchRehearsal(client, seasonId, resolvedInserts, allExcessIds, planHash, csvHashes, pre);
       log('');
       log('  ┌─────────────────────────────────────────────────────────────────────┐');
       log('  │  [DRY-RUN COMPLETE] No data written to the database.                │');
       log('  └─────────────────────────────────────────────────────────────────────┘');
-      log(`  Proposed inserts:     ${iSourceNew} source-backed + ${iPlaceholder} placeholder = ${iTotalInserts} total`);
+      log(`  Insert date quality breakdown:`);
+      log(`    source-backed, verified date:       ${srcVerified}`);
+      log(`    source-backed, estimated date:      ${srcEstimated}`);
+      log(`    ledger placeholders (all estimated): ${phCount}`);
+      log(`    total inserts:                       ${resolvedInserts.length}`);
       log(`  Excess rows to mark:  ${iExcessTotal} (${excessExisting.length} valid-month excess + ${dateAnomalyRows.length} date-anomaly)`);
-      log(`  Projected physical:   ${iProjected} (current ${iPreTotal} + ${iTotalInserts} inserts)`);
+      log(`  Projected physical:   ${iProjected} (current ${iPreTotal} + ${resolvedInserts.length} inserts)`);
       log(`  Projected excluded:   ${iExcessTotal}`);
       log(`  Projected report-counted: ${CHECKPOINT_TOTAL} (official ledger target)`);
       log(`  Plan fingerprint:     ${planHash}`);
       log('');
       log('  REQUIRED STEPS BEFORE --apply (owner must review each):');
-      log(`    1. Review this output in full — especially the 3-Column Monthly Report and Excess Row Audit above.`);
-      log(`    2. Apply supabase_migrations/058_add_excluded_status.sql (adds status='excluded' to CHECK constraint).`);
+      log(`    1. Review this output in full — especially rehearsal gate results, date quality breakdown,`);
+      log(`       the 3-Column Monthly Report, and Excess Row Audit above.`);
+      log(`    2. Confirm Migration 058 is applied (status='excluded' in DB CHECK constraint).`);
       log(`    3. Run: node scripts/sync_s11_recaps.mjs --apply`);
-      log(`       --apply performs the UPDATE (mark ${excessTotal} excess rows excluded) + all INSERTs atomically`);
+      log(`       --apply commits the UPDATE (mark ${iExcessTotal} excess rows excluded) + all ${resolvedInserts.length} INSERTs atomically`);
       log(`       in one transaction with advisory lock, hash verification, and in-transaction count gates.`);
     }
 
