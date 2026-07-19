@@ -104,6 +104,7 @@ function recapStatusLabel(status: unknown) {
   if (normalized === "needs_review") return "Cần rà soát";
   if (normalized === "invalid") return "Không hợp lệ";
   if (normalized === "duplicate") return "Trùng";
+  if (normalized === "excluded") return "Ngoài sổ chính thức";
   return displayText(status);
 }
 

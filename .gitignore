@@ -66,6 +66,7 @@ data_imports/ham/*source*
 # These files contain full recap bodies, mentee codes, and poster labels.
 # Never commit raw import snapshots or database backup files.
 data_imports/season11/Cleaning_data.csv
+data_imports/season11/Mentee_Tracking.csv
 data_imports/season11/*_source_review.csv
 data_imports/season11/*_dry_run*.json
 data_imports/season11/*_dry_run*.csv

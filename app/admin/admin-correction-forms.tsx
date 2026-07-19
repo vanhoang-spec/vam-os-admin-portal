@@ -137,6 +137,7 @@ export function EditRecapInlineForm({
               <option value="invalid">invalid</option>
               <option value="duplicate">duplicate</option>
               <option value="deleted">deleted</option>
+              <option value="excluded">excluded (sync-managed)</option>
             </select>
           </label>
           <label className="block">

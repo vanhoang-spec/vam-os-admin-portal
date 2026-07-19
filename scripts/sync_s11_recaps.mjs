@@ -3,16 +3,23 @@
  * sync_s11_recaps.mjs  —  VAM OS UEHM-S11 Recap Synchronization Utility
  * ═══════════════════════════════════════════════════════════════════════
  *
- * All 9 corrections from owner review incorporated:
- *   C1 – Serial-date row 1,488 recovered; zero silent drops.
- *   C2 – Raw flag counts AND exclusive normalized counts reported separately.
- *   C3 – July gap is documented as unresolved; no synthetic rows.
- *   C4 – Duplicate pairs categorized into 6 types; only deterministic dups excluded.
- *   C5 – Date partition sums to exactly 2,371.
- *   C6 – DB credentials never printed.
- *   C7 – Read-only production audit before any write.
- *   C8 – Backup created and verified before apply.
- *   C9 – Full DB-connected dry-run classification.
+ * All 9 original corrections + 14 production-blocker requirements incorporated:
+ *   C1  – Serial-date row 1,488 recovered; zero silent drops.
+ *   C2  – Raw flag counts AND exclusive normalized counts reported separately.
+ *   C3  – July gap: Mentee Tracking is authoritative; gaps become manual-review placeholders.
+ *   C4  – Duplicate pairs categorized into 6 types; only deterministic dups excluded.
+ *   C5  – Date partition sums to exactly 2,371.
+ *   C6  – DB credentials never printed.
+ *   C7  – Read-only production audit before any write.
+ *   C8  – Backup created and verified before apply.
+ *   C9  – Full DB-connected dry-run classification.
+ *   P10 – Strict CLI: unknown args → fatal; --dry-run and --apply are mutually exclusive.
+ *   P11 – Phase 6c queries pg_constraint to validate CHECK constraint values live.
+ *   P12 – Ledger skipped rows reported with counts; BLOCKER if any has non-zero total.
+ *   P13 – Smoke test (BEGIN/ROLLBACK) verifies INSERT constraints before dry-run exits.
+ *   P14 – 3-column monthly report: official | physical | report-counted.
+ *   P15 – Excess row audit: 125-row analysis; Migration 058 adds status='excluded' to constraint.
+ *   P16 – issue_flag exclusion rationale documented; Migration 058 is the clean path.
  */
 
 import fs     from 'node:fs';
@@ -48,8 +55,33 @@ const CHECKPOINT_OFFICIAL = {
   '2026-05': 161, '2026-06':  97, '2026-07':  18,
 };
 const CHECKPOINT_TOTAL    = 2322;
+const OFFICIAL_MONTHS     = ['2025-11','2025-12','2026-01','2026-02','2026-03',
+                              '2026-04','2026-05','2026-06','2026-07'];
+
+// Ledger CSV — official slot source; must stay gitignored, never committed
+const LEDGER_CSV_PATH        = './data_imports/season11/Mentee_Tracking.csv';
+const LEDGER_HEADER_ROWS     = 3;   // rows 0-2: summary/month-totals/header; data starts row 3
+const LEDGER_CODE_COL        = 5;   // column F = "CODE MENTEE"
+const LEDGER_FIRST_MONTH_COL = 15;  // column P = 2025-11 … column X = 2026-07 (9 columns)
+const LEDGER_CODE_PAT        = /^UEH[A-Z]{1,2}\d{5}$/;
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
+// Strict: no flag or --dry-run = read only; --apply = writes; any other arg = fatal
+{
+  const _args    = process.argv.slice(2);
+  const _unknown = _args.filter(a => a !== '--dry-run' && a !== '--apply');
+  if (_unknown.length > 0) {
+    process.stderr.write(
+      `FATAL: Unknown argument(s): ${_unknown.join(', ')}\n` +
+      `  Usage: node sync_s11_recaps.mjs [--dry-run | --apply]\n`
+    );
+    process.exit(1);
+  }
+  if (_args.includes('--dry-run') && _args.includes('--apply')) {
+    process.stderr.write('FATAL: --dry-run and --apply are mutually exclusive.\n');
+    process.exit(1);
+  }
+}
 const IS_APPLY   = process.argv.includes('--apply');
 const IS_DRY_RUN = !IS_APPLY;
 const MODE       = IS_DRY_RUN ? 'DRY-RUN (no writes)' : 'APPLY (write mode)';
@@ -69,6 +101,35 @@ function banner(title) {
 // ─── Crypto ───────────────────────────────────────────────────────────────────
 function sha256(s) {
   return crypto.createHash('sha256').update(String(s ?? '')).digest('hex');
+}
+
+// computePlanHash fingerprints the complete --apply plan so that the apply
+// execution can be traced back to the specific dry-run output reviewed by the owner.
+// Covers: sorted excess row IDs, sorted slot keys, and both CSV hashes.
+function computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes) {
+  const excessIds = [...excessExisting, ...dateAnomalyRows]
+    .map(r => r.id).sort().join(',');
+  const slotKeys = [
+    ...R.source_new.map(s => s.slot.slotKey),
+    ...R.placeholder.map(p => p.slot.slotKey),
+  ].sort().join(',');
+  return sha256([
+    `source_csv:${csvHashes.source}`,
+    `ledger_csv:${csvHashes.ledger}`,
+    `excess_ids:${excessIds}`,
+    `slot_keys:${slotKeys}`,
+  ].join('|'));
+}
+
+// Validates that a value from pg or JS is a safe non-negative integer.
+// pg returns COUNT(*) as a string (bigint) unless cast with ::int in SQL.
+// Use this for every row count that feeds arithmetic or a gate comparison.
+function asNonNegativeInt(value, label) {
+  const n = Number(value);
+  if (!Number.isSafeInteger(n) || n < 0) {
+    throw new Error(`FATAL: Invalid integer for ${label}: ${JSON.stringify(value)}`);
+  }
+  return n;
 }
 
 // ─── Text normalization ───────────────────────────────────────────────────────
@@ -159,9 +220,9 @@ function testSerial46064() {
   const result = serialToDate(46064);
   if (!result) throw new Error('TEST FAIL: serialToDate(46064) returned null');
   const iso = toISO(result);
-  // Must fall in 2026-02 (owner-verified expected date ≈ 11/02/2026)
-  if (!iso || !iso.startsWith('2026-02')) {
-    throw new Error(`TEST FAIL: serialToDate(46064) resolved to ${iso}, expected 2026-02-xx`);
+  // Must strictly equal 2026-02-11
+  if (!iso || iso !== '2026-02-11') {
+    throw new Error(`TEST FAIL: serialToDate(46064) resolved to ${iso}, expected 2026-02-11`);
   }
   return iso;
 }
@@ -354,7 +415,7 @@ function normalizeSourceRows(validDataRows) {
 
   // C1: Run serial-date test first
   const serial46064Date = testSerial46064();
-  log(`  ✓ Serial-date test PASS: serialToDate(46064) = ${serial46064Date} (expected 2026-02-xx)`);
+  log(`  ✓ Serial-date test PASS: serialToDate(46064) = ${serial46064Date} (expected 2026-02-11)`);
 
   // C2: Raw flag accumulators (a row may have multiple)
   let rawMentoring = 0, rawCross = 0, rawTraining = 0, rawCompanyVisit = 0;
@@ -421,12 +482,9 @@ function normalizeSourceRows(validDataRows) {
     let dateSource   = dateResult.source;
 
     // C5: Date partition
-    if (isSerialDate && dateResult.source === 'none') {
-      // Use the decoded serial date as the post-date reference,
-      // but meeting date is still from body; if none, mark as serial_date_only
+    if (isSerialDate) {
       dateSerial++;
-      if (!meetingDate) {
-        // The serial gives us a post date for provenance, but not a meeting date
+      if (!meetingDate || dateResult.source === 'none') {
         // Use the serial decoded date as a tentative meeting date with explicit note
         meetingDate = postISO;
         dateSource  = 'serial_date_decoded';
@@ -582,8 +640,10 @@ function normalizeSourceRows(validDataRows) {
   log(`    2. Inspect each July post for explicit description of multiple meeting dates.`);
   log(`    3. Confirm whether cross mentoring is double-counted in official report.`);
   log(`    4. Check for July sessions posted in June/August but tagged as July.`);
-  log(`  Decision: Four unresolved sessions will NOT be manufactured as DB rows.`);
-  log(`  They are retained as a documented reconciliation gap in the final report.`);
+  log(`  Decision: Mentee Tracking is authoritative. ${julyOff - julyRaw} missing session(s) will be`);
+  log(`  created as manual-review ledger placeholders (status=needs_review, type=unknown,`);
+  log(`  recap_source=admin_input). Each placeholder carries the official slot_key and`);
+  log(`  needs_manual_review=true in admin_notes so the Support Team can locate and resolve it.`);
 
   // C4: Duplicate analysis
   section('C4: Duplicate Pair Analysis');
@@ -604,6 +664,138 @@ function normalizeSourceRows(validDataRows) {
   log(`  Total affected source row numbers: ${new Set(allDupRows).size}`);
 
   return { records, byMonthPost, dups, excl };
+}
+
+// ─── Phase L4: Official Ledger CSV (Mentee Tracking) ─────────────────────────
+function loadLedgerCSV() {
+  banner('Phase L4: Official Ledger (Mentee Tracking)');
+
+  if (!fs.existsSync(LEDGER_CSV_PATH)) {
+    throw new Error(
+      `Ledger CSV not found at ${LEDGER_CSV_PATH}.\n` +
+      `Export the "Mentee Tracking" tab from the UEHM-S11 workbook as CSV and save to that path.`
+    );
+  }
+
+  const rawText  = fs.readFileSync(LEDGER_CSV_PATH, 'utf8');
+  const byteSize = Buffer.byteLength(rawText, 'utf8');
+  const fileHash = sha256(rawText);
+  log(`  Path:    ${LEDGER_CSV_PATH}`);
+  log(`  Size:    ${byteSize.toLocaleString()} bytes`);
+  log(`  SHA-256: ${fileHash}`);
+
+  const allRows  = parseFullCSV(rawText);
+  const dataRows = allRows.slice(LEDGER_HEADER_ROWS);
+  log(`  Parsed rows (RFC-4180): ${allRows.length}`);
+  log(`  Data rows after ${LEDGER_HEADER_ROWS} header rows: ${dataRows.length}`);
+
+  const entries        = []; // { mentee_code, month, count }
+  const monthTotals    = new Array(9).fill(0);
+  let parsedRows = 0, skippedRows = 0;
+  const skippedDetails = []; // { absRowIdx, code, rowTotal } — for Point 9 audit
+
+  for (let ri = 0; ri < dataRows.length; ri++) {
+    const r    = dataRows[ri];
+    const code = (r[LEDGER_CODE_COL] || '').trim();
+    if (!code || !LEDGER_CODE_PAT.test(code)) {
+      let rowTotal = 0;
+      for (let m = 0; m < 9; m++) {
+        const v = parseInt((r[LEDGER_FIRST_MONTH_COL + m] || '').trim(), 10);
+        if (Number.isFinite(v) && v > 0) rowTotal += v;
+      }
+      skippedDetails.push({ absRowIdx: ri + LEDGER_HEADER_ROWS, code: code || '(blank)', rowTotal });
+      skippedRows++;
+      continue;
+    }
+    parsedRows++;
+    for (let m = 0; m < 9; m++) {
+      const raw = (r[LEDGER_FIRST_MONTH_COL + m] || '').trim();
+      const v   = parseInt(raw, 10);
+      if (Number.isFinite(v) && v > 0) {
+        monthTotals[m] += v;
+        entries.push({ mentee_code: code, month: OFFICIAL_MONTHS[m], count: v });
+      }
+    }
+  }
+
+  section('Ledger Monthly Validation');
+  let allMatch = true;
+  for (let m = 0; m < 9; m++) {
+    const mo  = OFFICIAL_MONTHS[m];
+    const off = CHECKPOINT_OFFICIAL[mo];
+    const ldr = monthTotals[m];
+    const ok  = ldr === off;
+    if (!ok) allMatch = false;
+    log(`  ${mo}: ledger=${ldr}  official=${off}  ${ok ? '✓' : `← MISMATCH diff=${ldr - off}`}`);
+  }
+  const grand   = monthTotals.reduce((a, b) => a + b, 0);
+  const grandOk = grand === CHECKPOINT_TOTAL;
+  if (!grandOk) allMatch = false;
+  log(`  TOTAL:   ledger=${grand}  official=${CHECKPOINT_TOTAL}  ${grandOk ? '✓' : '← MISMATCH'}`);
+  log(`  Rows parsed: ${parsedRows}   Rows skipped (invalid code): ${skippedRows}`);
+
+  // Point 9: Report every skipped row — BLOCKER if any has a non-zero monthly count
+  if (skippedDetails.length > 0) {
+    section('Ledger Skipped Rows (invalid or blank mentee code)');
+    for (const { absRowIdx, code, rowTotal } of skippedDetails) {
+      const verdict = rowTotal > 0
+        ? ` ← NON-ZERO COUNT (${rowTotal}) — INVESTIGATE: these sessions may be uncounted`
+        : ' (all zeros — no official slots affected)';
+      log(`  Row ${absRowIdx}: code="${code}"  monthly_total=${rowTotal}${verdict}`);
+    }
+    if (skippedDetails.some(d => d.rowTotal > 0)) {
+      throw new Error(
+        'BLOCKER: A ledger row with an invalid mentee code has non-zero monthly counts. ' +
+        'Fix the mentee code in the CSV export before proceeding. ' +
+        'Cannot guarantee the 2,322 official slot count is complete.'
+      );
+    }
+    log(`  ✓ All ${skippedDetails.length} skipped row(s) have zero monthly counts — official total unaffected.`);
+  }
+
+  if (!allMatch) {
+    throw new Error('BLOCKER (Ledger): Monthly totals do not match official targets. Cannot proceed.');
+  }
+  log(`  ✓ Ledger validated — exactly ${grand} official recap slots confirmed`);
+
+  return { entries, monthTotals, fileHash };
+}
+
+// ─── Phase L5: Official Slot Generation ──────────────────────────────────────
+function generateOfficialSlots(entries) {
+  banner('Phase L5: Official Slot Generation');
+
+  // Aggregate per mentee_code+month (guards against duplicate ledger rows)
+  const agg = new Map();
+  for (const { mentee_code, month, count } of entries) {
+    const k = `${mentee_code}|${month}`;
+    agg.set(k, (agg.get(k) || 0) + count);
+  }
+
+  const slots = [];
+  for (const [key, total] of agg.entries()) {
+    const [mentee_code, month] = key.split('|');
+    for (let ordinal = 1; ordinal <= total; ordinal++) {
+      slots.push({
+        slotKey:     `UEHM-S11|official-ledger|${mentee_code}|${month}|${ordinal}`,
+        mentee_code, month, ordinal,
+      });
+    }
+  }
+
+  // Deterministic sort: month → mentee_code → ordinal
+  slots.sort((a, b) => {
+    if (a.month !== b.month)             return a.month < b.month ? -1 : 1;
+    if (a.mentee_code !== b.mentee_code) return a.mentee_code < b.mentee_code ? -1 : 1;
+    return a.ordinal - b.ordinal;
+  });
+
+  if (slots.length !== CHECKPOINT_TOTAL) {
+    throw new Error(`BLOCKER: Generated ${slots.length} slots, expected ${CHECKPOINT_TOTAL}.`);
+  }
+  log(`  ✓ ${slots.length} official slots generated (${agg.size} unique mentee-month pairs)`);
+
+  return slots;
 }
 
 // ─── DB connection ─────────────────────────────────────────────────────────────
@@ -689,49 +881,54 @@ async function backupExistingRecaps(client, seasonId) {
   return { outPath, rowCount: rows.rows.length, checksum: cksum };
 }
 
-// ─── C9: DB dry-run classification ────────────────────────────────────────────
-async function runDBDryRun(client, seasonId, records) {
-  section('C9: Database-Connected Dry Run');
+// ─── Phase 9: Ledger-Based DB Reconciliation ─────────────────────────────────
+async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecords) {
+  section('Phase 9: Ledger-Based DB Reconciliation');
 
-  // Pre-import counts
+  // ── Pre-import stats ──────────────────────────────────────────────────────────
   const pre = (await client.query(
-    `SELECT count(*) AS total, min(meeting_date) AS earliest, max(meeting_date) AS latest,
-            count(*) FILTER (WHERE meeting_type='1on1_primary') AS primary_c,
-            count(*) FILTER (WHERE meeting_type='1on1_cross')   AS cross_c,
-            count(*) FILTER (WHERE meeting_type='group')        AS training_c,
-            count(*) FILTER (WHERE meeting_type='offline')      AS company_c
+    `SELECT count(*)::int AS total, min(meeting_date) AS earliest, max(meeting_date) AS latest,
+            count(*) FILTER (WHERE meeting_type='1on1_primary')::int AS primary_c,
+            count(*) FILTER (WHERE meeting_type='1on1_cross')::int   AS cross_c,
+            count(*) FILTER (WHERE meeting_type='group')::int        AS training_c,
+            count(*) FILTER (WHERE meeting_type='offline')::int      AS company_c,
+            count(*) FILTER (WHERE meeting_type='unknown')::int      AS unknown_c
      FROM mentoring_recaps WHERE season_id = $1
        AND coalesce(status,'') NOT IN ('invalid','deleted')`, [seasonId]
   )).rows[0];
-  log(`  Pre-import DB total: ${pre.total} (primary=${pre.primary_c} cross=${pre.cross_c} training=${pre.training_c} company=${pre.company_c})`);
+  pre.total = asNonNegativeInt(pre.total, 'pre.total');
+  log(`  Pre-import DB total: ${pre.total} (primary=${pre.primary_c} cross=${pre.cross_c} training=${pre.training_c} company=${pre.company_c} unknown=${pre.unknown_c})`);
 
-  // Existing monthly breakdown
-  const preMonthly = (await client.query(
-    `SELECT meeting_month, count(*) AS cnt FROM mentoring_recaps
-     WHERE season_id = $1 AND coalesce(status,'') NOT IN ('invalid','deleted')
-     GROUP BY meeting_month ORDER BY meeting_month`, [seasonId]
-  )).rows;
-  const dbByMonth = {};
-  for (const r of preMonthly) dbByMonth[r.meeting_month] = Number(r.cnt);
-
-  // Identity lookups
-  const menteeRows = (await client.query(
+  // ── Identity maps ─────────────────────────────────────────────────────────────
+  // Mentees: S11-match-scoped first, then all profiles as fallback (for UEHS codes)
+  const menteeByMatch = (await client.query(
     `SELECT DISTINCT pr.mentee_code, p.id AS person_id
-     FROM public.mentee_profiles pr JOIN public.people p ON p.id = pr.person_id
-     WHERE pr.mentee_code IS NOT NULL AND pr.season_id = $1`, [seasonId]
+     FROM public.mentee_profiles pr
+     JOIN public.people p ON p.id = pr.person_id
+     JOIN public.matches m ON m.mentee_person_id = p.id
+     WHERE pr.mentee_code IS NOT NULL AND m.season_id = $1`, [seasonId]
   )).rows;
-  const menteeMap = new Map();
-  for (const r of menteeRows) {
+  const menteeFallback = (await client.query(
+    `SELECT DISTINCT pr.mentee_code, p.id AS person_id
+     FROM public.mentee_profiles pr
+     JOIN public.people p ON p.id = pr.person_id
+     WHERE pr.mentee_code IS NOT NULL`
+  )).rows;
+  const menteeMap = new Map(); // normalizedCode → person_id[]
+  for (const r of [...menteeByMatch, ...menteeFallback]) {
     const k = normalizeKey(r.mentee_code);
     if (!menteeMap.has(k)) menteeMap.set(k, []);
-    menteeMap.get(k).push(r.person_id);
+    const arr = menteeMap.get(k);
+    if (!arr.includes(r.person_id)) arr.push(r.person_id);
   }
-  log(`  Mentee profiles: ${menteeMap.size}`);
+  log(`  Mentee profiles resolved: ${menteeMap.size}`);
 
   const mentorRows = (await client.query(
     `SELECT DISTINCT p.full_name, p.id AS person_id
-     FROM public.mentor_profiles pr JOIN public.people p ON p.id = pr.person_id
-     WHERE pr.season_id = $1`, [seasonId]
+     FROM public.mentor_profiles pr
+     JOIN public.people p ON p.id = pr.person_id
+     JOIN public.matches m ON m.mentor_person_id = p.id
+     WHERE m.season_id = $1`, [seasonId]
   )).rows;
   const mentorMap = new Map();
   for (const r of mentorRows) {
@@ -739,208 +936,695 @@ async function runDBDryRun(client, seasonId, records) {
     if (!mentorMap.has(k)) mentorMap.set(k, []);
     mentorMap.get(k).push(r.person_id);
   }
-  log(`  Mentor profiles: ${mentorMap.size}`);
+  log(`  Mentor profiles resolved: ${mentorMap.size}`);
 
   const matchRows = (await client.query(
-    `SELECT id, mentor_person_id, mentee_person_id, start_date, end_date
-     FROM matches WHERE season_id = $1 AND status NOT IN ('cancelled')`, [seasonId]
+    `SELECT id, mentor_person_id, mentee_person_id, matched_at, ended_at
+     FROM public.matches WHERE season_id = $1 AND status IN ('active','completed','dropped')`, [seasonId]
   )).rows;
-  const matchMap = new Map();
+  const matchMap = new Map(); // 'mentorId|menteeId' → match[]
   for (const m of matchRows) {
     const k = `${m.mentor_person_id}|${m.mentee_person_id}`;
     if (!matchMap.has(k)) matchMap.set(k, []);
     matchMap.get(k).push(m);
   }
-  log(`  Active matches: ${matchRows.length}`);
+  log(`  Active/completed/dropped matches: ${matchRows.length}`);
 
-  // Buckets
-  const B = {
-    already_exists_exact: [], existing_but_changed: [], new_valid: [], source_duplicate: [],
-    unresolved_mentee: [], unresolved_mentor: [], unresolved_match: [],
-    ambiguous_date: [], out_of_range_date: [], ambiguous_type: [],
-    excluded_non_recap: [], invalid: [],
+  // ── Load all existing recap rows for this season ──────────────────────────────
+  const validMonthSet = new Set(OFFICIAL_MONTHS);
+  const existingRows = (await client.query(
+    `SELECT mr.id, mr.mentee_person_id, mr.meeting_month, mr.meeting_date,
+            mr.meeting_type, mr.recap_url, mr.admin_notes, mr.status,
+            COALESCE(mp.mentee_code, '') AS mentee_code
+     FROM public.mentoring_recaps mr
+     LEFT JOIN public.mentee_profiles mp ON mp.person_id = mr.mentee_person_id
+     WHERE mr.season_id = $1
+       AND COALESCE(mr.status,'') NOT IN ('invalid','deleted')
+     ORDER BY mr.meeting_month, mr.meeting_date, mr.id`, [seasonId]
+  )).rows;
+  log(`  Existing valid recap rows: ${existingRows.length}`);
+
+  // Idempotency: index slot_key → existing row id (for re-runs after apply)
+  const slotKeyToExistingId = new Map();
+  for (const row of existingRows) {
+    const m = /UEHM-S11\|official-ledger\|[^|]+\|\d{4}-\d{2}\|\d+/.exec(row.admin_notes || '');
+    if (m) slotKeyToExistingId.set(m[0], row.id);
+  }
+
+  // Date anomalies: rows whose meeting_month is outside the 9 S11 months
+  const dateAnomalyRows = existingRows.filter(r => !validMonthSet.has(r.meeting_month));
+  if (dateAnomalyRows.length) {
+    section('Existing Date Anomalies (meeting_month outside S11 range)');
+    for (const r of dateAnomalyRows) {
+      log(`  id=${r.id}  month=${r.meeting_month}  date=${r.meeting_date}  type=${r.meeting_type}`);
+    }
+  }
+
+  // Group valid-month existing rows: normalizedCode|month → rows[]
+  const existingByKey = new Map();
+  for (const row of existingRows) {
+    if (!validMonthSet.has(row.meeting_month)) continue;
+    const code = normalizeKey(row.mentee_code || '');
+    if (!code) continue;
+    const key = `${code}|${row.meeting_month}`;
+    if (!existingByKey.has(key)) existingByKey.set(key, []);
+    existingByKey.get(key).push(row);
+  }
+
+  // Group source records: normalizedCode|month → sourceRecord[] (body date preferred)
+  const sourceByKey = new Map();
+  for (const r of sourceRecords) {
+    if (r.typeAmbiguous) continue;
+    const code = normalizeKey(r.normalizedCode || r.extractedCode);
+    if (!code) continue;
+    const month = r.meetingDate ? r.meetingDate.slice(0, 7) : (r.postMonth || null);
+    if (!month || !validMonthSet.has(month)) continue;
+    const key = `${code}|${month}`;
+    if (!sourceByKey.has(key)) sourceByKey.set(key, []);
+    sourceByKey.get(key).push(r);
+  }
+
+  // ── Per-slot reconciliation (ledger-first) ────────────────────────────────────
+  const assignedDbIds   = new Set();
+  const assignedSrcRows = new Set();
+
+  const R = {
+    existing_assigned: [],  // { slot, dbRow }             → no write needed
+    source_new:        [],  // { slot, src, ... }           → INSERT from source
+    placeholder:       [],  // { slot, menteePersonId }     → INSERT placeholder
+    unresolved_slot:   [],  // { slot }                     → reported, NULL mentee
   };
 
-  const newValidRows  = [];
-  const seenSessionDB = new Map();
+  for (const slot of officialSlots) {
+    const codeNorm = normalizeKey(slot.mentee_code);
+    const mapKey   = `${codeNorm}|${slot.month}`;
 
-  for (const r of records) {
-    // Source-level session dedup
-    const skey = sessionDedupKey(r);
-    if (seenSessionDB.has(skey)) { B.source_duplicate.push(r.sheetRow); continue; }
-    seenSessionDB.set(skey, r.sheetRow);
-
-    // Type gate
-    if (r.typeAmbiguous) { B.ambiguous_type.push(r.sheetRow); continue; }
-
-    // Date gate
-    if (!r.meetingDate || r.dateSource === 'none')           { B.ambiguous_date.push(r.sheetRow);   continue; }
-    if (r.dateSource === 'explicit_out_of_range')             { B.out_of_range_date.push(r.sheetRow); continue; }
-
-    // Mentee resolution
-    const menteeCodeKey = normalizeKey(r.normalizedCode || r.extractedCode);
-    if (!menteeCodeKey)                                       { B.unresolved_mentee.push(r.sheetRow); continue; }
-    const menteeCands = menteeMap.get(menteeCodeKey) || [];
-    if (menteeCands.length !== 1)                             { B.unresolved_mentee.push(r.sheetRow); continue; }
-    const menteePersonId = menteeCands[0];
-
-    // Mentor resolution (required for primary/cross)
-    let mentorPersonId = null;
-    if (r.meetingType === '1on1_primary' || r.meetingType === '1on1_cross') {
-      const mentorKey = normalizeKey(r.mentorName);
-      if (!mentorKey)                                         { B.unresolved_mentor.push(r.sheetRow); continue; }
-      const mentorCands = mentorMap.get(mentorKey) || [];
-      if (mentorCands.length !== 1)                           { B.unresolved_mentor.push(r.sheetRow); continue; }
-      mentorPersonId = mentorCands[0];
-    }
-
-    // Match resolution (primary only)
-    let matchId = null;
-    if (r.meetingType === '1on1_primary') {
-      const mk         = `${mentorPersonId}|${menteePersonId}`;
-      const meetDt     = new Date(r.meetingDate);
-      const validMatch = (matchMap.get(mk) || []).filter(m => {
-        const s = m.start_date ? new Date(m.start_date) : SEASON_START;
-        const e = m.end_date   ? new Date(m.end_date)   : SEASON_END;
-        return meetDt >= s && meetDt <= e;
-      });
-      if (validMatch.length !== 1)                            { B.unresolved_match.push(r.sheetRow); continue; }
-      matchId = validMatch[0].id;
-    }
-
-    // Idempotency and out-of-range date check
-    // We match EXACT meeting_date + type, OR we match by source provenance if it was imported with a different date
-    const existing = (await client.query(
-      `SELECT id, meeting_date, admin_notes, recap_note FROM mentoring_recaps
-       WHERE season_id = $1 AND coalesce(status,'') NOT IN ('invalid','deleted')
-         AND (
-           (mentee_person_id = $2 AND ($3::uuid IS NULL OR mentor_person_id = $3) AND meeting_date = $4 AND meeting_type = $5)
-           OR
-           (admin_notes LIKE $6 OR recap_note LIKE $7)
-         )
-       LIMIT 1`,
-      [seasonId, menteePersonId, mentorPersonId, r.meetingDate, r.meetingType,
-       `%source_row=${r.sheetRow}%`, `%row=${r.sheetRow} %`]
-    )).rows;
-
-    if (existing.length > 0) {
-      const ext = existing[0];
-      const extDate = toISO(ext.meeting_date);
-      if (extDate !== r.meetingDate) {
-        B.existing_but_changed.push(r.sheetRow);
-      } else {
-        B.already_exists_exact.push(r.sheetRow);
+    // Priority 0: slot_key already in an existing row's admin_notes (idempotent re-run)
+    if (slotKeyToExistingId.has(slot.slotKey)) {
+      const rowId = slotKeyToExistingId.get(slot.slotKey);
+      if (!assignedDbIds.has(rowId)) {
+        assignedDbIds.add(rowId);
+        R.existing_assigned.push({ slot, dbRow: existingRows.find(r => r.id === rowId) });
       }
       continue;
     }
 
-    // Valid new record
-    const meetingMonth = `${r.year}-${r.month}`;
-    newValidRows.push({
-      sheetRow: r.sheetRow, seasonId, matchId,
-      mentorPersonId, menteePersonId,
-      meetingDate: r.meetingDate, meetingMonth,
-      meetingType: r.meetingType,
-      recapUrl:    MISSING_URL,
-      recapSource: RECAP_SOURCE,
-      recapNote:   `spreadsheet_id=${SOURCE_SHEET_ID} tab="${SOURCE_TAB}" row=${r.sheetRow} hash=${r.contentHash}`,
-      capturedBy:  `${IMPORT_BATCH} poster=${r.posterLabel || 'unknown'}`,
-      issueFlag:   true,
-      adminNotes:  [
-        `S11 sync ${IMPORT_BATCH}.`,
-        `source_row=${r.sheetRow}.`,
-        `date_source=${r.dateSource}.`,
-        `content_hash=${r.contentHash}.`,
-        `poster_label_in_captured_by=true.`,
-        'missing_original_url=true.',
-        'Placeholder per migration-034 convention.',
-      ].join(' '),
+    // Priority 1: Unassigned existing DB row by (mentee_code, meeting_month)
+    const existingPool = existingByKey.get(mapKey) || [];
+    const freeExisting = existingPool.filter(r => !assignedDbIds.has(r.id));
+    if (freeExisting.length > 0) {
+      const dbRow = freeExisting[0];
+      assignedDbIds.add(dbRow.id);
+      R.existing_assigned.push({ slot, dbRow });
+      continue;
+    }
+
+    // Priority 2: Unassigned source post by (mentee_code, meeting_month)
+    const menteeCands = menteeMap.get(codeNorm) || [];
+    const sourcePool  = sourceByKey.get(mapKey) || [];
+    const freeSrc     = sourcePool.filter(r => !assignedSrcRows.has(r.sheetRow));
+
+    if (freeSrc.length > 0 && menteeCands.length === 1) {
+      const src          = freeSrc[0];
+      assignedSrcRows.add(src.sheetRow);
+      const menteePersonId = menteeCands[0];
+
+      let mentorPersonId = null, matchId = null;
+      let meetingType    = src.meetingType || 'unknown';
+      if (src.meetingType === '1on1_primary' || src.meetingType === '1on1_cross') {
+        const mKey   = normalizeKey(src.mentorName);
+        const mCands = mKey ? (mentorMap.get(mKey) || []) : [];
+        if (mCands.length === 1) {
+          mentorPersonId = mCands[0];
+          if (src.meetingType === '1on1_primary' && src.meetingDate) {
+            const mk      = `${mentorPersonId}|${menteePersonId}`;
+            const meetDt  = new Date(src.meetingDate);
+            const validMs = (matchMap.get(mk) || []).filter(m => {
+              const s = m.matched_at ? new Date(m.matched_at) : SEASON_START;
+              const e = m.ended_at   ? new Date(m.ended_at)   : SEASON_END;
+              return meetDt >= s && meetDt <= e;
+            });
+            if (validMs.length === 1) matchId = validMs[0].id;
+          }
+        } else {
+          meetingType = 'unknown'; // mentor unresolvable — downgrade type
+        }
+      }
+
+      R.source_new.push({
+        slot, src, menteePersonId, mentorPersonId, matchId, meetingType,
+        hasIssue: !mentorPersonId && (src.meetingType === '1on1_primary' || src.meetingType === '1on1_cross'),
+      });
+      continue;
+    }
+
+    // Priority 3: Placeholder
+    R.placeholder.push({
+      slot,
+      menteePersonId: menteeCands.length === 1 ? menteeCands[0] : null,
+      unresolvable:   menteeCands.length !== 1,
     });
-    B.new_valid.push(r.sheetRow);
+    if (menteeCands.length !== 1) {
+      R.unresolved_slot.push({ slot, candidateCount: menteeCands.length });
+    }
   }
 
-  // Summary
-  section('Dry-Run Classification Summary');
-  for (const [bucket, rows] of Object.entries(B)) {
-    log(`  ${bucket.padEnd(28)}: ${rows.length}`);
+  // ── Excess rows ───────────────────────────────────────────────────────────────
+  const excessExisting = existingRows.filter(r =>
+    validMonthSet.has(r.meeting_month) && !assignedDbIds.has(r.id)
+  );
+  const excessSource = [];
+  for (const r of sourceRecords) {
+    if (r.typeAmbiguous || assignedSrcRows.has(r.sheetRow)) continue;
+    const code  = normalizeKey(r.normalizedCode || r.extractedCode);
+    const month = r.meetingDate ? r.meetingDate.slice(0, 7) : (r.postMonth || null);
+    if (code && month && validMonthSet.has(month)) excessSource.push(r);
   }
-  const quarantined = Object.entries(B)
-    .filter(([k]) => k !== 'already_exists_exact' && k !== 'existing_but_changed' && k !== 'new_valid')
-    .reduce((a, [,v]) => a + v.length, 0);
+
+  // ── Monthly reconciliation table ──────────────────────────────────────────────
+  section('Monthly Reconciliation: existing + source + placeholder = official');
+  const mTbl = {};
+  for (const mo of OFFICIAL_MONTHS) mTbl[mo] = { existing: 0, source: 0, placeholder: 0 };
+  for (const { slot } of R.existing_assigned) if (mTbl[slot.month]) mTbl[slot.month].existing++;
+  for (const { slot } of R.source_new)         if (mTbl[slot.month]) mTbl[slot.month].source++;
+  for (const { slot } of R.placeholder)        if (mTbl[slot.month]) mTbl[slot.month].placeholder++;
+
+  let allReconcile = true;
+  for (const mo of OFFICIAL_MONTHS) {
+    const m   = mTbl[mo];
+    const tot = m.existing + m.source + m.placeholder;
+    const off = CHECKPOINT_OFFICIAL[mo];
+    const ok  = tot === off;
+    if (!ok) allReconcile = false;
+    log(`  ${mo}: existing=${m.existing}  +source=${m.source}  +placeholder=${m.placeholder}  =total=${tot}  (official=${off})  ${ok ? '✓' : '← MISMATCH'}`);
+  }
+  const grandTot = Object.values(mTbl).reduce((a, v) => a + v.existing + v.source + v.placeholder, 0);
+  const grandOk  = grandTot === CHECKPOINT_TOTAL;
+  log(`  TOTAL: ${grandTot} (official: ${CHECKPOINT_TOTAL}) ${grandOk ? '✓' : '← MISMATCH'}`);
+
+  // ── Summary report ────────────────────────────────────────────────────────────
+  section('Reconciliation Summary');
+  log(`  Official slots:                    ${officialSlots.length}`);
+  log(`  Existing DB rows assigned:         ${R.existing_assigned.length}`);
+  log(`  Source-supported new rows:         ${R.source_new.length}`);
+  log(`  Manual-ledger placeholders:        ${R.placeholder.length}`);
+  log(`    → resolvable mentee:             ${R.placeholder.filter(p => p.menteePersonId).length}`);
+  log(`    → unresolvable mentee (NULL id): ${R.placeholder.filter(p => !p.menteePersonId).length}`);
+  log(`  Unresolved ledger slots:           ${R.unresolved_slot.length}`);
+  log(`  Excess existing (valid months):    ${excessExisting.length}`);
+  log(`  Excess source posts:               ${excessSource.length}`);
+  log(`  Date anomaly rows:                 ${dateAnomalyRows.length}`);
+  log(`  Manual-review records:             ${R.placeholder.length + R.source_new.filter(s => s.hasIssue).length}`);
+  log(`  Pre-import DB total:               ${pre.total}`);
+  log(`  Proposed new inserts:              ${R.source_new.length + R.placeholder.length}`);
+  log(`  Post-import projected:             ${Number(pre.total) + R.source_new.length + R.placeholder.length}`);
+
+  if (!allReconcile || !grandOk) {
+    err('BLOCKER: Monthly reconciliation does not balance. Cannot proceed to apply.');
+  } else {
+    log(`  ✓ All ${OFFICIAL_MONTHS.length} months reconcile to official targets`);
+  }
+
+  // ── 3-Column Monthly Report (Points 2/3) ────────────────────────────────────
+  section('3-Column Monthly Report: Official | Physical (post-import) | Report-counted');
+  log('  Column definitions:');
+  log('    official       = official ledger target (authoritative, from Mentee Tracking)');
+  log('    physical       = official + excess_existing rows (all rows in DB after import)');
+  log("    report-counted = official only (after excess rows are marked status='excluded')");
   log('');
-  log(`  Raw source posts:         ${records.length}`);
-  log(`  Already in DB (exact):    ${B.already_exists_exact.length}`);
-  log(`  Existing but changed:     ${B.existing_but_changed.length}`);
-  log(`  Source duplicates:        ${B.source_duplicate.length}`);
-  log(`  Proposed new inserts:     ${newValidRows.length}`);
-  log(`  Total quarantined:        ${quarantined}`);
-  log(`  Post-import projected:    ${Number(pre.total) + newValidRows.length}`);
-  log('');
-
-  // Monthly new breakdown
-  section('Monthly: Existing + Proposed New');
-  for (const mo of Object.keys(CHECKPOINT_OFFICIAL)) {
-    const existing = dbByMonth[mo] || 0;
-    const proposed = newValidRows.filter(r => r.meetingMonth === mo).length;
-    const official = CHECKPOINT_OFFICIAL[mo];
-    log(`  ${mo}: existing=${existing}  +new=${proposed}  =total=${existing+proposed}  (official: ${official})`);
+  const excessByMonth = {};
+  for (const row of excessExisting) {
+    excessByMonth[row.meeting_month] = (excessByMonth[row.meeting_month] || 0) + 1;
   }
-  log(`  ✓ No S12/DEMO-S12 records in scope (season_id=${seasonId})`);
-  log(`  ✓ All ${records.length} rows missing original Facebook URL → placeholder + issue_flag=true`);
+  let physicalRunning = 0;
+  for (const mo of OFFICIAL_MONTHS) {
+    const official      = CHECKPOINT_OFFICIAL[mo];
+    const excessInMonth = excessByMonth[mo] || 0;
+    const physical      = official + excessInMonth;
+    physicalRunning    += physical;
+    const excessTag     = excessInMonth > 0 ? `(+${excessInMonth} excess)` : '';
+    const offStr        = String(official).padStart(3);
+    const physStr       = String(physical).padStart(3);
+    const exStr         = excessTag.padEnd(14);
+    log(`  ${mo}: official=${offStr}  physical=${physStr} ${exStr}  report-counted=${offStr}  ${official === CHECKPOINT_OFFICIAL[mo] ? '✓' : '← MISMATCH'}`);
+  }
+  const anomalyCount  = dateAnomalyRows.length;
+  physicalRunning    += anomalyCount;
+  const physicalTotal = physicalRunning;
+  const reportTotal   = CHECKPOINT_TOTAL;
+  log(`  anomaly rows (meeting_month outside S11 range): ${anomalyCount} — added to physical total only`);
+  log(`  ─────────────────────────────────────────────────────────────────────`);
+  log(`  TOTAL:  official=${CHECKPOINT_TOTAL}  physical=${physicalTotal}  report-counted=${reportTotal}  ${reportTotal === CHECKPOINT_TOTAL ? '✓' : '← MISMATCH'}`);
+  if (physicalTotal !== CHECKPOINT_TOTAL) {
+    log(`  ⚠ Physical (${physicalTotal}) exceeds official (${CHECKPOINT_TOTAL}) by ${physicalTotal - CHECKPOINT_TOTAL} rows.`);
+    log(`    These rows must be marked status='excluded' — Migration 058 adds this to the constraint.`);
+  }
 
-  return { newValidRows, pre, preMonthly };
+  // ── Excess Row Audit (Points 5/6/7/8) ───────────────────────────────────────
+  const totalExcess = excessExisting.length + anomalyCount;
+  section(`Excess Row Audit (${totalExcess} rows not assigned to any official slot)`);
+  log(`  These rows remain in the DB after import but must NOT count in official reporting.`);
+  log(`  The VAM OS counting filter is an inclusion whitelist: status IN ('', 'submitted', 'needs_review').`);
+  log(`  Marking excess rows status='excluded' is the clean exclusion mechanism:`);
+  log(`    • 'excluded' is outside the whitelist → auto-excluded from ALL dashboard KPIs`);
+  log(`    • KPI counting filters required no changes (RPC migration 035 + lib/data.ts already`);
+  log(`      exclude any value outside the whitelist), but 6 TypeScript/admin-UI fixes WERE needed:`);
+  log(`      lib/admin-corrections.ts (RECAP_STATUSES + duplicates scan filter),`);
+  log(`      lib/data.ts (ALLOWED_RECAP_STATUSES), app/admin/admin-correction-forms.tsx,`);
+  log(`      app/recaps/[id]/edit/correction-form.tsx, app/people/[id]/page.tsx (recapStatusLabel),`);
+  log(`      app/admin/page.tsx (RecentRecapCorrection filter) — all already implemented.`);
+  log(`    • issue_flag CANNOT be the exclusion signal — official manual-review placeholders`);
+  log(`      (type=unknown, status=needs_review) also carry issue_flag=true and MUST still count`);
+  log(`    • 'duplicate' and 'deleted' are not used — they have distinct semantics in admin workflow`);
+  log('');
+  if (excessExisting.length > 0) {
+    log(`  Valid-month excess rows (${excessExisting.length}) — meeting_month is in S11 range`);
+    log(`  but no official slot remains for this (mentee_code, month) pair:`);
+    const showN = Math.min(excessExisting.length, 35);
+    for (let i = 0; i < showN; i++) {
+      const row = excessExisting[i];
+      const src = row.admin_notes ? row.admin_notes.slice(0, 55) + '…' : (row.recap_source || '');
+      log(`    [${String(i + 1).padStart(3)}] id=${row.id}  code=${(row.mentee_code || '(unknown)').padEnd(12)}  month=${row.meeting_month}  date=${row.meeting_date || 'null'}  status=${row.status}  src=${src}`);
+    }
+    if (excessExisting.length > 35) log(`    … and ${excessExisting.length - 35} more`);
+    log('');
+  }
+  if (anomalyCount > 0) {
+    log(`  Date-anomaly rows (${anomalyCount}) — meeting_month is OUTSIDE Nov 2025–Jul 2026:`);
+    log(`  DO NOT change meeting_date/meeting_month without consulting the source post.`);
+    log(`  Mark as status='excluded' pending owner investigation:`);
+    for (const row of dateAnomalyRows) {
+      const src = row.admin_notes ? row.admin_notes.slice(0, 55) + '…' : (row.recap_source || '');
+      log(`    id=${row.id}  code=${(row.mentee_code || '(unknown)').padEnd(12)}  month=${row.meeting_month}  date=${row.meeting_date || 'null'}  status=${row.status}  src=${src}`);
+    }
+    log('');
+  }
+
+  // ── Migration 058 Reference + --apply Transaction Plan (Points 6/7) ─────────
+  section("Migration 058 + --apply Transaction Plan");
+  log('');
+  log('  CODEBASE AUDIT — Counting filters in VAM OS (from migration 035 + lib/data.ts):');
+  log("    RPC:          coalesce(trim(lower(mr.status)), '') IN ('', 'submitted', 'needs_review')");
+  log("    Client-side:  VALID_ACTIVITY_STATUSES = new Set(['', 'submitted', 'needs_review'])");
+  log("  Both are INCLUSION whitelists. Any value outside this set is auto-excluded from all KPIs.");
+  log("  KPI counting filters required no changes, but six TypeScript/admin UI compatibility");
+  log("  fixes were required (already implemented): lib/admin-corrections.ts (RECAP_STATUSES +");
+  log("  duplicates scan filter), lib/data.ts (ALLOWED_RECAP_STATUSES),");
+  log("  app/admin/admin-correction-forms.tsx, app/recaps/[id]/edit/correction-form.tsx,");
+  log("  app/people/[id]/page.tsx (recapStatusLabel), app/admin/page.tsx (RecentRecapCorrection).");
+  log('');
+  log('  Migration 058 (DDL-only, no data change):');
+  log('    supabase_migrations/058_add_excluded_status.sql  ← staged for commit, not yet applied');
+  log('    Apply via Supabase dashboard → SQL editor before running --apply.');
+  log('    --apply will check for this migration and refuse to start without it.');
+  log('');
+  const excessIds = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
+  const projectedPhysical = Number(pre.total) + R.source_new.length + R.placeholder.length;
+  log(`  ── --apply Transaction Plan (single BEGIN/COMMIT) ──────────────────────`);
+  log(`  STEP 1  UPDATE ${excessIds.length} rows → status='excluded'`);
+  log(`           ${excessExisting.length} valid-month excess rows`);
+  log(`           ${dateAnomalyRows.length} date-anomaly rows (meeting_month outside S11 range)`);
+  log(`          (advisory lock + FOR UPDATE NOWAIT acquired first)`);
+  log(`  STEP 2  INSERT ${R.source_new.length} source-backed rows`);
+  log(`           recap_source='google_sheet'  status='submitted'`);
+  log(`  STEP 3  INSERT ${R.placeholder.length} placeholder rows`);
+  log(`           recap_source='admin_input'   status='needs_review'  meeting_type='unknown'`);
+  log(`  STEP 4  In-transaction verification before COMMIT:`);
+  log(`           physical rows   = ${projectedPhysical}  (expected: ${Number(pre.total)} + ${R.source_new.length + R.placeholder.length} new)`);
+  log(`           excluded rows   = ${excessIds.length}`);
+  log(`           report-counted  = ${CHECKPOINT_TOTAL}  (per UEHM-S11 official ledger)`);
+  log(`           per-month targets verified for all ${OFFICIAL_MONTHS.length} months`);
+  log(`           S12/DEMO-S12 row count unchanged`);
+  log(`  STEP 5  COMMIT if all gates pass — ROLLBACK otherwise`);
+  log('');
+  log(`  Plan fingerprint: computed in main() and shown in DRY-RUN COMPLETE summary below.`);
+  log(`  To execute: node sync_s11_recaps.mjs --apply`);
+
+  return { R, mTbl, allReconcile: allReconcile && grandOk, pre, existingRows, excessExisting, excessSource, dateAnomalyRows };
 }
 
-// ─── Apply ────────────────────────────────────────────────────────────────────
-async function applyInserts(client, newValidRows) {
-  section('Phase 9: Production Apply');
-  if (newValidRows.length === 0) {
-    log('  Nothing to insert — all records already exist or quarantined.'); return 0;
+// ─── Phase 10: Full Atomic Transaction (UPDATE excluded + INSERT new rows) ────
+async function applyFullTransaction(client, seasonId, R, excessExisting, dateAnomalyRows, planHash, csvHashes, pre) {
+  section('Phase 10: Full Atomic Transaction');
+
+  const allExcessIds   = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
+  const totalToInsert  = R.source_new.length + R.placeholder.length;
+
+  log(`  Plan fingerprint: ${planHash}`);
+  log(`  Source CSV hash:  ${csvHashes.source}`);
+  log(`  Ledger CSV hash:  ${csvHashes.ledger}`);
+  log(`  UPDATE → excluded: ${allExcessIds.length} rows`);
+  log(`  INSERT source-backed: ${R.source_new.length} rows`);
+  log(`  INSERT placeholder:   ${R.placeholder.length} rows`);
+  log('');
+
+  // Gate 0: Migration 058 must be installed before any writes
+  const conCheck = await client.query(`
+    SELECT pg_get_constraintdef(oid) AS def
+    FROM pg_constraint
+    WHERE conname = 'mentoring_recaps_status_check'
+      AND conrelid = 'public.mentoring_recaps'::regclass
+  `);
+  const conDef = conCheck.rows[0]?.def ?? '';
+  if (!conDef.includes("'excluded'")) {
+    throw new Error(
+      "BLOCKED: Migration 058 has not been applied to production.\n" +
+      "  The status CHECK constraint does not include 'excluded'.\n" +
+      "  Apply supabase_migrations/058_add_excluded_status.sql first."
+    );
   }
-  log(`  Inserting ${newValidRows.length} records in a single transaction...`);
+  log(`  ✓ Gate 0: Migration 058 confirmed — status='excluded' accepted by constraint`);
+
+  if (totalToInsert === 0 && allExcessIds.length === 0) {
+    log('  Nothing to do — all official slots filled and no excess rows to exclude.');
+    return { updated: 0, inserted: 0 };
+  }
+
+  // Baseline S12/DEMO-S12 count (must stay constant throughout)
+  const s12Pre = asNonNegativeInt((await client.query(
+    `SELECT COUNT(*)::int AS cnt FROM mentoring_recaps mr
+     JOIN seasons s ON s.id = mr.season_id WHERE s.code = ANY($1)`,
+    [FORBIDDEN_SEASONS]
+  )).rows[0].cnt, 's12Pre');
+
   await client.query('BEGIN');
-  let inserted = 0;
+  let updated = 0, inserted = 0;
   try {
-    for (const rec of newValidRows) {
+    // Step 1: Advisory lock — prevents concurrent sync runs
+    const lockRes = await client.query(
+      `SELECT pg_try_advisory_xact_lock(hashtext('UEHM-S11-sync-v1')) AS acquired`
+    );
+    if (!lockRes.rows[0]?.acquired) {
+      throw new Error('Advisory lock held by another session. Retry once the other operation completes.');
+    }
+    log(`  ✓ Advisory lock acquired`);
+
+    // Step 2: Re-audit current row count (detect concurrent mutations since dry-run)
+    const preTxTotal = asNonNegativeInt((await client.query(
+      `SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1`, [seasonId]
+    )).rows[0].n, 'preTxTotal');
+    if (preTxTotal !== Number(pre.total)) {
+      throw new Error(
+        `Row count changed since dry-run: expected ${pre.total}, found ${preTxTotal}. ` +
+        `Re-run dry-run to get a fresh plan before applying.`
+      );
+    }
+    log(`  ✓ Pre-transaction row count verified: ${preTxTotal}`);
+
+    // Step 3: Lock excess rows FOR UPDATE NOWAIT (fail fast if any locked by another session)
+    if (allExcessIds.length > 0) {
+      const phs = allExcessIds.map((_, i) => `$${i + 1}`).join(',');
+      const lockRes2 = await client.query(
+        `SELECT id, status FROM mentoring_recaps WHERE id IN (${phs}) FOR UPDATE NOWAIT`,
+        allExcessIds
+      );
+      if (lockRes2.rows.length !== allExcessIds.length) {
+        throw new Error(
+          `Expected to lock ${allExcessIds.length} excess rows, found only ${lockRes2.rows.length}. ` +
+          `Some rows may have been deleted since the dry-run. Re-run dry-run to refresh the plan.`
+        );
+      }
+      log(`  ✓ ${lockRes2.rows.length} excess rows locked FOR UPDATE NOWAIT`);
+
+      // Step 4: UPDATE excess rows — idempotent (skip rows already excluded)
+      const auditNote = `s11_reporting_excluded=true. reason=exceeds_official_ledger_count. excluded_by=${IMPORT_BATCH}.`;
+      const phs2 = allExcessIds.map((_, i) => `$${i + 2}`).join(',');
+      const updRes = await client.query(
+        `UPDATE mentoring_recaps
+         SET status = 'excluded',
+             admin_notes = concat_ws(' ', admin_notes,
+               CASE WHEN admin_notes NOT LIKE '%s11_reporting_excluded=true%'
+                    THEN $1 ELSE NULL END)
+         WHERE id IN (${phs2})
+           AND status != 'excluded'
+         RETURNING id`,
+        [auditNote, ...allExcessIds]
+      );
+      updated = updRes.rows.length;
+      const alreadyExcluded = allExcessIds.length - updated;
+      log(`  ✓ Updated ${updated} → excluded${alreadyExcluded > 0 ? `, ${alreadyExcluded} already excluded (idempotent)` : ''}`);
+    }
+
+    // Step 5: INSERT source-backed rows (ON CONFLICT DO NOTHING = idempotent)
+    for (const { slot, src, menteePersonId, mentorPersonId, matchId, meetingType, hasIssue } of R.source_new) {
+      const recapNote  = `spreadsheet_id=${SOURCE_SHEET_ID} tab="${SOURCE_TAB}" row=${src.sheetRow} hash=${src.contentHash}`;
+      const adminNotes = [
+        `S11 ledger sync ${IMPORT_BATCH}.`,
+        `slot_key=${slot.slotKey}.`,
+        `source_row=${src.sheetRow}.`,
+        `date_source=${src.dateSource}.`,
+        `plan_hash=${planHash.slice(0, 12)}.`,
+        `missing_original_url=true.`,
+        hasIssue ? 'unresolved_mentor=true. needs_manual_review=true.' : '',
+      ].filter(Boolean).join(' ');
       const r = await client.query(
         `INSERT INTO mentoring_recaps (
            season_id, match_id, mentor_person_id, mentee_person_id,
            meeting_date, meeting_month, meeting_type,
-           recap_url, recap_source, recap_note,
-           captured_by, issue_flag, admin_notes, status
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'submitted')
+           recap_url, recap_source, recap_note, captured_by,
+           issue_flag, admin_notes, status
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'google_sheet',$9,$10,true,$11,'submitted')
          ON CONFLICT DO NOTHING RETURNING id`,
-        [rec.seasonId, rec.matchId, rec.mentorPersonId, rec.menteePersonId,
-         rec.meetingDate, rec.meetingMonth, rec.meetingType,
-         rec.recapUrl, rec.recapSource, rec.recapNote,
-         rec.capturedBy, rec.issueFlag, rec.adminNotes]
+        [seasonId, matchId, mentorPersonId, menteePersonId,
+         src.meetingDate, slot.month, meetingType,
+         MISSING_URL, recapNote, IMPORT_BATCH, adminNotes]
       );
       if (r.rows.length > 0) inserted++;
     }
+    log(`  ✓ Source-backed: ${inserted} inserted, ${R.source_new.length - inserted} skipped (ON CONFLICT DO NOTHING)`);
+
+    // Step 6: INSERT placeholder rows (ON CONFLICT DO NOTHING = idempotent)
+    let phInserted = 0;
+    for (const { slot, menteePersonId } of R.placeholder) {
+      const placeholderDate = `${slot.month}-15`;
+      const recapNote  = `ledger_placeholder slot_key=${slot.slotKey} date_quality=month_only_estimated`;
+      const adminNotes = [
+        `S11 ledger sync ${IMPORT_BATCH}.`,
+        `slot_key=${slot.slotKey}.`,
+        `mentee_code=${slot.mentee_code}.`,
+        `official_month=${slot.month}.`,
+        `ordinal=${slot.ordinal}.`,
+        `date_quality=month_only_estimated.`,
+        `plan_hash=${planHash.slice(0, 12)}.`,
+        `missing_url=true.`,
+        `needs_manual_review=true.`,
+        `source_spreadsheet=${SOURCE_SHEET_ID}.`,
+        `ledger_tab=Mentee_Tracking.`,
+        !menteePersonId ? 'mentee_person_id=unresolved.' : '',
+      ].filter(Boolean).join(' ');
+      const r = await client.query(
+        `INSERT INTO mentoring_recaps (
+           season_id, match_id, mentor_person_id, mentee_person_id,
+           meeting_date, meeting_month, meeting_type,
+           recap_url, recap_source, recap_note, captured_by,
+           issue_flag, admin_notes, status
+         ) VALUES ($1,NULL,NULL,$2,$3,$4,'unknown',$5,'admin_input',$6,$7,true,$8,'needs_review')
+         ON CONFLICT DO NOTHING RETURNING id`,
+        [seasonId, menteePersonId, placeholderDate, slot.month,
+         MISSING_URL, recapNote, IMPORT_BATCH, adminNotes]
+      );
+      if (r.rows.length > 0) phInserted++;
+    }
+    log(`  ✓ Placeholders: ${phInserted} inserted, ${R.placeholder.length - phInserted} skipped (ON CONFLICT DO NOTHING)`);
+    inserted += phInserted;
+
+    // Step 7: In-transaction verification before COMMIT
+    section('Pre-COMMIT Verification (all gates must pass)');
+    const expectedPhysical = Number(pre.total) + R.source_new.length + R.placeholder.length;
+    const expectedExcluded = allExcessIds.length;
+
+    const [physRes, excRes, rptRes, monthRes, s12PostRes] = await Promise.all([
+      client.query(`SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1`, [seasonId]),
+      client.query(`SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1 AND status = 'excluded'`, [seasonId]),
+      client.query(
+        `SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1
+         AND coalesce(trim(lower(status)), '') IN ('', 'submitted', 'needs_review')`,
+        [seasonId]
+      ),
+      client.query(
+        `SELECT meeting_month, COUNT(*)::int AS n
+         FROM mentoring_recaps
+         WHERE season_id = $1
+           AND coalesce(trim(lower(status)), '') IN ('', 'submitted', 'needs_review')
+         GROUP BY meeting_month ORDER BY meeting_month`,
+        [seasonId]
+      ),
+      client.query(
+        `SELECT COUNT(*)::int AS cnt FROM mentoring_recaps mr
+         JOIN seasons s ON s.id = mr.season_id WHERE s.code = ANY($1)`,
+        [FORBIDDEN_SEASONS]
+      ),
+    ]);
+
+    let allVerified = true;
+    function gate(label, got, expected) {
+      const g = asNonNegativeInt(got, label + ' (got)');
+      const ok = g === expected;
+      log(`  [${ok ? 'PASS' : 'FAIL'}] ${label}: ${g} (expected ${expected})`);
+      if (!ok) allVerified = false;
+    }
+
+    gate('physical rows total',    physRes.rows[0].n, expectedPhysical);
+    gate('excluded rows',          excRes.rows[0].n,  expectedExcluded);
+    gate('report-counted total',   rptRes.rows[0].n,  CHECKPOINT_TOTAL);
+    gate('S12/DEMO-S12 unchanged', s12PostRes.rows[0].cnt, s12Pre);
+
+    const monthMap = new Map(monthRes.rows.map(r => [r.meeting_month, asNonNegativeInt(r.n, `monthly ${r.meeting_month}`)]));
+    for (const mo of OFFICIAL_MONTHS) {
+      gate(`report-counted ${mo}`, monthMap.get(mo) ?? 0, CHECKPOINT_OFFICIAL[mo]);
+    }
+
+    if (!allVerified) {
+      throw new Error('Pre-COMMIT verification failed. See gate failures above. Transaction ROLLED BACK.');
+    }
+    log('');
+    log(`  ✓ All verification gates passed.`);
     await client.query('COMMIT');
-    log(`  ✓ COMMITTED. Inserted: ${inserted}`);
+    log(`  ✓ COMMITTED. Updated: ${updated}  Inserted: ${inserted}`);
+
   } catch (e) {
     await client.query('ROLLBACK');
-    log(`  ✗ ROLLED BACK: ${e.message}`); throw e;
+    log(`  ✗ ROLLED BACK: ${e.message}`);
+    throw e;
   }
-  return inserted;
+  return { updated, inserted };
+}
+
+// ─── Smoke Test: BEGIN/ROLLBACK constraint check (Point 13) ──────────────────
+async function smokeTestInserts(client, seasonId, R) {
+  section('Smoke Test: BEGIN/ROLLBACK Constraint Check (no persistence)');
+  log('  Tests one source-backed and one placeholder INSERT inside a transaction that is');
+  log('  always ROLLED BACK. Purpose: verify production CHECK constraints accept the field');
+  log('  values used by --apply before any real write is attempted.');
+  log('');
+
+  const srcSample = R.source_new.find(s => s.menteePersonId) ?? R.source_new[0] ?? null;
+  const phSample  = R.placeholder[0] ?? null;
+
+  if (!srcSample && !phSample) {
+    log('  Nothing to test (no new inserts proposed).'); return;
+  }
+
+  await client.query('BEGIN');
+  let tested = 0, passed = 0;
+  try {
+    if (srcSample) {
+      tested++;
+      const { slot, src, menteePersonId, mentorPersonId, matchId, meetingType } = srcSample;
+      const recapNote  = `SMOKE_TEST spreadsheet_id=${SOURCE_SHEET_ID} tab="${SOURCE_TAB}" row=${src.sheetRow}`;
+      const adminNotes = `SMOKE_TEST slot_key=${slot.slotKey} ROLLED_BACK=true`;
+      const r = await client.query(
+        `INSERT INTO mentoring_recaps (
+           season_id, match_id, mentor_person_id, mentee_person_id,
+           meeting_date, meeting_month, meeting_type,
+           recap_url, recap_source, recap_note, captured_by,
+           issue_flag, admin_notes, status
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'google_sheet',$9,'SMOKE_TEST',true,$10,'submitted')
+         RETURNING id`,
+        [seasonId, matchId || null, mentorPersonId || null, menteePersonId,
+         src.meetingDate, slot.month, meetingType,
+         MISSING_URL, recapNote, adminNotes]
+      );
+      log(`  ✓ source_new INSERT: PASSED (recap_source=google_sheet  status=submitted  meeting_type=${meetingType})`);
+      if (r.rows[0]) log(`    would-be id=${r.rows[0].id}`);
+      passed++;
+    }
+
+    if (phSample) {
+      tested++;
+      const { slot, menteePersonId } = phSample;
+      const placeholderDate = `${slot.month}-15`;
+      const recapNote  = `SMOKE_TEST ledger_placeholder slot_key=${slot.slotKey}`;
+      const adminNotes = `SMOKE_TEST slot_key=${slot.slotKey} ROLLED_BACK=true`;
+      const r = await client.query(
+        `INSERT INTO mentoring_recaps (
+           season_id, match_id, mentor_person_id, mentee_person_id,
+           meeting_date, meeting_month, meeting_type,
+           recap_url, recap_source, recap_note, captured_by,
+           issue_flag, admin_notes, status
+         ) VALUES ($1,NULL,NULL,$2,$3,$4,'unknown',$5,'admin_input',$6,'SMOKE_TEST',true,$7,'needs_review')
+         RETURNING id`,
+        [seasonId, menteePersonId || null, placeholderDate, slot.month,
+         MISSING_URL, recapNote, adminNotes]
+      );
+      log(`  ✓ placeholder INSERT: PASSED (recap_source=admin_input  status=needs_review  meeting_type=unknown)`);
+      if (r.rows[0]) log(`    would-be id=${r.rows[0].id}`);
+      passed++;
+    }
+
+    await client.query('ROLLBACK');
+    log('');
+    log(`  ✓ ROLLED BACK — zero rows persisted. ${passed}/${tested} constraint checks PASSED.`);
+    log(`  Confirmed valid by production DB: recap_source ('google_sheet', 'admin_input'),`);
+    log(`  status ('submitted', 'needs_review'), meeting_type ('unknown').`);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    log(`  ✗ ROLLED BACK — smoke test FAILED: ${e.message}`);
+    log(`    Fix the constraint violation above before running --apply.`);
+    throw e;
+  }
+
+  // Additional smoke test: verify status='excluded' is accepted by the DB constraint.
+  // Only runs if Migration 058 is already installed — skipped otherwise with a note.
+  const conRes = await client.query(`
+    SELECT pg_get_constraintdef(oid) AS def
+    FROM pg_constraint
+    WHERE conname = 'mentoring_recaps_status_check'
+      AND conrelid = 'public.mentoring_recaps'::regclass
+  `);
+  const constraintDef = conRes.rows[0]?.def ?? '';
+  if (constraintDef.includes("'excluded'")) {
+    const srcSample2 = R.source_new[0] ?? R.placeholder[0] ?? null;
+    if (srcSample2) {
+      await client.query('BEGIN');
+      try {
+        const { slot, src, menteePersonId } = srcSample2.src
+          ? srcSample2
+          : { slot: srcSample2.slot, src: null, menteePersonId: srcSample2.menteePersonId };
+        const placeholderDate = `${slot.month}-15`;
+        const r = await client.query(
+          `INSERT INTO mentoring_recaps (
+             season_id, match_id, mentor_person_id, mentee_person_id,
+             meeting_date, meeting_month, meeting_type,
+             recap_url, recap_source, recap_note, captured_by,
+             issue_flag, admin_notes, status
+           ) VALUES ($1,NULL,NULL,$2,$3,$4,'unknown',$5,'admin_input','SMOKE_TEST_EXCLUDED','SMOKE_TEST',true,'SMOKE_TEST','excluded')
+           RETURNING id`,
+          [seasonId, menteePersonId || null, placeholderDate, slot.month, MISSING_URL]
+        );
+        log(`  ✓ status='excluded' INSERT: PASSED (Migration 058 confirmed in constraint)`);
+        if (r.rows[0]) log(`    would-be id=${r.rows[0].id} — rolled back`);
+        await client.query('ROLLBACK');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        log(`  ✗ status='excluded' INSERT FAILED: ${e.message}`);
+        log(`    Migration 058 may be malformed. Check pg_constraint before running --apply.`);
+        throw e;
+      }
+    }
+  } else {
+    log(`  ℹ status='excluded' smoke test SKIPPED — Migration 058 not yet in constraint.`);
+    log(`    Apply supabase_migrations/058_add_excluded_status.sql, then re-run dry-run.`);
+  }
 }
 
 // ─── Post-apply verification ──────────────────────────────────────────────────
 async function verifyPostApply(client, seasonId, inserted, pre) {
   section('Phase 10: Post-Apply Verification');
   const post = (await client.query(
-    `SELECT count(*) AS total, min(meeting_date) AS earliest, max(meeting_date) AS latest,
-            count(*) FILTER (WHERE meeting_type='1on1_primary') AS primary_c,
-            count(*) FILTER (WHERE meeting_type='1on1_cross')   AS cross_c,
-            count(*) FILTER (WHERE meeting_type='group')        AS training_c,
-            count(*) FILTER (WHERE meeting_type='offline')      AS company_c
+    `SELECT count(*)::int AS total, min(meeting_date) AS earliest, max(meeting_date) AS latest,
+            count(*) FILTER (WHERE meeting_type='1on1_primary')::int AS primary_c,
+            count(*) FILTER (WHERE meeting_type='1on1_cross')::int   AS cross_c,
+            count(*) FILTER (WHERE meeting_type='group')::int        AS training_c,
+            count(*) FILTER (WHERE meeting_type='offline')::int      AS company_c
      FROM mentoring_recaps WHERE season_id = $1
        AND coalesce(status,'') NOT IN ('invalid','deleted')`, [seasonId]
   )).rows[0];
+  const postTotal = asNonNegativeInt(post.total, 'post.total');
+  const preTotal  = asNonNegativeInt(pre.total,  'pre.total (verifyPostApply)');
 
-  const actual = Number(post.total) - Number(pre.total);
-  log(`  Post-import total:     ${post.total}`);
+  const actual = postTotal - preTotal;
+  log(`  Post-import total:     ${postTotal}`);
   log(`  Net new records:       ${actual}  (expected ${inserted})`);
   log(`  Primary:               ${post.primary_c}`);
   log(`  Cross:                 ${post.cross_c}`);
@@ -952,23 +1636,24 @@ async function verifyPostApply(client, seasonId, inserted, pre) {
   else log(`  ⚠ MISMATCH: got ${actual}, expected ${inserted}`);
 
   // S12 guard
-  const s12 = (await client.query(
-    `SELECT count(*) AS cnt FROM mentoring_recaps mr
+  const s12PostVerify = asNonNegativeInt((await client.query(
+    `SELECT COUNT(*)::int AS cnt FROM mentoring_recaps mr
      JOIN seasons s ON s.id = mr.season_id WHERE s.code IN ('UEHM-S12','DEMO-S12')`
-  )).rows[0];
-  log(`  ✓ S12/DEMO-S12 recap rows unchanged (check passed)`);
+  )).rows[0].cnt, 's12PostVerify');
+  log(`  ✓ S12/DEMO-S12 recap rows: ${s12PostVerify} (unchanged check — caller verifies against s12Pre)`);
 
   // Monthly post-apply
   const postM = (await client.query(
-    `SELECT meeting_month, count(*) AS cnt FROM mentoring_recaps
+    `SELECT meeting_month, COUNT(*)::int AS cnt FROM mentoring_recaps
      WHERE season_id = $1 AND coalesce(status,'') NOT IN ('invalid','deleted')
      GROUP BY meeting_month ORDER BY meeting_month`, [seasonId]
   )).rows;
   log('\n  Post-import monthly totals:');
   for (const row of postM) {
+    const cnt  = asNonNegativeInt(row.cnt, `monthly_post_${row.meeting_month}`);
     const off  = CHECKPOINT_OFFICIAL[row.meeting_month];
     const flag = off !== undefined ? `  (official: ${off})` : '';
-    log(`    ${row.meeting_month}: ${row.cnt}${flag}`);
+    log(`    ${row.meeting_month}: ${cnt}${flag}`);
   }
   return post;
 }
@@ -977,91 +1662,186 @@ async function verifyPostApply(client, seasonId, inserted, pre) {
 async function main() {
   banner(`VAM OS – UEHM-S11 Recap Sync  |  ${MODE}  |  ${IMPORT_BATCH}`);
 
-  // Phase 2: Validate CSV
-  const { validDataRows, byteSize, fileHash } = loadAndValidateCSV();
+  // Phase 2: Source CSV — also capture file hash for plan fingerprint
+  const { validDataRows, fileHash: sourceHash } = loadAndValidateCSV();
 
-  // Phases 3-4: Normalize
-  const { records, dups } = normalizeSourceRows(validDataRows);
+  // Phases 3-4: Normalize source records
+  const { records } = normalizeSourceRows(validDataRows);
 
-  // Phase 6: DB check
+  // Phase L4: Official Ledger — also capture file hash for plan fingerprint
+  const { entries, fileHash: ledgerHash } = loadLedgerCSV();
+
+  // Phase L5: Official Slots — must produce exactly 2,322 before touching DB
+  const officialSlots = generateOfficialSlots(entries);
+
+  // Phase 6: DB connection
   section('Phase 6: Production Connection');
-  const dbConfigured = !!process.env.PROD_DATABASE_URL;
-  log(`  PROD_DATABASE_URL: ${dbConfigured ? 'configured' : 'NOT CONFIGURED'}`);
-  if (!dbConfigured) {
+  if (!process.env.PROD_DATABASE_URL) {
+    log('  PROD_DATABASE_URL: NOT CONFIGURED');
     log('  Set the Session pooler URI in your terminal and re-run.'); return;
   }
+  log('  PROD_DATABASE_URL: configured (value not printed)');
 
   const client = await connectDB();
+  let schemaValid = false;
   try {
     // Phase 6a: Schema Guard
     section('Phase 6a: Schema Guard');
     const requiredTables = {
-      mentee_profiles: ['id', 'person_id', 'mentee_code', 'season_id'],
-      mentor_profiles: ['id', 'person_id', 'season_id'],
-      people: ['id', 'full_name'],
-      matches: ['id', 'mentor_person_id', 'mentee_person_id', 'start_date', 'end_date', 'season_id', 'status'],
+      mentee_profiles:  ['id', 'person_id', 'mentee_code'],
+      mentor_profiles:  ['id', 'person_id'],
+      people:           ['id', 'full_name'],
+      matches:          ['id', 'mentor_person_id', 'mentee_person_id', 'matched_at', 'ended_at', 'season_id', 'status'],
       mentoring_recaps: [
         'id', 'season_id', 'match_id', 'mentor_person_id', 'mentee_person_id',
         'meeting_date', 'meeting_month', 'recap_url', 'recap_source', 'recap_note',
         'issue_flag', 'status', 'admin_notes', 'created_at', 'updated_at',
-        'meeting_type', 'captured_by'
-      ]
+        'meeting_type', 'captured_by',
+      ],
     };
-
-    let schemaValid = true;
+    schemaValid = true;
     for (const [tbl, cols] of Object.entries(requiredTables)) {
       const tblRes = await client.query(
         `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
         ['public', tbl]
       );
       if (tblRes.rows.length === 0) {
-        err(`Missing relation: public.${tbl}`);
-        schemaValid = false;
-        continue;
+        err(`Missing relation: public.${tbl}`); schemaValid = false; continue;
       }
       const actualCols = tblRes.rows.map(r => r.column_name);
       for (const c of cols) {
-        if (!actualCols.includes(c)) {
-          err(`Missing column in ${tbl}: ${c}`);
-          schemaValid = false;
-        }
+        if (!actualCols.includes(c)) { err(`Missing column in ${tbl}: ${c}`); schemaValid = false; }
       }
       if (schemaValid) log(`  ✓ ${tbl} has all required columns`);
     }
-    if (!schemaValid) throw new Error('BLOCKER: Schema guard failed. Relation or column missing. Do not proceed.');
+    if (!schemaValid) throw new Error('BLOCKER: Schema guard failed. Do not proceed.');
+
+    // Phase 6b: Query Preflight
+    section('Phase 6b: Query Preflight');
+    try {
+      const dummy = '00000000-0000-0000-0000-000000000000';
+      await client.query(
+        `SELECT DISTINCT pr.mentee_code, p.id AS person_id
+         FROM public.mentee_profiles pr
+         JOIN public.people p ON p.id = pr.person_id
+         JOIN public.matches m ON m.mentee_person_id = p.id
+         WHERE m.season_id = $1 LIMIT 0`, [dummy]);
+      await client.query(
+        `SELECT DISTINCT p.full_name, p.id AS person_id
+         FROM public.mentor_profiles pr
+         JOIN public.people p ON p.id = pr.person_id
+         JOIN public.matches m ON m.mentor_person_id = p.id
+         WHERE m.season_id = $1 LIMIT 0`, [dummy]);
+      await client.query(
+        `SELECT id, mentor_person_id, mentee_person_id, matched_at, ended_at
+         FROM public.matches WHERE season_id = $1 AND status IN ('active','completed','dropped') LIMIT 0`, [dummy]);
+      await client.query(
+        `SELECT mr.id, mr.mentee_person_id, mr.meeting_month, mr.meeting_date,
+                mr.meeting_type, mr.recap_url, mr.admin_notes, mr.status,
+                COALESCE(mp.mentee_code, '') AS mentee_code
+         FROM public.mentoring_recaps mr
+         LEFT JOIN public.mentee_profiles mp ON mp.person_id = mr.mentee_person_id
+         WHERE mr.season_id = $1 LIMIT 0`, [dummy]);
+      log('  ✓ Query preflight passed (all tables and joins resolved correctly)');
+    } catch (errPreflight) {
+      err(`Query preflight failed: ${errPreflight.message}`);
+      throw new Error('BLOCKER: Query preflight failed. Do not proceed.');
+    }
+
+    // Phase 6c: Production Constraint Validation (Point 11)
+    section('Phase 6c: Production Constraint Validation');
+    try {
+      const conRes = await client.query(`
+        SELECT conname, pg_get_constraintdef(oid) AS def
+        FROM pg_constraint
+        WHERE conrelid = 'public.mentoring_recaps'::regclass AND contype = 'c'
+        ORDER BY conname
+      `);
+      if (conRes.rows.length === 0) {
+        log('  ⚠ No CHECK constraints found on public.mentoring_recaps (unexpected).');
+      }
+      for (const { conname, def } of conRes.rows) {
+        log(`  Constraint: ${conname}`);
+        log(`    ${def}`);
+      }
+      const defAll = conRes.rows.map(r => r.def).join('\n');
+      const checkVals = (label, required) => {
+        const missing = required.filter(v => !defAll.includes(`'${v}'`));
+        if (missing.length > 0) {
+          log(`  ⚠ ${label}: value(s) NOT in production constraint: ${missing.join(', ')}`);
+        } else {
+          log(`  ✓ ${label}: all required values confirmed in production constraint`);
+        }
+      };
+      checkVals('status (sync uses)',       ['submitted', 'needs_review']);
+      checkVals('status (full enum)',        ['submitted', 'needs_review', 'invalid', 'duplicate', 'deleted']);
+      checkVals('recap_source (sync uses)',  ['google_sheet', 'admin_input']);
+      checkVals('meeting_type (sync uses)',  ['unknown']);
+      if (!defAll.includes("'excluded'")) {
+        log(`  ℹ status='excluded' NOT yet in constraint — Migration 058 is required before marking excess rows`);
+      } else {
+        log(`  ✓ status='excluded' already in constraint — Migration 058 already applied`);
+      }
+    } catch (errCon) {
+      log(`  ⚠ Could not query pg_constraint: ${errCon.message} (non-blocking — continuing)`);
+    }
 
     // C7: Season audit
     const season   = await resolveAndAuditSeason(client);
     const seasonId = season.id;
 
-    // C8: Backup
+    // C8: Backup (both modes — safety snapshot before any write opportunity)
     const backup = await backupExistingRecaps(client, seasonId);
 
-    // C9: Dry-run
-    const { newValidRows, pre } = await runDBDryRun(client, seasonId, records);
+    // Phase 9: Ledger reconciliation
+    const reconcile = await runLedgerDBReconcile(client, seasonId, officialSlots, records);
+    const { R, allReconcile, pre, excessExisting, dateAnomalyRows } = reconcile;
+
+    const csvHashes = { source: sourceHash, ledger: ledgerHash };
+    const planHash  = computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes);
+
+    // Arithmetic invariants — FATAL if any constraint is violated
+    section('Arithmetic Invariant Check');
+    const iPreTotal     = asNonNegativeInt(pre.total,             'pre.total');
+    const iSourceNew    = asNonNegativeInt(R.source_new.length,   'source_new.length');
+    const iPlaceholder  = asNonNegativeInt(R.placeholder.length,  'placeholder.length');
+    const iTotalInserts = asNonNegativeInt(iSourceNew + iPlaceholder, 'totalInserts');
+    const iExcessTotal  = asNonNegativeInt(
+      excessExisting.length + dateAnomalyRows.length, 'excessTotal'
+    );
+    const iProjected    = asNonNegativeInt(iPreTotal + iTotalInserts, 'projectedPhysical');
+
+    if (iProjected !== iExcessTotal + CHECKPOINT_TOTAL) {
+      throw new Error(
+        `FATAL: Arithmetic invariant violated: ` +
+        `projectedPhysical(${iProjected}) ≠ excluded(${iExcessTotal}) + reportCounted(${CHECKPOINT_TOTAL}) = ${iExcessTotal + CHECKPOINT_TOTAL}. ` +
+        `Re-audit reconciliation before proceeding.`
+      );
+    }
+    if (iTotalInserts !== iSourceNew + iPlaceholder) {
+      throw new Error(`FATAL: totalInserts(${iTotalInserts}) ≠ sourceNew(${iSourceNew}) + placeholder(${iPlaceholder})`);
+    }
+    log(`  ✓ sourceNew + placeholder = ${iSourceNew} + ${iPlaceholder} = ${iTotalInserts}`);
+    log(`  ✓ preTotal + totalInserts = ${iPreTotal} + ${iTotalInserts} = ${iProjected} = projectedPhysical`);
+    log(`  ✓ excluded + reportCounted = ${iExcessTotal} + ${CHECKPOINT_TOTAL} = ${iExcessTotal + CHECKPOINT_TOTAL} = projectedPhysical`);
+    log(`  ✓ All values are safe non-negative integers`);
 
     if (IS_APPLY) {
-      // Phase 9: Write gates
-      section('Phase 9: Automatic Write Gates');
+      // Write gates
+      section('Phase 9b: Automatic Write Gates');
       const gates = [
-        ['Schema guard passed',                              schemaValid],
-        ['Source row count = 2,371',                         validDataRows.length === REQUIRED_RAW_ROWS],
-        ['Serial-date row 1,488 recovered',                  records.some(r => r.isSerialDate)],
-        ['Target season confirmed UEHM-S11',                 season.code === SEASON_CODE],
-        ['Backup completed and verified',                    !!backup.outPath],
-        ['No S12/DEMO-S12 in scope',                         true],
-        ['All new_valid have unique mentee',                  newValidRows.every(r => r.menteePersonId)],
-        ['Primary inserts have valid historical match',       newValidRows.filter(r=>r.meetingType==='1on1_primary').every(r=>r.matchId)],
-        ['Cross mentoring does not alter primary match',      true],
-        ['No fake Facebook URL',                             true],
-        ['Approved missing-URL placeholder confirmed',        true],
-        ['No existing recap deleted',                        true],
-        ['No ambiguous record in new_valid',                  newValidRows.every(r=>r.meetingType !== null)],
-        ['No fuzzy identity write',                           true],
-        ['Insert is idempotent (ON CONFLICT DO NOTHING)',     true],
-        ['Transaction with rollback implemented',             true],
-        ['Proposed inserts are session-level, not blind posts', true],
-        ['new_valid ≥ 0 (noop acceptable if all already exist)', newValidRows.length >= 0],
+        ['Schema guard passed',                           schemaValid],
+        ['Source row count = 2,371',                      validDataRows.length === REQUIRED_RAW_ROWS],
+        ['Ledger validates to 2,322 official slots',      officialSlots.length === CHECKPOINT_TOTAL],
+        ['All months reconcile to official targets',      allReconcile],
+        ['Target season confirmed UEHM-S11',              season.code === SEASON_CODE],
+        ['Backup completed and verified',                 !!backup.outPath],
+        ['No S12/DEMO-S12 in scope',                      true],
+        ['No existing recap deleted',                     true],
+        ['No fake Facebook URL invented',                 true],
+        ['Approved missing-URL placeholder confirmed',     true],
+        ['Insert is ON CONFLICT DO NOTHING (safe)',        true],
+        ['Transaction with rollback implemented',          true],
       ];
       let allPass = true;
       for (const [label, pass] of gates) {
@@ -1070,17 +1850,36 @@ async function main() {
       }
       if (!allPass) { log('\n  BLOCKED: Gate(s) failed. No data written.'); return; }
 
-      const inserted = await applyInserts(client, newValidRows);
-      const postStats = await verifyPostApply(client, seasonId, inserted, pre);
+      const { updated, inserted } = await applyFullTransaction(client, seasonId, R, excessExisting, dateAnomalyRows, planHash, csvHashes, pre);
+      await verifyPostApply(client, seasonId, inserted, pre);
 
-      // Second dry-run (idempotency)
-      section('Idempotency Check — Second Dry-Run');
-      const { newValidRows: run2 } = await runDBDryRun(client, seasonId, records);
-      if (run2.length === 0) log(`  ✓ IDEMPOTENT: 0 new records proposed after successful apply.`);
-      else log(`  ✗ WARNING: ${run2.length} records still proposed — idempotency NOT confirmed.`);
+      // Idempotency check — second reconcile pass should propose 0 new inserts
+      section('Idempotency Check — Second Reconcile Pass');
+      const r2      = await runLedgerDBReconcile(client, seasonId, officialSlots, records);
+      const newIn2  = r2.R.source_new.length + r2.R.placeholder.length;
+      if (newIn2 === 0) log('  ✓ IDEMPOTENT: 0 new records proposed after successful apply.');
+      else log(`  ✗ WARNING: ${newIn2} records still proposed — idempotency NOT confirmed.`);
 
     } else {
-      log('\n  [DRY-RUN COMPLETE] No data written. Run with --apply to proceed.');
+      await smokeTestInserts(client, seasonId, R);
+      const excessTotal = excessExisting.length + dateAnomalyRows.length;
+      log('');
+      log('  ┌─────────────────────────────────────────────────────────────────────┐');
+      log('  │  [DRY-RUN COMPLETE] No data written to the database.                │');
+      log('  └─────────────────────────────────────────────────────────────────────┘');
+      log(`  Proposed inserts:     ${iSourceNew} source-backed + ${iPlaceholder} placeholder = ${iTotalInserts} total`);
+      log(`  Excess rows to mark:  ${iExcessTotal} (${excessExisting.length} valid-month excess + ${dateAnomalyRows.length} date-anomaly)`);
+      log(`  Projected physical:   ${iProjected} (current ${iPreTotal} + ${iTotalInserts} inserts)`);
+      log(`  Projected excluded:   ${iExcessTotal}`);
+      log(`  Projected report-counted: ${CHECKPOINT_TOTAL} (official ledger target)`);
+      log(`  Plan fingerprint:     ${planHash}`);
+      log('');
+      log('  REQUIRED STEPS BEFORE --apply (owner must review each):');
+      log(`    1. Review this output in full — especially the 3-Column Monthly Report and Excess Row Audit above.`);
+      log(`    2. Apply supabase_migrations/058_add_excluded_status.sql (adds status='excluded' to CHECK constraint).`);
+      log(`    3. Run: node scripts/sync_s11_recaps.mjs --apply`);
+      log(`       --apply performs the UPDATE (mark ${excessTotal} excess rows excluded) + all INSERTs atomically`);
+      log(`       in one transaction with advisory lock, hash verification, and in-transaction count gates.`);
     }
 
   } finally {

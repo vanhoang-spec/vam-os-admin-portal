@@ -53,7 +53,7 @@ export type OperationsDashboardKpis = {
   followUpCount: number;
 };
 
-const ALLOWED_RECAP_STATUSES = new Set(["submitted", "needs_review", "invalid", "duplicate"]);
+const ALLOWED_RECAP_STATUSES = new Set(["submitted", "needs_review", "invalid", "duplicate", "excluded"]);
 
 export type MentoringRecapCorrectionInput = {
   id: string;

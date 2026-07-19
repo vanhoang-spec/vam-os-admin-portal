@@ -44,6 +44,7 @@ export function RecapCorrectionForm({ recap, personId, correctedByDefault }: { r
           <option value="needs_review">needs_review</option>
           <option value="invalid">invalid</option>
           <option value="duplicate">duplicate</option>
+          <option value="excluded">excluded (sync-managed)</option>
         </select>
       </label>
 

@@ -186,7 +186,7 @@ function FollowUpTab({ items }: { items: AdminActionItem[] }) {
 
 function RecentRecapCorrection({ recaps }: { recaps: Array<any> }) {
   const rows = recaps
-    .filter((recap) => recap.status !== "deleted")
+    .filter((recap) => recap.status !== "deleted" && recap.status !== "excluded")
     .sort((a, b) => String(b.meeting_date ?? "").localeCompare(String(a.meeting_date ?? "")))
     .slice(0, 10);
   return (

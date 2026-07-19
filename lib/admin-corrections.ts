@@ -63,7 +63,7 @@ export type MutationResult = {
 
 const DEFAULT_SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 const SAFE_ERROR = "Không thể thực hiện tác vụ. Vui lòng kiểm tra migration Phase 2D và server logs.";
-const RECAP_STATUSES = new Set(["submitted", "needs_review", "invalid", "duplicate", "deleted"]);
+const RECAP_STATUSES = new Set(["submitted", "needs_review", "invalid", "duplicate", "deleted", "excluded"]);
 const ACTION_STATUSES = new Set(["open", "in_progress", "resolved", "dropped", "no_response"]);
 const ACTION_TYPES = new Set([
   "followup_no_recap",
@@ -219,7 +219,7 @@ function buildIssues(input: {
 
   const issues: AdminDataIssue[] = [];
   const duplicateBuckets = new Map<string, MentoringRecap[]>();
-  for (const recap of input.recaps.filter((row) => row.status !== "deleted")) {
+  for (const recap of input.recaps.filter((row) => row.status !== "deleted" && row.status !== "excluded")) {
     const seasonCode = seasonCodeFor(seasonsById, recap.season_id);
     const mentee = recap.mentee_person_id ? peopleById.get(recap.mentee_person_id) : undefined;
     const mentor = recap.mentor_person_id ? peopleById.get(recap.mentor_person_id) : undefined;
