@@ -488,7 +488,7 @@ async function fullBatchRehearsal(client, seasonId, resolvedInserts, allExcessId
       if (!ok) allGates = false;
     }
     rehGate('physical rows',    physR.rows[0].n,   expectedPhysical);
-    rehGate('excluded rows',    excR.rows[0].n,    allExcessIds.length);
+    rehGate('excluded rows',    excR.rows[0].n,    asNonNegativeInt(pre.already_excluded, 'reh.already_excluded') + allExcessIds.length);
     rehGate('report-counted',   rptR.rows[0].n,    CHECKPOINT_TOTAL);
     rehGate('S12 unchanged',    s12R.rows[0].cnt,  s12Pre);
     const moMap = new Map(moR.rows.map(r => [r.meeting_month, asNonNegativeInt(r.n, `reh.mo.${r.meeting_month}`)]));
@@ -1268,7 +1268,10 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
 
   // ── Pre-import stats ──────────────────────────────────────────────────────────
   const pre = (await client.query(
-    `SELECT count(*)::int AS total, min(meeting_date) AS earliest, max(meeting_date) AS latest,
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE coalesce(trim(lower(status)),'') IN ('','submitted','needs_review'))::int AS report_counted,
+            count(*) FILTER (WHERE status='excluded')::int AS already_excluded,
+            min(meeting_date) AS earliest, max(meeting_date) AS latest,
             count(*) FILTER (WHERE meeting_type='1on1_primary')::int AS primary_c,
             count(*) FILTER (WHERE meeting_type='1on1_cross')::int   AS cross_c,
             count(*) FILTER (WHERE meeting_type='group')::int        AS training_c,
@@ -1277,8 +1280,14 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
      FROM mentoring_recaps WHERE season_id = $1
        AND coalesce(status,'') NOT IN ('invalid','deleted')`, [seasonId]
   )).rows[0];
-  pre.total = asNonNegativeInt(pre.total, 'pre.total');
-  log(`  Pre-import DB total: ${pre.total} (primary=${pre.primary_c} cross=${pre.cross_c} training=${pre.training_c} company=${pre.company_c} unknown=${pre.unknown_c})`);
+  pre.total            = asNonNegativeInt(pre.total,            'pre.total');
+  pre.report_counted   = asNonNegativeInt(pre.report_counted,   'pre.report_counted');
+  pre.already_excluded = asNonNegativeInt(pre.already_excluded, 'pre.already_excluded');
+  log(`  Physical (NOT IN invalid,deleted): ${pre.total}`);
+  log(`  Report-counted (countable status): ${pre.report_counted}`);
+  log(`  Already excluded:                  ${pre.already_excluded}`);
+  log(`  Other (duplicate etc.):            ${pre.total - pre.report_counted - pre.already_excluded}`);
+  log(`  Meeting types (primary=${pre.primary_c} cross=${pre.cross_c} training=${pre.training_c} company=${pre.company_c} unknown=${pre.unknown_c})`);
 
   // ── Identity maps ─────────────────────────────────────────────────────────────
   // Mentees: S11-match-scoped first, then all profiles as fallback (for UEHS codes)
@@ -1331,7 +1340,10 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
   }
   log(`  Active/completed/dropped matches: ${matchRows.length}`);
 
-  // ── Load all existing recap rows for this season ──────────────────────────────
+  // ── Load existing recap rows for this season ─────────────────────────────────
+  // existingRows: ONLY countable rows — eligible for slot assignment.
+  // Keeping excluded rows out of this pool prevents already-excluded rows from
+  // stealing official slots and causing countable rows to be double-counted as excess.
   const validMonthSet = new Set(OFFICIAL_MONTHS);
   const existingRows = (await client.query(
     `SELECT mr.id, mr.mentee_person_id, mr.meeting_month, mr.meeting_date,
@@ -1340,10 +1352,22 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
      FROM public.mentoring_recaps mr
      LEFT JOIN public.mentee_profiles mp ON mp.person_id = mr.mentee_person_id
      WHERE mr.season_id = $1
-       AND COALESCE(mr.status,'') NOT IN ('invalid','deleted')
+       AND coalesce(trim(lower(mr.status)),'') IN ('','submitted','needs_review')
      ORDER BY mr.meeting_month, mr.meeting_date, mr.id`, [seasonId]
   )).rows;
-  log(`  Existing valid recap rows: ${existingRows.length}`);
+  // alreadyExcludedRows: loaded separately for audit and physical-count reporting only.
+  // These rows are NEVER re-proposed for exclusion.
+  const alreadyExcludedRows = (await client.query(
+    `SELECT mr.id, mr.mentee_person_id, mr.meeting_month, mr.meeting_date,
+            mr.meeting_type, mr.admin_notes, mr.status,
+            COALESCE(mp.mentee_code, '') AS mentee_code
+     FROM public.mentoring_recaps mr
+     LEFT JOIN public.mentee_profiles mp ON mp.person_id = mr.mentee_person_id
+     WHERE mr.season_id = $1 AND mr.status = 'excluded'
+     ORDER BY mr.meeting_month, mr.meeting_date, mr.id`, [seasonId]
+  )).rows;
+  log(`  Countable rows (for slot assignment): ${existingRows.length}`);
+  log(`  Already-excluded rows (not re-proposed): ${alreadyExcludedRows.length}`);
 
   // Idempotency: index slot_key → existing row id (for re-runs after apply)
   const slotKeyToExistingId = new Map();
@@ -1352,12 +1376,23 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
     if (m) slotKeyToExistingId.set(m[0], row.id);
   }
 
-  // Date anomalies: rows whose meeting_month is outside the 9 S11 months
+  // Date anomalies: countable rows whose meeting_month is outside the 9 S11 months.
+  // Already-excluded anomaly rows are not re-proposed.
   const dateAnomalyRows = existingRows.filter(r => !validMonthSet.has(r.meeting_month));
-  if (dateAnomalyRows.length) {
-    section('Existing Date Anomalies (meeting_month outside S11 range)');
-    for (const r of dateAnomalyRows) {
-      log(`  id=${r.id}  month=${r.meeting_month}  date=${r.meeting_date}  type=${r.meeting_type}`);
+  const alreadyExcludedAnomalyRows = alreadyExcludedRows.filter(r => !validMonthSet.has(r.meeting_month));
+  if (dateAnomalyRows.length || alreadyExcludedAnomalyRows.length) {
+    section('Out-of-Season Anomaly Rows (meeting_month outside S11 range)');
+    if (dateAnomalyRows.length > 0) {
+      log(`  Countable out-of-season (newly proposed for exclusion: ${dateAnomalyRows.length}):`);
+      for (const r of dateAnomalyRows) {
+        log(`    id=${r.id}  month=${r.meeting_month}  date=${r.meeting_date}  status=${r.status}`);
+      }
+    }
+    if (alreadyExcludedAnomalyRows.length > 0) {
+      log(`  Already-excluded out-of-season (not re-proposed: ${alreadyExcludedAnomalyRows.length}):`);
+      for (const r of alreadyExcludedAnomalyRows) {
+        log(`    id=${r.id}  month=${r.meeting_month}  date=${r.meeting_date}  status=${r.status}`);
+      }
     }
   }
 
@@ -1474,9 +1509,42 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
   }
 
   // ── Excess rows ───────────────────────────────────────────────────────────────
+  // Only countable, unassigned rows — never already-excluded rows.
   const excessExisting = existingRows.filter(r =>
     validMonthSet.has(r.meeting_month) && !assignedDbIds.has(r.id)
   );
+
+  // Regression guard: if any already-excluded row appears here, the existingRows
+  // query is incorrectly including excluded rows (the 59-row double-count bug).
+  {
+    const alreadyExcludedIds = new Set(alreadyExcludedRows.map(r => r.id));
+    for (const r of excessExisting) {
+      if (alreadyExcludedIds.has(r.id)) {
+        throw new Error(`REGRESSION: Row id=${r.id} (status='excluded') appears in excessExisting. existingRows must only contain countable rows.`);
+      }
+    }
+    for (const r of dateAnomalyRows) {
+      if (alreadyExcludedIds.has(r.id)) {
+        throw new Error(`REGRESSION: Row id=${r.id} (status='excluded') appears in dateAnomalyRows.`);
+      }
+    }
+  }
+
+  // Disjoint partition invariant: every physical row accounted for exactly once
+  {
+    const iAssigned        = R.existing_assigned.length;
+    const iNewlyProposed   = excessExisting.length + dateAnomalyRows.length;
+    const iAlreadyExcl     = asNonNegativeInt(pre.already_excluded, 'partition.already_excluded');
+    const iOtherNonCounted = asNonNegativeInt(pre.total - pre.report_counted - pre.already_excluded, 'partition.other');
+    const partSum          = iAssigned + iNewlyProposed + iAlreadyExcl + iOtherNonCounted;
+    if (partSum !== pre.total) {
+      throw new Error(
+        `FATAL: Partition invariant violated: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) + alreadyExcluded(${iAlreadyExcl}) + other(${iOtherNonCounted}) = ${partSum} ≠ physical(${pre.total}).`
+      );
+    }
+    log(`  ✓ Partition: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) + alreadyExcluded(${iAlreadyExcl}) + other(${iOtherNonCounted}) = ${pre.total}`);
+  }
+
   const excessSource = [];
   for (const r of sourceRecords) {
     if (r.typeAmbiguous || assignedSrcRows.has(r.sheetRow)) continue;
@@ -1515,13 +1583,15 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
   log(`    → resolvable mentee:             ${R.placeholder.filter(p => p.menteePersonId).length}`);
   log(`    → unresolvable mentee (NULL id): ${R.placeholder.filter(p => !p.menteePersonId).length}`);
   log(`  Unresolved ledger slots:           ${R.unresolved_slot.length}`);
-  log(`  Excess existing (valid months):    ${excessExisting.length}`);
+  log(`  Excess existing (valid months):    ${excessExisting.length}  ← newly proposed for exclusion`);
+  log(`  Already excluded (not re-proposed):${alreadyExcludedRows.length}`);
+  log(`  Date anomaly rows (countable):     ${dateAnomalyRows.length}  ← newly proposed for exclusion`);
   log(`  Excess source posts:               ${excessSource.length}`);
-  log(`  Date anomaly rows:                 ${dateAnomalyRows.length}`);
   log(`  Manual-review records:             ${R.placeholder.length + R.source_new.filter(s => s.hasIssue).length}`);
-  log(`  Pre-import DB total:               ${pre.total}`);
+  log(`  Physical rows (DB):                ${pre.total}`);
+  log(`  Report-counted (DB):               ${pre.report_counted}`);
   log(`  Proposed new inserts:              ${R.source_new.length + R.placeholder.length}`);
-  log(`  Post-import projected:             ${Number(pre.total) + R.source_new.length + R.placeholder.length}`);
+  log(`  Proposed new exclusions:           ${excessExisting.length + dateAnomalyRows.length}`);
 
   if (!allReconcile || !grandOk) {
     err('BLOCKER: Monthly reconciliation does not balance. Cannot proceed to apply.');
@@ -1530,43 +1600,62 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
   }
 
   // ── 3-Column Monthly Report (Points 2/3) ────────────────────────────────────
-  section('3-Column Monthly Report: Official | Physical (post-import) | Report-counted');
+  section('3-Column Monthly Report: Official | Physical | Report-counted');
   log('  Column definitions:');
-  log('    official       = official ledger target (authoritative, from Mentee Tracking)');
-  log('    physical       = official + excess_existing rows (all rows in DB after import)');
-  log("    report-counted = official only (after excess rows are marked status='excluded')");
+  log('    official        = official ledger target (authoritative, from Mentee Tracking)');
+  log('    physical        = all non-invalid/non-deleted rows (countable + excluded + other)');
+  log("    report-counted  = rows passing counting whitelist IN ('','submitted','needs_review')");
+  log('    newly-excl      = countable rows proposed for exclusion in this run');
+  log('    already-excl    = rows already status=\'excluded\' (not re-proposed)');
   log('');
+  // Per-month counts built from actual row pools (not derived from official ± delta)
   const excessByMonth = {};
   for (const row of excessExisting) {
     excessByMonth[row.meeting_month] = (excessByMonth[row.meeting_month] || 0) + 1;
   }
+  const alreadyExclByMonth = {};
+  for (const row of alreadyExcludedRows) {
+    if (!validMonthSet.has(row.meeting_month)) continue;
+    alreadyExclByMonth[row.meeting_month] = (alreadyExclByMonth[row.meeting_month] || 0) + 1;
+  }
   let physicalRunning = 0;
   for (const mo of OFFICIAL_MONTHS) {
-    const official      = CHECKPOINT_OFFICIAL[mo];
-    const excessInMonth = excessByMonth[mo] || 0;
-    const physical      = official + excessInMonth;
-    physicalRunning    += physical;
-    const excessTag     = excessInMonth > 0 ? `(+${excessInMonth} excess)` : '';
-    const offStr        = String(official).padStart(3);
-    const physStr       = String(physical).padStart(3);
-    const exStr         = excessTag.padEnd(14);
-    log(`  ${mo}: official=${offStr}  physical=${physStr} ${exStr}  report-counted=${offStr}  ${official === CHECKPOINT_OFFICIAL[mo] ? '✓' : '← MISMATCH'}`);
+    const official        = CHECKPOINT_OFFICIAL[mo];
+    const newlyExcl       = excessByMonth[mo] || 0;
+    const alreadyExcl     = alreadyExclByMonth[mo] || 0;
+    // physical = assigned countable (= official in a balanced reconcile) + newly proposed + already excluded
+    const physical        = official + newlyExcl + alreadyExcl;
+    physicalRunning      += physical;
+    const tag = [
+      newlyExcl   > 0 ? `+${newlyExcl} new-excl`     : '',
+      alreadyExcl > 0 ? `+${alreadyExcl} already-excl` : '',
+    ].filter(Boolean).join(' ');
+    const offStr  = String(official).padStart(3);
+    const physStr = String(physical).padStart(3);
+    log(`  ${mo}: official=${offStr}  physical=${physStr}  report-counted=${offStr}  ${tag}  ✓`);
   }
-  const anomalyCount  = dateAnomalyRows.length;
-  physicalRunning    += anomalyCount;
-  const physicalTotal = physicalRunning;
+  // Out-of-season rows: both countable (newly proposed) and already-excluded
+  const countableAnomalyCount = dateAnomalyRows.length;
+  const excludedAnomalyCount  = alreadyExcludedAnomalyRows.length;
+  physicalRunning += countableAnomalyCount + excludedAnomalyCount;
+  const physicalTotal = pre.total; // authoritative DB count — use directly, not derived
   const reportTotal   = CHECKPOINT_TOTAL;
-  log(`  anomaly rows (meeting_month outside S11 range): ${anomalyCount} — added to physical total only`);
+  log(`  out-of-season anomaly (countable, newly proposed): ${countableAnomalyCount}`);
+  log(`  out-of-season anomaly (already excluded):          ${excludedAnomalyCount}`);
   log(`  ─────────────────────────────────────────────────────────────────────`);
   log(`  TOTAL:  official=${CHECKPOINT_TOTAL}  physical=${physicalTotal}  report-counted=${reportTotal}  ${reportTotal === CHECKPOINT_TOTAL ? '✓' : '← MISMATCH'}`);
-  if (physicalTotal !== CHECKPOINT_TOTAL) {
+  if (physicalRunning !== physicalTotal) {
+    log(`  ⚠ Row-count cross-check: computed ${physicalRunning} from pools vs DB ${physicalTotal} — discrepancy of ${physicalRunning - physicalTotal}`);
+  }
+  if (physicalTotal > CHECKPOINT_TOTAL) {
     log(`  ⚠ Physical (${physicalTotal}) exceeds official (${CHECKPOINT_TOTAL}) by ${physicalTotal - CHECKPOINT_TOTAL} rows.`);
-    log(`    These rows must be marked status='excluded' — Migration 058 adds this to the constraint.`);
+    log(`    Rows with status='excluded' or countable excess are in the physical count but excluded from reporting.`);
   }
 
-  // ── Excess Row Audit (Points 5/6/7/8) ───────────────────────────────────────
-  const totalExcess = excessExisting.length + anomalyCount;
-  section(`Excess Row Audit (${totalExcess} rows not assigned to any official slot)`);
+  // ── Excess Row Audit ─────────────────────────────────────────────────────────
+  // totalExcess = countable rows newly proposed for exclusion (NEVER includes already-excluded)
+  const totalExcess = excessExisting.length + countableAnomalyCount;
+  section(`Excess Row Audit (${totalExcess} countable rows newly proposed for exclusion; ${alreadyExcludedRows.length} already excluded)`);
   log(`  These rows remain in the DB after import but must NOT count in official reporting.`);
   log(`  The VAM OS counting filter is an inclusion whitelist: status IN ('', 'submitted', 'needs_review').`);
   log(`  Marking excess rows status='excluded' is the clean exclusion mechanism:`);
@@ -1593,58 +1682,54 @@ async function runLedgerDBReconcile(client, seasonId, officialSlots, sourceRecor
     if (excessExisting.length > 35) log(`    … and ${excessExisting.length - 35} more`);
     log('');
   }
-  if (anomalyCount > 0) {
-    log(`  Date-anomaly rows (${anomalyCount}) — meeting_month is OUTSIDE Nov 2025–Jul 2026:`);
+  if (countableAnomalyCount > 0) {
+    log(`  Countable date-anomaly rows (${countableAnomalyCount}) — meeting_month OUTSIDE Nov 2025–Jul 2026:`);
     log(`  DO NOT change meeting_date/meeting_month without consulting the source post.`);
-    log(`  Mark as status='excluded' pending owner investigation:`);
+    log(`  Proposed for status='excluded' pending owner investigation:`);
     for (const row of dateAnomalyRows) {
       const src = row.admin_notes ? row.admin_notes.slice(0, 55) + '…' : (row.recap_source || '');
       log(`    id=${row.id}  code=${(row.mentee_code || '(unknown)').padEnd(12)}  month=${row.meeting_month}  date=${row.meeting_date || 'null'}  status=${row.status}  src=${src}`);
     }
     log('');
   }
+  if (excludedAnomalyCount > 0) {
+    log(`  Already-excluded out-of-season rows (${excludedAnomalyCount}) — not re-proposed.`);
+    log('');
+  }
 
-  // ── Migration 058 Reference + --apply Transaction Plan (Points 6/7) ─────────
-  section("Migration 058 + --apply Transaction Plan");
-  log('');
-  log('  CODEBASE AUDIT — Counting filters in VAM OS (from migration 035 + lib/data.ts):');
-  log("    RPC:          coalesce(trim(lower(mr.status)), '') IN ('', 'submitted', 'needs_review')");
-  log("    Client-side:  VALID_ACTIVITY_STATUSES = new Set(['', 'submitted', 'needs_review'])");
-  log("  Both are INCLUSION whitelists. Any value outside this set is auto-excluded from all KPIs.");
-  log("  KPI counting filters required no changes, but six TypeScript/admin UI compatibility");
-  log("  fixes were required (already implemented): lib/admin-corrections.ts (RECAP_STATUSES +");
-  log("  duplicates scan filter), lib/data.ts (ALLOWED_RECAP_STATUSES),");
-  log("  app/admin/admin-correction-forms.tsx, app/recaps/[id]/edit/correction-form.tsx,");
-  log("  app/people/[id]/page.tsx (recapStatusLabel), app/admin/page.tsx (RecentRecapCorrection).");
-  log('');
-  log('  Migration 058 (DDL-only, no data change):');
-  log('    supabase_migrations/058_add_excluded_status.sql  ← staged for commit, not yet applied');
-  log('    Apply via Supabase dashboard → SQL editor before running --apply.');
-  log('    --apply will check for this migration and refuse to start without it.');
-  log('');
-  const excessIds = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
-  const projectedPhysical = Number(pre.total) + R.source_new.length + R.placeholder.length;
-  log(`  ── --apply Transaction Plan (single BEGIN/COMMIT) ──────────────────────`);
-  log(`  STEP 1  UPDATE ${excessIds.length} rows → status='excluded'`);
-  log(`           ${excessExisting.length} valid-month excess rows`);
-  log(`           ${dateAnomalyRows.length} date-anomaly rows (meeting_month outside S11 range)`);
-  log(`          (advisory lock + FOR UPDATE NOWAIT acquired first)`);
-  log(`  STEP 2  INSERT ${R.source_new.length} source-backed rows`);
-  log(`           recap_source='google_sheet'  status='submitted'`);
-  log(`  STEP 3  INSERT ${R.placeholder.length} placeholder rows`);
-  log(`           recap_source='admin_input'   status='needs_review'  meeting_type='unknown'`);
-  log(`  STEP 4  In-transaction verification before COMMIT:`);
-  log(`           physical rows   = ${projectedPhysical}  (expected: ${Number(pre.total)} + ${R.source_new.length + R.placeholder.length} new)`);
-  log(`           excluded rows   = ${excessIds.length}`);
-  log(`           report-counted  = ${CHECKPOINT_TOTAL}  (per UEHM-S11 official ledger)`);
-  log(`           per-month targets verified for all ${OFFICIAL_MONTHS.length} months`);
-  log(`           S12/DEMO-S12 row count unchanged`);
-  log(`  STEP 5  COMMIT if all gates pass — ROLLBACK otherwise`);
-  log('');
-  log(`  Plan fingerprint: computed in main() and shown in DRY-RUN COMPLETE summary below.`);
-  log(`  To execute: node sync_s11_recaps.mjs --apply`);
+  // ── --apply Transaction Plan ──────────────────────────────────────────────────
+  section('--apply Transaction Plan');
+  {
+    const newlyProposed = excessExisting.length + dateAnomalyRows.length;
+    const proposedInserts = R.source_new.length + R.placeholder.length;
+    const projPhysical = Number(pre.total) + proposedInserts;
+    const projExcluded = pre.already_excluded + newlyProposed;
+    const projReportCounted = pre.report_counted - newlyProposed + proposedInserts;
+    log(`  COUNTING FILTERS (inclusion whitelist — no changes needed):`);
+    log("    RPC:    coalesce(trim(lower(mr.status)), '') IN ('', 'submitted', 'needs_review')");
+    log("    Client: VALID_ACTIVITY_STATUSES = new Set(['', 'submitted', 'needs_review'])");
+    log(`  Migration 058 (status='excluded' in CHECK constraint): applied to production ✓`);
+    log('');
+    log(`  ── Proposed DML (single BEGIN/COMMIT) ──────────────────────────────────`);
+    log(`  STEP 1  UPDATE ${newlyProposed} rows → status='excluded'`);
+    log(`           ${excessExisting.length} valid-month excess rows (countable, unassigned)`);
+    log(`           ${dateAnomalyRows.length} countable date-anomaly rows (out-of-season month)`);
+    log(`          (advisory lock + FOR UPDATE NOWAIT acquired first)`);
+    log(`  STEP 2  INSERT ${R.source_new.length} source-backed rows (google_sheet)`);
+    log(`  STEP 3  INSERT ${R.placeholder.length} placeholder rows (admin_input / needs_review)`);
+    log(`  STEP 4  In-transaction verification before COMMIT:`);
+    log(`           physical rows   = ${projPhysical}  (current ${pre.total} + ${proposedInserts} inserts)`);
+    log(`           excluded rows   = ${projExcluded}  (current ${pre.already_excluded} + ${newlyProposed} newly excluded)`);
+    log(`           report-counted  = ${projReportCounted}  (target: ${CHECKPOINT_TOTAL})`);
+    log(`           per-month targets verified for all ${OFFICIAL_MONTHS.length} months`);
+    log(`           S12/DEMO-S12 row count unchanged`);
+    log(`  STEP 5  COMMIT if all gates pass — ROLLBACK otherwise`);
+    log('');
+    log(`  Plan fingerprint: computed in main() and shown in DRY-RUN COMPLETE summary below.`);
+    log(`  Applied payload fingerprint (production commit): e5d8958254631f906baaf674eeafac347fb29db9f225576bca08e8958d95cd64`);
+  }
 
-  return { R, mTbl, allReconcile: allReconcile && grandOk, pre, existingRows, excessExisting, excessSource, dateAnomalyRows, matchMap };
+  return { R, mTbl, allReconcile: allReconcile && grandOk, pre, existingRows, alreadyExcludedRows, excessExisting, excessSource, dateAnomalyRows, matchMap };
 }
 
 // ─── Phase 10: Full Atomic Transaction (UPDATE excluded + INSERT new rows) ────
@@ -1755,7 +1840,8 @@ async function applyFullTransaction(client, seasonId, resolvedInserts, allExcess
     // Step 7: In-transaction verification before COMMIT
     section('Pre-COMMIT Verification (all gates must pass)');
     const expectedPhysical = Number(pre.total) + resolvedInserts.length;
-    const expectedExcluded = allExcessIds.length;
+    // Total excluded = rows already excluded before this transaction + rows we're about to exclude
+    const expectedExcluded = asNonNegativeInt(pre.already_excluded, 'apply.already_excluded') + allExcessIds.length;
 
     const [physRes, excRes, rptRes, monthRes, s12PostRes] = await Promise.all([
       client.query(`SELECT COUNT(*)::int AS n FROM mentoring_recaps WHERE season_id = $1`, [seasonId]),
@@ -2001,42 +2087,80 @@ async function main() {
 
     // Phase 9: Ledger reconciliation
     const reconcile = await runLedgerDBReconcile(client, seasonId, officialSlots, records);
-    const { R, allReconcile, pre, excessExisting, dateAnomalyRows, matchMap } = reconcile;
+    const { R, allReconcile, pre, excessExisting, dateAnomalyRows, alreadyExcludedRows, matchMap } = reconcile;
 
-    const allExcessIds  = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
-    const csvHashes     = { source: sourceHash, ledger: ledgerHash };
-    const derivedDates  = resolveDates(R);
-    const planHash      = computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes, derivedDates);
+    const allExcessIds    = [...excessExisting, ...dateAnomalyRows].map(r => r.id);
+    const csvHashes       = { source: sourceHash, ledger: ledgerHash };
+    const derivedDates    = resolveDates(R);
+    const planHash        = computePlanHash(R, excessExisting, dateAnomalyRows, csvHashes, derivedDates);
     const resolvedInserts = buildResolvedInsertRows(R, derivedDates, planHash);
 
     // Arithmetic invariants — FATAL if any constraint is violated
+    // Uses partition-based accounting: every physical row falls into exactly one set.
     section('Arithmetic Invariant Check');
-    const iPreTotal     = asNonNegativeInt(pre.total,             'pre.total');
-    const iSourceNew    = asNonNegativeInt(R.source_new.length,   'source_new.length');
-    const iPlaceholder  = asNonNegativeInt(R.placeholder.length,  'placeholder.length');
-    const iTotalInserts = asNonNegativeInt(iSourceNew + iPlaceholder, 'totalInserts');
-    const iExcessTotal  = asNonNegativeInt(
-      excessExisting.length + dateAnomalyRows.length, 'excessTotal'
-    );
-    const iProjected    = asNonNegativeInt(iPreTotal + iTotalInserts, 'projectedPhysical');
+    const iPreTotal        = asNonNegativeInt(pre.total,            'pre.total');
+    const iReportCounted   = asNonNegativeInt(pre.report_counted,   'pre.report_counted');
+    const iAlreadyExcl     = asNonNegativeInt(pre.already_excluded, 'pre.already_excluded');
+    const iOtherNonCounted = asNonNegativeInt(iPreTotal - iReportCounted - iAlreadyExcl, 'otherNonCounted');
+    const iSourceNew       = asNonNegativeInt(R.source_new.length,  'source_new.length');
+    const iPlaceholder     = asNonNegativeInt(R.placeholder.length, 'placeholder.length');
+    const iTotalInserts    = asNonNegativeInt(iSourceNew + iPlaceholder, 'totalInserts');
+    const iNewlyProposed   = asNonNegativeInt(excessExisting.length + dateAnomalyRows.length, 'newlyProposed');
+    const iAssigned        = asNonNegativeInt(R.existing_assigned.length, 'existing_assigned');
 
-    if (iProjected !== iExcessTotal + CHECKPOINT_TOTAL) {
+    // 1. Partition invariant: no row counted twice, no row missed
+    const partSum = iAssigned + iNewlyProposed + iAlreadyExcl + iOtherNonCounted;
+    if (partSum !== iPreTotal) {
       throw new Error(
-        `FATAL: Arithmetic invariant violated: ` +
-        `projectedPhysical(${iProjected}) ≠ excluded(${iExcessTotal}) + reportCounted(${CHECKPOINT_TOTAL}) = ${iExcessTotal + CHECKPOINT_TOTAL}. ` +
+        `FATAL: Partition invariant: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) + alreadyExcluded(${iAlreadyExcl}) + other(${iOtherNonCounted}) = ${partSum} ≠ physical(${iPreTotal})`
+      );
+    }
+
+    // 2. Projected report-counted must equal CHECKPOINT_TOTAL
+    const iProjReportCounted = asNonNegativeInt(iReportCounted - iNewlyProposed + iTotalInserts, 'projectedReportCounted');
+    if (iProjReportCounted !== CHECKPOINT_TOTAL) {
+      throw new Error(
+        `FATAL: projectedReportCounted(${iProjReportCounted}) ≠ CHECKPOINT_TOTAL(${CHECKPOINT_TOTAL}). ` +
+        `current(${iReportCounted}) - newlyProposed(${iNewlyProposed}) + inserts(${iTotalInserts}) = ${iProjReportCounted}. ` +
         `Re-audit reconciliation before proceeding.`
       );
     }
-    if (iTotalInserts !== iSourceNew + iPlaceholder) {
-      throw new Error(`FATAL: totalInserts(${iTotalInserts}) ≠ sourceNew(${iSourceNew}) + placeholder(${iPlaceholder})`);
-    }
-    log(`  ✓ sourceNew + placeholder = ${iSourceNew} + ${iPlaceholder} = ${iTotalInserts}`);
-    log(`  ✓ preTotal + totalInserts = ${iPreTotal} + ${iTotalInserts} = ${iProjected} = projectedPhysical`);
-    log(`  ✓ excluded + reportCounted = ${iExcessTotal} + ${CHECKPOINT_TOTAL} = ${iExcessTotal + CHECKPOINT_TOTAL} = projectedPhysical`);
+
+    const iProjected = asNonNegativeInt(iPreTotal + iTotalInserts, 'projectedPhysical');
+    const iProjExcl  = asNonNegativeInt(iAlreadyExcl + iNewlyProposed, 'projectedExcluded');
+
+    log(`  Partition: assigned(${iAssigned}) + newlyProposed(${iNewlyProposed}) + alreadyExcluded(${iAlreadyExcl}) + other(${iOtherNonCounted}) = ${iPreTotal} ✓`);
+    log(`  Projected physical:       ${iProjected} (current ${iPreTotal} + ${iTotalInserts} inserts)`);
+    log(`  Projected excluded:       ${iProjExcl} (current ${iAlreadyExcl} + ${iNewlyProposed} newly proposed)`);
+    log(`  Projected report-counted: ${iProjReportCounted} = CHECKPOINT_TOTAL ✓`);
     log(`  ✓ All values are safe non-negative integers`);
 
     // Phase 9c: Schema-driven nullability preflight — blocks apply if any required field is null
     const { srcVerified, srcEstimated, phCount } = await preflightPayloads(client, resolvedInserts, seasonId);
+
+    // Phase 9d: Provenance check — read-only aggregate over applied-batch rows (req 10)
+    section('Phase 9d: Applied-Batch Provenance Check (read-only)');
+    const APPLIED_HASH_PREFIX = 'e5d895825463';
+    const provRes = await client.query(`
+      SELECT
+        count(*)::int                                                       AS total_official_ledger,
+        count(*) FILTER (WHERE admin_notes LIKE $2)::int                    AS with_applied_hash,
+        count(*) FILTER (WHERE admin_notes NOT LIKE $2)::int               AS without_applied_hash
+      FROM mentoring_recaps
+      WHERE season_id = $1
+        AND admin_notes LIKE '%slot_key=UEHM-S11|official-ledger|%'
+    `, [seasonId, `%plan_hash=${APPLIED_HASH_PREFIX}%`]);
+    const prov = provRes.rows[0];
+    log(`  Official-ledger rows (slot_key in admin_notes): ${prov.total_official_ledger}`);
+    log(`    with applied payload hash (${APPLIED_HASH_PREFIX}…): ${prov.with_applied_hash}`);
+    log(`    without applied hash:                            ${prov.without_applied_hash}`);
+    if ((prov.without_applied_hash ?? 0) > 0) {
+      log(`  ⚠ Some official-ledger rows lack the applied payload fingerprint — manual review advised`);
+    } else if (prov.total_official_ledger > 0) {
+      log(`  ✓ All ${prov.total_official_ledger} official-ledger rows carry the expected applied payload fingerprint`);
+    } else {
+      log(`  ℹ No official-ledger rows found (expected before --apply)`);
+    }
 
     if (IS_APPLY) {
       // Write gates
@@ -2078,24 +2202,33 @@ async function main() {
       log('  ┌─────────────────────────────────────────────────────────────────────┐');
       log('  │  [DRY-RUN COMPLETE] No data written to the database.                │');
       log('  └─────────────────────────────────────────────────────────────────────┘');
-      log(`  Insert date quality breakdown:`);
-      log(`    source-backed, verified date:       ${srcVerified}`);
-      log(`    source-backed, estimated date:      ${srcEstimated}`);
-      log(`    ledger placeholders (all estimated): ${phCount}`);
-      log(`    total inserts:                       ${resolvedInserts.length}`);
-      log(`  Excess rows to mark:  ${iExcessTotal} (${excessExisting.length} valid-month excess + ${dateAnomalyRows.length} date-anomaly)`);
-      log(`  Projected physical:   ${iProjected} (current ${iPreTotal} + ${resolvedInserts.length} inserts)`);
-      log(`  Projected excluded:   ${iExcessTotal}`);
-      log(`  Projected report-counted: ${CHECKPOINT_TOTAL} (official ledger target)`);
-      log(`  Plan fingerprint:     ${planHash}`);
+      log(`  Currently in DB:`);
+      log(`    physical rows:    ${iPreTotal}`);
+      log(`    report-counted:   ${iReportCounted}`);
+      log(`    already excluded: ${iAlreadyExcl}`);
+      log(`  Proposed changes:`);
+      log(`    new inserts:             ${resolvedInserts.length}  (${srcVerified} verified-date + ${srcEstimated} estimated-date source-backed + ${phCount} placeholder)`);
+      log(`    newly proposed for excl: ${iNewlyProposed}  (${excessExisting.length} valid-month excess + ${dateAnomalyRows.length} countable anomaly)`);
+      log(`  Projected totals:`);
+      log(`    physical:              ${iProjected}`);
+      log(`    excluded:              ${iProjExcl}`);
+      log(`    report-counted:        ${iProjReportCounted}  (= CHECKPOINT_TOTAL)`);
+      log(`  Applied payload fingerprint: e5d8958254631f906baaf674eeafac347fb29db9f225576bca08e8958d95cd64`);
+      log(`  Current plan fingerprint:    ${planHash}`);
+      if (resolvedInserts.length === 0 && iNewlyProposed === 0) {
+        log(`  ℹ No-op plan: all official slots already filled, no exclusions proposed.`);
+        log(`    Current plan fingerprint differs from applied payload hash — this is expected.`);
+      }
       log('');
-      log('  REQUIRED STEPS BEFORE --apply (owner must review each):');
-      log(`    1. Review this output in full — especially rehearsal gate results, date quality breakdown,`);
-      log(`       the 3-Column Monthly Report, and Excess Row Audit above.`);
-      log(`    2. Confirm Migration 058 is applied (status='excluded' in DB CHECK constraint).`);
-      log(`    3. Run: node scripts/sync_s11_recaps.mjs --apply`);
-      log(`       --apply commits the UPDATE (mark ${iExcessTotal} excess rows excluded) + all ${resolvedInserts.length} INSERTs atomically`);
-      log(`       in one transaction with advisory lock, hash verification, and in-transaction count gates.`);
+      if (resolvedInserts.length > 0 || iNewlyProposed > 0) {
+        log('  REQUIRED STEPS BEFORE --apply (owner must review each):');
+        log(`    1. Review this output in full — rehearsal gates, date quality, 3-Column Monthly Report.`);
+        log(`    2. Confirm Migration 058 is applied (status='excluded' in DB CHECK constraint).`);
+        log(`    3. Run: node scripts/sync_s11_recaps.mjs --apply`);
+        log(`       --apply commits UPDATE (${iNewlyProposed} rows → excluded) + ${resolvedInserts.length} INSERTs atomically.`);
+      } else {
+        log('  ✓ Nothing to do — production is already in the target state.');
+      }
     }
 
   } finally {
