@@ -109,7 +109,7 @@ export default async function MenteesPage() {
   });
   return (
     <>
-      <PageHeader title="Mentees" description="Hồ sơ mentee và thông tin học tập." />
+      <PageHeader title="Mentee" description="Hồ sơ mentee và thông tin học tập." />
       {allowCreate ? (
         <div className="mb-4 flex flex-wrap gap-2">
           <Link href="/mentees/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">

@@ -110,7 +110,7 @@ export default async function MentorsPage() {
   });
   return (
     <>
-      <PageHeader title="Mentors" description="Hồ sơ mentor đã được import vào VAM OS." />
+      <PageHeader title="Mentor" description="Hồ sơ mentor đã được import vào VAM OS." />
       {allowCreate ? (
         <div className="mb-4 flex flex-wrap gap-2">
           <Link href="/mentors/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">

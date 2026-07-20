@@ -6,6 +6,7 @@ import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFil
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { JsonRecord, MentoringRecap, Person, Season } from "@/lib/types";
+import { normalizeMeetingType } from "./normalizers";
 
 export type AdminWorkflowStatus = "open" | "in_progress" | "resolved" | "dropped" | "no_response";
 export type AdminWorkflowType =
@@ -476,6 +477,13 @@ export async function addManualRecap(input: JsonRecord): Promise<MutationResult>
     }
   }
 
+  let meetingType;
+  try {
+    meetingType = normalizeMeetingType(input.meeting_type);
+  } catch (e) {
+    return { ok: false, message: "Loại buổi mentoring không hợp lệ. Vui lòng chọn lại." };
+  }
+
   const payload = {
     season_id: season?.id ?? null,
     match_id: matchId,
@@ -486,7 +494,7 @@ export async function addManualRecap(input: JsonRecord): Promise<MutationResult>
     recap_url: clean(input.recap_url) ?? "manual://missing-recap-url",
     recap_source: "admin_input",
     recap_note: clean(input.recap_note),
-    meeting_type: clean(input.meeting_type) ?? "1on1_primary",
+    meeting_type: meetingType,
     captured_by: access.admin?.email ?? "admin",
     issue_flag: String(input.issue_flag ?? "false") === "true",
     status: validRecapStatus(input.status),
@@ -530,13 +538,20 @@ export async function editRecap(input: JsonRecord): Promise<MutationResult> {
   const seasonAccess = await requireOperationsForSeason(clean(before.season_id));
   if (!seasonAccess.ok) return { ok: false, message: seasonAccess.message };
 
+  let meetingType;
+  try {
+    meetingType = input.meeting_type ? normalizeMeetingType(input.meeting_type) : undefined;
+  } catch (e) {
+    return { ok: false, message: "Loại buổi mentoring không hợp lệ. Vui lòng chọn lại." };
+  }
+
   const updates: JsonRecord = {
     match_id: clean(input.match_id),
     mentor_person_id: clean(input.mentor_person_id),
     mentee_person_id: clean(input.mentee_person_id),
     recap_url: clean(input.recap_url) ?? "manual://missing-recap-url",
     recap_note: clean(input.recap_note),
-    meeting_type: clean(input.meeting_type),
+    meeting_type: meetingType,
     status: validRecapStatus(input.status),
     issue_flag: String(input.issue_flag ?? "false") === "true",
     admin_notes: clean(input.admin_notes)

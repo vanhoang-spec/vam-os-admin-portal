@@ -201,7 +201,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
   const menteeHealthData = [
     { name: "Mentee active tháng đã đóng", value: activeClosedMonthCount },
     { name: "Chưa có recap tháng gần nhất", value: missingClosedMonthCount },
-    { name: "Im lặng 2 tháng liên tiếp / cần follow-up", value: homeFollowUpKpi }
+    { name: "Chưa có recap 2 tháng liên tiếp", value: homeFollowUpKpi }
   ];
 
   const selectedMonth = dashboardSelectedMonth ?? officialClosedMonth ?? opsSelectedMonth;
@@ -319,7 +319,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
 
   return (
     <>
-      <PageHeader title="Dashboard" description="Tổng quan vận hành VAM OS MVP cho UEH Mentoring Season 11." />
+      <PageHeader title="Tổng quan" description="Tổng quan vận hành VAM OS MVP cho UEH Mentoring Season 11." />
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu dashboard. Các chỉ số liên quan có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
@@ -369,11 +369,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         <KpiCard label="Mentor active tháng này" value={homeMentorActiveKpi} />
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
         <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
-        <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={homeFollowUpKpi} />
+        <KpiCard label="Chưa có recap 2 tháng liên tiếp" value={homeFollowUpKpi} />
       </div>
 
       <section className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Sức khỏe mentoring</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Tình trạng hoạt động</h2>
         <div className="grid gap-4 xl:grid-cols-3">
           <Card className="xl:col-span-2">
             <div className="mb-3">
@@ -384,7 +384,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
           </Card>
           <Card>
             <div className="mb-3">
-              <h3 className="text-base font-semibold text-vam-ink">Sức khỏe mentee - {healthMonthLabel}</h3>
+              <h3 className="text-base font-semibold text-vam-ink">Tình trạng hoạt động - {healthMonthLabel}</h3>
               <p className="mt-1 text-sm text-slate-500">Dựa trên active match và recap được ghi nhận trong tháng.</p>
             </div>
             <DonutSummary data={menteeHealthData} />

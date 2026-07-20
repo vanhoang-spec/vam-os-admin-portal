@@ -212,14 +212,14 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
 
   return (
     <>
-      <PageHeader title="Data Issues" description="Các vấn đề dữ liệu cần rà soát từ dữ liệu Supabase hiện tại." />
+      <PageHeader title="Rà soát dữ liệu" description="Các vấn đề dữ liệu cần rà soát từ dữ liệu Supabase hiện tại." />
       <div className="mb-4 rounded-lg border border-vam-line bg-white p-4 text-sm text-slate-600 shadow-soft">
         <p className="mb-3">
           Trang này giúp rà soát dữ liệu cần làm sạch. Ở MVP hiện tại, các vấn đề được tính động từ dữ liệu Supabase; chức năng sửa trực tiếp sẽ bổ sung ở giai đoạn sau.
         </p>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-vam-line pt-3">
           <p className="text-xs italic text-slate-500 max-w-2xl">
-            * Use this form when an admin needs to manually add a missing mentoring recap. This action should use recap_source = admin_input and be audit logged.
+            * Trang này giúp rà soát dữ liệu cần làm sạch. Chức năng sửa trực tiếp sẽ bổ sung ở giai đoạn sau.
           </p>
           {allowEdit ? (
             <Link href="/recaps/create" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
@@ -361,9 +361,9 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
                 <table className="min-w-full divide-y divide-vam-line text-sm">
                   <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                     <tr>
-                      <th className="px-4 py-3">email_primary</th>
-                      <th className="px-4 py-3">duplicate count</th>
-                      <th className="px-4 py-3">related people</th>
+                      <th className="px-4 py-3">Email</th>
+                      <th className="px-4 py-3">Số lần trùng</th>
+                      <th className="px-4 py-3">Hồ sơ liên quan</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-vam-line">

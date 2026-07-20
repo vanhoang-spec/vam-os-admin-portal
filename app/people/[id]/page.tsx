@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, PageHeader, SimpleTable, TruncatedText } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { recapStatusLabel } from "@/lib/ui-labels";
 import { createCrmNoteFormAction, getCrmNotesByPerson, getPersonSeasonMemberships, type CrmNote, type PersonSeasonMembership } from "@/lib/lifecycle-crm";
 import {
   getApplications,
@@ -98,15 +99,6 @@ function activityKpi(label: string, value: number | string) {
   );
 }
 
-function recapStatusLabel(status: unknown) {
-  const normalized = normalizeStatus(status);
-  if (normalized === "submitted") return "Đã ghi nhận";
-  if (normalized === "needs_review") return "Cần rà soát";
-  if (normalized === "invalid") return "Không hợp lệ";
-  if (normalized === "duplicate") return "Trùng";
-  if (normalized === "excluded") return "Ngoài sổ chính thức";
-  return displayText(status);
-}
 
 function attendanceStatusLabel(status: unknown) {
   const normalized = normalizeStatus(status);

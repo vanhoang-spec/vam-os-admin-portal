@@ -229,7 +229,7 @@ export default async function TeamViewPage({
   return (
     <>
       <PageHeader
-        title="Team & Trách nhiệm"
+        title="Phân công & Trách nhiệm"
         description="Tổng hợp Core team và Support team theo dữ liệu operational_team_assignments hiện hành (read-only)."
       />
       {errors.length ? <ErrorBox message="Một phần dữ liệu chưa tải được. Một số dòng có thể thiếu thông tin liên kết." /> : null}

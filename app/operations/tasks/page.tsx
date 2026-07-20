@@ -7,6 +7,7 @@ import type { WorkflowOwner, WorkflowQueueItem } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 import { currentMonthVN } from "@/lib/dashboard-month";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import { followUpStatusLabel } from "@/lib/ui-labels";
 import { TaskExportButton } from "./task-export-button";
 import { AddCommentForm, CreateActionItemForm, GenerateFollowupForm, UpdateActionItemForm } from "./workflow-forms";
 
@@ -28,16 +29,6 @@ function cleanMonth(value: string | string[] | undefined) {
   return match?.[1] ?? null;
 }
 
-function statusLabel(value: unknown) {
-  const key = String(value ?? "");
-  if (key === "open") return "Đang mở";
-  if (key === "in_progress") return "Đang xử lý";
-  if (key === "resolved") return "Đã xử lý";
-  if (key === "dropped") return "Đã dừng tham gia";
-  if (key === "no_response") return "Không phản hồi";
-  if (key === "parked") return "Tạm để sau";
-  return displayText(value);
-}
 
 function priorityLabel(value: unknown) {
   const key = String(value ?? "");
@@ -189,7 +180,7 @@ function WorkflowTable({
               </div>
             )
           },
-          { key: "status", label: "Trạng thái", render: (row) => statusLabel(row.status) },
+          { key: "status", label: "Trạng thái", render: (row) => followUpStatusLabel(row.status) },
           { key: "priority", label: "Mức độ ưu tiên", render: (row) => priorityLabel(row.priority) },
           { key: "owner", label: "Người phụ trách", render: (row) => displayText(row.owner_name) },
           { key: "due_date", label: "Hạn xử lý", render: (row) => (row.due_date ? formatDate(row.due_date) : "-") },
@@ -202,7 +193,7 @@ function WorkflowTable({
             <Card key={row.id}>
               <div className="mb-3">
                 <div className="text-sm font-semibold text-vam-ink">{row.title}</div>
-                <div className="mt-1 text-xs text-slate-500">{statusLabel(row.status)} / {priorityLabel(row.priority)}</div>
+                <div className="mt-1 text-xs text-slate-500">{followUpStatusLabel(row.status)} / {priorityLabel(row.priority)}</div>
               </div>
               <div className="grid gap-3">
                 <UpdateActionItemForm id={row.id} owners={owners} canManage={canManage} />
@@ -242,7 +233,7 @@ export default async function OperationsTasksPage({ searchParams }: { searchPara
 
   return (
     <>
-      <PageHeader title="Công việc Operations" description="Theo dõi follow-up, lỗi dữ liệu, correction và việc vận hành hằng tháng." />
+      <PageHeader title="Việc cần xử lý" description="Theo dõi follow-up, lỗi dữ liệu, correction và việc vận hành hằng tháng." />
       {workflow.error ? <ErrorBox message={workflow.error} /> : null}
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -292,12 +283,12 @@ export default async function OperationsTasksPage({ searchParams }: { searchPara
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Follow-up Queue</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Danh sách cần hỗ trợ</h2>
         <WorkflowTable rows={filteredFollowUps} owners={data?.owners ?? []} canManage={canManage} includePeople />
       </section>
 
       <section className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Data Issues Queue</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Danh sách dữ liệu cần kiểm tra</h2>
         <WorkflowTable rows={filteredIssues} owners={data?.owners ?? []} canManage={canManage} />
       </section>
 

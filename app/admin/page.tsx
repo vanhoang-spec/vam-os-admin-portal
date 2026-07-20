@@ -30,13 +30,13 @@ function statusLabel(value: unknown) {
 
 function typeLabel(value: unknown) {
   const key = String(value ?? "");
-  if (key === "followup_no_recap") return "Follow-up thiếu recap";
-  if (key === "unmatched_recap") return "Unmatched recap";
-  if (key === "missing_mentee") return "Missing mentee";
-  if (key === "missing_mentor") return "Missing mentor";
-  if (key === "invalid_date") return "Invalid date";
-  if (key === "duplicate_recap") return "Duplicate recap";
-  if (key === "data_issue") return "Data issue";
+  if (key === "followup_no_recap") return "Cần hỗ trợ follow-up";
+  if (key === "unmatched_recap") return "Recap chưa khớp match";
+  if (key === "missing_mentee") return "Thiếu mentee";
+  if (key === "missing_mentor") return "Thiếu mentor";
+  if (key === "invalid_date") return "Ngày không hợp lệ";
+  if (key === "duplicate_recap") return "Recap trùng lặp";
+  if (key === "data_issue") return "Vấn đề dữ liệu";
   return displayText(value);
 }
 
@@ -78,11 +78,11 @@ function DataIssuesTab({ issues }: { issues: AdminDataIssue[] }) {
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Unmatched recap" value={byType.get("unmatched_recap") ?? 0} />
-        <KpiCard label="Missing mentee" value={byType.get("missing_mentee") ?? 0} />
-        <KpiCard label="Missing mentor" value={byType.get("missing_mentor") ?? 0} />
-        <KpiCard label="Invalid date" value={byType.get("invalid_date") ?? 0} />
-        <KpiCard label="Duplicate recap" value={byType.get("duplicate_recap") ?? 0} />
+        <KpiCard label="Recap chưa khớp match" value={byType.get("unmatched_recap") ?? 0} />
+        <KpiCard label="Thiếu mentee" value={byType.get("missing_mentee") ?? 0} />
+        <KpiCard label="Thiếu mentor" value={byType.get("missing_mentor") ?? 0} />
+        <KpiCard label="Ngày không hợp lệ" value={byType.get("invalid_date") ?? 0} />
+        <KpiCard label="Recap trùng lặp" value={byType.get("duplicate_recap") ?? 0} />
       </div>
 
       <Card>
@@ -99,7 +99,7 @@ function DataIssuesTab({ issues }: { issues: AdminDataIssue[] }) {
       </Card>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Data Issues Queue</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Danh sách dữ liệu cần kiểm tra</h2>
         {!topIssues.length ? <EmptyState message="Không có data issue mở theo rule hiện tại." /> : null}
         <div className="grid gap-4">
           {topIssues.map((issue) => (
@@ -142,10 +142,10 @@ function FollowUpTab({ items }: { items: AdminActionItem[] }) {
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Open" value={items.filter((item) => item.status === "open").length} />
-        <KpiCard label="In progress" value={items.filter((item) => item.status === "in_progress").length} />
-        <KpiCard label="No response" value={items.filter((item) => item.status === "no_response").length} />
-        <KpiCard label="Resolved" value={items.filter((item) => item.status === "resolved").length} />
+        <KpiCard label="Chưa xử lý" value={items.filter((item) => item.status === "open").length} />
+        <KpiCard label="Đang xử lý" value={items.filter((item) => item.status === "in_progress").length} />
+        <KpiCard label="Chưa nhận phản hồi" value={items.filter((item) => item.status === "no_response").length} />
+        <KpiCard label="Đã hoàn tất" value={items.filter((item) => item.status === "resolved").length} />
         <KpiCard label="Đang cần xử lý" value={openItems.length} />
       </div>
 
@@ -155,7 +155,7 @@ function FollowUpTab({ items }: { items: AdminActionItem[] }) {
       </Card>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Follow-up Queue</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Danh sách cần hỗ trợ</h2>
         {!items.length ? <EmptyState message="Chưa có action item follow-up." /> : null}
         <div className="grid gap-4">
           {items.map((item) => (
@@ -217,7 +217,7 @@ export default async function AdminCorrectionPage({ searchParams }: { searchPara
   if (!canManage) {
     return (
       <>
-        <PageHeader title="Admin Correction Workflow" description="Resolve data issues, assign owners, and correct recaps." />
+        <PageHeader title="Quy trình điều chỉnh dữ liệu" description="Giải quyết vấn đề dữ liệu, phân công, và chỉnh sửa recap." />
         <ErrorBox message="Bạn cần quyền admin hoặc super_admin để dùng trang này." />
       </>
     );
@@ -228,13 +228,13 @@ export default async function AdminCorrectionPage({ searchParams }: { searchPara
 
   return (
     <>
-      <PageHeader title="Admin Correction Workflow" description="Data Issues và Follow-up queue cho core team, không cần sửa CSV/DB tay." />
+      <PageHeader title="Quy trình điều chỉnh dữ liệu" description="Rà soát dữ liệu và hỗ trợ follow-up cho core team, không cần sửa CSV/DB thủ công." />
       {data.error ? <ErrorBox message={data.error} /> : null}
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <Link href="/admin?tab=data-issues" className={tabClass(tab === "data-issues")}>Data Issues</Link>
-        <Link href="/admin?tab=follow-up" className={tabClass(tab === "follow-up")}>Follow-up</Link>
-        <Link href="/admin/users" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Users</Link>
+        <Link href="/admin?tab=data-issues" className={tabClass(tab === "data-issues")}>Rà soát dữ liệu</Link>
+        <Link href="/admin?tab=follow-up" className={tabClass(tab === "follow-up")}>Hỗ trợ follow-up</Link>
+        <Link href="/admin/users" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Tài khoản</Link>
       </div>
 
       {tab === "data-issues" ? <DataIssuesTab issues={data.issues} /> : <FollowUpTab items={followups} />}
@@ -246,12 +246,12 @@ export default async function AdminCorrectionPage({ searchParams }: { searchPara
         <SimpleTable
           rows={data.actionItems.slice(0, 20)}
           columns={[
-            { key: "updated_at", label: "Updated", render: (row) => formatDate(row.updated_at) },
-            { key: "type", label: "Type", render: (row) => typeLabel(row.type) },
-            { key: "status", label: "Status", render: (row) => statusLabel(row.status) },
-            { key: "owner_email", label: "Owner", render: (row) => displayText(row.owner_email) },
+            { key: "updated_at", label: "Cập nhật", render: (row) => formatDate(row.updated_at) },
+            { key: "type", label: "Loại việc", render: (row) => typeLabel(row.type) },
+            { key: "status", label: "Trạng thái", render: (row) => statusLabel(row.status) },
+            { key: "owner_email", label: "Phụ trách", render: (row) => displayText(row.owner_email) },
             { key: "season_code", label: "Season", render: (row) => displayText(row.season_code) },
-            { key: "notes", label: "Notes", render: (row) => displayText(row.notes) }
+            { key: "notes", label: "Ghi chú", render: (row) => displayText(row.notes) }
           ]}
         />
       </section>

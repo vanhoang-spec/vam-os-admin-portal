@@ -34,17 +34,17 @@ export function RecapCorrectionForm({ recap, personId, correctedByDefault }: { r
       </label>
 
       <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">status</span>
+        <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
         <select
           name="status"
           defaultValue={String(recap.status ?? "submitted")}
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         >
-          <option value="submitted">submitted</option>
-          <option value="needs_review">needs_review</option>
-          <option value="invalid">invalid</option>
-          <option value="duplicate">duplicate</option>
-          <option value="excluded">excluded (sync-managed)</option>
+          <option value="submitted">Đã ghi nhận</option>
+          <option value="needs_review">Cần kiểm tra</option>
+          <option value="invalid">Không hợp lệ</option>
+          <option value="duplicate">Trùng dữ liệu</option>
+          <option value="excluded">Không tính vào báo cáo</option>
         </select>
       </label>
 

@@ -338,30 +338,30 @@ export function RecapCreateForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">meeting_type</span>
+          <span className="text-xs font-medium uppercase text-slate-500">Loại hình</span>
           <select
             name="meeting_type"
             defaultValue="1on1_primary"
             className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           >
-            <option value="1on1_primary">1on1_primary</option>
-            <option value="1on1_cross">1on1_cross</option>
-            <option value="group_training">group_training</option>
-            <option value="other">other</option>
+            <option value="1on1_primary">Mentoring 1–1</option>
+            <option value="1on1_cross">Cross-mentoring</option>
+            <option value="group">Mentoring theo nhóm</option>
+            <option value="unknown">Khác / chưa xác định</option>
           </select>
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">status</span>
+          <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
           <select
             name="status"
             defaultValue="submitted"
             className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
           >
-            <option value="submitted">submitted</option>
-            <option value="needs_review">needs_review</option>
-            <option value="invalid">invalid</option>
-            <option value="duplicate">duplicate</option>
+            <option value="submitted">Đã ghi nhận</option>
+            <option value="needs_review">Cần kiểm tra</option>
+            <option value="invalid">Không hợp lệ</option>
+            <option value="duplicate">Trùng dữ liệu</option>
           </select>
         </label>
       </div>
@@ -414,7 +414,7 @@ export function RecapCreateForm({
         </button>
         {state.ok && (
           <a href="/data-issues" className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            Quay lại Data Issues
+            Quay lại Rà soát dữ liệu
           </a>
         )}
       </div>

@@ -3,9 +3,9 @@ import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getFounderIntelligenceDashboard } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import type { FounderIntelligenceDashboard, JsonRecord } from "@/lib/types";
 import { displayText } from "@/lib/utils";
-import { SEASON_CONFIG } from "@/lib/season-config";
 import { CsvExportButton } from "./export-buttons";
 
 function countChart(rows: Array<Record<string, unknown>>, labelKey: string) {
@@ -42,9 +42,9 @@ function Snapshot({ data }: { data: FounderIntelligenceDashboard }) {
       <KpiCard label="Tổng mentee" value={data.menteeProfile.totalMentees} />
       <KpiCard label="Mentee active" value={data.menteeProfile.activeMentees} />
       <KpiCard label="Tỷ lệ mentor/mentee" value={data.matchingIntelligence.mentorMenteeRatio} />
-      <KpiCard label="Segment thiếu mentor" value={gaps} />
+      <KpiCard label="Nhóm thiếu mentor" value={gaps} />
       <KpiCard label="Mentor quá tải" value={overloaded} />
-      <KpiCard label="Mentee im lặng" value={data.menteeProfile.silentMentees} />
+      <KpiCard label="Mentee cần kết nối lại" value={data.menteeProfile.silentMentees} />
     </div>
   );
 }
@@ -73,19 +73,19 @@ export default async function FounderIntelligencePage() {
   return (
     <>
       <PageHeader
-        title="Founder & Core Team Intelligence"
-        description="Hiểu cấu trúc mentor/mentee, chất lượng matching và các điểm cần hành động."
+        title="Phân tích cộng đồng"
+        description="Nhìn lại cấu trúc mentor/mentee, chất lượng Matching và các điểm cần hành động."
       />
       {result.error ? <ErrorBox message={result.error} /> : null}
-      {!data ? <EmptyState message="Chưa tải được dữ liệu intelligence. Kiểm tra migration/RPC trên staging." /> : null}
+      {!data ? <EmptyState message="Chưa tải được dữ liệu phân tích. Kiểm tra migration/RPC trên staging." /> : null}
       {data ? (
         <div className="grid gap-6">
           <Card>
             <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
               <div>
-                <h2 className="text-lg font-semibold text-vam-ink">Cộng đồng đang khỏe hay yếu ở đâu?</h2>
+                <h2 className="text-lg font-semibold text-vam-ink">Tình trạng hoạt động của cộng đồng</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Tháng phân tích: <span className="font-semibold text-vam-ink">{data.definitions.selectedMonth}</span>. Điểm cần nhìn ngay là segment thiếu mentor, mentor overloaded, và mentee silent.
+                  Tháng phân tích: <span className="font-semibold text-vam-ink">{data.definitions.selectedMonth}</span>. Các điểm cần đặc biệt chú ý: nhóm thiếu mentor, mentor quá tải, và mentee chưa có recap.
                 </p>
                 <p className="mt-2 text-xs text-slate-500">{data.definitions.activeMentor}</p>
               </div>
@@ -100,7 +100,7 @@ export default async function FounderIntelligencePage() {
           <Snapshot data={data} />
 
           <section id="mentor-intelligence" className="grid gap-4">
-            <h2 className="text-lg font-semibold text-vam-ink">Mentor Intelligence</h2>
+            <h2 className="text-lg font-semibold text-vam-ink">Hoạt động Mentor</h2>
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor by industry</h3>
@@ -151,7 +151,7 @@ export default async function FounderIntelligencePage() {
           </section>
 
           <section id="mentee-intelligence" className="grid gap-4">
-            <h2 className="text-lg font-semibold text-vam-ink">Mentee Intelligence</h2>
+            <h2 className="text-lg font-semibold text-vam-ink">Hoạt động Mentee</h2>
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee by major</h3>
@@ -172,7 +172,7 @@ export default async function FounderIntelligencePage() {
             </div>
             <Card>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-base font-semibold text-vam-ink">Silent mentee by career interest</h3>
+                <h3 className="text-base font-semibold text-vam-ink">Mentee chưa có recap theo định hướng nghề nghiệp</h3>
                 <Link href="/operations/tasks?type=followup_no_recap" className="rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
                   Mở workflow follow-up
                 </Link>
@@ -181,14 +181,14 @@ export default async function FounderIntelligencePage() {
                 rows={data.activityBySegment.silentMenteeByCareerInterest}
                 columns={[
                   { key: "careerInterest", label: "Định hướng nghề nghiệp", render: (row) => displayText(row.careerInterest) },
-                  { key: "silentMentees", label: "Mentee im lặng" }
+                  { key: "silentMentees", label: "Mentee cần kết nối lại" }
                 ]}
               />
             </Card>
           </section>
 
           <section id="matching-intelligence" className="grid gap-4">
-            <h2 className="text-lg font-semibold text-vam-ink">Matching Intelligence</h2>
+            <h2 className="text-lg font-semibold text-vam-ink">Phân tích Matching</h2>
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Industry alignment</h3>
@@ -206,7 +206,7 @@ export default async function FounderIntelligencePage() {
           </section>
 
           <section id="activity-by-segment" className="grid gap-4">
-            <h2 className="text-lg font-semibold text-vam-ink">Activity by Segment</h2>
+            <h2 className="text-lg font-semibold text-vam-ink">Hoạt động theo nhóm</h2>
             <div className="grid gap-4 xl:grid-cols-3">
               <Card>
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Active mentee rate by major</h3>
@@ -248,7 +248,7 @@ export default async function FounderIntelligencePage() {
           </section>
 
           <section id="recommended-actions" className="grid gap-4">
-            <h2 className="text-lg font-semibold text-vam-ink">Recommended Actions</h2>
+            <h2 className="text-lg font-semibold text-vam-ink">Đề xuất hành động</h2>
             <div className="grid gap-3 md:grid-cols-2">
               {data.recommendedActions.map((action, index) => (
                 <Card key={`${action.title}-${index}`}>

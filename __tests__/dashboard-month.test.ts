@@ -33,8 +33,8 @@ function recap(
 }
 
 function validMonthsFromRecaps(recaps: MockRecap[], nowMonthVN: string): string[] {
-  return [
-    ...new Set(
+  return Array.from(
+    new Set(
       recaps
         .filter(
           (r) =>
@@ -43,8 +43,8 @@ function validMonthsFromRecaps(recaps: MockRecap[], nowMonthVN: string): string[
             r.meeting_month <= nowMonthVN
         )
         .map((r) => r.meeting_month as string)
-    ),
-  ];
+    )
+  );
 }
 
 function countValidForMonth(recaps: MockRecap[], month: string): number {

@@ -1,7 +1,7 @@
-﻿# VAM OS — UI Language & Information Architecture Audit
+# VAM OS — UI Language & Information Architecture Audit
 **Date:** 2026-07-20
 **Scope:** All user-facing strings across all 46 routes; primary navigation structure
-**Status:** READ-ONLY AUDIT — No labels changed, no DB values changed, no migration run
+**Status:** BATCH 1A IMPLEMENTED — User-facing language normalized and centralized via `ui-labels.ts`. No DB values changed, no migration run. Navigation structural grouping deferred.
 **Auditor:** Claude Sonnet 4.6 (automated) + owner review pending
 
 ---
@@ -537,7 +537,31 @@ All are display-layer changes only. No DB values change. No enums change. No mig
 
 ## 14. Batch 1 Implementation Notes
 
-### Safe to implement without owner approval
+**Implementation Progress (2026-07-20)**
+- **Batch 1A (Language & Label Consistency): IMPLEMENTED.**
+  - Created `lib/ui-labels.ts` to centralize safe, canonical Vietnamese mappings for all DB enums.
+  - Updated all identified raw enums, corporate terms (e.g., "CEO View", "Founder Intelligence", "Data Issues", "Operations"), and clinical labels ("Silent", "Dropped") across UI components, KPI cards, and form options.
+  - Existing DB values remain intact; fallback logic preserves unrecognized strings without failure.
+  - Primary navigation labels in `app-shell.tsx` updated to canonical Vietnamese terms without changing topology or structure.
+- **Batch 1A.1 (Corrective Patch): IMPLEMENTED.**
+  - Discovered a meeting-type blocker where legacy `<option>` values (`group_training`, `other`) were being sent directly to the database, violating the `mentoring_recaps` production CHECK constraint.
+  - Root cause: Missing validation/normalization in `addManualRecap` payload construction.
+  - Implemented `lib/normalizers.ts` to safely map legacy form values to canonical DB enums (`group`, `unknown`) before database insertion.
+  - Added pure unit tests verifying the normalizer handles canonical values, legacy aliases, and empty states (defaulting to `1on1_primary`), while rejecting invalid strings.
+  - Form options in `app/recaps/create/create-form.tsx` were updated to submit canonical values (`group`, `unknown`), but `ui-labels.ts` retains legacy mapping support for safe display.
+  - No database migration or mutation was required.
+  - Resolved 5 remaining English page-title/navigation exceptions (People -> Cộng đồng VAM, Mentors -> Mentor, Mentees -> Mentee, Applications -> Ứng tuyển, Team & Trách nhiệm -> Phân công & Trách nhiệm).
+- **Batch 1A.2 (Login Safety & Error Taxonomy): IMPLEMENTED.**
+  - **Finding:** The login flow rendered raw internal configuration details (Supabase host, key type, raw error responses) directly in the UI upon authentication failure, exposing environment internals to unauthenticated users.
+  - **Impact:** Failed authentication leaked technical diagnostics. An attacker or confused user would see technical exceptions instead of actionable guidance.
+  - **Fix:** Removed all `diagnostics` rendering from `app/login/page.tsx` and internal logging exposure from `app/login/actions.ts`.
+  - **Safe Error Taxonomy:** Created `lib/auth-error-messages.ts` with strict error mapping. Invalid credentials map to "Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra và thử lại." Network failures and unauthorized admin status are also gracefully caught.
+  - **Testing:** Added `__tests__/auth-safety.test.ts` to strictly verify that mapped errors do not contain project refs, hosts, stack traces, or passwords, and that `safeNext` rejects open redirects (e.g., `//evil.com`).
+  - **QA Blocker:** Local visual QA of the authenticated session is currently blocked due to a mismatched local `.env.local` pointing to a different Supabase project, which is safely ignored but prevents valid login locally.
+  - **Final Batch 1A Scope:** Exactly 23 modified tracked files and 3 new files (`lib/normalizers.ts`, `lib/auth-error-messages.ts`, `__tests__/auth-safety.test.ts`, etc.).
+- **Batch 1B (Navigation Redesign & IA): DEFERRED.** Structural grouping and accordion logic for the sidebar remain pending for a future iteration.
+
+### Safe to implement without owner approval (COMPLETED IN BATCH 1A)
 The following changes are display-only and semantically clear:
 - All `typeLabel()` and `statusLabel()` return value updates
 - Raw enum → Vietnamese in admin-correction-forms.tsx option labels
@@ -579,3 +603,24 @@ The following change the visible brand name of a page or concept:
 
 *File path: `docs/audits/VAM_OS_UI_LANGUAGE_AND_IA_2026-07-20.md`*
 *Status: NOT COMMITTED — audit file only.*
+
+## 16. Final Batch 1 Handoff
+
+- **Final test count**: 84/84 passing across 4 test files (`dashboard-month.test.ts` ×52, `ui-labels.test.ts` ×11, `auth-safety.test.ts` ×17, `normalizers.test.ts` ×4). Count increased from 77 to 84: 7 new regression and security tests added in Fix D.
+- **Lint** (`next lint`): PASS — 0 ESLint warnings or errors.
+- **Typecheck** (`tsc --noEmit`): PASS — TS2802 resolved. Pre-existing `...new Set(...)` spread in `__tests__/dashboard-month.test.ts` replaced with `Array.from(new Set(...))` (Fix B). `tsconfig.json` unchanged.
+- **Production build** (`next build`): PASS — compiled successfully, 46 application routes. "36/36" in build output refers to static page generation tasks only, not the total route count.
+- **Diff check** (`git diff --check`): PASS — clean (LF→CRLF normalisation warnings only; expected on Windows).
+- **Login technical metadata**: Fully removed. The diagnostics UI block was removed in Batch 1A.2. The two remaining static paragraphs referencing the auth provider name, internal table name, and sprint identifier were replaced with user-appropriate Vietnamese copy in Fix A1. Regression guard in `auth-safety.test.ts` verifies these strings cannot reappear.
+- **Dashboard metric label consistency**: Chart legend `menteeHealthData[2].name` now reads "Chưa có recap 2 tháng liên tiếp" — matching the KpiCard label and the operations page (Fix A2).
+- **Admin correction form labels**: `dropped` option in `ActionItemUpdateForm` now reads "Người tham gia đã dừng" matching `followUpStatusLabel("dropped")` (Fix A3). Last English span label "Status" translated to "Trạng thái" in `EditRecapInlineForm` (Fix A4).
+- **Meeting-type normalisation**: Safely maps legacy values (`group_training` → `group`, `other` → `unknown`) at the mutation boundary in `addManualRecap` and `editRecap`; blocks unknown inputs before database insertion. Form options submit canonical values directly.
+- **Auth error taxonomy**: Enforced strict fallback messages — "Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra và thử lại." for bad credentials; "VAM OS đang tạm thời không thể kết nối. Vui lòng thử lại sau." for network errors; "Đăng nhập không thành công. Vui lòng thử lại." for all other cases.
+- **`safeNext` open-redirect guard**: Hardened in Fix C to block (1) external URLs; (2) protocol-relative `//` paths; (3) backslash-disguised protocol-relative paths (`/\evil.com`); (4) control characters including CR, LF, and null byte; (5) auth-loop routes `/login` and `/unlock` via segment-aware regex (`^\/login([/?#]|$)`) that no longer over-blocks paths such as `/login-report`.
+- **Exact file counts (Batch 1 complete)**: 25 modified tracked files + 6 new untracked files = 31 files total. 12 pre-existing unrelated untracked files remain completely untouched.
+- **Remaining blockers**: None for staging and commit.
+- **Authenticated visual QA**: Pending — local environment is unsuitable. Must occur on the production Vercel deployment after owner-authorised push.
+- **No database write** was performed.
+- **No migration** was run.
+- **No environment variable** was read, modified, or printed.
+- **No commit or push** was performed. All Batch 1 changes remain unstaged pending explicit owner authorisation to proceed.

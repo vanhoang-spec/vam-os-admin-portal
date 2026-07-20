@@ -308,14 +308,14 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     .slice(0, OUTLIER_RECAP_LIMIT);
 
   const healthData = [
-    { name: "Mentee active tháng đã đóng", value: activeClosedMonthCount },
+    { name: "Mentee active tháng đã chốt", value: activeClosedMonthCount },
     { name: "Chưa có recap tháng gần nhất", value: missingClosedMonthCount },
-    { name: "Im lặng 2 tháng liên tiếp / cần follow-up", value: followUpTwoMonthCount }
+    { name: "Chưa có recap 2 tháng liên tiếp", value: followUpTwoMonthCount }
   ];
 
   return (
     <>
-      <PageHeader title="Operations" description="Dashboard vận hành tháng cho hoạt động mentoring Season 11." />
+      <PageHeader title="Vận hành" description="Dashboard vận hành tháng cho hoạt động mentoring Season 11." />
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu operations. Một số chỉ số có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
@@ -365,13 +365,13 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         </Card>
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
         <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
-        <KpiCard label="Im lặng 2 tháng liên tiếp / cần follow-up" value={followUpTwoMonthCount} />
+        <KpiCard label="Chưa có recap 2 tháng liên tiếp" value={followUpTwoMonthCount} />
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
         <nav aria-label="Operations views" className="flex flex-wrap gap-2 rounded-lg border border-vam-line bg-slate-50 p-2">
           <Link href={`/operations/monthly?month=${encodeURIComponent(selectedMonth)}`} className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink shadow-sm hover:bg-vam-mint">
-            Tổng quan tháng (CEO view)
+            Theo dõi tháng
           </Link>
           <Link href="/operations/intelligence" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-ink shadow-sm hover:bg-vam-mint">
             Phân tích cộng đồng mentor/mentee
@@ -404,7 +404,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
           {recapByMonth.length ? <BarSummary data={recapByMonth} highlightedName={selectedMonth} tooltipLabelPrefix="Tháng" valueLabel="Số recap" /> : <EmptyState message="Chưa có dữ liệu recap." />}
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentee health - {monthLabel(selectedMonth)}</h2>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Tình trạng hoạt động - {monthLabel(selectedMonth)}</h2>
           <DonutSummary data={healthData} />
         </Card>
       </section>
@@ -435,7 +435,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
             { key: "mentee_code", label: "Mã mentee", render: (row) => displayCode(row.mentee_code) },
             { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
             { key: "last_recap_date", label: "Recap gần nhất", render: (row) => (row.last_recap_date ? formatDate(row.last_recap_date) : "Chưa có recap") },
-            { key: "months_silent", label: "Số tháng silent" },
+            { key: "months_silent", label: "Số tháng chưa có recap" },
             { key: "profile", label: "Hồ sơ", render: (row) => <InternalLinkButton href={`/people/${row.mentee_id}`} label="Xem mentee" /> }
           ]}
         />

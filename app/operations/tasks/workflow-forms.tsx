@@ -110,11 +110,11 @@ export function UpdateActionItemForm({ id, owners, canManage }: { id: string; ow
       <div className="grid gap-2 sm:grid-cols-2">
         <select name="status" defaultValue="" className={inputClass}>
           <option value="">Giữ trạng thái</option>
-          <option value="open">Đang mở</option>
+          <option value="open">Chưa xử lý</option>
           <option value="in_progress">Đang xử lý</option>
-          <option value="resolved">Đã xử lý</option>
-          <option value="dropped">Đã dừng tham gia</option>
-          <option value="no_response">Không phản hồi</option>
+          <option value="resolved">Đã hoàn tất</option>
+          <option value="dropped">Người tham gia đã dừng</option>
+          <option value="no_response">Chưa nhận phản hồi</option>
           <option value="parked">Tạm để sau</option>
         </select>
         <select name="owner_admin_user_id" defaultValue="" className={inputClass}>

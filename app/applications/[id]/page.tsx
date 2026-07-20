@@ -18,6 +18,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationDecision, ApplicationReview, Match } from "@/lib/types";
+import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { AssignReviewerForm } from "./assign-reviewer-form";
 import { DecisionForm } from "./decision-form";
@@ -344,7 +345,7 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Tóm tắt nhanh</h2>
         <DetailGrid
           rows={[
-            ["Trạng thái hồ sơ", displayText(displayStatus)],
+            ["Trạng thái hồ sơ", applicationStatusLabel(displayStatus)],
             ["Nguồn dữ liệu", displayText(application.data.source)],
             ["Câu trả lời (dữ liệu cũ)", sortedAnswers.length > 0 ? sortedAnswers.length : "-"],
             ["Nội dung form đăng ký", rawPayloadEntries.length > 0 ? rawPayloadEntries.length : "-"],

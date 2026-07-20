@@ -3,30 +3,9 @@ import { ErrorBox, PageHeader } from "@/components/ui";
 import { getApplications, getIntakeBatches, getPeople, getSeasons, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Application, Person, Season } from "@/lib/types";
+import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
 
-// ── Status label helpers ──────────────────────────────────────────────────────
-
-function applicationStatusLabel(status: string | null): string {
-  const s = String(status ?? "").trim().toLowerCase();
-  if (s === "submitted") return "Đã nộp / Chờ xử lý";
-  if (s === "ready_for_screening") return "Sẵn sàng review";
-  if (s === "screening_assigned") return "Đã giao review";
-  if (s === "under_review") return "Đang review hồ sơ";
-  if (s === "screening_completed") return "Đã chấm hồ sơ";
-  if (s === "needs_more_review") return "Cần xem thêm";
-  if (s === "under_data_check") return "Đang kiểm tra dữ liệu";
-  if (s === "invited_to_interview") return "Mời phỏng vấn";
-  if (s === "interview_in_progress") return "Đang phỏng vấn";
-  if (s === "interview_completed") return "Hoàn tất phỏng vấn";
-  if (s === "approved_as_mentor") return "Đã duyệt — Mentor";
-  if (s === "approved_as_mentee") return "Đã duyệt — Mentee";
-  if (s === "rejected") return "Không phù hợp";
-  if (s === "waitlisted") return "Danh sách chờ";
-  if (s === "withdrawn") return "Rút đơn";
-  if (!status || !s) return "—";
-  return status; // Fallback: show raw value so nothing is silently lost
-}
 
 // ── Row type ──────────────────────────────────────────────────────────────────
 
@@ -121,7 +100,7 @@ export default async function ApplicationsPage() {
 
   return (
     <>
-      <PageHeader title="Applications" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
+      <PageHeader title="Ứng tuyển" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
       <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />
       <FilterableTable
         rows={rows}

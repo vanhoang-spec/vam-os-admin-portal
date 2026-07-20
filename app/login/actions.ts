@@ -4,23 +4,11 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { clearAuthCookies, getSupabaseAuthClientForPasswordSignIn, getSupabaseAuthClientWithAccessToken, setAuthCookies } from "@/lib/admin-auth";
 import { ADMIN_UNLOCK_COOKIE } from "@/lib/password-gate";
-import { getSupabasePublicEnvDiagnostics } from "@/lib/supabase";
+import { getSafeAuthErrorType, mapAuthError, safeNext } from "@/lib/auth-error-messages";
 
 export type LoginActionState = {
   error: string | null;
 };
-
-function safeNext(value: FormDataEntryValue | null) {
-  const next = String(value ?? "/operations");
-  if (!next.startsWith("/") || next.startsWith("//")) return "/operations";
-  if (next.startsWith("/login") || next.startsWith("/unlock")) return "/operations";
-  return next;
-}
-
-function authConfigHint() {
-  const diagnostics = getSupabasePublicEnvDiagnostics();
-  return `Supabase host: ${diagnostics.host}; project ref: ${diagnostics.projectRef}; anon key type: ${diagnostics.keyType}.`;
-}
 
 export async function loginAction(_previousState: LoginActionState, formData: FormData): Promise<LoginActionState> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -33,25 +21,23 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
 
   const client = getSupabaseAuthClientForPasswordSignIn();
   if (!client) {
-    return { error: `Thiếu cấu hình Supabase. Cần NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY. ${authConfigHint()}` };
+    return { error: mapAuthError("network_unavailable") };
   }
 
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error || !data.session || !data.user.email) {
     console.warn("[login] Supabase signInWithPassword failed", {
-      ...getSupabasePublicEnvDiagnostics(),
       errorName: error?.name ?? null,
-      errorStatus: error?.status ?? null,
-      errorMessage: error?.message ?? "missing session"
+      errorStatus: error?.status ?? null
     });
     await clearAuthCookies();
-    return { error: `Đăng nhập không thành công. Vui lòng kiểm tra email/mật khẩu. ${authConfigHint()}` };
+    return { error: mapAuthError(getSafeAuthErrorType(error)) };
   }
 
   const authedClient = getSupabaseAuthClientWithAccessToken(data.session.access_token);
   if (!authedClient) {
     await clearAuthCookies();
-    return { error: `Thiếu cấu hình Supabase. Cần NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY. ${authConfigHint()}` };
+    return { error: mapAuthError("network_unavailable") };
   }
 
   const { data: adminUser, error: adminError } = await authedClient
@@ -64,14 +50,11 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
 
   if (adminError || !adminUser) {
     console.warn("[login] active admin_users lookup failed", {
-      ...getSupabasePublicEnvDiagnostics(),
-      userId: data.user.id,
-      email: data.user.email,
-      adminError: adminError?.message ?? null
+      errorName: adminError?.code ?? null
     });
     await client.auth.signOut();
     await clearAuthCookies();
-    return { error: `Tài khoản này chưa có quyền active trong VAM OS. ${authConfigHint()}` };
+    return { error: mapAuthError("unauthorized_admin") };
   }
 
   await authedClient

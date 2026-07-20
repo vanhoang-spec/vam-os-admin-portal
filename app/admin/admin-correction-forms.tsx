@@ -61,21 +61,21 @@ export function ActionItemUpdateForm({ id, ownerEmail, status }: { id: string; o
       <StateMessage state={state} />
       <input type="hidden" name="id" value={id} />
       <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Status</span>
+        <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
         <select name="status" defaultValue={status ?? "open"} className={inputClass}>
-          <option value="open">open</option>
-          <option value="in_progress">in_progress</option>
-          <option value="resolved">resolved</option>
-          <option value="dropped">dropped</option>
-          <option value="no_response">no_response</option>
+          <option value="open">Chưa xử lý</option>
+          <option value="in_progress">Đang xử lý</option>
+          <option value="resolved">Đã hoàn tất</option>
+          <option value="dropped">Người tham gia đã dừng</option>
+          <option value="no_response">Chưa nhận phản hồi</option>
         </select>
       </label>
       <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Owner email</span>
+        <span className="text-xs font-medium uppercase text-slate-500">Email người phụ trách</span>
         <input name="owner_email" type="email" defaultValue={ownerEmail ?? ""} className={inputClass} />
       </label>
       <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Add note</span>
+        <span className="text-xs font-medium uppercase text-slate-500">Thêm ghi chú</span>
         <textarea name="note" rows={2} className={inputClass} />
       </label>
       <button type="submit" className={buttonClass}>Lưu</button>
@@ -92,10 +92,10 @@ export function QuickResolveForm({ id }: { id: string }) {
       <input type="hidden" name="status" value="resolved" />
       <input type="hidden" name="owner_email" value="" />
       <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Resolution note</span>
+        <span className="text-xs font-medium uppercase text-slate-500">Ghi chú xử lý</span>
         <textarea name="note" rows={2} className={inputClass} />
       </label>
-      <button type="submit" className={buttonClass}>Resolve</button>
+      <button type="submit" className={buttonClass}>Xử lý xong</button>
     </form>
   );
 }
@@ -130,14 +130,14 @@ export function EditRecapInlineForm({
             <input name="meeting_date" type="date" defaultValue={String(recap.meeting_date ?? "").slice(0, 10)} className={inputClass} />
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Status</span>
+            <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
             <select name="status" defaultValue={recap.status ?? "submitted"} className={inputClass}>
-              <option value="submitted">submitted</option>
-              <option value="needs_review">needs_review</option>
-              <option value="invalid">invalid</option>
-              <option value="duplicate">duplicate</option>
-              <option value="deleted">deleted</option>
-              <option value="excluded">excluded (sync-managed)</option>
+              <option value="submitted">Đã ghi nhận</option>
+              <option value="needs_review">Cần kiểm tra</option>
+              <option value="invalid">Không hợp lệ</option>
+              <option value="duplicate">Trùng dữ liệu</option>
+              <option value="deleted">Đã ẩn</option>
+              <option value="excluded">Không tính vào báo cáo</option>
             </select>
           </label>
           <label className="block">

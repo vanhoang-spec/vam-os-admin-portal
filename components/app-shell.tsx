@@ -25,24 +25,24 @@ function canReview(adminUser: CurrentAdminUser | null) {
 
 // Items visible to every authenticated admin user (any role).
 const navItems = [
-  { href: "/", label: "Dashboard", icon: Home },
-  { href: "/operations", label: "Operations", icon: LineChart },
-  { href: "/people", label: "People", icon: Users },
-  { href: "/mentors", label: "Mentors", icon: UserRoundCheck },
-  { href: "/mentees", label: "Mentees", icon: UserRoundSearch },
-  { href: "/applications", label: "Applications", icon: ClipboardList },
-  { href: "/matches", label: "Matches", icon: Handshake },
+  { href: "/", label: "Tổng quan", icon: Home },
+  { href: "/operations", label: "Vận hành", icon: LineChart },
+  { href: "/people", label: "Cộng đồng VAM", icon: Users },
+  { href: "/mentors", label: "Mentor", icon: UserRoundCheck },
+  { href: "/mentees", label: "Mentee", icon: UserRoundSearch },
+  { href: "/applications", label: "Ứng tuyển", icon: ClipboardList },
+  { href: "/matches", label: "Ghép cặp", icon: Handshake },
   { href: "/events", label: "Sự kiện", icon: CalendarRange },
-  { href: "/data-issues", label: "Data Issues", icon: DatabaseZap }
+  { href: "/data-issues", label: "Rà soát dữ liệu", icon: DatabaseZap }
 ];
 
 // Gated by canReview (reviewer + admin tiers).
-const reviewsNavItem = { href: "/reviews", label: "Reviews", icon: ClipboardCheck };
+const reviewsNavItem = { href: "/reviews", label: "Đánh giá", icon: ClipboardCheck };
 const interviewsNavItem = { href: "/interviews", label: "Phỏng vấn", icon: Mic };
 
 // Gated by canAccessAdminUser (super_admin / admin / core_team).
-const teamNavItem = { href: "/team", label: "Team & Trách nhiệm", icon: ShieldCheck };
-const adminCorrectionNavItem = { href: "/admin", label: "Admin Workflow", icon: Settings2 };
+const teamNavItem = { href: "/team", label: "Phân công & Trách nhiệm", icon: ShieldCheck };
+const adminCorrectionNavItem = { href: "/admin", label: "Quản trị", icon: Settings2 };
 
 // Gated by canManageUsers (super_admin / admin only).
 const userManagementNavItem = { href: "/admin/users", label: "Quản lý người dùng", icon: UserCog };
@@ -52,7 +52,7 @@ export function AppShell({ children, adminUser }: { children: React.ReactNode; a
 
   // Sidebar visibility per role:
   //   - canAccessAdminUser (super_admin / admin / core_team)
-  //       → Team & Trách nhiệm + Admin Workflow
+  //       → Phân công & Trách nhiệm + Quản trị (/admin)
   //   - canManageUsers (super_admin / admin)
   //       → Quản lý người dùng
   const showAdminTier = canAccessAdminUser(adminUser);

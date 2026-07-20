@@ -5,6 +5,7 @@ import { getIntakeBatches } from "@/lib/data";
 import { getManualMatchingCandidates, getMatchList } from "@/lib/matches";
 import { canManageMatches } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { matchStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { ManualMatchForm, MatchCancelForm } from "./matches-client";
 
@@ -15,14 +16,14 @@ function selectedParam(v: string | string[] | undefined) {
 function StatusBadge({ status }: { status: string | null }) {
   const s = String(status ?? "").toLowerCase();
   if (s === "active")
-    return <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">Đang active</span>;
+    return <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">{matchStatusLabel(s)}</span>;
   if (s === "dropped")
-    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">Đã hủy / Dừng match</span>;
+    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-600">{matchStatusLabel(s)}</span>;
   if (s === "completed")
-    return <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">Đã hoàn thành</span>;
+    return <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{matchStatusLabel(s)}</span>;
   if (s === "unmatched_review")
-    return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Cần xem lại / Chưa match phù hợp</span>;
-  return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{status ?? "—"}</span>;
+    return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">{matchStatusLabel(s)}</span>;
+  return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{matchStatusLabel(s)}</span>;
 }
 
 export default async function MatchesPage({
@@ -94,11 +95,11 @@ export default async function MatchesPage({
               defaultValue={rawStatus}
               className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
             >
-              <option value="active">Đang active</option>
-              <option value="dropped">Đã hủy / Dừng match</option>
-              <option value="completed">Đã hoàn thành</option>
-              <option value="unmatched_review">Cần xem lại / Chưa match phù hợp</option>
-              <option value="all">Tất cả</option>
+              <option value="all">Tất cả trạng thái</option>
+              <option value="active">{matchStatusLabel("active")}</option>
+              <option value="dropped">{matchStatusLabel("dropped")}</option>
+              <option value="completed">{matchStatusLabel("completed")}</option>
+              <option value="unmatched_review">{matchStatusLabel("unmatched_review")}</option>
             </select>
           </label>
 

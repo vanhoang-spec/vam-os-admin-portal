@@ -7,7 +7,7 @@ export default async function PeoplePage() {
   const people = await getPeople(scope);
   return (
     <>
-      <PageHeader title="People" description="Danh sách hồ sơ người tham gia trong hệ thống." />
+      <PageHeader title="Cộng đồng VAM" description="Danh sách hồ sơ người tham gia trong hệ thống." />
       <ErrorBox message={people.error} />
       <FilterableTable
         rows={people.data}
