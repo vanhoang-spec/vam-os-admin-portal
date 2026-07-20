@@ -5,11 +5,10 @@ import { canManageWorkflow } from "@/lib/auth-constants";
 import { getOperationsWorkflowData } from "@/lib/data";
 import type { WorkflowOwner, WorkflowQueueItem } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
+import { currentMonthVN } from "@/lib/dashboard-month";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { TaskExportButton } from "./task-export-button";
 import { AddCommentForm, CreateActionItemForm, GenerateFollowupForm, UpdateActionItemForm } from "./workflow-forms";
-
-const DEFAULT_MONTH = "2026-04";
 
 type TaskFilters = {
   status?: string;
@@ -26,7 +25,7 @@ function single(value: string | string[] | undefined) {
 function cleanMonth(value: string | string[] | undefined) {
   const raw = single(value);
   const match = String(raw ?? "").trim().match(/^(\d{4}-(0[1-9]|1[0-2]))/);
-  return match?.[1] ?? DEFAULT_MONTH;
+  return match?.[1] ?? null;
 }
 
 function statusLabel(value: unknown) {
@@ -218,7 +217,8 @@ function WorkflowTable({
 }
 
 export default async function OperationsTasksPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
-  const selectedMonth = cleanMonth(searchParams?.month);
+  // Task month: which month's workflow queue to view. Defaults to current VN calendar month.
+  const selectedMonth = cleanMonth(searchParams?.month) ?? currentMonthVN();
   const [workflow, adminUser] = await Promise.all([
     getOperationsWorkflowData(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, selectedMonth),
     getCurrentAdminUser()

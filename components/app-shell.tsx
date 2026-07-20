@@ -50,14 +50,6 @@ const userManagementNavItem = { href: "/admin/users", label: "Quản lý ngườ
 export function AppShell({ children, adminUser }: { children: React.ReactNode; adminUser: CurrentAdminUser | null }) {
   const pathname = usePathname();
 
-  // ROLE DEBUG — confirms the prop arrived at the client component with
-  // the right role string. Browser console only — remove after the
-  // production behavior is verified.
-  if (typeof window !== "undefined") {
-    // eslint-disable-next-line no-console
-    console.log("ROLE DEBUG (AppShell):", adminUser);
-  }
-
   // Sidebar visibility per role:
   //   - canAccessAdminUser (super_admin / admin / core_team)
   //       → Team & Trách nhiệm + Admin Workflow

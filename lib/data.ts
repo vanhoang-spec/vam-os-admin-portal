@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { currentMonthVN, isOperationalMonth, OPERATIONAL_MONTH_START, operationalMonthRange } from "@/lib/dashboard-month";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import {
   canOperateSeason,
@@ -142,8 +143,6 @@ function mergeRowsById<T extends { id?: string | null }>(rows: T[]) {
   return Array.from(byId.values()).concat(withoutId);
 }
 
-const OPERATIONAL_MONTH_START = "2025-10";
-const OPERATIONAL_MONTH_END = "2026-06";
 const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
 
 function normalizeStatus(value: unknown) {
@@ -160,18 +159,6 @@ function addMonths(month: string, delta: number) {
   return date.toISOString().slice(0, 7);
 }
 
-function operationalMonths() {
-  const months: string[] = [];
-  for (let month = OPERATIONAL_MONTH_START; month <= OPERATIONAL_MONTH_END; month = addMonths(month, 1)) {
-    months.push(month);
-  }
-  return months;
-}
-
-function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
-}
-
 function monthFromDate(value: unknown) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
@@ -179,11 +166,6 @@ function monthFromDate(value: unknown) {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString().slice(0, 7);
-}
-
-function isOperationalMonth(month: unknown) {
-  const value = String(month ?? "").trim();
-  return /^\d{4}-\d{2}$/.test(value) && value >= OPERATIONAL_MONTH_START && value <= OPERATIONAL_MONTH_END;
 }
 
 function isValidRecapActivity(recap: MentoringRecap) {
@@ -198,18 +180,18 @@ function computeOperationsDashboardKpis(input: {
   eventParticipations: EventParticipation[];
   seasonCode?: string;
 }): OperationsDashboardKpis {
+  const nowMonth = currentMonthVN();
   const validRecaps = input.recaps.filter(isValidRecapActivity);
-  const seasonMonths = operationalMonths();
-  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
-  const validEventMonths = input.events.map((event) => monthFromDate(event.starts_at)).filter((month): month is string => isOperationalMonth(month));
+  const seasonMonths = operationalMonthRange(nowMonth);
+  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month, nowMonth));
+  const validEventMonths = input.events.map((event) => monthFromDate(event.starts_at)).filter((month): month is string => isOperationalMonth(month, nowMonth));
   const monthsWithOperationalData = new Set([
     ...validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)),
     ...validEventMonths
   ]);
   const availableMonths = seasonMonths.filter((month) => monthsWithOperationalData.has(month)).sort((a, b) => b.localeCompare(a));
-  const nowMonth = currentMonth();
   const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
-  const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
+  const currentOperationalMonth = isOperationalMonth(nowMonth, nowMonth) ? nowMonth : null;
   const selectedMonth = latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
   const previousMonth = addMonths(selectedMonth, -1);
   const season = input.seasons.find((row) => row.code === (input.seasonCode ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE));
@@ -1003,20 +985,21 @@ async function getFounderIntelligenceDashboardFallback(seasonCode: string, scope
   const seasonMatches = matches.data.filter((row) => (seasonId ? row.season_id === seasonId : true));
   const activeMatches = seasonMatches.filter((row) => normalizeStatus(row.status) === "active" && row.mentor_person_id && row.mentee_person_id);
   const seasonRecaps = recaps.data.filter((row) => (seasonId ? row.season_id === seasonId : true));
+  const nowVN = currentMonthVN();
   const validRecaps = seasonRecaps.filter(isValidRecapActivity);
   const selectedMonth =
     validRecaps
       .map((row) => String(row.meeting_month ?? ""))
-      .filter(isOperationalMonth)
+      .filter((month) => isOperationalMonth(month, nowVN))
       .sort()
-      .filter((month) => month < currentMonth())
+      .filter((month) => month < nowVN)
       .at(-1) ??
     validRecaps
       .map((row) => String(row.meeting_month ?? ""))
-      .filter(isOperationalMonth)
+      .filter((month) => isOperationalMonth(month, nowVN))
       .sort()
       .at(-1) ??
-    currentMonth();
+    nowVN;
   const selectedRecaps = validRecaps.filter((row) => row.meeting_month === selectedMonth);
   const selectedMenteeIds = new Set(selectedRecaps.map((row) => row.mentee_person_id).filter(Boolean));
   const activeMentorIds = new Set(activeMatches.map((row) => row.mentor_person_id).filter(Boolean));

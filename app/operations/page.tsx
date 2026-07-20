@@ -4,6 +4,7 @@ import { Card, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, Kpi
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData, keyById } from "@/lib/data";
+import { currentMonthVN, isOperationalMonth, OPERATIONAL_MONTH_START, operationalMonthRange } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
@@ -12,8 +13,6 @@ import { MonthSelector } from "./month-selector";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
-const OPERATIONAL_MONTH_START = "2025-10";
-const OPERATIONAL_MONTH_END = "2026-06";
 const OUTLIER_RECAP_LIMIT = 50;
 const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
 
@@ -60,10 +59,6 @@ function isValidRecapActivity(recap: MentoringRecap) {
   return VALID_ACTIVITY_STATUSES.has(normalizeStatus(recap.status));
 }
 
-function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
-}
-
 function monthDate(month: string) {
   return new Date(`${month}-01T00:00:00Z`);
 }
@@ -72,14 +67,6 @@ function addMonths(month: string, delta: number) {
   const date = monthDate(month);
   date.setUTCMonth(date.getUTCMonth() + delta);
   return date.toISOString().slice(0, 7);
-}
-
-function operationalMonths() {
-  const months: string[] = [];
-  for (let month = OPERATIONAL_MONTH_START; month <= OPERATIONAL_MONTH_END; month = addMonths(month, 1)) {
-    months.push(month);
-  }
-  return months;
 }
 
 function monthDiff(laterMonth: string, earlierMonth: string) {
@@ -99,15 +86,6 @@ function monthFromDate(value: unknown) {
 
 function eventMonth(event: Event) {
   return monthFromDate(event.starts_at);
-}
-
-function isOperationalMonth(month: unknown) {
-  const value = String(month ?? "").trim();
-  return /^\d{4}-\d{2}$/.test(value) && value >= OPERATIONAL_MONTH_START && value <= OPERATIONAL_MONTH_END;
-}
-
-function isOutlierRecap(recap: MentoringRecap) {
-  return !isOperationalMonth(recap.meeting_month);
 }
 
 function percent(numerator: number, denominator: number) {
@@ -184,19 +162,19 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     return true;
   });
 
+  const nowVN = currentMonthVN();
   const validRecaps = seasonRecaps.filter(isValidRecapActivity);
-  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
-  const outlierRecaps = validRecaps.filter(isOutlierRecap);
-  const seasonMonths = operationalMonths();
-  const validEventMonths = seasonEvents.map(eventMonth).filter((month): month is string => isOperationalMonth(month));
+  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month, nowVN));
+  const outlierRecaps = validRecaps.filter((recap) => !isOperationalMonth(recap.meeting_month, nowVN));
+  const seasonMonths = operationalMonthRange(nowVN);
+  const validEventMonths = seasonEvents.map(eventMonth).filter((month): month is string => isOperationalMonth(month, nowVN));
   const monthsWithOperationalData = new Set([
     ...validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)),
     ...validEventMonths
   ]);
   const availableMonths = seasonMonths.filter((month) => monthsWithOperationalData.has(month)).sort((a, b) => b.localeCompare(a));
-  const nowMonth = currentMonth();
-  const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
-  const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
+  const latestNonFutureMonth = availableMonths.find((month) => month <= nowVN);
+  const currentOperationalMonth = isOperationalMonth(nowVN, nowVN) ? nowVN : null;
   const seasonLatestClosedMonth = data.latestClosedMonth?.data?.find((row: any) => row.season_id === season?.id);
   const officialClosedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
 
@@ -206,7 +184,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const requestedMonth = sanitizeMonthParam(searchParams?.month);
   const selectedMonth = requestedMonth ?? defaultMonth;
   const previousMonth = addMonths(selectedMonth, -1);
-  const closedMonth = officialClosedMonth ?? (selectedMonth >= nowMonth ? addMonths(nowMonth, -1) : selectedMonth);
+  const closedMonth = officialClosedMonth ?? (selectedMonth >= nowVN ? addMonths(nowVN, -1) : selectedMonth);
   const closedPreviousMonth = typeof seasonLatestClosedMonth?.previous_closed_month === "string" ? seasonLatestClosedMonth.previous_closed_month : addMonths(closedMonth, -1);
 
   const activeMatches = seasonMatches.filter(isActiveMatch);
@@ -244,7 +222,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
 
   const recapByMonth = Array.from(
     validOperationalRecaps.reduce((counts, recap) => {
-      if (!recap.meeting_month || !isOperationalMonth(recap.meeting_month)) return counts;
+      if (!recap.meeting_month || !isOperationalMonth(recap.meeting_month, nowVN)) return counts;
       counts.set(recap.meeting_month, (counts.get(recap.meeting_month) ?? 0) + 1);
       return counts;
     }, new Map<string, number>(seasonMonths.map((month) => [month, 0])))

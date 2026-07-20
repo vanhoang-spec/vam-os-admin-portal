@@ -3,6 +3,7 @@ import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData } from "@/lib/data";
+import { currentMonthVN, operationalMonthRange, VALID_RECAP_STATUSES } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
@@ -10,35 +11,9 @@ import { displayText, formatDate } from "@/lib/utils";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
-const OPERATIONAL_MONTH_START = "2025-10";
-const OPERATIONAL_MONTH_END = "2026-06";
-const VALID_RECAP_STATUSES = new Set(["", "submitted", "needs_review"]);
 
 function normalize(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
-}
-
-function monthDate(month: string) {
-  return new Date(`${month}-01T00:00:00Z`);
-}
-
-function addMonths(month: string, delta: number) {
-  const date = monthDate(month);
-  date.setUTCMonth(date.getUTCMonth() + delta);
-  return date.toISOString().slice(0, 7);
-}
-
-function operationalMonths() {
-  const months: string[] = [];
-  for (let month = OPERATIONAL_MONTH_START; month <= OPERATIONAL_MONTH_END; month = addMonths(month, 1)) {
-    months.push(month);
-  }
-  return months;
-}
-
-function isOperationalMonth(month: unknown) {
-  const value = String(month ?? "").trim();
-  return /^\d{4}-\d{2}$/.test(value) && value >= OPERATIONAL_MONTH_START && value <= OPERATIONAL_MONTH_END;
 }
 
 function monthFromDate(value: unknown) {
@@ -97,7 +72,8 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
   const officialClosedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
   const rpcSelectedMonth = data.kpis.data?.selectedMonth ?? null;
 
-  const monthOptions = operationalMonths().sort((a, b) => b.localeCompare(a));
+  const nowVN = currentMonthVN();
+  const monthOptions = operationalMonthRange(nowVN).sort((a, b) => b.localeCompare(a));
   const requestedMonth = sanitizeMonthParam(searchParams?.month);
   const selectedMonth = requestedMonth ?? officialClosedMonth ?? rpcSelectedMonth ?? monthOptions[monthOptions.length - 1];
   const isClosed = Boolean(officialClosedMonth) && selectedMonth <= officialClosedMonth!;
@@ -149,7 +125,7 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
                   {officialClosedMonth && month === officialClosedMonth ? " · đã chốt" : ""}
                 </option>
               ))}
-              {!operationalMonths().includes(selectedMonth) ? (
+              {!monthOptions.includes(selectedMonth) ? (
                 <option value={selectedMonth}>{selectedMonth} · ngoài khung</option>
               ) : null}
             </select>
