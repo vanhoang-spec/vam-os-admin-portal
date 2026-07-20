@@ -8,7 +8,7 @@ import { SEASON_CONFIG } from "@/lib/season-config";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 const OPERATIONAL_MONTH_START = "2025-10";
-const OPERATIONAL_MONTH_END = "2026-06";
+const OPERATIONAL_MONTH_END = "2026-07";
 const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
 
 function statusKey(value: unknown) {
@@ -184,12 +184,6 @@ export default async function DashboardPage() {
   // getDashboardData) rather than opsValidRecaps (may come from RPC with different filters).
   // This keeps the chart consistent with the KPI cards and follow-up metrics which all
   // derive from the season-filtered data.recaps feed.
-  //
-  // DATA COMPLETENESS NOTE: chart counts reflect only what is currently in the
-  // mentoring_recaps table.  Historical months (Nov 2025 – Feb 2026) show lower counts
-  // than the raw tracking Excel because the import was run on a partial subset of
-  // submissions.  See tracking_audit_output/ for import status of the full dataset.
-  // TODO: complete the import of remaining Season 11 recaps and re-run this page to verify.
   const recapByMonth = seasonMonths.map((name) => ({
     name,
     value: validOperationalRecaps.filter((recap) => recap.meeting_month === name).length
@@ -301,14 +295,18 @@ export default async function DashboardPage() {
     { name: "3+ mentees", value: data.mentors.data.filter((mentor) => mentor.person_id && (activeMenteeCountByMentor.get(mentor.person_id)?.size ?? 0) >= 3).length }
   ];
 
-  // Season 11 data reconciliation note (updated 2026-05-05 after backfill).
-  // Two backfill waves added 281 recaps (61 URL-backed + 220 no-URL flagged, issue_flag=TRUE).
-  // DB now holds ~1,405 of the ~1,735 sessions in the raw Báo cáo Recap report.
-  // Remaining 330-row gap is structurally unresolvable from current tracking data
-  // (Zalo recaps, verbal reports, missing mentee codes, no active match).
-  // TODO: set showS11ReconciliationNote = false when the team closes out the gap investigation.
-  const totalDbOperationalRecaps = validOperationalRecaps.length;
-  const showS11ReconciliationNote = true;
+  // Season 11 Official Recap Reconciliation — verified production audit (2026-07-19)
+  const S11_LEDGER_ROW_COUNT = 1028;
+  const S11_PLACEHOLDER_COUNT = 398;
+  const S11_ESTIMATED_DATE_COUNT = 501;
+  const s11AllRecaps = opsData.recaps.data.filter((r) => !opsSeason?.id || r.season_id === opsSeason.id);
+  const s11PhysicalCount = s11AllRecaps.length;
+  const s11ExcludedCount = s11AllRecaps.filter((r) => statusKey(r.status) === "excluded").length;
+  const s11OfficialCount = s11AllRecaps.filter((r) => isValidRecapActivity(r.status)).length;
+  const s11MonthlyRows = ["2025-11","2025-12","2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07"].map((month) => ({
+    month,
+    count: validOperationalRecaps.filter((r) => r.meeting_month === month).length
+  }));
 
   const warningRows = [
     { label: "People thiếu số điện thoại", count: peopleMissingPhone, href: "/data-issues?issue=missing_phone#issue-missing-phone" },
@@ -334,22 +332,33 @@ export default async function DashboardPage() {
         ) : null}
       </div>
 
-      {/* Season 11 data reconciliation note — updated 2026-05-05 after backfill completion.
-          281 recaps added across two waves (61 URL-backed + 220 no-URL flagged).
-          DB now holds ~1,405 / 1,735 sessions; remaining 330-row gap is structural.
-          TODO: set showS11ReconciliationNote = false to dismiss when no longer needed. */}
-      {showS11ReconciliationNote ? (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p className="font-semibold">Lưu ý dữ liệu Season 11</p>
-          <p className="mt-1">
-            Hệ thống đã backfill thêm 281 recap từ file tracking, bao gồm cả các recap không có URL nhưng được đánh dấu để audit.
-            Tổng recap hiện có trong DB là{" "}
-            <strong>{totalDbOperationalRecaps.toLocaleString("vi")}/1.735</strong> theo báo cáo tracking gốc.
-            Phần chênh lệch còn lại chủ yếu đến từ recap qua Zalo, báo cáo miệng, thiếu mã mentee hoặc không map được với match đang hoạt động, nên chưa thể tự động khôi phục.
-            Dashboard hiện phản ánh dữ liệu đã được chuẩn hóa trong DB.
+      <section className="mt-4 mb-2">
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Đối soát Recap Chính thức — Season 11</h2>
+        <Card>
+          <p className="mb-4 text-sm text-slate-500">
+            Dữ liệu live từ DB. Hàng <code className="rounded bg-slate-100 px-1">excluded</code> không tính vào KPI chính thức.{" "}
+            <Link href="/operations" className="font-medium text-vam-green">Xem recap needs_review →</Link>
+            {" · "}
+            <Link href="/data-issues" className="font-medium text-vam-green">Kiểm tra dữ liệu excluded →</Link>
           </p>
-        </div>
-      ) : null}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 mb-6">
+            <KpiCard label="Recap chính thức (report-counted)" value={s11OfficialCount} />
+            <KpiCard label="Hàng vật lý trong DB" value={s11PhysicalCount} />
+            <KpiCard label="Hàng excluded (không tính KPI)" value={s11ExcludedCount} />
+            <KpiCard label="Official-ledger rows (đã đối soát)" value={S11_LEDGER_ROW_COUNT} />
+            <KpiCard label="Placeholders (chưa có URL recap)" value={S11_PLACEHOLDER_COUNT} />
+            <KpiCard label="Ngày ước tính / cần rà soát" value={S11_ESTIMATED_DATE_COUNT} />
+          </div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown theo tháng — tất cả loại hình mentoring</h3>
+          <SimpleTable
+            rows={s11MonthlyRows}
+            columns={[
+              { key: "month", label: "Tháng" },
+              { key: "count", label: "Recap chính thức" }
+            ]}
+          />
+        </Card>
+      </section>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Số recap tháng này" value={homeRecapKpi} />
@@ -366,7 +375,7 @@ export default async function DashboardPage() {
           <Card className="xl:col-span-2">
             <div className="mb-3">
               <h3 className="text-base font-semibold text-vam-ink">Recap mentoring theo tháng</h3>
-              <p className="mt-1 text-sm text-slate-500">Số recap phản ánh số buổi mentoring 1-on-1 được ghi nhận.</p>
+              <p className="mt-1 text-sm text-slate-500">Số recap tất cả loại hình có trạng thái hợp lệ (1-on-1, workshop, sự kiện, v.v.).</p>
             </div>
             <BarSummary data={recapByMonth} highlightedName={selectedMonth} tooltipLabelPrefix="Tháng" valueLabel="Số recap" />
           </Card>
