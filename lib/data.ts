@@ -874,6 +874,9 @@ async function getOperationsDataFromRpc() {
   };
 }
 
+import { OPS_RECAPS_SELECT } from "./data-selects";
+export { OPS_RECAPS_SELECT };
+
 export async function getOperationsData(scope?: ScopeFilter) {
   const rpcData = scope ? null : await getOperationsDataFromRpc();
   if (rpcData) return rpcData;
@@ -894,7 +897,7 @@ export async function getOperationsData(scope?: ScopeFilter) {
     selectScopedBySeason<Match>("matches", "id,season_id,status,match_type,mentor_person_id,mentee_person_id", scope),
     selectScopedBySeason<MentoringRecap>(
       "mentoring_recaps",
-      "id,season_id,match_id,mentor_person_id,mentee_person_id,meeting_date,meeting_month,recap_url,recap_source,recap_note,meeting_type,captured_by,issue_flag,status,admin_notes",
+      OPS_RECAPS_SELECT,
       scope
     ),
     selectScopedBySeason<Event>("events", "id,legacy_event_temp_id,season_id,event_name,event_type,starts_at,source_notes", scope),

@@ -10,11 +10,9 @@ import {
   currentMonthVN,
   operationalMonthRange,
   isOperationalMonth,
+  computeS11RecapReconciliation,
   OPERATIONAL_MONTH_START,
   VALID_RECAP_STATUSES,
-  LEDGER_ADMIN_NOTES_MARKER,
-  ESTIMATED_DATE_MARKER,
-  PLACEHOLDER_RECAP_SOURCE,
 } from "@/lib/dashboard-month";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
@@ -302,17 +300,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
     { name: "3+ mentees", value: data.mentors.data.filter((mentor) => mentor.person_id && (activeMenteeCountByMentor.get(mentor.person_id)?.size ?? 0) >= 3).length }
   ];
 
-  // Season 11 Official Recap Reconciliation — live from DB
+  // Season 11 Official Recap Reconciliation — live from opsData (includes admin_notes, recap_source)
   const s11AllRecaps = opsData.recaps.data.filter((r) => !opsSeason?.id || r.season_id === opsSeason.id);
-  const s11PhysicalCount = s11AllRecaps.length;
-  const s11ExcludedCount = s11AllRecaps.filter((r) => statusKey(r.status) === "excluded").length;
-  const s11OfficialCount = s11AllRecaps.filter((r) => isValidRecapActivity(r.status)).length;
-  const s11LedgerRowCount = s11AllRecaps.filter((r) => (r.admin_notes ?? "").includes(LEDGER_ADMIN_NOTES_MARKER)).length;
-  const s11PlaceholderCount = s11AllRecaps.filter((r) => r.recap_source === PLACEHOLDER_RECAP_SOURCE).length;
-  const s11EstimatedDateCount = s11AllRecaps.filter((r) => (r.admin_notes ?? "").includes(ESTIMATED_DATE_MARKER)).length;
+  const s11Rec = computeS11RecapReconciliation(s11AllRecaps);
   const s11MonthlyRows = seasonMonths.map((month) => ({
     month,
-    count: validOperationalRecaps.filter((r) => r.meeting_month === month).length
+    count: s11Rec.monthlyCounted[month] ?? 0
   }));
 
   const warningRows = [
@@ -346,18 +339,18 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Đối soát Recap Chính thức — Season 11</h2>
         <Card>
           <p className="mb-4 text-sm text-slate-500">
-            Dữ liệu live từ DB. Hàng <code className="rounded bg-slate-100 px-1">excluded</code> không tính vào KPI chính thức.{" "}
-            <Link href="/operations" className="font-medium text-vam-green">Xem recap needs_review →</Link>
+            Dữ liệu live từ DB. Hàng <code className="rounded bg-slate-100 px-1">excluded</code> không tính vào KPI.{" "}
+            <Link href="/operations" className="font-medium text-vam-green">Trang vận hành (chứa recap needs_review) →</Link>
             {" · "}
-            <Link href="/data-issues" className="font-medium text-vam-green">Kiểm tra dữ liệu excluded →</Link>
+            <span className="text-slate-400">Chưa có trang audit riêng cho excluded.</span>
           </p>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 mb-6">
-            <KpiCard label="Recap chính thức (report-counted)" value={s11OfficialCount} />
-            <KpiCard label="Hàng vật lý trong DB" value={s11PhysicalCount} />
-            <KpiCard label="Hàng excluded (không tính KPI)" value={s11ExcludedCount} />
-            <KpiCard label="Official-ledger rows (đã đối soát)" value={s11LedgerRowCount} />
-            <KpiCard label="Placeholders (chưa có URL recap)" value={s11PlaceholderCount} />
-            <KpiCard label="Ngày ước tính / cần rà soát" value={s11EstimatedDateCount} />
+            <KpiCard label="Recap chính thức (report-counted)" value={s11Rec.reportCounted} />
+            <KpiCard label="Hàng vật lý trong DB" value={s11Rec.physical} />
+            <KpiCard label="Hàng excluded (không tính KPI)" value={s11Rec.excluded} />
+            <KpiCard label="Official-ledger rows (đã đối soát)" value={s11Rec.ledgerRows} />
+            <KpiCard label="Placeholders (chưa có URL recap)" value={s11Rec.placeholders} />
+            <KpiCard label="Ngày ước tính / cần rà soát" value={s11Rec.estimatedDates} />
           </div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown theo tháng — tất cả loại hình mentoring</h3>
           <SimpleTable

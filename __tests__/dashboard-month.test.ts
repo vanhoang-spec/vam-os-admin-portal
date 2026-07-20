@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   selectDashboardMonth,
+  computeS11RecapReconciliation,
   VALID_RECAP_STATUSES,
   LEDGER_ADMIN_NOTES_MARKER,
   ESTIMATED_DATE_MARKER,
   PLACEHOLDER_RECAP_SOURCE,
+  SOURCE_BACKED_RECAP_SOURCE,
 } from "../lib/dashboard-month";
+import { OPS_RECAPS_SELECT } from "../lib/data-selects";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -212,5 +215,140 @@ describe("S11 field markers", () => {
 
   it("PLACEHOLDER_RECAP_SOURCE identifies placeholder rows", () => {
     expect(PLACEHOLDER_RECAP_SOURCE).toBe("admin_input");
+  });
+
+  it("SOURCE_BACKED_RECAP_SOURCE identifies google_sheet-sourced rows", () => {
+    expect(SOURCE_BACKED_RECAP_SOURCE).toBe("google_sheet");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Data-contract regression: OPS_RECAPS_SELECT must contain required fields
+// ---------------------------------------------------------------------------
+
+describe("Data-contract: OPS_RECAPS_SELECT", () => {
+  const requiredFields = ["admin_notes", "recap_source", "issue_flag", "meeting_type", "status", "meeting_month"];
+
+  for (const field of requiredFields) {
+    it(`OPS_RECAPS_SELECT contains '${field}'`, () => {
+      const fields = OPS_RECAPS_SELECT.split(",").map((f) => f.trim());
+      expect(fields).toContain(field);
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tests: computeS11RecapReconciliation
+// ---------------------------------------------------------------------------
+
+describe("computeS11RecapReconciliation", () => {
+  const LEDGER_NOTE = `S11 ledger sync. slot_key=${LEDGER_ADMIN_NOTES_MARKER}TST01|2026-03|1. plan_hash=abc.`;
+  const ESTIMATED_NOTE = `date_source=estimated. ${ESTIMATED_DATE_MARKER} needs_manual_review=true.`;
+
+  it("empty array returns all-zero reconciliation", () => {
+    const r = computeS11RecapReconciliation([]);
+    expect(r.physical).toBe(0);
+    expect(r.reportCounted).toBe(0);
+    expect(r.excluded).toBe(0);
+    expect(r.ledgerRows).toBe(0);
+    expect(r.sourceBacked).toBe(0);
+    expect(r.placeholders).toBe(0);
+    expect(r.estimatedDates).toBe(0);
+    expect(r.monthlyCounted).toEqual({});
+  });
+
+  it("missing admin_notes does not falsely count a ledger row", () => {
+    const recaps = [
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "submitted", admin_notes: undefined, recap_source: "google_sheet", meeting_month: "2026-03" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.ledgerRows).toBe(0);
+    expect(r.estimatedDates).toBe(0);
+  });
+
+  it("LEDGER_ADMIN_NOTES_MARKER in admin_notes counts as ledger row", () => {
+    const recaps = [
+      { status: "submitted", admin_notes: LEDGER_NOTE, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.ledgerRows).toBe(1);
+  });
+
+  it("google_sheet recap_source counts as source-backed", () => {
+    const recaps = [
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "submitted", admin_notes: null, recap_source: "admin_input", meeting_month: "2026-03" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.sourceBacked).toBe(1);
+    expect(r.placeholders).toBe(1);
+  });
+
+  it("admin_input recap_source counts as placeholder", () => {
+    const recaps = [
+      { status: "needs_review", admin_notes: LEDGER_NOTE, recap_source: "admin_input", meeting_month: "2026-03" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.placeholders).toBe(1);
+    expect(r.sourceBacked).toBe(0);
+  });
+
+  it("ESTIMATED_DATE_MARKER in admin_notes counts as estimated date", () => {
+    const recaps = [
+      { status: "needs_review", admin_notes: ESTIMATED_NOTE, recap_source: "admin_input", meeting_month: "2026-07" },
+      { status: "submitted", admin_notes: LEDGER_NOTE, recap_source: "google_sheet", meeting_month: "2026-07" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.estimatedDates).toBe(1);
+  });
+
+  it("excluded status does not enter reportCounted", () => {
+    const recaps = [
+      { status: "excluded", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.reportCounted).toBe(1);
+    expect(r.excluded).toBe(1);
+    expect(r.physical).toBe(2);
+  });
+
+  it("all valid meeting_type values enter reportCounted when status is valid", () => {
+    const recaps = [
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-05", meeting_type: "1on1" },
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-05", meeting_type: "workshop" },
+      { status: "needs_review", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-05", meeting_type: "event" },
+      { status: "", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-05", meeting_type: null },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.reportCounted).toBe(4);
+    expect(r.monthlyCounted["2026-05"]).toBe(4);
+  });
+
+  it("monthlyCounted aggregates reportCounted per month correctly", () => {
+    const recaps = [
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "needs_review", admin_notes: null, recap_source: "admin_input", meeting_month: "2026-07" },
+      { status: "excluded", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.monthlyCounted["2026-03"]).toBe(2);
+    expect(r.monthlyCounted["2026-07"]).toBe(1);
+    expect(r.monthlyCounted["2026-04"]).toBeUndefined();
+  });
+
+  it("physical = reportCounted + excluded + other statuses", () => {
+    const recaps = [
+      { status: "submitted", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "excluded", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+      { status: "invalid", admin_notes: null, recap_source: "google_sheet", meeting_month: "2026-03" },
+    ];
+    const r = computeS11RecapReconciliation(recaps);
+    expect(r.physical).toBe(3);
+    expect(r.reportCounted).toBe(1);
+    expect(r.excluded).toBe(1);
   });
 });
