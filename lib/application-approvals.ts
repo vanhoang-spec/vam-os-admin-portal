@@ -216,10 +216,7 @@ export async function approveApplication(
 
     if (personErr || !newPerson) {
       log("insert person failed", personErr);
-      return {
-        ok: false,
-        message: `Không thể tạo hồ sơ người: ${personErr?.message ?? SAFE_ERROR}`
-      };
+      return { ok: false, message: "Không thể tạo hồ sơ người. " + SAFE_ERROR };
     }
     person = newPerson as Person;
     personCreated = true;
@@ -254,10 +251,7 @@ export async function approveApplication(
 
       if (profileErr || !newProfile) {
         log("insert mentor_profile failed", profileErr);
-        return {
-          ok: false,
-          message: `Không thể tạo mentor profile: ${profileErr?.message ?? SAFE_ERROR}`
-        };
+        return { ok: false, message: "Không thể tạo mentor profile. " + SAFE_ERROR };
       }
       profileId = (newProfile as { id: string }).id;
       profileCreated = true;
@@ -281,10 +275,7 @@ export async function approveApplication(
 
       if (profileErr || !newProfile) {
         log("insert mentee_profile failed", profileErr);
-        return {
-          ok: false,
-          message: `Không thể tạo mentee profile: ${profileErr?.message ?? SAFE_ERROR}`
-        };
+        return { ok: false, message: "Không thể tạo mentee profile. " + SAFE_ERROR };
       }
       profileId = (newProfile as { id: string }).id;
       profileCreated = true;
@@ -307,7 +298,7 @@ export async function approveApplication(
     log("update application status/person_id failed", appErr);
     return {
       ok: false,
-      message: `Không thể cập nhật trạng thái đơn: ${appErr.message}`
+      message: "Không thể cập nhật trạng thái đơn. " + SAFE_ERROR
     };
   }
 

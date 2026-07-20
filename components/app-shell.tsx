@@ -34,6 +34,10 @@ import { buildNavGroups, isActiveRoute, type NavGroupDef } from "@/lib/nav-model
 const ICON_MAP: Record<string, LucideIcon> = {
   "/": Home,
   "/operations": LineChart,
+  "/operations/tasks": ClipboardList,
+  "/operations/monthly": BarChart3,
+  "/operations/intelligence": LineChart,
+  "/recaps/create": ClipboardCheck,
   "/people": Users,
   "/mentors": UserRoundCheck,
   "/mentees": UserRoundSearch,
@@ -48,6 +52,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "/admin/users": UserCog,
   community: Users,
   admin: Settings2,
+  operations: LineChart,
 };
 
 function getGroupIcon(group: NavGroupDef): LucideIcon {

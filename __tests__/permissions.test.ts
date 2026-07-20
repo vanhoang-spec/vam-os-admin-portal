@@ -1,0 +1,178 @@
+import { describe, it, expect } from "vitest";
+import {
+  canAccessAdminUser,
+  canManageUsers,
+  canEditRecap,
+  canAssignReview,
+  canReview,
+  isReviewerOnly,
+  canDecide,
+  canBulkAssignReviews,
+  canManageReviewers,
+  canSelfClaimInterview,
+  canManageMatches,
+} from "../lib/permissions";
+
+// ── Role sets ─────────────────────────────────────────────────────────────────
+
+const ADMIN_TIER = ["super_admin", "admin", "core_team"] as const;
+const REVIEW_ROLES = ["super_admin", "admin", "core_team", "reviewer"] as const;
+const LIMITED_ROLES = ["viewer", "support_team"] as const;
+
+// ── canAccessAdminUser (admin tier only) ──────────────────────────────────────
+
+describe("canAccessAdminUser", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants ${role}`, () => expect(canAccessAdminUser(role)).toBe(true));
+  });
+  it("denies reviewer", () => expect(canAccessAdminUser("reviewer")).toBe(false));
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canAccessAdminUser(role)).toBe(false));
+  });
+  it("denies null", () => expect(canAccessAdminUser(null)).toBe(false));
+  it("denies undefined", () => expect(canAccessAdminUser(undefined)).toBe(false));
+});
+
+// ── canManageUsers (super_admin and admin only) ───────────────────────────────
+
+describe("canManageUsers", () => {
+  it("grants super_admin", () => expect(canManageUsers("super_admin")).toBe(true));
+  it("grants admin", () => expect(canManageUsers("admin")).toBe(true));
+  it("denies core_team", () => expect(canManageUsers("core_team")).toBe(false));
+  it("denies reviewer", () => expect(canManageUsers("reviewer")).toBe(false));
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canManageUsers(role)).toBe(false));
+  });
+  it("denies null", () => expect(canManageUsers(null)).toBe(false));
+});
+
+// ── canEditRecap (takes AdminLike object) ─────────────────────────────────────
+
+describe("canEditRecap", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants { role: "${role}" }`, () => expect(canEditRecap({ role })).toBe(true));
+  });
+  it("denies reviewer", () => expect(canEditRecap({ role: "reviewer" })).toBe(false));
+  it("denies null admin user", () => expect(canEditRecap(null)).toBe(false));
+  it("denies undefined admin user", () => expect(canEditRecap(undefined)).toBe(false));
+  it("denies object with null role", () => expect(canEditRecap({ role: null })).toBe(false));
+});
+
+// ── canAssignReview (admin tier only) ─────────────────────────────────────────
+
+describe("canAssignReview", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants ${role}`, () => expect(canAssignReview(role)).toBe(true));
+  });
+  it("denies reviewer (can review, cannot assign)", () => expect(canAssignReview("reviewer")).toBe(false));
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canAssignReview(role)).toBe(false));
+  });
+});
+
+// ── canReview (admin tier + reviewer) ────────────────────────────────────────
+
+describe("canReview", () => {
+  REVIEW_ROLES.forEach((role) => {
+    it(`grants ${role}`, () => expect(canReview(role)).toBe(true));
+  });
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canReview(role)).toBe(false));
+  });
+  it("denies null", () => expect(canReview(null)).toBe(false));
+});
+
+// ── isReviewerOnly (exactly "reviewer") ──────────────────────────────────────
+
+describe("isReviewerOnly", () => {
+  it("true for reviewer", () => expect(isReviewerOnly("reviewer")).toBe(true));
+  ADMIN_TIER.forEach((role) => {
+    it(`false for ${role}`, () => expect(isReviewerOnly(role)).toBe(false));
+  });
+  LIMITED_ROLES.forEach((role) => {
+    it(`false for ${role}`, () => expect(isReviewerOnly(role)).toBe(false));
+  });
+  it("false for null", () => expect(isReviewerOnly(null)).toBe(false));
+});
+
+// ── canDecide (admin tier only — excludes reviewer) ──────────────────────────
+
+describe("canDecide", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants ${role}`, () => expect(canDecide(role)).toBe(true));
+  });
+  it("denies reviewer", () => expect(canDecide("reviewer")).toBe(false));
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canDecide(role)).toBe(false));
+  });
+  it("denies null", () => expect(canDecide(null)).toBe(false));
+});
+
+// ── canBulkAssignReviews (admin tier only) ────────────────────────────────────
+
+describe("canBulkAssignReviews", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants ${role}`, () => expect(canBulkAssignReviews(role)).toBe(true));
+  });
+  it("denies reviewer", () => expect(canBulkAssignReviews("reviewer")).toBe(false));
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canBulkAssignReviews(role)).toBe(false));
+  });
+});
+
+// ── canManageReviewers (admin tier only) ──────────────────────────────────────
+
+describe("canManageReviewers", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants ${role}`, () => expect(canManageReviewers(role)).toBe(true));
+  });
+  it("denies reviewer", () => expect(canManageReviewers("reviewer")).toBe(false));
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canManageReviewers(role)).toBe(false));
+  });
+});
+
+// ── canSelfClaimInterview (admin tier + reviewer) ─────────────────────────────
+
+describe("canSelfClaimInterview", () => {
+  REVIEW_ROLES.forEach((role) => {
+    it(`grants ${role}`, () => expect(canSelfClaimInterview(role)).toBe(true));
+  });
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canSelfClaimInterview(role)).toBe(false));
+  });
+  it("denies null", () => expect(canSelfClaimInterview(null)).toBe(false));
+});
+
+// ── canManageMatches (admin tier only — reviewer excluded) ────────────────────
+
+describe("canManageMatches", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants ${role}`, () => expect(canManageMatches(role)).toBe(true));
+  });
+  it("denies reviewer (cannot manage matches)", () => expect(canManageMatches("reviewer")).toBe(false));
+  LIMITED_ROLES.forEach((role) => {
+    it(`denies ${role}`, () => expect(canManageMatches(role)).toBe(false));
+  });
+  it("denies null", () => expect(canManageMatches(null)).toBe(false));
+});
+
+// ── Role set consistency ───────────────────────────────────────────────────────
+
+describe("role set consistency", () => {
+  it("canManageMatches and canDecide have the same allowed set (admin tier)", () => {
+    const roles = ["super_admin", "admin", "core_team", "reviewer", "support_team", "viewer"];
+    roles.forEach((r) => {
+      expect(canManageMatches(r)).toBe(canDecide(r));
+    });
+  });
+
+  it("canReview is a strict superset of canAssignReview (reviewer can review but not assign)", () => {
+    const roles = ["super_admin", "admin", "core_team", "reviewer", "support_team", "viewer"];
+    roles.forEach((r) => {
+      if (canAssignReview(r)) expect(canReview(r)).toBe(true);
+    });
+    expect(canReview("reviewer")).toBe(true);
+    expect(canAssignReview("reviewer")).toBe(false);
+  });
+});

@@ -1,6 +1,9 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canManageWorkflow } from "@/lib/auth-constants";
 import { getFounderIntelligenceDashboard } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { SEASON_CONFIG } from "@/lib/season-config";
@@ -65,6 +68,9 @@ function SegmentGapTable({ rows }: { rows: FounderIntelligenceDashboard["matchin
 }
 
 export default async function FounderIntelligencePage() {
+  const adminUser = await getCurrentAdminUser();
+  if (!canManageWorkflow(adminUser)) notFound();
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const result = await getFounderIntelligenceDashboard(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, scope);

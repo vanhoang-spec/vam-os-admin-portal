@@ -29,7 +29,19 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
 
   const groups: NavGroupDef[] = [
     { key: "dashboard", label: "Tổng quan", href: "/" },
-    { key: "operations", label: "Vận hành", href: "/operations" },
+    showAdminTier
+      ? {
+          key: "operations",
+          label: "Vận hành",
+          items: [
+            { href: "/operations", label: "Tổng quan vận hành" },
+            { href: "/operations/tasks", label: "Nhiệm vụ & phân công" },
+            { href: "/operations/monthly", label: "Báo cáo tháng" },
+            { href: "/operations/intelligence", label: "Phân tích mùa" },
+            { href: "/recaps/create", label: "Tạo báo cáo" },
+          ],
+        }
+      : { key: "operations", label: "Vận hành", href: "/operations" },
     {
       key: "community",
       label: "Cộng đồng VAM",

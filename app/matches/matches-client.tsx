@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -6,6 +6,7 @@ import { useFormState } from "react-dom";
 import { cancelMatchAction, createManualMatchAction } from "@/app/actions/matches";
 import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import type { MatchActionState } from "@/lib/match-action-types";
+import { filterMentees, filterMentors } from "@/lib/match-search";
 import type { MenteeCandidate, MentorCandidate } from "@/lib/matches";
 
 const initialState: MatchActionState = { ok: false, message: null };
@@ -53,6 +54,8 @@ export function ManualMatchForm({
   const timing = useActionTiming("match.create", state);
   const [selectedMentorId, setSelectedMentorId] = useState("");
   const [selectedMenteeId, setSelectedMenteeId] = useState("");
+  const [mentorSearch, setMentorSearch] = useState("");
+  const [menteeSearch, setMenteeSearch] = useState("");
 
   const selectedMentor = mentors.find((m) => m.profile_id === selectedMentorId) ?? null;
   const selectedMentee = mentees.find((m) => m.profile_id === selectedMenteeId) ?? null;
@@ -63,11 +66,16 @@ export function ManualMatchForm({
       router.refresh();
       setSelectedMentorId("");
       setSelectedMenteeId("");
+      setMentorSearch("");
+      setMenteeSearch("");
     }
   }, [state.ok, router]);
 
   const availableMentors = mentors.filter((m) => m.active_match_count < MAX_LOAD);
   const availableMentees = mentees.filter((m) => !m.has_active_match);
+
+  const visibleMentors = filterMentors(mentors, mentorSearch);
+  const visibleMentees = filterMentees(mentees, menteeSearch);
 
   return (
     <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-4">
@@ -88,29 +96,39 @@ export function ManualMatchForm({
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Mentor selector */}
         <div>
-          <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Mentor (*)</span>
-            <select
-              name="mentor_profile_id"
-              value={selectedMentorId}
-              onChange={(e) => setSelectedMentorId(e.target.value)}
-              required
-              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
-            >
-              <option value="">-- Chọn Mentor --</option>
-              {mentors.map((m) => {
-                const lb = loadBar(m.active_match_count);
-                const isFull = m.active_match_count >= MAX_LOAD;
-                return (
-                  <option key={m.profile_id} value={m.profile_id} disabled={isFull}>
-                    {`[${lb.label}] ${m.full_name ?? m.email_primary ?? m.profile_id}`}
-                    {m.company_current ? ` — ${m.company_current}` : ""}
-                    {isFull ? " (FULL)" : ""}
-                  </option>
-                );
-              })}
-            </select>
+          <label htmlFor="mentor-search" className="block text-xs font-medium uppercase text-slate-500">
+            Mentor (*)
           </label>
+          <input
+            id="mentor-search"
+            type="text"
+            value={mentorSearch}
+            onChange={(e) => { setMentorSearch(e.target.value); setSelectedMentorId(""); }}
+            placeholder="Tìm theo tên, công ty…"
+            className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-1.5 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+          />
+          <label htmlFor="mentor-select" className="sr-only">Chọn Mentor</label>
+          <select
+            id="mentor-select"
+            name="mentor_profile_id"
+            value={selectedMentorId}
+            onChange={(e) => setSelectedMentorId(e.target.value)}
+            required
+            className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+          >
+            <option value="">-- Chọn Mentor {mentorSearch ? `(${visibleMentors.length} kết quả)` : ""} --</option>
+            {visibleMentors.map((m) => {
+              const lb = loadBar(m.active_match_count);
+              const isFull = m.active_match_count >= MAX_LOAD;
+              return (
+                <option key={m.profile_id} value={m.profile_id} disabled={isFull}>
+                  {`[${lb.label}] ${m.full_name ?? m.email_primary ?? m.profile_id}`}
+                  {m.company_current ? ` — ${m.company_current}` : ""}
+                  {isFull ? " (FULL)" : ""}
+                </option>
+              );
+            })}
+          </select>
           {selectedMentor ? (
             <div className="mt-2 rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-600">
               <div className="font-medium text-vam-ink">{selectedMentor.full_name ?? "—"}</div>
@@ -131,28 +149,38 @@ export function ManualMatchForm({
 
         {/* Mentee selector */}
         <div>
-          <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Mentee (*)</span>
-            <select
-              name="mentee_profile_id"
-              value={selectedMenteeId}
-              onChange={(e) => setSelectedMenteeId(e.target.value)}
-              required
-              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
-            >
-              <option value="">-- Chọn Mentee --</option>
-              {mentees.map((m) => {
-                const hasMatch = m.has_active_match;
-                return (
-                  <option key={m.profile_id} value={m.profile_id} disabled={hasMatch}>
-                    {`${m.full_name ?? m.email_primary ?? m.profile_id}`}
-                    {m.school_code ? ` (${m.school_code})` : ""}
-                    {hasMatch ? " — Đã có mentor" : ""}
-                  </option>
-                );
-              })}
-            </select>
+          <label htmlFor="mentee-search" className="block text-xs font-medium uppercase text-slate-500">
+            Mentee (*)
           </label>
+          <input
+            id="mentee-search"
+            type="text"
+            value={menteeSearch}
+            onChange={(e) => { setMenteeSearch(e.target.value); setSelectedMenteeId(""); }}
+            placeholder="Tìm theo tên, trường…"
+            className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-1.5 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+          />
+          <label htmlFor="mentee-select" className="sr-only">Chọn Mentee</label>
+          <select
+            id="mentee-select"
+            name="mentee_profile_id"
+            value={selectedMenteeId}
+            onChange={(e) => setSelectedMenteeId(e.target.value)}
+            required
+            className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+          >
+            <option value="">-- Chọn Mentee {menteeSearch ? `(${visibleMentees.length} kết quả)` : ""} --</option>
+            {visibleMentees.map((m) => {
+              const hasMatch = m.has_active_match;
+              return (
+                <option key={m.profile_id} value={m.profile_id} disabled={hasMatch}>
+                  {`${m.full_name ?? m.email_primary ?? m.profile_id}`}
+                  {m.school_code ? ` (${m.school_code})` : ""}
+                  {hasMatch ? " — Đã có mentor" : ""}
+                </option>
+              );
+            })}
+          </select>
           {selectedMentee ? (
             <div className="mt-2 rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-600">
               <div className="font-medium text-vam-ink">{selectedMentee.full_name ?? "—"}</div>

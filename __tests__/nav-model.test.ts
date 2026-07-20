@@ -76,6 +76,17 @@ describe("buildNavGroups — super_admin", () => {
     expect(subHrefs).toContain("/interviews");
     expect(subHrefs).toContain("/applications");
   });
+
+  it("operations group is an accordion with all 5 sub-items for super_admin", () => {
+    const ops = groups.find((g) => g.key === "operations");
+    expect(ops!.items).toBeDefined();
+    const opHrefs = ops!.items?.map((i) => i.href) ?? [];
+    expect(opHrefs).toContain("/operations");
+    expect(opHrefs).toContain("/operations/tasks");
+    expect(opHrefs).toContain("/operations/monthly");
+    expect(opHrefs).toContain("/operations/intelligence");
+    expect(opHrefs).toContain("/recaps/create");
+  });
 });
 
 // ── buildNavGroups — admin ────────────────────────────────────────────────────
@@ -167,6 +178,12 @@ describe("buildNavGroups — viewer", () => {
     expect(apps!.href).toBe("/applications");
     expect(apps!.items).toBeUndefined();
   });
+
+  it("operations is a standalone link (no sub-items) for viewer", () => {
+    const ops = groups.find((g) => g.key === "operations");
+    expect(ops!.href).toBe("/operations");
+    expect(ops!.items).toBeUndefined();
+  });
 });
 
 // ── buildNavGroups — support_team ─────────────────────────────────────────────
@@ -249,13 +266,20 @@ describe("allNavHrefs", () => {
   });
 });
 
-// ── Explicit per-role route set equivalence (verifies fa42fa1 permission model) ─
+// ── Explicit per-role route set equivalence ───────────────────────────────────
 //
-// Source of truth: fa42fa1 components/app-shell.tsx
+// Batch-3 additions: admin-tier roles (core_team, admin, super_admin) get
+// operations sub-nav items (tasks, monthly, intelligence, recaps/create) via
+// the Vận hành accordion group. Viewer/support_team/reviewer still see the
+// standalone /operations link.
+//
+// Source of truth: lib/nav-model.ts buildNavGroups()
 //   navItems (all roles):        /, /operations, /people, /mentors, /mentees,
 //                                 /applications, /matches, /events, /data-issues
+//   showAdminTier (+core):       /operations → accordion; adds /operations/tasks,
+//                                 /operations/monthly, /operations/intelligence,
+//                                 /recaps/create; also + /admin, /team
 //   canReview (+reviewer):       + /reviews, /interviews
-//   canAccessAdminUser (+core):  + /admin, /team
 //   canManageUsers (+admin):     + /admin/users
 
 const BASE_ROUTE_ARR = [
@@ -263,20 +287,27 @@ const BASE_ROUTE_ARR = [
   "/applications", "/matches", "/events", "/data-issues",
 ];
 
+const OPS_ADMIN_ROUTES = [
+  "/operations/tasks",
+  "/operations/monthly",
+  "/operations/intelligence",
+  "/recaps/create",
+];
+
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       BASE_ROUTE_ARR,
   support_team: BASE_ROUTE_ARR,
   reviewer:     [...BASE_ROUTE_ARR, "/reviews", "/interviews"],
-  core_team:    [...BASE_ROUTE_ARR, "/reviews", "/interviews", "/admin", "/team"],
-  admin:        [...BASE_ROUTE_ARR, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
-  super_admin:  [...BASE_ROUTE_ARR, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team"],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
+  super_admin:  [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
 };
 
 function sortedRoutes(arr: string[]) {
   return [...arr].sort();
 }
 
-describe("Explicit per-role route set — equivalence with fa42fa1 permission model", () => {
+describe("Explicit per-role route set — equivalence with nav-model permission gates", () => {
   const roles = Object.keys(EXPECTED_ROUTES) as CurrentAdminUser["role"][];
 
   roles.forEach((role) => {
