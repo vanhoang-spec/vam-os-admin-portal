@@ -5,11 +5,19 @@ import { getDashboardData, getOperationsData, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import {
+  selectDashboardMonth,
+  currentMonthVN,
+  operationalMonthRange,
+  isOperationalMonth,
+  OPERATIONAL_MONTH_START,
+  VALID_RECAP_STATUSES,
+  LEDGER_ADMIN_NOTES_MARKER,
+  ESTIMATED_DATE_MARKER,
+  PLACEHOLDER_RECAP_SOURCE,
+} from "@/lib/dashboard-month";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
-const OPERATIONAL_MONTH_START = "2025-10";
-const OPERATIONAL_MONTH_END = "2026-07";
-const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
 
 function statusKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -20,7 +28,7 @@ function isActive(value: unknown) {
 }
 
 function isValidRecapActivity(value: unknown) {
-  return VALID_ACTIVITY_STATUSES.has(statusKey(value));
+  return VALID_RECAP_STATUSES.has(statusKey(value));
 }
 
 function isBlank(value: unknown) {
@@ -53,22 +61,6 @@ function addMonths(month: string, delta: number) {
   return date.toISOString().slice(0, 7);
 }
 
-function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
-}
-
-function operationalMonths() {
-  const months: string[] = [];
-  for (let month = OPERATIONAL_MONTH_START; month <= OPERATIONAL_MONTH_END; month = addMonths(month, 1)) {
-    months.push(month);
-  }
-  return months;
-}
-
-function isOperationalMonth(month: unknown) {
-  const value = String(month ?? "").trim();
-  return /^\d{4}-\d{2}$/.test(value) && value >= OPERATIONAL_MONTH_START && value <= OPERATIONAL_MONTH_END;
-}
 
 function latestRecapDate(recaps: Array<{ meeting_date?: string | null }>) {
   const dates = recaps
@@ -96,7 +88,7 @@ function countByLabel(rows: Array<Record<string, unknown>>, key: string, fallbac
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, "vi"));
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const scope = await getScopeFilter(await getAdminScopeContext());
   const [data, opsData] = await Promise.all([
     getDashboardData(scope),
@@ -144,14 +136,14 @@ export default async function DashboardPage() {
     activeMenteeCountByMentor.set(match.mentor_person_id, menteeIds);
   }
 
-  const seasonMonths = operationalMonths();
+  const userMonthParam = typeof searchParams?.month === "string" ? searchParams.month : null;
+  const nowMonthVN = currentMonthVN();
+  const seasonMonths = operationalMonthRange(nowMonthVN);
   const validRecaps = seasonRecaps.filter((recap) => isValidRecapActivity(recap.status));
-  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month));
+  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month, nowMonthVN));
   const monthsWithData = new Set(validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)));
   const availableMonths = seasonMonths.filter((month) => monthsWithData.has(month)).sort((a, b) => b.localeCompare(a));
-  const nowMonth = currentMonth();
-  const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
-  const currentOperationalMonth = isOperationalMonth(nowMonth) ? nowMonth : null;
+  const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonthVN);
   
   const opsSeason = opsData.seasons.data.find((row) => row.code === SEASON_CODE);
   const seasonLatestClosedMonth = opsData.latestClosedMonth?.data?.find((row: any) => row.season_id === (season?.id || opsSeason?.id));
@@ -161,13 +153,28 @@ export default async function DashboardPage() {
   const opsSelectedMonth = opsData.kpis.data?.selectedMonth ?? latestNonFutureMonth ?? OPERATIONAL_MONTH_START;
   const healthMonthLabel = officialClosedMonth ?? opsSelectedMonth;
 
-  // KPIs derived directly from official governance data where available
-  const homeRecapKpi = typeof seasonLatestClosedMonth?.total_recap_entries === "number" ? seasonLatestClosedMonth.total_recap_entries : (opsData.kpis.data?.recapCount ?? 0);
+  const validRecapMonthsAll = Array.from(
+    new Set(
+      validRecaps
+        .map((r) => r.meeting_month)
+        .filter((m): m is string => m != null && /^\d{4}-\d{2}$/.test(m))
+    )
+  );
+  const { month: dashboardSelectedMonth, source: dashboardMonthSource } = selectDashboardMonth(
+    validRecapMonthsAll,
+    nowMonthVN,
+    userMonthParam
+  );
+
+  // homeRecapKpi: count for auto-selected month (current if has data, else latest prior)
+  const homeRecapKpi = dashboardSelectedMonth
+    ? validOperationalRecaps.filter((r) => r.meeting_month === dashboardSelectedMonth).length
+    : (typeof seasonLatestClosedMonth?.total_recap_entries === "number" ? seasonLatestClosedMonth.total_recap_entries : (opsData.kpis.data?.recapCount ?? 0));
   const homeMenteeActiveKpi = typeof seasonLatestClosedMonth?.distinct_mentees_with_recap === "number" ? seasonLatestClosedMonth.distinct_mentees_with_recap : (opsData.kpis.data?.activeMenteeCount ?? 0);
   const homeMentorActiveKpi = opsData.kpis.data?.activeMentorCount ?? 0;
 
   // Replicate Operations follow-up logic exactly
-  const closedMonth = officialClosedMonth ?? (opsSelectedMonth >= nowMonth ? addMonths(nowMonth, -1) : opsSelectedMonth);
+  const closedMonth = officialClosedMonth ?? (opsSelectedMonth >= nowMonthVN ? addMonths(nowMonthVN, -1) : opsSelectedMonth);
   const closedPreviousMonth = officialPreviousClosedMonth ?? addMonths(closedMonth, -1);
   
   const opsValidRecaps = opsData.recaps.data.filter((recap) => isValidRecapActivity(recap.status));
@@ -199,7 +206,7 @@ export default async function DashboardPage() {
     { name: "Im lặng 2 tháng liên tiếp / cần follow-up", value: homeFollowUpKpi }
   ];
 
-  const selectedMonth = officialClosedMonth ?? opsSelectedMonth; // for backward compatibility with secondary charts
+  const selectedMonth = dashboardSelectedMonth ?? officialClosedMonth ?? opsSelectedMonth;
   const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
   const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === closedPreviousMonth);
   const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
@@ -295,15 +302,15 @@ export default async function DashboardPage() {
     { name: "3+ mentees", value: data.mentors.data.filter((mentor) => mentor.person_id && (activeMenteeCountByMentor.get(mentor.person_id)?.size ?? 0) >= 3).length }
   ];
 
-  // Season 11 Official Recap Reconciliation — verified production audit (2026-07-19)
-  const S11_LEDGER_ROW_COUNT = 1028;
-  const S11_PLACEHOLDER_COUNT = 398;
-  const S11_ESTIMATED_DATE_COUNT = 501;
+  // Season 11 Official Recap Reconciliation — live from DB
   const s11AllRecaps = opsData.recaps.data.filter((r) => !opsSeason?.id || r.season_id === opsSeason.id);
   const s11PhysicalCount = s11AllRecaps.length;
   const s11ExcludedCount = s11AllRecaps.filter((r) => statusKey(r.status) === "excluded").length;
   const s11OfficialCount = s11AllRecaps.filter((r) => isValidRecapActivity(r.status)).length;
-  const s11MonthlyRows = ["2025-11","2025-12","2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07"].map((month) => ({
+  const s11LedgerRowCount = s11AllRecaps.filter((r) => (r.admin_notes ?? "").includes(LEDGER_ADMIN_NOTES_MARKER)).length;
+  const s11PlaceholderCount = s11AllRecaps.filter((r) => r.recap_source === PLACEHOLDER_RECAP_SOURCE).length;
+  const s11EstimatedDateCount = s11AllRecaps.filter((r) => (r.admin_notes ?? "").includes(ESTIMATED_DATE_MARKER)).length;
+  const s11MonthlyRows = seasonMonths.map((month) => ({
     month,
     count: validOperationalRecaps.filter((r) => r.meeting_month === month).length
   }));
@@ -326,10 +333,13 @@ export default async function DashboardPage() {
       ))}
 
       <div className="mb-4 text-sm">
-        <p className="text-slate-600 font-medium">Tháng đã chốt: {officialClosedMonth ?? "Chưa có"}</p>
-        {!officialClosedMonth && opsSelectedMonth ? (
-          <p className="text-amber-600 mt-1">Đang hiển thị tháng mở {opsSelectedMonth} do chưa có dữ liệu chốt</p>
-        ) : null}
+        <p className="text-slate-600 font-medium">Tháng đang xem: {dashboardSelectedMonth ?? "Chưa có"}</p>
+        {dashboardMonthSource === "current" && (
+          <p className="text-slate-500 mt-1 text-xs">Tháng hiện tại</p>
+        )}
+        {dashboardMonthSource === "fallback" && (
+          <p className="text-slate-500 mt-1 text-xs">Tháng gần nhất có dữ liệu</p>
+        )}
       </div>
 
       <section className="mt-4 mb-2">
@@ -345,9 +355,9 @@ export default async function DashboardPage() {
             <KpiCard label="Recap chính thức (report-counted)" value={s11OfficialCount} />
             <KpiCard label="Hàng vật lý trong DB" value={s11PhysicalCount} />
             <KpiCard label="Hàng excluded (không tính KPI)" value={s11ExcludedCount} />
-            <KpiCard label="Official-ledger rows (đã đối soát)" value={S11_LEDGER_ROW_COUNT} />
-            <KpiCard label="Placeholders (chưa có URL recap)" value={S11_PLACEHOLDER_COUNT} />
-            <KpiCard label="Ngày ước tính / cần rà soát" value={S11_ESTIMATED_DATE_COUNT} />
+            <KpiCard label="Official-ledger rows (đã đối soát)" value={s11LedgerRowCount} />
+            <KpiCard label="Placeholders (chưa có URL recap)" value={s11PlaceholderCount} />
+            <KpiCard label="Ngày ước tính / cần rà soát" value={s11EstimatedDateCount} />
           </div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown theo tháng — tất cả loại hình mentoring</h3>
           <SimpleTable
@@ -361,7 +371,7 @@ export default async function DashboardPage() {
       </section>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Số recap tháng này" value={homeRecapKpi} />
+        <KpiCard label={`Recap tháng ${dashboardSelectedMonth ?? "—"}`} value={homeRecapKpi} />
         <KpiCard label="Mentee active tháng này" value={homeMenteeActiveKpi} />
         <KpiCard label="Mentor active tháng này" value={homeMentorActiveKpi} />
         <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
