@@ -81,7 +81,7 @@ export async function assignApplicationReview(input: AssignReviewInput): Promise
 
   if (error) {
     log("insert application_reviews failed", error);
-    return { ok: false, message: `${SAFE_ERROR} (${error.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (!data) {
     return { ok: false, message: SAFE_ERROR };
@@ -162,7 +162,7 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
 
   if (error) {
     log("update review draft failed", error);
-    return { ok: false, message: `${SAFE_ERROR} (${error.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   return { ok: true, id: input.reviewId };
@@ -227,7 +227,7 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
 
   if (error) {
     log("submit review update failed", error);
-    return { ok: false, message: `${SAFE_ERROR} (${error.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   // Advance application.status based on review_round
@@ -292,7 +292,7 @@ export async function updateApplicationStatus(input: UpdateApplicationStatusInpu
 
   if (error) {
     log("update application status failed", error);
-    return { ok: false, message: `${SAFE_ERROR} (${error.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   return { ok: true, id: input.applicationId };

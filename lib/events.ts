@@ -447,7 +447,7 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
     log("event load failed", eventRes.error);
     return {
       ok: false,
-      error: eventRes.error.message,
+      error: SAFE_ERROR,
       event: null,
       participations: [],
       registrationLink: null,
@@ -552,7 +552,7 @@ export async function getRegistrationDetail(
 
   if (regRes.error) {
     log("registration detail load failed", regRes.error);
-    return { ok: false, error: regRes.error.message, registration: null, event: eventRes.data as Event | null };
+    return { ok: false, error: SAFE_ERROR, registration: null, event: eventRes.data as Event | null };
   }
 
   // Scope guard: ensure event belongs to an allowed season

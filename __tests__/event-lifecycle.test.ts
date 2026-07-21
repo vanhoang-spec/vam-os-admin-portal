@@ -40,7 +40,10 @@ import {
   rejectRegistrationProof,
   checkInForEvent,
   setRegistrationLinkActive,
+  getEventDetailData,
+  getRegistrationDetail,
 } from "@/lib/events";
+import { getMenteeProfiles, getMentorProfiles, getPeople, getSeasons } from "@/lib/data";
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
@@ -722,5 +725,66 @@ describe("setRegistrationLinkActive — DB error safety", () => {
       expect(result.message).not.toContain(SENSITIVE_MSG);
       expect(result.message).not.toContain("INTERNAL");
     }
+  });
+});
+
+// ── getEventDetailData — DB error safety ──────────────────────────────────────
+//
+// getEventDetailData returns { ok: false, error: string } when the event row
+// load fails. Before the fix, error was eventRes.error.message (raw DB text).
+// After fix: error is the SAFE_ERROR constant.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("getEventDetailData — DB error safety", () => {
+  const SENSITIVE_DETAIL = "INTERNAL: relation \"events\" does not exist in schema \"public\"";
+
+  it("event load DB error: raw message is not exposed in error field", async () => {
+    // from("events") fails; getSeasons/getPeople/getMentorProfiles/getMenteeProfiles
+    // are mocked via vi.mock("@/lib/data") and return empty arrays.
+    const client = {
+      from: vi.fn()
+        .mockReturnValueOnce(makeChain({ error: { code: "42P01", message: SENSITIVE_DETAIL } }))
+        .mockReturnValue(makeChain()),
+    };
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+    (getSeasons as Mock).mockResolvedValue({ data: [], error: null });
+    (getPeople as Mock).mockResolvedValue({ data: [], error: null });
+    (getMentorProfiles as Mock).mockResolvedValue({ data: [], error: null });
+    (getMenteeProfiles as Mock).mockResolvedValue({ data: [], error: null });
+
+    const result = await getEventDetailData(EVENT_UUID);
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain(SENSITIVE_DETAIL);
+    expect(result.error).not.toContain("INTERNAL");
+    expect(result.error?.length).toBeGreaterThan(0);
+  });
+});
+
+// ── getRegistrationDetail — DB error safety ───────────────────────────────────
+//
+// getRegistrationDetail returns { ok: false, error: string } when the
+// event_registrations row load fails. Before fix: error was regRes.error.message.
+// After fix: error is the SAFE_ERROR constant.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("getRegistrationDetail — DB error safety", () => {
+  const SENSITIVE_DETAIL = "INTERNAL: permission denied for table event_registrations in schema public";
+  const REG_UUID = "00000000-0000-4000-8000-000000000099";
+
+  it("registration load DB error: raw message is not exposed in error field", async () => {
+    // Promise.all: from("event_registrations") → error, from("events") → null (not found)
+    const client = {
+      from: vi.fn()
+        .mockReturnValueOnce(makeChain({ error: { code: "42501", message: SENSITIVE_DETAIL } }))
+        .mockReturnValueOnce(makeChain({ data: null }))
+        .mockReturnValue(makeChain()),
+    };
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await getRegistrationDetail(EVENT_UUID, REG_UUID);
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain(SENSITIVE_DETAIL);
+    expect(result.error).not.toContain("INTERNAL");
+    expect(result.error?.length).toBeGreaterThan(0);
   });
 });
