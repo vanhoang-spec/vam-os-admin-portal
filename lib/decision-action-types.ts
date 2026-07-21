@@ -15,3 +15,12 @@ export const initialDecisionActionState: DecisionActionState = {
   ok: false,
   message: null
 };
+
+/**
+ * Application decision statuses that are terminal or hard to reverse for the applicant.
+ * The decision form shows a confirmation dialog before submitting these.
+ */
+export const DESTRUCTIVE_DECISION_STATUSES = new Set([
+  "rejected_or_not_fit",
+  "withdrawn"
+]);
