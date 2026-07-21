@@ -413,3 +413,74 @@ describe("cancelMatch — unauthorized role rejection", () => {
     expect(result.message).toMatch(/quyền|matching/i);
   });
 });
+
+// ── DB error safety — regression for Phase 1 fix ──────────────────────────────
+//
+// Before fix: `${SAFE_ERROR} (${err.message})` leaked raw DB error text.
+// After fix:  SAFE_ERROR constant returned without raw detail appended.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("createManualMatch — DB error safety", () => {
+  const SENSITIVE_MSG = "INTERNAL: permission denied for table matches in schema public";
+
+  it("mentee active match check DB error: raw message suppressed", async () => {
+    // Call sequence: mentor_profiles(1) → mentee_profiles(2) → intake_batches(3) → matches mentee check(4)
+    const client = makeClient([
+      makeChain({ data: MENTOR_PROFILE }),                                  // (1) mentor_profiles
+      makeChain({ data: MENTEE_PROFILE }),                                  // (2) mentee_profiles
+      makeChain({ data: BATCH }),                                           // (3) intake_batches
+      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),     // (4) mentee match check FAILS
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).not.toContain(SENSITIVE_MSG);
+      expect(result.message).not.toContain("INTERNAL");
+      expect(result.message.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("cancelMatch — DB error safety", () => {
+  const SENSITIVE_MSG = "INTERNAL: permission denied for table matches in schema public";
+
+  it("match load DB error: raw message suppressed", async () => {
+    const client = makeClient([
+      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }), // matches.select FAILS
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await cancelMatch({ matchId: MATCH_UUID });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).not.toContain(SENSITIVE_MSG);
+      expect(result.message).not.toContain("INTERNAL");
+    }
+  });
+
+  it("match update DB error: raw message suppressed", async () => {
+    // Call sequence: matches.select(1) → matches.update.select(2)
+    const matchRow = { id: MATCH_UUID, status: "active", season_id: SEASON_UUID, notes: null };
+    const client = makeClient([
+      makeChain({ data: matchRow }),                                         // (1) load match OK
+      makeChain({ error: { code: "23503", message: SENSITIVE_MSG } }),      // (2) update FAILS
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await cancelMatch({ matchId: MATCH_UUID });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).not.toContain(SENSITIVE_MSG);
+      expect(result.message).not.toContain("INTERNAL");
+    }
+  });
+});

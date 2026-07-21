@@ -662,3 +662,65 @@ describe("setRegistrationLinkActive — close registration", () => {
     expect(true).toBe(true); // contract verification — see line 293 of lib/events.ts
   });
 });
+
+// ── setRegistrationLinkActive — DB error safety (regression for Phase 1 fix) ──
+//
+// Before fix: `${SAFE_ERROR} (${err.message})` leaked raw DB error text.
+// After fix:  returns SAFE_ERROR constant only — internal message suppressed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("setRegistrationLinkActive — DB error safety", () => {
+  const SENSITIVE_MSG = "INTERNAL: relation \"event_links\" does not exist in schema \"public\"";
+
+  it("event load DB error: raw message is suppressed", async () => {
+    const client = {
+      from: vi.fn()
+        .mockReturnValueOnce(makeChain({ error: { code: "PGRST301", message: SENSITIVE_MSG } }))
+        .mockReturnValue(makeChain()),
+    };
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+    const result = await setRegistrationLinkActive(EVENT_UUID, false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).not.toContain(SENSITIVE_MSG);
+      expect(result.message).not.toContain("INTERNAL");
+      expect(result.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("registration link load DB error: raw message is suppressed", async () => {
+    const event = { id: EVENT_UUID, season_id: SEASON_UUID };
+    const client = {
+      from: vi.fn()
+        .mockReturnValueOnce(makeChain({ data: event }))
+        .mockReturnValueOnce(makeChain({ error: { code: "500", message: SENSITIVE_MSG } }))
+        .mockReturnValue(makeChain()),
+    };
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+    const result = await setRegistrationLinkActive(EVENT_UUID, false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).not.toContain(SENSITIVE_MSG);
+      expect(result.message).not.toContain("INTERNAL");
+    }
+  });
+
+  it("registration link update DB error: raw message is suppressed", async () => {
+    const event = { id: EVENT_UUID, season_id: SEASON_UUID };
+    const link = { id: "link-id-1" };
+    const client = {
+      from: vi.fn()
+        .mockReturnValueOnce(makeChain({ data: event }))
+        .mockReturnValueOnce(makeChain({ data: link }))
+        .mockReturnValueOnce(makeChain({ error: { code: "23505", message: SENSITIVE_MSG } }))
+        .mockReturnValue(makeChain()),
+    };
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+    const result = await setRegistrationLinkActive(EVENT_UUID, false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.message).not.toContain(SENSITIVE_MSG);
+      expect(result.message).not.toContain("INTERNAL");
+    }
+  });
+});

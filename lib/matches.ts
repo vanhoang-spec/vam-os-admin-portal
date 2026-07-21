@@ -345,7 +345,7 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
     .select("season_id")
     .eq("id", intakeBatchId)
     .maybeSingle();
-  if (selectedBatchError) return { ...empty, error: selectedBatchError.message };
+  if (selectedBatchError) return { ...empty, error: SAFE_ERROR };
   const selectedSeasonId = (selectedBatch as JsonRecord | null)?.season_id as string | null;
   if (!selectedSeasonId) return { ok: true, error: null, mentors: [], mentees: [] };
 
@@ -367,15 +367,15 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
 
   if (mentorProfilesRes.error) {
     log("mentor_profiles fetch failed", mentorProfilesRes.error);
-    return { ...empty, ok: false, error: mentorProfilesRes.error.message };
+    return { ...empty, ok: false, error: SAFE_ERROR };
   }
   if (menteeProfilesRes.error) {
     log("mentee_profiles fetch failed", menteeProfilesRes.error);
-    return { ...empty, ok: false, error: menteeProfilesRes.error.message };
+    return { ...empty, ok: false, error: SAFE_ERROR };
   }
   if (activeMatchesRes.error) {
     log("active matches fetch failed", activeMatchesRes.error);
-    return { ...empty, ok: false, error: activeMatchesRes.error.message };
+    return { ...empty, ok: false, error: SAFE_ERROR };
   }
 
   const activeMatches = (activeMatchesRes.data ?? []) as Array<{ mentor_person_id: string | null; mentee_person_id: string | null }>;
@@ -569,7 +569,7 @@ export async function createManualMatch(input: {
     .maybeSingle();
   if (menteeMatchErr) {
     log("check mentee active match failed", menteeMatchErr);
-    return { ok: false, message: `${SAFE_ERROR} (${menteeMatchErr.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (existingMenteeMatch) {
     return { ok: false, message: "Mentee này đã có mentor đang active. Hủy match cũ trước khi tạo match mới." };
@@ -584,7 +584,7 @@ export async function createManualMatch(input: {
     .eq("status", "active");
   if (mentorCountErr) {
     log("count mentor active matches failed", mentorCountErr);
-    return { ok: false, message: `${SAFE_ERROR} (${mentorCountErr.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if ((mentorActiveCount ?? 0) >= MAX_MENTOR_ACTIVE_MATCHES) {
     return {
@@ -617,7 +617,7 @@ export async function createManualMatch(input: {
     if (insertErr.code === "23505") {
       return { ok: false, message: "Mentee này đã có match active (lỗi constraint). Hủy match cũ trước." };
     }
-    return { ok: false, message: `${SAFE_ERROR} (${insertErr.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   await writeAdminAudit(client, {
@@ -654,7 +654,7 @@ export async function cancelMatch(input: {
     .maybeSingle();
   if (loadErr) {
     log("load match for cancel failed", loadErr);
-    return { ok: false, message: `${SAFE_ERROR} (${loadErr.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (!before) return { ok: false, message: "Không tìm thấy match." };
 
@@ -681,7 +681,7 @@ export async function cancelMatch(input: {
 
   if (updateErr) {
     log("cancel match failed", updateErr);
-    return { ok: false, message: `${SAFE_ERROR} (${updateErr.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   await writeAdminAudit(client, {

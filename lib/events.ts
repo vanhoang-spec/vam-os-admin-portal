@@ -1281,7 +1281,7 @@ async function createEventLinkForEvent(eventId: unknown, linkType: "registration
     .maybeSingle();
   if (eventError) {
     log("load event for registration link failed", eventError);
-    return { ok: false, message: `${SAFE_ERROR} (${eventError.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (!event) return { ok: false, message: "Không tìm thấy sự kiện." };
 
@@ -1298,7 +1298,7 @@ async function createEventLinkForEvent(eventId: unknown, linkType: "registration
     .maybeSingle();
   if (existingError) {
     log("load existing registration link failed", existingError);
-    return { ok: false, message: `${SAFE_ERROR} (${existingError.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (existing) {
     return { ok: true, message: linkType === "checkin" ? "Liên kết check-in đã tồn tại." : "Liên kết đăng ký đã tồn tại.", data: existing as EventLink };
@@ -1326,7 +1326,7 @@ async function createEventLinkForEvent(eventId: unknown, linkType: "registration
       }
     }
     log("create registration link failed", insertError);
-    return { ok: false, message: `${SAFE_ERROR} (${insertError.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   await writeAdminAudit(client, {
@@ -1370,7 +1370,7 @@ export async function setRegistrationLinkActive(
     .maybeSingle();
   if (eventError) {
     log("load event for link toggle failed", eventError);
-    return { ok: false, message: `${SAFE_ERROR} (${eventError.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (!event) return { ok: false, message: "Không tìm thấy sự kiện." };
 
@@ -1387,7 +1387,7 @@ export async function setRegistrationLinkActive(
     .maybeSingle();
   if (linkError) {
     log("load registration link for toggle failed", linkError);
-    return { ok: false, message: `${SAFE_ERROR} (${linkError.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (!link) return { ok: false, message: "Chưa có link đăng ký cho sự kiện này." };
 
@@ -1397,7 +1397,7 @@ export async function setRegistrationLinkActive(
     .eq("id", (link as EventLink).id);
   if (updateError) {
     log("toggle registration link is_active failed", updateError);
-    return { ok: false, message: `${SAFE_ERROR} (${updateError.message})` };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   await writeAdminAudit(client, {
