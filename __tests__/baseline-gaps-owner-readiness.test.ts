@@ -20,6 +20,7 @@ describe("baseline-gaps owner execution readiness", () => {
     expect(probe).toContain("pg_get_triggerdef");
     expect(probe).toContain("NOT tg.tgisinternal");
     expect(probe).toContain("'triggers'");
+    expect(probe).toContain("FROM public_sequences ps JOIN pg_depend d ON d.objid=ps.oid");
   });
 
   it("keeps the parser offline, redacted, and schema-aware", () => {
@@ -27,6 +28,8 @@ describe("baseline-gaps owner execution readiness", () => {
     expect(parser).not.toMatch(/from\s+["'](?:@supabase|pg|postgres)|fetch\s*\(|https?:\/\//i);
     expect(parser).toContain('"triggers"');
     expect(parser).toContain("suspicious_pattern_counts");
+    expect(parser).toContain("GENERAL_DEPENDENCY_ROWS_NOT_SEQUENCE_OWNERSHIP");
+    expect(parser).toContain("dependency_schema_counts");
     expect(parser).toContain("raw_file_commit_allowed: false");
     expect(parser).not.toContain("console.log(value");
   });

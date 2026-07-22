@@ -35,9 +35,10 @@ public_sequences AS (
   WHERE n.nspname='public' AND c.relkind='S'
 ),
 sequence_ownership AS (
-  SELECT d.objid AS sequence_oid, tn.nspname AS table_schema,
+  SELECT ps.oid AS sequence_oid, tn.nspname AS table_schema,
          tc.relname AS table_name, a.attname AS column_name, d.deptype
-  FROM pg_depend d JOIN pg_class tc ON tc.oid=d.refobjid
+  FROM public_sequences ps JOIN pg_depend d ON d.objid=ps.oid
+  JOIN pg_class tc ON tc.oid=d.refobjid
   JOIN pg_namespace tn ON tn.oid=tc.relnamespace
   JOIN pg_attribute a ON a.attrelid=tc.oid AND a.attnum=d.refobjsubid
   WHERE d.classid='pg_class'::regclass AND d.deptype IN ('a','i')

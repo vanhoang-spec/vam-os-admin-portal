@@ -41,6 +41,11 @@ if (raw !== undefined) {
     const findings = Object.fromEntries(SUSPICIOUS.map(([name, pattern]) => [name, strings.filter(({ value }) => pattern.test(value)).length]));
     const riskyFindingCount = Object.values(findings).reduce((sum, count) => sum + count, 0);
     const safe = versionValid && missingSections.length === 0 && riskyFindingCount === 0;
+    const dependencySchemaCounts = Object.fromEntries(
+      [...new Set((data.sequence_ownership ?? []).map((row) => String(row.table_schema)))].sort()
+        .map((schema) => [schema, data.sequence_ownership.filter((row) => String(row.table_schema) === schema).length])
+    );
+    const sequenceMetadataConsistent = (data.sequences?.length ?? 0) > 0 || (data.sequence_ownership?.length ?? 0) === 0;
     const summary = {
       parser_mode: "offline-metadata-safety-review",
       input_bytes: Buffer.byteLength(raw, "utf8"),
@@ -50,6 +55,10 @@ if (raw !== undefined) {
       unexpected_top_level_keys: unexpectedKeys,
       section_counts: Object.fromEntries(EXPECTED_SECTIONS.map((key) => [key, Array.isArray(data?.[key]) ? data[key].length : null])),
       truncation_detected: false,
+      actual_public_sequences: data.sequences.length,
+      sequence_metadata_consistent: sequenceMetadataConsistent,
+      sequence_ownership_classification: sequenceMetadataConsistent ? "SCOPED_TO_ACTUAL_SEQUENCES" : "GENERAL_DEPENDENCY_ROWS_NOT_SEQUENCE_OWNERSHIP",
+      dependency_schema_counts: dependencySchemaCounts,
       suspicious_pattern_counts: findings,
       safe_for_offline_analysis: safe,
       raw_file_commit_allowed: false
