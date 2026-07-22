@@ -1,15 +1,32 @@
 # VAM OS Support UAT Synthetic Account Plan — 2026-07-22
 
-No users were created. All identities must be created only in staging Auth and linked to active, synthetic `admin_users` rows.
+Readiness: **PLANNED — OWNER CREATION REQUIRED**. No users were created.
 
 | Role | Synthetic email pattern | Program scope | Season/batch | Purpose | Prohibited access |
 |---|---|---|---|---|---|
-| Super admin | `uat.super-admin+demo-s12@example.com` | All synthetic programs | DEMO-S12 / DEMO-S12-B1 | Owner setup, portfolio and role verification | Production; real identities/data |
-| Admin | `uat.admin+demo-s12@example.com` | One named synthetic program | DEMO-S12 / DEMO-S12-B1 | Operational administration | Other programs; user provisioning unless explicitly tested |
-| Reviewer | `uat.reviewer+demo-s12@example.com` | One named synthetic program | DEMO-S12 / DEMO-S12-B1 | Assigned application review | Admin, matching, user management, other programs |
-| Support team | `uat.support+demo-s12@example.com` | One named synthetic program | DEMO-S12 / DEMO-S12-B1 | UAT navigation, triage and read workflows | Destructive/admin actions; other programs |
-| Viewer | `uat.viewer+demo-s12@example.com` | One named synthetic program | DEMO-S12 / DEMO-S12-B1 | Read-only and denial verification | All writes, admin pages, other programs |
+| Super admin | `uat.super-admin+demo-s12@example.com` | All synthetic programs | DEMO-S12 / DEMO-S12-B1 | Setup and portfolio verification | Production; real identities/data |
+| Admin | `uat.admin+demo-s12@example.com` | One synthetic program | DEMO-S12 / DEMO-S12-B1 | Operational administration | Other programs unless explicitly granted |
+| Reviewer | `uat.reviewer+demo-s12@example.com` | One synthetic program | DEMO-S12 / DEMO-S12-B1 | Assigned application review | Admin/user management and other programs |
+| Support team | `uat.support+demo-s12@example.com` | One synthetic program | DEMO-S12 / DEMO-S12-B1 | Support UAT and triage | Admin/destructive actions and other programs |
+| Viewer | `uat.viewer+demo-s12@example.com` | One synthetic program | DEMO-S12 / DEMO-S12-B1 | Read-only denial testing | All writes, admin pages, other programs |
 
-Recommended creation method: manually create each user in the confirmed staging Supabase Auth dashboard, use unique owner-delivered temporary passwords, then create/link the corresponding staging `admin_users` and program-scope rows through the repository-supported admin console where possible. This is safer for five users than introducing a new service-role provisioning script. Deliver credentials out of band and delete or disable accounts after UAT.
+## Exact owner creation and linking procedure
 
-Do not reuse production emails, copy production `auth_user_id` values, include passwords in tickets/docs, or run the untracked local admin-creation scripts as part of this authorization.
+1. Reconfirm the Preview banner says staging ref `ljfn…smpz`; stop on `UNKNOWN` or `PRODUCTION`.
+2. Sign in as an existing authorized staging super admin and open **Admin → Quản lý người dùng** (`/admin/users`).
+3. Create one account at a time with the synthetic email pattern, intended role, `active` status, synthetic program, DEMO-S12 season, and least-privilege scope.
+4. Submit once. The repository-supported flow must find or invite the staging Supabase Auth user, then create/update `admin_users` with its `auth_user_id` and scope. Do not use production Auth or the untracked local creation scripts.
+5. Confirm the row shows the intended role, `active` status, a non-empty Auth ID, and only the intended program/season scope. Do not record the full Auth ID in tickets or screenshots.
+6. If the console shows **Chưa liên kết Auth**, use **Đồng bộ Auth** once and recheck. Stop if it remains unlinked, duplicates an email, or shows an unexpected scope.
+7. Deliver the invite or temporary credential through an approved private channel. Never place passwords in Git, chat, screenshots, or UAT issues.
+8. Repeat for the minimum roles needed for the first smoke test; create all five only when their test cases are scheduled.
+
+## Login/logout smoke test
+
+1. In a private browser session, open the confirmed Ready Preview deployment and verify the staging banner.
+2. Complete the unlock gate if configured, then sign in with one synthetic account.
+3. Confirm the displayed role, one allowed route, one prohibited route, and program isolation match the plan.
+4. Refresh and navigate again to exercise session persistence/refresh.
+5. Log out, then directly revisit the protected URL; it must return to login/unlock.
+6. Record only role, branch/commit, PASS/FAIL, and non-secret observations. Stop if real data, another program, production classification, or technical secrets appear.
+7. Repeat the role/denial checks for the remaining provisioned roles. Disable/delete UAT access after the test window according to the owner cleanup plan.

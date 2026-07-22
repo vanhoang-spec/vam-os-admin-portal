@@ -1,18 +1,20 @@
 # VAM OS Support UAT Environment Go/No-Go — 2026-07-22
 
-Decision: **NO-GO** until the Preview target is proven staging. This does not reverse the earlier package-level conclusion “Support UAT ready with owner configuration”; it evaluates the currently unproven environment gate.
+Decision: **CONDITIONAL GO**.
+
+The environment target gate now passes: owner evidence confirms the Ready Vercel Preview deployment at branch `preview-environment-and-auth-readiness`, commit `fc8c718`, points to staging `ljfneyuvpxrmejpxsmpz`, excludes production, and has Preview-scoped public and server-side Supabase variables. UAT must remain limited until synthetic accounts, login/logout, data isolation, and required fixture/baseline conditions pass.
 
 | Gate | Status | Evidence | Owner action |
 |---|---|---|---|
-| Preview points to staging | BLOCKED | Local files are not Vercel Preview metadata | Return safe Vercel evidence and Preview banner screenshot |
-| Production ref excluded | BLOCKED | No current Preview-scope metadata | Confirm production ref absent; stop on any production classification |
-| Auth works | CONDITIONAL | Password login/session/logout code is ready; live Preview untested | Configure staging variables and test synthetic login/logout |
-| Synthetic accounts ready | PLANNED | Five-role plan exists; no users created | Create and link staging-only synthetic accounts |
-| Synthetic fixtures ready | BLOCKED | Seed is guarded; staging baseline is incomplete | Complete separately authorized baseline prerequisites |
-| No production data visible | BLOCKED | Requires live Preview inspection | Verify with synthetic account and redacted screenshot |
-| Program isolation testable | CONDITIONAL | QA matrix and scoped role plan exist | Provision at least two synthetic program scopes/data sets |
-| Rollback available | CONDITIONAL | Fallback plan exists; live deployment/recovery point unrecorded | Record last verified Preview commit and staging recovery point |
+| Preview points to staging | PASS | Owner-observed staging ref in Preview | Recheck banner for each deployment |
+| Production ref excluded | PASS | Owner reports production ref absent | Stop on any future production/unknown banner |
+| Auth works | CONDITIONAL | Code/config ready; no synthetic smoke test yet | Create/link minimum account and pass login/logout |
+| Synthetic accounts ready | PLANNED | Five-role plan and exact console procedure exist | Provision staging-only least-privilege accounts |
+| Synthetic fixtures ready | BLOCKED | Guarded seed; staging baseline compatibility unproven | Complete separate baseline gate before authorization |
+| No production data visible | CONDITIONAL | Environment ref excludes production; UI data not inspected with test user | Verify during smoke test |
+| Program isolation testable | CONDITIONAL | Scope mechanism and matrix exist | Provision synthetic scopes and test allowed/denied programs |
+| Rollback available | CONDITIONAL | Deployment commit recorded; staging recovery point not recorded | Name operator and record recovery point |
 
-Earliest conversion to conditional GO: prove Preview staging/exclusion, pass login/logout, create the minimum synthetic accounts, and verify no production data. Full GO additionally requires synthetic fixtures and program isolation to be testable. Complete owner evidence during Support Team UAT week, 27 July–2 August 2026, leaving remediation time before the 8 August Core Team demo.
+Permitted next activity is narrow staging-only account provisioning and smoke testing. Do not begin fixture writes or fixture-dependent scenarios. Convert to GO only after minimum synthetic accounts authenticate, role/program denials pass, no production data is visible, and every scenario selected for UAT has its data prerequisite. Target completion remains the Support Team UAT week of 27 July–2 August 2026, before the 8 August Core Team demo.
 
-No Vercel, Supabase, database, fixture, user, or migration mutation was performed for this decision.
+No Vercel, Supabase, database, fixture, user, or migration mutation was performed for this reassessment.
