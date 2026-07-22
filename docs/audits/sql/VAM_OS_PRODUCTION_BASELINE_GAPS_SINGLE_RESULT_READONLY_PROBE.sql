@@ -53,6 +53,17 @@ public_functions AS (
   JOIN pg_language l ON l.oid=p.prolang JOIN pg_roles r ON r.oid=p.proowner
   WHERE n.nspname='public' AND p.prokind IN ('f','p','w')
 ),
+public_triggers AS (
+  SELECT tg.oid, tg.tgname AS trigger_name, c.relname AS table_name,
+         p.proname AS function_name, pg_get_function_identity_arguments(p.oid) AS function_identity_args,
+         pg_get_triggerdef(tg.oid,true) AS definition, tg.tgenabled,
+         obj_description(tg.oid,'pg_trigger') AS comment,
+         EXISTS (SELECT 1 FROM pg_depend d JOIN pg_extension x ON x.oid=d.refobjid
+                 WHERE d.classid='pg_trigger'::regclass AND d.objid=tg.oid AND d.deptype='e') AS extension_managed
+  FROM pg_trigger tg JOIN pg_class c ON c.oid=tg.tgrelid
+  JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=tg.tgfoid
+  WHERE n.nspname='public' AND NOT tg.tgisinternal
+),
 public_comments AS (
   SELECT c.relname AS object_name, c.relkind AS object_kind,
          obj_description(c.oid,'pg_class') AS comment
@@ -69,6 +80,7 @@ payload AS (
     'sequences',COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY sequence_name) FROM public_sequences s),'[]'::jsonb),
     'sequence_ownership',COALESCE((SELECT jsonb_agg(to_jsonb(o) ORDER BY sequence_oid,table_name,column_name) FROM sequence_ownership o),'[]'::jsonb),
     'functions',COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY function_name,identity_args) FROM public_functions f),'[]'::jsonb),
+    'triggers',COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY table_name,trigger_name) FROM public_triggers t),'[]'::jsonb),
     'comments',COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY object_name) FROM public_comments c),'[]'::jsonb)
   ) AS baseline_gap_metadata
 )
