@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { PreviewEnvironmentBanner } from "@/components/preview-environment-banner";
 
 export const metadata: Metadata = {
   title: "VAM OS",
@@ -14,7 +15,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   if (publicRoute === "register" || publicRoute === "checkin") {
     return (
       <html lang="vi">
-        <body>{children}</body>
+        <body><PreviewEnvironmentBanner />{children}</body>
       </html>
     );
   }
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="vi">
       <body>
+        <PreviewEnvironmentBanner />
         <AppShell adminUser={adminUser}>{children}</AppShell>
       </body>
     </html>
