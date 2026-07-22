@@ -104,10 +104,15 @@ migration_tables_j as (
  where c.relkind in ('r','p') and (n.nspname ilike '%migration%' or c.relname ilike '%migration%' or c.relname ilike '%schema_version%')
  group by n.nspname,c.relname,c.reltuples) x
 ),
-migration_rows_j as (
- select coalesce(jsonb_agg(jsonb_build_object('version',version,'name',name,
- 'statement_count',cardinality(statements),'statement_checksum',md5(array_to_string(statements,E'\n')))
- order by version),'[]'::jsonb) value from supabase_migrations.schema_migrations
+migration_provenance_j as (
+ select jsonb_build_object(
+  'ledger_tables',migration_tables_j.value,
+  'rows','[]'::jsonb,
+  'status',case when jsonb_array_length(migration_tables_j.value)=0
+    then 'ledger_not_found_in_catalog'
+    else 'ledger_tables_detected_catalog_only' end,
+  'not_evaluated_reason','Ledger row contents were not evaluated because relation existence and column shape are not guaranteed; catalog metadata only.'
+ ) value from migration_tables_j
 ),
 estimates_j as (
  select coalesce(jsonb_agg(to_jsonb(x) order by schema_name,table_name),'[]'::jsonb) value from
@@ -134,9 +139,9 @@ select jsonb_build_object(
  'indexes',indexes_j.value,'functions',functions_j.value,'aggregates',aggregates_j.value,
  'triggers',triggers_j.value,'policies',policies_j.value,'table_grants',table_grants_j.value,
  'sequence_grants',sequence_grants_j.value,'function_grants',function_grants_j.value,
- 'migration_provenance',jsonb_build_object('ledger_tables',migration_tables_j.value,'rows',migration_rows_j.value),
+ 'migration_provenance',migration_provenance_j.value,
  'table_estimates',estimates_j.value,'safety_counts',safety_counts_j.value
 ) production_schema_inventory
 from target_identity,schemas_j,extensions_j,tables_j,columns_j,constraints_j,indexes_j,functions_j,
 aggregates_j,triggers_j,policies_j,table_grants_j,sequence_grants_j,function_grants_j,
-migration_tables_j,migration_rows_j,estimates_j,safety_counts_j;
+migration_tables_j,migration_provenance_j,estimates_j,safety_counts_j;
