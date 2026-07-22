@@ -1,0 +1,5 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: verification queries can be finalized only after executable baseline
+-- contents and the staging security target are approved.
+-- Verification must remain read-only and must not inspect business row values.

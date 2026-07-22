@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: owner approval of staging RLS/policy target is required.
+-- No permissive production posture is copied. Migration 061 remains separate.

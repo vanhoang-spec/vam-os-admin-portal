@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: trigger functions and target tables must be approved first; preserve
+-- confirmed names and catalog ordering without inventing execution order.

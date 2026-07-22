@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: approve least-privilege role and function EXECUTE matrix.
+-- Do not reproduce broad anon/authenticated/service_role production grants.

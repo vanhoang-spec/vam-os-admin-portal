@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: exact definitions/dependencies for v_monthly_activity_summary,
+-- v_mentee_monthly_tracking, and v_season_latest_closed_month require probe output.

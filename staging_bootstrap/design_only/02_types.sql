@@ -1,0 +1,6 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: enum labels/order require owner-run read-only metadata probe.
+-- Required: role_type, application_status, communication_channel,
+-- communication_status, event_type, match_type, match_status, gender_type,
+-- role_status, season_status. Do not infer labels from application constants.
