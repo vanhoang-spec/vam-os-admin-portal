@@ -4,6 +4,7 @@ import { Card, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, Kpi
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData, keyById } from "@/lib/data";
+import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { currentMonthVN, isOperationalMonth, operationalMonthRange, resolveOperationsMonth } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
@@ -217,7 +218,15 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const totalEventParticipantCount = eventParticipationsInMonth.length;
   const notUpdatedAttendanceCount = Math.max(0, totalEventParticipantCount - attendedCount - registeredAbsentCount);
   const hasEventCheckinData = totalEventParticipantCount > 0;
-  const rpcKpis = data.kpis.data?.selectedMonth === selectedMonth ? data.kpis.data : null;
+  const programKpis = computeProgramOperationsKpis({
+    seasons: data.seasons.data,
+    matches: data.matches.data,
+    recaps: data.recaps.data,
+    events: data.events.data,
+    eventParticipations: data.eventParticipations.data,
+    seasonCode: SEASON_CODE,
+    selectedMonth
+  });
 
   const recapByMonth = Array.from(
     validOperationalRecaps.reduce((counts, recap) => {
@@ -314,13 +323,19 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
 
   return (
     <>
-      <PageHeader title="Vận hành" description={`Dashboard vận hành tháng cho hoạt động mentoring. Season đang theo dõi: ${SEASON_CODE}.`} />
+      <PageHeader title="Vận hành" description="Dashboard KPI toàn chương trình; quyền người dùng chỉ giới hạn thao tác và dữ liệu chi tiết." />
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu operations. Một số chỉ số có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
       ))}
 
       <Card className="mb-4">
+        <div aria-label="Ngữ cảnh dashboard vận hành" className="mb-4 flex flex-wrap gap-2 text-sm">
+          <span className="rounded-full border border-vam-line bg-slate-50 px-3 py-1.5"><span className="text-slate-500">Chương trình:</span> UEH Mentoring</span>
+          <span className="rounded-full border border-vam-line bg-slate-50 px-3 py-1.5"><span className="text-slate-500">Mùa:</span> {displayText(season?.name, SEASON_CODE)}</span>
+          <span className="rounded-full border border-vam-line bg-slate-50 px-3 py-1.5"><span className="text-slate-500">Tháng:</span> {formatMonthVN(selectedMonth)}</span>
+          <span className="rounded-full border border-vam-line bg-slate-50 px-3 py-1.5"><span className="text-slate-500">Nguồn dữ liệu:</span> Tổng hợp toàn chương trình</span>
+        </div>
         <div className="grid gap-4 md:grid-cols-[minmax(220px,320px)_1fr] md:items-end">
           <MonthSelector months={monthOptions} selectedMonth={selectedMonth} />
           <div className="text-sm">
@@ -352,13 +367,13 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Số recap trong tháng" value={rpcKpis?.recapCount ?? selectedRecaps.length} />
-        <KpiCard label="Mentee active" value={rpcKpis?.activeMenteeCount ?? selectedMenteeIds.size} />
-        <KpiCard label="Mentor active" value={rpcKpis?.activeMentorCount ?? selectedMentorIds.size} />
+        <KpiCard label="Số recap trong tháng" value={programKpis.recapCount} />
+        <KpiCard label="Mentee active" value={programKpis.activeMenteeCount} />
+        <KpiCard label="Mentor active" value={programKpis.activeMentorCount} />
         <KpiCard label="Tỷ lệ mentee active" value={percent(activeMenteeCount, activeMenteeIds.size)} />
-        <KpiCard label="Mentor chưa có recap" value={rpcKpis?.mentorWithoutRecapCount ?? mentorWithoutRecapCount} />
-        <KpiCard label="Event/training trong tháng" value={rpcKpis?.eventTrainingCount ?? eventsInMonth.length} />
-        <KpiCard label="Lượt tham dự event" value={rpcKpis?.eventAttendanceCount ?? attendedCount} />
+        <KpiCard label="Mentor chưa có recap" value={programKpis.mentorWithoutRecapCount} />
+        <KpiCard label="Event/training trong tháng" value={programKpis.eventTrainingCount} />
+        <KpiCard label="Lượt tham dự event" value={programKpis.eventAttendanceCount} />
         <Card>
           <div className="text-sm text-slate-500">Tỷ lệ tham dự / tổng đăng ký</div>
           <div className="mt-2 text-3xl font-semibold text-vam-ink">{attendanceRateOverTotal(attendedCount, totalEventParticipantCount)}</div>
