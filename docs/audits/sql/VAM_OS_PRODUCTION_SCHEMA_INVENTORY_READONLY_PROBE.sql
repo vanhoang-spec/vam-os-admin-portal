@@ -22,7 +22,12 @@ from pg_policies where schemaname='public' order by tablename,policyname;
 select 'PRODUCTION_FUNCTIONS' result_section,n.nspname schema_name,p.proname,
 pg_get_function_identity_arguments(p.oid) identity_args,p.prosecdef security_definer,p.proconfig,
 pg_get_functiondef(p.oid) definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where n.nspname='public' order by p.proname,identity_args;
+where n.nspname='public' and p.prokind in ('f','p','w') order by p.proname,identity_args;
+select 'PRODUCTION_AGGREGATES' result_section,n.nspname schema_name,p.proname,
+pg_get_function_identity_arguments(p.oid) identity_args,pg_get_function_result(p.oid) return_type,
+p.prokind,pg_get_userbyid(p.proowner) owner,p.proacl acl
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public' and p.prokind='a' order by p.proname,identity_args;
 select 'PRODUCTION_TRIGGERS' result_section,n.nspname schema_name,c.relname table_name,t.tgname,
 t.tgenabled,pg_get_triggerdef(t.oid,true) definition from pg_trigger t join pg_class c on c.oid=t.tgrelid
 join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal and n.nspname='public' order by c.relname,t.tgname;
