@@ -1,0 +1,149 @@
+-- ============================================================================
+-- VAM OS STAGING SCHEMA-ONLY BASELINE DESIGN
+-- ============================================================================
+-- STAGING ONLY
+-- DESIGN ONLY
+-- NOT APPLIED
+-- NO PRODUCTION DATA
+-- NO AUTH USERS
+-- NO STORAGE OBJECTS
+-- OWNER AUTHORIZATION REQUIRED
+-- MUST NEVER RUN ON PRODUCTION
+--
+-- Location outside supabase_migrations is intentional. This file is not an
+-- automatic migration and is not executable while BLOCKING REVIEW items remain.
+--
+-- APPROACH A: pre-061 baseline. Recruitment campaign objects are excluded.
+-- Migration 061 must be reviewed and authorized separately after bootstrap.
+-- ============================================================================
+
+-- DESIGN STATUS: BLOCKED — MANUAL BASELINE REMEDIATION REQUIRED.
+-- This file contains no executable statements. DDL must not be enabled until
+-- every unresolved definition below is supplied from an authoritative source,
+-- reviewed, versioned, and covered by schema contract tests.
+
+-- [01] REQUIRED EXTENSION NAMES (definitions/internals are never cloned)
+-- pgcrypto
+-- citext
+-- uuid-ossp
+-- plpgsql is platform-provided.
+-- pg_stat_statements and supabase_vault are platform/operations dependencies,
+-- not manually cloned application baseline objects.
+
+-- [02] BLOCKING PUBLIC TYPE DEFINITIONS
+-- Exact enum labels and order were not included in the inventory:
+-- public.application_status
+-- public.communication_channel
+-- public.communication_status
+-- public.event_type
+-- public.gender_type
+-- public.match_status
+-- public.match_type
+-- public.role_status
+-- public.role_type
+-- public.season_status
+-- Do not infer labels from current rows, TypeScript labels, or check constraints.
+
+-- [03] CORE BASELINE TABLE MANIFEST
+-- Dependency group A:
+-- public.programs
+-- public.seasons
+-- public.intake_batches
+--
+-- Dependency group B:
+-- public.people
+-- public.person_roles
+-- public.mentor_profiles
+-- public.mentee_profiles
+-- public.admin_users
+-- public.admin_scope_access
+--
+-- Dependency group C:
+-- public.applications
+-- public.application_answers
+-- public.matches
+-- public.events
+-- public.event_links
+-- public.event_registrations
+-- public.event_participations
+-- public.mentoring_recaps
+--
+-- Exact column names/types/nullability/defaults were inventoried, but a complete
+-- executable table design remains blocked by missing enum labels, sequence
+-- ownership/definitions, pre-012 provenance, and an approved grants/RLS target.
+
+-- [04] OPTIONAL OPERATIONAL MODULE MANIFEST
+-- public.application_reviews
+-- public.application_decisions
+-- public.review_assignment_batches
+-- public.action_items
+-- public.activity_correction_log
+-- public.admin_audit_log
+-- public.operational_team_assignments
+-- public.communications
+-- public.crm_notes
+-- public.feedback_responses
+-- public.person_season_memberships
+-- public.person_season_membership_log
+-- public.industries
+-- public.function_areas
+-- public.mentor_program_participations
+-- public.mentor_industries
+-- public.mentor_function_areas
+-- public.data_import_batches
+-- public.data_issues
+-- public.data_quality_issues
+-- public.season_monthly_kpis
+
+-- [05] EXCLUDED HISTORICAL HELPERS AND ALL ROW CONTENT
+-- Every public relation whose name begins with staging_ is excluded by default.
+-- Historical import, data-quality, application-answer, audit, and business rows
+-- are never part of the schema-only package.
+
+-- [06] REQUIRED VIEWS — DEFINITIONS UNRESOLVED
+-- public.v_mentee_monthly_tracking
+-- public.v_monthly_activity_summary
+-- public.v_season_latest_closed_month
+-- The inventory supplied relation names but not view definitions or view SQL.
+
+-- [07] VAM-OWNED FUNCTION/TRIGGER CANDIDATES FOR PROVENANCE REVIEW
+-- public.admin_can_access_season
+-- public.current_admin_context
+-- public.current_admin_role
+-- public.get_founder_intelligence_dashboard
+-- public.get_operations_dashboard_data
+-- public.intel_experience_band
+-- public.intel_norm
+-- public.intel_vam_seniority_band
+-- public.is_active_admin
+-- public.is_admin_role
+-- public.prevent_person_season_membership_log_mutation
+-- public.set_updated_at
+-- public.validate_person_season_membership_scope
+-- Public citext/regexp compatibility routines are extension-managed and excluded.
+
+-- [08] CONSTRAINTS, INDEXES, TRIGGERS, RLS, POLICIES, GRANTS
+-- Inventory definitions must be normalized into dependency-ordered reviewed DDL.
+-- Production's broad direct privileges and disabled RLS on core tables must not
+-- be copied blindly. The target security contract requires an owner decision.
+-- No object is considered resolved by matching only its name.
+
+-- [09] MANAGED-SCHEMA EXCLUSIONS
+-- Do not manually clone internal objects belonging to auth, storage, vault,
+-- realtime, extensions, graphql, net, pgsodium, or other platform schemas.
+-- Do not clone extension-managed routines that happen to live in public.
+
+-- [10] MIGRATION 061 SEPARATION
+-- public.recruitment_campaigns and its columns/indexes/functions/triggers/policies
+-- are intentionally absent from this pre-061 baseline. Do not fold them in.
+-- Migration 061 remains unauthorized and must never be run as part of bootstrap.
+
+-- [11] REQUIRED REVIEW ARTIFACTS BEFORE THIS CAN BECOME EXECUTABLE
+-- - authoritative enum label/order inventory
+-- - exact view-definition inventory
+-- - exact sequence definitions and identity ownership inventory
+-- - normalized dependency graph and DDL ordering
+-- - VAM-owned versus extension-owned function provenance
+-- - owner-approved staging RLS/grants contract
+-- - schema diff tests against sanitized production metadata
+-- - rollback/recreate rehearsal plan
