@@ -61,10 +61,10 @@ Timestamps are `timestamptz`. UI uses `Asia/Ho_Chi_Minh`; no naive timestamp com
 - Role and stored statuses are constrained.
 - Capacity and confirmation days are positive when present.
 - Application trigger proves campaign season/batch/role match submitted row.
-- Unique campaign/role/canonical-email index is the race-safe duplicate guard.
+- Unique campaign/role/lower-trim-email index, excluding null/blank email, is the race-safe duplicate guard.
 - Application reference is unique.
 - Campaign FK uses `ON DELETE RESTRICT`; campaign with applications cannot be deleted.
-- Runtime additionally disables scope edits after the first application and uses close/archive instead of delete.
+- Database trigger blocks scope edits after the first application; runtime also disables the controls and uses close/archive instead of delete.
 
 One intake batch may have multiple campaigns when role or recruitment wave differs. Slug remains globally unique; duplicate identity semantics are campaign-specific.
 
