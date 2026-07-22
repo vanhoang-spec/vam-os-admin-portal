@@ -1,0 +1,41 @@
+{
+  "parser_mode": "offline-metadata-safety-review",
+  "input_bytes": 180915,
+  "json_valid": true,
+  "probe_version_valid": true,
+  "missing_sections": [],
+  "unexpected_top_level_keys": [],
+  "section_counts": {
+    "enums": 51,
+    "public_types": 62,
+    "views": 3,
+    "view_dependencies": 3,
+    "sequences": 0,
+    "sequence_ownership": 441,
+    "functions": 58,
+    "triggers": 20,
+    "comments": 22
+  },
+  "truncation_detected": false,
+  "actual_public_sequences": 0,
+  "sequence_metadata_consistent": false,
+  "sequence_ownership_classification": "GENERAL_DEPENDENCY_ROWS_NOT_SEQUENCE_OWNERSHIP",
+  "dependency_schema_counts": {
+    "auth": 81,
+    "pg_toast": 164,
+    "public": 168,
+    "realtime": 11,
+    "storage": 15,
+    "vault": 2
+  },
+  "suspicious_pattern_counts": {
+    "email": 0,
+    "phone": 0,
+    "jwt": 0,
+    "secret_or_password": 0,
+    "connection_string": 0,
+    "bearer_token": 0
+  },
+  "safe_for_offline_analysis": true,
+  "raw_file_commit_allowed": false
+}

@@ -30,13 +30,8 @@ Supabase-managed auth, storage, vault, realtime and extension internals are excl
 - PII, application answers and production identifiers
 - migration 061 campaign objects
 
-## Blocking unresolved sources
+## Offline baseline-gaps reassessment
 
-1. Exact labels/order for application_status, communication_channel/status, event_type, gender_type, match_status/type, role_status/type and season_status.
-2. View definitions for all three public views.
-3. Sequence definitions, ownership and identity dependencies.
-4. Provenance map separating VAM functions from citext/extension-managed public functions.
-5. Owner-approved target for RLS/grants rather than blindly copying insecure production exposure.
-6. Exact pre-012 base DDL and dependency ordering.
+Resolved by owner-provided catalog metadata: all ten enum label sets/order; exact definitions and direct dependencies for all three views; 13 VAM OS-owned versus 45 extension-managed functions; all 20 triggers; 22 comments; and zero actual public sequences. The 441 misnamed ownership rows are general catalog dependencies and are excluded, along with `auth`, `storage`, `realtime`, `vault`, `pg_toast`, and extension-managed routines.
 
-Until these are resolved, the baseline design is a review manifest, not executable bootstrap SQL.
+Still blocking: exact pre-012 base table creation DDL and reviewed cycle handling; owner-approved RLS/policies/grants and SECURITY DEFINER target; staging disposability/recovery; and reviewed executable modules. The baseline remains a design manifest, not bootstrap authorization.

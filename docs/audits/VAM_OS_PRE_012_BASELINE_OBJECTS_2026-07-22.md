@@ -21,3 +21,7 @@ The repository begins at migration 012. Production existence comes from the offl
 Minimum pre-012 staging foundation: `people`, `person_roles`, `mentor_profiles`, `mentee_profiles`, `seasons`, `events`, `matches`, `applications`, `application_answers`, and (subject to final code-path confirmation) `communications` and `feedback_responses`, plus their enum types, keys, defaults, indexes, and constraints. Historical import helpers are excluded unless a later migration dependency proves otherwise.
 
 Because authoritative pre-012 table DDL is still absent, the executable baseline cannot yet be reconstructed.
+
+## Offline baseline-gaps update
+
+No new table-creation DDL was present in this gaps output. Enum labels, views, functions, and triggers are now authoritative design inputs, but they do not replace missing pre-012 table definitions. This remains the primary schema-only baseline blocker; no table DDL is fabricated.

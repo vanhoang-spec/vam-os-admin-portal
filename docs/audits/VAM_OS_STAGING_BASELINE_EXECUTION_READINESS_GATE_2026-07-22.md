@@ -28,3 +28,16 @@
 - [ ] Owner issues separate, explicit bootstrap authorization.
 
 Current gate: **FAIL/CLOSED**. Metadata is incomplete, security is unapproved, staging disposability is unconfirmed, bootstrap is not authorized, and migration 061 remains separately unauthorized.
+
+## Offline baseline-gaps update
+
+- [x] All ten enum label sets and order confirmed.
+- [x] All three view definitions and direct dependencies confirmed.
+- [x] Actual public sequence set confirmed empty; 441 general dependency rows excluded from sequence design.
+- [x] VAM/extension function provenance and all 20 triggers classified.
+- [ ] Pre-012 table creation DDL and complete table dependency/cycle plan approved.
+- [ ] Seven SECURITY DEFINER functions and table-by-table RLS/policy/grant target approved.
+- [ ] Staging disposability, recovery point, and operator approved.
+- [ ] Executable modules reviewed and separate bootstrap authorization issued.
+
+Current gate remains **FAIL/CLOSED**, but enum/view/function/trigger/sequence metadata gaps are no longer blockers.

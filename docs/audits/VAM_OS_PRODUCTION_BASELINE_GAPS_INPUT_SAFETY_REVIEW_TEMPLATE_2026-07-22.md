@@ -1,26 +1,25 @@
-# VAM OS Production Baseline-Gaps Input Safety Review Template — 2026-07-22
+# VAM OS Production Baseline-Gaps Input Safety Review — 2026-07-22
 
 Raw input: `docs/audits/inputs/VAM_OS_PRODUCTION_BASELINE_GAPS_2026-07-22.json`
 
-Reviewer: __________  Date/time: __________  File size: __________
+Exact size: 180,915 bytes
+Raw file commit decision: **DO NOT COMMIT**
 
-| Check | PASS / FAIL / REVIEW | Evidence without raw values |
+| Check | Result | Sanitized evidence |
 |---|---|---|
-| Valid JSON | | |
-| Expected probe version | | |
-| Expected sections present | | |
-| No truncation indicator or parse failure | | |
-| One metadata object; no business rows | | |
-| No emails or phone numbers | | |
-| No tokens, secrets, API keys, or passwords | | |
-| No connection strings or credential-bearing URLs | | |
-| No Auth users or identity records | | |
-| No storage objects or object paths | | |
-| Catalog metadata only | | |
-| Safe to analyze offline | | |
+| Valid JSON | PASS | Offline parse succeeded |
+| Expected probe version | PASS | `vam-os-baseline-gaps-single-result-v1` |
+| Expected sections | PASS | No missing or unexpected top-level keys |
+| No truncation | PASS | Full JSON parse; all sections typed/present |
+| No business rows | PASS | Catalog metadata structure only |
+| No emails/phones | PASS | Scanner hit counts: 0 / 0 |
+| No tokens/secrets/passwords | PASS | JWT, secret/password, bearer hit counts: 0 |
+| No connection strings | PASS | Hit count: 0 |
+| No Auth users | PASS | No identity/business row section |
+| No storage objects | PASS | No storage-object row section; dependency schema names only |
+| Metadata-only | PASS | Catalog definitions/provenance only |
+| Safe for offline analysis | PASS | Parser decision YES |
 
-Expected sections: `enums`, `public_types`, `views`, `view_dependencies`, `sequences`, `sequence_ownership`, `functions`, `triggers`, and `comments`, plus `probe_version`.
+Section counts: enums 51; public types 62; views 3; view dependencies 3; sequences 0; broadly collected dependency rows 441; functions 58; triggers 20; comments 22.
 
-Offline parser result: __________  Missing sections: __________  Suspicious-pattern hit counts: __________
-
-Raw file commit decision: **DO NOT COMMIT / APPROVE AFTER SEPARATE REVIEW** (circle one). Default is **DO NOT COMMIT**. A PASS permits offline analysis, not publication or a database write.
+The 441 dependency rows contain platform/internal schema names but no business or secret values. They are excluded from sequence DDL and do not authorize platform-schema cloning.

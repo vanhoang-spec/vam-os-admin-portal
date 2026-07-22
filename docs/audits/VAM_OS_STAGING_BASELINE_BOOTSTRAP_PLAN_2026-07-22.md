@@ -100,3 +100,7 @@ Applications/programs/seasons/intake_batches/admin_users/admin_scope_access must
 3. Separate approval to recreate/reset staging.
 4. Separate approval to import an reviewed baseline.
 5. New explicit authorization before migration 061. None is granted here.
+
+## Offline baseline-gaps update
+
+The authorized metadata run resolved enum order, three view bodies/dependencies, function/trigger provenance, comments, and absence of standalone public sequences. It did not supply missing pre-012 `CREATE TABLE` DDL or approve security behavior. The recommended schema-only/design-first strategy is unchanged. Do not clone platform schemas or generate sequence DDL from the 441 broadly collected dependency rows. Bootstrap remains **NOT AUTHORIZED**.
