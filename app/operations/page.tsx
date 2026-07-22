@@ -315,7 +315,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
 
   return (
     <>
-      <PageHeader title="Vận hành" description="Dashboard vận hành tháng cho hoạt động mentoring Season 11." />
+      <PageHeader title="Vận hành" description={`Dashboard vận hành tháng cho hoạt động mentoring. Season đang theo dõi: ${SEASON_CODE}.`} />
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu operations. Một số chỉ số có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />

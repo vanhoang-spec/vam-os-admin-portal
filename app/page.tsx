@@ -319,7 +319,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
 
   return (
     <>
-      <PageHeader title="Tổng quan" description="Tổng quan vận hành VAM OS MVP cho UEH Mentoring Season 11." />
+      <PageHeader title="Tổng quan" description={`Tổng quan vận hành VAM OS. Season đang theo dõi: ${SEASON_CODE}.`} />
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu dashboard. Các chỉ số liên quan có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
@@ -336,7 +336,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
       </div>
 
       <section className="mt-4 mb-2">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Đối soát Recap Chính thức — Season 11</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">{`Đối soát Recap Chính thức — ${SEASON_CODE}`}</h2>
         <Card>
           <p className="mb-4 text-sm text-slate-500">
             Dữ liệu live từ DB. Hàng <code className="rounded bg-slate-100 px-1">excluded</code> không tính vào KPI.{" "}

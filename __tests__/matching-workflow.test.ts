@@ -123,16 +123,24 @@ describe("matchStatusLabel — completeness", () => {
 describe("applicationStatusLabel — canonical status coverage", () => {
   const CANONICAL_STATUSES: Array<[string, string]> = [
     ["submitted", "Đã nộp / Chờ xử lý"],
-    ["ready_for_screening", "Sẵn sàng review"],
-    ["under_review", "Đang review hồ sơ"],
-    ["needs_more_review", "Cần xem thêm"],
     ["under_data_check", "Đang kiểm tra dữ liệu"],
+    ["ready_for_screening", "Sẵn sàng review"],
+    ["screening_assigned", "Đã giao review"],
+    ["screening_in_progress", "Đang review hồ sơ"],
+    ["screening_completed", "Đã chấm hồ sơ"],
+    ["screening_passed", "Qua vòng hồ sơ"],
+    ["invited_to_meeting", "Mời gặp mặt"],
+    ["invited_to_orientation", "Mời buổi định hướng"],
     ["invited_to_interview", "Mời phỏng vấn"],
+    ["interview_scheduled", "Đã lên lịch phỏng vấn"],
+    ["interview_in_progress", "Đang phỏng vấn"],
     ["interview_completed", "Hoàn tất phỏng vấn"],
+    ["interview_passed", "Qua vòng phỏng vấn"],
     ["approved_as_mentor", "Đã duyệt — Mentor"],
     ["approved_as_mentee", "Đã duyệt — Mentee"],
-    ["rejected", "Không phù hợp"],
     ["waitlisted", "Danh sách chờ"],
+    ["rejected_or_not_fit", "Không phù hợp"],
+    ["needs_more_review", "Cần xem thêm"],
     ["withdrawn", "Rút đơn"],
   ];
 

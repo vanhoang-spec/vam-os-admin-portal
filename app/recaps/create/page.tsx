@@ -38,7 +38,7 @@ export default async function CreateRecapPage() {
 
   return (
     <>
-      <PageHeader title="Tạo mentoring recap" description="Ghi nhận thủ công các hoạt động mentoring (Correction Workflow)." />
+      <PageHeader title="Tạo mentoring recap" description="Ghi nhận thủ công các hoạt động mentoring (điều chỉnh dữ liệu nội bộ)." />
       {error ? <ErrorBox message={error} /> : null}
 
       <div className="grid gap-4 xl:grid-cols-[400px_1fr]">

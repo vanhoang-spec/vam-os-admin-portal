@@ -52,7 +52,7 @@ export default async function EditRecapPage({ params }: { params: { id: string }
 
   return (
     <>
-      <PageHeader title="Sửa mentoring recap" description="Workflow correction nội bộ cho dữ liệu recap. Mọi thay đổi được ghi vào audit log." />
+      <PageHeader title="Sửa mentoring recap" description="Điều chỉnh nội bộ cho dữ liệu recap. Mọi thay đổi được ghi vào audit log." />
       <ErrorBox message={error} />
 
       <div className="grid gap-4 xl:grid-cols-[1fr_420px]">

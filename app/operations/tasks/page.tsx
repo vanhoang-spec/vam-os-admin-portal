@@ -233,7 +233,7 @@ export default async function OperationsTasksPage({ searchParams }: { searchPara
 
   return (
     <>
-      <PageHeader title="Việc cần xử lý" description="Theo dõi follow-up, lỗi dữ liệu, correction và việc vận hành hằng tháng." />
+      <PageHeader title="Việc cần xử lý" description="Theo dõi nhắc nhở, lỗi dữ liệu và điều chỉnh vận hành hằng tháng." />
       {workflow.error ? <ErrorBox message={workflow.error} /> : null}
 
       <div className="mb-4 flex flex-wrap gap-2">

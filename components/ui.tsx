@@ -16,10 +16,13 @@ export function Card({ children, className }: { children: React.ReactNode; class
 }
 
 export function KpiCard({ label, value }: { label: string; value: number | string }) {
+  const displayValue = typeof value === "number"
+    ? new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
+    : value;
   return (
     <Card>
       <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-2 text-3xl font-semibold text-vam-ink">{value}</div>
+      <div className="mt-2 text-3xl font-semibold text-vam-ink">{displayValue}</div>
     </Card>
   );
 }

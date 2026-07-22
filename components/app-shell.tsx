@@ -197,7 +197,7 @@ function SidebarNav({
 function SidebarFooter({ adminUser }: { adminUser: CurrentAdminUser }) {
   return (
     <div className="border-t border-vam-line px-6 py-4 text-xs text-slate-500">
-      <div>UEH Mentoring Season 11</div>
+      <div>Vietnam Alumni Mentoring</div>
       <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
         <div className="truncate font-medium text-vam-ink">{adminUser.email}</div>
         <div>{roleLabel(adminUser.role)}</div>
@@ -288,7 +288,7 @@ function MobileDrawer({
         <div className="flex items-center justify-between border-b border-vam-line px-6 py-5">
           <div>
             <div className="text-lg font-bold text-vam-ink">VAM OS</div>
-            <div className="text-sm text-slate-500">Admin Portal</div>
+            <div className="text-sm text-slate-500">Cổng quản trị</div>
           </div>
           <button
             ref={closeButtonRef}
@@ -373,7 +373,7 @@ export function AppShell({
         <aside className="fixed inset-y-0 left-0 z-20 hidden w-72 flex-col border-r border-vam-line bg-white lg:flex">
           <div className="border-b border-vam-line px-6 py-5">
             <div className="text-lg font-bold text-vam-ink">VAM OS</div>
-            <div className="text-sm text-slate-500">Admin Portal</div>
+            <div className="text-sm text-slate-500">Cổng quản trị</div>
           </div>
           <SidebarNav groups={navGroups} pathname={pathname} navId="desktop-nav" />
           <SidebarFooter adminUser={adminUser} />
@@ -410,7 +410,7 @@ export function AppShell({
                     <Menu className="h-5 w-5" aria-hidden="true" />
                   </button>
                   <div>
-                    <div className="text-xl font-semibold text-vam-ink">VAM OS Admin Portal</div>
+                    <div className="text-xl font-semibold text-vam-ink">VAM OS</div>
                     <div className="text-sm text-slate-500">
                       Cổng quản trị dữ liệu Vietnam Alumni Mentoring
                     </div>

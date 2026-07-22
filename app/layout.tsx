@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 
 export const metadata: Metadata = {
-  title: "VAM OS Admin Portal",
+  title: "VAM OS",
   description: "Cổng quản trị nội bộ cho Vietnam Alumni Mentoring"
 };
 

@@ -71,3 +71,15 @@ export function includesQuery(values: unknown[], query: string) {
   if (!q) return true;
   return values.some((value) => String(value ?? "").toLowerCase().includes(q));
 }
+
+const VN_INT_FORMAT = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
+
+export function formatInt(value: number): string {
+  return VN_INT_FORMAT.format(value);
+}
+
+export function formatMonthVN(isoMonth: string): string {
+  const [year, month] = isoMonth.split("-");
+  if (!year || !month) return isoMonth;
+  return `Tháng ${parseInt(month, 10)}/${year}`;
+}
