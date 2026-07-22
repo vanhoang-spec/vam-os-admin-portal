@@ -207,7 +207,7 @@ export function EventForm({
           <label className="flex items-start gap-2">
             <input type="checkbox" name="allow_walk_in" value="true" defaultChecked={event?.allow_walk_in !== false} className="mt-1" />
             <div>
-              <span className="text-sm font-medium">Cho phép Walk-in</span>
+              <span className="text-sm font-medium">Cho phép vãng lai</span>
               <p className="text-xs text-slate-500">Cho phép người chưa đăng ký quét QR để tự check-in vào sự kiện.</p>
             </div>
           </label>

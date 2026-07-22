@@ -5,6 +5,7 @@ import {
   currentMonthVN,
   isOperationalMonth,
   operationalMonthRange,
+  resolveOperationsMonth,
   VALID_RECAP_STATUSES,
   LEDGER_ADMIN_NOTES_MARKER,
   ESTIMATED_DATE_MARKER,
@@ -452,6 +453,74 @@ describe("isOperationalMonth (2-arg, dynamic end)", () => {
     expect(isOperationalMonth("not-a-month", "2026-07")).toBe(false);
     expect(isOperationalMonth(null, "2026-07")).toBe(false);
     expect(isOperationalMonth(undefined, "2026-07")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: resolveOperationsMonth
+// ---------------------------------------------------------------------------
+
+describe("resolveOperationsMonth", () => {
+  const NOW = "2026-07";
+
+  it("current month has data → resolves to current month", () => {
+    const available = ["2026-03", "2026-06", "2026-07"];
+    expect(resolveOperationsMonth(null, NOW, available)).toEqual({
+      resolvedMonth: "2026-07",
+      resolutionReason: "current_month_has_data",
+    });
+  });
+
+  it("current month has no data → resolves to latest available", () => {
+    const available = ["2026-03", "2026-06"];
+    expect(resolveOperationsMonth(null, NOW, available)).toEqual({
+      resolvedMonth: "2026-06",
+      resolutionReason: "latest_available",
+    });
+  });
+
+  it("valid requested month → honours the request", () => {
+    const available = ["2026-03", "2026-06", "2026-07"];
+    expect(resolveOperationsMonth("2026-03", NOW, available)).toEqual({
+      resolvedMonth: "2026-03",
+      resolutionReason: "requested",
+    });
+  });
+
+  it("future requested month → discarded, falls back to auto-resolution", () => {
+    const available = ["2026-06", "2026-07"];
+    const result = resolveOperationsMonth("2027-12", NOW, available);
+    expect(result.resolvedMonth).toBe("2026-07");
+    expect(result.resolutionReason).toBe("current_month_has_data");
+  });
+
+  it("malformed requested month → discarded, falls back to auto-resolution", () => {
+    const available = ["2026-06"];
+    const result = resolveOperationsMonth("not-a-month", NOW, available);
+    expect(result.resolvedMonth).toBe("2026-06");
+    expect(result.resolutionReason).toBe("latest_available");
+  });
+
+  it("no data at all → current month with empty reason", () => {
+    expect(resolveOperationsMonth(null, NOW, [])).toEqual({
+      resolvedMonth: NOW,
+      resolutionReason: "current_month_empty",
+    });
+  });
+
+  it("valid requested month ≤ nowMonth without data in available list → still honoured", () => {
+    const available = ["2026-07"];
+    expect(resolveOperationsMonth("2026-01", NOW, available)).toEqual({
+      resolvedMonth: "2026-01",
+      resolutionReason: "requested",
+    });
+  });
+
+  it("officialClosedMonth (2026-03) is NOT inserted into resolution chain", () => {
+    const available = ["2026-07"];
+    const result = resolveOperationsMonth(null, NOW, available);
+    expect(result.resolvedMonth).not.toBe("2026-03");
+    expect(result.resolvedMonth).toBe("2026-07");
   });
 });
 

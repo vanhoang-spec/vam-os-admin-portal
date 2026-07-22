@@ -108,7 +108,7 @@ export default async function EventAttendancePage({ params }: { params: { id: st
         <KpiCard label="Đã tham gia" value={attendedCount} />
         <KpiCard label="Vắng" value={absentCount} />
         <KpiCard label="Chưa cập nhật trạng thái" value={notUpdatedCount} />
-        <KpiCard label="Walk-in" value={walkInCount} />
+        <KpiCard label="Vãng lai" value={walkInCount} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">

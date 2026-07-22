@@ -77,11 +77,11 @@ export default async function EditRecapPage({ params }: { params: { id: string }
               </div>
             </div>
             <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
-              <div className="text-xs font-medium uppercase text-slate-500">profile</div>
+              <div className="text-xs font-medium uppercase text-slate-500">Hồ sơ</div>
               <div className="mt-1">
                 {profilePersonId ? (
                   <Link href={`/people/${profilePersonId}`} className="text-sm font-medium text-vam-green">
-                    Xem profile liên quan
+                    Xem hồ sơ liên quan
                   </Link>
                 ) : (
                   "-"

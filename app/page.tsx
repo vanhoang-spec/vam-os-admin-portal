@@ -3,7 +3,7 @@ import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, ErrorBox, InternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getDashboardData, getOperationsData, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { displayCode, displayText } from "@/lib/utils";
+import { displayCode, displayText, formatMonthVN } from "@/lib/utils";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import {
   selectDashboardMonth,
@@ -325,54 +325,30 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         <ErrorBox key={error} message={error} />
       ))}
 
-      <div className="mb-4 text-sm">
-        <p className="text-slate-600 font-medium">Tháng đang xem: {dashboardSelectedMonth ?? "Chưa có"}</p>
+      {/* A: Month context indicator */}
+      <div className="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-vam-line bg-vam-mint/40 px-4 py-2.5 text-sm">
+        <span className="font-medium text-vam-ink">Tháng đang xem:</span>
+        <span className="font-semibold text-vam-green">{dashboardSelectedMonth ? formatMonthVN(dashboardSelectedMonth) : "Chưa có"}</span>
         {dashboardMonthSource === "current" && (
-          <p className="text-slate-500 mt-1 text-xs">Tháng hiện tại</p>
+          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Tháng hiện tại</span>
         )}
         {dashboardMonthSource === "fallback" && (
-          <p className="text-slate-500 mt-1 text-xs">Tháng gần nhất có dữ liệu</p>
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Tháng gần nhất có dữ liệu</span>
         )}
       </div>
 
-      <section className="mt-4 mb-2">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">{`Đối soát Recap Chính thức — ${SEASON_CODE}`}</h2>
-        <Card>
-          <p className="mb-4 text-sm text-slate-500">
-            Dữ liệu live từ DB. Hàng <code className="rounded bg-slate-100 px-1">excluded</code> không tính vào KPI.{" "}
-            <Link href="/operations" className="font-medium text-vam-green">Trang vận hành (chứa recap needs_review) →</Link>
-            {" · "}
-            <span className="text-slate-400">Chưa có trang audit riêng cho excluded.</span>
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 mb-6">
-            <KpiCard label="Recap chính thức (report-counted)" value={s11Rec.reportCounted} />
-            <KpiCard label="Hàng vật lý trong DB" value={s11Rec.physical} />
-            <KpiCard label="Hàng excluded (không tính KPI)" value={s11Rec.excluded} />
-            <KpiCard label="Official-ledger rows (đã đối soát)" value={s11Rec.ledgerRows} />
-            <KpiCard label="Placeholders (chưa có URL recap)" value={s11Rec.placeholders} />
-            <KpiCard label="Ngày ước tính / cần rà soát" value={s11Rec.estimatedDates} />
-          </div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown theo tháng — tất cả loại hình mentoring</h3>
-          <SimpleTable
-            rows={s11MonthlyRows}
-            columns={[
-              { key: "month", label: "Tháng" },
-              { key: "count", label: "Recap chính thức" }
-            ]}
-          />
-        </Card>
+      {/* B: Primary KPIs */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Chỉ số chính</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <KpiCard label={`Recap tháng ${dashboardSelectedMonth ? formatMonthVN(dashboardSelectedMonth) : "—"}`} value={homeRecapKpi} />
+          <KpiCard label="Mentee active tháng này" value={homeMenteeActiveKpi} />
+          <KpiCard label="Mentor active tháng này" value={homeMentorActiveKpi} />
+        </div>
       </section>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label={`Recap tháng ${dashboardSelectedMonth ?? "—"}`} value={homeRecapKpi} />
-        <KpiCard label="Mentee active tháng này" value={homeMenteeActiveKpi} />
-        <KpiCard label="Mentor active tháng này" value={homeMentorActiveKpi} />
-        <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
-        <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
-        <KpiCard label="Chưa có recap 2 tháng liên tiếp" value={homeFollowUpKpi} />
-      </div>
-
-      <section className="mt-6">
+      {/* C: Activity trends */}
+      <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Tình trạng hoạt động</h2>
         <div className="grid gap-4 xl:grid-cols-3">
           <Card className="xl:col-span-2">
@@ -384,7 +360,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
           </Card>
           <Card>
             <div className="mb-3">
-              <h3 className="text-base font-semibold text-vam-ink">Tình trạng hoạt động - {healthMonthLabel}</h3>
+              <h3 className="text-base font-semibold text-vam-ink">Tình trạng hoạt động - {healthMonthLabel ? formatMonthVN(healthMonthLabel) : "—"}</h3>
               <p className="mt-1 text-sm text-slate-500">Dựa trên active match và recap được ghi nhận trong tháng.</p>
             </div>
             <DonutSummary data={menteeHealthData} />
@@ -392,12 +368,34 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         </div>
       </section>
 
-      <section className="mt-6 grid gap-4">
+      {/* C2: Follow-up tracking KPIs */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Chỉ số theo dõi</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
+          <KpiCard
+            label="Chưa có recap tháng gần nhất"
+            value={missingClosedMonthCount}
+            tone={missingClosedMonthCount > 0 ? "warning" : "default"}
+          />
+          <KpiCard
+            label="Chưa có recap 2 tháng liên tiếp"
+            value={homeFollowUpKpi}
+            tone={homeFollowUpKpi > 0 ? "danger" : "default"}
+            helper={homeFollowUpKpi > 0 ? "Cần liên hệ follow-up" : undefined}
+          />
+        </div>
+      </section>
+
+      {/* D: Action tables */}
+      <section className="mb-6 grid gap-4">
         <Card>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-vam-ink">Top mentor theo số recap tháng này</h2>
-              <p className="mt-1 text-sm text-slate-500">Mentor có nhiều buổi mentoring 1-on-1 được ghi nhận nhất trong {selectedMonth}.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Mentor có nhiều buổi mentoring 1-on-1 được ghi nhận nhất trong {selectedMonth ? formatMonthVN(selectedMonth) : "—"}.
+              </p>
             </div>
             <Link href={`/operations?month=${selectedMonth}`} className="rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
               Xem Operations
@@ -437,7 +435,37 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         </Card>
       </section>
 
-      <section className="mt-6">
+      {/* E: Official Recap Reconciliation — audit detail, lower priority */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">{`Đối soát Recap Chính thức — ${SEASON_CODE}`}</h2>
+        <Card>
+          <p className="mb-4 text-sm text-slate-500">
+            Dữ liệu live từ DB. Hàng <code className="rounded bg-slate-100 px-1">excluded</code> không tính vào KPI.{" "}
+            <Link href="/operations" className="font-medium text-vam-green">Trang vận hành (chứa recap needs_review) →</Link>
+            {" · "}
+            <span className="text-slate-400">Chưa có trang audit riêng cho excluded.</span>
+          </p>
+          <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <KpiCard label="Recap chính thức (report-counted)" value={s11Rec.reportCounted} />
+            <KpiCard label="Hàng vật lý trong DB" value={s11Rec.physical} />
+            <KpiCard label="Hàng excluded (không tính KPI)" value={s11Rec.excluded} />
+            <KpiCard label="Official-ledger rows (đã đối soát)" value={s11Rec.ledgerRows} />
+            <KpiCard label="Placeholders (chưa có URL recap)" value={s11Rec.placeholders} tone={s11Rec.placeholders > 0 ? "warning" : "default"} />
+            <KpiCard label="Ngày ước tính / cần rà soát" value={s11Rec.estimatedDates} tone={s11Rec.estimatedDates > 0 ? "warning" : "default"} />
+          </div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown theo tháng — tất cả loại hình mentoring</h3>
+          <SimpleTable
+            rows={s11MonthlyRows}
+            columns={[
+              { key: "month", label: "Tháng", render: (row) => formatMonthVN(row.month) },
+              { key: "count", label: "Recap chính thức" }
+            ]}
+          />
+        </Card>
+      </section>
+
+      {/* F: Master data scale */}
+      <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Quy mô dữ liệu / Master data</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <KpiCard label="Tổng người" value={data.counts.people.data} />
@@ -447,23 +475,23 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
           <KpiCard label="Match active" value={activeMatches.length} />
           <KpiCard label="Tổng match" value={seasonMatches.length} />
           <KpiCard label="Mentee đã có mentor" value={menteesWithMentor} />
-          <KpiCard label="Mentee chưa có mentor" value={menteesWithoutMentor} />
+          <KpiCard label="Mentee chưa có mentor" value={menteesWithoutMentor} tone={menteesWithoutMentor > 0 ? "warning" : "default"} />
           <KpiCard label="Mentor đang phụ trách mentee" value={mentorsWithAssignedMentees} />
           <KpiCard label="Mentor chưa có mentee" value={mentorsWithoutAssignedMentees} />
         </div>
       </section>
 
-      <section className="mt-6">
+      <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Tình trạng vận hành dữ liệu</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Tỷ lệ mentee đã có mentor" value={percent(menteesWithMentor, data.counts.mentees.data)} />
           <KpiCard label="Tỷ lệ mentor có mentee" value={percent(mentorsWithAssignedMentees, data.counts.mentors.data)} />
           <KpiCard label="Số mentee trung bình / mentor có mentee" value={average(menteesWithMentor, mentorsWithAssignedMentees)} />
-          <KpiCard label="Cảnh báo dữ liệu" value={warningCount} />
+          <KpiCard label="Cảnh báo dữ liệu" value={warningCount} tone={warningCount > 0 ? "warning" : "default"} />
         </div>
       </section>
 
-      <section className="mt-6 grid gap-4 xl:grid-cols-2">
+      <section className="mb-6 grid gap-4 xl:grid-cols-2">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentee theo school_code</h2>
           <BarSummary data={countByLabel(data.mentees.data, "school_code")} />
@@ -482,7 +510,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         </Card>
       </section>
 
-      <section className="mt-6">
+      <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Mentor đang phụ trách nhiều mentee nhất</h2>
         <SimpleTable
           rows={topMentorRows}
@@ -497,7 +525,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         />
       </section>
 
-      <section className="mt-6">
+      <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Cảnh báo dữ liệu cần rà soát</h2>
         <SimpleTable
           rows={warningRows}

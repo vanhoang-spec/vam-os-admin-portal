@@ -574,7 +574,7 @@ export function ParticipationRow({
           </span>
           {isWalkIn ? (
             <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-              Walk-in
+              Vãng lai
             </span>
           ) : null}
         </div>

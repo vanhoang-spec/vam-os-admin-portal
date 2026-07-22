@@ -15,14 +15,30 @@ export function Card({ children, className }: { children: React.ReactNode; class
   return <section className={cn("rounded-lg border border-vam-line bg-white p-4 shadow-soft", className)}>{children}</section>;
 }
 
-export function KpiCard({ label, value }: { label: string; value: number | string }) {
+export function KpiCard({
+  label,
+  value,
+  tone = "default",
+  helper
+}: {
+  label: string;
+  value: number | string;
+  tone?: "default" | "success" | "warning" | "danger";
+  helper?: string;
+}) {
   const displayValue = typeof value === "number"
     ? new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)
     : value;
+  const valueClass =
+    tone === "success" ? "text-green-700"
+    : tone === "warning" ? "text-amber-700"
+    : tone === "danger" ? "text-red-700"
+    : "text-vam-ink";
   return (
     <Card>
       <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-2 text-3xl font-semibold text-vam-ink">{displayValue}</div>
+      <div className={cn("mt-2 text-3xl font-semibold", valueClass)}>{displayValue}</div>
+      {helper ? <div className="mt-1.5 text-xs text-slate-400">{helper}</div> : null}
     </Card>
   );
 }

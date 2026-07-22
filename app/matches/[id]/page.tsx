@@ -64,7 +64,7 @@ export default async function MatchDetailPage({ params }: { params: { id: string
             <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
               <div className="text-xs font-medium uppercase text-slate-500">Hồ sơ Mentor</div>
               <div className="mt-1">
-                <ExternalLinkButton href={mentorProfile?.bio_url} label="Xem profile mentor" />
+                <ExternalLinkButton href={mentorProfile?.bio_url} label="Xem hồ sơ Mentor" />
               </div>
             </div>
           </div>

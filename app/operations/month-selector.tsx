@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { formatMonthVN } from "@/lib/utils";
 
 function sanitizeMonthParam(value: string | null) {
   const match = String(value ?? "").trim().match(/^(\d{4}-(0[1-9]|1[0-2]))/);
@@ -32,12 +33,12 @@ export function MonthSelector({ months, selectedMonth }: { months: string[]; sel
       >
         {months.map((month) => (
           <option key={month} value={month}>
-            {month}
+            {formatMonthVN(month)}
           </option>
         ))}
         {!selectedMonthIsInOptions ? (
           <optgroup label="Tháng cần rà soát">
-            <option value={selectedMonth}>{selectedMonth}</option>
+            <option value={selectedMonth}>{formatMonthVN(selectedMonth)}</option>
           </optgroup>
         ) : null}
       </select>
