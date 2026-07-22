@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: select the production-matching repository version and review grants,
+-- SECURITY DEFINER, search_path, and dependencies. Exclude citext-owned functions.

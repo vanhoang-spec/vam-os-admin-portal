@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: indexes must be filtered to required application tables and reconciled
+-- against constraints before executable DDL is generated.

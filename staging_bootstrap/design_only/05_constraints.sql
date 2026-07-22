@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: dependency order and authoritative pre-012 FK semantics are unresolved.
+-- Never guess ON DELETE, deferrability, validation, or uniqueness semantics.

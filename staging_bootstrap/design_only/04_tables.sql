@@ -1,0 +1,5 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: authoritative pre-012 table DDL is unavailable.
+-- No CREATE TABLE is emitted until columns, defaults, identity, and type metadata
+-- are reconciled with enum, sequence, constraint, and dependency results.

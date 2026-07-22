@@ -1,0 +1,3 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: public sequence parameters and OWNED BY metadata require owner-run probe.

@@ -1,0 +1,4 @@
+-- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
+-- MUST NEVER RUN ON PRODUCTION.
+-- BLOCKED: confirm required extension versions and approved staging availability.
+-- Expected candidates from repository usage: pgcrypto and citext.
