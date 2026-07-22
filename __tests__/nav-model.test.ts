@@ -287,6 +287,8 @@ const BASE_ROUTE_ARR = [
   "/applications", "/matches", "/events", "/data-issues",
 ];
 
+const SUPER_ADMIN_BASE_ROUTES = ["/portfolio", ...BASE_ROUTE_ARR];
+
 const OPS_ADMIN_ROUTES = [
   "/operations/tasks",
   "/operations/monthly",
@@ -300,7 +302,7 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   reviewer:     [...BASE_ROUTE_ARR, "/reviews", "/interviews"],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team"],
   admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
-  super_admin:  [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
 };
 
 function sortedRoutes(arr: string[]) {

@@ -28,7 +28,16 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const showUserMgmt = roleIn(role, ["super_admin", "admin"]);
 
   const groups: NavGroupDef[] = [
-    { key: "dashboard", label: "Tổng quan", href: "/" },
+    role === "super_admin"
+      ? {
+          key: "dashboard",
+          label: "Tổng quan",
+          items: [
+            { href: "/portfolio", label: "Danh mục chương trình" },
+            { href: "/", label: "Tổng quan vận hành hiện tại" },
+          ],
+        }
+      : { key: "dashboard", label: "Tổng quan", href: "/" },
     showAdminTier
       ? {
           key: "operations",
