@@ -136,7 +136,7 @@ export default async function MenteesPage() {
           { key: "match_status", label: "Trạng thái match", valueKey: "match_status" },
           { key: "major", label: "Ngành", valueKey: "major" },
           { key: "intake_season", label: "Mùa intake", valueKey: "intake_season_code" },
-          { key: "intake_batch", label: "Batch intake", valueKey: "intake_batch_code" }
+          { key: "intake_batch", label: "Đợt tuyển", valueKey: "intake_batch_code" }
         ]}
         sortOptions={[
           { label: "Mã trường A-Z", key: "school_code", direction: "asc", type: "text", emptyLast: true, secondaryKey: "full_name" },

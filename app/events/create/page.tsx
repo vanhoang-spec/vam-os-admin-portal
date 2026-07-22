@@ -22,7 +22,7 @@ export default async function CreateEventPage() {
 
   return (
     <>
-      <PageHeader title="Tạo sự kiện" description="Ghi nhận sự kiện/hoạt động mới (orientation, training, networking, closing, ...)." />
+      <PageHeader title="Tạo sự kiện" description="Ghi nhận sự kiện/hoạt động mới (định hướng, đào tạo, networking, tổng kết, ...)." />
       {seasons.error ? <ErrorBox message={seasons.error} /> : null}
       {intakeBatches.error ? <ErrorBox message={intakeBatches.error} /> : null}
 
@@ -35,7 +35,7 @@ export default async function CreateEventPage() {
               <strong>Bắt buộc:</strong> Tên sự kiện, Loại, Mùa và Thời điểm bắt đầu.
             </p>
             <p>
-              <strong>Intake Batch</strong> (tuỳ chọn): chỉ chọn nếu sự kiện dành riêng cho một batch cụ thể, ví dụ Orientation cho UEHM-S12-B1.
+              <strong>Đợt tuyển</strong> (tuỳ chọn): chỉ chọn nếu sự kiện dành riêng cho một batch cụ thể, ví dụ Orientation cho UEHM-S12-B1.
             </p>
             <p>
               Sau khi tạo, bạn có thể chuyển sang trang <em>Quản lý tham gia</em> để thêm mentor/mentee và đánh dấu trạng thái tham gia.

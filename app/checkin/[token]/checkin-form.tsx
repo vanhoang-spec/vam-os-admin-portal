@@ -158,7 +158,7 @@ export function CheckinForm({ token }: { token: string }) {
           {showHint ? (
             <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-600">
               <p>Nếu bạn đã đăng ký trước, chỉ cần nhập email.</p>
-              <p className="mt-1">Nếu bạn chưa đăng ký trước, vui lòng nhập thêm họ và tên để check-in walk-in.</p>
+              <p className="mt-1">Nếu bạn chưa đăng ký trước, vui lòng nhập thêm họ và tên để điểm danh vãng lai.</p>
             </div>
           ) : null}
 

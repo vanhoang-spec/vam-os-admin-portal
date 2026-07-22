@@ -142,7 +142,7 @@ export default async function AdminApplicationsPage() {
           href="/applications"
           className="ml-auto inline-flex items-center rounded-md border border-vam-line px-2.5 py-1 font-medium text-vam-green hover:bg-vam-mint"
         >
-          → Xem danh sách applications cũ (legacy)
+          → Xem danh sách đơn ứng tuyển cũ
         </Link>
       </div>
 
@@ -167,7 +167,7 @@ export default async function AdminApplicationsPage() {
             label: "Nguồn đơn",
             valueKey: "source_display",
             options: [
-              { label: "VAM OS form (pilot)", value: "vam_os_form" },
+              { label: "Biểu mẫu VAM OS (thử nghiệm)", value: "vam_os_form" },
               { label: "Legacy/khác", value: "legacy" }
             ]
           }

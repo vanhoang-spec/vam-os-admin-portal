@@ -64,7 +64,7 @@ export function EditMenteeForm({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Mã mentee</span>
-            <input name="mentee_code" defaultValue={mentee.mentee_code ?? ""} className={inputClass} placeholder="vd: ME-S11-001" />
+            <input name="mentee_code" defaultValue={mentee.mentee_code ?? ""} className={inputClass} placeholder="vd: ME-S12-001" />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Mã trường (school_code)</span>

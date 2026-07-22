@@ -33,7 +33,7 @@ export default async function ReviewerPoolPage({
   return (
     <>
       <PageHeader
-        title="Reviewer Pool"
+        title="Danh sách Reviewer"
         description="Danh sách mentor có email trong hệ thống. Admin có thể cấp quyền reviewer để họ tham gia review hồ sơ."
       />
 
@@ -60,7 +60,7 @@ export default async function ReviewerPoolPage({
       {/* Batch filter */}
       <Card className="mb-5">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-medium text-slate-700">Lọc theo intake batch</p>
+          <p className="text-sm font-medium text-slate-700">Lọc theo đợt tuyển</p>
           <Link
             href="/reviews/guide"
             className="text-xs text-slate-400 hover:text-vam-green hover:underline"
@@ -70,13 +70,13 @@ export default async function ReviewerPoolPage({
         </div>
         <form method="GET" className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-500">Intake Batch</label>
+            <label className="text-xs font-medium text-slate-500">Đợt tuyển</label>
             <select
               name="intake_batch_id"
               defaultValue={intakeBatchId ?? ""}
               className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
             >
-              <option value="">Tất cả batch</option>
+              <option value="">Tất cả đợt</option>
               {intakeBatches.data.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name ?? b.code ?? b.id}

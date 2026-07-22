@@ -134,7 +134,7 @@ export function CreateMentorForm({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Mã mentor</span>
-            <input name="mentor_code" className={inputClass} placeholder="vd: M-S11-001" />
+            <input name="mentor_code" className={inputClass} placeholder="vd: M-S12-001" />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Bio URL</span>

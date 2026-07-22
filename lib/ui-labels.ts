@@ -102,32 +102,39 @@ export function participantStatusLabel(value: unknown): string {
 
 // ── Application status ────────────────────────────────────────────────────────
 /**
- * Display label for applications.status enum values (S12 pipeline).
+ * Display label for applications.status CHECK values (S12 pipeline, 20 values).
  * Applications page already has a local applicationStatusLabel() — this
  * canonical version is the authoritative source.
  *
- * DB values (must remain unchanged): submitted | ready_for_screening |
- * screening_assigned | under_review | screening_completed | needs_more_review |
- * under_data_check | invited_to_interview | interview_in_progress |
- * interview_completed | approved_as_mentor | approved_as_mentee |
- * rejected | waitlisted | withdrawn
+ * DB values (must remain unchanged): submitted | under_data_check |
+ * ready_for_screening | screening_assigned | screening_in_progress |
+ * screening_completed | screening_passed | invited_to_meeting |
+ * invited_to_orientation | invited_to_interview | interview_scheduled |
+ * interview_in_progress | interview_completed | interview_passed |
+ * approved_as_mentor | approved_as_mentee | waitlisted |
+ * rejected_or_not_fit | needs_more_review | withdrawn
  */
 export function applicationStatusLabel(value: unknown): string {
   const key = normalize(value);
   if (key === "submitted") return "Đã nộp / Chờ xử lý";
+  if (key === "under_data_check") return "Đang kiểm tra dữ liệu";
   if (key === "ready_for_screening") return "Sẵn sàng review";
   if (key === "screening_assigned") return "Đã giao review";
-  if (key === "under_review") return "Đang review hồ sơ";
+  if (key === "screening_in_progress") return "Đang review hồ sơ";
   if (key === "screening_completed") return "Đã chấm hồ sơ";
-  if (key === "needs_more_review") return "Cần xem thêm";
-  if (key === "under_data_check") return "Đang kiểm tra dữ liệu";
+  if (key === "screening_passed") return "Qua vòng hồ sơ";
+  if (key === "invited_to_meeting") return "Mời gặp mặt";
+  if (key === "invited_to_orientation") return "Mời buổi định hướng";
   if (key === "invited_to_interview") return "Mời phỏng vấn";
+  if (key === "interview_scheduled") return "Đã lên lịch phỏng vấn";
   if (key === "interview_in_progress") return "Đang phỏng vấn";
   if (key === "interview_completed") return "Hoàn tất phỏng vấn";
+  if (key === "interview_passed") return "Qua vòng phỏng vấn";
   if (key === "approved_as_mentor") return "Đã duyệt — Mentor";
   if (key === "approved_as_mentee") return "Đã duyệt — Mentee";
-  if (key === "rejected") return "Không phù hợp";
   if (key === "waitlisted") return "Danh sách chờ";
+  if (key === "rejected_or_not_fit") return "Không phù hợp";
+  if (key === "needs_more_review") return "Cần xem thêm";
   if (key === "withdrawn") return "Rút đơn";
   return fallback(value);
 }

@@ -141,32 +141,32 @@ export function EditRecapInlineForm({
             </select>
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Mentor person id</span>
+            <span className="text-xs font-medium uppercase text-slate-500">Mã người (Mentor)</span>
             <input name="mentor_person_id" defaultValue={recap.mentor_person_id ?? ""} className={inputClass} />
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Mentee person id</span>
+            <span className="text-xs font-medium uppercase text-slate-500">Mã người (Mentee)</span>
             <input name="mentee_person_id" defaultValue={recap.mentee_person_id ?? ""} className={inputClass} />
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Match id</span>
+            <span className="text-xs font-medium uppercase text-slate-500">Mã Match</span>
             <input name="match_id" defaultValue={recap.match_id ?? ""} className={inputClass} />
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Recap URL</span>
+            <span className="text-xs font-medium uppercase text-slate-500">URL Recap</span>
             <input name="recap_url" defaultValue={recap.recap_url ?? ""} className={inputClass} />
           </label>
         </div>
         <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">Recap note</span>
+          <span className="text-xs font-medium uppercase text-slate-500">Ghi chú recap</span>
           <textarea name="recap_note" defaultValue={recap.recap_note ?? ""} rows={2} className={inputClass} />
         </label>
         <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">Admin notes</span>
+          <span className="text-xs font-medium uppercase text-slate-500">Ghi chú nội bộ</span>
           <textarea name="admin_notes" defaultValue={recap.admin_notes ?? ""} rows={2} className={inputClass} />
         </label>
         <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">Reason</span>
+          <span className="text-xs font-medium uppercase text-slate-500">Lý do điều chỉnh</span>
           <textarea name="reason" rows={2} className={inputClass} />
         </label>
         <input type="hidden" name="meeting_type" value={recap.meeting_type ?? "1on1_primary"} />
@@ -177,11 +177,11 @@ export function EditRecapInlineForm({
         <StateMessage state={deleteState} />
         <input type="hidden" name="id" value={recap.id} />
         <label className="block">
-          <span className="text-xs font-medium uppercase text-red-700">Soft delete reason</span>
+          <span className="text-xs font-medium uppercase text-red-700">Lý do ẩn bản ghi</span>
           <textarea name="reason" rows={2} className={inputClass} />
         </label>
         <button type="submit" className="inline-flex w-fit justify-center rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white hover:bg-red-800">
-          Soft delete recap
+          Ẩn bản ghi
         </button>
       </form>
     </div>

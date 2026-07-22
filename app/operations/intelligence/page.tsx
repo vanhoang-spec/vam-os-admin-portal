@@ -30,6 +30,12 @@ function priorityClass(priority: string) {
   return "border-vam-line bg-slate-50 text-slate-700";
 }
 
+function priorityLabel(priority: string) {
+  if (priority === "high") return "Ưu tiên cao";
+  if (priority === "medium") return "Ưu tiên trung bình";
+  return "Ưu tiên thấp";
+}
+
 function rateText(value: unknown) {
   if (value === null || value === undefined) return "-";
   return `${value}%`;
@@ -96,9 +102,9 @@ export default async function FounderIntelligencePage() {
                 <p className="mt-2 text-xs text-slate-500">{data.definitions.activeMentor}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <CsvExportButton rows={data.mentorProfile.byIndustry as JsonRecord[]} filename="mentor-segment-summary.csv" label="Export mentor CSV" />
-                <CsvExportButton rows={data.menteeProfile.byMajor as JsonRecord[]} filename="mentee-segment-summary.csv" label="Export mentee CSV" />
-                <CsvExportButton rows={data.matchingIntelligence.mentorSupplyVsMenteeDemand as JsonRecord[]} filename="supply-demand-gap.csv" label="Export gap CSV" />
+                <CsvExportButton rows={data.mentorProfile.byIndustry as JsonRecord[]} filename="mentor-segment-summary.csv" label="Xuất CSV Mentor" />
+                <CsvExportButton rows={data.menteeProfile.byMajor as JsonRecord[]} filename="mentee-segment-summary.csv" label="Xuất CSV Mentee" />
+                <CsvExportButton rows={data.matchingIntelligence.mentorSupplyVsMenteeDemand as JsonRecord[]} filename="supply-demand-gap.csv" label="Xuất CSV chênh lệch" />
               </div>
             </div>
           </Card>
@@ -109,25 +115,25 @@ export default async function FounderIntelligencePage() {
             <h2 className="text-lg font-semibold text-vam-ink">Hoạt động Mentor</h2>
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor by industry</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor theo ngành</h3>
                 <BarSummary data={countChart(data.mentorProfile.byIndustry, "industry")} />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor by function</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor theo chuyên môn</h3>
                 <BarSummary data={countChart(data.mentorProfile.byFunction, "functionArea")} />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor by years of experience</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor theo số năm kinh nghiệm</h3>
                 <DonutSummary data={countChart(data.mentorProfile.byExperienceBand, "band")} />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor by years in VAM</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor theo số năm trong VAM</h3>
                 <DonutSummary data={countChart(data.mentorProfile.byVamSeniority, "band")} />
               </Card>
             </div>
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor overloaded</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor quá tải</h3>
                 <SimpleTable
                   rows={data.mentorProfile.overloadedMentors}
                   columns={[
@@ -160,19 +166,19 @@ export default async function FounderIntelligencePage() {
             <h2 className="text-lg font-semibold text-vam-ink">Hoạt động Mentee</h2>
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee by major</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee theo ngành học</h3>
                 <BarSummary data={countChart(data.menteeProfile.byMajor, "major")} />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee by career interest</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee theo định hướng nghề nghiệp</h3>
                 <BarSummary data={countChart(data.menteeProfile.byCareerInterest, "careerInterest")} />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee by target industry</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee theo ngành mục tiêu</h3>
                 <BarSummary data={countChart(data.menteeProfile.byTargetIndustry, "targetIndustry")} />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee by support team</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentee theo Support Team</h3>
                 <DonutSummary data={countChart(data.menteeProfile.bySupportTeam, "supportTeam")} />
               </Card>
             </div>
@@ -180,7 +186,7 @@ export default async function FounderIntelligencePage() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-base font-semibold text-vam-ink">Mentee chưa có recap theo định hướng nghề nghiệp</h3>
                 <Link href="/operations/tasks?type=followup_no_recap" className="rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
-                  Mở workflow follow-up
+                  Mở danh sách nhắc nhở
                 </Link>
               </div>
               <SimpleTable
@@ -197,16 +203,16 @@ export default async function FounderIntelligencePage() {
             <h2 className="text-lg font-semibold text-vam-ink">Phân tích Matching</h2>
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Industry alignment</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Phù hợp ngành nghề</h3>
                 <DonutSummary data={countChart(data.matchingIntelligence.matchesByIndustryAlignment, "alignment")} />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Function alignment</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Phù hợp chuyên môn</h3>
                 <DonutSummary data={countChart(data.matchingIntelligence.matchesByFunctionAlignment, "alignment")} />
               </Card>
             </div>
             <Card>
-              <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor supply vs mentee demand</h3>
+              <h3 className="mb-3 text-base font-semibold text-vam-ink">Cung-cầu Mentor và Mentee theo phân khúc</h3>
               <SegmentGapTable rows={data.matchingIntelligence.mentorSupplyVsMenteeDemand} />
             </Card>
           </section>
@@ -215,7 +221,7 @@ export default async function FounderIntelligencePage() {
             <h2 className="text-lg font-semibold text-vam-ink">Hoạt động theo nhóm</h2>
             <div className="grid gap-4 xl:grid-cols-3">
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Active mentee rate by major</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Tỷ lệ Mentee active theo ngành học</h3>
                 <SimpleTable
                   rows={data.activityBySegment.activeMenteeRateByMajor}
                   columns={[
@@ -227,11 +233,11 @@ export default async function FounderIntelligencePage() {
                 />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Recap rate by support team</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Tỷ lệ recap theo Support Team</h3>
                 <SimpleTable
                   rows={data.activityBySegment.recapRateBySupportTeam}
                   columns={[
-                    { key: "supportTeam", label: "Support team", render: (row) => displayText(row.supportTeam) },
+                    { key: "supportTeam", label: "Support Team", render: (row) => displayText(row.supportTeam) },
                     { key: "activeMentees", label: "Mentee active" },
                     { key: "menteesWithRecap", label: "Có recap" },
                     { key: "recapRate", label: "Tỷ lệ recap", render: (row) => rateText(row.recapRate) }
@@ -239,7 +245,7 @@ export default async function FounderIntelligencePage() {
                 />
               </Card>
               <Card>
-                <h3 className="mb-3 text-base font-semibold text-vam-ink">Active mentor rate by industry</h3>
+                <h3 className="mb-3 text-base font-semibold text-vam-ink">Tỷ lệ Mentor active theo ngành</h3>
                 <SimpleTable
                   rows={data.activityBySegment.activeMentorRateByIndustry}
                   columns={[
@@ -259,13 +265,13 @@ export default async function FounderIntelligencePage() {
               {data.recommendedActions.map((action, index) => (
                 <Card key={`${action.title}-${index}`}>
                   <div className={`mb-3 inline-flex rounded-md border px-2 py-1 text-xs font-semibold uppercase ${priorityClass(action.priority)}`}>
-                    {displayText(action.priority)}
+                    {priorityLabel(action.priority)}
                   </div>
                   <h3 className="text-base font-semibold text-vam-ink">{action.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{action.reason}</p>
                   <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                    <div><span className="font-medium text-vam-ink">Owner:</span> {action.suggestedOwner}</div>
-                    <div className="mt-1"><span className="font-medium text-vam-ink">Action:</span> {action.suggestedAction}</div>
+                    <div><span className="font-medium text-vam-ink">Người phụ trách:</span> {action.suggestedOwner}</div>
+                    <div className="mt-1"><span className="font-medium text-vam-ink">Hành động đề xuất:</span> {action.suggestedAction}</div>
                   </div>
                 </Card>
               ))}

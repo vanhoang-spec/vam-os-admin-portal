@@ -44,10 +44,33 @@ describe("UI Labels - Domain Mappings", () => {
     expect(matchStatusLabel("unmatched_review")).toBe("Cần xem lại ghép cặp");
   });
 
-  it("maps application status correctly", () => {
+  it("maps application status correctly for all 20 DB values", () => {
     expect(applicationStatusLabel("submitted")).toBe("Đã nộp / Chờ xử lý");
+    expect(applicationStatusLabel("under_data_check")).toBe("Đang kiểm tra dữ liệu");
+    expect(applicationStatusLabel("ready_for_screening")).toBe("Sẵn sàng review");
+    expect(applicationStatusLabel("screening_assigned")).toBe("Đã giao review");
+    expect(applicationStatusLabel("screening_in_progress")).toBe("Đang review hồ sơ");
+    expect(applicationStatusLabel("screening_completed")).toBe("Đã chấm hồ sơ");
+    expect(applicationStatusLabel("screening_passed")).toBe("Qua vòng hồ sơ");
+    expect(applicationStatusLabel("invited_to_meeting")).toBe("Mời gặp mặt");
+    expect(applicationStatusLabel("invited_to_orientation")).toBe("Mời buổi định hướng");
+    expect(applicationStatusLabel("invited_to_interview")).toBe("Mời phỏng vấn");
+    expect(applicationStatusLabel("interview_scheduled")).toBe("Đã lên lịch phỏng vấn");
+    expect(applicationStatusLabel("interview_in_progress")).toBe("Đang phỏng vấn");
     expect(applicationStatusLabel("interview_completed")).toBe("Hoàn tất phỏng vấn");
+    expect(applicationStatusLabel("interview_passed")).toBe("Qua vòng phỏng vấn");
     expect(applicationStatusLabel("approved_as_mentor")).toBe("Đã duyệt — Mentor");
+    expect(applicationStatusLabel("approved_as_mentee")).toBe("Đã duyệt — Mentee");
+    expect(applicationStatusLabel("waitlisted")).toBe("Danh sách chờ");
+    expect(applicationStatusLabel("rejected_or_not_fit")).toBe("Không phù hợp");
+    expect(applicationStatusLabel("needs_more_review")).toBe("Cần xem thêm");
+    expect(applicationStatusLabel("withdrawn")).toBe("Rút đơn");
+  });
+
+  it("does not map stale/removed DB values to valid labels", () => {
+    // These were old/incorrect values never in the real DB schema
+    expect(applicationStatusLabel("under_review")).toBe("under_review");
+    expect(applicationStatusLabel("rejected")).toBe("rejected");
   });
 
   it("maps meeting type correctly", () => {

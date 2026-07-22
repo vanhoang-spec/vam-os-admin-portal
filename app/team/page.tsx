@@ -30,13 +30,13 @@ function functionalTeamLabel(value: unknown) {
   if (n === "communication_media") return "Truyền thông / Nội dung";
   if (n === "event") return "Sự kiện / Đào tạo";
   if (n === "design") return "Thiết kế";
-  if (n === "data" || n === "data_operations") return "Data / Vận hành";
+  if (n === "data" || n === "data_operations") return "Dữ liệu / Vận hành";
   if (n === "matching") return "Matching";
-  if (n === "recap_followup") return "Recap follow-up";
+  if (n === "recap_followup") return "Theo dõi Recap";
   if (n === "mentor_coordination") return "Điều phối mentor";
   if (n === "mentee_coordination") return "Điều phối mentee";
-  if (n === "program_lead") return "Program lead";
-  if (n === "communications") return "Communications";
+  if (n === "program_lead") return "Trưởng chương trình";
+  if (n === "communications") return "Truyền thông";
   if (n === "other") return "Khác";
   if (n === "unknown" || !n) return "Chưa phân loại";
   return displayText(value);
@@ -50,12 +50,12 @@ function operationalRoleLabel(value: unknown) {
   if (n === "event_support") return "Sự kiện / Đào tạo";
   if (n === "design_support") return "Thiết kế";
   if (n === "support_team_member") return "Thành viên support team";
-  if (n === "program_lead") return "Program lead";
+  if (n === "program_lead") return "Trưởng chương trình";
   if (n === "matching") return "Matching";
-  if (n === "recap_followup") return "Recap follow-up";
+  if (n === "recap_followup") return "Theo dõi Recap";
   if (n === "mentor_coordination") return "Điều phối mentor";
   if (n === "mentee_coordination") return "Điều phối mentee";
-  if (n === "communications") return "Communications";
+  if (n === "communications") return "Truyền thông";
   if (n === "other") return "Khác";
   if (!n) return "-";
   return displayText(value);
@@ -350,7 +350,7 @@ export default async function TeamViewPage({
               },
               {
                 key: "team_name",
-                label: "Team / Scope",
+                label: "Team / Phạm vi",
                 render: (row) => (
                   <div>
                     <div className="text-sm">{displayText(row.team_name)}</div>
@@ -370,7 +370,7 @@ export default async function TeamViewPage({
               },
               {
                 key: "profile",
-                label: "Profile",
+                label: "Hồ sơ",
                 render: (row) => (
                   <Link href={`/people/${row.person_id}`} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
                     Xem hồ sơ
@@ -423,7 +423,7 @@ export default async function TeamViewPage({
               },
               {
                 key: "team_name",
-                label: "Team / Scope",
+                label: "Team / Phạm vi",
                 render: (row) => (
                   <div>
                     <div className="text-sm">{displayText(row.team_name)}</div>
@@ -443,7 +443,7 @@ export default async function TeamViewPage({
               },
               {
                 key: "profile",
-                label: "Profile",
+                label: "Hồ sơ",
                 render: (row) => (
                   <Link href={`/people/${row.person_id}`} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
                     Xem hồ sơ
@@ -477,11 +477,11 @@ export default async function TeamViewPage({
               { key: "source_role_group", label: "Nhóm gốc", render: (row) => sourceRoleGroupLabel(row.source_role_group) },
               { key: "operational_role", label: "Vai trò", render: (row) => operationalRoleLabel(row.operational_role) },
               { key: "functional_team", label: "Khu vực", render: (row) => functionalTeamLabel(row.functional_team) },
-              { key: "team_name", label: "Team / Scope", render: (row) => `${displayText(row.team_name)} · ${displayText(row.assigned_scope)}` },
+              { key: "team_name", label: "Team / Phạm vi", render: (row) => `${displayText(row.team_name)} · ${displayText(row.assigned_scope)}` },
               { key: "status", label: "Trạng thái", render: (row) => statusLabel(row.status) },
               {
                 key: "profile",
-                label: "Profile",
+                label: "Hồ sơ",
                 render: (row) => (
                   <Link href={`/people/${row.person_id}`} className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
                     Xem hồ sơ

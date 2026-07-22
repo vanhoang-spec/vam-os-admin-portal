@@ -104,7 +104,7 @@ export default async function ReviewsPage() {
         description={
           reviewerOnly
             ? "Danh sách các đơn được giao cho bạn cần review."
-            : "Toàn bộ review assignment trong hệ thống."
+            : "Toàn bộ phân công review trong hệ thống."
         }
       />
 
@@ -137,7 +137,7 @@ export default async function ReviewsPage() {
             href="/reviews/reviewer-pool"
             className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
-            Reviewer pool
+            Danh sách reviewer
           </Link>
           <Link
             href="/reviews/guide"

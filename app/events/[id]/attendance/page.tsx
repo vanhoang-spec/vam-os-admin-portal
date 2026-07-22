@@ -108,7 +108,7 @@ export default async function EventAttendancePage({ params }: { params: { id: st
         <KpiCard label="Đã tham gia" value={attendedCount} />
         <KpiCard label="Vắng" value={absentCount} />
         <KpiCard label="Chưa cập nhật trạng thái" value={notUpdatedCount} />
-        <KpiCard label="Walk-in" value={walkInCount} />
+        <KpiCard label="Vãng lai" value={walkInCount} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">
@@ -139,7 +139,7 @@ export default async function EventAttendancePage({ params }: { params: { id: st
             <Card>
               <h2 className="mb-1 text-base font-semibold text-slate-400">Thêm hàng loạt theo batch</h2>
               <p className="text-xs text-slate-400">
-                Sự kiện này chưa được gắn Intake Batch.{" "}
+                Sự kiện này chưa được gắn đợt tuyển.{" "}
                 <Link href={`/events/${detail.event.id}/edit`} className="text-vam-green underline hover:no-underline">
                   Sửa sự kiện
                 </Link>{" "}

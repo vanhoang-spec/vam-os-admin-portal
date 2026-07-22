@@ -110,7 +110,7 @@ export default async function ApplicationsPage() {
           { key: "status_unified", label: "Trạng thái", valueKey: "status_unified" },
           { key: "role_applied", label: "Vai trò ứng tuyển", valueKey: "role_applied" },
           { key: "season_code", label: "Mùa", valueKey: "season_code" },
-          { key: "intake_batch", label: "Intake Batch", valueKey: "intake_batch_code" },
+          { key: "intake_batch", label: "Đợt tuyển", valueKey: "intake_batch_code" },
           {
             key: "consent",
             label: "Đồng ý lưu trữ",
@@ -136,7 +136,7 @@ export default async function ApplicationsPage() {
           { key: "status_unified", label: "Trạng thái", displayKey: "status_display", badge: true },
           { key: "source", label: "Nguồn", displayKey: "source_display" },
           { key: "submitted_at", label: "Ngày nộp", displayKey: "submitted_at_display" },
-          { key: "consent_display", label: "Consent", displayKey: "consent_display", badge: true },
+          { key: "consent_display", label: "Đồng ý lưu trữ", displayKey: "consent_display", badge: true },
           { key: "detail", label: "Chi tiết", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem chi tiết" }
         ]}
       />

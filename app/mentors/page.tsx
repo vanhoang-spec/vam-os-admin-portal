@@ -157,7 +157,7 @@ export default async function MentorsPage() {
           },
           { key: "company_current", label: "Công ty", valueKey: "company_current" },
           { key: "intake_season", label: "Mùa intake", valueKey: "intake_season_code" },
-          { key: "intake_batch", label: "Batch intake", valueKey: "intake_batch_code" }
+          { key: "intake_batch", label: "Đợt tuyển", valueKey: "intake_batch_code" }
         ]}
         sortOptions={[
           { label: "Số mentee giảm dần", key: "assigned_mentee_count", direction: "desc", type: "number" },

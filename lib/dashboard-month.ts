@@ -134,6 +134,59 @@ export function computeS11RecapReconciliation(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Operations month resolution
+// ---------------------------------------------------------------------------
+
+export type OperationsMonthResolutionReason =
+  | "requested"
+  | "current_month_has_data"
+  | "latest_available"
+  | "current_month_empty";
+
+export interface OperationsMonthResolution {
+  resolvedMonth: string;
+  resolutionReason: OperationsMonthResolutionReason;
+}
+
+/**
+ * Resolve the month to display on the Operations page.
+ *
+ * Priority:
+ *   1. requestedRaw — validated YYYY-MM, must not be in the future. If invalid or
+ *      future, discarded and auto-resolution takes over.
+ *   2. currentMonth (nowMonth) if it appears in availableMonths.
+ *   3. Latest month ≤ nowMonth in availableMonths.
+ *   4. nowMonth with "current_month_empty" when no data exists yet.
+ *
+ * Never returns a future month. Never silently falls back to officialClosedMonth.
+ */
+export function resolveOperationsMonth(
+  requestedRaw: string | null | undefined,
+  nowMonth: string,
+  availableMonths: string[]
+): OperationsMonthResolution {
+  const parsed = requestedRaw
+    ? (String(requestedRaw).trim().match(/^(\d{4}-(0[1-9]|1[0-2]))/)?.[1] ?? null)
+    : null;
+  const validRequested = parsed && parsed <= nowMonth ? parsed : null;
+
+  if (validRequested) {
+    return { resolvedMonth: validRequested, resolutionReason: "requested" };
+  }
+
+  const { month, source } = selectDashboardMonth(availableMonths, nowMonth);
+
+  if (month) {
+    return {
+      resolvedMonth: month,
+      resolutionReason: source === "current" ? "current_month_has_data" : "latest_available",
+    };
+  }
+
+  return { resolvedMonth: nowMonth, resolutionReason: "current_month_empty" };
+}
+
 /** Whether a month string falls within the S11 operational range. */
 export function isOperationalMonth(month: unknown, endMonth: string): boolean {
   const value = String(month ?? "").trim();

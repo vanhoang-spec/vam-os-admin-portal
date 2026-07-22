@@ -128,7 +128,7 @@ export function EventForm({
 
       {/* Phase 045A: intake_batch_id selector */}
       <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Intake Batch (tuỳ chọn)</span>
+        <span className="text-xs font-medium uppercase text-slate-500">Đợt tuyển (tuỳ chọn)</span>
         <select
           name="intake_batch_id"
           defaultValue={event?.intake_batch_id ?? ""}
@@ -163,7 +163,7 @@ export function EventForm({
         <input
           name="legacy_event_temp_id"
           defaultValue={event?.legacy_event_temp_id ?? ""}
-          placeholder="ví dụ: UEHM-S11-CLOSING"
+          placeholder="ví dụ: UEHM-S12-CLOSING"
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
       </label>
@@ -207,7 +207,7 @@ export function EventForm({
           <label className="flex items-start gap-2">
             <input type="checkbox" name="allow_walk_in" value="true" defaultChecked={event?.allow_walk_in !== false} className="mt-1" />
             <div>
-              <span className="text-sm font-medium">Cho phép Walk-in</span>
+              <span className="text-sm font-medium">Cho phép vãng lai</span>
               <p className="text-xs text-slate-500">Cho phép người chưa đăng ký quét QR để tự check-in vào sự kiện.</p>
             </div>
           </label>

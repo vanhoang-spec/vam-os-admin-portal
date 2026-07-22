@@ -82,7 +82,7 @@ function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedA
               <th className="px-4 py-3">Họ tên</th>
               <th className="px-4 py-3">Vai trò</th>
               <th className="px-4 py-3">Trạng thái</th>
-              <th className="px-4 py-3">Auth user id</th>
+              <th className="px-4 py-3">Auth ID</th>
               <th className="px-4 py-3">Scope hiện tại</th>
               <th className="sticky right-0 z-10 w-64 border-l border-vam-line bg-slate-50 px-4 py-3">Thao tác</th>
             </tr>

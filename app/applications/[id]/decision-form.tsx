@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { updateApplicationDecisionAction } from "@/app/actions/application-decisions";
+import { ConfirmActionDialog } from "@/components/action-feedback";
 import {
+  DESTRUCTIVE_DECISION_STATUSES,
   initialDecisionActionState
 } from "@/lib/decision-action-types";
 
@@ -11,7 +14,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const DECISION_OPTIONS: { value: string; label: string }[] = [
-  { value: "screening_passed",    label: "Pass screening — Hồ sơ đạt" },
+  { value: "screening_passed",    label: "Qua vòng hồ sơ — Hồ sơ đạt" },
   { value: "invited_to_interview", label: "Mời phỏng vấn" },
   { value: "waitlisted",          label: "Đưa vào danh sách chờ" },
   { value: "rejected_or_not_fit", label: "Không phù hợp / từ chối" },
@@ -74,12 +77,11 @@ export function DecisionForm({
     updateApplicationDecisionAction,
     initialDecisionActionState
   );
+  const [selectedStatus, setSelectedStatus] = useState("");
 
-  // Track selected value for the warning logic
-  // (we can't use useState easily without a controlled select, so we use
-  //  a data attribute approach — just show the warning permanently when
-  //  no submitted review exists, since it's always potentially relevant)
   const showNoReviewWarning = !hasSubmittedReview;
+  const isDestructive = DESTRUCTIVE_DECISION_STATUSES.has(selectedStatus);
+  const selectedLabel = DECISION_OPTIONS.find((o) => o.value === selectedStatus)?.label ?? selectedStatus;
 
   return (
     <div className="space-y-4">
@@ -145,7 +147,8 @@ export function DecisionForm({
           <select
             name="new_status"
             required
-            defaultValue=""
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
             className="mt-1 w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink focus:outline-none focus:ring-1 focus:ring-vam-green"
           >
             <option value="" disabled>-- Chọn quyết định --</option>
@@ -169,7 +172,19 @@ export function DecisionForm({
           />
         </div>
 
-        <SubmitButton />
+        {isDestructive ? (
+          <ConfirmActionDialog
+            triggerLabel="Ghi nhận quyết định"
+            pendingLabel="Đang lưu…"
+            title="Xác nhận quyết định"
+            description={`Bạn đang chọn: "${selectedLabel}". Đây là quyết định có tính kết thúc cho hồ sơ ứng viên này. Vui lòng xác nhận trước khi ghi nhận.`}
+            confirmLabel="Xác nhận"
+            triggerClassName="inline-flex h-9 items-center gap-2 rounded-md bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            confirmClassName="bg-red-600 text-white hover:bg-red-700"
+          />
+        ) : (
+          <SubmitButton />
+        )}
       </form>
     </div>
   );

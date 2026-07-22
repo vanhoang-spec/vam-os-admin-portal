@@ -51,7 +51,7 @@ function IssueActionPanel({ issue }: { issue: AdminDataIssue }) {
     return (
       <div className="grid gap-3">
         <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Action: {statusLabel(issue.actionItem.status)} / owner: {displayText(issue.actionItem.owner_email)}
+          Việc: {statusLabel(issue.actionItem.status)} / Phụ trách: {displayText(issue.actionItem.owner_email)}
         </div>
         <QuickResolveForm id={issue.actionItem.id} />
       </div>
@@ -168,11 +168,11 @@ function FollowUpTab({ items }: { items: AdminActionItem[] }) {
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 xl:grid-cols-4">
                     <div><span className="font-medium text-vam-ink">Season:</span> {displayText(item.season_code)}</div>
-                    <div><span className="font-medium text-vam-ink">Owner:</span> {displayText(item.owner_email)}</div>
-                    <div><span className="font-medium text-vam-ink">Created:</span> {formatDate(item.created_at)}</div>
-                    <div><span className="font-medium text-vam-ink">Updated:</span> {formatDate(item.updated_at)}</div>
+                    <div><span className="font-medium text-vam-ink">Phụ trách:</span> {displayText(item.owner_email)}</div>
+                    <div><span className="font-medium text-vam-ink">Ngày tạo:</span> {formatDate(item.created_at)}</div>
+                    <div><span className="font-medium text-vam-ink">Cập nhật:</span> {formatDate(item.updated_at)}</div>
                   </div>
-                  <pre className="mt-3 whitespace-pre-wrap rounded-md border border-vam-line bg-slate-50 p-3 text-xs text-slate-700">{displayText(item.notes, "Chưa có notes")}</pre>
+                  <pre className="mt-3 whitespace-pre-wrap rounded-md border border-vam-line bg-slate-50 p-3 text-xs text-slate-700">{displayText(item.notes, "Chưa có ghi chú")}</pre>
                 </div>
                 <ActionItemUpdateForm id={item.id} ownerEmail={item.owner_email} status={item.status} />
               </div>
@@ -242,7 +242,7 @@ export default async function AdminCorrectionPage({ searchParams }: { searchPara
       {tab === "data-issues" ? <RecentRecapCorrection recaps={data.recaps} /> : null}
 
       <section className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Action item audit surface</h2>
+        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Lịch sử việc cần xử lý</h2>
         <SimpleTable
           rows={data.actionItems.slice(0, 20)}
           columns={[

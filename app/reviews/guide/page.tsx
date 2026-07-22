@@ -99,7 +99,7 @@ function ScoreTable() {
         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th className="px-3 py-2">Tiêu chí</th>
-            <th className="px-3 py-2">Field</th>
+            <th className="px-3 py-2">Tên trường</th>
             <th className="px-3 py-2">Mô tả</th>
           </tr>
         </thead>
@@ -212,7 +212,7 @@ export default async function ReviewerGuidePage() {
 
         {/* ── 2. Admin setup checklist ──────────────────────────── */}
         {isAdmin && (
-          <SectionCard number={2} title="Checklist Admin — Tạo tài khoản reviewer" accent="blue">
+          <SectionCard number={2} title="Danh sách công việc — Tạo tài khoản reviewer" accent="blue">
             <Checklist
               items={[
                 {
@@ -270,7 +270,7 @@ export default async function ReviewerGuidePage() {
 
         {/* ── 3. Bulk assignment checklist ─────────────────────── */}
         {isAdmin && (
-          <SectionCard number={3} title="Checklist Admin — Chia hồ sơ (Bulk Assignment)" accent="green">
+          <SectionCard number={3} title="Danh sách công việc — Chia hồ sơ" accent="green">
             <Checklist
               items={[
                 {
@@ -285,7 +285,7 @@ export default async function ReviewerGuidePage() {
                   )
                 },
                 {
-                  label: "Chọn Intake Batch và Role ứng tuyển (mentee hoặc mentor) → nhấn Tiếp tục.",
+                  label: "Chọn Đợt tuyển và Vai trò ứng tuyển (mentee hoặc mentor) → nhấn Tiếp tục.",
                   sub: "Trang sẽ load danh sách hồ sơ và reviewer khả dụng."
                 },
                 {

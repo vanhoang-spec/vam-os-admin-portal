@@ -4,11 +4,11 @@ import { Card, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, Kpi
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData, keyById } from "@/lib/data";
-import { currentMonthVN, isOperationalMonth, OPERATIONAL_MONTH_START, operationalMonthRange } from "@/lib/dashboard-month";
+import { currentMonthVN, isOperationalMonth, operationalMonthRange, resolveOperationsMonth } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
-import { displayCode, displayText, formatDate } from "@/lib/utils";
+import { displayCode, displayText, formatDate, formatMonthVN } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
@@ -119,7 +119,7 @@ function latestRecapDate(recaps: MentoringRecap[]) {
 }
 
 function monthLabel(month: string) {
-  return month;
+  return formatMonthVN(month);
 }
 
 export default async function OperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
@@ -173,16 +173,15 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
     ...validEventMonths
   ]);
   const availableMonths = seasonMonths.filter((month) => monthsWithOperationalData.has(month)).sort((a, b) => b.localeCompare(a));
-  const latestNonFutureMonth = availableMonths.find((month) => month <= nowVN);
-  const currentOperationalMonth = isOperationalMonth(nowVN, nowVN) ? nowVN : null;
   const seasonLatestClosedMonth = data.latestClosedMonth?.data?.find((row: any) => row.season_id === season?.id);
   const officialClosedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
 
-  const rpcSelectedMonth = data.kpis.data?.selectedMonth;
-  const defaultMonth = officialClosedMonth ?? rpcSelectedMonth ?? latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
+  const { resolvedMonth: selectedMonth, resolutionReason: monthResolutionSource } = resolveOperationsMonth(
+    sanitizeMonthParam(searchParams?.month),
+    nowVN,
+    Array.from(monthsWithOperationalData).filter((m): m is string => Boolean(m))
+  );
   const monthOptions = (availableMonths.length ? availableMonths : seasonMonths).sort((a, b) => b.localeCompare(a));
-  const requestedMonth = sanitizeMonthParam(searchParams?.month);
-  const selectedMonth = requestedMonth ?? defaultMonth;
   const previousMonth = addMonths(selectedMonth, -1);
   const closedMonth = officialClosedMonth ?? (selectedMonth >= nowVN ? addMonths(nowVN, -1) : selectedMonth);
   const closedPreviousMonth = typeof seasonLatestClosedMonth?.previous_closed_month === "string" ? seasonLatestClosedMonth.previous_closed_month : addMonths(closedMonth, -1);
@@ -315,7 +314,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
 
   return (
     <>
-      <PageHeader title="Vận hành" description="Dashboard vận hành tháng cho hoạt động mentoring Season 11." />
+      <PageHeader title="Vận hành" description={`Dashboard vận hành tháng cho hoạt động mentoring. Season đang theo dõi: ${SEASON_CODE}.`} />
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu operations. Một số chỉ số có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
@@ -325,11 +324,20 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
         <div className="grid gap-4 md:grid-cols-[minmax(220px,320px)_1fr] md:items-end">
           <MonthSelector months={monthOptions} selectedMonth={selectedMonth} />
           <div className="text-sm">
-            <p className="text-slate-600 font-medium">Tháng đã chốt: {officialClosedMonth ?? "Chưa có"}</p>
+            <p className="text-slate-600 font-medium">Tháng đã chốt: {officialClosedMonth ? formatMonthVN(officialClosedMonth) : "Chưa có"}</p>
+            {monthResolutionSource === "current_month_has_data" && (
+              <p className="text-green-700 mt-1 text-xs">Đang xem tháng hiện tại có dữ liệu.</p>
+            )}
+            {monthResolutionSource === "latest_available" && (
+              <p className="text-amber-600 mt-1 text-xs">Tháng hiện tại chưa có dữ liệu — đang xem tháng gần nhất có dữ liệu.</p>
+            )}
+            {monthResolutionSource === "current_month_empty" && (
+              <p className="text-slate-500 mt-1 text-xs">Chưa có dữ liệu recap trong mùa này.</p>
+            )}
             {selectedMonth > (officialClosedMonth ?? "") ? (
-              <p className="text-amber-600 mt-1">Dữ liệu tháng mở không dùng cho KPI chính thức</p>
+              <p className="text-amber-600 mt-1 text-xs">Dữ liệu tháng mở không dùng cho KPI chính thức</p>
             ) : null}
-            <p className="text-slate-500 mt-1">
+            <p className="text-slate-500 mt-1 text-xs">
               Follow-up là danh sách gợi ý dựa trên dữ liệu recap, chưa phải trạng thái xử lý chính thức.
             </p>
           </div>

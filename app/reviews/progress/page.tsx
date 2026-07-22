@@ -82,13 +82,13 @@ export default async function ReviewProgressPage({
       <Card className="mb-6">
         <form method="GET" className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-500">Intake Batch</label>
+            <label className="text-xs font-medium text-slate-500">Đợt tuyển</label>
             <select
               name="intake_batch_id"
               defaultValue={intakeBatchId ?? ""}
               className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
             >
-              <option value="">Tất cả batch</option>
+              <option value="">Tất cả đợt</option>
               {intakeBatches.data.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name ?? b.code ?? b.id}
@@ -123,7 +123,7 @@ export default async function ReviewProgressPage({
           <div className="mt-3 flex flex-wrap gap-2">
             {batchName && (
               <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600">
-                Batch: {batchName}
+                Đợt: {batchName}
               </span>
             )}
             <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600">
