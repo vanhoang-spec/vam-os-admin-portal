@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { currentMonthVN, isOperationalMonth, OPERATIONAL_MONTH_START, operationalMonthRange } from "@/lib/dashboard-month";
+import { currentMonthVN, isOperationalMonth } from "@/lib/dashboard-month";
+import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import {
   canOperateSeason,
@@ -153,78 +154,8 @@ function monthDate(month: string) {
   return new Date(`${month}-01T00:00:00Z`);
 }
 
-function addMonths(month: string, delta: number) {
-  const date = monthDate(month);
-  date.setUTCMonth(date.getUTCMonth() + delta);
-  return date.toISOString().slice(0, 7);
-}
-
-function monthFromDate(value: unknown) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}/.test(raw)) return raw.slice(0, 7);
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 7);
-}
-
 function isValidRecapActivity(recap: MentoringRecap) {
   return VALID_ACTIVITY_STATUSES.has(normalizeStatus(recap.status));
-}
-
-function computeOperationsDashboardKpis(input: {
-  seasons: Season[];
-  matches: Match[];
-  recaps: MentoringRecap[];
-  events: Event[];
-  eventParticipations: EventParticipation[];
-  seasonCode?: string;
-}): OperationsDashboardKpis {
-  const nowMonth = currentMonthVN();
-  const validRecaps = input.recaps.filter(isValidRecapActivity);
-  const seasonMonths = operationalMonthRange(nowMonth);
-  const validOperationalRecaps = validRecaps.filter((recap) => isOperationalMonth(recap.meeting_month, nowMonth));
-  const validEventMonths = input.events.map((event) => monthFromDate(event.starts_at)).filter((month): month is string => isOperationalMonth(month, nowMonth));
-  const monthsWithOperationalData = new Set([
-    ...validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)),
-    ...validEventMonths
-  ]);
-  const availableMonths = seasonMonths.filter((month) => monthsWithOperationalData.has(month)).sort((a, b) => b.localeCompare(a));
-  const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonth);
-  const currentOperationalMonth = isOperationalMonth(nowMonth, nowMonth) ? nowMonth : null;
-  const selectedMonth = latestNonFutureMonth ?? currentOperationalMonth ?? availableMonths[0] ?? OPERATIONAL_MONTH_START;
-  const previousMonth = addMonths(selectedMonth, -1);
-  const season = input.seasons.find((row) => row.code === (input.seasonCode ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE));
-
-  const activeMatches = input.matches.filter((match) => {
-    if (normalizeStatus(match.status) !== "active") return false;
-    if (season?.id) return match.season_id === season.id;
-    return true;
-  });
-  const activeMatchesWithPeople = activeMatches.filter((match) => match.mentor_person_id && match.mentee_person_id);
-  const activeMenteeIds = new Set(activeMatchesWithPeople.map((match) => match.mentee_person_id).filter(Boolean));
-  const activeMentorIds = new Set(activeMatchesWithPeople.map((match) => match.mentor_person_id).filter(Boolean));
-
-  const selectedRecaps = validRecaps.filter((recap) => recap.meeting_month === selectedMonth);
-  const previousRecaps = validRecaps.filter((recap) => recap.meeting_month === previousMonth);
-  const selectedMenteeIds = new Set(selectedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
-  const selectedMentorIds = new Set(selectedRecaps.map((recap) => recap.mentor_person_id).filter(Boolean));
-  const previousMenteeIds = new Set(previousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
-
-  const eventsInMonth = input.events.filter((event) => monthFromDate(event.starts_at) === selectedMonth);
-  const eventIdsInMonth = new Set(eventsInMonth.map((event) => event.id));
-  const eventParticipationsInMonth = input.eventParticipations.filter((row) => row.event_id && eventIdsInMonth.has(row.event_id));
-
-  return {
-    selectedMonth,
-    recapCount: selectedRecaps.length,
-    activeMenteeCount: selectedMenteeIds.size,
-    activeMentorCount: selectedMentorIds.size,
-    mentorWithoutRecapCount: Array.from(activeMentorIds).filter((id) => !selectedMentorIds.has(id)).length,
-    eventTrainingCount: eventsInMonth.length,
-    eventAttendanceCount: eventParticipationsInMonth.filter((row) => normalizeStatus(row.attendance_status) === "attended").length,
-    followUpCount: Array.from(activeMenteeIds).filter((id) => !selectedMenteeIds.has(id) && !previousMenteeIds.has(id)).length
-  };
 }
 
 async function selectTable<T>(table: string, columns = "*", fallback: T[] = []): Promise<QueryResult<T[]>> {
@@ -841,7 +772,7 @@ async function getOperationsDataFromRpc() {
   const recaps = (payload.recaps ?? []) as MentoringRecap[];
   const events = (payload.events ?? []) as Event[];
   const eventParticipations = (payload.eventParticipations ?? []) as EventParticipation[];
-  const kpis = (payload.kpis ?? computeOperationsDashboardKpis({ seasons, matches, recaps, events, eventParticipations })) as OperationsDashboardKpis;
+  const kpis = (payload.kpis ?? computeProgramOperationsKpis({ seasons, matches, recaps, events, eventParticipations })) as OperationsDashboardKpis;
   const { data: latestClosedMonth, error: latestClosedMonthError } = await selectTable<JsonRecord>("v_season_latest_closed_month");
   return {
     seasons: { data: seasons, error: null },
@@ -896,7 +827,7 @@ export async function getOperationsData(scope?: ScopeFilter) {
     events,
     eventParticipations,
     kpis: {
-      data: computeOperationsDashboardKpis({
+      data: computeProgramOperationsKpis({
         seasons: seasons.data,
         matches: matches.data,
         recaps: recaps.data,
