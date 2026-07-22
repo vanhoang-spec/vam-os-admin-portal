@@ -1,0 +1,39 @@
+{
+  "source_file": "docs/audits/inputs/VAM_OS_PRODUCTION_SCHEMA_INVENTORY_2026-07-22.json",
+  "file_bytes": 1527203,
+  "sha256": "f087049d9761607e5c698593baec1d3139e91f3b3ae7fe629a8a335bf8f2a1cb",
+  "json_valid": true,
+  "one_top_level_inventory_object": true,
+  "truncated": false,
+  "probe_version": "vam-os-production-schema-inventory-single-result-v1",
+  "expected_sections": 18,
+  "missing_sections": [],
+  "section_counts": {
+    "tables": 90,
+    "columns": 1101,
+    "indexes": 414,
+    "schemas": 68,
+    "policies": 17,
+    "triggers": 25,
+    "functions": 156,
+    "aggregates": 2,
+    "extensions": 6,
+    "constraints": 307,
+    "table_grants": 1780,
+    "function_grants": 450,
+    "sequence_grants": 5,
+    "table_estimates": 84,
+    "target_identity": 1,
+    "migration_provenance": 1,
+    "safety_counts": 1
+  },
+  "actual_pii_values_detected": false,
+  "actual_secret_values_detected": false,
+  "potential_pattern_findings": [
+    {
+      "category": "phone_like",
+      "path": "$.functions[20].definition",
+      "classification": "extension-managed function metadata false positive"
+    }
+  ]
+}

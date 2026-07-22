@@ -78,3 +78,6 @@ scripts/get_season_11_id.js
 scripts/get_season_11_id.mjs
 scripts/test_pg_connection.js
 scripts/reconcile_csv.js
+
+# Owner-supplied production metadata stays local; commit sanitized manifests only.
+docs/audits/inputs/VAM_OS_PRODUCTION_SCHEMA_INVENTORY_2026-07-22.json
