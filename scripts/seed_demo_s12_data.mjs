@@ -40,6 +40,9 @@ const isPrintPlan = args.includes("--print-plan");
 const confirmSeed = args.includes("--confirm-demo-seed");
 const confirmCleanup = args.includes("--cleanup-demo-s12");
 const isDryRun = args.length === 0 || args.includes("--dry-run") || (!confirmSeed && !confirmCleanup);
+const confirmStagingAuthorization = args.includes("--confirm-staging-authorization");
+const STAGING_PROJECT_REF = "ljfneyuvpxrmejpxsmpz";
+const PRODUCTION_PROJECT_REF = "qkkroesfiazsejkzflcd";
 
 // Find --target-project-ref <ref>
 const targetRefIndex = args.indexOf("--target-project-ref");
@@ -56,8 +59,20 @@ if (!isDryRun && !isPrintPlan) {
     process.exit(1);
   }
   const hostRef = parsedUrl.hostname.split(".")[0];
+  if (hostRef === PRODUCTION_PROJECT_REF) {
+    console.error("❌ ERROR: Production project is permanently forbidden for this demo seed.");
+    process.exit(1);
+  }
+  if (hostRef !== STAGING_PROJECT_REF || targetProjectRef !== STAGING_PROJECT_REF) {
+    console.error("❌ ERROR: Demo seed write modes are restricted to the confirmed staging project ref.");
+    process.exit(1);
+  }
   if (targetProjectRef !== hostRef) {
     console.error(`❌ ERROR: --target-project-ref '${targetProjectRef}' does not match target host '${hostRef}'.`);
+    process.exit(1);
+  }
+  if (!confirmStagingAuthorization) {
+    console.error("❌ ERROR: Write mode requires --confirm-staging-authorization after separate owner authorization.");
     process.exit(1);
   }
 }
@@ -71,6 +86,7 @@ Options:
   --dry-run            (Default) Run in dry-run mode, printing what would happen without writing
   --print-plan         Print the planned dataset before executing
   --target-project-ref <ref>  Required for any write mode. Must match the Supabase URL's project ref.
+  --confirm-staging-authorization  Required for write mode after separate owner authorization
   --confirm-demo-seed  Execute the seeding (includes cleanup first)
   --cleanup-demo-s12   Execute ONLY the cleanup of DEMO-S12 data
 `);
@@ -165,7 +181,7 @@ async function cleanup() {
   }
 
   // Find people linked to this season's applications or created with demo domain
-  const { data: people } = await client.from("people").select("id").like("email_primary", "%@example.com");
+  const { data: people } = await client.from("people").select("id").eq("source_sheets", "DEMO_SEED");
   const personIds = people?.map(p => p.id) || [];
 
   // Delete cascade order
