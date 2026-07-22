@@ -14,7 +14,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const DECISION_OPTIONS: { value: string; label: string }[] = [
-  { value: "screening_passed",    label: "Pass screening — Hồ sơ đạt" },
+  { value: "screening_passed",    label: "Qua vòng hồ sơ — Hồ sơ đạt" },
   { value: "invited_to_interview", label: "Mời phỏng vấn" },
   { value: "waitlisted",          label: "Đưa vào danh sách chờ" },
   { value: "rejected_or_not_fit", label: "Không phù hợp / từ chối" },
