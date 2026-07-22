@@ -1,4 +1,13 @@
 -- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
 -- MUST NEVER RUN ON PRODUCTION.
--- BLOCKED: select the production-matching repository version and review grants,
--- SECURITY DEFINER, search_path, and dependencies. Exclude citext-owned functions.
+-- Exact production definitions exist for 13 VAM-owned functions; 45 extension-managed routines are excluded.
+-- BLOCKED: public.matches DDL is unresolved, affecting dashboard RPC dependencies.
+-- OWNER APPROVAL REQUIRED before rendering/executing seven SECURITY DEFINER functions:
+-- current_admin_context, current_admin_role, is_active_admin, is_admin_role,
+-- admin_can_access_season, get_operations_dashboard_data, get_founder_intelligence_dashboard.
+-- Required decisions: necessity of definer rights, pg_catalog/public qualification,
+-- safe search_path, PUBLIC/anon revoke, authenticated/service_role execute, and fail-closed scope checks.
+-- Non-definer functions ready after table dependencies: intel_experience_band, intel_norm,
+-- intel_vam_seniority_band, prevent_person_season_membership_log_mutation,
+-- set_updated_at, validate_person_season_membership_scope.
+-- No function DDL is emitted while owner security decisions and matches dependency remain open.
