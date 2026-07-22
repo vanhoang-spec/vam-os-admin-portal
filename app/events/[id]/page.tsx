@@ -188,13 +188,13 @@ export default async function EventDetailPage({ params }: { params: { id: string
         <KpiCard label="Giữ ghế (đăng ký / xác nhận)" value={confirmedSeatsCount} />
         <KpiCard label="Danh sách chờ" value={waitlistedRegistrations.length} />
         <KpiCard label="Đã check-in" value={checkedInRegistrations.length} />
-        <KpiCard label="Walk-in" value={walkInRegistrations.length} />
+        <KpiCard label="Vãng lai" value={walkInRegistrations.length} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">
         <div className="grid gap-4">
           <Card>
-            <h2 className="mb-3 text-base font-semibold text-vam-ink">Link đăng ký công khai</h2>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết đăng ký công khai</h2>
             <RegistrationLinkPanel
               eventId={detail.event.id}
               registrationUrl={registrationUrl}
@@ -205,7 +205,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
           </Card>
 
           <Card>
-            <h2 className="mb-3 text-base font-semibold text-vam-ink">Link check-in / QR check-in</h2>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết điểm danh / QR</h2>
             <CheckinLinkPanel
               eventId={detail.event.id}
               checkinUrl={checkinUrl}
@@ -259,7 +259,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
                           {attendanceLabel(row.attendance_status)}
                         </span>
                         {row.is_walk_in ? (
-                          <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">Walk-in</span>
+                          <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">Vãng lai</span>
                         ) : null}
                         <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
                           {matchReviewLabel(row.match_review_status)}

@@ -142,7 +142,7 @@ export default async function ReviewDetailPage({
                 ["SĐT", displayText(displayPhone)],
                 ["Giới tính", displayText(displayGender)],
                 ["Mùa", displayText(season?.name ?? season?.code)],
-                ["Role applied", displayText(app.role_applied)],
+                ["Vai trò ứng tuyển", displayText(app.role_applied)],
                 ["Trạng thái đơn", displayText(displayStatus)],
                 ["Nộp lúc", formatDate(app.submitted_at)]
               ]}

@@ -56,7 +56,7 @@ export default async function InterviewsPage({
       {/* Batch + role selector (required — prevents showing all seasons at once) */}
       <Card className="mb-5">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-medium text-slate-700">Chọn batch để xem danh sách ứng viên phỏng vấn</p>
+          <p className="text-sm font-medium text-slate-700">Chọn đợt tuyển để xem danh sách ứng viên phỏng vấn</p>
           <Link
             href="/reviews/guide"
             className="text-xs text-slate-400 hover:text-vam-green hover:underline"
@@ -66,13 +66,13 @@ export default async function InterviewsPage({
         </div>
         <form method="GET" className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-500">Intake Batch</label>
+            <label className="text-xs font-medium text-slate-500">Đợt tuyển</label>
             <select
               name="intake_batch_id"
               defaultValue={intakeBatchId ?? ""}
               className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
             >
-              <option value="">-- Chọn batch --</option>
+              <option value="">-- Chọn đợt --</option>
               {intakeBatches.data.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name ?? b.code ?? b.id}
@@ -81,7 +81,7 @@ export default async function InterviewsPage({
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-500">Role ứng tuyển</label>
+            <label className="text-xs font-medium text-slate-500">Vai trò ứng tuyển</label>
             <select
               name="role_applied"
               defaultValue={roleApplied ?? "mentee"}
@@ -111,7 +111,7 @@ export default async function InterviewsPage({
       {/* No batch selected yet — show prompt */}
       {!intakeBatchId ? (
         <div className="rounded-md border border-dashed border-vam-line px-4 py-10 text-center text-sm text-slate-400">
-          Chọn intake batch để xem danh sách ứng viên đã được mời phỏng vấn.
+          Chọn đợt tuyển để xem danh sách ứng viên đã được mời phỏng vấn.
         </div>
       ) : (
         <InterviewsClient

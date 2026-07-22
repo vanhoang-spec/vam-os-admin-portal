@@ -27,7 +27,7 @@ function shortId(value: unknown) {
 
 const ISSUE_CONFIG = {
   missing_phone: {
-    label: "People thiếu số điện thoại",
+    label: "Người dùng thiếu số điện thoại",
     sectionId: "issue-missing-phone"
   },
   applications_missing_identity: {
@@ -43,11 +43,11 @@ const ISSUE_CONFIG = {
     sectionId: "issue-missing-mentor-bio-url"
   },
   mentee_without_active_mentor: {
-    label: "Mentee chưa có mentor active",
+    label: "Mentee chưa có mentor đang hoạt động",
     sectionId: "issue-mentee-without-active-mentor"
   },
   active_match_missing_person: {
-    label: "Match active lỗi",
+    label: "Match lỗi (đang hoạt động)",
     sectionId: "issue-active-match-missing-person"
   },
   duplicate_email: {
@@ -243,12 +243,12 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
       ))}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="People thiếu số điện thoại" value={peopleMissingPhone.length} />
+        <KpiCard label="Người dùng thiếu số điện thoại" value={peopleMissingPhone.length} />
         <KpiCard label="Đơn ứng tuyển thiếu tên/email" value={applicationsMissingIdentity.length} />
         <KpiCard label="Mentee cần rà soát trường học" value={menteesMissingSchool.length} />
         <KpiCard label="Mentor thiếu profile link" value={mentorsMissingBio.length} />
-        <KpiCard label="Mentee chưa có mentor active" value={menteesWithoutActiveMentor.length} />
-        <KpiCard label="Match active lỗi" value={activeMatchMissingPerson.length} />
+        <KpiCard label="Mentee chưa có mentor đang hoạt động" value={menteesWithoutActiveMentor.length} />
+        <KpiCard label="Match lỗi (đang hoạt động)" value={activeMatchMissingPerson.length} />
         <KpiCard label="Email trùng" value={duplicateEmails.length} />
       </div>
 
@@ -256,13 +256,13 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
         <IssueSection
           issueKey="missing_phone"
           selectedIssue={selectedIssue}
-          title="A. People thiếu số điện thoại"
+          title="A. Người dùng thiếu số điện thoại"
           rows={peopleMissingPhone}
           columns={[
-            { key: "full_name", label: "full_name", displayKey: "full_name_display" },
-            { key: "email_primary", label: "email_primary", displayKey: "email_primary_display" },
-            { key: "phone_primary", label: "phone_primary", displayKey: "phone_primary_display" },
-            { key: "source_sheets", label: "source_sheets", displayKey: "source_sheets_display" },
+            { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
+            { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
+            { key: "phone_primary", label: "Số điện thoại", displayKey: "phone_primary_display" },
+            { key: "source_sheets", label: "Nguồn dữ liệu", displayKey: "source_sheets_display" },
             { key: "person_link", label: "Hồ sơ", internalHrefKey: "id", internalHrefPrefix: "/people/", internalLabel: "Xem hồ sơ" }
           ]}
         />
@@ -270,16 +270,16 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
         <IssueSection
           issueKey="applications_missing_identity"
           selectedIssue={selectedIssue}
-          title="B. Applications thiếu tên/email ứng viên"
+          title="B. Đơn ứng tuyển thiếu tên/email"
           rows={applicationsMissingIdentity}
           columns={[
             { key: "sbd", label: "SBD" },
             { key: "short_application_id", label: "Mã đơn" },
             { key: "short_person_id", label: "Mã person" },
-            { key: "full_name", label: "full_name", displayKey: "full_name_display" },
-            { key: "email_primary", label: "email_primary", displayKey: "email_primary_display" },
-            { key: "final_status", label: "final_status", displayKey: "final_status_display" },
-            { key: "submitted_at", label: "submitted_at", displayKey: "submitted_at_display" },
+            { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
+            { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
+            { key: "final_status", label: "Trạng thái", displayKey: "final_status_display" },
+            { key: "submitted_at", label: "Ngày nộp", displayKey: "submitted_at_display" },
             { key: "application_link", label: "Đơn", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem đơn" },
             { key: "person_link", label: "Hồ sơ", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem hồ sơ" }
           ]}
@@ -291,12 +291,12 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
           title="C. Mentees cần rà soát trường học"
           rows={menteesMissingSchool}
           columns={[
-            { key: "full_name", label: "full_name", displayKey: "full_name_display" },
-            { key: "email_primary", label: "email_primary", displayKey: "email_primary_display" },
-            { key: "mentee_code", label: "mentee_code", displayKey: "mentee_code_display" },
-            { key: "school_code", label: "school_code", displayKey: "school_code_display" },
-            { key: "school_raw", label: "school_raw", displayKey: "school_raw_display" },
-            { key: "major", label: "major", displayKey: "major_display" },
+            { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
+            { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
+            { key: "mentee_code", label: "Mã Mentee", displayKey: "mentee_code_display" },
+            { key: "school_code", label: "Mã trường", displayKey: "school_code_display" },
+            { key: "school_raw", label: "Tên trường (gốc)", displayKey: "school_raw_display" },
+            { key: "major", label: "Ngành", displayKey: "major_display" },
             { key: "person_link", label: "Hồ sơ", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem hồ sơ" }
           ]}
         />
@@ -307,11 +307,11 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
           title="D. Mentors thiếu profile link"
           rows={mentorsMissingBio}
           columns={[
-            { key: "full_name", label: "full_name", displayKey: "full_name_display" },
-            { key: "email_primary", label: "email_primary", displayKey: "email_primary_display" },
-            { key: "mentor_code", label: "mentor_code", displayKey: "mentor_code_display" },
-            { key: "company_current", label: "company_current", displayKey: "company_current_display" },
-            { key: "title_current", label: "title_current", displayKey: "title_current_display" },
+            { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
+            { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
+            { key: "mentor_code", label: "Mã Mentor", displayKey: "mentor_code_display" },
+            { key: "company_current", label: "Công ty", displayKey: "company_current_display" },
+            { key: "title_current", label: "Chức vụ", displayKey: "title_current_display" },
             { key: "person_link", label: "Hồ sơ", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem hồ sơ" }
           ]}
         />
@@ -319,14 +319,14 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
         <IssueSection
           issueKey="mentee_without_active_mentor"
           selectedIssue={selectedIssue}
-          title="E. Mentees chưa có active mentor"
+          title="E. Mentees chưa có mentor đang hoạt động"
           rows={menteesWithoutActiveMentor}
           columns={[
-            { key: "full_name", label: "full_name", displayKey: "full_name_display" },
-            { key: "email_primary", label: "email_primary", displayKey: "email_primary_display" },
-            { key: "mentee_code", label: "mentee_code", displayKey: "mentee_code_display" },
-            { key: "school_code", label: "school_code", displayKey: "school_code_display" },
-            { key: "major", label: "major", displayKey: "major_display" },
+            { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
+            { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
+            { key: "mentee_code", label: "Mã Mentee", displayKey: "mentee_code_display" },
+            { key: "school_code", label: "Mã trường", displayKey: "school_code_display" },
+            { key: "major", label: "Ngành", displayKey: "major_display" },
             { key: "person_link", label: "Hồ sơ", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem hồ sơ" }
           ]}
         />
@@ -334,14 +334,14 @@ export default async function DataIssuesPage({ searchParams }: { searchParams?: 
         <IssueSection
           issueKey="active_match_missing_person"
           selectedIssue={selectedIssue}
-          title="F. Active match thiếu mentor/mentee"
+          title="F. Match đang hoạt động — thiếu mentor/mentee"
           rows={activeMatchMissingPerson}
           columns={[
             { key: "short_match_id", label: "Mã match" },
-            { key: "status", label: "status", displayKey: "status_display" },
-            { key: "match_type", label: "match_type", displayKey: "match_type_display" },
-            { key: "mentor_person_id", label: "mentor_person_id", displayKey: "mentor_person_id_display" },
-            { key: "mentee_person_id", label: "mentee_person_id", displayKey: "mentee_person_id_display" },
+            { key: "status", label: "Trạng thái", displayKey: "status_display" },
+            { key: "match_type", label: "Loại match", displayKey: "match_type_display" },
+            { key: "mentor_person_id", label: "ID Mentor", displayKey: "mentor_person_id_display" },
+            { key: "mentee_person_id", label: "ID Mentee", displayKey: "mentee_person_id_display" },
             { key: "match_link", label: "Match", internalHrefKey: "id", internalHrefPrefix: "/matches/", internalLabel: "Xem match" }
           ]}
         />

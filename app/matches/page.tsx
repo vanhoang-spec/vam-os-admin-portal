@@ -66,7 +66,7 @@ export default async function MatchesPage({
     <>
       <PageHeader
         title="Matching Mentor – Mentee"
-        description="Tạo và quản lý ghép cặp thủ công theo batch. S11 legacy matches vẫn hiển thị đầy đủ."
+        description="Tạo và quản lý ghép cặp thủ công theo batch. Dữ liệu match từ các mùa trước vẫn hiển thị đầy đủ."
       />
       {matchListRes.error ? <ErrorBox message={matchListRes.error} /> : null}
       {intakeBatchesRes.error ? <ErrorBox message={intakeBatchesRes.error} /> : null}
@@ -75,13 +75,13 @@ export default async function MatchesPage({
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3">
           <label className="block min-w-[200px] flex-1">
-            <span className="text-xs font-medium uppercase text-slate-500">Intake Batch</span>
+            <span className="text-xs font-medium uppercase text-slate-500">Đợt tuyển</span>
             <select
               name="batch"
               defaultValue={batchFilter}
               className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
             >
-              <option value="">-- Tất cả batch --</option>
+              <option value="">-- Tất cả đợt --</option>
               {batches.map((b) => (
                 <option key={b.id} value={b.id}>{b.code ?? b.name ?? b.id}</option>
               ))}
@@ -193,7 +193,7 @@ export default async function MatchesPage({
           <h2 className="mb-3 text-base font-semibold text-vam-ink">
             Danh sách matching{" "}
             <span className="text-sm font-normal text-slate-500">
-              ({matchListRes.data.length} {statusFilter !== "all" ? statusFilter : "tổng cộng"})
+              ({matchListRes.data.length} {statusFilter !== "all" ? matchStatusLabel(statusFilter) : "tổng cộng"})
             </span>
           </h2>
 
@@ -215,7 +215,7 @@ export default async function MatchesPage({
                     <tr>
                       <th className="w-[24%] px-4 py-3">Mentor</th>
                       <th className="w-[24%] px-4 py-3">Mentee</th>
-                      <th className="px-4 py-3">Batch / Nguồn</th>
+                      <th className="px-4 py-3">Đợt / Nguồn</th>
                       <th className="px-4 py-3">Trạng thái</th>
                       <th className="px-4 py-3">Thời điểm</th>
                       <th className="px-4 py-3">Hành động</th>

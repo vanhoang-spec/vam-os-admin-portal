@@ -57,7 +57,7 @@ export default async function AssignBulkPage({
         </div>
           <form method="GET" className="flex flex-wrap gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-500">Intake Batch</label>
+              <label className="text-xs font-medium text-slate-500">Đợt tuyển</label>
               <select
                 name="intake_batch_id"
                 defaultValue={intakeBatchId ?? ""}

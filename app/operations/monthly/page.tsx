@@ -104,7 +104,7 @@ export default async function MonthlyOperationsPage({ searchParams }: { searchPa
 
   return (
     <>
-      <PageHeader title="Báo cáo hoạt động tháng" description="Tổng quan hoạt động tháng (read-only). KPI chính thức theo tháng đã chốt." />
+      <PageHeader title="Báo cáo hoạt động tháng" description="Tổng quan hoạt động tháng (chỉ xem). KPI chính thức theo tháng đã chốt." />
       {errors.length ? <ErrorBox message="Một phần dữ liệu chưa tải được. Một số chỉ số có thể đang hiển thị 0." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error as string} message={error as string} />

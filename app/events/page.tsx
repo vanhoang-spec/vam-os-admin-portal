@@ -160,7 +160,7 @@ export default async function EventsPage({
           </label>
 
           <label className="block min-w-[160px] flex-1">
-            <span className="text-xs font-medium uppercase text-slate-500">Intake Batch</span>
+            <span className="text-xs font-medium uppercase text-slate-500">Đợt tuyển</span>
             <select
               name="batch"
               defaultValue={batchFilter}

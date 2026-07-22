@@ -39,30 +39,30 @@ export default async function MatchDetailPage({ params }: { params: { id: string
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin match</h2>
           <DetailGrid
             rows={[
-              ["season", season?.code ?? season?.name],
-              ["status", match.data.status],
-              ["match_type", match.data.match_type],
-              ["match_source_raw", match.data.match_source_raw],
-              ["match_confidence", match.data.match_confidence],
-              ["notes", match.data.notes]
+              ["Mùa", season?.code ?? season?.name],
+              ["Trạng thái", match.data.status],
+              ["Loại ghép", match.data.match_type],
+              ["Nguồn", match.data.match_source_raw],
+              ["Độ tin cậy", match.data.match_confidence],
+              ["Ghi chú", match.data.notes]
             ]}
           />
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentor details</h2>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin Mentor</h2>
           <div className="grid gap-3">
             <DetailGrid
               rows={[
-                ["full_name", mentor?.full_name],
-                ["email_primary", mentor?.email_primary],
-                ["phone_primary", mentor?.phone_primary],
-                ["mentor_code", displayCode(mentorProfile?.mentor_code)],
-                ["company_current", displayText(mentorProfile?.company_current)],
-                ["title_current", displayText(mentorProfile?.title_current)]
+                ["Họ tên", mentor?.full_name],
+                ["Email", mentor?.email_primary],
+                ["SĐT", mentor?.phone_primary],
+                ["Mã Mentor", displayCode(mentorProfile?.mentor_code)],
+                ["Công ty", displayText(mentorProfile?.company_current)],
+                ["Chức vụ", displayText(mentorProfile?.title_current)]
               ]}
             />
             <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
-              <div className="text-xs font-medium uppercase text-slate-500">profile mentor</div>
+              <div className="text-xs font-medium uppercase text-slate-500">Hồ sơ Mentor</div>
               <div className="mt-1">
                 <ExternalLinkButton href={mentorProfile?.bio_url} label="Xem profile mentor" />
               </div>
@@ -70,16 +70,16 @@ export default async function MatchDetailPage({ params }: { params: { id: string
           </div>
         </Card>
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentee details</h2>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin Mentee</h2>
           <DetailGrid
             rows={[
-              ["full_name", mentee?.full_name],
-              ["email_primary", mentee?.email_primary],
-              ["phone_primary", mentee?.phone_primary],
-              ["mentee_code", displayCode(menteeProfile?.mentee_code)],
-              ["school_code", displayCode(menteeProfile?.school_code)],
-              ["major", displayText(menteeProfile?.major)],
-              ["mssv", displayText(menteeProfile?.mssv)]
+              ["Họ tên", mentee?.full_name],
+              ["Email", mentee?.email_primary],
+              ["SĐT", mentee?.phone_primary],
+              ["Mã Mentee", displayCode(menteeProfile?.mentee_code)],
+              ["Trường", displayCode(menteeProfile?.school_code)],
+              ["Ngành", displayText(menteeProfile?.major)],
+              ["MSSV", displayText(menteeProfile?.mssv)]
             ]}
           />
         </Card>
