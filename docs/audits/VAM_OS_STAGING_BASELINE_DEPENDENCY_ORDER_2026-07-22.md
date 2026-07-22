@@ -23,3 +23,7 @@ Resolved high-level dependencies: types precede tables; core identity/program/se
 Potential cycles: mutual profile/person or application/person FKs and view/function dependencies cannot be certified without complete constraint and dependency metadata. Resolve table cycles by creating tables first and adding confirmed FKs in step 7—never by inventing deferrability or delete behavior.
 
 Unknowns blocking a complete topological sort: ten enum definitions/order, exact sequence ownership, three production view definitions, authoritative pre-012 DDL, function version provenance, and owner-approved security target.
+
+## Offline baseline-gaps update
+
+Steps 3, 4, and the object inventory for steps 9–11 are now deterministic: enums are ordered; no public sequence step is required; 13 VAM functions precede 20 triggers; and `mentoring_recaps`/`season_monthly_kpis` precede the three views. Extension-managed routines are excluded. A complete topological sort remains blocked by pre-012 table DDL/foreign-key cycle rendering and the owner-approved security target for SECURITY DEFINER functions, policies, and grants.

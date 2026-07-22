@@ -18,3 +18,7 @@ The environment target gate now passes: owner evidence confirms the Ready Vercel
 Permitted next activity is narrow staging-only account provisioning and smoke testing. Do not begin fixture writes or fixture-dependent scenarios. Convert to GO only after minimum synthetic accounts authenticate, role/program denials pass, no production data is visible, and every scenario selected for UAT has its data prerequisite. Target completion remains the Support Team UAT week of 27 July–2 August 2026, before the 8 August Core Team demo.
 
 No Vercel, Supabase, database, fixture, user, or migration mutation was performed for this reassessment.
+
+## Offline baseline-gaps reassessment
+
+Support UAT remains **CONDITIONAL GO** for environment/account smoke testing only. Preview staging confirmation is unchanged; synthetic accounts still require owner creation; fixture-dependent scenarios remain blocked until the staging baseline is separately authorized, applied, and verified. No production metadata value authorizes a staging write.

@@ -14,3 +14,7 @@ Proposed design only; owner security approval is required. Production-wide grant
 `postgres` retains owner/maintenance capability and is not an application actor. `service_role` bypass does not replace application authorization: server code must validate authenticated actor, role, program, season, and requested operation before using it. Legacy routes remain server-side and must pass regression tests before tightening grants.
 
 Owner decisions required: whether any authenticated direct read is needed; exact policies per route; whether to force RLS on owner paths; service-role function execute allowlist; staging operator roles. Migration 061 policies and grants remain a separate approval and are not included here.
+
+## Offline baseline-gaps update
+
+Seven VAM OS-owned functions are SECURITY DEFINER: `admin_can_access_season`, `current_admin_context`, `current_admin_role`, `get_founder_intelligence_dashboard`, `get_operations_dashboard_data`, `is_active_admin`, and `is_admin_role`. Their existence is authoritative; their production security posture is not automatically the staging target. Owner approval is still required for safe `search_path`, execute allowlists, RLS/policy interactions, and application caller checks. Decision remains unresolved; no grants or policies were changed.

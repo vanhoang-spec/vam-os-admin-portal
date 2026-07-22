@@ -18,3 +18,7 @@ The fixture still cannot be authorized because staging baseline compatibility ha
 6. Only then may the owner separately decide whether to issue `AUTHORIZE STAGING SYNTHETIC DEMO FIXTURE FOR DEMO-S12`.
 
 This record does not issue authorization. The fixture was not executed, no SQL was run, and migration 061 was not run.
+
+## Offline baseline-gaps reassessment
+
+The fixture remains **FIXTURE BLOCKED BY STAGING BASELINE**. Enum/view/function/trigger/sequence gaps are resolved, but authoritative pre-012 table DDL, security approval, staging recovery, and an executed/verified baseline are still absent. No fixture authorization follows from production metadata analysis.
