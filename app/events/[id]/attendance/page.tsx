@@ -139,7 +139,7 @@ export default async function EventAttendancePage({ params }: { params: { id: st
             <Card>
               <h2 className="mb-1 text-base font-semibold text-slate-400">Thêm hàng loạt theo batch</h2>
               <p className="text-xs text-slate-400">
-                Sự kiện này chưa được gắn Intake Batch.{" "}
+                Sự kiện này chưa được gắn đợt tuyển.{" "}
                 <Link href={`/events/${detail.event.id}/edit`} className="text-vam-green underline hover:no-underline">
                   Sửa sự kiện
                 </Link>{" "}

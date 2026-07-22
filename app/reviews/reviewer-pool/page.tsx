@@ -60,7 +60,7 @@ export default async function ReviewerPoolPage({
       {/* Batch filter */}
       <Card className="mb-5">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-medium text-slate-700">Lọc theo intake batch</p>
+          <p className="text-sm font-medium text-slate-700">Lọc theo đợt tuyển</p>
           <Link
             href="/reviews/guide"
             className="text-xs text-slate-400 hover:text-vam-green hover:underline"

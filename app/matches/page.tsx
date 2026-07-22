@@ -146,7 +146,7 @@ export default async function MatchesPage({
             <Card>
               <h2 className="mb-1 text-base font-semibold text-slate-400">Tạo matching thủ công</h2>
               <p className="text-sm text-slate-400">
-                Chọn một Intake Batch ở bộ lọc để bắt đầu tạo match.
+                Chọn một đợt tuyển ở bộ lọc để bắt đầu tạo match.
               </p>
             </Card>
           ) : (
