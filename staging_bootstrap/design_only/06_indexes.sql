@@ -1,4 +1,80 @@
 -- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
 -- MUST NEVER RUN ON PRODUCTION.
--- BLOCKED: indexes must be filtered to required application tables and reconciled
--- against constraints before executable DDL is generated.
+-- Generated only from safety-reviewed catalog metadata and repository-confirmed later alterations.
+
+CREATE INDEX intake_batches_season_idx ON intake_batches USING btree (season_id);
+CREATE INDEX idx_people_email_primary ON people USING btree (email_primary);
+CREATE INDEX idx_people_full_name_normalized ON people USING btree (full_name_normalized);
+CREATE INDEX idx_people_legacy_person_temp_id ON people USING btree (legacy_person_temp_id);
+CREATE INDEX idx_person_roles_role ON person_roles USING btree (role);
+CREATE INDEX idx_person_roles_status ON person_roles USING btree (status);
+CREATE INDEX idx_mentor_profiles_mentor_code ON mentor_profiles USING btree (mentor_code);
+CREATE INDEX mentor_profiles_intake_batch_idx ON mentor_profiles USING btree (intake_batch_id) WHERE intake_batch_id IS NOT NULL;
+CREATE INDEX mentor_profiles_source_application_idx ON mentor_profiles USING btree (source_application_id) WHERE source_application_id IS NOT NULL;
+CREATE INDEX idx_mentee_profiles_mentee_code ON mentee_profiles USING btree (mentee_code);
+CREATE INDEX idx_mentee_profiles_mssv ON mentee_profiles USING btree (mssv);
+CREATE INDEX mentee_profiles_intake_batch_idx ON mentee_profiles USING btree (intake_batch_id) WHERE intake_batch_id IS NOT NULL;
+CREATE INDEX mentee_profiles_source_application_idx ON mentee_profiles USING btree (source_application_id) WHERE source_application_id IS NOT NULL;
+CREATE INDEX applications_dedup_idx ON applications USING btree (intake_batch_id, role_applied, lower(email_primary)) WHERE email_primary IS NOT NULL;
+CREATE INDEX applications_status_idx ON applications USING btree (status) WHERE status IS NOT NULL;
+CREATE INDEX idx_applications_final_status ON applications USING btree (final_status);
+CREATE INDEX idx_applications_legacy_application_temp_id ON applications USING btree (legacy_application_temp_id);
+CREATE INDEX idx_applications_season_id ON applications USING btree (season_id);
+CREATE INDEX events_capacity_limit_enabled_idx ON events USING btree (capacity_limit_enabled) WHERE capacity_limit_enabled = true;
+CREATE INDEX events_checkin_mode_idx ON events USING btree (checkin_mode);
+CREATE INDEX events_intake_batch_idx ON events USING btree (intake_batch_id) WHERE intake_batch_id IS NOT NULL;
+CREATE INDEX events_status_idx ON events USING btree (status);
+CREATE INDEX idx_events_season_id ON events USING btree (season_id);
+CREATE INDEX event_links_event_id_idx ON event_links USING btree (event_id);
+CREATE INDEX event_links_token_idx ON event_links USING btree (token);
+CREATE INDEX event_registrations_attendance_status_idx ON event_registrations USING btree (attendance_status);
+CREATE INDEX event_registrations_email_idx ON event_registrations USING btree (email);
+CREATE INDEX event_registrations_event_id_idx ON event_registrations USING btree (event_id);
+CREATE INDEX event_registrations_linked_person_id_idx ON event_registrations USING btree (linked_person_id);
+CREATE INDEX event_registrations_match_review_status_idx ON event_registrations USING btree (match_review_status);
+CREATE INDEX event_registrations_no_show_flagged_idx ON event_registrations USING btree (no_show_flagged) WHERE no_show_flagged = true;
+CREATE INDEX event_registrations_payment_status_idx ON event_registrations USING btree (payment_status) WHERE payment_status <> 'not_required'::text;
+CREATE INDEX event_registrations_phone_idx ON event_registrations USING btree (phone);
+CREATE INDEX event_registrations_proof_status_idx ON event_registrations USING btree (proof_status) WHERE proof_status <> 'not_required'::text;
+CREATE INDEX event_registrations_registration_status_idx ON event_registrations USING btree (registration_status);
+CREATE INDEX event_registrations_student_id_idx ON event_registrations USING btree (student_id);
+CREATE INDEX idx_event_registrations_event_id ON event_registrations USING btree (event_id);
+CREATE INDEX idx_event_registrations_person_id ON event_registrations USING btree (person_id);
+CREATE INDEX event_participations_attendance_status_idx ON event_participations USING btree (attendance_status);
+CREATE INDEX event_participations_event_id_idx ON event_participations USING btree (event_id);
+CREATE INDEX event_participations_person_id_idx ON event_participations USING btree (person_id);
+CREATE INDEX event_participations_role_at_event_idx ON event_participations USING btree (role_at_event);
+CREATE INDEX event_participations_season_id_idx ON event_participations USING btree (season_id);
+CREATE INDEX mentoring_recaps_issue_flag_idx ON mentoring_recaps USING btree (issue_flag);
+CREATE INDEX mentoring_recaps_match_id_idx ON mentoring_recaps USING btree (match_id);
+CREATE INDEX mentoring_recaps_meeting_month_idx ON mentoring_recaps USING btree (meeting_month);
+CREATE INDEX mentoring_recaps_mentee_person_id_idx ON mentoring_recaps USING btree (mentee_person_id);
+CREATE INDEX mentoring_recaps_mentor_person_id_idx ON mentoring_recaps USING btree (mentor_person_id);
+CREATE INDEX mentoring_recaps_season_id_idx ON mentoring_recaps USING btree (season_id);
+CREATE INDEX season_monthly_kpis_season_month_idx ON season_monthly_kpis USING btree (season_id, month_value);
+CREATE INDEX admin_users_auth_user_id_idx ON admin_users USING btree (auth_user_id);
+CREATE INDEX admin_users_email_idx ON admin_users USING btree (email);
+CREATE INDEX admin_users_role_idx ON admin_users USING btree (role);
+CREATE INDEX admin_users_status_idx ON admin_users USING btree (status);
+CREATE INDEX application_reviews_application_idx ON application_reviews USING btree (application_id);
+CREATE INDEX application_reviews_assignment_batch_idx ON application_reviews USING btree (assignment_batch_id) WHERE assignment_batch_id IS NOT NULL;
+CREATE INDEX application_reviews_reviewer_idx ON application_reviews USING btree (reviewer_admin_user_id) WHERE reviewer_admin_user_id IS NOT NULL;
+CREATE INDEX application_reviews_round_idx ON application_reviews USING btree (review_round);
+CREATE INDEX application_reviews_status_idx ON application_reviews USING btree (status);
+CREATE INDEX idx_application_reviews_claim_source ON application_reviews USING btree (claim_source) WHERE claim_source IS NOT NULL;
+CREATE INDEX application_decisions_application_idx ON application_decisions USING btree (application_id);
+CREATE INDEX application_decisions_created_at_idx ON application_decisions USING btree (created_at DESC);
+CREATE INDEX application_decisions_decided_by_idx ON application_decisions USING btree (decided_by) WHERE decided_by IS NOT NULL;
+CREATE INDEX review_assignment_batches_created_at_idx ON review_assignment_batches USING btree (created_at DESC);
+CREATE INDEX review_assignment_batches_created_by_idx ON review_assignment_batches USING btree (created_by) WHERE created_by IS NOT NULL;
+CREATE INDEX review_assignment_batches_intake_batch_idx ON review_assignment_batches USING btree (intake_batch_id) WHERE intake_batch_id IS NOT NULL;
+CREATE INDEX person_season_memberships_intake_batch_id_idx ON person_season_memberships USING btree (intake_batch_id) WHERE intake_batch_id IS NOT NULL;
+CREATE INDEX person_season_memberships_person_id_idx ON person_season_memberships USING btree (person_id);
+CREATE INDEX person_season_memberships_program_season_idx ON person_season_memberships USING btree (program_id, season_id);
+CREATE INDEX person_season_memberships_season_role_status_idx ON person_season_memberships USING btree (season_id, role, status);
+CREATE INDEX person_season_membership_log_changed_at_idx ON person_season_membership_log USING btree (changed_at DESC);
+CREATE INDEX person_season_membership_log_membership_id_idx ON person_season_membership_log USING btree (membership_id);
+CREATE INDEX person_season_membership_log_person_id_idx ON person_season_membership_log USING btree (person_id);
+CREATE INDEX person_season_membership_log_program_season_idx ON person_season_membership_log USING btree (program_id, season_id);
+
+-- BLOCKED: indexes on public.matches are withheld with the unresolved table.

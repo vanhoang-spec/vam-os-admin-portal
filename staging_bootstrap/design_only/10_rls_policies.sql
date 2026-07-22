@@ -1,4 +1,6 @@
 -- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
 -- MUST NEVER RUN ON PRODUCTION.
--- BLOCKED: owner approval of staging RLS/policy target is required.
--- No permissive production posture is copied. Migration 061 remains separate.
+-- OWNER APPROVAL REQUIRED: table-by-table RLS/policy choices are documented in
+-- docs/audits/VAM_OS_STAGING_RLS_AND_GRANTS_TARGET_2026-07-22.md.
+-- No production policy is copied blindly. No policy DDL is emitted before approval.
+-- Migration 061 security remains outside this pre-061 baseline.

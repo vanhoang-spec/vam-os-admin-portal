@@ -1,4 +1,6 @@
 -- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
 -- MUST NEVER RUN ON PRODUCTION.
--- BLOCKED: trigger functions and target tables must be approved first; preserve
--- confirmed names and catalog ordering without inventing execution order.
+-- 20 authoritative enabled triggers: 17 set_updated_at, two membership-log immutability,
+-- and one membership scope-validation trigger. No extension or migration-061 trigger is included.
+-- BLOCKED: create exact trigger functions and every selected target table first.
+-- Exact trigger definitions remain in the ignored safety-reviewed metadata input; no timing/event is guessed.

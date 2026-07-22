@@ -1,4 +1,6 @@
 -- STAGING ONLY. DESIGN ONLY. NOT AUTHORIZED. NOT EXECUTED.
 -- MUST NEVER RUN ON PRODUCTION.
--- BLOCKED: approve least-privilege role and function EXECUTE matrix.
--- Do not reproduce broad anon/authenticated/service_role production grants.
+-- OWNER APPROVAL REQUIRED: default is no anon admin/business-table access,
+-- least-privilege authenticated access, and guarded server actions using service_role.
+-- PUBLIC/anon EXECUTE is recommended revoked for all seven admin/reporting SECURITY DEFINER functions.
+-- No GRANT or REVOKE is emitted before owner selection.

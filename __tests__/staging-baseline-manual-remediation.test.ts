@@ -8,27 +8,27 @@ const combined=readFileSync("docs/audits/sql/VAM_OS_PRODUCTION_BASELINE_GAPS_SIN
 const executable=combined.replace(/--[^\n]*/g,"").replace(/'(?:''|[^'])*'/g,"''");
 
 describe("manual staging baseline remediation",()=>{
-  it("keeps every design module outside automatic migrations and non-executable",()=>{
+  it("keeps every design module outside automatic migrations and unauthorized",()=>{
     expect(sqlFiles).toHaveLength(12);
     contents.forEach((body)=>{
       for(const mark of ["STAGING ONLY","DESIGN ONLY","NOT AUTHORIZED","NOT EXECUTED","MUST NEVER RUN ON PRODUCTION"]) expect(body).toContain(mark);
-      expect(body.replace(/--[^\n]*/g,"").trim()).toBe("");
     });
     expect(dir.startsWith("supabase_migrations/")).toBe(false);
   });
-  it("retains explicit blockers without guessed metadata",()=>{
+  it("retains the unresolved table blocker without guessed metadata",()=>{
     const all=contents.join("\n");
-    expect(all).toContain("BLOCKED: enum labels/order");
-    expect(all).toContain("BLOCKED: exact definitions/dependencies");
-    expect(all).toContain("BLOCKED: public sequence parameters");
+    expect(all).toContain("numeric typmod for match_confidence");
+    expect(all).toContain("Exact catalog metadata lacks numeric typmod");
+    expect(all).not.toMatch(/CREATE TABLE\s+"public"\."matches"/i);
+    expect(readFileSync(`${dir}/03_sequences.sql`,"utf8").replace(/--[^\n]*/g,"")).not.toMatch(/CREATE\s+SEQUENCE/i);
     expect(all).not.toMatch(/^\s*(insert|copy)\b/im);
   });
   it("excludes managed internals, data values, and migration 061",()=>{
     const all=contents.join("\n");
-    expect(all).toContain("Exclude citext-owned functions");
-    expect(all).toContain("Migration 061 remains separate");
+    expect(all).toContain("extension-managed routines are excluded");
+    expect(all).toContain("Migration 061 security remains outside");
     expect(all).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
-    expect(all).not.toMatch(/\b(auth|storage|vault)\s*\./i);
+    expect(all.replace(/--[^\n]*/g,"")).not.toMatch(/\b(auth|storage|vault)\s*\./i);
   });
   it("uses one catalog-only WITH SELECT and one JSON result",()=>{
     expect(executable.trim().toLowerCase().startsWith("with")).toBe(true);
