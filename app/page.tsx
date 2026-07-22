@@ -440,17 +440,15 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">{`Đối soát Recap Chính thức — ${SEASON_CODE}`}</h2>
         <Card>
           <p className="mb-4 text-sm text-slate-500">
-            Dữ liệu live từ DB. Hàng <code className="rounded bg-slate-100 px-1">excluded</code> không tính vào KPI.{" "}
-            <Link href="/operations" className="font-medium text-vam-green">Trang vận hành (chứa recap needs_review) →</Link>
-            {" · "}
-            <span className="text-slate-400">Chưa có trang audit riêng cho excluded.</span>
+            Dữ liệu live từ DB. Recap bị loại khỏi báo cáo không tính vào KPI.{" "}
+            <Link href="/operations" className="font-medium text-vam-green">Trang vận hành →</Link>
           </p>
           <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <KpiCard label="Recap chính thức (report-counted)" value={s11Rec.reportCounted} />
-            <KpiCard label="Hàng vật lý trong DB" value={s11Rec.physical} />
-            <KpiCard label="Hàng excluded (không tính KPI)" value={s11Rec.excluded} />
-            <KpiCard label="Official-ledger rows (đã đối soát)" value={s11Rec.ledgerRows} />
-            <KpiCard label="Placeholders (chưa có URL recap)" value={s11Rec.placeholders} tone={s11Rec.placeholders > 0 ? "warning" : "default"} />
+            <KpiCard label="Recap được tính vào báo cáo" value={s11Rec.reportCounted} />
+            <KpiCard label="Tổng hàng trong hệ thống" value={s11Rec.physical} />
+            <KpiCard label="Recap loại khỏi báo cáo" value={s11Rec.excluded} />
+            <KpiCard label="Hàng đã đối soát sổ cái" value={s11Rec.ledgerRows} />
+            <KpiCard label="Hàng chưa có link recap" value={s11Rec.placeholders} tone={s11Rec.placeholders > 0 ? "warning" : "default"} />
             <KpiCard label="Ngày ước tính / cần rà soát" value={s11Rec.estimatedDates} tone={s11Rec.estimatedDates > 0 ? "warning" : "default"} />
           </div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown theo tháng — tất cả loại hình mentoring</h3>
