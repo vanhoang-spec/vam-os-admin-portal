@@ -33,11 +33,11 @@ const tableRows: Record<string, unknown[]> = {
     { season_id: "season-ham", status: "approved" }
   ],
   person_season_memberships: [
-    { program_id: "program-ueh", season_id: "season-ueh", role: "mentor", status: "active" },
-    { program_id: "program-ueh", season_id: "season-ueh", role: "mentee", status: "active" },
-    { program_id: "program-ham", season_id: "season-ham", role: "mentor", status: "active" }
+    { person_id: "mentor-ueh", program_id: "program-ueh", season_id: "season-ueh", role: "mentor", status: "active" },
+    { person_id: "mentee-ueh", program_id: "program-ueh", season_id: "season-ueh", role: "mentee", status: "active" },
+    { person_id: "mentor-ham", program_id: "program-ham", season_id: "season-ham", role: "mentor", status: "active" }
   ],
-  matches: [{ season_id: "season-ueh", status: "active" }],
+  matches: [{ season_id: "season-ueh", status: "active", mentor_person_id: "mentor-ueh", mentee_person_id: "mentee-ueh" }],
   events: [{ season_id: "season-ham", status: "scheduled", starts_at: "2099-01-01T00:00:00Z" }],
   action_items: [
     { season_id: "season-ueh", status: "open", action_type: "data_issue", due_date: "2020-01-01" },

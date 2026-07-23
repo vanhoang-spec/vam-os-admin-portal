@@ -10,6 +10,10 @@ function metric(value: number | null) {
   return value === null ? "Chưa có dữ liệu" : formatInt(value);
 }
 
+function participantMetric(row: ProgramPortfolioRow, role: "mentors" | "mentees") {
+  return row.participantLinkageIncomplete ? "Chưa liên kết đủ dữ liệu" : metric(row[role]);
+}
+
 function healthLabel(value: ProgramPortfolioRow["health"]) {
   if (value === "normal") return "Bình thường";
   if (value === "attention") return "Cần chú ý";
@@ -74,8 +78,8 @@ export default async function PortfolioPage() {
               },
               { key: "currentSeasonCode", label: "Season hiện hành", render: (row) => row.currentSeasonCode ?? "Chưa có dữ liệu" },
               { key: "applications", label: "Ứng tuyển", render: (row) => metric(row.applications) },
-              { key: "mentors", label: "Mentor", render: (row) => metric(row.mentors) },
-              { key: "mentees", label: "Mentee", render: (row) => metric(row.mentees) },
+              { key: "mentors", label: "Mentor", render: (row) => participantMetric(row, "mentors") },
+              { key: "mentees", label: "Mentee", render: (row) => participantMetric(row, "mentees") },
               { key: "activeMatches", label: "Ghép cặp", render: (row) => metric(row.activeMatches) },
               { key: "upcomingEvents", label: "Sự kiện", render: (row) => metric(row.upcomingEvents) },
               { key: "dataIssues", label: "Vấn đề dữ liệu", render: (row) => metric(row.dataIssues) },
