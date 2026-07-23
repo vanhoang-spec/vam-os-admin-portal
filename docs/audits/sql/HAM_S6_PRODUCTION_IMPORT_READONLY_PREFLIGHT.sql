@@ -13,6 +13,16 @@
 --   * Read-only: no INSERT, UPDATE, DELETE, DDL, or COPY.
 --   * No PII: no names, emails, phones, student IDs, or Auth IDs.
 --   * Aggregate counts and boolean flags only.
+--
+-- Version: V2 (schema alignment — 2026-07-23)
+-- Changes from V1:
+--   * Removed checks for legacy columns absent from production schema:
+--       people.role, mentor_profiles.linkedin_url,
+--       mentee_profiles.status, matches.season_code
+--   * Removed enum checks for people.role (column absent)
+--   * Added check for person_season_memberships.program_id (NOT NULL, required)
+--   * Gate 7 now checks person_season_memberships.program_id and matches.status only
+--   * Probe name updated to HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V2
 -- ============================================================
 
 with
@@ -81,7 +91,10 @@ required_tables as (
   ) sub
 ),
 
--- 7. Required columns and data types
+-- 7. Required columns — canonical production schema (V2)
+-- Removed: people.role, mentor_profiles.linkedin_url,
+--          mentee_profiles.status, matches.season_code
+-- Added:   person_season_memberships.program_id
 required_columns as (
   select
     bool_and(col_exists) as all_required_columns_exist,
@@ -110,24 +123,22 @@ required_columns as (
       ('people.email_primary', 'people', 'email_primary'),
       ('people.phone_primary', 'people', 'phone_primary'),
       ('people.gender', 'people', 'gender'),
-      ('people.role', 'people', 'role'),
       ('people.source_sheets', 'people', 'source_sheets'),
       ('people.data_quality_flags', 'people', 'data_quality_flags'),
       ('mentor_profiles.person_id', 'mentor_profiles', 'person_id'),
       ('mentor_profiles.intake_batch_id', 'mentor_profiles', 'intake_batch_id'),
       ('mentor_profiles.mentor_code', 'mentor_profiles', 'mentor_code'),
-      ('mentor_profiles.linkedin_url', 'mentor_profiles', 'linkedin_url'),
       ('mentee_profiles.person_id', 'mentee_profiles', 'person_id'),
       ('mentee_profiles.intake_batch_id', 'mentee_profiles', 'intake_batch_id'),
       ('mentee_profiles.mentee_code', 'mentee_profiles', 'mentee_code'),
-      ('mentee_profiles.status', 'mentee_profiles', 'status'),
+      ('mentee_profiles.mentee_status', 'mentee_profiles', 'mentee_status'),
       ('matches.season_id', 'matches', 'season_id'),
       ('matches.mentor_person_id', 'matches', 'mentor_person_id'),
       ('matches.mentee_person_id', 'matches', 'mentee_person_id'),
       ('matches.status', 'matches', 'status'),
-      ('matches.season_code', 'matches', 'season_code'),
       ('matches.match_type', 'matches', 'match_type'),
       ('person_season_memberships.person_id', 'person_season_memberships', 'person_id'),
+      ('person_season_memberships.program_id', 'person_season_memberships', 'program_id'),
       ('person_season_memberships.season_id', 'person_season_memberships', 'season_id'),
       ('person_season_memberships.role', 'person_season_memberships', 'role'),
       ('person_season_memberships.status', 'person_season_memberships', 'status')
@@ -135,7 +146,9 @@ required_columns as (
   ) sub
 ),
 
--- 8. Required enum labels (people.role, matches.status, mentee_profiles.status)
+-- 8. Required enum labels — canonical schema (V2)
+-- Removed: people.role enum checks (column absent from production)
+-- Retained: matches.status=active (confirmed present in V1 preflight)
 required_enums as (
   select
     bool_and(label_exists) as all_required_enum_labels_exist,
@@ -152,8 +165,6 @@ required_enums as (
           and pe.enumlabel = e.label
       ) as label_exists
     from (values
-      ('people.role=mentor', 'role', 'mentor'),
-      ('people.role=mentee', 'role', 'mentee'),
       ('matches.status=active', 'match_status', 'active')
     ) as e(check_name, type_name, label)
   ) sub
@@ -332,8 +343,9 @@ seasons_program_id_fk as (
 )
 
 select jsonb_build_object(
-  'probe',              'HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V1',
+  'probe',              'HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V2',
   'authorized_phrase',  'AUTHORIZE OWNER-RUN READ-ONLY HAM-S6 PRODUCTION IMPORT PREFLIGHT',
+  'schema_alignment',   'V2 — canonical schema; legacy columns removed from column checks',
   'owner_must_verify_project_ref',  (select owner_must_verify_project_ref from target_identity),
   'db_name',            (select db_name from target_identity),
 
@@ -369,12 +381,14 @@ select jsonb_build_object(
 
   'gate_6_required_columns', jsonb_build_object(
     'all_required_columns_exist', (select all_required_columns_exist from required_columns),
-    'column_existence_map',       (select column_existence_map from required_columns)
+    'column_existence_map',       (select column_existence_map from required_columns),
+    'note', 'V2: checks canonical columns only; legacy columns (people.role, mentor_profiles.linkedin_url, mentee_profiles.status, matches.season_code) removed'
   ),
 
   'gate_7_required_enums', jsonb_build_object(
     'all_required_enum_labels_exist', (select all_required_enum_labels_exist from required_enums),
-    'enum_existence_map',             (select enum_existence_map from required_enums)
+    'enum_existence_map',             (select enum_existence_map from required_enums),
+    'note', 'V2: people.role enum checks removed (column absent from production); matches.status=active check retained'
   ),
 
   'gate_8_required_constraints', jsonb_build_object(
