@@ -291,4 +291,168 @@ describe("HAM-S6 production import safety", () => {
     );
     expect(runbook).toContain("does not authorize");
   });
+
+  // ── Schema alignment assertions (2026-07-23) ────────────────────────────────
+  // 15 new assertions verifying canonical production schema compliance
+
+  it("schema alignment document exists and lists all 4 legacy columns", () => {
+    const doc = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_SCHEMA_ALIGNMENT_2026-07-23.md",
+      "utf8"
+    );
+    expect(doc).toContain("people.role");
+    expect(doc).toContain("mentor_profiles.linkedin_url");
+    expect(doc).toContain("mentee_profiles.status");
+    expect(doc).toContain("matches.season_code");
+  });
+
+  it("schema alignment document confirms canonical replacements", () => {
+    const doc = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_SCHEMA_ALIGNMENT_2026-07-23.md",
+      "utf8"
+    );
+    // people.role → person_season_memberships.role
+    expect(doc).toContain("person_season_memberships.role");
+    // matches.season_code → season_id FK
+    expect(doc).toContain("season_id");
+    // Path B was chosen
+    expect(doc).toContain("Path B");
+  });
+
+  it("field mapping document exists and classifies UNSUPPORTED fields", () => {
+    const doc = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_FIELD_MAPPING_2026-07-23.md",
+      "utf8"
+    );
+    expect(doc).toContain("UNSUPPORTED");
+    // All 4 unsupported fields documented
+    expect(doc).toContain("people.role");
+    expect(doc).toContain("linkedin_url");
+    expect(doc).toContain("mentee_profiles.status");
+    expect(doc).toContain("matches.season_code");
+  });
+
+  it("module 03 people INSERT does not include role column (absent from production)", () => {
+    const body = modules["03_import_people.sql"];
+    const execBody = executable(body);
+    // The insert into public.people must NOT include 'role' in its column list
+    // We check executable SQL so comments don't interfere
+    const insertBlock = execBody.match(/insert\s+into\s+public\s*\.\s*people\s*\([^)]+\)/i)?.[0] ?? "";
+    expect(insertBlock).toBeTruthy();
+    expect(insertBlock).not.toMatch(/\brole\b/i);
+  });
+
+  it("module 03 people INSERT includes full_name, email_primary, data_quality_flags", () => {
+    const body = modules["03_import_people.sql"];
+    const execBody = executable(body);
+    const insertBlock = execBody.match(/insert\s+into\s+public\s*\.\s*people\s*\([^)]+\)/i)?.[0] ?? "";
+    expect(insertBlock).toMatch(/\bfull_name\b/i);
+    expect(insertBlock).toMatch(/\bemail_primary\b/i);
+    expect(insertBlock).toMatch(/\bdata_quality_flags\b/i);
+  });
+
+  it("module 04 mentor INSERT does not include linkedin_url (absent from production)", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    const execBody = executable(body);
+    // The mentor_profiles INSERT block must not contain linkedin_url
+    const mentorInsert = execBody.match(
+      /insert\s+into\s+public\s*\.\s*mentor_profiles\s*\([^)]+\)/i
+    )?.[0] ?? "";
+    expect(mentorInsert).toBeTruthy();
+    expect(mentorInsert).not.toMatch(/\blinkedin_url\b/i);
+  });
+
+  it("module 04 mentee INSERT does not include status column (absent from production)", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    const execBody = executable(body);
+    const menteeInsert = execBody.match(
+      /insert\s+into\s+public\s*\.\s*mentee_profiles\s*\([^)]+\)/i
+    )?.[0] ?? "";
+    expect(menteeInsert).toBeTruthy();
+    // status is absent; mentee_status (a separate column) may still appear
+    // We check that 'status' does not appear as a standalone column name before 'mentee_code'
+    // The column list should contain mentee_code but not a bare 'status'
+    expect(menteeInsert).not.toMatch(/\bperson_id\s*,\s*status\b/i);
+  });
+
+  it("module 04 mentee INSERT retains mentee_status (existing canonical column)", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    const menteeInsert = body.match(
+      /insert\s+into\s+public\s*\.\s*mentee_profiles\s*\([^)]+\)/i
+    )?.[0] ?? "";
+    expect(menteeInsert).toMatch(/\bmentee_status\b/i);
+  });
+
+  it("module 04 person_season_memberships INSERT includes program_id", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    const execBody = executable(body);
+    const membershipInsert = execBody.match(
+      /insert\s+into\s+public\s*\.\s*person_season_memberships\s*\([^)]+\)/i
+    )?.[0] ?? "";
+    expect(membershipInsert).toBeTruthy();
+    expect(membershipInsert).toMatch(/\bprogram_id\b/i);
+    expect(membershipInsert).toMatch(/\bseason_id\b/i);
+    expect(membershipInsert).toMatch(/\brole\b/i);
+  });
+
+  it("module 05 matches INSERT does not include season_code (absent from production)", () => {
+    const body = modules["05_import_matches.sql"];
+    const execBody = executable(body);
+    const matchInsert = execBody.match(
+      /insert\s+into\s+public\s*\.\s*matches\s*\([^)]+\)/i
+    )?.[0] ?? "";
+    expect(matchInsert).toBeTruthy();
+    expect(matchInsert).not.toMatch(/\bseason_code\b/i);
+  });
+
+  it("module 05 matches INSERT includes season_id (canonical FK)", () => {
+    const body = modules["05_import_matches.sql"];
+    const execBody = executable(body);
+    const matchInsert = execBody.match(
+      /insert\s+into\s+public\s*\.\s*matches\s*\([^)]+\)/i
+    )?.[0] ?? "";
+    expect(matchInsert).toMatch(/\bseason_id\b/i);
+  });
+
+  it("preflight probe is version V2 (canonical schema checks)", () => {
+    const preflight = readFileSync(
+      "docs/audits/sql/HAM_S6_PRODUCTION_IMPORT_READONLY_PREFLIGHT.sql",
+      "utf8"
+    );
+    expect(preflight).toContain("HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V2");
+    // V2 must not check the 4 legacy columns
+    const prefExec = executable(preflight);
+    // people.role is not in the values list (only in comments)
+    expect(prefExec).not.toMatch(/'people','people','role'/i);
+    // linkedin_url is not in the values list
+    expect(prefExec).not.toMatch(/'mentor_profiles\.linkedin_url'/i);
+  });
+
+  it("preflight probe V2 checks person_season_memberships.program_id", () => {
+    const preflight = readFileSync(
+      "docs/audits/sql/HAM_S6_PRODUCTION_IMPORT_READONLY_PREFLIGHT.sql",
+      "utf8"
+    );
+    expect(preflight).toContain("person_season_memberships.program_id");
+  });
+
+  it("post-import verification probe is version V2 and does not reference season_code", () => {
+    const verification = readFileSync(
+      "docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql",
+      "utf8"
+    );
+    expect(verification).toContain("HAM_S6_POST_IMPORT_VERIFICATION_V2");
+    // season_code must not appear in executable SQL of the probe
+    const verExec = executable(verification);
+    expect(verExec).not.toMatch(/\bseason_code\b/i);
+  });
+
+  it("post-import verification probe checks person_season_memberships for HAM-S6 roles", () => {
+    const verification = readFileSync(
+      "docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql",
+      "utf8"
+    );
+    expect(verification).toContain("person_season_memberships");
+    expect(verification).toContain("HAM-S6");
+  });
 });

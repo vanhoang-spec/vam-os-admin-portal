@@ -119,10 +119,12 @@ where mentor_person_id is null or mentee_person_id is null
 on commit drop;
 
 -- ── Insert matches ────────────────────────────────────────────────────────────
+-- NOTE: matches.season_code is absent from production schema.
+-- Season is linked canonically via season_id (UUID FK to seasons table).
+-- season_id is resolved from _ham_prod_context (seasons.code = 'HAM-S6').
 insert into public.matches (
   mentor_id,
   mentee_id,
-  season_code,
   season_id,
   status,
   mentor_person_id,
@@ -137,7 +139,6 @@ insert into public.matches (
 select
   ready.mentor_person_id,
   ready.mentee_person_id,
-  'HAM-S6',
   ctx.season_id,
   'active',
   ready.mentor_person_id,
