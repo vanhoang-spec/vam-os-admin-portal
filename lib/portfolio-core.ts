@@ -2,6 +2,7 @@ import type { ProgramContextCatalog, SeasonCatalogRow } from "@/lib/program-cont
 
 export type CountValue = number | null;
 export type PortfolioSources = { applications: any[] | null; memberships: any[] | null; matches: any[] | null; events: any[] | null; actions: any[] | null };
+export type PortfolioSeasonScope = { mode: "current" } | { mode: "all" } | { mode: "selected"; seasonId: string };
 export type ProgramPortfolioRow = {
   programId: string; programCode: string; programName: string; isActive: boolean;
   currentSeasonId: string | null; currentSeasonCode: string | null;
@@ -16,7 +17,6 @@ const ordinal = (code: string) => Number(code.match(/(?:^|-)S(\d+)(?:$|-)/i)?.[1
 export function resolveCurrentSeason(seasons: SeasonCatalogRow[]) {
   return [...seasons].sort((a, b) => Number(isActiveSeason(b.status)) - Number(isActiveSeason(a.status)) || ordinal(b.code) - ordinal(a.code) || b.code.localeCompare(a.code))[0] ?? null;
 }
-const scoped = (rows: any[] | null, seasonId: string) => rows?.filter((row) => String(row.season_id ?? "") === seasonId) ?? null;
 const count = (rows: any[] | null, predicate: (row: any) => boolean) => rows === null ? null : rows.filter(predicate).length;
 const isOpenApplication = (value: unknown) => !["approved", "rejected", "withdrawn", "cancelled", "declined", "profile_created"].includes(lower(value));
 function participantCount(memberships: any[] | null, matches: any[] | null, role: "mentor" | "mentee") {
@@ -34,23 +34,38 @@ function health(dataIssues: CountValue, overdueTasks: CountValue): ProgramPortfo
   if (overdueTasks > 0) return "attention";
   return "normal";
 }
-export function reconcilePortfolioRows(catalog: ProgramContextCatalog, sources: PortfolioSources, programId?: string, now = new Date()) {
+export function reconcilePortfolioRows(
+  catalog: ProgramContextCatalog,
+  sources: PortfolioSources,
+  programId?: string,
+  now = new Date(),
+  scope: PortfolioSeasonScope = { mode: "current" }
+) {
   const today = now.toISOString().slice(0, 10);
   return catalog.programs.filter((program) => !programId || program.id === programId).map((program) => {
-    const season = resolveCurrentSeason(catalog.seasons.filter((row) => row.programId === program.id));
-    if (!season) return {
+    const linkedSeasons = catalog.seasons.filter((row) => row.programId === program.id);
+    const currentSeason = resolveCurrentSeason(linkedSeasons);
+    const selectedSeasons = scope.mode === "all"
+      ? linkedSeasons
+      : scope.mode === "selected"
+        ? linkedSeasons.filter((row) => row.id === scope.seasonId)
+        : currentSeason ? [currentSeason] : [];
+    if (!selectedSeasons.length) return {
       programId: program.id, programCode: program.code, programName: program.name, isActive: program.isActive,
       currentSeasonId: null, currentSeasonCode: null, applications: null, mentors: null, mentees: null, activeMatches: null,
       upcomingEvents: null, dataIssues: null, overdueTasks: null, participantLinkageIncomplete: false, health: "unknown"
     } satisfies ProgramPortfolioRow;
-    const applications = scoped(sources.applications, season.id); const memberships = scoped(sources.memberships, season.id);
-    const matches = scoped(sources.matches, season.id); const events = scoped(sources.events, season.id); const actions = scoped(sources.actions, season.id);
+    const selectedIds = new Set(selectedSeasons.map((row) => row.id));
+    const inScope = (rows: any[] | null) => rows?.filter((row) => selectedIds.has(String(row.season_id ?? ""))) ?? null;
+    const applications = inScope(sources.applications); const memberships = inScope(sources.memberships);
+    const matches = inScope(sources.matches); const events = inScope(sources.events); const actions = inScope(sources.actions);
     const mentors = participantCount(memberships, matches, "mentor"); const mentees = participantCount(memberships, matches, "mentee");
     const dataIssues = count(actions, (row) => lower(row.action_type) === "data_issue" && ["open", "in_progress", "parked"].includes(lower(row.status)));
     const overdueTasks = count(actions, (row) => ["open", "in_progress", "parked"].includes(lower(row.status)) && String(row.due_date ?? "") < today);
     return {
       programId: program.id, programCode: program.code, programName: program.name, isActive: program.isActive,
-      currentSeasonId: season.id, currentSeasonCode: season.code,
+      currentSeasonId: scope.mode === "all" ? null : selectedSeasons[0].id,
+      currentSeasonCode: scope.mode === "all" ? null : selectedSeasons[0].code,
       applications: count(applications, (row) => isOpenApplication(row.status ?? row.final_status)), mentors: mentors.value, mentees: mentees.value,
       activeMatches: count(matches, (row) => lower(row.status) === "active"),
       upcomingEvents: count(events, (row) => Boolean(row.starts_at) && new Date(row.starts_at) >= now && !["cancelled", "completed"].includes(lower(row.status))),

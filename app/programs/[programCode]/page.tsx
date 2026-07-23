@@ -12,6 +12,10 @@ function metric(value: number | null) {
   return value === null ? "Chưa có dữ liệu" : formatInt(value);
 }
 
+function participantMetric(value: number | null, incomplete: boolean) {
+  return incomplete ? "Chưa liên kết đủ dữ liệu" : metric(value);
+}
+
 export default async function ProgramWorkspacePage({
   params,
   searchParams
@@ -28,6 +32,7 @@ export default async function ProgramWorkspacePage({
   const program = catalog.programs.find((row) => row.id === context.selectedProgramId)!;
   const seasons = catalog.seasons.filter((row) => row.programId === program.id);
   const row = summary.programs[0];
+  const scopeLabel = context.selectedSeasonCode ? `Season đã chọn: ${context.selectedSeasonCode}` : "Tất cả season (tổng hợp có chủ đích)";
   const query = new URLSearchParams({ program: program.code });
   if (context.selectedSeasonCode) query.set("season", context.selectedSeasonCode);
   if (context.selectedIntakeBatchId) query.set("batch", context.selectedIntakeBatchId);
@@ -45,15 +50,15 @@ export default async function ProgramWorkspacePage({
     <>
       <PageHeader
         title={program.name}
-        description={`Workspace chỉ đọc · Mã chương trình ${program.code}${context.selectedSeasonCode ? ` · ${context.selectedSeasonCode}` : ""}`}
+        description={`Workspace chỉ đọc · Mã chương trình ${program.code} · ${scopeLabel}`}
       />
 
       <section aria-labelledby="program-summary" className="mb-6">
-        <h2 id="program-summary" className="mb-3 text-lg font-semibold text-vam-ink">Tổng quan chương trình</h2>
+        <h2 id="program-summary" className="mb-3 text-lg font-semibold text-vam-ink">Tổng quan chương trình · {scopeLabel}</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Ứng tuyển đang xử lý" value={metric(row?.applications ?? null)} />
-          <KpiCard label="Mentor đang hoạt động" value={metric(row?.mentors ?? null)} />
-          <KpiCard label="Mentee đang hoạt động" value={metric(row?.mentees ?? null)} />
+          <KpiCard label="Mentor đang hoạt động" value={participantMetric(row?.mentors ?? null, row?.participantLinkageIncomplete ?? false)} />
+          <KpiCard label="Mentee đang hoạt động" value={participantMetric(row?.mentees ?? null, row?.participantLinkageIncomplete ?? false)} />
           <KpiCard label="Ghép cặp đang hoạt động" value={metric(row?.activeMatches ?? null)} />
           <KpiCard label="Sự kiện sắp tới" value={metric(row?.upcomingEvents ?? null)} />
           <KpiCard label="Vấn đề dữ liệu" value={metric(row?.dataIssues ?? null)} tone={(row?.dataIssues ?? 0) > 0 ? "warning" : "default"} />
