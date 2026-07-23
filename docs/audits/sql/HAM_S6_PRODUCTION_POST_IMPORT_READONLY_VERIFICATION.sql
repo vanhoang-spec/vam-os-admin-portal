@@ -1,5 +1,8 @@
 -- ============================================================
 -- HAM-S6 PRODUCTION POST-IMPORT READ-ONLY VERIFICATION
+-- Version: V3 (final schema alignment — 2026-07-23)
+-- mentee lifecycle status verified via person_season_memberships.status only.
+-- No mentee_profiles.mentee_status dependency (column absent from production).
 -- ============================================================
 -- OWNER-RUN ONLY. DO NOT MODIFY INTO A WRITE STATEMENT.
 -- NOT AUTHORIZED — Read runbook before execution.
@@ -18,7 +21,7 @@
 -- ============================================================
 
 select jsonb_build_object(
-  'probe',          'HAM_S6_POST_IMPORT_VERIFICATION_V2',
+  'probe',          'HAM_S6_POST_IMPORT_VERIFICATION_V3',
   'authorized_phrase', 'AUTHORIZE OWNER-RUN READ-ONLY HAM-S6 POST-IMPORT VERIFICATION',
 
   -- 1. HAM program exactly once

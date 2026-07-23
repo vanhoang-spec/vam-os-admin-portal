@@ -69,7 +69,7 @@ to its canonical production destination. Each field is classified by destination
 | `mentee_profiles.career_interest` | `field` or `expertise` | OPTIONAL | `nullif(coalesce(field, expertise), '')` |
 | `mentee_profiles.target_industry` | `field` | OPTIONAL | `nullif(r.field, '')` |
 | `mentee_profiles.target_function` | `expertise` | OPTIONAL | `nullif(r.expertise, '')` |
-| `mentee_profiles.mentee_status` | Hardcoded | CANONICAL | `'active'` — profile-level status; this column exists in production |
+| ~~`mentee_profiles.mentee_status`~~ | ~~Hardcoded `'active'`~~ | **UNSUPPORTED** | **Column absent from production schema (confirmed by preflight V2, 2026-07-23). Lifecycle status is in `person_season_memberships.status`.** |
 | `mentee_profiles.intake_batch_id` | `_ham_prod_context.intake_batch_id` | RELATIONAL | UUID for HAM-S6-B1 resolved at runtime |
 
 ---
@@ -113,6 +113,7 @@ to its canonical production destination. Each field is classified by destination
 | `people.role` | Column absent from production — role tracked via `person_season_memberships.role` |
 | `mentor_profiles.linkedin_url` | Column absent from production — URL preserved in `data_quality_flags` |
 | `mentee_profiles.status` | Column absent from production — lifecycle tracked via `person_season_memberships.status` |
+| `mentee_profiles.mentee_status` | Column absent from production (confirmed by preflight V2) — lifecycle tracked via `person_season_memberships.status` |
 | `matches.season_code` | Column absent from production — season linked via `season_id` FK |
 | Auth user identities | Out of scope for foundation import — separate Gate H authorization required |
 | `admin_users` rows | Out of scope for foundation import |

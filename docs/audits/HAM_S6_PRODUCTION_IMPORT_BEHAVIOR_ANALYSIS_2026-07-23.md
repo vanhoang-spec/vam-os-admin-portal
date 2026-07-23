@@ -3,10 +3,10 @@
 
 Static analysis of all foundation import scripts. No execution. No database query.
 
-**Schema alignment (2026-07-23):** Production modules were updated to remove 4 columns
-absent from the production schema. See `HAM_S6_PRODUCTION_IMPORT_SCHEMA_ALIGNMENT_2026-07-23.md`
-for the full canonical mapping. The "Summary of production-incompatible elements" table
-below is updated to reflect these resolutions.
+**Schema alignment (2026-07-23, final):** Production modules were updated to remove 5 columns
+absent from the production schema (4 in the initial alignment pass, 1 discovered via V2 preflight
+execution). See `HAM_S6_PRODUCTION_IMPORT_SCHEMA_ALIGNMENT_2026-07-23.md` for the full canonical
+mapping. The "Summary of production-incompatible elements" table below reflects all resolutions.
 
 ---
 
@@ -232,7 +232,8 @@ before any writes and will abort the transaction if HAM-S6 context is missing. S
 | `staging_ham_s6_people_identity_map` dependency | BLOCKER | 03 depends on 02 | **RESOLVED** — Production modules use `_ham_prod_identity_map` TEMP table (session-scoped, dropped on commit) |
 | `people.role` column absent | BLOCKER | 03 | **RESOLVED (schema alignment 2026-07-23)** — `role` removed from `people` INSERT; canonical role tracked via `person_season_memberships.role` |
 | `mentor_profiles.linkedin_url` column absent | BLOCKER | 04 | **RESOLVED (schema alignment 2026-07-23)** — `linkedin_url` removed from mentor INSERT; URL preserved in `people.data_quality_flags` |
-| `mentee_profiles.status` column absent | BLOCKER | 04 | **RESOLVED (schema alignment 2026-07-23)** — `status` removed from mentee INSERT; lifecycle status in `person_season_memberships.status`; `mentee_status` column is populated |
+| `mentee_profiles.status` column absent | BLOCKER | 04 | **RESOLVED (schema alignment 2026-07-23)** — `status` removed from mentee INSERT |
+| `mentee_profiles.mentee_status` column absent | BLOCKER | 04 | **RESOLVED (final schema alignment 2026-07-23)** — `mentee_status` removed from mentee INSERT; confirmed absent by V2 preflight; lifecycle status exclusively in `person_season_memberships.status` |
 | `matches.season_code` column absent | BLOCKER | 05 | **RESOLVED (schema alignment 2026-07-23)** — `season_code` removed from matches INSERT; season linked via canonical `season_id` FK |
 | No production project ref check | HIGH | All | Owner must independently verify project ref in Supabase dashboard URL; preflight runbook documents this requirement |
 | Name-key fallback in match resolution | MEDIUM | 03 | **RESOLVED** — Name-key fallback is EXPLICITLY DISABLED in module 05; fails closed on missing email |
