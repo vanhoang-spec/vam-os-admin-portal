@@ -3,7 +3,7 @@ import "server-only";
 import { getAdminScopeContext } from "@/lib/program-scope";
 import { loadProgramContextCatalog, toProgramAccessPrincipal } from "@/lib/program-context";
 import { requireGlobalAdmin, type CanonicalProgramContext, type ProgramContextCatalog } from "@/lib/program-context-core";
-import { isActiveSeason, reconcilePortfolioRows, total, type CountValue } from "@/lib/portfolio-core";
+import { isActiveSeason, reconcilePortfolioRows, total, type CountValue, type PortfolioSeasonScope } from "@/lib/portfolio-core";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 export type { ProgramPortfolioRow } from "@/lib/portfolio-core";
@@ -17,10 +17,11 @@ export type PortfolioData = {
   warnings: string[];
 };
 
-async function loadAggregateRows(catalog: ProgramContextCatalog, programId?: string): Promise<PortfolioData> {
+async function loadAggregateRows(catalog: ProgramContextCatalog, programId?: string, scope: PortfolioSeasonScope = { mode: "current" }): Promise<PortfolioData> {
   const client = getSupabaseServiceRoleClient();
   if (!client) throw new Error("Không thể tải dữ liệu portfolio lúc này.");
-  const seasonIds = catalog.seasons.filter((season) => !programId || season.programId === programId).map((season) => season.id);
+  const programSeasonIds = catalog.seasons.filter((season) => !programId || season.programId === programId).map((season) => season.id);
+  const seasonIds = scope.mode === "selected" ? programSeasonIds.filter((id) => id === scope.seasonId) : programSeasonIds;
   const filterSeason = (query: any) => programId ? query.in("season_id", seasonIds.length ? seasonIds : ["00000000-0000-0000-0000-000000000000"]) : query;
   const [applicationsRes, membershipsRes, matchesRes, eventsRes, actionsRes] = await Promise.all([
     filterSeason(client.from("applications").select("season_id,status,final_status")),
@@ -46,7 +47,7 @@ async function loadAggregateRows(catalog: ProgramContextCatalog, programId?: str
     matches: rowsOrNull(matchesRes, "Ghép cặp"),
     events: rowsOrNull(eventsRes, "Sự kiện"),
     actions: rowsOrNull(actionsRes, "Vấn đề dữ liệu và nhiệm vụ")
-  }, programId);
+  }, programId, new Date(), scope);
   return {
     totals: {
       programs: programs.length,
@@ -70,5 +71,8 @@ export async function getSuperAdminPortfolio(): Promise<PortfolioData> {
   return loadAggregateRows(catalog);
 }
 export async function getProgramWorkspaceSummary(context: CanonicalProgramContext): Promise<PortfolioData> {
-  return loadAggregateRows(await loadProgramContextCatalog(), context.selectedProgramId);
+  const scope: PortfolioSeasonScope = context.selectedSeasonId
+    ? { mode: "selected", seasonId: context.selectedSeasonId }
+    : { mode: "all" };
+  return loadAggregateRows(await loadProgramContextCatalog(), context.selectedProgramId, scope);
 }

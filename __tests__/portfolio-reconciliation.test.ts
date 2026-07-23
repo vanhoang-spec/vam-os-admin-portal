@@ -89,4 +89,29 @@ describe("portfolio KPI reconciliation", () => {
     expect(resolveCurrentSeason([...catalog.seasons].reverse())?.code).toBe("UEHM-S12");
     expect(reconcilePortfolioRows(catalog, empty)).toEqual(reconcilePortfolioRows(catalog, empty));
   });
+
+  it("keeps selected S11, selected S12, all-season, and current-season totals distinct", () => {
+    const sources = {
+      ...empty,
+      applications: [
+        { season_id: "ueh11", status: "submitted" },
+        { season_id: "ueh11", status: "submitted" },
+        { season_id: "ueh12", status: "submitted" }
+      ]
+    };
+    const selectedS11 = reconcilePortfolioRows(catalog, sources, "ueh", new Date(), { mode: "selected", seasonId: "ueh11" })[0];
+    const selectedS12 = reconcilePortfolioRows(catalog, sources, "ueh", new Date(), { mode: "selected", seasonId: "ueh12" })[0];
+    const all = reconcilePortfolioRows(catalog, sources, "ueh", new Date(), { mode: "all" })[0];
+    const current = reconcilePortfolioRows(catalog, sources, "ueh")[0];
+    expect([selectedS11.applications, selectedS12.applications, all.applications, current.applications]).toEqual([2, 1, 3, 1]);
+    expect([selectedS11.currentSeasonCode, selectedS12.currentSeasonCode, all.currentSeasonCode, current.currentSeasonCode])
+      .toEqual(["UEHM-S11", "UEHM-S12", null, "UEHM-S12"]);
+  });
+
+  it("can show equal S11/S12 totals only when each scoped source supports that equality", () => {
+    const sources = { ...empty, applications: [{ season_id: "ueh11", status: "submitted" }, { season_id: "ueh12", status: "submitted" }] };
+    const s11 = reconcilePortfolioRows(catalog, sources, "ueh", new Date(), { mode: "selected", seasonId: "ueh11" })[0];
+    const s12 = reconcilePortfolioRows(catalog, sources, "ueh", new Date(), { mode: "selected", seasonId: "ueh12" })[0];
+    expect([s11.applications, s12.applications]).toEqual([1, 1]);
+  });
 });
