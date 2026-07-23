@@ -17,12 +17,11 @@ and staging results.
 | `programs` | 0 (HAM row exists from migration 036) | 0 | 0 | None | Conflict-safe (do nothing) |
 | `seasons` | 1 (HAM-S6) | 0 | 0 | None | Assertion in module 02 |
 | `intake_batches` | 1 (HAM-S6-B1) | 0 | 0 | None | Assertion in module 02 |
-| `people` | 106 − `shared_exact` new rows | 0 | 0 | **YES** — 0–2 shared people possible | Email-match guard; post-import aggregate |
-| `person_roles` | 0 (if table exists; role is a column on `people`) | 0 | 0 | N/A | N/A |
-| `person_season_memberships` | ≥ 108 (one per resolved person per role) | 0 | 0 | YES — shared people get new HAM-S6 membership rows | `ON CONFLICT DO NOTHING` |
-| `mentor_profiles` | ≥ 45 (nominally 49 from staging, may vary by shared-person count) | 0 | 0 | LOW — shared people may already have UEHM mentor_profiles; HAM-S6-B1 profile is separate | Batch-scoped NOT EXISTS guard |
-| `mentee_profiles` | ≥ 55 (nominally 58 from staging, may vary) | 0 | 0 | LOW | Batch-scoped NOT EXISTS guard |
-| `matches` | ≥ 45 (nominally 52 from staging; varies by manual-review resolution) | 0 | 0 | LOW — match inserts are new rows scoped to HAM-S6 season_id | Pair-scoped NOT EXISTS guard |
+| `people` | 106 − `shared_exact` new rows | 0 | 0 | **YES** — 0–2 shared people possible | Email-match guard; post-import aggregate. **Note: `people.role` is absent from production schema — role is not written here** |
+| `person_season_memberships` | ≥ 108 (one per resolved person per role) | 0 | 0 | YES — shared people get new HAM-S6 membership rows | `ON CONFLICT DO NOTHING`. `role` column is the canonical role store (`'mentor'`/`'mentee'`) |
+| `mentor_profiles` | ≥ 45 (nominally 49 from staging, may vary by shared-person count) | 0 | 0 | LOW — shared people may already have UEHM mentor_profiles; HAM-S6-B1 profile is separate | Batch-scoped NOT EXISTS guard. **Note: `linkedin_url` is absent from production schema — URL preserved in `people.data_quality_flags`** |
+| `mentee_profiles` | ≥ 55 (nominally 58 from staging, may vary) | 0 | 0 | LOW | Batch-scoped NOT EXISTS guard. **Note: `status` is absent from production schema — lifecycle status in `person_season_memberships.status`; `mentee_status` column is populated** |
+| `matches` | ≥ 45 (nominally 52 from staging; varies by manual-review resolution) | 0 | 0 | LOW — match inserts are new rows scoped to HAM-S6 season_id | Pair-scoped NOT EXISTS guard. **Note: `season_code` is absent from production schema — season linked via `season_id` FK only** |
 | `admin_users` | **NOT INCLUDED** | 0 | 0 | N/A | Separate authorization |
 | `admin_scope_access` | **NOT INCLUDED** | 0 | 0 | N/A | Separate authorization |
 | `staging_ham_s6_people_identity_map` | **NOT INCLUDED** in production | N/A | N/A | N/A | Production uses temp table only |

@@ -179,14 +179,16 @@ where r.email_norm is null
   );
 
 -- ── Step 5: Insert new people rows ───────────────────────────────────────────
+-- NOTE: people.role is absent from production schema.
+-- Role is tracked via person_season_memberships.role (see module 04).
+-- The ham_role field flows through _ham_prod_identity_map and is used by module 04.
 with inserted as (
   insert into public.people (
-    full_name, role, email_primary, phone_primary, gender,
+    full_name, email_primary, phone_primary, gender,
     source_sheets, data_quality_flags
   )
   select
     c.full_name,
-    c.ham_role,
     c.email_norm,
     c.phone_norm,
     nullif(c.gender, ''),

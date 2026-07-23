@@ -3,6 +3,11 @@
 
 Static analysis of all foundation import scripts. No execution. No database query.
 
+**Schema alignment (2026-07-23):** Production modules were updated to remove 4 columns
+absent from the production schema. See `HAM_S6_PRODUCTION_IMPORT_SCHEMA_ALIGNMENT_2026-07-23.md`
+for the full canonical mapping. The "Summary of production-incompatible elements" table
+below is updated to reflect these resolutions.
+
 ---
 
 ## Script-level summary
@@ -222,11 +227,15 @@ before any writes and will abort the transaction if HAM-S6 context is missing. S
 
 | Issue | Severity | Affected scripts | Mitigation in production modules |
 |---|---|---|---|
-| `\copy` command (psql CLI only) | BLOCKER | 02, 03, 04 | Replace with inline VALUES or `COPY FROM STDIN` mechanism |
-| Staging UUID in `matched_person_ids` | BLOCKER | 02 (reads dry-run CSV) | Re-run identity resolution against production; do not reuse staging UUIDs |
-| `staging_ham_s6_people_identity_map` dependency | BLOCKER | 03 depends on 02 | Production import must create equivalent identity map from production-resolved UUIDs |
-| No production project ref check | HIGH | All | Add explicit owner confirmation step; cannot be auto-verified in SQL |
-| Name-key fallback in match resolution | MEDIUM | 03 | Disable name-key fallback; fail closed on missing email in matches CSV |
-| No source count assertion | MEDIUM | 02, 03 | Assert expected input counts before writes |
-| `notify pgrst` | LOW | 01, 02, 03 | Harmless in production; keep for schema reload; document |
-| Staging helper table PII columns | LOW | 02 | Production identity map may not need PII if resolved in separate step |
+| `\copy` command (psql CLI only) | BLOCKER | 02, 03, 04 | **RESOLVED** — Production modules use session-scoped TEMP tables; `\copy` appears only in documentation comments |
+| Staging UUID in `matched_person_ids` | BLOCKER | 02 (reads dry-run CSV) | **RESOLVED** — Production modules use email-only identity resolution against live production `people` table; no staging UUIDs |
+| `staging_ham_s6_people_identity_map` dependency | BLOCKER | 03 depends on 02 | **RESOLVED** — Production modules use `_ham_prod_identity_map` TEMP table (session-scoped, dropped on commit) |
+| `people.role` column absent | BLOCKER | 03 | **RESOLVED (schema alignment 2026-07-23)** — `role` removed from `people` INSERT; canonical role tracked via `person_season_memberships.role` |
+| `mentor_profiles.linkedin_url` column absent | BLOCKER | 04 | **RESOLVED (schema alignment 2026-07-23)** — `linkedin_url` removed from mentor INSERT; URL preserved in `people.data_quality_flags` |
+| `mentee_profiles.status` column absent | BLOCKER | 04 | **RESOLVED (schema alignment 2026-07-23)** — `status` removed from mentee INSERT; lifecycle status in `person_season_memberships.status`; `mentee_status` column is populated |
+| `matches.season_code` column absent | BLOCKER | 05 | **RESOLVED (schema alignment 2026-07-23)** — `season_code` removed from matches INSERT; season linked via canonical `season_id` FK |
+| No production project ref check | HIGH | All | Owner must independently verify project ref in Supabase dashboard URL; preflight runbook documents this requirement |
+| Name-key fallback in match resolution | MEDIUM | 03 | **RESOLVED** — Name-key fallback is EXPLICITLY DISABLED in module 05; fails closed on missing email |
+| No source count assertion | MEDIUM | 02, 03 | **RESOLVED** — Source count assertions present in modules 03 (112 rows) and 05 (60 rows) |
+| `notify pgrst` | LOW | 01, 02, 03 | Harmless in production; keep for schema reload; documented in module headers |
+| Staging helper table PII columns | LOW | 02 | **RESOLVED** — Production identity map is a session-scoped TEMP table; no persistent PII table created |

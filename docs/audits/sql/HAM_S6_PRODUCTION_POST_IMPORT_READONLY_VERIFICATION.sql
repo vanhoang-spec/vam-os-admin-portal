@@ -18,7 +18,7 @@
 -- ============================================================
 
 select jsonb_build_object(
-  'probe',          'HAM_S6_POST_IMPORT_VERIFICATION_V1',
+  'probe',          'HAM_S6_POST_IMPORT_VERIFICATION_V2',
   'authorized_phrase', 'AUTHORIZE OWNER-RUN READ-ONLY HAM-S6 POST-IMPORT VERIFICATION',
 
   -- 1. HAM program exactly once
@@ -202,21 +202,24 @@ select jsonb_build_object(
     )
   ),
 
-  -- 13. No cross-program leakage (HAM match rows not linked to HAM-S6 season)
-  'cross_program_leakage_check', jsonb_build_object(
-    'ham_matches_with_non_ham_season', (
+  -- 13. Season membership check (canonical role tracking via person_season_memberships)
+  -- matches.season_code is absent from production schema — season is verified via season_id FK
+  'ham_s6_memberships', jsonb_build_object(
+    'mentor_membership_count', (
       select count(*)::int
-      from public.matches m
-      join public.seasons s on s.id = m.season_id
-      where m.season_code = 'HAM-S6'
-        and s.code <> 'HAM-S6'
+      from public.person_season_memberships psm
+      join public.seasons s on s.id = psm.season_id
+      where s.code = 'HAM-S6' and psm.role = 'mentor'
     ),
-    'pass', (
-      select count(*) = 0
-      from public.matches m
-      join public.seasons s on s.id = m.season_id
-      where m.season_code = 'HAM-S6' and s.code <> 'HAM-S6'
-    )
+    'mentee_membership_count', (
+      select count(*)::int
+      from public.person_season_memberships psm
+      join public.seasons s on s.id = psm.season_id
+      where s.code = 'HAM-S6' and psm.role = 'mentee'
+    ),
+    'expected_mentor_min', 45,
+    'expected_mentee_min', 55,
+    'note', 'person_season_memberships is the canonical role store; people.role is absent from production schema'
   ),
 
   -- 14. UEH baseline unchanged (compare to recorded preflight baseline)

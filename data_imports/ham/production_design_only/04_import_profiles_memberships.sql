@@ -75,6 +75,9 @@ on commit drop;
 -- NOTE: Profile guard is scoped to HAM-S6-B1 batch specifically,
 -- NOT a global person_id guard. This allows a UEHM mentor to also receive
 -- a HAM-S6-B1 mentor_profile, which is the correct behavior.
+--
+-- NOTE: mentor_profiles.linkedin_url is absent from production schema.
+-- LinkedIn URL is preserved in people.data_quality_flags as linkedin=<url>.
 insert into public.mentor_profiles (
   person_id,
   mentor_code,
@@ -87,7 +90,6 @@ insert into public.mentor_profiles (
   function_area,
   first_vam_season,
   bio_short,
-  linkedin_url,
   intake_batch_id
 )
 select
@@ -107,7 +109,6 @@ select
     'field=' || coalesce(r.field, ''),
     'expertise=' || coalesce(r.expertise, '')
   ),
-  nullif(r.linkedin, ''),
   (select intake_batch_id from _ham_prod_context)
 from _ham_prod_people_for_profiles r
 where r.ham_role = 'mentor'
@@ -118,9 +119,11 @@ where r.ham_role = 'mentor'
   );
 
 -- ── Insert mentee profiles ────────────────────────────────────────────────────
+-- NOTE: mentee_profiles.status is absent from production schema.
+-- Lifecycle status is tracked via person_season_memberships.status (inserted below).
+-- mentee_status (a separate column) exists and is populated.
 insert into public.mentee_profiles (
   person_id,
-  status,
   mentee_code,
   school_raw,
   university,
@@ -132,7 +135,6 @@ insert into public.mentee_profiles (
 )
 select
   r.person_id,
-  'active',
   'HAM-S6-MENTEE-' || lpad(row_number() over (order by r.person_id::text)::text, 3, '0'),
   nullif(r.school, ''),
   nullif(r.school, ''),
@@ -150,9 +152,12 @@ where r.ham_role = 'mentee'
   );
 
 -- ── Insert season memberships ─────────────────────────────────────────────────
-insert into public.person_season_memberships (person_id, season_id, role, status)
+-- NOTE: program_id is NOT NULL in person_season_memberships (migration 052).
+-- It is resolved from _ham_prod_context along with season_id.
+insert into public.person_season_memberships (person_id, program_id, season_id, role, status)
 select
   m.person_id,
+  (select program_id from _ham_prod_context),
   (select season_id from _ham_prod_context),
   lower(m.ham_role),
   'active'

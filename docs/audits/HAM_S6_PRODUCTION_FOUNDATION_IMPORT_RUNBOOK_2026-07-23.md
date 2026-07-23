@@ -60,7 +60,7 @@ AUTHORIZE OWNER-RUN READ-ONLY HAM-S6 PRODUCTION IMPORT PREFLIGHT
 4. Run once
 5. Save the JSONB result with a timestamp
 
-**Gate A passes when:** `summary_pass = true` in the probe output and all required
+**Gate A passes when:** `summary_pass = true` in the probe output (V2 probe) and all required
 gates listed in the preflight runbook pass.
 
 **On any gate failure:** do not proceed. Investigate the specific failing gate. Do not
@@ -229,7 +229,7 @@ audit trail.
 AUTHORIZE OWNER-RUN READ-ONLY HAM-S6 POST-IMPORT VERIFICATION
 ```
 
-**Probe file:**
+**Probe file (V2):**
 
 ```
 docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql
