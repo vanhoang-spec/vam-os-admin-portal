@@ -119,9 +119,9 @@ where r.ham_role = 'mentor'
   );
 
 -- ── Insert mentee profiles ────────────────────────────────────────────────────
--- NOTE: mentee_profiles.status is absent from production schema.
--- Lifecycle status is tracked via person_season_memberships.status (inserted below).
--- mentee_status (a separate column) exists and is populated.
+-- NOTE: mentee_profiles.status and mentee_profiles.mentee_status are both absent
+-- from production schema (confirmed by preflight V2, 2026-07-23).
+-- Lifecycle status is tracked exclusively via person_season_memberships.status (inserted below).
 insert into public.mentee_profiles (
   person_id,
   mentee_code,
@@ -130,7 +130,6 @@ insert into public.mentee_profiles (
   career_interest,
   target_industry,
   target_function,
-  mentee_status,
   intake_batch_id
 )
 select
@@ -141,7 +140,6 @@ select
   nullif(coalesce(r.field, r.expertise), ''),
   nullif(r.field, ''),
   nullif(r.expertise, ''),
-  'active',
   (select intake_batch_id from _ham_prod_context)
 from _ham_prod_people_for_profiles r
 where r.ham_role = 'mentee'

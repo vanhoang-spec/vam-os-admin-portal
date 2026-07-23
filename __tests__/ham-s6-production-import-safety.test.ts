@@ -375,12 +375,14 @@ describe("HAM-S6 production import safety", () => {
     expect(menteeInsert).not.toMatch(/\bperson_id\s*,\s*status\b/i);
   });
 
-  it("module 04 mentee INSERT retains mentee_status (existing canonical column)", () => {
+  it("module 04 mentee INSERT does not include mentee_status (absent from production)", () => {
     const body = modules["04_import_profiles_memberships.sql"];
-    const menteeInsert = body.match(
+    const execBody = executable(body);
+    const menteeInsert = execBody.match(
       /insert\s+into\s+public\s*\.\s*mentee_profiles\s*\([^)]+\)/i
     )?.[0] ?? "";
-    expect(menteeInsert).toMatch(/\bmentee_status\b/i);
+    expect(menteeInsert).toBeTruthy();
+    expect(menteeInsert).not.toMatch(/\bmentee_status\b/i);
   });
 
   it("module 04 person_season_memberships INSERT includes program_id", () => {
@@ -414,37 +416,39 @@ describe("HAM-S6 production import safety", () => {
     expect(matchInsert).toMatch(/\bseason_id\b/i);
   });
 
-  it("preflight probe is version V2 (canonical schema checks)", () => {
+  it("preflight probe is version V3 (final schema alignment)", () => {
     const preflight = readFileSync(
       "docs/audits/sql/HAM_S6_PRODUCTION_IMPORT_READONLY_PREFLIGHT.sql",
       "utf8"
     );
-    expect(preflight).toContain("HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V2");
-    // V2 must not check the 4 legacy columns
+    expect(preflight).toContain("HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V3");
+    // V3 must not check any legacy or absent column
     const prefExec = executable(preflight);
-    // people.role is not in the values list (only in comments)
     expect(prefExec).not.toMatch(/'people','people','role'/i);
-    // linkedin_url is not in the values list
     expect(prefExec).not.toMatch(/'mentor_profiles\.linkedin_url'/i);
+    // mentee_profiles.mentee_status removed in V3 — must not be in values list
+    expect(prefExec).not.toMatch(/'mentee_profiles\.mentee_status'/i);
+    expect(prefExec).not.toMatch(/'mentee_profiles','mentee_profiles','mentee_status'/i);
   });
 
-  it("preflight probe V2 checks person_season_memberships.program_id", () => {
+  it("preflight probe V3 checks person_season_memberships.program_id and status", () => {
     const preflight = readFileSync(
       "docs/audits/sql/HAM_S6_PRODUCTION_IMPORT_READONLY_PREFLIGHT.sql",
       "utf8"
     );
     expect(preflight).toContain("person_season_memberships.program_id");
+    expect(preflight).toContain("person_season_memberships.status");
   });
 
-  it("post-import verification probe is version V2 and does not reference season_code", () => {
+  it("post-import verification probe is version V3 and does not reference season_code or mentee_status", () => {
     const verification = readFileSync(
       "docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql",
       "utf8"
     );
-    expect(verification).toContain("HAM_S6_POST_IMPORT_VERIFICATION_V2");
-    // season_code must not appear in executable SQL of the probe
+    expect(verification).toContain("HAM_S6_POST_IMPORT_VERIFICATION_V3");
     const verExec = executable(verification);
     expect(verExec).not.toMatch(/\bseason_code\b/i);
+    expect(verExec).not.toMatch(/\bmentee_status\b/i);
   });
 
   it("post-import verification probe checks person_season_memberships for HAM-S6 roles", () => {
@@ -454,5 +458,53 @@ describe("HAM-S6 production import safety", () => {
     );
     expect(verification).toContain("person_season_memberships");
     expect(verification).toContain("HAM-S6");
+  });
+
+  // ── Final schema alignment assertions (2026-07-23) ──────────────────────────
+  // Assertions verifying mentee_profiles.mentee_status is fully removed
+
+  it("no executable reference to mentee_profiles.mentee_status in any production module", () => {
+    // mentee_status is absent from production schema — must not appear in any INSERT
+    expect(allExec).not.toMatch(/\bmentee_status\b/i);
+  });
+
+  it("module 04 person_season_memberships INSERT includes status", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    const execBody = executable(body);
+    const membershipInsert = execBody.match(
+      /insert\s+into\s+public\s*\.\s*person_season_memberships\s*\([^)]+\)/i
+    )?.[0] ?? "";
+    expect(membershipInsert).toBeTruthy();
+    // status is the canonical mentee lifecycle field
+    expect(membershipInsert).toMatch(/\bstatus\b/i);
+  });
+
+  it("schema alignment document documents mentee_profiles.mentee_status as absent", () => {
+    const doc = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_SCHEMA_ALIGNMENT_2026-07-23.md",
+      "utf8"
+    );
+    expect(doc).toContain("mentee_profiles.mentee_status");
+    expect(doc).toContain("ABSENT from production");
+  });
+
+  it("field mapping document classifies mentee_profiles.mentee_status as UNSUPPORTED", () => {
+    const doc = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_FIELD_MAPPING_2026-07-23.md",
+      "utf8"
+    );
+    expect(doc).toContain("mentee_profiles.mentee_status");
+    expect(doc).toContain("UNSUPPORTED");
+  });
+
+  it("post-import verification probe verifies mentee membership lifecycle via person_season_memberships", () => {
+    const verification = readFileSync(
+      "docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql",
+      "utf8"
+    );
+    // Lifecycle status checked through memberships, not through mentee_profiles
+    expect(verification).toContain("ham_s6_memberships");
+    expect(verification).toContain("psm.role = 'mentor'");
+    expect(verification).toContain("psm.role = 'mentee'");
   });
 });

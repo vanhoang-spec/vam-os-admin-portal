@@ -14,15 +14,19 @@
 --   * No PII: no names, emails, phones, student IDs, or Auth IDs.
 --   * Aggregate counts and boolean flags only.
 --
--- Version: V2 (schema alignment — 2026-07-23)
--- Changes from V1:
---   * Removed checks for legacy columns absent from production schema:
---       people.role, mentor_profiles.linkedin_url,
+-- Version: V3 (final schema alignment — 2026-07-23)
+-- Changes from V2:
+--   * Removed check for mentee_profiles.mentee_status (confirmed absent from production
+--     by V2 preflight execution 2026-07-23T03:23:06.076Z)
+--   * No status column exists on mentee_profiles in production; lifecycle status is
+--     exclusively in person_season_memberships.status (PRESENT and verified)
+--   * Total column checks reduced from 33 to 32 (all present in production)
+--   * Probe name updated to HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V3
+-- Changes from V1→V2 (retained):
+--   * Removed checks for legacy columns: people.role, mentor_profiles.linkedin_url,
 --       mentee_profiles.status, matches.season_code
 --   * Removed enum checks for people.role (column absent)
 --   * Added check for person_season_memberships.program_id (NOT NULL, required)
---   * Gate 7 now checks person_season_memberships.program_id and matches.status only
---   * Probe name updated to HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V2
 -- ============================================================
 
 with
@@ -91,10 +95,11 @@ required_tables as (
   ) sub
 ),
 
--- 7. Required columns — canonical production schema (V2)
--- Removed: people.role, mentor_profiles.linkedin_url,
---          mentee_profiles.status, matches.season_code
--- Added:   person_season_memberships.program_id
+-- 7. Required columns — canonical production schema (V3)
+-- Removed: people.role, mentor_profiles.linkedin_url, mentee_profiles.status,
+--          matches.season_code (V1→V2), mentee_profiles.mentee_status (V2→V3)
+-- Added:   person_season_memberships.program_id (V1→V2)
+-- All 32 remaining columns confirmed present in production (preflight V2 result)
 required_columns as (
   select
     bool_and(col_exists) as all_required_columns_exist,
@@ -131,7 +136,7 @@ required_columns as (
       ('mentee_profiles.person_id', 'mentee_profiles', 'person_id'),
       ('mentee_profiles.intake_batch_id', 'mentee_profiles', 'intake_batch_id'),
       ('mentee_profiles.mentee_code', 'mentee_profiles', 'mentee_code'),
-      ('mentee_profiles.mentee_status', 'mentee_profiles', 'mentee_status'),
+      -- mentee_profiles.mentee_status removed in V3: absent from production (confirmed V2 preflight)
       ('matches.season_id', 'matches', 'season_id'),
       ('matches.mentor_person_id', 'matches', 'mentor_person_id'),
       ('matches.mentee_person_id', 'matches', 'mentee_person_id'),
@@ -343,9 +348,9 @@ seasons_program_id_fk as (
 )
 
 select jsonb_build_object(
-  'probe',              'HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V2',
+  'probe',              'HAM_S6_PRODUCTION_IMPORT_PREFLIGHT_V3',
   'authorized_phrase',  'AUTHORIZE OWNER-RUN READ-ONLY HAM-S6 PRODUCTION IMPORT PREFLIGHT',
-  'schema_alignment',   'V2 — canonical schema; legacy columns removed from column checks',
+  'schema_alignment',   'V3 — final schema alignment; mentee_profiles.mentee_status removed (absent from production)',
   'owner_must_verify_project_ref',  (select owner_must_verify_project_ref from target_identity),
   'db_name',            (select db_name from target_identity),
 
@@ -382,7 +387,7 @@ select jsonb_build_object(
   'gate_6_required_columns', jsonb_build_object(
     'all_required_columns_exist', (select all_required_columns_exist from required_columns),
     'column_existence_map',       (select column_existence_map from required_columns),
-    'note', 'V2: checks canonical columns only; legacy columns (people.role, mentor_profiles.linkedin_url, mentee_profiles.status, matches.season_code) removed'
+    'note', 'V3: checks canonical columns only; removed legacy columns (people.role, mentor_profiles.linkedin_url, mentee_profiles.status, matches.season_code) and absent column (mentee_profiles.mentee_status)'
   ),
 
   'gate_7_required_enums', jsonb_build_object(
