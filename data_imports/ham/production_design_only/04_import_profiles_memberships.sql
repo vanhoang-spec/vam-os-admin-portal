@@ -41,8 +41,7 @@ from public.programs p
 join public.seasons s on s.program_id = p.id and s.code = 'HAM-S6'
 join public.intake_batches ib on ib.season_id = s.id and ib.code = 'HAM-S6-B1'
 where p.code = 'HAM'
-limit 1
-on commit drop;
+limit 1;
 
 do $$
 begin

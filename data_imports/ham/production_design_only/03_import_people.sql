@@ -106,7 +106,7 @@ create temp table _ham_prod_identity_map (
   action           text not null,
   reason           text,
   created_at       timestamptz not null default now()
-) on commit drop;
+);
 
 create temp table _ham_prod_import_skips (
   source_row    integer,
@@ -130,8 +130,7 @@ select
   gender,
   school, company, title, expertise, field, linkedin, vam_profile_link
 from _ham_prod_people_source
-where upper(coalesce(import_ready, '')) = 'TRUE'
-on commit drop;
+where upper(coalesce(import_ready, '')) = 'TRUE';
 
 -- ── Step 2: Email-match resolution against PRODUCTION people table ────────────
 -- Finds source rows whose email already exists in production (reuse existing person).

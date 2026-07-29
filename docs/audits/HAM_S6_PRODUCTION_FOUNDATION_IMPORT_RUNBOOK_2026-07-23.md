@@ -172,39 +172,88 @@ AUTHORIZE PRODUCTION HAM-S6 FOUNDATION IMPORT
 **Execution environment requirements:**
 - `psql` CLI connected to production: `postgresql://[connection string for qkkroesfiazsejkzflcd]`
 - Source CSV files available on the execution host:
-  - `ham_people_clean.csv` (132 rows)
-  - `ham_matches_clean.csv` (60 rows)
-- Session must remain open across all modules (TEMP tables are session-scoped)
+  - `ham_people_clean.csv` (132 rows including header)
+  - `ham_matches_clean.csv` (60 import-ready rows)
+- **Single session required:** ALL steps E1–E8 must run in the same uninterrupted psql session.
+  Temp tables (`_ham_prod_identity_map`, `_ham_prod_ready`, `_ham_prod_context`) are
+  session-scoped and are lost if the session ends between modules. If the session breaks
+  after any module commits, use module 07 to roll back committed data before restarting.
 - Do not run modules in parallel — run sequentially in order
 
 ### Pre-execution environment check
 
 Before running any module, confirm:
 
-```bash
-# In psql, run this read-only check:
+```sql
+-- In psql, run this read-only check:
 select current_database(), inet_server_addr(), version();
 ```
 
-Confirm the response matches the production Supabase project. If it does not, stop
-immediately — do not proceed.
+Confirm the response matches the production Supabase project (`qkkroesfiazsejkzflcd`). If
+it does not, stop immediately — do not proceed.
+
+### Source CSV pre-load: people (before module 03)
+
+Run the following in the same psql session, outside any transaction, before Step E4:
+
+```sql
+create temp table _ham_prod_people_source (
+  source_file text, source_sheet text, row_num text, stt text,
+  full_name text, role text, program text, season text,
+  email text, phone text, gender text, dob text,
+  school text, company text, title text, expertise text, field text,
+  fb_profile text, linkedin text, vam_profile_link text,
+  mentee_names_raw text, mentee_count_raw text,
+  issue_flag text, issue_note text, import_ready text
+);
+```
+
+```
+\copy _ham_prod_people_source from 'data_imports/ham/ham_people_clean.csv' with (format csv, header true, encoding 'UTF8')
+```
+
+Expected: 132 rows loaded. Confirm with `select count(*) from _ham_prod_people_source;`
+
+### Source CSV pre-load: matches (before module 05)
+
+Run the following in the same psql session, outside any transaction, before Step E7:
+
+```sql
+create temp table _ham_prod_matches_source (
+  source_file text, source_sheet text, row_num text, program text, season text,
+  mentee_name text, mentee_email text, mentee_phone text, mentee_school text,
+  mentor_name text, mentor_email text, direction text,
+  match_status text, issue_flag text, issue_note text, import_ready text
+);
+```
+
+```
+\copy _ham_prod_matches_source from 'data_imports/ham/ham_matches_clean.csv' with (format csv, header true, encoding 'UTF8')
+```
+
+Expected: 60 rows loaded. Confirm with `select count(*) from _ham_prod_matches_source;`
 
 ### Module execution sequence
 
 All modules are in `data_imports/ham/production_design_only/`. Before executing any
-module, the production guard DO $ block must be removed under the existing authorization
-(Gate D). Each module still contains `-- PRODUCTION DESIGN ONLY` header comments for
-audit trail.
+module, the production guard `DO $$ begin raise exception ... end; $$;` block must be
+removed under the existing authorization (Gate D). Each module still contains
+`-- PRODUCTION DESIGN ONLY` header comments for audit trail.
+
+**Updated 2026-07-29:** Expected counts updated from ranges to exact values based on
+production backup cross-reference (0 email collisions confirmed). Temp table names corrected
+(`_ham_prod_people_source` and `_ham_prod_matches_source`). `ON COMMIT DROP` removed from
+cross-module temp tables (`_ham_prod_identity_map`, `_ham_prod_ready`, `_ham_prod_context`).
 
 | Step | Module | Action | Expected result |
 |---|---|---|---|
 | E1 | `01_preflight_assertions.sql` | Run — asserts pre-conditions | No exception raised; UEH baseline recorded |
-| E2 | Pre-load people CSV | `\copy _ham_people_staging FROM 'ham_people_clean.csv' CSV HEADER` | 132 rows loaded |
+| E2 | Pre-load people CSV | See "Source CSV pre-load: people" above | 132 rows loaded |
 | E3 | `02_seed_program_season_batch.sql` | Run | HAM-S6 + HAM-S6-B1 inserted; post-insert assertion passes |
-| E4 | `03_import_people.sql` | Run | ≥ 104 people processed; identity map populated; skips logged |
-| E5 | Pre-load matches CSV | `\copy _ham_matches_staging FROM 'ham_matches_clean.csv' CSV HEADER` | 60 rows loaded |
-| E6 | `04_import_profiles_memberships.sql` | Run | ≥ 45 mentor profiles, ≥ 55 mentee profiles, memberships inserted |
-| E7 | `05_import_matches.sql` | Run | ≥ 45 matches inserted |
+| E4 | `03_import_people.sql` | Run | **Exactly 112** new people created; identity map populated; 0 skips |
+| E5 | Pre-load matches CSV | See "Source CSV pre-load: matches" above | 60 rows loaded |
+| E6 | `04_import_profiles_memberships.sql` | Run | **Exactly 52** mentor profiles, **60** mentee profiles, **112** memberships |
+| E7 | `05_import_matches.sql` | Run | **Exactly 58** matches inserted; **2** skipped (unresolvable mentor) |
 | E8 | `06_post_import_assertions.sql` | Run | All assertions pass; JSONB summary returned |
 
 **On any module raising an exception:**
@@ -251,10 +300,21 @@ docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql
 | `ham_s6_b1_batch.pass` | `true` |
 | `linkage_valid.ham_program_to_season_linked` | `true` |
 | `linkage_valid.season_to_batch_linked` | `true` |
-| `active_matches.count` | 45–52 |
+| `people_with_ham_provenance.count` | **112** |
+| `people_with_ham_provenance.pass` | `true` |
+| `mentor_profiles.count` | **52** |
+| `mentor_profiles.pass` | `true` |
+| `mentee_profiles.count` | **60** |
+| `mentee_profiles.pass` | `true` |
+| `ham_s6_memberships_exact.count` | **112** |
+| `ham_s6_memberships_exact.pass` | `true` |
+| `active_matches.count` | **58** |
+| `active_matches.pass` | `true` |
 | `null_fk_check.pass` | `true` |
 | `duplicate_match_check.pass` | `true` |
 | `summary_pass` | `true` |
+
+*(Updated 2026-07-29: all counts are now exact fail-closed values, not ranges.)*
 
 **UEH baseline check (compare to Gate A baseline):**
 
@@ -280,11 +340,14 @@ No authorization phrase. Gate G is an owner decision checkpoint using the applic
 1. Log in to the production application as a super-admin
 2. Navigate to the HAM program view — confirm HAM-S6 appears in the season list
 3. Navigate to the HAM-S6 season — confirm the expected counts appear:
-   - Mentors: 45–52 visible
-   - Mentees: 55–60 visible
-   - Matches: 45–52 active
+   - Mentors: **52** visible
+   - Mentees: **60** visible
+   - Active matches: **58**
+   - Season memberships: **112** total (52 mentor + 60 mentee)
 4. Confirm no UEHM-S11 or UEHM-S12 data has changed in the portal
 5. Confirm no console errors or broken routes related to HAM-S6
+
+*(Updated 2026-07-29: counts are now exact, not ranges.)*
 
 **Gate G passes when:** the owner has visually confirmed HAM-S6 data is accessible and
 correct in the production portal.
@@ -361,13 +424,15 @@ GATE D — Authorization record
 
 GATE E — Execution
   E1 completed:         ________________
-  E2 rows loaded:       ________________
+  E2 rows loaded:       ________________ (expected 132)
   E3 completed:         ________________
-  E4 people count:      ________________ (min 104)
-  E5 rows loaded:       ________________
-  E6 mentor profiles:   ________________ (min 45)
-  E6 mentee profiles:   ________________ (min 55)
-  E7 matches:           ________________ (min 45)
+  E4 people created:    ________________ (expected exactly 112)
+  E5 rows loaded:       ________________ (expected 60)
+  E6 mentor profiles:   ________________ (expected exactly 52)
+  E6 mentee profiles:   ________________ (expected exactly 60)
+  E6 memberships:       ________________ (expected exactly 112)
+  E7 matches inserted:  ________________ (expected exactly 58)
+  E7 matches skipped:   ________________ (expected exactly 2)
   E8 summary_pass:      ________________
   Completed:            ________________
 
