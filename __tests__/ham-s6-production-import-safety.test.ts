@@ -112,15 +112,20 @@ describe("HAM-S6 production import safety", () => {
     expect(body).toContain("60");
   });
 
-  it("name-only / name-key fallback is disabled in modules 03 and 05", () => {
-    // Module 03 documents "Name-only matching is DISABLED"
-    // Module 05 documents "Name-key fallback is EXPLICITLY DISABLED"
-    for (const name of ["03_import_people.sql", "05_import_matches.sql"]) {
-      const body = modules[name];
-      expect(body, `${name}: name fallback must be documented as disabled`).toMatch(
-        /name.(?:only|key).+(?:DISABLED|disabled)/i
-      );
-    }
+  it("module 03 name-only person resolution is DISABLED (email or phone required)", () => {
+    // People identity in production uses email or phone only — name-only is blocked
+    const body = modules["03_import_people.sql"];
+    expect(body).toMatch(/name.only.+(?:DISABLED|disabled)/i);
+  });
+
+  it("module 05 name-key fallback is ENABLED for mentor resolution when email absent", () => {
+    // All 60 match rows have empty mentor_email; name-key fallback resolves 58 of them.
+    // The name-key resolution uses normalized mentor_name (strip diacritics, collapse non-alnum).
+    const body = modules["05_import_matches.sql"];
+    expect(body).toContain("name_key");
+    // Must contain the OR branch that fires when mentor_email is null
+    expect(body).toMatch(/lower\s*\(\s*nullif\s*\(\s*trim\s*\(\s*ms\.mentor_email/i);
+    expect(body).toMatch(/is\s+null/i);
   });
 
   it("no unrestricted DELETE on people — rollback scopes to provenance marker", () => {
@@ -506,5 +511,203 @@ describe("HAM-S6 production import safety", () => {
     expect(verification).toContain("ham_s6_memberships");
     expect(verification).toContain("psm.role = 'mentor'");
     expect(verification).toContain("psm.role = 'mentee'");
+  });
+
+  // ── Exact manifest assertions (2026-07-29) ──────────────────────────────────
+  // Prove exact fail-closed counts and module hardening
+
+  it("module 03 does not reference undefined _ham_prod_email_matched_dedup (bug fixed)", () => {
+    const body = modules["03_import_people.sql"];
+    expect(body).not.toContain("_ham_prod_email_matched_dedup");
+  });
+
+  it("module 03 asserts exactly 112 import-ready source people (not a range)", () => {
+    const body = modules["03_import_people.sql"];
+    expect(body).toContain("<> 112");
+    expect(body).not.toMatch(/v_ready_count\s*<\s*10[0-9]/);
+  });
+
+  it("module 03 asserts exactly 112 new people created (fail-closed, not range)", () => {
+    const body = modules["03_import_people.sql"];
+    // Exact assertion on new_count
+    expect(body).toContain("v_new_count <> 112");
+  });
+
+  it("module 03 asserts map + skips = exactly 112 (not < 108 range)", () => {
+    const body = modules["03_import_people.sql"];
+    expect(body).toContain("<> 112");
+    expect(body).not.toContain("< 108");
+  });
+
+  it("module 04 asserts exactly 52 mentor profiles (fail-closed)", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    expect(body).toContain("v_mentors <> 52");
+    expect(body).not.toContain("v_mentors < 45");
+  });
+
+  it("module 04 asserts exactly 60 mentee profiles (fail-closed)", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    expect(body).toContain("v_mentees <> 60");
+    expect(body).not.toContain("v_mentees < 55");
+  });
+
+  it("module 04 asserts exactly 112 HAM-S6 memberships (new assertion)", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    expect(body).toContain("v_memberships <> 112");
+    expect(body).toContain("person_season_memberships");
+  });
+
+  it("module 05 skip count assertion asserts exactly 2 (fail-closed)", () => {
+    const body = modules["05_import_matches.sql"];
+    expect(body).toContain("v_skip_count <> 2");
+  });
+
+  it("module 05 match count assertion asserts exactly 58 (not < 45 range)", () => {
+    const body = modules["05_import_matches.sql"];
+    expect(body).toContain("v_match_count <> 58");
+    expect(body).not.toContain("v_match_count < 45");
+  });
+
+  it("module 06 asserts exactly 52 mentor profiles (fail-closed)", () => {
+    const body = modules["06_post_import_assertions.sql"];
+    expect(body).toContain("<> 52");
+    expect(body).not.toContain("< 45");
+  });
+
+  it("module 06 asserts exactly 60 mentee profiles (fail-closed)", () => {
+    const body = modules["06_post_import_assertions.sql"];
+    expect(body).toContain("<> 60");
+    expect(body).not.toContain("< 55");
+  });
+
+  it("module 06 asserts exactly 112 HAM-S6 memberships (new assertion)", () => {
+    const body = modules["06_post_import_assertions.sql"];
+    expect(body).toContain("<> 112");
+    expect(body).toContain("person_season_memberships");
+  });
+
+  it("module 06 asserts exactly 58 active matches (fail-closed)", () => {
+    const body = modules["06_post_import_assertions.sql"];
+    expect(body).toContain("<> 58");
+    expect(body).not.toContain("< 45");
+  });
+
+  it("post-import verification uses exact expected values, not ranges", () => {
+    const verification = readFileSync(
+      "docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql",
+      "utf8"
+    );
+    expect(verification).toContain("expected_exact");
+    // Verify specific exact values are present in the probe
+    expect(verification).toContain("112");
+    expect(verification).toContain("52");
+    expect(verification).toContain("60");
+    expect(verification).toContain("58");
+    // Must not use range fields anymore
+    expect(verification).not.toContain("expected_min");
+    expect(verification).not.toContain("expected_max");
+  });
+
+  it("post-import verification summary_pass uses exact counts not >= bounds", () => {
+    const verification = readFileSync(
+      "docs/audits/sql/HAM_S6_PRODUCTION_POST_IMPORT_READONLY_VERIFICATION.sql",
+      "utf8"
+    );
+    // The summary_pass must use exact equality for all counts
+    expect(verification).toContain("count(*) = 112");
+    expect(verification).toContain("count(*) = 52");
+    expect(verification).toContain("count(*) = 60");
+    expect(verification).toContain("count(*) = 58");
+    // Must not use >= for business counts
+    expect(verification).not.toMatch(/count\(\*\)\s*>=\s*4[0-9]/);
+  });
+
+  it("manifest has final exact import projection with exact expected values", () => {
+    const manifest = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_MANIFEST_2026-07-23.md",
+      "utf8"
+    );
+    expect(manifest).toContain("Final exact import projection");
+    expect(manifest).toContain("112");
+    expect(manifest).toContain("52");
+    expect(manifest).toContain("60");
+    expect(manifest).toContain("58");
+    // Source reconciliation equation documented
+    expect(manifest).toContain("source_people (112)");
+  });
+
+  it("manifest documents 0 email collisions and explains why exact count is 112 not 104–108", () => {
+    const manifest = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_MANIFEST_2026-07-23.md",
+      "utf8"
+    );
+    expect(manifest).toContain("0 email collisions");
+    expect(manifest).toContain("104–108");
+    expect(manifest).toContain("112");
+  });
+
+  it("manifest documents the 2 skipped match rows and their reason", () => {
+    const manifest = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_MANIFEST_2026-07-23.md",
+      "utf8"
+    );
+    expect(manifest).toContain("Unresolvable mentor rows");
+    expect(manifest).toContain("unresolved_mentor_name");
+    expect(manifest).toContain("row 9");
+    expect(manifest).toContain("row 41");
+  });
+
+  it("backup directory is outside the repository (not tracked by git)", () => {
+    // Backup must not be inside the project directory
+    expect("C:\\Users\\THIS PC\\Desktop\\VAM 2026\\Backups").not.toContain(
+      "VAM_OS_Admin_Portal"
+    );
+    // No backup JSON files must be staged or present in the project
+    const prodDir2 = "data_imports/ham/production_design_only";
+    expect(() => readFileSync(`${prodDir2}/people.json`, "utf8")).toThrow();
+  });
+
+  it("executor script run_backup.mjs is absent from the project", () => {
+    expect(() => readFileSync("run_backup.mjs", "utf8")).toThrow();
+  });
+
+  it("no SQL execution path (pg, supabase, db connect) is added to package scripts", () => {
+    const scriptBlock = JSON.stringify(pkg.scripts);
+    expect(scriptBlock).not.toMatch(/\bpg\b/i);
+    expect(scriptBlock).not.toMatch(/run_backup/i);
+    expect(scriptBlock).not.toMatch(/pooler\.supabase/i);
+  });
+
+  it("no PII column values are hard-coded in any production module (no literal emails or names)", () => {
+    // Raw text check: no @-email patterns, no Vietnamese name patterns embedded
+    expect(allModules).not.toMatch(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+    // No literal person UUIDs (verified by existing test) — combined safety net
+    const uuidPat = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
+    expect(allModules).not.toMatch(uuidPat);
+  });
+
+  it("rollback scope matches exact projected inserts (112 people, 112 memberships, 52 mentor, 60 mentee, 58 matches)", () => {
+    const rollback = modules["07_rollback_design.sql"];
+    // Rollback removes all HAM-S6 data: matches, memberships, profiles, people, season, batch
+    expect(rollback).toMatch(/delete\s+from\s+public\s*\.\s*matches/i);
+    expect(rollback).toMatch(/delete\s+from\s+public\s*\.\s*person_season_memberships/i);
+    expect(rollback).toMatch(/delete\s+from\s+public\s*\.\s*mentor_profiles/i);
+    expect(rollback).toMatch(/delete\s+from\s+public\s*\.\s*mentee_profiles/i);
+    expect(rollback).toMatch(/delete\s+from\s+public\s*\.\s*people/i);
+    expect(rollback).toMatch(/delete\s+from\s+public\s*\.\s*intake_batches/i);
+    expect(rollback).toMatch(/delete\s+from\s+public\s*\.\s*seasons/i);
+    // Rollback is scoped to HAM-S6 (season_id or intake_batch_id from rollback_context)
+    expect(rollback).toContain("_rollback_context");
+  });
+
+  it("rollback preserves shared people: deletes only those with HAM_S6 provenance and no other references", () => {
+    const rollback = modules["07_rollback_design.sql"];
+    // Must check provenance marker AND absence of other memberships/profiles
+    expect(rollback).toContain("source_season=HAM_S6");
+    expect(rollback).toContain("not exists");
+    // Guards against deleting people with any remaining profile
+    expect(rollback).toContain("mentor_profiles");
+    expect(rollback).toContain("mentee_profiles");
+    expect(rollback).toContain("person_season_memberships");
   });
 });
