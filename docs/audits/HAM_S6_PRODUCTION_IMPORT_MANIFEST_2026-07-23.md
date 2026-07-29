@@ -127,3 +127,99 @@ in `people.email_primary` (existing rows) or newly inserted `people` rows.
 | Active matches | 52 | 45–52 |
 | Skipped people | 4 | 4 (same manual-review cases) |
 | Season memberships | Not tracked in staging | ≥ 104 |
+
+---
+
+## Final exact import projection
+
+**Added 2026-07-29.** Derived from offline source analysis (`ham_people_clean.csv`,
+`ham_matches_clean.csv`) cross-referenced against the production backup
+(`VAM_OS_PRODUCTION_PRE_HAM_S6_20260729_040703_UTC`). No production connection used.
+
+### Source reconciliation
+
+| Category | Count | Explanation |
+|---|---|---|
+| Total source people | 112 | 52 mentors + 60 mentees |
+| Mentor-only | 52 | import_ready=TRUE, role=mentor |
+| Mentee-only | 60 | import_ready=TRUE, role=mentee |
+| Dual-role | 0 | no person appears in both mentor and mentee rows |
+| Excluded (issue_flag or not import_ready) | 0 | all 112 rows are import_ready=TRUE, issue_flag=FALSE |
+| Missing email | 0 | all 112 rows have unique emails |
+| Duplicate source emails | 0 | all 112 emails unique in source |
+| Email collisions with production | 0 | confirmed by backup cross-reference (1335 prod people, 0 overlap) |
+
+Reconciliation equation satisfied:
+```
+source_people (112) = mentor_only (52) + mentee_only (60) + dual_role (0) + excluded (0)
+```
+
+### Match source reconciliation
+
+| Category | Count | Explanation |
+|---|---|---|
+| Total match rows | 60 | all import_ready=TRUE, no issue flags |
+| mentor_email present | 0 | mentor_email is absent from all 60 match rows in source CSV |
+| mentee_email present | 60 | all mentee endpoints resolve by email |
+| Mentor resolvable by name-key | 58 | 52 unique mentor names; 58 of 60 match rows name-key resolves |
+| Unresolvable mentor rows | 2 | both reference the same mentor name not present in people source |
+| Duplicate mentor+mentee pairs | 0 | no pair appears twice |
+| Valid match inserts | **58** | 60 − 2 unresolvable = 58 |
+
+**Note on the 2 skipped match rows:** Both rows (source row 9 and row 41) reference the
+same mentor name — one mentor with 2 assigned mentees. This name does not appear in
+`ham_people_clean.csv` (even after Vietnamese diacritic normalization). These 2 rows
+cannot be imported without source data correction. They are categorized as
+`unresolved_mentor_name` in the production match skip log.
+
+### Exact expected inserts
+
+| Object | Exact expected inserts | Exact expected updates | Exact expected deletes | Assertion |
+|---|---|---|---|---|
+| `programs` | 0 | 0 | 0 | HAM exists; module 02 inserts only HAM-S6 |
+| `seasons` | 1 (HAM-S6) | 0 | 0 | Exact — preflight confirmed HAM-S6 absent |
+| `intake_batches` | 1 (HAM-S6-B1) | 0 | 0 | Exact — preflight confirmed HAM-S6-B1 absent |
+| `people` | **112** | 0 | 0 | 0 email collisions with production backup; exact assertion in module 03 |
+| `person_season_memberships` | **112** | 0 | 0 | 0 pre-existing rows; ON CONFLICT DO NOTHING; 52 mentor + 60 mentee |
+| `mentor_profiles` | **52** | 0 | 0 | Batch-scoped guard; 0 pre-existing HAM-S6-B1 profiles |
+| `mentee_profiles` | **60** | 0 | 0 | Batch-scoped guard; 0 pre-existing HAM-S6-B1 profiles |
+| `matches` | **58** | 0 | 0 | Name-key resolution; 2 skipped (unresolvable mentor); 0 dup pairs |
+
+All assertions are fail-closed (`<>` exact value). Any deviation aborts and rolls back.
+
+### Module assertion status (after Phase 6 fixes)
+
+| Module | Assertion type | Value | Status |
+|---|---|---|---|
+| 03 — people | Exact: map+skips=112 AND new_count=112 | 112 | Fixed |
+| 04 — mentor profiles | Exact: count=52 | 52 | Fixed |
+| 04 — mentee profiles | Exact: count=60 | 60 | Fixed |
+| 04 — memberships | Exact: count=112 | 112 | Fixed (added) |
+| 05 — matches | Exact: count=58 | 58 | Fixed (name-key fallback added) |
+| 05 — skips | Exact: count=2 | 2 | Fixed (added) |
+| 06 — mentor profiles | Exact: count=52 | 52 | Fixed |
+| 06 — mentee profiles | Exact: count=60 | 60 | Fixed |
+| 06 — memberships | Exact: count=112 | 112 | Fixed (added) |
+| 06 — active matches | Exact: count=58 | 58 | Fixed |
+
+### Why 112 people and not 104–108
+
+The preflight V3 report estimated 104–108 new people because it could not verify email
+collisions offline. The production backup (`people.json`, 1335 rows) was cross-referenced
+offline against all 112 HAM-S6 source emails. The intersection is **0**. No HAM-S6 source
+email matches any existing production person's `email_primary`. Therefore the exact count
+is 112 — all new inserts, no reused people.
+
+### Fail-closed thresholds for rollback trigger
+
+If the post-import verification (`HAM_S6_POST_IMPORT_VERIFICATION_V3`) returns any of the
+following, the owner must execute module 07 (rollback) before any further action:
+
+- `people_with_ham_provenance.pass` = false (count ≠ 112)
+- `mentor_profiles.pass` = false (count ≠ 52)
+- `mentee_profiles.pass` = false (count ≠ 60)
+- `ham_s6_memberships_exact.pass` = false (count ≠ 112)
+- `active_matches.pass` = false (count ≠ 58)
+- `null_fk_check.pass` = false (any null FK in matches)
+- `duplicate_match_check.pass` = false (any duplicate pair)
+- UEH baseline counts deviate from: seasons=2, matches=638, mentor=2, mentee=1

@@ -64,16 +64,20 @@ select jsonb_build_object(
   ),
 
   -- 5. People participation
+  -- Exact: 112 new people (0 email collisions with production confirmed by backup analysis 2026-07-29)
   'people_with_ham_provenance', jsonb_build_object(
     'count', (
       select count(*)::int from public.people
       where data_quality_flags like '%source_season=HAM_S6%'
     ),
-    'expected_min', 104,
-    'expected_max', 108
+    'expected_exact', 112,
+    'pass', (
+      select count(*) = 112 from public.people
+      where data_quality_flags like '%source_season=HAM_S6%'
+    )
   ),
 
-  -- 6. Mentor profiles
+  -- 6. Mentor profiles — exact 52
   'mentor_profiles', jsonb_build_object(
     'count', (
       select count(*)::int
@@ -82,11 +86,17 @@ select jsonb_build_object(
       join public.seasons s on s.id = ib.season_id
       where s.code = 'HAM-S6'
     ),
-    'expected_min', 45,
-    'expected_max', 52
+    'expected_exact', 52,
+    'pass', (
+      select count(*) = 52
+      from public.mentor_profiles mp
+      join public.intake_batches ib on ib.id = mp.intake_batch_id
+      join public.seasons s on s.id = ib.season_id
+      where s.code = 'HAM-S6'
+    )
   ),
 
-  -- 7. Mentee profiles
+  -- 7. Mentee profiles — exact 60
   'mentee_profiles', jsonb_build_object(
     'count', (
       select count(*)::int
@@ -95,11 +105,35 @@ select jsonb_build_object(
       join public.seasons s on s.id = ib.season_id
       where s.code = 'HAM-S6'
     ),
-    'expected_min', 55,
-    'expected_max', 60
+    'expected_exact', 60,
+    'pass', (
+      select count(*) = 60
+      from public.mentee_profiles mtp
+      join public.intake_batches ib on ib.id = mtp.intake_batch_id
+      join public.seasons s on s.id = ib.season_id
+      where s.code = 'HAM-S6'
+    )
   ),
 
-  -- 8. Active matches
+  -- 7b. Season memberships — exact 112
+  'ham_s6_memberships_exact', jsonb_build_object(
+    'count', (
+      select count(*)::int
+      from public.person_season_memberships psm
+      join public.seasons s on s.id = psm.season_id
+      where s.code = 'HAM-S6'
+    ),
+    'expected_exact', 112,
+    'pass', (
+      select count(*) = 112
+      from public.person_season_memberships psm
+      join public.seasons s on s.id = psm.season_id
+      where s.code = 'HAM-S6'
+    )
+  ),
+
+  -- 8. Active matches — exact 58
+  -- (60 source rows − 2 skipped: one unresolvable mentor name, 2 mentees affected)
   'active_matches', jsonb_build_object(
     'count', (
       select count(*)::int
@@ -107,8 +141,13 @@ select jsonb_build_object(
       join public.seasons s on s.id = m.season_id
       where s.code = 'HAM-S6' and m.status = 'active'
     ),
-    'expected_min', 45,
-    'expected_max', 52
+    'expected_exact', 58,
+    'pass', (
+      select count(*) = 58
+      from public.matches m
+      join public.seasons s on s.id = m.season_id
+      where s.code = 'HAM-S6' and m.status = 'active'
+    )
   ),
 
   -- 9. No null critical FKs in matches
@@ -283,13 +322,17 @@ select jsonb_build_object(
     'note', 'Status should be running or active for portfolio current-season resolver to select HAM-S6'
   ),
 
-  -- Summary pass
+  -- Summary pass (exact fail-closed values — 2026-07-29 manifest)
   'summary_pass', (
     select
       (select count(*) = 1 from public.programs where code = 'HAM')
       and (select count(*) = 1 from public.seasons where code = 'HAM-S6')
       and (select count(*) = 1 from public.intake_batches where code = 'HAM-S6-B1')
-      and (select count(*) >= 45 from public.matches m join public.seasons s on s.id = m.season_id where s.code = 'HAM-S6' and m.status = 'active')
+      and (select count(*) = 112 from public.people where data_quality_flags like '%source_season=HAM_S6%')
+      and (select count(*) = 52 from public.mentor_profiles mp join public.intake_batches ib on ib.id = mp.intake_batch_id join public.seasons s on s.id = ib.season_id where s.code = 'HAM-S6')
+      and (select count(*) = 60 from public.mentee_profiles mtp join public.intake_batches ib on ib.id = mtp.intake_batch_id join public.seasons s on s.id = ib.season_id where s.code = 'HAM-S6')
+      and (select count(*) = 112 from public.person_season_memberships psm join public.seasons s on s.id = psm.season_id where s.code = 'HAM-S6')
+      and (select count(*) = 58 from public.matches m join public.seasons s on s.id = m.season_id where s.code = 'HAM-S6' and m.status = 'active')
       and (
         select count(*) = 0 from public.matches m
         join public.seasons s on s.id = m.season_id
