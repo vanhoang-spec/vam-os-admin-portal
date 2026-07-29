@@ -47,12 +47,11 @@ alter table public.admin_audit_log
 
 drop policy if exists "read_admin_audit_log_super_admin_only" on public.admin_audit_log;
 
--- NOTE: admin_audit_log RLS was already enabled in production before this migration
--- (confirmed by V2 probe). This rollback does NOT disable admin_audit_log RLS,
--- because it was NOT disabled before. Disabling would be over-rollback.
--- If admin_audit_log RLS was NOT enabled on staging before the migration,
--- uncomment the line below:
--- alter table public.admin_audit_log disable row level security;
+-- NOTE: Production admin_audit_log had RLS=true before this migration.
+-- STAGING NOTE: Staging admin_audit_log had RLS=false before this migration
+-- (confirmed by V2 preflight 2026-07-29: admin_audit_log.rls_enabled = false).
+-- The statement below restores the pre-migration staging state.
+alter table public.admin_audit_log disable row level security;
 
 -- =============================================================================
 -- ROLLBACK STEP 3 (undo STAGING STEP 3): Drop admin_users SELECT policy
@@ -62,7 +61,11 @@ drop policy if exists "read_admin_users_super_admin_or_self" on public.admin_use
 
 -- =============================================================================
 -- ROLLBACK STEP 2 (undo STAGING STEP 2): Disable RLS on admin_users
--- admin_users was RLS-disabled before the migration. This restores that state.
+-- Production admin_users had RLS=false before migration — this correctly restores it.
+-- STAGING NOTE: Staging admin_users already had RLS=true before the migration
+-- (V2 preflight 2026-07-29: rls_enabled=true, policy "active admins can read themselves").
+-- This rollback disables RLS entirely — leaving staging in a different state from
+-- before the migration. Restore the pre-existing staging policy manually if needed.
 -- Service-role paths continue to work regardless.
 -- WARNING: After this step, any JWT holder can enumerate admin_users via
 --          direct Supabase REST API again. Run this only when rollback is needed.
@@ -79,7 +82,20 @@ alter table public.admin_users disable row level security;
 
 grant execute on function public.current_admin_role() to anon;
 grant execute on function public.is_active_admin() to anon;
-grant execute on function public.is_admin_role(text[]) to anon;
+do $$
+begin
+  if exists(
+    select 1 from pg_proc fn
+    join pg_namespace ns on ns.oid = fn.pronamespace
+    where ns.nspname = 'public' and fn.proname = 'is_admin_role'
+  ) then
+    execute 'grant execute on function public.is_admin_role(text[]) to anon';
+    raise notice 'is_admin_role: anon EXECUTE restored';
+  else
+    raise notice 'is_admin_role: not found in public schema — grant skipped';
+  end if;
+end;
+$$;
 grant execute on function public.get_operations_dashboard_data(text) to anon;
 
 notify pgrst, 'reload schema';
@@ -104,7 +120,8 @@ notify pgrst, 'reload schema';
 --   DROP CONSTRAINT IF EXISTS — safe if constraint does not exist
 --   DROP POLICY IF EXISTS     — safe if policy does not exist
 --   DISABLE RLS               — safe if RLS is already disabled
---   GRANT                     — safe if grant already exists
+--   GRANT (bare)              — safe if grant already exists
+--   DO block (is_admin_role)  — skips gracefully if function is absent
 -- Run all rollback steps in order even if some are no-ops.
 -- =============================================================================
 

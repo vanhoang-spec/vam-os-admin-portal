@@ -113,6 +113,17 @@ describe("Emergency admin RLS staging migration — function grants", () => {
     expect(staging).toMatch(/get_operations_dashboard_data\(text\)/i);
     expect(staging).not.toMatch(/get_operations_dashboard_data\(\)/);
   });
+
+  it("is_admin_role revoke/grant is inside a conditional DO block (absent-function safety)", () => {
+    // Staging preflight 2026-07-29: is_admin_role_anon=null — function absent.
+    // After comment/literal stripping, no bare top-level revoke/grant remains.
+    expect(stagingExec).not.toMatch(/revoke\s+execute\s+on\s+function\s+public\.is_admin_role/i);
+    expect(stagingExec).not.toMatch(/grant\s+execute\s+on\s+function\s+public\.is_admin_role/i);
+  });
+
+  it("is_admin_role conditional block checks function existence in pg_proc", () => {
+    expect(staging).toMatch(/fn\.proname\s*=\s*'is_admin_role'/i);
+  });
 });
 
 describe("Emergency admin RLS staging migration — lockout safety", () => {
@@ -265,6 +276,14 @@ describe("Rollback — mirrors staging migration", () => {
   it("does not include participant schema", () => {
     expect(rollback).not.toContain("auth_user_id");
     expect(rollback).not.toContain("current_person_id");
+  });
+
+  it("is_admin_role anon grant restore is inside a conditional DO block (absent-function safety)", () => {
+    expect(rollbackExec).not.toMatch(/grant\s+execute\s+on\s+function\s+public\.is_admin_role\(text\[\]\)\s+to\s+anon/i);
+  });
+
+  it("disables RLS on admin_audit_log for staging rollback (staging had rls_enabled=false pre-migration)", () => {
+    expect(rollback).toMatch(/alter\s+table\s+public\.admin_audit_log\s+disable\s+row\s+level\s+security/i);
   });
 });
 

@@ -85,9 +85,25 @@ grant execute on function public.current_admin_role() to authenticated;
 revoke execute on function public.is_active_admin() from anon, public;
 grant execute on function public.is_active_admin() to authenticated;
 
--- is_admin_role(text[]) — returns true if current_admin_role() is in the list
-revoke execute on function public.is_admin_role(text[]) from anon, public;
-grant execute on function public.is_admin_role(text[]) to authenticated;
+-- is_admin_role(text[]) — conditional: staging preflight 2026-07-29 confirmed
+-- this function is absent from the staging environment (is_admin_role_anon: null).
+-- In production all 4 functions are present (Part 4 audit 2026-07-29).
+-- This DO block is a no-op when the function exists and safe when absent.
+do $$
+begin
+  if exists(
+    select 1 from pg_proc fn
+    join pg_namespace ns on ns.oid = fn.pronamespace
+    where ns.nspname = 'public' and fn.proname = 'is_admin_role'
+  ) then
+    execute 'revoke execute on function public.is_admin_role(text[]) from anon, public';
+    execute 'grant execute on function public.is_admin_role(text[]) to authenticated';
+    raise notice 'is_admin_role: anon EXECUTE revoked, authenticated EXECUTE retained';
+  else
+    raise notice 'is_admin_role: not found in public schema — grant/revoke skipped';
+  end if;
+end;
+$$;
 
 -- get_operations_dashboard_data(text) — operations RPC; checked internally
 -- NOTE: Migration 022 included REVOKE ALL FROM anon but did not take effect in production.
