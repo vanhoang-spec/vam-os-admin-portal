@@ -124,22 +124,30 @@ alter table public.admin_users enable row level security;
 
 -- =============================================================================
 -- STEP 3: admin_users SELECT POLICY
--- Policy: own row (any active admin reading their own record) OR super_admin.
--- current_admin_role() is SECURITY DEFINER and reads admin_users without
--- triggering RLS recursion — this is the correct and intended design.
+-- Both branches require active status — inactive and suspended admins are denied.
+--
+-- Branch 1: (auth.uid() = auth_user_id AND status = 'active')
+--   Own-row access. status = 'active' is a direct column reference on the row
+--   being evaluated — not a subquery, so no RLS recursion risk. An inactive or
+--   suspended admin's own row has status ≠ 'active', so Branch 1 is false.
+--
+-- Branch 2: current_admin_role() = 'super_admin'
+--   current_admin_role() (SECURITY DEFINER) queries admin_users with
+--   status = 'active' filter — returns NULL for non-active callers. Inactive or
+--   suspended super_admins get NULL ≠ 'super_admin' → Branch 2 is false.
 --
 -- Access matrix:
---   anon                    auth.uid() = null → no row match → DENIED
---   participant JWT (future) no admin_users row → current_admin_role() = null → DENIED unless own row
---   viewer/reviewer/admin   sees only their own row via auth.uid() = auth_user_id
---   super_admin             sees all rows via current_admin_role() = 'super_admin'
---   service_role            bypasses RLS → full access (no change from current behavior)
+--   anon                     auth.uid() = null → Branch 1 false; no active row → Branch 2 null → DENIED
+--   participant JWT (future)  no admin_users row → both branches false → DENIED
+--   invited admin             status ≠ 'active' → Branch 1 false; current_admin_role()=null → DENIED
+--   inactive/suspended admin  status ≠ 'active' → Branch 1 false; current_admin_role()=null → DENIED
+--   active viewer/reviewer/admin  own row: Branch 1 true → own row only; other rows: Branch 1 false,
+--                                current_admin_role() ≠ 'super_admin' → DENIED for other rows
+--   active super_admin        all rows: Branch 2 true → FULL READ ACCESS
+--   service_role              bypasses RLS → full access (no change from current behavior)
 --
--- No INSERT/UPDATE/DELETE policy: writes are fail-closed for all non-service-role.
+-- No INSERT/UPDATE/DELETE policy: writes fail-closed for all non-service-role.
 -- All application writes use service-role (lib/admin-users.ts) — unaffected.
--- No self-promotion possible via direct API: INSERT/UPDATE fail-closed.
--- No cross-role promotion: super_admin check uses current_admin_role() which
---   reads the authenticated user's own role — cannot be spoofed via API params.
 -- =============================================================================
 
 drop policy if exists "read_admin_users_super_admin_or_self" on public.admin_users;
@@ -148,7 +156,7 @@ create policy "read_admin_users_super_admin_or_self"
 on public.admin_users
 for select
 using (
-  auth.uid() = auth_user_id
+  (auth.uid() = auth_user_id and status = 'active')
   or public.current_admin_role() = 'super_admin'
 );
 
