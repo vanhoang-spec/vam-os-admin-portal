@@ -166,8 +166,9 @@ on conflict (person_id, season_id, role) do nothing;
 -- ── Assertions ────────────────────────────────────────────────────────────────
 do $$
 declare
-  v_mentors integer;
-  v_mentees integer;
+  v_mentors     integer;
+  v_mentees     integer;
+  v_memberships integer;
 begin
   select count(*) into v_mentors
   from public.mentor_profiles
@@ -177,16 +178,24 @@ begin
   from public.mentee_profiles
   where intake_batch_id = (select intake_batch_id from _ham_prod_context);
 
-  raise notice 'PROFILES: mentor_profiles=%, mentee_profiles=%', v_mentors, v_mentees;
+  select count(*) into v_memberships
+  from public.person_season_memberships
+  where season_id = (select season_id from _ham_prod_context);
 
-  if v_mentors < 45 then
-    raise exception 'ASSERTION FAIL: Expected at least 45 mentor profiles, got %. Stop.', v_mentors;
+  raise notice 'PROFILES: mentor_profiles=%, mentee_profiles=%, memberships=%',
+    v_mentors, v_mentees, v_memberships;
+
+  if v_mentors <> 52 then
+    raise exception 'ASSERTION FAIL: Expected exactly 52 mentor profiles, got %. Stop.', v_mentors;
   end if;
-  if v_mentees < 55 then
-    raise exception 'ASSERTION FAIL: Expected at least 55 mentee profiles, got %. Stop.', v_mentees;
+  if v_mentees <> 60 then
+    raise exception 'ASSERTION FAIL: Expected exactly 60 mentee profiles, got %. Stop.', v_mentees;
+  end if;
+  if v_memberships <> 112 then
+    raise exception 'ASSERTION FAIL: Expected exactly 112 HAM-S6 memberships, got %. Stop.', v_memberships;
   end if;
 
-  raise notice 'PASS: profile assertions satisfied';
+  raise notice 'PASS: profile and membership assertions satisfied';
 end;
 $$;
 

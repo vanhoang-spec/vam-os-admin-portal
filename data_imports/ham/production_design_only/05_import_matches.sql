@@ -64,15 +64,32 @@ begin
 end;
 $$;
 
--- ── Email-only match resolution ───────────────────────────────────────────────
--- Name-key fallback is EXPLICITLY DISABLED in production.
--- Rows where mentor_email or mentee_email is null/empty are skipped.
+-- ── Match resolution ──────────────────────────────────────────────────────────
+-- Resolution priority:
+--   1. Email match (authoritative) — when mentor_email or mentee_email is present
+--   2. Name-key fallback — when email is absent, use normalized name-key
+--      (name-key = lower, strip diacritics Đđ→Dd, strip parentheticals, collapse non-alnum to space)
+--
+-- Source data note: ham_matches_clean.csv has mentor_email absent for all 60 rows.
+-- All 52 mentor names are unique in the people source — name-key fallback is safe.
+-- 2 source rows reference a mentor name not found in the people source (same name, 2 mentees);
+-- those 2 rows will be skipped and logged (reason: unresolved_mentor_name).
+-- Expected resolved: 58. Expected skipped: 2.
 
 create temp table _ham_prod_match_ready as
 with mentor_by_email as (
   select
     m.person_id as mentor_person_id,
-    lower(trim(coalesce(p.email_primary, ''))) as email_norm
+    lower(trim(coalesce(p.email_primary, ''))) as email_norm,
+    lower(
+      regexp_replace(
+        regexp_replace(
+          translate(p.full_name, 'Đđ', 'Dd'),
+          '\([^)]*\)', ' ', 'g'
+        ),
+        '[^[:alnum:]]+', ' ', 'g'
+      )
+    ) as name_key
   from _ham_prod_identity_map m
   join public.people p on p.id = m.person_id
   where m.ham_role = 'mentor' and m.person_id is not null
@@ -91,25 +108,39 @@ select
   mtl.mentee_person_id
 from _ham_prod_matches_source ms
 left join mentor_by_email ml
-  on lower(nullif(trim(ms.mentor_email), '')) is not null
-  and ml.email_norm = lower(nullif(trim(ms.mentor_email), ''))
+  on (
+    -- Email match (authoritative): use when mentor_email is present
+    lower(nullif(trim(ms.mentor_email), '')) is not null
+    and ml.email_norm = lower(nullif(trim(ms.mentor_email), ''))
+  )
+  or (
+    -- Name-key fallback: use when mentor_email is absent
+    lower(nullif(trim(ms.mentor_email), '')) is null
+    and ml.name_key = lower(
+      regexp_replace(
+        regexp_replace(
+          translate(ms.mentor_name, 'Đđ', 'Dd'),
+          '\([^)]*\)', ' ', 'g'
+        ),
+        '[^[:alnum:]]+', ' ', 'g'
+      )
+    )
+  )
 left join mentee_by_email mtl
   on lower(nullif(trim(ms.mentee_email), '')) is not null
   and mtl.email_norm = lower(nullif(trim(ms.mentee_email), ''))
 where upper(coalesce(ms.import_ready, '')) = 'TRUE'
 on commit drop;
 
--- ── Log unresolved matches (email missing or no identity map entry) ────────────
+-- ── Log unresolved matches ────────────────────────────────────────────────────
 create temp table _ham_prod_match_skips as
 select
   nullif(row_num, '')::int as source_row,
   source_file, source_sheet,
   case
-    when lower(nullif(trim(mentor_email), '')) is null and lower(nullif(trim(mentee_email), '')) is null
-      then 'missing_both_emails'
-    when lower(nullif(trim(mentor_email), '')) is null then 'missing_mentor_email'
-    when lower(nullif(trim(mentee_email), '')) is null then 'missing_mentee_email'
-    when mentor_person_id is null and mentee_person_id is null then 'unresolved_both'
+    when mentor_person_id is null and mentee_person_id is null then 'unresolved_both_endpoints'
+    when mentor_person_id is null and lower(nullif(trim(mentor_email), '')) is null
+      then 'unresolved_mentor_name'
     when mentor_person_id is null then 'unresolved_mentor_email'
     when mentee_person_id is null then 'unresolved_mentee_email'
     else 'unknown'
@@ -117,6 +148,22 @@ select
 from _ham_prod_match_ready
 where mentor_person_id is null or mentee_person_id is null
 on commit drop;
+
+-- ── Assert skip count ──────────────────────────────────────────────────────────
+-- Expected: exactly 2 rows skipped (same mentor name not in people source, 2 mentees)
+do $$
+declare
+  v_skip_count integer;
+begin
+  select count(*) into v_skip_count from _ham_prod_match_skips;
+  if v_skip_count <> 2 then
+    raise exception
+      'ASSERTION FAIL: Expected exactly 2 skipped match rows, got %. Investigate before proceeding. Stop.',
+      v_skip_count;
+  end if;
+  raise notice 'PASS: match skip count = % (expected 2)', v_skip_count;
+end;
+$$;
 
 -- ── Insert matches ────────────────────────────────────────────────────────────
 -- NOTE: matches.season_code is absent from production schema.
@@ -180,9 +227,9 @@ begin
 
   raise notice 'MATCHES: inserted=%, skipped=%', v_match_count, v_skip_count;
 
-  if v_match_count < 45 then
+  if v_match_count <> 58 then
     raise exception
-      'ASSERTION FAIL: Expected at least 45 active HAM-S6 matches, got %. Stop.',
+      'ASSERTION FAIL: Expected exactly 58 active HAM-S6 matches, got %. Stop.',
       v_match_count;
   end if;
 

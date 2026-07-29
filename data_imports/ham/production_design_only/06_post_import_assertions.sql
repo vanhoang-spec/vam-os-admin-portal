@@ -45,8 +45,8 @@ begin
   join public.intake_batches ib on ib.id = mp.intake_batch_id
   join public.seasons s on s.id = ib.season_id
   where s.code = 'HAM-S6';
-  if v_count < 45 then
-    raise exception 'POST-IMPORT FAIL: Expected ≥ 45 mentor profiles, got %. Stop.', v_count;
+  if v_count <> 52 then
+    raise exception 'POST-IMPORT FAIL: Expected exactly 52 mentor profiles, got %. Stop.', v_count;
   end if;
   raise notice 'PASS: mentor_profiles = %', v_count;
 end;
@@ -61,10 +61,25 @@ begin
   join public.intake_batches ib on ib.id = mtp.intake_batch_id
   join public.seasons s on s.id = ib.season_id
   where s.code = 'HAM-S6';
-  if v_count < 55 then
-    raise exception 'POST-IMPORT FAIL: Expected ≥ 55 mentee profiles, got %. Stop.', v_count;
+  if v_count <> 60 then
+    raise exception 'POST-IMPORT FAIL: Expected exactly 60 mentee profiles, got %. Stop.', v_count;
   end if;
   raise notice 'PASS: mentee_profiles = %', v_count;
+end;
+$$;
+
+-- ── Assert season memberships ─────────────────────────────────────────────────
+do $$
+declare v_count integer;
+begin
+  select count(*) into v_count
+  from public.person_season_memberships psm
+  join public.seasons s on s.id = psm.season_id
+  where s.code = 'HAM-S6';
+  if v_count <> 112 then
+    raise exception 'POST-IMPORT FAIL: Expected exactly 112 HAM-S6 memberships, got %. Stop.', v_count;
+  end if;
+  raise notice 'PASS: HAM-S6 memberships = %', v_count;
 end;
 $$;
 
@@ -76,8 +91,8 @@ begin
   from public.matches m
   join public.seasons s on s.id = m.season_id
   where s.code = 'HAM-S6' and m.status = 'active';
-  if v_count < 45 then
-    raise exception 'POST-IMPORT FAIL: Expected ≥ 45 active matches, got %. Stop.', v_count;
+  if v_count <> 58 then
+    raise exception 'POST-IMPORT FAIL: Expected exactly 58 active matches, got %. Stop.', v_count;
   end if;
   raise notice 'PASS: active HAM-S6 matches = %', v_count;
 end;

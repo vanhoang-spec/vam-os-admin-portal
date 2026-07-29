@@ -134,6 +134,9 @@ where upper(coalesce(import_ready, '')) = 'TRUE'
 on commit drop;
 
 -- ── Step 2: Email-match resolution against PRODUCTION people table ────────────
+-- Finds source rows whose email already exists in production (reuse existing person).
+-- No dedup clause needed: production email_primary is UNIQUE, so each source email
+-- maps to at most one existing person.
 create temp table _ham_prod_email_matched as
 select
   r.source_row,
@@ -149,11 +152,6 @@ from _ham_prod_ready r
 join public.people p
   on lower(trim(coalesce(p.email_primary, ''))) = r.email_norm
   and r.email_norm is not null
-where not exists (
-  select 1 from _ham_prod_email_matched_dedup
-  where email_norm = r.email_norm
-  and email_norm is not null
-)
 on commit drop;
 
 -- ── Step 3: New person candidates (no email match, email present) ─────────────
@@ -257,11 +255,18 @@ begin
   raise notice 'PEOPLE IMPORT: identity_map=%, new=%, reused=%, skips=%',
     v_map_count, v_new_count, v_reused_count, v_skip_count;
 
-  -- Expected: map + skips = 112 (all import_ready rows accounted for)
-  if v_map_count + v_skip_count < 108 then
+  -- Expected: map + skips = exactly 112 (all import_ready rows accounted for)
+  if v_map_count + v_skip_count <> 112 then
     raise exception
-      'ASSERTION FAIL: mapped (%) + skipped (%) = % < 108 expected. Stop.',
+      'ASSERTION FAIL: mapped (%) + skipped (%) = % <> 112 expected. Stop.',
       v_map_count, v_skip_count, v_map_count + v_skip_count;
+  end if;
+
+  -- Expected: exactly 112 new people created (0 email collisions confirmed by backup analysis)
+  if v_new_count <> 112 then
+    raise exception
+      'ASSERTION FAIL: Expected exactly 112 new people, got %. If > 0 existing linked, investigate before proceeding. Stop.',
+      v_new_count;
   end if;
 
   raise notice 'PASS: people import assertions satisfied';
