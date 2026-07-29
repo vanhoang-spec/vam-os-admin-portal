@@ -710,4 +710,111 @@ describe("HAM-S6 production import safety", () => {
     expect(rollback).toContain("mentee_profiles");
     expect(rollback).toContain("person_season_memberships");
   });
+
+  // ── ON COMMIT DROP cross-module dependency fix (2026-07-29) ────────────────
+  // _ham_prod_identity_map, _ham_prod_ready, and _ham_prod_context are consumed
+  // by later modules in separate transactions. ON COMMIT DROP would destroy them
+  // at each module's COMMIT, making them unavailable to subsequent modules.
+  // These three tables must be plain session-scoped temp tables (no ON COMMIT DROP).
+
+  it("_ham_prod_identity_map does NOT have ON COMMIT DROP (consumed by mods 04 and 05 across commit boundaries)", () => {
+    const body = modules["03_import_people.sql"];
+    // Extract the CREATE TEMP TABLE block for _ham_prod_identity_map
+    const block = body.match(
+      /create\s+temp\s+table\s+_ham_prod_identity_map[\s\S]*?(?=create\s+temp\s+table|--\s+──|$)/i
+    )?.[0] ?? "";
+    expect(block, "_ham_prod_identity_map block not found").toBeTruthy();
+    expect(block.toLowerCase()).not.toContain("on commit drop");
+  });
+
+  it("_ham_prod_ready does NOT have ON COMMIT DROP (consumed by mod 04 across commit boundary)", () => {
+    const body = modules["03_import_people.sql"];
+    const block = body.match(
+      /create\s+temp\s+table\s+_ham_prod_ready[\s\S]*?(?=create\s+temp\s+table|--\s+──|$)/i
+    )?.[0] ?? "";
+    expect(block, "_ham_prod_ready block not found").toBeTruthy();
+    expect(block.toLowerCase()).not.toContain("on commit drop");
+  });
+
+  it("_ham_prod_context does NOT have ON COMMIT DROP (consumed by mod 05 across commit boundary)", () => {
+    const body = modules["04_import_profiles_memberships.sql"];
+    const block = body.match(
+      /create\s+temp\s+table\s+_ham_prod_context[\s\S]*?(?=create\s+temp\s+table|do\s+\$\$|--\s+──|$)/i
+    )?.[0] ?? "";
+    expect(block, "_ham_prod_context block not found").toBeTruthy();
+    expect(block.toLowerCase()).not.toContain("on commit drop");
+  });
+
+  it("execution runbook documents single-session requirement for temp tables", () => {
+    const runbook = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_FOUNDATION_IMPORT_RUNBOOK_2026-07-23.md",
+      "utf8"
+    );
+    expect(runbook).toMatch(/single\s+session/i);
+    expect(runbook).toContain("_ham_prod_identity_map");
+  });
+
+  it("execution runbook uses correct people source table name _ham_prod_people_source", () => {
+    const runbook = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_FOUNDATION_IMPORT_RUNBOOK_2026-07-23.md",
+      "utf8"
+    );
+    expect(runbook).toContain("_ham_prod_people_source");
+    expect(runbook).not.toContain("_ham_people_staging");
+  });
+
+  it("execution runbook uses correct matches source table name _ham_prod_matches_source", () => {
+    const runbook = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_FOUNDATION_IMPORT_RUNBOOK_2026-07-23.md",
+      "utf8"
+    );
+    expect(runbook).toContain("_ham_prod_matches_source");
+    expect(runbook).not.toContain("_ham_matches_staging");
+  });
+
+  it("execution runbook includes CREATE TABLE schema for _ham_prod_people_source pre-load", () => {
+    const runbook = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_FOUNDATION_IMPORT_RUNBOOK_2026-07-23.md",
+      "utf8"
+    );
+    expect(runbook).toMatch(/create\s+temp\s+table\s+_ham_prod_people_source/i);
+  });
+
+  it("execution runbook includes CREATE TABLE schema for _ham_prod_matches_source pre-load", () => {
+    const runbook = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_FOUNDATION_IMPORT_RUNBOOK_2026-07-23.md",
+      "utf8"
+    );
+    expect(runbook).toMatch(/create\s+temp\s+table\s+_ham_prod_matches_source/i);
+  });
+
+  it("execution runbook documents exact expected counts for all Gate E steps (not ranges)", () => {
+    const runbook = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_FOUNDATION_IMPORT_RUNBOOK_2026-07-23.md",
+      "utf8"
+    );
+    expect(runbook).toContain("exactly 112");
+    expect(runbook).toContain("exactly 52");
+    expect(runbook).toContain("exactly 60");
+    expect(runbook).toContain("exactly 58");
+    expect(runbook).toContain("exactly 2");
+    // Old range notation must be gone from the Gate E table
+    expect(runbook).not.toContain("(min 104)");
+    expect(runbook).not.toContain("(min 45)");
+    expect(runbook).not.toContain("(min 55)");
+  });
+
+  it("final pre-execution review document is present and covers all phases", () => {
+    const review = readFileSync(
+      "docs/audits/HAM_S6_PRODUCTION_IMPORT_FINAL_EXECUTION_REVIEW_2026-07-29.md",
+      "utf8"
+    );
+    expect(review).toContain("Phase 1");
+    expect(review).toContain("Phase 2");
+    expect(review).toContain("Phase 3");
+    expect(review).toContain("Phase 4");
+    expect(review).toContain("ON COMMIT DROP");
+    expect(review).toContain("name-key");
+    expect(review).toContain("PROVED");
+  });
 });
