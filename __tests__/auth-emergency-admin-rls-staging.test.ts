@@ -328,3 +328,78 @@ describe("No auto-run SQL path in application code", () => {
     }).not.toThrow();
   });
 });
+
+describe("Emergency admin RLS staging migration — transaction boundary", () => {
+  it("staging migration exec has exactly one BEGIN; statement", () => {
+    // PL/pgSQL 'begin' inside DO blocks is not followed by ';' — only the
+    // transaction-level BEGIN; matches this pattern.
+    const begins = stagingExec.match(/\bbegin\s*;/gi) ?? [];
+    expect(begins.length).toBe(1);
+  });
+
+  it("staging migration exec has exactly one COMMIT; statement", () => {
+    const commits = stagingExec.match(/\bcommit\s*;/gi) ?? [];
+    expect(commits.length).toBe(1);
+  });
+
+  it("BEGIN precedes the first DO block (STEP 0 lockout preflight is inside the transaction)", () => {
+    const beginIdx = stagingExec.search(/\bbegin\s*;/i);
+    const firstDoIdx = stagingExec.search(/\bdo\s+\$\$/i);
+    expect(beginIdx).toBeGreaterThanOrEqual(0);
+    expect(firstDoIdx).toBeGreaterThanOrEqual(0);
+    expect(beginIdx).toBeLessThan(firstDoIdx);
+  });
+
+  it("COMMIT follows the final NOTIFY statement (all mutations are inside the transaction)", () => {
+    const notifyIdx = stagingExec.search(/\bnotify\s+pgrst\b/i);
+    const commitIdx = stagingExec.search(/\bcommit\s*;/i);
+    expect(notifyIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeGreaterThan(notifyIdx);
+  });
+
+  it("no executable mutation appears before BEGIN (all mutations are inside the transaction)", () => {
+    const beginIdx = stagingExec.search(/\bbegin\s*;/i);
+    expect(beginIdx).toBeGreaterThanOrEqual(0);
+    const prefix = stagingExec.substring(0, beginIdx);
+    for (const kw of ["revoke", "grant", "alter", "drop", "create", "notify", "do"]) {
+      expect(prefix, `mutation '${kw}' found before BEGIN`).not.toMatch(
+        new RegExp(`\\b${kw}\\b`, "i")
+      );
+    }
+  });
+
+  it("COMMIT is the last SQL statement in the exec (transaction closed cleanly)", () => {
+    expect(stagingExec.trim().toLowerCase()).toMatch(/commit\s*;\s*$/);
+  });
+
+  it("DO blocks contain no COMMIT, ROLLBACK, or SAVEPOINT transaction control statements", () => {
+    const doBlocks = staging.match(/do\s+\$\$[\s\S]*?\$\$\s*;/gi) ?? [];
+    expect(doBlocks.length, "expected at least one DO block in staging migration").toBeGreaterThan(0);
+    for (const block of doBlocks) {
+      expect(block, "DO block contains COMMIT").not.toMatch(/\bcommit\b/i);
+      expect(block, "DO block contains ROLLBACK").not.toMatch(/\brollback\b/i);
+      expect(block, "DO block contains SAVEPOINT").not.toMatch(/\bsavepoint\b/i);
+    }
+  });
+
+  it("STEP 0 lockout preflight DO block has no EXCEPTION WHEN handler (failures propagate unhandled)", () => {
+    // A RAISE EXCEPTION in an unhandled block propagates to the caller.
+    // Inside BEGIN/COMMIT, this aborts the transaction before COMMIT can be reached.
+    const firstDoBlock = staging.match(/do\s+\$\$[\s\S]*?\$\$\s*;/i)?.[0] ?? "";
+    expect(firstDoBlock.length, "first DO block not found").toBeGreaterThan(0);
+    expect(
+      firstDoBlock,
+      "STEP 0 DO block has an EXCEPTION WHEN handler — preflight failures must propagate"
+    ).not.toMatch(/\bexception\s+when\b/i);
+  });
+
+  it("staging migration documents automatic transaction rollback for pre-COMMIT failures", () => {
+    expect(staging).toMatch(/rolled back automatically/i);
+  });
+
+  it("rollback file documents it is for post-commit use only (not for migration failure recovery)", () => {
+    expect(rollback).toMatch(/only after the migration.*commit/i);
+    expect(rollback).toMatch(/rolled back automatically/i);
+  });
+});

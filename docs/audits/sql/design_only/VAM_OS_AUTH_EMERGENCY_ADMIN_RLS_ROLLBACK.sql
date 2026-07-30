@@ -18,15 +18,17 @@
 --   - Steps are ordered from least-disruptive to most-disruptive (constraint
 --     removal before policy drops before RLS disable before grant restoration).
 --
--- When to run:
---   - VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_VERIFICATION.sql shows a failed assertion.
---   - Staging login is broken after the migration.
---   - Application errors appear that were not present before.
---   - Owner decides to abort staging validation.
+-- When to run (only after the migration transaction has successfully committed):
+--   - COMMIT was reached and verification shows a failed assertion.
+--   - COMMIT was reached and staging login is broken after the migration.
+--   - COMMIT was reached and application errors appear that were not present before.
+--   - COMMIT was reached and owner decides to abort staging validation.
 --
 -- When NOT to run:
 --   - Do not run on production (not authorized).
 --   - Do not run if the staging migration was never applied.
+--   - Do not run if the migration raised an exception before COMMIT — the
+--     transaction rolled back automatically; no changes were committed.
 --   - Do not run if the verification passed and no regression is detected.
 -- =============================================================================
 
@@ -117,9 +119,13 @@ notify pgrst, 'reload schema';
 -- =============================================================================
 
 -- =============================================================================
--- PARTIAL FAILURE RECOVERY:
--- If the staging migration failed mid-way and not all steps ran, each
--- ROLLBACK step is safe to run independently. Each is idempotent:
+-- PARTIAL ROLLBACK RECOVERY:
+-- The staging migration is wrapped in a single explicit transaction (BEGIN/COMMIT).
+-- A migration failure before COMMIT rolls back all steps automatically — this
+-- rollback script is NOT required and must NOT be run in that case.
+--
+-- This section applies only if this rollback script itself fails mid-way.
+-- Each rollback step is idempotent and safe to re-run independently:
 --   DROP CONSTRAINT IF EXISTS          — safe if constraint does not exist
 --   DROP POLICY IF EXISTS              — safe if policy does not exist
 --   DISABLE RLS (admin_audit_log only) — safe if RLS is already disabled

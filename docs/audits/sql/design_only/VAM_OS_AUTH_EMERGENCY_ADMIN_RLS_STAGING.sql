@@ -35,12 +35,19 @@
 -- How to run:
 --   1. Owner executes in Supabase SQL Editor on STAGING project only.
 --   2. Immediately run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_VERIFICATION.sql to confirm.
---   3. If any assertion fails: run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql.
+--   3. If COMMIT was reached and verification shows a failed assertion:
+--      run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql to reverse the migration.
+--      (A migration failure before COMMIT rolls back all changes automatically.)
 -- =============================================================================
+
+-- All steps execute as one atomic unit. A failure in any step raises an exception
+-- that aborts the transaction — all preceding changes are rolled back automatically.
+begin;
 
 -- =============================================================================
 -- STEP 0: LOCKOUT PREFLIGHT
--- Aborts the entire migration if no active super_admin has an auth_user_id.
+-- Aborts the entire migration transaction. A RAISE EXCEPTION here prevents
+-- COMMIT — all preceding and subsequent statements are rolled back automatically.
 -- This ensures at least one human can authenticate after RLS is enabled.
 -- =============================================================================
 
@@ -220,9 +227,16 @@ $$;
 
 notify pgrst, 'reload schema';
 
+commit;
+
 -- =============================================================================
 -- IMMEDIATE NEXT STEP AFTER RUNNING:
 -- Run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_VERIFICATION.sql in the same SQL Editor
 -- session. All assertions must pass before any other work proceeds.
--- If any assertion fails: run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql.
+--
+-- If COMMIT was reached without error and a verification assertion fails:
+--   run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql to reverse the migration.
+-- If the migration raised an exception before COMMIT:
+--   the transaction rolled back automatically — all steps were undone;
+--   no rollback script is required.
 -- =============================================================================
