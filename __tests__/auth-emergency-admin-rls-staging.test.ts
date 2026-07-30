@@ -92,6 +92,24 @@ describe("Emergency admin RLS staging migration — policy correctness", () => {
     expect(staging).toMatch(/drop\s+policy\s+if\s+exists\s+"read_admin_users_super_admin_or_self"/i);
     expect(staging).toMatch(/drop\s+policy\s+if\s+exists\s+"read_admin_audit_log_super_admin_only"/i);
   });
+
+  it("admin_users own-row branch requires status='active' — inactive and suspended admins denied", () => {
+    // status = 'active' is a direct column reference on the evaluated row; no RLS recursion.
+    // Without this, any authenticated user with a matching auth_user_id (including inactive/suspended)
+    // would satisfy the own-row branch and read their admin_users row.
+    expect(staging).toMatch(/auth\.uid\(\)\s*=\s*auth_user_id\s+and\s+status\s*=\s*'active'/i);
+  });
+
+  it("super_admin all-row access uses current_admin_role() which internally requires active status", () => {
+    // current_admin_role() filters status='active' — inactive/suspended super_admins get NULL.
+    // NULL = 'super_admin' is NULL (falsy), so this branch correctly denies non-active super_admins.
+    expect(staging).toMatch(/public\.current_admin_role\(\)\s*=\s*'super_admin'/i);
+  });
+
+  it("migration does not touch the pre-existing 'active admins can read themselves' staging policy", () => {
+    // This policy must be preserved across the migration to maintain the staging baseline.
+    expect(staging).not.toContain('"active admins can read themselves"');
+  });
 });
 
 describe("Emergency admin RLS staging migration — function grants", () => {
@@ -112,6 +130,17 @@ describe("Emergency admin RLS staging migration — function grants", () => {
   it("uses correct signature for get_operations_dashboard_data (text param)", () => {
     expect(staging).toMatch(/get_operations_dashboard_data\(text\)/i);
     expect(staging).not.toMatch(/get_operations_dashboard_data\(\)/);
+  });
+
+  it("is_admin_role revoke/grant is inside a conditional DO block (absent-function safety)", () => {
+    // Staging preflight 2026-07-29: is_admin_role_anon=null — function absent.
+    // After comment/literal stripping, no bare top-level revoke/grant remains.
+    expect(stagingExec).not.toMatch(/revoke\s+execute\s+on\s+function\s+public\.is_admin_role/i);
+    expect(stagingExec).not.toMatch(/grant\s+execute\s+on\s+function\s+public\.is_admin_role/i);
+  });
+
+  it("is_admin_role conditional block checks function existence in pg_proc", () => {
+    expect(staging).toMatch(/fn\.proname\s*=\s*'is_admin_role'/i);
   });
 });
 
@@ -236,8 +265,11 @@ describe("Rollback — mirrors staging migration", () => {
     expect(rollback).toMatch(/drop\s+policy\s+if\s+exists\s+"read_admin_users_super_admin_or_self"/i);
   });
 
-  it("disables RLS on admin_users", () => {
-    expect(rollback).toMatch(/alter\s+table\s+public\.admin_users\s+disable\s+row\s+level\s+security/i);
+  it("does NOT execute disable RLS on admin_users (staging pre-migration baseline was RLS=true)", () => {
+    // Staging had admin_users.rls_enabled=true before migration (V2 preflight 2026-07-29).
+    // Disabling RLS would leave staging more permissive than pre-migration.
+    // Checks rollbackExec (comments stripped) so comment-only mentions are not falsely flagged.
+    expect(rollbackExec).not.toMatch(/alter\s+table\s+public\.admin_users\s+disable\s+row\s+level\s+security/i);
   });
 
   it("drops the admin_audit_log policy created in staging", () => {
@@ -266,6 +298,21 @@ describe("Rollback — mirrors staging migration", () => {
     expect(rollback).not.toContain("auth_user_id");
     expect(rollback).not.toContain("current_person_id");
   });
+
+  it("is_admin_role anon grant restore is inside a conditional DO block (absent-function safety)", () => {
+    expect(rollbackExec).not.toMatch(/grant\s+execute\s+on\s+function\s+public\.is_admin_role\(text\[\]\)\s+to\s+anon/i);
+  });
+
+  it("disables RLS on admin_audit_log for staging rollback (staging had rls_enabled=false pre-migration)", () => {
+    // admin_audit_log.rls_enabled was false before migration — rollback must restore that state.
+    expect(rollback).toMatch(/alter\s+table\s+public\.admin_audit_log\s+disable\s+row\s+level\s+security/i);
+  });
+
+  it("rollback drops only the package-created admin_users policy, not the pre-existing staging policy", () => {
+    // "active admins can read themselves" existed before migration and must be preserved by rollback.
+    expect(rollback).toMatch(/drop\s+policy\s+if\s+exists\s+"read_admin_users_super_admin_or_self"\s+on\s+public\.admin_users/i);
+    expect(rollback).not.toMatch(/drop\s+policy\s+if\s+exists\s+"active\s+admins\s+can\s+read\s+themselves"/i);
+  });
 });
 
 describe("No auto-run SQL path in application code", () => {
@@ -279,5 +326,80 @@ describe("No auto-run SQL path in application code", () => {
       const appCheck = readFileSync(`${appEntry}/layout.tsx`, "utf8");
       expect(appCheck).not.toContain(stagingFileName);
     }).not.toThrow();
+  });
+});
+
+describe("Emergency admin RLS staging migration — transaction boundary", () => {
+  it("staging migration exec has exactly one BEGIN; statement", () => {
+    // PL/pgSQL 'begin' inside DO blocks is not followed by ';' — only the
+    // transaction-level BEGIN; matches this pattern.
+    const begins = stagingExec.match(/\bbegin\s*;/gi) ?? [];
+    expect(begins.length).toBe(1);
+  });
+
+  it("staging migration exec has exactly one COMMIT; statement", () => {
+    const commits = stagingExec.match(/\bcommit\s*;/gi) ?? [];
+    expect(commits.length).toBe(1);
+  });
+
+  it("BEGIN precedes the first DO block (STEP 0 lockout preflight is inside the transaction)", () => {
+    const beginIdx = stagingExec.search(/\bbegin\s*;/i);
+    const firstDoIdx = stagingExec.search(/\bdo\s+\$\$/i);
+    expect(beginIdx).toBeGreaterThanOrEqual(0);
+    expect(firstDoIdx).toBeGreaterThanOrEqual(0);
+    expect(beginIdx).toBeLessThan(firstDoIdx);
+  });
+
+  it("COMMIT follows the final NOTIFY statement (all mutations are inside the transaction)", () => {
+    const notifyIdx = stagingExec.search(/\bnotify\s+pgrst\b/i);
+    const commitIdx = stagingExec.search(/\bcommit\s*;/i);
+    expect(notifyIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeGreaterThan(notifyIdx);
+  });
+
+  it("no executable mutation appears before BEGIN (all mutations are inside the transaction)", () => {
+    const beginIdx = stagingExec.search(/\bbegin\s*;/i);
+    expect(beginIdx).toBeGreaterThanOrEqual(0);
+    const prefix = stagingExec.substring(0, beginIdx);
+    for (const kw of ["revoke", "grant", "alter", "drop", "create", "notify", "do"]) {
+      expect(prefix, `mutation '${kw}' found before BEGIN`).not.toMatch(
+        new RegExp(`\\b${kw}\\b`, "i")
+      );
+    }
+  });
+
+  it("COMMIT is the last SQL statement in the exec (transaction closed cleanly)", () => {
+    expect(stagingExec.trim().toLowerCase()).toMatch(/commit\s*;\s*$/);
+  });
+
+  it("DO blocks contain no COMMIT, ROLLBACK, or SAVEPOINT transaction control statements", () => {
+    const doBlocks = staging.match(/do\s+\$\$[\s\S]*?\$\$\s*;/gi) ?? [];
+    expect(doBlocks.length, "expected at least one DO block in staging migration").toBeGreaterThan(0);
+    for (const block of doBlocks) {
+      expect(block, "DO block contains COMMIT").not.toMatch(/\bcommit\b/i);
+      expect(block, "DO block contains ROLLBACK").not.toMatch(/\brollback\b/i);
+      expect(block, "DO block contains SAVEPOINT").not.toMatch(/\bsavepoint\b/i);
+    }
+  });
+
+  it("STEP 0 lockout preflight DO block has no EXCEPTION WHEN handler (failures propagate unhandled)", () => {
+    // A RAISE EXCEPTION in an unhandled block propagates to the caller.
+    // Inside BEGIN/COMMIT, this aborts the transaction before COMMIT can be reached.
+    const firstDoBlock = staging.match(/do\s+\$\$[\s\S]*?\$\$\s*;/i)?.[0] ?? "";
+    expect(firstDoBlock.length, "first DO block not found").toBeGreaterThan(0);
+    expect(
+      firstDoBlock,
+      "STEP 0 DO block has an EXCEPTION WHEN handler — preflight failures must propagate"
+    ).not.toMatch(/\bexception\s+when\b/i);
+  });
+
+  it("staging migration documents automatic transaction rollback for pre-COMMIT failures", () => {
+    expect(staging).toMatch(/rolled back automatically/i);
+  });
+
+  it("rollback file documents it is for post-commit use only (not for migration failure recovery)", () => {
+    expect(rollback).toMatch(/only after the migration.*commit/i);
+    expect(rollback).toMatch(/rolled back automatically/i);
   });
 });

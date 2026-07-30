@@ -18,15 +18,17 @@
 --   - Steps are ordered from least-disruptive to most-disruptive (constraint
 --     removal before policy drops before RLS disable before grant restoration).
 --
--- When to run:
---   - VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_VERIFICATION.sql shows a failed assertion.
---   - Staging login is broken after the migration.
---   - Application errors appear that were not present before.
---   - Owner decides to abort staging validation.
+-- When to run (only after the migration transaction has successfully committed):
+--   - COMMIT was reached and verification shows a failed assertion.
+--   - COMMIT was reached and staging login is broken after the migration.
+--   - COMMIT was reached and application errors appear that were not present before.
+--   - COMMIT was reached and owner decides to abort staging validation.
 --
 -- When NOT to run:
 --   - Do not run on production (not authorized).
 --   - Do not run if the staging migration was never applied.
+--   - Do not run if the migration raised an exception before COMMIT — the
+--     transaction rolled back automatically; no changes were committed.
 --   - Do not run if the verification passed and no regression is detected.
 -- =============================================================================
 
@@ -47,12 +49,11 @@ alter table public.admin_audit_log
 
 drop policy if exists "read_admin_audit_log_super_admin_only" on public.admin_audit_log;
 
--- NOTE: admin_audit_log RLS was already enabled in production before this migration
--- (confirmed by V2 probe). This rollback does NOT disable admin_audit_log RLS,
--- because it was NOT disabled before. Disabling would be over-rollback.
--- If admin_audit_log RLS was NOT enabled on staging before the migration,
--- uncomment the line below:
--- alter table public.admin_audit_log disable row level security;
+-- NOTE: Production admin_audit_log had RLS=true before this migration.
+-- STAGING NOTE: Staging admin_audit_log had RLS=false before this migration
+-- (confirmed by V2 preflight 2026-07-29: admin_audit_log.rls_enabled = false).
+-- The statement below restores the pre-migration staging state.
+alter table public.admin_audit_log disable row level security;
 
 -- =============================================================================
 -- ROLLBACK STEP 3 (undo STAGING STEP 3): Drop admin_users SELECT policy
@@ -61,14 +62,21 @@ drop policy if exists "read_admin_audit_log_super_admin_only" on public.admin_au
 drop policy if exists "read_admin_users_super_admin_or_self" on public.admin_users;
 
 -- =============================================================================
--- ROLLBACK STEP 2 (undo STAGING STEP 2): Disable RLS on admin_users
--- admin_users was RLS-disabled before the migration. This restores that state.
--- Service-role paths continue to work regardless.
--- WARNING: After this step, any JWT holder can enumerate admin_users via
---          direct Supabase REST API again. Run this only when rollback is needed.
+-- ROLLBACK STEP 2 — admin_users RLS state (STAGING ONLY)
+-- Staging admin_users had RLS=true before the migration (V2 preflight 2026-07-29).
+-- STAGING STEP 2 was a no-op (RLS was already enabled). Disabling RLS here would
+-- leave staging MORE permissive than its proven pre-migration state.
+--
+-- Correct staging rollback: keep RLS enabled. No SQL required here.
+-- The pre-existing "active admins can read themselves" policy was never dropped
+-- by the migration (STEP 3 only affects "read_admin_users_super_admin_or_self")
+-- and is preserved throughout — no manual reconstruction needed.
+--
+-- Post-rollback admin_users state (staging):
+--   RLS:    enabled (same as pre-migration)
+--   Policy: "active admins can read themselves" (same as pre-migration)
 -- =============================================================================
-
-alter table public.admin_users disable row level security;
+-- (no SQL — admin_users RLS remains enabled per staging pre-migration baseline)
 
 -- =============================================================================
 -- ROLLBACK STEP 1 (undo STAGING STEP 1): Restore anon EXECUTE grants
@@ -79,7 +87,20 @@ alter table public.admin_users disable row level security;
 
 grant execute on function public.current_admin_role() to anon;
 grant execute on function public.is_active_admin() to anon;
-grant execute on function public.is_admin_role(text[]) to anon;
+do $$
+begin
+  if exists(
+    select 1 from pg_proc fn
+    join pg_namespace ns on ns.oid = fn.pronamespace
+    where ns.nspname = 'public' and fn.proname = 'is_admin_role'
+  ) then
+    execute 'grant execute on function public.is_admin_role(text[]) to anon';
+    raise notice 'is_admin_role: anon EXECUTE restored';
+  else
+    raise notice 'is_admin_role: not found in public schema — grant skipped';
+  end if;
+end;
+$$;
 grant execute on function public.get_operations_dashboard_data(text) to anon;
 
 notify pgrst, 'reload schema';
@@ -88,8 +109,8 @@ notify pgrst, 'reload schema';
 -- AFTER ROLLBACK:
 -- Run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_VERIFICATION.sql to confirm rollback state.
 -- The following assertions should NOW be FALSE (migration undone):
---   v8.admin_users_rls_enabled              → false
---   v8.admin_users_select_policy_present    → false
+--   v8.admin_users_rls_enabled              → TRUE (staging had RLS=true before migration)
+--   v8.admin_users_select_policy_present    → false ("read_admin_users_super_admin_or_self" dropped)
 --   v8.all_anon_revokes_applied             → false (anon grants restored)
 -- The following should remain TRUE (regression check):
 --   v8.admin_scope_access_unaffected        → true
@@ -98,13 +119,19 @@ notify pgrst, 'reload schema';
 -- =============================================================================
 
 -- =============================================================================
--- PARTIAL FAILURE RECOVERY:
--- If the staging migration failed mid-way and not all steps ran, each
--- ROLLBACK step is safe to run independently. Each is idempotent:
---   DROP CONSTRAINT IF EXISTS — safe if constraint does not exist
---   DROP POLICY IF EXISTS     — safe if policy does not exist
---   DISABLE RLS               — safe if RLS is already disabled
---   GRANT                     — safe if grant already exists
+-- PARTIAL ROLLBACK RECOVERY:
+-- The staging migration is wrapped in a single explicit transaction (BEGIN/COMMIT).
+-- A migration failure before COMMIT rolls back all steps automatically — this
+-- rollback script is NOT required and must NOT be run in that case.
+--
+-- This section applies only if this rollback script itself fails mid-way.
+-- Each rollback step is idempotent and safe to re-run independently:
+--   DROP CONSTRAINT IF EXISTS          — safe if constraint does not exist
+--   DROP POLICY IF EXISTS              — safe if policy does not exist
+--   DISABLE RLS (admin_audit_log only) — safe if RLS is already disabled
+--   admin_users RLS: not disabled (staging pre-migration baseline was RLS=true)
+--   GRANT (bare)                       — safe if grant already exists
+--   DO block (is_admin_role)           — skips gracefully if function is absent
 -- Run all rollback steps in order even if some are no-ops.
 -- =============================================================================
 
@@ -119,5 +146,5 @@ notify pgrst, 'reload schema';
 -- use the Management API with the service-role key to drop the policy:
 --   DELETE https://api.supabase.com/v1/projects/{ref}/database/query
 -- Run: DROP POLICY "read_admin_users_super_admin_or_self" ON public.admin_users;
---      ALTER TABLE public.admin_users DISABLE ROW LEVEL SECURITY;
+-- NOTE: Do NOT disable admin_users RLS — staging had RLS=true before migration.
 -- =============================================================================

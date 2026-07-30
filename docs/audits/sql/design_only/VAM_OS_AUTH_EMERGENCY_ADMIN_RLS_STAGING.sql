@@ -35,12 +35,19 @@
 -- How to run:
 --   1. Owner executes in Supabase SQL Editor on STAGING project only.
 --   2. Immediately run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_VERIFICATION.sql to confirm.
---   3. If any assertion fails: run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql.
+--   3. If COMMIT was reached and verification shows a failed assertion:
+--      run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql to reverse the migration.
+--      (A migration failure before COMMIT rolls back all changes automatically.)
 -- =============================================================================
+
+-- All steps execute as one atomic unit. A failure in any step raises an exception
+-- that aborts the transaction — all preceding changes are rolled back automatically.
+begin;
 
 -- =============================================================================
 -- STEP 0: LOCKOUT PREFLIGHT
--- Aborts the entire migration if no active super_admin has an auth_user_id.
+-- Aborts the entire migration transaction. A RAISE EXCEPTION here prevents
+-- COMMIT — all preceding and subsequent statements are rolled back automatically.
 -- This ensures at least one human can authenticate after RLS is enabled.
 -- =============================================================================
 
@@ -85,9 +92,25 @@ grant execute on function public.current_admin_role() to authenticated;
 revoke execute on function public.is_active_admin() from anon, public;
 grant execute on function public.is_active_admin() to authenticated;
 
--- is_admin_role(text[]) — returns true if current_admin_role() is in the list
-revoke execute on function public.is_admin_role(text[]) from anon, public;
-grant execute on function public.is_admin_role(text[]) to authenticated;
+-- is_admin_role(text[]) — conditional: staging preflight 2026-07-29 confirmed
+-- this function is absent from the staging environment (is_admin_role_anon: null).
+-- In production all 4 functions are present (Part 4 audit 2026-07-29).
+-- This DO block is a no-op when the function exists and safe when absent.
+do $$
+begin
+  if exists(
+    select 1 from pg_proc fn
+    join pg_namespace ns on ns.oid = fn.pronamespace
+    where ns.nspname = 'public' and fn.proname = 'is_admin_role'
+  ) then
+    execute 'revoke execute on function public.is_admin_role(text[]) from anon, public';
+    execute 'grant execute on function public.is_admin_role(text[]) to authenticated';
+    raise notice 'is_admin_role: anon EXECUTE revoked, authenticated EXECUTE retained';
+  else
+    raise notice 'is_admin_role: not found in public schema — grant/revoke skipped';
+  end if;
+end;
+$$;
 
 -- get_operations_dashboard_data(text) — operations RPC; checked internally
 -- NOTE: Migration 022 included REVOKE ALL FROM anon but did not take effect in production.
@@ -108,22 +131,30 @@ alter table public.admin_users enable row level security;
 
 -- =============================================================================
 -- STEP 3: admin_users SELECT POLICY
--- Policy: own row (any active admin reading their own record) OR super_admin.
--- current_admin_role() is SECURITY DEFINER and reads admin_users without
--- triggering RLS recursion — this is the correct and intended design.
+-- Both branches require active status — inactive and suspended admins are denied.
+--
+-- Branch 1: (auth.uid() = auth_user_id AND status = 'active')
+--   Own-row access. status = 'active' is a direct column reference on the row
+--   being evaluated — not a subquery, so no RLS recursion risk. An inactive or
+--   suspended admin's own row has status ≠ 'active', so Branch 1 is false.
+--
+-- Branch 2: current_admin_role() = 'super_admin'
+--   current_admin_role() (SECURITY DEFINER) queries admin_users with
+--   status = 'active' filter — returns NULL for non-active callers. Inactive or
+--   suspended super_admins get NULL ≠ 'super_admin' → Branch 2 is false.
 --
 -- Access matrix:
---   anon                    auth.uid() = null → no row match → DENIED
---   participant JWT (future) no admin_users row → current_admin_role() = null → DENIED unless own row
---   viewer/reviewer/admin   sees only their own row via auth.uid() = auth_user_id
---   super_admin             sees all rows via current_admin_role() = 'super_admin'
---   service_role            bypasses RLS → full access (no change from current behavior)
+--   anon                     auth.uid() = null → Branch 1 false; no active row → Branch 2 null → DENIED
+--   participant JWT (future)  no admin_users row → both branches false → DENIED
+--   invited admin             status ≠ 'active' → Branch 1 false; current_admin_role()=null → DENIED
+--   inactive/suspended admin  status ≠ 'active' → Branch 1 false; current_admin_role()=null → DENIED
+--   active viewer/reviewer/admin  own row: Branch 1 true → own row only; other rows: Branch 1 false,
+--                                current_admin_role() ≠ 'super_admin' → DENIED for other rows
+--   active super_admin        all rows: Branch 2 true → FULL READ ACCESS
+--   service_role              bypasses RLS → full access (no change from current behavior)
 --
--- No INSERT/UPDATE/DELETE policy: writes are fail-closed for all non-service-role.
+-- No INSERT/UPDATE/DELETE policy: writes fail-closed for all non-service-role.
 -- All application writes use service-role (lib/admin-users.ts) — unaffected.
--- No self-promotion possible via direct API: INSERT/UPDATE fail-closed.
--- No cross-role promotion: super_admin check uses current_admin_role() which
---   reads the authenticated user's own role — cannot be spoofed via API params.
 -- =============================================================================
 
 drop policy if exists "read_admin_users_super_admin_or_self" on public.admin_users;
@@ -132,7 +163,7 @@ create policy "read_admin_users_super_admin_or_self"
 on public.admin_users
 for select
 using (
-  auth.uid() = auth_user_id
+  (auth.uid() = auth_user_id and status = 'active')
   or public.current_admin_role() = 'super_admin'
 );
 
@@ -196,9 +227,16 @@ $$;
 
 notify pgrst, 'reload schema';
 
+commit;
+
 -- =============================================================================
 -- IMMEDIATE NEXT STEP AFTER RUNNING:
 -- Run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_VERIFICATION.sql in the same SQL Editor
 -- session. All assertions must pass before any other work proceeds.
--- If any assertion fails: run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql.
+--
+-- If COMMIT was reached without error and a verification assertion fails:
+--   run VAM_OS_AUTH_EMERGENCY_ADMIN_RLS_ROLLBACK.sql to reverse the migration.
+-- If the migration raised an exception before COMMIT:
+--   the transaction rolled back automatically — all steps were undone;
+--   no rollback script is required.
 -- =============================================================================
