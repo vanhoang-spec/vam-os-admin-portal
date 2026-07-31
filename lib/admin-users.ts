@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { createHash, randomUUID } from "crypto";
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
@@ -336,6 +337,12 @@ async function ensureAuthUserForEmail(client: any, email: string) {
   };
 }
 
+async function recordAuthReconciliation(client:any,actorId:string,operationId:string,email:string,actionType:string,failureClass:string,retryStatus:"required"|"resolved"){
+  const identifierHash=createHash("sha256").update(normalizeEmail(email),"utf8").digest("hex");
+  const {error}=await client.rpc("vam062_record_auth_reconciliation",{p_actor_admin_user_id:actorId,p_operation_id:operationId,p_identifier_hash:identifierHash,p_action_type:actionType,p_failure_class:failureClass,p_retry_status:retryStatus,p_correlation_metadata:{source:"account_admin"}});
+  if(error)throw new Error("CRITICAL_RECONCILIATION_RECORDING_FAILED");
+}
+
 async function upsertScope(client: any, input: {
   authUserId: string;
   scopeId?: string | null;
@@ -396,6 +403,7 @@ export async function createManagedAdminUser(input: {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return { ok: false, message: "Email không hợp lệ." };
 
+  const operationId=randomUUID();
   const auth = await ensureAuthUserForEmail(client, email);
   if (!auth.authUserId) return { ok: false, message: auth.warning ?? "Không thể tạo hoặc tìm Supabase Auth user." };
   const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
@@ -405,9 +413,9 @@ export async function createManagedAdminUser(input: {
   if (atomicError) {
     if (auth.created) {
       const compensation = await client.auth.admin.deleteUser(auth.authUserId);
-      return compensation.error
-        ? { ok: false, message: "Tác vụ thất bại và cần đối soát Auth trước khi thử lại." }
-        : { ok: false, message: "Tác vụ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi an toàn." };
+      if(compensation.error){try{await recordAuthReconciliation(client,String(actor.id),operationId,email,"create_admin_user","auth_compensation_failed","required");return{ok:false,message:"Tác vụ thất bại; trạng thái đối soát đã được ghi nhận."}}catch{return{ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động."}}}
+      try{await recordAuthReconciliation(client,String(actor.id),operationId,email,"create_admin_user","database_failed_auth_compensated","resolved")}catch{return{ok:false,message:"Lời mời đã thu hồi nhưng ghi nhận bù trừ thất bại; dừng thử lại tự động."}}
+      return { ok: false, message: "Tác vụ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi an toàn." };
     }
     return { ok: false, message: "Tác vụ cơ sở dữ liệu và audit thất bại; Auth hiện có không bị thay đổi." };
   }
@@ -635,13 +643,16 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
     return { ok: true, message: "Người dùng đã có auth_user_id, không cần đồng bộ." };
   }
 
+  const operationId=randomUUID();
   const auth = await ensureAuthUserForEmail(client, before.user.email);
   if (!auth.authUserId) return { ok: false, message: auth.warning ?? "Không thể tìm hoặc tạo Supabase Auth user." };
   const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "link_auth", p_target_admin_user_id: targetId, p_payload: { auth_user_id: auth.authUserId, program_id: "VAM", season_id: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, scope_role: scopeRoleForAdminRole(before.user.role), scope_status: before.user.status === "active" ? "active" : "inactive" } });
   if (atomicError) {
     if (auth.created) {
       const compensation = await client.auth.admin.deleteUser(auth.authUserId);
-      return compensation.error ? { ok: false, message: "Đồng bộ thất bại và cần đối soát Auth trước khi thử lại." } : { ok: false, message: "Đồng bộ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi." };
+      if(compensation.error){try{await recordAuthReconciliation(client,String(actor.id),operationId,String(before.user.email??""),"sync_auth","auth_compensation_failed","required");return{ok:false,message:"Đồng bộ thất bại; trạng thái đối soát đã được ghi nhận."}}catch{return{ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động."}}}
+      try{await recordAuthReconciliation(client,String(actor.id),operationId,String(before.user.email??""),"sync_auth","database_failed_auth_compensated","resolved")}catch{return{ok:false,message:"Lời mời đã thu hồi nhưng ghi nhận bù trừ thất bại; dừng thử lại tự động."}}
+      return { ok: false, message: "Đồng bộ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi." };
     }
     return { ok: false, message: "Đồng bộ cơ sở dữ liệu và audit thất bại; Auth hiện có không bị thay đổi." };
   }

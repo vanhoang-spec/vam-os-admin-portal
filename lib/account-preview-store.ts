@@ -1,40 +1,13 @@
 import "server-only";
-
-import { createHash, randomUUID, timingSafeEqual } from "crypto";
-
-const PREVIEW_TTL_MS = 10 * 60 * 1000;
-const MAX_PREVIEWS = 50;
-type Entry = { actorId: string; csv: string; digest: string; expiresAt: number };
-const previews = new Map<string, Entry>();
-
-function digest(csv: string) {
-  return createHash("sha256").update(csv, "utf8").digest("hex");
-}
-
-function prune(now = Date.now()) {
-  previews.forEach((entry, id) => { if (entry.expiresAt <= now) previews.delete(id); });
-  while (previews.size >= MAX_PREVIEWS) previews.delete(previews.keys().next().value as string);
-}
-
-export function createAccountPreview(actorId: string, csv: string, now = Date.now()) {
-  prune(now);
-  const id = randomUUID();
-  const integrity = digest(`${id}:${actorId}:${csv}`);
-  previews.set(id, { actorId, csv, digest: integrity, expiresAt: now + PREVIEW_TTL_MS });
-  return { id, integrity, expiresAt: now + PREVIEW_TTL_MS };
-}
-
-export function consumeAccountPreview(actorId: string, id: string, integrity: string, now = Date.now()) {
-  prune(now);
-  const entry = previews.get(id);
-  if (!entry || entry.actorId !== actorId || entry.expiresAt <= now) return { ok: false, reason: "preview_missing_or_expired" } as const;
-  const supplied = Buffer.from(integrity, "hex");
-  const expected = Buffer.from(entry.digest, "hex");
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return { ok: false, reason: "preview_tampered" } as const;
-  previews.delete(id);
-  return { ok: true, csv: entry.csv } as const;
-}
-
-export function clearAccountPreviewsForTests() {
-  previews.clear();
-}
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "crypto";
+import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+const PREVIEW_TTL_MS=10*60*1000,MAX_PREVIEWS=50;
+export type StoredPreview={ciphertext:string;iv:string;authTag:string};
+export interface AccountPreviewPersistence{create(input:{id:string;actorId:string;secretHash:string;expiresAt:string}&StoredPreview):Promise<void>;consume(input:{id:string;actorId:string;secretHash:string}):Promise<StoredPreview|null>}
+const hash=(v:string)=>createHash("sha256").update(v,"utf8").digest("hex");
+const key=(id:string,a:string,s:string)=>createHash("sha256").update(`VAM062:${id}:${a}:${s}`,"utf8").digest();
+function encrypt(id:string,a:string,s:string,csv:string):StoredPreview{const iv=randomBytes(12),c=createCipheriv("aes-256-gcm",key(id,a,s),iv),payload=Buffer.concat([c.update(csv,"utf8"),c.final()]);return{ciphertext:payload.toString("base64"),iv:iv.toString("base64"),authTag:c.getAuthTag().toString("base64")}}
+function decrypt(id:string,a:string,s:string,v:StoredPreview){const d=createDecipheriv("aes-256-gcm",key(id,a,s),Buffer.from(v.iv,"base64"));d.setAuthTag(Buffer.from(v.authTag,"base64"));return Buffer.concat([d.update(Buffer.from(v.ciphertext,"base64")),d.final()]).toString("utf8")}
+export function sharedAccountPreviewPersistence():AccountPreviewPersistence{const client=getSupabaseServiceRoleClient();if(!client)throw Error("PREVIEW_STORE_UNAVAILABLE");return{async create(i){const{error}=await client.rpc("vam062_create_account_preview",{p_preview_id:i.id,p_actor_admin_user_id:i.actorId,p_secret_hash:i.secretHash,p_ciphertext:i.ciphertext,p_iv:i.iv,p_auth_tag:i.authTag,p_expires_at:i.expiresAt,p_max_previews:MAX_PREVIEWS});if(error)throw Error("PREVIEW_STORE_UNAVAILABLE")},async consume(i){const{data,error}=await client.rpc("vam062_consume_account_preview",{p_preview_id:i.id,p_actor_admin_user_id:i.actorId,p_secret_hash:i.secretHash});if(error)throw Error("PREVIEW_STORE_UNAVAILABLE");const r=Array.isArray(data)?data[0]:data;return r?{ciphertext:String(r.ciphertext),iv:String(r.iv),authTag:String(r.auth_tag)}:null}}}
+export async function createAccountPreview(actorId:string,csv:string,p=sharedAccountPreviewPersistence(),now=Date.now()){const id=randomUUID(),secret=randomBytes(32).toString("base64url"),expiresAt=now+PREVIEW_TTL_MS;await p.create({id,actorId,secretHash:hash(secret),expiresAt:new Date(expiresAt).toISOString(),...encrypt(id,actorId,secret,csv)});return{id,integrity:secret,expiresAt}}
+export async function consumeAccountPreview(actorId:string,id:string,integrity:string,p=sharedAccountPreviewPersistence()){if(!/^[A-Za-z0-9_-]{40,64}$/.test(integrity)||!/^[0-9a-f-]{36}$/i.test(id))return{ok:false,reason:"preview_invalid"}as const;const stored=await p.consume({id,actorId,secretHash:hash(integrity)});if(!stored)return{ok:false,reason:"preview_missing_expired_used_or_actor_mismatch"}as const;try{return{ok:true,csv:decrypt(id,actorId,integrity,stored)}as const}catch{return{ok:false,reason:"preview_integrity_failed"}as const}}

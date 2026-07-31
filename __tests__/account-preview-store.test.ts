@@ -1,10 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-vi.mock("server-only",()=>({}));
-import { clearAccountPreviewsForTests, consumeAccountPreview, createAccountPreview } from "@/lib/account-preview-store";
-
-describe("account preview references",()=>{
-  beforeEach(()=>clearAccountPreviewsForTests());
-  it("accepts once for the same actor",()=>{const p=createAccountPreview("actor","synthetic,csv",100);expect(consumeAccountPreview("actor",p.id,p.integrity,101)).toEqual({ok:true,csv:"synthetic,csv"});expect(consumeAccountPreview("actor",p.id,p.integrity,102)).toEqual({ok:false,reason:"preview_missing_or_expired"});});
-  it("rejects tampering without consuming the valid preview",()=>{const p=createAccountPreview("actor","synthetic,csv",100);expect(consumeAccountPreview("actor",p.id,"00",101).reason).toBe("preview_tampered");expect(consumeAccountPreview("actor",p.id,p.integrity,102).ok).toBe(true);});
-  it("rejects the wrong actor and expiry",()=>{const p=createAccountPreview("actor","synthetic,csv",100);expect(consumeAccountPreview("other",p.id,p.integrity,101).ok).toBe(false);expect(consumeAccountPreview("actor",p.id,p.integrity,100+10*60*1000).reason).toBe("preview_missing_or_expired");});
+import { describe,expect,it,vi } from "vitest";
+vi.mock("server-only",()=>({}));vi.mock("@/lib/supabase-server",()=>({getSupabaseServiceRoleClient:()=>null}));
+import {createAccountPreview,consumeAccountPreview,type AccountPreviewPersistence}from "@/lib/account-preview-store";
+function memory():AccountPreviewPersistence&{rows:Map<string,any>}{const rows=new Map<string,any>();return{rows,async create(i){rows.set(i.id,i)},async consume(i){const r=rows.get(i.id);if(!r||r.actorId!==i.actorId||r.secretHash!==i.secretHash||Date.parse(r.expiresAt)<=Date.now())return null;rows.delete(i.id);return r}}}
+describe("shared encrypted preview contract",()=>{
+ it("atomically consumes once without storing raw CSV",async()=>{const p=memory(),v=await createAccountPreview("actor","private,csv",p);expect(JSON.stringify(Array.from(p.rows.values()))).not.toContain("private,csv");expect((await consumeAccountPreview("actor",v.id,v.integrity,p)).ok).toBe(true);expect((await consumeAccountPreview("actor",v.id,v.integrity,p)).ok).toBe(false)});
+ it("rejects actor mismatch, tampering and expiry",async()=>{const p=memory(),v=await createAccountPreview("actor","csv",p);expect((await consumeAccountPreview("other",v.id,v.integrity,p)).ok).toBe(false);expect((await consumeAccountPreview("actor",v.id,"tampered",p)).ok).toBe(false);const expired=memory();expired.consume=async()=>null;expect((await consumeAccountPreview("actor",v.id,v.integrity,expired)).ok).toBe(false)});
+ it("fails closed on shared-store outage",async()=>{const p:AccountPreviewPersistence={create:async()=>{throw Error()},consume:async()=>{throw Error()}};await expect(createAccountPreview("actor","csv",p)).rejects.toThrow();await expect(consumeAccountPreview("actor","00000000-0000-0000-0000-000000000000","A".repeat(43),p)).rejects.toThrow()});
 });

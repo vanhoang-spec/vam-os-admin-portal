@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { requireSuperAdmin } from "@/lib/admin-users";
 import { isParticipantImportRole, isStaffImportRole, scopeRoleForStaffRole } from "@/lib/account-roles";
 import { executeStaffMutation } from "@/lib/account-mutation-orchestrator";
@@ -44,7 +44,7 @@ export async function previewAccountImport(csv: string): Promise<AccountImportPa
   const actor = await requireSuperAdmin();
   if (!actor?.id) throw new Error("Không có quyền xem trước import.");
   const parsed = parseAccountImportCsv(csv, await loadAccountImportReference());
-  return parsed.ok ? { ...parsed, preview: createAccountPreview(actor.id, csv) } : parsed;
+  return parsed.ok ? { ...parsed, preview: await createAccountPreview(actor.id, csv) } : parsed;
 }
 
 async function upsertParticipantMembership(client: any, actorId: string, batchId: string, row: AccountImportRow): Promise<AccountImportOutcome> {
@@ -75,7 +75,9 @@ async function findAuthUser(client: any, email: string) {
 export async function confirmAccountImport(previewId: string, integrity: string): Promise<{ ok: boolean; batchId?: string; outcomes: AccountImportOutcome[]; message: string }> {
   const actor = await requireSuperAdmin();
   if (!actor?.id) return { ok: false, outcomes: [], message: "Không có quyền xác nhận import." };
-  const consumed = consumeAccountPreview(actor.id, previewId, integrity);
+  let consumed;
+  try { consumed = await consumeAccountPreview(actor.id, previewId, integrity); }
+  catch { return { ok: false, outcomes: [], message: "Kho xem trước tạm thời không sẵn sàng. Không có mutation nào được thực hiện." }; }
   if (!consumed.ok) return { ok: false, outcomes: [], message: "Bản xem trước đã hết hạn, bị thay đổi hoặc đã được sử dụng." };
   const csv = consumed.csv;
   const reference = await loadAccountImportReference();
@@ -97,13 +99,15 @@ export async function confirmAccountImport(previewId: string, integrity: string)
       if (isParticipantImportRole(row.role)) outcome = await upsertParticipantMembership(client, actor.id, String(batch.id), row);
       else if (isStaffImportRole(row.role)) {
         const staffRole = row.role;
+        const operationId = randomUUID();
         const result = await executeStaffMutation({
           findAuth: () => findAuthUser(client, row.email),
           inviteAuth: async () => { const invited = await client.auth.admin.inviteUserByEmail(row.email); if (invited.error || !invited.data?.user?.id) throw new Error("AUTH_INVITE_FAILED"); return { id: String(invited.data.user.id) }; },
           commitDatabase: async (authUserId) => { const rpc = await client.rpc("vam062_upsert_staff_account_atomic", { p_actor_admin_user_id: actor.id, p_batch_id: batch.id, p_row_number: row.rowNumber, p_auth_user_id: authUserId, p_email: row.email, p_display_name: row.displayName, p_role: staffRole, p_program_id: row.programId, p_season_id: row.seasonId, p_scope_role: scopeRoleForStaffRole(staffRole) }); if (rpc.error) throw new Error("DB_TRANSACTION_FAILED"); },
           compensateAuth: async (authUserId) => { const deleted = await client.auth.admin.deleteUser(authUserId); if (deleted.error) throw new Error("AUTH_COMPENSATION_FAILED"); },
-          recordReconciliation: async (authUserIdHash) => { const rpc = await client.rpc("vam062_record_reconciliation", { p_actor_admin_user_id: actor.id, p_batch_id: batch.id, p_row_number: row.rowNumber, p_auth_user_id_hash: authUserIdHash }); if (rpc.error) throw new Error("RECONCILIATION_RECORD_FAILED"); },
-          hashIdentifier: (value) => createHash("sha256").update(value, "utf8").digest("hex")
+          recordCompensation: async (identifierHash) => { const rpc=await client.rpc("vam062_record_auth_reconciliation",{p_actor_admin_user_id:actor.id,p_operation_id:operationId,p_identifier_hash:identifierHash,p_action_type:"csv_staff_import",p_failure_class:"database_failed_auth_compensated",p_retry_status:"resolved",p_correlation_metadata:{batch_id:batch.id,row_number:row.rowNumber}});if(rpc.error)throw Error("COMPENSATION_RECORD_FAILED") },
+          recordReconciliation: async (identifierHash) => { const durable=await client.rpc("vam062_record_auth_reconciliation",{p_actor_admin_user_id:actor.id,p_operation_id:operationId,p_identifier_hash:identifierHash,p_action_type:"csv_staff_import",p_failure_class:"auth_compensation_failed",p_retry_status:"required",p_correlation_metadata:{batch_id:batch.id,row_number:row.rowNumber}}); if(durable.error)throw Error("RECONCILIATION_RECORD_FAILED"); const rpc = await client.rpc("vam062_record_reconciliation", { p_actor_admin_user_id: actor.id, p_batch_id: batch.id, p_row_number: row.rowNumber, p_auth_user_id_hash: identifierHash }); if (rpc.error) throw new Error("RECONCILIATION_RECORD_FAILED"); },
+          hashIdentifier: () => createHash("sha256").update(row.email, "utf8").digest("hex")
         });
         outcome = { rowNumber: row.rowNumber, status: result.status, reason: result.reason };
       } else outcome = { rowNumber: row.rowNumber, status: "failed", reason: "unsupported_role_after_revalidation" };
