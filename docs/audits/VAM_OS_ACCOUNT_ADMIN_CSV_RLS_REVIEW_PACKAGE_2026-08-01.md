@@ -15,3 +15,17 @@ Rollback validates the exact five-row RLS state set and deterministic checksums,
 Before any staging application: perform another independent static review, then separately authorize the V3 read-only preflight. The isolation harness rejects empty, malformed, duplicate or identity-mismatched credentials; validates every session against its configured synthetic user id; proves fixtures through Super Admin; and covers both operators' positive access, cross-program and cross-season denial, ordinary roles, and import metadata. It never prints credentials or identifiers and has not been run remotely.
 
 Known wider dependencies remain outside this package: `matches`, `mentee_profiles`, `mentor_profiles`, `mentoring_recaps`, and `event_participations` have previously evidenced unsafe production RLS states. Account rollout must not broaden until those paths are separately verified/remediated where authenticated users could reach them.
+
+## Second independent static review remediation
+
+Migration 062 V3 remains blocked and unapplied. The remediation adds fail-closed structural evidence for all prerequisite columns, constraints, relationships, grants, RLS state, helpers, policies, collisions, and rollback compatibility. Each required preflight section is tri-state (`PASS`, `FAIL`, or `NOT APPLICABLE`) and missing required evidence makes overall eligibility false.
+
+Every `ON CONFLICT` target is now proven before material DDL as an exact, validated, non-partial, non-expression unique/exclusion constraint with compatible column order and ordinary PostgreSQL NULL semantics. Predecessor policies are compared by exact catalog expression and complete policy attributes; grouping-removing normalization was deleted.
+
+Rollback authenticates package identity, ownership, the exact table set, column counts, RLS state, absence of table policies, ordinary-role grants, functions, and policy hashes before any package table drop. It refuses altered, missing, duplicated, additional, or replacement evidence. Legitimate business rows written through package RPCs remain intentionally preserved and can require forward reconciliation after rollback.
+
+Post-apply verification carries an independent expected policy specification, exact roles/commands/permissiveness/expressions, expected table/RLS/grant state, service-only functions, provenance, NULL-season denial, and unexpected-policy rejection. Runtime-generated manifest hashes are supplementary evidence only.
+
+Auth recovery uses one ownership contract. A successful invitation with an omitted user id is resolved by exact post-invite lookup and treated as operation-created; unresolved or ambiguous ownership is never deleted and is durably reconciled. Pre-existing identities are never compensated. Manual create, sync, and CSV staff import use sanitized hashes and metadata.
+
+The local harness rejects malformed, expired, duplicate, or reused identities; proves JWT subjects and exact active database roles; requires role-separated users; authenticates UEH/HAM program-season-person membership topology; and proves same-program/cross-season denial separately. Import-metadata assertions distinguish HTTP privilege denial from intentional RLS zero-row filtering; invalid authentication is rejected before denial tests and any returned metadata row fails.

@@ -320,19 +320,20 @@ async function findAuthUserByEmail(client: any, email: string) {
 
 async function ensureAuthUserForEmail(client: any, email: string) {
   const existing = await findAuthUserByEmail(client, email);
-  if (existing?.id) return { authUserId: existing.id as string, created: false, warning: null as string | null };
+  if (existing?.id) return { authUserId: existing.id as string, created: false, ownershipAmbiguous: false, warning: null as string | null };
 
   const { data, error } = await client.auth.admin.inviteUserByEmail(email);
   if (error) {
     const afterError = await findAuthUserByEmail(client, email);
-    if (afterError?.id) return { authUserId: afterError.id as string, created: false, warning: null };
-    return { authUserId: null, created: false, warning: serviceRoleErrorMessage("Supabase Auth invite failed", error.message) };
+    if (afterError?.id) return { authUserId: afterError.id as string, created: false, ownershipAmbiguous: false, warning: null };
+    return { authUserId: null, created: false, ownershipAmbiguous: false, warning: serviceRoleErrorMessage("Supabase Auth invite failed", error.message) };
   }
 
   const authUserId = data?.user?.id ?? (await findAuthUserByEmail(client, email))?.id ?? null;
   return {
     authUserId: authUserId as string | null,
-    created: Boolean(data?.user?.id),
+    created: Boolean(authUserId),
+    ownershipAmbiguous: !authUserId,
     warning: authUserId ? null : "Auth invite đã chạy nhưng chưa trả về auth_user_id."
   };
 }
@@ -405,7 +406,7 @@ export async function createManagedAdminUser(input: {
 
   const operationId=randomUUID();
   const auth = await ensureAuthUserForEmail(client, email);
-  if (!auth.authUserId) return { ok: false, message: auth.warning ?? "Không thể tạo hoặc tìm Supabase Auth user." };
+  if (!auth.authUserId) { if (auth.ownershipAmbiguous) { try { await recordAuthReconciliation(client,String(actor.id),operationId,email,"create_admin_user","ambiguous_auth_ownership","required"); } catch { return { ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động." }; } } return { ok: false, message: auth.ownershipAmbiguous ? "Không xác định được quyền sở hữu Auth; trạng thái đối soát đã được ghi nhận." : auth.warning ?? "Không thể tạo hoặc tìm Supabase Auth user." }; }
   const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
     p_actor_admin_user_id: actor.id, p_operation: "upsert", p_target_admin_user_id: null,
     p_payload: { auth_user_id: auth.authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: auth.created ? "invited" : validStatus(input.status), program_id: scopeText(input.programId,"VAM"), season_id: scopeText(input.seasonId,SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE), scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
@@ -645,7 +646,7 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
 
   const operationId=randomUUID();
   const auth = await ensureAuthUserForEmail(client, before.user.email);
-  if (!auth.authUserId) return { ok: false, message: auth.warning ?? "Không thể tìm hoặc tạo Supabase Auth user." };
+  if (!auth.authUserId) { if (auth.ownershipAmbiguous) { try { await recordAuthReconciliation(client,String(actor.id),operationId,String(before.user.email??""),"sync_auth","ambiguous_auth_ownership","required"); } catch { return { ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động." }; } } return { ok: false, message: auth.ownershipAmbiguous ? "Không xác định được quyền sở hữu Auth; trạng thái đối soát đã được ghi nhận." : auth.warning ?? "Không thể tìm hoặc tạo Supabase Auth user." }; }
   const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "link_auth", p_target_admin_user_id: targetId, p_payload: { auth_user_id: auth.authUserId, program_id: "VAM", season_id: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, scope_role: scopeRoleForAdminRole(before.user.role), scope_status: before.user.status === "active" ? "active" : "inactive" } });
   if (atomicError) {
     if (auth.created) {
