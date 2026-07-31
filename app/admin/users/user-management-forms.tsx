@@ -53,9 +53,11 @@ function RoleSelect({ defaultValue }: { defaultValue: string }) {
 
 function StatusSelect({ defaultValue }: { defaultValue: string }) {
   return (
-    <select name="status" defaultValue={defaultValue === "active" ? "active" : "inactive"} className={inputClass}>
+    <select name="status" defaultValue={defaultValue} className={inputClass}>
+      <option value="invited">Đã mời — chưa kích hoạt</option>
       <option value="active">Kích hoạt</option>
-      <option value="inactive">Tạm khóa</option>
+      <option value="suspended">Tạm khóa</option>
+      <option value="inactive">Ngừng quyền truy cập</option>
     </select>
   );
 }
@@ -100,7 +102,7 @@ export function CreateAdminUserForm() {
         </label>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
-          <StatusSelect defaultValue="active" />
+          <StatusSelect defaultValue="invited" />
         </label>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">season_code</span>
@@ -137,7 +139,7 @@ export function EditAdminUserForm({ user }: { user: ManagedAdminUser }) {
   return (
     <div className="grid gap-3">
       <div className={canSaveScope ? "rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"}>
-        {canSaveScope ? `Đã liên kết Auth: ${user.auth_user_id}` : "Chưa liên kết Auth: cần bấm Đồng bộ Auth trước khi lưu scope access."}
+        {canSaveScope ? "Danh tính Auth: đã liên kết" : "Danh tính Auth: chưa liên kết; cần Đồng bộ Auth trước khi lưu scope."}
       </div>
       {!canSaveScope ? <SyncAuthForm user={user} /> : null}
       {canSaveScope && !scope ? (
@@ -197,7 +199,7 @@ export function StatusToggleForm({ user, disabled }: { user: ManagedAdminUser; d
   const [state, formAction] = useFormState(setAdminUserStatusAction, initialState);
   const nextStatus = user.status === "active" ? "inactive" : "active";
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-1" onSubmit={(event) => { if (nextStatus !== "active" && !window.confirm("Tạm khóa tài khoản này? Người dùng sẽ mất quyền truy cập.")) event.preventDefault(); }}>
       <input type="hidden" name="id" value={user.id} />
       <input type="hidden" name="status" value={nextStatus} />
       <button type="submit" disabled={disabled} className={nextStatus === "active" ? quietButtonClass : dangerButtonClass}>
@@ -224,7 +226,7 @@ export function SyncAuthForm({ user }: { user: ManagedAdminUser }) {
 export function RemoveAccessForm({ user, disabled }: { user: ManagedAdminUser; disabled: boolean }) {
   const [state, formAction] = useFormState(removeAdminAccessAction, initialState);
   return (
-    <form action={formAction} className="grid gap-1">
+    <form action={formAction} className="grid gap-1" onSubmit={(event) => { if (!window.confirm("Ngừng quyền quản trị? Auth user sẽ không bị xóa.")) event.preventDefault(); }}>
       <input type="hidden" name="id" value={user.id} />
       <button type="submit" disabled={disabled} className={dangerButtonClass}>
         Xóa quyền admin

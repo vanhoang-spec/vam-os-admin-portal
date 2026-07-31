@@ -73,7 +73,13 @@ function safeJson(value: unknown) {
 function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedAdminUser[]; activeSuperAdminCount: number }) {
   if (!users.length) return <EmptyState message="Chưa có admin user để hiển thị." />;
   return (
-    <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
+    <><div className="grid gap-3 md:hidden">
+      {users.map((user) => <article key={user.id} className="rounded-lg border border-vam-line bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="break-words font-semibold text-vam-ink">{displayText(user.full_name)}</h3><p className="break-all text-sm text-slate-600">{displayText(user.email)}</p></div><StatusBadges user={user} /></div>
+        <dl className="mt-3 grid gap-2 text-sm"><div><dt className="text-xs uppercase text-slate-500">Operational role</dt><dd>{roleLabel(user.role)}</dd></div><div><dt className="text-xs uppercase text-slate-500">Program / season scope</dt><dd className="break-words">{scopeText(user)}</dd></div><div><dt className="text-xs uppercase text-slate-500">Auth identity</dt><dd>{user.auth_user_id ? "Đã liên kết" : "Chưa liên kết"}</dd></div><div><dt className="text-xs uppercase text-slate-500">Participant membership</dt><dd>Không quản lý tại tài khoản staff</dd></div></dl>
+        <div className="mt-4 grid gap-2"><Link href={`/admin/users?edit=${user.id}`} className="min-h-11 rounded-md border border-vam-line px-3 py-2.5 text-center font-medium text-vam-green">Sửa tài khoản</Link><StatusToggleForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /><RemoveAccessForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /></div>
+      </article>)}
+    </div><div className="hidden overflow-hidden rounded-lg border border-vam-line bg-white md:block">
       <div className="overflow-x-auto">
         <table className="min-w-[1280px] divide-y divide-vam-line text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
@@ -114,7 +120,7 @@ function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedA
           </tbody>
         </table>
       </div>
-    </div>
+    </div></>
   );
 }
 
@@ -134,6 +140,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams?: 
   return (
     <>
       <PageHeader title="Quản lý người dùng" description="Super Admin Console cho user, vai trò, trạng thái và phân quyền mùa/chương trình." />
+      <div className="mb-6 flex flex-wrap gap-3"><Link href="/admin/users/import" className="min-h-11 rounded-md bg-vam-green px-4 py-2.5 font-medium text-white">Import CSV an toàn</Link></div>
       {usersResult.error ? <ErrorBox message={usersResult.error} /> : null}
       {auditResult.error ? <ErrorBox message={auditResult.error} /> : null}
 

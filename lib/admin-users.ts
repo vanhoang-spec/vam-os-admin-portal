@@ -5,6 +5,7 @@ import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { JsonRecord } from "@/lib/types";
+import { isValidEmail, normalizeEmail } from "@/lib/identity";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
 export type ScopeRole = "full_access" | "operations" | "review" | "read";
@@ -95,10 +96,6 @@ export async function requireSuperAdmin(): Promise<CurrentAdminUser | null> {
   }
 }
 
-function normalizeEmail(value: unknown) {
-  return String(value ?? "").trim().toLowerCase();
-}
-
 function cleanText(value: unknown) {
   const text = String(value ?? "").trim();
   return text || null;
@@ -166,6 +163,7 @@ async function getScopesForAuthUsers(client: any, authUserIds: string[]): Promis
       details: error.details
     });
     return { data: [], error: `Không thể tải admin_scope_access: ${error.message}` };
+    throw new Error("Không thể ghi nhật ký kiểm toán bắt buộc.");
   }
   return { data: ((data ?? []) as JsonRecord[]).map(normalizeScopeRow), error: null };
 }
@@ -394,7 +392,7 @@ export async function createManagedAdminUser(input: {
   if (!client) return { ok: false, message: error };
 
   const email = normalizeEmail(input.email);
-  if (!email || !email.includes("@")) return { ok: false, message: "Email không hợp lệ." };
+  if (!isValidEmail(email)) return { ok: false, message: "Email không hợp lệ." };
 
   const auth = await ensureAuthUserForEmail(client, email);
   if (!auth.authUserId) return { ok: false, message: auth.warning ?? "Không thể tạo hoặc tìm Supabase Auth user." };
@@ -409,7 +407,7 @@ export async function createManagedAdminUser(input: {
     email,
     full_name: cleanText(input.fullName),
     role: validRole(input.role),
-    status: validStatus(input.status),
+    status: auth.created ? "invited" : validStatus(input.status),
     auth_user_id: auth.authUserId
   };
   const before = existing?.id ? await snapshotAdminUser(client, existing.id) : null;
@@ -439,7 +437,7 @@ export async function createManagedAdminUser(input: {
     afterData: after
   });
 
-  return { ok: true, message: `Đã tạo/cập nhật admin user và liên kết Auth. auth_user_id: ${auth.authUserId}` };
+  return { ok: true, message: auth.created ? "Đã gửi lời mời và tạo tài khoản ở trạng thái đã mời." : "Đã cập nhật tài khoản hiện có an toàn." };
 }
 
 export async function updateManagedAdminUser(input: {
@@ -520,6 +518,13 @@ export async function setManagedAdminUserStatus(id: unknown, status: unknown): P
 
   const { data: current } = await client.from("admin_users").select("role,status,auth_user_id").eq("id", targetId).maybeSingle();
   const nextRole = validRole(current?.role);
+  if (current?.status === "invited" && nextStatus === "active") {
+    if (!current.auth_user_id) return { ok: false, message: "Tài khoản chưa liên kết Auth nên chưa thể kích hoạt." };
+    const { data: authData, error: authError } = await client.auth.admin.getUserById(current.auth_user_id);
+    if (authError || !authData?.user?.email_confirmed_at) {
+      return { ok: false, message: "Người dùng chưa hoàn tất xác nhận thông tin đăng nhập; trạng thái vẫn là đã mời." };
+    }
+  }
   if (await wouldRemoveLastActiveSuperAdmin(client, targetId, nextRole, nextStatus)) {
     return { ok: false, message: "Không thể tạm khóa super_admin active cuối cùng." };
   }
@@ -624,7 +629,7 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
     afterData: after
   });
 
-  return { ok: true, message: `Đã đồng bộ Auth. auth_user_id: ${auth.authUserId}` };
+  return { ok: true, message: "Đã đồng bộ danh tính Auth an toàn." };
 }
 
 export async function deactivateManagedAdminUser(id: unknown): Promise<AdminUserMutationResult> {
