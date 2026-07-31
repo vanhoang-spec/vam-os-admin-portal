@@ -7,7 +7,9 @@ export type ImportActionState = {
   phase: "idle" | "preview" | "complete";
   ok: boolean;
   message: string;
-  rawCsv?: string;
+  previewId?: string;
+  previewIntegrity?: string;
+  previewExpiresAt?: number;
   rows: AccountImportRow[];
   outcomes: AccountImportOutcome[];
 };
@@ -20,17 +22,18 @@ export async function previewImportAction(_: ImportActionState, formData: FormDa
   const rawCsv = await file.text();
   try {
     const result = await previewAccountImport(rawCsv);
-    return { phase: "preview", ok: result.ok, message: result.ok ? "Dữ liệu hợp lệ. Hãy kiểm tra kỹ trước khi xác nhận." : [...result.errors, "Hãy sửa các dòng lỗi rồi tải lại."].filter(Boolean).join(" "), rawCsv, rows: result.rows, outcomes: [] };
+    return { phase: "preview", ok: result.ok, message: result.ok ? "Dữ liệu hợp lệ. Bản xem trước dùng một lần và hết hạn sau 10 phút." : [...result.errors, "Hãy sửa các dòng lỗi rồi tải lại."].filter(Boolean).join(" "), previewId: result.preview?.id, previewIntegrity: result.preview?.integrity, previewExpiresAt: result.preview?.expiresAt, rows: result.rows, outcomes: [] };
   } catch {
     return { ...initialImportState, message: "Không thể kiểm tra tệp. Không có dữ liệu hoặc lời mời nào được tạo." };
   }
 }
 
 export async function confirmImportAction(_: ImportActionState, formData: FormData): Promise<ImportActionState> {
-  const rawCsv = String(formData.get("raw_csv") ?? "");
-  if (!rawCsv) return { ...initialImportState, message: "Phiên xem trước đã hết hạn. Vui lòng tải lại tệp." };
+  const previewId = String(formData.get("preview_id") ?? "");
+  const previewIntegrity = String(formData.get("preview_integrity") ?? "");
+  if (!previewId || !previewIntegrity) return { ...initialImportState, message: "Phiên xem trước đã hết hạn. Vui lòng tải lại tệp." };
   try {
-    const result = await confirmAccountImport(rawCsv);
+    const result = await confirmAccountImport(previewId, previewIntegrity);
     return { phase: "complete", ok: result.ok, message: result.message, rows: [], outcomes: result.outcomes };
   } catch {
     return { ...initialImportState, message: "Xác nhận thất bại an toàn. Kiểm tra cấu hình staging và thử lại." };

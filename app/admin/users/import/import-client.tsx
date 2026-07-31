@@ -32,8 +32,9 @@ export function AccountImportClient() {
       <div><SubmitButton>Xem trước an toàn</SubmitButton></div>
     </form>
     {finalState.message ? <div tabIndex={-1} className={finalState.ok ? "rounded-md border border-green-200 bg-green-50 p-4 text-green-800" : "rounded-md border border-red-200 bg-red-50 p-4 text-red-800"} role="status">{finalState.message}</div> : null}
-    {preview.phase === "preview" ? <><PreviewRows rows={preview.rows} />{preview.ok && preview.rawCsv ? <form action={confirmAction} className="sticky bottom-3 rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-lg">
-      <input type="hidden" name="raw_csv" value={preview.rawCsv} />
+    {preview.phase === "preview" ? <><PreviewRows rows={preview.rows} />{preview.ok && preview.previewId && preview.previewIntegrity ? <form action={confirmAction} className="sticky bottom-3 rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-lg">
+      <input type="hidden" name="preview_id" value={preview.previewId} />
+      <input type="hidden" name="preview_integrity" value={preview.previewIntegrity} />
       <p className="mb-3 text-sm text-amber-900">Xác nhận sẽ kiểm tra lại toàn bộ dữ liệu trên server. Staff sẽ nhận lời mời; mentor/mentee chỉ nhận membership và không có Auth.</p>
       <SubmitButton danger>Xác nhận import</SubmitButton>
     </form> : null}</> : null}

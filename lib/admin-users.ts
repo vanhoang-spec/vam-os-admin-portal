@@ -163,7 +163,6 @@ async function getScopesForAuthUsers(client: any, authUserIds: string[]): Promis
       details: error.details
     });
     return { data: [], error: `Không thể tải admin_scope_access: ${error.message}` };
-    throw new Error("Không thể ghi nhật ký kiểm toán bắt buộc.");
   }
   return { data: ((data ?? []) as JsonRecord[]).map(normalizeScopeRow), error: null };
 }
@@ -280,6 +279,9 @@ async function writeAuditLog(client: any, input: {
       hint: error.hint,
       details: error.details
     });
+    const auditError = new Error("Không thể hoàn tất tác vụ vì nhật ký kiểm toán bắt buộc thất bại.");
+    auditError.name = "MandatoryAuditError";
+    throw auditError;
   }
 }
 
@@ -396,6 +398,21 @@ export async function createManagedAdminUser(input: {
 
   const auth = await ensureAuthUserForEmail(client, email);
   if (!auth.authUserId) return { ok: false, message: auth.warning ?? "Không thể tạo hoặc tìm Supabase Auth user." };
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
+    p_actor_admin_user_id: actor.id, p_operation: "upsert", p_target_admin_user_id: null,
+    p_payload: { auth_user_id: auth.authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: auth.created ? "invited" : validStatus(input.status), program_id: scopeText(input.programId,"VAM"), season_id: scopeText(input.seasonId,SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE), scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
+  });
+  if (atomicError) {
+    if (auth.created) {
+      const compensation = await client.auth.admin.deleteUser(auth.authUserId);
+      return compensation.error
+        ? { ok: false, message: "Tác vụ thất bại và cần đối soát Auth trước khi thử lại." }
+        : { ok: false, message: "Tác vụ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi an toàn." };
+    }
+    return { ok: false, message: "Tác vụ cơ sở dữ liệu và audit thất bại; Auth hiện có không bị thay đổi." };
+  }
+  return { ok: true, message: auth.created ? "Đã gửi lời mời và tạo tài khoản ở trạng thái đã mời." : "Đã cập nhật tài khoản hiện có an toàn." };
+  /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
 
   const { data: existing } = await client
     .from("admin_users")
@@ -438,6 +455,7 @@ export async function createManagedAdminUser(input: {
   });
 
   return { ok: true, message: auth.created ? "Đã gửi lời mời và tạo tài khoản ở trạng thái đã mời." : "Đã cập nhật tài khoản hiện có an toàn." };
+  */
 }
 
 export async function updateManagedAdminUser(input: {
@@ -468,6 +486,10 @@ export async function updateManagedAdminUser(input: {
 
   const before = await snapshotAdminUser(client, id);
   if (!before) return { ok: false, message: "Không tìm thấy admin user." };
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "update", p_target_admin_user_id: id, p_payload: { full_name: cleanText(input.fullName), role: nextRole, status: nextStatus, scope_id: String(input.scopeId??""), program_id: scopeText(input.programId,"VAM"), season_id: scopeText(input.seasonId,SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE), scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) } });
+  if (atomicError) return { ok: false, message: "Không thể cập nhật tài khoản và audit trong cùng giao dịch." };
+  return { ok: true, message: "Đã cập nhật người dùng và phân quyền." };
+  /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
 
   const { error: updateError } = await client
     .from("admin_users")
@@ -504,6 +526,7 @@ export async function updateManagedAdminUser(input: {
   });
 
   return { ok: true, message: "Đã cập nhật người dùng và phân quyền." };
+  */
 }
 
 export async function setManagedAdminUserStatus(id: unknown, status: unknown): Promise<AdminUserMutationResult> {
@@ -528,6 +551,10 @@ export async function setManagedAdminUserStatus(id: unknown, status: unknown): P
   if (await wouldRemoveLastActiveSuperAdmin(client, targetId, nextRole, nextStatus)) {
     return { ok: false, message: "Không thể tạm khóa super_admin active cuối cùng." };
   }
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "status", p_target_admin_user_id: targetId, p_payload: { status: nextStatus } });
+  if (atomicError) return { ok: false, message: "Không thể đổi trạng thái và ghi audit trong cùng giao dịch." };
+  return { ok: true, message: nextStatus === "active" ? "Đã kích hoạt lại người dùng." : "Đã tạm khóa người dùng. Supabase Auth user không bị xóa." };
+  /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
 
   const before = await snapshotAdminUser(client, targetId);
   const { error: updateError } = await client.from("admin_users").update({ status: nextStatus }).eq("id", targetId);
@@ -547,6 +574,7 @@ export async function setManagedAdminUserStatus(id: unknown, status: unknown): P
   });
 
   return { ok: true, message: nextStatus === "active" ? "Đã kích hoạt lại người dùng." : "Đã tạm khóa người dùng. Supabase Auth user không bị xóa." };
+  */
 }
 
 export async function removeManagedAdminAccess(id: unknown): Promise<AdminUserMutationResult> {
@@ -562,6 +590,10 @@ export async function removeManagedAdminAccess(id: unknown): Promise<AdminUserMu
   if (await wouldRemoveLastActiveSuperAdmin(client, targetId, validRole(current?.role), "inactive")) {
     return { ok: false, message: "Không thể xóa quyền admin của super_admin active cuối cùng." };
   }
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "remove", p_target_admin_user_id: targetId, p_payload: {} });
+  if (atomicError) return { ok: false, message: "Không thể ngừng quyền và ghi audit trong cùng giao dịch." };
+  return { ok: true, message: "Đã ngừng quyền admin trong VAM OS. Supabase Auth user không bị xóa." };
+  /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
 
   const before = await snapshotAdminUser(client, targetId);
   const { error: updateError } = await client.from("admin_users").update({ status: "inactive" }).eq("id", targetId);
@@ -578,6 +610,7 @@ export async function removeManagedAdminAccess(id: unknown): Promise<AdminUserMu
   });
 
   return { ok: true, message: "Đã xóa quyền admin trong VAM OS. Supabase Auth user không bị xóa." };
+  */
 }
 
 export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMutationResult> {
@@ -604,6 +637,16 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
 
   const auth = await ensureAuthUserForEmail(client, before.user.email);
   if (!auth.authUserId) return { ok: false, message: auth.warning ?? "Không thể tìm hoặc tạo Supabase Auth user." };
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "link_auth", p_target_admin_user_id: targetId, p_payload: { auth_user_id: auth.authUserId, program_id: "VAM", season_id: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, scope_role: scopeRoleForAdminRole(before.user.role), scope_status: before.user.status === "active" ? "active" : "inactive" } });
+  if (atomicError) {
+    if (auth.created) {
+      const compensation = await client.auth.admin.deleteUser(auth.authUserId);
+      return compensation.error ? { ok: false, message: "Đồng bộ thất bại và cần đối soát Auth trước khi thử lại." } : { ok: false, message: "Đồng bộ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi." };
+    }
+    return { ok: false, message: "Đồng bộ cơ sở dữ liệu và audit thất bại; Auth hiện có không bị thay đổi." };
+  }
+  return { ok: true, message: "Đã đồng bộ danh tính Auth an toàn." };
+  /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
 
   const { error: updateError } = await client.from("admin_users").update({ auth_user_id: auth.authUserId }).eq("id", targetId);
   if (updateError) return { ok: false, message: `Không thể cập nhật auth_user_id: ${updateError.message}` };
@@ -630,6 +673,7 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
   });
 
   return { ok: true, message: "Đã đồng bộ danh tính Auth an toàn." };
+  */
 }
 
 export async function deactivateManagedAdminUser(id: unknown): Promise<AdminUserMutationResult> {
