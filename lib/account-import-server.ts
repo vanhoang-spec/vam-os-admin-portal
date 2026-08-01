@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "crypto";
 import { requireSuperAdmin } from "@/lib/admin-users";
 import { isParticipantImportRole, isStaffImportRole, scopeRoleForStaffRole } from "@/lib/account-roles";
 import { executeStaffMutation } from "@/lib/account-mutation-orchestrator";
+import { resolveAuthOwnership } from "@/lib/account-auth-ownership";
 import { consumeAccountPreview, createAccountPreview } from "@/lib/account-preview-store";
 import {
   parseAccountImportCsv,
@@ -61,17 +62,6 @@ async function upsertParticipantMembership(client: any, actorId: string, batchId
   return { rowNumber: row.rowNumber, status: result.outcome_status, reason: result.reason_code };
 }
 
-async function findAuthUser(client: any, email: string) {
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await client.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error) throw new Error("AUTH_LOOKUP_FAILED");
-    const found = data?.users?.find((user: any) => String(user.email ?? "").trim().toLowerCase() === email);
-    if (found?.id) return { id: String(found.id) };
-    if (!data?.users?.length || data.users.length < 1000) break;
-  }
-  return null;
-}
-
 export async function confirmAccountImport(previewId: string, integrity: string): Promise<{ ok: boolean; batchId?: string; outcomes: AccountImportOutcome[]; message: string }> {
   const actor = await requireSuperAdmin();
   if (!actor?.id) return { ok: false, outcomes: [], message: "Không có quyền xác nhận import." };
@@ -101,8 +91,7 @@ export async function confirmAccountImport(previewId: string, integrity: string)
         const staffRole = row.role;
         const operationId = randomUUID();
         const result = await executeStaffMutation({
-          findAuth: () => findAuthUser(client, row.email),
-          inviteAuth: async () => { const invited = await client.auth.admin.inviteUserByEmail(row.email); if (invited.error) throw new Error("AUTH_INVITE_FAILED"); if (invited.data?.user?.id) return { id: String(invited.data.user.id), ownership: "created" as const }; const resolved = await findAuthUser(client, row.email); return resolved?.id ? { id: resolved.id, ownership: "created" as const } : { id: null, ownership: "ambiguous" as const }; },
+          resolveAuth: () => resolveAuthOwnership(client, row.email),
           commitDatabase: async (authUserId) => { const rpc = await client.rpc("vam062_upsert_staff_account_atomic", { p_actor_admin_user_id: actor.id, p_batch_id: batch.id, p_row_number: row.rowNumber, p_auth_user_id: authUserId, p_email: row.email, p_display_name: row.displayName, p_role: staffRole, p_program_id: row.programId, p_season_id: row.seasonId, p_scope_role: scopeRoleForStaffRole(staffRole) }); if (rpc.error) throw new Error("DB_TRANSACTION_FAILED"); },
           compensateAuth: async (authUserId) => { const deleted = await client.auth.admin.deleteUser(authUserId); if (deleted.error) throw new Error("AUTH_COMPENSATION_FAILED"); },
           recordCompensation: async (identifierHash) => { const rpc=await client.rpc("vam062_record_auth_reconciliation",{p_actor_admin_user_id:actor.id,p_operation_id:operationId,p_identifier_hash:identifierHash,p_action_type:"csv_staff_import",p_failure_class:"database_failed_auth_compensated",p_retry_status:"resolved",p_correlation_metadata:{batch_id:batch.id,row_number:row.rowNumber}});if(rpc.error)throw Error("COMPENSATION_RECORD_FAILED") },

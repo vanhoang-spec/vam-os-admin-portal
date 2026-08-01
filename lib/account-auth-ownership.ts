@@ -1,0 +1,12 @@
+export type AuthOwnershipState = "preexisting" | "proven_created" | "ambiguous" | "not_found" | "failed";
+export type AuthOwnershipResult = { state: AuthOwnershipState; id: string | null; deleteAllowed: boolean; evidence: "pre_lookup" | "provider_id" | "post_lookup" | "none" };
+type AuthUser = { id?: unknown; email?: unknown };
+const normalizedEmail = (value: unknown) => String(value ?? "").trim().toLowerCase();
+export async function findExactAuthUsers(client: any, email: string): Promise<{ ok: boolean; users: { id: string }[] }> {
+ const target=normalizedEmail(email),matches=new Map<string,{id:string}>(); try { for(let page=1;page<=20;page+=1){const {data,error}=await client.auth.admin.listUsers({page,perPage:1000});if(error)return{ok:false,users:[]};const users:AuthUser[]=data?.users??[];for(const user of users){const id=String(user.id??"").trim();if(id&&normalizedEmail(user.email)===target)matches.set(id,{id})}if(users.length<1000)break}return{ok:true,users:Array.from(matches.values())}}catch{return{ok:false,users:[]}}
+}
+export async function resolveAuthOwnership(client:any,email:string):Promise<AuthOwnershipResult>{
+ const before=await findExactAuthUsers(client,email);if(!before.ok)return{state:"failed",id:null,deleteAllowed:false,evidence:"none"};if(before.users.length>1)return{state:"ambiguous",id:null,deleteAllowed:false,evidence:"pre_lookup"};if(before.users.length===1)return{state:"preexisting",id:before.users[0].id,deleteAllowed:false,evidence:"pre_lookup"};
+ let invitation:any;try{invitation=await client.auth.admin.inviteUserByEmail(email)}catch{return{state:"failed",id:null,deleteAllowed:false,evidence:"none"}}const providerId=String(invitation?.data?.user?.id??"").trim(),after=await findExactAuthUsers(client,email);
+ if(invitation?.error||!after.ok||after.users.length>1)return{state:"ambiguous",id:providerId||(after.users.length===1?after.users[0].id:null),deleteAllowed:false,evidence:providerId?"provider_id":"post_lookup"};if(providerId){if(after.users.length===1&&after.users[0].id!==providerId)return{state:"ambiguous",id:providerId,deleteAllowed:false,evidence:"provider_id"};return{state:"proven_created",id:providerId,deleteAllowed:true,evidence:"provider_id"}}if(after.users.length===0)return{state:"not_found",id:null,deleteAllowed:false,evidence:"none"};return{state:"ambiguous",id:after.users[0].id,deleteAllowed:false,evidence:"post_lookup"}
+}

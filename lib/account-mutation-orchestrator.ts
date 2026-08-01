@@ -1,28 +1,25 @@
 export type StaffMutationResult = { ok: boolean; status: "created" | "updated" | "failed"; reason: string; reconciliationRequired?: boolean };
-export type AuthCreationResult = { id: string | null; ownership: "created" | "ambiguous" };
+import type { AuthOwnershipResult } from "@/lib/account-auth-ownership";
 
 export async function executeStaffMutation(input: {
-  findAuth: () => Promise<{ id: string } | null>;
-  inviteAuth: () => Promise<AuthCreationResult>;
+  resolveAuth: () => Promise<AuthOwnershipResult>;
   commitDatabase: (authUserId: string) => Promise<void>;
   compensateAuth: (authUserId: string) => Promise<void>;
   recordCompensation: (authUserIdHash: string) => Promise<void>;
   recordReconciliation: (authUserIdHash: string) => Promise<void>;
   hashIdentifier: (value: string) => string;
 }): Promise<StaffMutationResult> {
-  const existing = await input.findAuth();
-  const invited = existing ? null : await input.inviteAuth();
-  if (!existing && (!invited?.id || invited.ownership === "ambiguous")) {
-    try { await input.recordReconciliation(input.hashIdentifier(invited?.id ?? "ambiguous_auth_identity")); }
+  const auth = await input.resolveAuth();
+  if (!auth.id || auth.state === "ambiguous" || auth.state === "not_found" || auth.state === "failed") {
+    try { await input.recordReconciliation(input.hashIdentifier(auth.id ?? `auth_${auth.state}`)); }
     catch { return { ok: false, status: "failed", reason: "critical_reconciliation_recording_failed", reconciliationRequired: true }; }
     return { ok: false, status: "failed", reason: "ambiguous_auth_ownership_recorded", reconciliationRequired: true };
   }
-  const auth = existing ?? { id: invited!.id! };
   try {
     await input.commitDatabase(auth.id);
-    return { ok: true, status: existing ? "updated" : "created", reason: existing ? "staff_account_updated" : "staff_account_invited" };
+    return { ok: true, status: auth.state === "preexisting" ? "updated" : "created", reason: auth.state === "preexisting" ? "staff_account_updated" : "staff_account_invited" };
   } catch {
-    if (existing) return { ok: false, status: "failed", reason: "database_transaction_failed_no_new_auth" };
+    if (!auth.deleteAllowed || auth.state !== "proven_created") return { ok: false, status: "failed", reason: "database_transaction_failed_no_deletion_authority" };
     try {
       await input.compensateAuth(auth.id);
       try { await input.recordCompensation(input.hashIdentifier(auth.id)); }

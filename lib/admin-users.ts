@@ -7,6 +7,7 @@ import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { JsonRecord } from "@/lib/types";
 import { isValidEmail, normalizeEmail } from "@/lib/identity";
+import { resolveAuthOwnership } from "@/lib/account-auth-ownership";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
 export type ScopeRole = "full_access" | "operations" | "review" | "read";
@@ -306,36 +307,9 @@ async function wouldRemoveLastActiveSuperAdmin(client: any, targetId: string, ne
   return (count ?? 0) < 1;
 }
 
-async function findAuthUserByEmail(client: any, email: string) {
-  const target = normalizeEmail(email);
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await client.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error) throw new Error(serviceRoleErrorMessage("Không thể tra cứu Supabase Auth user", error.message));
-    const user = data?.users?.find((row: any) => normalizeEmail(row.email) === target);
-    if (user) return user;
-    if (!data?.users?.length || data.users.length < 1000) break;
-  }
-  return null;
-}
-
 async function ensureAuthUserForEmail(client: any, email: string) {
-  const existing = await findAuthUserByEmail(client, email);
-  if (existing?.id) return { authUserId: existing.id as string, created: false, ownershipAmbiguous: false, warning: null as string | null };
-
-  const { data, error } = await client.auth.admin.inviteUserByEmail(email);
-  if (error) {
-    const afterError = await findAuthUserByEmail(client, email);
-    if (afterError?.id) return { authUserId: afterError.id as string, created: false, ownershipAmbiguous: false, warning: null };
-    return { authUserId: null, created: false, ownershipAmbiguous: false, warning: serviceRoleErrorMessage("Supabase Auth invite failed", error.message) };
-  }
-
-  const authUserId = data?.user?.id ?? (await findAuthUserByEmail(client, email))?.id ?? null;
-  return {
-    authUserId: authUserId as string | null,
-    created: Boolean(authUserId),
-    ownershipAmbiguous: !authUserId,
-    warning: authUserId ? null : "Auth invite đã chạy nhưng chưa trả về auth_user_id."
-  };
+  const result = await resolveAuthOwnership(client, email);
+  return { authUserId: result.state === "preexisting" || result.state === "proven_created" ? result.id : null, created: result.state === "proven_created" && result.deleteAllowed, ownershipAmbiguous: result.state === "ambiguous" || result.state === "not_found", warning: result.state === "failed" ? "Không thể xác minh Supabase Auth user." : null };
 }
 
 async function recordAuthReconciliation(client:any,actorId:string,operationId:string,email:string,actionType:string,failureClass:string,retryStatus:"required"|"resolved"){
