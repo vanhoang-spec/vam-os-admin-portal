@@ -1,0 +1,619 @@
+{
+  "artifact": "VAM_OS_V5_STAGING_SCHEMA_EVIDENCE",
+  "captureDate": "2026-08-01",
+  "captureStatus": "NOT_EXECUTED",
+  "note": "This document was produced during a Bash-free, database-connection-free static preparation phase. No database command of any kind was executed while producing this file. Every field below that would require a live catalog query is explicitly marked with status PENDING_CATALOG_CAPTURE, value null, and authority UNAVAILABLE. Nothing here is a fabricated catalog value.",
+
+  "repositoryBaseline": {
+    "repository": "VAM_OS_Admin_Portal",
+    "branch": "batch-account-admin-csv-rls-foundation",
+    "headCommit": "611ff7228f3dedeffef7459630211a797ba1b5e6",
+    "indexEmpty": true,
+    "dirtyWorktreePreserved": true,
+    "confirmedEarlierInThisSessionViaGit": true,
+    "confirmedDuringThisAutonomousPhaseViaBash": false
+  },
+
+  "protectedArtifactHashesSha256": {
+    "note": "Computed earlier in this session under explicit human-approved Bash use, prior to this Bash-free autonomous phase. Not recomputed during this phase.",
+    "supabase_migrations/062_review_only_account_admin_rls_foundation.sql": "1a366dc03cc4810fb53946bbe6a7c04e30828adecec51963ccd9c2d74ff96c58",
+    "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql": "ab6dfb708a855da97466814d2ec770c40d61fc8985a6c24531f3c9185b53848a",
+    "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql": "062d924dd688c419dc4a1c16ef2faa6ef0b209f825a5de8e827d3bbdd7f6ddbe",
+    "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql": "5cff548d8df4a55dadf5742a537586ff444a760b32d9df7d5b737bb73764ac60",
+    "editedDuringThisAutonomousPhase": false
+  },
+
+  "stagingTargetProof": {
+    "sanitizedApprovedProjectRef": "ljfneyuvpxrmejpxsmpz",
+    "productionProjectRefIntentionallyExcludedFromEvidence": true,
+    "productionProjectRefValuePersistedAnywhereInThisDocument": false,
+    "connectionStringEverPersisted": false,
+    "priorMinimalReadOnlyConnectionTest": {
+      "performedInThisSession": true,
+      "performedDuringThisAutonomousPhase": false,
+      "database": "postgres",
+      "transactionReadOnly": "on",
+      "serverVersion": "17.6",
+      "roleShapeCheck": "expected_role_shape"
+    }
+  },
+
+  "captureQueryArtifact": {
+    "path": "docs/audits/sql/design_only/VAM_OS_V5_METADATA_EVIDENCE_CAPTURE.sql",
+    "sha256": null,
+    "sha256Status": "PENDING_HASH_COMPUTATION_AT_EXECUTION_TIME",
+    "sectionsDefined": [
+      "relations",
+      "columns",
+      "constraints",
+      "indexes",
+      "relation_acl",
+      "function_acl",
+      "policies",
+      "rls_state",
+      "helper_functions",
+      "prerequisite_probe",
+      "session_context"
+    ],
+    "staticComplianceReview": {
+      "beginsReadOnlyTransaction": true,
+      "statementTimeout": "15s",
+      "lockTimeout": "3s",
+      "endsWithRollback": true,
+      "catalogRelationsQueried": [
+        "pg_class", "pg_namespace", "pg_attribute", "pg_attrdef", "pg_collation",
+        "pg_constraint", "pg_index", "pg_am", "pg_proc", "pg_language", "pg_policies"
+      ],
+      "informationSchemaViewsQueried": [],
+      "catalogRenderingFunctionsUsed": [
+        "pg_get_expr", "pg_get_constraintdef", "pg_get_indexdef", "pg_get_functiondef",
+        "pg_get_function_identity_arguments", "pg_get_function_arguments",
+        "pg_get_userbyid", "aclexplode", "acldefault", "format_type",
+        "to_regnamespace", "to_regprocedure", "current_setting", "current_database"
+      ],
+      "applicationRelationsSelectedFrom": [],
+      "applicationFunctionsInvoked": [],
+      "authUsersQueried": false,
+      "ddlPresent": false,
+      "dmlPresent": false,
+      "conclusion": "Every FROM/JOIN target is a pg_catalog relation. Application relations (people, admin_users, etc.) are referenced only by name in catalog-join predicates (c.relname = 'people') to retrieve their structural metadata; no row of any application table is ever selected. Helper function definitions are retrieved via pg_get_functiondef; the functions themselves are never called."
+    }
+  },
+
+  "prerequisiteDependencyInventory": [
+    {
+      "evidenceId": "PREREQ-01",
+      "objectType": "table",
+      "schema": "public",
+      "name": "people",
+      "sourceReferences": ["supabase_migrations/062_review_only_account_admin_rls_foundation.sql:7", "docs/audits/VAM_OS_ACCOUNT_ADMIN_V5_SPEC.json"],
+      "repositoryAuthoritativeDdl": false,
+      "classification": "MISSING_REPOSITORY_EVIDENCE",
+      "note": "No CREATE TABLE for public.people exists anywhere under supabase_migrations/. Tracked migration history begins at 012; this table predates tracked history or was created out-of-band.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-02",
+      "objectType": "table",
+      "schema": "public",
+      "name": "programs",
+      "sourceReferences": ["supabase_migrations/036_mentor_taxonomy_and_programs.sql:23-33"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "columnsPerRepo": ["id uuid pk default gen_random_uuid()", "code text not null unique", "name text not null", "is_active boolean not null default true", "created_at timestamptz", "updated_at timestamptz"],
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-03",
+      "objectType": "table",
+      "schema": "public",
+      "name": "seasons",
+      "sourceReferences": ["supabase_migrations/062_review_only_account_admin_rls_foundation.sql:7", "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql:3"],
+      "repositoryAuthoritativeDdl": false,
+      "classification": "MISSING_REPOSITORY_EVIDENCE",
+      "note": "No CREATE TABLE for public.seasons exists anywhere under supabase_migrations/. Only RLS-enable statements (migration 018) and downstream FK references (036, 052) exist; the base table shape is entirely unanchored in this repo.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-04",
+      "objectType": "table",
+      "schema": "public",
+      "name": "intake_batches",
+      "sourceReferences": ["supabase_migrations/036_mentor_taxonomy_and_programs.sql:229-240"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "note": "Table shape matches repo authority. See CONFLICT-02 for a separate, unrelated defect in migration 062's FK guard string for this table's season_id FK.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-05",
+      "objectType": "table",
+      "schema": "public",
+      "name": "person_season_memberships",
+      "sourceReferences": ["supabase_migrations/052_phase1a_member_lifecycle_crm_foundation.sql:12-66"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "note": "Table shape and unique(person_id,season_id,role) arbiter match repo authority. See CONFLICT-03 for a separate, unrelated defect in migration 062's lifecycle-constraint guard for this table.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-06",
+      "objectType": "table",
+      "schema": "public",
+      "name": "person_season_membership_log",
+      "sourceReferences": ["supabase_migrations/052_phase1a_member_lifecycle_crm_foundation.sql:125-183"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-07",
+      "objectType": "table",
+      "schema": "public",
+      "name": "admin_users",
+      "sourceReferences": ["supabase_migrations/017_create_admin_users_and_roles.sql:5-21", "supabase_migrations/047_fix_admin_users_role_constraint_core_support_team.sql:15-29"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "note": "role_check updated by migration 047 to include support_team/core_team, matching migration 062's expected role list. status_check (invited/active/suspended/inactive) and unique(email) unchanged since 017.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-08",
+      "objectType": "table",
+      "schema": "public",
+      "name": "admin_scope_access",
+      "sourceReferences": ["supabase_migrations/020_admin_scope_access_schema_alignment.sql:7-70", "supabase_migrations/026_production_schema_sync_admin_audit.sql:17-64"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "CONFLICT",
+      "note": "Table shape matches repo authority, but the ON CONFLICT arbiter assumed by migration 062 does not exist. See CONFLICT-01.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-09",
+      "objectType": "table",
+      "schema": "public",
+      "name": "admin_audit_log",
+      "sourceReferences": ["supabase_migrations/024_super_admin_user_console.sql:4-12", "supabase_migrations/026_production_schema_sync_admin_audit.sql:78-137"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "note": "Caveat CAVEAT-08: the two admin_users FKs were added NOT VALID in migration 026 and validation status thereafter is unknown from repo alone.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-10",
+      "objectType": "function",
+      "schema": "public",
+      "name": "current_admin_role()",
+      "sourceReferences": ["supabase_migrations/018_draft_rls_read_policies.sql:16-28", "supabase_migrations/020_admin_scope_access_schema_alignment.sql:79-91"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "definitionNote": "language sql, stable, security definer, search_path=public. Definition unchanged in its two create-or-replace occurrences.",
+      "privilegeStateNote": "RISK-04: unlike is_active_admin(), no tracked migration ever revokes anon/public EXECUTE on this function. Grant state must be confirmed via staging function_acl capture before relying on migration 062's line-17 guard.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-11",
+      "objectType": "function",
+      "schema": "public",
+      "name": "is_active_admin()",
+      "sourceReferences": ["supabase_migrations/018_draft_rls_read_policies.sql:46-59", "supabase_migrations/020_admin_scope_access_schema_alignment.sql:93-106", "supabase_migrations/057_security_hardening_rls_phase1.sql:39,44"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "definitionNote": "language sql, stable, security definer, search_path=public.",
+      "privilegeStateNote": "Migration 057 explicitly REVOKEs EXECUTE from anon/public and GRANTs to authenticated, matching migration 062's line-17 expectation.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-12",
+      "objectType": "schema",
+      "schema": "auth",
+      "name": "auth",
+      "sourceReferences": ["supabase_migrations/062_review_only_account_admin_rls_foundation.sql:10"],
+      "repositoryAuthoritativeDdl": false,
+      "classification": "NOT_REQUIRED_BY_PACKAGE",
+      "note": "Supabase-managed schema, not created by any repository migration. Existence probe included in capture SQL defensively.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-13",
+      "objectType": "function",
+      "schema": "pg_catalog",
+      "name": "gen_random_uuid()",
+      "sourceReferences": ["supabase_migrations/026_production_schema_sync_admin_audit.sql:5"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "note": "pgcrypto extension created idempotently in migration 026; function used as id default throughout 017/020/024/036/052/062.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-14",
+      "objectType": "policy",
+      "schema": "public",
+      "table": "admin_users",
+      "name": "read_admin_users_super_admin_or_self",
+      "sourceReferences": ["supabase_migrations/018_draft_rls_read_policies.sql:221-229"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "qualPerRepo": "(auth.uid() = auth_user_id) OR (current_admin_role() = 'super_admin')",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-15",
+      "objectType": "policy",
+      "schema": "public",
+      "table": "admin_scope_access",
+      "name": "read_admin_scope_access_self_or_super_admin",
+      "sourceReferences": ["supabase_migrations/020_admin_scope_access_schema_alignment.sql:110-132"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "qualPerRepo": "(current_admin_role() = 'super_admin') OR (is_active_admin() AND user_id = auth.uid() AND status = 'active')",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-16",
+      "objectType": "policy",
+      "schema": "public",
+      "table": "admin_audit_log",
+      "name": "read_admin_audit_log_super_admin_only",
+      "sourceReferences": ["supabase_migrations/062_review_only_account_admin_rls_foundation.sql:25", "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql:14"],
+      "repositoryAuthoritativeDdl": false,
+      "classification": "MISSING_REPOSITORY_EVIDENCE",
+      "note": "MISSING-07: no tracked migration creates this policy or ever enables RLS on admin_audit_log, yet preflight's expected_baseline requires it to already exist (hard PASS/FAIL dependency). Origin (manual/out-of-band) unconfirmed without staging capture.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-17",
+      "objectType": "constraint",
+      "schema": "public",
+      "table": "admin_users",
+      "name": "admin_users_email_key (inline unique)",
+      "role": "ON CONFLICT arbiter for admin_users(email)",
+      "sourceReferences": ["supabase_migrations/017_create_admin_users_and_roles.sql:8"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-18",
+      "objectType": "constraint_or_index",
+      "schema": "public",
+      "table": "admin_scope_access",
+      "name": "admin_scope_access_unique_active_scope_idx",
+      "role": "actual arbiter vs. migration 062's assumed ON CONFLICT target",
+      "sourceReferences": ["supabase_migrations/020_admin_scope_access_schema_alignment.sql:63-70", "supabase_migrations/062_review_only_account_admin_rls_foundation.sql:28"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "CONFLICT",
+      "note": "See CONFLICT-01. Real arbiter is a PARTIAL, EXPRESSION-based unique index on (user_id, coalesce(program_id,''), coalesce(season_id,''), role) WHERE status='active' -- not a plain pg_constraint. Migration 062 line 28 requires a plain UNIQUE (user_id, program_id, season_id) constraint that does not exist.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-19",
+      "objectType": "constraint",
+      "schema": "public",
+      "table": "person_season_memberships",
+      "name": "person_season_memberships_person_season_role_key",
+      "role": "ON CONFLICT arbiter for person_season_memberships(person_id,season_id,role)",
+      "sourceReferences": ["supabase_migrations/052_phase1a_member_lifecycle_crm_foundation.sql:64-65"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-20",
+      "objectType": "foreign_key",
+      "schema": "public",
+      "table": "seasons",
+      "name": "seasons.program_id -> programs.id",
+      "sourceReferences": ["supabase_migrations/062_review_only_account_admin_rls_foundation.sql:14", "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql:24"],
+      "repositoryAuthoritativeDdl": false,
+      "classification": "MISSING_REPOSITORY_EVIDENCE",
+      "note": "seasons has no repository-authoritative CREATE TABLE (see PREREQ-03), so the exact FK definition, including its ON DELETE action, cannot be confirmed from repo alone. Migration 062 (no ON DELETE clause expected) and preflight (ON DELETE RESTRICT expected) disagree about this same unanchored FK -- an internal repo-vs-repo inconsistency, not just a repo-vs-staging one.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-21",
+      "objectType": "foreign_key",
+      "schema": "public",
+      "table": "intake_batches",
+      "name": "intake_batches.season_id -> seasons.id",
+      "sourceReferences": ["supabase_migrations/036_mentor_taxonomy_and_programs.sql:231", "supabase_migrations/062_review_only_account_admin_rls_foundation.sql:15", "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql:25"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "CONFLICT",
+      "note": "See CONFLICT-02. Real FK is 'FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE RESTRICT' (per migration 036, on delete restrict). Migration 062 line 15 expects the constraintdef string WITHOUT the ON DELETE RESTRICT suffix, which will never equal the real value.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-22",
+      "objectType": "foreign_key_set",
+      "schema": "public",
+      "table": "person_season_memberships",
+      "name": "person_id/program_id/season_id FKs",
+      "sourceReferences": ["supabase_migrations/052_phase1a_member_lifecycle_crm_foundation.sql:14-16", "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql:30"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "note": "person_id -> people(id) ON DELETE CASCADE, program_id -> programs(id) ON DELETE RESTRICT, season_id -> seasons(id) ON DELETE RESTRICT, matching preflight's membership_foreign_keys assertion. Not independently checked by migration 062's own DO block (migration 062 only guards the seasons/programs and intake_batches/seasons relationships, not these three) -- a scope gap in migration 062's own guard coverage, not a value conflict.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-23",
+      "objectType": "check_constraint",
+      "schema": "public",
+      "table": "admin_users",
+      "name": "admin_users_status_check",
+      "sourceReferences": ["supabase_migrations/017_create_admin_users_and_roles.sql:19-20"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "definitionPerRepo": "status in ('invited','active','suspended','inactive')",
+      "note": "Single constraint contains all four keywords migration 062 line 29 pattern-matches for; guard passes.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-24",
+      "objectType": "check_constraint_pair",
+      "schema": "public",
+      "table": "person_season_memberships",
+      "name": "person_season_memberships_role_check + person_season_memberships_status_check",
+      "sourceReferences": ["supabase_migrations/052_phase1a_member_lifecycle_crm_foundation.sql:28-50"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "CONFLICT",
+      "note": "See CONFLICT-03. Migration 062 line 30 requires ONE constraint containing 'mentor' AND 'mentee' AND 'invited'. The real schema splits these into two constraints (role_check has mentor/mentee, status_check has invited); neither alone satisfies the guard.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-25",
+      "objectType": "check_constraint",
+      "schema": "public",
+      "table": "admin_users",
+      "name": "admin_users_role_check",
+      "sourceReferences": ["supabase_migrations/047_fix_admin_users_role_constraint_core_support_team.sql:15-29"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "REPO_AUTHORITATIVE_MATCH",
+      "definitionPerRepo": "role in ('viewer','reviewer','support_team','core_team','admin','super_admin')",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    },
+    {
+      "evidenceId": "PREREQ-26",
+      "objectType": "foreign_key_validation_state",
+      "schema": "public",
+      "table": "admin_audit_log",
+      "name": "admin_audit_log_actor_admin_user_id_fkey / admin_audit_log_target_admin_user_id_fkey",
+      "sourceReferences": ["supabase_migrations/026_production_schema_sync_admin_audit.sql:118-135"],
+      "repositoryAuthoritativeDdl": true,
+      "classification": "CATALOG_EVIDENCE_ONLY",
+      "note": "CAVEAT-08: both FKs added with NOT VALID in migration 026. Whether they have since been validated (convalidated=true) is unknown from repo alone; the constraints capture section's is_validated field will resolve this.",
+      "stagingCapture": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+    }
+  ],
+
+  "packageTableInventoryFrozenEight": [
+    { "evidenceId": "PKG-01", "name": "public.account_rls_package_state", "createdBy": "migration 062 line 33" },
+    { "evidenceId": "PKG-02", "name": "public.account_rls_package_manifest", "createdBy": "migration 062 line 124" },
+    { "evidenceId": "PKG-03", "name": "public.account_import_batches", "createdBy": "migration 062 line 38" },
+    { "evidenceId": "PKG-04", "name": "public.account_import_outcomes", "createdBy": "migration 062 line 39" },
+    { "evidenceId": "PKG-05", "name": "public.account_auth_reconciliation", "createdBy": "migration 062 line 40" },
+    { "evidenceId": "PKG-06", "name": "public.account_auth_operations", "createdBy": "migration 062 line 41" },
+    { "evidenceId": "PKG-07", "name": "public.account_person_auth_links", "createdBy": "migration 062 line 42" },
+    { "evidenceId": "PKG-08", "name": "public.account_import_previews", "createdBy": "migration 062 line 43" }
+  ],
+  "packageTableInventoryNote": "None of these eight tables exist in staging yet, because migration 062 has not been applied (review-only). The capture SQL's 'relations' section probes for them defensively with LEFT JOIN so their expected absence is itself evidence, not an error.",
+
+  "packageFunctionInventory": [
+    "vam062_current_admin_id()", "vam062_admin_mutation_atomic(uuid,text,uuid,jsonb)",
+    "vam062_upsert_staff_account_atomic(uuid,uuid,integer,uuid,text,text,text,uuid,uuid,text)",
+    "vam062_import_participant_membership_atomic(uuid,uuid,integer,text,text,text,uuid,uuid,uuid)",
+    "vam062_record_reconciliation(uuid,uuid,integer,text)",
+    "vam062_record_auth_reconciliation(uuid,uuid,text,text,text,text,jsonb)",
+    "vam062_begin_auth_operation(uuid,uuid,text,text,uuid)",
+    "vam062_record_auth_operation_stage(uuid,uuid,text,text,text,boolean,text)",
+    "vam062_create_account_preview(uuid,uuid,text,text,text,text,timestamptz,integer)",
+    "vam062_consume_account_preview(uuid,uuid,text)"
+  ],
+  "packagePolicyInventory": [
+    "vam062_admin_users_self_or_super", "vam062_scope_self_or_super", "vam062_audit_actor_or_super",
+    "vam062_people_program_ops", "vam062_membership_program_ops"
+  ],
+  "packageObjectCountCheck": { "tables": 8, "functions": 10, "policies": 5, "total": 23, "matchesRollbackExpectedCount": true },
+
+  "classificationVocabulary": {
+    "comparisonMatrixStates": [
+      "REPO_AUTHORITATIVE_MATCH",
+      "CATALOG_EVIDENCE_ONLY",
+      "REPO_CATALOG_MATCH_NOT_YET_APPROVED",
+      "CONFLICT",
+      "MISSING_REPOSITORY_EVIDENCE",
+      "NOT_REQUIRED_BY_PACKAGE"
+    ],
+    "candidateCanonicalValueStates": [
+      "APPROVED_REPOSITORY_AUTHORITY",
+      "STAGING_EVIDENCE_AWAITING_APPROVAL",
+      "UNRESOLVED_CONFLICT",
+      "UNAVAILABLE"
+    ]
+  },
+
+  "conflictsIdentifiedFromRepositoryEvidenceAlone": [
+    {
+      "id": "CONFLICT-01",
+      "severity": "HIGH_BLOCKING",
+      "summary": "admin_scope_access ON CONFLICT arbiter assumed by migration 062 does not exist in repo-authoritative schema.",
+      "evidenceIds": ["PREREQ-08", "PREREQ-18"]
+    },
+    {
+      "id": "CONFLICT-02",
+      "severity": "HIGH_BLOCKING",
+      "summary": "intake_batches -> seasons FK guard string in migration 062 omits ON DELETE RESTRICT, which the repo-authoritative FK actually has.",
+      "evidenceIds": ["PREREQ-04", "PREREQ-21"]
+    },
+    {
+      "id": "CONFLICT-03",
+      "severity": "HIGH_BLOCKING",
+      "summary": "person_season_memberships lifecycle-constraint guard in migration 062 expects one constraint with mentor+mentee+invited; repo-authoritative schema splits these across two constraints.",
+      "evidenceIds": ["PREREQ-05", "PREREQ-24"]
+    }
+  ],
+  "risksPendingStagingCapture": [
+    {
+      "id": "RISK-04",
+      "severity": "HIGH_UNCONFIRMED",
+      "summary": "current_admin_role() may still hold default anon/public EXECUTE (never revoked in tracked migrations, unlike is_active_admin() which migration 057 explicitly locked down). If so, migration 062 line 17 guard will abort.",
+      "evidenceIds": ["PREREQ-10"]
+    }
+  ],
+  "missingRepositoryEvidence": [
+    { "id": "MISSING-05", "summary": "public.people has no repository-authoritative CREATE TABLE.", "evidenceIds": ["PREREQ-01"] },
+    { "id": "MISSING-06", "summary": "public.seasons has no repository-authoritative CREATE TABLE; its FK to programs is asserted differently by migration 062 vs preflight.", "evidenceIds": ["PREREQ-03", "PREREQ-20"] },
+    { "id": "MISSING-07", "summary": "admin_audit_log's baseline read policy is required by preflight but created by no tracked migration; RLS is never enabled on admin_audit_log by any tracked migration.", "evidenceIds": ["PREREQ-16"] }
+  ],
+
+  "expectedEvidenceSectionsPendingCapture": {
+    "relations": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "columns": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "constraints": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "indexes": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "relation_acl": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "function_acl": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "policies": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "rls_state": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "helper_functions": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "prerequisite_probe": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" },
+    "session_context": { "status": "PENDING_CATALOG_CAPTURE", "value": null, "authority": "UNAVAILABLE" }
+  },
+
+  "repositorySourceInventory": [
+    "supabase_migrations/017_create_admin_users_and_roles.sql",
+    "supabase_migrations/018_draft_rls_read_policies.sql",
+    "supabase_migrations/020_admin_scope_access_schema_alignment.sql",
+    "supabase_migrations/024_super_admin_user_console.sql",
+    "supabase_migrations/026_production_schema_sync_admin_audit.sql",
+    "supabase_migrations/036_mentor_taxonomy_and_programs.sql",
+    "supabase_migrations/047_fix_admin_users_role_constraint_core_support_team.sql",
+    "supabase_migrations/052_phase1a_member_lifecycle_crm_foundation.sql",
+    "supabase_migrations/057_security_hardening_rls_phase1.sql",
+    "supabase_migrations/062_review_only_account_admin_rls_foundation.sql",
+    "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql",
+    "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql",
+    "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql",
+    "docs/audits/VAM_OS_ACCOUNT_ADMIN_V5_SPEC.json",
+    "lib/account-import-server.ts",
+    "lib/admin-users.ts",
+    "lib/account-auth-ledger.ts",
+    "lib/account-preview-store.ts"
+  ],
+
+  "safetyControlsForFutureExecution": {
+    "pgSslMode": "require",
+    "pgConnectTimeout": 10,
+    "psqlBinary": "C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe",
+    "psqlFlags": ["-X", "-q", "-v ON_ERROR_STOP=1"],
+    "transactionMode": "BEGIN TRANSACTION READ ONLY",
+    "statementTimeout": "15s",
+    "lockTimeout": "3s",
+    "terminatesWith": "ROLLBACK",
+    "rawOutputPersisted": false,
+    "sanitizerRequired": true,
+    "sanitizerPath": "scripts/vam_v5_metadata_evidence_sanitizer.mjs",
+    "sanitizerSha256": "c9d0f3d3473fdc95045b439fb88a6e49bb80d9b09e69feed4cbed92a35114494",
+    "sanitizerSha256Note": "This is the current hash, computed after both the Phase 8 FINDING-A fix and the Round-2 Task 3 session-evidence-check additions. eaf38ac7... below was an intermediate value between those two edits and is superseded.",
+    "sanitizerSha256AfterPhase8FixBeforeTask3": "eaf38ac7a841c1e2c55757748f22666b9db7ef6cd27e227c2de5c69e330276a3",
+    "sanitizerSha256PriorToPhase8Fix": "6b198115cad05ba32cad97d391baa2de6864f0c578e83b31086cffde9e849a4e"
+  },
+
+  "phase8AdversarialReview": {
+    "performedAt": "2026-08-01",
+    "performedUnderBashFreeDatabaseFreePhase": true,
+    "note": "See docs/audits/VAM_OS_V5_SCHEMA_AUTHORITY_DECISION_PACK_2026-08-01.md section 16 for full detail. Summarized here so this evidence document stays self-consistent with the decision pack without requiring cross-reference for the headline status.",
+    "findings": [
+      {
+        "id": "FINDING-A",
+        "component": "scripts/vam_v5_metadata_evidence_sanitizer.mjs",
+        "summary": "Nested-object secret redactions did not propagate their _manual_review_required flag to the enclosing row, so flaggedSecretCandidateCount / noOutstandingSecretPatternMatches could under-report.",
+        "exploitableUnderCurrentCaptureSql": false,
+        "reason": "No column selected by VAM_OS_V5_METADATA_EVIDENCE_CAPTURE.sql is json/jsonb-typed today; only scalars and arrays, which were already handled correctly.",
+        "status": "FIXED_AND_VERIFIED",
+        "verification": "Three local dry runs (positive/negative/nested-secret) against fabricated non-secret stdin, no database or network access."
+      },
+      {
+        "id": "FINDING-B",
+        "component": "execution wrapper (documented in decision pack, not a standalone tracked file)",
+        "summary": "STAGING_DATABASE_URL passed as a bare psql -d CLI argument is visible via host process listing for the life of the process.",
+        "status": "RESOLVED_ROUND_2",
+        "resolution": "v2 pipeline removes -d entirely; STAGING_DATABASE_URL is exported as PGDATABASE (libpq env var, accepts a full connection URI) then immediately unset. No process argv created by the wrapper ever contains the value.",
+        "residualRisk": "Environment-variable exposure via same-privilege process-environment inspection is a materially smaller but non-zero surface than argv; accepted as documented, not eliminated to zero."
+      },
+      {
+        "id": "FINDING-C",
+        "component": "execution wrapper",
+        "summary": "psql ... 2>&1 | node sanitizer can interleave/split lines under stdio buffering differences; verified this fails closed (spurious capture failure) rather than open (corrupted published evidence).",
+        "status": "DOCUMENTED_VERIFIED_SAFE_NO_FIX_REQUIRED"
+      },
+      {
+        "id": "FINDING-D",
+        "component": "sanitizer publication checks",
+        "summary": "approvedStagingRefPresent / productionRefAbsent validate that template-carried ref strings survived cloning, not which server psql actually connected to at capture time.",
+        "status": "NARROWED_ROUND_2_NOT_FULLY_ELIMINABLE",
+        "mitigation": "Human must re-confirm STAGING_DATABASE_URL targets the approved ref immediately before the execution turn; this document's stagingTargetProof reflects a prior, not a current, check.",
+        "resolution": "v2 pipeline adds a non-printing target preflight (stagingVariablePresent/postgresUriShape/approvedStagingRefPresent/productionRefAbsent) that checks the live variable immediately before psql starts, and the sanitizer's session_context checks were strengthened (statementTimeoutBounded, lockTimeoutBounded, serverVersionPresent, databaseNamePresent). Target assurance is now explicitly two independent, non-substitutable parts: (A) pre-execution env-var preflight, (B) post-execution session-behavior evidence. Postgres has no self-referential project-ref signal, so no check can prove which project the open session belongs to; this residual is inherent to the technology."
+      }
+    ]
+  },
+
+  "round2Remediation": {
+    "performedAt": "2026-08-01",
+    "scope": "Closed FINDING-B and narrowed FINDING-D from phase8AdversarialReview. Local-only: no psql, no network, no STAGING_DATABASE_URL inspection or display (real or as a stand-in for real).",
+    "sanitizerChanges": [
+      "Added parsePgDurationToMs() helper.",
+      "Added checks.statementTimeoutBounded, checks.lockTimeoutBounded, checks.serverVersionPresent, checks.databaseNamePresent to the publication gate.",
+      "sessionRow extracted once and reused; transactionReadOnlyConfirmedOn simplified to use it."
+    ],
+    "sanitizerSha256AfterRound2": "c9d0f3d3473fdc95045b439fb88a6e49bb80d9b09e69feed4cbed92a35114494",
+    "sanitizerSha256Note": "Matches safetyControlsForFutureExecution.sanitizerSha256 above (single source of truth). Computed via sha256sum after Round-2 edits landed, not the intermediate eaf38ac7... value recorded partway through this turn's editing.",
+    "wrapperChanges": [
+      "v1 pipeline retained verbatim in the decision pack inside a collapsed, explicitly SUPERSEDED/MUST-NOT-EXECUTE block, for audit-trail continuity only.",
+      "v2 pipeline added: no '-d \"$STAGING_DATABASE_URL\"'; STAGING_DATABASE_URL exported as PGDATABASE then unset; explicit 'set +x'; new non-printing target preflight (4 booleans only) gating psql invocation.",
+      "PGSSLMODE=require, PGCONNECT_TIMEOUT=10, the PostgreSQL 17 psql binary path, and -X -q -v ON_ERROR_STOP=1 -f \"$SQLFILE\" all unchanged from v1.",
+      "All prior atomicity/secret-safety properties (set -u, pipefail, umask 077, trap before mktemp, candidate outside repo, atomic PIPESTATUS capture, gated single-mv publish, no temp residue) reconfirmed unchanged in v2."
+    ],
+    "localValidationPerformed": [
+      "bash -n on v2 pipeline: syntax OK, no line over 100 characters.",
+      "node --check on sanitizer post-Task-3: syntax OK.",
+      "Five fabricated dummy-URI preflight cases (approved-ref-good, staging-ref-absent, production-ref-present, malformed-URI, empty-variable) run as in-process shell function calls; only the passing case produced the placeholder-psql marker; grep for both dummy substrings against captured output found zero matches in all cases.",
+      "Sanitizer positive/negative/nested-secret fixtures re-run unchanged; three new fixtures added for the bounded-timeout gate (clean, statement_timeout=0, statement_timeout=60s) all produced the expected allPassed value.",
+      "This evidence document and the decision pack re-parsed/re-read after edits; git status/index re-checked; protected files re-hashed."
+    ],
+    "stillNotExecuted": true,
+    "migration062StillBlockedAndUnapplied": true
+  },
+
+  "round3StandaloneWrapper": {
+    "performedAt": "2026-08-01",
+    "scope": "Moved the authoritative execution workflow out of the decision pack Markdown into one standalone, syntax-checked, hashable script file, and closed the remaining execution-safety gaps identified this round (hash-pinning of dependencies before any credential handling, checked/same-filesystem temp-directory creation, and signal-safe cleanup that cannot return a zero exit code on interruption). Local-only: no psql, no network, no STAGING_DATABASE_URL inspection or display (real or fabricated-as-real).",
+    "wrapperPath": "scripts/vam_v5_metadata_capture_wrapper.sh",
+    "wrapperSha256Note": "Recorded in the decision pack (Round-3 section) and the final report, not here -- the wrapper embeds this document's own hash as one of its hash-pinning constants, so this document is finalized and hashed BEFORE the wrapper is written, and is not edited again afterward to avoid a circular hash reference.",
+    "hashPinning": {
+      "design": "Before exporting PGDATABASE or invoking psql, the wrapper computes the actual SHA-256 of the sanitizer, the capture SQL, and this evidence document (acting as the sanitizer's template), and compares each against a literal expected-hash constant embedded in the wrapper's own source. Any mismatch fails closed before any credential is touched, printing only 'CAPTURE_FAILED reason=artifact_hash_mismatch artifact=<name>' where <name> is one of sanitizer/capture_sql/template_json -- never a hash value or file content.",
+      "purpose": "Defends against the template, sanitizer, or capture SQL having been silently modified between this review and a future execution turn."
+    },
+    "temporaryDirectoryDesign": {
+      "previousDesign": "OS temp directory via mktemp -d, with a documented but unverified same-filesystem assumption relative to the repository.",
+      "currentDesign": "A hidden, unpredictable-suffix directory created as a sibling of the repository root (under the repository's parent directory), so it is guaranteed outside the repository yet on the same filesystem/volume as the final evidence file by construction, not by assumption. mktemp -d's own exit status is checked; failure fails closed before any further state is created.",
+      "prePublicationCheck": "Immediately before the final atomic rename, the wrapper additionally compares the device ID (via `stat -c %d`) of the candidate's and the final destination's containing directories, and fails closed if they cannot be proven equal -- defense in depth on top of the by-construction guarantee, not a replacement for it. Not live-verified against this specific Windows/Git-Bash/NTFS environment in this database-free turn; flagged for a human spot-check with a non-secret dummy file before relying on it operationally."
+    },
+    "signalSafety": {
+      "design": "Separate trap registrations for EXIT versus HUP/INT/TERM, using two distinct functions rather than one shared handler. The EXIT trap trusts $? (well-defined for EXIT traps). Each signal trap ignores $? entirely and exits with a hardcoded, signal-specific non-zero code (129/130/143 for HUP/INT/TERM), after disabling all traps (`trap - EXIT HUP INT TERM`) so the EXIT trap cannot re-fire and overwrite that code with whatever $? happened to be from the last command before the signal arrived.",
+      "reasoning": "A single shared trap that does `local ec=$?; ...; exit \"$ec\"` for both EXIT and signals is unsafe: $? at signal-delivery time reflects the last completed command's status, not the signal, so an interruption immediately after a successful command could silently exit 0 -- indistinguishable from CAPTURE_OK to an unattended caller. This design makes that impossible by never trusting $? in the signal path."
+    }
+  },
+
+  "round4CredentialScopeHardening": {
+    "performedAt": "2026-08-01",
+    "scope": "Replaced the wrapper's global `export PGDATABASE=\"$STAGING_DATABASE_URL\"` with a process-scoped assignment so the credential lives in the environment of the single psql child process only, never in the wrapper's own persistent shell environment. Local-only: no psql, no network, no STAGING_DATABASE_URL inspection or display (real or fabricated-as-real).",
+    "design": {
+      "startupUnsets": "PGDATABASE, PGHOST, PGHOSTADDR, PGPORT, PGUSER, PGPASSWORD, PGPASSFILE, PGSERVICE, PGSERVICEFILE, PGOPTIONS are all unset at wrapper startup, before PGSSLMODE/PGCONNECT_TIMEOUT are set, so no inherited libpq variable from a parent process can combine with or override the URI handled later.",
+      "credentialHolder": "DB_URI (a plain, never-exported shell variable) replaces the prior design's exported PGDATABASE as the temporary holder for STAGING_DATABASE_URL's value, set only after the non-printing preflight has already passed.",
+      "psqlInvocation": "PGDATABASE=\"$DB_URI\" \"$PSQL\" -X -q -v ON_ERROR_STOP=1 -f \"$SQLFILE\" -- a simple-command prefix assignment, which bash scopes to that one child process's environment only and never adds to argv or to the wrapper's own exported environment.",
+      "sanitizerInvocation": "piped through `env -u PGDATABASE -u DB_URI -u STAGING_DATABASE_URL -u PGPASSWORD node \"$SANITIZER\" ...` -- explicit, self-documenting proof in the wrapper's own source that the sanitizer process cannot inherit any of the four credential-bearing variable names, even though none of them were ever exported to begin with.",
+      "postPipelineCleanup": "DB_URI is unset immediately after PIPE_CODES=(\"${PIPESTATUS[@]}\") is captured, and again defensively (along with STAGING_DATABASE_URL, PGDATABASE, PGPASSWORD) inside remove_temp_state(), which both the EXIT and every signal handler call."
+    },
+    "wrapperSha256Note": "Recorded in the decision pack's FINAL EXECUTION ATTESTATION section, not here, for the same circular-reference reason documented in round3StandaloneWrapper.wrapperSha256Note above -- this document is finalized and hashed before the wrapper is written, and is not edited again afterward."
+  }
+}
