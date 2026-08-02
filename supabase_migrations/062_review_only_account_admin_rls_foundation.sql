@@ -72,13 +72,31 @@ begin
 
   -- No unexpected pre-existing policy on any table this package will alter,
   -- including the two newly-hardened tables (intake_batches,
-  -- person_season_membership_log) which previously had none at all.
+  -- person_season_membership_log) which previously had none at all. The
+  -- four tuples below are the exact, structurally-validated pre-existing
+  -- policy shapes live staging carries as of the 2026-08-02 05:30Z schema
+  -- evidence capture: three long-standing admin-RLS policies, plus the
+  -- out-of-band emergency hardening policy "active admins can read
+  -- themselves" applied directly to staging on 2026-06-17 (see
+  -- docs/VAM_OS_PROD_STAGING_SCHEMA_DIFF_2026-06-17.md) — safe and
+  -- redundant with read_admin_users_super_admin_or_self's self-read branch,
+  -- never widening access. read_admin_users_super_admin_or_self's qual
+  -- below reflects a subsequent hardening (status='active' added to its
+  -- self-read branch) this guard previously did not account for. Both
+  -- admin_users policies are accepted and preserved as-is: this migration
+  -- only ever ADDs vam062_-prefixed policies alongside them (below), never
+  -- drops or rewrites a pre-existing one. Every tuple is matched
+  -- structurally on name+table+permissive+roles+cmd+qual+with_check — this
+  -- is not a policy-count check — so any policy not matching one of these
+  -- four exactly, known-safe or not, still falls into v_unexpected and
+  -- fails the migration closed below.
   select string_agg(tablename||'.'||policyname,', ') into v_unexpected
   from pg_policies
   where schemaname='public'
     and tablename in ('admin_users','admin_scope_access','admin_audit_log','people','person_season_memberships','intake_batches','person_season_membership_log')
     and not (
-      tablename='admin_users' and policyname='read_admin_users_super_admin_or_self' and permissive='PERMISSIVE' and roles=array['public'] and cmd='SELECT' and with_check is null and qual='((auth.uid() = auth_user_id) OR (current_admin_role() = ''super_admin''::text))' or
+      tablename='admin_users' and policyname='read_admin_users_super_admin_or_self' and permissive='PERMISSIVE' and roles=array['public'] and cmd='SELECT' and with_check is null and qual='(((auth.uid() = auth_user_id) AND (status = ''active''::text)) OR (current_admin_role() = ''super_admin''::text))' or
+      tablename='admin_users' and policyname='active admins can read themselves' and permissive='PERMISSIVE' and roles=array['authenticated'] and cmd='SELECT' and with_check is null and qual='((auth_user_id = auth.uid()) AND (status = ''active''::text))' or
       tablename='admin_scope_access' and policyname='read_admin_scope_access_self_or_super_admin' and permissive='PERMISSIVE' and roles=array['public'] and cmd='SELECT' and with_check is null and qual='((current_admin_role() = ''super_admin''::text) OR (is_active_admin() AND (user_id = auth.uid()) AND (status = ''active''::text)))' or
       tablename='admin_audit_log' and policyname='read_admin_audit_log_super_admin_only' and permissive='PERMISSIVE' and roles=array['public'] and cmd='SELECT' and with_check is null and qual='(current_admin_role() = ''super_admin''::text)'
     );
