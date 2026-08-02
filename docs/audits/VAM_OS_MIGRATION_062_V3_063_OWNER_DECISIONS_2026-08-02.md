@@ -128,6 +128,77 @@ what was there before. Flagging this explicitly: it is consistent with
 DEC-09's stated intent (no unsafe direct anon/authenticated access) but goes
 beyond in table, so it should be reviewed against actual intent.
 
+## Independent-review remediation (DEC-R1/R2/R3, 2026-08-02)
+
+An independent static review of this branch (HEAD `5de0f502348afc08ed10f6df7a565a9baea1a952`
+at review time) returned PASS with three required-before-apply findings, all
+now remediated on top of that HEAD:
+
+- **Finding A / DEC-R1 (scope status mutation contract, MEDIUM)** —
+  `vam062_admin_mutation_atomic`'s `upsert`, `update` (no `scope_id`), and
+  `link_auth` branches previously hardcoded new `admin_scope_access` rows to
+  `'active'` while silently discarding any caller-supplied `scope_status`;
+  the explicit-`scope_id` branch of `update` still honored it, making the
+  function internally inconsistent and capable of setting arbitrary status
+  values through a path other than the dedicated deactivate/remove
+  operation. Fixed: all four paths now share one contract — a supplied
+  `scope_status` must be exactly `'active'` or omitted, or the call fails
+  before any mutation; the explicit-`scope_id` branch can now only retarget
+  `role` on an already-`active` row (`WHERE ... AND status='active'` added
+  to its `UPDATE`), never reactivate an inactive row or set any other
+  status. The `status`/`remove` operation is unchanged — it remains the one
+  dedicated mechanism for deactivation/reactivation/removal, per DEC-R1 §5.
+- **Finding B / DEC-R2 (concurrent admin-scope idempotency, MEDIUM)** — the
+  existence-check-then-insert pattern in `vam062_upsert_staff_account_atomic`
+  (and the equivalent inline logic previously duplicated across
+  `vam062_admin_mutation_atomic`'s three creation branches) was not race-safe
+  under concurrent calls for the same identity. Fixed: a new shared helper,
+  `vam062_upsert_scope_atomic(user_id, program_id, season_id, scope_role,
+  target_status)`, acquires a transaction-scoped advisory lock keyed on
+  exactly `user_id + program_id + season_id + role` (DEC-R2's specified
+  identity, never including status) before repeating the existence check,
+  then inserts-or-no-ops for either target status (`'active'` for the
+  admin-console paths, `'inactive'` for staff import). All four prior call
+  sites now route through this one helper.
+- **Finding C / DEC-R3 (concurrent add-role idempotency, LOW)** —
+  `vam063_add_membership_role`'s existence-check-then-insert could surface a
+  raw `unique_violation` to the caller under concurrent duplicate requests
+  (though the live `UNIQUE(person_id,season_id,role)` constraint already
+  prevented any actual duplicate row). Fixed: an advisory lock keyed on
+  exactly `person_id + season_id + role` is acquired before the existence
+  check is repeated, so a concurrent duplicate call now observes the first
+  call's committed row and returns a controlled `'noop'` result instead of
+  hitting the `INSERT` at all. The live unique constraint is untouched and
+  remains the final integrity gate.
+
+**Adjacent check-then-insert pattern review (Task 5 of the remediation
+request):** every other function in 062 and 063 was checked for the same
+race class. `vam062_import_participant_membership_atomic` performs a
+pre-check `SELECT` for business-logic branching (skip/cross-program checks)
+but its actual mutation uses `ON CONFLICT (person_id,season_id,role)`
+against a real, always-enforced, non-partial unique constraint — safe by
+construction, no change needed. `vam062_record_reconciliation` uses
+`ON CONFLICT (batch_id,row_number)` against `account_import_outcomes`'s real
+unique constraint — safe. `vam062_begin_auth_operation` and
+`vam062_create_account_preview` already used the identical
+`pg_advisory_xact_lock` pattern the two new fixes now match — safe, no
+change needed. `vam063_transition_membership_atomic` takes `FOR UPDATE` on
+the specific membership row before its idempotency check — safe, no change
+needed. One function, `vam062_record_auth_reconciliation`, performs a plain
+`INSERT` keyed on a caller-supplied `operation_id` primary key with no lock
+of its own; in normal usage it is always preceded by
+`vam062_begin_auth_operation`, which does take the identity-scoped advisory
+lock. This was **not** remediated — it is not one of the three named
+findings, changing it was outside this remediation's authorized scope, and
+it is disclosed here rather than silently left unmentioned.
+
+Net effect on the manifest: migration 062 gains one new internal function
+(`vam062_upsert_scope_atomic`), so the tracked function count goes from 10
+to 11 and the total `account_rls_package_manifest` row count goes from 25 to
+26 — reflected in the migration, rollback, and post-apply-verification
+files and their tests. No table, RLS state, grant scope, admin_users
+vocabulary, or audit vocabulary changed as part of this remediation.
+
 ## Not resolved by this patch
 
 - Whether the `admin_scope_access` NULL-scope design premise referenced in

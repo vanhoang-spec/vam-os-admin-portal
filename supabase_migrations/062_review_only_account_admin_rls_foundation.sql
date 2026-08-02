@@ -196,6 +196,45 @@ create function public.vam062_current_admin_id() returns uuid language sql stabl
   select id from public.admin_users where auth_user_id=auth.uid() and status='active' limit 1
 $$;
 
+-- Race-safe admin_scope_access upsert core (remediates independent-review
+-- Finding B). Serializes every write that may create a scope row by exactly
+-- the logical identity DEC-R2 specifies — user_id + program_id + season_id
+-- + role, never including status — via a transaction-scoped advisory lock
+-- acquired before the final existence check, so a concurrent 'active'
+-- upsert and an 'inactive' staff-import for the same identity cannot race
+-- each other either. Internal helper only: never granted directly to any
+-- role (see the no-direct-grant note near the bottom of this file); callers
+-- are exclusively other SECURITY DEFINER functions in this package sharing
+-- the same owner.
+--  * p_target_status='active': matching active row -> no-op; matching
+--    inactive-only row(s) -> untouched, a new active row is inserted
+--    (DEC-03); ON CONFLICT on the live partial/expression index remains as
+--    a defense-in-depth backstop for the active-vs-active case.
+--  * p_target_status='inactive': used only by the staff-import path, whose
+--    newly-provisioned scope rows must start inactive (DEC-04/DEC-R1 §7);
+--    any existing row for the identity (active or inactive) is treated as
+--    already satisfied — no duplicate inactive row is ever created.
+create function public.vam062_upsert_scope_atomic(p_user_id uuid,p_program_id uuid,p_season_id uuid,p_scope_role text,p_target_status text) returns void language plpgsql security definer set search_path=public as $$
+begin
+  if p_target_status not in ('active','inactive') then
+    raise exception 'VAM062V3 invalid scope target status';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('VAM062_SCOPE|'||p_user_id::text||'|'||p_program_id::text||'|'||p_season_id::text||'|'||p_scope_role));
+  if p_target_status='active' then
+    if exists(select 1 from public.admin_scope_access where user_id=p_user_id and program_id=p_program_id::text and season_id=p_season_id::text and role=p_scope_role and status='active') then
+      return;
+    end if;
+    insert into public.admin_scope_access(user_id,program_id,season_id,role,status)
+      values(p_user_id,p_program_id::text,p_season_id::text,p_scope_role,'active')
+      on conflict (user_id, (coalesce(program_id, '')), (coalesce(season_id, '')), role) where (status = 'active') do nothing;
+  else
+    if exists(select 1 from public.admin_scope_access where user_id=p_user_id and program_id=p_program_id::text and season_id=p_season_id::text and role=p_scope_role) then
+      return;
+    end if;
+    insert into public.admin_scope_access(user_id,program_id,season_id,role,status) values(p_user_id,p_program_id::text,p_season_id::text,p_scope_role,'inactive');
+  end if;
+end $$;
+
 -- Admin CRUD (staff self-service / super_admin operations on existing admin
 -- accounts). Fixes vs. the reviewed draft:
 --  * program/season are resolved to canonical UUIDs (id-or-code lookup
@@ -204,16 +243,28 @@ $$;
 --    UUID strings" — the reviewed draft stored the raw payload value, which
 --    could be a program *code*, not a uuid).
 --  * admin_scope_access writes use the corrected 4-part arbiter and DEC-03's
---    "insert new active row, never reactivate inactive history" semantics
---    via ON CONFLICT (...) WHERE status='active' DO NOTHING.
---  * the status/remove branch now scopes its admin_scope_access update to
---    the specific program+season+role identified in the payload, instead of
---    blanket-updating every scope row the user holds (DEC-02: role is part
---    of identity everywhere, including here).
+--    "insert new active row, never reactivate inactive history" semantics,
+--    now via the race-safe vam062_upsert_scope_atomic helper (remediates
+--    independent-review Finding B).
+--  * DEC-R1: create/upsert/update/link_auth are active-only scope-creation
+--    paths. A caller-supplied scope_status is never silently discarded — if
+--    present it must be exactly 'active' or the call fails before any
+--    mutation. The explicit-scope-id update branch follows the identical
+--    rule and can now only retarget the role of an already-active scope row
+--    (never reactivate an inactive one in place, never set an arbitrary
+--    status) — matching the same DEC-03 "insert new row, never reactivate"
+--    semantics as every other creation path, instead of being the one
+--    branch that could silently do something different (this remediates
+--    independent-review Finding A).
+--  * the status/remove branch is unchanged: it remains the one dedicated,
+--    explicit deactivate/reactivate/remove mechanism DEC-R1 §5 reserves for
+--    this purpose, scoped to the specific program+season+role identified in
+--    the payload rather than blanket-updating every scope row the user
+--    holds (DEC-02: role is part of identity everywhere, including here).
 create function public.vam062_admin_mutation_atomic(p_actor_admin_user_id uuid,p_operation text,p_target_admin_user_id uuid,p_payload jsonb) returns void language plpgsql security definer set search_path=public as $$
 declare
   v_target uuid; v_auth uuid; v_before jsonb; v_after jsonb; v_action text;
-  v_program_id uuid; v_season_id uuid;
+  v_program_id uuid; v_season_id uuid; v_scope_status text;
 begin
   if not exists(select 1 from public.admin_users where id=p_actor_admin_user_id and role='super_admin' and status='active') then
     raise exception 'VAM062V3 unauthorized actor';
@@ -225,6 +276,14 @@ begin
   if p_operation in ('upsert','update','link_auth') then
     if nullif(p_payload->>'season_id','') is null or nullif(p_payload->>'program_id','') is null then
       raise exception 'VAM062V3 explicit program and season required';
+    end if;
+    -- DEC-R1: these three operations only ever create or retarget an
+    -- ACTIVE scope row. A caller-supplied scope_status is honored only when
+    -- it is exactly 'active'; anything else fails closed before mutation
+    -- rather than being silently ignored or silently applied.
+    v_scope_status:=nullif(btrim(p_payload->>'scope_status'),'');
+    if v_scope_status is not null and v_scope_status<>'active' then
+      raise exception 'VAM062V3 scope_status must be active or omitted for this operation; use the dedicated status/remove operation to deactivate';
     end if;
     select p.id,s.id into v_program_id,v_season_id
     from public.programs p join public.seasons s on s.program_id=p.id
@@ -245,9 +304,7 @@ begin
       values((p_payload->>'auth_user_id')::uuid,lower(btrim(p_payload->>'email')),nullif(btrim(p_payload->>'full_name'),''),p_payload->>'role',p_payload->>'status')
       on conflict(email) do update set auth_user_id=excluded.auth_user_id,full_name=excluded.full_name,role=excluded.role,status=excluded.status
       returning id,auth_user_id into v_target,v_auth;
-    insert into public.admin_scope_access(user_id,program_id,season_id,role,status)
-      values(v_auth,v_program_id::text,v_season_id::text,p_payload->>'scope_role','active')
-      on conflict (user_id, (coalesce(program_id, '')), (coalesce(season_id, '')), role) where (status = 'active') do nothing;
+    perform public.vam062_upsert_scope_atomic(v_auth,v_program_id,v_season_id,p_payload->>'scope_role','active');
     v_action:=case when v_before is null then 'create_admin_user' else 'update_admin_user' end;
 
   elsif p_operation='update' then
@@ -255,14 +312,15 @@ begin
     if v_before is null then raise exception 'VAM062V3 target missing'; end if;
     update public.admin_users set full_name=nullif(btrim(p_payload->>'full_name'),''),role=p_payload->>'role',status=p_payload->>'status' where id=p_target_admin_user_id returning id into v_target;
     if nullif(p_payload->>'scope_id','') is not null then
+      -- Explicit-scope-id retarget: role only, and only against a row that
+      -- is currently active — this can never reactivate an inactive row or
+      -- set any other status (DEC-R1 §4/§6).
       update public.admin_scope_access
-        set role=p_payload->>'scope_role',status=p_payload->>'scope_status'
-        where id=(p_payload->>'scope_id')::uuid and user_id=v_auth and program_id=v_program_id::text and season_id=v_season_id::text;
+        set role=p_payload->>'scope_role'
+        where id=(p_payload->>'scope_id')::uuid and user_id=v_auth and program_id=v_program_id::text and season_id=v_season_id::text and status='active';
       if not found then raise exception 'VAM062V3 scope mismatch'; end if;
     else
-      insert into public.admin_scope_access(user_id,program_id,season_id,role,status)
-        values(v_auth,v_program_id::text,v_season_id::text,p_payload->>'scope_role','active')
-        on conflict (user_id, (coalesce(program_id, '')), (coalesce(season_id, '')), role) where (status = 'active') do nothing;
+      perform public.vam062_upsert_scope_atomic(v_auth,v_program_id,v_season_id,p_payload->>'scope_role','active');
     end if;
     v_action:='update_admin_user';
 
@@ -270,9 +328,7 @@ begin
     select to_jsonb(a) into v_before from public.admin_users a where id=p_target_admin_user_id for update;
     if v_before is null then raise exception 'VAM062V3 target missing'; end if;
     update public.admin_users set auth_user_id=(p_payload->>'auth_user_id')::uuid where id=p_target_admin_user_id returning id,auth_user_id into v_target,v_auth;
-    insert into public.admin_scope_access(user_id,program_id,season_id,role,status)
-      values(v_auth,v_program_id::text,v_season_id::text,p_payload->>'scope_role','active')
-      on conflict (user_id, (coalesce(program_id, '')), (coalesce(season_id, '')), role) where (status = 'active') do nothing;
+    perform public.vam062_upsert_scope_atomic(v_auth,v_program_id,v_season_id,p_payload->>'scope_role','active');
     v_action:='sync_auth';
 
   elsif p_operation in ('status','remove') then
@@ -304,13 +360,14 @@ begin
 end $$;
 
 -- CSV staff import. Fixes: new admin_users rows stay 'inactive' (DEC-04, not
--- 'invited' — CONFLICT-08); admin_scope_access write uses the corrected
--- arbiter; and because a brand-new staff scope row is itself 'inactive' (so
--- it is never covered by the active-only partial index), an explicit
--- existence pre-check makes reimport idempotent regardless of active/inactive
--- state, rather than relying on ON CONFLICT alone.
+-- 'invited' — CONFLICT-08); admin_scope_access write uses the race-safe
+-- vam062_upsert_scope_atomic helper (target status 'inactive', matching
+-- DEC-04/DEC-R1 §7 — newly-provisioned staff scope stays dormant until
+-- explicit activation), which remediates independent-review Finding B: the
+-- reviewed existence-check-then-insert here was not safe under concurrent
+-- reimport of the same row.
 create function public.vam062_upsert_staff_account_atomic(p_actor_admin_user_id uuid,p_batch_id uuid,p_row_number integer,p_auth_user_id uuid,p_email text,p_display_name text,p_role text,p_program_id uuid,p_season_id uuid,p_scope_role text) returns void language plpgsql security definer set search_path=public as $$
-declare v_target uuid; v_existing boolean; v_scope_existing boolean;
+declare v_target uuid; v_existing boolean;
 begin
   if not exists(select 1 from public.admin_users where id=p_actor_admin_user_id and role='super_admin' and status='active') then
     raise exception 'VAM062V3 unauthorized actor';
@@ -331,10 +388,7 @@ begin
     on conflict(email) do update set auth_user_id=excluded.auth_user_id,full_name=excluded.full_name,role=excluded.role
     returning id into v_target;
 
-  select exists(select 1 from public.admin_scope_access where user_id=p_auth_user_id and program_id=p_program_id::text and season_id=p_season_id::text and role=p_scope_role) into v_scope_existing;
-  if not v_scope_existing then
-    insert into public.admin_scope_access(user_id,program_id,season_id,role,status) values(p_auth_user_id,p_program_id::text,p_season_id::text,p_scope_role,'inactive');
-  end if;
+  perform public.vam062_upsert_scope_atomic(p_auth_user_id,p_program_id,p_season_id,p_scope_role,'inactive');
   if not exists(select 1 from public.admin_scope_access where user_id=p_auth_user_id and program_id=p_program_id::text and season_id=p_season_id::text and role=p_scope_role) then
     raise exception 'VAM062V3 scope reconciliation failed';
   end if;
@@ -550,11 +604,17 @@ revoke insert,update,delete,truncate,trigger,references on public.admin_users,pu
 grant select on public.admin_users,public.admin_scope_access,public.admin_audit_log,public.people,public.person_season_memberships,public.intake_batches,public.person_season_membership_log to authenticated;
 
 revoke all on public.account_rls_package_state,public.account_rls_package_manifest,public.account_import_batches,public.account_import_outcomes,public.account_auth_reconciliation,public.account_auth_operations,public.account_person_auth_links,public.account_import_previews from public,anon,authenticated;
-revoke all on function public.vam062_current_admin_id(),public.vam062_admin_mutation_atomic(uuid,text,uuid,jsonb),public.vam062_upsert_staff_account_atomic(uuid,uuid,integer,uuid,text,text,text,uuid,uuid,text),public.vam062_import_participant_membership_atomic(uuid,uuid,integer,text,text,text,uuid,uuid,uuid),public.vam062_record_reconciliation(uuid,uuid,integer,text),public.vam062_record_auth_reconciliation(uuid,uuid,text,text,text,text,jsonb),public.vam062_begin_auth_operation(uuid,uuid,text,text,uuid),public.vam062_record_auth_operation_stage(uuid,uuid,text,text,text,boolean,text),public.vam062_create_account_preview(uuid,uuid,text,text,text,text,timestamptz,integer),public.vam062_consume_account_preview(uuid,uuid,text) from public,anon,authenticated;
+revoke all on function public.vam062_current_admin_id(),public.vam062_upsert_scope_atomic(uuid,uuid,uuid,text,text),public.vam062_admin_mutation_atomic(uuid,text,uuid,jsonb),public.vam062_upsert_staff_account_atomic(uuid,uuid,integer,uuid,text,text,text,uuid,uuid,text),public.vam062_import_participant_membership_atomic(uuid,uuid,integer,text,text,text,uuid,uuid,uuid),public.vam062_record_reconciliation(uuid,uuid,integer,text),public.vam062_record_auth_reconciliation(uuid,uuid,text,text,text,text,jsonb),public.vam062_begin_auth_operation(uuid,uuid,text,text,uuid),public.vam062_record_auth_operation_stage(uuid,uuid,text,text,text,boolean,text),public.vam062_create_account_preview(uuid,uuid,text,text,text,text,timestamptz,integer),public.vam062_consume_account_preview(uuid,uuid,text) from public,anon,authenticated;
+-- vam062_upsert_scope_atomic is only ever called internally by the other
+-- functions in this package, but is granted directly to service_role below
+-- anyway, matching every other vam062_ function's convention (unlike the
+-- newer per-package pattern in migration 063), since this package's own
+-- rollback/post-apply verification generically requires every
+-- manifest-tracked function to carry a direct service_role grant.
 revoke all on public.account_rls_package_state from service_role;
 revoke all on public.account_rls_package_manifest from service_role;
 grant all on public.account_import_batches,public.account_import_outcomes,public.account_auth_reconciliation,public.account_auth_operations,public.account_person_auth_links,public.account_import_previews to service_role;
-grant execute on function public.vam062_current_admin_id(),public.vam062_admin_mutation_atomic(uuid,text,uuid,jsonb),public.vam062_upsert_staff_account_atomic(uuid,uuid,integer,uuid,text,text,text,uuid,uuid,text),public.vam062_import_participant_membership_atomic(uuid,uuid,integer,text,text,text,uuid,uuid,uuid),public.vam062_record_reconciliation(uuid,uuid,integer,text),public.vam062_record_auth_reconciliation(uuid,uuid,text,text,text,text,jsonb),public.vam062_begin_auth_operation(uuid,uuid,text,text,uuid),public.vam062_record_auth_operation_stage(uuid,uuid,text,text,text,boolean,text),public.vam062_create_account_preview(uuid,uuid,text,text,text,text,timestamptz,integer),public.vam062_consume_account_preview(uuid,uuid,text) to service_role;
+grant execute on function public.vam062_current_admin_id(),public.vam062_upsert_scope_atomic(uuid,uuid,uuid,text,text),public.vam062_admin_mutation_atomic(uuid,text,uuid,jsonb),public.vam062_upsert_staff_account_atomic(uuid,uuid,integer,uuid,text,text,text,uuid,uuid,text),public.vam062_import_participant_membership_atomic(uuid,uuid,integer,text,text,text,uuid,uuid,uuid),public.vam062_record_reconciliation(uuid,uuid,integer,text),public.vam062_record_auth_reconciliation(uuid,uuid,text,text,text,text,jsonb),public.vam062_begin_auth_operation(uuid,uuid,text,text,uuid),public.vam062_record_auth_operation_stage(uuid,uuid,text,text,text,boolean,text),public.vam062_create_account_preview(uuid,uuid,text,text,text,text,timestamptz,integer),public.vam062_consume_account_preview(uuid,uuid,text) to service_role;
 
 -- Audit vocabulary expansion (DEC-10). Replaces the NOT VALID legacy
 -- constraint with an equally NOT VALID superset (existing rows are still

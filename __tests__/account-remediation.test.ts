@@ -37,8 +37,129 @@ describe("preview and SQL package safety",()=>{
   it("preserves policy grouping through exact expression comparison",()=>{for(const path of ["supabase_migrations/062_review_only_account_admin_rls_foundation.sql","docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql","docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql"]){const sql=read(path);expect(sql).not.toContain("[[:space:]()]");expect(sql).not.toContain("punctuation");expect(sql).toContain("qual=")}});
   it("uses independent exact post-apply policy specifications",()=>{const sql=read("docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql");expect(sql).toContain("p.qual=e.q");expect(sql).toContain("s.season_id IS NOT NULL");expect(sql).toContain("policy_inventory");expect(sql).toContain("package_grants")});
   it("all four migration-062 V3 files represent intake_batches and person_season_membership_log hardening, not just the migration",()=>{for(const path of ["supabase_migrations/062_review_only_account_admin_rls_foundation.sql","docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql","docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql","docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql"]){const sql=read(path);expect(sql).toContain("intake_batches");expect(sql).toContain("person_season_membership_log")}});
-  it("admin_scope_access reactivation never touches an inactive row: ON CONFLICT target is the active-only partial index, no UPDATE branch reaches an inactive row",()=>{const sql=read("supabase_migrations/062_review_only_account_admin_rls_foundation.sql");const conflictClauses=sql.match(/on conflict \(user_id, \(coalesce\(program_id, ''\)\), \(coalesce\(season_id, ''\)\), role\) where \(status = 'active'\) do nothing/g)??[];expect(conflictClauses.length).toBeGreaterThanOrEqual(3);expect(sql).not.toMatch(/admin_scope_access set status='active'[^;]*status='inactive'/)});
+  it("admin_scope_access reactivation never touches an inactive row: the single shared helper's ON CONFLICT target is the active-only partial index, no UPDATE branch reaches an inactive row",()=>{const sql=read("supabase_migrations/062_review_only_account_admin_rls_foundation.sql");const conflictClauses=sql.match(/on conflict \(user_id, \(coalesce\(program_id, ''\)\), \(coalesce\(season_id, ''\)\), role\) where \(status = 'active'\) do nothing/g)??[];expect(conflictClauses.length).toBe(1);const helperIdx=sql.indexOf("create function public.vam062_upsert_scope_atomic");const nextFnIdx=sql.indexOf("create function public.vam062_admin_mutation_atomic");expect(sql.slice(helperIdx,nextFnIdx)).toContain(conflictClauses[0]);expect(sql).not.toMatch(/admin_scope_access set status='active'[^;]*status='inactive'/)});
   it("action_type_vocabulary and admin_users_status_vocabulary assertions exist in post-apply verification with exact final definitions",()=>{const sql=read("docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql");expect(sql).toContain("'action_type_vocabulary'");expect(sql).toContain("'admin_users_status_vocabulary'");expect(sql).toContain("not exists(select 1 from pg_constraint where conrelid='public.admin_users'::regclass and contype='c' and pg_get_constraintdef(oid) like '%invited%')")});
   it("harness proves authoritative topology and exact denial mechanisms",()=>{const source=read("scripts/account-rls-isolation-harness.mjs");for(const token of ["provider_subject","authoritative_account","authoritative_scope","person_auth_link","authoritative_membership","ueh_seasons_distinct","membership_topology","same_program_different_season","privilege_denial","zeroRowsAllowed:false"])expect(source).toContain(token)});  it("API harness fails closed without inputs and emits sanitized JSON",()=>{const run=spawnSync(process.execPath,["scripts/account-rls-isolation-harness.mjs"],{encoding:"utf8"});expect(run.status).toBe(1);expect(JSON.parse(run.stdout)).toEqual({pass:false,reason:"missing_config",results:[]});expect(run.stdout).not.toMatch(/jwt|https?:|apikey/i);});
   it("exact policy equality rejects semantic mutations",()=>{const approved="(scope AND season) OR super_admin";for(const mutation of ["scope AND season OR super_admin","(scope) OR super_admin","(scope AND season) OR TRUE","(scope OR season) OR super_admin","(scope AND null_season) OR super_admin"])expect(mutation===approved).toBe(false)});
+});
+
+describe("independent-review remediation: Findings A/B/C (DEC-R1/R2/R3)",()=>{
+  const MIGRATION="supabase_migrations/062_review_only_account_admin_rls_foundation.sql";
+  const ROLLBACK="docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql";
+  const POST_APPLY="docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql";
+  const slice=(sql:string,startMarker:string,endMarker:string)=>sql.slice(sql.indexOf(startMarker),endMarker?sql.indexOf(endMarker,sql.indexOf(startMarker)):undefined);
+
+  it("Finding A: a non-active scope_status is rejected before mutation, and every named path shares the identical guard clause",()=>{
+    const sql=read(MIGRATION);
+    const guard="raise exception 'VAM062V3 scope_status must be active or omitted for this operation";
+    expect(sql).toContain(guard);
+    const mutationFn=slice(sql,"create function public.vam062_admin_mutation_atomic","create function public.vam062_upsert_staff_account_atomic");
+    const guardIdx=mutationFn.indexOf(guard);
+    const firstInsertIdx=mutationFn.indexOf("insert into public.admin_users");
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(guardIdx).toBeLessThan(firstInsertIdx);
+  });
+
+  it("Finding A: scope_status is never silently discarded — it is validated once for all three creation branches (upsert/update-no-scope_id/link_auth) via one shared check, not per-branch",()=>{
+    const sql=read(MIGRATION);
+    const mutationFn=slice(sql,"create function public.vam062_admin_mutation_atomic","create function public.vam062_upsert_staff_account_atomic");
+    expect((mutationFn.match(/v_scope_status:=nullif\(btrim\(p_payload->>'scope_status'\),''\)/g)??[]).length).toBe(1);
+    expect((mutationFn.match(/if v_scope_status is not null and v_scope_status<>'active' then/g)??[]).length).toBe(1);
+  });
+
+  it("Finding A: the explicit-scope-id update path can only retarget role on an already-active row — same rule, no behavioral inconsistency",()=>{
+    const sql=read(MIGRATION);
+    const mutationFn=slice(sql,"create function public.vam062_admin_mutation_atomic","create function public.vam062_upsert_staff_account_atomic");
+    expect(mutationFn).toContain("set role=p_payload->>'scope_role'\n        where id=(p_payload->>'scope_id')::uuid and user_id=v_auth and program_id=v_program_id::text and season_id=v_season_id::text and status='active';");
+    expect(mutationFn).not.toContain("status=p_payload->>'scope_status'");
+  });
+
+  it("Finding B: a single shared, race-safe helper (vam062_upsert_scope_atomic) is used by all four scope-creation call sites, and no inline existence-check-then-insert for admin_scope_access remains",()=>{
+    const sql=read(MIGRATION);
+    expect((sql.match(/perform public\.vam062_upsert_scope_atomic\(/g)??[]).length).toBe(4);
+    expect(sql).not.toMatch(/select exists\(select 1 from public\.admin_scope_access[^;]*into v_scope_existing/);
+  });
+
+  it("Finding B: the lock is acquired before the final existence check, keyed on exactly user_id+program_id+season_id+role (never status)",()=>{
+    const sql=read(MIGRATION);
+    const helper=slice(sql,"create function public.vam062_upsert_scope_atomic","create function public.vam062_admin_mutation_atomic");
+    const lockIdx=helper.indexOf("pg_advisory_xact_lock(hashtext('VAM062_SCOPE|'||p_user_id::text||'|'||p_program_id::text||'|'||p_season_id::text||'|'||p_scope_role))");
+    const existsIdx=helper.indexOf("if exists(select 1 from public.admin_scope_access");
+    expect(lockIdx).toBeGreaterThan(-1);
+    expect(existsIdx).toBeGreaterThan(-1);
+    expect(lockIdx).toBeLessThan(existsIdx);
+    expect(helper).not.toContain("p_scope_role||'|'||p_target_status"); // status intentionally excluded from the lock key
+  });
+
+  it("Finding B: active replay is a no-op, inactive history is never touched, and at most one new active row can be created (ON CONFLICT remains as backstop)",()=>{
+    const sql=read(MIGRATION);
+    const helper=slice(sql,"create function public.vam062_upsert_scope_atomic","create function public.vam062_admin_mutation_atomic");
+    expect(helper).toMatch(/status='active'\) then\s*\n\s*return;/);
+    expect(helper).not.toMatch(/update public\.admin_scope_access set status='active'/);
+    expect(helper).toContain("on conflict (user_id, (coalesce(program_id, '')), (coalesce(season_id, '')), role) where (status = 'active') do nothing;");
+  });
+
+  it("Finding B: staff-import routes its scope write through the same race-safe helper with target status 'inactive'",()=>{
+    const sql=read(MIGRATION);
+    const staffFn=slice(sql,"create function public.vam062_upsert_staff_account_atomic","create function public.vam062_import_participant_membership_atomic");
+    expect(staffFn).toContain("perform public.vam062_upsert_scope_atomic(p_auth_user_id,p_program_id,p_season_id,p_scope_role,'inactive');");
+  });
+
+  it("Finding B: malformed/invalid program-season relationships still fail before any scope mutation is reachable",()=>{
+    const sql=read(MIGRATION);
+    const mutationFn=slice(sql,"create function public.vam062_admin_mutation_atomic","create function public.vam062_upsert_staff_account_atomic");
+    const invalidIdx=mutationFn.indexOf("invalid program-season relationship");
+    const firstScopeCallIdx=mutationFn.indexOf("vam062_upsert_scope_atomic(");
+    expect(invalidIdx).toBeGreaterThan(-1);
+    expect(invalidIdx).toBeLessThan(firstScopeCallIdx);
+  });
+
+  it("Finding C: vam063_add_membership_role acquires an advisory lock, keyed on person_id+season_id+role, before its final existence check",()=>{
+    const sql=read("supabase_migrations/063_review_only_membership_lifecycle_operations.sql");
+    const addRole=slice(sql,"create function public.vam063_add_membership_role","create function public.vam063_remove_membership_role");
+    const lockIdx=addRole.indexOf("pg_advisory_xact_lock(hashtext('VAM063_ROLE|'||p_person_id::text||'|'||p_season_id::text||'|'||p_role))");
+    const finalCheckIdx=addRole.indexOf("select id into v_membership from public.person_season_memberships where person_id=p_person_id and season_id=p_season_id and role=p_role;");
+    expect(lockIdx).toBeGreaterThan(-1);
+    expect(finalCheckIdx).toBeGreaterThan(-1);
+    expect(lockIdx).toBeLessThan(finalCheckIdx);
+  });
+
+  it("Finding C: a concurrent/repeated add-role request returns a controlled noop before reaching INSERT, with no duplicate log or audit write, and the live unique constraint is untouched elsewhere",()=>{
+    const sql=read("supabase_migrations/063_review_only_membership_lifecycle_operations.sql");
+    const addRole=slice(sql,"create function public.vam063_add_membership_role","create function public.vam063_remove_membership_role");
+    const noopIdx=addRole.indexOf("return query select 'noop'::text,v_membership;");
+    const insertIdx=addRole.indexOf("insert into public.person_season_memberships");
+    const logIdx=addRole.indexOf("insert into public.person_season_membership_log");
+    expect(noopIdx).toBeGreaterThan(-1);
+    expect(noopIdx).toBeLessThan(insertIdx);
+    expect(insertIdx).toBeLessThan(logIdx);
+    expect(sql).not.toMatch(/drop constraint|alter table public\.person_season_memberships/i); // no constraint touched in 063
+  });
+
+  it("RLS/grant design and audit vocabulary are unchanged by this remediation",()=>{
+    const sql=read(MIGRATION);
+    for(const t of ["admin_users","admin_scope_access","admin_audit_log","people","person_season_memberships","intake_batches","person_season_membership_log"]){
+      expect(sql).toContain(`alter table public.${t} enable row level security;`);
+    }
+    const idx=sql.indexOf("add constraint admin_audit_log_action_type_check");
+    const clause=sql.slice(idx,sql.indexOf(";",idx));
+    for(const value of ["create_admin_user","update_admin_user","reactivate_admin_user","deactivate_admin_user","remove_admin_access","sync_auth","unknown","import_participant_membership","link_person_auth","reconcile_person_auth","create_membership","add_membership_role","remove_membership_role","pause_membership","withdraw_membership","opt_out_membership","cancel_membership","reactivate_membership"]) expect(clause).toContain(`'${value}'`);
+  });
+
+  it("rollback and post-apply verification track the new function: 11 functions, 26 manifest rows, dropped only after both its callers",()=>{
+    const rollback=read(ROLLBACK);
+    expect(rollback).toContain("object_kind='function')<>11");
+    expect(rollback).toContain(")<>26");
+    const dropIdx=rollback.indexOf("drop function public.vam062_upsert_scope_atomic");
+    const staffDropIdx=rollback.indexOf("drop function public.vam062_upsert_staff_account_atomic");
+    const mutationDropIdx=rollback.indexOf("drop function public.vam062_admin_mutation_atomic");
+    expect(dropIdx).toBeGreaterThan(-1);
+    expect(staffDropIdx).toBeLessThan(dropIdx);
+    expect(mutationDropIdx).toBeLessThan(dropIdx);
+
+    const postApply=read(POST_APPLY);
+    expect(postApply).toContain("'vam062_upsert_scope_atomic(uuid,uuid,uuid,text,text)'");
+    expect(postApply).toContain("proname like 'vam062_%')=11");
+    expect(postApply).toContain("package_version='VAM062_V5')=26");
+  });
 });

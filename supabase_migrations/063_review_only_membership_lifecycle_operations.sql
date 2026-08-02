@@ -156,6 +156,16 @@ $$;
 -- active, and never touches the person's other active roles (DEC-07,
 -- multi-role preservation). Cross-program isolation matches
 -- vam062_import_participant_membership_atomic's existing guard.
+-- Concurrency (remediates independent-review Finding C, DEC-R3): a
+-- transaction-scoped advisory lock keyed on exactly person_id+season_id+role
+-- is acquired before the existence check is repeated, so two concurrent
+-- add-role calls for the same identity serialize instead of racing —
+-- the second call observes the first's committed row and returns a
+-- controlled no-op rather than reaching the INSERT at all. The live
+-- UNIQUE(person_id,season_id,role) constraint remains untouched as the
+-- final database-level integrity gate; the lock exists so a legitimate
+-- concurrent caller never sees a raw unique_violation instead of a clean
+-- no-op result.
 create function public.vam063_add_membership_role(p_actor_admin_user_id uuid,p_person_id uuid,p_program_id uuid,p_season_id uuid,p_role text,p_reason text) returns table(outcome_status text,membership_id uuid) language plpgsql security definer set search_path=public as $$
 declare v_membership uuid; v_existing boolean;
 begin
@@ -178,9 +188,14 @@ begin
     raise exception 'VAM063 cross-program reassignment denied';
   end if;
 
-  select exists(select 1 from public.person_season_memberships where person_id=p_person_id and season_id=p_season_id and role=p_role) into v_existing;
+  -- Serialize by the exact logical identity (DEC-R3) before the final,
+  -- authoritative existence check. Program/season/role validation above
+  -- deliberately happens before the lock (cheap read-only checks that don't
+  -- need serialization); only the create-or-noop decision itself does.
+  perform pg_advisory_xact_lock(hashtext('VAM063_ROLE|'||p_person_id::text||'|'||p_season_id::text||'|'||p_role));
+  select id into v_membership from public.person_season_memberships where person_id=p_person_id and season_id=p_season_id and role=p_role;
+  v_existing:=v_membership is not null;
   if v_existing then
-    select id into v_membership from public.person_season_memberships where person_id=p_person_id and season_id=p_season_id and role=p_role;
     return query select 'noop'::text,v_membership;
     return;
   end if;

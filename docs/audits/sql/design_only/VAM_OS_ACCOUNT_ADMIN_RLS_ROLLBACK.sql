@@ -26,9 +26,9 @@ begin
      or exists(select 1 from public.account_rls_package_state where table_name not in('admin_users','admin_scope_access','admin_audit_log','people','person_season_memberships','intake_batches','person_season_membership_log') or state_checksum<>encode(digest('VAM062_V5|'||table_name||'|'||rls_was_enabled||'|'||rls_was_forced,'sha256'),'hex'))
   then raise exception 'VAM062V3 rollback state invalid'; end if;
 
-  if (select count(*) from public.account_rls_package_manifest)<>25
+  if (select count(*) from public.account_rls_package_manifest)<>26
      or (select count(*) from public.account_rls_package_manifest where object_kind='table')<>8
-     or (select count(*) from public.account_rls_package_manifest where object_kind='function')<>10
+     or (select count(*) from public.account_rls_package_manifest where object_kind='function')<>11
      or (select count(*) from public.account_rls_package_manifest where object_kind='policy')<>7
      or exists(select 1 from public.account_rls_package_manifest where package_version<>'VAM062_V5')
   then raise exception 'VAM062V3 manifest set invalid'; end if;
@@ -117,6 +117,9 @@ drop policy vam062_membership_log_program_ops on public.person_season_membership
 
 drop function public.vam062_upsert_staff_account_atomic(uuid,uuid,integer,uuid,text,text,text,uuid,uuid,text);
 drop function public.vam062_admin_mutation_atomic(uuid,text,uuid,jsonb);
+-- Dropped only after both callers above (vam062_upsert_staff_account_atomic,
+-- vam062_admin_mutation_atomic) are already gone.
+drop function public.vam062_upsert_scope_atomic(uuid,uuid,uuid,text,text);
 drop function public.vam062_import_participant_membership_atomic(uuid,uuid,integer,text,text,text,uuid,uuid,uuid);
 drop function public.vam062_record_reconciliation(uuid,uuid,integer,text);
 drop function public.vam062_record_auth_reconciliation(uuid,uuid,text,text,text,text,jsonb);
