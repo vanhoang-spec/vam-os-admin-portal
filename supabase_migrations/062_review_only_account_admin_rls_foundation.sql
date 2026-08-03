@@ -165,8 +165,8 @@ begin
   -- unexpected prior edit is never silently clobbered.
   if not exists(
     select 1 from pg_constraint c
-    where c.conrelid='public.admin_audit_log'::regclass and c.conname='admin_audit_log_action_type_check' and c.contype='c'
-      and pg_get_constraintdef(c.oid)='CHECK (action_type = ANY (ARRAY[''create_admin_user''::text, ''update_admin_user''::text, ''reactivate_admin_user''::text, ''deactivate_admin_user''::text, ''remove_admin_access''::text, ''sync_auth''::text, ''unknown''::text])) NOT VALID'
+    where c.conrelid='public.admin_audit_log'::regclass and c.conname='admin_audit_log_action_type_check' and c.contype='c' and c.convalidated=false
+      and pg_get_constraintdef(c.oid, true)='CHECK (action_type = ANY (ARRAY[''create_admin_user''::text, ''update_admin_user''::text, ''reactivate_admin_user''::text, ''deactivate_admin_user''::text, ''remove_admin_access''::text, ''sync_auth''::text, ''unknown''::text])) NOT VALID'
   ) then raise exception 'VAM062V3 admin_audit_log action_type constraint drifted from the expected legacy vocabulary'; end if;
 end $$;
 

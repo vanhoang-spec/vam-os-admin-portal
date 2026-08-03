@@ -102,8 +102,8 @@ begin
   -- the DEC-10-expanded superset before rollback reverses it, so rollback
   -- never blindly overwrites an unexpected later edit either.
   if not exists(
-    select 1 from pg_constraint c where c.conrelid='public.admin_audit_log'::regclass and c.conname='admin_audit_log_action_type_check' and c.contype='c'
-      and pg_get_constraintdef(c.oid)='CHECK (action_type = ANY (ARRAY[''create_admin_user''::text, ''update_admin_user''::text, ''reactivate_admin_user''::text, ''deactivate_admin_user''::text, ''remove_admin_access''::text, ''sync_auth''::text, ''unknown''::text, ''import_participant_membership''::text, ''link_person_auth''::text, ''reconcile_person_auth''::text, ''create_membership''::text, ''add_membership_role''::text, ''remove_membership_role''::text, ''pause_membership''::text, ''withdraw_membership''::text, ''opt_out_membership''::text, ''cancel_membership''::text, ''reactivate_membership''::text])) NOT VALID'
+    select 1 from pg_constraint c where c.conrelid='public.admin_audit_log'::regclass and c.conname='admin_audit_log_action_type_check' and c.contype='c' and c.convalidated=false
+      and pg_get_constraintdef(c.oid, true)='CHECK (action_type = ANY (ARRAY[''create_admin_user''::text, ''update_admin_user''::text, ''reactivate_admin_user''::text, ''deactivate_admin_user''::text, ''remove_admin_access''::text, ''sync_auth''::text, ''unknown''::text, ''import_participant_membership''::text, ''link_person_auth''::text, ''reconcile_person_auth''::text, ''create_membership''::text, ''add_membership_role''::text, ''remove_membership_role''::text, ''pause_membership''::text, ''withdraw_membership''::text, ''opt_out_membership''::text, ''cancel_membership''::text, ''reactivate_membership''::text])) NOT VALID'
   ) then raise exception 'VAM062V3 action_type constraint does not match the expected post-migration definition; refusing to roll back an unexpected state'; end if;
 end $$;
 
