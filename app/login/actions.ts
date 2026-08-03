@@ -1,9 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { clearAuthCookies, getSupabaseAuthClientForPasswordSignIn, getSupabaseAuthClientWithAccessToken, setAuthCookies } from "@/lib/admin-auth";
-import { ADMIN_UNLOCK_COOKIE } from "@/lib/password-gate";
 import { getSafeAuthErrorType, mapAuthError, safeNext } from "@/lib/auth-error-messages";
 
 export type LoginActionState = {
@@ -71,6 +69,5 @@ export async function logoutAction() {
   const client = getSupabaseAuthClientForPasswordSignIn();
   if (client) await client.auth.signOut();
   await clearAuthCookies();
-  cookies().delete(ADMIN_UNLOCK_COOKIE);
   redirect("/login");
 }

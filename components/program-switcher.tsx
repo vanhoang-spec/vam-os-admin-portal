@@ -41,13 +41,21 @@ export function ProgramSwitcher({ options }: { options: ProgramSwitcherOptions }
       router.push("/portfolio");
       return;
     }
+    if (pathname === "/portfolio" || pathname === "/admin/users") {
+      router.push(`${pathname}?${new URLSearchParams({ program: code }).toString()}`);
+      return;
+    }
     router.push(`/programs/${encodeURIComponent(code)}`);
   }
 
   function openSeason(code: string) {
     if (!selectedProgram) return;
-    const query = code ? `?season=${encodeURIComponent(code)}` : "";
-    router.push(`/programs/${encodeURIComponent(selectedProgram.code)}${query}`);
+    const query = new URLSearchParams({ program: selectedProgram.code });
+    if (code) query.set("season", code);
+    const destination = pathname === "/portfolio" || pathname === "/admin/users"
+      ? pathname
+      : `/programs/${encodeURIComponent(selectedProgram.code)}`;
+    router.push(`${destination}?${query.toString()}`);
   }
 
   function openBatch(id: string) {

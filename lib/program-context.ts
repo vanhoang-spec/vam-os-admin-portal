@@ -37,10 +37,19 @@ export async function loadProgramContextCatalog(): Promise<ProgramContextCatalog
     client.from("seasons").select("id,code,name,program_id,status"),
     client.from("intake_batches").select("id,code,name,season_id,is_active")
   ]);
-  const error = programsResult.error ?? seasonsResult.error ?? batchesResult.error;
+  const error = programsResult.error ?? seasonsResult.error;
   if (error) {
     console.error("[program-context] catalog lookup failed", { code: error.code, message: error.message });
     throw new ProgramContextError("forbidden", "Không thể xác minh phạm vi truy cập lúc này.");
+  }
+
+  // Intake batches are optional. Their temporary unavailability must not
+  // take down the authoritative program and season inventory.
+  if (batchesResult.error) {
+    console.error("[program-context] intake batch catalog lookup failed", {
+      code: batchesResult.error.code,
+      message: batchesResult.error.message
+    });
   }
 
   return {
@@ -57,7 +66,7 @@ export async function loadProgramContextCatalog(): Promise<ProgramContextCatalog
       programId: text(row.program_id),
       status: row.status == null ? null : text(row.status)
     })),
-    intakeBatches: (batchesResult.data ?? []).map((row: any) => ({
+    intakeBatches: (batchesResult.error ? [] : batchesResult.data ?? []).map((row: any) => ({
       id: text(row.id),
       code: text(row.code),
       name: text(row.name),

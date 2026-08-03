@@ -21,7 +21,11 @@ function healthLabel(value: ProgramPortfolioRow["health"]) {
   return "Chưa có dữ liệu";
 }
 
-export default async function PortfolioPage() {
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function PortfolioPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const adminUser = await getCurrentAdminUser();
   if (adminUser?.role !== "super_admin") {
     const programs = await resolveAuthorizedPrograms();
@@ -29,12 +33,28 @@ export default async function PortfolioPage() {
   }
 
   const data = await getSuperAdminPortfolio();
+  const selectedProgram = first(searchParams?.program);
+  const selectedSeason = first(searchParams?.season);
+  const adminUsersQuery = new URLSearchParams();
+  if (selectedProgram) adminUsersQuery.set("program", selectedProgram);
+  if (selectedSeason) adminUsersQuery.set("season", selectedSeason);
   return (
     <>
       <PageHeader
         title="Danh mục chương trình"
         description="Tổng quan toàn hệ thống dành cho Super Admin. Dashboard chỉ hiển thị số liệu tổng hợp, không hiển thị thông tin cá nhân."
       />
+
+      {selectedProgram && selectedSeason ? (
+        <Card className="mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-700">
+            <span>Phạm vi đã chọn: <strong>{selectedProgram}</strong> · <strong>{selectedSeason}</strong></span>
+            <Link href={`/admin/users?${adminUsersQuery.toString()}`} className="font-medium text-vam-green hover:underline">
+              Mở quản lý người dùng trong phạm vi này
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       {data.warnings.length ? (
         <ErrorBox message={`Một số KPI chưa có nguồn dữ liệu tin cậy: ${data.warnings.join(", ")}.`} />

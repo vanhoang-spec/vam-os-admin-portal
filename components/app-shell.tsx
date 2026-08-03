@@ -335,7 +335,7 @@ export function AppShell({
     prevDrawerOpenRef.current = drawerOpen;
   }, [drawerOpen]);
 
-  if (pathname === "/unlock" || pathname === "/login" || pathname.startsWith("/apply")) {
+  if (pathname === "/login" || pathname.startsWith("/apply")) {
     return <>{children}</>;
   }
 

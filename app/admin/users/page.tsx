@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 import { listAdminAuditLogs, listManagedAdminUsers, requireSuperAdmin, type ManagedAdminUser } from "@/lib/admin-users";
 import { displayText, formatDate } from "@/lib/utils";
-import { CreateAdminUserForm, EditAdminUserForm, RemoveAccessForm, StatusToggleForm, SyncAuthForm } from "./user-management-forms";
+import { loadProgramContextCatalog, resolveAuthorizedProgramContext } from "@/lib/program-context";
+import { ProgramContextError } from "@/lib/program-context-core";
+import { CreateAdminUserForm, EditAdminUserForm, RemoveAccessForm, StatusToggleForm, SyncAuthForm, type ScopeCatalogOptions } from "./user-management-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -128,10 +130,29 @@ export default async function AdminUsersPage({ searchParams }: { searchParams?: 
   const adminUser = await requireSuperAdmin();
   if (!adminUser) notFound();
 
-  const [usersResult, auditResult] = await Promise.all([
+  const [usersResult, auditResult, catalog] = await Promise.all([
     listManagedAdminUsers(),
-    listAdminAuditLogs()
+    listAdminAuditLogs(),
+    loadProgramContextCatalog()
   ]);
+  const requestedProgram = single(searchParams?.program);
+  const requestedSeason = single(searchParams?.season);
+  let contextError = "";
+  let selectedProgramId = "";
+  let selectedSeasonId = "";
+  if (requestedProgram || requestedSeason) {
+    try {
+      const context = await resolveAuthorizedProgramContext({ programCode: requestedProgram, seasonCode: requestedSeason });
+      selectedProgramId = context.selectedProgramId;
+      selectedSeasonId = context.selectedSeasonId ?? "";
+      if (!selectedSeasonId) contextError = "Hãy chọn một season hợp lệ trước khi tạo hoặc sửa scope.";
+    } catch (error) {
+      contextError = error instanceof ProgramContextError ? error.message : "Không thể xác minh phạm vi đã chọn.";
+    }
+  } else {
+    contextError = "Hãy chọn chương trình và season từ bộ chọn phạm vi; hệ thống sẽ không dùng giá trị mặc định ngầm định.";
+  }
+  const scopeOptions: ScopeCatalogOptions = { programs: catalog.programs, seasons: catalog.seasons, selectedProgramId, selectedSeasonId };
   const users = usersResult.data;
   const activeSuperAdminCount = users.filter((user) => user.role === "super_admin" && user.status === "active").length;
   const selectedEditId = single(searchParams?.edit);
@@ -143,13 +164,16 @@ export default async function AdminUsersPage({ searchParams }: { searchParams?: 
       <div className="mb-6 flex flex-wrap gap-3"><Link href="/admin/users/import" className="min-h-11 rounded-md bg-vam-green px-4 py-2.5 font-medium text-white">Import CSV an toàn</Link></div>
       {usersResult.error ? <ErrorBox message={usersResult.error} /> : null}
       {auditResult.error ? <ErrorBox message={auditResult.error} /> : null}
+      {contextError ? <ErrorBox message={contextError} /> : (
+        <Card className="mb-6"><p className="text-sm text-slate-700">Program: <strong>{requestedProgram}</strong> · Season: <strong>{requestedSeason}</strong></p></Card>
+      )}
 
       <Card className="mb-6">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Thêm user quản trị</h2>
         <p className="mb-4 text-sm text-slate-600">
           Luồng tạo user sẽ tìm hoặc mời Supabase Auth user trước, sau đó lưu admin_users với auth_user_id và cập nhật scope. Service-role key chỉ chạy server-side.
         </p>
-        <CreateAdminUserForm />
+        {contextError ? <p className="text-sm text-slate-600">Chọn phạm vi hợp lệ để bật biểu mẫu.</p> : <CreateAdminUserForm scopeOptions={scopeOptions} />}
       </Card>
 
       {selectedUser ? (
@@ -165,7 +189,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams?: 
                 Đóng form sửa
               </Link>
             </div>
-            <EditAdminUserForm user={selectedUser} />
+            {contextError ? <ErrorBox message="Không thể sửa scope khi phạm vi trang chưa hợp lệ." /> : <EditAdminUserForm user={selectedUser} scopeOptions={scopeOptions} />}
           </Card>
         </section>
       ) : null}

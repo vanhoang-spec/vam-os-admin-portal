@@ -1,7 +1,5 @@
-import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { createClient, type User } from "@supabase/supabase-js";
-import { ADMIN_UNLOCK_COOKIE, ADMIN_UNLOCK_SALT } from "@/lib/password-gate";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE, type CurrentAdminUser } from "@/lib/auth-constants";
@@ -23,16 +21,6 @@ function logAdminAuthError(scope: string, error: unknown) {
     hint: err?.hint,
     details: err?.details
   });
-}
-
-function passwordGateToken(password: string) {
-  return createHash("sha256").update(`${ADMIN_UNLOCK_SALT}:${password}`).digest("hex");
-}
-
-export function hasPasswordGateFallback() {
-  const configuredPassword = process.env.VAM_OS_ADMIN_PASSWORD;
-  if (!configuredPassword) return false;
-  return cookies().get(ADMIN_UNLOCK_COOKIE)?.value === passwordGateToken(configuredPassword);
 }
 
 function authClient(accessToken?: string) {

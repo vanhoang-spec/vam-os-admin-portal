@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFormState } from "react-dom";
 import type { ManagedAdminUser } from "@/lib/admin-users";
+import type { ProgramCatalogRow, SeasonCatalogRow } from "@/lib/program-context-core";
 import {
   createAdminUserAction,
   removeAdminAccessAction,
@@ -12,7 +13,13 @@ import {
   updateAdminUserAction,
   type AdminUserActionState
 } from "./actions";
-import { SEASON_CONFIG } from "@/lib/season-config";
+
+export type ScopeCatalogOptions = {
+  programs: ProgramCatalogRow[];
+  seasons: SeasonCatalogRow[];
+  selectedProgramId: string;
+  selectedSeasonId: string;
+};
 
 const initialState: AdminUserActionState = { ok: false, message: "" };
 const inputClass = "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -82,7 +89,7 @@ function ScopeStatusSelect({ defaultValue }: { defaultValue: string }) {
   );
 }
 
-export function CreateAdminUserForm() {
+export function CreateAdminUserForm({ scopeOptions }: { scopeOptions: ScopeCatalogOptions }) {
   const [state, formAction] = useFormState(createAdminUserAction, initialState);
   return (
     <form action={formAction} className="grid gap-3">
@@ -105,12 +112,18 @@ export function CreateAdminUserForm() {
           <StatusSelect defaultValue="invited" />
         </label>
         <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">season_code</span>
-          <input name="season_code" className={inputClass} defaultValue={SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} placeholder={SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} />
+          <span className="text-xs font-medium uppercase text-slate-500">Season</span>
+          <select name="season_id" required className={inputClass} defaultValue={scopeOptions.selectedSeasonId}>
+            <option value="" disabled>Chọn season</option>
+            {scopeOptions.seasons.filter((season) => season.programId === scopeOptions.selectedProgramId).map((season) => <option key={season.id} value={season.id}>{season.name} ({season.code})</option>)}
+          </select>
         </label>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Program</span>
-          <input name="program" className={inputClass} defaultValue="VAM" placeholder="VAM" />
+          <select name="program_id" required className={inputClass} defaultValue={scopeOptions.selectedProgramId}>
+            <option value="" disabled>Chọn chương trình</option>
+            {scopeOptions.programs.map((program) => <option key={program.id} value={program.id}>{program.name} ({program.code})</option>)}
+          </select>
         </label>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Phân quyền</span>
@@ -128,13 +141,13 @@ export function CreateAdminUserForm() {
   );
 }
 
-export function EditAdminUserForm({ user }: { user: ManagedAdminUser }) {
+export function EditAdminUserForm({ user, scopeOptions }: { user: ManagedAdminUser; scopeOptions: ScopeCatalogOptions }) {
   const [state, formAction] = useFormState(updateAdminUserAction, initialState);
   const scopes = Array.isArray(user.scopes) ? user.scopes : [];
   const scope = scopes[0];
   const canSaveScope = Boolean(user.auth_user_id);
-  const scopeProgram = scope?.program_id ?? scope?.program ?? "VAM";
-  const scopeSeason = scope?.season_id ?? scope?.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
+  const scopeProgram = scope?.program_id ?? scope?.program ?? scopeOptions.selectedProgramId;
+  const scopeSeason = scope?.season_id ?? scope?.season_code ?? scopeOptions.selectedSeasonId;
   const scopeLevel = scope?.role ?? scope?.scope_level ?? "read";
   return (
     <div className="grid gap-3">
@@ -166,11 +179,17 @@ export function EditAdminUserForm({ user }: { user: ManagedAdminUser }) {
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Program</span>
-            <input name="program" defaultValue={scopeProgram} disabled={!canSaveScope} className={inputClass} placeholder="VAM" />
+            <select name="program_id" defaultValue={scopeProgram} disabled={!canSaveScope} required className={inputClass}>
+              <option value="" disabled>Chọn chương trình</option>
+              {scopeOptions.programs.map((program) => <option key={program.id} value={program.id}>{program.name} ({program.code})</option>)}
+            </select>
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">season_code</span>
-            <input name="season_code" defaultValue={scopeSeason} disabled={!canSaveScope} className={inputClass} placeholder={SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE} />
+            <span className="text-xs font-medium uppercase text-slate-500">Season</span>
+            <select name="season_id" defaultValue={scopeSeason} disabled={!canSaveScope} required className={inputClass}>
+              <option value="" disabled>Chọn season</option>
+              {scopeOptions.seasons.filter((season) => season.programId === scopeProgram).map((season) => <option key={season.id} value={season.id}>{season.name} ({season.code})</option>)}
+            </select>
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">scope_level</span>
