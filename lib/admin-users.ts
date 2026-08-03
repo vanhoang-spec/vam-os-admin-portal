@@ -7,7 +7,8 @@ import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { JsonRecord } from "@/lib/types";
 import { isValidEmail, normalizeEmail } from "@/lib/identity";
-import { resolveAuthOwnership } from "@/lib/account-auth-ownership";
+import { findExactAuthUsers, resolveAuthOwnership } from "@/lib/account-auth-ownership";
+import { executeManualStaffProvisioning, type ProvisioningResult } from "@/lib/manual-staff-provisioning";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
 export type ScopeRole = "full_access" | "operations" | "review" | "read";
@@ -52,6 +53,12 @@ export type AdminAuditLogRow = {
 export type AdminUserMutationResult = {
   ok: boolean;
   message: string;
+  status?: ProvisioningResult["status"];
+  failureClass?: string;
+  failureStage?: ProvisioningResult["failureStage"];
+  operationId?: string;
+  reconciliationRequired?: boolean;
+  ownerAction?: ProvisioningResult["ownerAction"];
 };
 
 const ADMIN_ROLES = new Set(["viewer", "reviewer", "support_team", "core_team", "admin", "super_admin"]);
@@ -378,23 +385,43 @@ export async function createManagedAdminUser(input: {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return { ok: false, message: "Email không hợp lệ." };
 
-  const operationId=randomUUID();
-  const auth = await ensureAuthUserForEmail(client, email);
-  if (!auth.authUserId) { if (auth.ownershipAmbiguous) { try { await recordAuthReconciliation(client,String(actor.id),operationId,email,"create_admin_user","ambiguous_auth_ownership","required"); } catch { return { ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động." }; } } return { ok: false, message: auth.ownershipAmbiguous ? "Không xác định được quyền sở hữu Auth; trạng thái đối soát đã được ghi nhận." : auth.warning ?? "Không thể tạo hoặc tìm Supabase Auth user." }; }
-  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
-    p_actor_admin_user_id: actor.id, p_operation: "upsert", p_target_admin_user_id: null,
-    p_payload: { auth_user_id: auth.authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: auth.created ? "invited" : validStatus(input.status), program_id: scopeText(input.programId,"VAM"), season_id: scopeText(input.seasonId,SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE), scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
+  const operationId = randomUUID();
+  const emailHash = createHash("sha256").update(email, "utf8").digest("hex");
+  const authHash = (id: string | null) => id ? createHash("sha256").update(id, "utf8").digest("hex") : null;
+  const logSafe = (stage: string, failureClass: string, code?: string) => logAdminUsersRuntime("staff provisioning", { operationId, stage, failureClass, code: code ?? null });
+  const result = await executeManualStaffProvisioning(operationId, {
+    beginJournal: async () => {
+      const { data, error: beginError } = await client.rpc("vam062_begin_auth_operation", { p_actor_admin_user_id: actor.id, p_operation_id: operationId, p_operation_type: "manual", p_identifier_hash: emailHash, p_retry_of: null });
+      if (beginError) { logSafe("journal", "journal_creation_failed", beginError.code); return false; }
+      const row = Array.isArray(data) ? data[0] : data;
+      return row?.accepted === true;
+    },
+    recordStage: async (stage, ownership, authId, deleteAllowed, failureClass) => {
+      const { error: stageError } = await client.rpc("vam062_record_auth_operation_stage", {
+        p_actor_admin_user_id: actor.id, p_operation_id: operationId, p_stage: stage, p_ownership_state: ownership,
+        p_auth_user_id_hash: authHash(authId), p_delete_allowed: deleteAllowed, p_failure_class: failureClass ?? null
+      });
+      if (stageError) { logSafe(stage, failureClass ?? "stage_recording_failed", stageError.code); throw new Error("STAGE_RECORDING_FAILED"); }
+    },
+    preLookup: () => findExactAuthUsers(client, email).then((lookup) => ({ ok: lookup.ok, ids: lookup.users.map((user) => user.id) })),
+    invite: async () => { const invitation = await client.auth.admin.inviteUserByEmail(email); return { id: String(invitation?.data?.user?.id ?? "").trim() || null, error: Boolean(invitation?.error) }; },
+    postLookup: () => findExactAuthUsers(client, email).then((lookup) => ({ ok: lookup.ok, ids: lookup.users.map((user) => user.id) })),
+    commitApplication: async (authUserId) => {
+      const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
+        p_actor_admin_user_id: actor.id, p_operation: "upsert", p_target_admin_user_id: null,
+        p_payload: { auth_user_id: authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: "invited", program_id: scopeText(input.programId,"VAM"), season_id: scopeText(input.seasonId,SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE), scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
+      });
+      if (atomicError) { logSafe("application", "application_mutation_failed", atomicError.code); throw new Error("APPLICATION_MUTATION_FAILED"); }
+    },
+    compensate: async (authUserId) => { const compensation = await client.auth.admin.deleteUser(authUserId); if (compensation.error) { logSafe("compensation", "auth_compensation_failed", compensation.error.code); throw new Error("COMPENSATION_FAILED"); } },
+    recordReconciliation: (failureClass, resolved) => recordAuthReconciliation(client, String(actor.id), operationId, email, "create_admin_user", failureClass, resolved ? "resolved" : "required")
   });
-  if (atomicError) {
-    if (auth.created) {
-      const compensation = await client.auth.admin.deleteUser(auth.authUserId);
-      if(compensation.error){try{await recordAuthReconciliation(client,String(actor.id),operationId,email,"create_admin_user","auth_compensation_failed","required");return{ok:false,message:"Tác vụ thất bại; trạng thái đối soát đã được ghi nhận."}}catch{return{ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động."}}}
-      try{await recordAuthReconciliation(client,String(actor.id),operationId,email,"create_admin_user","database_failed_auth_compensated","resolved")}catch{return{ok:false,message:"Lời mời đã thu hồi nhưng ghi nhận bù trừ thất bại; dừng thử lại tự động."}}
-      return { ok: false, message: "Tác vụ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi an toàn." };
-    }
-    return { ok: false, message: "Tác vụ cơ sở dữ liệu và audit thất bại; Auth hiện có không bị thay đổi." };
-  }
-  return { ok: true, message: auth.created ? "Đã gửi lời mời và tạo tài khoản ở trạng thái đã mời." : "Đã cập nhật tài khoản hiện có an toàn." };
+  const reference = `Mã tham chiếu: ${result.operationId}`;
+  const base = { ...result, operationId: result.operationId };
+  if (result.ok) return { ...base, message: `Đã gửi lời mời và tạo tài khoản ở trạng thái đã mời. ${reference}` };
+  if (result.status === "rejected") return { ...base, message: `Danh tính đã tồn tại. Không có dữ liệu nào được cập nhật; hãy dùng quy trình xem xét tài khoản hiện có. ${reference}` };
+  if (result.reconciliationRequired) return { ...base, message: `Trạng thái cần đối soát thủ công. Không tự động thử lại. ${reference}` };
+  return { ...base, message: `Tác vụ dừng an toàn trước khi hoàn tất. Không tự động thử lại. ${reference}` };
   /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
 
   const { data: existing } = await client
