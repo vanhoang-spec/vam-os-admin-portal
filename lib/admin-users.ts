@@ -367,6 +367,7 @@ async function upsertScope(client: any, input: {
 }
 
 export async function createManagedAdminUser(input: {
+  operationId?: unknown;
   email: unknown;
   fullName: unknown;
   role: unknown;
@@ -385,7 +386,10 @@ export async function createManagedAdminUser(input: {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return { ok: false, message: "Email không hợp lệ." };
 
-  const operationId = randomUUID();
+  const requestedOperationId = String(input.operationId ?? "").trim();
+  const operationId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedOperationId)
+    ? requestedOperationId
+    : randomUUID();
   const emailHash = createHash("sha256").update(email, "utf8").digest("hex");
   const authHash = (id: string | null) => id ? createHash("sha256").update(id, "utf8").digest("hex") : null;
   const logSafe = (stage: string, failureClass: string, code?: string) => logAdminUsersRuntime("staff provisioning", { operationId, stage, failureClass, code: code ?? null });

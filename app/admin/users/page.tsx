@@ -195,7 +195,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams?: 
       ) : null}
 
       <section className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-vam-ink">Danh sách người dùng</h2>
+        <h2 id="managed-users" className="mb-3 scroll-mt-24 text-lg font-semibold text-vam-ink">Danh sách người dùng</h2>
         <UserManagementTable users={users} activeSuperAdminCount={activeSuperAdminCount} />
       </section>
 
