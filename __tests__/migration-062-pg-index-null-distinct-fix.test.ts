@@ -119,11 +119,31 @@ describe("migration 062 pg_index remediation: indisnullsnotdistinct -> indnullsn
     expect(diffLines[0]).toContain("indisnullsnotdistinct");
   });
 
-  it("9. rollback and migration-063 membership-lifecycle rollback sources never referenced the misspelled or corrected column (no equivalent defect existed there)", () => {
+  it("9. rollback differs from the pg_index baseline only by the reviewed constraint-guard normalization", () => {
     const baselineHead = "1569ba8483c7e6f7fb5125f629dd671babc3b51b";
     const result = spawnSync("git", ["show", `${baselineHead}:${ROLLBACK_062}`], { encoding: "utf8" });
     expect(result.status).toBe(0);
-    expect(read(ROLLBACK_062)).toBe(result.stdout);
-    expect(read(ROLLBACK_062)).not.toMatch(/indisnullsnotdistinct|indnullsnotdistinct/);
+    const before = result.stdout;
+    const after = read(ROLLBACK_062);
+    const oldCatalogLine = "    select 1 from pg_constraint c where c.conrelid='public.admin_audit_log'::regclass and c.conname='admin_audit_log_action_type_check' and c.contype='c'";
+    const newCatalogLine = `${oldCatalogLine} and c.convalidated=false`;
+    const actionTypes = ["create_admin_user", "update_admin_user", "reactivate_admin_user", "deactivate_admin_user", "remove_admin_access", "sync_auth", "unknown", "import_participant_membership", "link_person_auth", "reconcile_person_auth", "create_membership", "add_membership_role", "remove_membership_role", "pause_membership", "withdraw_membership", "opt_out_membership", "cancel_membership", "reactivate_membership"];
+    const definition = `CHECK (action_type = ANY (ARRAY[${actionTypes.map((value) => `''${value}''::text`).join(", ")}])) NOT VALID`;
+    const oldDefinitionLine = `      and pg_get_constraintdef(c.oid)='${definition}'`;
+    const newDefinitionLine = `      and pg_get_constraintdef(c.oid, true)='${definition}'`;
+    expect(before.split(oldCatalogLine).length - 1).toBe(1);
+    expect(before.split(oldDefinitionLine).length - 1).toBe(1);
+    expect(after).toBe(before.replace(oldCatalogLine, newCatalogLine).replace(oldDefinitionLine, newDefinitionLine));
+    const exec = stripLineComments(after);
+    const guardStart = exec.indexOf("select 1 from pg_constraint c where c.conrelid='public.admin_audit_log'::regclass");
+    const guard = exec.slice(guardStart, exec.indexOf("then raise exception 'VAM062V3 action_type constraint", guardStart));
+    expect(guard).toContain("c.conname='admin_audit_log_action_type_check'");
+    expect(guard).toContain("c.contype='c'");
+    expect(guard).toContain("c.convalidated=false");
+    expect(guard).toContain(`pg_get_constraintdef(c.oid, true)='${definition}'`);
+    expect(guard).not.toMatch(/pg_get_constraintdef\(c\.oid\)(?!\s*,)/);
+    expect(Array.from(definition.matchAll(/''([^']+)''::text/g), (match) => match[1])).toEqual(actionTypes);
+    expect(definition).toContain("NOT VALID");
+    expect(after).not.toMatch(/indisnullsnotdistinct|indnullsnotdistinct/);
   });
 });
