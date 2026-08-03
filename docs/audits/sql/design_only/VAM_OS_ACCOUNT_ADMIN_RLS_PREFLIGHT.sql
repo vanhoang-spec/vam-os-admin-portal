@@ -95,7 +95,7 @@ expected_policy(t,n,roles,cmd,qual) as(values
  ('admin_scope_access','read_admin_scope_access_self_or_super_admin',array['public'],'SELECT','((current_admin_role() = ''super_admin''::text) OR (is_active_admin() AND (user_id = auth.uid()) AND (status = ''active''::text)))'),
  ('admin_audit_log','read_admin_audit_log_super_admin_only',array['public'],'SELECT','(current_admin_role() = ''super_admin''::text)')),
 expected_arbiter(t,cols) as(values('admin_users',array['email']),('person_season_memberships',array['person_id','season_id','role'])),
-index_shape as(select c.relname t,i.indexrelid,i.indisunique,i.indisvalid,i.indisready,i.indpred is null nonpartial,i.indexprs is null nonexpression,i.indisnullsnotdistinct,array(select a.attname from unnest(i.indkey::smallint[]) with ordinality k(attnum,ord) join pg_attribute a on a.attrelid=i.indrelid and a.attnum=k.attnum where k.ord<=i.indnkeyatts order by k.ord) cols,i.indnkeyatts from pg_index i join pg_class c on c.oid=i.indrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public'),
+index_shape as(select c.relname t,i.indexrelid,i.indisunique,i.indisvalid,i.indisready,i.indpred is null nonpartial,i.indexprs is null nonexpression,i.indisnullsnotdistinct,array(select a.attname::text from unnest(i.indkey::smallint[]) with ordinality k(attnum,ord) join pg_attribute a on a.attrelid=i.indrelid and a.attnum=k.attnum where k.ord<=i.indnkeyatts order by k.ord) cols,i.indnkeyatts from pg_index i join pg_class c on c.oid=i.indrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public'),
 arbiter_assert as(select e.t,e.cols,case when count(s.*)=1 and bool_and(s.indisunique and s.indisvalid and s.indisready and s.nonpartial and s.nonexpression and not s.indisnullsnotdistinct and s.indnkeyatts=cardinality(e.cols)) then 'PASS' else 'FAIL' end status from expected_arbiter e left join index_shape s on s.t=e.t and s.cols=e.cols group by e.t,e.cols),
 scope_arbiter_assert as(
  select case when exists(
@@ -109,7 +109,7 @@ scope_arbiter_assert as(
  ) then 'PASS' else 'FAIL' end status
 ),
 column_assert as(select e.t||'.'||e.c assertion,case when count(c.*)=1 and bool_and(c.udt_name=e.typ and (c.is_nullable='YES')=e.nullable and c.is_identity=e.identity_kind and c.is_generated=e.generated_kind) then 'PASS' else 'FAIL' end status from expected_col e left join information_schema.columns c on c.table_schema='public' and c.table_name=e.t and c.column_name=e.c group by e.t,e.c),
-policy_assert as(select e.t||'.'||e.n assertion,case when count(p.*)=1 and bool_and(p.permissive='PERMISSIVE' and p.roles=e.roles and p.cmd=e.cmd and p.qual=e.qual and p.with_check is null) then 'PASS' else 'FAIL' end status from expected_policy e left join pg_policies p on p.schemaname='public' and p.tablename=e.t and p.policyname=e.n group by e.t,e.n),
+policy_assert as(select e.t||'.'||e.n assertion,case when count(p.*)=1 and bool_and(p.permissive='PERMISSIVE' and p.roles::text[]=e.roles and p.cmd=e.cmd and p.qual=e.qual and p.with_check is null) then 'PASS' else 'FAIL' end status from expected_policy e left join pg_policies p on p.schemaname='public' and p.tablename=e.t and p.policyname=e.n group by e.t,e.n),
 -- action_type_vocabulary is checked as a set of bare values plus a separate
 -- NOT VALID state check, instead of raw pg_get_constraintdef string
 -- equality, so whitespace/casts/parentheses/ARRAY formatting/value order in

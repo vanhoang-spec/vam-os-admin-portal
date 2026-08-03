@@ -23,7 +23,7 @@ describe("staging preflight policy-blocker remediation (2026-08-02)", () => {
     const sql = read(MIGRATION);
     const guard = sql.slice(sql.indexOf("v_unexpected"), sql.indexOf("if v_unexpected is not null"));
     expect(guard).toContain(`policyname='${EMERGENCY_POLICY}'`);
-    expect(guard).toContain("roles=array['authenticated']");
+    expect(guard).toContain("roles::text[]=array['authenticated']::text[]");
     expect(guard).toContain("qual='((auth_user_id = auth.uid()) AND (status = ''active''::text))'");
   });
 
