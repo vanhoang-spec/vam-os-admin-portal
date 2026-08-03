@@ -138,10 +138,18 @@ describe("staging preflight policy-blocker remediation (2026-08-02)", () => {
     expect(sql).not.toMatch(/grant\s+(insert|update|delete|all)\s+on public\.admin_users.*to\s+(anon|authenticated)/i);
   });
 
-  it("12. migration 063 source is byte-for-byte unchanged from the required baseline HEAD", () => {
+  it("12. migration 063 source is unchanged from the required baseline HEAD by this policy-blocker remediation specifically: the only later change is the unrelated, separately-confirmed pg_index column-name fix", () => {
     const baselineHead = "6644e993a40efda720396714cd12b62c611ab358";
     const result = spawnSync("git", ["show", `${baselineHead}:${MIGRATION_063}`], { encoding: "utf8" });
     expect(result.status).toBe(0);
-    expect(read(MIGRATION_063)).toBe(result.stdout);
+    const before = result.stdout;
+    const after = read(MIGRATION_063);
+    const beforeLines = before.split("\n");
+    const afterLines = after.split("\n");
+    expect(afterLines.length).toBe(beforeLines.length);
+    const diffLines = beforeLines.filter((line, i) => line !== afterLines[i]);
+    expect(diffLines.length).toBe(1);
+    expect(diffLines[0]).toContain("indisnullsnotdistinct");
+    expect(diffLines[0]).not.toMatch(/roles|pg_policies/i);
   });
 });

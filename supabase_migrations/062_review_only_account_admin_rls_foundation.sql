@@ -109,7 +109,7 @@ begin
   if not exists(
     select 1 from pg_index i join pg_class c on c.oid=i.indrelid join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and c.relname='admin_users'
-      and i.indisunique and i.indisvalid and i.indisready and not i.indisnullsnotdistinct
+      and i.indisunique and i.indisvalid and i.indisready and not i.indnullsnotdistinct
       and i.indnkeyatts=1 and i.indpred is null and i.indexprs is null
       and (select a.attname from pg_attribute a where a.attrelid=i.indrelid and a.attnum=i.indkey[0])='email'
   ) then raise exception 'VAM062V3 admin_users(email) conflict target missing, altered, or ambiguous'; end if;
@@ -123,7 +123,7 @@ begin
   if not exists(
     select 1 from pg_index i join pg_class c on c.oid=i.indrelid join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and c.relname='admin_scope_access'
-      and i.indisunique and i.indisvalid and i.indisready and not i.indisnullsnotdistinct
+      and i.indisunique and i.indisvalid and i.indisready and not i.indnullsnotdistinct
       and i.indnkeyatts=4
       and i.indpred is not null and pg_get_expr(i.indpred,i.indrelid)='(status = ''active''::text)'
       and i.indexprs is not null and pg_get_expr(i.indexprs,i.indrelid)='COALESCE(program_id, ''''::text), COALESCE(season_id, ''''::text)'
@@ -135,7 +135,7 @@ begin
     select 1 from pg_constraint c join pg_index i on i.indexrelid=c.conindid
     where c.conrelid='public.person_season_memberships'::regclass and c.contype='u' and c.convalidated
       and pg_get_constraintdef(c.oid,true)='UNIQUE (person_id, season_id, role)'
-      and i.indisunique and i.indisvalid and i.indisready and i.indnkeyatts=3 and i.indpred is null and i.indexprs is null and not i.indisnullsnotdistinct
+      and i.indisunique and i.indisvalid and i.indisready and i.indnkeyatts=3 and i.indpred is null and i.indexprs is null and not i.indnullsnotdistinct
   ) then raise exception 'VAM062V3 membership conflict target missing, altered, or ambiguous'; end if;
 
   -- admin_users lifecycle vocabulary (fixes CONFLICT-07 and implements

@@ -39,7 +39,7 @@ assertions as(
  union all select 'prerequisite:admin_scope_access_corrected_arbiter',case when exists(
    select 1 from pg_index i join pg_class c on c.oid=i.indrelid join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relname='admin_scope_access'
-     and i.indisunique and i.indisvalid and i.indisready and not i.indisnullsnotdistinct and i.indnkeyatts=4
+     and i.indisunique and i.indisvalid and i.indisready and not i.indnullsnotdistinct and i.indnkeyatts=4
      and i.indpred is not null and pg_get_expr(i.indpred,i.indrelid)='(status = ''active''::text)'
      and i.indexprs is not null and pg_get_expr(i.indexprs,i.indrelid)='COALESCE(program_id, ''''::text), COALESCE(season_id, ''''::text)'
  ) then 'PASS' else 'FAIL' end

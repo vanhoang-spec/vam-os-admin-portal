@@ -95,22 +95,37 @@ describe("migration 062 array-type remediation: pg_policies.roles name[] vs text
     expect(raw).toContain("-- Explicit grant hardening"); // comments still present in the raw file, proving the strip step is meaningful
   });
 
-  it("7. migration 063 source is unchanged: no confirmed equivalent defect was found there (it contains no pg_policies.roles reference at all)", () => {
+  it("7. migration 063 source has no pg_policies.roles reference at all (no confirmed equivalent array-type defect was found there); its only change since this array-type remediation's baseline is the unrelated, separately-confirmed pg_index column-name fix", () => {
     const sql = read(MIGRATION_063);
     expect(sql).not.toMatch(/pg_policies/i);
     expect(sql).not.toMatch(/\.roles\b/);
     const baselineHead = "6644e993a40efda720396714cd12b62c611ab358";
     const result = spawnSync("git", ["show", `${baselineHead}:${MIGRATION_063}`], { encoding: "utf8" });
     expect(result.status).toBe(0);
-    expect(sql).toBe(result.stdout);
+    const beforeLines = result.stdout.split("\n");
+    const afterLines = sql.split("\n");
+    expect(afterLines.length).toBe(beforeLines.length);
+    const diffLines = beforeLines.filter((line, i) => line !== afterLines[i]);
+    expect(diffLines.length).toBe(1);
+    expect(diffLines[0]).toContain("indisnullsnotdistinct");
   });
 
-  it("rollback and membership-lifecycle-063 preflight sources were audited and confirmed to have no name[]/text[] mismatch, and are byte-for-byte unchanged", () => {
+  it("rollback source was audited and confirmed to have no name[]/text[] mismatch, and remains byte-for-byte unchanged", () => {
     const baselineHead = "5d80c53a5f00c096987f29f70f762350876b4633";
-    for (const path of [ROLLBACK_062, MEMBERSHIP_PREFLIGHT_063]) {
-      const result = spawnSync("git", ["show", `${baselineHead}:${path}`], { encoding: "utf8" });
-      expect(result.status).toBe(0);
-      expect(read(path)).toBe(result.stdout);
-    }
+    const result = spawnSync("git", ["show", `${baselineHead}:${ROLLBACK_062}`], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(read(ROLLBACK_062)).toBe(result.stdout);
+  });
+
+  it("membership-lifecycle-063 preflight source was audited and confirmed to have no name[]/text[] mismatch; its only later change is the unrelated, separately-confirmed pg_index column-name fix", () => {
+    const baselineHead = "5d80c53a5f00c096987f29f70f762350876b4633";
+    const result = spawnSync("git", ["show", `${baselineHead}:${MEMBERSHIP_PREFLIGHT_063}`], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    const beforeLines = result.stdout.split("\n");
+    const afterLines = read(MEMBERSHIP_PREFLIGHT_063).split("\n");
+    expect(afterLines.length).toBe(beforeLines.length);
+    const diffLines = beforeLines.filter((line, i) => line !== afterLines[i]);
+    expect(diffLines.length).toBe(1);
+    expect(diffLines[0]).toContain("indisnullsnotdistinct");
   });
 });
