@@ -695,48 +695,36 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
     return { ok: true, message: "Người dùng đã có auth_user_id, không cần đồng bộ." };
   }
 
-  const operationId=randomUUID();
-  const auth = await ensureAuthUserForEmail(client, before.user.email);
-  if (!auth.authUserId) { if (auth.ownershipAmbiguous) { try { await recordAuthReconciliation(client,String(actor.id),operationId,String(before.user.email??""),"sync_auth","ambiguous_auth_ownership","required"); } catch { return { ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động." }; } } return { ok: false, message: auth.ownershipAmbiguous ? "Không xác định được quyền sở hữu Auth; trạng thái đối soát đã được ghi nhận." : auth.warning ?? "Không thể tìm hoặc tạo Supabase Auth user." }; }
-  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "link_auth", p_target_admin_user_id: targetId, p_payload: { auth_user_id: auth.authUserId, program_id: "VAM", season_id: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, scope_role: scopeRoleForAdminRole(before.user.role), scope_status: before.user.status === "active" ? "active" : "inactive" } });
-  if (atomicError) {
-    if (auth.created) {
-      const compensation = await client.auth.admin.deleteUser(auth.authUserId);
-      if(compensation.error){try{await recordAuthReconciliation(client,String(actor.id),operationId,String(before.user.email??""),"sync_auth","auth_compensation_failed","required");return{ok:false,message:"Đồng bộ thất bại; trạng thái đối soát đã được ghi nhận."}}catch{return{ok:false,message:"Lỗi nghiêm trọng khi ghi trạng thái đối soát; dừng thử lại tự động."}}}
-      try{await recordAuthReconciliation(client,String(actor.id),operationId,String(before.user.email??""),"sync_auth","database_failed_auth_compensated","resolved")}catch{return{ok:false,message:"Lời mời đã thu hồi nhưng ghi nhận bù trừ thất bại; dừng thử lại tự động."}}
-      return { ok: false, message: "Đồng bộ cơ sở dữ liệu thất bại; lời mời mới đã được thu hồi." };
-    }
-    return { ok: false, message: "Đồng bộ cơ sở dữ liệu và audit thất bại; Auth hiện có không bị thay đổi." };
-  }
-  return { ok: true, message: "Đã đồng bộ danh tính Auth an toàn." };
-  /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
-
-  const { error: updateError } = await client.from("admin_users").update({ auth_user_id: auth.authUserId }).eq("id", targetId);
-  if (updateError) return { ok: false, message: `Không thể cập nhật auth_user_id: ${updateError.message}` };
-
-  try {
-    await upsertScope(client, {
-      authUserId: auth.authUserId,
-      programId: "VAM",
-      seasonId: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
-      role: scopeRoleForAdminRole(before.user.role),
-      status: before.user.status === "active" ? "active" : "inactive"
-    });
-  } catch (scopeError: any) {
-    return { ok: false, message: scopeError.message };
-  }
-
-  const after = await snapshotAdminUser(client, targetId);
-  await writeAuditLog(client, {
-    actorAdminUserId: actor.id,
-    actionType: "sync_auth",
-    targetAdminUserId: targetId,
-    beforeData: before,
-    afterData: after
+  const operationId = randomUUID();
+  const rejectSync = (failureClass: string, message: string, reconciliationRequired = false): AdminUserMutationResult => ({
+    ok: false, status: "rejected", failureClass, failureStage: "pre_lookup", operationId,
+    reconciliationRequired, ownerAction: reconciliationRequired ? "manual_reconciliation" : "do_not_retry",
+    message: `${message} Mã tham chiếu: ${operationId}`
   });
 
-  return { ok: true, message: "Đã đồng bộ danh tính Auth an toàn." };
-  */
+  const identityLookup = await findExactAuthUsers(client, before.user.email);
+  if (!identityLookup.ok) return rejectSync("sync_identity_lookup_failed", "Không thể xác minh danh tính Auth. Không tự động thử lại.", true);
+  if (identityLookup.users.length === 0) return rejectSync("sync_identity_missing", "Không có danh tính Auth hiện hữu để đồng bộ. Hãy dùng quy trình Sửa tài khoản/scope rõ ràng.");
+  if (identityLookup.users.length !== 1) return rejectSync("sync_identity_ambiguous", "Có nhiều danh tính hoặc quyền sở hữu không rõ ràng. Hãy đối soát trước khi đồng bộ.", true);
+
+  const authUserId = identityLookup.users[0].id;
+  const scopeResult = await getScopesForAuthUsers(client, [authUserId]);
+  if (scopeResult.error) return rejectSync("sync_scope_lookup_failed", "Không thể xác minh scope hiện hữu. Không tự động thử lại.", true);
+  if (scopeResult.data.length === 0) return rejectSync("sync_scope_missing", "Tài khoản chưa có scope sử dụng được. Hãy dùng quy trình Sửa tài khoản/scope rõ ràng.");
+  if (scopeResult.data.length !== 1) return rejectSync("sync_scope_ambiguous", "Tài khoản có nhiều scope; hệ thống không tự chọn. Hãy dùng quy trình Sửa tài khoản/scope rõ ràng.");
+
+  const scope = scopeResult.data[0];
+  if (scope.status !== "active") return rejectSync("sync_scope_inactive", "Scope hiện hữu không active và không thể được kích hoạt ngầm qua Đồng bộ Auth.");
+  if (!SCOPE_ROLES.has(String(scope.role))) return rejectSync("sync_scope_role_invalid", "Scope hiện hữu có cấp quyền không hợp lệ.");
+  const validatedScope = await validateExplicitAdminScope(client, scope.program_id, scope.season_id);
+  if (!validatedScope.ok) return { ...validatedScope.result, operationId, ownerAction: "do_not_retry", message: `${validatedScope.result.message} Hãy dùng quy trình Sửa tài khoản/scope rõ ràng. Mã tham chiếu: ${operationId}` };
+
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
+    p_actor_admin_user_id: actor.id, p_operation: "link_auth", p_target_admin_user_id: targetId,
+    p_payload: { auth_user_id: authUserId, program_id: validatedScope.programId, season_id: validatedScope.seasonId, scope_role: scope.role, scope_status: scope.status }
+  });
+  if (atomicError) return rejectSync("sync_atomic_link_failed", "Không thể hoàn tất liên kết Auth và audit. Không có scope mặc định nào được tạo.", true);
+  return { ok: true, status: "created", operationId, reconciliationRequired: false, ownerAction: "none", message: `Đã đồng bộ danh tính Auth và giữ nguyên scope hiện hữu. Mã tham chiếu: ${operationId}` };
 }
 
 export async function deactivateManagedAdminUser(id: unknown): Promise<AdminUserMutationResult> {
