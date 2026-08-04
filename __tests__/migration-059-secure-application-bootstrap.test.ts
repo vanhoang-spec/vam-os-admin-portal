@@ -235,11 +235,19 @@ describe("migration 059 — RLS is no longer disabled on the PII tables", () => 
     expect(migration()).not.toMatch(/RLS is disabled on applications/i);
   });
 
-  it("keeps the three review workflow tables RLS-enabled and not forced", () => {
+  it("enables and forces row level security on the three review tables too", () => {
+    // uniform server-only contract: all five behave identically
     for (const t of WORKFLOW_TABLES) {
       expect(rls.get(t)?.enabled).toBe(true);
-      expect(rls.get(t)?.forced).toBe(false);
+      expect(rls.get(t)?.forced).toBe(true);
       expect(rls.get(t)?.disabled).toBe(false);
+    }
+  });
+
+  it("forces row level security on every one of the five tables", () => {
+    for (const t of ALL_TABLES) {
+      expect(rls.get(t)?.enabled).toBe(true);
+      expect(rls.get(t)?.forced).toBe(true);
     }
   });
 });
@@ -289,7 +297,7 @@ describe("migration 059 — explicit privilege contract on the PII tables", () =
   });
 });
 
-describe("migration 059 — review workflow tables are not broadened", () => {
+describe("migration 059 — review workflow tables share the same server-only contract", () => {
   const model = privilegeModel(migration());
 
   it.each(WORKFLOW_TABLES)("revokes ALL from anon on %s", (t) => {
@@ -297,16 +305,35 @@ describe("migration 059 — review workflow tables are not broadened", () => {
     expect(privsOf(model, t, "anon")).toEqual([]);
   });
 
-  it.each(WORKFLOW_TABLES)("leaves authenticated with SELECT only on %s", (t) => {
-    expect(privsOf(model, t, "authenticated")).toEqual(["SELECT"]);
+  it.each(WORKFLOW_TABLES)("leaves authenticated with no privilege at all on %s", (t) => {
+    expect(model.revokedAll.get(t)?.has("authenticated")).toBe(true);
+    expect(privsOf(model, t, "authenticated")).toEqual([]);
   });
 
   it.each(WORKFLOW_TABLES)("gives service_role exactly the four DML privileges on %s", (t) => {
     expect(privsOf(model, t, "service_role")).toEqual([...DML].sort());
   });
 
-  it("revokes ALL from PUBLIC on every one of the five tables", () => {
-    for (const t of ALL_TABLES) expect(model.revokedAll.get(t)?.has("public")).toBe(true);
+  it("revokes ALL from PUBLIC, anon and authenticated on every one of the five tables", () => {
+    for (const t of ALL_TABLES) {
+      for (const role of ["public", "anon", "authenticated"]) {
+        expect(model.revokedAll.get(t)?.has(role)).toBe(true);
+        expect(privsOf(model, t, role)).toEqual([]);
+      }
+    }
+  });
+
+  it("grants no privilege to any role other than service_role, on any of the five", () => {
+    for (const t of ALL_TABLES) {
+      const holders = Array.from(model.granted.get(t)!.entries())
+        .filter(([, set]) => set.size > 0)
+        .map(([role]) => role);
+      expect(holders).toEqual(["service_role"]);
+    }
+  });
+
+  it("contains no GRANT to authenticated anywhere", () => {
+    expect(stripped(migration())).not.toMatch(/\bgrant\b[^;]*\bto\s+authenticated\b/i);
   });
 });
 
@@ -322,18 +349,24 @@ describe("migration 059 — no permissive application PII policy remains", () =>
     expect(stripped(migration())).not.toMatch(/create\s+policy\s+"?read_applications_review_roles/i);
   });
 
-  it("creates exactly the three intended review workflow read policies", () => {
-    expect(created.sort()).toEqual([
-      ["application_decisions_read", "application_decisions"],
-      ["application_reviews_read", "application_reviews"],
-      ["review_assignment_batches_read", "review_assignment_batches"],
-    ].sort());
+  it("creates no policy on any of the five tables", () => {
+    expect(created).toEqual([]);
   });
 
-  it("guards at COMMIT time that no policy exists on either PII table", () => {
+  it("no longer creates the three is_admin_role-based read policies", () => {
+    const w = withoutComments(migration());
+    for (const p of ["application_reviews_read", "application_decisions_read",
+                     "review_assignment_batches_read"]) {
+      expect(w).not.toContain(p);
+    }
+  });
+
+  it("guards at COMMIT time that no policy exists on any of the five tables", () => {
     const w = withoutComments(migration());
     expect(w).toMatch(/POLICY_CONFLICT/);
-    expect(w).toMatch(/tablename\s+IN\s+\('applications',\s*'application_answers'\)/i);
+    for (const t of ALL_TABLES) {
+      expect(w).toMatch(new RegExp(`'${t}'`));
+    }
   });
 });
 
@@ -353,9 +386,17 @@ describe("migration 059 — fail-closed preconditions and self-verification", ()
     expect(w).toMatch(/rolbypassrls[\s\S]{0,120}'service_role'/);
   });
 
-  it("aborts when is_admin_role(text[]) is absent", () => {
-    expect(w).toMatch(/DEPENDENCY_MISSING[\s\S]{0,400}is_admin_role/);
-    expect(w).toMatch(/pg_get_function_arguments\(p\.oid\)\s*=\s*'roles text\[\]'/);
+  it("has no is_admin_role dependency of any kind", () => {
+    expect(w).not.toMatch(/is_admin_role/);
+    expect(w).not.toMatch(/pg_get_function_arguments/);
+    expect(stripped(migration())).not.toMatch(/\bsecurity\s+definer\b/i);
+  });
+
+  it("aborts when a foreign-key target has no eligible unique index", () => {
+    expect(w).toMatch(/FK_TARGET_NOT_UNIQUE/);
+    expect(w).toMatch(/i\.indisunique/);
+    expect(w).toMatch(/i\.indimmediate/);
+    expect(w).toMatch(/i\.indnkeyatts = 1/);
   });
 
   it("re-verifies the RLS and grant contract before COMMIT", () => {
@@ -599,7 +640,7 @@ describe("migration 059 preflight — prerequisites, conflicts, enums, evidence"
     for (const t of ["people", "programs", "seasons", "intake_batches", "admin_users"]) {
       expect(s).toContain(`('${t}')`);
     }
-    expect(s).toContain("'prerequisite:is_admin_role_text_array'");
+    expect(s).not.toContain("'prerequisite:is_admin_role_text_array'");
     expect(s).toContain("'prerequisite:fk_targets_unique'");
     for (const t of ["people", "seasons", "intake_batches", "admin_users"]) {
       expect(s).toContain(`'prerequisite:${t}_id_uuid'`);
@@ -793,8 +834,10 @@ describe("migration 059 verifier — exact security contract", () => {
     expect(s).toContain("array['gen_random_uuid()','<none>','<none>','<none>','<none>','now()'],\n  true, true)");
   });
 
-  it("requires zero policies on the two PII tables", () => {
-    expect(w()).toContain("'security:zero_policies_on_pii_tables'");
+  it("requires zero policies on all five tables", () => {
+    expect(w()).toContain("'security:zero_policies'");
+    expect(w()).toContain("'security:zero_policies:' || t");
+    expect(w()).toContain("'security:no_is_admin_role_dependency'");
   });
 
   it("requires no privilege at all for anon or authenticated on the PII tables", () => {
@@ -815,30 +858,28 @@ describe("migration 059 verifier — exact security contract", () => {
   it("pins the exact non-owner ACL of every table, PUBLIC included", () => {
     const s = w();
     expect(s).toContain("'security:acl:' || e.t");
-    expect(s).toContain(`('applications', '{"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb)`);
-    expect(s).toContain(`('application_reviews', '{"authenticated":["SELECT"],"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb)`);
+    for (const t of ALL_TABLES) {
+      expect(s).toContain(`('${t}', '{"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb)`);
+    }
     // grantee 0 is PUBLIC and must be resolved, not skipped
     expect(s).toContain("coalesce(pg_get_userbyid(nullif(a.grantee, 0)), 'PUBLIC')");
   });
 
-  it("pins policy names, roles, commands, USING and WITH CHECK for the other three tables", () => {
+  it("expects no policy contract at all for the three review tables", () => {
     const s = w();
-    expect(s).toContain("'security:policy:' || e.n");
-    expect(s).toContain("'security:policy_inventory'");
-    expect(s).toContain("p.permissive = 'PERMISSIVE' and p.cmd = e.cmd");
-    expect(s).toContain("p.roles = e.roles");
-    expect(s).toContain("p.with_check is null");
-    expect(s).toContain("p.qual like '%is_admin_role%'");
-    expect(s).toContain("p.vals = (select array_agg(v order by v) from unnest(e.vals) v)");
-    expect(s).toContain("array['active','admin','core_team','reviewer','super_admin']");
+    expect(s).not.toContain("'security:policy:' || e.n");
+    expect(s).not.toContain("'security:policy_inventory'");
+    expect(s).not.toContain("'security:policy_qual_exact:'");
+    expect(s).not.toContain("is_admin_role(ARRAY[");
+    expect(s).not.toContain("application_reviews_read");
   });
 
-  it("emits the raw quals, check definitions and ACLs as unscored evidence", () => {
+  it("emits unexpected policies, check definitions and ACLs as unscored evidence", () => {
     const s = w();
-    expect(s).toContain("'policy_quals'");
+    expect(s).toContain("'unexpected_policies'");
     expect(s).toContain("'check_definitions'");
     expect(s).toContain("'non_owner_acls'");
-    expect(/assertions as \(([\s\S]*?)\n\),\nnormalized as/.exec(s)?.[1] ?? "").not.toContain("'policy_quals'");
+    expect(/assertions as \(([\s\S]*?)\n\),\nnormalized as/.exec(s)?.[1] ?? "").not.toContain("'unexpected_policies'");
   });
 });
 

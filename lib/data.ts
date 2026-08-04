@@ -69,7 +69,14 @@ export type MentoringRecapCorrectionInput = {
 };
 
 const VI_ERROR = "Không thể tải dữ liệu. Vui lòng kiểm tra cấu hình Supabase và quyền đọc bảng.";
+const SERVICE_ROLE_REQUIRED =
+  "Thiếu SUPABASE_SERVICE_ROLE_KEY. Dữ liệu hồ sơ ứng tuyển chỉ truy cập được bằng service role.";
 const IN_FILTER_CHUNK_SIZE = 200;
+
+/** Fail-closed result for a server-only application table with no service-role client. */
+export function serviceRoleRequiredError<T>(fallback: T): QueryResult<T> {
+  return { data: fallback, error: SERVICE_ROLE_REQUIRED };
+}
 
 export function envError<T>(fallback: T): QueryResult<T> {
   return {
@@ -78,8 +85,37 @@ export function envError<T>(fallback: T): QueryResult<T> {
   };
 }
 
-function dataClient() {
-  return getSupabaseServiceRoleClient() ?? getSupabaseServerClient() ?? supabase;
+/**
+ * The migration-059 application workflow tables. They are server-only: RLS is
+ * enabled and forced with zero policies and no PUBLIC/anon/authenticated
+ * privilege, so only the service-role client can reach them. Reads of these
+ * tables must never fall back to the cookie-scoped or anon client — that
+ * fallback cannot succeed and would turn a configuration fault into a silent
+ * empty result.
+ */
+export const SERVER_ONLY_APPLICATION_TABLES = [
+  "applications",
+  "application_answers",
+  "application_reviews",
+  "application_decisions",
+  "review_assignment_batches"
+] as const;
+
+const SERVER_ONLY_TABLE_SET: ReadonlySet<string> = new Set(SERVER_ONLY_APPLICATION_TABLES);
+
+export function isServerOnlyApplicationTable(table: string) {
+  return SERVER_ONLY_TABLE_SET.has(table);
+}
+
+/**
+ * Resolves the read client for a table. Pass the table name so application
+ * workflow reads fail closed when the service-role key is absent instead of
+ * degrading to an authenticated or anonymous client.
+ */
+function dataClient(table?: string) {
+  const serviceRole = getSupabaseServiceRoleClient();
+  if (table && isServerOnlyApplicationTable(table)) return serviceRole ?? null;
+  return serviceRole ?? getSupabaseServerClient() ?? supabase;
 }
 
 function logDataError(scope: string, error: unknown) {
@@ -115,8 +151,13 @@ async function selectInChunks<T>(
   values: string[],
   columns = "*"
 ): Promise<{ data: T[]; error: unknown | null }> {
-  const client = dataClient();
-  if (!client) return { data: [], error: null };
+  const client = dataClient(table);
+  if (!client) {
+    return {
+      data: [],
+      error: isServerOnlyApplicationTable(table) ? { message: SERVICE_ROLE_REQUIRED } : null
+    };
+  }
 
   const rows: T[] = [];
   for (const chunk of chunkValues(uniqueStrings(values))) {
@@ -159,8 +200,8 @@ function isValidRecapActivity(recap: MentoringRecap) {
 }
 
 async function selectTable<T>(table: string, columns = "*", fallback: T[] = []): Promise<QueryResult<T[]>> {
-  const client = dataClient();
-  if (!client) return envError(fallback);
+  const client = dataClient(table);
+  if (!client) return isServerOnlyApplicationTable(table) ? serviceRoleRequiredError(fallback) : envError(fallback);
   const { data, error } = await client.from(table).select(columns);
   if (error) {
     if (isNextDynamicUsageError(error)) throw error;
@@ -171,8 +212,8 @@ async function selectTable<T>(table: string, columns = "*", fallback: T[] = []):
 }
 
 async function selectAllTable<T>(table: string, columns = "*", fallback: T[] = [], pageSize = 1000): Promise<QueryResult<T[]>> {
-  const client = dataClient();
-  if (!client) return envError(fallback);
+  const client = dataClient(table);
+  if (!client) return isServerOnlyApplicationTable(table) ? serviceRoleRequiredError(fallback) : envError(fallback);
   const rows: T[] = [];
   for (let from = 0; ; from += pageSize) {
     const to = from + pageSize - 1;
@@ -364,8 +405,8 @@ export async function getMenteeProfiles(scope?: ScopeFilter) {
 export async function getApplications(scope?: ScopeFilter) {
   if (!scope) return selectAllTable<Application>("applications");
   if (noAllowedRows(scope)) return { data: [] as Application[], error: null };
-  const client = dataClient();
-  if (!client) return envError<Application[]>([]);
+  const client = dataClient("applications");
+  if (!client) return serviceRoleRequiredError<Application[]>([]);
   const batchIds = await getScopedIntakeBatchIds(scope);
   const filters: string[] = [];
   if (scope.allowedSeasonIds?.length) filters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
@@ -460,8 +501,8 @@ export async function getRolesForPerson(personId: string) {
 export async function getAnswersForApplications(applicationIds: string[]) {
   const empty: JsonRecord[] = [];
   if (!applicationIds.length) return { data: empty, error: null };
-  const client = dataClient();
-  if (!client) return envError(empty);
+  const client = dataClient("application_answers");
+  if (!client) return serviceRoleRequiredError(empty);
   const { data, error } = await client.from("application_answers").select("*").in("application_id", applicationIds);
   if (error) return { data: empty, error: `${VI_ERROR} (application_answers: ${error.message})` };
   return { data: data ?? empty, error: null };
@@ -482,8 +523,8 @@ export async function getPerson(id: string, scope?: ScopeFilter) {
 }
 
 export async function getApplication(id: string, scope?: ScopeFilter) {
-  const client = dataClient();
-  if (!client) return envError<Application | null>(null);
+  const client = dataClient("applications");
+  if (!client) return serviceRoleRequiredError<Application | null>(null);
   const { data, error } = await client.from("applications").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (applications: ${error.message})` };
   if (scope && data) {
@@ -1227,8 +1268,9 @@ export function keyById<T extends { id: string }>(rows: T[]) {
 // ----------------------------------------------------------------
 
 export async function getApplicationReviewsForApplication(applicationId: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
-  const client = dataClient(); // RLS: admin sees all, reviewer sees own
-  if (!client) return envError<ApplicationReview[]>([]);
+  // server-only table: service-role or nothing
+  const client = dataClient("application_reviews");
+  if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
   if (scope) {
     const app = await getApplication(applicationId, scope);
     if (app.error || !app.data) return { data: [], error: app.error };
@@ -1244,8 +1286,8 @@ export async function getApplicationReviewsForApplication(applicationId: string,
 
 /** Reviews assigned to a specific admin user — used for reviewer's /reviews page. */
 export async function getMyApplicationReviews(adminUserId: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
-  const client = dataClient();
-  if (!client) return envError<ApplicationReview[]>([]);
+  const client = dataClient("application_reviews");
+  if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
   let query = client
     .from("application_reviews")
     .select("*")
@@ -1269,16 +1311,16 @@ export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<Que
   const apps = await getApplications(scope);
   const appIds = apps.data.map((app) => app.id);
   if (!appIds.length) return { data: [], error: apps.error };
-  const client = dataClient();
-  if (!client) return envError<ApplicationReview[]>([]);
+  const client = dataClient("application_reviews");
+  if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
   const { data, error } = await client.from("application_reviews").select("*").in("application_id", appIds);
   if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
   return { data: (data ?? []) as ApplicationReview[], error: apps.error };
 }
 
 export async function getApplicationReviewById(id: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview | null>> {
-  const client = dataClient();
-  if (!client) return envError<ApplicationReview | null>(null);
+  const client = dataClient("application_reviews");
+  if (!client) return serviceRoleRequiredError<ApplicationReview | null>(null);
   const { data, error } = await client
     .from("application_reviews")
     .select("*")
@@ -1314,8 +1356,8 @@ export async function getApplicationDecisions(
   applicationId: string,
   scope?: ScopeFilter
 ): Promise<QueryResult<ApplicationDecision[]>> {
-  const client = dataClient();
-  if (!client) return envError<ApplicationDecision[]>([]);
+  const client = dataClient("application_decisions");
+  if (!client) return serviceRoleRequiredError<ApplicationDecision[]>([]);
   if (scope) {
     const app = await getApplication(applicationId, scope);
     if (app.error || !app.data) return { data: [], error: app.error };

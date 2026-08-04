@@ -206,33 +206,39 @@ describe("prerequisite diagnostic — identity", () => {
   });
 });
 
-describe("prerequisite diagnostic — replicates the failing assertions verbatim", () => {
-  it("carries both failing predicates exactly as the owner preflight computes them", () => {
-    const diag = withoutComments(sql());
-    const pre = withoutComments(read(OWNER_PREFLIGHT));
+describe("prerequisite diagnostic — preserves the failing predicates as evidence", () => {
+  const fkPredicate = flat(
+    `select 1 from (values ('people'),('seasons'),('intake_batches'),('admin_users')) x(t)
+     where not exists (
+       select 1 from pg_constraint c
+       where c.conrelid = to_regclass('public.' || x.t)
+         and c.contype in ('p','u')
+         and c.conkey = array[(
+           select a.attnum from pg_attribute a
+           where a.attrelid = c.conrelid and a.attname = 'id'
+         )]
+     )`
+  );
+  const fnPredicate = flat(
+    `select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'is_admin_role'
+       and pg_get_function_arguments(p.oid) = 'roles text[]'`
+  );
 
-    const fkPredicate = flat(
-      `select 1 from (values ('people'),('seasons'),('intake_batches'),('admin_users')) x(t)
-       where not exists (
-         select 1 from pg_constraint c
-         where c.conrelid = to_regclass('public.' || x.t)
-           and c.contype in ('p','u')
-           and c.conkey = array[(
-             select a.attnum from pg_attribute a
-             where a.attrelid = c.conrelid and a.attname = 'id'
-           )]
-       )`
-    );
-    expect(flat(pre)).toContain(fkPredicate);
-    expect(flat(diag)).toContain(fkPredicate);
+  it("still carries both original predicates, so the diagnosis stays reproducible", () => {
+    const diag = flat(withoutComments(sql()));
+    expect(diag).toContain(fkPredicate);
+    expect(diag).toContain(fnPredicate);
+  });
 
-    const fnPredicate = flat(
-      `select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public' and p.proname = 'is_admin_role'
-         and pg_get_function_arguments(p.oid) = 'roles text[]'`
-    );
-    expect(flat(pre)).toContain(fnPredicate);
-    expect(flat(diag)).toContain(fnPredicate);
+  it("the owner preflight no longer contains either failing predicate", () => {
+    // both were remediated: the FK check now scans pg_index, and the
+    // is_admin_role dependency was removed with the three policies
+    const pre = flat(withoutComments(read(OWNER_PREFLIGHT)));
+    expect(pre).not.toContain(fkPredicate);
+    expect(pre).not.toContain(fnPredicate);
+    expect(pre).not.toContain("pg_get_function_arguments");
+    expect(pre).not.toContain("prerequisite:is_admin_role_text_array");
   });
 
   it("reports both replicated results under their preflight assertion names", () => {
@@ -460,19 +466,16 @@ describe("prerequisite diagnostic — cannot expose data or credentials", () => 
   });
 });
 
-describe("prerequisite diagnostic — nothing else changed", () => {
-  it("leaves migration 059 byte-identical", () => {
+describe("prerequisite diagnostic — is itself immutable", () => {
+  it("is unchanged since the commit that introduced it", () => {
     const r = spawnSync("git", [
-      "diff", "--quiet", "6470980c80c2d55f0f6716a095170b77d6b0af18", "--", MIGRATION_059,
+      "diff", "--quiet", "0d239372d1cce5b0970b452cbe75f9c7bc39c86d", "--", DIAGNOSTIC,
     ]);
     expect(r.status).toBe(0);
   });
 
-  it("leaves the owner preflight packet byte-identical", () => {
-    const r = spawnSync("git", [
-      "diff", "--quiet", "6244fbaa4bb7566bc4cd3fed2e162b875064c18b", "--", OWNER_PREFLIGHT,
-    ]);
-    expect(r.status).toBe(0);
+  it("still targets migration 059's dependencies", () => {
+    expect(readFileSync(MIGRATION_059, "utf8")).toContain("public.people");
   });
 
   it("matches its reported SHA-256 over the committed bytes", () => {

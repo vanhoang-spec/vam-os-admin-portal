@@ -247,97 +247,49 @@ describe("preflight — structural topology stays a secondary guard", () => {
 // ===========================================================================
 // HIGH — complete USING-expression verification
 // ===========================================================================
+// SUPERSEDED. The three is_admin_role-based read policies this section used
+// to compare are no longer created: the application workflow is server-only,
+// so all five tables carry ZERO policies. The remediation the section proved
+// is now enforced by a strictly stronger rule — no policy may exist at all —
+// asserted in __tests__/migration-059-final-prerequisites.test.ts. What
+// remains here is the proof that the old apparatus and its subject are gone.
 
-type Variant = { t: string; n: string; variant: string; q: string };
+describe("verifier — the policy-expression apparatus is retired, not weakened", () => {
+  const v = () => read(VERIFIER);
 
-function expectedQuals(sql: string): Variant[] {
-  const w = withoutComments(sql);
-  const start = w.indexOf("expected_policy_qual(t, n, variant, q) as (values");
-  expect(start).toBeGreaterThan(-1);
-  // +1 so the region keeps the final tuple's own closing parenthesis
-  const end = w.indexOf(")),", start) + 1;
-  expect(end).toBeGreaterThan(start);
-  const region = w.slice(start, end);
-  const out: Variant[] = [];
-  const re = /\('([a-z_]+)','([a-z_]+)','([a-z_]+)',\s*'((?:[^']|'')*)'\)/g;
-  for (const m of Array.from(region.matchAll(re))) {
-    out.push({ t: m[1], n: m[2], variant: m[3], q: m[4].replace(/''/g, "'") });
-  }
-  return out;
-}
-
-/**
- * Mirrors the SQL normalisation exactly: unwrap parentheses that sit directly
- * around a bare column reference immediately followed by a cast, then collapse
- * whitespace and trim. Nothing else.
- */
-const norm = (s: string) =>
-  s
-    .replace(/\(([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?)\)::/g, "$1::")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const variants = expectedQuals(read(VERIFIER));
-const matchesSome = (actual: string, policy: string) =>
-  variants.filter((v) => v.n === policy).some((v) => norm(v.q) === norm(actual));
-
-const REVIEWS = "application_reviews_read";
-const base = () => variants.find((v) => v.variant === "bare_status_text")!.q;
-
-describe("verifier — complete USING expressions are stored, not fragments", () => {
-  it("stores every variant for all three workflow policies", () => {
-    expect(variants).toHaveLength(8);
-    const byPolicy = new Map<string, number>();
-    for (const v of variants) byPolicy.set(v.n, (byPolicy.get(v.n) ?? 0) + 1);
-    expect(byPolicy.get(REVIEWS)).toBe(4);
-    expect(byPolicy.get("application_decisions_read")).toBe(2);
-    expect(byPolicy.get("review_assignment_batches_read")).toBe(2);
+  it("no longer stores expected policy expressions", () => {
+    const w = withoutComments(v());
+    expect(w).not.toContain("expected_policy_qual");
+    expect(w).not.toContain("norm_actual");
+    expect(w).not.toContain("norm_expected");
+    expect(w).not.toContain("security:policy_qual_exact");
   });
 
-  it("stores complete expressions with no wildcard or pattern placeholder", () => {
-    for (const v of variants) {
-      expect(v.q).toContain("is_admin_role(ARRAY[");
-      expect(v.q).not.toContain("%");
-      expect(v.q).not.toContain("...");
-      expect(v.q).not.toContain("_%");
+  it("no longer expects is_admin_role or the three retired policies", () => {
+    const w = withoutComments(v());
+    // no expected policy expression survives
+    expect(w).not.toContain("is_admin_role(ARRAY[");
+    for (const p of ["application_reviews_read", "application_decisions_read",
+                     "review_assignment_batches_read"]) {
+      expect(w).not.toContain(p);
     }
-    // the reviews policy must carry its full ownership predicate and subquery
-    expect(base()).toContain("reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users");
-    expect(base()).toContain("admin_users.auth_user_id = auth.uid()");
-    expect(base()).toContain("LIMIT 1");
+    // the only remaining mention is the negative guard that forbids it
+    const mentions = w.split("\n").filter((l) => l.includes("is_admin_role"));
+    expect(mentions.length).toBeGreaterThan(0);
+    for (const l of mentions) {
+      expect(l).toMatch(/no_is_admin_role_dependency|not exists|like '%is_admin_role%'/);
+    }
   });
 
-  it("compares with equality after identical normalisation of both sides", () => {
-    const w = withoutComments(read(VERIFIER));
-    const region = w.slice(w.indexOf("norm_actual as ("), w.indexOf("ueh as ("));
-    const castPattern = "'\\(([a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)?)\\)::', '\\1::', 'g'";
-    // exactly once for the actual side and once for the expected side
-    expect(region.split(castPattern).length - 1).toBe(2);
-    expect(region.split("'[[:space:]]+', ' ', 'g'").length - 1).toBe(2);
-    expect(w).toContain("join norm_expected x on x.t = a.t and x.n = a.n and x.q = a.q");
-    expect(w).toContain("'security:policy_qual_exact:' || e.n");
-    // never a substring or pattern comparison
-    expect(w).not.toMatch(/x\.q\s+like\s+/i);
-    expect(w).not.toMatch(/a\.q\s+like\s+/i);
+  it("replaces expression comparison with an absolute zero-policy rule", () => {
+    const w = withoutComments(v());
+    expect(w).toContain("'security:zero_policies'");
+    expect(w).toContain("'security:zero_policies:' || t");
+    expect(w).toContain("'security:no_is_admin_role_dependency'");
   });
 
-  it("retains the exact structural policy contract alongside the expression check", () => {
-    const w = withoutComments(read(VERIFIER));
-    expect(w).toContain("p.permissive = 'PERMISSIVE' and p.cmd = e.cmd");
-    expect(w).toContain("p.roles = e.roles");
-    expect(w).toContain("p.with_check is null");
-    expect(w).toContain("'security:policy_inventory'");
-    expect(w).toContain("'security:policy:' || e.n");
-  });
-
-  it("emits both normalised expressions as evidence", () => {
-    const w = withoutComments(read(VERIFIER));
-    expect(w).toContain("'policy_qual_actual_normalized'");
-    expect(w).toContain("'policy_qual_expected_normalized'");
-  });
-
-  it("does not weaken the migration 062 / 063 compatibility assertions", () => {
-    const w = withoutComments(read(VERIFIER));
+  it("keeps every migration 062 / 063 compatibility assertion", () => {
+    const w = withoutComments(v());
     for (const a of [
       "'compat:m062_functions_present'",
       "'compat:m062_policies_present'",
@@ -349,107 +301,6 @@ describe("verifier — complete USING expressions are stored, not fragments", ()
     ]) {
       expect(w).toContain(a);
     }
-  });
-});
-
-describe("verifier — positive fixtures still match", () => {
-  it("accepts arbitrary whitespace changes", () => {
-    expect(matchesSome(base().replace(/ /g, "    "), REVIEWS)).toBe(true);
-    expect(matchesSome(`   ${base()}   `, REVIEWS)).toBe(true);
-  });
-
-  it("accepts line breaks, as pg_get_expr renders sub-SELECTs multi-line", () => {
-    const broken = base()
-      .replace(/ OR /g, "\n  OR\n  ")
-      .replace(/ FROM /g, "\n   FROM ")
-      .replace(/ WHERE /g, "\n  WHERE ")
-      .replace(/ LIMIT /g, "\n LIMIT ");
-    expect(matchesSome(broken, REVIEWS)).toBe(true);
-  });
-
-  it("accepts a harmless redundant outer parenthesis pair", () => {
-    expect(matchesSome(`(${base()})`, REVIEWS)).toBe(true);
-    const decisions = variants.find((v) => v.n === "application_decisions_read" && v.variant === "bare")!.q;
-    expect(matchesSome(`(${decisions})`, "application_decisions_read")).toBe(true);
-    const batches = variants.find((v) => v.n === "review_assignment_batches_read" && v.variant === "bare")!.q;
-    expect(matchesSome(`(${batches})`, "review_assignment_batches_read")).toBe(true);
-  });
-
-  it("accepts the known equivalent PostgreSQL cast rendering", () => {
-    // varchar columns deparse as (col)::text; text columns as col
-    const parenCast = base().replace(
-      "admin_users.status = 'active'::text",
-      "(admin_users.status)::text = 'active'::text"
-    );
-    expect(parenCast).not.toBe(base());
-    expect(matchesSome(parenCast, REVIEWS)).toBe(true);
-  });
-
-  it("accepts every stored variant verbatim", () => {
-    for (const v of variants) expect(matchesSome(v.q, v.n)).toBe(true);
-  });
-});
-
-describe("verifier — negative fixtures are rejected", () => {
-  const cases: Array<[string, string]> = [
-    ["expected expression OR true", `${base()} OR true`],
-    ["true OR expected expression", `true OR ${base()}`],
-    [
-      "expected expression OR another role branch",
-      `${base()} OR is_admin_role(ARRAY['interviewer'::text])`,
-    ],
-    ["expected expression AND false", `${base()} AND false`],
-    [
-      "removed ownership condition",
-      "is_admin_role(ARRAY['admin'::text, 'super_admin'::text, 'core_team'::text]) OR is_admin_role(ARRAY['reviewer'::text])",
-    ],
-    [
-      "changed user/owner column",
-      base().replace("reviewer_admin_user_id =", "reviewer_person_id ="),
-    ],
-    [
-      "changed is_admin_role role set",
-      base().replace("'core_team'::text]", "'core_team'::text, 'interviewer'::text]"),
-    ],
-    [
-      "additional function call",
-      base().replace("= 'active'::text", "= lower('active'::text)"),
-    ],
-    [
-      "unexpected alternate condition",
-      `${base()} OR (auth.uid() IS NOT NULL)`,
-    ],
-    [
-      "dropped status predicate inside the subquery",
-      base().replace(" AND (admin_users.status = 'active'::text)", ""),
-    ],
-    [
-      "relaxed comparison operator",
-      base().replace("reviewer_admin_user_id =", "reviewer_admin_user_id <>"),
-    ],
-  ];
-
-  it.each(cases)("rejects: %s", (_name, mutated) => {
-    expect(matchesSome(mutated, REVIEWS)).toBe(false);
-  });
-
-  it("rejects each mutation for every stored variant, not just one", () => {
-    for (const [, mutated] of cases) {
-      for (const v of variants) expect(norm(v.q)).not.toBe(norm(mutated));
-    }
-  });
-
-  it("normalisation removes nothing semantically meaningful", () => {
-    for (const token of ["OR", "AND", "true", "false", "is_admin_role", "auth.uid()", "LIMIT 1"]) {
-      const withToken = `${base()} OR ${token === "OR" || token === "AND" ? "true" : token}`;
-      expect(norm(withToken)).toContain(token === "OR" || token === "AND" ? "true" : token);
-    }
-    // the only cast transformation is the paren unwrap, and it preserves the cast
-    expect(norm("(admin_users.status)::text")).toBe("admin_users.status::text");
-    expect(norm("(a.b)::text = 'x'::text")).toBe("a.b::text = 'x'::text");
-    // it cannot touch a function call or a parenthesised sub-expression
-    expect(norm("(f(x))::text")).toBe("(f(x))::text");
-    expect(norm("(a OR b)::text")).toBe("(a OR b)::text");
   });
 });
 

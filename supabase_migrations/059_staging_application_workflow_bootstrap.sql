@@ -29,31 +29,44 @@
 -- ============================================================
 -- SECURITY CONTRACT (PHASE 8, applied before COMMIT)
 -- ============================================================
--- public.applications and public.application_answers hold applicant PII
--- (full name, email, phone, gender, free-text answers). Creating them without
--- an explicit privilege contract would leave them exposed through the ambient
--- Supabase default privileges that grant newly created public tables to anon
--- and authenticated. Every legitimate read and write already happens
--- server-side under service_role, so both tables are deny-by-default for
--- every other role:
+-- The application workflow is server-only. Every legitimate read and write of
+-- all five tables already happens server-side under service_role: see
+-- lib/applications-create.ts, lib/application-approvals.ts,
+-- lib/application-decisions.ts, lib/application-reviews.ts,
+-- lib/bulk-assignment.ts, lib/interview-claim.ts, lib/portfolio.ts and the
+-- server-only accessors in lib/data.ts. No direct anon or authenticated table
+-- access is required by any code path.
 --
---   * ROW LEVEL SECURITY enabled and FORCED on both tables
---   * zero policies — no permissive PUBLIC/anon/authenticated policy exists
+-- ONE uniform contract therefore applies to all five tables — applications,
+-- application_answers, application_reviews, application_decisions and
+-- review_assignment_batches:
+--
+--   * ROW LEVEL SECURITY enabled and FORCED
+--   * zero policies — no policy of any kind is created on any of them
 --   * REVOKE ALL from PUBLIC, anon and authenticated
 --   * GRANT exactly SELECT, INSERT, UPDATE, DELETE to service_role
 --   * no TRUNCATE, REFERENCES, TRIGGER, ownership or schema-management grant
+--   * every client role fails closed
+--
+-- applications and application_answers hold applicant PII (full name, email,
+-- phone, gender, free-text answers); application_reviews additionally holds
+-- reviewer scoring and notes. Creating any of them without an explicit
+-- privilege contract would leave them exposed through the ambient Supabase
+-- default privileges that grant newly created public tables to anon and
+-- authenticated.
 --
 -- FORCE ROW LEVEL SECURITY subjects the table owner to policies too, so it is
 -- only safe where the owner keeps out-of-band access. Phase 0 therefore
 -- aborts unless both the migration owner and service_role carry BYPASSRLS,
 -- which is what preserves postgres/table-owner behaviour unchanged.
 --
--- application_reviews, application_decisions and review_assignment_batches
--- keep their intended migration 040/041/044a contract: RLS enabled, their
--- original admin-scoped SELECT policies, no FORCE, and a restated (never
--- broadened) grant set following the migration 062 pattern — anon revoked,
--- authenticated limited to the SELECT its read policies already require,
--- service_role limited to the four DML privileges.
+-- This supersedes the migration 040/041/044a policy design for the three
+-- review workflow tables. The application_reviews_read,
+-- application_decisions_read and review_assignment_batches_read policies are
+-- deliberately NOT created, and authenticated keeps no SELECT privilege on
+-- those tables. Consequently this migration has no dependency on
+-- public.is_admin_role(text[]) at all — that helper is neither required,
+-- created nor replaced here.
 --
 -- Does NOT:
 --   - INSERT, UPDATE, or DELETE any data
@@ -62,18 +75,23 @@
 --   - install migration 057 (security hardening) content
 --   - install any S11 seed or dashboard content
 --   - create an applications trigger
---   - create any policy on applications or application_answers
+--   - create any policy on any of the five tables
 --   - grant TRUNCATE, or any privilege at all to PUBLIC, anon or authenticated
---     on applications or application_answers
+--     on any of the five tables
+--   - depend on, create or replace public.is_admin_role
+--   - introduce a SECURITY DEFINER helper of any kind
 --
 -- Abort conditions:
 --   - Any of the five target tables already exists (OBJECT_CONFLICT)
 --   - An enum exists but has incompatible values (ENUM_SCHEMA_CONFLICT)
---   - A dependency (people, seasons, intake_batches, admin_users,
---     is_admin_role) is absent (DEPENDENCY_MISSING)
+--   - A dependency (people, seasons, intake_batches, admin_users) is absent
+--     (DEPENDENCY_MISSING)
+--   - A foreign-key target column lacks an eligible unique index
+--     (FK_TARGET_NOT_UNIQUE)
 --   - anon, authenticated or service_role does not exist (ROLE_MISSING)
 --   - the owner or service_role lacks BYPASSRLS (RLS_FORCE_UNSAFE)
---   - a policy exists on either PII table at COMMIT time (POLICY_CONFLICT)
+--   - a policy exists on any of the five tables at COMMIT time
+--     (POLICY_CONFLICT)
 --   - the final privilege contract is not exactly as declared
 --     (GRANT_CONTRACT_VIOLATION / RLS_CONTRACT_VIOLATION)
 --
@@ -82,7 +100,8 @@
 --   public.seasons
 --   public.intake_batches
 --   public.admin_users
---   public.is_admin_role(text[])  (created by migration 017)
+-- Each must carry an eligible unique index on its id column; see the
+-- FK_TARGET_NOT_UNIQUE guard in PHASE 0 for the exact rule.
 --
 -- Authorization phrase: AUTHORIZE STAGING APPLICATION BOOTSTRAP MIGRATION
 -- ============================================================
@@ -149,22 +168,58 @@ BEGIN
       v_missing;
   END IF;
 
-  -- is_admin_role(text[]) is a hard dependency: the three non-PII tables
-  -- created below carry SELECT policies that call it directly, so a missing
-  -- function must abort here rather than fail mid-migration.
-  IF NOT EXISTS (
+END;
+$$;
+
+-- Every foreign-key target column must be backed by an index PostgreSQL will
+-- accept as a foreign-key target.
+--
+-- This is the catalog rule PostgreSQL itself applies (transformFkeyCheckAttrs
+-- scans pg_index, not pg_constraint): a unique, valid, ready, immediate index
+-- whose single key column is the referenced column, with no partial predicate
+-- and no expression key. Primary-key and UNIQUE-constraint indexes qualify
+-- through exactly the same rule, so no separate constraint check is needed —
+-- and a bare CREATE UNIQUE INDEX, which produces no pg_constraint row at all,
+-- is correctly accepted.
+--
+-- Only the FIRST key column is compared and indnkeyatts must be 1, so a
+-- composite index cannot qualify on the strength of containing the column.
+-- INCLUDE columns live beyond indnkeyatts and are therefore ignored, which is
+-- correct: they are not part of the key.
+DO $$
+DECLARE
+  v_target text;
+BEGIN
+  SELECT t INTO v_target FROM (
+    VALUES ('people'), ('seasons'), ('intake_batches'), ('admin_users')
+  ) AS required(t)
+  WHERE NOT EXISTS (
     SELECT 1
-    FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
-      AND p.proname = 'is_admin_role'
-      AND pg_get_function_arguments(p.oid) = 'roles text[]'
-  ) THEN
+    FROM pg_index i
+    JOIN pg_attribute a
+      ON a.attrelid = i.indrelid
+     AND a.attname = 'id'
+     AND a.attnum > 0
+     AND NOT a.attisdropped
+    WHERE i.indrelid = to_regclass('public.' || required.t)
+      AND i.indisunique
+      AND i.indisvalid
+      AND i.indisready
+      AND i.indimmediate
+      AND i.indpred IS NULL
+      AND i.indexprs IS NULL
+      AND i.indnkeyatts = 1
+      AND (string_to_array(i.indkey::text, ' ')::smallint[])[1] = a.attnum
+  )
+  LIMIT 1;
+
+  IF v_target IS NOT NULL THEN
     RAISE EXCEPTION
-      'DEPENDENCY_MISSING: public.is_admin_role(text[]) not found. '
-      'Migration 059 requires the migration 017 helper for the '
-      'application_reviews, application_decisions and '
-      'review_assignment_batches read policies.';
+      'FK_TARGET_NOT_UNIQUE: public.%.id has no unique, valid, ready, '
+      'immediate, single-column, non-partial, non-expression index. '
+      'Migration 059 declares a foreign key against it, which PostgreSQL '
+      'will refuse without one.',
+      v_target;
   END IF;
 END;
 $$;
@@ -189,7 +244,7 @@ BEGIN
   END IF;
 
   -- FORCE ROW LEVEL SECURITY applies policies to the table owner as well.
-  -- With zero policies on the two PII tables that would deny the owner and
+  -- With zero policies on all five tables that would deny the owner and
   -- service_role entirely, unless both bypass RLS. Both do on Supabase.
   -- Abort rather than silently locking anyone out: this precondition is what
   -- keeps postgres/table-owner behaviour unchanged under FORCE.
@@ -198,8 +253,8 @@ BEGIN
   ) THEN
     RAISE EXCEPTION
       'RLS_FORCE_UNSAFE: migration owner % lacks BYPASSRLS. '
-      'Migration 059 forces row level security on applications and '
-      'application_answers; without BYPASSRLS the owner would lose access.',
+      'Migration 059 forces row level security on all five application '
+      'workflow tables; without BYPASSRLS the owner would lose access.',
       current_user;
   END IF;
 
@@ -208,8 +263,9 @@ BEGIN
   ) THEN
     RAISE EXCEPTION
       'RLS_FORCE_UNSAFE: service_role lacks BYPASSRLS. '
-      'Migration 059 grants service_role the only access to applications and '
-      'application_answers, which carry no policies; without BYPASSRLS every '
+      'Migration 059 grants service_role the only access to the five '
+      'application workflow tables, which carry no policies; without '
+      'BYPASSRLS every '
       'server-side read and write would return or affect zero rows.';
   END IF;
 END;
@@ -562,25 +618,11 @@ CREATE INDEX application_reviews_status_idx
 CREATE INDEX application_reviews_round_idx
   ON public.application_reviews (review_round);
 
--- RLS from migration 040
-ALTER TABLE public.application_reviews ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "application_reviews_read" ON public.application_reviews;
-CREATE POLICY "application_reviews_read"
-  ON public.application_reviews
-  FOR SELECT
-  USING (
-    public.is_admin_role(ARRAY['admin', 'super_admin', 'core_team'])
-    OR (
-      public.is_admin_role(ARRAY['reviewer'])
-      AND reviewer_admin_user_id = (
-        SELECT id FROM public.admin_users
-        WHERE auth_user_id = auth.uid()
-          AND status = 'active'
-        LIMIT 1
-      )
-    )
-  );
+-- RLS is enabled and forced for this table in PHASE 8, with zero policies.
+-- The migration 040 application_reviews_read policy is deliberately NOT
+-- created: it granted direct SELECT to authenticated reviewer/admin JWTs,
+-- which the server-only contract removes. Reviewer scoping is enforced by the
+-- server accessors in lib/data.ts, not by a table policy.
 
 -- ============================================================
 -- PHASE 5: public.application_decisions
@@ -613,16 +655,9 @@ CREATE INDEX application_decisions_decided_by_idx
 CREATE INDEX application_decisions_created_at_idx
   ON public.application_decisions (created_at DESC);
 
--- RLS from migration 041
-ALTER TABLE public.application_decisions ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "application_decisions_read" ON public.application_decisions;
-CREATE POLICY "application_decisions_read"
-  ON public.application_decisions
-  FOR SELECT
-  USING (
-    public.is_admin_role(ARRAY['admin', 'super_admin', 'core_team', 'reviewer'])
-  );
+-- RLS is enabled and forced for this table in PHASE 8, with zero policies.
+-- The migration 041 application_decisions_read policy is deliberately NOT
+-- created, for the same server-only reason as application_reviews above.
 
 -- ============================================================
 -- PHASE 6: public.review_assignment_batches
@@ -661,16 +696,9 @@ CREATE INDEX review_assignment_batches_created_by_idx
   ON public.review_assignment_batches (created_by)
   WHERE created_by IS NOT NULL;
 
--- RLS from migration 044a
-ALTER TABLE public.review_assignment_batches ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "review_assignment_batches_read" ON public.review_assignment_batches;
-CREATE POLICY "review_assignment_batches_read"
-  ON public.review_assignment_batches
-  FOR SELECT
-  USING (
-    public.is_admin_role(ARRAY['admin', 'super_admin', 'core_team'])
-  );
+-- RLS is enabled and forced for this table in PHASE 8, with zero policies.
+-- The migration 044a review_assignment_batches_read policy is deliberately
+-- NOT created, for the same server-only reason as application_reviews above.
 
 -- ============================================================
 -- PHASE 7: application_reviews.assignment_batch_id FK + indexes
@@ -709,54 +737,43 @@ COMMENT ON COLUMN public.application_reviews.claim_source IS
 -- that inherited posture with an explicit, deny-by-default one and then
 -- proves the result before COMMIT.
 
--- ── 8a. applications / application_answers — applicant PII ───
--- Deny-by-default: RLS on, RLS forced, zero policies, no privilege for
+-- ── 8a. one uniform contract for all five tables ───
+-- Deny-by-default: RLS on, RLS forced, zero policies, no privilege at all for
 -- PUBLIC/anon/authenticated, and exactly the four DML privileges for
--- service_role. TRUNCATE, REFERENCES and TRIGGER are deliberately excluded.
+-- service_role. TRUNCATE, REFERENCES and TRIGGER are deliberately excluded,
+-- as is every ownership and schema-management privilege.
 
-ALTER TABLE public.applications        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.applications        FORCE  ROW LEVEL SECURITY;
-ALTER TABLE public.application_answers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.application_answers FORCE  ROW LEVEL SECURITY;
+ALTER TABLE public.applications              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.applications              FORCE  ROW LEVEL SECURITY;
+ALTER TABLE public.application_answers       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.application_answers       FORCE  ROW LEVEL SECURITY;
+ALTER TABLE public.application_reviews       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.application_reviews       FORCE  ROW LEVEL SECURITY;
+ALTER TABLE public.application_decisions     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.application_decisions     FORCE  ROW LEVEL SECURITY;
+ALTER TABLE public.review_assignment_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.review_assignment_batches FORCE  ROW LEVEL SECURITY;
 
-REVOKE ALL ON TABLE public.applications, public.application_answers FROM PUBLIC;
-REVOKE ALL ON TABLE public.applications, public.application_answers FROM anon;
-REVOKE ALL ON TABLE public.applications, public.application_answers FROM authenticated;
-REVOKE ALL ON TABLE public.applications, public.application_answers FROM service_role;
-
-GRANT SELECT, INSERT, UPDATE, DELETE
-  ON TABLE public.applications, public.application_answers
-  TO service_role;
-
--- ── 8b. review workflow tables — restated, never broadened ───
--- application_reviews, application_decisions and review_assignment_batches
--- keep the migration 040/041/044a contract already established above: RLS
--- enabled (not forced) and their original admin-scoped SELECT policies. Their
--- grants are restated here in the migration 062 form so the resulting state
--- is deterministic rather than inherited. This does not broaden access:
--- anon has no policy and so could never read a row, authenticated keeps only
--- the SELECT privilege its existing read policies already require (rows still
--- filtered by those policies), and no write privilege is given to either.
-
-REVOKE ALL ON TABLE public.application_reviews, public.application_decisions,
+REVOKE ALL ON TABLE public.applications, public.application_answers,
+                    public.application_reviews, public.application_decisions,
                     public.review_assignment_batches
   FROM PUBLIC;
-REVOKE ALL ON TABLE public.application_reviews, public.application_decisions,
+REVOKE ALL ON TABLE public.applications, public.application_answers,
+                    public.application_reviews, public.application_decisions,
                     public.review_assignment_batches
   FROM anon;
-REVOKE ALL ON TABLE public.application_reviews, public.application_decisions,
+REVOKE ALL ON TABLE public.applications, public.application_answers,
+                    public.application_reviews, public.application_decisions,
                     public.review_assignment_batches
   FROM authenticated;
-REVOKE ALL ON TABLE public.application_reviews, public.application_decisions,
+REVOKE ALL ON TABLE public.applications, public.application_answers,
+                    public.application_reviews, public.application_decisions,
                     public.review_assignment_batches
   FROM service_role;
 
-GRANT SELECT
-  ON TABLE public.application_reviews, public.application_decisions,
-           public.review_assignment_batches
-  TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE
-  ON TABLE public.application_reviews, public.application_decisions,
+  ON TABLE public.applications, public.application_answers,
+           public.application_reviews, public.application_decisions,
            public.review_assignment_batches
   TO service_role;
 
@@ -764,7 +781,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE
 -- If any assertion below fails the whole migration rolls back, so the tables
 -- can never be committed in a weaker state than declared.
 
--- No policy may exist on either PII table.
+-- No policy may exist on any of the five tables.
 DO $$
 DECLARE
   v_policy text;
@@ -772,20 +789,21 @@ BEGIN
   SELECT p.policyname INTO v_policy
   FROM pg_policies p
   WHERE p.schemaname = 'public'
-    AND p.tablename IN ('applications', 'application_answers')
+    AND p.tablename IN ('applications', 'application_answers',
+                        'application_reviews', 'application_decisions',
+                        'review_assignment_batches')
   LIMIT 1;
 
   IF v_policy IS NOT NULL THEN
     RAISE EXCEPTION
-      'POLICY_CONFLICT: policy % exists on an application PII table. '
-      'applications and application_answers must carry no policy at all.',
+      'POLICY_CONFLICT: policy % exists on an application workflow table. '
+      'All five tables must carry no policy at all.',
       v_policy;
   END IF;
 END;
 $$;
 
--- RLS must be enabled and forced on both PII tables, and enabled (not forced)
--- on the three review workflow tables.
+-- RLS must be enabled AND forced on all five tables.
 DO $$
 DECLARE
   v_table text;
@@ -794,7 +812,9 @@ BEGIN
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public'
-    AND c.relname IN ('applications', 'application_answers')
+    AND c.relname IN ('applications', 'application_answers',
+                      'application_reviews', 'application_decisions',
+                      'review_assignment_batches')
     AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
   LIMIT 1;
 
@@ -802,21 +822,6 @@ BEGIN
     RAISE EXCEPTION
       'RLS_CONTRACT_VIOLATION: public.% must have row level security both '
       'enabled and forced.', v_table;
-  END IF;
-
-  SELECT c.relname INTO v_table
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public'
-    AND c.relname IN ('application_reviews', 'application_decisions',
-                      'review_assignment_batches')
-    AND NOT (c.relrowsecurity AND NOT c.relforcerowsecurity)
-  LIMIT 1;
-
-  IF v_table IS NOT NULL THEN
-    RAISE EXCEPTION
-      'RLS_CONTRACT_VIOLATION: public.% must have row level security enabled '
-      'and not forced.', v_table;
   END IF;
 END;
 $$;
@@ -832,6 +837,12 @@ BEGIN
       ('applications',              'public.applications'::regclass,
        'service_role', ARRAY['SELECT','INSERT','UPDATE','DELETE']),
       ('application_answers',       'public.application_answers'::regclass,
+       'service_role', ARRAY['SELECT','INSERT','UPDATE','DELETE']),
+      ('application_reviews',       'public.application_reviews'::regclass,
+       'service_role', ARRAY['SELECT','INSERT','UPDATE','DELETE']),
+      ('application_decisions',     'public.application_decisions'::regclass,
+       'service_role', ARRAY['SELECT','INSERT','UPDATE','DELETE']),
+      ('review_assignment_batches', 'public.review_assignment_batches'::regclass,
        'service_role', ARRAY['SELECT','INSERT','UPDATE','DELETE'])
   ),
   acl AS (
@@ -853,15 +864,17 @@ BEGIN
 
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION
-      'GRANT_CONTRACT_VIOLATION: unexpected privilege % on an application PII '
-      'table. Only service_role may hold SELECT/INSERT/UPDATE/DELETE.',
+      'GRANT_CONTRACT_VIOLATION: unexpected privilege % on an application '
+      'workflow table. Only service_role may hold SELECT/INSERT/UPDATE/DELETE.',
       v_bad;
   END IF;
 
-  -- ...and service_role must actually hold all four.
+  -- ...and service_role must actually hold all four, on all five tables.
   SELECT format('%s -> service_role missing %s', t.relname, p.priv)
     INTO v_bad
-  FROM (VALUES ('applications'), ('application_answers')) AS t(relname)
+  FROM (VALUES ('applications'), ('application_answers'),
+               ('application_reviews'), ('application_decisions'),
+               ('review_assignment_batches')) AS t(relname)
   CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) AS p(priv)
   WHERE NOT has_table_privilege('service_role', 'public.' || t.relname, p.priv)
   LIMIT 1;
@@ -872,35 +885,43 @@ BEGIN
 END;
 $$;
 
--- No role other than the owner and service_role may write to the three
--- review workflow tables, and anon may not read them.
+-- Effective-privilege check. has_table_privilege also resolves privileges
+-- inherited through PUBLIC and role membership, so this catches anything the
+-- ACL scan above could miss. No client role may hold ANY privilege on ANY of
+-- the five tables, and service_role must not hold the excluded three.
 DO $$
 DECLARE
   v_bad text;
 BEGIN
   SELECT format('%s -> %s:%s', t.relname, r.role_name, p.priv)
     INTO v_bad
-  FROM (VALUES ('application_reviews'), ('application_decisions'),
+  FROM (VALUES ('applications'), ('application_answers'),
+               ('application_reviews'), ('application_decisions'),
                ('review_assignment_batches')) AS t(relname)
   CROSS JOIN (VALUES ('anon'), ('authenticated')) AS r(role_name)
-  CROSS JOIN (VALUES ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE')) AS p(priv)
+  CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+                     ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) AS p(priv)
   WHERE has_table_privilege(r.role_name, 'public.' || t.relname, p.priv)
   LIMIT 1;
 
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION
-      'GRANT_CONTRACT_VIOLATION: unexpected write privilege %.', v_bad;
+      'GRANT_CONTRACT_VIOLATION: client role retains privilege %.', v_bad;
   END IF;
 
-  SELECT t.relname INTO v_bad
-  FROM (VALUES ('application_reviews'), ('application_decisions'),
+  SELECT format('%s -> service_role:%s', t.relname, p.priv)
+    INTO v_bad
+  FROM (VALUES ('applications'), ('application_answers'),
+               ('application_reviews'), ('application_decisions'),
                ('review_assignment_batches')) AS t(relname)
-  WHERE has_table_privilege('anon', 'public.' || t.relname, 'SELECT')
+  CROSS JOIN (VALUES ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) AS p(priv)
+  WHERE has_table_privilege('service_role', 'public.' || t.relname, p.priv)
   LIMIT 1;
 
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION
-      'GRANT_CONTRACT_VIOLATION: anon retains SELECT on public.%.', v_bad;
+      'GRANT_CONTRACT_VIOLATION: service_role holds excluded privilege %.',
+      v_bad;
   END IF;
 END;
 $$;

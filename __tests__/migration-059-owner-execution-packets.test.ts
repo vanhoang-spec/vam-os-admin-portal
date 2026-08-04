@@ -33,8 +33,8 @@ const ATTEST_BLOCK = [
 
 /** SHA-256 over the committed LF bytes. Reproduce with: git show HEAD:<path> | sha256sum */
 const EXPECTED_SHA: Record<string, string> = {
-  [PACKET_PREFLIGHT]: "a9d94db89ea85ff30cbd7e02ba25fa3286742c118cf4abe325fec897383f9eea",
-  [PACKET_VERIFIER]: "7d32573702cc81db5ac92cb241b807f63ee3be7b12c642b5fdffa62a73555b3a",
+  [PACKET_PREFLIGHT]: "eb6e90dde26d86e6ac9bd7ffaf7a6af6cc7eb918f37c951aab3e0f882451731d",
+  [PACKET_VERIFIER]: "1dbec09eedd5d31e3d674ed72787462a943f09e90cd01622c368ca43707c0878",
 };
 
 const lf = (s: string) => s.replace(/\r\n/g, "\n");
@@ -397,16 +397,7 @@ describe("execution packets — reported SHA-256 binding", () => {
   });
 });
 
-describe("execution packets — migration 059 is untouched", () => {
-  it("leaves the migration SQL byte-identical to the reviewed commit", () => {
-    const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
-    const r = spawnSync("git", [
-      "diff", "--quiet", "6470980c80c2d55f0f6716a095170b77d6b0af18",
-      "--", "supabase_migrations/059_staging_application_workflow_bootstrap.sql",
-    ]);
-    expect(r.status).toBe(0);
-  });
-
+describe("execution packets — stay read-only", () => {
   it("adds no SQL that could write to the database", () => {
     for (const p of Object.keys(EXPECTED_SHA)) {
       expect(read(p)).toContain("SET TRANSACTION READ ONLY;");

@@ -134,19 +134,19 @@ expected_table(t, cols, types, nulls, defs, rls, forced) as (values
   array['uuid','uuid','text','uuid','uuid','uuid','timestamptz','timestamptz','text','int4','int4','int4','int4','int4','int4','text','text','timestamptz','timestamptz','timestamptz','uuid','timestamptz','text'],
   array['NO','NO','NO','YES','YES','YES','YES','YES','NO','YES','YES','YES','YES','YES','YES','YES','YES','YES','YES','YES','YES','YES','YES'],
   array['gen_random_uuid()','<none>','<none>','<none>','<none>','<none>','now()','<none>','''assigned''::text','<none>','<none>','<none>','<none>','<none>','<none>','<none>','<none>','<none>','now()','now()','<none>','<none>','<none>'],
-  true, false),
+  true, true),
  ('application_decisions',
   array['id','application_id','decided_by','decided_by_name','decision','previous_status','new_status','decision_note','created_at'],
   array['uuid','uuid','uuid','text','text','text','text','text','timestamptz'],
   array['NO','NO','YES','YES','NO','YES','NO','YES','YES'],
   array['gen_random_uuid()','<none>','<none>','<none>','<none>','<none>','<none>','<none>','now()'],
-  true, false),
+  true, true),
  ('review_assignment_batches',
   array['id','intake_batch_id','review_round','created_by','created_at','due_at','assignment_note','application_count','reviewer_count'],
   array['uuid','uuid','text','uuid','timestamptz','timestamptz','text','int4','int4'],
   array['NO','YES','NO','YES','NO','YES','YES','YES','YES'],
   array['gen_random_uuid()','<none>','''profile_screening''::text','<none>','now()','<none>','<none>','<none>','<none>'],
-  true, false)),
+  true, true)),
 
 -- Primary keys: one per table, on (id).
 expected_pk(t, cols) as (values
@@ -231,67 +231,22 @@ expected_enum(n, vals) as (values
  ('role_type', array['mentor','mentee','supporter','speaker','partner_contact','donor','admin']),
  ('application_status', array['accepted','rejected_or_pending','rejected','pending','withdrawn'])),
 
--- Exact non-owner ACL per table, as a role -> sorted privilege map.
+-- Exact non-owner ACL per table, as a role -> sorted privilege map. Uniform
+-- across all five tables: service_role and nobody else.
 expected_acl(t, acl) as (values
  ('applications', '{"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb),
  ('application_answers', '{"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb),
- ('application_reviews', '{"authenticated":["SELECT"],"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb),
- ('application_decisions', '{"authenticated":["SELECT"],"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb),
- ('review_assignment_batches', '{"authenticated":["SELECT"],"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb)),
+ ('application_reviews', '{"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb),
+ ('application_decisions', '{"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb),
+ ('review_assignment_batches', '{"service_role":["DELETE","INSERT","SELECT","UPDATE"]}'::jsonb)),
 
--- Policy contract for the three review workflow tables. roles is the exact
--- pg_policies.roles array; these policies were created without a TO clause,
--- so they apply to PUBLIC. vals is the exact sorted set of quoted literals
--- the USING expression must reference.
-expected_policy(t, n, cmd, roles, vals) as (values
- ('application_reviews','application_reviews_read','SELECT', array['public'],
-  array['active','admin','core_team','reviewer','super_admin']),
- ('application_decisions','application_decisions_read','SELECT', array['public'],
-  array['admin','core_team','reviewer','super_admin']),
- ('review_assignment_batches','review_assignment_batches_read','SELECT', array['public'],
-  array['admin','core_team','super_admin'])),
-
--- ------------------------------------------------------------
--- Complete expected USING expressions, compared in full.
--- ------------------------------------------------------------
--- Each row below is a COMPLETE deparsed expression, never a fragment and
--- never a pattern. The actual pg_policies.qual and the expected text are put
--- through the identical normalisation (see norm_actual / norm_expected) and
--- then compared with plain equality, so any extra branch, removed conjunct,
--- changed column, changed role set, extra function call or altered operator
--- fails: 'X OR true', 'true OR X', 'X OR <other branch>', 'X AND false' and
--- an X with its ownership predicate dropped are all unequal to every variant.
---
--- Two rendering degrees of freedom cannot be collapsed by a normalisation
--- that is forbidden to discard anything meaningful, so each is enumerated as
--- a separate COMPLETE variant instead:
---   paren  : ruleutils wraps operator expressions in parentheses but not a
---            bare top-level function call; 'bare' and 'wrapped' cover both.
---   cast   : admin_users.status renders as status = 'active'::text when the
---            column is text, and (status)::text = 'active'::text when it is
---            varchar. Both are enumerated; neither is pattern-matched.
--- Enumerating complete alternatives is strictly stronger than loosening the
--- comparison: no information is discarded from either side.
-expected_policy_qual(t, n, variant, q) as (values
- ('application_reviews','application_reviews_read','bare_status_text',
-  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status = ''active''::text)) LIMIT 1)))'),
- ('application_reviews','application_reviews_read','wrapped_status_text',
-  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status = ''active''::text)) LIMIT 1))))'),
- ('application_reviews','application_reviews_read','bare_status_varchar',
-  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status::text = ''active''::text)) LIMIT 1)))'),
- ('application_reviews','application_reviews_read','wrapped_status_varchar',
-  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status::text = ''active''::text)) LIMIT 1))))'),
- ('application_decisions','application_decisions_read','bare',
-  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text, ''reviewer''::text])'),
- ('application_decisions','application_decisions_read','wrapped',
-  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text, ''reviewer''::text]))'),
- ('review_assignment_batches','review_assignment_batches_read','bare',
-  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text])'),
- ('review_assignment_batches','review_assignment_batches_read','wrapped',
-  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]))')),
-
-pii_table(t) as (values ('applications'),('application_answers')),
-workflow_table(t) as (values ('application_reviews'),('application_decisions'),('review_assignment_batches')),
+-- One uniform security contract, so one list. No PII/workflow split remains.
+secured_table(t) as (values
+ ('applications'),('application_answers'),('application_reviews'),
+ ('application_decisions'),('review_assignment_batches')),
+client_role(r) as (values ('anon'),('authenticated')),
+all_privilege(p) as (values
+ ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),('TRUNCATE'),('REFERENCES'),('TRIGGER')),
 
 -- ============================================================
 -- observed state
@@ -325,40 +280,13 @@ con_literals as (
   join pg_namespace n on n.oid = rel.relnamespace
   where n.nspname = 'public'
 ),
+-- Every policy in the public schema. Under the server-only contract the five
+-- secured tables must contribute NO rows here at all.
 pol as (
   select p.tablename, p.policyname, p.permissive, p.roles::text[] roles, p.cmd,
-         p.qual, p.with_check,
-         (select array_agg(m order by m)
-            from (select distinct (regexp_matches(coalesce(p.qual, ''), '''([a-zA-Z0-9_]+)''::text', 'g'))[1] m) s) vals
+         p.qual, p.with_check
   from pg_policies p
   where p.schemaname = 'public'
-),
--- ------------------------------------------------------------
--- Deterministic, symmetric USING-expression normalisation.
--- ------------------------------------------------------------
--- Exactly two transformations, applied identically to the actual expression
--- and to every expected variant:
---   1. regexp_replace(x, '\(([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?)\)::', '\1::', 'g')
---      unwraps parentheses that sit directly around a bare column reference
---      immediately followed by a cast — the one known-equivalent cast
---      rendering difference. It can only ever match "(ident)::" or
---      "(qualifier.ident)::"; it cannot touch a function call, a literal, an
---      operator, a boolean branch or a parenthesised sub-expression.
---   2. whitespace runs collapse to one space, then btrim — line breaks only.
--- Nothing else is removed or ignored. Boolean operators, additional
--- branches, ownership predicates, function calls, literals, column
--- references and comparison operators all survive normalisation intact and
--- therefore participate in the equality comparison.
-norm_actual as (
-  select p.tablename t, p.policyname n,
-         btrim(regexp_replace(regexp_replace(coalesce(p.qual, ''), '\(([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?)\)::', '\1::', 'g'), '[[:space:]]+', ' ', 'g')) q
-  from pg_policies p
-  where p.schemaname = 'public'
-),
-norm_expected as (
-  select e.t, e.n, e.variant,
-         btrim(regexp_replace(regexp_replace(e.q, '\(([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?)\)::', '\1::', 'g'), '[[:space:]]+', ' ', 'g')) q
-  from expected_policy_qual e
 ),
 ueh as (
   select p.id program_id, p.is_active program_active,
@@ -549,19 +477,27 @@ assertions as (
    case when relrowsecurity = rls and relforcerowsecurity = forced then 'PASS' else 'FAIL' end
    from tbl
 
- -- ===== security: applications / application_answers (PII) =====
- union all select 'security:zero_policies_on_pii_tables',
-   case when not exists (select 1 from pol where tablename in (select t from pii_table))
+ -- ===== security: one uniform contract, all five tables =====
+ -- Zero policies. Not "the expected policies" — none at all, on any of the
+ -- five. Nothing can hide in an expression that does not exist.
+ union all select 'security:zero_policies',
+   case when not exists (select 1 from pol where tablename in (select t from secured_table))
         then 'PASS' else 'FAIL' end
- -- Belt and braces over the ACL check below: has_table_privilege also
- -- resolves privileges inherited through PUBLIC and role membership.
- union all select 'security:no_effective_privilege:' || r.role_name || ':' || p.t,
+ union all select 'security:zero_policies:' || t,
+   case when not exists (select 1 from pol p where p.tablename = t)
+        then 'PASS' else 'FAIL' end
+   from secured_table
+ -- No privilege of any kind for PUBLIC, anon or authenticated.
+ -- has_table_privilege also resolves privileges inherited through PUBLIC and
+ -- role membership, so this catches anything the ACL comparison could miss.
+ union all select 'security:no_effective_privilege:' || r.r || ':' || s.t,
    case when not exists (
-     select 1 from (values ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
-                           ('TRUNCATE'),('REFERENCES'),('TRIGGER')) x(priv)
-     where has_table_privilege(r.role_name, 'public.' || p.t, x.priv))
+     select 1 from all_privilege x
+     where has_table_privilege(r.r, 'public.' || s.t, x.p))
         then 'PASS' else 'FAIL' end
-   from pii_table p cross join (values ('anon'),('authenticated')) r(role_name)
+   from secured_table s cross join client_role r
+ -- service_role holds exactly the four DML privileges and none of the other
+ -- three.
  union all select 'security:service_role_exact_dml:' || t,
    case when has_table_privilege('service_role', 'public.' || t, 'SELECT')
          and has_table_privilege('service_role', 'public.' || t, 'INSERT')
@@ -571,56 +507,16 @@ assertions as (
          and not has_table_privilege('service_role', 'public.' || t, 'REFERENCES')
          and not has_table_privilege('service_role', 'public.' || t, 'TRIGGER')
         then 'PASS' else 'FAIL' end
-   from pii_table
-
- -- ===== security: the three review workflow tables =====
- -- Exact structural contract: name, permissive/restrictive mode, roles,
- -- command, WITH CHECK and the literal set. Retained in full alongside the
- -- complete-expression comparison below.
- union all select 'security:policy:' || e.n,
-   case when (select count(*) from pol p where p.tablename = e.t and p.policyname = e.n) = 1
-         and exists (
-           select 1 from pol p
-           where p.tablename = e.t and p.policyname = e.n
-             and p.permissive = 'PERMISSIVE' and p.cmd = e.cmd
-             and p.roles = e.roles
-             and p.with_check is null
-             and p.qual is not null
-             and p.qual like '%is_admin_role%'
-             and p.vals = (select array_agg(v order by v) from unnest(e.vals) v))
-        then 'PASS' else 'FAIL' end
-   from expected_policy e
- -- Complete USING expression, compared in full after identical normalisation
- -- of both sides. A policy carrying any additional permissive branch — an
- -- 'OR true', an extra role test, an alternate condition — or missing its
- -- ownership predicate cannot match any expected variant and FAILs here.
- union all select 'security:policy_qual_exact:' || e.n,
-   case when exists (
-     select 1 from norm_actual a
-     join norm_expected x on x.t = a.t and x.n = a.n and x.q = a.q
-     where a.t = e.t and a.n = e.n)
-        then 'PASS' else 'FAIL' end
-   from expected_policy e
- union all select 'security:policy_inventory',
-   case when (select coalesce(array_agg(p.policyname::text order by p.policyname), array[]::text[])
-                from pol p where p.tablename in (select t from expected_table))
-             = (select array_agg(n order by n) from expected_policy)
-        then 'PASS' else 'FAIL' end
- union all select 'security:no_anon_privilege:' || t,
+   from secured_table
+ -- The removed helper must not be a dependency of anything this package owns.
+ union all select 'security:no_is_admin_role_dependency',
    case when not exists (
-     select 1 from (values ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),
-                           ('TRUNCATE'),('REFERENCES'),('TRIGGER')) x(priv)
-     where has_table_privilege('anon', 'public.' || t, x.priv))
+     select 1 from pg_policies p
+     where p.schemaname = 'public'
+       and p.tablename in (select t from secured_table)
+       and (coalesce(p.qual, '') like '%is_admin_role%'
+         or coalesce(p.with_check, '') like '%is_admin_role%'))
         then 'PASS' else 'FAIL' end
-   from workflow_table
- union all select 'security:authenticated_read_only:' || t,
-   case when has_table_privilege('authenticated', 'public.' || t, 'SELECT')
-         and not exists (
-           select 1 from (values ('INSERT'),('UPDATE'),('DELETE'),
-                                 ('TRUNCATE'),('REFERENCES'),('TRIGGER')) x(priv)
-           where has_table_privilege('authenticated', 'public.' || t, x.priv))
-        then 'PASS' else 'FAIL' end
-   from workflow_table
 
  -- ===== security: exact non-owner ACL on all five tables =====
  union all select 'security:acl:' || e.t,
@@ -753,18 +649,13 @@ select jsonb_build_object(
   'failed_assertions', coalesce(jsonb_agg(assertion order by assertion) filter (where status <> 'PASS'), '[]'::jsonb),
   'evidence', jsonb_build_object(
     'note', 'Verbatim deparsed expressions, emitted for independent inspection. Never scored.',
-    'policy_quals', coalesce((
+    -- Expected to be empty. Any policy that appears here is a FAIL above; it
+    -- is emitted verbatim so an unexpected one can be identified at a glance.
+    'unexpected_policies', coalesce((
       select jsonb_object_agg(p.policyname, jsonb_build_object('table', p.tablename, 'cmd', p.cmd,
                                                               'roles', to_jsonb(p.roles),
                                                               'using', p.qual, 'with_check', p.with_check))
-        from pol p where p.tablename in (select t from expected_table)), '{}'::jsonb),
-    -- Both sides of the complete-expression comparison, post-normalisation,
-    -- so a FAIL can be diffed directly without re-deriving anything.
-    'policy_qual_actual_normalized', coalesce((
-      select jsonb_object_agg(a.n, a.q) from norm_actual a
-       where a.t in (select t from expected_table)), '{}'::jsonb),
-    'policy_qual_expected_normalized', coalesce((
-      select jsonb_object_agg(x.n || ':' || x.variant, x.q) from norm_expected x), '{}'::jsonb),
+        from pol p where p.tablename in (select t from secured_table)), '{}'::jsonb),
     'check_definitions', coalesce((
       select jsonb_object_agg(l.conname, l.def) from con_literals l
        where l.contype = 'c'

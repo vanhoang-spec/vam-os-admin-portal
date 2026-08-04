@@ -282,25 +282,35 @@ assertions as (
        and column_name = 'id' and udt_name = 'uuid'
    ) then 'PASS' else 'FAIL' end
  -- Every FK target above must be backed by a unique/primary key.
+ -- PostgreSQL's own foreign-key target rule (transformFkeyCheckAttrs scans
+ -- pg_index, not pg_constraint): a unique, valid, ready, immediate index whose
+ -- single key column is id, with no partial predicate and no expression key.
+ -- Primary-key and UNIQUE-constraint indexes qualify through this same rule,
+ -- and a bare CREATE UNIQUE INDEX — which produces no pg_constraint row at
+ -- all — is correctly accepted. indnkeyatts = 1 with a first-key-column
+ -- comparison means a composite index cannot qualify merely by containing id,
+ -- and INCLUDE columns, which live beyond indnkeyatts, are correctly ignored.
  union all select 'prerequisite:fk_targets_unique',
    case when not exists (
      select 1 from (values ('people'),('seasons'),('intake_batches'),('admin_users')) x(t)
      where not exists (
-       select 1 from pg_constraint c
-       where c.conrelid = to_regclass('public.' || x.t)
-         and c.contype in ('p','u')
-         and c.conkey = array[(
-           select a.attnum from pg_attribute a
-           where a.attrelid = c.conrelid and a.attname = 'id'
-         )]
+       select 1
+       from pg_index i
+       join pg_attribute a
+         on a.attrelid = i.indrelid
+        and a.attname = 'id'
+        and a.attnum > 0
+        and not a.attisdropped
+       where i.indrelid = to_regclass('public.' || x.t)
+         and i.indisunique
+         and i.indisvalid
+         and i.indisready
+         and i.indimmediate
+         and i.indpred is null
+         and i.indexprs is null
+         and i.indnkeyatts = 1
+         and (string_to_array(i.indkey::text, ' ')::smallint[])[1] = a.attnum
      )
-   ) then 'PASS' else 'FAIL' end
- -- The three review-workflow read policies call this helper directly.
- union all select 'prerequisite:is_admin_role_text_array',
-   case when exists (
-     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public' and p.proname = 'is_admin_role'
-       and pg_get_function_arguments(p.oid) = 'roles text[]'
    ) then 'PASS' else 'FAIL' end
  union all select 'prerequisite:gen_random_uuid',
    case when to_regprocedure('gen_random_uuid()') is not null then 'PASS' else 'FAIL' end
