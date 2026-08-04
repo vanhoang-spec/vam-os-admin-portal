@@ -1,56 +1,69 @@
--- VAM OS — MIGRATION 059 POST-APPLY VERIFIER (READ-ONLY, STAGING-ONLY)
--- package: VAM059_VERIFY_V1
+-- VAM OS — MIGRATION 059 OWNER POST-APPLY VERIFIER — EXECUTION PACKET
+-- packet: VAM059_OWNER_VERIFY_EXEC_V1
 --
--- Purpose: prove the exact schema AND security contract of the secured
--- migration 059 after it has been applied to staging. It writes nothing and
--- is always terminated by ROLLBACK. It authorizes nothing by itself and is
--- not an apply packet.
+-- COMPLETE AND SELF-CONTAINED. Copy this whole file into the Supabase SQL
+-- Editor and run it exactly as committed. It needs no manual step, no
+-- additional statement, no psql \i include, no external file and no
+-- previously prepared session. Run this AFTER migration 059 has been applied.
 --
--- Environment
---   expected staging project ref : ljfneyuvpxrmejpxsmpz
---   forbidden production ref     : qkkroesfiazsejkzflcd
+-- ------------------------------------------------------------
+-- ONE HUMAN CONTROL, IMMEDIATELY BEFORE YOU RUN THIS
+-- ------------------------------------------------------------
+--   Look at the Supabase dashboard URL in your browser and confirm the
+--   project ref reads exactly:
 --
--- This verifier validates contracts, not existence. Every table is checked
--- for exact ordered columns, types, nullability and defaults; every FK for
--- its exact ON DELETE / ON UPDATE action and deferrability; every index for
--- its exact definition; both enums for exact ordered values; and both PII
--- tables for RLS enabled, RLS forced, zero policies, zero PUBLIC/anon/
--- authenticated privilege and exactly SELECT/INSERT/UPDATE/DELETE for
--- service_role with no TRUNCATE.
+--       ljfneyuvpxrmejpxsmpz
 --
--- Policy USING expressions are compared IN FULL. security:policy_qual_exact:*
--- puts the actual pg_policies.qual and a complete source-controlled expected
--- expression through the identical normalisation and compares them with
--- equality, so a policy carrying an extra permissive branch (OR true, an
--- extra role test, an alternate condition) or missing its ownership predicate
--- FAILs. Normalisation is limited to whitespace and one known-equivalent cast
--- rendering; it never removes an operator, branch, predicate, function call,
--- literal or column reference. The structural contract — name, permissive
--- mode, roles, command, WITH CHECK, inventory — is asserted separately and in
--- full, and both normalised expressions are emitted under "evidence".
+--   If it reads qkkroesfiazsejkzflcd, or anything else, stop and close this
+--   file. The attestation inside the transaction below records that you
+--   performed this check. Nothing else in this packet can establish which
+--   project you are connected to.
+-- ------------------------------------------------------------
 --
--- Deparsed CHECK constraints are still compared through their exact
--- quoted-literal sets plus structural catalog columns rather than raw
--- pg_get_constraintdef equality, carrying over the correction recorded in
--- __tests__/migration-062-verifier-catalog-rendering-fix.test.ts. A literal
--- set is exact and immune to formatting, the raw definitions are emitted as
--- evidence, and the per-table CHECK inventory is an exact set equality, so no
--- unexpected constraint can hide.
+-- Why the attestation is committed here rather than supplied at run time:
+--   docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POST_APPLY_VERIFY.sql
+--   is the reviewed, hashed source of truth. It deliberately contains no
+--   attestation, so executing it can never silently claim an identity. Getting
+--   the attestation into that file at run time would change reviewed and
+--   hashed SQL bytes at execution time, which is exactly what this packet
+--   exists to prevent. The attestation therefore lives here, in bytes that are
+--   themselves reviewed and hashed.
 --
--- This artifact runs only AFTER migration 059 has been applied. It reads the
--- five new tables to prove they are empty, so against a database where they
--- do not exist it raises undefined_table rather than returning verified=false.
--- Either way it never reports success: run the pre-apply preflight
--- (VAM_OS_MIGRATION_059_PREFLIGHT.sql) first to establish which side of the
--- apply the database is on.
+--   This is safe only because all four of the following hold:
+--     * the owner performs the visual dashboard check above immediately
+--       before execution;
+--     * these packet bytes and their SHA-256 are reviewed independently;
+--     * the forbidden production ref qkkroesfiazsejkzflcd is still rejected
+--       outright by the identity truth table, from either identity source;
+--     * structural topology remains a secondary guard and can never
+--       substitute for identity.
 --
--- Pass criteria: overall_status = PASS, verified = true, failureCount = 0,
---                failed_assertions = [].
-
+-- Effect: READ ONLY. One transaction, always terminated by ROLLBACK, never
+--   committed. Writes nothing.
+-- Output: one row, one JSONB column, the same structure the canonical
+--   artifact emits. project_identity.attestation_set_by_this_file reports
+--   true here, so the output itself records that identity came from this
+--   packet's committed attestation rather than from the platform setting.
+-- Pass criteria: overall_status = PASS, verified = true, failureCount = 0, failed_assertions = []
+--
+-- Provenance: the region below is the canonical artifact's executable region,
+--   carried over with exactly two mechanical changes — the attestation block,
+--   and attestation_set_by_this_file flipped from false to true.
+--   __tests__/migration-059-owner-execution-packets.test.ts rebuilds this
+--   packet from the canonical file and fails if one byte differs.
 BEGIN;
 SET TRANSACTION READ ONLY;
 SET LOCAL statement_timeout = '45s';
 SET LOCAL lock_timeout = '3s';
+-- Owner attestation of the connected project. Transaction-local, and rolled
+-- back with everything else. It is present as committed bytes so this packet
+-- runs exactly as reviewed; the canonical artifact deliberately carries no
+-- attestation, so running that file can never silently claim an identity.
+-- This attestation is only meaningful because the owner performed the visual
+-- dashboard check described at the top of this packet immediately before
+-- running it. The forbidden production ref qkkroesfiazsejkzflcd is still
+-- rejected outright by the identity truth table below.
+SET LOCAL vam059.attested_project_ref = 'ljfneyuvpxrmejpxsmpz';
 
 with
 expected_ref(staging, production) as (values ('ljfneyuvpxrmejpxsmpz', 'qkkroesfiazsejkzflcd')),
@@ -723,7 +736,7 @@ select jsonb_build_object(
       when (select attested_class from identity) <> 'absent' then 'owner_attestation'
       else 'none' end,
     'verified', coalesce((select verdict from identity_verdict), 'FAIL') = 'PASS',
-    'attestation_set_by_this_file', false
+    'attestation_set_by_this_file', true
   ),
   'owner_must_verify_project_ref', true,
   'overall_status', case when bool_and(status = 'PASS') then 'PASS' else 'FAIL' end,
