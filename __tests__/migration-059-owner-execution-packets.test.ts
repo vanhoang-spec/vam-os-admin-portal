@@ -34,7 +34,7 @@ const ATTEST_BLOCK = [
 /** SHA-256 over the committed LF bytes. Reproduce with: git show HEAD:<path> | sha256sum */
 const EXPECTED_SHA: Record<string, string> = {
   [PACKET_PREFLIGHT]: "eb6e90dde26d86e6ac9bd7ffaf7a6af6cc7eb918f37c951aab3e0f882451731d",
-  [PACKET_VERIFIER]: "1dbec09eedd5d31e3d674ed72787462a943f09e90cd01622c368ca43707c0878",
+  [PACKET_VERIFIER]: "e983e30f8290b135faef2ca14db31f3fca2860f2cdc6f2e63795580789d847cb",
 };
 
 const lf = (s: string) => s.replace(/\r\n/g, "\n");

@@ -785,7 +785,7 @@ describe("migration 059 verifier — exact schema contract", () => {
     expect(s).toContain("'fk:' || e.n");
     expect(s).toContain("'fk_inventory'");
     expect(s).toContain("c.confdeltype = e.del and c.confupdtype = e.upd");
-    expect(s).toContain("c.condeferrable = e.deferrable and c.condeferred = e.deferred");
+    expect(s).toContain("c.condeferrable = e.is_deferrable and c.condeferred = e.is_deferred");
     // SET NULL + deferred on the two legacy application FKs, CASCADE on answers
     expect(s).toContain("'applications_person_id_fkey','person_id','people','id','n','a',true,true");
     expect(s).toContain("'applications_season_id_fkey','season_id','seasons','id','n','a',true,true");

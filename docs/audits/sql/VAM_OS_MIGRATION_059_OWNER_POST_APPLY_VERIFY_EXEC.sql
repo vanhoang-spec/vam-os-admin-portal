@@ -160,7 +160,7 @@ expected_unique(t, n, cols) as (values
 
 -- Foreign keys. del/upd use pg_constraint.confdeltype / confupdtype:
 --   'a' = NO ACTION, 'c' = CASCADE, 'n' = SET NULL.
-expected_fk(t, n, col, ref, refcol, del, upd, deferrable, deferred) as (values
+expected_fk(t, n, col, ref, refcol, del, upd, is_deferrable, is_deferred) as (values
  ('applications','applications_person_id_fkey','person_id','people','id','n','a',true,true),
  ('applications','applications_season_id_fkey','season_id','seasons','id','n','a',true,true),
  ('applications','applications_intake_batch_id_fkey','intake_batch_id','intake_batches','id','a','a',false,false),
@@ -398,7 +398,7 @@ assertions as (
      where c.conrelid = to_regclass('public.' || e.t) and c.contype = 'f' and c.conname = e.n
        and c.confrelid = to_regclass('public.' || e.ref)
        and c.confdeltype = e.del and c.confupdtype = e.upd
-       and c.condeferrable = e.deferrable and c.condeferred = e.deferred
+       and c.condeferrable = e.is_deferrable and c.condeferred = e.is_deferred
        and (select array_agg(a.attname::text order by k.ord)
               from unnest(c.conkey) with ordinality k(attnum, ord)
               join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum) = array[e.col]
