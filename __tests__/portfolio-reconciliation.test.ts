@@ -7,8 +7,8 @@ const catalog = {
     { id: "ham", code: "HAM", name: "Hanoi Alumni Mentoring", isActive: true }
   ],
   seasons: [
-    { id: "ueh11", code: "UEHM-S11", name: "S11", programId: "ueh", status: "closed" },
-    { id: "ueh12", code: "UEHM-S12", name: "S12", programId: "ueh", status: "running" }
+    { id: "ueh11", code: "UEHM-S11", name: "S11", programId: "ueh" },
+    { id: "ueh12", code: "UEHM-S12", name: "S12", programId: "ueh" }
   ],
   intakeBatches: []
 };
@@ -63,13 +63,13 @@ describe("portfolio KPI reconciliation", () => {
   });
 
   it("shows scoped HAM data when a linked season exists", () => {
-    const withHam = { ...catalog, seasons: [...catalog.seasons, { id: "ham6", code: "HAM-S6", name: "S6", programId: "ham", status: "active" }] };
+    const withHam = { ...catalog, seasons: [...catalog.seasons, { id: "ham6", code: "HAM-S6", name: "S6", programId: "ham" }] };
     const ham = reconcilePortfolioRows(withHam, { ...empty, matches: [{ season_id: "ham6", status: "active", mentor_person_id: "hm", mentee_person_id: "he" }] })[0];
     expect(ham).toMatchObject({ currentSeasonCode: "HAM-S6", mentors: 1, mentees: 1, activeMatches: 1 });
   });
 
   it("does not leak UEH rows into HAM", () => {
-    const withHam = { ...catalog, seasons: [...catalog.seasons, { id: "ham6", code: "HAM-S6", name: "S6", programId: "ham", status: "active" }] };
+    const withHam = { ...catalog, seasons: [...catalog.seasons, { id: "ham6", code: "HAM-S6", name: "S6", programId: "ham" }] };
     const rows = reconcilePortfolioRows(withHam, { ...empty, applications: [{ season_id: "ueh12", status: "submitted" }] });
     expect(rows.find((row) => row.programCode === "HAM")?.applications).toBe(0);
   });
@@ -85,7 +85,7 @@ describe("portfolio KPI reconciliation", () => {
     expect(rows.map((row) => [row.programCode, row.applications])).toEqual([["HAM", null], ["UEHM", 1]]);
   });
 
-  it("is independent of viewer/admin role and resolves running seasons deterministically", () => {
+  it("is independent of viewer/admin role and resolves the latest catalog season deterministically", () => {
     expect(resolveCurrentSeason([...catalog.seasons].reverse())?.code).toBe("UEHM-S12");
     expect(reconcilePortfolioRows(catalog, empty)).toEqual(reconcilePortfolioRows(catalog, empty));
   });

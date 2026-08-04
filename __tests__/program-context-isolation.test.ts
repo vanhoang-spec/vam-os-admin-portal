@@ -19,8 +19,8 @@ const catalog: ProgramContextCatalog = {
     { id: "program-old", code: "OLD", name: "Archived", isActive: false }
   ],
   seasons: [
-    { id: "season-ueh-12", code: "UEHM-S12", name: "UEH Season 12", programId: "program-ueh", status: "active" },
-    { id: "season-ham-6", code: "HAM-S6", name: "HAM Season 6", programId: "program-ham", status: "active" }
+    { id: "season-ueh-12", code: "UEHM-S12", name: "UEH Season 12", programId: "program-ueh" },
+    { id: "season-ham-6", code: "HAM-S6", name: "HAM Season 6", programId: "program-ham" }
   ],
   intakeBatches: [
     { id: "batch-ueh", code: "UEHM-S12-B1", name: "UEH B1", seasonId: "season-ueh-12", isActive: true },

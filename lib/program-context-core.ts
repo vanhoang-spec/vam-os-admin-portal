@@ -30,7 +30,6 @@ export type SeasonCatalogRow = {
   code: string;
   name: string;
   programId: string;
-  status?: string | null;
 };
 
 export type IntakeBatchCatalogRow = {
@@ -57,6 +56,7 @@ export type ProgramContextCatalog = {
   programs: ProgramCatalogRow[];
   seasons: SeasonCatalogRow[];
   intakeBatches: IntakeBatchCatalogRow[];
+  warnings?: string[];
 };
 
 export type ContextRequest = {

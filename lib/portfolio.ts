@@ -3,7 +3,7 @@ import "server-only";
 import { getAdminScopeContext } from "@/lib/program-scope";
 import { loadProgramContextCatalog, toProgramAccessPrincipal } from "@/lib/program-context";
 import { requireGlobalAdmin, type CanonicalProgramContext, type ProgramContextCatalog } from "@/lib/program-context-core";
-import { isActiveSeason, reconcilePortfolioRows, total, type CountValue, type PortfolioSeasonScope } from "@/lib/portfolio-core";
+import { reconcilePortfolioRows, total, type CountValue, type PortfolioSeasonScope } from "@/lib/portfolio-core";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 export type { ProgramPortfolioRow } from "@/lib/portfolio-core";
@@ -32,7 +32,7 @@ async function loadAggregateRows(catalog: ProgramContextCatalog, programId?: str
     filterSeason(client.from("events").select("season_id,status,starts_at")),
     filterSeason(client.from("action_items").select("season_id,status,action_type,due_date"))
   ]);
-  const warnings: string[] = [];
+  const warnings: string[] = [...(catalog.warnings ?? [])];
   function rowsOrNull(result: any, label: string) {
     if (result.error) {
       console.error(`[portfolio] ${label} aggregate failed`, { code: result.error.code, message: result.error.message });
@@ -52,7 +52,7 @@ async function loadAggregateRows(catalog: ProgramContextCatalog, programId?: str
     totals: {
       programs: programs.length,
       activePrograms: programs.filter((program) => program.isActive).length,
-      activeSeasons: catalog.seasons.filter((season) => (!programId || season.programId === programId) && isActiveSeason(season.status)).length,
+      activeSeasons: catalog.seasons.filter((season) => !programId || season.programId === programId).length,
       openApplications: total(programs, "applications"),
       activeMentors: total(programs, "mentors"),
       activeMentees: total(programs, "mentees"),

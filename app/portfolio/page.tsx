@@ -65,7 +65,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams?: R
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <KpiCard label="Tổng chương trình" value={metric(data.totals.programs)} />
           <KpiCard label="Chương trình đang hoạt động" value={metric(data.totals.activePrograms)} />
-          <KpiCard label="Season đang hoạt động" value={metric(data.totals.activeSeasons)} />
+          <KpiCard label="Season trong danh mục" value={metric(data.totals.activeSeasons)} />
           <KpiCard label="Ứng tuyển đang mở hoặc chờ xử lý" value={metric(data.totals.openApplications)} />
           <KpiCard label="Mentor đang hoạt động" value={metric(data.totals.activeMentors)} />
           <KpiCard label="Mentee đang hoạt động" value={metric(data.totals.activeMentees)} />

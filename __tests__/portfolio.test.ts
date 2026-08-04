@@ -16,8 +16,8 @@ const contextCatalog = {
     { id: "program-ham", code: "HAM", name: "Hanoi Alumni Mentoring", isActive: true }
   ],
   seasons: [
-    { id: "season-ueh", code: "UEHM-S12", name: "UEH S12", programId: "program-ueh", status: "active" },
-    { id: "season-ham", code: "HAM-S6", name: "HAM S6", programId: "program-ham", status: "active" }
+    { id: "season-ueh", code: "UEHM-S12", name: "UEH S12", programId: "program-ueh" },
+    { id: "season-ham", code: "HAM-S6", name: "HAM S6", programId: "program-ham" }
   ],
   intakeBatches: []
 };

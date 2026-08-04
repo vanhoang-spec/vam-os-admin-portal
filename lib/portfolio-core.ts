@@ -12,10 +12,9 @@ export type ProgramPortfolioRow = {
   health: "normal" | "attention" | "data_issue" | "unknown";
 };
 const lower = (value: unknown) => String(value ?? "").trim().toLowerCase();
-export const isActiveSeason = (value: unknown) => ["active", "open", "ongoing", "current", "running"].includes(lower(value));
 const ordinal = (code: string) => Number(code.match(/(?:^|-)S(\d+)(?:$|-)/i)?.[1] ?? -1);
 export function resolveCurrentSeason(seasons: SeasonCatalogRow[]) {
-  return [...seasons].sort((a, b) => Number(isActiveSeason(b.status)) - Number(isActiveSeason(a.status)) || ordinal(b.code) - ordinal(a.code) || b.code.localeCompare(a.code))[0] ?? null;
+  return [...seasons].sort((a, b) => ordinal(b.code) - ordinal(a.code) || b.code.localeCompare(a.code))[0] ?? null;
 }
 const count = (rows: any[] | null, predicate: (row: any) => boolean) => rows === null ? null : rows.filter(predicate).length;
 const isOpenApplication = (value: unknown) => !["approved", "rejected", "withdrawn", "cancelled", "declined", "profile_created"].includes(lower(value));

@@ -164,6 +164,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams?: 
       <div className="mb-6 flex flex-wrap gap-3"><Link href="/admin/users/import" className="min-h-11 rounded-md bg-vam-green px-4 py-2.5 font-medium text-white">Import CSV an toàn</Link></div>
       {usersResult.error ? <ErrorBox message={usersResult.error} /> : null}
       {auditResult.error ? <ErrorBox message={auditResult.error} /> : null}
+      {catalog.warnings?.length ? <ErrorBox message={catalog.warnings.join(" ")} /> : null}
       {contextError ? <ErrorBox message={contextError} /> : (
         <Card className="mb-6"><p className="text-sm text-slate-700">Program: <strong>{requestedProgram}</strong> · Season: <strong>{requestedSeason}</strong></p></Card>
       )}

@@ -74,7 +74,6 @@ export default async function ProgramWorkspacePage({
               columns={[
                 { key: "name", label: "Tên season" },
                 { key: "code", label: "Mã" },
-                { key: "status", label: "Trạng thái", render: (season) => season.status ?? "Chưa có dữ liệu" },
                 {
                   key: "open",
                   label: "Mở",

@@ -34,7 +34,7 @@ export async function loadProgramContextCatalog(): Promise<ProgramContextCatalog
 
   const [programsResult, seasonsResult, batchesResult] = await Promise.all([
     client.from("programs").select("id,code,name,is_active"),
-    client.from("seasons").select("id,code,name,program_id,status"),
+    client.from("seasons").select("id,code,name,program_id"),
     client.from("intake_batches").select("id,code,name,season_id,is_active")
   ]);
   const error = programsResult.error ?? seasonsResult.error;
@@ -52,27 +52,38 @@ export async function loadProgramContextCatalog(): Promise<ProgramContextCatalog
     });
   }
 
-  return {
-    programs: (programsResult.data ?? []).map((row: any) => ({
+  const warnings: string[] = [];
+  const programs = (programsResult.data ?? []).map((row: any) => ({
       id: text(row.id),
       code: text(row.code),
       name: text(row.name),
       isActive: row.is_active !== false
-    })),
-    seasons: (seasonsResult.data ?? []).map((row: any) => ({
+    })).filter((row: any) => row.id && row.code && row.name);
+  if (programs.length !== (programsResult.data ?? []).length) {
+    warnings.push("Một số program thiếu dữ liệu bắt buộc và đã bị loại khỏi bộ chọn.");
+  }
+  const programIds = new Set(programs.map((row: any) => row.id));
+  const seasons = (seasonsResult.data ?? []).map((row: any) => ({
       id: text(row.id),
       code: text(row.code),
       name: text(row.name),
-      programId: text(row.program_id),
-      status: row.status == null ? null : text(row.status)
-    })),
+      programId: text(row.program_id)
+    })).filter((row: any) => row.id && row.code && row.name && row.programId && programIds.has(row.programId));
+  if (seasons.length !== (seasonsResult.data ?? []).length) {
+    warnings.push("Một số season thiếu liên kết program hợp lệ và đã bị loại khỏi bộ chọn.");
+  }
+
+  return {
+    programs,
+    seasons,
     intakeBatches: (batchesResult.error ? [] : batchesResult.data ?? []).map((row: any) => ({
       id: text(row.id),
       code: text(row.code),
       name: text(row.name),
       seasonId: text(row.season_id),
       isActive: row.is_active !== false
-    }))
+    })),
+    warnings
   };
 }
 
