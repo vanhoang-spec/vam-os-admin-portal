@@ -82,6 +82,47 @@ function serviceClient() {
   return { client, error: null };
 }
 
+async function validateExplicitAdminScope(client: any, programValue: unknown, seasonValue: unknown): Promise<
+  | { ok: true; programId: string; seasonId: string }
+  | { ok: false; result: AdminUserMutationResult }
+> {
+  const programId = String(programValue ?? "").trim();
+  const seasonId = String(seasonValue ?? "").trim();
+  const reject = (failureClass: string, message: string) => ({
+    ok: false as const,
+    result: {
+      ok: false,
+      status: "rejected" as const,
+      failureClass,
+      failureStage: "pre_lookup" as const,
+      reconciliationRequired: false,
+      ownerAction: "none" as const,
+      message
+    }
+  });
+  if (!programId) return reject("missing_program", "Phải chọn chương trình hợp lệ. Không có thay đổi nào được thực hiện.");
+  if (!seasonId) return reject("missing_season", "Phải chọn season hợp lệ. Không có thay đổi nào được thực hiện.");
+
+  const { data: program, error: programError } = await client
+    .from("programs")
+    .select("id,is_active")
+    .eq("id", programId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (programError || !program?.id) return reject("invalid_program", "Chương trình không tồn tại hoặc không hoạt động. Không có thay đổi nào được thực hiện.");
+
+  const { data: season, error: seasonError } = await client
+    .from("seasons")
+    .select("id,program_id")
+    .eq("id", seasonId)
+    .maybeSingle();
+  if (seasonError || !season?.id) return reject("invalid_season", "Season không tồn tại. Không có thay đổi nào được thực hiện.");
+  if (String(season.program_id) !== String(program.id)) {
+    return reject("unrelated_program_season", "Season không thuộc chương trình đã chọn. Không có thay đổi nào được thực hiện.");
+  }
+  return { ok: true, programId: String(program.id), seasonId: String(season.id) };
+}
+
 function serviceRoleErrorMessage(scope: string, message: string) {
   const envStatus = getSupabaseServiceRoleEnvStatus();
   const keyState = envStatus.loaded ? "đã load" : "chưa load";
@@ -385,6 +426,8 @@ export async function createManagedAdminUser(input: {
 
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return { ok: false, message: "Email không hợp lệ." };
+  const validatedScope = await validateExplicitAdminScope(client, input.programId, input.seasonId);
+  if (!validatedScope.ok) return validatedScope.result;
 
   const requestedOperationId = String(input.operationId ?? "").trim();
   const operationId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedOperationId)
@@ -413,7 +456,7 @@ export async function createManagedAdminUser(input: {
     commitApplication: async (authUserId) => {
       const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
         p_actor_admin_user_id: actor.id, p_operation: "upsert", p_target_admin_user_id: null,
-        p_payload: { auth_user_id: authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: "invited", program_id: scopeText(input.programId,"VAM"), season_id: scopeText(input.seasonId,SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE), scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
+        p_payload: { auth_user_id: authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: "invited", program_id: validatedScope.programId, season_id: validatedScope.seasonId, scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
       });
       if (atomicError) { logSafe("application", "application_mutation_failed", atomicError.code); throw new Error("APPLICATION_MUTATION_FAILED"); }
     },
@@ -492,6 +535,9 @@ export async function updateManagedAdminUser(input: {
   const id = String(input.id ?? "").trim();
   if (!id) return { ok: false, message: "Thiếu admin user id." };
 
+  const validatedScope = await validateExplicitAdminScope(client, input.programId, input.seasonId);
+  if (!validatedScope.ok) return validatedScope.result;
+
   const nextRole = validRole(input.role);
   const nextStatus = validStatus(input.status);
   if (await wouldRemoveLastActiveSuperAdmin(client, id, nextRole, nextStatus)) {
@@ -500,7 +546,7 @@ export async function updateManagedAdminUser(input: {
 
   const before = await snapshotAdminUser(client, id);
   if (!before) return { ok: false, message: "Không tìm thấy admin user." };
-  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "update", p_target_admin_user_id: id, p_payload: { full_name: cleanText(input.fullName), role: nextRole, status: nextStatus, scope_id: String(input.scopeId??""), program_id: scopeText(input.programId,"VAM"), season_id: scopeText(input.seasonId,SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE), scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) } });
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "update", p_target_admin_user_id: id, p_payload: { full_name: cleanText(input.fullName), role: nextRole, status: nextStatus, scope_id: String(input.scopeId??""), program_id: validatedScope.programId, season_id: validatedScope.seasonId, scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) } });
   if (atomicError) return { ok: false, message: "Không thể cập nhật tài khoản và audit trong cùng giao dịch." };
   return { ok: true, message: "Đã cập nhật người dùng và phân quyền." };
   /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.
