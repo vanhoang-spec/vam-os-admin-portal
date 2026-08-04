@@ -939,11 +939,14 @@ describe("migration 059 PostgREST probe package", () => {
 
   it("refuses any endpoint that is not the expected staging project", () => {
     const s = script();
-    expect(s).toContain('const STAGING_REF = "ljfneyuvpxrmejpxsmpz"');
-    expect(s).toContain('const PRODUCTION_REF = "qkkroesfiazsejkzflcd"');
-    expect(s).toContain("u.hostname.includes(STAGING_REF)");
-    expect(s).toContain("!u.hostname.includes(PRODUCTION_REF)");
-    expect(s).toContain("endpoint_not_expected_staging_project");
+    expect(s).toContain('const EXPECTED_HOST = "ljfneyuvpxrmejpxsmpz.supabase.co"');
+    expect(s).toContain('const FORBIDDEN_HOST = "qkkroesfiazsejkzflcd.supabase.co"');
+    expect(s).toContain("u.hostname !== EXPECTED_HOST");
+    expect(s).toContain("u.hostname === FORBIDDEN_HOST");
+    expect(s).toContain("endpoint_host_not_expected_staging");
+    // substring host matching is the vulnerability that was removed
+    expect(s).not.toMatch(/hostname\.includes\(/);
+    expect(s).not.toMatch(/hostname\.(startsWith|endsWith)\(/);
   });
 
   it("redacts tokens, keys, uuids, emails and auth headers from all output", () => {
@@ -954,7 +957,7 @@ describe("migration 059 PostgREST probe package", () => {
     expect(s).toContain("[redacted-email]");
     expect(s).toMatch(/authorization\|apikey\|cookie\|set-cookie/i);
     // only these fields may leave the process — checked on code, not comments
-    const emitBody = (/const emit = \(pass, reason\) => \{([\s\S]*?)\n\};/.exec(s)?.[1] ?? "")
+    const emitBody = (/const emit = \(pass, reason\) => \{([\s\S]*?)\n\s*\};/.exec(s)?.[1] ?? "")
       .split("\n")
       .filter((l) => !/^\s*\/\//.test(l))
       .join("\n");

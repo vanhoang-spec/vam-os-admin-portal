@@ -18,17 +18,24 @@
 -- authenticated privilege and exactly SELECT/INSERT/UPDATE/DELETE for
 -- service_role with no TRUNCATE.
 --
--- Rendering-robustness note. Deparsed CHECK and USING expressions are
--- compared through their exact quoted-literal sets and structural catalog
--- columns rather than through raw pg_get_constraintdef / pg_policies.qual
--- string equality. That is a deliberate carry-over of the correction made in
--- __tests__/migration-062-verifier-catalog-rendering-fix.test.ts: raw
--- deparse strings vary with parenthesisation and cast rendering and produced
--- false-negative FAILs against a schema that already matched exactly. The
--- comparison strength is unchanged — a literal set is exact and immune to
--- formatting — and both tables' raw expressions are additionally emitted
--- verbatim under "evidence" for independent inspection. Constraint and index
--- inventories are exact set equalities, so nothing unexpected can hide.
+-- Policy USING expressions are compared IN FULL. security:policy_qual_exact:*
+-- puts the actual pg_policies.qual and a complete source-controlled expected
+-- expression through the identical normalisation and compares them with
+-- equality, so a policy carrying an extra permissive branch (OR true, an
+-- extra role test, an alternate condition) or missing its ownership predicate
+-- FAILs. Normalisation is limited to whitespace and one known-equivalent cast
+-- rendering; it never removes an operator, branch, predicate, function call,
+-- literal or column reference. The structural contract — name, permissive
+-- mode, roles, command, WITH CHECK, inventory — is asserted separately and in
+-- full, and both normalised expressions are emitted under "evidence".
+--
+-- Deparsed CHECK constraints are still compared through their exact
+-- quoted-literal sets plus structural catalog columns rather than raw
+-- pg_get_constraintdef equality, carrying over the correction recorded in
+-- __tests__/migration-062-verifier-catalog-rendering-fix.test.ts. A literal
+-- set is exact and immune to formatting, the raw definitions are emitted as
+-- evidence, and the per-table CHECK inventory is an exact set equality, so no
+-- unexpected constraint can hide.
 --
 -- This artifact runs only AFTER migration 059 has been applied. It reads the
 -- five new tables to prove they are empty, so against a database where they
@@ -47,7 +54,48 @@ SET LOCAL lock_timeout = '3s';
 
 with
 expected_ref(staging, production) as (values ('ljfneyuvpxrmejpxsmpz', 'qkkroesfiazsejkzflcd')),
-exposed_ref as (select nullif(btrim(coalesce(current_setting('app.settings.project_ref', true), '')), '') v),
+-- Identity is proven, never assumed — the same exhaustive, fail-closed truth
+-- table the pre-apply preflight uses. See that file's PROJECT IDENTITY header
+-- for the execution instructions; the owner supplies
+-- SET LOCAL vam059.attested_project_ref = 'ljfneyuvpxrmejpxsmpz';
+-- deliberately in this transaction where the platform setting is unavailable.
+-- This file never sets it.
+identity_class(platform, attested, verdict) as (values
+ ('absent','absent','FAIL'),
+ ('absent','expected_staging','PASS'),
+ ('absent','forbidden_production','FAIL'),
+ ('absent','other','FAIL'),
+ ('expected_staging','absent','PASS'),
+ ('expected_staging','expected_staging','PASS'),
+ ('expected_staging','forbidden_production','FAIL'),
+ ('expected_staging','other','FAIL'),
+ ('forbidden_production','absent','FAIL'),
+ ('forbidden_production','expected_staging','FAIL'),
+ ('forbidden_production','forbidden_production','FAIL'),
+ ('forbidden_production','other','FAIL'),
+ ('other','absent','FAIL'),
+ ('other','expected_staging','FAIL'),
+ ('other','forbidden_production','FAIL'),
+ ('other','other','FAIL')),
+platform_ref as (select nullif(btrim(coalesce(current_setting('app.settings.project_ref', true), '')), '') v),
+attested_ref as (select nullif(btrim(coalesce(current_setting('vam059.attested_project_ref', true), '')), '') v),
+identity as (
+  select
+    case when p.v is null then 'absent'
+         when p.v = r.staging then 'expected_staging'
+         when p.v = r.production then 'forbidden_production'
+         else 'other' end platform_class,
+    case when a.v is null then 'absent'
+         when a.v = r.staging then 'expected_staging'
+         when a.v = r.production then 'forbidden_production'
+         else 'other' end attested_class
+  from expected_ref r, platform_ref p, attested_ref a
+),
+identity_verdict as (
+  select i.platform_class, i.attested_class, c.verdict
+  from identity i
+  join identity_class c on c.platform = i.platform_class and c.attested = i.attested_class
+),
 
 -- ============================================================
 -- expected contracts (source-controlled)
@@ -187,6 +235,45 @@ expected_policy(t, n, cmd, roles, vals) as (values
  ('review_assignment_batches','review_assignment_batches_read','SELECT', array['public'],
   array['admin','core_team','super_admin'])),
 
+-- ------------------------------------------------------------
+-- Complete expected USING expressions, compared in full.
+-- ------------------------------------------------------------
+-- Each row below is a COMPLETE deparsed expression, never a fragment and
+-- never a pattern. The actual pg_policies.qual and the expected text are put
+-- through the identical normalisation (see norm_actual / norm_expected) and
+-- then compared with plain equality, so any extra branch, removed conjunct,
+-- changed column, changed role set, extra function call or altered operator
+-- fails: 'X OR true', 'true OR X', 'X OR <other branch>', 'X AND false' and
+-- an X with its ownership predicate dropped are all unequal to every variant.
+--
+-- Two rendering degrees of freedom cannot be collapsed by a normalisation
+-- that is forbidden to discard anything meaningful, so each is enumerated as
+-- a separate COMPLETE variant instead:
+--   paren  : ruleutils wraps operator expressions in parentheses but not a
+--            bare top-level function call; 'bare' and 'wrapped' cover both.
+--   cast   : admin_users.status renders as status = 'active'::text when the
+--            column is text, and (status)::text = 'active'::text when it is
+--            varchar. Both are enumerated; neither is pattern-matched.
+-- Enumerating complete alternatives is strictly stronger than loosening the
+-- comparison: no information is discarded from either side.
+expected_policy_qual(t, n, variant, q) as (values
+ ('application_reviews','application_reviews_read','bare_status_text',
+  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status = ''active''::text)) LIMIT 1)))'),
+ ('application_reviews','application_reviews_read','wrapped_status_text',
+  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status = ''active''::text)) LIMIT 1))))'),
+ ('application_reviews','application_reviews_read','bare_status_varchar',
+  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status::text = ''active''::text)) LIMIT 1)))'),
+ ('application_reviews','application_reviews_read','wrapped_status_varchar',
+  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]) OR (is_admin_role(ARRAY[''reviewer''::text]) AND (reviewer_admin_user_id = ( SELECT admin_users.id FROM admin_users WHERE ((admin_users.auth_user_id = auth.uid()) AND (admin_users.status::text = ''active''::text)) LIMIT 1))))'),
+ ('application_decisions','application_decisions_read','bare',
+  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text, ''reviewer''::text])'),
+ ('application_decisions','application_decisions_read','wrapped',
+  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text, ''reviewer''::text]))'),
+ ('review_assignment_batches','review_assignment_batches_read','bare',
+  'is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text])'),
+ ('review_assignment_batches','review_assignment_batches_read','wrapped',
+  '(is_admin_role(ARRAY[''admin''::text, ''super_admin''::text, ''core_team''::text]))')),
+
 pii_table(t) as (values ('applications'),('application_answers')),
 workflow_table(t) as (values ('application_reviews'),('application_decisions'),('review_assignment_batches')),
 
@@ -230,6 +317,33 @@ pol as (
   from pg_policies p
   where p.schemaname = 'public'
 ),
+-- ------------------------------------------------------------
+-- Deterministic, symmetric USING-expression normalisation.
+-- ------------------------------------------------------------
+-- Exactly two transformations, applied identically to the actual expression
+-- and to every expected variant:
+--   1. regexp_replace(x, '\(([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?)\)::', '\1::', 'g')
+--      unwraps parentheses that sit directly around a bare column reference
+--      immediately followed by a cast — the one known-equivalent cast
+--      rendering difference. It can only ever match "(ident)::" or
+--      "(qualifier.ident)::"; it cannot touch a function call, a literal, an
+--      operator, a boolean branch or a parenthesised sub-expression.
+--   2. whitespace runs collapse to one space, then btrim — line breaks only.
+-- Nothing else is removed or ignored. Boolean operators, additional
+-- branches, ownership predicates, function calls, literals, column
+-- references and comparison operators all survive normalisation intact and
+-- therefore participate in the equality comparison.
+norm_actual as (
+  select p.tablename t, p.policyname n,
+         btrim(regexp_replace(regexp_replace(coalesce(p.qual, ''), '\(([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?)\)::', '\1::', 'g'), '[[:space:]]+', ' ', 'g')) q
+  from pg_policies p
+  where p.schemaname = 'public'
+),
+norm_expected as (
+  select e.t, e.n, e.variant,
+         btrim(regexp_replace(regexp_replace(e.q, '\(([a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?)\)::', '\1::', 'g'), '[[:space:]]+', ' ', 'g')) q
+  from expected_policy_qual e
+),
 ueh as (
   select p.id program_id, p.is_active program_active,
          s.id season_id, s.program_id season_program_id,
@@ -255,11 +369,19 @@ assertions as (
  select 'env:transaction_read_only' assertion,
         case when current_setting('transaction_read_only') = 'on' then 'PASS' else 'FAIL' end status
  union all select 'env:project_ref_is_expected_staging',
-   case when (select v from exposed_ref) is null
-          or (select v from exposed_ref) = (select staging from expected_ref)
+   coalesce((select verdict from identity_verdict), 'FAIL')
+ union all select 'env:project_identity_present',
+   case when (select platform_class from identity) <> 'absent'
+          or (select attested_class from identity) <> 'absent'
         then 'PASS' else 'FAIL' end
  union all select 'env:project_ref_is_not_forbidden_production',
-   case when (select v from exposed_ref) is distinct from (select production from expected_ref)
+   case when (select platform_class from identity) <> 'forbidden_production'
+         and (select attested_class from identity) <> 'forbidden_production'
+        then 'PASS' else 'FAIL' end
+ union all select 'env:project_identity_sources_agree',
+   case when (select platform_class from identity) = 'absent'
+          or (select attested_class from identity) = 'absent'
+          or (select platform_class from identity) = (select attested_class from identity)
         then 'PASS' else 'FAIL' end
 
  -- ===== object inventory =====
@@ -436,6 +558,9 @@ assertions as (
    from pii_table
 
  -- ===== security: the three review workflow tables =====
+ -- Exact structural contract: name, permissive/restrictive mode, roles,
+ -- command, WITH CHECK and the literal set. Retained in full alongside the
+ -- complete-expression comparison below.
  union all select 'security:policy:' || e.n,
    case when (select count(*) from pol p where p.tablename = e.t and p.policyname = e.n) = 1
          and exists (
@@ -447,6 +572,17 @@ assertions as (
              and p.qual is not null
              and p.qual like '%is_admin_role%'
              and p.vals = (select array_agg(v order by v) from unnest(e.vals) v))
+        then 'PASS' else 'FAIL' end
+   from expected_policy e
+ -- Complete USING expression, compared in full after identical normalisation
+ -- of both sides. A policy carrying any additional permissive branch — an
+ -- 'OR true', an extra role test, an alternate condition — or missing its
+ -- ownership predicate cannot match any expected variant and FAILs here.
+ union all select 'security:policy_qual_exact:' || e.n,
+   case when exists (
+     select 1 from norm_actual a
+     join norm_expected x on x.t = a.t and x.n = a.n and x.q = a.q
+     where a.t = e.t and a.n = e.n)
         then 'PASS' else 'FAIL' end
    from expected_policy e
  union all select 'security:policy_inventory',
@@ -572,6 +708,20 @@ select jsonb_build_object(
   'transaction_read_only', current_setting('transaction_read_only'),
   'expected_staging_ref', (select staging from expected_ref),
   'forbidden_production_ref', (select production from expected_ref),
+  'project_identity', jsonb_build_object(
+    'platform_setting', 'app.settings.project_ref',
+    'platform_class', (select platform_class from identity),
+    'attestation_setting', 'vam059.attested_project_ref',
+    'attested_class', (select attested_class from identity),
+    'route', case
+      when (select platform_class from identity) <> 'absent'
+       and (select attested_class from identity) <> 'absent' then 'both'
+      when (select platform_class from identity) <> 'absent' then 'platform_setting'
+      when (select attested_class from identity) <> 'absent' then 'owner_attestation'
+      else 'none' end,
+    'verified', coalesce((select verdict from identity_verdict), 'FAIL') = 'PASS',
+    'attestation_set_by_this_file', false
+  ),
   'owner_must_verify_project_ref', true,
   'overall_status', case when bool_and(status = 'PASS') then 'PASS' else 'FAIL' end,
   'verified', bool_and(status = 'PASS'),
@@ -592,6 +742,13 @@ select jsonb_build_object(
                                                               'roles', to_jsonb(p.roles),
                                                               'using', p.qual, 'with_check', p.with_check))
         from pol p where p.tablename in (select t from expected_table)), '{}'::jsonb),
+    -- Both sides of the complete-expression comparison, post-normalisation,
+    -- so a FAIL can be diffed directly without re-deriving anything.
+    'policy_qual_actual_normalized', coalesce((
+      select jsonb_object_agg(a.n, a.q) from norm_actual a
+       where a.t in (select t from expected_table)), '{}'::jsonb),
+    'policy_qual_expected_normalized', coalesce((
+      select jsonb_object_agg(x.n || ':' || x.variant, x.q) from norm_expected x), '{}'::jsonb),
     'check_definitions', coalesce((
       select jsonb_object_agg(l.conname, l.def) from con_literals l
        where l.contype = 'c'

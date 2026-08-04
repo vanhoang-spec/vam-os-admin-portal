@@ -10,17 +10,56 @@
 --   expected staging project ref : ljfneyuvpxrmejpxsmpz
 --   forbidden production ref     : qkkroesfiazsejkzflcd
 --
--- PostgreSQL cannot read the Supabase project ref from inside the database.
--- Two independent controls cover that gap:
---   1. env:* below reads current_setting('app.settings.project_ref', true) and
---      FAILs closed the moment the exposed value is anything other than the
---      expected staging ref — including the forbidden production ref.
---   2. conflict:table_absent:applications is a hard structural discriminator.
---      Production physically HAS public.applications; staging does not. Run
---      against production this preflight therefore reports eligible=false
---      whether or not the ref is exposed. The owner must still confirm the
---      dashboard ref independently; owner_must_verify_project_ref is always
---      emitted as true for that reason.
+-- ============================================================
+-- PROJECT IDENTITY — FAIL CLOSED
+-- ============================================================
+-- Target identity must be PROVEN, never assumed. Identity is read from two
+-- independent, owner-controlled sources, each classified into exactly one of
+-- absent / expected_staging / forbidden_production / other:
+--
+--   platform  : current_setting('app.settings.project_ref', true)
+--   attested  : current_setting('vam059.attested_project_ref', true)
+--
+-- The verdict is looked up from the exhaustive 16-row identity_class truth
+-- table below. Only three combinations return PASS, and all three require at
+-- least one source to read exactly ljfneyuvpxrmejpxsmpz while the other is
+-- either absent or the same exact value. Everything else — no source at all,
+-- an empty string, the forbidden production ref, an unrelated ref, or two
+-- sources that disagree — returns FAIL, and eligible is bool_and over every
+-- assertion, so eligible becomes false.
+--
+-- The expected ref hard-coded in this file is the comparison target, not
+-- evidence of what is connected. It proves nothing on its own.
+--
+-- conflict:* and env:not_production_topology remain SECONDARY guards only.
+-- They are additional ANDed assertions; because eligibility is a conjunction,
+-- no structural observation can ever substitute for, or compensate for, a
+-- failed identity assertion. Object absence, database name and current_user
+-- are never treated as proof of staging identity.
+--
+-- ------------------------------------------------------------
+-- EXECUTION INSTRUCTIONS (owner-run, staging only)
+-- ------------------------------------------------------------
+--   1. Open the Supabase dashboard and VISUALLY CONFIRM the project ref in
+--      the browser URL reads exactly ljfneyuvpxrmejpxsmpz. If it reads
+--      qkkroesfiazsejkzflcd, or anything else, stop — do not run this file.
+--   2. Paste this file into the SQL editor of that confirmed project.
+--   3. Supabase's SQL editor does not expose app.settings.project_ref. Where
+--      it is absent, the owner must supply the transaction-local attestation
+--      deliberately, by typing exactly one additional statement immediately
+--      after the "SET LOCAL lock_timeout" line below:
+--
+--        SET LOCAL vam059.attested_project_ref = 'ljfneyuvpxrmejpxsmpz';
+--
+--      This file NEVER sets, defaults or fabricates that attestation. As
+--      committed it contains no attestation statement, so running it
+--      unmodified against a project that does not expose
+--      app.settings.project_ref reports eligible=false by design.
+--   4. Read project_identity in the output. It reports the class of each
+--      source and which route proved identity.
+--
+-- owner_must_verify_project_ref is always emitted as true: step 1 is a human
+-- control that no in-database assertion can replace.
 --
 -- Eligibility is deliberately NOT derived from the default-privilege
 -- evidence. Ambient Supabase default ACLs will normally grant new public
@@ -45,6 +84,27 @@ SET LOCAL lock_timeout = '3s';
 with
 -- ---------- expected contracts (source-controlled) ----------
 expected_ref(staging, production) as (values ('ljfneyuvpxrmejpxsmpz', 'qkkroesfiazsejkzflcd')),
+-- Exhaustive identity verdict table: 4 platform classes x 4 attested classes.
+-- Source-controlled data rather than nested conditionals, so every one of the
+-- sixteen combinations is stated explicitly and auditable. Exactly three
+-- return PASS; there is no default branch that could pass by omission.
+identity_class(platform, attested, verdict) as (values
+ ('absent','absent','FAIL'),
+ ('absent','expected_staging','PASS'),
+ ('absent','forbidden_production','FAIL'),
+ ('absent','other','FAIL'),
+ ('expected_staging','absent','PASS'),
+ ('expected_staging','expected_staging','PASS'),
+ ('expected_staging','forbidden_production','FAIL'),
+ ('expected_staging','other','FAIL'),
+ ('forbidden_production','absent','FAIL'),
+ ('forbidden_production','expected_staging','FAIL'),
+ ('forbidden_production','forbidden_production','FAIL'),
+ ('forbidden_production','other','FAIL'),
+ ('other','absent','FAIL'),
+ ('other','expected_staging','FAIL'),
+ ('other','forbidden_production','FAIL'),
+ ('other','other','FAIL')),
 target_table(t) as (values
  ('applications'),('application_answers'),('application_reviews'),
  ('application_decisions'),('review_assignment_batches')),
@@ -95,7 +155,28 @@ prerequisite_table(t) as (values
  ('people'),('programs'),('seasons'),('intake_batches'),('admin_users')),
 
 -- ---------- observed state ----------
-exposed_ref as (select nullif(btrim(coalesce(current_setting('app.settings.project_ref', true), '')), '') v),
+-- Both sources are read with the missing_ok form, so an unset GUC yields NULL
+-- rather than raising. An empty or whitespace-only value collapses to NULL and
+-- is therefore classified 'absent', which never passes.
+platform_ref as (select nullif(btrim(coalesce(current_setting('app.settings.project_ref', true), '')), '') v),
+attested_ref as (select nullif(btrim(coalesce(current_setting('vam059.attested_project_ref', true), '')), '') v),
+identity as (
+  select
+    case when p.v is null then 'absent'
+         when p.v = r.staging then 'expected_staging'
+         when p.v = r.production then 'forbidden_production'
+         else 'other' end platform_class,
+    case when a.v is null then 'absent'
+         when a.v = r.staging then 'expected_staging'
+         when a.v = r.production then 'forbidden_production'
+         else 'other' end attested_class
+  from expected_ref r, platform_ref p, attested_ref a
+),
+identity_verdict as (
+  select i.platform_class, i.attested_class, c.verdict
+  from identity i
+  join identity_class c on c.platform = i.platform_class and c.attested = i.attested_class
+),
 enum_actual as (
   select t.typname n,
          array(select e.enumlabel::text from pg_enum e where e.enumtypid = t.oid order by e.enumsortorder) v
@@ -118,16 +199,31 @@ assertions as (
  -- ===== environment and safety =====
  select 'env:transaction_read_only' assertion,
         case when current_setting('transaction_read_only') = 'on' then 'PASS' else 'FAIL' end status
- -- Fails closed: an exposed ref that is not the expected staging ref (which
- -- includes the forbidden production ref) is a FAIL, never a skip.
+ -- Identity verdict comes from the exhaustive identity_class truth table.
+ -- coalesce(..., 'FAIL') is the fail-closed default: if the lookup yields no
+ -- row for any reason, the assertion fails rather than disappearing.
  union all select 'env:project_ref_is_expected_staging',
-   case when (select v from exposed_ref) is null
-          or (select v from exposed_ref) = (select staging from expected_ref)
+   coalesce((select verdict from identity_verdict), 'FAIL')
+ -- At least one identity source must have been supplied at all. An absent or
+ -- empty app.settings.project_ref with no owner attestation fails here.
+ union all select 'env:project_identity_present',
+   case when (select platform_class from identity) <> 'absent'
+          or (select attested_class from identity) <> 'absent'
         then 'PASS' else 'FAIL' end
+ -- The forbidden production ref is rejected explicitly, from either source.
  union all select 'env:project_ref_is_not_forbidden_production',
-   case when (select v from exposed_ref) is distinct from (select production from expected_ref)
+   case when (select platform_class from identity) <> 'forbidden_production'
+         and (select attested_class from identity) <> 'forbidden_production'
         then 'PASS' else 'FAIL' end
- -- Structural production discriminator: production carries public.applications.
+ -- Two supplied sources may not disagree.
+ union all select 'env:project_identity_sources_agree',
+   case when (select platform_class from identity) = 'absent'
+          or (select attested_class from identity) = 'absent'
+          or (select platform_class from identity) = (select attested_class from identity)
+        then 'PASS' else 'FAIL' end
+ -- SECONDARY guard only. Production carries public.applications; staging does
+ -- not. This is one more ANDed assertion and can never substitute for, or
+ -- compensate for, a failed identity assertion above.
  union all select 'env:not_production_topology',
    case when to_regclass('public.applications') is null then 'PASS' else 'FAIL' end
 
@@ -362,7 +458,23 @@ select jsonb_build_object(
   'transaction_read_only', current_setting('transaction_read_only'),
   'expected_staging_ref', (select staging from expected_ref),
   'forbidden_production_ref', (select production from expected_ref),
-  'observed_project_ref_exposed', (select v is not null from exposed_ref),
+  -- Project identity is reported explicitly. Only the CLASS of each source is
+  -- emitted, never the raw supplied value, so an unexpected input is never
+  -- echoed back into the output.
+  'project_identity', jsonb_build_object(
+    'platform_setting', 'app.settings.project_ref',
+    'platform_class', (select platform_class from identity),
+    'attestation_setting', 'vam059.attested_project_ref',
+    'attested_class', (select attested_class from identity),
+    'route', case
+      when (select platform_class from identity) <> 'absent'
+       and (select attested_class from identity) <> 'absent' then 'both'
+      when (select platform_class from identity) <> 'absent' then 'platform_setting'
+      when (select attested_class from identity) <> 'absent' then 'owner_attestation'
+      else 'none' end,
+    'verified', coalesce((select verdict from identity_verdict), 'FAIL') = 'PASS',
+    'attestation_set_by_this_file', false
+  ),
   'owner_must_verify_project_ref', true,
   'migration_059_sha256', 'sha256 of supabase_migrations/059_staging_application_workflow_bootstrap.sql is bound offline by __tests__/migration-059-secure-application-bootstrap.test.ts',
   'overall_status', case when bool_and(status = 'PASS') then 'PASS' else 'FAIL' end,
