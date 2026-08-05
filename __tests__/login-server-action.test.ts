@@ -73,12 +73,12 @@ describe("Server-Side Login Flow", () => {
       const formData = new FormData();
       formData.set("email", "  USER@Example.COM  ");
       formData.set("password", "pass");
-      
+
       // Mock findAdminUserForAuthUser via mocking the service client to return a valid row
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: "user-id-1", email: "user@example.com", status: "active" }], error: null });
-      
+
       await loginAction({ error: null }, formData);
-      
+
       expect(mockAuthClient.auth.signInWithPassword).toHaveBeenCalledTimes(1);
       expect(mockAuthClient.auth.signInWithPassword).toHaveBeenCalledWith({
         email: "user@example.com",
@@ -90,14 +90,14 @@ describe("Server-Side Login Flow", () => {
       const formData = new FormData();
       formData.set("email", "user@example.com");
       formData.set("password", "wrong");
-      
+
       mockAuthClient.auth.signInWithPassword.mockResolvedValueOnce({
         data: { session: null, user: null },
         error: { status: 400, message: "Invalid login credentials" },
       });
-      
+
       const res = await loginAction({ error: null }, formData);
-      
+
       expect(res.error).toBe("Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra và thử lại.");
       expect(adminAuth.setAuthCookies).not.toHaveBeenCalled();
       expect(adminAuth.clearAuthCookies).toHaveBeenCalled();
@@ -109,11 +109,11 @@ describe("Server-Side Login Flow", () => {
       const formData = new FormData();
       formData.set("email", "user@example.com");
       formData.set("password", "pass");
-      
+
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: "user-id-1", email: "user@example.com", status: "active" }], error: null });
-      
+
       await loginAction({ error: null }, formData);
-      
+
       expect(adminAuth.setAuthCookies).toHaveBeenCalled();
       const { redirect } = await import("next/navigation");
       expect(redirect).toHaveBeenCalledTimes(1);
@@ -126,7 +126,7 @@ describe("Server-Side Login Flow", () => {
 
     it("primary UUID match does not invoke legacy linking", async () => {
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: "user-id-1", email: "user@example.com", status: "active" }], error: null });
-      
+
       const admin = await findAdminUserForAuthUser(user as any);
       expect(admin).not.toBeNull();
       // select was called, update was not (queryMock called exactly once)
@@ -136,7 +136,7 @@ describe("Server-Side Login Flow", () => {
     it("unique null legacy row is linked conditionally and succeeds", async () => {
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: null, email: "user@example.com", status: "active" }], error: null });
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1" }], error: null }); // update returning data
-      
+
       const admin = await findAdminUserForAuthUser(user as any);
       expect(admin).not.toBeNull();
       expect(queryMock).toHaveBeenCalledTimes(2);
@@ -145,16 +145,16 @@ describe("Server-Side Login Flow", () => {
     it("update database error signs out and does not redirect (in loginAction)", async () => {
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: null, email: "user@example.com", status: "active" }], error: null });
       queryMock.mockResolvedValueOnce({ data: null, error: { message: "DB Error" } }); // update fails
-      
+
       await expect(findAdminUserForAuthUser(user as any)).rejects.toThrow("DB Error");
-      
+
       const formData = new FormData();
       formData.set("email", "user@example.com");
       formData.set("password", "pass");
-      
+
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: null, email: "user@example.com", status: "active" }], error: null });
       queryMock.mockResolvedValueOnce({ data: null, error: { message: "DB Error" } }); // update fails again for loginAction test
-      
+
       const res = await loginAction({ error: null }, formData);
       expect(res.error).toBe("Tài khoản này chưa được cấp quyền truy cập VAM OS. Vui lòng liên hệ người phụ trách.");
       expect(mockAuthClient.auth.signOut).toHaveBeenCalled();
@@ -166,7 +166,7 @@ describe("Server-Side Login Flow", () => {
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: null, email: "user@example.com", status: "active" }], error: null });
       queryMock.mockResolvedValueOnce({ data: [], error: null }); // update returns 0 rows
       queryMock.mockResolvedValueOnce({ data: { auth_user_id: "user-id-1" }, error: null }); // re-read shows same UUID
-      
+
       const admin = await findAdminUserForAuthUser(user as any);
       expect(admin).not.toBeNull();
       expect(queryMock).toHaveBeenCalledTimes(3);
@@ -176,16 +176,16 @@ describe("Server-Side Login Flow", () => {
       queryMock.mockResolvedValueOnce({ data: [{ id: "admin-1", auth_user_id: null, email: "user@example.com", status: "active" }], error: null });
       queryMock.mockResolvedValueOnce({ data: [], error: null }); // update returns 0 rows
       queryMock.mockResolvedValueOnce({ data: { auth_user_id: "different-id" }, error: null }); // re-read shows different UUID
-      
+
       await expect(findAdminUserForAuthUser(user as any)).rejects.toThrow("identity link conflict");
     });
 
     it("ambiguous normalized-email match fails closed (not active)", async () => {
       queryMock.mockResolvedValueOnce({ data: [], error: null }); // lookup returns nothing because not active
-      
+
       const admin = await findAdminUserForAuthUser(user as any);
       expect(admin).toBeNull();
-      
+
       const formData = new FormData();
       formData.set("email", "user@example.com");
       formData.set("password", "pass");
