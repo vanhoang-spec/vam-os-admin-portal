@@ -26,7 +26,9 @@ export const ACCOUNTS = [
   { slug: "support", fullName: "UAT Active Support", adminRole: "support_team", status: "active", scopeRole: "operations" },
   { slug: "viewer", fullName: "UAT Active Viewer", adminRole: "viewer", status: "active", scopeRole: "read" },
   { slug: "nonadmin", fullName: "UAT Auth Non-admin", adminRole: null, status: null, scopeRole: null },
-  { slug: "status", fullName: "UAT Status Test", adminRole: "admin", status: "invited", scopeRole: "read" }
+  { slug: "invited", fullName: "UAT Invited Admin", adminRole: "admin", status: "invited", scopeRole: "read" },
+  { slug: "suspended", fullName: "UAT Suspended Admin", adminRole: "admin", status: "suspended", scopeRole: "read" },
+  { slug: "inactive", fullName: "UAT Inactive Admin", adminRole: "admin", status: "inactive", scopeRole: "read" }
 ];
 
 export const PERSON = {
@@ -91,7 +93,9 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     for (const id of createdItems.people) {
       const logCount = await countRows("person_season_membership_log", "person_id", id);
       if (logCount > 0) {
-        logger.log(`  [rollback-skip] person ${id} has log rows, leaving retained`);
+        logger.log(`  [rollback-skip] person ${id} has log rows, soft-retiring instead`);
+        const { error } = await db.from("people").update({ data_quality_flags: `vam_uat_fixture:${FIXTURE_TAG}:retained` }).eq("id", id);
+        if (error) { logger.error(`  [rollback-fail] failed to soft-retire person ${id}`); failedRollbacks++; }
       } else {
         const { error } = await db.from("people").delete().eq("id", id);
         if (error) { logger.error(`  [rollback-fail] failed to delete person ${id}`); failedRollbacks++; }
@@ -181,11 +185,14 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     const authUserId = authUser?.id ?? null;
 
     const { data: existingAdmin, error: adminReadError } = await db.from("admin_users").select("id,role,status,auth_user_id,notes").eq("email", address).maybeSingle();
-    if (adminReadError) throw new Error(`admin_users read failed`);
+    if (adminReadError) throw new Error(`admin_users read failed or ambiguity detected: ${adminReadError.message}`);
 
     if (existingAdmin?.id) {
       if (existingAdmin.role !== account.adminRole || existingAdmin.status !== account.status || existingAdmin.auth_user_id !== authUserId) {
         throw new Error(`admin_users row exists for ${address} but role/status/auth_user_id does not exact-match expected. Aborting to prevent silent overwrite.`);
+      }
+      if (!existingAdmin.notes?.includes(`VAM UAT fixture ${FIXTURE_TAG}`)) {
+        throw new Error(`admin_users row exists for ${address} but lacks correct UAT fixture marker in notes. Aborting.`);
       }
       skip(`admin_users row present`);
     } else if (applyMode) {
@@ -207,7 +214,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     if (!authUserId) return;
 
     const { data: existingScope, error: scopeReadError } = await db.from("admin_scope_access").select("id,role,status").eq("user_id", authUserId).eq("program_id", scope.programId).eq("season_id", scope.seasonId).maybeSingle();
-    if (scopeReadError) throw new Error(`admin_scope_access read failed`);
+    if (scopeReadError) throw new Error(`admin_scope_access read failed or ambiguity detected: ${scopeReadError.message}`);
 
     const scopeStatus = account.status === "active" ? "active" : "inactive";
     if (existingScope?.id) {
@@ -234,12 +241,15 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
   async function provisionPerson(scope) {
     logger.log(`\n${PERSON.full_name} <${PERSON.email_primary}>`);
 
-    const { data: existingPerson, error: personReadError } = await db.from("people").select("id,data_quality_flags").ilike("email_primary", PERSON.email_primary).maybeSingle();
-    if (personReadError) throw new Error(`people read failed`);
+    const { data: existingPerson, error: personReadError } = await db.from("people").select("id,data_quality_flags,full_name").ilike("email_primary", PERSON.email_primary).maybeSingle();
+    if (personReadError) throw new Error(`people read failed or ambiguity detected: ${personReadError.message}`);
 
     let personId = existingPerson?.id ? String(existingPerson.id) : null;
     if (personId) {
-      if (!existingPerson.data_quality_flags?.includes(FIXTURE_TAG)) {
+      if (existingPerson.full_name !== PERSON.full_name) {
+        throw new Error(`people row exists for ${PERSON.email_primary} but full_name mismatch. Aborting.`);
+      }
+      if (!existingPerson.data_quality_flags?.includes(`vam_uat_fixture:${FIXTURE_TAG}`)) {
         throw new Error(`people row exists for ${PERSON.email_primary} but lacks correct UAT fixture marker. Aborting.`);
       }
       skip(`people row present`);
@@ -261,7 +271,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     if (!personId) return;
 
     const { data: existingMembership, error: membershipReadError } = await db.from("person_season_memberships").select("id,status,role").eq("person_id", personId).eq("season_id", scope.seasonId).maybeSingle();
-    if (membershipReadError) throw new Error(`membership read failed`);
+    if (membershipReadError) throw new Error(`membership read failed or ambiguity detected: ${membershipReadError.message}`);
 
     if (existingMembership?.id) {
       if (existingMembership.role !== PERSON.membershipRole || existingMembership.status !== "active") {

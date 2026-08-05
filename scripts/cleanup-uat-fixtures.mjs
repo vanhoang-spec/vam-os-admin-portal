@@ -66,7 +66,7 @@ const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
-const SLUGS = ["admin", "reviewer", "support", "viewer", "nonadmin", "status"];
+const SLUGS = ["admin", "reviewer", "support", "viewer", "nonadmin", "invited", "suspended", "inactive"];
 const email = (slug) => `uat.${slug}+${FIXTURE_TAG}@example.com`;
 const PERSON_EMAIL = email("person");
 
@@ -96,11 +96,17 @@ async function countRows(table, column, value) {
 
 async function cleanupPerson() {
   console.log(`\nSynthetic person <${PERSON_EMAIL}>`);
-  const { data: person, error } = await db.from("people").select("id").ilike("email_primary", PERSON_EMAIL).maybeSingle();
+  const { data: person, error } = await db.from("people").select("id,data_quality_flags,full_name").ilike("email_primary", PERSON_EMAIL).maybeSingle();
   if (error) throw new Error(`people read failed: ${error.message}`);
   if (!person?.id) {
     console.log("  [absent] no people row");
     return;
+  }
+  if (!person.data_quality_flags?.includes(`vam_uat_fixture:${FIXTURE_TAG}`)) {
+    abort(`Safety check failed: people row ${person.id} lacks fixture marker. Aborting mutation.`);
+  }
+  if (person.full_name !== `VAM-UAT-${FIXTURE_TAG} Person`) {
+    abort(`Safety check failed: people row ${person.id} full_name mismatch. Aborting mutation.`);
   }
   const personId = String(person.id);
 
@@ -162,16 +168,27 @@ async function cleanupAccount(slug) {
   const address = email(slug);
   console.log(`\n<${address}>`);
 
+  const authUser = await findAuthUserByEmail(address);
+  if (authUser && authUser.user_metadata?.vam_uat_fixture !== FIXTURE_TAG) {
+    abort(`Safety check failed: auth.users row ${authUser.id} lacks fixture metadata. Aborting mutation.`);
+  }
+
   const { data: adminUser, error: adminError } = await db
     .from("admin_users")
-    .select("id,status,auth_user_id")
+    .select("id,status,auth_user_id,notes,role")
     .eq("email", address)
     .maybeSingle();
   if (adminError) throw new Error(`admin_users read failed: ${adminError.message}`);
 
-  let authUserId = adminUser?.auth_user_id ? String(adminUser.auth_user_id) : null;
+  let authUserId = authUser ? authUser.id : (adminUser?.auth_user_id ? String(adminUser.auth_user_id) : null);
 
   if (adminUser?.id) {
+    if (!adminUser.notes?.includes(`VAM UAT fixture ${FIXTURE_TAG}`)) {
+      abort(`Safety check failed: admin_users row ${adminUser.id} lacks fixture marker. Aborting mutation.`);
+    }
+    if (authUser && adminUser.auth_user_id && adminUser.auth_user_id !== authUser.id) {
+      abort(`Safety check failed: admin_users row ${adminUser.id} linkage mismatch with auth.users. Aborting mutation.`);
+    }
     const actorCount = await countRows("admin_audit_log", "actor_admin_user_id", adminUser.id);
     const targetCount = await countRows("admin_audit_log", "target_admin_user_id", adminUser.id);
     const auditCount = actorCount + targetCount;
@@ -198,9 +215,6 @@ async function cleanupAccount(slug) {
   } else {
     console.log("  [absent] no admin_users row");
   }
-
-  const authUser = await findAuthUserByEmail(address);
-  if (authUser) authUserId = authUser.id;
 
   if (authUserId) {
     const { data: scopes, error: scopeError } = await db.from("admin_scope_access").select("id").eq("user_id", authUserId);
