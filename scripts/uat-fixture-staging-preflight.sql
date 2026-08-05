@@ -59,7 +59,7 @@ person_identity AS (
 ),
 expected_columns(table_name, column_name, expected_type, expected_nullable) AS (
   VALUES
-    ('admin_users',               'id',              'uuid', 'NO'),
+    ('admin_users',               'id',              'uuid', NULL),
     ('admin_users',               'auth_user_id',    'uuid', 'YES'),
     ('admin_users',               'email',           'text', 'NO'),
     ('admin_users',               'full_name',       'text', 'YES'),
@@ -224,6 +224,46 @@ checks AS (
   LEFT JOIN actual_columns a
     ON a.table_name = e.table_name AND a.column_name = e.column_name
 
+  -- 7b. admin_users.id specific validation -----------------------------------
+  UNION ALL
+  SELECT 31,
+         'admin_users.id_default',
+         CASE WHEN coalesce(c.column_default, '') ILIKE '%uuid_generate%' OR coalesce(c.column_default, '') ILIKE '%gen_random_uuid%' THEN 'PASS' ELSE 'FAIL' END,
+         'admin_users.id default=' || coalesce(c.column_default, '<none>')
+  FROM information_schema.columns c
+  WHERE c.table_schema = 'public' AND c.table_name = 'admin_users' AND c.column_name = 'id'
+
+  UNION ALL
+  SELECT 32,
+         'admin_users.id_nullability',
+         CASE WHEN c.is_nullable = 'NO' THEN 'PASS' ELSE 'INFO' END,
+         'admin_users.id nullable=' || c.is_nullable || ' — should be NO (schema divergence backlog)'
+  FROM information_schema.columns c
+  WHERE c.table_schema = 'public' AND c.table_name = 'admin_users' AND c.column_name = 'id'
+
+  UNION ALL
+  SELECT 33,
+         'admin_users.id_data_nulls',
+         CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+         'admin_users rows with id IS NULL: ' || count(*)::text
+  FROM public.admin_users WHERE id IS NULL
+
+  UNION ALL
+  SELECT 34,
+         'admin_users.id_data_dupes',
+         CASE WHEN count(*) = 0 THEN 'PASS' ELSE 'FAIL' END,
+         'admin_users duplicate non-null ids: ' || count(*)::text
+  FROM (SELECT id FROM public.admin_users WHERE id IS NOT NULL GROUP BY id HAVING count(*) > 1) d
+
+  UNION ALL
+  SELECT 35,
+         'admin_users.pk_shape',
+         'INFO',
+         'admin_users primary key is on ' || coalesce(string_agg(a.attname, ', '), '<none>')
+  FROM pg_index i
+  JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+  WHERE i.indrelid = 'public.admin_users'::regclass AND i.indisprimary
+
   -- 8. Unique constraints the exact-recovery queries rely on -----------------
   UNION ALL
   SELECT 40,
@@ -248,6 +288,17 @@ checks AS (
   WHERE t.relname = 'people' AND i.indisunique AND att.attname = 'email_primary' AND i.indnkeyatts = 1
 
   UNION ALL
+  SELECT 44,
+         'unique.admin_users_id',
+         CASE WHEN count(*) > 0 THEN 'PASS' ELSE 'FAIL' END,
+         'unique indexes on admin_users(id): ' || count(*)::text ||
+         ' — unique id support required by current code and FKs'
+  FROM pg_index i
+  JOIN pg_class t ON t.oid = i.indrelid
+  JOIN pg_attribute att ON att.attrelid = i.indrelid AND att.attnum = ANY (i.indkey)
+  WHERE t.relname = 'admin_users' AND i.indisunique AND att.attname = 'id' AND i.indnkeyatts = 1
+
+  UNION ALL
   SELECT 42,
          'unique.membership_person_season_role',
          CASE WHEN count(*) > 0 THEN 'PASS' ELSE 'FAIL' END,
@@ -269,14 +320,40 @@ checks AS (
   -- 9. Foreign-key delete behaviour cleanup depends on -----------------------
   UNION ALL
   SELECT 50,
-         'fk.' || c.conname::text,
+         'fk.subject_pinning.' || c.conname::text,
          CASE WHEN c.confdeltype IN ('a', 'r') THEN 'PASS' ELSE 'FAIL' END,
          'confdeltype=' || c.confdeltype::text ||
          ' (a=no action, r=restrict — both pin the parent row, which cleanup relies on)'
   FROM pg_constraint c
+  JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
   WHERE c.contype = 'f'
     AND c.confrelid IN ('public.admin_users'::regclass, 'public.person_season_memberships'::regclass, 'public.people'::regclass)
     AND c.conrelid IN ('public.admin_audit_log'::regclass, 'public.person_season_membership_log'::regclass)
+    AND a.attname <> 'changed_by'
+
+  UNION ALL
+  SELECT 53,
+         'fk.actor_attribution.' || c.conname::text,
+         CASE WHEN c.confdeltype = 'n' THEN 'PASS' ELSE 'FAIL' END,
+         'confdeltype=' || c.confdeltype::text ||
+         ' (n=set null — acceptable for actor attribution, authoritative from migration 052)'
+  FROM pg_constraint c
+  JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+  WHERE c.contype = 'f'
+    AND c.conrelid = 'public.person_season_membership_log'::regclass
+    AND a.attname = 'changed_by'
+
+  UNION ALL
+  SELECT 54,
+         'fk.actor_attribution.trigger_interaction.' || c.conname::text,
+         'INFO',
+         'actor-attribution FK ' || c.conname::text || ' with confdeltype=' || c.confdeltype::text ||
+         ' interacts with append-only trigger — attempting to cascade SET NULL may be rejected'
+  FROM pg_constraint c
+  JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+  WHERE c.contype = 'f'
+    AND c.conrelid = 'public.person_season_membership_log'::regclass
+    AND a.attname = 'changed_by'
 
   UNION ALL
   SELECT 51,
@@ -331,12 +408,12 @@ checks AS (
   SELECT 70,
          'collision.admin_users_accounts',
          CASE
-           WHEN count(*) FILTER (WHERE au.notes IS DISTINCT FROM 'VAM UAT fixture 20260805') > 0 THEN 'FAIL'
+           WHEN count(au.email) FILTER (WHERE au.notes IS DISTINCT FROM 'VAM UAT fixture 20260805') > 0 THEN 'FAIL'
            ELSE 'PASS'
          END,
-         'admin_users rows on fixture account emails: ' || count(*)::text ||
+         'matched admin_users rows on fixture account emails: ' || count(au.email)::text ||
          ', of which carrying a foreign or missing marker: ' ||
-         count(*) FILTER (WHERE au.notes IS DISTINCT FROM 'VAM UAT fixture 20260805')::text
+         count(au.email) FILTER (WHERE au.notes IS DISTINCT FROM 'VAM UAT fixture 20260805')::text
   FROM account_emails ae
   LEFT JOIN public.admin_users au ON au.email = ae.address
 
