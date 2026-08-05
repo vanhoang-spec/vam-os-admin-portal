@@ -18,7 +18,7 @@ function SubmitButton() {
       disabled={pending}
       className="flex h-11 items-center justify-center gap-2 rounded-md bg-vam-green px-4 text-sm font-semibold text-white hover:bg-vam-ink disabled:cursor-not-allowed disabled:opacity-70"
     >
-      {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+      {pending && <Loader2 className="h-4 w-4 animate-spin" data-testid="login-spinner" />}
       {pending ? "Đang đăng nhập..." : "Đăng nhập"}
     </button>
   );
@@ -30,18 +30,29 @@ export function LoginForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
   const submitLock = React.useRef(false);
 
+  // `state` only changes when the server action RETURNED a value, i.e. it
+  // completed without redirecting. Releasing the lock here therefore happens
+  // exactly once per failed submission, and never on the success path (where
+  // `redirect()` means the action never resolves to a new state and the lock
+  // stays engaged through navigation).
   React.useEffect(() => {
     submitLock.current = false;
   }, [state]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); // Prevents Next.js native action polyfill from double-running
     if (submitLock.current) {
+      // A submission is already in flight. Cancelling the default here makes
+      // React's form-action plugin bail out before it can start a second
+      // server-action invocation (it skips the action when the submit event
+      // was already default-prevented).
+      e.preventDefault();
       return;
     }
+    // Acquire synchronously, then let React handle the submit natively. We
+    // deliberately do NOT preventDefault and do NOT call formAction() by hand:
+    // only the native path runs startHostTransition(), which is what makes
+    // useFormStatus() report `pending` to <SubmitButton />.
     submitLock.current = true;
-    const formData = new FormData(e.currentTarget);
-    formAction(formData);
   };
 
   const handleEmailBlur = () => {

@@ -69,6 +69,13 @@ export async function getCurrentSupabaseAuthUser(): Promise<User | null> {
  * Failure policy:
  *   - DB / config error  → THROW (caller must surface a 500;
  *                          no silent viewer fallback)
+ *   - ambiguous identity → THROW. More than one active row linked to
+ *                          the same auth user, or more than one
+ *                          unlinked row for the same normalized
+ *                          email, means the data is corrupt. We never
+ *                          pick one arbitrarily: the chosen row's
+ *                          `role` would decide the granted privilege.
+ *   - identity-link race lost → THROW (see the backfill block below)
  *   - row genuinely not found → return null (legitimate "not an
  *                               admin" — caller treats as denied)
  *   - row found → return it
@@ -95,12 +102,16 @@ export async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow
   if (user.email) filterParts.push(`email.eq.${user.email}`);
   const orFilter = filterParts.join(",");
 
+  // limit(3) rather than limit(2): with at most one legitimate linked row and
+  // at most one legitimate legacy row, a third row can only mean the data is
+  // corrupt. Reading one extra row is what makes that corruption *detectable*
+  // instead of being silently truncated away by the limit itself.
   const { data, error } = await client
     .from("admin_users")
     .select("id,auth_user_id,email,full_name,role,status")
     .eq("status", "active")
     .or(orFilter)
-    .limit(2);
+    .limit(3);
 
   if (error) {
     logAdminAuthError("admin_users lookup failed", error);
@@ -116,12 +127,44 @@ export async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow
     return null;
   }
 
-  // If auth_user_id-linked and email-only rows BOTH exist, always
-  // prefer the auth_user_id-linked one — it is the authoritative
-  // identity and avoids the historical "stale viewer row wins" bug.
-  const linked = rows.find((row) => row.auth_user_id === user.id) ?? null;
-  const emailMatch = rows.find((row) => !row.auth_user_id && row.email === user.email) ?? null;
-  const row = linked ?? emailMatch;
+  // Partition explicitly into the two identity classes. `find()` is
+  // deliberately NOT used here: taking the first element would silently pick an
+  // arbitrary row when the data is ambiguous, and that row's `role` is what
+  // determines the privilege level the session is granted.
+  //
+  // Database uniqueness invariant this relies on:
+  //   `admin_users.email` is NOT NULL UNIQUE (migration 017) and the live shape
+  //   keys the table on email, so at most one row can match a given normalized
+  //   email. `admin_users.auth_user_id` has only a NON-unique index, so the DB
+  //   does not by itself prevent two rows sharing one auth user.
+  // We do not trust either invariant at runtime. If the data ever violates them
+  // (corruption, a relaxed constraint, a partial migration, a bad backfill) we
+  // fail closed rather than authorize against an arbitrarily chosen row.
+  const linkedRows = rows.filter((row) => Boolean(row.auth_user_id) && row.auth_user_id === user.id);
+  const legacyRows = rows.filter(
+    (row) => !row.auth_user_id && Boolean(user.email) && row.email === user.email
+  );
+
+  if (linkedRows.length > 1) {
+    console.warn("[admin-auth] ambiguous identity: multiple active rows linked to one auth user", {
+      linkedRowsSeen: linkedRows.length
+    });
+    throw new Error("[admin-auth] ambiguous admin identity: multiple rows linked to this auth user");
+  }
+
+  // Only relevant when no linked row exists — if the authoritative linked row is
+  // present it wins outright and duplicate legacy rows are irrelevant.
+  if (linkedRows.length === 0 && legacyRows.length > 1) {
+    console.warn("[admin-auth] ambiguous identity: multiple unlinked rows for one normalized email", {
+      legacyRowsSeen: legacyRows.length
+    });
+    throw new Error("[admin-auth] ambiguous admin identity: multiple legacy rows for this email");
+  }
+
+  // If a linked row and a legacy row BOTH exist, always prefer the linked one —
+  // it is the authoritative identity and avoids the historical
+  // "stale viewer row wins" bug.
+  const row = linkedRows[0] ?? legacyRows[0] ?? null;
 
   if (!row) {
     console.warn("[admin-auth] admin_users rows present but none matched the auth user identity", {

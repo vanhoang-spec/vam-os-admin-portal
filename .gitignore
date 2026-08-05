@@ -82,3 +82,9 @@ scripts/reconcile_csv.js
 # Owner-supplied production metadata stays local; commit sanitized manifests only.
 docs/audits/inputs/VAM_OS_PRODUCTION_SCHEMA_INVENTORY_2026-07-22.json
 docs/audits/inputs/VAM_OS_PRODUCTION_BASELINE_GAPS_2026-07-22.json
+
+# Playwright browser-test artefacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
