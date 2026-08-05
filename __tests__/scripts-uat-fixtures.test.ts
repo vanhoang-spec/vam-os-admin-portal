@@ -1441,7 +1441,10 @@ describe("staging schema preflight SQL", () => {
     // The checks the REST dry-run provably cannot make.
     expect(withoutComments).toMatch(/admin_users\.status_vocabulary/);
     expect(withoutComments).toMatch(/data_quality_flags/);
-    expect(withoutComments).toMatch(/confdeltype/);
+    // Explicitly cast: pg_constraint.confdeltype is the internal "char" type and
+    // PostgreSQL 17 cannot resolve `unknown || "char"`. See
+    // __tests__/uat-preflight-catalog-casts.test.ts for the full guard.
+    expect(withoutComments).toMatch(/c\.confdeltype::text/);
     expect(withoutComments).toMatch(/indisunique/);
     expect(withoutComments).toContain("UEHM-S12");
     expect(withoutComments).toContain("UEHM-S12-B1");

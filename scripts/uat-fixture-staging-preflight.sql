@@ -121,7 +121,7 @@ checks AS (
   SELECT 10 AS sort_key,
          'environment.database' AS check_name,
          'INFO' AS status,
-         'current_database=' || current_database() ||
+         'current_database=' || current_database()::text ||
          ' — confirm out of band that this session targets VAM OS staging, not production' AS detail
 
   UNION ALL
@@ -269,9 +269,9 @@ checks AS (
   -- 9. Foreign-key delete behaviour cleanup depends on -----------------------
   UNION ALL
   SELECT 50,
-         'fk.' || c.conname,
+         'fk.' || c.conname::text,
          CASE WHEN c.confdeltype IN ('a', 'r') THEN 'PASS' ELSE 'FAIL' END,
-         'confdeltype=' || c.confdeltype ||
+         'confdeltype=' || c.confdeltype::text ||
          ' (a=no action, r=restrict — both pin the parent row, which cleanup relies on)'
   FROM pg_constraint c
   WHERE c.contype = 'f'
