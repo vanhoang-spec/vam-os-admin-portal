@@ -1,24 +1,32 @@
 #!/usr/bin/env node
 // VAM OS — UAT fixture provisioning for STAGING ONLY.
 //
-// Creates the six-account UAT matrix plus one synthetic person and membership.
-// Account definitions, ownership markers and the staging guard live in
-// ./uat-fixture-common.mjs and are shared with the teardown script.
+// Provisions the six stable Auth/admin accounts plus one per-run synthetic
+// person and membership. Identity, ownership markers and the staging guard live
+// in ./uat-fixture-common.mjs and are shared with the teardown script.
 //
-// Two invariants drive the design:
+// The six accounts are stable across runs and are reused, not accumulated. The
+// person and membership belong to exactly one VAM_UAT_RUN_ID, so a run whose
+// person gets log-pinned by lifecycle UAT never blocks the next run.
+//
+// Invariants:
 //
 //   * A row that already existed is never deleted, never overwritten and never
-//     re-marked. The only exception is a *retained* fixture admin row (status
+//     re-marked. The one exception is a *retained* fixture admin row (status
 //     inactive, auth_user_id null, exact marker) left behind by a previous
 //     teardown, which may be relinked to a freshly created Auth user. That
-//     relink is tracked and reverted on rollback.
-//   * A write is only considered successful once its returned identity has been
+//     relink is tracked and reverted on rollback, never deleted.
+//   * A write counts as successful only once its returned identity is
 //     validated. A success response with no id triggers an exact re-query so the
 //     row can still be compensated, and aborts the run either way.
+//   * An Auth user is deleted during rollback only when nothing still points at
+//     its UUID. Any admin row that could not be removed or unlinked, and any
+//     scope row that could not be deleted, retains its Auth user instead.
 //
 // Usage:
-//   node scripts/create-uat-fixtures.mjs            # dry run, no writes
-//   node scripts/create-uat-fixtures.mjs --apply    # perform writes
+//   VAM_UAT_RUN_ID=20260805-01 node scripts/create-uat-fixtures.mjs
+//   VAM_UAT_RUN_ID=20260805-01 node scripts/create-uat-fixtures.mjs --apply
+//   node scripts/create-uat-fixtures.mjs --run-id=20260805-01
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -26,14 +34,14 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import {
   ACCOUNTS,
-  ACTIVE_MARKER,
-  ADMIN_NOTES_MARKER,
-  FIXTURE_TAG,
-  PERSON,
-  RETAINED_MARKER,
+  ACCOUNT_NOTES_MARKER,
+  ACCOUNT_TAG,
+  LOOKUP_PASS_LINE,
+  PLAN_PASS_LINE,
   STAGING_HOSTNAME,
+  assertRunId,
   assertStagingHost,
-  classifyFixtureMarker,
+  classifyPersonRunMarker,
   countRows,
   email,
   findAuthUserByEmail,
@@ -41,24 +49,42 @@ import {
   isExactAuthFixtureMarker,
   loadEnvLocal,
   parseApplyMode,
+  personIdentityForRun,
   resolveFixtureScope,
+  resolveRunId,
+  schemaPreflightLine,
   scopeStatusFor
 } from "./uat-fixture-common.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export { ACCOUNTS, PERSON, email };
+export { ACCOUNTS, email };
 
-export async function runFixtures(db, applyMode, fixturePassword, logger = console) {
+export async function runFixtures(db, applyMode, fixturePassword, logger = console, options = {}) {
+  // Validated before anything touches the network.
+  const person = personIdentityForRun(options.runId);
+  const schemaPreflightVerified = options.schemaPreflightVerified === true;
+
   const actions = [];
   const createdItems = {
     authUsers: [],
     adminUsers: [],
+    relinkedAdmins: [],
     scopes: [],
     people: [],
-    memberships: [],
-    relinkedAdmins: []
+    memberships: []
   };
+
+  // Per-Auth-UUID rollback gate. An Auth user is only deletable while nothing
+  // that references its UUID has been left behind.
+  const authBlockers = new Map();
+  function blockAuthDeletion(authUserId, reason) {
+    if (!authUserId) return;
+    const key = String(authUserId);
+    const reasons = authBlockers.get(key) ?? [];
+    reasons.push(reason);
+    authBlockers.set(key, reasons);
+  }
 
   function record(kind, detail) {
     actions.push({ kind, detail });
@@ -70,11 +96,6 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
 
   // --- Write-response validation ------------------------------------------
 
-  /**
-   * Re-query a row by its exact unique fixture identity after an insert
-   * returned a success response with no id. Returns the recovered id, or null
-   * when the row provably does not exist. Throws when the answer is ambiguous.
-   */
   async function recoverInsertedId(label, table, filters) {
     let query = db.from(table).select("id");
     for (const [column, value] of filters) query = query.eq(column, value);
@@ -92,24 +113,19 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     );
   }
 
-  /**
-   * Insert and only treat the write as done once an id is confirmed. On a
-   * malformed success response the row is recovered by exact identity so
-   * rollback can still remove it, then the run aborts.
-   */
-  async function insertTracked(label, table, payload, recoveryFilters, tracker) {
+  async function insertTracked(label, table, payload, recoveryFilters, onTracked) {
     const { data, error } = await db.from(table).insert(payload).select("id").maybeSingle();
     if (error) throw new Error(`${label}: insert failed (${error.message}).`);
 
     const id = data?.id ? String(data.id) : null;
     if (id) {
-      tracker.push(id);
+      onTracked(id);
       return id;
     }
 
     const recovered = await recoverInsertedId(label, table, recoveryFilters);
     if (recovered) {
-      tracker.push(recovered);
+      onTracked(recovered);
       throw new Error(
         `${label}: write returned a malformed success response; recovered row ${recovered} by exact identity and queued it for compensation. Aborting.`
       );
@@ -124,7 +140,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
       email: address,
       password: fixturePassword,
       email_confirm: true,
-      user_metadata: { vam_uat_fixture: FIXTURE_TAG }
+      user_metadata: { vam_uat_fixture: ACCOUNT_TAG }
     });
     if (error) throw new Error(`auth.users ${address}: createUser failed (${error.message}).`);
 
@@ -161,7 +177,6 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     logger.log("\n[ROLLBACK] Initiating transaction-like compensation for this run...");
     let failedRollbacks = 0;
 
-    /** Resolve pin state, or report it as unresolved and keep the row. */
     async function pinCount(kind, id, table, column) {
       try {
         return await countRows(db, table, column, id);
@@ -194,7 +209,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
       if (logCount === null) continue;
       if (logCount > 0) {
         logger.log(`  [rollback-skip] person ${id} has log rows, soft-retiring instead`);
-        const { error } = await db.from("people").update({ data_quality_flags: RETAINED_MARKER }).eq("id", id);
+        const { error } = await db.from("people").update({ data_quality_flags: person.retainedMarker }).eq("id", id);
         if (error) { logger.error(`  [rollback-fail] failed to soft-retire person ${id}`); failedRollbacks += 1; }
         else logger.log(`  [rollback-ok] soft-retired person ${id}`);
       } else {
@@ -204,44 +219,99 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
       }
     }
 
-    for (const id of createdItems.scopes) {
-      const { error } = await db.from("admin_scope_access").delete().eq("id", id);
-      if (error) { logger.error(`  [rollback-fail] failed to delete scope ${id}`); failedRollbacks += 1; }
-      else logger.log(`  [rollback-ok] deleted scope ${id}`);
+    // admin_scope_access.user_id has no FK to auth.users, so a surviving scope
+    // row would become a dangling reference if its Auth user were deleted.
+    for (const scope of createdItems.scopes) {
+      const { error } = await db.from("admin_scope_access").delete().eq("id", scope.id);
+      if (error) {
+        logger.error(`  [rollback-fail] failed to delete scope ${scope.id}`);
+        blockAuthDeletion(scope.authUserId, `admin_scope_access ${scope.id} could not be deleted`);
+        failedRollbacks += 1;
+      } else {
+        logger.log(`  [rollback-ok] deleted scope ${scope.id}`);
+      }
     }
 
-    for (const id of createdItems.adminUsers) {
-      const actorCount = await pinCount("admin_users", id, "admin_audit_log", "actor_admin_user_id");
-      if (actorCount === null) continue;
-      const targetCount = await pinCount("admin_users", id, "admin_audit_log", "target_admin_user_id");
-      if (targetCount === null) continue;
+    for (const admin of createdItems.adminUsers) {
+      const actorCount = await pinCount("admin_users", admin.id, "admin_audit_log", "actor_admin_user_id");
+      if (actorCount === null) {
+        blockAuthDeletion(admin.authUserId, `admin_users ${admin.id} audit pin state unresolved`);
+        continue;
+      }
+      const targetCount = await pinCount("admin_users", admin.id, "admin_audit_log", "target_admin_user_id");
+      if (targetCount === null) {
+        blockAuthDeletion(admin.authUserId, `admin_users ${admin.id} audit pin state unresolved`);
+        continue;
+      }
 
       if (actorCount + targetCount > 0) {
-        logger.log(`  [rollback-skip] admin_users ${id} pinned by audit log, retiring and clearing auth link instead`);
-        const { error } = await db.from("admin_users").update({ status: "inactive", auth_user_id: null }).eq("id", id);
-        if (error) { logger.error(`  [rollback-fail] failed to retire admin_users ${id}`); failedRollbacks += 1; }
-        else logger.log(`  [rollback-ok] retired admin_users ${id} (auth link cleared)`);
+        logger.log(`  [rollback-skip] admin_users ${admin.id} pinned by audit log, retiring and clearing auth link instead`);
+        const { data, error } = await db
+          .from("admin_users")
+          .update({ status: "inactive", auth_user_id: null })
+          .eq("id", admin.id)
+          .select("id");
+        const affected = (data ?? []).length;
+        if (error || affected !== 1) {
+          logger.error(
+            `  [rollback-fail] failed to clear auth link on admin_users ${admin.id} (${error ? error.message : `${affected} row(s) affected`})`
+          );
+          blockAuthDeletion(admin.authUserId, `admin_users ${admin.id} still holds its auth_user_id`);
+          failedRollbacks += 1;
+        } else {
+          logger.log(`  [rollback-ok] retired admin_users ${admin.id} (auth link cleared)`);
+        }
       } else {
-        const { error } = await db.from("admin_users").delete().eq("id", id);
-        if (error) { logger.error(`  [rollback-fail] failed to delete admin_users ${id}`); failedRollbacks += 1; }
-        else logger.log(`  [rollback-ok] deleted admin_users ${id}`);
+        const { data, error } = await db.from("admin_users").delete().eq("id", admin.id).select("id");
+        const affected = (data ?? []).length;
+        if (error || affected !== 1) {
+          logger.error(
+            `  [rollback-fail] failed to delete admin_users ${admin.id} (${error ? error.message : `${affected} row(s) affected`})`
+          );
+          blockAuthDeletion(admin.authUserId, `admin_users ${admin.id} could not be deleted`);
+          failedRollbacks += 1;
+        } else {
+          logger.log(`  [rollback-ok] deleted admin_users ${admin.id}`);
+        }
       }
     }
 
     // Pre-existing retained rows are reverted, never deleted.
-    for (const id of createdItems.relinkedAdmins) {
-      const { error } = await db.from("admin_users").update({ status: "inactive", auth_user_id: null }).eq("id", id);
-      if (error) { logger.error(`  [rollback-fail] failed to revert relink of admin_users ${id}`); failedRollbacks += 1; }
-      else logger.log(`  [rollback-ok] reverted relink of pre-existing admin_users ${id}`);
+    for (const admin of createdItems.relinkedAdmins) {
+      const { data, error } = await db
+        .from("admin_users")
+        .update({ status: "inactive", auth_user_id: null })
+        .eq("id", admin.id)
+        .select("id");
+      const affected = (data ?? []).length;
+      if (error || affected !== 1) {
+        logger.error(
+          `  [rollback-fail] failed to revert relink of admin_users ${admin.id} (${error ? error.message : `${affected} row(s) affected`})`
+        );
+        blockAuthDeletion(admin.authUserId, `admin_users ${admin.id} still holds its relinked auth_user_id`);
+        failedRollbacks += 1;
+      } else {
+        logger.log(`  [rollback-ok] reverted relink of pre-existing admin_users ${admin.id}`);
+      }
     }
 
-    // Auth deletion runs last: every row referencing these UUIDs is gone or unlinked.
+    // Auth deletion runs last, and only for UUIDs nothing points at any more.
     for (const id of createdItems.authUsers) {
+      const reasons = authBlockers.get(String(id));
+      if (reasons?.length) {
+        logger.error(`  [keep] auth.users ${id} retained — ${reasons.join("; ")}`);
+        failedRollbacks += 1;
+        continue;
+      }
       const { error } = await db.auth.admin.deleteUser(id);
       if (error) { logger.error(`  [rollback-fail] failed to delete auth.users ${id}`); failedRollbacks += 1; }
       else logger.log(`  [rollback-ok] deleted auth.users ${id}`);
     }
 
+    const retained = createdItems.authUsers.filter((id) => authBlockers.get(String(id))?.length);
+    if (retained.length > 0) {
+      logger.error(`[ROLLBACK] Retained auth.users requiring manual review: ${retained.join(", ")}`);
+    }
     if (failedRollbacks > 0) {
       logger.error(`\n[ROLLBACK] Completed with ${failedRollbacks} failure(s).`);
     } else {
@@ -268,7 +338,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
         `admin_users ${rowId}: relink affected ${affected} row(s), expected exactly 1. The row was not in the expected retained state; aborting.`
       );
     }
-    createdItems.relinkedAdmins.push(String(rowId));
+    createdItems.relinkedAdmins.push({ id: String(rowId), authUserId: String(newAuthUserId) });
     record("admin_users", `relinked retained fixture row ${rowId} → status=${expectedStatus}`);
   }
 
@@ -280,7 +350,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     if (authUser) {
       if (!isExactAuthFixtureMarker(authUser.user_metadata?.vam_uat_fixture)) {
         throw new Error(
-          `auth.users ${address} exists but its user_metadata.vam_uat_fixture does not exactly equal the fixture tag. Aborting to prevent adoption.`
+          `auth.users ${address} exists but its user_metadata.vam_uat_fixture does not exactly equal the account tag. Aborting to prevent adoption.`
         );
       }
       skip(`auth.users row already present`);
@@ -306,7 +376,6 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     if (adminReadError) throw new Error(`admin_users read failed or ambiguity detected: ${adminReadError.message}`);
 
     if (existingAdmin?.id) {
-      // Ownership first: an unmarked row is never touched, relinked or adopted.
       if (!isExactAdminNotesMarker(existingAdmin.notes)) {
         throw new Error(
           `admin_users row exists for ${address} but notes does not exactly equal the fixture marker. Aborting to prevent adoption.`
@@ -346,10 +415,10 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
           full_name: account.fullName,
           role: account.adminRole,
           status: account.status,
-          notes: ADMIN_NOTES_MARKER
+          notes: ACCOUNT_NOTES_MARKER
         },
-        [["email", address], ["notes", ADMIN_NOTES_MARKER]],
-        createdItems.adminUsers
+        [["email", address], ["notes", ACCOUNT_NOTES_MARKER]],
+        (id) => createdItems.adminUsers.push({ id, authUserId })
       );
       record("admin_users", `created (role=${account.adminRole}, status=${account.status})`);
     } else {
@@ -392,7 +461,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
           ["season_id", scope.seasonId],
           ["role", account.scopeRole]
         ],
-        createdItems.scopes
+        (id) => createdItems.scopes.push({ id, authUserId })
       );
       record("admin_scope_access", `created (role=${account.scopeRole}, status=${scopeStatus})`);
     } else {
@@ -401,48 +470,48 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
   }
 
   async function provisionPerson(scope) {
-    logger.log(`\n${PERSON.full_name} <${PERSON.email_primary}>`);
+    logger.log(`\n${person.full_name} <${person.email_primary}>`);
 
     const { data: existingPerson, error: personReadError } = await db
       .from("people")
       .select("id,data_quality_flags,full_name")
-      .eq("email_primary", PERSON.email_primary)
+      .eq("email_primary", person.email_primary)
       .maybeSingle();
     if (personReadError) throw new Error(`people read failed or ambiguity detected: ${personReadError.message}`);
 
     let personId = existingPerson?.id ? String(existingPerson.id) : null;
     if (personId) {
-      const marker = classifyFixtureMarker(existingPerson.data_quality_flags);
+      const marker = classifyPersonRunMarker(existingPerson.data_quality_flags, person);
       if (marker === "none") {
         throw new Error(
-          `people row exists for ${PERSON.email_primary} but data_quality_flags does not exactly equal a fixture marker. Aborting to prevent adoption.`
+          `people row exists for ${person.email_primary} but data_quality_flags does not exactly equal a run ${person.runId} marker. Aborting to prevent adoption.`
         );
       }
-      if (existingPerson.full_name !== PERSON.full_name) {
-        throw new Error(`people row exists for ${PERSON.email_primary} but full_name does not exact-match. Aborting.`);
+      if (existingPerson.full_name !== person.full_name) {
+        throw new Error(`people row exists for ${person.email_primary} but full_name does not exact-match. Aborting.`);
       }
       if (marker === "retained") {
         throw new Error(
-          `people row ${personId} is a retained, log-pinned fixture person from a previous UAT cycle and cannot be re-provisioned without a lifecycle status transition. Bump FIXTURE_TAG to provision a fresh person. Aborting.`
+          `people row ${personId} is the retained, log-pinned person of UAT run ${person.runId}. That run has already completed its lifecycle and its identity cannot be reused. Start a new run with a fresh VAM_UAT_RUN_ID. Aborting.`
         );
       }
       skip(`people row present`);
     } else if (applyMode) {
       personId = await insertTracked(
-        `people ${PERSON.email_primary}`,
+        `people ${person.email_primary}`,
         "people",
         {
-          full_name: PERSON.full_name,
-          email_primary: PERSON.email_primary,
+          full_name: person.full_name,
+          email_primary: person.email_primary,
           source_sheets: "admin_manual_input",
-          data_quality_flags: ACTIVE_MARKER
+          data_quality_flags: person.activeMarker
         },
-        [["email_primary", PERSON.email_primary], ["data_quality_flags", ACTIVE_MARKER]],
-        createdItems.people
+        [["email_primary", person.email_primary], ["data_quality_flags", person.activeMarker]],
+        (id) => createdItems.people.push(id)
       );
       record("people", `created`);
     } else {
-      record("people", "insert synthetic UAT person");
+      record("people", `insert synthetic UAT person for run ${person.runId}`);
     }
 
     if (!personId) return;
@@ -456,7 +525,7 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     if (membershipReadError) throw new Error(`membership read failed or ambiguity detected: ${membershipReadError.message}`);
 
     if (existingMembership?.id) {
-      if (existingMembership.role !== PERSON.membershipRole || existingMembership.status !== PERSON.membershipStatus) {
+      if (existingMembership.role !== person.membershipRole || existingMembership.status !== person.membershipStatus) {
         throw new Error(
           `person_season_memberships exists for person ${personId} but role/status does not exact-match expected. Aborting to prevent silent overwrite.`
         );
@@ -471,21 +540,21 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
           program_id: scope.programId,
           season_id: scope.seasonId,
           intake_batch_id: scope.batchId,
-          role: PERSON.membershipRole,
-          status: PERSON.membershipStatus,
+          role: person.membershipRole,
+          status: person.membershipStatus,
           source: "manual",
-          notes: ADMIN_NOTES_MARKER
+          notes: ACCOUNT_NOTES_MARKER
         },
         [
           ["person_id", personId],
           ["season_id", scope.seasonId],
-          ["role", PERSON.membershipRole]
+          ["role", person.membershipRole]
         ],
-        createdItems.memberships
+        (id) => createdItems.memberships.push(id)
       );
       record("person_season_memberships", `created`);
     } else {
-      record("person_season_memberships", `insert role=${PERSON.membershipRole}`);
+      record("person_season_memberships", `insert role=${person.membershipRole}`);
     }
   }
 
@@ -499,6 +568,15 @@ export async function runFixtures(db, applyMode, fixturePassword, logger = conso
     await provisionPerson(scope);
 
     logger.log(`\n${applyMode ? "Applied" : "Planned"} ${actions.length} write(s).`);
+
+    if (!applyMode) {
+      // A REST dry-run proves the plan and the live lookups. It cannot prove
+      // live column types, constraints or FK delete behaviour, so it must never
+      // report schema compatibility on its own.
+      logger.log(`\n${PLAN_PASS_LINE}`);
+      logger.log(LOOKUP_PASS_LINE);
+      logger.log(schemaPreflightLine(schemaPreflightVerified));
+    }
   } catch (err) {
     logger.error(`\nFAILED: ${err.message}`);
     await rollback();
@@ -522,6 +600,14 @@ if (isMain) {
     process.exit(1);
   }
 
+  // Run id is validated before any client is constructed.
+  let runId;
+  try {
+    runId = assertRunId(resolveRunId(process.argv, process.env));
+  } catch (error) {
+    abort(error.message);
+  }
+
   if (!SUPABASE_URL) abort("NEXT_PUBLIC_SUPABASE_URL is not set.");
   try {
     assertStagingHost(SUPABASE_URL);
@@ -541,9 +627,13 @@ if (isMain) {
   });
 
   console.log(`VAM OS UAT fixtures — target staging host ${STAGING_HOSTNAME}`);
+  console.log(`Stable account tag ${ACCOUNT_TAG} — lifecycle run id ${runId}`);
   console.log(applyMode ? "MODE: APPLY (writes will be performed)" : "MODE: DRY RUN (no writes; pass --apply to execute)");
 
-  runFixtures(db, applyMode, FIXTURE_PASSWORD, console).catch(() => {
+  runFixtures(db, applyMode, FIXTURE_PASSWORD, console, {
+    runId,
+    schemaPreflightVerified: process.env.VAM_UAT_SCHEMA_PREFLIGHT === "verified"
+  }).catch(() => {
     process.exit(1);
   });
 }

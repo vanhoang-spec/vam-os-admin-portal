@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 // VAM OS — UAT fixture teardown for STAGING ONLY.
 //
+// Tears down the six stable Auth/admin accounts and the synthetic person and
+// membership of exactly ONE VAM_UAT_RUN_ID. Another run's person is a different
+// email in a different marker namespace value, so it is invisible here and is
+// never mutated.
+//
 // Cleanup is conditional, because the schema decides what is removable:
 //
 //   * person_season_membership_log is append-only (triggers
@@ -17,14 +22,14 @@
 // never attempts to bypass a trigger or drop a constraint, and it never deletes
 // or updates an audit/log row.
 //
-// Retiring an admin row also clears auth_user_id. Deleting the Auth user while
-// a retained row still pointed at its UUID left a dangling link that made the
-// next provisioning run unrecoverable, so the Auth user is only deleted once
-// the database side is confirmed safe.
+// Retiring an admin row also clears auth_user_id, and the Auth user is deleted
+// only once nothing points at its UUID any more — neither a retained admin row
+// nor a surviving scope row.
 //
 // Usage:
-//   node scripts/cleanup-uat-fixtures.mjs            # dry run, no writes
-//   node scripts/cleanup-uat-fixtures.mjs --apply    # perform teardown
+//   VAM_UAT_RUN_ID=20260805-01 node scripts/cleanup-uat-fixtures.mjs
+//   VAM_UAT_RUN_ID=20260805-01 node scripts/cleanup-uat-fixtures.mjs --apply
+//   node scripts/cleanup-uat-fixtures.mjs --run-id=20260805-01
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -32,12 +37,12 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import {
   ACCOUNTS,
+  ACCOUNT_TAG,
   FixtureOwnershipError,
-  PERSON,
-  RETAINED_MARKER,
   STAGING_HOSTNAME,
+  assertRunId,
   assertStagingHost,
-  classifyFixtureMarker,
+  classifyPersonRunMarker,
   countRows,
   email,
   findAuthUserByEmail,
@@ -45,12 +50,16 @@ import {
   isExactAuthFixtureMarker,
   loadEnvLocal,
   parseApplyMode,
-  resolveFixtureScope
+  personIdentityForRun,
+  resolveFixtureScope,
+  resolveRunId
 } from "./uat-fixture-common.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export async function runCleanup(db, applyMode, logger = console) {
+export async function runCleanup(db, applyMode, logger = console, options = {}) {
+  // Validated before anything touches the network.
+  const person = personIdentityForRun(options.runId);
   const failures = [];
 
   function act(verb, detail) {
@@ -64,8 +73,6 @@ export async function runCleanup(db, applyMode, logger = console) {
     failures.push(detail);
   }
 
-  // The fixture scope pins which membership and which scope row belong to this
-  // fixture. Without it nothing is deleted by a broad filter.
   let scope = null;
   try {
     scope = await resolveFixtureScope(db);
@@ -75,28 +82,28 @@ export async function runCleanup(db, applyMode, logger = console) {
   }
 
   async function cleanupPerson() {
-    logger.log(`\nSynthetic person <${PERSON.email_primary}>`);
+    logger.log(`\nSynthetic person for run ${person.runId} <${person.email_primary}>`);
 
-    const { data: person, error } = await db
+    const { data: row, error } = await db
       .from("people")
       .select("id,data_quality_flags,full_name")
-      .eq("email_primary", PERSON.email_primary)
+      .eq("email_primary", person.email_primary)
       .maybeSingle();
     if (error) throw new Error(`people read failed: ${error.message}`);
-    if (!person?.id) {
-      logger.log("  [absent] no people row");
+    if (!row?.id) {
+      logger.log("  [absent] no people row for this run");
       return;
     }
 
-    if (classifyFixtureMarker(person.data_quality_flags) === "none") {
+    if (classifyPersonRunMarker(row.data_quality_flags, person) === "none") {
       throw new FixtureOwnershipError(
-        `people row ${person.id} data_quality_flags does not exactly equal a fixture marker. Aborting mutation.`
+        `people row ${row.id} data_quality_flags does not exactly equal a run ${person.runId} marker. Aborting mutation.`
       );
     }
-    if (person.full_name !== PERSON.full_name) {
-      throw new FixtureOwnershipError(`people row ${person.id} full_name does not exact-match. Aborting mutation.`);
+    if (row.full_name !== person.full_name) {
+      throw new FixtureOwnershipError(`people row ${row.id} full_name does not exact-match. Aborting mutation.`);
     }
-    const personId = String(person.id);
+    const personId = String(row.id);
 
     if (!scope) {
       keep(`people row ${personId} and its memberships not evaluated — fixture scope unresolved`);
@@ -112,7 +119,7 @@ export async function runCleanup(db, applyMode, logger = console) {
     const owned = [];
     for (const membership of memberships ?? []) {
       const isFixtureMembership =
-        String(membership.season_id) === scope.seasonId && membership.role === PERSON.membershipRole;
+        String(membership.season_id) === scope.seasonId && membership.role === person.membershipRole;
       if (isFixtureMembership) owned.push(membership);
       else keep(`membership ${membership.id} (season=${membership.season_id}, role=${membership.role}) is not the fixture membership — left untouched`);
     }
@@ -149,19 +156,19 @@ export async function runCleanup(db, applyMode, logger = console) {
     const personLogCount = await countRows(db, "person_season_membership_log", "person_id", personId);
     if (personLogCount > 0 || pinned) {
       keep(`people row ${personId} retained — ${personLogCount} log row(s) reference it`);
-      if (person.data_quality_flags === RETAINED_MARKER) {
-        keep(`people row ${personId} already carries the retained marker`);
+      if (row.data_quality_flags === person.retainedMarker) {
+        keep(`people row ${personId} already carries the run ${person.runId} retained marker`);
       } else if (applyMode) {
         const { data, error: flagError } = await db
           .from("people")
-          .update({ data_quality_flags: RETAINED_MARKER })
+          .update({ data_quality_flags: person.retainedMarker })
           .eq("id", personId)
           .select("id");
         if (flagError) fail(`people row ${personId} retained-marker update failed: ${flagError.message}`);
         else if ((data ?? []).length !== 1) fail(`people row ${personId} retained-marker update affected ${(data ?? []).length} row(s), expected 1`);
-        else act("flag person", `${personId} → retained`);
+        else act("flag person", `${personId} → retained (run ${person.runId})`);
       } else {
-        act("flag person", `${personId} → retained`);
+        act("flag person", `${personId} → retained (run ${person.runId})`);
       }
       return;
     }
@@ -182,7 +189,7 @@ export async function runCleanup(db, applyMode, logger = console) {
     const authUser = await findAuthUserByEmail(db, address);
     if (authUser && !isExactAuthFixtureMarker(authUser.user_metadata?.vam_uat_fixture)) {
       throw new FixtureOwnershipError(
-        `auth.users ${authUser.id} for ${address} user_metadata.vam_uat_fixture does not exactly equal the fixture tag. Aborting mutation.`
+        `auth.users ${authUser.id} for ${address} user_metadata.vam_uat_fixture does not exactly equal the account tag. Aborting mutation.`
       );
     }
 
@@ -193,7 +200,7 @@ export async function runCleanup(db, applyMode, logger = console) {
       .maybeSingle();
     if (adminError) throw new Error(`admin_users read failed: ${adminError.message}`);
 
-    // Auth deletion is gated on the database side finishing cleanly.
+    // Auth deletion is gated on nothing still referencing this UUID.
     let authDeletable = true;
 
     if (adminUser?.id) {
@@ -241,10 +248,13 @@ export async function runCleanup(db, applyMode, logger = console) {
           act("retire admin_users", `${adminUser.id} → status=inactive, auth_user_id=null`);
         }
       } else if (applyMode) {
-        const { error } = await db.from("admin_users").delete().eq("id", adminUser.id);
-        if (error) {
+        const { data, error } = await db.from("admin_users").delete().eq("id", adminUser.id).select("id");
+        const affected = (data ?? []).length;
+        if (error || affected !== 1) {
           authDeletable = false;
-          fail(`admin_users ${adminUser.id} delete failed: ${error.message}; auth.users retained to avoid a dangling link`);
+          fail(
+            `admin_users ${adminUser.id} delete affected ${affected} row(s) (${error ? error.message : "no error"}); auth.users retained to avoid a dangling link`
+          );
         } else {
           act("delete admin_users", adminUser.id);
         }
@@ -332,7 +342,7 @@ export async function runCleanup(db, applyMode, logger = console) {
     await cleanupPerson();
   } catch (error) {
     if (error instanceof FixtureOwnershipError) throw error;
-    fail(`${PERSON.email_primary}: ${error.message}`);
+    fail(`${person.email_primary}: ${error.message}`);
   }
 
   for (const account of ACCOUNTS) {
@@ -370,6 +380,13 @@ if (isMain) {
     process.exit(1);
   }
 
+  let runId;
+  try {
+    runId = assertRunId(resolveRunId(process.argv, process.env));
+  } catch (error) {
+    abort(error.message);
+  }
+
   if (!SUPABASE_URL) abort("NEXT_PUBLIC_SUPABASE_URL is not set.");
   try {
     assertStagingHost(SUPABASE_URL);
@@ -386,9 +403,10 @@ if (isMain) {
   });
 
   console.log(`VAM OS UAT fixture teardown — target staging host ${STAGING_HOSTNAME}`);
+  console.log(`Stable account tag ${ACCOUNT_TAG} — lifecycle run id ${runId}`);
   console.log(applyMode ? "MODE: APPLY (writes will be performed)" : "MODE: DRY RUN (no writes; pass --apply to execute)");
 
-  runCleanup(db, applyMode, console).catch((error) => {
+  runCleanup(db, applyMode, console, { runId }).catch((error) => {
     console.error(`\nFAILED: ${error.message}`);
     process.exit(1);
   });

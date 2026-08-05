@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { execSync } from "child_process";
+import { readFileSync } from "fs";
 import { resolve } from "path";
 // @ts-ignore - .mjs fixture scripts are untyped by design
 import { runFixtures } from "../scripts/create-uat-fixtures.mjs";
@@ -10,24 +11,31 @@ import * as fixtureCommon from "../scripts/uat-fixture-common.mjs";
 
 const {
   ACCOUNTS,
-  ACTIVE_MARKER,
-  ADMIN_NOTES_MARKER,
-  FIXTURE_TAG,
-  PERSON,
-  RETAINED_MARKER,
+  ACCOUNT_NOTES_MARKER,
+  ACCOUNT_TAG,
   STAGING_HOSTNAME,
+  assertRunId,
   assertStagingHost,
-  classifyFixtureMarker,
+  classifyPersonRunMarker,
   email,
   isExactAdminNotesMarker,
-  parseApplyMode
+  parseApplyMode,
+  personIdentityForRun,
+  resolveRunId
 } = fixtureCommon as any;
 
 const createScript = resolve(__dirname, "../scripts/create-uat-fixtures.mjs");
+const preflightSqlPath = resolve(__dirname, "../scripts/uat-fixture-staging-preflight.sql");
+
+const RUN_A = "20260805-01";
+const RUN_B = "20260805-02";
+const PERSON_A = personIdentityForRun(RUN_A);
+const PERSON_B = personIdentityForRun(RUN_B);
 
 const PROGRAM_ID = "program-uuid-0001";
 const SEASON_ID = "season-uuid-0001";
 const BATCH_ID = "batch-uuid-0001";
+const PASSWORD = "pw-long-enough";
 
 // ---------------------------------------------------------------------------
 // In-memory PostgREST + GoTrue double.
@@ -35,6 +43,9 @@ const BATCH_ID = "batch-uuid-0001";
 // Query state is captured per builder so assertions can inspect the exact
 // filters, payloads and ids each stage used. Filters are genuinely applied, so
 // a script that widens a delete or drops a filter fails these tests.
+//
+//   world.fault(state)                  -> pre-empt a query with a fixed result
+//   world.mangle(state, result, world)   -> corrupt the response of a real write
 // ---------------------------------------------------------------------------
 
 type Filter = [op: string, column: string, value: any];
@@ -224,13 +235,13 @@ function createLogger() {
 }
 
 /** Seed the world as if a successful `--apply` run had already happened. */
-function seedProvisioned(world: any) {
+function seedProvisioned(world: any, person: any = PERSON_A) {
   const links: Record<string, string> = {};
   for (const account of ACCOUNTS) {
     const authUser = {
       id: `auth-seed-${account.slug}`,
       email: email(account.slug),
-      user_metadata: { vam_uat_fixture: FIXTURE_TAG }
+      user_metadata: { vam_uat_fixture: ACCOUNT_TAG }
     };
     world.authUsers.push(authUser);
     links[account.slug] = authUser.id;
@@ -243,7 +254,7 @@ function seedProvisioned(world: any) {
       full_name: account.fullName,
       role: account.adminRole,
       status: account.status,
-      notes: ADMIN_NOTES_MARKER
+      notes: ACCOUNT_NOTES_MARKER
     });
     world.tables.admin_scope_access.push({
       id: `scope-seed-${account.slug}`,
@@ -256,22 +267,22 @@ function seedProvisioned(world: any) {
   }
 
   world.tables.people.push({
-    id: "person-seed",
-    full_name: PERSON.full_name,
-    email_primary: PERSON.email_primary,
+    id: `person-seed-${person.runId}`,
+    full_name: person.full_name,
+    email_primary: person.email_primary,
     source_sheets: "admin_manual_input",
-    data_quality_flags: ACTIVE_MARKER
+    data_quality_flags: person.activeMarker
   });
   world.tables.person_season_memberships.push({
-    id: "membership-seed",
-    person_id: "person-seed",
+    id: `membership-seed-${person.runId}`,
+    person_id: `person-seed-${person.runId}`,
     program_id: PROGRAM_ID,
     season_id: SEASON_ID,
     intake_batch_id: BATCH_ID,
-    role: PERSON.membershipRole,
-    status: PERSON.membershipStatus,
+    role: person.membershipRole,
+    status: person.membershipStatus,
     source: "manual",
-    notes: ADMIN_NOTES_MARKER
+    notes: ACCOUNT_NOTES_MARKER
   });
   return links;
 }
@@ -291,6 +302,12 @@ function pinMembership(world: any, membershipId: string, personId: string) {
 
 const writesTo = (world: any, table: string, op?: string) =>
   world.writes.filter((w: any) => w.table === table && (!op || w.op === op));
+
+const authIdFor = (world: any, slug: string) =>
+  world.authOps.find((o: any) => o.op === "create" && o.email === email(slug))?.id;
+
+const deletedAuthIds = (world: any) =>
+  world.authOps.filter((o: any) => o.op === "delete").map((o: any) => o.id);
 
 // ---------------------------------------------------------------------------
 
@@ -327,21 +344,69 @@ describe("shared fixture identity model", () => {
     expect(ACCOUNTS.some((a: any) => a.adminRole === "super_admin")).toBe(false);
   });
 
-  it("accepts only the two canonical data_quality_flags markers", () => {
-    expect(classifyFixtureMarker(ACTIVE_MARKER)).toBe("active");
-    expect(classifyFixtureMarker(RETAINED_MARKER)).toBe("retained");
-    expect(classifyFixtureMarker(`prefix ${ACTIVE_MARKER}`)).toBe("none");
-    expect(classifyFixtureMarker(`${ACTIVE_MARKER} suffix`)).toBe("none");
-    expect(classifyFixtureMarker(`vam_uat_fixture:${FIXTURE_TAG}:other`)).toBe("none");
-    expect(classifyFixtureMarker(undefined)).toBe("none");
-    expect(classifyFixtureMarker(null)).toBe("none");
+  it("keeps stable account identity independent of the run id", () => {
+    // Account emails and markers must be identical whichever run is active.
+    expect(email("admin")).toBe(`uat.admin+${ACCOUNT_TAG}@example.com`);
+    expect(email("admin")).not.toContain(RUN_A);
+    expect(email("admin")).not.toContain(RUN_B);
+    expect(ACCOUNT_NOTES_MARKER).toBe(`VAM UAT fixture ${ACCOUNT_TAG}`);
+    expect(ACCOUNT_NOTES_MARKER).not.toContain(RUN_A);
+  });
+
+  it("derives per-run person identity in its own marker namespace", () => {
+    expect(PERSON_A.full_name).toBe(`VAM-UAT-${RUN_A} Person`);
+    expect(PERSON_A.email_primary).toBe(`uat.person+${RUN_A}@example.com`);
+    expect(PERSON_A.activeMarker).toBe(`vam_uat_person_run:${RUN_A}`);
+    expect(PERSON_A.retainedMarker).toBe(`vam_uat_person_run:${RUN_A}:retained`);
+    // Two namespaces, never interchangeable.
+    expect(PERSON_A.activeMarker.startsWith("vam_uat_person_run:")).toBe(true);
+    expect(ACCOUNT_NOTES_MARKER.startsWith("vam_uat_person_run:")).toBe(false);
+    expect(isExactAdminNotesMarker(PERSON_A.activeMarker)).toBe(false);
+  });
+
+  it("classifies a run marker only against its own run", () => {
+    expect(classifyPersonRunMarker(PERSON_A.activeMarker, PERSON_A)).toBe("active");
+    expect(classifyPersonRunMarker(PERSON_A.retainedMarker, PERSON_A)).toBe("retained");
+    // Run A's marker is invisible to run B and vice versa.
+    expect(classifyPersonRunMarker(PERSON_A.activeMarker, PERSON_B)).toBe("none");
+    expect(classifyPersonRunMarker(PERSON_B.retainedMarker, PERSON_A)).toBe("none");
+    expect(classifyPersonRunMarker(`${PERSON_A.activeMarker} extra`, PERSON_A)).toBe("none");
+    expect(classifyPersonRunMarker(undefined, PERSON_A)).toBe("none");
   });
 
   it("rejects free-text notes that merely mention the fixture marker", () => {
-    expect(isExactAdminNotesMarker(ADMIN_NOTES_MARKER)).toBe(true);
-    expect(isExactAdminNotesMarker(`Real admin — see VAM UAT fixture ${FIXTURE_TAG} ticket`)).toBe(false);
-    expect(isExactAdminNotesMarker(`${ADMIN_NOTES_MARKER} — retained`)).toBe(false);
+    expect(isExactAdminNotesMarker(ACCOUNT_NOTES_MARKER)).toBe(true);
+    expect(isExactAdminNotesMarker(`Real admin — see VAM UAT fixture ${ACCOUNT_TAG} ticket`)).toBe(false);
+    expect(isExactAdminNotesMarker(`${ACCOUNT_NOTES_MARKER} — retained`)).toBe(false);
     expect(isExactAdminNotesMarker(null)).toBe(false);
+  });
+
+  it("rejects missing, malformed and dangerous run ids", () => {
+    expect(assertRunId(RUN_A)).toBe(RUN_A);
+    expect(assertRunId("abc")).toBe("abc");
+    expect(() => assertRunId(undefined)).toThrow(/VAM_UAT_RUN_ID is not set/);
+    expect(() => assertRunId("")).toThrow(/is not set/);
+    expect(() => assertRunId("   ")).toThrow(/is not set/);
+    expect(() => assertRunId("ab")).toThrow(/between 3 and 32 characters/);
+    expect(() => assertRunId("a".repeat(33))).toThrow(/between 3 and 32 characters/);
+    expect(() => assertRunId(" 20260805-01")).toThrow(/whitespace/);
+    for (const bad of [
+      "2026%0805",
+      "2026_0805",
+      "run id",
+      "run/../id",
+      "run'id",
+      'run"id',
+      "run;drop",
+      "RUN-A",
+      "-leading",
+      "trailing-",
+      "double--hyphen",
+      "run.id",
+      "rün-id"
+    ]) {
+      expect(() => assertRunId(bad), `expected ${bad} to be rejected`).toThrow(/not in the accepted format/);
+    }
   });
 
   it("verifies the staging project by exact hostname, not substring", () => {
@@ -358,6 +423,12 @@ describe("shared fixture identity model", () => {
     expect(parseApplyMode(["node", "script", "--apply=true"])).toBe(false);
     expect(parseApplyMode(["node", "script"])).toBe(false);
   });
+
+  it("prefers an explicit --run-id flag over the environment", () => {
+    expect(resolveRunId([`--run-id=${RUN_B}`], { VAM_UAT_RUN_ID: RUN_A })).toBe(RUN_B);
+    expect(resolveRunId([], { VAM_UAT_RUN_ID: RUN_A })).toBe(RUN_A);
+    expect(resolveRunId([], {})).toBeUndefined();
+  });
 });
 
 describe("create-uat-fixtures — ownership verification", () => {
@@ -371,14 +442,23 @@ describe("create-uat-fixtures — ownership verification", () => {
     logger = createLogger();
   });
 
+  it("refuses to run without a valid run id, before any network call", async () => {
+    await expect(runFixtures(db, true, PASSWORD, logger, {})).rejects.toThrow(/VAM_UAT_RUN_ID is not set/);
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: "bad id" })).rejects.toThrow(
+      /not in the accepted format/
+    );
+    expect(world.queries).toHaveLength(0);
+    expect(world.authOps).toHaveLength(0);
+  });
+
   it("aborts when an existing Auth user lacks the exact metadata marker", async () => {
     world.authUsers.push({
       id: "auth-foreign",
       email: email("admin"),
       user_metadata: { vam_uat_fixture: "20260101" }
     });
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
-      /does not exactly equal the fixture tag/
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
+      /does not exactly equal the account tag/
     );
     expect(world.authOps.filter((o: any) => o.op === "create")).toHaveLength(0);
     expect(world.writes).toHaveLength(0);
@@ -386,8 +466,8 @@ describe("create-uat-fixtures — ownership verification", () => {
 
   it("aborts when an existing admin row carries only a substring marker", async () => {
     seedProvisioned(world);
-    world.tables.admin_users[0].notes = `Real admin — see VAM UAT fixture ${FIXTURE_TAG} ticket`;
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
+    world.tables.admin_users[0].notes = `Real admin — see VAM UAT fixture ${ACCOUNT_TAG} ticket`;
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
       /notes does not exactly equal the fixture marker/
     );
     expect(world.writes).toHaveLength(0);
@@ -396,14 +476,14 @@ describe("create-uat-fixtures — ownership verification", () => {
   it("aborts when an existing admin row has the wrong role", async () => {
     seedProvisioned(world);
     world.tables.admin_users[0].role = "viewer";
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(/expected admin/);
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/expected admin/);
     expect(world.writes).toHaveLength(0);
   });
 
   it("aborts when a scope row role does not exact-match", async () => {
     seedProvisioned(world);
     world.tables.admin_scope_access[0].role = "read";
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
       /admin_scope_access exists .* does not exact-match/
     );
   });
@@ -418,39 +498,29 @@ describe("create-uat-fixtures — ownership verification", () => {
       role: "read",
       status: "active"
     });
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
       /admin_scope_access read failed or ambiguity detected/
     );
   });
 
-  it("aborts when the person row marker is not exact", async () => {
+  it("aborts when the person row marker belongs to no run", async () => {
     seedProvisioned(world);
-    world.tables.people[0].data_quality_flags = `${ACTIVE_MARKER} plus notes`;
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
-      /does not exactly equal a fixture marker/
+    world.tables.people[0].data_quality_flags = `${PERSON_A.activeMarker} plus notes`;
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
+      /does not exactly equal a run 20260805-01 marker/
     );
-  });
-
-  it("aborts on a retained log-pinned person instead of transitioning its status", async () => {
-    seedProvisioned(world);
-    world.tables.people[0].data_quality_flags = RETAINED_MARKER;
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
-      /retained, log-pinned fixture person .* Bump FIXTURE_TAG/
-    );
-    expect(writesTo(world, "people")).toHaveLength(0);
-    expect(writesTo(world, "person_season_memberships")).toHaveLength(0);
   });
 
   it("aborts when an existing membership role/status does not exact-match", async () => {
     seedProvisioned(world);
     world.tables.person_season_memberships[0].status = "cancelled";
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
       /person_season_memberships exists .* does not exact-match/
     );
   });
 
-  it("provisions the full six-account matrix on a clean staging database", async () => {
-    await runFixtures(db, true, "pw-long-enough", logger);
+  it("provisions the six stable accounts plus one per-run person", async () => {
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A });
 
     expect(world.authUsers).toHaveLength(6);
     expect(world.tables.admin_users).toHaveLength(5);
@@ -461,13 +531,14 @@ describe("create-uat-fixtures — ownership verification", () => {
     const nonadminId = world.authUsers.find((u: any) => u.email === email("nonadmin")).id;
     expect(world.tables.admin_users.some((r: any) => r.email === email("nonadmin"))).toBe(false);
     expect(world.tables.admin_scope_access.some((r: any) => r.user_id === nonadminId)).toBe(false);
-    expect(world.tables.admin_users.every((r: any) => r.notes === ADMIN_NOTES_MARKER)).toBe(true);
+    expect(world.tables.admin_users.every((r: any) => r.notes === ACCOUNT_NOTES_MARKER)).toBe(true);
     expect(world.tables.admin_users.every((r: any) => ["active", "inactive"].includes(r.status))).toBe(true);
-    expect(world.tables.people[0].data_quality_flags).toBe(ACTIVE_MARKER);
+    expect(world.tables.people[0].data_quality_flags).toBe(PERSON_A.activeMarker);
+    expect(world.tables.people[0].email_primary).toBe(PERSON_A.email_primary);
   });
 });
 
-describe("create-uat-fixtures — retained row re-provisioning (HIGH-1)", () => {
+describe("create-uat-fixtures — retained row re-provisioning", () => {
   let world: any;
   let db: any;
   let logger: any;
@@ -486,20 +557,20 @@ describe("create-uat-fixtures — retained row re-provisioning (HIGH-1)", () => 
       full_name: "UAT Active Admin",
       role: "admin",
       status: "inactive",
-      notes: ADMIN_NOTES_MARKER,
+      notes: ACCOUNT_NOTES_MARKER,
       ...overrides
     });
   }
 
   it("relinks a retained fixture row to the newly created Auth user by exact id", async () => {
     seedRetainedAdminRow();
-    await runFixtures(db, true, "pw-long-enough", logger);
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A });
 
     const newAuthId = world.authUsers.find((u: any) => u.email === email("admin")).id;
     const row = world.tables.admin_users.find((r: any) => r.id === "admin-retained");
     expect(row.auth_user_id).toBe(newAuthId);
     expect(row.status).toBe("active");
-    expect(row.notes).toBe(ADMIN_NOTES_MARKER);
+    expect(row.notes).toBe(ACCOUNT_NOTES_MARKER);
 
     const relink = writesTo(world, "admin_users", "update")[0];
     expect(relink.ids).toEqual(["admin-retained"]);
@@ -507,13 +578,12 @@ describe("create-uat-fixtures — retained row re-provisioning (HIGH-1)", () => 
       ["eq", "id", "admin-retained"],
       ["is", "auth_user_id", null]
     ]);
-    // The retained row is reused, never duplicated.
     expect(world.tables.admin_users.filter((r: any) => r.email === email("admin"))).toHaveLength(1);
   });
 
   it("aborts instead of relinking when the row holds a different non-null auth UUID", async () => {
     seedRetainedAdminRow({ auth_user_id: "auth-someone-else" });
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
       /is not a retained fixture row/
     );
     const row = world.tables.admin_users.find((r: any) => r.id === "admin-retained");
@@ -523,7 +593,7 @@ describe("create-uat-fixtures — retained row re-provisioning (HIGH-1)", () => 
 
   it("refuses to relink a retained-looking row that lacks the exact marker", async () => {
     seedRetainedAdminRow({ notes: "left over from something else" });
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(
       /notes does not exactly equal the fixture marker/
     );
     expect(writesTo(world, "admin_users", "update")).toHaveLength(0);
@@ -534,18 +604,18 @@ describe("create-uat-fixtures — retained row re-provisioning (HIGH-1)", () => 
     world.fault = (state: QueryState) =>
       state.table === "people" && state.op === "insert" ? { data: null, error: { message: "people boom" } } : null;
 
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(/people boom/);
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
 
     const row = world.tables.admin_users.find((r: any) => r.id === "admin-retained");
     expect(row).toBeDefined();
     expect(row.auth_user_id).toBeNull();
     expect(row.status).toBe("inactive");
-    expect(row.notes).toBe(ADMIN_NOTES_MARKER);
+    expect(row.notes).toBe(ACCOUNT_NOTES_MARKER);
     expect(writesTo(world, "admin_users", "delete").flatMap((w: any) => w.ids)).not.toContain("admin-retained");
   });
 });
 
-describe("create-uat-fixtures — malformed success responses (HIGH-2)", () => {
+describe("create-uat-fixtures — malformed success responses", () => {
   let world: any;
   let db: any;
   let logger: any;
@@ -565,7 +635,7 @@ describe("create-uat-fixtures — malformed success responses (HIGH-2)", () => {
       return { data: null, error: null };
     };
 
-    const error = await runFixtures(db, true, "pw-long-enough", logger).catch((e: any) => e);
+    const error = await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A }).catch((e: any) => e);
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(TypeError);
     expect(error.message).toMatch(/recovered auth-orphan by exact email and fixture metadata/);
@@ -576,7 +646,7 @@ describe("create-uat-fixtures — malformed success responses (HIGH-2)", () => {
   it("reports an unresolved Auth write when the created user cannot be identified", async () => {
     world.authCreateResult = () => ({ data: null, error: null });
 
-    const error = await runFixtures(db, true, "pw-long-enough", logger).catch((e: any) => e);
+    const error = await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A }).catch((e: any) => e);
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(TypeError);
     expect(error.message).toMatch(/could not be identified. Possible unresolved Auth write/);
@@ -584,10 +654,10 @@ describe("create-uat-fixtures — malformed success responses (HIGH-2)", () => {
   });
 
   it("recovers an inserted admin row by exact email and marker, then rolls it back", async () => {
-    world.mangle = (state: QueryState, result: any) =>
+    world.mangle = (state: QueryState) =>
       state.table === "admin_users" && state.op === "insert" ? { data: null, error: null } : undefined;
 
-    const error = await runFixtures(db, true, "pw-long-enough", logger).catch((e: any) => e);
+    const error = await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A }).catch((e: any) => e);
     expect(error).not.toBeInstanceOf(TypeError);
     expect(error.message).toMatch(/recovered row admin_users-\d+ by exact identity/);
 
@@ -596,19 +666,27 @@ describe("create-uat-fixtures — malformed success responses (HIGH-2)", () => {
     );
     expect(recovery!.filters).toEqual([
       ["eq", "email", email("admin")],
-      ["eq", "notes", ADMIN_NOTES_MARKER]
+      ["eq", "notes", ACCOUNT_NOTES_MARKER]
     ]);
     expect(world.tables.admin_users).toHaveLength(0);
     expect(world.authUsers).toHaveLength(0);
   });
 
-  it("recovers an inserted person row by exact email and marker", async () => {
+  it("recovers an inserted person row by exact email and run marker", async () => {
     world.mangle = (state: QueryState) =>
       state.table === "people" && state.op === "insert" ? { data: null, error: null } : undefined;
 
-    const error = await runFixtures(db, true, "pw-long-enough", logger).catch((e: any) => e);
+    const error = await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A }).catch((e: any) => e);
     expect(error).not.toBeInstanceOf(TypeError);
     expect(error.message).toMatch(/recovered row people-\d+ by exact identity/);
+
+    const recovery = world.queries.find(
+      (q: QueryState) => q.table === "people" && q.op === "select" && !q.single && !q.head
+    );
+    expect(recovery!.filters).toEqual([
+      ["eq", "email_primary", PERSON_A.email_primary],
+      ["eq", "data_quality_flags", PERSON_A.activeMarker]
+    ]);
     expect(world.tables.people).toHaveLength(0);
   });
 
@@ -620,12 +698,138 @@ describe("create-uat-fixtures — malformed success responses (HIGH-2)", () => {
       return { data: null, error: null };
     };
 
-    const error = await runFixtures(db, true, "pw-long-enough", logger).catch((e: any) => e);
+    const error = await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A }).catch((e: any) => e);
     expect(error).not.toBeInstanceOf(TypeError);
     expect(error.message).toMatch(/matched 2 rows. Ambiguous, unresolved write state/);
-    // Provisioning stopped: no person or membership was attempted afterwards.
     expect(world.tables.people).toHaveLength(0);
     expect(world.tables.person_season_memberships).toHaveLength(0);
+  });
+});
+
+describe("create-uat-fixtures — per-Auth rollback gating", () => {
+  let world: any;
+  let db: any;
+  let logger: any;
+
+  beforeEach(() => {
+    world = createWorld();
+    db = createDb(world);
+    logger = createLogger();
+  });
+
+  /** Fail after every account exists, and pin every admin row via the audit log. */
+  function failAfterAccountsWithPinnedAdmins(extra: (state: QueryState) => any) {
+    world.fault = (state: QueryState) => {
+      if (state.table === "people" && state.op === "insert") {
+        return { data: null, error: { message: "people boom" } };
+      }
+      if (state.table === "admin_audit_log" && state.head) {
+        return { count: 1, error: null };
+      }
+      return extra(state);
+    };
+  }
+
+  it("retains an Auth user when its admin row clear-link update errors", async () => {
+    failAfterAccountsWithPinnedAdmins((state) =>
+      state.table === "admin_users" && state.op === "update"
+        ? { data: null, error: { message: "clear-link network error" } }
+        : null
+    );
+
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
+
+    const adminAuthId = authIdFor(world, "admin");
+    expect(deletedAuthIds(world)).not.toContain(adminAuthId);
+    expect(logger.all()).toMatch(new RegExp(`\\[keep\\] auth\\.users ${adminAuthId} retained`));
+    expect(logger.all()).toMatch(/still holds its auth_user_id/);
+  });
+
+  it("retains an Auth user when the clear-link update reports zero affected rows", async () => {
+    failAfterAccountsWithPinnedAdmins((state) =>
+      state.table === "admin_users" && state.op === "update" ? { data: [], error: null } : null
+    );
+
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
+
+    const adminAuthId = authIdFor(world, "admin");
+    expect(deletedAuthIds(world)).not.toContain(adminAuthId);
+    expect(logger.all()).toMatch(/0 row\(s\) affected/);
+  });
+
+  it("retains an Auth user when the clear-link update reports more than one affected row", async () => {
+    failAfterAccountsWithPinnedAdmins((state) =>
+      state.table === "admin_users" && state.op === "update"
+        ? { data: [{ id: "one" }, { id: "two" }], error: null }
+        : null
+    );
+
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
+
+    const adminAuthId = authIdFor(world, "admin");
+    expect(deletedAuthIds(world)).not.toContain(adminAuthId);
+    expect(logger.all()).toMatch(/2 row\(s\) affected/);
+  });
+
+  it("deletes unblocked Auth users while retaining blocked ones in the same rollback", async () => {
+    failAfterAccountsWithPinnedAdmins((state) =>
+      state.table === "admin_users" && state.op === "update" ? { data: [], error: null } : null
+    );
+
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
+
+    // nonadmin has no admin row, so nothing references its UUID: it is deleted.
+    const nonadminAuthId = authIdFor(world, "nonadmin");
+    expect(deletedAuthIds(world)).toEqual([nonadminAuthId]);
+
+    // Every account that owns a pinned admin row is retained.
+    for (const slug of ["admin", "reviewer", "support", "viewer", "inactive"]) {
+      expect(deletedAuthIds(world)).not.toContain(authIdFor(world, slug));
+    }
+  });
+
+  it("names every retained Auth UUID in the rollback summary and ends non-zero", async () => {
+    failAfterAccountsWithPinnedAdmins((state) =>
+      state.table === "admin_users" && state.op === "update" ? { data: [], error: null } : null
+    );
+
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
+
+    const retained = ["admin", "reviewer", "support", "viewer", "inactive"].map((s) => authIdFor(world, s));
+    const summary = logger.errors.find((line: string) => line.includes("Retained auth.users requiring manual review"));
+    expect(summary).toBeDefined();
+    for (const id of retained) expect(summary).toContain(id);
+    // A rejected run is what makes the CLI exit non-zero.
+    expect(logger.all()).toMatch(/\[ROLLBACK\] Completed with \d+ failure\(s\)/);
+  });
+
+  it("retains an Auth user when its scope row could not be deleted", async () => {
+    world.fault = (state: QueryState) => {
+      if (state.table === "people" && state.op === "insert") {
+        return { data: null, error: { message: "people boom" } };
+      }
+      if (state.table === "admin_scope_access" && state.op === "delete") {
+        return { data: null, error: { message: "scope delete blocked" } };
+      }
+      return null;
+    };
+
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
+
+    const adminAuthId = authIdFor(world, "admin");
+    expect(deletedAuthIds(world)).not.toContain(adminAuthId);
+    expect(logger.all()).toMatch(/admin_scope_access .* could not be deleted/);
+  });
+
+  it("deletes every Auth user when the whole rollback succeeds", async () => {
+    world.fault = (state: QueryState) =>
+      state.table === "people" && state.op === "insert" ? { data: null, error: { message: "people boom" } } : null;
+
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
+
+    expect(deletedAuthIds(world)).toHaveLength(6);
+    expect(world.authUsers).toHaveLength(0);
+    expect(logger.all()).not.toContain("Retained auth.users requiring manual review");
   });
 });
 
@@ -640,7 +844,7 @@ describe("create-uat-fixtures — rollback safety", () => {
     logger = createLogger();
   });
 
-  it("keeps the row and reports a failure when the pin count query errors (MEDIUM-1)", async () => {
+  it("keeps the row and reports a failure when the pin count query errors", async () => {
     world.fault = (state: QueryState) => {
       if (state.table === "person_season_memberships" && state.op === "insert") {
         return { data: null, error: { message: "membership boom" } };
@@ -651,15 +855,13 @@ describe("create-uat-fixtures — rollback safety", () => {
       return null;
     };
 
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(/membership boom/);
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/membership boom/);
 
-    // The person created this run must NOT be blind-deleted on an unresolved pin state.
     expect(writesTo(world, "people", "delete")).toHaveLength(0);
     expect(world.tables.people).toHaveLength(1);
     expect(logger.all()).toMatch(/pin state unresolved .* retaining row rather than deleting blind/);
-    // Independent objects still roll back, and the run still ends non-zero.
     expect(writesTo(world, "admin_scope_access", "delete").length).toBeGreaterThan(0);
-    expect(world.authOps.filter((o: any) => o.op === "delete")).toHaveLength(6);
+    expect(deletedAuthIds(world)).toHaveLength(6);
     expect(logger.all()).toMatch(/\[ROLLBACK\] Completed with \d+ failure\(s\)/);
   });
 
@@ -674,10 +876,11 @@ describe("create-uat-fixtures — rollback safety", () => {
       return null;
     };
 
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(/people boom/);
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/people boom/);
 
     expect(writesTo(world, "admin_scope_access", "delete").length).toBeGreaterThan(0);
-    expect(world.authOps.filter((o: any) => o.op === "delete")).toHaveLength(6);
+    // Admin rows survived, so their Auth users are retained; nonadmin's is not.
+    expect(deletedAuthIds(world)).toEqual([authIdFor(world, "nonadmin")]);
     expect(logger.all()).toMatch(/\[ROLLBACK\] Completed with \d+ failure\(s\)/);
   });
 
@@ -685,7 +888,7 @@ describe("create-uat-fixtures — rollback safety", () => {
     world.mangle = (state: QueryState) =>
       state.table === "person_season_memberships" && state.op === "insert" ? { data: null, error: null } : undefined;
 
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(/queued it for compensation/);
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/queued it for compensation/);
 
     const rollbackOrder = world.order.slice(world.order.indexOf("person_season_memberships:delete"));
     const stages = rollbackOrder.filter((entry: string) =>
@@ -705,10 +908,9 @@ describe("create-uat-fixtures — rollback safety", () => {
       state.table === "person_season_memberships" && state.op === "insert"
         ? { data: null, error: { message: "membership boom" } }
         : null;
-    // Force a fresh membership insert attempt against the pre-existing person.
     world.tables.person_season_memberships = [];
 
-    await expect(runFixtures(db, true, "pw-long-enough", logger)).rejects.toThrow(/membership boom/);
+    await expect(runFixtures(db, true, PASSWORD, logger, { runId: RUN_A })).rejects.toThrow(/membership boom/);
 
     expect(world.tables.admin_users).toHaveLength(5);
     expect(world.tables.admin_scope_access).toHaveLength(5);
@@ -716,7 +918,6 @@ describe("create-uat-fixtures — rollback safety", () => {
     expect(world.authUsers).toHaveLength(6);
     expect(world.authOps.filter((o: any) => o.op === "delete")).toHaveLength(0);
     expect(world.writes.filter((w: any) => w.op === "delete" || w.op === "update")).toHaveLength(0);
-    // Each pre-existing scope is still owned by its original Auth user.
     for (const account of ACCOUNTS.filter((a: any) => a.adminRole)) {
       const scope = world.tables.admin_scope_access.find((r: any) => r.id === `scope-seed-${account.slug}`);
       expect(scope.user_id).toBe(links[account.slug]);
@@ -725,13 +926,50 @@ describe("create-uat-fixtures — rollback safety", () => {
   });
 
   it("performs zero mutations in dry-run mode", async () => {
-    await runFixtures(db, false, "pw-long-enough", logger);
+    await runFixtures(db, false, PASSWORD, logger, { runId: RUN_A });
 
     expect(world.writes).toHaveLength(0);
     expect(world.authOps).toHaveLength(0);
     expect(world.authUsers).toHaveLength(0);
     expect(world.queries.every((q: QueryState) => q.op === "select")).toBe(true);
     expect(logger.all()).toMatch(/Planned \d+ write\(s\)/);
+  });
+});
+
+describe("create-uat-fixtures — dry-run schema reporting", () => {
+  let world: any;
+  let db: any;
+  let logger: any;
+
+  beforeEach(() => {
+    world = createWorld();
+    db = createDb(world);
+    logger = createLogger();
+  });
+
+  it("separates plan and lookup results from schema verification", async () => {
+    await runFixtures(db, false, PASSWORD, logger, { runId: RUN_A });
+
+    expect(logger.all()).toContain("SCRIPT PLAN PASS");
+    expect(logger.all()).toContain("LIVE DATA LOOKUP PASS");
+    expect(logger.all()).toContain("SCHEMA PREFLIGHT NOT VERIFIED");
+    expect(logger.all()).toContain("scripts/uat-fixture-staging-preflight.sql");
+    // A REST dry-run must never claim the live schema is compatible.
+    expect(logger.all()).not.toMatch(/SCHEMA PREFLIGHT PASS/);
+    expect(logger.all()).not.toMatch(/schema compatible/i);
+  });
+
+  it("reports schema preflight as operator-acknowledged only when explicitly confirmed", async () => {
+    await runFixtures(db, false, PASSWORD, logger, { runId: RUN_A, schemaPreflightVerified: true });
+
+    expect(logger.all()).toContain("SCHEMA PREFLIGHT ACKNOWLEDGED (operator-confirmed, out of band)");
+    expect(logger.all()).not.toContain("SCHEMA PREFLIGHT NOT VERIFIED");
+    expect(logger.all()).not.toMatch(/SCHEMA PREFLIGHT PASS/);
+  });
+
+  it("does not print schema wording at all in apply mode", async () => {
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A });
+    expect(logger.all()).not.toMatch(/SCHEMA PREFLIGHT/);
   });
 });
 
@@ -746,40 +984,53 @@ describe("cleanup-uat-fixtures — ownership verification", () => {
     logger = createLogger();
   });
 
+  it("refuses to run without a valid run id, before any network call", async () => {
+    await expect(runCleanup(db, true, logger, {})).rejects.toThrow(/VAM_UAT_RUN_ID is not set/);
+    await expect(runCleanup(db, true, logger, { runId: "Bad-ID" })).rejects.toThrow(/not in the accepted format/);
+    expect(world.queries).toHaveLength(0);
+    expect(world.authOps).toHaveLength(0);
+  });
+
   it("aborts when an Auth user lacks the exact fixture metadata marker", async () => {
     seedProvisioned(world);
     world.authUsers[0].user_metadata = { vam_uat_fixture: "20260101" };
-    await expect(runCleanup(db, true, logger)).rejects.toThrow(/does not exactly equal the fixture tag/);
+    await expect(runCleanup(db, true, logger, { runId: RUN_A })).rejects.toThrow(
+      /does not exactly equal the account tag/
+    );
     expect(world.authOps.filter((o: any) => o.op === "delete")).toHaveLength(0);
     expect(writesTo(world, "admin_users")).toHaveLength(0);
   });
 
   it("aborts when admin notes only mention the marker as free text", async () => {
     seedProvisioned(world);
-    world.tables.admin_users[0].notes = `Real admin — see VAM UAT fixture ${FIXTURE_TAG} ticket`;
-    await expect(runCleanup(db, true, logger)).rejects.toThrow(/notes does not exactly equal the fixture marker/);
+    world.tables.admin_users[0].notes = `Real admin — see VAM UAT fixture ${ACCOUNT_TAG} ticket`;
+    await expect(runCleanup(db, true, logger, { runId: RUN_A })).rejects.toThrow(
+      /notes does not exactly equal the fixture marker/
+    );
     expect(world.tables.admin_users).toHaveLength(5);
     expect(world.authOps.filter((o: any) => o.op === "delete")).toHaveLength(0);
   });
 
-  it("aborts when the person marker is not exact", async () => {
+  it("aborts when the person marker is not exact for this run", async () => {
     seedProvisioned(world);
-    world.tables.people[0].data_quality_flags = `${ACTIVE_MARKER} and more`;
-    await expect(runCleanup(db, true, logger)).rejects.toThrow(/does not exactly equal a fixture marker/);
+    world.tables.people[0].data_quality_flags = `${PERSON_A.activeMarker} and more`;
+    await expect(runCleanup(db, true, logger, { runId: RUN_A })).rejects.toThrow(
+      /does not exactly equal a run 20260805-01 marker/
+    );
     expect(world.tables.people).toHaveLength(1);
     expect(world.writes).toHaveLength(0);
   });
 
   it("performs zero mutations in dry-run mode", async () => {
     seedProvisioned(world);
-    await runCleanup(db, false, logger);
+    await runCleanup(db, false, logger, { runId: RUN_A });
     expect(world.writes).toHaveLength(0);
     expect(world.authOps).toHaveLength(0);
     expect(world.authUsers).toHaveLength(6);
   });
 });
 
-describe("cleanup-uat-fixtures — retained rows and Auth ordering (HIGH-1)", () => {
+describe("cleanup-uat-fixtures — retained rows and Auth ordering", () => {
   let world: any;
   let db: any;
   let logger: any;
@@ -794,13 +1045,13 @@ describe("cleanup-uat-fixtures — retained rows and Auth ordering (HIGH-1)", ()
     seedProvisioned(world);
     pinAdmin(world, "admin-seed-admin");
 
-    await runCleanup(db, true, logger);
+    await runCleanup(db, true, logger, { runId: RUN_A });
 
     const row = world.tables.admin_users.find((r: any) => r.id === "admin-seed-admin");
     expect(row).toBeDefined();
     expect(row.status).toBe("inactive");
     expect(row.auth_user_id).toBeNull();
-    expect(row.notes).toBe(ADMIN_NOTES_MARKER);
+    expect(row.notes).toBe(ACCOUNT_NOTES_MARKER);
 
     const retire = writesTo(world, "admin_users", "update")[0];
     expect(retire.payload).toEqual({ status: "inactive", auth_user_id: null });
@@ -821,20 +1072,20 @@ describe("cleanup-uat-fixtures — retained rows and Auth ordering (HIGH-1)", ()
         ? { data: null, error: { message: "update blocked" } }
         : null;
 
-    await expect(runCleanup(db, true, logger)).rejects.toThrow(/Teardown completed with 1 failure/);
+    await expect(runCleanup(db, true, logger, { runId: RUN_A })).rejects.toThrow(/Teardown completed with 1 failure/);
 
     expect(logger.all()).toMatch(/auth\.users retained to avoid a dangling link/);
     expect(world.authUsers.some((u: any) => u.email === email("admin"))).toBe(true);
-    expect(world.authOps.filter((o: any) => o.op === "delete" && o.id === "auth-seed-admin")).toHaveLength(0);
+    expect(deletedAuthIds(world)).not.toContain("auth-seed-admin");
   });
 
   it("leaves a re-provisionable retained row that create can relink", async () => {
     seedProvisioned(world);
     pinAdmin(world, "admin-seed-admin");
-    await runCleanup(db, true, logger);
+    await runCleanup(db, true, logger, { runId: RUN_A });
 
     const secondLogger = createLogger();
-    await runFixtures(db, true, "pw-long-enough", secondLogger);
+    await runFixtures(db, true, PASSWORD, secondLogger, { runId: RUN_B });
 
     const row = world.tables.admin_users.find((r: any) => r.id === "admin-seed-admin");
     const newAuth = world.authUsers.find((u: any) => u.email === email("admin"));
@@ -843,25 +1094,25 @@ describe("cleanup-uat-fixtures — retained rows and Auth ordering (HIGH-1)", ()
     expect(world.tables.admin_users.filter((r: any) => r.email === email("admin"))).toHaveLength(1);
   });
 
-  it("applies the retained marker to a log-pinned person and cancels its membership", async () => {
+  it("applies the run's retained marker to a log-pinned person and cancels its membership", async () => {
     seedProvisioned(world);
-    pinMembership(world, "membership-seed", "person-seed");
+    pinMembership(world, `membership-seed-${RUN_A}`, `person-seed-${RUN_A}`);
 
-    await runCleanup(db, true, logger);
+    await runCleanup(db, true, logger, { runId: RUN_A });
 
-    const person = world.tables.people.find((r: any) => r.id === "person-seed");
-    expect(person.data_quality_flags).toBe(RETAINED_MARKER);
-    const membership = world.tables.person_season_memberships.find((r: any) => r.id === "membership-seed");
+    const person = world.tables.people.find((r: any) => r.id === `person-seed-${RUN_A}`);
+    expect(person.data_quality_flags).toBe(PERSON_A.retainedMarker);
+    const membership = world.tables.person_season_memberships.find((r: any) => r.id === `membership-seed-${RUN_A}`);
     expect(membership.status).toBe("cancelled");
-    expect(membership.notes).toBe(ADMIN_NOTES_MARKER);
+    expect(membership.notes).toBe(ACCOUNT_NOTES_MARKER);
   });
 
   it("never deletes or updates append-only audit or log rows", async () => {
     seedProvisioned(world);
     pinAdmin(world, "admin-seed-admin");
-    pinMembership(world, "membership-seed", "person-seed");
+    pinMembership(world, `membership-seed-${RUN_A}`, `person-seed-${RUN_A}`);
 
-    await runCleanup(db, true, logger);
+    await runCleanup(db, true, logger, { runId: RUN_A });
 
     const immutable = world.writes.filter((w: any) =>
       ["admin_audit_log", "person_season_membership_log"].includes(w.table)
@@ -872,7 +1123,7 @@ describe("cleanup-uat-fixtures — retained rows and Auth ordering (HIGH-1)", ()
   });
 });
 
-describe("cleanup-uat-fixtures — exact scope deletion (MEDIUM-2)", () => {
+describe("cleanup-uat-fixtures — exact scope deletion", () => {
   let world: any;
   let db: any;
   let logger: any;
@@ -894,7 +1145,7 @@ describe("cleanup-uat-fixtures — exact scope deletion (MEDIUM-2)", () => {
       status: "active"
     });
 
-    await runCleanup(db, true, logger);
+    await runCleanup(db, true, logger, { runId: RUN_A });
 
     expect(world.tables.admin_scope_access.map((r: any) => r.id)).toEqual(["scope-unrelated"]);
     const scopeDeletes = writesTo(world, "admin_scope_access", "delete");
@@ -904,8 +1155,6 @@ describe("cleanup-uat-fixtures — exact scope deletion (MEDIUM-2)", () => {
     }
     expect(scopeDeletes.flatMap((w: any) => w.ids)).not.toContain("scope-unrelated");
     expect(logger.all()).toMatch(/unexpected admin_scope_access scope-unrelated .* left untouched/);
-    // The surviving scope row still references this Auth UUID, so the Auth user
-    // must be retained rather than left dangling.
     expect(world.authUsers.some((u: any) => u.email === email("admin"))).toBe(true);
     expect(logger.all()).toMatch(/auth\.users auth-seed-admin retained/);
   });
@@ -921,7 +1170,7 @@ describe("cleanup-uat-fixtures — exact scope deletion (MEDIUM-2)", () => {
       status: "inactive"
     });
 
-    await expect(runCleanup(db, true, logger)).rejects.toThrow(/Teardown completed with 1 failure/);
+    await expect(runCleanup(db, true, logger, { runId: RUN_A })).rejects.toThrow(/Teardown completed with 1 failure/);
 
     expect(world.tables.admin_scope_access.some((r: any) => r.id === "scope-seed-admin")).toBe(true);
     expect(world.tables.admin_scope_access.some((r: any) => r.id === "scope-duplicate")).toBe(true);
@@ -947,14 +1196,11 @@ describe("cleanup-uat-fixtures — resilience and idempotency", () => {
         ? { data: null, error: { message: "reviewer delete blocked" } }
         : null;
 
-    await expect(runCleanup(db, true, logger)).rejects.toThrow(/Teardown completed with 1 failure/);
+    await expect(runCleanup(db, true, logger, { runId: RUN_A })).rejects.toThrow(/Teardown completed with 1 failure/);
 
-    // The blocked account keeps both its row and its Auth user, still linked to
-    // each other — the failure must never leave a dangling auth_user_id.
     expect(world.tables.admin_users.map((r: any) => r.id)).toEqual(["admin-seed-reviewer"]);
     expect(world.authUsers.map((u: any) => u.email)).toEqual([email("reviewer")]);
     expect(world.tables.admin_users[0].auth_user_id).toBe(world.authUsers[0].id);
-    // Every other account, and the synthetic person, were still torn down.
     expect(world.tables.admin_scope_access).toHaveLength(0);
     expect(world.tables.people).toHaveLength(0);
     expect(world.tables.person_season_memberships).toHaveLength(0);
@@ -963,26 +1209,25 @@ describe("cleanup-uat-fixtures — resilience and idempotency", () => {
   it("is idempotent: a second run performs zero mutations", async () => {
     seedProvisioned(world);
     pinAdmin(world, "admin-seed-admin");
-    pinMembership(world, "membership-seed", "person-seed");
+    pinMembership(world, `membership-seed-${RUN_A}`, `person-seed-${RUN_A}`);
 
-    await runCleanup(db, true, logger);
-    const firstRunWrites = world.writes.length;
-    expect(firstRunWrites).toBeGreaterThan(0);
+    await runCleanup(db, true, logger, { runId: RUN_A });
+    expect(world.writes.length).toBeGreaterThan(0);
 
     world.writes = [];
     world.authOps = [];
     const secondLogger = createLogger();
-    await runCleanup(db, true, secondLogger);
+    await runCleanup(db, true, secondLogger, { runId: RUN_A });
 
     expect(world.writes).toHaveLength(0);
     expect(world.authOps).toHaveLength(0);
     expect(secondLogger.all()).toMatch(/already retained \(inactive, auth link cleared\)/);
-    expect(secondLogger.all()).toMatch(/already carries the retained marker/);
+    expect(secondLogger.all()).toMatch(/already carries the run 20260805-01 retained marker/);
   });
 
   it("removes every detached fixture object on a clean teardown", async () => {
     seedProvisioned(world);
-    await runCleanup(db, true, logger);
+    await runCleanup(db, true, logger, { runId: RUN_A });
 
     expect(world.authUsers).toHaveLength(0);
     expect(world.tables.admin_users).toHaveLength(0);
@@ -992,17 +1237,235 @@ describe("cleanup-uat-fixtures — resilience and idempotency", () => {
   });
 });
 
+describe("lifecycle run separation", () => {
+  let world: any;
+  let db: any;
+  let logger: any;
+
+  beforeEach(() => {
+    world = createWorld();
+    db = createDb(world);
+    logger = createLogger();
+  });
+
+  /** Provision run A, exercise lifecycle so its person becomes log-pinned, tear it down. */
+  async function completeRunA() {
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A });
+    const personA = world.tables.people[0];
+    const membershipA = world.tables.person_season_memberships[0];
+    pinMembership(world, membershipA.id, personA.id);
+    await runCleanup(db, true, logger, { runId: RUN_A });
+    return { personAId: personA.id, membershipAId: membershipA.id };
+  }
+
+  it("retains run A's person after its lifecycle teardown", async () => {
+    const { personAId, membershipAId } = await completeRunA();
+
+    const personA = world.tables.people.find((r: any) => r.id === personAId);
+    expect(personA).toBeDefined();
+    expect(personA.data_quality_flags).toBe(PERSON_A.retainedMarker);
+    expect(personA.email_primary).toBe(PERSON_A.email_primary);
+    const membershipA = world.tables.person_season_memberships.find((r: any) => r.id === membershipAId);
+    expect(membershipA.status).toBe("cancelled");
+    // Accounts were detached, so they were fully removed rather than accumulated.
+    expect(world.authUsers).toHaveLength(0);
+    expect(world.tables.admin_users).toHaveLength(0);
+  });
+
+  it("provisions run B on the same stable accounts without touching run A's person", async () => {
+    const { personAId } = await completeRunA();
+    const runBLogger = createLogger();
+
+    await runFixtures(db, true, PASSWORD, runBLogger, { runId: RUN_B });
+
+    // Six stable accounts again — no accumulation across runs.
+    expect(world.authUsers).toHaveLength(6);
+    expect(world.tables.admin_users).toHaveLength(5);
+    expect(world.authUsers.map((u: any) => u.email).sort()).toEqual(ACCOUNTS.map((a: any) => email(a.slug)).sort());
+    expect(world.tables.admin_users.every((r: any) => r.notes === ACCOUNT_NOTES_MARKER)).toBe(true);
+
+    // Run B has its own person; run A's retained person is untouched.
+    const personB = world.tables.people.find((r: any) => r.email_primary === PERSON_B.email_primary);
+    expect(personB.data_quality_flags).toBe(PERSON_B.activeMarker);
+    const personA = world.tables.people.find((r: any) => r.id === personAId);
+    expect(personA.data_quality_flags).toBe(PERSON_A.retainedMarker);
+    expect(world.tables.people).toHaveLength(2);
+  });
+
+  it("keeps account emails and markers identical across run A and run B", async () => {
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A });
+    const unique = (values: any[]) => Array.from(new Set(values));
+    const afterA = {
+      emails: world.authUsers.map((u: any) => u.email).sort(),
+      adminEmails: world.tables.admin_users.map((r: any) => r.email).sort(),
+      markers: unique(world.tables.admin_users.map((r: any) => r.notes)),
+      metadata: unique(world.authUsers.map((u: any) => u.user_metadata.vam_uat_fixture))
+    };
+
+    await runCleanup(db, true, logger, { runId: RUN_A });
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_B });
+
+    expect(world.authUsers.map((u: any) => u.email).sort()).toEqual(afterA.emails);
+    expect(world.tables.admin_users.map((r: any) => r.email).sort()).toEqual(afterA.adminEmails);
+    expect(unique(world.tables.admin_users.map((r: any) => r.notes))).toEqual(afterA.markers);
+    expect(unique(world.authUsers.map((u: any) => u.user_metadata.vam_uat_fixture))).toEqual(afterA.metadata);
+    expect(afterA.markers).toEqual([ACCOUNT_NOTES_MARKER]);
+  });
+
+  it("cleanup of run B never reads or mutates run A's person", async () => {
+    const { personAId } = await completeRunA();
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_B });
+
+    world.writes = [];
+    world.queries = [];
+    const runBLogger = createLogger();
+    await runCleanup(db, true, runBLogger, { runId: RUN_B });
+
+    // No write touched run A's person row.
+    const touchedIds = world.writes.flatMap((w: any) => w.ids ?? []);
+    expect(touchedIds).not.toContain(personAId);
+    // Every people lookup was scoped to run B's exact email.
+    const peopleLookups = world.queries.filter((q: QueryState) => q.table === "people");
+    expect(peopleLookups.length).toBeGreaterThan(0);
+    for (const lookup of peopleLookups) {
+      const emailFilter = lookup.filters.find((filter: Filter) => filter[1] === "email_primary");
+      if (emailFilter) expect(emailFilter[2]).toBe(PERSON_B.email_primary);
+    }
+    const personA = world.tables.people.find((r: any) => r.id === personAId);
+    expect(personA.data_quality_flags).toBe(PERSON_A.retainedMarker);
+  });
+
+  it("refuses to reuse a spent run id and says a new one is needed", async () => {
+    await completeRunA();
+
+    const rerunLogger = createLogger();
+    await expect(runFixtures(db, true, PASSWORD, rerunLogger, { runId: RUN_A })).rejects.toThrow(
+      /retained, log-pinned person of UAT run 20260805-01\. .*Start a new run with a fresh VAM_UAT_RUN_ID/
+    );
+  });
+
+  it("resumes a run whose person is still active", async () => {
+    await runFixtures(db, true, PASSWORD, logger, { runId: RUN_A });
+    const personAId = world.tables.people[0].id;
+
+    world.writes = [];
+    const resumeLogger = createLogger();
+    await runFixtures(db, true, PASSWORD, resumeLogger, { runId: RUN_A });
+
+    // Everything already existed, so a resume is a no-op.
+    expect(world.writes).toHaveLength(0);
+    expect(world.tables.people).toHaveLength(1);
+    expect(world.tables.people[0].id).toBe(personAId);
+    expect(resumeLogger.all()).toMatch(/people row present/);
+  });
+});
+
+describe("staging schema preflight SQL", () => {
+  const raw = readFileSync(preflightSqlPath, "utf8");
+  const withoutComments = raw
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  // Split on statement separators only, ignoring semicolons inside string
+  // literals (with '' escapes), so prose in a detail column cannot fool the
+  // read-only assertions below.
+  const statements = ((): string[] => {
+    const out: string[] = [];
+    let current = "";
+    let inString = false;
+    for (let i = 0; i < withoutComments.length; i += 1) {
+      const ch = withoutComments[i];
+      if (inString) {
+        current += ch;
+        if (ch === "'") {
+          if (withoutComments[i + 1] === "'") current += withoutComments[++i];
+          else inString = false;
+        }
+        continue;
+      }
+      if (ch === "'") {
+        inString = true;
+        current += ch;
+      } else if (ch === ";") {
+        out.push(current.trim());
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim()) out.push(current.trim());
+    return out.filter(Boolean);
+  })();
+
+  it("contains only read-only statements", () => {
+    expect(statements.length).toBeGreaterThan(0);
+    const allowed = ["BEGIN", "SET", "WITH", "SELECT", "ROLLBACK"];
+    for (const statement of statements) {
+      const firstWord = statement.split(/\s+/)[0].toUpperCase();
+      expect(allowed, `unexpected leading keyword in: ${statement.slice(0, 60)}`).toContain(firstWord);
+    }
+  });
+
+  it("contains no DML or DDL", () => {
+    expect(withoutComments).not.toMatch(/\bINSERT\s+INTO\b/i);
+    expect(withoutComments).not.toMatch(/\bUPDATE\s+\w+\s+SET\b/i);
+    expect(withoutComments).not.toMatch(/\bDELETE\s+FROM\b/i);
+    expect(withoutComments).not.toMatch(/\bTRUNCATE\b/i);
+    expect(withoutComments).not.toMatch(/\bALTER\s+(TABLE|INDEX|FUNCTION|POLICY|SEQUENCE)\b/i);
+    expect(withoutComments).not.toMatch(/\bDROP\s+(TABLE|INDEX|FUNCTION|POLICY|CONSTRAINT|TRIGGER)\b/i);
+    expect(withoutComments).not.toMatch(/\bCREATE\s+(TABLE|INDEX|FUNCTION|TRIGGER|POLICY|VIEW)\b/i);
+    expect(withoutComments).not.toMatch(/\bGRANT\b|\bREVOKE\b/i);
+  });
+
+  it("opens a read-only transaction and ends with a rollback", () => {
+    expect(statements[0].toUpperCase()).toBe("BEGIN");
+    expect(statements[1].toUpperCase()).toBe("SET TRANSACTION READ ONLY");
+    expect(statements[statements.length - 1].toUpperCase()).toBe("ROLLBACK");
+    expect(withoutComments).not.toMatch(/\bCOMMIT\b/i);
+  });
+
+  it("emits explicit PASS/FAIL rows rather than raw data", () => {
+    expect(withoutComments).toMatch(/'PASS'/);
+    expect(withoutComments).toMatch(/'FAIL'/);
+    expect(withoutComments).toMatch(/check_name/);
+    expect(withoutComments).toMatch(/status/);
+  });
+
+  it("is parameterised by run id and checks the identities the scripts depend on", () => {
+    expect(raw).toContain(":'run_id'");
+    expect(withoutComments).toContain("vam_uat_person_run:");
+    for (const slug of ["admin", "reviewer", "support", "viewer", "nonadmin", "inactive"]) {
+      expect(withoutComments).toContain(email(slug));
+    }
+    expect(withoutComments).toContain("VAM UAT fixture 20260805");
+    // The checks the REST dry-run provably cannot make.
+    expect(withoutComments).toMatch(/admin_users\.status_vocabulary/);
+    expect(withoutComments).toMatch(/data_quality_flags/);
+    expect(withoutComments).toMatch(/confdeltype/);
+    expect(withoutComments).toMatch(/indisunique/);
+    expect(withoutComments).toContain("UEHM-S12");
+    expect(withoutComments).toContain("UEHM-S12-B1");
+  });
+
+  it("documents how it must be executed, since PostgREST cannot run it", () => {
+    expect(raw).toMatch(/psql/);
+    expect(raw).toMatch(/-v run_id=/);
+    expect(raw).toMatch(/PostgREST cannot run this/i);
+  });
+});
+
 describe("create-uat-fixtures CLI safety guards", () => {
   const baseEnv = {
     ...process.env,
     SUPABASE_SERVICE_ROLE_KEY: "service-role-placeholder",
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-placeholder",
-    VAM_UAT_FIXTURE_PASSWORD: "longpassword123"
+    VAM_UAT_FIXTURE_PASSWORD: "longpassword123",
+    VAM_UAT_RUN_ID: RUN_A
   };
 
-  function runCli(env: NodeJS.ProcessEnv) {
+  function runCli(env: NodeJS.ProcessEnv, args = "") {
     try {
-      const stdout = execSync(`node "${createScript}"`, { env, stdio: "pipe" });
+      const stdout = execSync(`node "${createScript}" ${args}`.trim(), { env, stdio: "pipe" });
       return { code: 0, output: stdout.toString() };
     } catch (error: any) {
       return {
@@ -1028,5 +1491,27 @@ describe("create-uat-fixtures CLI safety guards", () => {
     expect(result.code).toBe(1);
     expect(result.output).toContain("SAFETY ABORT");
     expect(result.output).toContain("is not VAM OS staging");
+  });
+
+  it("aborts before touching the network when the run id is missing", () => {
+    const { VAM_UAT_RUN_ID, ...envWithoutRunId } = baseEnv;
+    const result = runCli({ ...envWithoutRunId, NEXT_PUBLIC_SUPABASE_URL: `https://${STAGING_HOSTNAME}` });
+    expect(result.code).toBe(1);
+    expect(result.output).toContain("SAFETY ABORT");
+    expect(result.output).toContain("VAM_UAT_RUN_ID is not set");
+    expect(result.output).toContain("No network operation attempted");
+    expect(result.output).not.toContain("MODE:");
+  });
+
+  it("aborts before touching the network when the run id is malformed", () => {
+    const result = runCli({
+      ...baseEnv,
+      NEXT_PUBLIC_SUPABASE_URL: `https://${STAGING_HOSTNAME}`,
+      VAM_UAT_RUN_ID: "bad run/id"
+    });
+    expect(result.code).toBe(1);
+    expect(result.output).toContain("SAFETY ABORT");
+    expect(result.output).toContain("not in the accepted format");
+    expect(result.output).not.toContain("MODE:");
   });
 });

@@ -1,53 +1,114 @@
 // VAM OS — shared identity model for the synthetic UAT fixtures (STAGING ONLY).
 //
 // create-uat-fixtures.mjs, cleanup-uat-fixtures.mjs and the regression tests all
-// import this module so there is exactly one deterministic account definition
-// and exactly one ownership-marker vocabulary. Nothing here performs I/O beyond
-// the caller-supplied Supabase client, and nothing here reads credentials.
+// import this module so there is exactly one deterministic definition of who the
+// fixtures are. Nothing here performs I/O beyond the caller-supplied Supabase
+// client, and nothing here reads credentials.
+//
+// Two identity kinds live here, in two separate marker namespaces:
+//
+//   * Stable account identity — the six Auth/admin accounts. Keyed on
+//     ACCOUNT_TAG, which does NOT change between UAT runs, so accounts are
+//     reused rather than accumulated. Namespace: `vam_uat_fixture`.
+//   * Per-run lifecycle identity — the synthetic person and membership. Keyed on
+//     a caller-supplied VAM_UAT_RUN_ID, so a run whose person got log-pinned by
+//     lifecycle UAT never blocks the next run. Namespace: `vam_uat_person_run`.
 //
 // Status vocabulary follows migration 062 / DEC-04: admin_users.status is
 // active or inactive only. 'invited' and 'suspended' are deliberately absent.
 
 export const STAGING_PROJECT_REF = "ljfneyuvpxrmejpxsmpz";
 export const STAGING_HOSTNAME = `${STAGING_PROJECT_REF}.supabase.co`;
-export const FIXTURE_TAG = "20260805";
 export const SEASON_CODE = "UEHM-S12";
 export const BATCH_CODE = "UEHM-S12-B1";
 
-// --- Ownership markers -----------------------------------------------------
+// --- Stable account identity -----------------------------------------------
 //
-// Exactly two canonical values are recognised per column. Ownership is proven by
-// equality against these constants, never by substring containment: `notes` and
-// `data_quality_flags` are operator-writable free-text columns, so a real row
-// merely mentioning the tag must NOT pass verification.
+// Ownership is proven by equality against these constants, never by substring
+// containment: `notes` and `data_quality_flags` are operator-writable free-text
+// columns, so a real row merely mentioning the tag must NOT pass verification.
 
-export const ACTIVE_MARKER = `vam_uat_fixture:${FIXTURE_TAG}`;
-export const RETAINED_MARKER = `vam_uat_fixture:${FIXTURE_TAG}:retained`;
-export const ADMIN_NOTES_MARKER = `VAM UAT fixture ${FIXTURE_TAG}`;
-export const AUTH_METADATA_MARKER = FIXTURE_TAG;
+export const ACCOUNT_TAG = "20260805";
+export const ACCOUNT_NOTES_MARKER = `VAM UAT fixture ${ACCOUNT_TAG}`;
+export const AUTH_METADATA_MARKER = ACCOUNT_TAG;
 
-/**
- * Classify a people.data_quality_flags value.
- * Returns "active", "retained", or "none". Only exact matches are accepted.
- */
-export function classifyFixtureMarker(value) {
-  if (value === ACTIVE_MARKER) return "active";
-  if (value === RETAINED_MARKER) return "retained";
-  return "none";
-}
+export const email = (slug) => `uat.${slug}+${ACCOUNT_TAG}@example.com`;
 
-export function isFixtureMarker(value) {
-  return classifyFixtureMarker(value) !== "none";
-}
-
-/** admin_users.notes must equal the canonical marker exactly. */
+/** admin_users.notes must equal the canonical account marker exactly. */
 export function isExactAdminNotesMarker(value) {
-  return value === ADMIN_NOTES_MARKER;
+  return value === ACCOUNT_NOTES_MARKER;
 }
 
-/** auth.users user_metadata.vam_uat_fixture must equal the tag exactly. */
+/** auth.users user_metadata.vam_uat_fixture must equal the account tag exactly. */
 export function isExactAuthFixtureMarker(value) {
   return value === AUTH_METADATA_MARKER;
+}
+
+// --- Per-run lifecycle identity ---------------------------------------------
+
+export const PERSON_MARKER_NAMESPACE = "vam_uat_person_run";
+export const RUN_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const RUN_ID_MIN_LENGTH = 3;
+export const RUN_ID_MAX_LENGTH = 32;
+
+/**
+ * Validate VAM_UAT_RUN_ID before anything touches the network.
+ *
+ * The value is interpolated into an email local-part and into marker strings
+ * compared by equality, so the accepted alphabet is deliberately narrow:
+ * lowercase alphanumerics separated by single hyphens. That excludes whitespace,
+ * quotes, wildcards (% _), path separators and unicode look-alikes.
+ */
+export function assertRunId(rawRunId) {
+  if (rawRunId === undefined || rawRunId === null || String(rawRunId).trim() === "") {
+    throw new Error(
+      "VAM_UAT_RUN_ID is not set. Every UAT lifecycle run needs its own run id (for example 20260805-01). No network operation attempted."
+    );
+  }
+  const runId = String(rawRunId).trim();
+  if (runId !== String(rawRunId)) {
+    throw new Error(`VAM_UAT_RUN_ID must not contain leading or trailing whitespace. No network operation attempted.`);
+  }
+  if (runId.length < RUN_ID_MIN_LENGTH || runId.length > RUN_ID_MAX_LENGTH) {
+    throw new Error(
+      `VAM_UAT_RUN_ID must be between ${RUN_ID_MIN_LENGTH} and ${RUN_ID_MAX_LENGTH} characters (got ${runId.length}). No network operation attempted.`
+    );
+  }
+  if (!RUN_ID_PATTERN.test(runId)) {
+    throw new Error(
+      `VAM_UAT_RUN_ID "${runId}" is not in the accepted format: lowercase letters and digits separated by single hyphens, for example 20260805-01. No network operation attempted.`
+    );
+  }
+  return runId;
+}
+
+/**
+ * Derive the per-run person/membership identity. Markers live in their own
+ * namespace so an account marker can never satisfy a person check, or vice
+ * versa, and so run A's marker can never satisfy run B's check.
+ */
+export function personIdentityForRun(rawRunId) {
+  const runId = assertRunId(rawRunId);
+  return {
+    runId,
+    full_name: `VAM-UAT-${runId} Person`,
+    email_primary: `uat.person+${runId}@example.com`,
+    activeMarker: `${PERSON_MARKER_NAMESPACE}:${runId}`,
+    retainedMarker: `${PERSON_MARKER_NAMESPACE}:${runId}:retained`,
+    membershipRole: "mentor",
+    membershipStatus: "active"
+  };
+}
+
+/**
+ * Classify a people.data_quality_flags value against ONE run's identity.
+ * Returns "active", "retained" or "none". Exact matches only, so another run's
+ * marker classifies as "none" and is therefore never adopted or mutated.
+ */
+export function classifyPersonRunMarker(value, person) {
+  if (value === person.activeMarker) return "active";
+  if (value === person.retainedMarker) return "retained";
+  return "none";
 }
 
 /** Raised when a candidate row fails ownership verification. Always fatal. */
@@ -60,8 +121,8 @@ export class FixtureOwnershipError extends Error {
 
 // --- Account matrix --------------------------------------------------------
 //
-// Six Auth accounts. `nonadmin` is Auth-only by design: no admin_users row and
-// therefore no admin_scope_access row.
+// Six Auth accounts, stable across runs. `nonadmin` is Auth-only by design: no
+// admin_users row and therefore no admin_scope_access row.
 
 export const ACCOUNTS = [
   { slug: "admin", fullName: "UAT Active Admin", adminRole: "admin", status: "active", scopeRole: "full_access" },
@@ -71,15 +132,6 @@ export const ACCOUNTS = [
   { slug: "nonadmin", fullName: "UAT Auth Non-admin", adminRole: null, status: null, scopeRole: null },
   { slug: "inactive", fullName: "UAT Inactive Admin", adminRole: "admin", status: "inactive", scopeRole: "read" }
 ];
-
-export const PERSON = {
-  full_name: `VAM-UAT-${FIXTURE_TAG} Person`,
-  email_primary: `uat.person+${FIXTURE_TAG}@example.com`,
-  membershipRole: "mentor",
-  membershipStatus: "active"
-};
-
-export const email = (slug) => `uat.${slug}+${FIXTURE_TAG}@example.com`;
 
 export function normalizeEmail(value) {
   return String(value ?? "").trim().toLowerCase();
@@ -117,6 +169,35 @@ export function assertStagingHost(rawUrl) {
 /** Only the exact `--apply` token enables write mode. */
 export function parseApplyMode(argv) {
   return (argv ?? []).includes("--apply");
+}
+
+/**
+ * Resolve the run id from CLI (`--run-id=<value>`) or environment, preferring
+ * the CLI form. Validation happens in assertRunId.
+ */
+export function resolveRunId(argv, env) {
+  const flag = (argv ?? []).find((arg) => String(arg).startsWith("--run-id="));
+  const fromFlag = flag ? String(flag).slice("--run-id=".length) : undefined;
+  return fromFlag !== undefined && fromFlag !== "" ? fromFlag : (env ?? {}).VAM_UAT_RUN_ID;
+}
+
+// --- Schema preflight reporting --------------------------------------------
+//
+// A REST dry-run proves the plan and the live data lookups. It cannot prove the
+// live column types, constraints or FK delete behaviour that the scripts depend
+// on, so it must never claim schema compatibility. Only the separate read-only
+// SQL preflight can do that.
+
+export const PREFLIGHT_SQL_PATH = "scripts/uat-fixture-staging-preflight.sql";
+export const PLAN_PASS_LINE = "SCRIPT PLAN PASS";
+export const LOOKUP_PASS_LINE = "LIVE DATA LOOKUP PASS";
+export const SCHEMA_UNVERIFIED_LINE = "SCHEMA PREFLIGHT NOT VERIFIED";
+export const SCHEMA_ACKNOWLEDGED_LINE = "SCHEMA PREFLIGHT ACKNOWLEDGED (operator-confirmed, out of band)";
+
+export function schemaPreflightLine(verified) {
+  return verified
+    ? SCHEMA_ACKNOWLEDGED_LINE
+    : `${SCHEMA_UNVERIFIED_LINE} — run ${PREFLIGHT_SQL_PATH} against staging and review its PASS/FAIL rows before apply`;
 }
 
 // --- Shared read helpers ---------------------------------------------------
