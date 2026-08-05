@@ -439,7 +439,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Quản lý membership lifecycle</h2>
         <MembershipLifecycleControls personId={params.id} enabled={canOperateAnyScope(scopeContext)}
-          memberships={seasonMembershipRows.map((row) => ({ id: row.id, role: row.role, status: row.status, programLabel: String(row.program?.name ?? row.program?.code ?? row.program_id), seasonLabel: String(row.season?.name ?? row.season?.code ?? row.season_id) }))}
+          memberships={seasonMembershipRows.map((row) => ({ id: row.id, role: row.role, status: row.status, intakeBatchCode: row.intake_batch_code, programLabel: String(row.program?.name ?? row.program?.code ?? row.program_id), seasonLabel: String(row.season?.name ?? row.season?.code ?? row.season_id) }))}
           programs={programs.data.map((row) => ({ id: row.id, label: String(row.name ?? row.code ?? row.id) }))}
           seasons={seasons.data.map((row) => ({ id: row.id, label: String(row.name ?? row.code ?? row.id) }))} />
         <p className="mt-3 text-xs text-slate-500">Mỗi thao tác thành công ghi person_season_membership_log và admin_audit_log; trạng thái Lịch sử VAM trên trang được làm mới sau thao tác.</p>

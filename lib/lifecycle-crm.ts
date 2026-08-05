@@ -24,6 +24,7 @@ export type PersonSeasonMembership = JsonRecord & {
   program_id: string;
   season_id: string;
   intake_batch_id: string | null;
+  intake_batch_code: string | null;
   role: string;
   status: string;
   source: string;
@@ -201,7 +202,28 @@ export async function getPersonSeasonMemberships(personId: string, scope?: Scope
 
   const { data, error } = await query;
   if (error) return { data: [] as PersonSeasonMembership[], error: errorMessage("person_season_memberships", error) };
-  return { data: (data ?? []) as PersonSeasonMembership[], error: null };
+
+  const rows = (data ?? []) as PersonSeasonMembership[];
+  const batchIds = Array.from(new Set(rows.map((row) => clean(row.intake_batch_id)).filter((id): id is string => Boolean(id))));
+  const codeByBatchId = new Map<string, string>();
+
+  if (batchIds.length) {
+    const { data: batches, error: batchError } = await supabase.from("intake_batches").select("id,code").in("id", batchIds);
+    if (batchError) return { data: [] as PersonSeasonMembership[], error: errorMessage("intake_batches", batchError) };
+    for (const batch of (batches ?? []) as Array<{ id?: unknown; code?: unknown }>) {
+      const id = clean(batch.id);
+      const code = clean(batch.code);
+      if (id && code) codeByBatchId.set(id, code);
+    }
+  }
+
+  return {
+    data: rows.map((row) => ({
+      ...row,
+      intake_batch_code: row.intake_batch_id ? codeByBatchId.get(row.intake_batch_id) ?? null : null
+    })),
+    error: null
+  };
 }
 
 export async function getCrmNotesByPerson(personId: string, ctx: AdminScopeContext, scope?: ScopeFilter) {
