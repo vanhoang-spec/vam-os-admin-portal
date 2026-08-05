@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { clearAuthCookies, getSupabaseAuthClientForPasswordSignIn, getSupabaseAuthClientWithAccessToken, setAuthCookies } from "@/lib/admin-auth";
+import { clearAuthCookies, getSupabaseAuthClientForPasswordSignIn, setAuthCookies, findAdminUserForAuthUser } from "@/lib/admin-auth";
 import { getSafeAuthErrorType, mapAuthError, safeNext } from "@/lib/auth-error-messages";
 
 export type LoginActionState = {
@@ -32,34 +32,22 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
     return { error: mapAuthError(getSafeAuthErrorType(error)) };
   }
 
-  const authedClient = getSupabaseAuthClientWithAccessToken(data.session.access_token);
-  if (!authedClient) {
-    await clearAuthCookies();
-    return { error: mapAuthError("network_unavailable") };
-  }
-
-  const { data: adminUser, error: adminError } = await authedClient
-    .from("admin_users")
-    .select("email,status")
-    .eq("status", "active")
-    .or(`auth_user_id.eq.${data.user.id},email.eq.${data.user.email}`)
-    .limit(1)
-    .maybeSingle();
-
-  if (adminError || !adminUser) {
-    console.warn("[login] active admin_users lookup failed", {
-      errorName: adminError?.code ?? null
-    });
+  let adminUser = null;
+  try {
+    adminUser = await findAdminUserForAuthUser(data.user);
+  } catch (err: any) {
+    console.warn("[login] identity linking or resolution failed", err.message);
     await client.auth.signOut();
     await clearAuthCookies();
     return { error: mapAuthError("unauthorized_admin") };
   }
 
-  await authedClient
-    .from("admin_users")
-    .update({ auth_user_id: data.user.id })
-    .eq("email", data.user.email)
-    .is("auth_user_id", null);
+  if (!adminUser) {
+    console.warn("[login] active admin_users lookup failed (no match)");
+    await client.auth.signOut();
+    await clearAuthCookies();
+    return { error: mapAuthError("unauthorized_admin") };
+  }
 
   await setAuthCookies(data.session.access_token, data.session.refresh_token, data.session.expires_in);
   redirect(next);

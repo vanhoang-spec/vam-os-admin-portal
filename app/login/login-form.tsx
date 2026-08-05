@@ -28,13 +28,28 @@ export function LoginForm({ next }: { next: string }) {
   const [state, formAction] = useFormState(loginAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
+  const submitLock = React.useRef(false);
+
+  React.useEffect(() => {
+    submitLock.current = false;
+  }, [state]);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); // Prevents Next.js native action polyfill from double-running
+    if (submitLock.current) {
+      return;
+    }
+    submitLock.current = true;
+    const formData = new FormData(e.currentTarget);
+    formAction(formData);
+  };
 
   const handleEmailBlur = () => {
     setEmail((prev) => prev.trim().toLowerCase());
   };
 
   return (
-    <form action={formAction} className="grid gap-4">
+    <form action={formAction} onSubmit={handleSubmit} className="grid gap-4">
       <input type="hidden" name="next" value={next} />
       <label className="grid gap-2">
         <span className="text-sm font-medium text-vam-ink">Email</span>

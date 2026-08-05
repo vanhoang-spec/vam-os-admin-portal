@@ -73,7 +73,7 @@ export async function getCurrentSupabaseAuthUser(): Promise<User | null> {
  *                               admin" — caller treats as denied)
  *   - row found → return it
  */
-async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null> {
+export async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null> {
   const client = getSupabaseServiceRoleClient();
   if (!client) {
     const status = getSupabaseServiceRoleEnvStatus();
@@ -132,15 +132,42 @@ async function findAdminUserForAuthUser(user: User): Promise<AdminUserRow | null
 
   // First-login backfill: link the email-seeded row to this auth user.
   if (!row.auth_user_id) {
-    const { error: updateError } = await client
+    const { data: updatedRows, error: updateError } = await client
       .from("admin_users")
       .update({ auth_user_id: user.id })
-      .eq("email", row.email)
-      .is("auth_user_id", null);
+      .eq("id", row.id)
+      .is("auth_user_id", null)
+      .select("id");
+
     if (updateError) {
       logAdminAuthError("admin_users auth_user_id backfill failed", updateError);
       throw new Error(`[admin-auth] failed to link admin_users to auth user: ${updateError.message}`);
     }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      // 0 rows updated, meaning auth_user_id is no longer null (race condition)
+      // Re-read row
+      const { data: reReadData, error: reReadError } = await client
+        .from("admin_users")
+        .select("auth_user_id")
+        .eq("id", row.id)
+        .maybeSingle();
+
+      if (reReadError) {
+        logAdminAuthError("admin_users auth_user_id re-read failed", reReadError);
+        throw new Error(`[admin-auth] failed to re-read admin_users after race: ${reReadError.message}`);
+      }
+
+      if (!reReadData || reReadData.auth_user_id !== user.id) {
+        // deny access if it is linked to any different UUID or result remains missing
+        console.warn("[admin-auth] identity link race lost or row missing", {
+          expectedAuthUserId: user.id,
+          actualAuthUserId: reReadData?.auth_user_id
+        });
+        throw new Error("[admin-auth] identity link conflict");
+      }
+    }
+
     row.auth_user_id = user.id;
   }
 
