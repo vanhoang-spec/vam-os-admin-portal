@@ -89,9 +89,33 @@ export type ScopedPersonIdsResult = {
   error: string | null;
 };
 
+/**
+ * Outcome of resolving the intake batch IDs an admin scope may see. Three
+ * downstream person-visibility sources are filtered by these IDs, so the same
+ * three states must stay distinguishable: `batchIds === null` means
+ * unrestricted/global and is never produced by a failure, `[]` with no error is
+ * a legitimate "this scope owns no batch", and a non-null `error` means the
+ * batch list could not be resolved at all. `batchIds` is `[]` on failure so a
+ * caller that reads only the IDs still narrows rather than widens.
+ */
+export type ScopedIntakeBatchIdsResult = {
+  batchIds: string[] | null;
+  error: string | null;
+};
+
+/** User-safe scope failure text: names the table and nothing from the database. */
+function scopeVisibilityMessage(table: string) {
+  return `${SCOPE_VISIBILITY_ERROR} (${table})`;
+}
+
 /** Fail-closed scope result: no visibility, plus a user-safe error naming only the table. */
 function scopeVisibilityError(table: string): ScopedPersonIdsResult {
-  return { personIds: [], error: `${SCOPE_VISIBILITY_ERROR} (${table})` };
+  return { personIds: [], error: scopeVisibilityMessage(table) };
+}
+
+/** Fail-closed batch result: no batches, plus a user-safe error naming only the table. */
+function scopeBatchError(table: string): ScopedIntakeBatchIdsResult {
+  return { batchIds: [], error: scopeVisibilityMessage(table) };
 }
 
 /** Fail-closed result for a server-only application table with no service-role client. */
@@ -285,32 +309,44 @@ async function selectScopedBySeason<T>(
   return { data, error: null };
 }
 
-async function getScopedIntakeBatchIds(scope?: ScopeFilter) {
-  if (!scope) return null;
-  if (noAllowedRows(scope)) return [];
+/**
+ * Resolves the intake batches a scope may see. A query failure returns a typed
+ * error rather than an empty list: three person-visibility sources are filtered
+ * by these IDs, and silently reporting "no batches" omits real people and
+ * reproduces a false "person not found". Next.js dynamic usage errors are
+ * rethrown, matching `selectTable`/`getScopedPersonIds`.
+ */
+async function getScopedIntakeBatchIds(scope?: ScopeFilter): Promise<ScopedIntakeBatchIdsResult> {
+  if (!scope) return { batchIds: null, error: null };
+  if (noAllowedRows(scope)) return { batchIds: [], error: null };
   const client = dataClient();
-  if (!client) return [];
+  // No configured client is the module-wide empty-but-successful path (see
+  // `selectInChunks`); only an actual query failure is reported here.
+  if (!client) return { batchIds: [], error: null };
 
   let data: JsonRecord[] = [];
   if (scope.allowedSeasonIds?.length) {
     const result = await selectInChunks<JsonRecord>("intake_batches", "season_id", scope.allowedSeasonIds, "id,season_id");
     if (result.error) {
-      logDataError("intake_batches.scope", result.error);
-      return [];
+      if (isNextDynamicUsageError(result.error)) throw result.error;
+      logDataError("intake_batches.getScopedIntakeBatchIds", result.error);
+      return scopeBatchError("intake_batches");
     }
     data = result.data;
   } else {
     const { data: rows, error } = await client.from("intake_batches").select("id,season_id");
     if (error) {
-      logDataError("intake_batches.scope", error);
-      return [];
+      if (isNextDynamicUsageError(error)) throw error;
+      logDataError("intake_batches.getScopedIntakeBatchIds", error);
+      return scopeBatchError("intake_batches");
     }
     data = (rows ?? []) as JsonRecord[];
   }
 
-  return data
-    .map((row) => String(row.id))
-    .filter(Boolean);
+  return {
+    batchIds: data.map((row) => String(row.id)).filter(Boolean),
+    error: null
+  };
 }
 
 /**
@@ -369,7 +405,12 @@ export async function getScopedPersonIds(scope?: ScopeFilter): Promise<ScopedPer
     }
   }
 
-  const batchIds = await getScopedIntakeBatchIds(scope);
+  // The batch IDs gate the three sources below, so an unresolved batch list is a
+  // failed scope evaluation — not "no batches". Returning here also means those
+  // three queries never start, and the season-derived IDs above are discarded
+  // rather than returned as a partial union.
+  const { batchIds, error: batchScopeIdsError } = await getScopedIntakeBatchIds(scope);
+  if (batchScopeIdsError) return { personIds: [], error: batchScopeIdsError };
   if (batchIds?.length) {
     const [mentorProfilesRes, menteeProfilesRes, appsRes] = await Promise.all([
       selectInChunks<JsonRecord>("mentor_profiles", "intake_batch_id", batchIds, "person_id"),
@@ -423,7 +464,8 @@ export async function getMentorProfiles(scope?: ScopeFilter) {
   if (scopeError) return { data: [] as MentorProfile[], error: scopeError };
   if (personIds && personIds.length === 0) return { data: [] as MentorProfile[], error: null };
   if (!personIds) return selectTable<MentorProfile>("mentor_profiles");
-  const batchIds = await getScopedIntakeBatchIds(scope);
+  const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+  if (batchScopeError) return { data: [] as MentorProfile[], error: batchScopeError };
   const [byPerson, byBatch] = await Promise.all([
     selectInChunks<MentorProfile>("mentor_profiles", "person_id", personIds),
     batchIds?.length
@@ -444,7 +486,8 @@ export async function getMenteeProfiles(scope?: ScopeFilter) {
   if (scopeError) return { data: [] as MenteeProfile[], error: scopeError };
   if (personIds && personIds.length === 0) return { data: [] as MenteeProfile[], error: null };
   if (!personIds) return selectTable<MenteeProfile>("mentee_profiles");
-  const batchIds = await getScopedIntakeBatchIds(scope);
+  const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+  if (batchScopeError) return { data: [] as MenteeProfile[], error: batchScopeError };
   const [byPerson, byBatch] = await Promise.all([
     selectInChunks<MenteeProfile>("mentee_profiles", "person_id", personIds),
     batchIds?.length
@@ -465,7 +508,8 @@ export async function getApplications(scope?: ScopeFilter) {
   if (noAllowedRows(scope)) return { data: [] as Application[], error: null };
   const client = dataClient("applications");
   if (!client) return serviceRoleRequiredError<Application[]>([]);
-  const batchIds = await getScopedIntakeBatchIds(scope);
+  const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+  if (batchScopeError) return { data: [] as Application[], error: batchScopeError };
   const filters: string[] = [];
   if (scope.allowedSeasonIds?.length) filters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
   if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
@@ -495,7 +539,8 @@ export async function getSeasons(scope?: ScopeFilter) {
 
 export async function getIntakeBatches(scope?: ScopeFilter) {
   if (!scope) return selectAllTable<IntakeBatch>("intake_batches", "id,season_id,code,name,is_active");
-  const batchIds = await getScopedIntakeBatchIds(scope);
+  const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+  if (batchScopeError) return { data: [] as IntakeBatch[], error: batchScopeError };
   if (!batchIds?.length) return { data: [] as IntakeBatch[], error: null };
   const client = dataClient();
   if (!client) return envError<IntakeBatch[]>([]);
@@ -1470,7 +1515,8 @@ export async function getReviewAssignableApplications(filters: {
     .order("id", { ascending: true });
 
   if (filters.intakeBatchId) {
-    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
+    if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
@@ -1626,7 +1672,8 @@ export async function getReviewAssignmentProgress(filters: {
   // Step 1: resolve app IDs if batch filter is active
   let appIdFilter: string[] | null = null;
   if (filters.intakeBatchId) {
-    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
+    if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
@@ -1778,13 +1825,15 @@ export async function getReviewerPool(filters?: {
     .order("id");
 
   if (filters?.intakeBatchId) {
-    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
+    if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
     mentorQuery = mentorQuery.eq("intake_batch_id", filters.intakeBatchId);
   } else {
-    const scopedBatchIds = await getScopedIntakeBatchIds(filters?.scope);
+    const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters?.scope);
+    if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds) {
       if (!scopedBatchIds.length) return { data: [], error: null };
       mentorQuery = mentorQuery.in("intake_batch_id", scopedBatchIds);
@@ -1904,13 +1953,15 @@ export async function getInterviewCandidates(filters?: {
     .order("id", { ascending: true });
 
   if (filters?.intakeBatchId) {
-    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
+    if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
     appsQuery = appsQuery.eq("intake_batch_id", filters.intakeBatchId);
   } else if (filters?.scope) {
-    const scopedBatchIds = await getScopedIntakeBatchIds(filters.scope);
+    const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
+    if (batchScopeError) return { data: [], error: batchScopeError };
     if (!scopedBatchIds?.length) return { data: [], error: null };
     appsQuery = appsQuery.in("intake_batch_id", scopedBatchIds);
   }
