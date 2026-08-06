@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { getScopedPersonIds, getPerson, getMentorProfiles, getMenteeProfiles } from "@/lib/data";
 import { getSupabaseServiceRoleClient, getSupabaseServerClient } from "@/lib/supabase-server";
 
-const { mockTables, mockErrors, mockFrom } = vi.hoisted(() => {
+const { mockTables, mockErrors, mockFrom, mockSupabaseState } = vi.hoisted(() => {
   const tables: Record<string, any[]> = {};
   const errors: Record<string, any> = {};
 
@@ -32,7 +32,9 @@ const { mockTables, mockErrors, mockFrom } = vi.hoisted(() => {
     return { select: () => chain };
   });
 
-  return { mockTables: tables, mockErrors: errors, mockFrom: fromFn };
+  const supabaseState = { client: { from: fromFn } as any };
+
+  return { mockTables: tables, mockErrors: errors, mockFrom: fromFn, mockSupabaseState: supabaseState };
 });
 
 vi.mock("server-only", () => ({}));
@@ -43,9 +45,7 @@ vi.mock("@/lib/admin-auth", () => ({
   getCurrentAdminUser: vi.fn(async () => null)
 }));
 vi.mock("@/lib/supabase", () => ({
-  supabase: {
-    from: (t: string) => mockFrom(t)
-  }
+  get supabase() { return mockSupabaseState.client; }
 }));
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleClient: vi.fn(),
@@ -62,6 +62,7 @@ beforeEach(() => {
   const mockDb = { from: mockFrom };
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(mockDb as any);
   vi.mocked(getSupabaseServerClient).mockReturnValue(mockDb as any);
+  mockSupabaseState.client = mockDb as any;
   errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -411,5 +412,90 @@ describe("The removed partial-result behaviour stays removed", () => {
     const body = helper.slice(0, helper.indexOf("\n}\n"));
     expect(body).toContain("scopeBatchError(\"intake_batches\")");
     expect(body).not.toContain("logDataError(\"intake_batches.scope\"");
+  });
+});
+
+describe("Missing Supabase client error semantics", () => {
+  function simulateMissingClient() {
+    mockSupabaseState.client = null;
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(null);
+    vi.mocked(getSupabaseServerClient).mockReturnValue(null);
+  }
+
+  it("23. Restricted scope + missing client returns a non-null canonical safe environment-error.", async () => {
+    simulateMissingClient();
+    // Use allowedProgramIds to bypass the season-based tables (which would fail early on the server-only applications table)
+    // and hit getScopedIntakeBatchIds directly.
+    const { error } = await getScopedPersonIds({ allowedProgramIds: ["p1"] });
+    expect(error).toBe("Thiếu NEXT_PUBLIC_SUPABASE_URL hoặc NEXT_PUBLIC_SUPABASE_ANON_KEY trong .env.local.");
+  });
+
+  it("24. Missing client cannot be interpreted as unrestricted access.", async () => {
+    simulateMissingClient();
+    const { personIds } = await getScopedPersonIds({ allowedProgramIds: ["p1"] });
+    expect(personIds).not.toBeNull();
+    expect(personIds).toEqual([]);
+  });
+
+  it("25. Missing client cannot be interpreted as legitimate zero intake batches.", async () => {
+    const legitimate = await getScopedPersonIds({ allowedProgramIds: ["p1"] });
+
+    simulateMissingClient();
+    const failed = await getScopedPersonIds({ allowedProgramIds: ["p1"] });
+
+    expect(legitimate.error).toBeNull();
+    expect(failed.error).not.toBeNull();
+  });
+
+  it("26. getScopedPersonIds() returns no partial person IDs.", async () => {
+    simulateMissingClient();
+    const { personIds, error } = await getScopedPersonIds({ allowedProgramIds: ["p1"] });
+    expect(personIds).toEqual([]);
+    expect(error).not.toBeNull();
+  });
+
+  it("27. Mentor-profile, mentee-profile and application queries do not run.", async () => {
+    simulateMissingClient();
+    await getScopedPersonIds({ allowedProgramIds: ["p1"] });
+    expect(queriedTables()).toEqual([]);
+  });
+
+  it("28. getPerson() does not query people and receives operational error.", async () => {
+    simulateMissingClient();
+    const result = await getPerson("person-membership", { allowedProgramIds: ["p1"] });
+    expect(result.data).toBeNull();
+    expect(result.error).not.toBeNull();
+    expect(queriedTables()).not.toContain("people");
+  });
+
+  it("29. getMentorProfiles() propagates the error.", async () => {
+    simulateMissingClient();
+    const result = await getMentorProfiles({ allowedProgramIds: ["p1"] });
+    expect(result.error).not.toBeNull();
+    expect(result.data).toEqual([]);
+  });
+
+  it("30. getMenteeProfiles() propagates the error.", async () => {
+    simulateMissingClient();
+    const result = await getMenteeProfiles({ allowedProgramIds: ["p1"] });
+    expect(result.error).not.toBeNull();
+    expect(result.data).toEqual([]);
+  });
+
+  it("31. Unrestricted scope behavior remains unchanged.", async () => {
+    simulateMissingClient();
+    const { personIds, error } = await getScopedPersonIds(undefined);
+    expect(personIds).toBeNull();
+    expect(error).toBeNull();
+  });
+
+  it("32. No environment value or secret appears in returned errors or logs.", async () => {
+    simulateMissingClient();
+    const { error } = await getScopedPersonIds({ allowedProgramIds: ["p1"] });
+    expect(error).not.toContain("http");
+    expect(error).not.toContain("sb_");
+    expect(error).not.toContain("eyJ");
+    // Module convention is to just return envError without double logging it in scope evaluation.
+    expect(errorLog).toHaveBeenCalledTimes(0);
   });
 });

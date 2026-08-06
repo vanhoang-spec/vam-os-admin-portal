@@ -320,9 +320,10 @@ async function getScopedIntakeBatchIds(scope?: ScopeFilter): Promise<ScopedIntak
   if (!scope) return { batchIds: null, error: null };
   if (noAllowedRows(scope)) return { batchIds: [], error: null };
   const client = dataClient();
-  // No configured client is the module-wide empty-but-successful path (see
-  // `selectInChunks`); only an actual query failure is reported here.
-  if (!client) return { batchIds: [], error: null };
+  // If the Supabase client cannot be initialized (e.g. missing environment
+  // variables), fail closed and return the canonical environment error rather
+  // than an empty batch list that looks like a legitimate restricted scope.
+  if (!client) return { batchIds: [], error: envError(null).error };
 
   let data: JsonRecord[] = [];
   if (scope.allowedSeasonIds?.length) {
