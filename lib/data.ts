@@ -298,11 +298,12 @@ export async function getScopedPersonIds(scope?: ScopeFilter) {
 
   const ids = new Set<string>();
   if (scope.allowedSeasonIds?.length) {
-    const [matchesRes, recapsRes, partsRes, appsRes] = await Promise.all([
+    const [matchesRes, recapsRes, partsRes, appsRes, membershipsRes] = await Promise.all([
       selectInChunks<JsonRecord>("matches", "season_id", scope.allowedSeasonIds, "mentor_person_id,mentee_person_id"),
       selectInChunks<JsonRecord>("mentoring_recaps", "season_id", scope.allowedSeasonIds, "mentor_person_id,mentee_person_id"),
       selectInChunks<JsonRecord>("event_participations", "season_id", scope.allowedSeasonIds, "person_id"),
-      selectInChunks<JsonRecord>("applications", "season_id", scope.allowedSeasonIds, "person_id")
+      selectInChunks<JsonRecord>("applications", "season_id", scope.allowedSeasonIds, "person_id"),
+      selectInChunks<JsonRecord>("person_season_memberships", "season_id", scope.allowedSeasonIds, "person_id")
     ]);
     for (const row of matchesRes.data) {
       if (row.mentor_person_id) ids.add(String(row.mentor_person_id));
@@ -316,6 +317,9 @@ export async function getScopedPersonIds(scope?: ScopeFilter) {
       if (row.person_id) ids.add(String(row.person_id));
     }
     for (const row of appsRes.data) {
+      if (row.person_id) ids.add(String(row.person_id));
+    }
+    for (const row of membershipsRes.data) {
       if (row.person_id) ids.add(String(row.person_id));
     }
   }
