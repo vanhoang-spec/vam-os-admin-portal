@@ -379,11 +379,20 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     crmNotes.error;
 
   if (!person.data) {
+    // A scope/lookup failure is not the same as a genuine miss: do not claim the
+    // person is absent when we could not verify access in the first place.
+    const personLookupFailed = Boolean(person.error);
     return (
       <>
-        <PageHeader title="Không tìm thấy hồ sơ" />
+        <PageHeader title={personLookupFailed ? "Không tải được hồ sơ" : "Không tìm thấy hồ sơ"} />
         <ErrorBox message={error} />
-        <EmptyState message="Không tìm thấy person_id này trong bảng people." />
+        <EmptyState
+          message={
+            personLookupFailed
+              ? "Không xác minh được quyền truy cập hồ sơ này do lỗi hệ thống. Vui lòng thử lại."
+              : "Không tìm thấy person_id này trong bảng people."
+          }
+        />
       </>
     );
   }

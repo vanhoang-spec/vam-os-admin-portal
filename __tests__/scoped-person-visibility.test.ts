@@ -64,19 +64,19 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
       { person_id: "person-1", season_id: "s1", status: "active" }
     ];
     const scope = { allowedSeasonIds: ["s1"], allowedProgramIds: ["p1"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).toContain("person-1");
   });
 
   it("2. Wrong program is excluded.", async () => {
-    // In our implementation, we match on allowedSeasonIds. 
-    // If a person is in season s2 (which belongs to a wrong program), 
+    // In our implementation, we match on allowedSeasonIds.
+    // If a person is in season s2 (which belongs to a wrong program),
     // they won't be in allowedSeasonIds.
     mockTables["person_season_memberships"] = [
       { person_id: "person-1", season_id: "s2", status: "active" }
     ];
     const scope = { allowedSeasonIds: ["s1"], allowedProgramIds: ["p1"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).not.toContain("person-1");
   });
 
@@ -85,7 +85,7 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
       { person_id: "person-1", season_id: "s2", status: "active" }
     ];
     const scope = { allowedSeasonIds: ["s1"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).not.toContain("person-1");
   });
 
@@ -107,7 +107,7 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
       { person_id: "person-app", season_id: "s1" }
     ];
     const scope = { allowedSeasonIds: ["s1"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).toContain("person-app");
   });
 
@@ -119,7 +119,7 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
       { person_id: "person-dup", season_id: "s1" }
     ];
     const scope = { allowedSeasonIds: ["s1"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids?.filter(id => id === "person-dup").length).toBe(1);
   });
 
@@ -134,7 +134,7 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
       { person_id: "person-batch", season_id: "s1" }
     ];
     const scope = { allowedSeasonIds: ["s1"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).toContain("person-batch");
   });
 
@@ -146,7 +146,7 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
       { person_id: "person-cancelled", season_id: "s1", status: "cancelled" }
     ];
     const scope = { allowedSeasonIds: ["s1"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).toContain("person-paused");
     expect(ids).toContain("person-withdrawn");
     expect(ids).toContain("person-invited");
@@ -157,13 +157,20 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
     mockTables["applications"] = [
       { person_id: "person-app", season_id: "s1" }
     ];
+    mockTables["person_season_memberships"] = [
+      { person_id: "person-membership", season_id: "s1", status: "active" }
+    ];
     mockErrors["person_season_memberships"] = { message: "Simulated DB error" };
     const scope = { allowedSeasonIds: ["s1"] };
-    const ids = await getScopedPersonIds(scope);
-    
-    // It should fail-closed for memberships (return []), but applications still return their IDs.
-    expect(ids).toContain("person-app");
-    expect(ids).not.toContain("person-membership"); // not visible
+    const { personIds: ids, error } = await getScopedPersonIds(scope);
+
+    // Scope evaluation failed, so it fails closed and reports rather than
+    // continuing with a partial result as though the query had succeeded.
+    expect(error).not.toBeNull();
+    expect(ids).toEqual([]);
+    expect(ids).not.toBeNull();
+    expect(ids).not.toContain("person-membership");
+    expect(ids).not.toContain("person-app");
   });
 
   it("10. UEHM scope cannot see HAM or another program.", async () => {
@@ -173,7 +180,7 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
     ];
     // UEHM admin has allowedSeasonIds strictly limited to UEHM seasons.
     const scope = { allowedSeasonIds: ["s-uehm"] };
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).toContain("person-uehm");
     expect(ids).not.toContain("person-ham");
   });
@@ -181,7 +188,7 @@ describe("CRM Scoped-Person Visibility via Memberships", () => {
   it("11. Unrestricted/global scope behavior remains unchanged.", async () => {
     // getScopedPersonIds returns `null` for global scope (!scope).
     const scope = undefined;
-    const ids = await getScopedPersonIds(scope);
+    const { personIds: ids } = await getScopedPersonIds(scope);
     expect(ids).toBeNull();
   });
 

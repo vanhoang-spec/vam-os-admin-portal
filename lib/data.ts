@@ -71,7 +71,28 @@ export type MentoringRecapCorrectionInput = {
 const VI_ERROR = "Không thể tải dữ liệu. Vui lòng kiểm tra cấu hình Supabase và quyền đọc bảng.";
 const SERVICE_ROLE_REQUIRED =
   "Thiếu SUPABASE_SERVICE_ROLE_KEY. Dữ liệu hồ sơ ứng tuyển chỉ truy cập được bằng service role.";
+const SCOPE_VISIBILITY_ERROR =
+  "Không xác minh được phạm vi truy cập. Vui lòng thử lại hoặc liên hệ quản trị viên.";
 const IN_FILTER_CHUNK_SIZE = 200;
+
+/**
+ * Outcome of resolving the person IDs an admin scope may see.
+ *
+ * `personIds === null` means unrestricted/global visibility and nothing else —
+ * it must never be produced by a failure. When `error` is non-null the scope
+ * could not be evaluated: `personIds` is `[]` so any caller that ignores the
+ * error still fails closed, and callers must surface the error instead of
+ * treating the empty set as "this person is out of scope".
+ */
+export type ScopedPersonIdsResult = {
+  personIds: string[] | null;
+  error: string | null;
+};
+
+/** Fail-closed scope result: no visibility, plus a user-safe error naming only the table. */
+function scopeVisibilityError(table: string): ScopedPersonIdsResult {
+  return { personIds: [], error: `${SCOPE_VISIBILITY_ERROR} (${table})` };
+}
 
 /** Fail-closed result for a server-only application table with no service-role client. */
 export function serviceRoleRequiredError<T>(fallback: T): QueryResult<T> {
@@ -292,9 +313,25 @@ async function getScopedIntakeBatchIds(scope?: ScopeFilter) {
     .filter(Boolean);
 }
 
-export async function getScopedPersonIds(scope?: ScopeFilter) {
-  if (!scope) return null;
-  if (noAllowedRows(scope)) return [];
+/**
+ * First failed source among the scope queries, if any. Logs through the
+ * canonical `logDataError` sanitizer (operation name, table, error code and
+ * message only) and converts it into a user-safe string. Next.js dynamic usage
+ * errors are rethrown, matching `selectTable`/`selectScopedBySeason`.
+ */
+function firstScopeQueryError(results: Array<{ table: string; error: unknown }>) {
+  for (const { table, error } of results) {
+    if (!error) continue;
+    if (isNextDynamicUsageError(error)) throw error;
+    logDataError(`${table}.getScopedPersonIds`, error);
+    return scopeVisibilityError(table);
+  }
+  return null;
+}
+
+export async function getScopedPersonIds(scope?: ScopeFilter): Promise<ScopedPersonIdsResult> {
+  if (!scope) return { personIds: null, error: null };
+  if (noAllowedRows(scope)) return { personIds: [], error: null };
 
   const ids = new Set<string>();
   if (scope.allowedSeasonIds?.length) {
@@ -305,6 +342,14 @@ export async function getScopedPersonIds(scope?: ScopeFilter) {
       selectInChunks<JsonRecord>("applications", "season_id", scope.allowedSeasonIds, "person_id"),
       selectInChunks<JsonRecord>("person_season_memberships", "season_id", scope.allowedSeasonIds, "person_id")
     ]);
+    const seasonScopeError = firstScopeQueryError([
+      { table: "matches", error: matchesRes.error },
+      { table: "mentoring_recaps", error: recapsRes.error },
+      { table: "event_participations", error: partsRes.error },
+      { table: "applications", error: appsRes.error },
+      { table: "person_season_memberships", error: membershipsRes.error }
+    ]);
+    if (seasonScopeError) return seasonScopeError;
     for (const row of matchesRes.data) {
       if (row.mentor_person_id) ids.add(String(row.mentor_person_id));
       if (row.mentee_person_id) ids.add(String(row.mentee_person_id));
@@ -331,12 +376,18 @@ export async function getScopedPersonIds(scope?: ScopeFilter) {
       selectInChunks<JsonRecord>("mentee_profiles", "intake_batch_id", batchIds, "person_id"),
       selectInChunks<JsonRecord>("applications", "intake_batch_id", batchIds, "person_id")
     ]);
+    const batchScopeError = firstScopeQueryError([
+      { table: "mentor_profiles", error: mentorProfilesRes.error },
+      { table: "mentee_profiles", error: menteeProfilesRes.error },
+      { table: "applications", error: appsRes.error }
+    ]);
+    if (batchScopeError) return batchScopeError;
     for (const row of mentorProfilesRes.data) if (row.person_id) ids.add(String(row.person_id));
     for (const row of menteeProfilesRes.data) if (row.person_id) ids.add(String(row.person_id));
     for (const row of appsRes.data) if (row.person_id) ids.add(String(row.person_id));
   }
 
-  return Array.from(ids);
+  return { personIds: Array.from(ids), error: null };
 }
 
 async function countTable(table: string, filter?: (query: any) => any): Promise<QueryResult<number>> {
@@ -354,7 +405,8 @@ async function countTable(table: string, filter?: (query: any) => any): Promise<
 }
 
 export async function getPeople(scope?: ScopeFilter) {
-  const personIds = await getScopedPersonIds(scope);
+  const { personIds, error: scopeError } = await getScopedPersonIds(scope);
+  if (scopeError) return { data: [] as Person[], error: scopeError };
   if (personIds && personIds.length === 0) return { data: [] as Person[], error: null };
   if (!personIds) return selectAllTable<Person>("people");
   const { data, error } = await selectInChunks<Person>("people", "id", personIds);
@@ -367,7 +419,8 @@ export async function getPeople(scope?: ScopeFilter) {
 }
 
 export async function getMentorProfiles(scope?: ScopeFilter) {
-  const personIds = await getScopedPersonIds(scope);
+  const { personIds, error: scopeError } = await getScopedPersonIds(scope);
+  if (scopeError) return { data: [] as MentorProfile[], error: scopeError };
   if (personIds && personIds.length === 0) return { data: [] as MentorProfile[], error: null };
   if (!personIds) return selectTable<MentorProfile>("mentor_profiles");
   const batchIds = await getScopedIntakeBatchIds(scope);
@@ -387,7 +440,8 @@ export async function getMentorProfiles(scope?: ScopeFilter) {
 }
 
 export async function getMenteeProfiles(scope?: ScopeFilter) {
-  const personIds = await getScopedPersonIds(scope);
+  const { personIds, error: scopeError } = await getScopedPersonIds(scope);
+  if (scopeError) return { data: [] as MenteeProfile[], error: scopeError };
   if (personIds && personIds.length === 0) return { data: [] as MenteeProfile[], error: null };
   if (!personIds) return selectTable<MenteeProfile>("mentee_profiles");
   const batchIds = await getScopedIntakeBatchIds(scope);
@@ -517,7 +571,10 @@ export async function getDataIssues() {
 }
 
 export async function getPerson(id: string, scope?: ScopeFilter) {
-  const personIds = await getScopedPersonIds(scope);
+  const { personIds, error: scopeError } = await getScopedPersonIds(scope);
+  // Scope could not be evaluated: report it instead of running the person query
+  // and returning the same `{ data: null, error: null }` as a genuine miss.
+  if (scopeError) return { data: null as Person | null, error: scopeError };
   if (personIds && !personIds.includes(id)) return { data: null, error: null };
   const client = dataClient();
   if (!client) return envError<Person | null>(null);
@@ -752,7 +809,8 @@ export async function getOperationalTeamAssignments(scope?: ScopeFilter) {
   const columns = "id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes";
   if (!scope) return selectAllTable<OperationalTeamAssignment>("operational_team_assignments", columns);
 
-  const personIds = await getScopedPersonIds(scope);
+  const { personIds, error: scopeError } = await getScopedPersonIds(scope);
+  if (scopeError) return { data: [] as OperationalTeamAssignment[], error: scopeError };
   if (!personIds?.length) return { data: [] as OperationalTeamAssignment[], error: null };
 
   const client = dataClient();

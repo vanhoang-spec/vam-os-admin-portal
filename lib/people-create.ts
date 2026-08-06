@@ -196,9 +196,15 @@ async function findPersonById(client: any, id: string): Promise<Person | null> {
   return (data as Person) ?? null;
 }
 
+/**
+ * Fail-closed scope check. `error` is set only when the scope itself could not
+ * be evaluated, so callers can report a system failure instead of the
+ * misleading "person is outside your program scope".
+ */
 async function personIsInScope(personId: string, scope?: ScopeFilter) {
-  const scopedPersonIds = await getScopedPersonIds(scope);
-  return !scopedPersonIds || scopedPersonIds.includes(personId);
+  const { personIds, error } = await getScopedPersonIds(scope);
+  if (error) return { inScope: false, error };
+  return { inScope: !personIds || personIds.includes(personId), error: null };
 }
 
 async function validateProgramSelection(ctx: AdminScopeContext, programIds: string[]) {
@@ -217,7 +223,9 @@ async function resolvePerson(
     if (!isValidUuid(linkId)) return { ok: false, message: "ID người được liên kết không hợp lệ." };
     const existing = await findPersonById(client, linkId);
     if (!existing) return { ok: false, message: "Không tìm thấy người để liên kết." };
-    if (!(await personIsInScope(existing.id, scope))) {
+    const linkScope = await personIsInScope(existing.id, scope);
+    if (linkScope.error) return { ok: false, message: linkScope.error };
+    if (!linkScope.inScope) {
       return { ok: false, message: "Nguoi duoc lien ket khong nam trong pham vi chuong trinh cua ban." };
     }
     return { ok: true, person: existing, created: false };
@@ -515,7 +523,9 @@ export async function updateMentorProfile(input: UpdateMentorInput): Promise<Mut
     return { ok: false, message: "Không tìm thấy person liên kết." };
   }
   const personBefore = personBeforeRes.data as Person;
-  if (!(await personIsInScope(personBefore.id, access.scope))) {
+  const mentorScope = await personIsInScope(personBefore.id, access.scope);
+  if (mentorScope.error) return { ok: false, message: mentorScope.error };
+  if (!mentorScope.inScope) {
     return { ok: false, message: "Ho so mentor khong nam trong pham vi chuong trinh cua ban." };
   }
   const linksBefore = await loadMentorProfileLinks(client, mentorProfileId);
@@ -729,7 +739,9 @@ export async function updateMenteeProfile(input: UpdateMenteeInput): Promise<Mut
     return { ok: false, message: "Không tìm thấy person liên kết với mentee." };
   }
   const personBefore = personBeforeRes.data as Person;
-  if (!(await personIsInScope(personBefore.id, access.scope))) {
+  const menteeScope = await personIsInScope(personBefore.id, access.scope);
+  if (menteeScope.error) return { ok: false, message: menteeScope.error };
+  if (!menteeScope.inScope) {
     return { ok: false, message: "Ho so mentee khong nam trong pham vi chuong trinh cua ban." };
   }
 
