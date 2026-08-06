@@ -218,6 +218,30 @@ function bestScopeLevel(levels: ScopeLevel[]) {
   return levels.sort((a, b) => SCOPE_RANK[b] - SCOPE_RANK[a])[0] ?? null;
 }
 
+export function resolveCanonicalScope(
+  ctx: AdminScopeContext,
+  programId: string | null | undefined,
+  programCode: string | null | undefined,
+  seasonId: string | null | undefined,
+  seasonCode: string | null | undefined
+): ScopeLevel | null {
+  if (ctx.isSuperAdmin) return "full_access";
+
+  const matchingLevels = ctx.programScopes
+    .filter((scope) => {
+      if (scope.seasonId) {
+        return (seasonId && scope.seasonId === seasonId) || (seasonCode && scope.seasonId === seasonCode);
+      }
+      if (scope.programId) {
+        return (programId && scope.programId === programId) || (programCode && scope.programId === programCode);
+      }
+      return false;
+    })
+    .map((scope) => scope.scopeLevel);
+
+  return bestScopeLevel(matchingLevels);
+}
+
 export async function getScopeLevelForSeason(
   ctx: AdminScopeContext,
   seasonId: string | null | undefined
@@ -233,15 +257,7 @@ export async function getScopeLevelForSeason(
   const program = programs.find((row) => row.id === seasonProgramId || row.code === seasonProgramId);
   const programCode = clean(program?.code);
 
-  const matchingLevels = ctx.programScopes
-    .filter((scope) => {
-      if (scope.seasonId) return scope.seasonId === resolvedSeasonId || scope.seasonId === seasonCode;
-      if (scope.programId) return scope.programId === seasonProgramId || scope.programId === programCode;
-      return false;
-    })
-    .map((scope) => scope.scopeLevel);
-
-  return bestScopeLevel(matchingLevels);
+  return resolveCanonicalScope(ctx, seasonProgramId, programCode, resolvedSeasonId, seasonCode);
 }
 
 export async function canReadSeason(ctx: AdminScopeContext, seasonId: string | null | undefined) {
