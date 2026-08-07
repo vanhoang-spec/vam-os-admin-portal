@@ -21,7 +21,7 @@ vi.mock("@/app/actions/membership-lifecycle", () => ({
 }));
 vi.mock("react-dom", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, useFormState: (action: unknown, initial: unknown) => [initial, action] };
+  return { ...actual, useFormState: (action: unknown, initial: unknown) => [initial, action], useFormStatus: () => ({ pending: false }) };
 });
 
 import { MembershipLifecycleControls } from "@/app/people/[id]/membership-lifecycle-controls";

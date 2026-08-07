@@ -15,7 +15,7 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ notFound: vi.fn(), redirect: vi.fn() }));
 vi.mock("next/link", () => ({ default: ({ children, href }: any) => <a href={href}>{children}</a> }));
-vi.mock("react-dom", () => ({ useFormState: () => [{}, vi.fn()] }));
+vi.mock("react-dom", () => ({ useFormState: () => [{}, vi.fn()], useFormStatus: () => ({ pending: false }) }));
 vi.mock("next/headers", () => ({ cookies: vi.fn(() => ({ get: vi.fn() })) }));
 
 import { getAdminScopeContext, resolveCanonicalScope, canOperateAnyScope } from "@/lib/program-scope";

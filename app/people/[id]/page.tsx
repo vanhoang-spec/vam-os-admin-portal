@@ -30,6 +30,7 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter, resolveCanoni
 import { MembershipLifecycleControls } from "./membership-lifecycle-controls";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
+import { SubmitButton } from "@/components/submit-button";
 
 type MentorMenteeRow = Match & {
   mentee?: Person;
@@ -602,9 +603,9 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
                 <input name="next_action_due_date" type="date" className={inputClassName()} />
               </label>
             </div>
-            <button type="submit" className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1.5 text-xs font-medium text-white hover:bg-vam-green/90">
+            <SubmitButton aria-label="Thêm ghi chú CRM" pendingText="Đang lưu..." className="inline-flex w-fit rounded-md bg-vam-green px-3 py-1.5 text-xs font-medium text-white hover:bg-vam-green/90">
               Thêm ghi chú CRM
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
         {crmNoteRows.length > 0 ? (

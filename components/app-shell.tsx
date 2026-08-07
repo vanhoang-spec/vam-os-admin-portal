@@ -340,6 +340,13 @@ export function AppShell({
   }
 
   if (!adminUser) {
+    if (pathname === "/e2e-harness") {
+      return (
+        <main id="main-content" tabIndex={-1} className="min-h-screen bg-[#f7faf8] px-4 py-10">
+          {children}
+        </main>
+      );
+    }
     return (
       <main id="main-content" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-[#f7faf8] px-4 py-10">
         <section className="w-full max-w-md rounded-lg border border-vam-line bg-white p-6 shadow-soft">
