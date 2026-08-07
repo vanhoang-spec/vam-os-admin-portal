@@ -40,13 +40,24 @@ export function evaluateApplyGate(
     };
   }
 
-  // Step 2: check token.
+  // Step 2: check tokenless opt-in.
+  const allowTokenless = process.env.VAM_OS_ALLOW_TOKENLESS_APPLICATIONS === "true";
+
+  // Step 3: check token.
   const expected =
     process.env.VAM_OS_APPLY_TOKEN?.trim() ||
     process.env.VAM_OS_APPLICATION_PILOT_TOKEN?.trim();
   const isProduction = process.env.NODE_ENV === "production";
   const provided = String(providedToken ?? "").trim();
 
+  const tokenMatched = expected && provided && provided === expected;
+
+  // Gate Logic: Form is enabled AND (TokenMatched OR TokenlessUAT)
+  if (tokenMatched || allowTokenless) {
+    return { status: "open" };
+  }
+
+  // If we reach here, neither condition was met.
   if (!expected) {
     if (isProduction) {
       return {
@@ -60,9 +71,5 @@ export function evaluateApplyGate(
     };
   }
 
-  if (!provided || provided !== expected) {
-    return { status: "closed", reason: "Token không hợp lệ hoặc chưa cung cấp." };
-  }
-
-  return { status: "open" };
+  return { status: "closed", reason: "Token không hợp lệ hoặc chưa cung cấp." };
 }
