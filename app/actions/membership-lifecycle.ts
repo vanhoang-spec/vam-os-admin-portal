@@ -1,12 +1,9 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { isMembershipLifecycleOperation, isMembershipRole, membershipOperationNeedsReason, type MembershipLifecycleOperation } from "@/lib/membership-lifecycle";
+import { isMembershipLifecycleOperation, isMembershipRole, membershipOperationNeedsReason, type MembershipLifecycleOperation, type MembershipLifecycleActionState } from "@/lib/membership-lifecycle";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-
-export type MembershipLifecycleActionState = { ok: boolean; message: string; outcome?: string };
-export const initialMembershipLifecycleState: MembershipLifecycleActionState = { ok: false, message: "" };
 const RPC_BY_OPERATION: Record<MembershipLifecycleOperation, string> = {
   pause: "vam063_pause_membership", reactivate: "vam063_reactivate_membership", withdraw: "vam063_withdraw_membership",
   opt_out: "vam063_opt_out_membership", cancel: "vam063_cancel_membership", remove_role: "vam063_remove_membership_role"

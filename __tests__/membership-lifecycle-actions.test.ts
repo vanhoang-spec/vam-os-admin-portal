@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import * as ts from "typescript";
+import { isServerActionModule, scanServerActionExports } from "./use-server-scanner";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -7,7 +9,8 @@ vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/program-scope", () => ({ getAdminScopeContext: vi.fn(), canOperateSeason: vi.fn() }));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() }));
 
-import { addMembershipRoleAction, initialMembershipLifecycleState, transitionMembershipAction } from "@/app/actions/membership-lifecycle";
+import { addMembershipRoleAction, transitionMembershipAction } from "@/app/actions/membership-lifecycle";
+import { initialMembershipLifecycleState } from "@/lib/membership-lifecycle";
 import { getAdminScopeContext, canOperateSeason } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -88,5 +91,15 @@ describe("membership lifecycle server actions", () => {
     expect(action).not.toMatch(/\.delete\(|delete\s+from/i);
     expect(action).toContain("revalidatePath"); expect(action).not.toContain("actor_admin_user_id\"");
     expect(ui).toContain("window.confirm"); expect(ui).toContain("required={required}"); expect(ui).not.toMatch(/auth_user_id|password|token/i);
+  });
+
+  it("proves strict server action export contract via AST", () => {
+    const filePath = "app/actions/membership-lifecycle.ts";
+    const sourceCode = readFileSync(filePath, "utf8");
+    const sourceFile = ts.createSourceFile(filePath, sourceCode, ts.ScriptTarget.Latest, true);
+
+    expect(isServerActionModule(sourceFile)).toBe(true);
+    const invalidExports = scanServerActionExports(sourceFile);
+    expect(invalidExports).toEqual([]);
   });
 });

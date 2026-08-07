@@ -1,20 +1,7 @@
 "use server";
 
-import { confirmAccountImport, previewAccountImport, type AccountImportOutcome } from "@/lib/account-import-server";
-import type { AccountImportRow } from "@/lib/account-import";
-
-export type ImportActionState = {
-  phase: "idle" | "preview" | "complete";
-  ok: boolean;
-  message: string;
-  previewId?: string;
-  previewIntegrity?: string;
-  previewExpiresAt?: number;
-  rows: AccountImportRow[];
-  outcomes: AccountImportOutcome[];
-};
-
-export const initialImportState: ImportActionState = { phase: "idle", ok: false, message: "", rows: [], outcomes: [] };
+import { confirmAccountImport, previewAccountImport } from "@/lib/account-import-server";
+import { initialImportState, type ImportActionState } from "./import-state";
 
 export async function previewImportAction(_: ImportActionState, formData: FormData): Promise<ImportActionState> {
   const file = formData.get("csv_file");

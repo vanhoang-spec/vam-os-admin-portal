@@ -1,6 +1,10 @@
 export const MEMBERSHIP_ROLES = ["mentor", "mentee"] as const;
 export type MembershipRole = (typeof MEMBERSHIP_ROLES)[number];
 
+export type MembershipLifecycleActionState = { ok: boolean; message: string; outcome?: string };
+export const initialMembershipLifecycleState: MembershipLifecycleActionState = { ok: false, message: "" };
+
+
 export const MEMBERSHIP_LIFECYCLE_OPERATIONS = ["pause", "reactivate", "withdraw", "opt_out", "cancel", "remove_role"] as const;
 export type MembershipLifecycleOperation = (typeof MEMBERSHIP_LIFECYCLE_OPERATIONS)[number];
 

@@ -1,7 +1,7 @@
 "use client";
 import { useFormState } from "react-dom";
-import { addMembershipRoleAction, initialMembershipLifecycleState, transitionMembershipAction } from "@/app/actions/membership-lifecycle";
-import { availableMembershipActions, MEMBERSHIP_ACTION_LABELS, membershipOperationNeedsReason, type MembershipLifecycleOperation } from "@/lib/membership-lifecycle";
+import { addMembershipRoleAction, transitionMembershipAction } from "@/app/actions/membership-lifecycle";
+import { availableMembershipActions, MEMBERSHIP_ACTION_LABELS, membershipOperationNeedsReason, type MembershipLifecycleOperation, initialMembershipLifecycleState } from "@/lib/membership-lifecycle";
 
 type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; };
 type Option = { id: string; label: string };

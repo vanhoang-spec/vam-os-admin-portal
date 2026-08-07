@@ -2,7 +2,8 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { accountImportResultsCsv } from "@/lib/account-import";
-import { confirmImportAction, initialImportState, previewImportAction } from "./actions";
+import { confirmImportAction, previewImportAction } from "./actions";
+import { initialImportState } from "./import-state";
 
 function SubmitButton({ children, danger = false }: { children: React.ReactNode; danger?: boolean }) {
   const { pending } = useFormStatus();
