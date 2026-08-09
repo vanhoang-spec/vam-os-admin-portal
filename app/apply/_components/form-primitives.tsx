@@ -29,19 +29,21 @@ function Label({
   htmlFor,
   required,
   children,
-  helpText
+  helpText,
+  helpId
 }: {
   htmlFor?: string;
   required?: boolean;
   children: React.ReactNode;
   helpText?: string;
+  helpId?: string;
 }) {
   return (
     <div>
       <label htmlFor={htmlFor} className="block text-sm font-medium text-vam-ink">
         {children} {required ? <span className="text-red-600">*</span> : null}
       </label>
-      {helpText ? <p className="mt-0.5 text-xs text-slate-500">{helpText}</p> : null}
+      {helpText ? <p id={helpId} className="mt-0.5 text-xs text-slate-500">{helpText}</p> : null}
     </div>
   );
 }
@@ -63,9 +65,10 @@ export function TextField({
   helpText?: string;
   defaultValue?: string;
 }) {
+  const helpId = helpText ? `${name}-help` : undefined;
   return (
     <div>
-      <Label htmlFor={name} required={required} helpText={helpText}>
+      <Label htmlFor={name} required={required} helpText={helpText} helpId={helpId}>
         {label}
       </Label>
       <input
@@ -75,6 +78,43 @@ export function TextField({
         required={required}
         placeholder={placeholder}
         defaultValue={defaultValue ?? ""}
+        className={inputClass}
+      />
+    </div>
+  );
+}
+
+export function NumberField({
+  name,
+  label,
+  required,
+  min,
+  helpText,
+  onChange
+}: {
+  name: string;
+  label: string;
+  required?: boolean;
+  min?: number;
+  helpText?: string;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>;
+}) {
+  const helpId = helpText ? `${name}-help` : undefined;
+  return (
+    <div>
+      <Label htmlFor={name} required={required} helpText={helpText} helpId={helpId}>
+        {label}
+      </Label>
+      <input
+        id={name}
+        name={name}
+        type="number"
+        inputMode="decimal"
+        min={min}
+        step="any"
+        required={required}
+        aria-describedby={helpId}
+        onChange={onChange}
         className={inputClass}
       />
     </div>

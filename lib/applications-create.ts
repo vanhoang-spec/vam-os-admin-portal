@@ -16,6 +16,13 @@ export type ApplicationSubmissionInput = {
   consentDataStorage: boolean;
   /** Everything else from the form goes here verbatim. */
   rawPayload: JsonRecord;
+  /** Structured, auditable answers written after the application row. */
+  answers?: Array<{
+    questionKey: string;
+    questionLabel: string;
+    valueText: string;
+    acceptedAt?: string;
+  }>;
 };
 
 export type ApplicationSubmissionResult =
@@ -83,8 +90,8 @@ function safeText(value: string | null | undefined) {
  *   - Resolves season + intake_batch by code.
  *   - Blocks duplicates: same intake_batch + same role_applied + same
  *     normalised email returns code='duplicate'.
- *   - Writes only `applications`. Does NOT touch people, mentor_profiles,
- *     mentee_profiles, matches, or any junction tables.
+ *   - Writes `applications` and optional `application_answers`. Does NOT touch
+ *     people, profiles, matches, or review/decision tables.
  *   - Uses service-role client so RLS does not block the anonymous form.
  */
 export async function submitPilotApplication(
@@ -205,6 +212,29 @@ export async function submitPilotApplication(
   if (!inserted) {
     log("insert applications returned no row", { batch: input.intakeBatchCode, role: input.role });
     return { ok: false, code: "db", message: SAFE_ERROR };
+  }
+
+  if (input.answers?.length) {
+    const answerRows = input.answers.map((answer) => ({
+      application_id: inserted.id,
+      question_key: answer.questionKey,
+      question_label: answer.questionLabel,
+      value_text: answer.valueText,
+      created_at: answer.acceptedAt ?? new Date().toISOString()
+    }));
+    const { error: answersErr } = await client.from("application_answers").insert(answerRows);
+    if (answersErr) {
+      log("insert application_answers failed", answersErr);
+      // Keep this enhancement from creating a partially auditable application.
+      // The row was created by this request and has not yet been returned as successful.
+      const { error: cleanupErr } = await client.from("applications").delete().eq("id", inserted.id);
+      if (cleanupErr) log("cleanup partial application failed", cleanupErr);
+      return {
+        ok: false,
+        code: "db",
+        message: `${SAFE_ERROR} (application_answers: ${answersErr.message})`
+      };
+    }
   }
 
   return { ok: true, applicationId: inserted.id };

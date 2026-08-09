@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState } from "react-dom";
 import { submitMentorApplicationAction } from "@/app/actions/apply";
 import { initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
@@ -8,12 +9,17 @@ import {
   ConsentCheckbox,
   FormBanner,
   FormSection,
+  NumberField,
   RadioGroupField,
   SelectField,
   TextAreaField,
   TextField
 } from "../_components/form-primitives";
 import { ApplySubmitButton } from "../_components/submit-button";
+import {
+  APPLICATION_ACKNOWLEDGEMENTS as ACK,
+  MENTOR_CONFIRMATION_PHRASE
+} from "@/lib/application-commitments";
 
 const CONTACT_METHOD_OPTIONS = [
   { value: "email", label: "Email" },
@@ -168,6 +174,10 @@ export function ApplyMentorForm() {
     submitMentorApplicationAction,
     initialApplyActionState
   );
+  const [workYears, setWorkYears] = useState<number | null>(null);
+  const [managementYears, setManagementYears] = useState<number | null>(null);
+  const belowThreshold =
+    workYears !== null && managementYears !== null && (workYears < 8 || managementYears < 3);
 
   return (
     <form action={formAction} className="grid gap-6">
@@ -347,6 +357,78 @@ export function ApplyMentorForm() {
           label="Câu hỏi / ghi chú gửi core team"
           rows={3}
         />
+      </FormSection>
+
+      <FormSection
+        title="Xác nhận điều kiện và cam kết tham gia"
+        description="Để đảm bảo chất lượng của UEH Mentoring và trải nghiệm tốt cho cả Mentor và Mentee, vui lòng đọc và xác nhận các nội dung dưới đây."
+      >
+        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-vam-ink">Điều kiện kinh nghiệm</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <NumberField
+              name="mentor_total_work_years"
+              label="Tổng số năm kinh nghiệm làm việc"
+              required
+              min={0}
+              onChange={(event) => setWorkYears(event.target.value === "" ? null : Number(event.target.value))}
+            />
+            <NumberField
+              name="mentor_people_management_years"
+              label="Tổng số năm kinh nghiệm quản lý con người/đội ngũ"
+              required
+              min={0}
+              helpText="Quản lý con người/đội ngũ nghĩa là từng trực tiếp chịu trách nhiệm dẫn dắt, đánh giá, phát triển hoặc quản lý nhân sự; không chỉ là chức danh Product Manager/Project Manager nhưng không quản lý người."
+              onChange={(event) =>
+                setManagementYears(event.target.value === "" ? null : Number(event.target.value))
+              }
+            />
+            <NumberField
+              name="mentor_largest_team_size"
+              label="Quy mô đội ngũ lớn nhất đã trực tiếp quản lý"
+              required={(managementYears ?? 0) > 0}
+              min={1}
+            />
+            <TextField
+              name="mentor_reference"
+              label="Người giới thiệu/người tham chiếu"
+              helpText="Có thể ghi tên + tổ chức + mối quan hệ nếu phù hợp."
+            />
+          </div>
+          <p className="mt-3 text-sm text-slate-700">
+            Tiêu chí chung: <strong>8 năm kinh nghiệm</strong> và <strong>3 năm quản lý con người</strong>.
+          </p>
+          {belowThreshold ? (
+            <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm leading-6 text-amber-900" role="status">
+              Theo tiêu chí chung của Mùa 12, Mentor cần có tối thiểu 8 năm kinh nghiệm làm việc và ít nhất 3 năm kinh nghiệm quản lý con người. Nếu bạn được Core Team giới thiệu/xét trường hợp đặc biệt, Ban Tổ chức sẽ xem xét riêng.
+            </p>
+          ) : null}
+        </div>
+
+        {[
+          ACK.MENTOR_ELIGIBILITY_V1,
+          ACK.MENTOR_TIME_COMMITMENT_V1,
+          ACK.MENTOR_MATCH_EXPECTATION_V1,
+          ACK.MENTOR_MENTORING_PRINCIPLE_V1,
+          ACK.MENTOR_CONDUCT_V1,
+          ACK.MENTOR_NO_GHOST_V1
+        ].map((entry) => (
+          <div key={entry.key} className="rounded-md border border-vam-line bg-white p-2">
+            <ConsentCheckbox name={entry.key} required label={entry.wording} />
+          </div>
+        ))}
+
+        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+          <TextField
+            name="MENTOR_ACTIVE_READING_V1"
+            label="Vui lòng nhập lại câu dưới đây để xác nhận bạn đã đọc và hiểu các nguyên tắc chính."
+            required
+            helpText={MENTOR_CONFIRMATION_PHRASE}
+          />
+        </div>
+        <p className="text-xs text-slate-500">
+          Cam kết thời gian tối thiểu: <strong>1–2 giờ/tháng</strong> cho mỗi Mentee.
+        </p>
       </FormSection>
 
       <div className="flex justify-end pt-2">

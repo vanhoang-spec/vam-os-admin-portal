@@ -14,6 +14,10 @@ import {
   TextField
 } from "../_components/form-primitives";
 import { ApplySubmitButton } from "../_components/submit-button";
+import {
+  APPLICATION_ACKNOWLEDGEMENTS as ACK,
+  MENTEE_CONFIRMATION_PHRASE
+} from "@/lib/application-commitments";
 
 const EMAIL_NOTIF_OPTIONS = [
   { value: "email", label: "Email" },
@@ -324,6 +328,40 @@ export function ApplyMenteeForm() {
           label="Câu hỏi / ghi chú gửi core team"
           rows={3}
         />
+      </FormSection>
+
+      <FormSection
+        title="Xác nhận cách UEH Mentoring hoạt động"
+        description="Mentoring hiệu quả phụ thuộc rất nhiều vào sự chủ động và kỳ vọng phù hợp của Mentee. Vui lòng đọc kỹ và xác nhận các nội dung sau."
+      >
+        <p className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          Mentee cần <strong>chủ động liên hệ Mentor</strong>; <strong>Cross-mentoring</strong> là nguồn lực bổ sung.
+        </p>
+        {[
+          ACK.MENTEE_CROSS_INDUSTRY_V1,
+          ACK.MENTEE_MENTOR_LEVEL_EXPECTATION_V1,
+          ACK.MENTEE_PROACTIVE_SCHEDULING_V1,
+          ACK.MENTEE_CROSS_MENTORING_V1,
+          ACK.MENTEE_NO_GHOST_V1,
+          ACK.MENTEE_OWNERSHIP_V1
+        ].map((entry) => (
+          <div key={entry.key} className="rounded-md border border-vam-line bg-white p-2">
+            <ConsentCheckbox name={entry.key} required label={entry.wording} />
+            {(entry as { helper?: string }).helper ? (
+              <p className="px-3 pb-2 text-xs leading-5 text-slate-500">
+                {(entry as { helper?: string }).helper}
+              </p>
+            ) : null}
+          </div>
+        ))}
+        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+          <TextField
+            name="MENTEE_ACTIVE_READING_V1"
+            label="Vui lòng nhập lại câu dưới đây để xác nhận bạn đã đọc và hiểu các nguyên tắc chính."
+            required
+            helpText={MENTEE_CONFIRMATION_PHRASE}
+          />
+        </div>
       </FormSection>
 
       <div className="flex justify-end pt-2">

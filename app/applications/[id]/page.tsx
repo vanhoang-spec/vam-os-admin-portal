@@ -20,6 +20,11 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import type { ApplicationDecision, ApplicationReview, Match } from "@/lib/types";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
+import {
+  mentorExperienceFromAnswers,
+  summarizeAcknowledgements,
+  type ApplicationCommitmentRole
+} from "@/lib/application-commitments";
 import { AssignReviewerForm } from "./assign-reviewer-form";
 import { DecisionForm } from "./decision-form";
 import { ApprovalForm } from "./approval-form";
@@ -136,6 +141,14 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
   const displayGender     = application.data.gender        ?? person?.gender        ?? null;
   const displayStatus     = application.data.status        ?? application.data.final_status ?? null;
   const displayConsentVal = application.data.consent_data_storage ?? application.data.consent_pdpa;
+  const commitmentRole =
+    application.data.role_applied === "mentor" || application.data.role_applied === "mentee"
+      ? (application.data.role_applied as ApplicationCommitmentRole)
+      : null;
+  const acknowledgementSummary = commitmentRole
+    ? summarizeAcknowledgements(commitmentRole, answers.data)
+    : null;
+  const mentorExperience = commitmentRole === "mentor" ? mentorExperienceFromAnswers(answers.data) : null;
 
   // raw_payload from native S12 form — entries rendered when no legacy answers exist
   const rawPayloadEntries = ((): [string, string][] => {
@@ -339,6 +352,58 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
           ]}
         />
       </Card>
+
+      {commitmentRole ? (
+        <Card className="mb-4">
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">
+            Điều kiện và xác nhận tham gia — V1
+          </h2>
+          {acknowledgementSummary?.isHistorical ? (
+            <EmptyState message="Không được thu thập cho phiên bản đơn này." />
+          ) : (
+            <>
+              {mentorExperience ? (
+                <div className="mb-4">
+                  <DetailGrid
+                    rows={[
+                      ["Tổng số năm kinh nghiệm làm việc", displayText(mentorExperience.totalWorkYears)],
+                      ["Số năm quản lý con người/đội ngũ", displayText(mentorExperience.peopleManagementYears)],
+                      ["Đội ngũ lớn nhất trực tiếp quản lý", displayText(mentorExperience.largestTeamSize)],
+                      ["Người giới thiệu/người tham chiếu", displayText(mentorExperience.reference)],
+                      [
+                        "Điều kiện Mentor",
+                        mentorExperience.eligibility === "STANDARD_ELIGIBILITY_MET"
+                          ? "✓ Standard eligibility met"
+                          : mentorExperience.eligibility === "REQUIRES_CORE_TEAM_EXCEPTION_REVIEW"
+                            ? "⚠ Requires Core Team exception review"
+                            : "Không được thu thập cho phiên bản đơn này"
+                      ]
+                    ]}
+                  />
+                </div>
+              ) : null}
+              <details className="rounded-md border border-vam-line bg-slate-50 p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-vam-ink">
+                  {acknowledgementSummary?.completed
+                    ? "✓ Acknowledgements completed"
+                    : "Acknowledgements chưa đầy đủ"}
+                </summary>
+                <div className="mt-3 grid gap-2">
+                  {acknowledgementSummary?.collected.map(({ definition, answer }) => (
+                    <div key={definition.key} className="rounded-md border border-vam-line bg-white p-3 text-sm">
+                      <div className="font-medium text-vam-ink">{definition.wording}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {definition.key} · version {definition.version} · {answer?.value_text === "true" ? "Đã xác nhận" : "Chưa thu thập"}
+                        {answer?.created_at ? ` · ${formatDate(answer.created_at)}` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </>
+          )}
+        </Card>
+      ) : null}
 
       {/* ── Quick summary ── */}
       <Card className="mb-4">

@@ -9,6 +9,11 @@ import {
 } from "@/lib/applications-create";
 import type { ApplyActionState } from "@/lib/apply-types";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import {
+  acknowledgementsForRole,
+  validateMenteeCommitments,
+  validateMentorCommitments
+} from "@/lib/application-commitments";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
 const INTAKE_BATCH_CODE = SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE;
@@ -30,8 +35,29 @@ function formBoolean(formData: FormData, key: string): boolean {
   return value === "true" || value === "on" || value === "1";
 }
 
+function formNumber(formData: FormData, key: string): number {
+  const raw = formText(formData, key);
+  return raw === "" ? Number.NaN : Number(raw);
+}
+
+function acceptedAcknowledgementKeys(role: ApplicationRole, formData: FormData) {
+  return new Set(
+    acknowledgementsForRole(role)
+      .filter((entry) => entry.key.endsWith("ACTIVE_READING_V1") || formBoolean(formData, entry.key))
+      .map((entry) => entry.key)
+  );
+}
+
+function acknowledgementAnswers(role: ApplicationRole, acceptedAt: string) {
+  return acknowledgementsForRole(role).map((entry) => ({
+    questionKey: entry.key,
+    questionLabel: entry.wording,
+    valueText: "true",
+    acceptedAt
+  }));
+}
+
 function fail(scope: string, err: unknown): ApplyActionState {
-  const msg = err instanceof Error ? err.message : String(err);
   console.error(`[${scope}] unhandled error`, err);
   return {
     ok: false,
@@ -68,6 +94,11 @@ export async function submitMentorApplicationAction(
     const phonePrimary = formText(formData, "phone_primary");
     const gender = formText(formData, "gender");
     const consentDataStorage = formBoolean(formData, "consent_data_storage");
+    const totalWorkYears = formNumber(formData, "mentor_total_work_years");
+    const peopleManagementYears = formNumber(formData, "mentor_people_management_years");
+    const largestTeamSize = formNumber(formData, "mentor_largest_team_size");
+    const mentorReference = formText(formData, "mentor_reference");
+    const activeReading = formText(formData, "MENTOR_ACTIVE_READING_V1");
 
     // raw_payload: every other Spec v2 mentor field, in declared order
     const rawPayload: Record<string, unknown> = {
@@ -107,7 +138,11 @@ export async function submitMentorApplicationAction(
       profile_picture_url: formText(formData, "profile_picture_url") || null,
       // Section 8 — other
       referrer_or_source: formText(formData, "referrer_or_source") || null,
-      additional_notes: formText(formData, "additional_notes") || null
+      additional_notes: formText(formData, "additional_notes") || null,
+      mentor_total_work_years: Number.isFinite(totalWorkYears) ? totalWorkYears : null,
+      mentor_people_management_years: Number.isFinite(peopleManagementYears) ? peopleManagementYears : null,
+      mentor_largest_team_size: Number.isFinite(largestTeamSize) ? largestTeamSize : null,
+      mentor_reference: mentorReference || null
     };
 
     // Required field checks (UI also validates; this is defense-in-depth)
@@ -147,6 +182,39 @@ export async function submitMentorApplicationAction(
         message: "Bạn cần đồng ý cho phép VAM OS lưu trữ dữ liệu cá nhân để gửi đơn."
       };
     }
+    const commitmentValidation = validateMentorCommitments({
+      totalWorkYears,
+      peopleManagementYears,
+      largestTeamSize,
+      acceptedKeys: acceptedAcknowledgementKeys("mentor", formData),
+      activeReading
+    });
+    if (!commitmentValidation.ok) return commitmentValidation;
+
+    const acceptedAt = new Date().toISOString();
+    const answers = [
+      {
+        questionKey: "mentor_total_work_years",
+        questionLabel: "Tổng số năm kinh nghiệm làm việc",
+        valueText: String(totalWorkYears)
+      },
+      {
+        questionKey: "mentor_people_management_years",
+        questionLabel: "Tổng số năm kinh nghiệm quản lý con người/đội ngũ",
+        valueText: String(peopleManagementYears)
+      },
+      {
+        questionKey: "mentor_largest_team_size",
+        questionLabel: "Quy mô đội ngũ lớn nhất đã trực tiếp quản lý",
+        valueText: Number.isFinite(largestTeamSize) ? String(largestTeamSize) : ""
+      },
+      {
+        questionKey: "mentor_reference",
+        questionLabel: "Người giới thiệu/người tham chiếu",
+        valueText: mentorReference
+      },
+      ...acknowledgementAnswers("mentor", acceptedAt)
+    ];
 
     const result = await submitPilotApplication({
       role: "mentor" as ApplicationRole,
@@ -157,7 +225,8 @@ export async function submitMentorApplicationAction(
       phonePrimary,
       gender: gender || null,
       consentDataStorage,
-      rawPayload
+      rawPayload,
+      answers
     });
 
     // On failure return the error state immediately.
@@ -190,6 +259,7 @@ export async function submitMenteeApplicationAction(
     const phonePrimary = formText(formData, "phone_primary");
     const gender = formText(formData, "gender");
     const consentDataStorage = formBoolean(formData, "consent_data_storage");
+    const activeReading = formText(formData, "MENTEE_ACTIVE_READING_V1");
 
     // raw_payload: every other Spec v2 mentee field
     const rawPayload: Record<string, unknown> = {
@@ -273,6 +343,13 @@ export async function submitMenteeApplicationAction(
         message: "Bạn cần đồng ý cho phép VAM OS lưu trữ dữ liệu cá nhân để gửi đơn."
       };
     }
+    const commitmentValidation = validateMenteeCommitments({
+      acceptedKeys: acceptedAcknowledgementKeys("mentee", formData),
+      activeReading
+    });
+    if (!commitmentValidation.ok) return commitmentValidation;
+
+    const acceptedAt = new Date().toISOString();
 
     const result = await submitPilotApplication({
       role: "mentee" as ApplicationRole,
@@ -283,7 +360,8 @@ export async function submitMenteeApplicationAction(
       phonePrimary,
       gender: gender || null,
       consentDataStorage,
-      rawPayload
+      rawPayload,
+      answers: acknowledgementAnswers("mentee", acceptedAt)
     });
 
     if (!result.ok) return resultToState(result);
@@ -294,4 +372,3 @@ export async function submitMenteeApplicationAction(
 
   redirect("/apply/thanks?role=mentee");
 }
-
