@@ -5,8 +5,18 @@ import { describe, expect, it } from "vitest";
 const VERIFIER = "docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql";
 const MIGRATION_062 = "supabase_migrations/062_review_only_account_admin_rls_foundation.sql";
 const MIGRATION_063 = "supabase_migrations/063_review_only_membership_lifecycle_operations.sql";
-const CATALOG_EVIDENCE =
-  ".tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/post-failure-readonly-catalog-evidence.json";
+/**
+ * The four staging RLS policies as pg_policies rendered them, captured
+ * read-only at PRE_REMEDIATION_HEAD. This is a committed extract of that
+ * capture — the same six fields these assertions read, byte-identical quals —
+ * so the suite runs from a clean checkout. The rest of the original capture
+ * (its metadata, table inventory and package counts) stays out of the tree.
+ *
+ * The value here is the RAW multi-line rendering. Regenerating it from the
+ * verifier's expected quals would make `normalises the four captured staging
+ * quals onto the committed expected quals` compare the verifier with itself.
+ */
+const CATALOG_EVIDENCE = "__tests__/fixtures/migration-062-staging-policy-catalog.json";
 
 /** Verifier state immediately before this remediation. */
 const PRE_REMEDIATION_HEAD = "675bb380123860ac11a11b603c8ecdcac4e76a0f";

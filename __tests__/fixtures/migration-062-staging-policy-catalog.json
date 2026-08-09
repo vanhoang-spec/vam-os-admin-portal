@@ -1,0 +1,45 @@
+{
+  "_readme": "Minimal fixture for __tests__/migration-062-verifier-catalog-rendering-fix.test.ts. The four RLS policies as pg_policies rendered them on staging, captured read-only at commit 675bb380123860ac11a11b603c8ecdcac4e76a0f. Only the six fields the assertions read are kept; the capture metadata, table inventory and package counts of the original evidence file are deliberately not committed. The point of these rows is their RAW multi-line rendering: the test proves that catalog output differs byte-wise from the verifier expected quals yet normalises onto them. Do not reflow, reindent or regenerate this from the verifier SQL — that would make the assertion circular.",
+  "policies": [
+    {
+      "tablename": "intake_batches",
+      "policyname": "vam062_intake_batches_program_ops",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((current_admin_role() = 'super_admin'::text) OR (EXISTS ( SELECT 1\n   FROM (seasons se\n     JOIN admin_scope_access s ON (((s.user_id = auth.uid()) AND (s.status = 'active'::text) AND (s.role = ANY (ARRAY['full_access'::text, 'operations'::text])) AND (s.program_id = (se.program_id)::text) AND (s.season_id IS NOT NULL) AND (s.season_id = (se.id)::text))))\n  WHERE (se.id = intake_batches.season_id))))",
+      "with_check": null
+    },
+    {
+      "tablename": "person_season_membership_log",
+      "policyname": "vam062_membership_log_program_ops",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((current_admin_role() = 'super_admin'::text) OR (EXISTS ( SELECT 1\n   FROM admin_scope_access s\n  WHERE ((s.user_id = auth.uid()) AND (s.status = 'active'::text) AND (s.role = ANY (ARRAY['full_access'::text, 'operations'::text])) AND (s.program_id = (person_season_membership_log.program_id)::text) AND (s.season_id IS NOT NULL) AND (s.season_id = (person_season_membership_log.season_id)::text)))))",
+      "with_check": null
+    },
+    {
+      "tablename": "person_season_memberships",
+      "policyname": "vam062_membership_program_ops",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((current_admin_role() = 'super_admin'::text) OR (EXISTS ( SELECT 1\n   FROM admin_scope_access s\n  WHERE ((s.user_id = auth.uid()) AND (s.status = 'active'::text) AND (s.role = ANY (ARRAY['full_access'::text, 'operations'::text])) AND (s.program_id = (person_season_memberships.program_id)::text) AND (s.season_id IS NOT NULL) AND (s.season_id = (person_season_memberships.season_id)::text)))))",
+      "with_check": null
+    },
+    {
+      "tablename": "people",
+      "policyname": "vam062_people_program_ops",
+      "roles": [
+        "authenticated"
+      ],
+      "cmd": "SELECT",
+      "qual": "((current_admin_role() = 'super_admin'::text) OR (EXISTS ( SELECT 1\n   FROM (person_season_memberships m\n     JOIN admin_scope_access s ON (((s.user_id = auth.uid()) AND (s.status = 'active'::text) AND (s.role = ANY (ARRAY['full_access'::text, 'operations'::text])) AND (s.program_id = (m.program_id)::text) AND (s.season_id IS NOT NULL) AND (s.season_id = (m.season_id)::text))))\n  WHERE (m.person_id = people.id))))",
+      "with_check": null
+    }
+  ]
+}
