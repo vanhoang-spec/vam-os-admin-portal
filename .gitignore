@@ -88,3 +88,11 @@ docs/audits/inputs/VAM_OS_PRODUCTION_BASELINE_GAPS_2026-07-22.json
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# ── Release hygiene — never let execution artefacts reach a release commit ──
+
+# Agent scratch / staging execution working directories
+.tmp_*/
+
+# Supabase CLI machine state: linked project ref, pooler URL, platform versions
+supabase/.temp/

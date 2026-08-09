@@ -1,0 +1,119 @@
+{
+  "package": "VAM_OS_PROD_S12_RELEASE_20260809",
+  "package_version": "VAM_PROD_S12_R1",
+  "created": "2026-08-09",
+  "status": "PREPARED — NOT APPLIED",
+  "target": "PRODUCTION",
+  "target_project": { "name": "vam-os-mvp", "ref": "qkkroesfiazsejkzflcd" },
+  "target_deployment": "vam-os-admin-portal.vercel.app",
+  "source_branch": "migration-062-v3-membership-lifecycle",
+  "source_head": "24556ad3519b64bc12e17eb33faa1128124be795",
+
+  "evidence_baseline": {
+    "probe_a": "VAM_OS_PROD_S12_RELEASE_FORENSIC_A_CATALOG_READONLY_PROBE.sql — owner-run 2026-08-09",
+    "probe_a2": "ERROR 42P01 — supabase_migrations.schema_migrations does not exist. Expected; no ledger on Production.",
+    "probe_b": "VAM_OS_PROD_S12_RELEASE_FORENSIC_B_DATA_READONLY_PROBE.sql — owner-run 2026-08-09",
+    "authority": "live object state only; this package never consults a migration ledger"
+  },
+
+  "delta_matrix": {
+    "M062": { "classification": "PARTIAL — MINIMAL PROD VARIANT", "delivered_by": ["T2", "T1"], "omitted": "8 account_* tables and 11 vam062_* functions; no Day-1 path calls one" },
+    "M063": { "classification": "REQUIRED — Production-specific variant", "delivered_by": ["T3"] },
+    "M064": { "classification": "NOT REQUIRED as a migration", "delivered_by": ["T3"], "note": "remediation inlined in vam063_trusted_api_role(); Production has none of the nine functions M064 rewrites" },
+    "M065": { "classification": "REQUIRED — Production-specific packaging", "delivered_by": ["T3 section 1"], "note": "DDL identical to the M065 package" },
+    "M066": { "classification": "NOT REQUIRED", "evidence": "Probe A — both linkage columns and both partial index families already present", "enforced_by": ["preflight section 3", "verifier V21"] },
+    "M067": { "classification": "NOT REQUIRED", "evidence": "Probe A — both person_id FKs already CASCADE / NO ACTION / DEFERRABLE INITIALLY DEFERRED / VALID; Probe B — zero orphans", "enforced_by": ["preflight section 3", "verifier V22"] },
+    "M068": { "classification": "PARTIAL — MINIMAL PROD VARIANT", "delivered_by": ["T1"], "note": "52-value CHECK only; no column adds, no drops, no trigger, no backfill" },
+    "day1_security": { "classification": "REQUIRED — new, Production-specific", "delivered_by": ["T2"] },
+    "uehm_s12_admin_scope": { "classification": "NOT REQUIRED — Decision A", "delivered_by": [] },
+    "migration_ledger": { "classification": "NOT REQUIRED", "note": "explicitly out of scope for launch" },
+    "audit_backfill": { "classification": "NOT REQUIRED", "evidence": "Probe B — audit_rows_total = 0, out_of_canonical_rows = 0" }
+  },
+
+  "apply_order": [
+    { "step": 0, "file": "preflight.sql", "kind": "read-only gate", "must": "PASS; record baseline_token and the three seals" },
+    { "step": 1, "file": "apply/T1_audit_action_type_compat.sql", "kind": "transaction" },
+    { "step": 2, "file": "apply/T2_security_rls_grant_minimum.sql", "kind": "transaction" },
+    { "step": 3, "file": "apply/T3_membership_lifecycle_objects.sql", "kind": "transaction", "note": "installs functions with NO execute grant" },
+    { "step": 4, "file": "PROBE_C_TRUSTED_CONTEXT_RUNBOOK.md", "kind": "owner-run HTTP probe", "must": "is_trusted = true, else STOP" },
+    { "step": 5, "file": "apply/T4_enable_lifecycle_execution.sql", "kind": "transaction", "requires": "set_config('vam.probe_c_claim_source', '<claim_source>', false) in the same session" },
+    { "step": 6, "file": "verifier.sql", "kind": "read-only", "must": "all 24 PASS" },
+    { "step": 7, "file": "tests.sql", "kind": "read-only by rollback", "note": "optional on Production; opt-in via vam.allow_tests" }
+  ],
+
+  "objects_changed": {
+    "tables_altered": ["public.admin_audit_log", "public.person_season_membership_log"],
+    "rls_enabled": ["admin_users", "applications", "people", "mentor_profiles", "mentee_profiles", "intake_batches", "person_season_memberships", "person_season_membership_log"],
+    "grants_revoked_from_public_anon_authenticated": ["applications", "people", "mentor_profiles", "mentee_profiles", "admin_users", "intake_batches", "person_season_memberships", "person_season_membership_log", "admin_audit_log", "application_decisions"],
+    "constraints_added": ["admin_audit_log_action_type_check (52 values, VALIDATED)"],
+    "constraints_replaced": ["person_season_membership_log_transition_type_check (7 -> 13 values)"],
+    "columns_altered": ["admin_audit_log legacy columns: DROP NOT NULL where NOT NULL without default (conditional, idempotent)"],
+    "tables_created": ["public.vam_prod_s12_release_state", "public.vam_prod_s12_release_gate"],
+    "functions_created": [
+      "vam063_trusted_api_role()",
+      "vam069_trusted_context_probe()",
+      "vam063_authorized_for_scope(uuid,uuid,uuid)",
+      "vam063_transition_membership_atomic(uuid,uuid,text[],text,text,text,text,boolean)",
+      "vam063_pause_membership(uuid,uuid,text)",
+      "vam063_withdraw_membership(uuid,uuid,text)",
+      "vam063_opt_out_membership(uuid,uuid,text)",
+      "vam063_cancel_membership(uuid,uuid,text)",
+      "vam063_reactivate_membership(uuid,uuid,text)",
+      "vam063_remove_membership_role(uuid,uuid,text)",
+      "vam063_add_membership_role(uuid,uuid,uuid,uuid,text,text)"
+    ],
+    "app_files": ["app/people/[id]/membership-lifecycle-controls.tsx"]
+  },
+
+  "objects_not_changed": [
+    "no column added, dropped, renamed or retyped anywhere",
+    "all four legacy admin_audit_log columns preserved (action, actor_email, target_email, metadata)",
+    "no updated_at trigger created on admin_audit_log — no Day-1 path UPDATEs an audit row",
+    "no default and no NOT NULL added to any column",
+    "no row inserted, updated or deleted by any apply transaction",
+    "no RLS policy created — T2 enables RLS with none, fail closed",
+    "programs / seasons / application_decisions / admin_scope_access RLS state untouched",
+    "no admin_scope_access row seeded",
+    "no admin_users row created, modified or promoted",
+    "no M066 or M067 change",
+    "no VAM062 V3 object (account_* tables, vam062_* functions)",
+    "no migration ledger created or repaired",
+    "no unrelated legacy drift normalized",
+    "no credential read, rotated or reset; project JWT secret untouched",
+    "no test record deleted",
+    "lib/season-config.ts unchanged — CURRENT_OPERATING_SEASON_CODE stays UEHM-S11"
+  ],
+
+  "decisions": {
+    "D1_audit_validated_not_notvalid": "Probe B shows zero audit rows, so the validation scan is free and there is no deferral to justify. The constraint is trustworthy from the first row Production writes.",
+    "D2_no_audit_trigger": "Every Day-1 audit writer INSERTs; none UPDATEs. An updated_at trigger is not exercised by any Day-1 path, so it is NOT REQUIRED and not installed.",
+    "D3_legacy_columns_preserved": "The four legacy columns are kept. Only a NOT-NULL-without-default is relaxed, because the app never writes them and 23502 would otherwise abort every audited Day-1 mutation.",
+    "D4_no_policies": "No Day-1 read or write uses the anon or authenticated role — verified module by module at HEAD 24556ad. RLS with no policy and no grant is the narrowest safe remediation. Any future authenticated read path must ship its own policy AND grant.",
+    "D5_execution_gated_by_probe_c": "Which credential the deployment presents is not knowable from the database, so T3 installs the lifecycle functions ungranted and T4 grants EXECUTE only after Probe C proves the deployed key resolves to service_role.",
+    "D6_scope_decision_A": "admin_scope_access holds season/program CODES while the lifecycle scope branch compares UUIDs, so no scope row could authorize S12. The controlled super_admin operator is used and no row is seeded.",
+    "D7_vam062_omitted": "Installing VAM062 V3 to reach the admin console would multiply the release surface for a non-Day-1 path. Accepted as P1-2 with a documented workaround."
+  },
+
+  "validation": {
+    "method": "executed against a disposable postgres:17-alpine reproduction of the Probe A/B baseline",
+    "reproduction": "validation/prod_baseline_reproduction.sql",
+    "results": {
+      "preflight": "PASS, with both expected NOTICEs",
+      "T1_T2_T3_T4": "all committed",
+      "verifier_after_T4": "24/24 PASS",
+      "verifier_before_T4": "V19 and V20 FAIL as documented; all others PASS",
+      "tests": "23/23 assertions passed",
+      "T4_gate_refusals": "PROBE_C_NOT_RECORDED and PROBE_C_INVALID both refused as designed",
+      "rollback_chain": "R4 -> R3 -> R2 -> R1 all committed; preflight PASSES again with an identical baseline token",
+      "trusted_context_sources": "all three proven (legacy_guc, claims_json, set_role); anon denied on both the probe and public.people"
+    },
+    "defects_found_by_execution": [
+      "verifier V04 compared boolean::text against 't' instead of 'true' — a false FAIL on a correct release",
+      "R2 aborted at its final verification on an ambiguous 'g' between a PL/pgSQL variable and a lateral alias",
+      "R1 ran while T2 was still applied, leaving a half-reversed release; it now enforces the documented order"
+    ]
+  },
+
+  "not_applied": true,
+  "requires_independent_static_review": true
+}

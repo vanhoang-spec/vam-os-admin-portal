@@ -131,9 +131,19 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
       <form action={addAction} className="grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3" onSubmit={handleAddSubmit}>
         <h3 className="font-medium">Thêm vai trò membership</h3>
         <input type="hidden" name="person_id" value={personId} />
-        <label className="text-sm">Program<select name="program_id" required className="mt-1 w-full rounded-md border border-vam-line px-3 py-2">{programs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-        <label className="text-sm">Season<select name="season_id" required className="mt-1 w-full rounded-md border border-vam-line px-3 py-2">{seasons.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-        <label className="text-sm">Vai trò<select name="role" required className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"><option value="mentor">Mentor</option><option value="mentee">Mentee</option></select></label>
+        {/*
+          Every select opens on an empty placeholder rather than on its first
+          option. A browser select with no defaultValue silently pre-selects
+          option 0, so this form previously arrived pre-filled with whichever
+          program and season happened to sort first, and with Mentor — which is
+          wrong for an approved mentee. The operator had to notice and change a
+          value that already looked chosen. `required` plus an empty value means
+          an unchosen field cannot be submitted at all, and the server action's
+          uuid/role validation rejects it as a second line of defence.
+        */}
+        <label className="text-sm">Program<select name="program_id" required defaultValue="" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"><option value="" disabled>— Chọn program —</option>{programs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <label className="text-sm">Season<select name="season_id" required defaultValue="" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"><option value="" disabled>— Chọn season —</option>{seasons.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <label className="text-sm">Vai trò<select name="role" required defaultValue="" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"><option value="" disabled>— Chọn vai trò —</option><option value="mentor">Mentor</option><option value="mentee">Mentee</option></select></label>
         <label className="text-sm">Lý do (không bắt buộc)<input name="reason" maxLength={500} className="mt-1 w-full rounded-md border border-vam-line px-3 py-2" /></label>
         <SubmitButton
           disabled={pendingMembershipId === "add_new"}

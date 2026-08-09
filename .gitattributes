@@ -1,0 +1,27 @@
+# This repository is authored with LF endings and runs with core.autocrlf=true,
+# so before this file a fresh checkout on Windows rewrote every tracked text
+# file to CRLF. That is not cosmetic here: the migration suite asserts *byte*
+# identity of the SQL under supabase_migrations/, and the Production release
+# package is pinned by SHA256SUMS.txt. A CRLF checkout therefore failed 34
+# migration-immutability assertions and every package hash against sources that
+# were in fact unmodified — verified on commit 24556ad before this rule existed.
+#
+# Pin the checkout to LF everywhere so a fresh clone is byte-identical to the
+# tree the gates and the hash inventory were recorded against, on any platform.
+# No blob content changes: the index already stores LF.
+* text=auto eol=lf
+
+# Stated explicitly because it is hash-verified, not merely tested.
+VAM_OS_PROD_S12_RELEASE_20260809/** text eol=lf
+
+# Binary payloads must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.zip binary
