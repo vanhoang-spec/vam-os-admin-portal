@@ -27,7 +27,7 @@ export type ApplicationSubmissionInput = {
 
 export type ApplicationSubmissionResult =
   | { ok: true; applicationId: string }
-  | { ok: false; code: "config" | "duplicate" | "season_missing" | "batch_missing" | "validation" | "db"; message: string };
+  | { ok: false; code: "config" | "duplicate" | "season_missing" | "batch_missing" | "validation" | "db" | "incomplete_submission"; message: string };
 
 const SAFE_ERROR =
   "Không thể ghi đơn ứng tuyển. Vui lòng thử lại sau hoặc liên hệ ban tổ chức nếu vấn đề tiếp diễn.";
@@ -228,7 +228,22 @@ export async function submitPilotApplication(
       // Keep this enhancement from creating a partially auditable application.
       // The row was created by this request and has not yet been returned as successful.
       const { error: cleanupErr } = await client.from("applications").delete().eq("id", inserted.id);
-      if (cleanupErr) log("cleanup partial application failed", cleanupErr);
+      if (cleanupErr) {
+        const err = cleanupErr as { code?: string; message?: string };
+        console.error("[applications-create] cleanup partial application failed", {
+          applicationId: inserted.id,
+          code: err.code,
+          message: err.message
+        });
+        // A surviving incomplete row may trigger duplicate protection on retry.
+        // Ask the applicant not to retry repeatedly; controlled repair uses the logged ID.
+        return {
+          ok: false,
+          code: "incomplete_submission",
+          message:
+            "Đơn của bạn có thể đã được ghi nhận chưa hoàn tất. Vui lòng không gửi lại nhiều lần và liên hệ Ban Tổ chức để được hỗ trợ."
+        };
+      }
       return {
         ok: false,
         code: "db",

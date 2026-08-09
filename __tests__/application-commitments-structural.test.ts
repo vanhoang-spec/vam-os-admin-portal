@@ -10,6 +10,7 @@ describe("Season 12 commitment structural safeguards", () => {
   const menteeForm = read("app/apply/mentee/apply-mentee-form.tsx");
   const detail = read("app/applications/[id]/page.tsx");
   const gate = read("lib/apply-gate.ts");
+  const primitives = read("app/apply/_components/form-primitives.tsx");
 
   it("enforces commitments in the server action before persistence", () => {
     expect(action).toContain("validateMentorCommitments");
@@ -31,6 +32,13 @@ describe("Season 12 commitment structural safeguards", () => {
   it("renders all acknowledgement checkboxes unchecked by default", () => {
     expect(mentorForm).not.toContain("defaultChecked");
     expect(menteeForm).not.toContain("defaultChecked");
+  });
+
+  it("associates Mentor and Mentee active-reading help sentences with their inputs", () => {
+    expect(primitives).toContain("aria-describedby={helpId}");
+    expect(primitives).toContain('const helpId = helpText ? `${name}-help` : undefined');
+    expect(mentorForm).toContain("helpText={MENTOR_CONFIRMATION_PHRASE}");
+    expect(menteeForm).toContain("helpText={MENTEE_CONFIRMATION_PHRASE}");
   });
 
   it("shows historical-safe and exception-review admin states", () => {

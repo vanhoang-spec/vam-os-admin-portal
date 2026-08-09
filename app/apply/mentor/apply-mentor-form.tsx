@@ -396,7 +396,7 @@ export function ApplyMentorForm() {
             />
           </div>
           <p className="mt-3 text-sm text-slate-700">
-            Tiêu chí chung: <strong>8 năm kinh nghiệm</strong> và <strong>3 năm quản lý con người</strong>.
+            Tiêu chí chuẩn của Mentor Mùa 12: tối thiểu <strong>8 năm kinh nghiệm làm việc</strong> và ít nhất <strong>3 năm kinh nghiệm trực tiếp quản lý con người/đội ngũ</strong>. Các trường hợp đặc biệt có thể được Core Team xem xét riêng.
           </p>
           {belowThreshold ? (
             <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm leading-6 text-amber-900" role="status">

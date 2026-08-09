@@ -78,6 +78,7 @@ export function TextField({
         required={required}
         placeholder={placeholder}
         defaultValue={defaultValue ?? ""}
+        aria-describedby={helpId}
         className={inputClass}
       />
     </div>

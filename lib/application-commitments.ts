@@ -19,7 +19,7 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
     version: 1,
     role: "mentor",
     wording:
-      "Tôi xác nhận mình có tối thiểu 8 năm kinh nghiệm làm việc, trong đó có ít nhất 3 năm kinh nghiệm trực tiếp quản lý con người/đội ngũ."
+      "Tôi xác nhận các thông tin về kinh nghiệm làm việc và kinh nghiệm quản lý con người/đội ngũ mà tôi cung cấp ở trên là chính xác."
   },
   MENTOR_TIME_COMMITMENT_V1: {
     key: "MENTOR_TIME_COMMITMENT_V1",

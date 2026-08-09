@@ -41,6 +41,13 @@ describe("Season 12 application commitment contract", () => {
     expect(validateMentorCommitments({ totalWorkYears: 10, peopleManagementYears: 4, largestTeamSize: 2, acceptedKeys: keys, activeReading: MENTOR_CONFIRMATION_PHRASE }).ok).toBe(false);
   });
 
+  it("uses truthful experience-data attestation for standard and exception applicants", () => {
+    expect(APPLICATION_ACKNOWLEDGEMENTS.MENTOR_ELIGIBILITY_V1.wording).toBe(
+      "Tôi xác nhận các thông tin về kinh nghiệm làm việc và kinh nghiệm quản lý con người/đội ngũ mà tôi cung cấp ở trên là chính xác."
+    );
+    expect(APPLICATION_ACKNOWLEDGEMENTS.MENTOR_ELIGIBILITY_V1.wording).not.toContain("tối thiểu 8 năm");
+  });
+
   it("classifies work experience below 8 for exception review without rejection", () => {
     expect(validateMentorCommitments({ totalWorkYears: 7, peopleManagementYears: 4, largestTeamSize: 2, acceptedKeys: accepted("mentor"), activeReading: MENTOR_CONFIRMATION_PHRASE })).toEqual({ ok: true, eligibility: "REQUIRES_CORE_TEAM_EXCEPTION_REVIEW" });
   });
