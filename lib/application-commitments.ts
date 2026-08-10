@@ -11,7 +11,7 @@ export type AcknowledgementDefinition = Readonly<{
 export const MENTOR_CONFIRMATION_PHRASE =
   "Tôi hiểu cam kết của Mentor và sẵn sàng đồng hành cùng Mentee trong suốt mùa mentoring.";
 export const MENTEE_CONFIRMATION_PHRASE =
-  "Mentor của tôi có thể không cùng ngành và tôi là người chủ động trong hành trình mentoring.";
+  "Tôi cam kết gặp Mentor tối thiểu một lần mỗi tháng, viết recap trong vòng 48 giờ và chủ động trao đổi với Mentor và Ban Tổ chức.";
 
 export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
   MENTOR_ELIGIBILITY_V1: {
@@ -81,7 +81,14 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
     version: 1,
     role: "mentee",
     wording:
-      "Tôi hiểu rằng tôi là người chủ động trong mối quan hệ mentoring. Tôi có trách nhiệm chủ động liên hệ và sắp xếp lịch gặp Mentor, dự kiến tối thiểu một lần mỗi tháng trong suốt mùa mentoring, thay vì chờ Mentor liên hệ với tôi."
+      "Tôi cam kết chủ động liên hệ và sắp xếp gặp Mentor tối thiểu 1 lần mỗi tháng trong suốt mùa mentoring."
+  },
+  MENTEE_RECAP_48H_V1: {
+    key: "MENTEE_RECAP_48H_V1",
+    version: 1,
+    role: "mentee",
+    wording:
+      "Tôi cam kết hoàn thành recap trong vòng 48 giờ sau mỗi buổi gặp Mentor."
   },
   MENTEE_CROSS_MENTORING_V1: {
     key: "MENTEE_CROSS_MENTORING_V1",
@@ -97,7 +104,7 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
     version: 1,
     role: "mentee",
     wording:
-      "Nếu gặp khó khăn với Mentor, không sắp xếp được lịch gặp, cảm thấy matching chưa phù hợp hoặc có vấn đề khác, tôi sẽ chủ động trao đổi với Ban Tổ chức để được hỗ trợ thay vì im lặng, mất liên lạc hoặc tự ý dừng chương trình giữa mùa."
+      "Tôi cam kết chủ động trao đổi với Mentor và Ban Tổ chức khi có khó khăn, thay đổi hoặc vấn đề ảnh hưởng đến quá trình mentoring."
   },
   MENTEE_OWNERSHIP_V1: {
     key: "MENTEE_OWNERSHIP_V1",
@@ -186,7 +193,7 @@ export function mentorExperienceFromAnswers(answers: ApplicationAnswerLike[]) {
 
 export type CommitmentValidation =
   | { ok: true; eligibility?: MentorEligibility }
-  | { ok: false; message: string };
+  | { ok: false; message: string; fieldErrors?: Array<{ name: string; label: string }> };
 
 export function validateMentorCommitments(input: {
   totalWorkYears: number;
@@ -213,11 +220,16 @@ export function validateMentorCommitments(input: {
   const missing = acknowledgementsForRole("mentor")
     .filter((entry) => entry.key !== "MENTOR_ACTIVE_READING_V1")
     .find((entry) => !input.acceptedKeys.has(entry.key));
-  if (missing) return { ok: false, message: `Vui lòng xác nhận: ${missing.wording}` };
+  if (missing) return {
+    ok: false,
+    message: `Vui lòng xác nhận: ${missing.wording}`,
+    fieldErrors: [{ name: missing.key, label: missing.wording }]
+  };
   if (!confirmationMatches(input.activeReading, MENTOR_CONFIRMATION_PHRASE)) {
     return {
       ok: false,
-      message: "Câu xác nhận chủ động của Mentor chưa đúng. Vui lòng nhập lại câu được hiển thị."
+      message: "Câu xác nhận chủ động của Mentor chưa đúng. Vui lòng nhập lại câu được hiển thị.",
+      fieldErrors: [{ name: "MENTOR_ACTIVE_READING_V1", label: "Câu xác nhận chủ động của Mentor" }]
     };
   }
   return {
@@ -233,11 +245,16 @@ export function validateMenteeCommitments(input: {
   const missing = acknowledgementsForRole("mentee")
     .filter((entry) => entry.key !== "MENTEE_ACTIVE_READING_V1")
     .find((entry) => !input.acceptedKeys.has(entry.key));
-  if (missing) return { ok: false, message: `Vui lòng xác nhận: ${missing.wording}` };
+  if (missing) return {
+    ok: false,
+    message: `Vui lòng xác nhận: ${missing.wording}`,
+    fieldErrors: [{ name: missing.key, label: missing.wording }]
+  };
   if (!confirmationMatches(input.activeReading, MENTEE_CONFIRMATION_PHRASE)) {
     return {
       ok: false,
-      message: "Câu xác nhận chủ động của Mentee chưa đúng. Vui lòng nhập lại câu được hiển thị."
+      message: "Câu xác nhận chủ động của Mentee chưa đúng. Vui lòng nhập lại câu được hiển thị.",
+      fieldErrors: [{ name: "MENTEE_ACTIVE_READING_V1", label: "Câu xác nhận chủ động của Mentee" }]
     };
   }
   return { ok: true };

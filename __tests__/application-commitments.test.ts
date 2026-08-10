@@ -18,8 +18,8 @@ const accepted = (role: "mentor" | "mentee") =>
   new Set(acknowledgementsForRole(role).map((entry) => entry.key));
 
 describe("Season 12 application commitment contract", () => {
-  it("publishes all 14 deterministic immutable V1 semantic keys", () => {
-    expect(acknowledgementRegistry).toHaveLength(14);
+  it("publishes all 15 deterministic immutable V1 semantic keys", () => {
+    expect(acknowledgementRegistry).toHaveLength(15);
     expect(Object.isFrozen(APPLICATION_ACKNOWLEDGEMENTS)).toBe(true);
     expect(acknowledgementRegistry.every((entry) => entry.version === 1 && entry.key.endsWith("_V1"))).toBe(true);
   });
@@ -81,6 +81,29 @@ describe("Season 12 application commitment contract", () => {
     const keys = accepted("mentee");
     keys.delete("MENTEE_OWNERSHIP_V1");
     expect(validateMenteeCommitments({ acceptedKeys: keys, activeReading: MENTEE_CONFIRMATION_PHRASE }).ok).toBe(false);
+  });
+
+  it("requires monthly meeting, recap within 48 hours, and proactive communication", () => {
+    expect(APPLICATION_ACKNOWLEDGEMENTS.MENTEE_PROACTIVE_SCHEDULING_V1.wording).toBe(
+      "Tôi cam kết chủ động liên hệ và sắp xếp gặp Mentor tối thiểu 1 lần mỗi tháng trong suốt mùa mentoring."
+    );
+    expect(APPLICATION_ACKNOWLEDGEMENTS.MENTEE_RECAP_48H_V1.wording).toBe(
+      "Tôi cam kết hoàn thành recap trong vòng 48 giờ sau mỗi buổi gặp Mentor."
+    );
+    expect(APPLICATION_ACKNOWLEDGEMENTS.MENTEE_NO_GHOST_V1.wording).toBe(
+      "Tôi cam kết chủ động trao đổi với Mentor và Ban Tổ chức khi có khó khăn, thay đổi hoặc vấn đề ảnh hưởng đến quá trình mentoring."
+    );
+    for (const key of ["MENTEE_PROACTIVE_SCHEDULING_V1", "MENTEE_RECAP_48H_V1", "MENTEE_NO_GHOST_V1"]) {
+      const keys = accepted("mentee");
+      keys.delete(key);
+      expect(validateMenteeCommitments({ acceptedKeys: keys, activeReading: MENTEE_CONFIRMATION_PHRASE }).ok).toBe(false);
+    }
+  });
+
+  it("uses the final Mentee active-reading operational phrase", () => {
+    expect(MENTEE_CONFIRMATION_PHRASE).toBe(
+      "Tôi cam kết gặp Mentor tối thiểu một lần mỗi tháng, viết recap trong vòng 48 giờ và chủ động trao đổi với Mentor và Ban Tổ chức."
+    );
   });
 
   it("accepts a normalized Mentee phrase and rejects an incorrect phrase", () => {

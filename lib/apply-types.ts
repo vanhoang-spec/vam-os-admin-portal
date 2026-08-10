@@ -11,6 +11,7 @@ export type ApplyActionState = {
   ok: boolean;
   message: string | null;
   applicationId?: string;
+  fieldErrors?: Array<{ name: string; label: string }>;
 };
 
 export const initialApplyActionState: ApplyActionState = {

@@ -5,9 +5,9 @@ import { useFormState } from "react-dom";
 import { submitMentorApplicationAction } from "@/app/actions/apply";
 import { initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import {
+  ApplicationForm,
   CheckboxGroupField,
   ConsentCheckbox,
-  FormBanner,
   FormSection,
   NumberField,
   RadioGroupField,
@@ -15,7 +15,6 @@ import {
   TextAreaField,
   TextField
 } from "../_components/form-primitives";
-import { ApplySubmitButton } from "../_components/submit-button";
 import {
   APPLICATION_ACKNOWLEDGEMENTS as ACK,
   MENTOR_CONFIRMATION_PHRASE
@@ -180,8 +179,7 @@ export function ApplyMentorForm() {
     workYears !== null && managementYears !== null && (workYears < 8 || managementYears < 3);
 
   return (
-    <form action={formAction} className="grid gap-6">
-      <FormBanner state={state} />
+    <ApplicationForm action={formAction} state={state} submitLabel="Gửi đơn đăng ký mentor">
 
       <FormSection title="1. Đồng ý & quyền riêng tư">
         <ConsentCheckbox
@@ -243,6 +241,11 @@ export function ApplyMentorForm() {
           label="Ngành / chức năng phụ (nếu có, chọn tối đa 3)"
           options={[...INDUSTRY_OPTIONS, ...FUNCTION_OPTIONS]}
           helpText="Chỉ chọn nếu có thêm chuyên môn phụ — không bắt buộc."
+          maxSelections={3}
+          otherInput={{
+            name: "secondary_industries_functions_other",
+            label: "Vui lòng ghi rõ kỹ năng/lĩnh vực khác"
+          }}
         />
         <SelectField
           name="highest_degree"
@@ -378,7 +381,7 @@ export function ApplyMentorForm() {
               label="Tổng số năm kinh nghiệm quản lý con người/đội ngũ"
               required
               min={0}
-              helpText="Quản lý con người/đội ngũ nghĩa là từng trực tiếp chịu trách nhiệm dẫn dắt, đánh giá, phát triển hoặc quản lý nhân sự; không chỉ là chức danh Product Manager/Project Manager nhưng không quản lý người."
+              helpText="Quản lý con người/đội ngũ nghĩa là từng trực tiếp chịu trách nhiệm dẫn dắt, đánh giá, phát triển hoặc quản lý nhân sự. Nếu chỉ có chức danh nhưng chưa từng trực tiếp dẫn dắt, đánh giá hoặc phát triển nhân sự trực thuộc thì chưa được tính là kinh nghiệm quản lý đội ngũ."
               onChange={(event) =>
                 setManagementYears(event.target.value === "" ? null : Number(event.target.value))
               }
@@ -405,9 +408,18 @@ export function ApplyMentorForm() {
           ) : null}
         </div>
 
+        <div className="rounded-lg border-2 border-vam-green bg-vam-mint/40 p-4">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-vam-green">
+            Cam kết thời gian — Bắt buộc
+          </p>
+          <p className="mb-3 text-sm text-vam-ink">
+            Dành tối thiểu <strong className="text-base">1–2 giờ/tháng cho mỗi Mentee</strong> trong suốt mùa mentoring.
+          </p>
+          <ConsentCheckbox name={ACK.MENTOR_TIME_COMMITMENT_V1.key} required label={ACK.MENTOR_TIME_COMMITMENT_V1.wording} />
+        </div>
+
         {[
           ACK.MENTOR_ELIGIBILITY_V1,
-          ACK.MENTOR_TIME_COMMITMENT_V1,
           ACK.MENTOR_MATCH_EXPECTATION_V1,
           ACK.MENTOR_MENTORING_PRINCIPLE_V1,
           ACK.MENTOR_CONDUCT_V1,
@@ -426,14 +438,8 @@ export function ApplyMentorForm() {
             helpText={MENTOR_CONFIRMATION_PHRASE}
           />
         </div>
-        <p className="text-xs text-slate-500">
-          Cam kết thời gian tối thiểu: <strong>1–2 giờ/tháng</strong> cho mỗi Mentee.
-        </p>
       </FormSection>
 
-      <div className="flex justify-end pt-2">
-        <ApplySubmitButton idleLabel="Gửi đơn đăng ký mentor" />
-      </div>
-    </form>
+    </ApplicationForm>
   );
 }

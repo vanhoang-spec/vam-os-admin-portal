@@ -14,6 +14,7 @@ import {
   validateMenteeCommitments,
   validateMentorCommitments
 } from "@/lib/application-commitments";
+import { validateMaxThreeWithOther } from "@/lib/application-form-validation";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
 const INTAKE_BATCH_CODE = SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE;
@@ -117,6 +118,7 @@ export async function submitMentorApplicationAction(
       industry_primary: formText(formData, "industry_primary"),
       function_primary: formText(formData, "function_primary"),
       secondary_industries_functions: formArray(formData, "secondary_industries_functions"),
+      secondary_industries_functions_other: formText(formData, "secondary_industries_functions_other") || null,
       highest_degree: formText(formData, "highest_degree") || null,
       // Section 5 — mentoring readiness
       prior_vam_involvement: formText(formData, "prior_vam_involvement") || null,
@@ -162,6 +164,12 @@ export async function submitMentorApplicationAction(
     };
     const programsOk = (rawPayload.programs_willing_to_join as string[]).length > 0;
     const consentMethodsOk = (rawPayload.consent_contact_methods as string[]).length > 0;
+    const secondaryValidation = validateMaxThreeWithOther({
+      values: rawPayload.secondary_industries_functions as string[],
+      otherText: String(rawPayload.secondary_industries_functions_other ?? ""),
+      fieldName: "secondary_industries_functions",
+      fieldLabel: "Ngành / chức năng phụ"
+    });
 
     const missingField = Object.entries(required).find(([, v]) => !v || (typeof v === "string" && !v.trim()));
     if (missingField) {
@@ -180,6 +188,13 @@ export async function submitMentorApplicationAction(
       return {
         ok: false,
         message: "Bạn cần đồng ý cho phép VAM OS lưu trữ dữ liệu cá nhân để gửi đơn."
+      };
+    }
+    if (!secondaryValidation.ok) {
+      return {
+        ok: false,
+        message: secondaryValidation.message,
+        fieldErrors: [{ name: secondaryValidation.fieldName, label: secondaryValidation.fieldLabel }]
       };
     }
     const commitmentValidation = validateMentorCommitments({
@@ -286,6 +301,7 @@ export async function submitMenteeApplicationAction(
       top_3_questions_for_mentor: formText(formData, "top_3_questions_for_mentor"),
       current_difficulty_text: formText(formData, "current_difficulty_text") || null,
       target_soft_skills: formArray(formData, "target_soft_skills"),
+      target_soft_skills_other: formText(formData, "target_soft_skills_other") || null,
       meeting_format_preference: formText(formData, "meeting_format_preference") || null,
       mentor_gender_preference: formText(formData, "mentor_gender_preference") || null,
       training_topics_interest: formArray(formData, "training_topics_interest"),
@@ -320,6 +336,12 @@ export async function submitMenteeApplicationAction(
     };
     const interviewOk = (rawPayload.available_for_interview as string[]).length > 0;
     const emailNotifOk = (rawPayload.email_notification_consent as string[]).length > 0;
+    const softSkillValidation = validateMaxThreeWithOther({
+      values: rawPayload.target_soft_skills as string[],
+      otherText: String(rawPayload.target_soft_skills_other ?? ""),
+      fieldName: "target_soft_skills",
+      fieldLabel: "Soft skills bạn muốn phát triển"
+    });
 
     const missingField = Object.entries(required).find(([, v]) => !v || (typeof v === "string" && !v.trim()));
     if (missingField) {
@@ -341,6 +363,13 @@ export async function submitMenteeApplicationAction(
       return {
         ok: false,
         message: "Bạn cần đồng ý cho phép VAM OS lưu trữ dữ liệu cá nhân để gửi đơn."
+      };
+    }
+    if (!softSkillValidation.ok) {
+      return {
+        ok: false,
+        message: softSkillValidation.message,
+        fieldErrors: [{ name: softSkillValidation.fieldName, label: softSkillValidation.fieldLabel }]
       };
     }
     const commitmentValidation = validateMenteeCommitments({

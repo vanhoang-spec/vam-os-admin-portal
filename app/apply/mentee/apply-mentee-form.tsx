@@ -4,16 +4,15 @@ import { useFormState } from "react-dom";
 import { submitMenteeApplicationAction } from "@/app/actions/apply";
 import { initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import {
+  ApplicationForm,
   CheckboxGroupField,
   ConsentCheckbox,
-  FormBanner,
   FormSection,
   RadioGroupField,
   SelectField,
   TextAreaField,
   TextField
 } from "../_components/form-primitives";
-import { ApplySubmitButton } from "../_components/submit-button";
 import {
   APPLICATION_ACKNOWLEDGEMENTS as ACK,
   MENTEE_CONFIRMATION_PHRASE
@@ -150,8 +149,7 @@ export function ApplyMenteeForm() {
   );
 
   return (
-    <form action={formAction} className="grid gap-6">
-      <FormBanner state={state} />
+    <ApplicationForm action={formAction} state={state} submitLabel="Gửi đơn đăng ký mentee">
 
       <FormSection title="1. Đồng ý & quyền riêng tư">
         <ConsentCheckbox
@@ -263,6 +261,11 @@ export function ApplyMenteeForm() {
           name="target_soft_skills"
           label="Soft skills bạn muốn phát triển (chọn tối đa 3)"
           options={SOFT_SKILL_OPTIONS}
+          maxSelections={3}
+          otherInput={{
+            name: "target_soft_skills_other",
+            label: "Vui lòng ghi rõ kỹ năng/lĩnh vực khác"
+          }}
         />
         <SelectField
           name="meeting_format_preference"
@@ -301,7 +304,7 @@ export function ApplyMenteeForm() {
         <ConsentCheckbox
           name="commitment_understanding"
           required
-          label="Tôi đã đọc và cam kết tham gia tối thiểu 6 tháng + recap mỗi tháng + đến kickoff."
+          label="Tôi đã đọc và cam kết tham gia tối thiểu 6 tháng + hoàn thành recap trong 48 giờ sau mỗi buổi gặp + đến kickoff."
         />
       </FormSection>
 
@@ -341,6 +344,7 @@ export function ApplyMenteeForm() {
           ACK.MENTEE_CROSS_INDUSTRY_V1,
           ACK.MENTEE_MENTOR_LEVEL_EXPECTATION_V1,
           ACK.MENTEE_PROACTIVE_SCHEDULING_V1,
+          ACK.MENTEE_RECAP_48H_V1,
           ACK.MENTEE_CROSS_MENTORING_V1,
           ACK.MENTEE_NO_GHOST_V1,
           ACK.MENTEE_OWNERSHIP_V1
@@ -364,9 +368,6 @@ export function ApplyMenteeForm() {
         </div>
       </FormSection>
 
-      <div className="flex justify-end pt-2">
-        <ApplySubmitButton idleLabel="Gửi đơn đăng ký mentee" />
-      </div>
-    </form>
+    </ApplicationForm>
   );
 }

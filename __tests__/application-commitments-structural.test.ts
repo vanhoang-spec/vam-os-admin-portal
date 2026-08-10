@@ -43,8 +43,23 @@ describe("Season 12 commitment structural safeguards", () => {
 
   it("shows historical-safe and exception-review admin states", () => {
     expect(detail).toContain("Không được thu thập cho phiên bản đơn này.");
+    expect(detail).toContain("Acknowledgements đã thu thập một phần (phiên bản lịch sử)");
     expect(detail).toContain("Requires Core Team exception review");
     expect(detail).toContain("Acknowledgements completed");
+  });
+
+  it("persists and validates max-three Other answers without a migration", () => {
+    expect(action).toContain("validateMaxThreeWithOther");
+    expect(action).toContain("secondary_industries_functions_other");
+    expect(action).toContain("target_soft_skills_other");
+    expect(mentorForm).toContain("maxSelections={3}");
+    expect(menteeForm).toContain("maxSelections={3}");
+  });
+
+  it("renders the revised Mentor helper and prominent required time commitment", () => {
+    expect(mentorForm).toContain("Nếu chỉ có chức danh nhưng chưa từng trực tiếp dẫn dắt");
+    expect(mentorForm).toContain("Cam kết thời gian — Bắt buộc");
+    expect(mentorForm).toContain("1–2 giờ/tháng cho mỗi Mentee");
   });
 
   it("keeps the token/pilot gate's two-condition model", () => {

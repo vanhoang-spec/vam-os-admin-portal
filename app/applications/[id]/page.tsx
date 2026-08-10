@@ -386,7 +386,7 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
                 <summary className="cursor-pointer text-sm font-semibold text-vam-ink">
                   {acknowledgementSummary?.completed
                     ? "✓ Acknowledgements completed"
-                    : "Acknowledgements chưa đầy đủ"}
+                    : "Acknowledgements đã thu thập một phần (phiên bản lịch sử)"}
                 </summary>
                 <div className="mt-3 grid gap-2">
                   {acknowledgementSummary?.collected.map(({ definition, answer }) => (
