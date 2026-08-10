@@ -18,8 +18,8 @@ const accepted = (role: "mentor" | "mentee") =>
   new Set(acknowledgementsForRole(role).map((entry) => entry.key));
 
 describe("Season 12 application commitment contract", () => {
-  it("publishes all 15 deterministic immutable V1 semantic keys", () => {
-    expect(acknowledgementRegistry).toHaveLength(15);
+  it("publishes all 20 deterministic immutable V1 semantic keys", () => {
+    expect(acknowledgementRegistry).toHaveLength(20);
     expect(Object.isFrozen(APPLICATION_ACKNOWLEDGEMENTS)).toBe(true);
     expect(acknowledgementRegistry.every((entry) => entry.version === 1 && entry.key.endsWith("_V1"))).toBe(true);
   });
@@ -91,7 +91,7 @@ describe("Season 12 application commitment contract", () => {
       "Tôi cam kết hoàn thành recap trong vòng 48 giờ sau mỗi buổi gặp Mentor."
     );
     expect(APPLICATION_ACKNOWLEDGEMENTS.MENTEE_NO_GHOST_V1.wording).toBe(
-      "Tôi cam kết chủ động trao đổi với Mentor và Ban Tổ chức khi có khó khăn, thay đổi hoặc vấn đề ảnh hưởng đến quá trình mentoring."
+      "Tôi hiểu rằng khi có vấn đề, cảm thấy không an toàn hoặc không còn phù hợp với mối quan hệ mentoring, tôi sẽ chủ động trao đổi với Mentor hoặc Ban Tổ chức thay vì ngừng liên lạc; Ban Tổ chức có quyền xem xét hoặc kết thúc matching khi cần thiết."
     );
     for (const key of ["MENTEE_PROACTIVE_SCHEDULING_V1", "MENTEE_RECAP_48H_V1", "MENTEE_NO_GHOST_V1"]) {
       const keys = accepted("mentee");

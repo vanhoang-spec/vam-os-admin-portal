@@ -422,14 +422,24 @@ export function ApplyMentorForm() {
           ACK.MENTOR_ELIGIBILITY_V1,
           ACK.MENTOR_MATCH_EXPECTATION_V1,
           ACK.MENTOR_MENTORING_PRINCIPLE_V1,
-          ACK.MENTOR_CONDUCT_V1,
           ACK.MENTOR_NO_GHOST_V1
         ].map((entry) => (
           <div key={entry.key} className="rounded-md border border-vam-line bg-white p-2">
             <ConsentCheckbox name={entry.key} required label={entry.wording} />
           </div>
         ))}
-
+        <h3 className="mt-2 border-t border-vam-line pt-4 text-sm font-semibold text-vam-ink">
+          Ranh giới nghề nghiệp, an toàn và bảo mật
+        </h3>
+        {[
+          ACK.MENTOR_BOUNDARIES_V1,
+          ACK.MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1,
+          ACK.MENTOR_CONFLICT_ESCALATION_V1
+        ].map((entry) => (
+          <div key={entry.key} className="rounded-md border border-vam-line bg-white p-2">
+            <ConsentCheckbox name={entry.key} required label={entry.wording} />
+          </div>
+        ))}
         <div className="rounded-md border border-vam-line bg-slate-50 p-4">
           <TextField
             name="MENTOR_ACTIVE_READING_V1"

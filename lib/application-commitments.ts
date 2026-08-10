@@ -6,6 +6,7 @@ export type AcknowledgementDefinition = Readonly<{
   role: ApplicationCommitmentRole;
   wording: string;
   helper?: string;
+  collectionStage?: "application" | "post_approval_after_orientation";
 }>;
 
 export const MENTOR_CONFIRMATION_PHRASE =
@@ -43,11 +44,35 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
       "Tôi hiểu rằng mentoring là một quá trình đồng hành. Tôi sẽ tôn trọng Mentee, lắng nghe, trao đổi cởi mở và không áp đặt quyết định cá nhân lên Mentee."
   },
   MENTOR_CONDUCT_V1: {
+    // Public application exclusion is intentional. Collect only during future
+    // post-approval onboarding, after Core Team review and Mentor Orientation.
     key: "MENTOR_CONDUCT_V1",
     version: 1,
     role: "mentor",
     wording:
-      "Tôi cam kết tuân thủ Code of Conduct của UEH Mentoring; không sử dụng quan hệ mentoring để bán hàng, bán khóa học, tuyển dụng đa cấp hoặc phục vụ các lợi ích cá nhân không phù hợp với mục tiêu của chương trình; đồng thời tôn trọng ranh giới nghề nghiệp và sự an toàn của Mentee."
+      "Tôi đã đọc và đồng ý tuân thủ Mentor Code of Conduct; tôi hiểu rằng Ban Tổ chức có quyền xem xét, tạm dừng hoặc chấm dứt tư cách Mentor nếu có vi phạm nghiêm trọng.",
+    collectionStage: "post_approval_after_orientation"
+  },
+  MENTOR_BOUNDARIES_V1: {
+    key: "MENTOR_BOUNDARIES_V1",
+    version: 1,
+    role: "mentor",
+    wording:
+      "Tôi cam kết duy trì ranh giới nghề nghiệp phù hợp và không lợi dụng vai trò Mentor cho bất kỳ mục đích cá nhân, tài chính, thương mại hoặc tình cảm không phù hợp nào."
+  },
+  MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1: {
+    key: "MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1",
+    version: 1,
+    role: "mentor",
+    wording:
+      "Tôi cam kết tôn trọng, không phân biệt đối xử, không quấy rối và bảo vệ sự an toàn, quyền riêng tư cũng như tính bảo mật của Mentee."
+  },
+  MENTOR_CONFLICT_ESCALATION_V1: {
+    key: "MENTOR_CONFLICT_ESCALATION_V1",
+    version: 1,
+    role: "mentor",
+    wording:
+      "Tôi sẽ chủ động thông báo cho Ban Tổ chức khi phát sinh xung đột lợi ích, vấn đề vượt quá phạm vi chuyên môn, hoặc tình huống có thể ảnh hưởng đến sự an toàn hoặc chất lượng của mối quan hệ mentoring."
   },
   MENTOR_NO_GHOST_V1: {
     key: "MENTOR_NO_GHOST_V1",
@@ -104,7 +129,21 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
     version: 1,
     role: "mentee",
     wording:
-      "Tôi cam kết chủ động trao đổi với Mentor và Ban Tổ chức khi có khó khăn, thay đổi hoặc vấn đề ảnh hưởng đến quá trình mentoring."
+      "Tôi hiểu rằng khi có vấn đề, cảm thấy không an toàn hoặc không còn phù hợp với mối quan hệ mentoring, tôi sẽ chủ động trao đổi với Mentor hoặc Ban Tổ chức thay vì ngừng liên lạc; Ban Tổ chức có quyền xem xét hoặc kết thúc matching khi cần thiết."
+  },
+  MENTEE_RELATIONSHIP_BOUNDARIES_V1: {
+    key: "MENTEE_RELATIONSHIP_BOUNDARIES_V1",
+    version: 1,
+    role: "mentee",
+    wording:
+      "Tôi hiểu rằng Mentor không có nghĩa vụ cung cấp việc làm, referral, kết nối, hỗ trợ tài chính, thông tin nội bộ hoặc các lợi ích cá nhân khác. Tôi cam kết không gây áp lực hoặc lợi dụng mối quan hệ Mentor–Mentee để yêu cầu các lợi ích không phù hợp với mục đích mentoring."
+  },
+  MENTEE_CONFIDENTIALITY_V1: {
+    key: "MENTEE_CONFIDENTIALITY_V1",
+    version: 1,
+    role: "mentee",
+    wording:
+      "Tôi cam kết bảo mật thông tin Mentor chia sẻ; không ghi âm, ghi hình, đăng tải, chuyển tiếp hoặc sử dụng nội dung trao đổi khi chưa được sự đồng ý phù hợp."
   },
   MENTEE_OWNERSHIP_V1: {
     key: "MENTEE_OWNERSHIP_V1",
@@ -121,10 +160,13 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
   }
 } satisfies Record<string, AcknowledgementDefinition>);
 
-export const acknowledgementRegistry = Object.values(APPLICATION_ACKNOWLEDGEMENTS);
+export const acknowledgementRegistry: readonly AcknowledgementDefinition[] =
+  Object.values(APPLICATION_ACKNOWLEDGEMENTS);
 
 export function acknowledgementsForRole(role: ApplicationCommitmentRole) {
-  return acknowledgementRegistry.filter((entry) => entry.role === role);
+  return acknowledgementRegistry.filter((entry) =>
+    entry.role === role && (entry.collectionStage ?? "application") === "application"
+  );
 }
 
 export function normalizeConfirmation(value: string): string {

@@ -340,13 +340,13 @@ export function ApplyMenteeForm() {
         <p className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-slate-700">
           Mentee cần <strong>chủ động liên hệ Mentor</strong>; <strong>Cross-mentoring</strong> là nguồn lực bổ sung.
         </p>
+        <h3 className="text-sm font-semibold text-vam-ink">Cam kết tham gia và chủ động</h3>
         {[
           ACK.MENTEE_CROSS_INDUSTRY_V1,
           ACK.MENTEE_MENTOR_LEVEL_EXPECTATION_V1,
           ACK.MENTEE_PROACTIVE_SCHEDULING_V1,
           ACK.MENTEE_RECAP_48H_V1,
           ACK.MENTEE_CROSS_MENTORING_V1,
-          ACK.MENTEE_NO_GHOST_V1,
           ACK.MENTEE_OWNERSHIP_V1
         ].map((entry) => (
           <div key={entry.key} className="rounded-md border border-vam-line bg-white p-2">
@@ -356,6 +356,18 @@ export function ApplyMenteeForm() {
                 {(entry as { helper?: string }).helper}
               </p>
             ) : null}
+          </div>
+        ))}
+        <h3 className="mt-2 border-t border-vam-line pt-4 text-sm font-semibold text-vam-ink">
+          Ranh giới, bảo mật và an toàn
+        </h3>
+        {[
+          ACK.MENTEE_RELATIONSHIP_BOUNDARIES_V1,
+          ACK.MENTEE_CONFIDENTIALITY_V1,
+          ACK.MENTEE_NO_GHOST_V1
+        ].map((entry) => (
+          <div key={entry.key} className="rounded-md border border-vam-line bg-white p-2">
+            <ConsentCheckbox name={entry.key} required label={entry.wording} />
           </div>
         ))}
         <div className="rounded-md border border-vam-line bg-slate-50 p-4">
