@@ -11,14 +11,14 @@ describe("Login Error Taxonomy & Safety", () => {
     });
     expect(errorType).toBe("invalid_credentials");
     const msg = mapAuthError(errorType);
-    expect(msg).toBe("Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra và thử lại.");
+    expect(msg).toBe("Sai email hoặc mật khẩu");
     expect(msg).not.toContain("supabase.co");
     expect(msg).not.toContain("sb_publishable");
   });
 
   it("maps unauthorized admin errors securely", () => {
     const msg = mapAuthError("unauthorized_admin");
-    expect(msg).toBe("Tài khoản này chưa được cấp quyền truy cập VAM OS. Vui lòng liên hệ người phụ trách.");
+    expect(msg).toBe("Sai email hoặc mật khẩu");
     expect(msg).not.toContain("admin_users");
   });
 

@@ -40,8 +40,8 @@ vi.mock("next/navigation", () => ({
   })
 }));
 
-const UNAUTHORIZED_MESSAGE = "Tài khoản này chưa được cấp quyền truy cập VAM OS. Vui lòng liên hệ người phụ trách.";
-const INVALID_CREDENTIALS_MESSAGE = "Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra và thử lại.";
+const UNAUTHORIZED_MESSAGE = "Sai email hoặc mật khẩu";
+const INVALID_CREDENTIALS_MESSAGE = "Sai email hoặc mật khẩu";
 
 type StageOp = "select" | "update";
 

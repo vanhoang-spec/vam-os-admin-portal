@@ -8,6 +8,7 @@ import {
   CheckboxGroupField,
   ConsentCheckbox,
   FormSection,
+  PhoneField,
   RadioGroupField,
   SelectField,
   TextAreaField,
@@ -167,16 +168,20 @@ export function ApplyMenteeForm() {
 
       <FormSection title="2. Thông tin định danh">
         <TextField name="full_name" label="Họ và tên" required />
-        <SelectField name="gender" label="Giới tính" options={GENDER_OPTIONS} />
+        <SelectField
+          name="gender"
+          label="Giới tính"
+          options={GENDER_OPTIONS}
+          otherInput={{ name: "gender_other", label: "Vui lòng ghi rõ" }}
+        />
         <TextField name="year_of_birth" label="Năm sinh" placeholder="VD: 2003" />
       </FormSection>
 
       <FormSection title="3. Liên hệ">
         <TextField name="email_primary" label="Email" type="email" required />
-        <TextField
+        <PhoneField
           name="phone_primary"
           label="Số điện thoại"
-          type="tel"
           required
           placeholder="VD: 0901234567"
         />
@@ -188,12 +193,19 @@ export function ApplyMenteeForm() {
       </FormSection>
 
       <FormSection title="4. Học vấn">
-        <SelectField name="university" label="Trường đại học" required options={UNIVERSITY_OPTIONS} />
+        <SelectField
+          name="university"
+          label="Trường đại học"
+          required
+          options={UNIVERSITY_OPTIONS}
+          otherInput={{ name: "university_other", label: "Vui lòng ghi rõ", triggerValue: "OTHER" }}
+        />
         <SelectField
           name="school_or_faculty"
           label="Khoa / viện (nếu là UEH)"
           required
           options={FACULTY_OPTIONS}
+          otherInput={{ name: "school_or_faculty_other", label: "Vui lòng ghi rõ" }}
         />
         <TextField name="major" label="Ngành học" required placeholder="VD: Marketing số" />
         <TextField name="class_cohort" label="Khoá (VD: K48)" required placeholder="K48" />
@@ -218,12 +230,14 @@ export function ApplyMenteeForm() {
           label="Ngành nghề bạn muốn theo đuổi"
           required
           options={TARGET_INDUSTRY_OPTIONS}
+          otherInput={{ name: "target_industry_other", label: "Vui lòng ghi rõ" }}
         />
         <SelectField
           name="target_function"
           label="Chức năng / vị trí công việc bạn quan tâm"
           required
           options={TARGET_FUNCTION_OPTIONS}
+          otherInput={{ name: "target_function_other", label: "Vui lòng ghi rõ" }}
         />
         <TextAreaField
           name="one_year_vision_text"
@@ -282,6 +296,7 @@ export function ApplyMenteeForm() {
           label="Chủ đề training / workshop bạn quan tâm"
           options={TRAINING_TOPIC_OPTIONS}
           helpText="BTC dùng tín hiệu này để tổ chức workshop, không phải tiêu chí xét hồ sơ."
+          otherInput={{ name: "training_topics_interest_other", label: "Vui lòng ghi rõ" }}
         />
       </FormSection>
 
@@ -325,6 +340,7 @@ export function ApplyMenteeForm() {
           name="referrer_or_source"
           label="Bạn biết đến chương trình qua đâu?"
           options={REFERRER_OPTIONS}
+          otherInput={{ name: "referrer_or_source_other", label: "Vui lòng ghi rõ" }}
         />
         <TextAreaField
           name="additional_notes"

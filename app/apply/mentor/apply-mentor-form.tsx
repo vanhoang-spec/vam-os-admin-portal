@@ -10,6 +10,7 @@ import {
   ConsentCheckbox,
   FormSection,
   NumberField,
+  PhoneField,
   RadioGroupField,
   SelectField,
   TextAreaField,
@@ -138,13 +139,12 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const PROGRAM_OPTIONS = [
-  { value: "UEHM", label: "UEH Mentoring (mặc định)" },
-  { value: "HAM", label: "HAM (Hanoi Alumni Mentoring)" },
-  { value: "FTU", label: "FTU Mentoring" },
-  { value: "BK", label: "BK Mentoring" },
-  { value: "HUFLIT", label: "HUFLIT Mentoring" },
-  { value: "HUB", label: "HUB Mentoring" },
-  { value: "DUE", label: "DUE Mentoring" }
+  { value: "UEHM", label: "UEH Mentoring (ĐH Kinh tế TP.HCM)" },
+  { value: "HAM", label: "Hanoi Alumni Mentoring" },
+  { value: "BK", label: "BK Mentoring (Đại học Bách Khoa TP.HCM)" },
+  { value: "HUFLIT", label: "HUFLIT Mentoring (ĐH Ngoại ngữ - Tin học TP.HCM)" },
+  { value: "HUB", label: "HUB Mentoring (ĐH Ngân hàng TP.HCM)" },
+  { value: "DUE", label: "DUE Mentoring (Đại học Kinh tế Đà Nẵng)" }
 ];
 
 const ACTIVITY_OPTIONS = [
@@ -198,17 +198,21 @@ export function ApplyMentorForm() {
       <FormSection title="2. Thông tin định danh">
         <TextField name="full_name" label="Họ và tên (đầy đủ)" required />
         <TextField name="preferred_name" label="Tên thường gọi (nếu khác họ tên)" />
-        <SelectField name="gender" label="Giới tính" options={GENDER_OPTIONS} />
+        <SelectField
+          name="gender"
+          label="Giới tính"
+          options={GENDER_OPTIONS}
+          otherInput={{ name: "gender_other", label: "Vui lòng ghi rõ" }}
+        />
         <TextField name="year_of_birth" label="Năm sinh" placeholder="VD: 1990" />
         <SelectField name="current_city" label="Thành phố hiện tại" options={CITY_OPTIONS} />
       </FormSection>
 
       <FormSection title="3. Liên hệ">
         <TextField name="email_primary" label="Email" type="email" required />
-        <TextField
+        <PhoneField
           name="phone_primary"
           label="Số điện thoại"
-          type="tel"
           required
           placeholder="VD: 0901234567"
         />
@@ -229,12 +233,14 @@ export function ApplyMentorForm() {
           label="Ngành nghề chính (chọn 1)"
           required
           options={INDUSTRY_OPTIONS}
+          otherInput={{ name: "industry_primary_other", label: "Vui lòng ghi rõ" }}
         />
         <SelectField
           name="function_primary"
           label="Chức năng / chuyên môn chính (chọn 1)"
           required
           options={FUNCTION_OPTIONS}
+          otherInput={{ name: "function_primary_other", label: "Vui lòng ghi rõ" }}
         />
         <CheckboxGroupField
           name="secondary_industries_functions"
@@ -251,6 +257,7 @@ export function ApplyMentorForm() {
           name="highest_degree"
           label="Bằng cấp cao nhất"
           options={HIGHEST_DEGREE_OPTIONS}
+          otherInput={{ name: "highest_degree_other", label: "Vui lòng ghi rõ" }}
         />
       </FormSection>
 
@@ -325,11 +332,13 @@ export function ApplyMentorForm() {
           label="Chương trình anh/chị sẵn sàng tham gia (chọn 1 hoặc nhiều)"
           required
           options={PROGRAM_OPTIONS}
+          defaultSelected={["UEHM"]}
         />
         <CheckboxGroupField
           name="activities_willing_to_support"
           label="Ngoài mentoring 1:1, anh/chị có thể hỗ trợ hoạt động nào?"
           options={ACTIVITY_OPTIONS}
+          otherInput={{ name: "activities_willing_to_support_other", label: "Vui lòng ghi rõ" }}
         />
       </FormSection>
 
@@ -354,6 +363,7 @@ export function ApplyMentorForm() {
           name="referrer_or_source"
           label="Anh/chị biết đến chương trình qua đâu?"
           options={REFERRER_OPTIONS}
+          otherInput={{ name: "referrer_or_source_other", label: "Vui lòng ghi rõ" }}
         />
         <TextAreaField
           name="additional_notes"

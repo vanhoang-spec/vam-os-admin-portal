@@ -14,9 +14,9 @@ const requiredBadge = (
   </span>
 );
 
-const InlineRequiredError = () => (
+const InlineRequiredError = ({ message }: { message?: string }) => (
   <span className="mt-1 hidden text-sm font-medium text-red-700 group-data-[invalid=true]:block" role="alert">
-    Vui lòng hoàn thành mục bắt buộc này.
+    {message || "Vui lòng hoàn thành mục bắt buộc này."}
   </span>
 );
 
@@ -63,11 +63,7 @@ export function ApplicationForm({
       control.setAttribute("aria-invalid", "true");
       control.closest("[data-field-name]")?.setAttribute("data-invalid", "true");
     });
-    const first = invalid[0];
-    if (first) {
-      first.scrollIntoView({ behavior: "smooth", block: "center" });
-      first.focus({ preventScroll: true });
-    }
+    // Native HTML5 validation will handle scrolling and focusing
   };
 
   useEffect(() => {
@@ -88,14 +84,9 @@ export function ApplicationForm({
       ref={formRef}
       action={action}
       className="grid gap-6"
-      noValidate
+      onInvalidCapture={revealInvalid}
       onSubmit={(event) => {
-        if (!event.currentTarget.checkValidity()) {
-          event.preventDefault();
-          revealInvalid();
-        } else {
-          setMissing([]);
-        }
+        setMissing([]);
       }}
       onChange={(event) => {
         const control = event.target as HTMLInputElement;
@@ -202,6 +193,47 @@ export function TextField({
   );
 }
 
+export function PhoneField({
+  name,
+  label,
+  required,
+  placeholder,
+  helpText,
+  defaultValue
+}: {
+  name: string;
+  label: string;
+  required?: boolean;
+  placeholder?: string;
+  helpText?: string;
+  defaultValue?: string;
+}) {
+  const helpId = helpText ? `${name}-help` : undefined;
+  return (
+    <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
+      <Label htmlFor={name} required={required} helpText={helpText} helpId={helpId}>
+        {label}
+      </Label>
+      <input
+        id={name}
+        name={name}
+        type="tel"
+        inputMode="numeric"
+        maxLength={10}
+        pattern="[0-9]{10}"
+        required={required}
+        aria-required={required || undefined}
+        placeholder={placeholder}
+        defaultValue={defaultValue ?? ""}
+        aria-describedby={helpId}
+        className={inputClass}
+      />
+      <InlineRequiredError message="Số điện thoại phải gồm đúng 10 chữ số." />
+    </div>
+  );
+}
+
+
 export function NumberField({
   name,
   label,
@@ -284,7 +316,8 @@ export function SelectField({
   required,
   options,
   helpText,
-  placeholderOption = "-- Chọn --"
+  placeholderOption = "-- Chọn --",
+  otherInput
 }: {
   name: string;
   label: string;
@@ -292,13 +325,17 @@ export function SelectField({
   options: Array<{ value: string; label: string }>;
   helpText?: string;
   placeholderOption?: string;
+  otherInput?: { name: string; label: string; triggerValue?: string };
 }) {
+  const [selectedValue, setSelectedValue] = useState("");
+  const showOther = otherInput && selectedValue === (otherInput.triggerValue ?? "other");
+
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
       <Label htmlFor={name} required={required} helpText={helpText}>
         {label}
       </Label>
-      <select id={name} name={name} required={required} aria-required={required || undefined} defaultValue="" className={inputClass}>
+      <select id={name} name={name} required={required} aria-required={required || undefined} defaultValue="" className={inputClass} onChange={(e) => setSelectedValue(e.target.value)}>
         <option value="" disabled={required}>
           {placeholderOption}
         </option>
@@ -308,6 +345,12 @@ export function SelectField({
           </option>
         ))}
       </select>
+      {showOther ? (
+        <div className="mt-3" data-field-name={otherInput.name} data-field-label={otherInput.label}>
+          <Label htmlFor={otherInput.name} required>{otherInput.label}</Label>
+          <input id={otherInput.name} name={otherInput.name} required aria-required="true" className={inputClass} />
+        </div>
+      ) : null}
       <InlineRequiredError />
     </div>
   );
@@ -320,7 +363,8 @@ export function CheckboxGroupField({
   options,
   helpText,
   maxSelections,
-  otherInput
+  otherInput,
+  defaultSelected
 }: {
   name: string;
   label: string;
@@ -329,8 +373,9 @@ export function CheckboxGroupField({
   helpText?: string;
   maxSelections?: number;
   otherInput?: { name: string; label: string };
+  defaultSelected?: string[];
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set(defaultSelected || []));
   const [limitError, setLimitError] = useState(false);
   const otherSelected = selected.has("other");
   return (
@@ -355,6 +400,7 @@ export function CheckboxGroupField({
               type="checkbox"
               name={name}
               value={o.value}
+              defaultChecked={defaultSelected?.includes(o.value)}
               required={required && selected.size === 0 && index === 0}
               aria-required={required || undefined}
               onChange={(event) => {
@@ -395,14 +441,19 @@ export function RadioGroupField({
   label,
   required,
   options,
-  helpText
+  helpText,
+  otherInput
 }: {
   name: string;
   label: string;
   required?: boolean;
   options: Array<{ value: string; label: string }>;
   helpText?: string;
+  otherInput?: { name: string; label: string; triggerValue?: string };
 }) {
+  const [selectedValue, setSelectedValue] = useState("");
+  const showOther = otherInput && selectedValue === (otherInput.triggerValue ?? "other");
+
   return (
     <fieldset data-field-name={name} data-field-label={label} aria-required={required || undefined} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
       <legend className="block text-sm font-medium text-vam-ink">
@@ -420,12 +471,19 @@ export function RadioGroupField({
               name={name}
               value={o.value}
               required={required}
+              onChange={(e) => setSelectedValue(e.target.value)}
               className="mt-0.5 h-4 w-4 border-vam-line text-vam-green focus:ring-vam-mint"
             />
             <span className="text-vam-ink">{o.label}</span>
           </label>
         ))}
       </div>
+      {showOther ? (
+        <div className="mt-3" data-field-name={otherInput.name} data-field-label={otherInput.label}>
+          <Label htmlFor={otherInput.name} required>{otherInput.label}</Label>
+          <input id={otherInput.name} name={otherInput.name} required aria-required="true" className={inputClass} />
+        </div>
+      ) : null}
       <InlineRequiredError />
     </fieldset>
   );

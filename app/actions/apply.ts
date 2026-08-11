@@ -106,6 +106,7 @@ export async function submitMentorApplicationAction(
       // Section 1 — consent & contact channels
       consent_contact_methods: formArray(formData, "consent_contact_methods"),
       // Section 2 — identity extras
+      gender_other: formText(formData, "gender_other") || null,
       preferred_name: formText(formData, "preferred_name") || null,
       year_of_birth: formText(formData, "year_of_birth") || null,
       current_city: formText(formData, "current_city") || null,
@@ -116,10 +117,13 @@ export async function submitMentorApplicationAction(
       title_current: formText(formData, "title_current"),
       years_of_experience: formText(formData, "years_of_experience"),
       industry_primary: formText(formData, "industry_primary"),
+      industry_primary_other: formText(formData, "industry_primary_other") || null,
       function_primary: formText(formData, "function_primary"),
+      function_primary_other: formText(formData, "function_primary_other") || null,
       secondary_industries_functions: formArray(formData, "secondary_industries_functions"),
       secondary_industries_functions_other: formText(formData, "secondary_industries_functions_other") || null,
       highest_degree: formText(formData, "highest_degree") || null,
+      highest_degree_other: formText(formData, "highest_degree_other") || null,
       // Section 5 — mentoring readiness
       prior_vam_involvement: formText(formData, "prior_vam_involvement") || null,
       first_vam_season: formText(formData, "first_vam_season") || null,
@@ -135,11 +139,13 @@ export async function submitMentorApplicationAction(
       preferred_language: formArray(formData, "preferred_language"),
       programs_willing_to_join: formArray(formData, "programs_willing_to_join"),
       activities_willing_to_support: formArray(formData, "activities_willing_to_support"),
+      activities_willing_to_support_other: formText(formData, "activities_willing_to_support_other") || null,
       // Section 7 — attachments
       bio_or_cv_url: formText(formData, "bio_or_cv_url") || null,
       profile_picture_url: formText(formData, "profile_picture_url") || null,
       // Section 8 — other
       referrer_or_source: formText(formData, "referrer_or_source") || null,
+      referrer_or_source_other: formText(formData, "referrer_or_source_other") || null,
       additional_notes: formText(formData, "additional_notes") || null,
       mentor_total_work_years: Number.isFinite(totalWorkYears) ? totalWorkYears : null,
       mentor_people_management_years: Number.isFinite(peopleManagementYears) ? peopleManagementYears : null,
@@ -176,6 +182,13 @@ export async function submitMentorApplicationAction(
       return {
         ok: false,
         message: `Thiếu trường bắt buộc: ${missingField[0]}.`
+      };
+    }
+    if (!/^\d{10}$/.test(phonePrimary)) {
+      return {
+        ok: false,
+        message: "Số điện thoại phải gồm đúng 10 chữ số.",
+        fieldErrors: [{ name: "phone_primary", label: "Số điện thoại" }]
       };
     }
     if (!programsOk) {
@@ -281,12 +294,15 @@ export async function submitMenteeApplicationAction(
       // Section 1 — consent extras
       email_notification_consent: formArray(formData, "email_notification_consent"),
       // Section 2 — identity extras
+      gender_other: formText(formData, "gender_other") || null,
       year_of_birth: formText(formData, "year_of_birth") || null,
       // Section 3 — contact extras
       social_contact: formText(formData, "social_contact") || null,
       // Section 4 — education
       university: formText(formData, "university"),
+      university_other: formText(formData, "university_other") || null,
       school_or_faculty: formText(formData, "school_or_faculty"),
+      school_or_faculty_other: formText(formData, "school_or_faculty_other") || null,
       major: formText(formData, "major"),
       class_cohort: formText(formData, "class_cohort"),
       year_of_study: formText(formData, "year_of_study"),
@@ -294,7 +310,9 @@ export async function submitMenteeApplicationAction(
       gpa_4: formText(formData, "gpa_4") || null,
       // Section 5 — direction
       target_industry: formText(formData, "target_industry"),
+      target_industry_other: formText(formData, "target_industry_other") || null,
       target_function: formText(formData, "target_function"),
+      target_function_other: formText(formData, "target_function_other") || null,
       one_year_vision_text: formText(formData, "one_year_vision_text"),
       // Section 6 — mentoring expectations
       mentoring_goals_text: formText(formData, "mentoring_goals_text"),
@@ -305,15 +323,17 @@ export async function submitMenteeApplicationAction(
       meeting_format_preference: formText(formData, "meeting_format_preference") || null,
       mentor_gender_preference: formText(formData, "mentor_gender_preference") || null,
       training_topics_interest: formArray(formData, "training_topics_interest"),
+      training_topics_interest_other: formText(formData, "training_topics_interest_other") || null,
       // Section 7 — essay & commitment
       why_uem_text: formText(formData, "why_uem_text") || null,
       mentoring_plan_text: formText(formData, "mentoring_plan_text") || null,
       if_not_effective_text: formText(formData, "if_not_effective_text") || null,
       commitment_understanding: formBoolean(formData, "commitment_understanding"),
-      // Section 8 — readiness
+      // Section 8 — readiness & source
       available_for_interview: formArray(formData, "available_for_interview"),
       available_for_kickoff: formText(formData, "available_for_kickoff"),
       referrer_or_source: formText(formData, "referrer_or_source") || null,
+      referrer_or_source_other: formText(formData, "referrer_or_source_other") || null,
       additional_notes: formText(formData, "additional_notes") || null
     };
 
@@ -352,6 +372,13 @@ export async function submitMenteeApplicationAction(
     }
     if (!interviewOk) {
       return { ok: false, message: "Vui lòng chọn ít nhất một khoảng thời gian sẵn sàng phỏng vấn." };
+    }
+    if (!/^\d{10}$/.test(phonePrimary)) {
+      return {
+        ok: false,
+        message: "Số điện thoại phải gồm đúng 10 chữ số.",
+        fieldErrors: [{ name: "phone_primary", label: "Số điện thoại" }]
+      };
     }
     if (!emailNotifOk) {
       return { ok: false, message: "Vui lòng chọn ít nhất một kênh nhận thông báo." };

@@ -9,9 +9,8 @@
 export function mapAuthError(errorType: "invalid_credentials" | "unauthorized_admin" | "network_unavailable" | "unknown"): string {
   switch (errorType) {
     case "invalid_credentials":
-      return "Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra và thử lại.";
     case "unauthorized_admin":
-      return "Tài khoản này chưa được cấp quyền truy cập VAM OS. Vui lòng liên hệ người phụ trách.";
+      return "Sai email hoặc mật khẩu";
     case "network_unavailable":
       return "VAM OS đang tạm thời không thể kết nối. Vui lòng thử lại sau.";
     case "unknown":
