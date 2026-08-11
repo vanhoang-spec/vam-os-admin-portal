@@ -1,5 +1,6 @@
 import "server-only";
 
+import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord } from "@/lib/types";
 
@@ -158,6 +159,18 @@ export async function submitPilotApplication(
       ok: false,
       code: "batch_missing",
       message: `Đợt ${input.intakeBatchCode} chưa được tạo trong hệ thống. Vui lòng liên hệ BTC.`
+    };
+  }
+
+  const isPublicApplicationEnabled =
+    input.role === "mentor"
+      ? SEASON_CONFIG.ENABLE_PUBLIC_MENTOR_APPLICATION
+      : SEASON_CONFIG.ENABLE_PUBLIC_MENTEE_APPLICATION;
+  if (!isPublicApplicationEnabled) {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Đơn đăng ký cho vai trò này hiện chưa được mở. Vui lòng chờ thông báo chính thức."
     };
   }
 

@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/season-config", () => ({
+  SEASON_CONFIG: {
+    ENABLE_PUBLIC_MENTOR_APPLICATION: true,
+    ENABLE_PUBLIC_MENTEE_APPLICATION: true
+  }
+}));
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleClient: vi.fn(),
   getSupabaseServiceRoleEnvStatus: vi.fn(() => ({ sameAsAnonKey: false }))
