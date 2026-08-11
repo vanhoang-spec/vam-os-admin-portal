@@ -14,7 +14,13 @@ import {
   validateMenteeCommitments,
   validateMentorCommitments
 } from "@/lib/application-commitments";
-import { validateMaxThreeWithOther } from "@/lib/application-form-validation";
+import {
+  enforceOtherDetails,
+  isValidApplicationPhone,
+  validateMaxThreeWithOther,
+  MENTEE_OTHER_DETAIL_RULES,
+  MENTOR_OTHER_DETAIL_RULES
+} from "@/lib/application-form-validation";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
 const INTAKE_BATCH_CODE = SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE;
@@ -184,7 +190,7 @@ export async function submitMentorApplicationAction(
         message: `Thiếu trường bắt buộc: ${missingField[0]}.`
       };
     }
-    if (!/^\d{10}$/.test(phonePrimary)) {
+    if (!isValidApplicationPhone(phonePrimary)) {
       return {
         ok: false,
         message: "Số điện thoại phải gồm đúng 10 chữ số.",
@@ -208,6 +214,16 @@ export async function submitMentorApplicationAction(
         ok: false,
         message: secondaryValidation.message,
         fieldErrors: [{ name: secondaryValidation.fieldName, label: secondaryValidation.fieldLabel }]
+      };
+    }
+    // Authoritative "Khác / Other" detail enforcement. Also strips stale or forged
+    // `_other` text whose parent no longer selects Other.
+    const otherDetails = enforceOtherDetails({ ...rawPayload, gender }, rawPayload, MENTOR_OTHER_DETAIL_RULES);
+    if (!otherDetails.ok) {
+      return {
+        ok: false,
+        message: otherDetails.message,
+        fieldErrors: [{ name: otherDetails.fieldName, label: otherDetails.fieldLabel }]
       };
     }
     const commitmentValidation = validateMentorCommitments({
@@ -373,7 +389,7 @@ export async function submitMenteeApplicationAction(
     if (!interviewOk) {
       return { ok: false, message: "Vui lòng chọn ít nhất một khoảng thời gian sẵn sàng phỏng vấn." };
     }
-    if (!/^\d{10}$/.test(phonePrimary)) {
+    if (!isValidApplicationPhone(phonePrimary)) {
       return {
         ok: false,
         message: "Số điện thoại phải gồm đúng 10 chữ số.",
@@ -397,6 +413,16 @@ export async function submitMenteeApplicationAction(
         ok: false,
         message: softSkillValidation.message,
         fieldErrors: [{ name: softSkillValidation.fieldName, label: softSkillValidation.fieldLabel }]
+      };
+    }
+    // Authoritative "Khác / Other" detail enforcement. Also strips stale or forged
+    // `_other` text whose parent no longer selects Other.
+    const otherDetails = enforceOtherDetails({ ...rawPayload, gender }, rawPayload, MENTEE_OTHER_DETAIL_RULES);
+    if (!otherDetails.ok) {
+      return {
+        ok: false,
+        message: otherDetails.message,
+        fieldErrors: [{ name: otherDetails.fieldName, label: otherDetails.fieldLabel }]
       };
     }
     const commitmentValidation = validateMenteeCommitments({

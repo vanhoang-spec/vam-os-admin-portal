@@ -44,26 +44,46 @@ export function ApplicationForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [missing, setMissing] = useState<MissingField[]>([]);
 
+  // Runs from the form's `invalid` capture listener, which the browser fires once
+  // per invalid control during interactive validation.
+  //
+  // MUST NOT call checkValidity(): per the HTML spec that method *dispatches* an
+  // `invalid` event at the control, which captures straight back into this handler
+  // and recurses without bound. Read the `validity` property instead — a plain
+  // property access that fires nothing.
   const revealInvalid = () => {
     const form = formRef.current;
     if (!form) return;
     const controls = Array.from(form.querySelectorAll<HTMLElement>("input, select, textarea"));
     const invalid = controls.filter((control) => {
       const candidate = control as HTMLInputElement;
-      return typeof candidate.checkValidity === "function" && !candidate.checkValidity();
+      return candidate.validity ? !candidate.validity.valid : false;
     });
     const unique = Array.from(new Map(invalid.map((control) => {
       const details = fieldDetails(control);
       return [details.name, details];
     })).values());
-    setMissing(unique);
+    // The browser fires one `invalid` event per invalid control, so this handler
+    // runs N times per submit. Keep the previous array when nothing changed so the
+    // repeats collapse into a single React render.
+    setMissing((prev) =>
+      prev.length === unique.length && prev.every((item, i) => item.name === unique[i].name)
+        ? prev
+        : unique
+    );
     form.querySelectorAll("[data-field-name]").forEach((node) => node.removeAttribute("data-invalid"));
     controls.forEach((control) => control.removeAttribute("aria-invalid"));
     invalid.forEach((control) => {
       control.setAttribute("aria-invalid", "true");
       control.closest("[data-field-name]")?.setAttribute("data-invalid", "true");
     });
-    // Native HTML5 validation will handle scrolling and focusing
+    // Deterministic first-invalid handling in DOM order. Idempotent across the N
+    // repeats because `invalid[0]` is the same node every time.
+    const first = invalid[0];
+    if (first && document.activeElement !== first) {
+      first.scrollIntoView({ behavior: "smooth", block: "center" });
+      first.focus({ preventScroll: true });
+    }
   };
 
   useEffect(() => {
@@ -214,13 +234,18 @@ export function PhoneField({
       <Label htmlFor={name} required={required} helpText={helpText} helpId={helpId}>
         {label}
       </Label>
+      {/*
+        No maxLength: it silently truncates an over-length paste (e.g. the 11-digit
+        "09012345678" became the valid-but-wrong "0901234567"). Let the full value
+        stand so `pattern` rejects it and the applicant is told to correct it.
+      */}
       <input
         id={name}
         name={name}
         type="tel"
         inputMode="numeric"
-        maxLength={10}
         pattern="[0-9]{10}"
+        title="Số điện thoại phải gồm đúng 10 chữ số (0-9), không khoảng trắng."
         required={required}
         aria-required={required || undefined}
         placeholder={placeholder}
