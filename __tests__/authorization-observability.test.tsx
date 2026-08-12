@@ -404,7 +404,7 @@ describe("Authorization Observability Instrumentation", () => {
   });
 
   it("18. resolver semantic regression protection", () => {
-    const defaultCtx = { isSuperAdmin: false, adminUser: null, authUserId: null, globalRole: null, programScopes: [] };
+    const defaultCtx = { isSuperAdmin: false, adminUser: null, authUserId: null, globalRole: null, programScopes: [], scopeError: null };
 
     // 1. Super Admin → full_access
     expect(resolveCanonicalScope({ ...defaultCtx, isSuperAdmin: true }, null, null, null, null)).toBe("full_access");

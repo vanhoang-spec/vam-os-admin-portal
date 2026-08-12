@@ -13,9 +13,15 @@ const { mockTables, mockErrors, mockFrom } = vi.hoisted(() => {
 
     const chain = {
       in: vi.fn((col, vals) => {
-        if (error) return Promise.resolve({ data: [], error });
-        const filtered = rows.filter((r) => vals.includes(r[col]));
-        return Promise.resolve({ data: filtered, error: null });
+        // Mirrors the real client: `.in()` is awaitable and also pageable via
+        // `.range()`, which the scoped loader uses to read past PostgREST's
+        // silent db-max-rows cap.
+        const filtered = error ? [] : rows.filter((r: any) => vals.includes(r[col]));
+        return {
+          range: (from: number, to: number) =>
+            Promise.resolve(error ? { data: [], error } : { data: filtered.slice(from, to + 1), error: null }),
+          then: (resolve: any) => resolve(error ? { data: [], error } : { data: filtered, error: null })
+        };
       }),
       eq: vi.fn((col, val) => {
         if (error) return { maybeSingle: () => Promise.resolve({ data: null, error }) };
@@ -250,7 +256,8 @@ function scopeContext(programScopes: ProgramScope[]): AdminScopeContext {
     authUserId: "auth-user-1",
     globalRole: "admin",
     isSuperAdmin: false,
-    programScopes
+    programScopes,
+    scopeError: null
   };
 }
 

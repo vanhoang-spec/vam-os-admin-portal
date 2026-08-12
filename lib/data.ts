@@ -74,6 +74,14 @@ const SERVICE_ROLE_REQUIRED =
 const SCOPE_VISIBILITY_ERROR =
   "Không xác minh được phạm vi truy cập. Vui lòng thử lại hoặc liên hệ quản trị viên.";
 const IN_FILTER_CHUNK_SIZE = 200;
+/**
+ * PostgREST caps every response at `db-max-rows` (1000 on Supabase hosted).
+ * The cap is applied silently — the response is `200 OK` with no error — so any
+ * unpaginated `select()` over a table larger than this returns a truncated set
+ * that is indistinguishable from complete data. Every read that can exceed it
+ * must page with `.range()` until a short page arrives.
+ */
+const SELECT_PAGE_SIZE = 1000;
 
 /**
  * Outcome of resolving the person IDs an admin scope may see.
@@ -207,9 +215,18 @@ async function selectInChunks<T>(
   const rows: T[] = [];
   for (const chunk of chunkValues(uniqueStrings(values))) {
     if (!chunk.length) continue;
-    const { data, error } = await client.from(table).select(columns).in(column, chunk);
-    if (error) return { data: rows, error };
-    rows.push(...((data ?? []) as T[]));
+    // Page each chunk. Without this the scoped read silently stops at
+    // `SELECT_PAGE_SIZE` rows while the unscoped read (`selectAllTable`, which
+    // has always paged) returns everything — so a scoped admin and an
+    // unscoped super admin computed different aggregates from the same table.
+    for (let from = 0; ; from += SELECT_PAGE_SIZE) {
+      const to = from + SELECT_PAGE_SIZE - 1;
+      const { data, error } = await client.from(table).select(columns).in(column, chunk).range(from, to);
+      if (error) return { data: rows, error };
+      const page = (data ?? []) as T[];
+      rows.push(...page);
+      if (page.length < SELECT_PAGE_SIZE) break;
+    }
   }
 
   return { data: rows, error: null };
@@ -256,7 +273,7 @@ async function selectTable<T>(table: string, columns = "*", fallback: T[] = []):
   return { data: (data ?? []) as T[], error: null };
 }
 
-async function selectAllTable<T>(table: string, columns = "*", fallback: T[] = [], pageSize = 1000): Promise<QueryResult<T[]>> {
+async function selectAllTable<T>(table: string, columns = "*", fallback: T[] = [], pageSize = SELECT_PAGE_SIZE): Promise<QueryResult<T[]>> {
   const client = dataClient(table);
   if (!client) return isServerOnlyApplicationTable(table) ? serviceRoleRequiredError(fallback) : envError(fallback);
   const rows: T[] = [];
@@ -464,7 +481,7 @@ export async function getMentorProfiles(scope?: ScopeFilter) {
   const { personIds, error: scopeError } = await getScopedPersonIds(scope);
   if (scopeError) return { data: [] as MentorProfile[], error: scopeError };
   if (personIds && personIds.length === 0) return { data: [] as MentorProfile[], error: null };
-  if (!personIds) return selectTable<MentorProfile>("mentor_profiles");
+  if (!personIds) return selectAllTable<MentorProfile>("mentor_profiles");
   const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
   if (batchScopeError) return { data: [] as MentorProfile[], error: batchScopeError };
   const [byPerson, byBatch] = await Promise.all([
@@ -486,7 +503,7 @@ export async function getMenteeProfiles(scope?: ScopeFilter) {
   const { personIds, error: scopeError } = await getScopedPersonIds(scope);
   if (scopeError) return { data: [] as MenteeProfile[], error: scopeError };
   if (personIds && personIds.length === 0) return { data: [] as MenteeProfile[], error: null };
-  if (!personIds) return selectTable<MenteeProfile>("mentee_profiles");
+  if (!personIds) return selectAllTable<MenteeProfile>("mentee_profiles");
   const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
   if (batchScopeError) return { data: [] as MenteeProfile[], error: batchScopeError };
   const [byPerson, byBatch] = await Promise.all([
@@ -596,7 +613,7 @@ export async function getMentorFunctionAreaLinks(mentorProfileIds?: string[]) {
 }
 
 export async function getRolesForPerson(personId: string) {
-  return selectTable<JsonRecord>("person_roles", "*").then((res) => ({
+  return selectAllTable<JsonRecord>("person_roles", "*").then((res) => ({
     ...res,
     data: res.data.filter((role) => role.person_id === personId)
   }));
@@ -613,7 +630,7 @@ export async function getAnswersForApplications(applicationIds: string[]) {
 }
 
 export async function getDataIssues() {
-  return selectTable<JsonRecord>("data_issues");
+  return selectAllTable<JsonRecord>("data_issues");
 }
 
 export async function getPerson(id: string, scope?: ScopeFilter) {
@@ -1415,14 +1432,17 @@ export async function getMyApplicationReviews(adminUserId: string, scope?: Scope
 
 /** All reviews — used for admin/core_team /reviews page (RLS allows this). */
 export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
-  if (!scope) return selectTable<ApplicationReview>("application_reviews", "*");
+  if (!scope) return selectAllTable<ApplicationReview>("application_reviews", "*");
   const apps = await getApplications(scope);
   const appIds = apps.data.map((app) => app.id);
   if (!appIds.length) return { data: [], error: apps.error };
   const client = dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
-  const { data, error } = await client.from("application_reviews").select("*").in("application_id", appIds);
-  if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
+  const { data, error } = await selectInChunks<ApplicationReview>("application_reviews", "application_id", appIds, "*");
+  if (error) {
+    const err = error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
   return { data: (data ?? []) as ApplicationReview[], error: apps.error };
 }
 

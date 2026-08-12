@@ -7,7 +7,7 @@ import { getOperationsData, keyById } from "@/lib/data";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { currentMonthVN, isOperationalMonth, operationalMonthRange, resolveOperationsMonth } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
-import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { canOperateAnyScope, canReadSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate, formatMonthVN } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
@@ -125,22 +125,57 @@ function monthLabel(month: string) {
 
 export default async function OperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
   const scopeContext = await getAdminScopeContext();
+
+  // Scope could not be evaluated. Rendering the dashboard here would filter every
+  // table to zero rows and present an infrastructure failure as "no activity".
+  if (scopeContext.scopeError) {
+    return (
+      <>
+        <PageHeader title="Vận hành" description="Không tải được dashboard vận hành." />
+        <ErrorBox message={scopeContext.scopeError} />
+      </>
+    );
+  }
+
+  // Not authorized for this program/season aggregate: deny explicitly. Falling
+  // through would render the same "Tổng hợp toàn chương trình" header over an
+  // all-zero dataset, which reads as real operational truth.
+  if (!(await canReadSeason(scopeContext, SEASON_CODE))) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn chưa được cấp phạm vi truy cập cho mùa vận hành hiện tại. Liên hệ quản trị viên để được cấp quyền."
+      />
+    );
+  }
+
   const scope = await getScopeFilter(scopeContext);
   const [data, adminUser] = await Promise.all([
     getOperationsData(scope),
     getCurrentAdminUser()
   ]);
   const allowRecapEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
-  const errors = [
-    data.seasons.error,
-    data.people.error,
-    data.mentees.error,
-    data.matches.error,
-    data.recaps.error,
-    data.events.error,
-    data.eventParticipations.error,
-    data.kpis.error
-  ].filter(Boolean);
+
+  // Sources the KPI figures are computed from. If any failed, the aggregate is
+  // unknown — not zero — so the numbers are withheld rather than shown as truth.
+  const kpiSourceError =
+    data.seasons.error ||
+    data.matches.error ||
+    data.recaps.error ||
+    data.events.error ||
+    data.eventParticipations.error ||
+    data.kpis.error;
+  if (kpiSourceError) {
+    return (
+      <>
+        <PageHeader title="Vận hành" description="Không tải được dữ liệu KPI vận hành." />
+        <ErrorBox message="Không tính được KPI vận hành vì một nguồn dữ liệu bắt buộc không tải được. Các chỉ số không được hiển thị để tránh hiểu nhầm là không có hoạt động." />
+        <ErrorBox message={kpiSourceError} />
+      </>
+    );
+  }
+
+  const errors = [data.people.error, data.mentees.error].filter(Boolean);
 
   const peopleById = keyById(data.people.data);
   const menteeProfilesByPersonId = new Map(data.mentees.data.filter((profile) => profile.person_id).map((profile) => [profile.person_id, profile]));
@@ -324,7 +359,7 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   return (
     <>
       <PageHeader title="Vận hành" description="Dashboard KPI toàn chương trình; quyền người dùng chỉ giới hạn thao tác và dữ liệu chi tiết." />
-      {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu operations. Một số chỉ số có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
+      {errors.length ? <ErrorBox message="Không tải được danh bạ người dùng. Các chỉ số KPI vẫn chính xác; tên và mã trong bảng chi tiết có thể bị thiếu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
       ))}

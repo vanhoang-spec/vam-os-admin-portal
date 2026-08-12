@@ -39,7 +39,7 @@ function actor(role = "core_team", status = "active") { return { id: ACTOR, role
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getAdminScopeContext).mockResolvedValue({ adminUser: actor() as any, authUserId: "auth-synthetic", globalRole: "core_team", isSuperAdmin: false, programScopes: [] });
+  vi.mocked(getAdminScopeContext).mockResolvedValue({ adminUser: actor() as any, authUserId: "auth-synthetic", globalRole: "core_team", isSuperAdmin: false, programScopes: [], scopeError: null });
   vi.mocked(canOperateSeason).mockResolvedValue(true);
 });
 
@@ -47,7 +47,7 @@ describe("membership lifecycle server actions", () => {
   it("rejects unauthenticated, inactive, and viewer+read callers before RPC", async () => {
     for (const admin of [null, actor("core_team", "inactive"), actor("viewer")]) {
       const db = client(); vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(db as any);
-      vi.mocked(getAdminScopeContext).mockResolvedValue({ adminUser: admin as any, authUserId: null, globalRole: admin?.role ?? null, isSuperAdmin: false, programScopes: [] });
+      vi.mocked(getAdminScopeContext).mockResolvedValue({ adminUser: admin as any, authUserId: null, globalRole: admin?.role ?? null, isSuperAdmin: false, programScopes: [], scopeError: null });
       vi.mocked(canOperateSeason).mockResolvedValue(admin?.role !== "viewer");
       const result = await transitionMembershipAction(initialMembershipLifecycleState, transitionForm());
       expect(result.ok).toBe(false); expect(db.rpc).not.toHaveBeenCalled();

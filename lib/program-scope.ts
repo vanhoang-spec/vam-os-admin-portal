@@ -21,7 +21,18 @@ export type AdminScopeContext = {
   globalRole: string | null;
   isSuperAdmin: boolean;
   programScopes: ProgramScope[];
+  /**
+   * Non-null when the grants could not be read at all. An unreadable
+   * `admin_scope_access` produces the same empty `programScopes` as a genuinely
+   * ungranted user, and downstream that empty scope filters every table to zero
+   * rows — an infrastructure failure rendered as legitimate "no activity".
+   * Callers must surface this instead of treating the empty scope as truth.
+   */
+  scopeError: string | null;
 };
+
+export const SCOPE_RESOLUTION_ERROR =
+  "Không xác minh được phạm vi truy cập của bạn. Đây là lỗi hệ thống, không phải dữ liệu trống. Vui lòng thử lại hoặc liên hệ quản trị viên.";
 
 export type ScopeFilter = {
   allowedProgramIds?: string[];
@@ -74,15 +85,17 @@ export const getAdminScopeContext = cache(async (): Promise<AdminScopeContext> =
   const isSuperAdmin = globalRole === "super_admin";
 
   if (!adminUser || !authUserId) {
-    return { adminUser, authUserId, globalRole, isSuperAdmin: false, programScopes: [] };
+    return { adminUser, authUserId, globalRole, isSuperAdmin: false, programScopes: [], scopeError: null };
   }
   if (isSuperAdmin) {
-    return { adminUser, authUserId, globalRole, isSuperAdmin: true, programScopes: [] };
+    return { adminUser, authUserId, globalRole, isSuperAdmin: true, programScopes: [], scopeError: null };
   }
 
   const client = getSupabaseServiceRoleClient();
   if (!client) {
-    return { adminUser, authUserId, globalRole, isSuperAdmin: false, programScopes: [] };
+    // Missing service-role credential, not an ungranted user.
+    console.error("[program-scope] service-role client unavailable; cannot resolve scope");
+    return { adminUser, authUserId, globalRole, isSuperAdmin: false, programScopes: [], scopeError: SCOPE_RESOLUTION_ERROR };
   }
 
   const { data, error } = await client
@@ -98,7 +111,7 @@ export const getAdminScopeContext = cache(async (): Promise<AdminScopeContext> =
       hint: error.hint,
       details: error.details
     });
-    return { adminUser, authUserId, globalRole, isSuperAdmin: false, programScopes: [] };
+    return { adminUser, authUserId, globalRole, isSuperAdmin: false, programScopes: [], scopeError: SCOPE_RESOLUTION_ERROR };
   }
 
   return {
@@ -106,6 +119,7 @@ export const getAdminScopeContext = cache(async (): Promise<AdminScopeContext> =
     authUserId,
     globalRole,
     isSuperAdmin: false,
+    scopeError: null,
     programScopes: ((data ?? []) as JsonRecord[]).map((row) => ({
       programId: clean(row.program_id),
       seasonId: clean(row.season_id),
