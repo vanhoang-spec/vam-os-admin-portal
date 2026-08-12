@@ -165,9 +165,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Excludes `apply/*` so the public pilot intake forms (/apply/mentor,
-  // /apply/mentee) bypass the admin auth + unlock gate. Those routes
-  // are protected by their own per-route token check (see
-  // `app/apply/*/page.tsx` + `VAM_OS_APPLICATION_PILOT_TOKEN`).
+  // Excludes `apply/*` so the public intake forms (/apply/mentor,
+  // /apply/mentee) bypass the admin auth + unlock gate.
+  //
+  // M069: those routes are protected by the database-backed gate in
+  // `lib/apply-gate.ts`, which the page render AND the submission Server
+  // Action both resolve. The default state is CLOSED, so excluding them here
+  // does not expose an open form — it exposes a closed notice until an
+  // authorised admin changes the state from Quản trị → Mùa & Form đăng ký.
   matcher: ["/((?!login|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
 };

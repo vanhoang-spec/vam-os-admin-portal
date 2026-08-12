@@ -62,8 +62,17 @@ describe("Season 12 commitment structural safeguards", () => {
     expect(mentorForm).toContain("1–2 giờ/tháng cho mỗi Mentee");
   });
 
-  it("keeps the token/pilot gate's two-condition model", () => {
-    expect(gate).toContain("if (!isEnabled)");
-    expect(gate).toContain("if (tokenMatched || allowTokenless)");
+  it("keeps the gate's three-state model with a server-side token check", () => {
+    // M069 replaced the env enable-flag + tokenless opt-in with a
+    // database-backed closed/pilot/open state. The token contract survived:
+    // pilot still requires the correct token, and CLOSED has no token escape
+    // hatch. See __tests__/apply-gate.test.ts for the full decision table.
+    expect(gate).toContain('state === "closed"');
+    expect(gate).toContain('state === "open"');
+    expect(gate).toContain("timingSafeEqual");
+    expect(gate).toContain("readApplicationFormState");
+    // No environment variable may re-open a form.
+    expect(gate).not.toContain("ENABLE_PUBLIC_MENTOR_APPLICATION");
+    expect(gate).not.toContain("ALLOW_TOKENLESS");
   });
 });

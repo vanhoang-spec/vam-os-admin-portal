@@ -2,7 +2,7 @@
 
 import { useFormState } from "react-dom";
 import { submitMenteeApplicationAction } from "@/app/actions/apply";
-import { initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -141,7 +141,7 @@ const REFERRER_OPTIONS = [
   { value: "other", label: "Khác" }
 ];
 
-export function ApplyMenteeForm() {
+export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) {
   // Redirect on success is handled server-side via redirect() in the action.
   // useFormState is kept only to surface error states (validation / duplicate / db).
   const [state, formAction] = useFormState<ApplyActionState, FormData>(
@@ -151,6 +151,13 @@ export function ApplyMenteeForm() {
 
   return (
     <ApplicationForm action={formAction} state={state} submitLabel="Gửi đơn đăng ký mentee">
+      {/*
+        Pilot token relay. Rendered only while the form is in pilot state, so
+        the Server Action can re-run the identical gate the page ran. The
+        server reads this field explicitly and never copies it into
+        raw_payload or an answer row.
+      */}
+      {applyToken ? <input type="hidden" name={APPLY_TOKEN_FIELD} value={applyToken} /> : null}
 
       <FormSection title="1. Đồng ý & quyền riêng tư">
         <ConsentCheckbox

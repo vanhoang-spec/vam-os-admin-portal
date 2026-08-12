@@ -73,3 +73,32 @@ export function canSelfClaimInterview(role?: string | null) {
 export function canManageMatches(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can OPEN or CLOSE a public application form (M069).
+ *
+ * Deliberately narrower than every other admin-tier permission in this file.
+ * Changing this state changes what the public internet can do: opening the
+ * mentor form publishes a live intake to anyone with the link, and closing it
+ * mid-recruitment silently drops applicants who are part-way through.
+ *
+ * core_team is NOT granted. It holds `canDecide` and `canManageMatches`, but
+ * those act on records already inside the system; none of them is an
+ * externally-visible publication event, so neither is evidence that core_team
+ * was ever intended to control public recruitment. No existing permission
+ * safely maps to this action, so core_team stays read-only here until the
+ * owner decides otherwise. reviewer, support_team and viewer are excluded for
+ * the same reason.
+ *
+ * This is only the global-role half of the check. The caller must ALSO prove
+ * season scope via `canOperateSeason` — a scoped admin with no UEHM-S12 grant
+ * must not be able to toggle UEHM-S12.
+ */
+export function canToggleApplicationForm(role?: string | null) {
+  return ["super_admin", "admin"].includes(role || "");
+}
+
+/** Can view the season/form control screen without being able to change it. */
+export function canViewApplicationFormControls(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

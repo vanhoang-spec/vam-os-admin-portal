@@ -82,6 +82,10 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
       label: "Quản trị",
       items: [
         { href: "/admin", label: "Quản trị" },
+        // M069. Visible to the admin tier (core_team included) because the
+        // screen is useful read-only; the toggle itself is gated separately
+        // by canToggleApplicationForm + season scope.
+        { href: "/admin/seasons-forms", label: "Mùa & Form đăng ký" },
         { href: "/team", label: "Phân công & Trách nhiệm" },
         ...(showUserMgmt ? [{ href: "/admin/users", label: "Quản lý người dùng" }] : []),
       ],

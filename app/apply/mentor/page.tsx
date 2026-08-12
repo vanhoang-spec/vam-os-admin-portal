@@ -1,5 +1,5 @@
 import { evaluateApplyGate } from "@/lib/apply-gate";
-import { ClosedFormView, DevWarningBanner } from "../_components/gate-views";
+import { ClosedFormView, PilotModeBanner } from "../_components/gate-views";
 import { ApplyMentorForm } from "./apply-mentor-form";
 
 export const metadata = {
@@ -13,15 +13,19 @@ export default async function ApplyMentorPage(props: { searchParams?: Promise<{ 
   const searchParams = await props.searchParams;
 
   const tokenRaw = Array.isArray(searchParams?.token) ? searchParams?.token[0] : searchParams?.token;
-  const gate = evaluateApplyGate(tokenRaw, "mentor");
+  const gate = await evaluateApplyGate(tokenRaw, "mentor");
 
   if (gate.status === "closed") {
-    return <ClosedFormView />;
+    return <ClosedFormView reason={gate.reason} />;
   }
+
+  // In pilot the token travels into the Server Action so the submission is
+  // judged by the same gate the render was. In open state nothing is carried.
+  const carriedToken = gate.state === "pilot" ? String(tokenRaw ?? "").trim() : null;
 
   return (
     <>
-      {gate.status === "dev_warning" ? <DevWarningBanner reason={gate.reason} /> : null}
+      {gate.state === "pilot" ? <PilotModeBanner /> : null}
       <header className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-vam-green">
           Vietnam Alumni Mentoring · Season 12 · Batch 1 (Pilot)
@@ -40,7 +44,7 @@ export default async function ApplyMentorPage(props: { searchParams?: Promise<{ 
         </p>
       </header>
 
-      <ApplyMentorForm />
+      <ApplyMentorForm applyToken={carriedToken} />
     </>
   );
 }

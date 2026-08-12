@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/season-config", () => ({
-  SEASON_CONFIG: {
-    ENABLE_PUBLIC_MENTOR_APPLICATION: true,
-    ENABLE_PUBLIC_MENTEE_APPLICATION: true
-  }
+// M069: the role gate is now database-backed. This suite is about the
+// answer-insert cleanup path, so the gate is stubbed OPEN; the gate's own
+// behaviour is covered by apply-gate.test.ts and m069-application-gate.test.ts.
+vi.mock("@/lib/apply-gate", () => ({
+  evaluateApplyGate: vi.fn(async () => ({ status: "open", state: "open" }))
 }));
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleClient: vi.fn(),

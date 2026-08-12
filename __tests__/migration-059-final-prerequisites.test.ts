@@ -474,10 +474,16 @@ describe("migration immutability", () => {
     expect(gitUnchanged(BASELINE, p)).toBe(true);
   });
 
-  it("changes only migration 059 under supabase_migrations/", () => {
-    const r = spawnSync("git", ["diff", "--name-only", BASELINE, "--", "supabase_migrations/"], {
-      encoding: "utf8",
-    });
+  // 059 is the only migration this work may MODIFY. Adding a later migration
+  // file is not a violation of that contract — this guard exists to catch an
+  // edit to migration history, not to freeze the directory forever. The filter
+  // is therefore M(odified)/D(eleted)/R(enamed); A(dded) is allowed.
+  it("modifies no migration under supabase_migrations/ except 059", () => {
+    const r = spawnSync(
+      "git",
+      ["diff", "--name-only", "--diff-filter=MDR", BASELINE, "--", "supabase_migrations/"],
+      { encoding: "utf8" }
+    );
     expect(r.status).toBe(0);
     expect(r.stdout.split("\n").filter(Boolean)).toEqual([MIGRATION]);
   });

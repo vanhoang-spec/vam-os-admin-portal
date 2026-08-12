@@ -1,75 +1,127 @@
 import "server-only";
 
-import { SEASON_CONFIG } from "@/lib/season-config";
+import { timingSafeEqual } from "node:crypto";
+import {
+  readApplicationFormState,
+  type ApplicantRole,
+  type ApplicationFormState
+} from "@/lib/application-form-controls";
 
-export type ApplyGateRole = "mentor" | "mentee";
+export type ApplyGateRole = ApplicantRole;
 
-export type ApplyGateResult =
-  | { status: "open" }
-  | { status: "dev_warning"; reason: string }
-  | { status: "closed"; reason: string };
+export type ApplyGateDecision =
+  | { status: "open"; state: ApplicationFormState }
+  | { status: "closed"; state: ApplicationFormState; reason: string; code: ApplyGateDenyCode };
+
+export type ApplyGateDenyCode =
+  | "state_closed"
+  | "token_required"
+  | "token_invalid"
+  | "token_not_configured"
+  | "lookup_failed"
+  | "bad_role";
+
+const CLOSED_MESSAGE =
+  "Đơn đăng ký chưa được mở. Vui lòng chờ thông báo chính thức từ Ban Tổ chức.";
+
+const PILOT_MESSAGE =
+  "Đường link đăng ký đang ở chế độ pilot và chỉ mở cho danh sách được BTC mời.";
+
+const UNAVAILABLE_MESSAGE =
+  "Không xác minh được trạng thái form đăng ký. Đây là lỗi hệ thống — form được giữ đóng để an toàn.";
 
 /**
- * Decide whether to show the public application form on /apply/*.
+ * The configured pilot token, server-side only.
  *
- * Gate model — BOTH conditions must pass:
- *   1. Explicit enable flag: VAM_OS_ENABLE_MENTOR_APPLICATION=true or
- *      VAM_OS_ENABLE_MENTEE_APPLICATION=true (per role). Default is false (closed).
- *   2. Token: env VAM_OS_APPLY_TOKEN (or VAM_OS_APPLICATION_PILOT_TOKEN fallback)
- *      must be set AND match the `?token=...` query param.
- *
- * If the enable flag is false, the form is closed immediately — token is irrelevant.
- * In production, if the token env var is unset, the form is also closed.
- * In development, if the token env var is unset, a dev_warning is shown instead of
- * closed — but only if the enable flag is also true.
+ * `VAM_OS_APPLY_TOKEN` is the current name; `VAM_OS_APPLICATION_PILOT_TOKEN`
+ * is the original one and is still honoured as a fallback so an existing
+ * deployment does not silently lose its pilot link. Neither is ever returned
+ * to a caller, logged, or persisted.
  */
-export function evaluateApplyGate(
-  providedToken: string | undefined | null,
-  role: ApplyGateRole
-): ApplyGateResult {
-  // Step 1: check explicit enable flag — this is the primary safety gate.
-  const isEnabled =
-    role === "mentor"
-      ? SEASON_CONFIG.ENABLE_PUBLIC_MENTOR_APPLICATION
-      : SEASON_CONFIG.ENABLE_PUBLIC_MENTEE_APPLICATION;
-
-  if (!isEnabled) {
-    return {
-      status: "closed",
-      reason: `Đơn đăng ký ${role === "mentor" ? "mentor" : "mentee"} chưa được mở. Vui lòng chờ thông báo chính thức.`
-    };
-  }
-
-  // Step 2: check tokenless opt-in.
-  const allowTokenless = process.env.VAM_OS_ALLOW_TOKENLESS_APPLICATIONS === "true";
-
-  // Step 3: check token.
-  const expected =
+function configuredToken(): string | null {
+  const value =
     process.env.VAM_OS_APPLY_TOKEN?.trim() ||
     process.env.VAM_OS_APPLICATION_PILOT_TOKEN?.trim();
-  const isProduction = process.env.NODE_ENV === "production";
-  const provided = String(providedToken ?? "").trim();
+  return value || null;
+}
 
-  const tokenMatched = expected && provided && provided === expected;
+/**
+ * Constant-time comparison. A plain `===` on a secret leaks its prefix length
+ * through timing; the forms are public and unauthenticated, so the comparison
+ * is reachable by anyone.
+ */
+function tokenMatches(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
-  // Gate Logic: Form is enabled AND (TokenMatched OR TokenlessUAT)
-  if (tokenMatched || allowTokenless) {
-    return { status: "open" };
+/**
+ * THE canonical gate. The page render path and the submission Server Action
+ * both resolve this exact function with the same inputs, so there is no way
+ * for the two to disagree — that split was the known token finding this
+ * replaces.
+ *
+ * Decision table:
+ *
+ *   DB state   token provided   result
+ *   --------   --------------   ------------------------------------------
+ *   closed     (any)            CLOSED  — token can never bypass closed
+ *   pilot      correct          OPEN
+ *   pilot      wrong / missing  CLOSED
+ *   pilot      env unset        CLOSED  — fail closed, in every environment
+ *   open       (ignored)        OPEN
+ *   unreadable (any)            CLOSED
+ *
+ * Note the second row of `closed`: there is deliberately no token escape
+ * hatch out of CLOSED. Pilot access is a distinct state the owner selects,
+ * not a side effect of holding a token.
+ */
+export async function evaluateApplyGate(
+  providedToken: string | undefined | null,
+  role: ApplyGateRole
+): Promise<ApplyGateDecision> {
+  if (role !== "mentor" && role !== "mentee") {
+    return { status: "closed", state: "closed", reason: CLOSED_MESSAGE, code: "bad_role" };
   }
 
-  // If we reach here, neither condition was met.
+  const { state, reason } = await readApplicationFormState(role);
+
+  if (reason) {
+    return { status: "closed", state: "closed", reason: UNAVAILABLE_MESSAGE, code: "lookup_failed" };
+  }
+
+  if (state === "closed") {
+    return { status: "closed", state, reason: CLOSED_MESSAGE, code: "state_closed" };
+  }
+
+  if (state === "open") {
+    return { status: "open", state };
+  }
+
+  // state === "pilot" — the token contract applies, identically on both paths.
+  const expected = configuredToken();
   if (!expected) {
-    if (isProduction) {
-      return {
-        status: "closed",
-        reason: "VAM_OS_APPLY_TOKEN chưa được cấu hình trên server."
-      };
-    }
+    // Deliberately NOT a dev bypass. The previous implementation opened the
+    // form in development when the token env var was unset; that made the
+    // dev and production decision tables differ, which is exactly how a gate
+    // gets shipped believing it was tested.
     return {
-      status: "dev_warning",
-      reason: "VAM_OS_APPLY_TOKEN chưa được set — form đang mở vì đang ở môi trường dev."
+      status: "closed",
+      state,
+      reason: UNAVAILABLE_MESSAGE,
+      code: "token_not_configured"
     };
   }
 
-  return { status: "closed", reason: "Token không hợp lệ hoặc chưa cung cấp." };
+  const provided = String(providedToken ?? "").trim();
+  if (!provided) {
+    return { status: "closed", state, reason: PILOT_MESSAGE, code: "token_required" };
+  }
+  if (!tokenMatches(provided, expected)) {
+    return { status: "closed", state, reason: PILOT_MESSAGE, code: "token_invalid" };
+  }
+
+  return { status: "open", state };
 }

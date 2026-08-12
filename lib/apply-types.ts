@@ -18,3 +18,14 @@ export const initialApplyActionState: ApplyActionState = {
   ok: false,
   message: null
 };
+
+/**
+ * The hidden form field that relays a pilot token from the page render into
+ * the submission Server Action, so both resolve the identical gate.
+ *
+ * Lives here rather than in lib/apply-gate.ts because the form components are
+ * "use client" and apply-gate.ts is `server-only`. The name is prefixed so it
+ * cannot collide with a Form Spec field, and the server reads it explicitly —
+ * it is never swept into raw_payload or an answer row.
+ */
+export const APPLY_TOKEN_FIELD = "__apply_token";

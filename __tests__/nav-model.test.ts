@@ -296,13 +296,19 @@ const OPS_ADMIN_ROUTES = [
   "/recaps/create",
 ];
 
+// M069 added /admin/seasons-forms to the admin-tier group. It is visible to
+// core_team as well, because the screen is useful read-only; the ability to
+// CHANGE a form's state is gated separately by canToggleApplicationForm plus
+// season scope, not by nav visibility.
+const ADMIN_TIER_ROUTES = ["/admin", "/admin/seasons-forms", "/team"];
+
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       BASE_ROUTE_ARR,
   support_team: BASE_ROUTE_ARR,
   reviewer:     [...BASE_ROUTE_ARR, "/reviews", "/interviews"],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team"],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
 };
 
 function sortedRoutes(arr: string[]) {

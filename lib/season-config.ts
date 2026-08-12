@@ -29,24 +29,15 @@ export const SEASON_CONFIG = {
   DEMO_SEASON_CODE: "DEMO-S12",
 
   /**
-   * Explicit enable flag for the public mentor application form.
+   * M069: the public mentor/mentee form state is NO LONGER an environment
+   * variable. It lives in `public.application_form_controls` and is changed
+   * from Quản trị → Mùa & Form đăng ký, with an audit row per change.
    *
-   * BOTH this flag AND a valid token are required to open the form.
-   * Token presence alone is NOT sufficient.
+   * `VAM_OS_ENABLE_MENTOR_APPLICATION`, `VAM_OS_ENABLE_MENTEE_APPLICATION`
+   * and `VAM_OS_ALLOW_TOKENLESS_APPLICATIONS` are dead config: nothing reads
+   * them. Setting them has no effect and cannot open a form. Remove them from
+   * Vercel once M069 is live so nobody believes otherwise.
    *
-   * Control via env var: VAM_OS_ENABLE_MENTOR_APPLICATION=true
-   * Default: false (closed). Form remains closed until explicitly enabled.
+   * See lib/application-form-controls.ts and lib/apply-gate.ts.
    */
-  ENABLE_PUBLIC_MENTOR_APPLICATION: process.env.VAM_OS_ENABLE_MENTOR_APPLICATION === "true",
-
-  /**
-   * Explicit enable flag for the public mentee application form.
-   *
-   * BOTH this flag AND a valid token are required to open the form.
-   * Token presence alone is NOT sufficient.
-   *
-   * Control via env var: VAM_OS_ENABLE_MENTEE_APPLICATION=true
-   * Default: false (closed). Form remains closed until explicitly enabled.
-   */
-  ENABLE_PUBLIC_MENTEE_APPLICATION: process.env.VAM_OS_ENABLE_MENTEE_APPLICATION === "true",
 };

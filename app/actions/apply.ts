@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { evaluateApplyGate } from "@/lib/apply-gate";
 import {
   submitPilotApplication,
   type ApplicationRole,
   type ApplicationSubmissionResult
 } from "@/lib/applications-create";
-import type { ApplyActionState } from "@/lib/apply-types";
+import { APPLY_TOKEN_FIELD, type ApplyActionState } from "@/lib/apply-types";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import {
   acknowledgementsForRole,
@@ -27,6 +28,20 @@ const INTAKE_BATCH_CODE = SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE;
 
 function formText(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
+}
+
+/**
+ * Read the relayed pilot token.
+ *
+ * Deliberately separate from `formText` so the token is never picked up by
+ * one of the bulk `raw_payload` builders below, and so grepping for this
+ * field name finds every place it is touched. The value is passed straight
+ * to the gate and to nothing else — it is not logged here or anywhere
+ * downstream, and no error message echoes it back.
+ */
+function applyToken(formData: FormData): string | null {
+  const value = String(formData.get(APPLY_TOKEN_FIELD) ?? "").trim();
+  return value || null;
 }
 
 function formArray(formData: FormData, key: string): string[] {
@@ -73,6 +88,25 @@ function fail(scope: string, err: unknown): ApplyActionState {
   };
 }
 
+/**
+ * Refuse the whole action before a single field is inspected when the gate is
+ * not open.
+ *
+ * `submitPilotApplication` re-checks the same gate, so this is not the only
+ * defence — but checking here means a closed form answers a direct Server
+ * Action invocation with "not open" rather than with a field-validation
+ * error, which would otherwise confirm to an anonymous caller that the
+ * endpoint is live and reveal the shape of the form behind it.
+ */
+async function gateRefusal(role: ApplicationRole, token: string | null): Promise<ApplyActionState | null> {
+  const gate = await evaluateApplyGate(token, role);
+  if (gate.status === "open") return null;
+  return {
+    ok: false,
+    message: "Đơn đăng ký cho vai trò này hiện chưa được mở. Vui lòng chờ thông báo chính thức."
+  };
+}
+
 function resultToState(result: ApplicationSubmissionResult): ApplyActionState {
   if (result.ok) {
     return {
@@ -95,6 +129,10 @@ export async function submitMentorApplicationAction(
   formData: FormData
 ): Promise<ApplyActionState> {
   try {
+    const token = applyToken(formData);
+    const refused = await gateRefusal("mentor", token);
+    if (refused) return refused;
+
     // Top-level columns
     const fullName = formText(formData, "full_name");
     const emailPrimary = formText(formData, "email_primary");
@@ -264,6 +302,7 @@ export async function submitMentorApplicationAction(
       role: "mentor" as ApplicationRole,
       seasonCode: SEASON_CODE,
       intakeBatchCode: INTAKE_BATCH_CODE,
+      applyToken: token,
       fullName,
       emailPrimary,
       phonePrimary,
@@ -297,6 +336,10 @@ export async function submitMenteeApplicationAction(
   formData: FormData
 ): Promise<ApplyActionState> {
   try {
+    const token = applyToken(formData);
+    const refused = await gateRefusal("mentee", token);
+    if (refused) return refused;
+
     // Top-level columns
     const fullName = formText(formData, "full_name");
     const emailPrimary = formText(formData, "email_primary");
@@ -437,6 +480,7 @@ export async function submitMenteeApplicationAction(
       role: "mentee" as ApplicationRole,
       seasonCode: SEASON_CODE,
       intakeBatchCode: INTAKE_BATCH_CODE,
+      applyToken: token,
       fullName,
       emailPrimary,
       phonePrimary,

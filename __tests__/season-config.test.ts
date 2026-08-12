@@ -31,28 +31,27 @@ describe("SEASON_CONFIG — S12 application season", () => {
   });
 });
 
-// ── Public application env flags ──────────────────────────────────────────────
+// ── M069: the env enable-flags are gone ───────────────────────────────────────
 //
-// ENABLE_PUBLIC_MENTOR_APPLICATION and ENABLE_PUBLIC_MENTEE_APPLICATION must
-// be controlled by env vars (VAM_OS_ENABLE_MENTOR_APPLICATION / MENTEE_APPLICATION),
-// not hardcoded. In test environments the env vars are unset, so both resolve
-// to false. This guards against accidental hardcoding of true.
+// The public form state moved out of SEASON_CONFIG and into the database
+// (public.application_form_controls). These assertions exist so the flags
+// cannot quietly come back: a re-added ENABLE_PUBLIC_* would give the codebase
+// two sources of truth for whether recruitment is open, and the DB one would
+// stop being authoritative.
 
-describe("SEASON_CONFIG — public application flags", () => {
-  it("ENABLE_PUBLIC_MENTOR_APPLICATION is boolean", () => {
-    expect(typeof SEASON_CONFIG.ENABLE_PUBLIC_MENTOR_APPLICATION).toBe("boolean");
+describe("SEASON_CONFIG — M069 removed the public application env flags", () => {
+  it("no longer exposes ENABLE_PUBLIC_MENTOR_APPLICATION", () => {
+    expect(SEASON_CONFIG).not.toHaveProperty("ENABLE_PUBLIC_MENTOR_APPLICATION");
   });
 
-  it("ENABLE_PUBLIC_MENTEE_APPLICATION is boolean", () => {
-    expect(typeof SEASON_CONFIG.ENABLE_PUBLIC_MENTEE_APPLICATION).toBe("boolean");
+  it("no longer exposes ENABLE_PUBLIC_MENTEE_APPLICATION", () => {
+    expect(SEASON_CONFIG).not.toHaveProperty("ENABLE_PUBLIC_MENTEE_APPLICATION");
   });
 
-  it("ENABLE_PUBLIC_MENTOR_APPLICATION is false when env var is unset (test env)", () => {
-    // Guards against the flag being hardcoded to true
-    expect(SEASON_CONFIG.ENABLE_PUBLIC_MENTOR_APPLICATION).toBe(false);
-  });
-
-  it("ENABLE_PUBLIC_MENTEE_APPLICATION is false when env var is unset (test env)", () => {
-    expect(SEASON_CONFIG.ENABLE_PUBLIC_MENTEE_APPLICATION).toBe(false);
+  it("exposes no key at all that could re-open a form from config", () => {
+    const openers = Object.keys(SEASON_CONFIG).filter((key) =>
+      /ENABLE|OPEN|TOKENLESS|ALLOW/i.test(key)
+    );
+    expect(openers).toEqual([]);
   });
 });

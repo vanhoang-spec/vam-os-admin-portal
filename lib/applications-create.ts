@@ -1,6 +1,7 @@
 import "server-only";
 
-import { SEASON_CONFIG } from "@/lib/season-config";
+import { evaluateApplyGate } from "@/lib/apply-gate";
+import { S12_BINDING } from "@/lib/application-form-controls";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord } from "@/lib/types";
 
@@ -10,6 +11,11 @@ export type ApplicationSubmissionInput = {
   role: ApplicationRole;
   seasonCode: string; // e.g. "UEHM-S12"
   intakeBatchCode: string; // e.g. "UEHM-S12-B1"
+  /**
+   * The pilot token the applicant's page carried, if any. Used ONLY to
+   * evaluate the gate. Never logged, never written to any table.
+   */
+  applyToken?: string | null;
   fullName: string;
   emailPrimary: string;
   phonePrimary: string;
@@ -32,6 +38,15 @@ export type ApplicationSubmissionResult =
 
 const SAFE_ERROR =
   "Không thể ghi đơn ứng tuyển. Vui lòng thử lại sau hoặc liên hệ ban tổ chức nếu vấn đề tiếp diễn.";
+
+/**
+ * One message for every gate refusal. The gate's own `code` distinguishes
+ * "closed", "wrong token" and "lookup failed" for the server log, but the
+ * applicant sees a single string: telling an anonymous caller which of those
+ * it hit is free reconnaissance on the token and on the season binding.
+ */
+const GATE_CLOSED_MESSAGE =
+  "Đơn đăng ký cho vai trò này hiện chưa được mở. Vui lòng chờ thông báo chính thức.";
 
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string; details?: string };
@@ -98,6 +113,35 @@ function safeText(value: string | null | undefined) {
 export async function submitPilotApplication(
   input: ApplicationSubmissionInput
 ): Promise<ApplicationSubmissionResult> {
+  // ── M069 gate — FIRST, before any write path is reachable ─────────────────
+  // This is the same `evaluateApplyGate` the page render calls, with the same
+  // inputs. Invoking this Server Action directly (stale tab, replayed POST,
+  // handcrafted request) therefore cannot bypass what the page enforced.
+
+  // The Season 12 binding is fixed. A submission naming any other season or
+  // intake is refused outright rather than gated — that is what stops a
+  // Season 11 form from ever being reachable through this path.
+  if (
+    input.seasonCode !== S12_BINDING.seasonCode ||
+    input.intakeBatchCode !== S12_BINDING.intakeBatchCode
+  ) {
+    console.error("[applications-create] refused non-canonical intake binding", {
+      role: input.role,
+      seasonCode: input.seasonCode,
+      intakeBatchCode: input.intakeBatchCode
+    });
+    return { ok: false, code: "validation", message: GATE_CLOSED_MESSAGE };
+  }
+
+  const gate = await evaluateApplyGate(input.applyToken, input.role);
+  if (gate.status !== "open") {
+    console.warn("[applications-create] submission refused by gate", {
+      role: input.role,
+      code: gate.code
+    });
+    return { ok: false, code: "validation", message: GATE_CLOSED_MESSAGE };
+  }
+
   const { client, error: clientError } = clientResult();
   if (!client) {
     return { ok: false, code: "config", message: clientError ?? SAFE_ERROR };
@@ -162,17 +206,8 @@ export async function submitPilotApplication(
     };
   }
 
-  const isPublicApplicationEnabled =
-    input.role === "mentor"
-      ? SEASON_CONFIG.ENABLE_PUBLIC_MENTOR_APPLICATION
-      : SEASON_CONFIG.ENABLE_PUBLIC_MENTEE_APPLICATION;
-  if (!isPublicApplicationEnabled) {
-    return {
-      ok: false,
-      code: "validation",
-      message: "Đơn đăng ký cho vai trò này hiện chưa được mở. Vui lòng chờ thông báo chính thức."
-    };
-  }
+  // The role gate was evaluated at the top of this function, against the
+  // database rather than an environment variable. Nothing re-checks it here.
 
   // Duplicate check: same batch + same role + same normalised email
   const { data: dupRow, error: dupErr } = await client
