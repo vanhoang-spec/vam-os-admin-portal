@@ -126,6 +126,7 @@ export type PageOrder =
  *   seasons                       012 mentoring_recaps.season_id        -> seasons(id)
  *   matches                       012 mentoring_recaps.match_id         -> matches(id)
  *   events                        051 event_registrations.event_id      -> events(id)
+ *   event_links / event_registrations                                    051
  *   mentor_profiles               036 mentor_industries.mentor_profile_id -> mentor_profiles(id)
  *   mentee_profiles               046a matches.mentee_profile_id        -> mentee_profiles(id)
  *   admin_users                   044a review_assignment_batches.created_by -> admin_users(id)
@@ -149,7 +150,9 @@ export const PAGE_ORDER = {
   application_answers: { strategy: "keyset", key: "id" },
   application_reviews: { strategy: "keyset", key: "id" },
   applications: { strategy: "keyset", key: "id" },
+  event_links: { strategy: "keyset", key: "id" },
   event_participations: { strategy: "keyset", key: "id" },
+  event_registrations: { strategy: "keyset", key: "id" },
   events: { strategy: "keyset", key: "id" },
   function_areas: { strategy: "keyset", key: "id" },
   industries: { strategy: "keyset", key: "id" },

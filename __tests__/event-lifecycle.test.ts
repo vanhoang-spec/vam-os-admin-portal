@@ -54,6 +54,8 @@ function makeChain(result: { data?: unknown; error?: unknown; count?: number } =
   chain.select = self;
   chain.eq = self;
   chain.neq = self;
+  chain.gt = self;
+  chain.ilike = self;
   chain.limit = self;
   chain.in = self;
   chain.order = self;
@@ -76,6 +78,18 @@ function makeRegistration(status: string) {
 
 function makeEvent(overrides: Record<string, unknown> = {}) {
   return { id: EVENT_UUID, season_id: SEASON_UUID, capacity_limit_enabled: false, capacity_limit: null, event_name: "Test Event", ...overrides };
+}
+
+/**
+ * Multi-row reads page to exhaustion under `lib/paged-read.ts`, so ONE logical
+ * read now consumes several `from()` calls: one per data page, plus a final
+ * empty page that proves exhaustion (the loop deliberately does not stop on a
+ * short page — see the TERMINATION note in lib/paged-read.ts). `makePages`
+ * expands a single row set into that call sequence so a test can keep
+ * expressing its intent as "this read returns these rows".
+ */
+function makePages(rows: unknown[]): unknown[] {
+  return [makeChain({ data: rows }), makeChain({ data: [] })];
 }
 
 function makeClient(responses: unknown[]) {
@@ -149,7 +163,8 @@ describe("confirmEventRegistration — status guards", () => {
       from: vi.fn()
         .mockReturnValueOnce(makeChain({ data: makeRegistration("waitlisted") })) // reg
         .mockReturnValueOnce(makeChain({ data: makeEvent(fullEvent) }))            // event
-        .mockReturnValueOnce(makeChain({ data: existingConfirmed }))               // capacity query
+        .mockReturnValueOnce(makePages(existingConfirmed)[0])                      // capacity query, page 1
+        .mockReturnValueOnce(makePages(existingConfirmed)[1])                      // capacity query, exhaustion page
         .mockReturnValue(makeChain()),
     };
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
@@ -321,7 +336,8 @@ describe("confirmEventRegistration — capacity edge cases", () => {
       from: vi.fn()
         .mockReturnValueOnce(makeChain({ data: makeRegistration("waitlisted") }))  // reg (confirmable)
         .mockReturnValueOnce(makeChain({ data: makeEvent(capacityEvent) }))         // event
-        .mockReturnValueOnce(makeChain({ data: existingCancelled }))                // capacity query
+        .mockReturnValueOnce(makePages(existingCancelled)[0])                       // capacity query, page 1
+        .mockReturnValueOnce(makePages(existingCancelled)[1])                       // capacity query, exhaustion page
         .mockReturnValueOnce(makeChain({ data: updatedReg }))                       // update
         .mockReturnValue(makeChain()),
     };

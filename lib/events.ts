@@ -3,7 +3,7 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getMenteeProfiles, getMentorProfiles, getPeople, getSeasons } from "@/lib/data";
-import { readAllPages, type PagedTable } from "@/lib/paged-read";
+import { readAllPages, readBounded, type PagedTable } from "@/lib/paged-read";
 import { canAccessSeason, canOperateAnyScope, canOperateSeason, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import {
   ATTENDANCE_STATUS_VALUES,
@@ -286,6 +286,37 @@ async function selectAll<T extends Record<string, any>>(client: any, table: Page
   return { data, error: null as string | null };
 }
 
+/**
+ * Class C, filtered. Same contract as `selectAll`, for the reads that carry
+ * their own `WHERE` clause (one event, one batch, a set of event ids).
+ *
+ * `filter` is applied INSIDE the per-page factory, so every page of the read
+ * carries byte-identical filters — the event/capacity/status predicates cannot
+ * drift between page 1 and page 2 by construction rather than by convention.
+ *
+ * The returned `error` is non-null if ANY page failed. Callers must branch on
+ * it BEFORE touching `data`: a later-page failure returns the rows gathered so
+ * far, and treating that prefix as a complete result set is precisely the bug
+ * this module exists to prevent. There is no partial success here.
+ */
+async function selectAllWhere<T extends Record<string, any>>(
+  client: any,
+  table: PagedTable,
+  columns: string,
+  filter: (query: any) => any,
+  scope = `${table} filtered select failed`
+) {
+  const { data, error } = await readAllPages<T>(table, columns, (projection) =>
+    filter(client.from(table).select(projection))
+  );
+  if (error) {
+    log(scope, error);
+    const err = error as { message?: string };
+    return { data: [] as T[], error: (err.message ?? "Bad Request") as string };
+  }
+  return { data, error: null as string | null };
+}
+
 function normalizeEmail(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -404,12 +435,19 @@ export async function getEventListData(scope?: ScopeFilter): Promise<EventListDa
         : Promise.resolve({ data: [] as Season[], error: null })
       : selectAll<Season>(client, "seasons", "id,code,name"),
     selectAll<Person>(client, "people", "id,full_name,email_primary"),
+    // Class C. One row per registration across EVERY event in scope, so this is
+    // the largest read on the page — a workspace with a few hundred events is
+    // far past the 1000-row cap. Truncation here understates the registration
+    // totals on the event list, and does so identically to a genuinely quiet
+    // workspace, so it cannot be noticed from the rendered page.
     eventIds.length
-      ? client
-          .from("event_registrations")
-          .select("event_id,registration_status")
-          .in("event_id", eventIds)
-          .then((res: any) => ({ data: (res.data ?? []) as { event_id: string; registration_status: string | null }[], error: res.error?.message ?? null }))
+      ? selectAllWhere<{ event_id: string; registration_status: string | null }>(
+          client,
+          "event_registrations",
+          "event_id,registration_status",
+          (query) => query.in("event_id", eventIds),
+          "event list registration totals select failed"
+        )
       : Promise.resolve({ data: [] as { event_id: string; registration_status: string | null }[], error: null as string | null })
   ]);
 
@@ -491,35 +529,57 @@ export async function getEventDetailData(eventId: string, scope?: ScopeFilter): 
     };
   }
 
-  // Phase 045A: scope participations to this event only (was: load all then filter in JS)
-  const { data: partsData, error: partsErr } = await client
-    .from("event_participations")
-    .select("id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in")
-    .eq("event_id", id);
-  if (partsErr) {
-    log("event_participations load failed", partsErr);
-  }
-  const partsRes = { data: (partsData ?? []) as EventParticipation[], error: partsErr ? partsErr.message : null };
+  // Phase 045A: scope participations to this event only (was: load all then filter in JS).
+  // Class C: scoping to one event bounds this by the event's attendance, not by
+  // anything below the row cap — a plenary session is exactly the event whose
+  // roster passes 1000 and exactly the one whose roster must be complete.
+  const partsRes = await selectAllWhere<EventParticipation>(
+    client,
+    "event_participations",
+    "id,event_id,season_id,person_id,role_at_event,registration_status,attendance_status,attendance_date,recap_url,excuse_reason,admin_notes,captured_by,walk_in",
+    (query) => query.eq("event_id", id),
+    "event_participations load failed"
+  );
 
-  const [{ data: linkData, error: linkErr }, { data: registrationData, error: registrationErr }] = await Promise.all([
-    client
-      .from("event_links")
-      .select("id,event_id,link_type,token,is_active,opens_at,closes_at,created_by,created_at,updated_at")
-      .eq("event_id", id)
-      .in("link_type", ["registration", "checkin"]),
-    client
-      .from("event_registrations")
-      .select("id,event_id,event_link_id,linked_person_id,full_name,email,phone,student_id,school,program_of_study,role_text,notes,consent_given,registration_source,registration_status,attendance_status,is_walk_in,registered_at,checked_in_at,checkin_source,match_method,match_review_status,matched_at,created_at,updated_at,mentee_code,proof_url,proof_note,proof_status,review_status,review_note,confirmed_at,waitlisted_at,rejected_at,payment_status,payment_proof_url,no_show_flagged,blacklist_flag,meal_selected,meal_fee_amount,meal_fee_currency")
-      .eq("event_id", id)
-      .order("registered_at", { ascending: false })
+  const [linksRes, registrationsRes] = await Promise.all([
+    // Class B: `unique (event_id, link_type)` in migration 051 with a two-value
+    // CHECK on link_type bounds this at 2 rows. `readBounded` fails loudly if
+    // that constraint is ever dropped instead of quietly reading a prefix.
+    readBounded<EventLink>(
+      "event_links",
+      client
+        .from("event_links")
+        .select("id,event_id,link_type,token,is_active,opens_at,closes_at,created_by,created_at,updated_at")
+        .eq("event_id", id)
+        .in("link_type", ["registration", "checkin"])
+    ),
+    // Class C: one row per public registration for this event.
+    selectAllWhere<EventRegistration>(
+      client,
+      "event_registrations",
+      "id,event_id,event_link_id,linked_person_id,full_name,email,phone,student_id,school,program_of_study,role_text,notes,consent_given,registration_source,registration_status,attendance_status,is_walk_in,registered_at,checked_in_at,checkin_source,match_method,match_review_status,matched_at,created_at,updated_at,mentee_code,proof_url,proof_note,proof_status,review_status,review_note,confirmed_at,waitlisted_at,rejected_at,payment_status,payment_proof_url,no_show_flagged,blacklist_flag,meal_selected,meal_fee_amount,meal_fee_currency",
+      (query) => query.eq("event_id", id),
+      "event_registrations load failed"
+    )
   ]);
+  const linkErr = linksRes.error as { message?: string } | null;
   if (linkErr) log("event_links load failed", linkErr);
-  if (registrationErr) log("event_registrations load failed", registrationErr);
+  const linkData = linksRes.data;
+
+  // Paging orders by the `id` cursor, so the newest-first order the table renders
+  // is re-established here across the whole result rather than per page. Rows with
+  // no `registered_at` sort last, as they did under the SQL `order`.
+  const registrationData = [...registrationsRes.data].sort((a, b) => {
+    const left = a.registered_at ? Date.parse(String(a.registered_at)) : Number.NEGATIVE_INFINITY;
+    const right = b.registered_at ? Date.parse(String(b.registered_at)) : Number.NEGATIVE_INFINITY;
+    if (left === right) return String(a.id).localeCompare(String(b.id));
+    return right - left;
+  });
 
   const errors = [
     partsRes.error,
     linkErr?.message,
-    registrationErr?.message,
+    registrationsRes.error,
     seasonsRes.error,
     peopleRes.error,
     mentorsRes.error,
@@ -742,36 +802,48 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   // Load all non-cancelled registrations for duplicate check AND capacity count.
   // 'rejected' rows are excluded from duplicate check so a previously-rejected person
   // could re-register, but currently they remain in this list (neq cancelled only).
-  const { data: existingRows, error: existingError } = await client
-    .from("event_registrations")
-    .select("id,email,registration_status")
-    .eq("event_id", eventId)
-    .neq("registration_status", "cancelled");
+  //
+  // Class C, and the read that two write decisions rest on. Truncated at 1000
+  // rows, BOTH decisions below invert for anyone whose row fell off the end:
+  // `duplicate` reads false for an existing registrant, and `activeSeatsCount`
+  // saturates at the cap so a full event keeps accepting seats. The duplicate
+  // half has a database backstop — `event_registrations_event_lower_email_active_uidx`
+  // (051) makes the insert fail 23505, which is handled as `already_registered`
+  // — but the capacity half has none: overselling is a clean INSERT.
+  const { data: existingRows, error: existingError } = await selectAllWhere<{
+    id: string;
+    email: string | null;
+    registration_status: string | null;
+  }>(
+    client,
+    "event_registrations",
+    "id,email,registration_status",
+    (query) => query.eq("event_id", eventId).neq("registration_status", "cancelled"),
+    "public registration duplicate check failed"
+  );
 
   if (existingError) {
-    log("public registration duplicate check failed", existingError);
     return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
   }
 
-  const duplicate = ((existingRows ?? []) as Array<{ email: string | null; registration_status: string | null }>).some(
-    (row) => normalizeEmail(row.email) === email
-  );
+  const duplicate = existingRows.some((row) => normalizeEmail(row.email) === email);
   if (duplicate) {
     return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: registrationData.event.event_name ?? null };
   }
 
-  const { data: peopleData, error: peopleError } = await client
-    .from("people")
-    .select("id,email_primary")
-    .ilike("email_primary", email);
+  // Class B: a lookup of one email address against `people.email_primary`. The
+  // result is a handful of rows even with duplicate person records; `readBounded`
+  // turns a violated assumption into an error rather than a silent prefix.
+  const { data: peopleData, error: peopleError } = await readBounded<{ id: string; email_primary: string | null }>(
+    "people email match",
+    client.from("people").select("id,email_primary").ilike("email_primary", email)
+  );
   if (peopleError) {
     log("public registration people match failed", peopleError);
     return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
   }
 
-  const matchedPerson = ((peopleData ?? []) as Array<{ id: string; email_primary: string | null }>).find(
-    (person) => normalizeEmail(person.email_primary) === email
-  );
+  const matchedPerson = peopleData.find((person) => normalizeEmail(person.email_primary) === email);
   const nowIso = matchedPerson ? new Date().toISOString() : null;
 
   const cfg = readEventConfig(registrationData.event as JsonRecord);
@@ -793,7 +865,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   // Active seats = registered + pending_review + confirmed (not waitlisted, not rejected).
   // Waitlisted registrations do not occupy a confirmed seat; rejected ones are vacated.
   const SEAT_STATUSES = new Set(["registered", "pending_review", "confirmed"]);
-  const activeSeatsCount = ((existingRows ?? []) as Array<{ registration_status: string | null }>).filter(
+  const activeSeatsCount = existingRows.filter(
     (row) => SEAT_STATUSES.has(String(row.registration_status ?? ""))
   ).length;
   const isFull = cfg.capacity_limit_enabled && cfg.capacity_limit != null && activeSeatsCount >= cfg.capacity_limit;
@@ -877,17 +949,24 @@ async function syncCheckedInParticipation(client: any, input: {
 }) {
   if (!input.personId) return { ok: true };
 
-  const { data: existing, error: existingError } = await client
-    .from("event_participations")
-    .select("id")
-    .eq("event_id", input.eventId)
-    .eq("person_id", input.personId);
+  // Class B: rows for ONE person at ONE event. Migration 051 notes there is no
+  // `unique(event_id, person_id)` constraint, so the bound is the application's
+  // own select-then-insert discipline rather than the schema — which is exactly
+  // the case `readBounded` exists to assert rather than assume.
+  const { data: existing, error: existingError } = await readBounded<{ id: string }>(
+    "event_participations check-in sync",
+    client
+      .from("event_participations")
+      .select("id")
+      .eq("event_id", input.eventId)
+      .eq("person_id", input.personId)
+  );
   if (existingError) {
     log("check event_participations for check-in sync failed", existingError);
     return { ok: false };
   }
 
-  const existingIds = ((existing ?? []) as Array<{ id: string }>).map((row) => row.id).filter(Boolean);
+  const existingIds = existing.map((row) => row.id).filter(Boolean);
   if (existingIds.length) {
     const { error: updateError } = await client
       .from("event_participations")
@@ -1063,17 +1142,25 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
   // ── 6. Load all registrations for this event (all statuses) ──────────────
   // We load all (including cancelled) so we can return specific messages for
   // cancelled / rejected / waitlisted registrants instead of "not registered".
-  const { data: allRows, error: allRowsError } = await client
-    .from("event_registrations")
-    .select("id,email,attendance_status,linked_person_id,registration_status,is_walk_in,review_status")
-    .eq("event_id", eventId);
+  //
+  // Class C, and the read every branch below depends on. Truncated, a registrant
+  // whose row fell off the end is told "chưa có trong danh sách đăng ký" in the
+  // restricted modes, and in open mode is silently re-created as a WALK-IN — a
+  // write, against an event whose `activeCount` capacity check was computed from
+  // the same truncated list. The DB's active-email unique index catches the
+  // duplicate insert, but only after the user has been told they were not
+  // registered.
+  const { data: allRegistrations, error: allRowsError } = await selectAllWhere<EventRegistration>(
+    client,
+    "event_registrations",
+    "id,email,attendance_status,linked_person_id,registration_status,is_walk_in,review_status",
+    (query) => query.eq("event_id", eventId),
+    "check existing registration for check-in failed"
+  );
 
   if (allRowsError) {
-    log("check existing registration for check-in failed", allRowsError);
     return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: displayName };
   }
-
-  const allRegistrations = (allRows ?? []) as EventRegistration[];
 
   // Find the best-matching registration for this email:
   //   prefer non-cancelled (could be any Phase 2 status), fall back to cancelled.
@@ -1218,18 +1305,17 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
     };
   }
 
-  const { data: peopleData, error: peopleError } = await client
-    .from("people")
-    .select("id,email_primary")
-    .ilike("email_primary", email);
+  // Class B, as in `registerForEvent`: one email address against people.email_primary.
+  const { data: peopleData, error: peopleError } = await readBounded<{ id: string; email_primary: string | null }>(
+    "people email match",
+    client.from("people").select("id,email_primary").ilike("email_primary", email)
+  );
   if (peopleError) {
     log("people match for walk-in check-in failed", peopleError);
     return { ok: false, status: "server_error", message: "Không thể check-in lúc này.", eventName: displayName };
   }
 
-  const matchedPerson = ((peopleData ?? []) as Array<{ id: string; email_primary: string | null }>).find(
-    (person) => normalizeEmail(person.email_primary) === email
-  );
+  const matchedPerson = peopleData.find((person) => normalizeEmail(person.email_primary) === email);
   const nowIso = new Date().toISOString();
 
   const payload: JsonRecord = {
@@ -1513,16 +1599,26 @@ async function ensureRegistrationCapacityForConfirm(
   const capacity = Number(event.capacity_limit);
   if (!Number.isFinite(capacity) || capacity <= 0) return { ok: true };
 
-  const { data, error } = await client
-    .from("event_registrations")
-    .select("id,registration_status")
-    .eq("event_id", event.id)
-    .in("registration_status", Array.from(CAPACITY_CONSUMING_REGISTRATION_STATUSES));
+  // Class C. This count IS the capacity gate: an admin confirmation is allowed
+  // or refused on its value, so a truncated read saturates `consumingCount` at
+  // the row cap and lets an over-capacity event keep confirming seats. The
+  // status filter is rebuilt per page inside the factory, so page 2 counts the
+  // same statuses as page 1.
+  const { data, error } = await selectAllWhere<{ id: string; registration_status: string | null }>(
+    client,
+    "event_registrations",
+    "id,registration_status",
+    (query) =>
+      query
+        .eq("event_id", event.id)
+        .in("registration_status", Array.from(CAPACITY_CONSUMING_REGISTRATION_STATUSES)),
+    "registration capacity check failed"
+  );
 
   if (error) return { ok: false, message: safeOperationError("registration capacity check failed", error) };
 
   const currentRegistrationId = String(registration.id ?? "");
-  const consumingCount = ((data ?? []) as Array<{ id: string; registration_status: string | null }>).filter(
+  const consumingCount = data.filter(
     (row) => row.id !== currentRegistrationId && CAPACITY_CONSUMING_REGISTRATION_STATUSES.has(String(row.registration_status ?? ""))
   ).length;
 
@@ -2325,20 +2421,24 @@ export async function bulkAddEventParticipants(input: {
   }
 
   // Load profiles for this batch
-  const profileTable = group === "approved_mentees_in_batch" ? "mentee_profiles" : "mentor_profiles";
+  const profileTable: PagedTable = group === "approved_mentees_in_batch" ? "mentee_profiles" : "mentor_profiles";
   const roleValue: EventRoleValue = group === "approved_mentees_in_batch" ? "mentee" : "mentor";
 
-  const { data: profiles, error: profileError } = await client
-    .from(profileTable)
-    .select("id,person_id")
-    .eq("intake_batch_id", intakeBatchId);
+  // Class C. An intake batch is a whole cohort; truncation here does not fail,
+  // it just adds fewer people than the admin asked for and reports the short
+  // number as success, so nobody has a reason to look.
+  const { data: profiles, error: profileError } = await selectAllWhere<{ id: string; person_id: string | null }>(
+    client,
+    profileTable,
+    "id,person_id",
+    (query) => query.eq("intake_batch_id", intakeBatchId),
+    `load ${profileTable} for bulk add failed`
+  );
   if (profileError) {
-    log(`load ${profileTable} for bulk add failed`, profileError);
-    return { ok: false, message: `${SAFE_ERROR} (${profileError.message})` };
+    return { ok: false, message: `${SAFE_ERROR} (${profileError})` };
   }
 
-  const profileList = (profiles ?? []) as Array<{ id: string; person_id: string | null }>;
-  const candidatePersonIds = profileList
+  const candidatePersonIds = profiles
     .map((p) => p.person_id)
     .filter((id): id is string => Boolean(id) && isValidUuid(id));
 
@@ -2351,19 +2451,27 @@ export async function bulkAddEventParticipants(input: {
     };
   }
 
-  // Load existing participations for this event to detect duplicates
-  const { data: existing, error: existingError } = await client
-    .from("event_participations")
-    .select("person_id")
-    .eq("event_id", eventId);
+  // Load existing participations for this event to detect duplicates.
+  //
+  // Class C, and the read whose completeness decides what gets INSERTed. There
+  // is no `unique(event_id, person_id)` constraint on event_participations
+  // (migration 051 says so explicitly and defers it), so this set is the ONLY
+  // thing preventing a duplicate row. A truncated read means every member past
+  // the cap is absent from `alreadyIn`, gets re-inserted, and the event's roster
+  // silently doubles — with the operation reporting success. Of every read in
+  // this file this is the one with no database backstop at all.
+  const { data: existing, error: existingError } = await selectAllWhere<{ person_id: string | null }>(
+    client,
+    "event_participations",
+    "person_id",
+    (query) => query.eq("event_id", eventId),
+    "load existing participations for bulk add failed"
+  );
   if (existingError) {
-    log("load existing participations for bulk add failed", existingError);
-    return { ok: false, message: `${SAFE_ERROR} (${existingError.message})` };
+    return { ok: false, message: `${SAFE_ERROR} (${existingError})` };
   }
 
-  const alreadyIn = new Set(
-    (existing ?? []).map((r: JsonRecord) => r.person_id as string).filter(Boolean)
-  );
+  const alreadyIn = new Set(existing.map((row) => row.person_id as string).filter(Boolean));
   const newPersonIds = candidatePersonIds.filter((id) => !alreadyIn.has(id));
   const skippedCount = candidatePersonIds.length - newPersonIds.length;
 
