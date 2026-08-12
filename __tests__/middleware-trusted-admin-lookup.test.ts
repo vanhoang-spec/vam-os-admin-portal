@@ -22,6 +22,11 @@ import {
   resolveTrustedCredential,
   SERVICE_ROLE_ENV_NAME
 } from "@/lib/middleware-admin-lookup";
+import {
+  restoreProcessState,
+  snapshotProcessState,
+  type ProcessStateSnapshot
+} from "./support/process-state";
 
 const SUPABASE_URL = "https://qkkroesfiazsejkzflcd.supabase.co";
 const ANON_KEY = "sb_publishable_anonkey_for_tests";
@@ -333,10 +338,14 @@ describe("trusted-server admin lookup — identity input hardening", () => {
 });
 
 describe("middleware end-to-end against the post-T2 DB posture", () => {
-  const originalFetch = globalThis.fetch;
-  const originalEnv = { ...process.env };
+  // Snapshot is taken per test, not once for the describe: a test that throws
+  // must not be able to hand its env or its fetch double to the next one.
+  let processState: ProcessStateSnapshot;
 
   beforeEach(() => {
+    processState = snapshotProcessState();
+    // Mutated IN PLACE. Assigning a fresh object to `process.env` would swap
+    // Node's exotic env object for a plain one for the rest of this worker.
     process.env.NEXT_PUBLIC_SUPABASE_URL = SUPABASE_URL;
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = ANON_KEY;
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -344,8 +353,12 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
-    process.env = { ...originalEnv };
+    // Restores env keys and `globalThis.fetch` together, and runs even when the
+    // test body threw before reaching its own cleanup.
+    restoreProcessState(processState);
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.resetModules();
   });
 
