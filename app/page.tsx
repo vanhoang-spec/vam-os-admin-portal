@@ -86,7 +86,9 @@ function countByLabel(rows: Array<Record<string, unknown>>, key: string, fallbac
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, "vi"));
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+export default async function DashboardPage(props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const searchParams = await props.searchParams;
+
   const scope = await getScopeFilter(await getAdminScopeContext());
   const [data, opsData] = await Promise.all([
     getDashboardData(scope),

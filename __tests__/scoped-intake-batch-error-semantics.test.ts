@@ -49,7 +49,7 @@ beforeEach(() => {
 
   const mockDb = { from: mockFrom };
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(mockDb as any);
-  vi.mocked(getSupabaseServerClient).mockReturnValue(mockDb as any);
+  vi.mocked(getSupabaseServerClient).mockResolvedValue(mockDb as any);
   mockSupabaseState.client = mockDb as any;
   errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -407,7 +407,7 @@ describe("Missing Supabase client error semantics", () => {
   function simulateMissingClient() {
     mockSupabaseState.client = null;
     vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(null);
-    vi.mocked(getSupabaseServerClient).mockReturnValue(null);
+    vi.mocked(getSupabaseServerClient).mockResolvedValue(null);
   }
 
   it("23. Restricted scope + missing client returns a non-null canonical safe environment-error.", async () => {

@@ -26,14 +26,12 @@ function StatusBadge({ status }: { status: string | null }) {
   return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{matchStatusLabel(s)}</span>;
 }
 
-export default async function MatchesPage({
-  searchParams
-}: {
-  searchParams?: {
+export default async function MatchesPage(props: { searchParams?: Promise<{
     batch?: string | string[];
     status?: string | string[];
-  };
-}) {
+  }> }) {
+  const searchParams = await props.searchParams;
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const [adminUser, intakeBatchesRes] = await Promise.all([

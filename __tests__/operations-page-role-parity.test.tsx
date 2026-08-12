@@ -157,7 +157,7 @@ function grant(authUserId: string, scope: { program_id?: string | null; season_i
 }
 
 async function renderOperations() {
-  const ui = await OperationsPage({ searchParams: { month: MONTH } });
+  const ui = await OperationsPage({ searchParams: Promise.resolve({ month: MONTH }) });
   return render(<>{ui}</>);
 }
 
@@ -177,7 +177,7 @@ beforeEach(() => {
   seed();
   const client = fakeClient(db);
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as any);
-  vi.mocked(getSupabaseServerClient).mockReturnValue(client as any);
+  vi.mocked(getSupabaseServerClient).mockResolvedValue(client as any);
 });
 
 describe("1-2. one aggregate truth across roles", () => {

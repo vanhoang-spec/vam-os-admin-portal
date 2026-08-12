@@ -9,11 +9,9 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function ApplyMentorPage({
-  searchParams
-}: {
-  searchParams?: { token?: string | string[] };
-}) {
+export default async function ApplyMentorPage(props: { searchParams?: Promise<{ token?: string | string[] }> }) {
+  const searchParams = await props.searchParams;
+
   const tokenRaw = Array.isArray(searchParams?.token) ? searchParams?.token[0] : searchParams?.token;
   const gate = evaluateApplyGate(tokenRaw, "mentor");
 

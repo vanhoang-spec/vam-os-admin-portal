@@ -100,11 +100,9 @@ type SupportRow = OperationalTeamAssignment & {
   mentee_code: string | null;
 };
 
-export default async function TeamViewPage({
-  searchParams
-}: {
-  searchParams?: { q?: string | string[]; group?: string | string[]; functional?: string | string[]; status?: string | string[] };
-}) {
+export default async function TeamViewPage(props: { searchParams?: Promise<{ q?: string | string[]; group?: string | string[]; functional?: string | string[]; status?: string | string[] }> }) {
+  const searchParams = await props.searchParams;
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const [assignments, people, mentors, mentees, seasons] = await Promise.all([

@@ -78,16 +78,14 @@ function buildEventRows(
     .sort((a, b) => String(b.starts_at ?? "").localeCompare(String(a.starts_at ?? "")));
 }
 
-export default async function EventsPage({
-  searchParams
-}: {
-  searchParams?: {
+export default async function EventsPage(props: { searchParams?: Promise<{
     season?: string | string[];
     type?: string | string[];
     batch?: string | string[];
     status?: string | string[];
-  };
-}) {
+  }> }) {
+  const searchParams = await props.searchParams;
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const [data, intakeBatchesRes, adminUser] = await Promise.all([

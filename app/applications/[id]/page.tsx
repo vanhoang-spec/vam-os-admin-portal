@@ -80,7 +80,9 @@ function roundLabel(round: string) {
   return round;
 }
 
-export default async function ApplicationDetailPage({ params }: { params: { id: string } }) {
+export default async function ApplicationDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const [adminUser, application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =

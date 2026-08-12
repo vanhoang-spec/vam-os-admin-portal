@@ -7,7 +7,9 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import { displayText, formatDate } from "@/lib/utils";
 import { AddParticipantForm, BulkAddForm, ParticipationRow } from "./attendance-forms";
 
-export default async function EventAttendancePage({ params }: { params: { id: string } }) {
+export default async function EventAttendancePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const adminUser = await getCurrentAdminUser();

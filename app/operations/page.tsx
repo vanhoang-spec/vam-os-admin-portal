@@ -123,7 +123,9 @@ function monthLabel(month: string) {
   return formatMonthVN(month);
 }
 
-export default async function OperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
+export default async function OperationsPage(props: { searchParams?: Promise<{ month?: string | string[] }> }) {
+  const searchParams = await props.searchParams;
+
   const scopeContext = await getAdminScopeContext();
 
   // Scope could not be evaluated. Rendering the dashboard here would filter every

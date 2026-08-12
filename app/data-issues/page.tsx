@@ -97,7 +97,9 @@ function IssueSection<T>({
   );
 }
 
-export default async function DataIssuesPage({ searchParams }: { searchParams?: { issue?: string } }) {
+export default async function DataIssuesPage(props: { searchParams?: Promise<{ issue?: string }> }) {
+  const searchParams = await props.searchParams;
+
   const selectedIssue = isIssueKey(searchParams?.issue) ? searchParams.issue : null;
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);

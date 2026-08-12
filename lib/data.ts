@@ -177,10 +177,10 @@ export function isServerOnlyApplicationTable(table: string) {
  * workflow reads fail closed when the service-role key is absent instead of
  * degrading to an authenticated or anonymous client.
  */
-function dataClient(table?: string) {
+async function dataClient(table?: string) {
   const serviceRole = getSupabaseServiceRoleClient();
   if (table && isServerOnlyApplicationTable(table)) return serviceRole ?? null;
-  return serviceRole ?? getSupabaseServerClient() ?? supabase;
+  return serviceRole ?? (await getSupabaseServerClient()) ?? supabase;
 }
 
 function logDataError(scope: string, error: unknown) {
@@ -235,7 +235,7 @@ async function selectInChunks<T extends Record<string, any>>(
   columns = "*",
   refine?: (query: any) => any
 ): Promise<{ data: T[]; error: unknown | null }> {
-  const client = dataClient(table);
+  const client = await dataClient(table);
   if (!client) {
     return {
       data: [],
@@ -294,7 +294,7 @@ function isValidRecapActivity(recap: MentoringRecap) {
  * `selectAllTable` for anything that can genuinely grow.
  */
 async function selectTable<T>(table: string, columns = "*", fallback: T[] = []): Promise<QueryResult<T[]>> {
-  const client = dataClient(table);
+  const client = await dataClient(table);
   if (!client) return isServerOnlyApplicationTable(table) ? serviceRoleRequiredError(fallback) : envError(fallback);
   const { data, error } = await readBounded<T>(table, client.from(table).select(columns));
   if (error) {
@@ -318,7 +318,7 @@ async function selectAllTable<T extends Record<string, any>>(
   fallback: T[] = [],
   pageSize = SELECT_PAGE_SIZE
 ): Promise<QueryResult<T[]>> {
-  const client = dataClient(table);
+  const client = await dataClient(table);
   if (!client) return isServerOnlyApplicationTable(table) ? serviceRoleRequiredError(fallback) : envError(fallback);
   const { data, error } = await readAllPages<T>(
     table,
@@ -379,7 +379,7 @@ async function selectScopedBySeason<T extends Record<string, any>>(
 async function getScopedIntakeBatchIds(scope?: ScopeFilter): Promise<ScopedIntakeBatchIdsResult> {
   if (!scope) return { batchIds: null, error: null };
   if (noAllowedRows(scope)) return { batchIds: [], error: null };
-  const client = dataClient();
+  const client = await dataClient();
   // If the Supabase client cannot be initialized (e.g. missing environment
   // variables), fail closed and return the canonical environment error rather
   // than an empty batch list that looks like a legitimate restricted scope.
@@ -498,7 +498,7 @@ export async function getScopedPersonIds(scope?: ScopeFilter): Promise<ScopedPer
 }
 
 async function countTable(table: string, filter?: (query: any) => any): Promise<QueryResult<number>> {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError(0);
   let query = client.from(table).select("id", { count: "exact", head: true });
   if (filter) query = filter(query);
@@ -572,7 +572,7 @@ export async function getMenteeProfiles(scope?: ScopeFilter) {
 export async function getApplications(scope?: ScopeFilter) {
   if (!scope) return selectAllTable<Application>("applications");
   if (noAllowedRows(scope)) return { data: [] as Application[], error: null };
-  const client = dataClient("applications");
+  const client = await dataClient("applications");
   if (!client) return serviceRoleRequiredError<Application[]>([]);
   const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
   if (batchScopeError) return { data: [] as Application[], error: batchScopeError };
@@ -686,7 +686,7 @@ export async function getMentorFunctionAreaLinks(mentorProfileIds?: string[]) {
  * identical to before. `readBounded` fails loudly if that bound is ever wrong.
  */
 export async function getRolesForPerson(personId: string) {
-  const client = dataClient("person_roles");
+  const client = await dataClient("person_roles");
   if (!client) return envError<JsonRecord[]>([]);
   const { data, error } = await readBounded<JsonRecord>(
     "person_roles",
@@ -737,7 +737,7 @@ export async function getPerson(id: string, scope?: ScopeFilter) {
   // and returning the same `{ data: null, error: null }` as a genuine miss.
   if (scopeError) return { data: null as Person | null, error: scopeError };
   if (personIds && !personIds.includes(id)) return { data: null, error: null };
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<Person | null>(null);
   const { data, error } = await client.from("people").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (people: ${error.message})` };
@@ -745,7 +745,7 @@ export async function getPerson(id: string, scope?: ScopeFilter) {
 }
 
 export async function getApplication(id: string, scope?: ScopeFilter) {
-  const client = dataClient("applications");
+  const client = await dataClient("applications");
   if (!client) return serviceRoleRequiredError<Application | null>(null);
   const { data, error } = await client.from("applications").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (applications: ${error.message})` };
@@ -761,7 +761,7 @@ export async function getAnswersForApplication(applicationId: string) {
 }
 
 export async function getMatch(id: string, scope?: ScopeFilter) {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<Match | null>(null);
   const { data, error } = await client.from("matches").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (matches: ${error.message})` };
@@ -778,7 +778,7 @@ export async function getMatch(id: string, scope?: ScopeFilter) {
  * truncating if that ever stops holding.
  */
 export async function getMentoringRecapsByMenteePersonId(personId: string, scope?: ScopeFilter) {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<MentoringRecap[]>([]);
   let query = client
     .from("mentoring_recaps")
@@ -799,7 +799,7 @@ export async function getMentoringRecapsByMenteePersonId(personId: string, scope
 }
 
 export async function getMentoringRecapsByMentorPersonId(personId: string, scope?: ScopeFilter) {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<MentoringRecap[]>([]);
   let query = client
     .from("mentoring_recaps")
@@ -821,7 +821,7 @@ export async function getMentoringRecapsByMentorPersonId(personId: string, scope
 }
 
 export async function getMentoringRecapById(id: string, scope?: ScopeFilter) {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<MentoringRecap | null>(null);
   const { data, error } = await client.from("mentoring_recaps").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
@@ -832,7 +832,7 @@ export async function getMentoringRecapById(id: string, scope?: ScopeFilter) {
 }
 
 export async function getActivityCorrectionLogs(targetTable: "mentoring_recaps" | "event_participations", targetId: string) {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<ActivityCorrectionLog[]>([]);
   const { data, error } = await client
     .from("activity_correction_log")
@@ -874,7 +874,7 @@ function correctionTypeForField(field: string): ActivityCorrectionLog["correctio
 }
 
 export async function updateMentoringRecapCorrection(input: MentoringRecapCorrectionInput): Promise<QueryResult<MentoringRecap | null>> {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<MentoringRecap | null>(null);
   const recapId = String(input.id ?? "").trim();
   if (!recapId) return { data: null, error: "Thiếu recap id." };
@@ -950,7 +950,7 @@ export async function updateMentoringRecapCorrection(input: MentoringRecapCorrec
 }
 
 export async function getEventParticipationsByPersonId(personId: string, scope?: ScopeFilter) {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<EventParticipation[]>([]);
   let query = client
     .from("event_participations")
@@ -972,7 +972,7 @@ export async function getEventParticipationsByPersonId(personId: string, scope?:
 }
 
 export async function getOperationalTeamAssignmentsByPerson(personId: string) {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<OperationalTeamAssignment[]>([]);
   // Class B: one person's operational assignments.
   const { data, error } = await readBounded<OperationalTeamAssignment>(
@@ -1026,7 +1026,7 @@ export async function getOperationalTeamAssignments(scope?: ScopeFilter) {
 async function getOperationsDataFromRpc() {
   // This RPC uses SECURITY DEFINER and checks auth.uid() internally.
   // Must be called with the server auth client (user JWT), NOT service role (auth.uid() = NULL there).
-  const client = getSupabaseServerClient() ?? supabase;
+  const client = (await getSupabaseServerClient()) ?? supabase;
   if (!client) return null;
 
   const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE });
@@ -1139,7 +1139,7 @@ export async function getOperationsData(scope?: ScopeFilter) {
 }
 
 export async function getOperationsWorkflowData(seasonCode = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, selectedMonth?: string | null): Promise<QueryResult<OperationsWorkflowData | null>> {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<OperationsWorkflowData | null>(null);
   const { data, error } = await client.rpc("get_operations_workflow_data", {
     p_season_code: seasonCode,
@@ -1153,7 +1153,7 @@ export async function getFounderIntelligenceDashboard(seasonCode = SEASON_CONFIG
   if (scope) {
     return getFounderIntelligenceDashboardFallback(seasonCode, scope);
   }
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<FounderIntelligenceDashboard | null>(null);
   const { data, error } = await client.rpc("get_founder_intelligence_dashboard", {
     p_season_code: seasonCode
@@ -1387,7 +1387,7 @@ export type CreateActionItemInput = {
 };
 
 export async function createWorkflowActionItem(input: CreateActionItemInput): Promise<QueryResult<JsonRecord | null>> {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<JsonRecord | null>(null);
   const { data, error } = await client.rpc("create_action_item", {
     p_season_code: input.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
@@ -1415,7 +1415,7 @@ export async function updateWorkflowActionItem(input: {
   description?: string | null;
   metadata?: JsonRecord | null;
 }): Promise<QueryResult<JsonRecord | null>> {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<JsonRecord | null>(null);
   const { data, error } = await client.rpc("update_action_item", {
     p_action_item_id: input.id,
@@ -1431,7 +1431,7 @@ export async function updateWorkflowActionItem(input: {
 }
 
 export async function addWorkflowActionItemComment(input: { id: string; comment_text: string }): Promise<QueryResult<JsonRecord | null>> {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<JsonRecord | null>(null);
   const { data, error } = await client.rpc("add_action_item_comment", {
     p_action_item_id: input.id,
@@ -1442,7 +1442,7 @@ export async function addWorkflowActionItemComment(input: { id: string; comment_
 }
 
 export async function generateMonthlyFollowupActions(input: { season_code?: string; selected_month: string }): Promise<QueryResult<JsonRecord | null>> {
-  const client = dataClient();
+  const client = await dataClient();
   if (!client) return envError<JsonRecord | null>(null);
   const { data, error } = await client.rpc("generate_monthly_followup_actions", {
     p_season_code: input.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
@@ -1526,7 +1526,7 @@ export function keyById<T extends { id: string }>(rows: T[]) {
 
 export async function getApplicationReviewsForApplication(applicationId: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
   // server-only table: service-role or nothing
-  const client = dataClient("application_reviews");
+  const client = await dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
   if (scope) {
     const app = await getApplication(applicationId, scope);
@@ -1555,7 +1555,7 @@ export async function getApplicationReviewsForApplication(applicationId: string,
  * unchanged.
  */
 export async function getMyApplicationReviews(adminUserId: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
-  const client = dataClient("application_reviews");
+  const client = await dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
   const mine = (query: any) => query.eq("reviewer_admin_user_id", adminUserId).neq("status", "cancelled");
 
@@ -1613,7 +1613,7 @@ export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<Que
 }
 
 export async function getApplicationReviewById(id: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview | null>> {
-  const client = dataClient("application_reviews");
+  const client = await dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview | null>(null);
   const { data, error } = await client
     .from("application_reviews")
@@ -1654,7 +1654,7 @@ export async function getApplicationDecisions(
   applicationId: string,
   scope?: ScopeFilter
 ): Promise<QueryResult<ApplicationDecision[]>> {
-  const client = dataClient("application_decisions");
+  const client = await dataClient("application_decisions");
   if (!client) return serviceRoleRequiredError<ApplicationDecision[]>([]);
   if (scope) {
     const app = await getApplication(applicationId, scope);

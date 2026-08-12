@@ -176,7 +176,7 @@ beforeEach(() => {
   seed();
   const supabase = client();
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(supabase as any);
-  vi.mocked(getSupabaseServerClient).mockReturnValue(supabase as any);
+  vi.mocked(getSupabaseServerClient).mockResolvedValue(supabase as any);
   vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "admin-1", role: "admin", status: "active", auth_user_id: "auth-admin" } as any);
 });
 

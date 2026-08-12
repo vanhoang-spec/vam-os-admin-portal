@@ -229,7 +229,9 @@ function isMissingOptionalTableError(error: string | null, tableName: string) {
   );
 }
 
-export default async function PersonDetailPage({ params }: { params: { id: string } }) {
+export default async function PersonDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const [

@@ -96,7 +96,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "full_access", programId: "prog-1", seasonId: "season-1", status: "active" } as any]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     
     const wrapper = container.querySelector("[data-vam-program-scope]");
@@ -112,7 +112,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "operations", programId: "prog-1", seasonId: "season-1", status: "active" } as any]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope")).toBe("operations");
   });
@@ -124,7 +124,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "review", programId: "prog-1", seasonId: "season-1", status: "active" } as any]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope")).toBe("review");
   });
@@ -136,7 +136,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "read", programId: "prog-1", seasonId: "season-1", status: "active" } as any]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope")).toBe("read");
   });
@@ -148,7 +148,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "operations", programId: "prog-1", seasonId: "season-1", status: "active" } as any]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope")).toBe("operations");
   });
@@ -160,7 +160,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "read", programId: "prog-1", seasonId: "season-1", status: "active" } as any]
     } as any);
     
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope")).toBe("read");
   });
@@ -183,7 +183,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "operations", programId: "prog-2", seasonId: "season-3", status: "active" } as any]
     } as any);
     
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     const wrapper = container.querySelector("[data-vam-program-scope]");
     expect(wrapper?.getAttribute("data-vam-program-code")).toBe("HAM");
@@ -200,7 +200,7 @@ describe("Authorization Observability Instrumentation", () => {
       ]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope")).toBe("read");
   });
@@ -222,7 +222,7 @@ describe("Authorization Observability Instrumentation", () => {
       ]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     
     const s11 = container.querySelector("[data-vam-membership-id='m-s11']");
@@ -249,7 +249,7 @@ describe("Authorization Observability Instrumentation", () => {
       ]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     
     const m1 = container.querySelector("[data-vam-membership-id='m-1']");
@@ -272,7 +272,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "full_access", programId: "prog-1", seasonId: null, status: "active" } as any]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope")).toBe("full_access");
   });
@@ -291,7 +291,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: []
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     
     const m1 = container.querySelector("[data-vam-membership-id='m-1']");
@@ -313,7 +313,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [] as any[]
     } as any);
     
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     expect(container.querySelector("[data-vam-program-scope]")).toBeNull();
   });
@@ -326,7 +326,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ programId: "SECRET_PROGRAM_ID_9B43", seasonId: "SECRET_SEASON_ID_2A11", scopeLevel: "full_access", status: "active" } as any]
     } as any);
     
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     
     expect(container.innerHTML).not.toContain("AUTH_SECRET_SENTINEL_7F31");
@@ -352,7 +352,7 @@ describe("Authorization Observability Instrumentation", () => {
     } as any);
     mockCanOperateAnyScope.mockReturnValueOnce(true);
     
-    const pageAuthorized = await PersonDetailPage({ params: { id: "1" } });
+    const pageAuthorized = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container: containerAuthorized } = render(pageAuthorized);
     expect(containerAuthorized.querySelector("[data-vam-membership-id='membership-1'] form")).not.toBeNull();
     
@@ -364,7 +364,7 @@ describe("Authorization Observability Instrumentation", () => {
     } as any);
     mockCanOperateAnyScope.mockReturnValueOnce(false);
     
-    const pageUnauthorized = await PersonDetailPage({ params: { id: "1" } });
+    const pageUnauthorized = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container: containerUnauthorized } = render(pageUnauthorized);
     expect(containerUnauthorized.querySelector("form")).toBeNull();
     expect(containerUnauthorized.innerHTML).toContain("Cần quyền operations hoặc full_access");
@@ -377,7 +377,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [] as any[]
     } as any);
     
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
     
     const membershipSection = container.querySelector("[data-vam-membership-id='membership-1']");
@@ -394,7 +394,7 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [{ scopeLevel: "read", programId: "prog-1", seasonId: "season-1", status: "active" } as any]
     } as any);
 
-    const page = await PersonDetailPage({ params: { id: "1" } });
+    const page = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container } = render(page);
 
     const scope = container.querySelector("[data-vam-program-scope]")?.getAttribute("data-vam-program-scope");

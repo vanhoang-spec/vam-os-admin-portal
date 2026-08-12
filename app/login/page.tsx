@@ -4,7 +4,9 @@ import { LoginForm } from "./login-form";
 
 import { safeNext } from "@/lib/auth-error-messages";
 
-export default async function LoginPage({ searchParams }: { searchParams?: { next?: string | string[] } }) {
+export default async function LoginPage(props: { searchParams?: Promise<{ next?: string | string[] }> }) {
+  const searchParams = await props.searchParams;
+
   const adminUser = await getCurrentAdminUser();
   if (adminUser) redirect(safeNext(searchParams?.next));
 

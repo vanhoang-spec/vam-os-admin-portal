@@ -43,7 +43,7 @@ beforeEach(() => {
 
   const mockDb = { from: mockFrom };
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(mockDb as any);
-  vi.mocked(getSupabaseServerClient).mockReturnValue(mockDb as any);
+  vi.mocked(getSupabaseServerClient).mockResolvedValue(mockDb as any);
 });
 
 describe("CRM Scoped-Person Visibility via Memberships", () => {

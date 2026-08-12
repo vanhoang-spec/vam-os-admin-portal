@@ -16,13 +16,10 @@ function participantMetric(value: number | null, incomplete: boolean) {
   return incomplete ? "Chưa liên kết đủ dữ liệu" : metric(value);
 }
 
-export default async function ProgramWorkspacePage({
-  params,
-  searchParams
-}: {
-  params: { programCode: string };
-  searchParams?: { season?: string | string[]; batch?: string | string[] };
-}) {
+export default async function ProgramWorkspacePage(props: { params: Promise<{ programCode: string }>; searchParams?: Promise<{ season?: string | string[]; batch?: string | string[] }> }) {
+  const params = await props.params;
+  const searchParams = await props.searchParams;
+
   const context = await resolveAuthorizedProgramContext({
     programCode: params.programCode,
     seasonCode: first(searchParams?.season),

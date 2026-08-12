@@ -56,7 +56,7 @@ beforeEach(() => {
   db.maxRows = DEFAULT_MAX_ROWS;
   client = fakeClient(db);
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as any);
-  vi.mocked(getSupabaseServerClient).mockReturnValue(client as any);
+  vi.mocked(getSupabaseServerClient).mockResolvedValue(client as any);
 });
 
 // ---------------------------------------------------------------------------

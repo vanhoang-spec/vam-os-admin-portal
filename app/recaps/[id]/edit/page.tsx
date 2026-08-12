@@ -7,7 +7,9 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import { displayText, formatDate } from "@/lib/utils";
 import { RecapCorrectionForm } from "./correction-form";
 
-export default async function EditRecapPage({ params }: { params: { id: string } }) {
+export default async function EditRecapPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
   const adminUser = await getCurrentAdminUser();
   if (!canEditRecaps(adminUser)) {
     return (

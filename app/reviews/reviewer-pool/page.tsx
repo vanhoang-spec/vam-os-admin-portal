@@ -12,11 +12,9 @@ import { ReviewerPoolClient } from "./reviewer-pool-client";
 // Phase 044A-2 — Enable mentors as reviewers
 // ---------------------------------------------------------------------------
 
-export default async function ReviewerPoolPage({
-  searchParams
-}: {
-  searchParams: { intake_batch_id?: string };
-}) {
+export default async function ReviewerPoolPage(props: { searchParams: Promise<{ intake_batch_id?: string }> }) {
+  const searchParams = await props.searchParams;
+
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canManageReviewers(adminUser.role)) redirect("/reviews");

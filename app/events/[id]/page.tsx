@@ -9,8 +9,8 @@ import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/pr
 import { displayText, formatDate } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 
-function getRequestOrigin() {
-  const h = headers();
+async function getRequestOrigin() {
+  const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   if (!host) return "";
   const proto = h.get("x-forwarded-proto") ?? "https";
@@ -47,7 +47,9 @@ function registrationStatusLabel(value: unknown) {
   return { label: displayText(status), color: "bg-slate-100 text-slate-700" };
 }
 
-export default async function EventDetailPage({ params }: { params: { id: string } }) {
+export default async function EventDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const adminUser = await getCurrentAdminUser();
@@ -83,7 +85,7 @@ export default async function EventDetailPage({ params }: { params: { id: string
 
   const seasonsById = new Map(detail.seasons.map((season) => [season.id, season]));
   const seasonCode = detail.event.season_id ? (seasonsById.get(detail.event.season_id)?.code ?? null) : null;
-  const origin = getRequestOrigin();
+  const origin = await getRequestOrigin();
   const registrationUrl = detail.registrationLink?.token ? `${origin}/register/${detail.registrationLink.token}` : null;
   const checkinUrl = detail.checkinLink?.token ? `${origin}/checkin/${detail.checkinLink.token}` : null;
   const checkinQrDataUrl = checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 200 }) : null;

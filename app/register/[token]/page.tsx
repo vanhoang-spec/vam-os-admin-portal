@@ -68,13 +68,10 @@ function RegistrationBlocked({
   );
 }
 
-export default async function PublicEventRegistrationPage({
-  params,
-  searchParams
-}: {
-  params: { token: string };
-  searchParams?: { status?: string | string[]; registration_id?: string | string[] };
-}) {
+export default async function PublicEventRegistrationPage(props: { params: Promise<{ token: string }>; searchParams?: Promise<{ status?: string | string[]; registration_id?: string | string[] }> }) {
+  const params = await props.params;
+  const searchParams = await props.searchParams;
+
   const data = await getPublicRegistrationData(params.token);
   const eventName = displayText(data.event?.event_name, "Sự kiện");
 

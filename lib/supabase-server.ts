@@ -11,12 +11,19 @@ function supabaseServiceRoleKey() {
   return process.env[SERVICE_ROLE_ENV_NAME]?.trim();
 }
 
-export function getSupabaseServerClient() {
+/**
+ * Async since Next 15: `cookies()` returns a Promise there. The `try` still
+ * matters and is not redundant — `cookies()` REJECTS (rather than returning
+ * undefined) outside a request scope, so the catch keeps the previous
+ * "no cookie, fall back to the anon client" behaviour instead of turning a
+ * static render into a thrown error.
+ */
+export async function getSupabaseServerClient() {
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
   let accessToken: string | undefined;
   try {
-    accessToken = cookies().get(AUTH_ACCESS_COOKIE)?.value;
+    accessToken = (await cookies()).get(AUTH_ACCESS_COOKIE)?.value;
   } catch {
     accessToken = undefined;
   }

@@ -128,11 +128,9 @@ function ProofLink({ url, label }: { url: string | null | undefined; label: stri
 // Page
 // ---------------------------------------------------------------------------
 
-export default async function RegistrationDetailPage({
-  params
-}: {
-  params: { id: string; regId: string };
-}) {
+export default async function RegistrationDetailPage(props: { params: Promise<{ id: string; regId: string }> }) {
+  const params = await props.params;
+
   const adminUser = await getCurrentAdminUser();
   if (!canEditRecaps(adminUser)) {
     return (

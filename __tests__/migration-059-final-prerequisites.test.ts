@@ -430,7 +430,7 @@ describe("application workflow access is server-only", () => {
     expect(fn).not.toBe("");
     expect(fn).toContain("if (table && isServerOnlyApplicationTable(table)) return serviceRole ?? null;");
     // the permissive chain remains only for non-server-only tables
-    expect(fn).toContain("return serviceRole ?? getSupabaseServerClient() ?? supabase;");
+    expect(fn).toContain("return serviceRole ?? (await getSupabaseServerClient()) ?? supabase;");
   });
 
   it("routes every five-table read through the table-aware client", () => {
