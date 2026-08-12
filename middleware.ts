@@ -11,6 +11,30 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE } from "@/lib/auth-constants";
+import {
+  isTrustedCredentialMisconfiguration,
+  resolveActiveAdminViaTrustedServer,
+  SERVICE_ROLE_ENV_NAME
+} from "@/lib/middleware-admin-lookup";
+
+/**
+ * Snapshot of the env vars the trusted lookup needs.
+ *
+ * Each value is read with a STATIC `process.env.X` member access on purpose.
+ * The Edge bundle Next.js builds for middleware substitutes those literals at
+ * build time; handing `process.env` itself to another module and indexing it
+ * dynamically can therefore yield `undefined` at runtime. That would fail
+ * closed — safe, but it would leave the redirect loop unfixed. The rest of
+ * this file already reads env the same way.
+ */
+function trustedLookupEnv() {
+  return {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
+  };
+}
 
 function redirectToLogin(request: NextRequest) {
   const url = request.nextUrl.clone();
@@ -55,33 +79,44 @@ async function refreshAccessToken(refreshToken: string) {
   return (await response.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
 }
 
-async function hasActiveAdminUser(user: { id?: string; email?: string }, accessToken: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)?.trim();
-  if (!supabaseUrl || !supabaseAnonKey || !user.id || !user.email) return false;
+/**
+ * Resolves the active `admin_users` row for an ALREADY-VALIDATED Supabase Auth
+ * user, in trusted server context.
+ *
+ * This deliberately does NOT query as the end user. Production release S12/T2
+ * removed SELECT on `admin_users` from `anon` and `authenticated` (RLS on,
+ * zero policies); querying with the user's access token is refused there, and
+ * middleware read that refusal as "not an admin" — the post-RC3 redirect loop.
+ * The table stays unreadable to anon/authenticated; only this server-side
+ * resolution is privileged. See `lib/middleware-admin-lookup.ts`.
+ *
+ * Fails CLOSED on every error path, including a missing service-role
+ * credential or one that is really the anon key.
+ */
+async function hasActiveAdminUser(user: { id?: string; email?: string }) {
+  const decision = await resolveActiveAdminViaTrustedServer(user, trustedLookupEnv(), fetch);
 
-  const filter = encodeURIComponent(`(auth_user_id.eq.${user.id},email.eq.${user.email})`);
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/admin_users?select=email&status=eq.active&or=${filter}&limit=1`,
-    {
-      headers: {
-        apikey: supabaseAnonKey,
-        Authorization: `Bearer ${accessToken}`
-      },
-      cache: "no-store"
-    }
-  );
+  // Surface ONLY credential misconfiguration. Those states deny every admin and
+  // would otherwise be indistinguishable from "nobody here is an admin" — a
+  // silent redirect loop with nothing to diagnose. Per-user denials are
+  // deliberately NOT logged: they are routine and would put user identity in
+  // the logs. The reason codes are fixed strings; no key, token, header or user
+  // identity is ever logged.
+  if (isTrustedCredentialMisconfiguration(decision.reason)) {
+    console.error("[middleware] trusted admin lookup credential misconfigured", {
+      reason: decision.reason,
+      envName: SERVICE_ROLE_ENV_NAME
+    });
+  }
 
-  if (!response.ok) return false;
-  const rows = (await response.json()) as unknown[];
-  return rows.length > 0;
+  return decision.allowed;
 }
 
 async function authAllowsRequest(request: NextRequest) {
   const accessToken = request.cookies.get(AUTH_ACCESS_COOKIE)?.value;
   if (accessToken) {
     const user = await fetchAuthUser(accessToken);
-    if (user && (await hasActiveAdminUser(user, accessToken))) return NextResponse.next();
+    if (user && (await hasActiveAdminUser(user))) return NextResponse.next();
   }
 
   const refreshToken = request.cookies.get(AUTH_REFRESH_COOKIE)?.value;
@@ -91,7 +126,7 @@ async function authAllowsRequest(request: NextRequest) {
   if (!refreshed?.access_token) return null;
 
   const user = await fetchAuthUser(refreshed.access_token);
-  if (!user || !(await hasActiveAdminUser(user, refreshed.access_token))) return null;
+  if (!user || !(await hasActiveAdminUser(user))) return null;
 
   const response = NextResponse.next();
   response.cookies.set(AUTH_ACCESS_COOKIE, refreshed.access_token, {
