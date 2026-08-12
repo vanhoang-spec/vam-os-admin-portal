@@ -31,7 +31,40 @@ function addMonths(month: string, delta: number) {
   return date.toISOString().slice(0, 7);
 }
 
-/** Count-only program aggregate. Role and reviewer assignment are deliberately absent. */
+/**
+ * Count-only program aggregate. Role and reviewer assignment are deliberately absent.
+ *
+ * TWO DISTINCT "ACTIVE MENTEE" CONCEPTS — INTENTIONAL, NOT A BUG
+ * -------------------------------------------------------------
+ * `/operations` shows two numbers that both read as "active mentee", and they
+ * are different on purpose. `docs/OPERATIONS_DASHBOARD_QA.md` is the authority
+ * and states the distinction explicitly (rows "Current-month activity" and
+ * "Ty le mentee active": *"Luu y tu so khac voi card 'Mentee active' neu co
+ * recap ngoai active match"*). The database view `v_monthly_activity_summary`
+ * defines the first concept the same way — `count(distinct mentee_person_id)`
+ * over valid recaps, with no join to `matches`.
+ *
+ *   A. RECAP-ACTIVITY MENTEE — `activeMenteeCount` here.
+ *      Distinct `mentee_person_id` on a valid recap in the selected month.
+ *      NO match-status requirement. This measures reported activity, so a
+ *      mentee whose match ended, or was never recorded, still counts. Card
+ *      "Mentee active" on `/operations`.
+ *
+ *   B. ACTIVE-MATCHED MENTEE WITH A RECAP — computed in `app/operations/page.tsx`
+ *      as the numerator of the "Tỷ lệ mentee active" card, over the denominator
+ *      "distinct mentees in an active match". This measures coverage of the
+ *      managed population, so it deliberately excludes recap activity from
+ *      outside an active match. B <= A always.
+ *
+ * `activeMentorCount` mirrors concept A for mentors;
+ * `mentorWithoutRecapCount` mirrors concept B's population for mentors
+ * (active-matched mentors absent from the month's recap mentor set).
+ *
+ * Do not "reconcile" A and B into one number: they answer different questions
+ * and both are on the dashboard by design. The probe
+ * `docs/audits/sql/VAM_OS_PROD_OPERATIONS_ROLE_DATA_DIVERGENCE_READONLY_PROBE.sql`
+ * computes each of them independently for exactly this reason.
+ */
 export function computeProgramOperationsKpis(input: {
   seasons: Season[];
   matches: Match[];

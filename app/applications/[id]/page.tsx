@@ -17,7 +17,7 @@ import {
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import type { ApplicationDecision, ApplicationReview, Match } from "@/lib/types";
+import type { ApplicationDecision, ApplicationReview, JsonRecord, Match } from "@/lib/types";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import {
@@ -111,7 +111,9 @@ export default async function ApplicationDetailPage({ params }: { params: { id: 
     : undefined;
   const relatedMentor = relatedMatch?.mentor_person_id ? peopleById.get(relatedMatch.mentor_person_id) : undefined;
   const sortedAnswers = answers.data
-    .map((answer, index) => ({ ...answer, original_index: index }))
+    // Annotated: an object spread does not carry the source index signature, so
+    // without this the sorted rows lose every answer field but `original_index`.
+    .map((answer, index): JsonRecord => ({ ...answer, original_index: index }))
     .sort((a, b) => {
       const aOrder = questionOrder.get(String(a.question_key ?? "")) ?? Number.MAX_SAFE_INTEGER;
       const bOrder = questionOrder.get(String(b.question_key ?? "")) ?? Number.MAX_SAFE_INTEGER;

@@ -103,3 +103,57 @@ Gia tri mong doi de test:
 
 - Khong co thay doi app code trong audit nay.
 - Da tao tai lieu QA: `docs/OPERATIONS_DASHBOARD_QA.md`.
+
+---
+
+## Addendum 2026-08-12 — "Active mentee" semantics, ruled
+
+Ban review doc lap cua ban vá `hotfix-operations-scoped-aggregate-truncation`
+neu ra rang `/operations` hien thi hai so deu doc la "mentee active", va hoi day
+la (A) business semantics co chu dich hay (B) mot su khong nhat quan trong dinh
+nghia cua ung dung.
+
+**Ket luan: (A) — co chu dich.** Tai lieu nay la authority va da ghi ro su khac
+biet do tu dau, tai dong "Ty le mentee active": *"Luu y tu so khac voi card
+'Mentee active' neu co recap ngoai active match"*. View trong database
+(`v_monthly_activity_summary`) cung dinh nghia khai niem thu nhat theo dung cach
+do — `count(distinct mentee_person_id)` tren recap hop le, khong join `matches`.
+Hai so tra loi hai cau hoi khac nhau va ca hai deu can co tren dashboard.
+
+Ten chinh thuc cua hai khai niem:
+
+| Ten | Dinh nghia | Xuat hien tai |
+| --- | --- | --- |
+| **Recap-activity mentee** (khai niem A) | Distinct `mentee_person_id` co recap hop le trong thang. **Khong** yeu cau match active. | Card "Mentee active"; `ProgramOperationsKpis.activeMenteeCount` |
+| **Active-matched mentee with recap** (khai niem B) | Distinct mentee vua co match `active` vua co recap hop le trong thang. | **Tu so** cua card "Tỷ lệ mentee active"; bien `activeMatchedMenteeWithRecapCount` trong `app/operations/page.tsx` |
+
+Luon co `B <= A`. Hieu `A - B` la so mentee co recap nhung khong nam trong mot
+match active.
+
+Thay doi da thuc hien de dong ambiguity nay (khong doi gia tri KPI nao):
+
+- `lib/operations-kpis.ts` ghi ro hai khai niem va ly do chung khac nhau.
+- Bien trong `app/operations/page.tsx` doi ten thanh
+  `activeMatchedMenteeWithRecapCount` (truoc do ten `activeMenteeCount`, trung
+  ten voi khai niem A).
+- Moi the KPI lien quan tren `/operations` co them dong `helper` neu ro dinh
+  nghia, tu so va mau so ngay tren giao dien.
+- Probe `docs/audits/sql/VAM_OS_PROD_OPERATIONS_ROLE_DATA_DIVERGENCE_READONLY_PROBE.sql`
+  tinh **rieng** ca hai, cong them truong `concept_a_minus_concept_b`.
+
+De xuat cu o muc "De xuat future fixes" (doi label "Mentee active" thanh "Mentee
+co recap" tren toan bo san pham) **van con mo**: no cham `/`, `/operations` va
+`/operations/intelligence` nen la mot quyet dinh san pham rieng, khong nam trong
+pham vi ban vá data-correctness nay.
+
+### Drift da phat hien, chua sua
+
+Dong "Ty le attendance" trong bang tren ghi `attended / (attended +
+registered_absent)`. Code dang chay dung `attended / tong so participation cua
+thang`, ke ca cac luot chua cap nhat trang thai, va **da cong bo dieu do ngay
+tren giao dien** ("Bao gồm cả các lượt chưa cập nhật trạng thái trong mẫu số")
+cung nhan "Tỷ lệ tham dự / tổng đăng ký". Day la mot thay doi co chu dich xay ra
+sau ban audit nay va tai lieu chua duoc cap nhat. Probe tra ve **ca hai** mau so
+(`card_8_rate_over_total_pct` va
+`card_8_rate_over_attended_plus_absent_pct_doc_definition`) de owner chon dinh
+nghia canonical. Khong doi code trong ban vá nay.

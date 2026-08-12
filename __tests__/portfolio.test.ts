@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/program-scope", () => ({
@@ -45,20 +46,32 @@ const tableRows: Record<string, unknown[]> = {
   ]
 };
 
-const from = vi.fn((table: string) => ({
-  select: vi.fn(async () => ({ data: tableRows[table] ?? [], error: null }))
-}));
+// The portfolio aggregate reads five relations that all exceed the PostgREST
+// row cap in Production, so it is exercised against the faithful fake: the cap
+// is enforced silently and an unordered read comes back in an arbitrary order.
+const db = createFakeDb();
+const from = vi.fn((table: string) => fakeClient(db).from(table));
 
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(() => ({ from })) }));
 
 import { getSuperAdminPortfolio } from "@/lib/portfolio";
 
 describe("Super Admin portfolio aggregate", () => {
-  beforeEach(() => from.mockClear());
+  beforeEach(() => {
+    from.mockClear();
+    db.reset();
+    for (const [table, rows] of Object.entries(tableRows)) {
+      // Ordering keys the real tables carry; the fake projects only the
+      // requested columns, so the loader must ask for them itself.
+      db.tables[table] = (rows as any[]).map((row, index) => ({ id: `${table}-${index}`, ...(row as object) }));
+    }
+  });
 
   it("aggregates both programs without N+1 queries", async () => {
     const result = await getSuperAdminPortfolio();
-    expect(from).toHaveBeenCalledTimes(5);
+    // Five paged reads, each one data page plus one terminating empty page.
+    // Constant in the number of rows — the property this assertion guards.
+    expect(from).toHaveBeenCalledTimes(10);
     expect(result.totals).toMatchObject({
       programs: 2,
       activePrograms: 2,

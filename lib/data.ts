@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { readAllPages, readBounded, SELECT_PAGE_SIZE, type PagedTable } from "@/lib/paged-read";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { currentMonthVN, isOperationalMonth } from "@/lib/dashboard-month";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
@@ -74,14 +75,25 @@ const SERVICE_ROLE_REQUIRED =
 const SCOPE_VISIBILITY_ERROR =
   "Không xác minh được phạm vi truy cập. Vui lòng thử lại hoặc liên hệ quản trị viên.";
 const IN_FILTER_CHUNK_SIZE = 200;
+
 /**
- * PostgREST caps every response at `db-max-rows` (1000 on Supabase hosted).
- * The cap is applied silently — the response is `200 OK` with no error — so any
- * unpaginated `select()` over a table larger than this returns a truncated set
- * that is indistinguishable from complete data. Every read that can exceed it
- * must page with `.range()` until a short page arrives.
+ * Multi-row reads in this module are classified A/B/C and remediated per
+ * `lib/paged-read.ts`:
+ *
+ *   A — structurally bounded below the PostgREST row cap (`maybeSingle`,
+ *       `head: true` counts, an explicit `.limit(n)` with n well under the cap,
+ *       or an `.in()` on a primary key whose list is itself bounded). Left
+ *       as-is; the bound is stated at the call site.
+ *   B — practically bounded but not guaranteed: `selectTable` /
+ *       `readBounded`, which FAIL if the asserted bound is exceeded rather
+ *       than returning a silently truncated set.
+ *   C — potentially unbounded: `selectAllTable` / `selectInChunks` /
+ *       `readAllPages`, which page to exhaustion under a declared unique
+ *       ordering key.
+ *
+ * The `/operations` Production defect was a class-C read (`mentoring_recaps`
+ * filtered by season) issued with neither paging nor an ordering key.
  */
-const SELECT_PAGE_SIZE = 1000;
 
 /**
  * Outcome of resolving the person IDs an admin scope may see.
@@ -198,11 +210,30 @@ function chunkValues<T>(values: T[], size = IN_FILTER_CHUNK_SIZE) {
   return chunks;
 }
 
-async function selectInChunks<T>(
-  table: string,
+/**
+ * Class C. Reads every row whose `column` is in `values`.
+ *
+ * The `IN` list is chunked so the request URL stays within limits, and EACH
+ * CHUNK IS PAGED to exhaustion under the table's declared ordering key. Both
+ * halves matter and the Production defect was the missing second half: a bare
+ * `.in()` returned only the first `db-max-rows` rows of the chunk, with
+ * `error: null`, so a scoped Admin and an unscoped Super Admin computed
+ * different aggregates from the same table.
+ *
+ * Failure is all-or-nothing at the caller's level: the first chunk or page that
+ * errors aborts the whole read and returns that error. Callers must not present
+ * the partial `data` as a result — every caller here checks `error` first.
+ *
+ * `refine` adds filters that must be present on EVERY page (status, round, …).
+ * It is applied to a freshly built query per page, so no page can carry a
+ * different filter set than any other.
+ */
+async function selectInChunks<T extends Record<string, any>>(
+  table: PagedTable,
   column: string,
   values: string[],
-  columns = "*"
+  columns = "*",
+  refine?: (query: any) => any
 ): Promise<{ data: T[]; error: unknown | null }> {
   const client = dataClient(table);
   if (!client) {
@@ -215,18 +246,12 @@ async function selectInChunks<T>(
   const rows: T[] = [];
   for (const chunk of chunkValues(uniqueStrings(values))) {
     if (!chunk.length) continue;
-    // Page each chunk. Without this the scoped read silently stops at
-    // `SELECT_PAGE_SIZE` rows while the unscoped read (`selectAllTable`, which
-    // has always paged) returns everything — so a scoped admin and an
-    // unscoped super admin computed different aggregates from the same table.
-    for (let from = 0; ; from += SELECT_PAGE_SIZE) {
-      const to = from + SELECT_PAGE_SIZE - 1;
-      const { data, error } = await client.from(table).select(columns).in(column, chunk).range(from, to);
-      if (error) return { data: rows, error };
-      const page = (data ?? []) as T[];
-      rows.push(...page);
-      if (page.length < SELECT_PAGE_SIZE) break;
-    }
+    const { data, error } = await readAllPages<T>(table, columns, (projection) => {
+      const query = client.from(table).select(projection).in(column, chunk);
+      return refine ? refine(query) : query;
+    });
+    if (error) return { data: rows, error };
+    rows.push(...data);
   }
 
   return { data: rows, error: null };
@@ -261,38 +286,56 @@ function isValidRecapActivity(recap: MentoringRecap) {
   return VALID_ACTIVITY_STATUSES.has(normalizeStatus(recap.status));
 }
 
+/**
+ * Class B. A whole-relation read the application asserts stays below
+ * `BOUNDED_READ_LIMIT` — used for reference relations (`seasons`) and
+ * per-season summary views. If the assertion is ever wrong the read FAILS with
+ * a named error; it never returns a silently truncated relation. Use
+ * `selectAllTable` for anything that can genuinely grow.
+ */
 async function selectTable<T>(table: string, columns = "*", fallback: T[] = []): Promise<QueryResult<T[]>> {
   const client = dataClient(table);
   if (!client) return isServerOnlyApplicationTable(table) ? serviceRoleRequiredError(fallback) : envError(fallback);
-  const { data, error } = await client.from(table).select(columns);
+  const { data, error } = await readBounded<T>(table, client.from(table).select(columns));
   if (error) {
     if (isNextDynamicUsageError(error)) throw error;
     logDataError(`${table}.select`, error);
-    return { data: fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
+    const err = error as { message?: string };
+    return { data: fallback, error: `${VI_ERROR} (${table}: ${err.message ?? "Bad Request"})` };
   }
-  return { data: (data ?? []) as T[], error: null };
+  return { data, error: null };
 }
 
-async function selectAllTable<T>(table: string, columns = "*", fallback: T[] = [], pageSize = SELECT_PAGE_SIZE): Promise<QueryResult<T[]>> {
+/**
+ * Class C. Reads an entire table, paged under its declared ordering key.
+ * A page failure aborts the whole read: returning the pages fetched so far as
+ * if they were the table is exactly the silent-truncation failure mode this
+ * module exists to remove, so `data` is discarded in favour of `fallback`.
+ */
+async function selectAllTable<T extends Record<string, any>>(
+  table: PagedTable,
+  columns = "*",
+  fallback: T[] = [],
+  pageSize = SELECT_PAGE_SIZE
+): Promise<QueryResult<T[]>> {
   const client = dataClient(table);
   if (!client) return isServerOnlyApplicationTable(table) ? serviceRoleRequiredError(fallback) : envError(fallback);
-  const rows: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const to = from + pageSize - 1;
-    const { data, error } = await client.from(table).select(columns).range(from, to);
-    if (error) {
-      if (isNextDynamicUsageError(error)) throw error;
-      logDataError(`${table}.selectAll`, error);
-      return { data: rows.length ? rows : fallback, error: `${VI_ERROR} (${table}: ${error.message})` };
-    }
-    const page = (data ?? []) as T[];
-    rows.push(...page);
-    if (page.length < pageSize) break;
+  const { data, error } = await readAllPages<T>(
+    table,
+    columns,
+    (projection) => client.from(table).select(projection),
+    pageSize
+  );
+  if (error) {
+    if (isNextDynamicUsageError(error)) throw error;
+    logDataError(`${table}.selectAll`, error);
+    const err = error as { message?: string };
+    return { data: fallback, error: `${VI_ERROR} (${table}: ${err.message ?? "Bad Request"})` };
   }
-  return { data: rows, error: null };
+  return { data, error: null };
 }
 
-export async function selectAllRows<T>(table: string, columns = "*", fallback: T[] = []) {
+export async function selectAllRows<T extends Record<string, any>>(table: PagedTable, columns = "*", fallback: T[] = []) {
   return selectAllTable<T>(table, columns, fallback);
 }
 
@@ -308,8 +351,8 @@ function noAllowedRows(scope?: ScopeFilter) {
   return (hasSeasonScope(scope) && scope?.allowedSeasonIds?.length === 0) || (hasProgramScope(scope) && scope?.allowedProgramIds?.length === 0);
 }
 
-async function selectScopedBySeason<T>(
-  table: string,
+async function selectScopedBySeason<T extends Record<string, any>>(
+  table: PagedTable,
   columns = "*",
   scope?: ScopeFilter,
   fallback: T[] = []
@@ -352,13 +395,18 @@ async function getScopedIntakeBatchIds(scope?: ScopeFilter): Promise<ScopedIntak
     }
     data = result.data;
   } else {
-    const { data: rows, error } = await client.from("intake_batches").select("id,season_id");
+    // Class C: a program-scoped (season-unscoped) grant reads every batch. This
+    // list gates three person-visibility sources, so a truncated read here
+    // silently hides real people.
+    const { data: rows, error } = await readAllPages<JsonRecord>("intake_batches", "id,season_id", (projection) =>
+      client.from("intake_batches").select(projection)
+    );
     if (error) {
       if (isNextDynamicUsageError(error)) throw error;
       logDataError("intake_batches.getScopedIntakeBatchIds", error);
       return scopeBatchError("intake_batches");
     }
-    data = (rows ?? []) as JsonRecord[];
+    data = rows;
   }
 
   return {
@@ -532,9 +580,19 @@ export async function getApplications(scope?: ScopeFilter) {
   if (scope.allowedSeasonIds?.length) filters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
   if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
   if (!filters.length) return { data: [], error: null };
-  const { data, error } = await client.from("applications").select("*").or(filters.join(","));
-  if (error) return { data: [], error: `${VI_ERROR} (applications: ${error.message})` };
-  return { data: (data ?? []) as Application[], error: null };
+  // Class C. An intake season routinely holds thousands of applications, and
+  // this list is the scope gate for reviews, decisions and answers — a
+  // truncated read here understates every downstream count.
+  const or = filters.join(",");
+  const { data, error } = await readAllPages<Application>("applications", "*", (projection) =>
+    client.from("applications").select(projection).or(or)
+  );
+  if (error) {
+    logDataError("applications.getApplications", error);
+    const err = error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (applications: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 export async function getMatches(scope?: ScopeFilter) {
@@ -548,11 +606,16 @@ export async function getEvents(scope?: ScopeFilter) {
 export async function getSeasons(scope?: ScopeFilter) {
   if (!hasSeasonScope(scope)) return selectTable<Season>("seasons");
   if (!scope?.allowedSeasonIds?.length) return { data: [] as Season[], error: null };
-  const client = dataClient();
-  if (!client) return envError<Season[]>([]);
-  const { data, error } = await client.from("seasons").select("id,code,name").in("id", scope.allowedSeasonIds);
-  if (error) return { data: [], error: `${VI_ERROR} (seasons: ${error.message})` };
-  return { data: (data ?? []) as Season[], error: null };
+  // Class C by construction rather than by volume: `id` is the primary key, so
+  // the result can never exceed the granted-season list, but that list has no
+  // enforced ceiling. Chunk-and-page rather than assume it stays small.
+  const { data, error } = await selectInChunks<Season>("seasons", "id", scope.allowedSeasonIds, "id,code,name");
+  if (error) {
+    logDataError("seasons.getSeasons", error);
+    const err = error as { message?: string };
+    return { data: [] as Season[], error: `${VI_ERROR} (seasons: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 export async function getIntakeBatches(scope?: ScopeFilter) {
@@ -560,11 +623,13 @@ export async function getIntakeBatches(scope?: ScopeFilter) {
   const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
   if (batchScopeError) return { data: [] as IntakeBatch[], error: batchScopeError };
   if (!batchIds?.length) return { data: [] as IntakeBatch[], error: null };
-  const client = dataClient();
-  if (!client) return envError<IntakeBatch[]>([]);
-  const { data, error } = await client.from("intake_batches").select("id,season_id,code,name,is_active").in("id", batchIds);
-  if (error) return { data: [], error: `${VI_ERROR} (intake_batches: ${error.message})` };
-  return { data: (data ?? []) as IntakeBatch[], error: null };
+  const { data, error } = await selectInChunks<IntakeBatch>("intake_batches", "id", batchIds, "id,season_id,code,name,is_active");
+  if (error) {
+    logDataError("intake_batches.getIntakeBatches", error);
+    const err = error as { message?: string };
+    return { data: [] as IntakeBatch[], error: `${VI_ERROR} (intake_batches: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 export async function getPrograms(scope?: ScopeFilter) {
@@ -612,25 +677,58 @@ export async function getMentorFunctionAreaLinks(mentorProfileIds?: string[]) {
   return { ...result, data: result.data.filter((row) => allowed.has(row.mentor_profile_id)) };
 }
 
+/**
+ * Class B. `person_roles` holds ~1,300 rows in Production, so the previous
+ * whole-table read followed by a JS filter was itself over the row cap: the
+ * page could miss the very roles it was looking for. The filter now runs in the
+ * database, which bounds the result to one person's roles (a handful, one per
+ * season and role type). The JS filter is kept so the returned set is provably
+ * identical to before. `readBounded` fails loudly if that bound is ever wrong.
+ */
 export async function getRolesForPerson(personId: string) {
-  return selectAllTable<JsonRecord>("person_roles", "*").then((res) => ({
-    ...res,
-    data: res.data.filter((role) => role.person_id === personId)
-  }));
+  const client = dataClient("person_roles");
+  if (!client) return envError<JsonRecord[]>([]);
+  const { data, error } = await readBounded<JsonRecord>(
+    "person_roles",
+    client.from("person_roles").select("*").eq("person_id", personId)
+  );
+  if (error) {
+    if (isNextDynamicUsageError(error)) throw error;
+    logDataError("person_roles.getRolesForPerson", error);
+    const err = error as { message?: string };
+    return { data: [] as JsonRecord[], error: `${VI_ERROR} (person_roles: ${err.message ?? "Bad Request"})` };
+  }
+  return { data: data.filter((role) => role.person_id === personId), error: null };
 }
 
-export async function getAnswersForApplications(applicationIds: string[]) {
+/**
+ * Class C. Not bounded in either direction: `applicationIds` is every
+ * application in scope (thousands for an intake season), and each application
+ * carries one row per answered question. A single scoped call can therefore
+ * return tens of thousands of rows. Chunk the IN list, page every chunk.
+ */
+export async function getAnswersForApplications(applicationIds: string[]): Promise<QueryResult<JsonRecord[]>> {
   const empty: JsonRecord[] = [];
   if (!applicationIds.length) return { data: empty, error: null };
-  const client = dataClient("application_answers");
-  if (!client) return serviceRoleRequiredError(empty);
-  const { data, error } = await client.from("application_answers").select("*").in("application_id", applicationIds);
-  if (error) return { data: empty, error: `${VI_ERROR} (application_answers: ${error.message})` };
-  return { data: data ?? empty, error: null };
+  const { data, error } = await selectInChunks<JsonRecord>("application_answers", "application_id", applicationIds, "*");
+  if (error) {
+    logDataError("application_answers.getAnswersForApplications", error);
+    const err = error as { message?: string };
+    return { data: empty, error: `${VI_ERROR} (application_answers: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
+/**
+ * Class B. `data_issues` predates this repository and has no `create table` in
+ * `supabase_migrations/`, so no ordering key can be proven for it and it is
+ * deliberately absent from `PAGE_ORDER` — guessing `id` would raise a
+ * PostgREST 400 rather than degrade. It currently has no caller in the app; if
+ * one is added and the bound is exceeded, this fails loudly instead of
+ * returning a truncated issue list.
+ */
 export async function getDataIssues() {
-  return selectAllTable<JsonRecord>("data_issues");
+  return selectTable<JsonRecord>("data_issues");
 }
 
 export async function getPerson(id: string, scope?: ScopeFilter) {
@@ -673,6 +771,12 @@ export async function getMatch(id: string, scope?: ScopeFilter) {
   return { data: data as Match | null, error: null };
 }
 
+/**
+ * Class B. One person's recaps across every season they appear in: bounded by
+ * (mentees per mentor) x (months per season) x (seasons), which is two orders
+ * of magnitude below the row cap. `readBounded` fails loudly rather than
+ * truncating if that ever stops holding.
+ */
 export async function getMentoringRecapsByMenteePersonId(personId: string, scope?: ScopeFilter) {
   const client = dataClient();
   if (!client) return envError<MentoringRecap[]>([]);
@@ -685,9 +789,13 @@ export async function getMentoringRecapsByMenteePersonId(personId: string, scope
     if (!scope.allowedSeasonIds.length) return { data: [], error: null };
     query = query.in("season_id", scope.allowedSeasonIds);
   }
-  const { data, error } = await query;
-  if (error) return { data: [], error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
-  return { data: (data ?? []) as MentoringRecap[], error: null };
+  const { data, error } = await readBounded<MentoringRecap>("mentoring_recaps", query);
+  if (error) {
+    logDataError("mentoring_recaps.byMentee", error);
+    const err = error as { message?: string };
+    return { data: [] as MentoringRecap[], error: `${VI_ERROR} (mentoring_recaps: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 export async function getMentoringRecapsByMentorPersonId(personId: string, scope?: ScopeFilter) {
@@ -702,9 +810,14 @@ export async function getMentoringRecapsByMentorPersonId(personId: string, scope
     if (!scope.allowedSeasonIds.length) return { data: [], error: null };
     query = query.in("season_id", scope.allowedSeasonIds);
   }
-  const { data, error } = await query;
-  if (error) return { data: [], error: `${VI_ERROR} (mentoring_recaps: ${error.message})` };
-  return { data: (data ?? []) as MentoringRecap[], error: null };
+  // Class B — see getMentoringRecapsByMenteePersonId.
+  const { data, error } = await readBounded<MentoringRecap>("mentoring_recaps", query);
+  if (error) {
+    logDataError("mentoring_recaps.byMentor", error);
+    const err = error as { message?: string };
+    return { data: [] as MentoringRecap[], error: `${VI_ERROR} (mentoring_recaps: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 export async function getMentoringRecapById(id: string, scope?: ScopeFilter) {
@@ -848,26 +961,46 @@ export async function getEventParticipationsByPersonId(personId: string, scope?:
     if (!scope.allowedSeasonIds.length) return { data: [], error: null };
     query = query.in("season_id", scope.allowedSeasonIds);
   }
-  const { data, error } = await query;
-  if (error) return { data: [], error: `${VI_ERROR} (event_participations: ${error.message})` };
-  return { data: (data ?? []) as EventParticipation[], error: null };
+  // Class B: one person's event participations, bounded by events per season.
+  const { data, error } = await readBounded<EventParticipation>("event_participations", query);
+  if (error) {
+    logDataError("event_participations.byPerson", error);
+    const err = error as { message?: string };
+    return { data: [] as EventParticipation[], error: `${VI_ERROR} (event_participations: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 export async function getOperationalTeamAssignmentsByPerson(personId: string) {
   const client = dataClient();
   if (!client) return envError<OperationalTeamAssignment[]>([]);
-  const { data, error } = await client
-    .from("operational_team_assignments")
-    .select("id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes")
-    .eq("person_id", personId)
-    .order("source_role_group", { ascending: true })
-    .order("functional_team", { ascending: true })
-    .order("role_note", { ascending: true })
-    .order("operational_role", { ascending: true });
-  if (error) return { data: [], error: `${VI_ERROR} (operational_team_assignments: ${error.message})` };
-  return { data: (data ?? []) as OperationalTeamAssignment[], error: null };
+  // Class B: one person's operational assignments.
+  const { data, error } = await readBounded<OperationalTeamAssignment>(
+    "operational_team_assignments",
+    client
+      .from("operational_team_assignments")
+      .select("id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes")
+      .eq("person_id", personId)
+      .order("source_role_group", { ascending: true })
+      .order("functional_team", { ascending: true })
+      .order("role_note", { ascending: true })
+      .order("operational_role", { ascending: true })
+  );
+  if (error) {
+    logDataError("operational_team_assignments.byPerson", error);
+    const err = error as { message?: string };
+    return { data: [] as OperationalTeamAssignment[], error: `${VI_ERROR} (operational_team_assignments: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
+/**
+ * Class C. The scoped branch previously chunked the person list by 500 but
+ * never paged a chunk, so it carried the same silent-truncation defect as the
+ * `/operations` recap read: one UEHM season resolves ~1,000 people, and a
+ * person can hold several assignments, so a single chunk can exceed the cap on
+ * its own. Both branches now page.
+ */
 export async function getOperationalTeamAssignments(scope?: ScopeFilter) {
   const columns = "id,person_id,source_role_group,operational_role,functional_team,team_name,assigned_scope,role_note,status,notes";
   if (!scope) return selectAllTable<OperationalTeamAssignment>("operational_team_assignments", columns);
@@ -876,19 +1009,18 @@ export async function getOperationalTeamAssignments(scope?: ScopeFilter) {
   if (scopeError) return { data: [] as OperationalTeamAssignment[], error: scopeError };
   if (!personIds?.length) return { data: [] as OperationalTeamAssignment[], error: null };
 
-  const client = dataClient();
-  if (!client) return envError<OperationalTeamAssignment[]>([]);
-  const rows: OperationalTeamAssignment[] = [];
-  for (let i = 0; i < personIds.length; i += 500) {
-    const chunk = personIds.slice(i, i + 500);
-    const { data, error } = await client
-      .from("operational_team_assignments")
-      .select(columns)
-      .in("person_id", chunk);
-    if (error) return { data: rows, error: `${VI_ERROR} (operational_team_assignments: ${error.message})` };
-    rows.push(...((data ?? []) as OperationalTeamAssignment[]));
+  const { data, error } = await selectInChunks<OperationalTeamAssignment>(
+    "operational_team_assignments",
+    "person_id",
+    personIds,
+    columns
+  );
+  if (error) {
+    logDataError("operational_team_assignments.selectScoped", error);
+    const err = error as { message?: string };
+    return { data: [] as OperationalTeamAssignment[], error: `${VI_ERROR} (operational_team_assignments: ${err.message ?? "Bad Request"})` };
   }
-  return { data: rows, error: null };
+  return { data, error: null };
 }
 
 async function getOperationsDataFromRpc() {
@@ -1400,34 +1532,66 @@ export async function getApplicationReviewsForApplication(applicationId: string,
     const app = await getApplication(applicationId, scope);
     if (app.error || !app.data) return { data: [], error: app.error };
   }
-  const { data, error } = await client
-    .from("application_reviews")
-    .select("*")
-    .eq("application_id", applicationId)
-    .order("created_at", { ascending: false });
-  if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
-  return { data: (data ?? []) as ApplicationReview[], error: null };
+  // Class B: review rounds per application are bounded by the workflow.
+  const { data, error } = await readBounded<ApplicationReview>(
+    "application_reviews",
+    client.from("application_reviews").select("*").eq("application_id", applicationId).order("created_at", { ascending: false })
+  );
+  if (error) {
+    logDataError("application_reviews.forApplication", error);
+    const err = error as { message?: string };
+    return { data: [] as ApplicationReview[], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
-/** Reviews assigned to a specific admin user — used for reviewer's /reviews page. */
+/**
+ * Reviews assigned to a specific admin user — used for reviewer's /reviews page.
+ *
+ * Class C. The scoped branch filters by every application in scope, which is
+ * thousands of IDs for an intake season, so the IN list must be chunked and
+ * each chunk paged. `due_at` ordering is not unique and cannot drive paging;
+ * it is reapplied in JS over the complete set so the rendered order is
+ * unchanged.
+ */
 export async function getMyApplicationReviews(adminUserId: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview[]>> {
   const client = dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
-  let query = client
-    .from("application_reviews")
-    .select("*")
-    .eq("reviewer_admin_user_id", adminUserId)
-    .neq("status", "cancelled")
-    .order("due_at", { ascending: true });
+  const mine = (query: any) => query.eq("reviewer_admin_user_id", adminUserId).neq("status", "cancelled");
+
+  let result: { data: ApplicationReview[]; error: unknown | null };
   if (scope) {
     const apps = await getApplications(scope);
     const appIds = apps.data.map((app) => app.id);
     if (!appIds.length) return { data: [], error: apps.error };
-    query = query.in("application_id", appIds);
+    result = await selectInChunks<ApplicationReview>("application_reviews", "application_id", appIds, "*", mine);
+  } else {
+    result = await readAllPages<ApplicationReview>("application_reviews", "*", (projection) =>
+      mine(client.from("application_reviews").select(projection))
+    );
   }
-  const { data, error } = await query;
-  if (error) return { data: [], error: `${VI_ERROR} (application_reviews: ${error.message})` };
-  return { data: (data ?? []) as ApplicationReview[], error: null };
+  if (result.error) {
+    logDataError("application_reviews.mine", result.error);
+    const err = result.error as { message?: string };
+    return { data: [] as ApplicationReview[], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
+  return { data: sortByDueAtAscending(result.data), error: null };
+}
+
+/**
+ * Preserves the `.order("due_at", { ascending: true })` the paged read replaces,
+ * including PostgreSQL's NULLS LAST for an ascending sort, with `id` as a
+ * deterministic tiebreaker.
+ */
+function sortByDueAtAscending(rows: ApplicationReview[]) {
+  return [...rows].sort((a, b) => {
+    const left = (a as JsonRecord).due_at ?? null;
+    const right = (b as JsonRecord).due_at ?? null;
+    if (left === null && right === null) return String(a.id).localeCompare(String(b.id));
+    if (left === null) return 1;
+    if (right === null) return -1;
+    return String(left).localeCompare(String(right)) || String(a.id).localeCompare(String(b.id));
+  });
 }
 
 /** All reviews — used for admin/core_team /reviews page (RLS allows this). */
@@ -1436,14 +1600,16 @@ export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<Que
   const apps = await getApplications(scope);
   const appIds = apps.data.map((app) => app.id);
   if (!appIds.length) return { data: [], error: apps.error };
-  const client = dataClient("application_reviews");
-  if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
+  // Class C: one row per (application, reviewer, round) across the intake.
+  // `selectInChunks` resolves its own client and fails closed when the
+  // service-role credential for this server-only table is absent.
   const { data, error } = await selectInChunks<ApplicationReview>("application_reviews", "application_id", appIds, "*");
   if (error) {
+    logDataError("application_reviews.all", error);
     const err = error as { message?: string };
     return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
   }
-  return { data: (data ?? []) as ApplicationReview[], error: apps.error };
+  return { data, error: apps.error };
 }
 
 export async function getApplicationReviewById(id: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview | null>> {
@@ -1470,13 +1636,17 @@ export async function getApplicationReviewById(id: string, scope?: ScopeFilter):
 export async function getActiveAdminUsers(): Promise<QueryResult<AdminUserPublic[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<AdminUserPublic[]>([]);
-  const { data, error } = await client
-    .from("admin_users")
-    .select("id,email,full_name,role")
-    .eq("status", "active")
-    .order("full_name", { ascending: true });
-  if (error) return { data: [], error: `${VI_ERROR} (admin_users: ${error.message})` };
-  return { data: (data ?? []) as AdminUserPublic[], error: null };
+  // Class B: staff accounts, two orders of magnitude below the row cap.
+  const { data, error } = await readBounded<AdminUserPublic>(
+    "admin_users",
+    client.from("admin_users").select("id,email,full_name,role").eq("status", "active").order("full_name", { ascending: true })
+  );
+  if (error) {
+    logDataError("admin_users.active", error);
+    const err = error as { message?: string };
+    return { data: [] as AdminUserPublic[], error: `${VI_ERROR} (admin_users: ${err.message ?? "Bad Request"})` };
+  }
+  return { data, error: null };
 }
 
 /** All admin decisions recorded against an application, newest first. */
@@ -1490,15 +1660,17 @@ export async function getApplicationDecisions(
     const app = await getApplication(applicationId, scope);
     if (app.error || !app.data) return { data: [], error: app.error };
   }
-  const { data, error } = await client
-    .from("application_decisions")
-    .select("*")
-    .eq("application_id", applicationId)
-    .order("created_at", { ascending: false });
+  // Class B: decisions recorded against one application.
+  const { data, error } = await readBounded<ApplicationDecision>(
+    "application_decisions",
+    client.from("application_decisions").select("*").eq("application_id", applicationId).order("created_at", { ascending: false })
+  );
   if (error) {
-    return { data: [], error: `${VI_ERROR} (application_decisions: ${error.message})` };
+    logDataError("application_decisions.forApplication", error);
+    const err = error as { message?: string };
+    return { data: [] as ApplicationDecision[], error: `${VI_ERROR} (application_decisions: ${err.message ?? "Bad Request"})` };
   }
-  return { data: (data ?? []) as ApplicationDecision[], error: null };
+  return { data, error: null };
 }
 
 export function groupCount(rows: JsonRecord[], key: string) {
@@ -1529,34 +1701,40 @@ export async function getReviewAssignableApplications(filters: {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewAssignableApplication[]>([]);
 
-  let appsQuery = client
-    .from("applications")
-    .select("id,full_name,email_primary,role_applied,status,submitted_at,intake_batch_id,season_id")
-    .order("submitted_at", { ascending: true })
-    .order("id", { ascending: true });
-
+  // Class C: an intake batch holds thousands of applications. Filters are
+  // captured in a factory so every page carries exactly the same predicate.
+  let narrow: (query: any) => any = (query) => query;
   if (filters.intakeBatchId) {
     const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
     if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
-    appsQuery = appsQuery.eq("intake_batch_id", filters.intakeBatchId);
+    const batchId = filters.intakeBatchId;
+    narrow = (query) => query.eq("intake_batch_id", batchId);
   } else if (filters.scope?.allowedSeasonIds) {
-    if (!filters.scope.allowedSeasonIds.length) return { data: [], error: null };
-    appsQuery = appsQuery.in("season_id", filters.scope.allowedSeasonIds);
+    const seasonIds = filters.scope.allowedSeasonIds;
+    if (!seasonIds.length) return { data: [], error: null };
+    narrow = (query) => query.in("season_id", seasonIds);
   }
   if (filters.roleApplied) {
-    appsQuery = appsQuery.eq("role_applied", filters.roleApplied);
+    const roleApplied = filters.roleApplied;
+    const previous = narrow;
+    narrow = (query) => previous(query).eq("role_applied", roleApplied);
   }
 
-  const { data: appRows, error: appsErr } = await appsQuery;
+  const { data: pagedApps, error: appsErr } = await readAllPages<JsonRecord>(
+    "applications",
+    "id,full_name,email_primary,role_applied,status,submitted_at,intake_batch_id,season_id",
+    (projection) => narrow(client.from("applications").select(projection))
+  );
   if (appsErr) {
     logDataError("getReviewAssignableApplications.apps", appsErr);
-    return { data: [], error: `${VI_ERROR} (applications: ${appsErr.message})` };
+    const err = appsErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (applications: ${err.message ?? "Bad Request"})` };
   }
 
-  const appList = (appRows ?? []) as {
+  const appList = (pagedApps as unknown as {
     id: string;
     full_name: string | null;
     email_primary: string | null;
@@ -1564,20 +1742,28 @@ export async function getReviewAssignableApplications(filters: {
     status: string | null;
     submitted_at: string | null;
     intake_batch_id: string | null;
-  }[];
+  }[])
+    // Restores the `.order("submitted_at").order("id")` the paged read replaces.
+    .sort((a, b) => String(a.submitted_at ?? "").localeCompare(String(b.submitted_at ?? "")) || String(a.id).localeCompare(String(b.id)));
 
   if (!appList.length) return { data: [], error: null };
 
   const appIds = appList.map((a) => a.id);
-  const { data: reviewRows } = await client
-    .from("application_reviews")
-    .select("application_id")
-    .eq("review_round", "profile_screening")
-    .neq("status", "cancelled")
-    .in("application_id", appIds);
+  const { data: reviewRows, error: reviewErr } = await selectInChunks<JsonRecord>(
+    "application_reviews",
+    "application_id",
+    appIds,
+    "application_id",
+    (query) => query.eq("review_round", "profile_screening").neq("status", "cancelled")
+  );
+  if (reviewErr) {
+    logDataError("getReviewAssignableApplications.reviews", reviewErr);
+    const err = reviewErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
 
   const reviewCountByAppId = new Map<string, number>();
-  for (const row of reviewRows ?? []) {
+  for (const row of reviewRows) {
     const id = row.application_id as string | null;
     if (id) reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
   }
@@ -1599,37 +1785,50 @@ export async function getReviewEligibleReviewers(): Promise<QueryResult<ReviewEl
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewEligibleReviewer[]>([]);
 
-  const { data: adminRows, error: adminErr } = await client
-    .from("admin_users")
-    .select("id,email,full_name,role")
-    .in("role", ["super_admin", "admin", "core_team", "reviewer"])
-    .eq("status", "active")
-    .order("full_name", { ascending: true });
+  // Class B: staff accounts.
+  const { data: adminRows, error: adminErr } = await readBounded<JsonRecord>(
+    "admin_users",
+    client
+      .from("admin_users")
+      .select("id,email,full_name,role")
+      .in("role", ["super_admin", "admin", "core_team", "reviewer"])
+      .eq("status", "active")
+      .order("full_name", { ascending: true })
+  );
 
   if (adminErr) {
     logDataError("getReviewEligibleReviewers.admin_users", adminErr);
-    return { data: [], error: `${VI_ERROR} (admin_users: ${adminErr.message})` };
+    const err = adminErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (admin_users: ${err.message ?? "Bad Request"})` };
   }
 
-  const reviewers = (adminRows ?? []) as {
+  const reviewers = (adminRows as unknown as {
     id: string;
     email: string;
     full_name: string | null;
     role: string;
-  }[];
+  }[]);
 
   if (!reviewers.length) return { data: [], error: null };
 
+  // Class C: total profile-screening reviews across all reviewers scales with
+  // the intake, so this read exceeds the cap well before the reviewer list does.
   const reviewerIds = reviewers.map((r) => r.id);
-  const { data: workloadRows } = await client
-    .from("application_reviews")
-    .select("reviewer_admin_user_id")
-    .eq("review_round", "profile_screening")
-    .neq("status", "cancelled")
-    .in("reviewer_admin_user_id", reviewerIds);
+  const { data: workloadRows, error: workloadErr } = await selectInChunks<JsonRecord>(
+    "application_reviews",
+    "reviewer_admin_user_id",
+    reviewerIds,
+    "reviewer_admin_user_id",
+    (query) => query.eq("review_round", "profile_screening").neq("status", "cancelled")
+  );
+  if (workloadErr) {
+    logDataError("getReviewEligibleReviewers.workload", workloadErr);
+    const err = workloadErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
 
   const workloadById = new Map<string, number>();
-  for (const row of workloadRows ?? []) {
+  for (const row of workloadRows) {
     const id = row.reviewer_admin_user_id as string | null;
     if (id) workloadById.set(id, (workloadById.get(id) ?? 0) + 1);
   }
@@ -1650,17 +1849,25 @@ export async function getReviewAssignmentBatches(): Promise<QueryResult<ReviewAs
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewAssignmentBatch[]>([]);
 
-  const { data, error } = await client
-    .from("review_assignment_batches")
-    .select("*")
-    .order("created_at", { ascending: false });
+  // Class C: one row per bulk-assignment operation, unbounded over time.
+  // `created_at` is not unique, so paging keys on `id` and the newest-first
+  // order the panel renders is reapplied over the complete set.
+  const { data, error } = await readAllPages<ReviewAssignmentBatch>("review_assignment_batches", "*", (projection) =>
+    client.from("review_assignment_batches").select(projection)
+  );
 
   if (error) {
     logDataError("getReviewAssignmentBatches", error);
-    return { data: [], error: `${VI_ERROR} (review_assignment_batches: ${error.message})` };
+    const err = error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (review_assignment_batches: ${err.message ?? "Bad Request"})` };
   }
 
-  return { data: (data ?? []) as ReviewAssignmentBatch[], error: null };
+  const rows = [...data].sort(
+    (a, b) =>
+      String((b as JsonRecord).created_at ?? "").localeCompare(String((a as JsonRecord).created_at ?? "")) ||
+      String(b.id).localeCompare(String(a.id))
+  );
+  return { data: rows, error: null };
 }
 
 /**
@@ -1698,15 +1905,17 @@ export async function getReviewAssignmentProgress(filters: {
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
-    const { data: appRows, error: appErr } = await client
-      .from("applications")
-      .select("id")
-      .eq("intake_batch_id", filters.intakeBatchId);
+    // Class C: every application in one intake batch.
+    const batchId = filters.intakeBatchId;
+    const { data: appRows, error: appErr } = await readAllPages<JsonRecord>("applications", "id", (projection) =>
+      client.from("applications").select(projection).eq("intake_batch_id", batchId)
+    );
     if (appErr) {
       logDataError("getReviewAssignmentProgress.apps", appErr);
-      return { data: [], error: `${VI_ERROR} (applications: ${appErr.message})` };
+      const err = appErr as { message?: string };
+      return { data: [], error: `${VI_ERROR} (applications: ${err.message ?? "Bad Request"})` };
     }
-    appIdFilter = (appRows ?? []).map((a) => a.id as string);
+    appIdFilter = appRows.map((a) => a.id as string);
     if (!appIdFilter.length) return { data: [], error: null };
   } else if (filters.scope) {
     const apps = await getApplications(filters.scope);
@@ -1714,46 +1923,53 @@ export async function getReviewAssignmentProgress(filters: {
     appIdFilter = apps.data.map((app) => app.id);
   }
 
-  // Step 2: fetch review rows
-  let reviewsQuery = client
-    .from("application_reviews")
-    .select("reviewer_admin_user_id,status,submitted_at,application_id")
-    .eq("review_round", reviewRound);
-
-  if (appIdFilter) {
-    reviewsQuery = reviewsQuery.in("application_id", appIdFilter);
-  }
-
-  const { data: reviewRows, error: reviewErr } = await reviewsQuery;
+  // Step 2: fetch review rows. Class C — one row per (application, reviewer)
+  // for the round, which is a multiple of the intake size.
+  const forRound = (query: any) => query.eq("review_round", reviewRound);
+  const reviewsColumns = "reviewer_admin_user_id,status,submitted_at,application_id";
+  const { data: reviewRows, error: reviewErr } = appIdFilter
+    ? await selectInChunks<JsonRecord>("application_reviews", "application_id", appIdFilter, reviewsColumns, forRound)
+    : await readAllPages<JsonRecord>("application_reviews", reviewsColumns, (projection) =>
+        forRound(client.from("application_reviews").select(projection))
+      );
   if (reviewErr) {
     logDataError("getReviewAssignmentProgress.reviews", reviewErr);
-    return { data: [], error: `${VI_ERROR} (application_reviews: ${reviewErr.message})` };
+    const err = reviewErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
   }
 
-  const reviews = (reviewRows ?? []) as {
+  const reviews = (reviewRows as unknown as {
     reviewer_admin_user_id: string | null;
     status: string;
     submitted_at: string | null;
     application_id: string;
-  }[];
+  }[]);
 
   if (!reviews.length) return { data: [], error: null };
 
-  // Step 3: fetch reviewer names and emails
+  // Step 3: fetch reviewer names and emails. Class A — `id` is the primary key,
+  // so the result cannot exceed the reviewer list, which `admin_users` bounds.
   const reviewerIds = Array.from(
     new Set(reviews.map((r) => r.reviewer_admin_user_id).filter((id): id is string => Boolean(id)))
   );
 
-  const { data: adminRows } = await client
-    .from("admin_users")
-    .select("id,full_name,email")
-    .in("id", reviewerIds);
+  const { data: adminRows, error: adminErr } = await selectInChunks<JsonRecord>(
+    "admin_users",
+    "id",
+    reviewerIds,
+    "id,full_name,email"
+  );
+  if (adminErr) {
+    logDataError("getReviewAssignmentProgress.admin_users", adminErr);
+    const err = adminErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (admin_users: ${err.message ?? "Bad Request"})` };
+  }
 
   const nameById = new Map<string, string | null>(
-    (adminRows ?? []).map((r) => [r.id as string, (r.full_name as string | null) ?? null])
+    adminRows.map((r) => [r.id as string, (r.full_name as string | null) ?? null])
   );
   const emailById = new Map<string, string | null>(
-    (adminRows ?? []).map((r) => [r.id as string, (r.email as string | null) ?? null])
+    adminRows.map((r) => [r.id as string, (r.email as string | null) ?? null])
   );
 
   // Aggregate counts per reviewer
@@ -1839,11 +2055,10 @@ export async function getReviewerPool(filters?: {
   if (!client) return envError<ReviewerPoolRow[]>([]);
 
   // --- Query 1: mentor profiles (conditionally filtered)
-  let mentorQuery = client
-    .from("mentor_profiles")
-    .select("id,person_id,mentor_code,intake_batch_id")
-    .not("person_id", "is", null)
-    .order("id");
+  // Class C: Production holds well over a thousand mentor profiles, so the
+  // unfiltered pool read was already past the cap. Filters live in a factory so
+  // every page carries the same predicate.
+  let narrow: (query: any) => any = (query) => query.not("person_id", "is", null);
 
   if (filters?.intakeBatchId) {
     const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
@@ -1851,57 +2066,77 @@ export async function getReviewerPool(filters?: {
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
-    mentorQuery = mentorQuery.eq("intake_batch_id", filters.intakeBatchId);
+    const batchId = filters.intakeBatchId;
+    narrow = (query) => query.not("person_id", "is", null).eq("intake_batch_id", batchId);
   } else {
     const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters?.scope);
     if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds) {
       if (!scopedBatchIds.length) return { data: [], error: null };
-      mentorQuery = mentorQuery.in("intake_batch_id", scopedBatchIds);
+      narrow = (query) => query.not("person_id", "is", null).in("intake_batch_id", scopedBatchIds);
     }
   }
 
   const [mentorRes, adminRes] = await Promise.all([
-    mentorQuery,
-    client.from("admin_users").select("id,email,role,status,auth_user_id")
+    readAllPages<JsonRecord>("mentor_profiles", "id,person_id,mentor_code,intake_batch_id", (projection) =>
+      narrow(client.from("mentor_profiles").select(projection))
+    ),
+    // Class B: staff accounts.
+    readBounded<JsonRecord>("admin_users", client.from("admin_users").select("id,email,role,status,auth_user_id"))
   ]);
 
   if (mentorRes.error) {
     logDataError("getReviewerPool.mentor_profiles", mentorRes.error);
-    return { data: [], error: `${VI_ERROR} (mentor_profiles: ${mentorRes.error.message})` };
+    const err = mentorRes.error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (mentor_profiles: ${err.message ?? "Bad Request"})` };
+  }
+  if (adminRes.error) {
+    logDataError("getReviewerPool.admin_users", adminRes.error);
+    const err = adminRes.error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (admin_users: ${err.message ?? "Bad Request"})` };
   }
 
-  const mentors = (mentorRes.data ?? []) as {
+  const mentors = (mentorRes.data as unknown as {
     id: string;
     person_id: string | null;
     mentor_code: string | null;
     intake_batch_id: string | null;
-  }[];
+  }[])
+    // Restores the `.order("id")` the paged read subsumes.
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
   if (!mentors.length) return { data: [], error: null };
 
   // --- Query 2: people (only linked person_ids)
+  // Class C: one person id per mentor profile, so this list tracks Query 1.
   const personIds = Array.from(
     new Set(mentors.map((m) => m.person_id).filter((id): id is string => Boolean(id)))
   );
 
-  const { data: peopleRows } = await client
-    .from("people")
-    .select("id,full_name,email_primary")
-    .in("id", personIds);
+  const { data: peopleRows, error: peopleErr } = await selectInChunks<JsonRecord>(
+    "people",
+    "id",
+    personIds,
+    "id,full_name,email_primary"
+  );
+  if (peopleErr) {
+    logDataError("getReviewerPool.people", peopleErr);
+    const err = peopleErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (people: ${err.message ?? "Bad Request"})` };
+  }
 
   const peopleById = new Map(
-    (peopleRows ?? []).map((p) => [
+    peopleRows.map((p) => [
       p.id as string,
-      p as { id: string; full_name: string | null; email_primary: string | null }
+      p as unknown as { id: string; full_name: string | null; email_primary: string | null }
     ])
   );
 
   // --- Build email → admin_user map from Query 3
   const adminByEmail = new Map(
-    (adminRes.data ?? []).map((a) => [
-      String((a as { email: string }).email ?? "").toLowerCase(),
-      a as { id: string; email: string; role: string | null; status: string | null; auth_user_id: string | null }
+    adminRes.data.map((a) => [
+      String((a as { email?: string }).email ?? "").toLowerCase(),
+      a as unknown as { id: string; email: string; role: string | null; status: string | null; auth_user_id: string | null }
     ])
   );
 
@@ -1966,12 +2201,8 @@ export async function getInterviewCandidates(filters?: {
       ? (INTERVIEW_POOL_STATUSES.slice(0, 3) as unknown as string[])
       : (INTERVIEW_POOL_STATUSES as unknown as string[]);
 
-  let appsQuery = client
-    .from("applications")
-    .select("id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at")
-    .in("status", statuses)
-    .order("submitted_at", { ascending: true })
-    .order("id", { ascending: true });
+  // Class C: an interview pool spans a whole intake batch.
+  let narrow: (query: any) => any = (query) => query.in("status", statuses);
 
   if (filters?.intakeBatchId) {
     const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
@@ -1979,25 +2210,32 @@ export async function getInterviewCandidates(filters?: {
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
-    appsQuery = appsQuery.eq("intake_batch_id", filters.intakeBatchId);
+    const batchId = filters.intakeBatchId;
+    narrow = (query) => query.in("status", statuses).eq("intake_batch_id", batchId);
   } else if (filters?.scope) {
     const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
     if (batchScopeError) return { data: [], error: batchScopeError };
     if (!scopedBatchIds?.length) return { data: [], error: null };
-    appsQuery = appsQuery.in("intake_batch_id", scopedBatchIds);
+    narrow = (query) => query.in("status", statuses).in("intake_batch_id", scopedBatchIds);
   }
 
   // Default to mentee unless explicitly overridden
   const roleApplied = filters?.roleApplied ?? "mentee";
-  appsQuery = appsQuery.eq("role_applied", roleApplied);
+  const byStatusAndBatch = narrow;
+  narrow = (query) => byStatusAndBatch(query).eq("role_applied", roleApplied);
 
-  const { data: appRows, error: appsErr } = await appsQuery;
+  const { data: appRows, error: appsErr } = await readAllPages<JsonRecord>(
+    "applications",
+    "id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at",
+    (projection) => narrow(client.from("applications").select(projection))
+  );
   if (appsErr) {
     logDataError("getInterviewCandidates.applications", appsErr);
-    return { data: [], error: `${VI_ERROR} (applications: ${appsErr.message})` };
+    const err = appsErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (applications: ${err.message ?? "Bad Request"})` };
   }
 
-  const appList = (appRows ?? []) as {
+  const appList = (appRows as unknown as {
     id: string;
     full_name: string | null;
     email_primary: string | null;
@@ -2007,26 +2245,41 @@ export async function getInterviewCandidates(filters?: {
     role_applied: string | null;
     sbd: string | null;
     submitted_at: string | null;
-  }[];
+  }[])
+    // Restores the `.order("submitted_at").order("id")` the paged read replaces.
+    .sort((a, b) => String(a.submitted_at ?? "").localeCompare(String(b.submitted_at ?? "")) || String(a.id).localeCompare(String(b.id)));
 
   if (!appList.length) return { data: [], error: null };
 
-  // Fetch active interview reviews for these applications
+  // Fetch active interview reviews for these applications. Class C.
   const appIds = appList.map((a) => a.id);
-  const { data: reviewRows } = await client
-    .from("application_reviews")
-    .select("id,application_id,status,reviewer_admin_user_id")
-    .eq("review_round", "interview")
-    .neq("status", "cancelled")
-    .in("application_id", appIds)
-    .order("created_at", { ascending: true }); // oldest first → consistent "primary" review
+  const { data: reviewRows, error: reviewErr } = await selectInChunks<JsonRecord>(
+    "application_reviews",
+    "application_id",
+    appIds,
+    "id,application_id,status,reviewer_admin_user_id,created_at",
+    (query) => query.eq("review_round", "interview").neq("status", "cancelled")
+  );
+  if (reviewErr) {
+    logDataError("getInterviewCandidates.reviews", reviewErr);
+    const err = reviewErr as { message?: string };
+    return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
+
+  // Oldest first → the same consistent "primary" review the `.order("created_at")`
+  // used to pick, now applied over the complete paged set. `id` breaks ties so
+  // the choice is deterministic rather than dependent on arrival order.
+  const orderedReviews = [...reviewRows].sort(
+    (a, b) =>
+      String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || String(a.id).localeCompare(String(b.id))
+  );
 
   // Map application_id → first active interview review
   const reviewByAppId = new Map<
     string,
     { id: string; status: string; reviewer_admin_user_id: string | null }
   >();
-  for (const row of reviewRows ?? []) {
+  for (const row of orderedReviews) {
     const appId = row.application_id as string;
     if (!reviewByAppId.has(appId)) {
       reviewByAppId.set(appId, {

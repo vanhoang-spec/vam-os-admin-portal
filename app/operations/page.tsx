@@ -242,7 +242,12 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   const missingClosedMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id)).length;
   const followUpTwoMonthCount = Array.from(activeMenteeIds).filter((id) => !closedMenteeIds.has(id) && !closedPreviousMenteeIds.has(id)).length;
 
-  const activeMenteeCount = Array.from(selectedMenteeIds).filter((id) => activeMenteeIds.has(id)).length;
+  // Concept B (see lib/operations-kpis.ts): mentees who BOTH hold an active
+  // match AND filed a recap this month. Deliberately narrower than
+  // `programKpis.activeMenteeCount`, which is concept A — every mentee with a
+  // recap this month, match or no match. The name spells the difference out so
+  // the two are not mistaken for the same quantity again.
+  const activeMatchedMenteeWithRecapCount = Array.from(selectedMenteeIds).filter((id) => activeMenteeIds.has(id)).length;
   const mentorWithoutRecapCount = Array.from(activeMentorIds).filter((id) => !selectedMentorIds.has(id)).length;
 
   const eventsInMonth = seasonEvents.filter((event) => eventMonth(event) === selectedMonth);
@@ -403,10 +408,26 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Số recap trong tháng" value={programKpis.recapCount} />
-        <KpiCard label="Mentee active" value={programKpis.activeMenteeCount} />
-        <KpiCard label="Mentor active" value={programKpis.activeMentorCount} />
-        <KpiCard label="Tỷ lệ mentee active" value={percent(activeMenteeCount, activeMenteeIds.size)} />
-        <KpiCard label="Mentor chưa có recap" value={programKpis.mentorWithoutRecapCount} />
+        <KpiCard
+          label="Mentee active"
+          value={programKpis.activeMenteeCount}
+          helper="Mentee có ít nhất 1 recap hợp lệ trong tháng. Không yêu cầu match active."
+        />
+        <KpiCard
+          label="Mentor active"
+          value={programKpis.activeMentorCount}
+          helper="Mentor có ít nhất 1 recap hợp lệ trong tháng. Không yêu cầu match active."
+        />
+        <KpiCard
+          label="Tỷ lệ mentee active"
+          value={percent(activeMatchedMenteeWithRecapCount, activeMenteeIds.size)}
+          helper={`Tử số: mentee vừa có match active vừa có recap trong tháng (${activeMatchedMenteeWithRecapCount}). Mẫu số: mentee có match active (${activeMenteeIds.size}). Tử số khác thẻ "Mentee active" ở trên.`}
+        />
+        <KpiCard
+          label="Mentor chưa có recap"
+          value={programKpis.mentorWithoutRecapCount}
+          helper="Mentor có match active nhưng không có recap nào trong tháng."
+        />
         <KpiCard label="Event/training trong tháng" value={programKpis.eventTrainingCount} />
         <KpiCard label="Lượt tham dự event" value={programKpis.eventAttendanceCount} />
         <Card>
@@ -421,9 +442,21 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
             <p className="mt-2 text-xs leading-5 text-slate-500">Chưa có dữ liệu event/check-in cho tháng đang xem.</p>
           )}
         </Card>
-        <KpiCard label="Mentee active tháng đã đóng" value={activeClosedMonthCount} />
-        <KpiCard label="Chưa có recap tháng gần nhất" value={missingClosedMonthCount} />
-        <KpiCard label="Chưa có recap 2 tháng liên tiếp" value={followUpTwoMonthCount} />
+        <KpiCard
+          label="Mentee active tháng đã đóng"
+          value={activeClosedMonthCount}
+          helper={`Mentee có match active và có recap trong tháng đã chốt (${formatMonthVN(closedMonth)}).`}
+        />
+        <KpiCard
+          label="Chưa có recap tháng gần nhất"
+          value={missingClosedMonthCount}
+          helper={`Mentee có match active, không có recap trong ${formatMonthVN(closedMonth)}.`}
+        />
+        <KpiCard
+          label="Chưa có recap 2 tháng liên tiếp"
+          value={followUpTwoMonthCount}
+          helper={`Mentee có match active, không có recap trong ${formatMonthVN(closedMonth)} lẫn ${formatMonthVN(closedPreviousMonth)}.`}
+        />
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">

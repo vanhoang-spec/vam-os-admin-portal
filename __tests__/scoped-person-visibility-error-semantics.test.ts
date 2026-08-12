@@ -1,44 +1,21 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 import { getScopedPersonIds, getPerson } from "@/lib/data";
 import { getAllowedSeasonIds, type AdminScopeContext, type ProgramScope } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient, getSupabaseServerClient } from "@/lib/supabase-server";
 
-const { mockTables, mockErrors, mockFrom } = vi.hoisted(() => {
+const { holder, mockTables, mockErrors, mockFrom } = vi.hoisted(() => {
+  const holder: { client: any } = { client: null };
   const tables: Record<string, any[]> = {};
   const errors: Record<string, any> = {};
 
-  const fromFn = vi.fn((table: string) => {
-    const rows = tables[table] || [];
-    const error = errors[table] || null;
+  // Delegates to the shared faithful PostgREST fake (see
+  // __tests__/support/fake-postgrest.ts): it enforces the silent db-max-rows
+  // cap and returns an un-ORDERed read in an arbitrary order, so a loader that
+  // pages without a deterministic key fails here instead of looking correct.
+  const fromFn = vi.fn((table: string) => holder.client.from(table));
 
-    const chain = {
-      in: vi.fn((col, vals) => {
-        // Mirrors the real client: `.in()` is awaitable and also pageable via
-        // `.range()`, which the scoped loader uses to read past PostgREST's
-        // silent db-max-rows cap.
-        const filtered = error ? [] : rows.filter((r: any) => vals.includes(r[col]));
-        return {
-          range: (from: number, to: number) =>
-            Promise.resolve(error ? { data: [], error } : { data: filtered.slice(from, to + 1), error: null }),
-          then: (resolve: any) => resolve(error ? { data: [], error } : { data: filtered, error: null })
-        };
-      }),
-      eq: vi.fn((col, val) => {
-        if (error) return { maybeSingle: () => Promise.resolve({ data: null, error }) };
-        const filtered = rows.filter((r) => r[col] === val);
-        return {
-          maybeSingle: () => Promise.resolve({ data: filtered[0] || null, error: null })
-        };
-      }),
-      then: (resolve: any) => {
-        if (error) resolve({ data: [], error });
-        else resolve({ data: rows, error: null });
-      }
-    };
-    return { select: () => chain };
-  });
-
-  return { mockTables: tables, mockErrors: errors, mockFrom: fromFn };
+  return { holder, mockTables: tables, mockErrors: errors, mockFrom: fromFn };
 });
 
 vi.mock("server-only", () => ({}));
@@ -60,10 +37,15 @@ vi.mock("@/lib/supabase-server", () => ({
 
 let errorLog: ReturnType<typeof vi.spyOn>;
 
+const fakeDb = createFakeDb();
+holder.client = fakeClient(fakeDb);
+Object.assign(fakeDb, { tables: mockTables, errors: mockErrors });
+
 beforeEach(() => {
   vi.clearAllMocks();
   for (const key of Object.keys(mockTables)) delete mockTables[key];
   for (const key of Object.keys(mockErrors)) delete mockErrors[key];
+  fakeDb.requests.length = 0;
 
   const mockDb = { from: mockFrom };
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(mockDb as any);

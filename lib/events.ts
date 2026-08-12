@@ -3,6 +3,7 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getMenteeProfiles, getMentorProfiles, getPeople, getSeasons } from "@/lib/data";
+import { readAllPages, type PagedTable } from "@/lib/paged-read";
 import { canAccessSeason, canOperateAnyScope, canOperateSeason, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import {
   ATTENDANCE_STATUS_VALUES,
@@ -267,22 +268,22 @@ function parseDateTime(value: string | null): string | null {
   return parsed.toISOString();
 }
 
-async function selectAll<T>(client: any, table: string, columns = "*") {
-  let allData: T[] = [];
-  let from = 0;
-  const step = 1000;
-  while (true) {
-    const { data, error } = await client.from(table).select(columns).range(from, from + step - 1);
-    if (error) {
-      log(`${table} select failed`, error);
-      return { data: allData, error: error.message as string };
-    }
-    if (!data || data.length === 0) break;
-    allData = allData.concat(data as T[]);
-    if (data.length < step) break;
-    from += step;
+/**
+ * Class C. Reads an entire table under the pagination contract in
+ * `lib/paged-read.ts`.
+ *
+ * The previous loop paged by offset with NO ORDER BY, so page boundaries were
+ * undefined and rows could repeat or vanish between pages, and it stopped on a
+ * short page, which silently truncates if the server cap is below the step.
+ */
+async function selectAll<T extends Record<string, any>>(client: any, table: PagedTable, columns = "*") {
+  const { data, error } = await readAllPages<T>(table, columns, (projection) => client.from(table).select(projection));
+  if (error) {
+    log(`${table} select failed`, error);
+    const err = error as { message?: string };
+    return { data: [] as T[], error: (err.message ?? "Bad Request") as string };
   }
-  return { data: allData, error: null as string | null };
+  return { data, error: null as string | null };
 }
 
 function normalizeEmail(value: unknown) {
@@ -307,15 +308,30 @@ function publicLinkWindowStatus(link: Pick<EventLink, "is_active" | "opens_at" |
   return { status: "ready" as const, message: "Sẵn sàng đăng ký." };
 }
 
-async function selectAllScopedBySeason<T>(client: any, table: string, columns: string, allowedSeasonIds?: string[]) {
+/**
+ * Class C. The scoped branch carried the same defect as the `/operations` recap
+ * read: a bare `.in("season_id", …)` with no `.range()`, while the unscoped
+ * branch paged. PostgREST capped it at `db-max-rows` with `error: null`, so a
+ * scoped admin and an unscoped super admin saw different event data for the
+ * same season. Both branches now page under the same ordering key.
+ */
+async function selectAllScopedBySeason<T extends Record<string, any>>(
+  client: any,
+  table: PagedTable,
+  columns: string,
+  allowedSeasonIds?: string[]
+) {
   if (!allowedSeasonIds) return selectAll<T>(client, table, columns);
   if (allowedSeasonIds.length === 0) return { data: [] as T[], error: null as string | null };
-  const { data, error } = await client.from(table).select(columns).in("season_id", allowedSeasonIds);
+  const { data, error } = await readAllPages<T>(table, columns, (projection) =>
+    client.from(table).select(projection).in("season_id", allowedSeasonIds)
+  );
   if (error) {
     log(`${table} scoped select failed`, error);
-    return { data: [] as T[], error: error.message as string };
+    const err = error as { message?: string };
+    return { data: [] as T[], error: (err.message ?? "Bad Request") as string };
   }
-  return { data: (data ?? []) as T[], error: null as string | null };
+  return { data, error: null as string | null };
 }
 
 async function writeAdminAudit(client: any, input: {

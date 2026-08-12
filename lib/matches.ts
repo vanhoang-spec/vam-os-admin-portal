@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { readAllPages, type PagedTable } from "@/lib/paged-read";
 import { canManageMatches } from "@/lib/permissions";
 import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -98,6 +99,11 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
+/**
+ * Class A — structurally bounded. `people.id` is the primary key, so a chunk of
+ * at most `step` ids can return at most `step` rows, two hundred being far
+ * below the PostgREST row cap. No pagination is needed or possible here.
+ */
 async function selectPeopleByIds(client: any, ids: string[]) {
   const rows: JsonRecord[] = [];
   const step = 200;
@@ -114,18 +120,31 @@ async function selectPeopleByIds(client: any, ids: string[]) {
   return rows;
 }
 
-async function selectRowsByColumn(client: any, table: string, columns: string, column: string, values: string[]) {
+/**
+ * Class C. Unlike `selectPeopleByIds` the filter column here is NOT unique — a
+ * person can hold profiles in several intake batches and a season holds many
+ * batches — so a 200-value chunk has no structural row bound and could be
+ * capped silently. Each chunk is now paged under the table's ordering key.
+ *
+ * Error handling is deliberately unchanged: a failed chunk is logged and
+ * skipped, as before. That is a pre-existing partial-result behaviour of the
+ * matching workspace and is out of scope for this remediation; it is recorded
+ * as a known finding rather than altered here.
+ */
+async function selectRowsByColumn(client: any, table: PagedTable, columns: string, column: string, values: string[]) {
   const rows: JsonRecord[] = [];
   const step = 200;
   for (let index = 0; index < values.length; index += step) {
     const chunk = values.slice(index, index + step);
     if (!chunk.length) continue;
-    const { data, error } = await client.from(table).select(columns).in(column, chunk);
+    const { data, error } = await readAllPages<JsonRecord>(table, columns, (projection) =>
+      client.from(table).select(projection).in(column, chunk)
+    );
     if (error) {
       log(`${table} chunk lookup failed`, error);
       continue;
     }
-    rows.push(...((data ?? []) as JsonRecord[]));
+    rows.push(...data);
   }
   return rows;
 }

@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { readBounded } from "@/lib/paged-read";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import type { JsonRecord } from "@/lib/types";
@@ -65,17 +66,28 @@ function isUuidLike(value: string | null | undefined) {
   return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
 }
 
+/**
+ * Class B. `seasons` and `programs` are reference relations — tens of rows, one
+ * per operating season and program — and every scope decision on the site is
+ * derived from them. `readBounded` asserts that bound: if either relation ever
+ * grows past it the read fails instead of silently returning a partial catalog,
+ * which would quietly shrink every admin's resolved scope.
+ */
 async function loadSeasonsAndPrograms() {
   const client = getSupabaseServiceRoleClient();
   if (!client) return { seasons: [] as JsonRecord[], programs: [] as JsonRecord[] };
   const [seasonsRes, programsRes] = await Promise.all([
-    client.from("seasons").select("id,code,name,program_id"),
-    client.from("programs").select("id,code,name")
+    readBounded<JsonRecord>("seasons", client.from("seasons").select("id,code,name,program_id")),
+    readBounded<JsonRecord>("programs", client.from("programs").select("id,code,name"))
   ]);
-  return {
-    seasons: (seasonsRes.data ?? []) as JsonRecord[],
-    programs: (programsRes.data ?? []) as JsonRecord[]
-  };
+  if (seasonsRes.error || programsRes.error) {
+    console.error("[program-scope] season/program catalog read failed", {
+      seasons: (seasonsRes.error as { message?: string } | null)?.message,
+      programs: (programsRes.error as { message?: string } | null)?.message
+    });
+    return { seasons: [] as JsonRecord[], programs: [] as JsonRecord[] };
+  }
+  return { seasons: seasonsRes.data, programs: programsRes.data };
 }
 
 export const getAdminScopeContext = cache(async (): Promise<AdminScopeContext> => {

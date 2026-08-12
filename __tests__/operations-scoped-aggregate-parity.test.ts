@@ -8,11 +8,15 @@
  * recaps in Production the Admin lost every row past the cap — including all of
  * the newest month — and the loss surfaced as legitimate zero activity.
  *
- * The mock below reproduces the cap exactly: a `select()` with no `.range()`
- * returns at most MAX_ROWS rows, with `error: null`. Any loader that does not
- * page is therefore silently truncated here, the same way it is in Production.
+ * The shared fake in `__tests__/support/fake-postgrest.ts` reproduces both
+ * halves of the real failure: the cap is applied silently, AND a read with no
+ * `ORDER BY` comes back in an arbitrary order. "Old behaviour" is not simulated
+ * by commentary — `readOldUnpagedWay` below issues the exact query the blocked
+ * commit's parent issued, so the Production symptom is reproduced inside the
+ * test rather than asserted about.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createFakeDb, fakeClient, DEFAULT_MAX_ROWS, requestsFor } from "./support/fake-postgrest";
 import { getOperationsData } from "@/lib/data";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { getAdminScopeContext, getScopeFilter, canReadSeason, SCOPE_RESOLUTION_ERROR } from "@/lib/program-scope";
@@ -21,7 +25,7 @@ import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/sup
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 
 /** PostgREST `db-max-rows` on Supabase hosted. */
-const MAX_ROWS = 1000;
+const MAX_ROWS = DEFAULT_MAX_ROWS;
 
 const SEASON_CODE = "UEHM-S11";
 const UEH_SEASON = "11111111-1111-4111-8111-111111111111";
@@ -29,53 +33,31 @@ const HAM_SEASON = "22222222-2222-4222-8222-222222222222";
 const UEH_PROGRAM = "33333333-3333-4333-8333-333333333333";
 const HAM_PROGRAM = "44444444-4444-4444-8444-444444444444";
 
-const { tables, rpcResult, mockFrom, mockRpc } = vi.hoisted(() => {
-  const tables: Record<string, any[]> = {};
-  const errors: Record<string, any> = {};
-  const rpcResult: { value: any } = { value: { data: null, error: { code: "PGRST202", message: "not found" } } };
-  return { tables, errors, rpcResult, mockFrom: vi.fn(), mockRpc: vi.fn() };
-});
+const { rpcResult, mockRpc } = vi.hoisted(() => ({
+  rpcResult: { value: { data: null, error: { code: "PGRST202", message: "not found" } } as any },
+  mockRpc: vi.fn()
+}));
 
-const tableErrors: Record<string, any> = {};
-
-function builder(rows: any[], error: any) {
-  const self: any = {
-    in(column: string, values: string[]) {
-      return builder(rows.filter((row) => values.includes(row[column])), error);
-    },
-    eq(column: string, value: unknown) {
-      return builder(rows.filter((row) => row[column] === value), error);
-    },
-    // PostgREST honours the requested window but never returns more than
-    // MAX_ROWS rows for it.
-    range(from: number, to: number) {
-      if (error) return Promise.resolve({ data: null, error });
-      const end = Math.min(to + 1, from + MAX_ROWS);
-      return Promise.resolve({ data: rows.slice(from, end), error: null });
-    },
-    maybeSingle() {
-      if (error) return Promise.resolve({ data: null, error });
-      return Promise.resolve({ data: rows[0] ?? null, error: null });
-    },
-    // No `.range()` was chained: the cap applies and nothing signals it.
-    then(resolve: any) {
-      if (error) return resolve({ data: null, error });
-      return resolve({ data: rows.slice(0, MAX_ROWS), error: null });
-    }
-  };
-  return self;
-}
+const db = createFakeDb();
+const tables = db.tables;
+const tableErrors = db.errors;
 
 function client() {
-  return {
-    from: (table: string) => ({
-      select: () => builder(tables[table] ?? [], tableErrors[table] ?? null)
-    }),
+  return fakeClient(db, {
     rpc: (...args: unknown[]) => {
       mockRpc(...args);
-      return Promise.resolve(rpcResult.value);
+      return rpcResult.value;
     }
-  };
+  });
+}
+
+/**
+ * The read `lib/data.ts` issued before the fix: a bare `.in()` with no
+ * `.range()` and no `ORDER BY`. Kept verbatim so the original defect stays
+ * provable from this suite even after the fixed loader is refactored again.
+ */
+async function readOldUnpagedWay(table: string, column: string, values: string[], columns: string) {
+  return client().from(table).select(columns).in(column, values);
 }
 
 vi.mock("server-only", () => ({}));
@@ -189,14 +171,104 @@ async function kpisFor(scope: any, month: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  for (const key of Object.keys(tables)) delete tables[key];
-  for (const key of Object.keys(tableErrors)) delete tableErrors[key];
+  db.reset();
   rpcResult.value = { data: null, error: { code: "PGRST202", message: "not found" } };
   seed();
-  const db = client();
-  vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(db as any);
-  vi.mocked(getSupabaseServerClient).mockReturnValue(db as any);
+  const supabase = client();
+  vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(supabase as any);
+  vi.mocked(getSupabaseServerClient).mockReturnValue(supabase as any);
   vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "admin-1", role: "admin", status: "active", auth_user_id: "auth-admin" } as any);
+});
+
+describe("Root cause: the Production bug, reproduced and then closed", () => {
+  it("R1. the old unpaged scoped read silently returns exactly 1000 rows with error null", async () => {
+    const { data, error } = await readOldUnpagedWay("mentoring_recaps", "season_id", [UEH_SEASON], "id,meeting_month");
+    expect(error).toBeNull();
+    expect(data).toHaveLength(MAX_ROWS);
+    // Nothing in the response distinguishes this from a complete read.
+  });
+
+  it("R2. the rows past the cap — including every July recap — are the ones lost", async () => {
+    const all = tables.mentoring_recaps.filter((row: any) => row.season_id === UEH_SEASON);
+    expect(all.length).toBeGreaterThan(MAX_ROWS);
+    const { data } = await readOldUnpagedWay("mentoring_recaps", "season_id", [UEH_SEASON], "id,meeting_month");
+    expect((data as any[]).length).toBeLessThan(all.length);
+    expect(all.filter((row: any) => row.meeting_month === "2026-07")).toHaveLength(18);
+  });
+
+  it("R3. the old read produced scoped recapCount 0 while the full aggregate was 18", async () => {
+    const { data: truncated } = await readOldUnpagedWay(
+      "mentoring_recaps",
+      "season_id",
+      [UEH_SEASON],
+      "id,season_id,meeting_month,status,mentor_person_id,mentee_person_id"
+    );
+    const oldKpis = computeProgramOperationsKpis({
+      seasons: tables.seasons as any,
+      matches: tables.matches as any,
+      recaps: truncated as any,
+      events: tables.events as any,
+      eventParticipations: tables.event_participations as any,
+      seasonCode: SEASON_CODE,
+      selectedMonth: "2026-07"
+    });
+    const fixed = await kpisFor(UEHM_SCOPE, "2026-07");
+
+    // The exact Production divergence: same season, same month, two answers.
+    expect(oldKpis.recapCount).toBe(0);
+    expect(oldKpis.activeMenteeCount).toBe(0);
+    expect(oldKpis.activeMentorCount).toBe(0);
+    expect(fixed.kpis.recapCount).toBe(18);
+    expect(fixed.kpis.activeMenteeCount).toBe(15);
+    expect(fixed.kpis.activeMentorCount).toBe(3);
+    expect(fixed.kpis.recapCount).not.toBe(oldKpis.recapCount);
+  });
+
+  it("R4. every scoped recap page is ordered and carries an identical filter set", async () => {
+    await getOperationsData(UEHM_SCOPE);
+    // `/operations` issues several recap reads. Isolate the KPI read — the one
+    // that broke in Production — by its projection; `recap_url` appears only in
+    // OPS_RECAPS_SELECT, and that read is issued exactly once per page load.
+    const pages = requestsFor(db, "mentoring_recaps").filter((request) => request.columns.includes("recap_url"));
+    expect(pages.length).toBeGreaterThan(2);
+    // Reverting the ordering key would leave `order` empty on every page.
+    for (const page of pages) expect(page.order).toEqual(["id:asc"]);
+    // Every page must carry the same scope predicate. The only legitimate
+    // difference between pages is the keyset cursor (`id > :last`), so it is
+    // stripped before comparing; anything else differing would mean a page read
+    // a different slice of the table than its siblings.
+    const scopeFilters = new Set(
+      pages.map((page) =>
+        JSON.stringify(
+          (JSON.parse(page.filters) as any[]).filter((filter) => !(filter.kind === "gt" && filter.column === "id"))
+        )
+      )
+    );
+    expect(scopeFilters.size).toBe(1);
+    expect(JSON.parse(Array.from(scopeFilters)[0])).toEqual([{ kind: "in", column: "season_id", values: [UEH_SEASON] }]);
+    // Every page after the first must carry a keyset cursor. Without it the
+    // read is offset paging wearing an ORDER BY, and rows can shift between
+    // pages under concurrent writes.
+    const cursors: string[] = [];
+    for (const page of pages.slice(1)) {
+      const cursor = (JSON.parse(page.filters) as any[]).find((filter) => filter.kind === "gt" && filter.column === "id");
+      expect(cursor).toBeDefined();
+      cursors.push(String(cursor.value));
+    }
+    // Cursors advance strictly, so no two pages can overlap.
+    expect([...cursors].sort()).toEqual(cursors);
+    expect(new Set(cursors).size).toBe(cursors.length);
+    // The read terminates on an empty page, never on a short one.
+    expect(pages[pages.length - 1].returned).toBe(0);
+  });
+
+  it("R5. the scoped read returns each recap exactly once — no gaps, no duplicates", async () => {
+    const data = await getOperationsData(UEHM_SCOPE);
+    const expected = tables.mentoring_recaps.filter((row: any) => row.season_id === UEH_SEASON).map((row: any) => row.id).sort();
+    const seen = data.recaps.data.map((row: any) => row.id).sort();
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen).toEqual(expected);
+  });
 });
 
 describe("Operations aggregate parity across roles", () => {
