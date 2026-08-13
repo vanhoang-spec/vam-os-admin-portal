@@ -56,9 +56,139 @@ export const PROD_T1_PATH = join(
   "T1_audit_action_type_compat.sql"
 );
 
+/**
+ * The completed S12 release transaction that installed the historical Probe C
+ * artifact `public.vam069_trusted_context_probe()`. R4 reads it so the
+ * "unrelated vam069_ function" the guards must tolerate is a real repository
+ * artifact, not a string invented by a test.
+ */
+export const PROD_T3_PATH = join(
+  ROOT,
+  "VAM_OS_PROD_S12_RELEASE_20260809",
+  "apply",
+  "T3_membership_lifecycle_objects.sql"
+);
+
 const migration = readFileSync(MIGRATION_069_PATH, "utf8");
 const prodBaseline = readFileSync(PROD_BASELINE_PATH, "utf8");
 const prodT1 = readFileSync(PROD_T1_PATH, "utf8");
+const prodT3 = readFileSync(PROD_T3_PATH, "utf8");
+
+// ===========================================================================
+// 0. THE MIGRATION-OWNED OBJECT INVENTORY (R4)
+// ===========================================================================
+
+/**
+ * R4. The unapplied/partial-schema guards in preflight.sql and apply.sql
+ * Section 0 must express "no object belonging to THIS migration exists". R3
+ * expressed something broader — "no function anywhere carries the vam069_
+ * prefix" — and the two are not the same set.
+ *
+ * The prefix is NOT owned by migration 069. The completed Production S12
+ * release installed `public.vam069_trusted_context_probe()` in its T3, and it
+ * is live on Production. Under the R3 rule a completely unapplied Production
+ * refused with FUNCTION_PRESENT, which is a false positive, and rollback.sql's
+ * post-condition would have declared a correct rollback FAILED for the same
+ * reason.
+ *
+ * These constants are derived from the canonical migration itself, so the
+ * inventory the SQL guards hard-code cannot drift away from the objects the
+ * migration actually creates.
+ */
+export interface OwnedFunction {
+  schema: string;
+  name: string;
+  qualifiedName: string;
+  /** The declared parameter TYPE vector, e.g. `""` or `"uuid, text, text, text, text"`. */
+  argTypes: string;
+}
+
+/**
+ * Every function `create or replace function`d by migration 069, with its
+ * declared parameter type vector. Parsed with a balanced-paren scan rather than
+ * a regex over the argument list, because the RPC's parameter list spans lines.
+ */
+export function ownedFunctionsFromMigration(): OwnedFunction[] {
+  const out: OwnedFunction[] = [];
+  const head = /create or replace function\s+([a-z_][a-z0-9_]*)\.([a-z0-9_]+)\s*\(/g;
+  let m: RegExpExecArray | null;
+
+  while ((m = head.exec(migration)) !== null) {
+    const open = head.lastIndex - 1;
+    let depth = 0;
+    let close = -1;
+    for (let i = open; i < migration.length; i += 1) {
+      const ch = migration[i];
+      if (ch === "(") depth += 1;
+      else if (ch === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          close = i;
+          break;
+        }
+      }
+    }
+    if (close === -1) {
+      throw new Error(`migration 069: unbalanced parameter list for ${m[1]}.${m[2]}`);
+    }
+    const argTypes = migration
+      .slice(open + 1, close)
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean)
+      // "p_actor_admin_user_id uuid" -> "uuid"; a bare "uuid" stays "uuid".
+      .map((p) => {
+        const parts = p.split(/\s+/);
+        return parts.length >= 2 ? parts.slice(1).join(" ") : parts[0];
+      })
+      .join(", ");
+
+    out.push({
+      schema: m[1],
+      name: m[2],
+      qualifiedName: `${m[1]}.${m[2]}`,
+      argTypes
+    });
+  }
+
+  if (out.length === 0) {
+    throw new Error("migration 069 creates no functions — the parse is wrong");
+  }
+  return out.sort((a, b) => a.qualifiedName.localeCompare(b.qualifiedName));
+}
+
+export const M069_OWNED_FUNCTIONS = ownedFunctionsFromMigration();
+
+/** The bare names the SQL guards match on, sorted, as they appear in the arrays. */
+export const M069_OWNED_FUNCTION_NAMES = M069_OWNED_FUNCTIONS.map((f) => f.name);
+
+/**
+ * The relation / trigger / constraint half of the inventory. Unlike `vam069_`,
+ * the `application_form_controls` prefix IS this migration's own object
+ * namespace: every catalog name it can match is a name migration 069 creates.
+ * That is why the guards keep a prefix scan there and only there.
+ */
+export const M069_OWNED_OBJECT_PREFIX = "application_form_controls";
+
+/**
+ * TEST FIXTURE, not a rule. The vam069_-prefixed functions that exist in this
+ * repository and are NOT owned by migration 069 — read out of the completed S12
+ * release so the fixture cannot describe a function that no longer exists.
+ *
+ * Nothing in the M069 SQL names these. The guards tolerate them because they
+ * are not in the owned inventory, never because they appear on a list.
+ */
+export function foreignVam069FunctionsFromRelease(): string[] {
+  const names = new Set<string>();
+  const re = /create (?:or replace )?function\s+public\.(vam069_[a-z0-9_]+)\s*\(/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prodT3)) !== null) {
+    if (!M069_OWNED_FUNCTION_NAMES.includes(m[1])) names.add(m[1]);
+  }
+  return Array.from(names).sort();
+}
+
+export const FOREIGN_VAM069_FUNCTIONS = foreignVam069FunctionsFromRelease();
 
 // ===========================================================================
 // 1. CHECK constraints — exact normalised catalog definitions

@@ -11,6 +11,7 @@ Production. Both forms are CLOSED and stay CLOSED.
 | Prerequisite | S12 release R4.2 applied and verified (specifically T1) |
 | Binding | `UEHM` / `UEHM-S12` / `UEHM-S12-B1` |
 | Initial state | mentor = `closed`, mentee = `closed` |
+| Round | R4 — the unapplied guard is scoped to migration-owned objects ([§4.1](#41-what-this-migration-owns-r4)) |
 
 ---
 
@@ -185,12 +186,138 @@ so a caller reaching the database by another route is still refused.
 | `preflight.sql` | READ-ONLY. 27 refusal conditions. Emits a pass token, an audit column seal, an audit contract seal and an audit vocabulary seal. |
 | `apply.sql` | One transaction. Section 0 re-asserts the **whole** baseline; **does not depend on preflight having been run.** |
 | `verifier.sql` | READ-ONLY. 24 checks, all must PASS. Each one compares a complete definition, not a fragment of one. |
-| `rollback.sql` | Refuses while any form is open. Never deletes audit history. |
+| `rollback.sql` | Refuses while any form is open. Never deletes audit history. Drops only migration-owned identities — never a `vam069_*` prefix match. |
 
 The repository migration `supabase_migrations/069_application_form_controls.sql`
 is identical in effect; `apply.sql` adds only the header and the Section 0
 re-assertion. Everything from `-- ── 1. The control table` onward is
 byte-identical between the two, asserted by test.
+
+### 4.1 What this migration owns (R4)
+
+R3's unapplied guard refused when **any** function matched `vam069_*`. That is
+broader than the fact it needs to prove, and on Production the two sets are not
+the same.
+
+**The finding.** An owner-run, read-only Production forensic found exactly one
+function under that prefix:
+
+```
+public.vam069_trusted_context_probe()
+  language sql, SECURITY DEFINER, owner postgres, search_path=public
+  EXECUTE: postgres + service_role
+  body calls public.vam063_trusted_api_role()
+  probe_version = 'VAM_PROD_S12_PROBE_C_v1'
+```
+
+It is a legitimate historical artifact of the **completed** Production S12
+release — `VAM_OS_PROD_S12_RELEASE_20260809/apply/T3_membership_lifecycle_objects.sql`,
+Section 3, the Probe C runtime proof that gated T4. It has nothing to do with
+application intake.
+
+The same forensic proved M069 itself was entirely **unapplied**:
+`application_form_controls` absent, no M069 relation, trigger or control
+constraint, and the canonical pre-M069 52-value audit vocabulary intact. R3's
+preflight refused that database with `[FUNCTION_PRESENT]` anyway. A false
+positive — and `rollback.sql` carried the mirror-image defect: its
+post-condition asserted the *prefix* was unused, so a **correct** rollback on
+Production would have been reported `ROLLBACK FAILED` because Probe C survived
+it, exactly as it should.
+
+**The rule, restated.** The guards now express
+
+> objects belonging to THIS migration must be absent
+
+and not
+
+> no object anywhere may use the `vam069` prefix.
+
+Nothing is whitelisted by name. `vam069_trusted_context_probe` appears in **no**
+M069 SQL artifact — a test asserts that, so nobody can "fix" a future collision
+by adding an exemption.
+
+**The migration-owned inventory**, derived from
+`supabase_migrations/069_application_form_controls.sql` by
+`__tests__/support/m069-canonical-definitions.ts`, which fails the build if the
+arrays hard-coded in `preflight.sql` and `apply.sql` Section 0 drift from it:
+
+| kind | object |
+|---|---|
+| function | `public.vam069_assert_control_binding()` |
+| function | `public.vam069_set_application_form_state(uuid, text, text, text, text)` |
+| relation | `public.application_form_controls` (table) |
+| relation | `application_form_controls_pkey` (implicit PK index) |
+| relation | `application_form_controls_batch_role_key` (unique index) |
+| trigger | `application_form_controls_binding` |
+| constraint | `application_form_controls_pkey`, `application_form_controls_role_check`, `application_form_controls_state_check`, and the four `application_form_controls_*_fkey` rows |
+
+**Signature-independent, on purpose.** The function test matches the two owned
+*names* in `public` at any signature, because both collisions are unsafe: the
+intended identity already present would be silently **replaced** by
+`create or replace function`, overwriting a body this package cannot vouch for;
+a conflicting **overload** under an owned name would **survive** both the apply
+and the rollback as a stray SECURITY DEFINER function under a name this
+migration owns. The refusal prints the full identity of whatever it found.
+
+**Why the other prefix stays.** The relation / trigger / constraint scan still
+matches `application_form_controls%`. Unlike `vam069_`, that prefix *is* this
+migration's own object namespace — every catalog name it can match is a name
+migration 069 creates — so there a prefix scan is exact ownership, and it is
+what catches a half-applied package (a trigger without its table, an index left
+by a failed rollback).
+
+**What R4 does not change.** No other refusal is weakened or removed: the exact
+52-value vocabulary and its set-equality proof, the complete 13-column audit
+INSERT contract, the `UEHM → UEHM-S12 → UEHM-S12-B1` cardinality and parentage,
+the sealed verifier definitions, RLS and grants, and the CLOSED/CLOSED seed are
+all exactly as reviewed in R3. The preflight token is unchanged. Canonical
+migration 069 is unchanged — this is a guard defect, not a runtime one — and
+`verifier.sql` needed no change, because it already located both functions by
+exact name and judged them by sealed body identity.
+
+Two evidence columns are added to the preflight's summary row:
+`m069_owned_objects_present` (expected `<none>` — the unapplied proof stated
+positively) and `unrelated_vam069_functions`, which on the reviewed Production
+baseline reads exactly `public.vam069_trusted_context_probe()`. Both the
+preflight and Section 0 also `RAISE NOTICE` naming any unowned prefixed
+function they saw, so the transcript shows the exclusion was deliberate.
+
+#### R4, executed on disposable PostgreSQL
+
+`__tests__/m069-r4-unapplied-guard-live.test.ts` builds a Production-shaped
+baseline **from repository artifacts only** — `prod_baseline_reproduction.sql`
+plus the completed release `T1`…`T4` — so the shape under test carries the
+historical `vam069_trusted_context_probe()`, no M069 object, the canonical 52
+vocabulary and the canonical S12 chain. It is opt-in (`M069_LIVE_PG_URL`,
+local hosts only, because it creates and drops throwaway databases) and it
+refuses any non-local host. Executed on PostgreSQL 15.18:
+
+| scenario | result |
+|---|---|
+| baseline with no `vam069` function at all | preflight **PASS** |
+| baseline with **only** `vam069_trusted_context_probe()` | preflight **PASS**, no `FUNCTION_PRESENT` |
+| same baseline, `apply.sql` | Section 0 passes, transaction **COMMIT**, both rows `closed` |
+| intended binding function pre-exists | preflight and Section 0 both refuse `[FUNCTION_PRESENT] public.vam069_assert_control_binding()` |
+| conflicting overload `vam069_assert_control_binding(int)` | both refuse, identity reported as `(integer)` |
+| intended toggle RPC pre-exists | both refuse, naming the five named parameters |
+| conflicting overload `vam069_set_application_form_state(text)` | both refuse |
+| `application_form_controls` pre-exists | both refuse `[ALREADY_APPLIED]` |
+| leftover owned index / trigger / constraint name | both refuse `[PARTIAL_M069]`, naming the object |
+| apply → verifier | **24/24 PASS** |
+| rollback | completes; owned functions gone, control table gone |
+
+The probe's identity seal —
+`sha256(prosrc) = 521b583078a568b4b1d1c4fad4ed563aac4a9ba900e12eb97802b7d954f55ca6`,
+owner `postgres`, `search_path=public`, `postgres=X/postgres service_role=X/postgres` —
+is **byte-identical before apply, after apply and after rollback**, and
+`select probe_version from public.vam069_trusted_context_probe()` still returns
+`VAM_PROD_S12_PROBE_C_v1` at the end. After rollback the only `vam069_`
+function left in the database is that probe.
+
+The ninth scenario proves the verifier is not fooled the other way: with M069
+applied and then **only** the two owned functions dropped, the probe still
+carries the prefix, and V09/V13/V14/V19/V20/V21/V22/V23 all report `FAIL` with
+detail `<none>` — the verifier never matched the probe.
 
 ### apply.sql is self-contained
 
@@ -201,7 +328,7 @@ mutation:
 |---|---|
 | **A** | environment identity — no `vam062_*` functions, i.e. not Staging |
 | **B** | `admin_users` exists; `id`/`email`/`role`/`status` all present, `id` is `uuid`, `role`/`status` are text-comparable, `id` carries a primary/unique key — the exact prerequisites of the SECURITY DEFINER authorization path and of the `updated_by` FK |
-| **C** | M069 is completely unapplied — no control table, no `vam069_*` function, no leftover `application_form_controls*` relation, trigger or constraint |
+| **C** | M069 is completely unapplied — no control table, no function carrying a **migration-owned identity**, no leftover `application_form_controls*` relation, trigger or constraint (see [§4.1](#41-what-this-migration-owns-r4)) |
 | **D** | exactly one `UEHM`; exactly one `UEHM-S12` whose `program_id` is that `UEHM`; exactly one `UEHM-S12-B1` whose `season_id` is that exact `UEHM-S12`; no S11 resolution; the code-join the seed performs resolves to exactly one chain |
 | **E** | `admin_audit_log` exists with the 13 post-release columns; the four legacy columns are nullable-or-defaulted; **the complete audit INSERT contract holds for all 13 columns** (below); exactly one `action_type` CHECK, found by definition, named as expected, VALIDATED, parseable, duplicate-free, **set-equal to the canonical 52**, and not already admitting `set_application_form_state` |
 | **F** | no conflicting control rows |
@@ -488,6 +615,15 @@ satisfy a constraint.
 
 **Rolling back leaves both forms CLOSED** (the gate fails closed with no
 control table). That is safe, but it is not a way to keep recruitment running.
+
+Every `DROP` in `rollback.sql` names an exact identity — the table, its trigger,
+`public.vam069_assert_control_binding()` and
+`public.vam069_set_application_form_state(uuid, text, text, text, text)`. None
+of them is a prefix match, so the file cannot reach
+`public.vam069_trusted_context_probe()` or any other object this migration does
+not own; it names them in a `NOTICE` before it starts, and its post-condition
+asserts the two owned identities are gone rather than asserting the prefix is
+unused. See [§4.1](#41-what-this-migration-owns-r4).
 
 ---
 

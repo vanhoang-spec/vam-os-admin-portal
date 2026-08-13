@@ -23,6 +23,21 @@
 -- REFUSES if any control row is not 'closed', so a live recruitment cannot be
 -- silently terminated by this script. Override deliberately by closing the
 -- forms first.
+--
+-- WHAT THIS FILE MAY REMOVE, AND WHAT IT MAY NOT
+-- Only the objects migration 069 OWNS:
+--   public.vam069_set_application_form_state(uuid, text, text, text, text)
+--   public.vam069_assert_control_binding()
+--   public.application_form_controls (with its trigger, index and constraints)
+--   and the set_application_form_state audit value, conditionally.
+--
+-- The vam069_ PREFIX is not owned by this migration. Production carries
+-- public.vam069_trusted_context_probe() from the completed S12 release (T3
+-- Section 3 — Probe C). It is not an application-intake object. Every DROP
+-- below names an exact identity, never a prefix, so this file cannot reach it,
+-- and the post-condition asserts the two owned identities are gone rather than
+-- asserting the prefix is unused — which would have failed on Production while
+-- a correct rollback had in fact completed.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 begin;
@@ -51,7 +66,28 @@ begin
 end
 $m069_rollback_guard$;
 
+-- Name, before touching anything, the prefixed functions this rollback will
+-- NOT drop. Evidence in the transcript that the exclusion is deliberate.
+do $m069_not_ours$
+declare
+  v_txt text;
+begin
+  select string_agg('public.' || p.proname
+                    || '(' || pg_get_function_identity_arguments(p.oid) || ')',
+                    ', ' order by p.proname)
+    into v_txt
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname like 'vam069\_%'
+    and p.proname <> all (array['vam069_assert_control_binding',
+                                'vam069_set_application_form_state']);
+  if v_txt is not null then
+    raise notice 'M069 ROLLBACK: vam069_-prefixed function(s) NOT owned by this migration will be LEFT IN PLACE: %. On Production this is the completed S12 release Probe C artifact.', v_txt;
+  end if;
+end
+$m069_not_ours$;
+
 -- ── 1. Drop the mutation function ───────────────────────────────────────────
+-- Exact identity. Not `vam069_*`.
 drop function if exists public.vam069_set_application_form_state(uuid, text, text, text, text);
 
 -- ── 2. Drop the table (takes its trigger, index and constraints with it) ────
@@ -120,15 +156,29 @@ $m069_vocab$;
 
 -- ── 4. Post-conditions ──────────────────────────────────────────────────────
 do $m069_rollback_post$
+declare
+  v_txt text;
 begin
   if to_regclass('public.application_form_controls') is not null then
     raise exception 'M069 ROLLBACK FAILED: application_form_controls still exists.';
   end if;
-  if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public' and p.proname like 'vam069\_%') then
-    raise exception 'M069 ROLLBACK FAILED: a vam069_* function still exists.';
+  -- The MIGRATION-OWNED identities must be gone. Asserting the vam069_ prefix
+  -- is unused instead would fail on Production, where the completed S12
+  -- release's Probe C function legitimately carries that prefix and is none of
+  -- this migration's business. Any signature under an owned name still counts:
+  -- a stray overload left behind is a failed rollback.
+  select string_agg('public.' || p.proname
+                    || '(' || pg_get_function_identity_arguments(p.oid) || ')',
+                    ', ' order by p.proname)
+    into v_txt
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = any (array['vam069_assert_control_binding',
+                               'vam069_set_application_form_state']);
+  if v_txt is not null then
+    raise exception 'M069 ROLLBACK FAILED: migration-owned function(s) still exist: %.', v_txt;
   end if;
-  raise notice 'M069 ROLLBACK COMPLETE. Both public forms now resolve CLOSED via the gate fail-closed path.';
+  raise notice 'M069 ROLLBACK COMPLETE. Both public forms now resolve CLOSED via the gate fail-closed path. Functions this migration does not own were not touched.';
 end
 $m069_rollback_post$;
 

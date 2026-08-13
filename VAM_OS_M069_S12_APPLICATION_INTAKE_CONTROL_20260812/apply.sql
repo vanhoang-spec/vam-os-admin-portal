@@ -113,6 +113,46 @@ declare
     'updated_at#timestamp with time zone#omitted#^([a-z_]+\.)?(now\(\)|CURRENT_TIMESTAMP)$'
   ];
   v_admin_user_cols constant text[] := array['email','id','role','status'];
+  -- ══ MIGRATION-OWNED OBJECT INVENTORY ══════════════════════════════════════
+  -- The EXACT objects migration 069 creates. Byte-identical to the array in
+  -- preflight.sql, and proven so by test.
+  -- __tests__/support/m069-canonical-definitions.ts re-derives this list from
+  -- supabase_migrations/069_application_form_controls.sql and a test fails if
+  -- this copy disagrees, so the inventory cannot drift away from the migration.
+  --
+  --   functions    public.vam069_assert_control_binding()
+  --                public.vam069_set_application_form_state(
+  --                  uuid, text, text, text, text)
+  --   relations    public.application_form_controls          (table)
+  --                application_form_controls_pkey            (implicit PK index)
+  --                application_form_controls_batch_role_key  (unique index)
+  --   trigger      application_form_controls_binding
+  --   constraints  application_form_controls_pkey,
+  --                application_form_controls_role_check,
+  --                application_form_controls_state_check and the four
+  --                application_form_controls_*_fkey rows
+  --
+  -- WHY THE FUNCTION TEST MATCHES NAMES AND NOT THE vam069_ PREFIX.
+  -- The prefix is not owned by this migration. The completed S12 release
+  -- installed public.vam069_trusted_context_probe() (release T3 Section 3 —
+  -- Probe C), which is live on Production, is not an application-intake object,
+  -- and is neither created by this file nor dropped by rollback.sql. A prefix
+  -- test aborts a perfectly unapplied database because of it. The condition
+  -- this guard must express is "no object belonging to THIS migration exists",
+  -- so it tests the two owned names in schema public.
+  --
+  -- It matches those names at ANY signature, deliberately, because both cases
+  -- are unsafe:
+  --   * the intended identity already present would be silently REPLACED by
+  --     Section 2 / Section 5 below, overwriting a body this package did not
+  --     install and cannot vouch for;
+  --   * a conflicting overload under an owned name would SURVIVE both the apply
+  --     and the rollback as a stray SECURITY DEFINER function under a name this
+  --     migration owns.
+  v_owned_function_names constant text[] := array[
+    'vam069_assert_control_binding',
+    'vam069_set_application_form_state'
+  ];
   -- ══ CANONICAL PRE-M069 AUDIT VOCABULARY (52) ══════════════════════════════
   -- The exact list installed by the S12 release T1, Section 2. This array is
   -- the ONE canonical representation shared by preflight.sql, this block,
@@ -183,13 +223,36 @@ begin
     raise exception 'M069 ABORTED [ALREADY_APPLIED]: application_form_controls already exists. Run verifier.sql instead.';
   end if;
 
-  select count(*) into v_n
+  -- EXACT IDENTITY, per the migration-owned inventory declared above. Every
+  -- function found under an owned name is reported with its full identity, so
+  -- the abort names precisely what collides.
+  select string_agg('public.' || p.proname
+                    || '(' || pg_get_function_identity_arguments(p.oid) || ')',
+                    ', ' order by p.proname, pg_get_function_identity_arguments(p.oid))
+    into v_txt
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and p.proname like 'vam069\_%';
-  if v_n <> 0 then
-    raise exception 'M069 ABORTED [FUNCTION_PRESENT]: % vam069_* function(s) already exist.', v_n;
+  where n.nspname = 'public' and p.proname = any (v_owned_function_names);
+  if v_txt is not null then
+    raise exception 'M069 ABORTED [FUNCTION_PRESENT]: function(s) carrying a migration-owned identity already exist: %. M069 has been applied here, or something else claimed one of these names. Run verifier.sql, or roll the partial state back, before applying.', v_txt;
   end if;
 
+  -- Not an abort — evidence. Prefixed functions this migration does not own are
+  -- named in the transcript so the reader can see the guard considered them and
+  -- deliberately let them stand.
+  select string_agg('public.' || p.proname
+                    || '(' || pg_get_function_identity_arguments(p.oid) || ')',
+                    ', ' order by p.proname, pg_get_function_identity_arguments(p.oid))
+    into v_txt
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname like 'vam069\_%'
+    and p.proname <> all (v_owned_function_names);
+  if v_txt is not null then
+    raise notice 'M069: vam069_-prefixed function(s) NOT owned by this migration are present and are left untouched: %. They are not application-intake objects; this file does not create them and rollback.sql does not drop them.', v_txt;
+  end if;
+
+  -- The relation, trigger and constraint half of the inventory above. Unlike
+  -- vam069_, the application_form_controls prefix IS this migration's own
+  -- object namespace: every name it can match is a name migration 069 creates.
   select string_agg(obj, ', ' order by obj) into v_txt from (
     select 'relation ' || c.relname as obj
     from pg_class c join pg_namespace n on n.oid = c.relnamespace
