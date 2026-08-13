@@ -6,7 +6,7 @@ import { availableMembershipActions, MEMBERSHIP_ACTION_LABELS, membershipOperati
 import { SubmitButton } from "@/components/submit-button";
 
 type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; };
-type Option = { id: string; label: string };
+type Option = { id: string; label: string; code?: string };
 
 function Feedback({ state }: { state: typeof initialMembershipLifecycleState }) {
   return state.message ? <p role="status" className={state.ok ? "text-sm text-green-700" : "text-sm text-red-700"}>{state.message}</p> : null;
@@ -82,18 +82,39 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
   }, [addState]);
 
   const handleAddSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    if (pendingMembershipId === "add_new") {
+    // Only block if we already submitted THIS form type.
+    const buttonName = (event.nativeEvent as SubmitEvent).submitter?.getAttribute("name") || "add_new";
+    if (pendingMembershipId === buttonName) {
       event.preventDefault();
       return;
     }
-    if (!window.confirm("Xác nhận thêm vai trò active cho person này?")) {
+    if (!window.confirm(buttonName === "continue_s12" ? "Xác nhận tiếp tục sang Mùa 12?" : "Xác nhận thêm vai trò active cho person này?")) {
       event.preventDefault();
       return;
     }
-    setPendingMembershipId("add_new");
+    setPendingMembershipId(buttonName);
   };
 
   if (!enabled) return <p className="text-sm text-slate-600">Cần quyền operations hoặc full_access trong season để quản lý lifecycle.</p>;
+
+  const uehmProgram = programs.find((p) => p.code === "UEHM");
+  const s11Season = seasons.find((s) => s.code === "UEHM-S11");
+  const s12Season = seasons.find((s) => s.code === "UEHM-S12");
+
+  const missingS12Roles: { role: string; programId: string; seasonId: string; programLabel: string; seasonLabel: string }[] = [];
+
+  if (uehmProgram && s11Season && s12Season) {
+    const s11Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S11");
+    const s12Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S12");
+
+    for (const s11 of s11Memberships) {
+      if (!s12Memberships.some((s12) => s12.role === s11.role)) {
+        if (!missingS12Roles.some((m) => m.role === s11.role)) {
+          missingS12Roles.push({ role: s11.role, programId: uehmProgram.id, seasonId: s12Season.id, programLabel: uehmProgram.label, seasonLabel: s12Season.label });
+        }
+      }
+    }
+  }
 
   return (
     <div className="grid gap-4">
@@ -128,6 +149,31 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
         );
       })}
 
+      {missingS12Roles.map((missing) => (
+        <section key={`missing-s12-${missing.role}`} className="rounded-md border border-vam-line bg-slate-50 p-3">
+          <div className="mb-3 text-sm">
+            <strong>{missing.programLabel} / {missing.seasonLabel}</strong>
+            <span className="ml-2">{missing.role} · Chưa chuyển sang Mùa 12</span>
+          </div>
+          <form action={addAction} className="grid gap-2 lg:grid-cols-2" onSubmit={handleAddSubmit}>
+            <input type="hidden" name="person_id" value={personId} />
+            <input type="hidden" name="program_id" value={missing.programId} />
+            <input type="hidden" name="season_id" value={missing.seasonId} />
+            <input type="hidden" name="role" value={missing.role} />
+            <input type="hidden" name="reason" value="Tiếp tục tham gia Mùa 12" />
+            <SubmitButton
+              name="continue_s12"
+              disabled={pendingMembershipId === "continue_s12"}
+              pendingText="Đang xử lý..."
+              className="justify-self-start bg-vam-green px-3 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+            >
+              Tiếp tục sang Mùa 12
+            </SubmitButton>
+            {pendingMembershipId === "continue_s12" && <Feedback state={addState} />}
+          </form>
+        </section>
+      ))}
+
       <form action={addAction} className="grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3" onSubmit={handleAddSubmit}>
         <h3 className="font-medium">Thêm vai trò membership</h3>
         <input type="hidden" name="person_id" value={personId} />
@@ -146,13 +192,14 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
         <label className="text-sm">Vai trò<select name="role" required defaultValue="" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"><option value="" disabled>— Chọn vai trò —</option><option value="mentor">Mentor</option><option value="mentee">Mentee</option></select></label>
         <label className="text-sm">Lý do (không bắt buộc)<input name="reason" maxLength={500} className="mt-1 w-full rounded-md border border-vam-line px-3 py-2" /></label>
         <SubmitButton
+          name="add_new"
           disabled={pendingMembershipId === "add_new"}
           pendingText="Đang thêm vai trò..."
           className="justify-self-start bg-vam-green px-3 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
         >
           Thêm vai trò active
         </SubmitButton>
-        <Feedback state={addState} />
+        {pendingMembershipId === "add_new" && <Feedback state={addState} />}
       </form>
     </div>
   );
