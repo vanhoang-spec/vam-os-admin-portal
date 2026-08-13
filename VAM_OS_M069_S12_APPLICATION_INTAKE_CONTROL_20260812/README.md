@@ -182,9 +182,9 @@ so a caller reaching the database by another route is still refused.
 
 | file | role |
 |---|---|
-| `preflight.sql` | READ-ONLY. 25 refusal conditions. Emits a pass token, an audit column seal and an audit vocabulary seal. |
+| `preflight.sql` | READ-ONLY. 27 refusal conditions. Emits a pass token, an audit column seal, an audit contract seal and an audit vocabulary seal. |
 | `apply.sql` | One transaction. Section 0 re-asserts the **whole** baseline; **does not depend on preflight having been run.** |
-| `verifier.sql` | READ-ONLY. 24 checks, all must PASS. |
+| `verifier.sql` | READ-ONLY. 24 checks, all must PASS. Each one compares a complete definition, not a fragment of one. |
 | `rollback.sql` | Refuses while any form is open. Never deletes audit history. |
 
 The repository migration `supabase_migrations/069_application_form_controls.sql`
@@ -203,7 +203,7 @@ mutation:
 | **B** | `admin_users` exists; `id`/`email`/`role`/`status` all present, `id` is `uuid`, `role`/`status` are text-comparable, `id` carries a primary/unique key — the exact prerequisites of the SECURITY DEFINER authorization path and of the `updated_by` FK |
 | **C** | M069 is completely unapplied — no control table, no `vam069_*` function, no leftover `application_form_controls*` relation, trigger or constraint |
 | **D** | exactly one `UEHM`; exactly one `UEHM-S12` whose `program_id` is that `UEHM`; exactly one `UEHM-S12-B1` whose `season_id` is that exact `UEHM-S12`; no S11 resolution; the code-join the seed performs resolves to exactly one chain |
-| **E** | `admin_audit_log` exists with the 13 post-release columns; the four legacy columns are nullable-or-defaulted; exactly one `action_type` CHECK, found by definition, named as expected, VALIDATED, parseable, duplicate-free, **set-equal to the canonical 52**, and not already admitting `set_application_form_state` |
+| **E** | `admin_audit_log` exists with the 13 post-release columns; the four legacy columns are nullable-or-defaulted; **the complete audit INSERT contract holds for all 13 columns** (below); exactly one `action_type` CHECK, found by definition, named as expected, VALIDATED, parseable, duplicate-free, **set-equal to the canonical 52**, and not already admitting `set_application_form_state` |
 | **F** | no conflicting control rows |
 
 Any mismatch raises before the first mutation and the transaction aborts.
@@ -211,16 +211,74 @@ Running `preflight.sql` first is still recommended — it reports the same
 refusals read-only, without taking a lock — but **skipping it, or a baseline
 that drifted after it passed, cannot make the apply unsafe.**
 
+#### The complete `admin_audit_log` INSERT contract
+
+Thirteen column names existing was never evidence that the audit INSERT can
+succeed. Remove the default from NOT NULL `id`, `created_at` or `updated_at`
+and the name list is unchanged: the old Section 0 passed, M069 committed, the
+owner was told it was verified — and the **first** toggle then failed with
+`23502`, taking the state change down with it, because the state change and the
+audit row share one transaction. Change `details` from `jsonb` to `text` and it
+fails with `42804` instead. Both must abort **before** the first mutation.
+
+Section 0 and the preflight therefore check every column, in the class the
+INSERT actually puts it in. The contract below is derived from the accepted
+Production baseline — the 13-column shape in
+`VAM_OS_PROD_S12_RELEASE_20260809/validation/prod_baseline_reproduction.sql`,
+with the release T1 Section 1 legacy `NOT NULL` drops applied — combined with
+what migration 069's own audit INSERT writes into each column.
+
+| column | type | INSERT | what must hold |
+|---|---|---|---|
+| `action` | `text` | value `'set_application_form_state'` | type accepts the literal |
+| `action_type` | `text` | value `'set_application_form_state'` | type accepts the literal |
+| `actor_admin_user_id` | `uuid` | value `v_actor.id` (`admin_users.id`) | type is `uuid` |
+| `actor_email` | `text` | value `v_actor.email` (`admin_users.email`) | type is `text` |
+| `before_data` | `jsonb` | value `jsonb_build_object(...)` | type is `jsonb` |
+| `after_data` | `jsonb` | value `jsonb_build_object(...)` | type is `jsonb` |
+| `details` | `jsonb` | value `jsonb_build_object(...)` | type is `jsonb` |
+| `target_admin_user_id` | `uuid` | **literal NULL** | must be **nullable** |
+| `id` | `uuid` | omitted | NOT NULL ⇒ default of the `gen_random_uuid()` / `uuid_generate_v4()` family, or an identity/generated mechanism |
+| `created_at` | `timestamptz` | omitted | NOT NULL ⇒ default of the `now()` / `CURRENT_TIMESTAMP` family |
+| `updated_at` | `timestamptz` | omitted | NOT NULL ⇒ default of the `now()` / `CURRENT_TIMESTAMP` family |
+| `metadata` | `jsonb` | omitted | must be nullable (or defaulted) |
+| `target_email` | `text` | omitted | must be nullable (or defaulted) |
+
+Plus two catalog facts the INSERT also depends on: `admin_audit_log` must be an
+ordinary table, and it must not carry `FORCE ROW LEVEL SECURITY` — RLS merely
+being *enabled* is the accepted baseline and is fine, but FORCE would filter the
+SECURITY DEFINER INSERT even running as the table owner.
+
+The default-family check matters on its own: a default of `NULL::uuid`
+satisfies "has a default" and still violates NOT NULL at INSERT time. A column
+that is GENERATED or IDENTITY ALWAYS is refused wherever the INSERT supplies a
+value, because an explicit value into one is `428C9`.
+
+Every refusal names the offending column and the property it violates, under
+`[AUDIT_CONTRACT]` (or `[AUDIT_INSERT_BLOCKED]` for the two catalog facts). The
+contract array appears three times — the preflight guard, the preflight token
+CTE and apply Section 0 — and a test proves all three are identical to the one
+derived in `__tests__/support/m069-canonical-definitions.ts`, exactly the
+anti-drift arrangement the 52-value vocabulary already uses.
+
 Expected preflight token on the reviewed R4.2 baseline:
 
 ```
-M069:ABSENT:VOCAB52EXACT:VALIDATED:NULLABLE4:S12OK
+M069:ABSENT:VOCAB52EXACT:VALIDATED:NULLABLE4:AUDITCONTRACT13:S12OK
 ```
 
 `VOCAB52EXACT` is emitted only when the admitted set is **set-equal** to the
 canonical 52. A different 52-value list emits `VOCABDRIFT`, and the
 `audit_vocab_missing` / `audit_vocab_unexpected` columns name the values. (The
-previous token spelled this field `52`, which any 52-value list satisfied.)
+first version of the token spelled this field `52`, which any 52-value list
+satisfied.)
+
+`AUDITCONTRACT13` is emitted only when all 13 columns satisfy the contract
+above, evaluated by the same rules Section 0 applies. Anything else emits
+`AUDITCONTRACTDRIFT`, and `audit_contract_violations` names the columns.
+`NULLABLE4` is retained, but it was never this proof: it reported four legacy
+columns and said nothing about the three omitted NOT NULL columns whose
+defaults the INSERT depends on.
 
 Run every script with `set timezone = 'UTC'` or the seals are not comparable.
 
@@ -266,21 +324,111 @@ set timezone = 'UTC';
 **All 24 checks must read PASS.** `control_rows_not_closed` must be `0`.
 If V05 is not PASS, a form is open — close it immediately through the UI.
 
-The verifier reads definitions, not names, because a name is not evidence:
+The verifier reads definitions, not names, because a name is not evidence — and
+compares them **whole**, because a fragment of a definition is not evidence
+either:
 
 | check | proves |
 |---|---|
-| V07 / V08 | the CHECK **expressions** admit exactly `{mentor, mentee}` and exactly `{closed, pilot, open}` — a same-named CHECK with different values FAILs |
+| V07 / V08 | the **complete** normalised `pg_get_constraintdef(oid, true)` of each CHECK equals a hard-coded canonical definition, and the constraint is on that table, attached to that one column, under the expected name, VALIDATED |
 | V09 | the trigger's table, `BEFORE`, `INSERT OR UPDATE`, `FOR EACH ROW`, enabled state, and the **function it points at** — a same-named trigger on another function FAILs |
-| V19 | the trigger function is the intended SECURITY DEFINER body (pinned `search_path`, returns `trigger`, all three binding refusals present) + an `md5` body seal |
-| V13 / V20 | exact schema, name, argument signature `(uuid, text, text, text, text)` and the exact `TABLE(...)` result contract |
+| V19 | the trigger function's schema, name, argument signature, `trigger` result type, `plpgsql` language, `SECURITY DEFINER`, exactly one pinned setting, owner — **and** that its body is byte-identical to the canonical one, by SHA-256 seal |
+| V13 / V20 | exact schema, name, **named** argument signature `(p_actor_admin_user_id uuid, p_intake_batch_code text, p_applicant_role text, p_expected_state text, p_new_state text)` **and** the bare type vector `(uuid, text, text, text, text)`, and the exact `TABLE(...)` result contract. The parameter names are part of the contract because `app/actions/application-form-controls.ts` calls the RPC through PostgREST with named arguments — a rename breaks the Admin screen while the type vector is unchanged |
 | V14 | `SECURITY DEFINER` and exactly one pinned setting, `search_path=public, pg_temp` |
 | V21 | the function **owner** — a SECURITY DEFINER function runs as its owner, so the owner must not be a web role and must be the same principal that owns the control table |
 | V15 | no `anon` / `authenticated` / `PUBLIC` EXECUTE, read from the ACL including `acldefault()`, so a function whose default PUBLIC grant was never revoked also FAILs |
 | V22 | `service_role` **does** hold EXECUTE — without it the Admin screen is dead |
-| V23 | the RPC body still carries the authorization contract (active status, the `super_admin`/`admin` allow-list, `42501`, the row lock, the stale-state compare, the atomic audit INSERT, and no `core_team`) + an `md5` body seal, so a substituted same-signature function FAILs |
+| V23 | the RPC body is byte-identical to the canonical one, by SHA-256 seal, and the function is `plpgsql`. Body identity is **additional to** V13/V14/V15/V20/V21/V22, not a substitute: a seal over the body says nothing about the signature, the search_path, the owner or the ACL |
 | V17 | the audit vocabulary is **set-equal** to the canonical 52 + `set_application_form_state` — no original lost, nothing extra, nothing substituted |
 | V24 | exactly one `UEHM` → one `UEHM-S12` → one `UEHM-S12-B1`, and both control rows hang off **that** intake row and are the only control rows — a same-code batch under another program/season FAILs |
+
+#### What is sealed, exactly
+
+**CHECK constraints.** The complete `pg_get_constraintdef(oid, true)` text, with
+runs of whitespace collapsed to one space and the ends trimmed. Nothing else is
+discarded: parentheses, `::text` casts, operators, value order and a trailing
+`NOT VALID` must all match. `pretty = true` is the rendering existing accepted
+artifacts in this repository already compare against by literal
+(`supabase_migrations/062`, the S12 release preflight).
+
+Extracting the quoted literals — what the previous revision did — was not
+enough. Every one of these exposes exactly `{mentee, mentor}`:
+
+```
+CHECK ((applicant_role = ANY (ARRAY['mentor'::text,'mentee'::text])) OR (length(applicant_role) > 0))
+CHECK (applicant_role <> ALL (ARRAY['mentor'::text, 'mentee'::text]))
+CHECK (state = ANY (ARRAY['mentor'::text, 'mentee'::text]))
+```
+
+The first admits every non-empty string, the second admits exactly the wrong
+set, the third governs the wrong column. All three now FAIL.
+
+**Function bodies.** `pg_proc.prosrc` — the exact bytes between the `$$`
+delimiters in the canonical migration — hashed with SHA-256:
+
+```
+vam069_assert_control_binding      f110bd1ba651eb9a71ce8ec4f4d889d838eba6d4497dcf2b1b55248d7b8b67c2
+vam069_set_application_form_state  4615a7e06fbc11f0a5f277639b92a89bb934d604f5b1214a3c36858bf0cb7089
+```
+
+The seal covers the body and **only** the body. Searching that body for marker
+phrases — what the previous revision did — accepts a replacement that keeps
+every phrase in a comment, or moves the enforcement behind `if false then`, or
+changes one comparison, or deletes the atomic audit INSERT. The repository's
+tests drive each of those mutations, built from the migration's own source,
+through the seal and prove it rejects them while the marker search accepted
+them.
+
+The marker `like` tests are retained in V19/V23 so a FAIL is readable, but the
+PASS is conditional on the seal. One R2 marker was removed rather than
+retained: `prosrc not like '%core_team%'`. The canonical body *fails* it — the
+body explains in a comment that core_team, reviewer, support_team and viewer
+are not allowed, and a substring test cannot tell that sentence from a grant.
+It was wrong in both directions, and the seal proves the same fact exactly.
+
+**Where the expected values come from.** The constants in `verifier.sql` are
+derived from `supabase_migrations/069_application_form_controls.sql` by
+`__tests__/support/m069-canonical-definitions.ts`, and
+`__tests__/migration-069-application-intake-control.test.ts` fails if the two
+ever disagree. Editing the canonical CHECK or a function body without updating
+the verifier breaks the build, not Production.
+
+The verifier's summary row reports both live body seals so two environments can
+be diffed directly.
+
+#### Executed, not only reasoned about
+
+This package was run end to end on PostgreSQL 15.18 against a **disposable
+local** reproduction of the accepted Production baseline —
+`VAM_OS_PROD_S12_RELEASE_20260809/validation/prod_baseline_reproduction.sql`
+plus the release T1, which is what that file exists for. Nothing was run
+against Production.
+
+* preflight emitted exactly the documented token, with
+  `audit_contract_violations = <none>`;
+* apply committed; verifier reported **24/24 PASS**;
+* the expected constants above are confirmed against the real catalog: the
+  server renders the CHECKs exactly as `verifier.sql` requires, and both
+  `prosrc` seals matched byte for byte;
+* eleven mutated baselines (`id` / `created_at` / `updated_at` default removed,
+  `id` defaulted to `NULL::uuid`, `metadata` / `target_email` /
+  `target_admin_user_id` made NOT NULL, `details` → `text`,
+  `actor_admin_user_id` → `text`, `action_type` → `varchar(20)`, FORCE RLS)
+  each aborted Section 0 **before** the control table was created;
+* eleven mutated catalogs (weakened CHECKs, NOT VALID, and eight function
+  bodies that keep every marker phrase) each produced a verifier FAIL on
+  exactly the check that owns them;
+* and the failure MEDIUM 2 describes was reproduced directly: with
+  `created_at`'s default removed after a successful apply, the first toggle
+  fails with `23502` and the state change rolls back with it. That is the
+  outcome Section 0 now refuses to allow anyone to reach.
+
+Three defects were found by running it, all fixed here:
+`text || "char"` in V09's detail expression aborted the **entire** verifier
+file on PG15; V13 compared against a type-only signature where PostgreSQL
+renders parameter names; and V23's `prosrc not like '%core_team%'` failed the
+canonical body. The first two meant R2's verifier reported FAIL on a correct
+Production for V13 and V23 — and could not run at all.
 
 ### Step 4 — deploy the application
 

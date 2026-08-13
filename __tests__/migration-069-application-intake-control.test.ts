@@ -10,6 +10,34 @@ import {
   sqlVocabulary,
   vocabularyDrift
 } from "./support/m069-audit-vocabulary";
+import {
+  BINDING_FUNCTION_CONTRACT,
+  CANONICAL_BINDING_BODY,
+  CANONICAL_ROLE_CHECK,
+  CANONICAL_RPC_BODY,
+  CANONICAL_STATE_CHECK,
+  CONTRACT_ARRAY_MARKERS,
+  EXPECTED_BINDING_BODY_SEAL,
+  EXPECTED_RPC_BODY_SEAL,
+  M069_AUDIT_CONTRACT,
+  M069_AUDIT_CONTRACT_ROWS,
+  RPC_FUNCTION_CONTRACT,
+  auditContractViolations,
+  bodySealSha256,
+  commentOutBlock,
+  constraintAccepted,
+  deparseCheckAnyArray,
+  functionAccepted,
+  insertValueType,
+  m069AuditInsert,
+  makeUnreachable,
+  parseSqlAuditContract,
+  productionAuditCatalog,
+  replaceExactly,
+  type AuditColumnCatalog,
+  type CandidateConstraint,
+  type CandidateFunction
+} from "./support/m069-canonical-definitions";
 
 /**
  * M069 migration package — structural assertions.
@@ -184,11 +212,17 @@ describe("M069 — preflight refusal conditions", () => {
   });
 
   it("documents the expected token for the reviewed baseline", () => {
-    // Versioned when the vocabulary proof became an exact set comparison:
-    // VOCAB52EXACT is emitted only when the admitted set is set-equal to the
-    // canonical 52, where the old field emitted 52 for ANY 52-value list.
-    expect(preflight).toContain("M069:ABSENT:VOCAB52EXACT:VALIDATED:NULLABLE4:S12OK");
+    // Versioned twice. VOCAB52EXACT (R2) is emitted only when the admitted set
+    // is set-equal to the canonical 52, where the old field emitted 52 for ANY
+    // 52-value list. AUDITCONTRACT13 (R3) is emitted only when all 13
+    // admin_audit_log columns satisfy the full INSERT contract, where
+    // NULLABLE4 spoke for four legacy columns and said nothing about the three
+    // omitted NOT NULL columns whose defaults the INSERT depends on.
+    expect(preflight).toContain(
+      "M069:ABSENT:VOCAB52EXACT:VALIDATED:NULLABLE4:AUDITCONTRACT13:S12OK"
+    );
     expect(preflight).not.toContain("M069:ABSENT:52:VALIDATED");
+    expect(preflight).not.toContain("VALIDATED:NULLABLE4:S12OK");
   });
 
   it("emits VOCABDRIFT, and names the offending values, when the set is not exact", () => {
@@ -861,14 +895,17 @@ describe("M069 R2 / MEDIUM 3 — verifier proves definitions, not names", () => 
   });
 
   it("11 — a same-named applicant_role CHECK with wrong values FAILs (V07 reads the expression)", () => {
-    expect(verifier).toContain("applicant_role CHECK expression admits exactly mentor+mentee");
-    expect(verifier).toContain("bool_and(v.vals = array['mentee','mentor'])");
-    expect(verifier).toContain("pg_get_constraintdef(c.oid) ilike '%applicant_role%'");
+    // Superseded and strengthened by R3: V07 no longer judges the extracted
+    // literals, it compares the whole normalised definition. See the R3
+    // sections below for the mechanism and its adversarial cases.
+    expect(verifier).toContain("applicant_role CHECK is the exact canonical definition");
+    expect(verifier).toContain("bool_and(v.attached_to = 'applicant_role')");
+    expect(verifier).toContain("pg_get_constraintdef(c.oid, true)");
   });
 
   it("12 — a same-named state CHECK with wrong values FAILs (V08 reads the expression)", () => {
-    expect(verifier).toContain("state CHECK expression admits exactly closed+pilot+open");
-    expect(verifier).toContain("bool_and(v.vals = array['closed','open','pilot'])");
+    expect(verifier).toContain("state CHECK is the exact canonical definition");
+    expect(verifier).toContain("bool_and(v.attached_to = 'state')");
   });
 
   it("13/14 — a same-named trigger on the wrong function or with wrong timing FAILs", () => {
@@ -885,16 +922,26 @@ describe("M069 R2 / MEDIUM 3 — verifier proves definitions, not names", () => 
   });
 
   it("14 — the trigger FUNCTION identity and body are proven too (V19)", () => {
-    expect(verifier).toContain("binding trigger function is the intended SECURITY DEFINER body");
-    expect(verifier).toContain("f.prorettype = 'pg_catalog.trigger'::regtype");
+    // Superseded and strengthened by R3: the return type is read through
+    // pg_get_function_result and the body through a compared SHA-256 seal,
+    // not through marker substrings.
+    expect(verifier).toContain("binding trigger function is the canonical definition (sealed body)");
+    expect(verifier).toContain("bool_and(f.result_type = 'trigger')");
     expect(verifier).toContain("f.prosrc like '%does not own intake_batch%'");
     expect(verifier).toContain("f.prosrc like '%does not own season%'");
-    expect(verifier).toContain("md5(f.prosrc)");
+    expect(verifier).toContain("encode(sha256(convert_to(p.prosrc, 'UTF8')), 'hex')");
   });
 
   it("15 — a same-named RPC with a different signature FAILs (V13)", () => {
     expect(verifier).toContain("pg_get_function_identity_arguments(p.oid)");
-    expect(verifier).toContain("r.arg_signature = 'uuid, text, text, text, text'");
+    // R3: the identity arguments PostgreSQL renders include the parameter
+    // names, and the runtime calls this RPC by name, so both the named
+    // signature and the bare type vector are asserted.
+    expect(verifier).toContain(
+      "r.arg_signature = 'p_actor_admin_user_id uuid, p_intake_batch_code text, " +
+        "p_applicant_role text, p_expected_state text, p_new_state text'"
+    );
+    expect(verifier).toContain("r.arg_types = 'uuid, text, text, text, text'");
     expect(verifier).toContain("r.schema_name = 'public'");
     expect(verifier).toContain("r.fn_name = 'vam069_set_application_form_state'");
   });
@@ -959,12 +1006,17 @@ describe("M069 R2 / MEDIUM 3 — verifier proves definitions, not names", () => 
       "r.prosrc like '%for update%'",
       "r.prosrc like '%p_expected_state%'",
       "r.prosrc like '%40001%'",
-      "r.prosrc like '%admin_audit_log%'",
-      "r.prosrc not like '%core_team%'"
+      "r.prosrc like '%admin_audit_log%'"
     ]) {
       expect(verifier).toContain(marker);
     }
-    expect(verifier).toContain("md5(r.prosrc)");
+    // R2's `not like '%core_team%'` clause is gone — see the R3 section that
+    // proves the canonical body itself failed it.
+    expect(verifier).not.toContain("r.prosrc not like '%core_team%'");
+    // R3: the markers above are retained as diagnostics; the PASS is now
+    // conditional on the body seal, proven by the R3 sections below.
+    expect(verifier).toContain("md5(p.prosrc)");
+    expect(verifier).toContain("bool_and(r.body_seal = (select body_seal from expected_seal");
   });
 
   it("is still read-only after the strengthening", () => {
@@ -1045,5 +1097,930 @@ describe("M069 R2 — the R1 guarantees are preserved", () => {
     for (const [, sql] of ALL_SQL) {
       expect(code(sql).replace(/preflight_token/g, "")).not.toMatch(/token/i);
     }
+  });
+});
+
+// ===========================================================================
+// R3 — the two independent-review MEDIUMs against R2
+//
+// The R2 tests inspected verifier SOURCE. These do not. They import the
+// mechanism the SQL implements — full-definition comparison, body sealing, the
+// per-column audit contract — from
+// __tests__/support/m069-canonical-definitions.ts and drive real fixture
+// definitions through it: catalog renderings a hostile or careless change
+// would actually produce, and real mutated function bodies built from the
+// canonical migration's own source.
+//
+// Two things are proven together, and the second is the point:
+//   1. the R3 mechanism REJECTS each adversary, and
+//   2. the R2 mechanism ACCEPTED it.
+// Without (2) the new checks would be unfalsifiable ceremony.
+//
+// Separately, the constants hard-coded in verifier.sql / preflight.sql /
+// apply.sql are compared against values DERIVED from the canonical migration
+// and from the accepted Production baseline artifacts, so editing the SQL
+// without editing the verifier fails here rather than in Production.
+// ===========================================================================
+
+/** Reads the next SQL string literal after `from`, un-doubling `''`. */
+function sqlStringAfter(text: string, from: number): string {
+  const start = text.indexOf("'", from);
+  if (start === -1) throw new Error("no SQL string literal found");
+  let out = "";
+  let i = start + 1;
+  while (i < text.length) {
+    if (text[i] === "'") {
+      if (text[i + 1] === "'") {
+        out += "'";
+        i += 2;
+        continue;
+      }
+      return out;
+    }
+    out += text[i];
+    i += 1;
+  }
+  throw new Error("unterminated SQL string literal");
+}
+
+/** The constant verifier.sql requires for `object`, out of expected_def / expected_seal. */
+function verifierConstantFor(object: string): string {
+  const at = verifier.indexOf(`('${object}',`);
+  expect(at, `verifier.sql declares no expected value for ${object}`).toBeGreaterThan(-1);
+  return sqlStringAfter(verifier, at + `('${object}',`.length);
+}
+
+// ---------------------------------------------------------------------------
+// R3 / MEDIUM 1 — the verifier proves exact definitions, not markers
+// ---------------------------------------------------------------------------
+
+describe("M069 R3 / MEDIUM 1 — verifier constants are derived from the canonical migration", () => {
+  it("V07's expected definition is the deparse of migration 069's own role CHECK", () => {
+    expect(verifierConstantFor("application_form_controls_role_check")).toBe(
+      CANONICAL_ROLE_CHECK.definition
+    );
+    expect(CANONICAL_ROLE_CHECK.column).toBe("applicant_role");
+    expect(CANONICAL_ROLE_CHECK.values).toEqual(["mentor", "mentee"]);
+  });
+
+  it("V08's expected definition is the deparse of migration 069's own state CHECK", () => {
+    expect(verifierConstantFor("application_form_controls_state_check")).toBe(
+      CANONICAL_STATE_CHECK.definition
+    );
+    expect(CANONICAL_STATE_CHECK.column).toBe("state");
+    expect(CANONICAL_STATE_CHECK.values).toEqual(["closed", "pilot", "open"]);
+  });
+
+  it("V19's expected seal is SHA-256 of migration 069's trigger function body", () => {
+    expect(verifierConstantFor("vam069_assert_control_binding")).toBe(
+      EXPECTED_BINDING_BODY_SEAL
+    );
+    expect(EXPECTED_BINDING_BODY_SEAL).toBe(bodySealSha256(CANONICAL_BINDING_BODY));
+  });
+
+  it("V23's expected seal is SHA-256 of migration 069's RPC body", () => {
+    expect(verifierConstantFor("vam069_set_application_form_state")).toBe(
+      EXPECTED_RPC_BODY_SEAL
+    );
+    expect(EXPECTED_RPC_BODY_SEAL).toBe(bodySealSha256(CANONICAL_RPC_BODY));
+  });
+
+  it("the sealed bodies are the bytes between the $$ delimiters, and nothing else", () => {
+    // Documents precisely what is sealed: prosrc, which starts at the newline
+    // after the opening `$$` and ends at the newline before the closing one.
+    for (const body of [CANONICAL_BINDING_BODY, CANONICAL_RPC_BODY]) {
+      expect(body.startsWith("\ndeclare\n")).toBe(true);
+      expect(body.endsWith("\nend;\n")).toBe(true);
+      expect(body).not.toContain("security definer");
+      expect(body).not.toContain("set search_path");
+    }
+  });
+
+  it("apply.sql ships the identical bodies, so one seal covers both files", () => {
+    for (const fn of [
+      "public.vam069_assert_control_binding",
+      "public.vam069_set_application_form_state"
+    ]) {
+      const marker = `create or replace function ${fn}`;
+      const start = apply.indexOf(marker);
+      const open = apply.indexOf("\nas $$", start) + "\nas $$".length;
+      const close = apply.indexOf("$$;", open);
+      const packaged = apply.slice(open, close);
+      const canonical =
+        fn.endsWith("assert_control_binding") ? CANONICAL_BINDING_BODY : CANONICAL_RPC_BODY;
+      expect(bodySealSha256(packaged)).toBe(bodySealSha256(canonical));
+    }
+  });
+
+  it("changing the canonical SQL changes the derived value, so a stale constant FAILs", () => {
+    // The drift lock, demonstrated rather than asserted: a one-value edit to
+    // the migration's CHECK, and a one-word edit to a function body, both
+    // move the derived expectation away from the constant in verifier.sql.
+    const extraRole = deparseCheckAnyArray("applicant_role", ["mentor", "mentee", "observer"]);
+    expect(extraRole).not.toBe(verifierConstantFor("application_form_controls_role_check"));
+
+    const editedBody = replaceExactly(CANONICAL_RPC_BODY, "'42501'", "'42502'");
+    expect(bodySealSha256(editedBody)).not.toBe(
+      verifierConstantFor("vam069_set_application_form_state")
+    );
+  });
+});
+
+// --- A. CHECK constraints --------------------------------------------------
+
+const CONTROL_TABLE = "application_form_controls";
+
+/** A catalog rendering of the canonical role CHECK, as V07 would read it. */
+function roleCandidate(patch: Partial<CandidateConstraint> = {}): CandidateConstraint {
+  return {
+    definition: CANONICAL_ROLE_CHECK.definition,
+    name: "application_form_controls_role_check",
+    table: CONTROL_TABLE,
+    attachedTo: "applicant_role",
+    validated: true,
+    ...patch
+  };
+}
+
+function stateCandidate(patch: Partial<CandidateConstraint> = {}): CandidateConstraint {
+  return {
+    definition: CANONICAL_STATE_CHECK.definition,
+    name: "application_form_controls_state_check",
+    table: CONTROL_TABLE,
+    attachedTo: "state",
+    validated: true,
+    ...patch
+  };
+}
+
+/**
+ * The R2 mechanism: pull the quoted literals out of the definition and compare
+ * the resulting SET. Reproduced faithfully so each adversary can be shown to
+ * have passed it.
+ */
+function r2ConstraintAccepted(
+  expectedValues: readonly string[],
+  candidates: readonly CandidateConstraint[]
+): boolean {
+  if (candidates.length !== 1) return false;
+  const literals = Array.from(candidates[0].definition.matchAll(/'([^']*)'::text/g))
+    .map((m) => m[1])
+    .sort();
+  const unique = Array.from(new Set(literals));
+  const expected = [...expectedValues].sort();
+  return unique.length === expected.length && unique.every((v, i) => v === expected[i]);
+}
+
+describe("M069 R3 / MEDIUM 1A — the CHECK mechanism rejects altered definitions", () => {
+  it("the canonical definitions pass, so the gate is not vacuously refusing", () => {
+    expect(constraintAccepted(CANONICAL_ROLE_CHECK, CONTROL_TABLE, [roleCandidate()])).toBe(true);
+    expect(constraintAccepted(CANONICAL_STATE_CHECK, CONTROL_TABLE, [stateCandidate()])).toBe(true);
+  });
+
+  it("only whitespace is normalised away — a line-wrapped rendering still passes", () => {
+    const wrapped = CANONICAL_ROLE_CHECK.definition.replace(/, /g, ",\n    ");
+    expect(wrapped).not.toBe(CANONICAL_ROLE_CHECK.definition);
+    expect(
+      constraintAccepted(CANONICAL_ROLE_CHECK, CONTROL_TABLE, [roleCandidate({ definition: wrapped })])
+    ).toBe(true);
+  });
+
+  const ROLE_ADVERSARIES: Array<[string, CandidateConstraint, boolean]> = [
+    [
+      "1. the intended CHECK plus OR length(applicant_role) > 0",
+      roleCandidate({
+        definition:
+          "CHECK ((applicant_role = ANY (ARRAY['mentor'::text, 'mentee'::text])) " +
+          "OR (length(applicant_role) > 0))"
+      }),
+      true
+    ],
+    [
+      "3a. the same literals in a materially different expression (<> ALL)",
+      roleCandidate({
+        definition: "CHECK (applicant_role <> ALL (ARRAY['mentor'::text, 'mentee'::text]))"
+      }),
+      true
+    ],
+    [
+      "3b. the same literals, negated with IS NOT FALSE so NULL is admitted",
+      roleCandidate({
+        definition:
+          "CHECK (((applicant_role = ANY (ARRAY['mentor'::text, 'mentee'::text])) IS NOT FALSE))"
+      }),
+      true
+    ],
+    [
+      "4. the same constraint name over a wholly different definition",
+      roleCandidate({ definition: "CHECK (applicant_role IS NOT NULL)" }),
+      false
+    ],
+    [
+      "4b. an extra admitted value",
+      roleCandidate({
+        definition: deparseCheckAnyArray("applicant_role", ["mentor", "mentee", "observer"])
+      }),
+      false
+    ],
+    [
+      "5. the canonical expression, but NOT VALID",
+      roleCandidate({
+        definition: `${CANONICAL_ROLE_CHECK.definition} NOT VALID`,
+        validated: false
+      }),
+      true
+    ],
+    [
+      "6. the canonical expression attached to the wrong column",
+      roleCandidate({ attachedTo: "state" }),
+      true
+    ],
+    [
+      "7. the canonical expression on the wrong table",
+      roleCandidate({ table: "application_form_controls_archive" }),
+      true
+    ],
+    [
+      "8. the canonical expression under an unexpected constraint name",
+      roleCandidate({ name: "application_form_controls_role_check2" }),
+      true
+    ]
+  ];
+
+  it.each(ROLE_ADVERSARIES)(
+    "applicant_role: rejects %s",
+    (_label, candidate, r2WouldHavePassed) => {
+      expect(constraintAccepted(CANONICAL_ROLE_CHECK, CONTROL_TABLE, [candidate])).toBe(false);
+      // …and R2's literal-set check accepted it, which is why this is a fix.
+      expect(r2ConstraintAccepted(CANONICAL_ROLE_CHECK.values, [candidate])).toBe(
+        r2WouldHavePassed
+      );
+    }
+  );
+
+  const STATE_ADVERSARIES: Array<[string, CandidateConstraint, boolean]> = [
+    [
+      "2. the intended CHECK plus OR state IS NULL",
+      stateCandidate({
+        definition:
+          "CHECK ((state = ANY (ARRAY['closed'::text, 'pilot'::text, 'open'::text])) " +
+          "OR (state IS NULL))"
+      }),
+      true
+    ],
+    [
+      "2b. the intended CHECK weakened with a fourth reachable state",
+      stateCandidate({
+        definition:
+          "CHECK ((state = ANY (ARRAY['closed'::text, 'pilot'::text, 'open'::text])) " +
+          "OR (state = 'draft'::text))"
+      }),
+      false
+    ],
+    [
+      "3. the same literals in a materially different expression",
+      stateCandidate({
+        definition: "CHECK ((state)::text ~~ ANY (ARRAY['closed'::text, 'pilot'::text, 'open'::text]))"
+      }),
+      true
+    ],
+    [
+      "4. the same constraint name over a wholly different definition",
+      stateCandidate({ definition: "CHECK (length(state) > 0)" }),
+      false
+    ],
+    [
+      "5. the canonical expression, but NOT VALID",
+      stateCandidate({
+        definition: `${CANONICAL_STATE_CHECK.definition} NOT VALID`,
+        validated: false
+      }),
+      true
+    ],
+    [
+      "6. the canonical expression attached to the wrong column",
+      stateCandidate({ attachedTo: "applicant_role" }),
+      true
+    ]
+  ];
+
+  it.each(STATE_ADVERSARIES)("state: rejects %s", (_label, candidate, r2WouldHavePassed) => {
+    expect(constraintAccepted(CANONICAL_STATE_CHECK, CONTROL_TABLE, [candidate])).toBe(false);
+    expect(r2ConstraintAccepted(CANONICAL_STATE_CHECK.values, [candidate])).toBe(
+      r2WouldHavePassed
+    );
+  });
+
+  it("a second CHECK alongside the canonical one is a refusal, not a pass", () => {
+    expect(
+      constraintAccepted(CANONICAL_ROLE_CHECK, CONTROL_TABLE, [
+        roleCandidate(),
+        roleCandidate({
+          name: "application_form_controls_role_escape",
+          definition: "CHECK (applicant_role IS NOT NULL)"
+        })
+      ])
+    ).toBe(false);
+  });
+
+  it("an absent CHECK is a refusal", () => {
+    expect(constraintAccepted(CANONICAL_ROLE_CHECK, CONTROL_TABLE, [])).toBe(false);
+    expect(constraintAccepted(CANONICAL_STATE_CHECK, CONTROL_TABLE, [])).toBe(false);
+  });
+
+  it("V07/V08 PASS is CONDITIONAL on the equality, not merely reporting it", () => {
+    for (const object of [
+      "application_form_controls_role_check",
+      "application_form_controls_state_check"
+    ]) {
+      expect(verifier).toContain(
+        `and bool_and(v.norm_def = (select definition from expected_def\n` +
+          `                                    where object = '${object}'))`
+      );
+    }
+    expect(verifier).toContain("and bool_and(v.convalidated)");
+  });
+});
+
+// --- B/C. Function bodies --------------------------------------------------
+
+/** A catalog rendering of the canonical binding function, as V19 would read it. */
+function bindingCandidate(patch: Partial<CandidateFunction> = {}): CandidateFunction {
+  return {
+    schema: "public",
+    name: "vam069_assert_control_binding",
+    argSignature: "",
+    argTypes: "",
+    resultType: "trigger",
+    language: "plpgsql",
+    securityDefiner: true,
+    config: ["search_path=public, pg_temp"],
+    owner: "postgres",
+    body: CANONICAL_BINDING_BODY,
+    ...patch
+  };
+}
+
+function rpcCandidate(patch: Partial<CandidateFunction> = {}): CandidateFunction {
+  return {
+    schema: "public",
+    name: "vam069_set_application_form_state",
+    argSignature:
+      "p_actor_admin_user_id uuid, p_intake_batch_code text, p_applicant_role text, " +
+      "p_expected_state text, p_new_state text",
+    argTypes: "uuid, text, text, text, text",
+    resultType:
+      "TABLE(outcome_status text, previous_state text, new_state text, updated_at timestamp with time zone, actor_email text)",
+    language: "plpgsql",
+    securityDefiner: true,
+    config: ["search_path=public, pg_temp"],
+    owner: "postgres",
+    body: CANONICAL_RPC_BODY,
+    ...patch
+  };
+}
+
+/** The R2 mechanism for V19: does the body contain each marker phrase? */
+function r2BindingBodyAccepted(body: string): boolean {
+  return (
+    body.includes("does not resolve to a season") &&
+    body.includes("does not own intake_batch") &&
+    body.includes("does not own season") &&
+    body.includes("23514")
+  );
+}
+
+/**
+ * The R2 mechanism for V23: the eight affirmative marker phrases. R2 also
+ * carried a ninth clause, `prosrc not like '%core_team%'`, which the canonical
+ * body itself failed — proven separately below — so it is not part of the
+ * comparison the adversaries are measured against.
+ */
+function r2RpcBodyAccepted(body: string): boolean {
+  return (
+    body.includes("'active'") &&
+    body.includes("super_admin") &&
+    body.includes("42501") &&
+    body.includes("for update") &&
+    body.includes("p_expected_state") &&
+    body.includes("40001") &&
+    body.includes("admin_audit_log") &&
+    body.includes("set_application_form_state")
+  );
+}
+
+describe("M069 R3 / MEDIUM 1B — the binding trigger function is proven, not pattern-matched", () => {
+  it("9. the canonical body passes", () => {
+    expect(functionAccepted(BINDING_FUNCTION_CONTRACT, [bindingCandidate()])).toBe(true);
+    expect(r2BindingBodyAccepted(CANONICAL_BINDING_BODY)).toBe(true);
+  });
+
+  const BINDING_BODY_ADVERSARIES: Array<[string, string]> = [
+    [
+      "5. markers preserved only in comments, the season-ownership refusal removed",
+      commentOutBlock(CANONICAL_BINDING_BODY, "if new.season_id is distinct from v_season_id then", 4)
+    ],
+    [
+      "6. markers preserved in unreachable code, the program-ownership refusal never runs",
+      makeUnreachable(
+        CANONICAL_BINDING_BODY,
+        "if new.program_id is distinct from v_program_id then",
+        4
+      )
+    ],
+    [
+      "7. one critical binding comparison changed — program_id compared to itself",
+      replaceExactly(
+        CANONICAL_BINDING_BODY,
+        "new.program_id is distinct from v_program_id",
+        "new.program_id is distinct from new.program_id"
+      )
+    ],
+    [
+      "7b. the resolve-to-a-season guard inverted",
+      replaceExactly(CANONICAL_BINDING_BODY, "if v_season_id is null then", "if false then")
+    ]
+  ];
+
+  it.each(BINDING_BODY_ADVERSARIES)("rejects %s", (_label, body) => {
+    // The mutation is real: it is not the canonical body.
+    expect(body).not.toBe(CANONICAL_BINDING_BODY);
+    // R2 accepted every one of these — the marker words all survive.
+    expect(r2BindingBodyAccepted(body)).toBe(true);
+    // R3 does not.
+    expect(functionAccepted(BINDING_FUNCTION_CONTRACT, [bindingCandidate({ body })])).toBe(false);
+  });
+
+  it("8. the same name and signature over a wholly different body is rejected", () => {
+    const body = "\ndeclare\n  v_season_id uuid;\nbegin\n  return new;\nend;\n";
+    expect(functionAccepted(BINDING_FUNCTION_CONTRACT, [bindingCandidate({ body })])).toBe(false);
+  });
+
+  it.each([
+    ["a different schema", { schema: "app" }],
+    ["a different name", { name: "vam069_assert_binding" }],
+    ["an unexpected argument", { argSignature: "flag boolean", argTypes: "boolean" }],
+    ["a non-trigger result type", { resultType: "boolean" }],
+    ["a different language", { language: "sql" }],
+    ["SECURITY INVOKER", { securityDefiner: false }],
+    ["an unpinned search_path", { config: [] }],
+    ["a second pinned setting", { config: ["search_path=public, pg_temp", "role=postgres"] }],
+    ["a different pinned search_path", { config: ["search_path=public"] }],
+    ["a web-role owner", { owner: "service_role" }]
+  ])("rejects the canonical body with %s", (_label, patch) => {
+    expect(
+      functionAccepted(BINDING_FUNCTION_CONTRACT, [bindingCandidate(patch as Partial<CandidateFunction>)])
+    ).toBe(false);
+  });
+
+  it("rejects zero, and two, functions of that name", () => {
+    expect(functionAccepted(BINDING_FUNCTION_CONTRACT, [])).toBe(false);
+    expect(
+      functionAccepted(BINDING_FUNCTION_CONTRACT, [bindingCandidate(), bindingCandidate()])
+    ).toBe(false);
+  });
+});
+
+describe("M069 R3 / MEDIUM 1C — the toggle RPC is proven, not pattern-matched", () => {
+  it("14. the canonical body passes", () => {
+    expect(functionAccepted(RPC_FUNCTION_CONTRACT, [rpcCandidate()])).toBe(true);
+    expect(r2RpcBodyAccepted(CANONICAL_RPC_BODY)).toBe(true);
+  });
+
+  // The third field records whether R2's marker search accepted the body, so
+  // the cases that were genuinely invisible to it are distinguished from the
+  // one that happened to delete a marker along with the enforcement.
+  const RPC_BODY_ADVERSARIES: Array<[string, string, boolean]> = [
+    [
+      "10. authorization markers retained in comments, the actor check removed",
+      commentOutBlock(
+        CANONICAL_RPC_BODY,
+        "if v_actor.id is null or v_actor.status <> 'active'",
+        5
+      ),
+      true
+    ],
+    [
+      "10b. the actor check kept but never reached",
+      makeUnreachable(CANONICAL_RPC_BODY, "if v_actor.id is null or v_actor.status <> 'active'", 5),
+      true
+    ],
+    [
+      "11. the active-admin comparison weakened — OR became AND, so an inactive admin passes",
+      replaceExactly(
+        CANONICAL_RPC_BODY,
+        "if v_actor.id is null or v_actor.status <> 'active'",
+        "if v_actor.id is null and v_actor.status <> 'active'"
+      ),
+      true
+    ],
+    [
+      "11b. the active-admin comparison replaced by a NULL test",
+      replaceExactly(CANONICAL_RPC_BODY, "v_actor.status <> 'active'", "v_actor.status is null"),
+      false
+    ],
+    [
+      "12. the role restriction widened to a role that was never reviewed",
+      replaceExactly(
+        CANONICAL_RPC_BODY,
+        "array['super_admin', 'admin']",
+        "array['super_admin', 'admin', 'reviewer']"
+      ),
+      true
+    ],
+    [
+      "13. the expected_state concurrency check moved behind a branch that never runs",
+      makeUnreachable(
+        CANONICAL_RPC_BODY,
+        "if p_expected_state is not null and v_control.state <> p_expected_state then",
+        4
+      ),
+      true
+    ],
+    [
+      "13b. the expected_state comparison changed so a stale page always wins",
+      replaceExactly(
+        CANONICAL_RPC_BODY,
+        "v_control.state <> p_expected_state",
+        "v_control.state <> v_control.state"
+      ),
+      true
+    ],
+    [
+      "13c. the row lock dropped while the words FOR UPDATE stay in a comment",
+      replaceExactly(CANONICAL_RPC_BODY, "  for update;", "  ; -- for update"),
+      true
+    ],
+    [
+      "13d. the atomic audit INSERT commented out",
+      commentOutBlock(CANONICAL_RPC_BODY, "insert into public.admin_audit_log (", 24),
+      true
+    ]
+  ];
+
+  it.each(RPC_BODY_ADVERSARIES)("rejects %s", (_label, body, r2WouldHavePassed) => {
+    expect(body).not.toBe(CANONICAL_RPC_BODY);
+    // All but 11b keep 'active', super_admin, 42501, for update,
+    // p_expected_state, 40001, admin_audit_log and set_application_form_state
+    // somewhere in prosrc — so R2's V23 read PASS on them.
+    expect(r2RpcBodyAccepted(body)).toBe(r2WouldHavePassed);
+    expect(functionAccepted(RPC_FUNCTION_CONTRACT, [rpcCandidate({ body })])).toBe(false);
+  });
+
+  it("a core_team grant is rejected by the seal", () => {
+    const body = replaceExactly(
+      CANONICAL_RPC_BODY,
+      "array['super_admin', 'admin']",
+      "array['super_admin', 'admin', 'core_team']"
+    );
+    expect(functionAccepted(RPC_FUNCTION_CONTRACT, [rpcCandidate({ body })])).toBe(false);
+  });
+
+  it("R2's `prosrc not like '%core_team%'` clause FAILED the canonical body itself", () => {
+    // The body explains, in a comment, that core_team / reviewer /
+    // support_team / viewer are NOT allowed. A substring test over prosrc
+    // cannot tell that sentence from a grant, so V23 would have reported FAIL
+    // against a correctly applied Production — and, symmetrically, would have
+    // reported PASS for a body that admitted core_team without naming it.
+    expect(CANONICAL_RPC_BODY).toContain("core_team");
+    expect(CANONICAL_RPC_BODY).toContain("core_team, reviewer, support_team and viewer are NOT");
+    // The executable authorization list does not admit it.
+    const authorization = CANONICAL_RPC_BODY.slice(
+      CANONICAL_RPC_BODY.indexOf("if v_actor.id is null"),
+      CANONICAL_RPC_BODY.indexOf("42501")
+    );
+    expect(authorization).not.toContain("core_team");
+    expect(authorization).toContain("array['super_admin', 'admin']");
+    // R3 removed the clause and proves the same fact by exact body identity.
+    // No EXECUTABLE line of the verifier mentions core_team any more; the
+    // explanation of why the clause was removed remains, in a comment.
+    expect(code(verifier)).not.toContain("core_team");
+    expect(verifier).toContain("core_team, reviewer, support_team and viewer are NOT");
+  });
+
+  it.each([
+    [
+      "a renamed parameter — the runtime calls this RPC by name",
+      {
+        argSignature:
+          "p_actor_id uuid, p_intake_batch_code text, p_applicant_role text, " +
+          "p_expected_state text, p_new_state text"
+      }
+    ],
+    ["a dropped parameter", { argTypes: "uuid, text, text, text" }],
+    ["a widened type vector", { argTypes: "uuid, text, text, text, text, boolean" }],
+    ["a different result contract", { resultType: "TABLE(outcome_status text)" }],
+    ["SECURITY INVOKER", { securityDefiner: false }],
+    ["an unpinned search_path", { config: [] }],
+    ["a different pinned search_path", { config: ["search_path=public, extensions, pg_temp"] }],
+    ["a web-role owner", { owner: "authenticated" }],
+    ["a different schema", { schema: "extensions" }],
+    ["a different language", { language: "sql" }]
+  ])("body identity is additional, not a substitute: rejects %s", (_label, patch) => {
+    expect(
+      functionAccepted(RPC_FUNCTION_CONTRACT, [rpcCandidate(patch as Partial<CandidateFunction>)])
+    ).toBe(false);
+  });
+
+  it("V19/V23 PASS is CONDITIONAL on seal equality, and the ACL checks are still separate", () => {
+    expect(verifier).toContain("bool_and(f.body_seal = (select body_seal from expected_seal");
+    expect(verifier).toContain("bool_and(r.body_seal = (select body_seal from expected_seal");
+    // The structural proofs body identity does NOT replace.
+    expect(verifier).toContain("r.arg_types = 'uuid, text, text, text, text'");
+    expect(verifier).toContain("bool_and(r.prosecdef)");
+    expect(verifier).toContain("= 'search_path=public,pg_temp'");
+    expect(verifier).toContain("aclexplode(coalesce(r.proacl, acldefault('f', r.proowner)))");
+    expect(verifier).toContain("service_role holds EXECUTE on the mutation function");
+    expect(verifier).toContain("grantee_name in ('anon', 'authenticated', 'PUBLIC')");
+    expect(verifier).toContain("mutation function owner is not a web role");
+    expect(verifier).toContain("bool_and(r.language_name = 'plpgsql')");
+    expect(verifier).toContain("bool_and(f.language_name = 'plpgsql')");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R3 / MEDIUM 2 — Section 0 proves the complete audit INSERT contract
+// ---------------------------------------------------------------------------
+
+const BASELINE_AUDIT_CATALOG = productionAuditCatalog();
+
+function withColumn(
+  catalog: readonly AuditColumnCatalog[],
+  column: string,
+  patch: Partial<AuditColumnCatalog>
+): AuditColumnCatalog[] {
+  let hit = false;
+  const out = catalog.map((c) => {
+    if (c.column !== column) return { ...c };
+    hit = true;
+    return { ...c, ...patch };
+  });
+  if (!hit) throw new Error(`no ${column} in the baseline catalog`);
+  return out;
+}
+
+/** The R2 proof: the 13 column NAMES, sorted. Nothing else. */
+function r2AuditNamesAccepted(catalog: readonly AuditColumnCatalog[]): boolean {
+  const names = catalog.map((c) => c.column).sort();
+  const expected = M069_AUDIT_CONTRACT.map((c) => c.column).sort();
+  return names.length === expected.length && names.every((n, i) => n === expected[i]);
+}
+
+describe("M069 R3 / MEDIUM 2 — the audit contract is derived from the accepted baseline", () => {
+  it("covers all 13 admin_audit_log columns, none omitted", () => {
+    expect(M069_AUDIT_CONTRACT).toHaveLength(13);
+    expect(BASELINE_AUDIT_CATALOG).toHaveLength(13);
+    expect(M069_AUDIT_CONTRACT.map((c) => c.column)).toEqual(
+      BASELINE_AUDIT_CATALOG.map((c) => c.column)
+    );
+  });
+
+  it("classifies every column into exactly one of the three INSERT classes", () => {
+    const supplied = m069AuditInsert().map((i) => i.column).sort();
+    const byClass = {
+      value: M069_AUDIT_CONTRACT.filter((c) => c.supply === "value").map((c) => c.column),
+      null: M069_AUDIT_CONTRACT.filter((c) => c.supply === "null").map((c) => c.column),
+      omitted: M069_AUDIT_CONTRACT.filter((c) => c.supply === "omitted").map((c) => c.column)
+    };
+    expect([...byClass.value, ...byClass.null].sort()).toEqual(supplied);
+    expect(byClass.null).toEqual(["target_admin_user_id"]);
+    expect(byClass.omitted.sort()).toEqual([
+      "created_at",
+      "id",
+      "metadata",
+      "target_email",
+      "updated_at"
+    ]);
+  });
+
+  it("class 1 — the type of every directly supplied column accepts the value the RPC writes", () => {
+    for (const { column, value } of m069AuditInsert()) {
+      const written = insertValueType(value);
+      const contract = M069_AUDIT_CONTRACT.find((c) => c.column === column);
+      expect(contract, column).toBeDefined();
+      if (written === null) {
+        // Only the literal NULL resolves to no type, and only one column takes it.
+        expect(contract!.supply).toBe("null");
+      } else {
+        expect(`${column}=${contract!.type}`).toBe(`${column}=${written}`);
+      }
+    }
+  });
+
+  it("class 2 — every omitted NOT NULL column has a proven default mechanism", () => {
+    for (const c of M069_AUDIT_CONTRACT.filter((x) => x.supply === "omitted")) {
+      const live = BASELINE_AUDIT_CATALOG.find((x) => x.column === c.column)!;
+      if (live.notNull) {
+        expect(c.defaultPattern, `${c.column} needs a default family`).not.toBeNull();
+        expect(new RegExp(c.defaultPattern!).test(live.defaultExpr ?? "")).toBe(true);
+      }
+    }
+    // Concretely: the three the review named.
+    expect(M069_AUDIT_CONTRACT.find((c) => c.column === "id")!.defaultPattern).toContain(
+      "gen_random_uuid"
+    );
+    for (const column of ["created_at", "updated_at"]) {
+      expect(M069_AUDIT_CONTRACT.find((c) => c.column === column)!.defaultPattern).toContain(
+        "now"
+      );
+    }
+  });
+
+  it("class 3 — every nullable omitted column is actually nullable in the baseline", () => {
+    for (const c of M069_AUDIT_CONTRACT.filter((x) => x.supply === "omitted")) {
+      const live = BASELINE_AUDIT_CATALOG.find((x) => x.column === c.column)!;
+      if (c.defaultPattern === null) expect(live.notNull).toBe(false);
+    }
+  });
+
+  it("21. the exact canonical current Production audit schema passes", () => {
+    expect(auditContractViolations(M069_AUDIT_CONTRACT, BASELINE_AUDIT_CATALOG)).toEqual([]);
+  });
+
+  it("every SQL copy of the contract is identical to the derived one", () => {
+    const derived = M069_AUDIT_CONTRACT_ROWS;
+    expect(derived).toHaveLength(13);
+    const copies: Array<[string, string[]]> = [
+      ["preflight guard", parseSqlAuditContract(preflight, CONTRACT_ARRAY_MARKERS[0][1])],
+      ["preflight token CTE", parseSqlAuditContract(preflight, CONTRACT_ARRAY_MARKERS[1][1])],
+      ["apply Section 0", parseSqlAuditContract(APPLY_SECTION_0, CONTRACT_ARRAY_MARKERS[2][1])]
+    ];
+    for (const [name, rows] of copies) {
+      expect(`${name}=${rows.join("\n")}`).toBe(`${name}=${derived.join("\n")}`);
+    }
+  });
+});
+
+describe("M069 R3 / MEDIUM 2 — baselines Section 0 must abort on BEFORE mutation", () => {
+  const AUDIT_ADVERSARIES: Array<[string, AuditColumnCatalog[]]> = [
+    [
+      "15. id NOT NULL with its default removed",
+      withColumn(BASELINE_AUDIT_CATALOG, "id", { defaultExpr: null })
+    ],
+    [
+      "15b. id NOT NULL with a default of NULL::uuid",
+      withColumn(BASELINE_AUDIT_CATALOG, "id", { defaultExpr: "NULL::uuid" })
+    ],
+    [
+      "16. created_at NOT NULL with its default removed",
+      withColumn(BASELINE_AUDIT_CATALOG, "created_at", { defaultExpr: null })
+    ],
+    [
+      "17. updated_at NOT NULL with its default removed",
+      withColumn(BASELINE_AUDIT_CATALOG, "updated_at", { defaultExpr: null })
+    ],
+    [
+      "17b. updated_at default replaced by a fixed timestamp",
+      withColumn(BASELINE_AUDIT_CATALOG, "updated_at", {
+        defaultExpr: "'2026-01-01 00:00:00+00'::timestamp with time zone"
+      })
+    ],
+    [
+      "18a. metadata made NOT NULL without a default (omitted by the INSERT)",
+      withColumn(BASELINE_AUDIT_CATALOG, "metadata", { notNull: true })
+    ],
+    [
+      "18b. target_email made NOT NULL without a default (omitted by the INSERT)",
+      withColumn(BASELINE_AUDIT_CATALOG, "target_email", { notNull: true })
+    ],
+    [
+      "18c. target_admin_user_id made NOT NULL, and the INSERT writes NULL into it",
+      withColumn(BASELINE_AUDIT_CATALOG, "target_admin_user_id", { notNull: true })
+    ],
+    [
+      "18d. id turned into GENERATED ALWAYS AS IDENTITY (allowed: it is omitted)",
+      withColumn(BASELINE_AUDIT_CATALOG, "id", { identity: "a", defaultExpr: null })
+    ],
+    [
+      "18e. before_data turned into a GENERATED column the INSERT supplies",
+      withColumn(BASELINE_AUDIT_CATALOG, "before_data", { generated: "s" })
+    ],
+    [
+      "19a. details changed from jsonb to text",
+      withColumn(BASELINE_AUDIT_CATALOG, "details", { type: "text" })
+    ],
+    [
+      "19b. actor_admin_user_id changed from uuid to text",
+      withColumn(BASELINE_AUDIT_CATALOG, "actor_admin_user_id", { type: "text" })
+    ],
+    [
+      "19c. action_type narrowed to character varying(20)",
+      withColumn(BASELINE_AUDIT_CATALOG, "action_type", { type: "character varying(20)" })
+    ],
+    [
+      "19d. created_at changed from timestamptz to timestamp without time zone",
+      withColumn(BASELINE_AUDIT_CATALOG, "created_at", { type: "timestamp without time zone" })
+    ],
+    [
+      "20. 13 columns with the right names but the wrong type/nullability/default shape",
+      BASELINE_AUDIT_CATALOG.map((c) => ({
+        ...c,
+        type: "text",
+        notNull: true,
+        defaultExpr: null
+      }))
+    ]
+  ];
+
+  it.each(AUDIT_ADVERSARIES)("refuses %s", (label, catalog) => {
+    const violations = auditContractViolations(M069_AUDIT_CONTRACT, catalog);
+    // 18d is the one legal variation: an omitted NOT NULL column may satisfy
+    // the contract through IDENTITY instead of a default.
+    if (label.startsWith("18d")) {
+      expect(violations).toEqual([]);
+      return;
+    }
+    expect(violations.length, `${label} produced no violation`).toBeGreaterThan(0);
+    // Every one of these has the right 13 names, which is all R2 checked.
+    expect(r2AuditNamesAccepted(catalog)).toBe(true);
+  });
+
+  it("names the offending column, so a refusal is actionable", () => {
+    const violations = auditContractViolations(
+      M069_AUDIT_CONTRACT,
+      withColumn(BASELINE_AUDIT_CATALOG, "created_at", { defaultExpr: null })
+    );
+    expect(violations.every((v) => v.startsWith("created_at:"))).toBe(true);
+    expect(violations.join(" | ")).toContain(
+      "created_at: omitted by the M069 INSERT and NOT NULL with no usable default"
+    );
+    expect(violations.join(" | ")).toContain("created_at: default is <none>");
+  });
+
+  it("a missing or extra column is refused too", () => {
+    expect(
+      auditContractViolations(
+        M069_AUDIT_CONTRACT,
+        BASELINE_AUDIT_CATALOG.filter((c) => c.column !== "details")
+      )
+    ).toContain("details: absent from admin_audit_log");
+    expect(
+      auditContractViolations(M069_AUDIT_CONTRACT, [
+        ...BASELINE_AUDIT_CATALOG,
+        {
+          column: "shadow_payload",
+          type: "jsonb",
+          notNull: false,
+          defaultExpr: null,
+          identity: "",
+          generated: ""
+        }
+      ])
+    ).toContain("shadow_payload: present but not part of the M069 audit INSERT contract");
+  });
+});
+
+describe("M069 R3 / MEDIUM 2 — Section 0 is the boundary and the preflight agrees with it", () => {
+  it("Section 0 refuses under the new tags, before the first mutation", () => {
+    for (const tag of ["[AUDIT_CONTRACT]", "[AUDIT_INSERT_BLOCKED]"]) {
+      expect(APPLY_SECTION_0).toContain(tag);
+      expect(preflight).toContain(tag);
+    }
+    const lines = apply.split("\n");
+    const guardEnd = lines.findIndex((l) => l.includes("$m069_guard$;"));
+    const contractAt = lines.findIndex((l) => l.includes("[AUDIT_CONTRACT]"));
+    const firstMutation = lines.findIndex((l) =>
+      /^\s*(create|alter|drop|insert|update|delete|truncate|grant|revoke)\s/i.test(
+        l.replace(/--.*$/, "")
+      )
+    );
+    expect(contractAt).toBeGreaterThan(-1);
+    expect(contractAt).toBeLessThan(guardEnd);
+    expect(guardEnd).toBeLessThan(firstMutation);
+  });
+
+  it("Section 0 evaluates the contract itself and does not defer to the preflight", () => {
+    for (const branch of [
+      "type is ' || a.typ || ', the contract requires ",
+      "NOT NULL, but the M069 INSERT writes NULL into it",
+      "omitted by the M069 INSERT and NOT NULL with no usable default",
+      "the contract requires ' || e.default_re",
+      "GENERATED/IDENTITY ALWAYS, but the M069 INSERT supplies it explicitly"
+    ]) {
+      expect(APPLY_SECTION_0).toContain(branch);
+    }
+    expect(APPLY_SECTION_0).toContain("format_type(a.atttypid, a.atttypmod)");
+    expect(APPLY_SECTION_0).toContain("pg_get_expr(d.adbin, d.adrelid)");
+    expect(APPLY_SECTION_0).toContain("relforcerowsecurity");
+  });
+
+  it("the preflight advertises exactly what it now proves", () => {
+    expect(preflight).toContain("AUDITCONTRACT13");
+    expect(preflight).toContain("AUDITCONTRACTDRIFT");
+    expect(preflight).toContain("audit_contract_violations");
+    expect(preflight).toContain("audit_contract_seal");
+    expect(hasMutatingStatement(preflight)).toBe(false);
+  });
+
+  it("the R2 vocabulary hardening and Section 4 hardening are untouched", () => {
+    expect(preflight).toContain("VOCAB52EXACT");
+    expect(APPLY_SECTION_0).toContain("[AUDIT_VOCAB_UNEXPECTED]");
+    for (const sql of [apply, migration]) {
+      const vocabBlock = sql.slice(sql.indexOf("do $vocab$"), sql.indexOf("$vocab$;"));
+      const dropAt = vocabBlock.indexOf("drop constraint admin_audit_log_action_type_check");
+      expect(vocabBlock.indexOf("[AUDIT_VOCAB_UNEXPECTED]")).toBeLessThan(dropAt);
+      expect(vocabBlock.indexOf("[AUDIT_VOCAB_POST]")).toBeGreaterThan(dropAt);
+    }
+    expect(verifier).toContain("24 checks");
   });
 });

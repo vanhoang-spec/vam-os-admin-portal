@@ -14,16 +14,51 @@
 -- body, an audit vocabulary with the right size and a substituted value — all
 -- of those would pass a name-and-count verifier while leaving Production
 -- unsafe. So this file reads the actual definitions:
---   * V07/V08 parse pg_get_constraintdef() into the sets the CHECKs admit;
+--   * V07/V08 compare the COMPLETE normalised pg_get_constraintdef() of each
+--     CHECK against a hard-coded canonical definition;
 --   * V09/V19 prove the trigger's table, timing, events, enabled state and
---     function IDENTITY, and that the function is the intended definer body;
+--     function IDENTITY, and that the function body is byte-identical to the
+--     canonical one, by sealed comparison;
 --   * V13/V14/V20/V21/V22/V23 prove the RPC's schema, name, argument
---     signature, result type, SECURITY DEFINER flag, pinned search_path,
---     owner, grants and authorization contract, and emit a body seal;
+--     signature, result type, language, SECURITY DEFINER flag, pinned
+--     search_path, owner and grants, and seal its body;
 --   * V17 proves the audit vocabulary is SET-EQUAL to the canonical 52 plus
 --     exactly set_application_form_state;
 --   * V24 proves the control rows hang off the one UEHM / UEHM-S12 /
 --     UEHM-S12-B1 chain and off nothing else.
+--
+-- WHY FRAGMENTS ARE NOT ENOUGH, AND WHAT IS SEALED (R3)
+-- Reading a definition is not the same as proving it. Pulling the quoted
+-- literals out of a CHECK accepts
+--     <canonical> OR length(applicant_role) > 0
+-- which exposes exactly the same literals and admits every non-empty string.
+-- Searching a function body for marker phrases accepts a replacement that
+-- keeps every marker in a comment, or behind `if false then`, and deletes the
+-- statement that enforced it. Both holes are closed by comparing the WHOLE
+-- definition against an expected constant, and PASS is conditional on that
+-- equality — the seals below are not diagnostics.
+--
+--   CHECK constraints  the complete `pg_get_constraintdef(oid, true)` text,
+--                      with runs of whitespace collapsed to one space and the
+--                      ends trimmed, and NOTHING else discarded: parentheses,
+--                      ::text casts, operators, value order and a trailing
+--                      NOT VALID all still have to match. `pretty = true` is
+--                      the rendering existing accepted artifacts in this
+--                      repository already compare against by literal
+--                      (supabase_migrations/062, S12 release preflight).
+--   function bodies    `pg_proc.prosrc` — the exact bytes between the `$$`
+--                      delimiters in the canonical migration — hashed with
+--                      SHA-256. The seal covers the body and only the body;
+--                      schema, name, argument signature, result contract,
+--                      language, SECURITY DEFINER, pinned search_path, owner
+--                      and ACL are each proven separately, because a seal over
+--                      the body says nothing about any of them.
+--
+-- The constants in expected_def / expected_seal below are derived from
+-- supabase_migrations/069_application_form_controls.sql by
+-- __tests__/support/m069-canonical-definitions.ts, and
+-- __tests__/migration-069-application-intake-control.test.ts fails if this
+-- file and that migration ever disagree. They cannot drift apart silently.
 -- =============================================================================
 
 \echo '=== M069 VERIFIER — READ ONLY ==='
@@ -82,6 +117,48 @@ audit_shape as (
     coalesce((select sum(length(def) - length(replace(def, '''', ''))) from audit_check), 0) as quote_n
 ),
 
+-- ══ CANONICAL DEFINITIONS AND SEALS ════════════════════════════════════════
+-- The complete definition each object must have. Derived from
+-- supabase_migrations/069_application_form_controls.sql — see the header.
+-- A verifier PASS is CONDITIONAL on equality with these values.
+expected_def(object, definition) as (
+  values
+    ('application_form_controls_role_check',
+     'CHECK (applicant_role = ANY (ARRAY[''mentor''::text, ''mentee''::text]))'),
+    ('application_form_controls_state_check',
+     'CHECK (state = ANY (ARRAY[''closed''::text, ''pilot''::text, ''open''::text]))')
+),
+-- SHA-256 of pg_proc.prosrc, i.e. of the function body alone.
+expected_seal(object, body_seal) as (
+  values
+    ('vam069_assert_control_binding',
+     'f110bd1ba651eb9a71ce8ec4f4d889d838eba6d4497dcf2b1b55248d7b8b67c2'),
+    ('vam069_set_application_form_state',
+     '4615a7e06fbc11f0a5f277639b92a89bb934d604f5b1214a3c36858bf0cb7089')
+),
+
+-- Every CHECK on the control table, with the COMPLETE definition, the columns
+-- conkey attaches it to, and whether it is VALIDATED. Whitespace is collapsed
+-- so a line-wrapped rendering still compares equal; nothing else is discarded.
+control_checks as (
+  select c.conname,
+         c.convalidated,
+         btrim(regexp_replace(pg_get_constraintdef(c.oid, true), '\s+', ' ', 'g')) as norm_def,
+         (select string_agg(a.attname, '+' order by a.attnum)
+            from unnest(c.conkey) k
+            join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k) as attached_to
+  from pg_constraint c
+  where c.conrelid = to_regclass('public.application_form_controls')
+    and c.contype = 'c'
+),
+
+-- The owner of the control table. A SECURITY DEFINER function executes AS ITS
+-- OWNER, so both M069 functions must be owned by the same principal.
+control_owner as (
+  select pg_get_userbyid(relowner) as table_owner
+  from pg_class where oid = to_regclass('public.application_form_controls')
+),
+
 -- The one program/season/intake chain, resolved by code.
 chain as (
   select p.id as program_id, s.id as season_id, b.id as batch_id
@@ -96,16 +173,41 @@ rpc as (
          n.nspname                                 as schema_name,
          p.proname                                 as fn_name,
          pg_get_function_identity_arguments(p.oid) as arg_signature,
+         oidvectortypes(p.proargtypes)             as arg_types,
          pg_get_function_result(p.oid)             as result_type,
+         l.lanname                                 as language_name,
          p.prosecdef,
          p.proconfig,
          p.prosrc,
          p.proacl,
          p.proowner,
-         pg_get_userbyid(p.proowner)               as fn_owner
+         pg_get_userbyid(p.proowner)               as fn_owner,
+         encode(sha256(convert_to(p.prosrc, 'UTF8')), 'hex') as body_seal,
+         md5(p.prosrc)                             as body_md5
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
+  join pg_language l on l.oid = p.prolang
   where n.nspname = 'public' and p.proname = 'vam069_set_application_form_state'
+),
+
+-- The binding trigger function, read the same way.
+binding_fn as (
+  select p.oid,
+         n.nspname                                 as schema_name,
+         p.proname                                 as fn_name,
+         pg_get_function_identity_arguments(p.oid) as arg_signature,
+         pg_get_function_result(p.oid)             as result_type,
+         l.lanname                                 as language_name,
+         p.prosecdef,
+         p.proconfig,
+         p.prosrc,
+         pg_get_userbyid(p.proowner)               as fn_owner,
+         encode(sha256(convert_to(p.prosrc, 'UTF8')), 'hex') as body_seal,
+         md5(p.prosrc)                             as body_md5
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  join pg_language l on l.oid = p.prolang
+  where n.nspname = 'public' and p.proname = 'vam069_assert_control_binding'
 ),
 -- acldefault() is used when proacl is NULL, because a function that was never
 -- REVOKEd carries the built-in default — which grants EXECUTE to PUBLIC.
@@ -160,37 +262,49 @@ checks as (
   where schemaname = 'public' and tablename = 'application_form_controls'
     and indexname = 'application_form_controls_batch_role_key'
 
-  -- V07 — role vocabulary is closed. The EXPRESSION is read, not the name: a
-  -- same-named CHECK admitting a third role must FAIL here.
+  -- V07 — the applicant_role CHECK is the EXACT canonical definition: right
+  -- name, right table, attached to that one column, VALIDATED, and the whole
+  -- normalised expression equal to the expected constant.
+  --
+  -- Extracting the admitted literals was not enough. Every one of these
+  -- exposes exactly {mentee, mentor} and every one is weaker or different:
+  --     CHECK (applicant_role = ANY (ARRAY['mentor'::text,'mentee'::text])
+  --            OR length(applicant_role) > 0)      -- admits any non-empty text
+  --     CHECK (applicant_role <> ALL (ARRAY[...]))  -- admits exactly the wrong set
+  --     CHECK (state = ANY (ARRAY['mentor'::text,'mentee'::text]))  -- wrong column
+  -- Comparing the complete definition rejects all of them, and a NOT VALID
+  -- constraint fails twice over: convalidated is false and the rendering
+  -- carries a trailing NOT VALID the expected constant does not have.
   union all
-  select 'V07', 'applicant_role CHECK expression admits exactly mentor+mentee',
-         count(*) = 1 and bool_and(v.vals = array['mentee','mentor']),
-         coalesce(string_agg(v.conname || ' => {' || coalesce(array_to_string(v.vals, ','), '') || '}', '; '), '<absent>')
-  from (
-    select c.conname,
-           (select array_agg(distinct m[1] order by m[1])
-            from regexp_matches(pg_get_constraintdef(c.oid), '''([^'']*)''::text', 'g') m) as vals
-    from pg_constraint c
-    where c.conrelid = to_regclass('public.application_form_controls')
-      and c.contype = 'c'
-      and pg_get_constraintdef(c.oid) ilike '%applicant_role%'
-  ) v
+  select 'V07', 'applicant_role CHECK is the exact canonical definition',
+         count(*) = 1
+         and bool_and(v.conname = 'application_form_controls_role_check')
+         and bool_and(v.convalidated)
+         and bool_and(v.attached_to = 'applicant_role')
+         and bool_and(v.norm_def = (select definition from expected_def
+                                    where object = 'application_form_controls_role_check')),
+         coalesce(string_agg(v.conname || ' on {' || coalesce(v.attached_to, '<none>')
+                             || '} validated=' || v.convalidated::text
+                             || ' => ' || v.norm_def, '; '), '<absent>')
+  from control_checks v
+  where v.norm_def ilike '%applicant_role%'
 
-  -- V08 — state vocabulary is closed, by expression
+  -- V08 — the state CHECK is the EXACT canonical definition, same standard.
+  -- `... OR state IS NULL` and `... OR state = 'draft'` both keep the three
+  -- expected literals visible and both FAIL here.
   union all
-  select 'V08', 'state CHECK expression admits exactly closed+pilot+open',
-         count(*) = 1 and bool_and(v.vals = array['closed','open','pilot']),
-         coalesce(string_agg(v.conname || ' => {' || coalesce(array_to_string(v.vals, ','), '') || '}', '; '), '<absent>')
-  from (
-    select c.conname,
-           (select array_agg(distinct m[1] order by m[1])
-            from regexp_matches(pg_get_constraintdef(c.oid), '''([^'']*)''::text', 'g') m) as vals
-    from pg_constraint c
-    where c.conrelid = to_regclass('public.application_form_controls')
-      and c.contype = 'c'
-      and pg_get_constraintdef(c.oid) ilike '%state%'
-      and pg_get_constraintdef(c.oid) not ilike '%applicant_role%'
-  ) v
+  select 'V08', 'state CHECK is the exact canonical definition',
+         count(*) = 1
+         and bool_and(v.conname = 'application_form_controls_state_check')
+         and bool_and(v.convalidated)
+         and bool_and(v.attached_to = 'state')
+         and bool_and(v.norm_def = (select definition from expected_def
+                                    where object = 'application_form_controls_state_check')),
+         coalesce(string_agg(v.conname || ' on {' || coalesce(v.attached_to, '<none>')
+                             || '} validated=' || v.convalidated::text
+                             || ' => ' || v.norm_def, '; '), '<absent>')
+  from control_checks v
+  where v.norm_def ilike '%state%' and v.norm_def not ilike '%applicant_role%'
 
   -- V09 — binding trigger IDENTITY: right table, BEFORE INSERT OR UPDATE FOR
   -- EACH ROW, enabled, and pointing at the intended function. A same-named
@@ -208,7 +322,10 @@ checks as (
          and bool_and(t.tgenabled = 'O')    -- fires in origin/local sessions
          and bool_and(fnn.nspname = 'public' and fn.proname = 'vam069_assert_control_binding'),
          coalesce(string_agg(t.tgname || ' -> ' || fnn.nspname || '.' || fn.proname
-                             || ' type=' || t.tgtype::text || ' enabled=' || t.tgenabled, ', '), '<none>')
+                             -- tgenabled is "char"; text || "char" is an
+                             -- ambiguous operator in PG15 and aborts the whole
+                             -- file, so the cast is required, not cosmetic.
+                             || ' type=' || t.tgtype::text || ' enabled=' || t.tgenabled::text, ', '), '<none>')
   from pg_trigger t
   join pg_proc fn on fn.oid = t.tgfoid
   join pg_namespace fnn on fnn.oid = fn.pronamespace
@@ -241,13 +358,22 @@ checks as (
 
   -- V13 — the mutation function exists exactly once, in the right schema,
   -- with the exact argument signature the runtime calls.
+  --
+  -- The PARAMETER NAMES are part of that signature, not decoration:
+  -- app/actions/application-form-controls.ts calls this RPC through PostgREST
+  -- with named arguments (p_actor_admin_user_id, p_intake_batch_code,
+  -- p_applicant_role, p_expected_state, p_new_state), so renaming one breaks
+  -- the Admin screen while the type vector stays identical. Both the named
+  -- identity arguments and the bare type vector are therefore asserted.
   union all
   select 'V13', 'vam069_set_application_form_state exists once with the exact signature',
          count(*) = 1
          and bool_and(r.schema_name = 'public')
          and bool_and(r.fn_name = 'vam069_set_application_form_state')
-         and bool_and(r.arg_signature = 'uuid, text, text, text, text'),
-         coalesce(string_agg(r.schema_name || '.' || r.fn_name || '(' || r.arg_signature || ')', ', '), '<none>')
+         and bool_and(r.arg_signature = 'p_actor_admin_user_id uuid, p_intake_batch_code text, p_applicant_role text, p_expected_state text, p_new_state text')
+         and bool_and(r.arg_types = 'uuid, text, text, text, text'),
+         coalesce(string_agg(r.schema_name || '.' || r.fn_name || '(' || r.arg_signature || ')'
+                             || ' types=(' || r.arg_types || ')', ', '), '<none>')
   from rpc r
 
   -- V14 — it is SECURITY DEFINER with EXACTLY the pinned search_path, and no
@@ -307,26 +433,46 @@ checks as (
   join public.seasons s on s.id = c.season_id
   where s.code like '%S11%'
 
-  -- V19 — the trigger FUNCTION is the intended one, not merely a function of
-  -- that name: SECURITY DEFINER, pinned search_path, returns trigger, and its
-  -- body still carries all three binding refusals. md5 is emitted as a seal
-  -- so two environments can be compared directly.
+  -- V19 — the binding trigger function IS the canonical definition. Every
+  -- property is proven on its own — schema, name, argument signature, result
+  -- type, language, SECURITY DEFINER, exactly one pinned setting, owner — and
+  -- then the body is proven byte-identical by SHA-256 seal.
+  --
+  -- The seal is what closes the marker hole. A replacement body that keeps
+  -- every phrase below in a comment, or moves the three RAISEs behind
+  -- `if false then ... end if;`, or changes `is distinct from` to `=` in the
+  -- season comparison, still satisfies every `like` test on this list. It
+  -- cannot produce the same SHA-256. The `like` tests are retained as
+  -- diagnostics only: PASS requires the seal.
   union all
-  select 'V19', 'binding trigger function is the intended SECURITY DEFINER body',
+  select 'V19', 'binding trigger function is the canonical definition (sealed body)',
          count(*) = 1
+         and bool_and(f.schema_name = 'public')
+         and bool_and(f.fn_name = 'vam069_assert_control_binding')
+         and bool_and(f.arg_signature = '')
+         and bool_and(f.result_type = 'trigger')
+         and bool_and(f.language_name = 'plpgsql')
          and bool_and(f.prosecdef)
+         and bool_and(coalesce(array_length(f.proconfig, 1), 0) = 1)
          and bool_and(replace(array_to_string(f.proconfig, '|'), ' ', '') = 'search_path=public,pg_temp')
-         and bool_and(f.prorettype = 'pg_catalog.trigger'::regtype)
+         and bool_and(f.fn_owner not in ('anon', 'authenticated', 'service_role'))
+         and bool_and(f.fn_owner = o.table_owner)
+         and bool_and(f.body_seal = (select body_seal from expected_seal
+                                     where object = 'vam069_assert_control_binding'))
          and bool_and(f.prosrc like '%does not resolve to a season%')
          and bool_and(f.prosrc like '%does not own intake_batch%')
          and bool_and(f.prosrc like '%does not own season%')
          and bool_and(f.prosrc like '%23514%'),
-         coalesce(string_agg('secdef=' || f.prosecdef::text
+         coalesce(string_agg('args=(' || f.arg_signature || ') returns=' || f.result_type
+                             || ' lang=' || f.language_name
+                             || ' secdef=' || f.prosecdef::text
                              || ' cfg=' || coalesce(array_to_string(f.proconfig, ','), '<none>')
-                             || ' seal=' || md5(f.prosrc), ', '), '<none>')
-  from pg_proc f
-  join pg_namespace fn on fn.oid = f.pronamespace
-  where fn.nspname = 'public' and f.proname = 'vam069_assert_control_binding'
+                             || ' owner=' || f.fn_owner
+                             || ' seal=' || f.body_seal
+                             || ' md5=' || f.body_md5
+                             || ' len=' || length(f.prosrc)::text, ', '), '<none>')
+  from binding_fn f
+  cross join control_owner o
 
   -- V20 — the RPC's result type is part of the contract: app/actions reads
   -- outcome_status, previous_state, new_state, updated_at and actor_email off
@@ -349,10 +495,7 @@ checks as (
          and bool_and(r.fn_owner = t.table_owner),
          coalesce(string_agg('function=' || r.fn_owner || ' table=' || coalesce(t.table_owner, '<none>'), ', '), '<none>')
   from rpc r
-  cross join (
-    select pg_get_userbyid(relowner) as table_owner
-    from pg_class where oid = to_regclass('public.application_form_controls')
-  ) t
+  cross join control_owner t
 
   -- V22 — the affirmative grant. Without it the Server Action path cannot
   -- call the RPC at all and the Admin screen is dead.
@@ -363,14 +506,29 @@ checks as (
   from rpc_acl
   where privilege_type = 'EXECUTE' and grantee_name = 'service_role'
 
-  -- V23 — the RPC BODY still carries the authorization contract. This is what
-  -- fails if someone replaces the function with an unsafe one of the same
-  -- name and signature: no active-status check, no role allow-list, no row
-  -- lock, no optimistic-concurrency compare, no atomic audit INSERT — or a
-  -- core_team grant that was never reviewed. md5 is emitted as a body seal.
+  -- V23 — the RPC BODY is the canonical definition, proven by SHA-256 seal.
+  --
+  -- R2 asserted that the phrases below occur somewhere in prosrc. They occur
+  -- in a body that has had the actor lookup deleted and the words left in a
+  -- comment; in a body whose `v_actor.status <> 'active'` was weakened to
+  -- `v_actor.status is not null`; in a body whose role allow-list gained a
+  -- third entry; in a body whose `p_expected_state` compare sits behind a
+  -- branch that never runs. None of those produces the same seal, and PASS is
+  -- conditional on the seal — the phrase tests are diagnostics that make a
+  -- FAIL readable, not the proof.
+  --
+  -- Body identity is ADDITIONAL to, not a substitute for, the structural
+  -- proofs: schema/name/signature (V13), SECURITY DEFINER and pinned
+  -- search_path (V14), the TABLE result contract (V20), owner (V21), the
+  -- absence of any PUBLIC/anon/authenticated EXECUTE (V15) and the
+  -- affirmative service_role EXECUTE (V22) are all proven separately, because
+  -- a body seal says nothing about any of them.
   union all
-  select 'V23', 'mutation function body still carries the M069 authorization contract',
+  select 'V23', 'mutation function body is the canonical definition (sealed body)',
          count(*) = 1
+         and bool_and(r.language_name = 'plpgsql')
+         and bool_and(r.body_seal = (select body_seal from expected_seal
+                                     where object = 'vam069_set_application_form_state'))
          and bool_and(r.prosrc like '%''active''%')
          and bool_and(r.prosrc like '%super_admin%')
          and bool_and(r.prosrc like '%42501%')
@@ -378,9 +536,18 @@ checks as (
          and bool_and(r.prosrc like '%p_expected_state%')
          and bool_and(r.prosrc like '%40001%')
          and bool_and(r.prosrc like '%admin_audit_log%')
-         and bool_and(r.prosrc like '%set_application_form_state%')
-         and bool_and(r.prosrc not like '%core_team%'),
-         coalesce(string_agg('seal=' || md5(r.prosrc) || ' len=' || length(r.prosrc)::text, ', '), '<none>')
+         and bool_and(r.prosrc like '%set_application_form_state%'),
+         -- R2 also asserted `prosrc not like '%core_team%'` here. The
+         -- canonical body FAILS that test: it explains in a comment that
+         -- core_team, reviewer, support_team and viewer are NOT allowed, and
+         -- a substring test cannot tell that sentence from a grant. Removed,
+         -- because it was wrong in both directions — it FAILed the intended
+         -- function and would have PASSed a body that admitted core_team
+         -- without naming it. The seal above decides, exactly.
+         coalesce(string_agg('lang=' || r.language_name
+                             || ' seal=' || r.body_seal
+                             || ' md5=' || r.body_md5
+                             || ' len=' || length(r.prosrc)::text, ', '), '<none>')
   from rpc r
 
   -- V24 — DIRECT binding proof, independent of the batch code alone. Exactly
@@ -463,4 +630,16 @@ select
               from (select value from actual_post except select value from expected_post) b),
            '<none>') as audit_vocab_unexpected,
   md5(coalesce((select string_agg(value, ',' order by value) from actual_post), '<none>')) as audit_vocab_seal,
+  -- The two body seals V19/V23 compared against their expected constants,
+  -- reported so two environments can be diffed directly. Expected:
+  --   binding f110bd1ba651eb9a71ce8ec4f4d889d838eba6d4497dcf2b1b55248d7b8b67c2
+  --   rpc     4615a7e06fbc11f0a5f277639b92a89bb934d604f5b1214a3c36858bf0cb7089
+  coalesce((select encode(sha256(convert_to(p.prosrc, 'UTF8')), 'hex')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'vam069_assert_control_binding'),
+           '<absent>') as binding_body_seal,
+  coalesce((select encode(sha256(convert_to(p.prosrc, 'UTF8')), 'hex')
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname = 'vam069_set_application_form_state'),
+           '<absent>') as rpc_body_seal,
   now() at time zone 'UTC' as verified_at_utc;

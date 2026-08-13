@@ -8,7 +8,9 @@
 -- Section 0 re-asserts every material condition the standalone preflight
 -- proves — environment, admin_users authorization prerequisites, complete
 -- absence of M069, exact UEHM / UEHM-S12 / UEHM-S12-B1 cardinality and
--- parentage, the admin_audit_log column and nullability shape, and exact set
+-- parentage, the COMPLETE 13-column admin_audit_log INSERT contract (name,
+-- type, nullability, default and generated/identity behaviour of every
+-- column, in the three classes the M069 INSERT creates), and exact set
 -- equality of the pre-M069 52-value audit vocabulary — INSIDE this
 -- transaction, before the first mutation. Running the preflight is still
 -- recommended (it reports the same refusals without taking a lock), but
@@ -75,6 +77,40 @@ declare
     'action','action_type','actor_admin_user_id','actor_email','after_data',
     'before_data','created_at','details','id','metadata','target_admin_user_id',
     'target_email','updated_at'
+  ];
+  -- ══ CANONICAL admin_audit_log INSERT CONTRACT (all 13 columns) ════════════
+  -- column # format_type # how the M069 audit INSERT treats it # default regex
+  --
+  --   value   an expression is written into the column
+  --   null    the literal NULL is written into it, so it MUST be nullable
+  --   omitted the column is not named in the INSERT at all, so it must either
+  --           be nullable or carry a usable default / identity / generated value
+  --
+  -- The fourth field is set only for omitted NOT NULL columns, where the
+  -- default is what makes the INSERT legal, and pins the family that default
+  -- must belong to. `#` is the separator because the regexes contain `|`.
+  --
+  -- Derived from the accepted Production baseline — the 13-column shape in
+  -- VAM_OS_PROD_S12_RELEASE_20260809/validation/prod_baseline_reproduction.sql
+  -- with T1 Section 1's legacy NOT NULL drops applied — combined with what
+  -- migration 069's audit INSERT actually writes into each column.
+  -- __tests__/support/m069-canonical-definitions.ts re-derives this array from
+  -- those same artifacts and a test fails if this copy disagrees, so the
+  -- contract cannot drift away from either the baseline or the RPC.
+  v_audit_contract constant text[] := array[
+    'action#text#value#',
+    'action_type#text#value#',
+    'actor_admin_user_id#uuid#value#',
+    'actor_email#text#value#',
+    'after_data#jsonb#value#',
+    'before_data#jsonb#value#',
+    'created_at#timestamp with time zone#omitted#^([a-z_]+\.)?(now\(\)|CURRENT_TIMESTAMP)$',
+    'details#jsonb#value#',
+    'id#uuid#omitted#^([a-z_]+\.)?(gen_random_uuid|uuid_generate_v4)\(\)$',
+    'metadata#jsonb#omitted#',
+    'target_admin_user_id#uuid#null#',
+    'target_email#text#omitted#',
+    'updated_at#timestamp with time zone#omitted#^([a-z_]+\.)?(now\(\)|CURRENT_TIMESTAMP)$'
   ];
   v_admin_user_cols constant text[] := array['email','id','role','status'];
   -- ══ CANONICAL PRE-M069 AUDIT VOCABULARY (52) ══════════════════════════════
@@ -252,6 +288,95 @@ begin
     raise exception 'M069 ABORTED [AUDIT_ACTION_NOT_NULL]: legacy column(s) % would abort the audit INSERT with 23502.', v_txt;
   end if;
 
+  -- ── E2. The COMPLETE audit INSERT contract, not just the 13 names ────────
+  -- Thirteen columns existing proves nothing about whether the M069 audit
+  -- INSERT can succeed. Drop the default from NOT NULL id, created_at or
+  -- updated_at and the name list is unchanged: the guard above passes, M069
+  -- commits, the owner is told it is verified — and the FIRST toggle then
+  -- fails with 23502, taking the state change down with it because the two
+  -- share a transaction. Change details from jsonb to text and the INSERT
+  -- fails with 42804 instead. Both must abort BEFORE the first mutation.
+  --
+  -- So every one of the 13 columns is checked against the contract above, in
+  -- the three classes the INSERT actually creates:
+  --   supplied directly  the column's type must be the one the RPC writes;
+  --   supplied as NULL   target_admin_user_id must be nullable;
+  --   omitted            nullable, or NOT NULL with a default that produces a
+  --                      value — and for id / created_at / updated_at, a
+  --                      default of the right family, because a default of
+  --                      NULL::uuid satisfies "has a default" and still
+  --                      violates NOT NULL at INSERT time.
+  -- A column that is GENERATED or IDENTITY ALWAYS is refused where the INSERT
+  -- supplies a value, because an explicit value into one is 428C9.
+  if not exists (select 1 from pg_class
+                  where oid = to_regclass('public.admin_audit_log') and relkind = 'r') then
+    raise exception 'M069 ABORTED [AUDIT_INSERT_BLOCKED]: admin_audit_log is not an ordinary table; the M069 audit INSERT is written against one.';
+  end if;
+
+  if exists (select 1 from pg_class
+              where oid = to_regclass('public.admin_audit_log') and relforcerowsecurity) then
+    raise exception 'M069 ABORTED [AUDIT_INSERT_BLOCKED]: FORCE ROW LEVEL SECURITY is set on admin_audit_log, so the SECURITY DEFINER audit INSERT is filtered by policy even running as the table owner. RLS being merely ENABLED is the accepted baseline and is fine; FORCE is not.';
+  end if;
+
+  with expected as (
+    select split_part(e, '#', 1)            as col,
+           split_part(e, '#', 2)            as typ,
+           split_part(e, '#', 3)            as supply,
+           nullif(split_part(e, '#', 4), '') as default_re
+    from unnest(v_audit_contract) e
+  ),
+  actual as (
+    select a.attname::text                      as col,
+           format_type(a.atttypid, a.atttypmod) as typ,
+           a.attnotnull,
+           a.attidentity,
+           a.attgenerated,
+           pg_get_expr(d.adbin, d.adrelid)      as defexpr
+    from pg_attribute a
+    left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+    where a.attrelid = to_regclass('public.admin_audit_log')
+      and a.attnum > 0 and not a.attisdropped
+  ),
+  violations(v) as (
+    select e.col || ': absent from admin_audit_log'
+      from expected e left join actual a on a.col = e.col
+     where a.col is null
+    union all
+    select a.col || ': present but not part of the M069 audit INSERT contract'
+      from actual a left join expected e on e.col = a.col
+     where e.col is null
+    union all
+    select e.col || ': type is ' || a.typ || ', the contract requires ' || e.typ
+      from expected e join actual a on a.col = e.col
+     where a.typ <> e.typ
+    union all
+    select e.col || ': GENERATED/IDENTITY ALWAYS, but the M069 INSERT supplies it explicitly'
+      from expected e join actual a on a.col = e.col
+     where e.supply in ('value', 'null')
+       and (a.attgenerated <> '' or a.attidentity = 'a')
+    union all
+    select e.col || ': NOT NULL, but the M069 INSERT writes NULL into it'
+      from expected e join actual a on a.col = e.col
+     where e.supply = 'null' and a.attnotnull
+    union all
+    select e.col || ': omitted by the M069 INSERT and NOT NULL with no usable default, identity or generated value'
+      from expected e join actual a on a.col = e.col
+     where e.supply = 'omitted' and a.attnotnull
+       and a.attidentity = '' and a.attgenerated = ''
+       and (a.defexpr is null or btrim(a.defexpr) ~* '^null(::[a-z ]+)?$')
+    union all
+    select e.col || ': default is ' || coalesce(a.defexpr, '<none>') || ', the contract requires ' || e.default_re
+      from expected e join actual a on a.col = e.col
+     where e.default_re is not null
+       and a.attidentity = '' and a.attgenerated = ''
+       and (a.defexpr is null or btrim(a.defexpr) !~ e.default_re)
+  )
+  select string_agg(v, '; ' order by v) into v_txt from violations;
+
+  if v_txt is not null then
+    raise exception 'M069 ABORTED [AUDIT_CONTRACT]: admin_audit_log does not satisfy the M069 audit INSERT contract: %.', v_txt;
+  end if;
+
   -- Find the vocabulary constraint by DEFINITION, not by name: a CHECK on
   -- action_type under any name still governs what the audit INSERT may write.
   select count(*) into v_n
@@ -345,7 +470,7 @@ begin
     end if;
   end if;
 
-  raise notice 'M069 Section 0 passed: environment, admin_users authorization prerequisites, complete absence of M069, exact UEHM/UEHM-S12/UEHM-S12-B1 chain, audit schema and set-equal 52-value audit vocabulary all re-asserted inside this transaction.';
+  raise notice 'M069 Section 0 passed: environment, admin_users authorization prerequisites, complete absence of M069, exact UEHM/UEHM-S12/UEHM-S12-B1 chain, the complete 13-column admin_audit_log INSERT contract and the set-equal 52-value audit vocabulary all re-asserted inside this transaction.';
 end
 $m069_guard$;
 
