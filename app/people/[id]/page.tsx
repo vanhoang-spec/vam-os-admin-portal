@@ -26,7 +26,7 @@ import {
   keyById
 } from "@/lib/data";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
-import { canOperateAnyScope, getAdminScopeContext, getScopeFilter, resolveCanonicalScope } from "@/lib/program-scope";
+import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFilter, resolveCanonicalScope } from "@/lib/program-scope";
 import { MembershipLifecycleControls } from "./membership-lifecycle-controls";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
@@ -234,6 +234,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
 
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
+  const canOperateUehmS12 = await canOperateSeason(scopeContext, "UEHM-S12");
   const [
     adminUser,
     person,
@@ -450,7 +451,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
 
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Trạng thái tham gia</h2>
-        <MembershipLifecycleControls personId={params.id} enabled={canOperateAnyScope(scopeContext)}
+        <MembershipLifecycleControls personId={params.id} enabled={canOperateAnyScope(scopeContext)} canOperateUehmS12={canOperateUehmS12}
           memberships={seasonMembershipRows.map((row) => ({ id: row.id, role: row.role, status: row.status, intakeBatchCode: row.intake_batch_code, programLabel: String(row.program?.name ?? row.program?.code ?? row.program_id), seasonLabel: String(row.season?.name ?? row.season?.code ?? row.season_id), authorizationScopeLevel: resolveCanonicalScope(scopeContext, row.program?.id, row.program?.code, row.season?.id, row.season?.code), programCode: row.program?.code, seasonCode: row.season?.code }))}
           programs={programs.data.map((row) => ({ id: row.id, label: String(row.name ?? row.code ?? row.id), code: row.code ?? undefined }))}
           seasons={seasons.data.map((row) => ({ id: row.id, label: String(row.name ?? row.code ?? row.id), code: row.code ?? undefined }))} />

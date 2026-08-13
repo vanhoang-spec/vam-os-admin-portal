@@ -73,7 +73,7 @@ function TransitionForm({
   );
 }
 
-export function MembershipLifecycleControls({ personId, memberships, programs, seasons, enabled }: { personId: string; memberships: Membership[]; programs: Option[]; seasons: Option[]; enabled: boolean }) {
+export function MembershipLifecycleControls({ personId, memberships, programs, seasons, enabled, canOperateUehmS12 }: { personId: string; memberships: Membership[]; programs: Option[]; seasons: Option[]; enabled: boolean; canOperateUehmS12?: boolean }) {
   const [addState, addAction] = useFormState(addMembershipRoleAction, initialMembershipLifecycleState);
   const [pendingMembershipId, setPendingMembershipId] = useState<string | null>(null);
 
@@ -103,7 +103,7 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
 
   const missingS12Roles: { role: string; programId: string; seasonId: string; programLabel: string; seasonLabel: string }[] = [];
 
-  if (uehmProgram && s11Season && s12Season) {
+  if (uehmProgram && s11Season && s12Season && canOperateUehmS12) {
     const s11Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S11");
     const s12Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S12");
 

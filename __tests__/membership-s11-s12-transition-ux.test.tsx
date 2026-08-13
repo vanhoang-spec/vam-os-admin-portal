@@ -38,12 +38,11 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
     ];
 
-    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} />);
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
 
     // Should render the missing S12 section
     expect(screen.getByText("UEHM / Mùa 12")).not.toBeNull();
     expect(screen.getByText("mentor · Chưa chuyển sang Mùa 12")).not.toBeNull();
-    
     // Should render the button explicitly
     const continueBtn = screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" });
     expect(continueBtn).not.toBeNull();
@@ -55,7 +54,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       { id: "M2", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
     ];
 
-    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} />);
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
 
     // Mùa 12 already exists in the memberships list
     const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
@@ -67,9 +66,21 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
     ];
 
-    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={false} />);
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={false} canOperateUehmS12={false} />);
 
     expect(screen.getByText(/Cần quyền operations/)).not.toBeNull();
+    const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
+    expect(continueBtns.length).toBe(0);
+  });
+
+  it("does not display 'Tiếp tục sang Mùa 12' if user cannot operate UEHM-S12 specifically", () => {
+    const memberships = [
+      { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={false} />);
+
+    // Cannot operate UEHM-S12, so the transition action does not show up
     const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
     expect(continueBtns.length).toBe(0);
   });
@@ -79,7 +90,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       { id: "M2", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
     ];
 
-    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} />);
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
 
     // Active membership supports pause/withdraw/opt_out
     expect(screen.getByRole("button", { name: "Tạm nghỉ" })).not.toBeNull();
@@ -91,7 +102,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       { id: "M2", role: "mentor", status: "paused", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
     ];
 
-    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} />);
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
 
     // Paused membership supports reactivate
     expect(screen.getByRole("button", { name: "Kích hoạt lại" })).not.toBeNull();
@@ -102,7 +113,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       { id: "M1", role: "mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
     ];
 
-    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} />);
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
 
     expect(screen.getByText("mentee · Chưa chuyển sang Mùa 12")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
