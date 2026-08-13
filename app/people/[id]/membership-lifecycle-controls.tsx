@@ -104,15 +104,23 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
   const missingS12Roles: { role: string; programId: string; seasonId: string; programLabel: string; seasonLabel: string }[] = [];
 
   if (uehmProgram && s11Season && s12Season && canOperateUehmS12) {
-    const isContinuationEligible = (status: string) => status === "active" || status === "completed";
-    const isParticipantRole = (role: string) => role === "mentor" || role === "mentee";
+    const normalize = (val: string) => String(val ?? "").trim().toLowerCase();
+    const isContinuationEligible = (status: string) => {
+      const s = normalize(status);
+      return s === "active" || s === "completed";
+    };
+    const isParticipantRole = (role: string) => {
+      const r = normalize(role);
+      return r === "mentor" || r === "mentee";
+    };
     const s11Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S11" && isContinuationEligible(m.status) && isParticipantRole(m.role));
     const s12Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S12");
 
     for (const s11 of s11Memberships) {
-      if (!s12Memberships.some((s12) => s12.role === s11.role)) {
-        if (!missingS12Roles.some((m) => m.role === s11.role)) {
-          missingS12Roles.push({ role: s11.role, programId: uehmProgram.id, seasonId: s12Season.id, programLabel: uehmProgram.label, seasonLabel: s12Season.label });
+      const normalizedRole = normalize(s11.role);
+      if (!s12Memberships.some((s12) => normalize(s12.role) === normalizedRole)) {
+        if (!missingS12Roles.some((m) => m.role === normalizedRole)) {
+          missingS12Roles.push({ role: normalizedRole, programId: uehmProgram.id, seasonId: s12Season.id, programLabel: uehmProgram.label, seasonLabel: s12Season.label });
         }
       }
     }

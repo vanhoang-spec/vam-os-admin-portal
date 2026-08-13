@@ -781,4 +781,43 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       unmount();
     }
   });
+
+  it("normalizes role casing and whitespace for continuation eligibility", () => {
+    for (const role of ["mentor", "Mentor", " MENTOR ", "mentee", "Mentee"]) {
+      const memberships = [
+        { id: "M1", role, status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+      ];
+      const { unmount } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it("normalizes status casing and whitespace for continuation eligibility", () => {
+    for (const status of ["active", "Active", " completed "]) {
+      const memberships = [
+        { id: "M1", role: "mentor", status, intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+      ];
+      const { unmount } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it("suppresses CTA when same-role S12 membership exists despite role casing differences", () => {
+    const memberships = [
+      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
+      { id: "M2", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+    ];
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+    expect(screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" }).length).toBe(0);
+  });
+
+  it("Lê Thị Thu Hạ-shaped fixture: renders CTA successfully", () => {
+    const memberships = [
+      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+    expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
+  });
 });
