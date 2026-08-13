@@ -888,4 +888,39 @@ describe("Season 11 -> Season 12 Transition UX", () => {
     expect(seasonIdInput).not.toBeNull();
     expect(seasonIdInput?.getAttribute("value")).toBe("S12");
   });
+
+  describe("S12 continuation diagnostic", () => {
+    const TARGET_PERSON = "74f882de-338d-47da-a759-98bd32659b59";
+    const memberships = [
+      { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    it("renders only for Hạ on Preview/Staging with authorized operator", () => {
+      process.env.NEXT_PUBLIC_VERCEL_ENV = "preview";
+      render(<MembershipLifecycleControls personId={TARGET_PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByTestId("s12-diagnostic")).not.toBeNull();
+      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    });
+
+    it("does not render in Production", () => {
+      process.env.NEXT_PUBLIC_VERCEL_ENV = "production";
+      render(<MembershipLifecycleControls personId={TARGET_PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByTestId("s12-diagnostic")).toBeNull();
+      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    });
+
+    it("does not render for another person", () => {
+      process.env.NEXT_PUBLIC_VERCEL_ENV = "preview";
+      render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByTestId("s12-diagnostic")).toBeNull();
+      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    });
+
+    it("does not render for unauthorized operator", () => {
+      process.env.NEXT_PUBLIC_VERCEL_ENV = "preview";
+      render(<MembershipLifecycleControls personId={TARGET_PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={false} />);
+      expect(screen.queryByTestId("s12-diagnostic")).toBeNull();
+      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    });
+  });
 });
