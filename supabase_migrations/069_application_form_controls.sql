@@ -121,9 +121,46 @@ revoke all on public.application_form_controls from authenticated;
 -- form state change, so an M069 audit INSERT would abort with 23514 — and
 -- because the M069 toggle is atomic, that would abort the toggle itself.
 -- Extend the vocabulary by exactly one value. Nothing is removed.
+--
+-- The replacement list below is hard-coded, so it is only safe if the list it
+-- replaces is EXACTLY the canonical pre-M069 52. A count of 52 does not prove
+-- that: a different 52-value list would pass a count check and this block would
+-- then silently delete a legitimate Production action type. So the existing
+-- definition is parsed into the set it actually admits and compared for SET
+-- EQUALITY in both directions before the drop, and the installed definition is
+-- compared again afterwards against the canonical 52 plus exactly
+-- set_application_form_state.
 do $vocab$
 declare
-  v_def text;
+  v_def           text;
+  v_actual_vocab  text[];
+  v_missing       text[];
+  v_unexpected    text[];
+  v_post_expected text[];
+  v_raw_n         integer;
+  v_quote_n       integer;
+  -- CANONICAL PRE-M069 AUDIT VOCABULARY (52). The exact list installed by the
+  -- S12 release T1, Section 2. Shared verbatim with preflight.sql, apply.sql
+  -- Section 0 and verifier.sql; __tests__/support/m069-audit-vocabulary.ts
+  -- holds the same 52 values and a test proves every copy is set-equal to it.
+  -- DO NOT EDIT ONE COPY.
+  v_expected_vocab constant text[] := array[
+    'accept_registration_proof','add_event_participation','add_manual_recap','add_membership_role',
+    'approve_application_as_mentee','approve_application_as_mentor','bulk_add_event_participants',
+    'cancel_event','cancel_event_registration','cancel_match','cancel_membership',
+    'close_event_registration','confirm_event_registration','confirm_registration_payment',
+    'create_action_item','create_admin_user','create_event','create_event_checkin_link',
+    'create_event_registration_link','create_manual_match','create_membership','create_mentee_profile',
+    'create_mentor_profile','deactivate_admin_user','edit_recap','import_participant_membership',
+    'link_person_auth','open_event_registration','opt_out_membership','pause_membership',
+    'reactivate_admin_user','reactivate_membership','reconcile_person_auth','reject_event_registration',
+    'reject_registration_payment','reject_registration_proof','remove_admin_access',
+    'remove_event_participation','remove_membership_role','soft_delete_recap','sync_auth','unknown',
+    'update_action_item','update_admin_user','update_admin_user_access','update_event','update_event_participation',
+    'update_mentee_profile','update_mentor_profile','update_registration_review_note',
+    'waitlist_event_registration','withdraw_membership'
+  ];
+  v_m069_value constant text := 'set_application_form_state';
 begin
   select pg_get_constraintdef(c.oid) into v_def
   from pg_constraint c
@@ -135,6 +172,35 @@ begin
   elsif v_def like '%set_application_form_state%' then
     raise notice 'M069: audit vocabulary already admits set_application_form_state.';
   else
+    -- Parse the list about to be replaced, and prove the parse is COMPLETE:
+    -- every quote character in the definition must belong to one of the
+    -- 'value'::text elements captured here, or the definition is not the closed
+    -- ANY(ARRAY[...]) shape this block understands and the parsed set is not
+    -- evidence of anything.
+    select count(*) into v_raw_n
+    from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+    select array_agg(distinct m[1]) into v_actual_vocab
+    from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+    v_quote_n := length(v_def) - length(replace(v_def, '''', ''));
+    if v_def not ilike '%= ANY (ARRAY[%' or v_quote_n <> 2 * v_raw_n
+       or v_raw_n <> coalesce(array_length(v_actual_vocab, 1), 0) then
+      raise exception 'M069 ABORTED [AUDIT_VOCAB_SHAPE]: admin_audit_log_action_type_check is not a parseable, duplicate-free ANY(ARRAY[...]) list: %.', v_def;
+    end if;
+
+    select array_agg(x order by x) into v_missing
+    from unnest(v_expected_vocab) x where x <> all (coalesce(v_actual_vocab, array[]::text[]));
+    select array_agg(x order by x) into v_unexpected
+    from unnest(coalesce(v_actual_vocab, array[]::text[])) x where x <> all (v_expected_vocab);
+
+    if v_missing is not null or v_unexpected is not null then
+      raise exception 'M069 ABORTED [AUDIT_VOCAB_UNEXPECTED]: the vocabulary being replaced admits % value(s) but is not the canonical pre-M069 52. MISSING (expected, not present): %. UNEXPECTED (present, not expected): %. Replacing it would drop the unexpected value(s).',
+        coalesce(array_length(v_actual_vocab, 1), 0),
+        coalesce(array_to_string(v_missing, ', '), '<none>'),
+        coalesce(array_to_string(v_unexpected, ', '), '<none>');
+    end if;
+
     alter table public.admin_audit_log
       drop constraint admin_audit_log_action_type_check;
     alter table public.admin_audit_log
@@ -157,6 +223,33 @@ begin
           'waitlist_event_registration','withdraw_membership'
         ])
       );
+
+    -- Re-read what actually landed and prove it is the canonical 52 plus
+    -- exactly one new value. Nothing lost, nothing extra.
+    select pg_get_constraintdef(c.oid) into v_def
+    from pg_constraint c
+    where c.conrelid = to_regclass('public.admin_audit_log')
+      and c.conname = 'admin_audit_log_action_type_check';
+
+    select array_agg(distinct m[1]) into v_actual_vocab
+    from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+    v_post_expected := v_expected_vocab || v_m069_value;
+
+    select array_agg(x order by x) into v_missing
+    from unnest(v_post_expected) x where x <> all (coalesce(v_actual_vocab, array[]::text[]));
+    select array_agg(x order by x) into v_unexpected
+    from unnest(coalesce(v_actual_vocab, array[]::text[])) x where x <> all (v_post_expected);
+
+    if v_missing is not null or v_unexpected is not null
+       or coalesce(array_length(v_actual_vocab, 1), 0) <> 53 then
+      raise exception 'M069 ABORTED [AUDIT_VOCAB_POST]: the installed vocabulary is not the canonical 52 plus %. Size %. MISSING: %. UNEXPECTED: %.',
+        v_m069_value,
+        coalesce(array_length(v_actual_vocab, 1), 0),
+        coalesce(array_to_string(v_missing, ', '), '<none>'),
+        coalesce(array_to_string(v_unexpected, ', '), '<none>');
+    end if;
+
     raise notice 'M069: audit vocabulary extended to 53 values (added set_application_form_state).';
   end if;
 end

@@ -96,6 +96,45 @@ set_application_form_state
 Nothing is removed. All 52 release values are preserved verbatim and asserted
 by test.
 
+### The 52 are proven by SET EQUALITY, not by counting
+
+`apply.sql` replaces the constraint with a **hard-coded** list, so that is only
+safe if the list it replaces is *exactly* the canonical pre-M069 52. A count of
+52 is not evidence: a different 52-value list — one legitimate Production
+action type renamed, or swapped for another — passes a count check, and the
+replacement would then silently delete it.
+
+Every artifact therefore parses `pg_get_constraintdef()` into the set the
+constraint **actually admits** and compares it in both directions:
+
+| where | proves |
+|---|---|
+| `preflight.sql` | actual == canonical 52, and `set_application_form_state` absent |
+| `apply.sql` Section 0 | the same, inside the apply transaction |
+| `apply.sql` / migration Section 4 | the same again immediately before the drop, and *after* the add that the result is the canonical 52 **+** exactly `set_application_form_state` |
+| `verifier.sql` V17 | post-apply set == canonical 52 + `set_application_form_state` |
+
+Refusals name the offending values: `MISSING (expected, not present)` and
+`UNEXPECTED (present, not expected)`.
+
+The parse is proven complete before the set is trusted — every quote character
+in the constraint definition must belong to a captured `'value'::text` element
+— so a value the parser could not read cannot hide from the comparison.
+Duplicates, a `NOT VALID` constraint, more than one `action_type` CHECK, or a
+CHECK under an unexpected name are each separate refusals. The constraint is
+found **by definition, not by name**; the name is then asserted rather than
+assumed.
+
+### One canonical representation
+
+The 52 values are written once as a source of truth in
+[`__tests__/support/m069-audit-vocabulary.ts`](../__tests__/support/m069-audit-vocabulary.ts),
+and `migration-069-application-intake-control.test.ts` proves that **every**
+copy in this package — the preflight guard, the preflight token CTE, both
+`apply.sql` copies, the migration copy, both verifier CTEs and the `rollback.sql`
+restore list — is set-equal to it. Preflight, apply and verifier cannot drift
+apart on what "the pre-M069 vocabulary" means.
+
 Two deliberate choices:
 
 - **One action type, not two.** With three states, `open_application_form` /
@@ -143,19 +182,45 @@ so a caller reaching the database by another route is still refused.
 
 | file | role |
 |---|---|
-| `preflight.sql` | READ-ONLY. 13 refusal conditions. Emits a pass token + audit column seal. |
-| `apply.sql` | One transaction. Re-asserts the baseline in Section 0; never assumes preflight ran. |
-| `verifier.sql` | READ-ONLY. 18 checks, all must PASS. |
+| `preflight.sql` | READ-ONLY. 25 refusal conditions. Emits a pass token, an audit column seal and an audit vocabulary seal. |
+| `apply.sql` | One transaction. Section 0 re-asserts the **whole** baseline; **does not depend on preflight having been run.** |
+| `verifier.sql` | READ-ONLY. 24 checks, all must PASS. |
 | `rollback.sql` | Refuses while any form is open. Never deletes audit history. |
 
 The repository migration `supabase_migrations/069_application_form_controls.sql`
-is identical in effect; `apply.sql` adds only the Section 0 re-assertion.
+is identical in effect; `apply.sql` adds only the header and the Section 0
+re-assertion. Everything from `-- ── 1. The control table` onward is
+byte-identical between the two, asserted by test.
+
+### apply.sql is self-contained
+
+Section 0 re-asserts, inside the apply transaction and before the first
+mutation:
+
+| | re-asserted |
+|---|---|
+| **A** | environment identity — no `vam062_*` functions, i.e. not Staging |
+| **B** | `admin_users` exists; `id`/`email`/`role`/`status` all present, `id` is `uuid`, `role`/`status` are text-comparable, `id` carries a primary/unique key — the exact prerequisites of the SECURITY DEFINER authorization path and of the `updated_by` FK |
+| **C** | M069 is completely unapplied — no control table, no `vam069_*` function, no leftover `application_form_controls*` relation, trigger or constraint |
+| **D** | exactly one `UEHM`; exactly one `UEHM-S12` whose `program_id` is that `UEHM`; exactly one `UEHM-S12-B1` whose `season_id` is that exact `UEHM-S12`; no S11 resolution; the code-join the seed performs resolves to exactly one chain |
+| **E** | `admin_audit_log` exists with the 13 post-release columns; the four legacy columns are nullable-or-defaulted; exactly one `action_type` CHECK, found by definition, named as expected, VALIDATED, parseable, duplicate-free, **set-equal to the canonical 52**, and not already admitting `set_application_form_state` |
+| **F** | no conflicting control rows |
+
+Any mismatch raises before the first mutation and the transaction aborts.
+Running `preflight.sql` first is still recommended — it reports the same
+refusals read-only, without taking a lock — but **skipping it, or a baseline
+that drifted after it passed, cannot make the apply unsafe.**
 
 Expected preflight token on the reviewed R4.2 baseline:
 
 ```
-M069:ABSENT:52:VALIDATED:NULLABLE4:S12OK
+M069:ABSENT:VOCAB52EXACT:VALIDATED:NULLABLE4:S12OK
 ```
+
+`VOCAB52EXACT` is emitted only when the admitted set is **set-equal** to the
+canonical 52. A different 52-value list emits `VOCABDRIFT`, and the
+`audit_vocab_missing` / `audit_vocab_unexpected` columns name the values. (The
+previous token spelled this field `52`, which any 52-value list satisfied.)
 
 Run every script with `set timezone = 'UTC'` or the seals are not comparable.
 
@@ -174,7 +239,13 @@ set timezone = 'UTC';
 ```
 
 Expect `M069 PREFLIGHT PASSED` and the token above. **If it refuses, stop.**
-Every refusal names its condition in brackets; none is safe to skip.
+Every refusal names its condition in brackets; none is safe to skip. If the
+audit vocabulary refusal fires, read `audit_vocab_missing` and
+`audit_vocab_unexpected` — they name exactly which values disagree with the
+canonical 52, and the package must be re-derived against this database before
+Section 4 is allowed to replace the constraint.
+
+This step is a convenience, not a prerequisite: Step 2 re-proves all of it.
 
 ### Step 2 — apply (one transaction)
 
@@ -192,8 +263,24 @@ set timezone = 'UTC';
 \i VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/verifier.sql
 ```
 
-**All 18 checks must read PASS.** `control_rows_not_closed` must be `0`.
+**All 24 checks must read PASS.** `control_rows_not_closed` must be `0`.
 If V05 is not PASS, a form is open — close it immediately through the UI.
+
+The verifier reads definitions, not names, because a name is not evidence:
+
+| check | proves |
+|---|---|
+| V07 / V08 | the CHECK **expressions** admit exactly `{mentor, mentee}` and exactly `{closed, pilot, open}` — a same-named CHECK with different values FAILs |
+| V09 | the trigger's table, `BEFORE`, `INSERT OR UPDATE`, `FOR EACH ROW`, enabled state, and the **function it points at** — a same-named trigger on another function FAILs |
+| V19 | the trigger function is the intended SECURITY DEFINER body (pinned `search_path`, returns `trigger`, all three binding refusals present) + an `md5` body seal |
+| V13 / V20 | exact schema, name, argument signature `(uuid, text, text, text, text)` and the exact `TABLE(...)` result contract |
+| V14 | `SECURITY DEFINER` and exactly one pinned setting, `search_path=public, pg_temp` |
+| V21 | the function **owner** — a SECURITY DEFINER function runs as its owner, so the owner must not be a web role and must be the same principal that owns the control table |
+| V15 | no `anon` / `authenticated` / `PUBLIC` EXECUTE, read from the ACL including `acldefault()`, so a function whose default PUBLIC grant was never revoked also FAILs |
+| V22 | `service_role` **does** hold EXECUTE — without it the Admin screen is dead |
+| V23 | the RPC body still carries the authorization contract (active status, the `super_admin`/`admin` allow-list, `42501`, the row lock, the stale-state compare, the atomic audit INSERT, and no `core_team`) + an `md5` body seal, so a substituted same-signature function FAILs |
+| V17 | the audit vocabulary is **set-equal** to the canonical 52 + `set_application_form_state` — no original lost, nothing extra, nothing substituted |
+| V24 | exactly one `UEHM` → one `UEHM-S12` → one `UEHM-S12-B1`, and both control rows hang off **that** intake row and are the only control rows — a same-code batch under another program/season FAILs |
 
 ### Step 4 — deploy the application
 

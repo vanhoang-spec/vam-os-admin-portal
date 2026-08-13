@@ -2,10 +2,18 @@
 -- VAM OS — M069 PRODUCTION APPLY
 --
 -- Identical in effect to supabase_migrations/069_application_form_controls.sql;
--- this copy adds the Section 0 re-assertion block below. preflight.sql MUST
--- have passed. Section 0 re-asserts the load-bearing facts INSIDE this
--- transaction, because the preflight ran in a different one and anything
--- could have changed in between. apply.sql never assumes preflight ran.
+-- this copy adds the Section 0 re-assertion block below.
+--
+-- THIS FILE DOES NOT DEPEND ON preflight.sql HAVING BEEN RUN.
+-- Section 0 re-asserts every material condition the standalone preflight
+-- proves — environment, admin_users authorization prerequisites, complete
+-- absence of M069, exact UEHM / UEHM-S12 / UEHM-S12-B1 cardinality and
+-- parentage, the admin_audit_log column and nullability shape, and exact set
+-- equality of the pre-M069 52-value audit vocabulary — INSIDE this
+-- transaction, before the first mutation. Running the preflight is still
+-- recommended (it reports the same refusals without taking a lock), but
+-- skipping it, or a baseline that drifted after it passed, cannot make this
+-- apply unsafe: the transaction aborts before it writes anything.
 --
 -- MIGRATION 069
 -- Season 12 Application Intake Control
@@ -39,28 +47,198 @@ set local statement_timeout = '120s';
 set local lock_timeout      = '10s';
 set local timezone          = 'UTC';
 
--- ── Section 0. Re-assert the baseline inside this transaction ───────────────
+-- ── Section 0. Re-assert the whole baseline inside this transaction ─────────
+-- Self-contained by design. Every refusal condition preflight.sql tests is
+-- re-tested here, under the same bracketed tags, before the first mutation.
+-- The preflight and this block share ONE canonical expected vocabulary array
+-- (see the comment on v_expected_vocab), and a test proves the two tag sets
+-- and the two arrays match, so they cannot drift apart semantically.
 do $m069_guard$
 declare
-  v_cols       text[];
-  v_n          integer;
-  v_txt        text;
+  v_program_id        uuid;
+  v_season_id         uuid;
+  v_season_program_id uuid;
+  v_batch_id          uuid;
+  v_batch_season_id   uuid;
+  v_cols              text[];
+  v_txt               text;
+  v_n                 integer;
+  v_raw_n             integer;
+  v_quote_n           integer;
+  v_def               text;
+  v_conname           text;
+  v_validated         boolean;
+  v_actual_vocab      text[];
+  v_missing           text[];
+  v_unexpected        text[];
   v_audit_cols constant text[] := array[
     'action','action_type','actor_admin_user_id','actor_email','after_data',
     'before_data','created_at','details','id','metadata','target_admin_user_id',
     'target_email','updated_at'
   ];
+  v_admin_user_cols constant text[] := array['email','id','role','status'];
+  -- ══ CANONICAL PRE-M069 AUDIT VOCABULARY (52) ══════════════════════════════
+  -- The exact list installed by the S12 release T1, Section 2. This array is
+  -- the ONE canonical representation shared by preflight.sql, this block,
+  -- Section 4 below and verifier.sql.
+  -- __tests__/support/m069-audit-vocabulary.ts carries the same 52 values and a
+  -- test proves every copy is set-equal to it. DO NOT EDIT ONE COPY.
+  v_expected_vocab constant text[] := array[
+    'accept_registration_proof','add_event_participation','add_manual_recap','add_membership_role',
+    'approve_application_as_mentee','approve_application_as_mentor','bulk_add_event_participants',
+    'cancel_event','cancel_event_registration','cancel_match','cancel_membership',
+    'close_event_registration','confirm_event_registration','confirm_registration_payment',
+    'create_action_item','create_admin_user','create_event','create_event_checkin_link',
+    'create_event_registration_link','create_manual_match','create_membership','create_mentee_profile',
+    'create_mentor_profile','deactivate_admin_user','edit_recap','import_participant_membership',
+    'link_person_auth','open_event_registration','opt_out_membership','pause_membership',
+    'reactivate_admin_user','reactivate_membership','reconcile_person_auth','reject_event_registration',
+    'reject_registration_payment','reject_registration_proof','remove_admin_access',
+    'remove_event_participation','remove_membership_role','soft_delete_recap','sync_auth','unknown',
+    'update_action_item','update_admin_user','update_admin_user_access','update_event','update_event_participation',
+    'update_mentee_profile','update_mentor_profile','update_registration_review_note',
+    'waitlist_event_registration','withdraw_membership'
+  ];
+  v_m069_value constant text := 'set_application_form_state';
+  v_vocab_conname constant text := 'admin_audit_log_action_type_check';
 begin
+  -- ── A. Environment / Production identity ─────────────────────────────────
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public' and p.proname like 'vam062\_%') then
     raise exception 'M069 ABORTED [ENV_NOT_PRODUCTION]: vam062_* functions exist — this is Staging.';
+  end if;
+
+  -- ── B. admin_users prerequisites for the SECURITY DEFINER path ───────────
+  if to_regclass('public.admin_users') is null then
+    raise exception 'M069 ABORTED [ADMIN_USERS_MISSING]: admin_users does not exist; updated_by has no FK target.';
+  end if;
+
+  select array_agg(column_name order by column_name) into v_cols
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'admin_users'
+    and column_name in ('id','email','role','status');
+  if v_cols is distinct from v_admin_user_cols then
+    raise exception 'M069 ABORTED [ADMIN_USERS_COLUMNS]: admin_users exposes %, expected all of %. The authorization path reads every one of them.',
+      coalesce(v_cols::text, '<none>'), v_admin_user_cols::text;
+  end if;
+
+  select string_agg(column_name || ' is ' || data_type, ', ' order by column_name) into v_txt
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'admin_users'
+    and ((column_name = 'id' and data_type <> 'uuid')
+      or (column_name in ('email','role','status') and data_type not in ('text','character varying')));
+  if v_txt is not null then
+    raise exception 'M069 ABORTED [ADMIN_USERS_COLUMNS]: % — the authorization path compares role/status to text literals and passes id as uuid.', v_txt;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint c
+    where c.conrelid = to_regclass('public.admin_users')
+      and c.contype in ('p','u')
+      and c.conkey = array[(select a.attnum from pg_attribute a
+                            where a.attrelid = to_regclass('public.admin_users')
+                              and a.attname = 'id' and a.attnum > 0 and not a.attisdropped)]
+  ) then
+    raise exception 'M069 ABORTED [ADMIN_USERS_KEY]: admin_users.id carries no primary or unique key; updated_by cannot reference it.';
+  end if;
+
+  -- ── C. M069 is completely unapplied ──────────────────────────────────────
+  if to_regclass('public.application_form_controls') is not null then
+    raise exception 'M069 ABORTED [ALREADY_APPLIED]: application_form_controls already exists. Run verifier.sql instead.';
+  end if;
+
+  select count(*) into v_n
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname like 'vam069\_%';
+  if v_n <> 0 then
+    raise exception 'M069 ABORTED [FUNCTION_PRESENT]: % vam069_* function(s) already exist.', v_n;
+  end if;
+
+  select string_agg(obj, ', ' order by obj) into v_txt from (
+    select 'relation ' || c.relname as obj
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname like 'application\_form\_controls%'
+    union all
+    select 'trigger ' || t.tgname
+    from pg_trigger t
+    where not t.tgisinternal and t.tgname like 'application\_form\_controls%'
+    union all
+    select 'constraint ' || c.conname
+    from pg_constraint c
+    where c.conname like 'application\_form\_controls%'
+  ) s;
+  if v_txt is not null then
+    raise exception 'M069 ABORTED [PARTIAL_M069]: pre-existing M069 object(s): %. Roll the partial state back before applying.', v_txt;
+  end if;
+
+  -- ── D. Exact UEHM / UEHM-S12 / UEHM-S12-B1 cardinality and chain ─────────
+  select count(*) into v_n from public.programs where code = 'UEHM';
+  if v_n = 0 then
+    raise exception 'M069 ABORTED [PROGRAM_MISSING]: no program with code UEHM.';
+  end if;
+  if v_n > 1 then
+    raise exception 'M069 ABORTED [PROGRAM_AMBIGUOUS]: % programs with code UEHM, expected exactly 1.', v_n;
+  end if;
+  select id into v_program_id from public.programs where code = 'UEHM';
+
+  select count(*) into v_n from public.seasons where code = 'UEHM-S12';
+  if v_n = 0 then
+    raise exception 'M069 ABORTED [SEASON_MISSING]: season UEHM-S12 not found.';
+  end if;
+  if v_n > 1 then
+    raise exception 'M069 ABORTED [SEASON_AMBIGUOUS]: % rows with code UEHM-S12, expected exactly 1.', v_n;
+  end if;
+  select id, program_id into v_season_id, v_season_program_id
+  from public.seasons where code = 'UEHM-S12';
+
+  if v_season_program_id is distinct from v_program_id then
+    raise exception 'M069 ABORTED [SEASON_PARENT]: UEHM-S12.program_id is %, expected the UEHM program %.',
+      coalesce(v_season_program_id::text, '<null>'), v_program_id;
+  end if;
+
+  select count(*) into v_n from public.intake_batches where code = 'UEHM-S12-B1';
+  if v_n = 0 then
+    raise exception 'M069 ABORTED [BATCH_MISSING]: intake batch UEHM-S12-B1 not found.';
+  end if;
+  if v_n > 1 then
+    raise exception 'M069 ABORTED [BATCH_AMBIGUOUS]: % rows with code UEHM-S12-B1, expected exactly 1.', v_n;
+  end if;
+  select id, season_id into v_batch_id, v_batch_season_id
+  from public.intake_batches where code = 'UEHM-S12-B1';
+
+  if v_batch_season_id is distinct from v_season_id then
+    raise exception 'M069 ABORTED [BATCH_PARENT]: UEHM-S12-B1.season_id is %, expected the UEHM-S12 season %. A same-code batch under another season is not the M069 intake.',
+      coalesce(v_batch_season_id::text, '<null>'), v_season_id;
+  end if;
+
+  if exists (
+    select 1 from public.seasons s
+    where s.id = v_batch_season_id and s.code like '%S11%'
+  ) then
+    raise exception 'M069 ABORTED [S11_BINDING]: UEHM-S12-B1 resolves to a Season 11 season.';
+  end if;
+
+  -- The seed below joins on codes. This asserts the join it will perform
+  -- resolves to exactly the one chain proven above.
+  select count(*) into v_n
+  from public.intake_batches b
+  join public.seasons s on s.id = b.season_id
+  join public.programs p on p.id = s.program_id
+  where b.code = 'UEHM-S12-B1' and s.code = 'UEHM-S12' and p.code = 'UEHM';
+  if v_n <> 1 then
+    raise exception 'M069 ABORTED [S12_BINDING]: UEHM / UEHM-S12 / UEHM-S12-B1 resolves as % chain(s), expected exactly 1.', v_n;
+  end if;
+
+  -- ── E. admin_audit_log prerequisites for the M069 audit INSERT ───────────
+  if to_regclass('public.admin_audit_log') is null then
+    raise exception 'M069 ABORTED [AUDIT_TABLE_MISSING]: admin_audit_log does not exist.';
   end if;
 
   select array_agg(column_name order by column_name) into v_cols
   from information_schema.columns
   where table_schema = 'public' and table_name = 'admin_audit_log';
   if v_cols is distinct from v_audit_cols then
-    raise exception 'M069 ABORTED [AUDIT_COLUMNS]: admin_audit_log is %, expected the 13 post-release columns.', v_cols;
+    raise exception 'M069 ABORTED [AUDIT_COLUMNS]: admin_audit_log is %, expected the 13 post-release columns %.', v_cols, v_audit_cols;
   end if;
 
   select string_agg(a.attname, ', ' order by a.attname) into v_txt
@@ -74,19 +252,100 @@ begin
     raise exception 'M069 ABORTED [AUDIT_ACTION_NOT_NULL]: legacy column(s) % would abort the audit INSERT with 23502.', v_txt;
   end if;
 
-  if not exists (
-    select 1 from public.intake_batches b
-    join public.seasons s on s.id = b.season_id
-    join public.programs p on p.id = s.program_id
-    where b.code = 'UEHM-S12-B1' and s.code = 'UEHM-S12' and p.code = 'UEHM'
-  ) then
-    raise exception 'M069 ABORTED [S12_BINDING]: UEHM / UEHM-S12 / UEHM-S12-B1 does not resolve as one chain.';
+  -- Find the vocabulary constraint by DEFINITION, not by name: a CHECK on
+  -- action_type under any name still governs what the audit INSERT may write.
+  select count(*) into v_n
+  from pg_constraint c
+  where c.conrelid = to_regclass('public.admin_audit_log')
+    and c.contype = 'c'
+    and pg_get_constraintdef(c.oid) ilike '%action_type%';
+
+  if v_n = 0 then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_MISSING]: no CHECK constraint governs admin_audit_log.action_type. The S12 release T1 has not been applied to this database.';
+  end if;
+  if v_n > 1 then
+    select string_agg(c.conname, ', ' order by c.conname) into v_txt
+    from pg_constraint c
+    where c.conrelid = to_regclass('public.admin_audit_log')
+      and c.contype = 'c'
+      and pg_get_constraintdef(c.oid) ilike '%action_type%';
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_SHAPE]: % CHECK constraints govern action_type (%), expected exactly 1.', v_n, v_txt;
   end if;
 
-  select count(*) into v_n from public.intake_batches where code = 'UEHM-S12-B1';
-  if v_n <> 1 then
-    raise exception 'M069 ABORTED [BATCH_AMBIGUOUS]: % rows with code UEHM-S12-B1, expected exactly 1.', v_n;
+  select c.conname, c.convalidated, pg_get_constraintdef(c.oid)
+    into v_conname, v_validated, v_def
+  from pg_constraint c
+  where c.conrelid = to_regclass('public.admin_audit_log')
+    and c.contype = 'c'
+    and pg_get_constraintdef(c.oid) ilike '%action_type%';
+
+  if v_conname is distinct from v_vocab_conname then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_SHAPE]: the action_type CHECK is named %, expected %. Section 4 drops it by name.',
+      coalesce(v_conname, '<null>'), v_vocab_conname;
   end if;
+  if v_validated is not true then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_NOT_VALIDATED]: % is NOT VALID, so existing rows are not proven to satisfy it.', v_conname;
+  end if;
+
+  if v_def not ilike '%= ANY (ARRAY[%' then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_SHAPE]: % is not a closed ANY(ARRAY[...]) list: %.', v_conname, v_def;
+  end if;
+
+  select count(*) into v_raw_n
+  from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+  select array_agg(distinct m[1]) into v_actual_vocab
+  from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+  -- Quote pairing proves the parse is COMPLETE: every quoted literal in the
+  -- definition was captured as one of the elements below. Without this, a
+  -- value the regex could not read would be invisible to the set comparison.
+  v_quote_n := length(v_def) - length(replace(v_def, '''', ''));
+  if v_quote_n <> 2 * v_raw_n then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_SHAPE]: % contains % quote characters but only % parseable ''value''::text elements — part of the definition was not understood: %.',
+      v_conname, v_quote_n, v_raw_n, v_def;
+  end if;
+  if v_raw_n <> coalesce(array_length(v_actual_vocab, 1), 0) then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_SHAPE]: % lists % elements but only % are distinct — the vocabulary contains duplicates.',
+      v_conname, v_raw_n, coalesce(array_length(v_actual_vocab, 1), 0);
+  end if;
+
+  if v_m069_value = any (v_actual_vocab) then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_M069_PRESENT]: the vocabulary already admits %. M069 has been applied here, or something else added the value.', v_m069_value;
+  end if;
+
+  select array_agg(x order by x) into v_missing
+  from unnest(v_expected_vocab) x
+  where x <> all (coalesce(v_actual_vocab, array[]::text[]));
+
+  select array_agg(x order by x) into v_unexpected
+  from unnest(coalesce(v_actual_vocab, array[]::text[])) x
+  where x <> all (v_expected_vocab);
+
+  if v_missing is not null or v_unexpected is not null then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_UNEXPECTED]: % admits % value(s) but is not the canonical pre-M069 vocabulary. MISSING (expected, not present): %. UNEXPECTED (present, not expected): %. Section 4 would replace this list with its own and drop the unexpected value(s).',
+      v_conname,
+      coalesce(array_length(v_actual_vocab, 1), 0),
+      coalesce(array_to_string(v_missing, ', '), '<none>'),
+      coalesce(array_to_string(v_unexpected, ', '), '<none>');
+  end if;
+
+  if coalesce(array_length(v_actual_vocab, 1), 0) <> 52 then
+    raise exception 'M069 ABORTED [AUDIT_VOCAB_UNEXPECTED]: % admits % values, expected exactly 52.',
+      v_conname, coalesce(array_length(v_actual_vocab, 1), 0);
+  end if;
+
+  -- ── F. No conflicting control rows ───────────────────────────────────────
+  -- The table is proven absent above, so this cannot fire. Asserted anyway so
+  -- that a state this package does not model can never be written over.
+  if to_regclass('public.application_form_controls') is not null then
+    select count(*) into v_n from public.application_form_controls;
+    if v_n <> 0 then
+      raise exception 'M069 ABORTED [CONFLICTING_ROWS]: % pre-existing control row(s).', v_n;
+    end if;
+  end if;
+
+  raise notice 'M069 Section 0 passed: environment, admin_users authorization prerequisites, complete absence of M069, exact UEHM/UEHM-S12/UEHM-S12-B1 chain, audit schema and set-equal 52-value audit vocabulary all re-asserted inside this transaction.';
 end
 $m069_guard$;
 
@@ -180,9 +439,46 @@ revoke all on public.application_form_controls from authenticated;
 -- form state change, so an M069 audit INSERT would abort with 23514 — and
 -- because the M069 toggle is atomic, that would abort the toggle itself.
 -- Extend the vocabulary by exactly one value. Nothing is removed.
+--
+-- The replacement list below is hard-coded, so it is only safe if the list it
+-- replaces is EXACTLY the canonical pre-M069 52. A count of 52 does not prove
+-- that: a different 52-value list would pass a count check and this block would
+-- then silently delete a legitimate Production action type. So the existing
+-- definition is parsed into the set it actually admits and compared for SET
+-- EQUALITY in both directions before the drop, and the installed definition is
+-- compared again afterwards against the canonical 52 plus exactly
+-- set_application_form_state.
 do $vocab$
 declare
-  v_def text;
+  v_def           text;
+  v_actual_vocab  text[];
+  v_missing       text[];
+  v_unexpected    text[];
+  v_post_expected text[];
+  v_raw_n         integer;
+  v_quote_n       integer;
+  -- CANONICAL PRE-M069 AUDIT VOCABULARY (52). The exact list installed by the
+  -- S12 release T1, Section 2. Shared verbatim with preflight.sql, apply.sql
+  -- Section 0 and verifier.sql; __tests__/support/m069-audit-vocabulary.ts
+  -- holds the same 52 values and a test proves every copy is set-equal to it.
+  -- DO NOT EDIT ONE COPY.
+  v_expected_vocab constant text[] := array[
+    'accept_registration_proof','add_event_participation','add_manual_recap','add_membership_role',
+    'approve_application_as_mentee','approve_application_as_mentor','bulk_add_event_participants',
+    'cancel_event','cancel_event_registration','cancel_match','cancel_membership',
+    'close_event_registration','confirm_event_registration','confirm_registration_payment',
+    'create_action_item','create_admin_user','create_event','create_event_checkin_link',
+    'create_event_registration_link','create_manual_match','create_membership','create_mentee_profile',
+    'create_mentor_profile','deactivate_admin_user','edit_recap','import_participant_membership',
+    'link_person_auth','open_event_registration','opt_out_membership','pause_membership',
+    'reactivate_admin_user','reactivate_membership','reconcile_person_auth','reject_event_registration',
+    'reject_registration_payment','reject_registration_proof','remove_admin_access',
+    'remove_event_participation','remove_membership_role','soft_delete_recap','sync_auth','unknown',
+    'update_action_item','update_admin_user','update_admin_user_access','update_event','update_event_participation',
+    'update_mentee_profile','update_mentor_profile','update_registration_review_note',
+    'waitlist_event_registration','withdraw_membership'
+  ];
+  v_m069_value constant text := 'set_application_form_state';
 begin
   select pg_get_constraintdef(c.oid) into v_def
   from pg_constraint c
@@ -194,6 +490,35 @@ begin
   elsif v_def like '%set_application_form_state%' then
     raise notice 'M069: audit vocabulary already admits set_application_form_state.';
   else
+    -- Parse the list about to be replaced, and prove the parse is COMPLETE:
+    -- every quote character in the definition must belong to one of the
+    -- 'value'::text elements captured here, or the definition is not the closed
+    -- ANY(ARRAY[...]) shape this block understands and the parsed set is not
+    -- evidence of anything.
+    select count(*) into v_raw_n
+    from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+    select array_agg(distinct m[1]) into v_actual_vocab
+    from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+    v_quote_n := length(v_def) - length(replace(v_def, '''', ''));
+    if v_def not ilike '%= ANY (ARRAY[%' or v_quote_n <> 2 * v_raw_n
+       or v_raw_n <> coalesce(array_length(v_actual_vocab, 1), 0) then
+      raise exception 'M069 ABORTED [AUDIT_VOCAB_SHAPE]: admin_audit_log_action_type_check is not a parseable, duplicate-free ANY(ARRAY[...]) list: %.', v_def;
+    end if;
+
+    select array_agg(x order by x) into v_missing
+    from unnest(v_expected_vocab) x where x <> all (coalesce(v_actual_vocab, array[]::text[]));
+    select array_agg(x order by x) into v_unexpected
+    from unnest(coalesce(v_actual_vocab, array[]::text[])) x where x <> all (v_expected_vocab);
+
+    if v_missing is not null or v_unexpected is not null then
+      raise exception 'M069 ABORTED [AUDIT_VOCAB_UNEXPECTED]: the vocabulary being replaced admits % value(s) but is not the canonical pre-M069 52. MISSING (expected, not present): %. UNEXPECTED (present, not expected): %. Replacing it would drop the unexpected value(s).',
+        coalesce(array_length(v_actual_vocab, 1), 0),
+        coalesce(array_to_string(v_missing, ', '), '<none>'),
+        coalesce(array_to_string(v_unexpected, ', '), '<none>');
+    end if;
+
     alter table public.admin_audit_log
       drop constraint admin_audit_log_action_type_check;
     alter table public.admin_audit_log
@@ -216,6 +541,33 @@ begin
           'waitlist_event_registration','withdraw_membership'
         ])
       );
+
+    -- Re-read what actually landed and prove it is the canonical 52 plus
+    -- exactly one new value. Nothing lost, nothing extra.
+    select pg_get_constraintdef(c.oid) into v_def
+    from pg_constraint c
+    where c.conrelid = to_regclass('public.admin_audit_log')
+      and c.conname = 'admin_audit_log_action_type_check';
+
+    select array_agg(distinct m[1]) into v_actual_vocab
+    from regexp_matches(v_def, '''([^'']*)''::text', 'g') m;
+
+    v_post_expected := v_expected_vocab || v_m069_value;
+
+    select array_agg(x order by x) into v_missing
+    from unnest(v_post_expected) x where x <> all (coalesce(v_actual_vocab, array[]::text[]));
+    select array_agg(x order by x) into v_unexpected
+    from unnest(coalesce(v_actual_vocab, array[]::text[])) x where x <> all (v_post_expected);
+
+    if v_missing is not null or v_unexpected is not null
+       or coalesce(array_length(v_actual_vocab, 1), 0) <> 53 then
+      raise exception 'M069 ABORTED [AUDIT_VOCAB_POST]: the installed vocabulary is not the canonical 52 plus %. Size %. MISSING: %. UNEXPECTED: %.',
+        v_m069_value,
+        coalesce(array_length(v_actual_vocab, 1), 0),
+        coalesce(array_to_string(v_missing, ', '), '<none>'),
+        coalesce(array_to_string(v_unexpected, ', '), '<none>');
+    end if;
+
     raise notice 'M069: audit vocabulary extended to 53 values (added set_application_form_state).';
   end if;
 end
