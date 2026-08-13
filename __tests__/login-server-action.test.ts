@@ -228,7 +228,7 @@ describe("Server-Side Login Flow", () => {
       expect(adminAuth.setAuthCookies).toHaveBeenCalledTimes(1);
       expect(adminAuth.setAuthCookies).toHaveBeenCalledWith("token", "refresh", 3600);
       expect(redirect).toHaveBeenCalledTimes(1);
-      expect(redirect).toHaveBeenCalledWith("/operations");
+      expect(redirect).toHaveBeenCalledWith("/");
       expect(mockAuthClient.auth.signOut).not.toHaveBeenCalled();
     });
 

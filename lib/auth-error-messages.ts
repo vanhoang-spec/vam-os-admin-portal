@@ -44,16 +44,16 @@ export function getSafeAuthErrorType(error: any): "invalid_credentials" | "netwo
 
 export function safeNext(value: any): string {
   const next = Array.isArray(value) ? value[0] : value;
-  const normalized = String(next ?? "/operations");
+  const normalized = String(next ?? "/");
   // Must start with exactly one slash — blocks empty string, external URLs, protocol-relative //
-  if (!normalized.startsWith("/") || normalized.startsWith("//")) return "/operations";
+  if (!normalized.startsWith("/") || normalized.startsWith("//")) return "/";
   // Block backslash immediately after leading slash (disguised protocol-relative on some parsers)
-  if (normalized.startsWith("/\\")) return "/operations";
+  if (normalized.startsWith("/\\")) return "/";
   // Block control characters: CR, LF, null, or any ASCII control (CRLF header injection)
-  if (/[\x00-\x1f\x7f]/.test(normalized)) return "/operations";
+  if (/[\x00-\x1f\x7f]/.test(normalized)) return "/";
   // Block auth loop routes using segment-aware matching: matches /login, /login?…, /login/…
   // but intentionally does NOT block unrelated paths like /login-report
-  if (/^\/login([/?#]|$)/.test(normalized)) return "/operations";
-  if (/^\/unlock([/?#]|$)/.test(normalized)) return "/operations";
+  if (/^\/login([/?#]|$)/.test(normalized)) return "/";
+  if (/^\/unlock([/?#]|$)/.test(normalized)) return "/";
   return normalized;
 }

@@ -57,32 +57,32 @@ describe("safeNext function for Open Redirects", () => {
   });
 
   it("rejects open redirects (external URLs)", () => {
-    expect(safeNext("https://evil.com")).toBe("/operations");
-    expect(safeNext("http://malicious.org")).toBe("/operations");
+    expect(safeNext("https://evil.com")).toBe("/");
+    expect(safeNext("http://malicious.org")).toBe("/");
   });
 
   it("rejects protocol-relative open redirects", () => {
-    expect(safeNext("//evil.com")).toBe("/operations");
+    expect(safeNext("//evil.com")).toBe("/");
   });
 
   it("rejects backslash-disguised protocol-relative redirects", () => {
-    expect(safeNext("/\\evil.com")).toBe("/operations");
-    expect(safeNext("/\\\\evil.com")).toBe("/operations");
+    expect(safeNext("/\\evil.com")).toBe("/");
+    expect(safeNext("/\\\\evil.com")).toBe("/");
   });
 
   it("rejects paths with control characters (CRLF injection)", () => {
-    expect(safeNext("/admin\r\n//evil.com")).toBe("/operations");
-    expect(safeNext("/admin\n//evil.com")).toBe("/operations");
-    expect(safeNext("/admin\x00evil")).toBe("/operations");
+    expect(safeNext("/admin\r\n//evil.com")).toBe("/");
+    expect(safeNext("/admin\n//evil.com")).toBe("/");
+    expect(safeNext("/admin\x00evil")).toBe("/");
   });
 
   it("rejects loop redirects back to login/unlock (exact and sub-path)", () => {
-    expect(safeNext("/login")).toBe("/operations");
-    expect(safeNext("/login?next=/admin")).toBe("/operations");
-    expect(safeNext("/login/reset")).toBe("/operations");
-    expect(safeNext("/unlock")).toBe("/operations");
-    expect(safeNext("/unlock/reset")).toBe("/operations");
-    expect(safeNext("/unlock?token=abc")).toBe("/operations");
+    expect(safeNext("/login")).toBe("/");
+    expect(safeNext("/login?next=/admin")).toBe("/");
+    expect(safeNext("/login/reset")).toBe("/");
+    expect(safeNext("/unlock")).toBe("/");
+    expect(safeNext("/unlock/reset")).toBe("/");
+    expect(safeNext("/unlock?token=abc")).toBe("/");
   });
 
   it("does not block paths that merely start with the same characters as loop routes", () => {
@@ -91,9 +91,9 @@ describe("safeNext function for Open Redirects", () => {
     expect(safeNext("/unlock-page")).toBe("/unlock-page");
   });
 
-  it("defaults to /operations when empty or null", () => {
-    expect(safeNext("")).toBe("/operations");
-    expect(safeNext(null)).toBe("/operations");
+  it("defaults to / when empty or null", () => {
+    expect(safeNext("")).toBe("/");
+    expect(safeNext(null)).toBe("/");
   });
 
   it("allows valid internal paths with query strings and fragments", () => {
