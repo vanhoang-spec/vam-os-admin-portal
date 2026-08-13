@@ -48,6 +48,73 @@ describe("Season 11 -> Season 12 Transition UX", () => {
     expect(continueBtn).not.toBeNull();
   });
 
+  it("displays 'Tiếp tục sang Mùa 12' when S11 status is completed", () => {
+    const memberships = [
+      { id: "M1", role: "mentor", status: "completed", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    const continueBtn = screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" });
+    expect(continueBtn).not.toBeNull();
+  });
+
+  it("hides 'Tiếp tục sang Mùa 12' when S11 status is withdrawn", () => {
+    const memberships = [
+      { id: "M1", role: "mentor", status: "withdrawn", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
+    expect(continueBtns.length).toBe(0);
+  });
+
+  it("hides 'Tiếp tục sang Mùa 12' when S11 status is opted_out", () => {
+    const memberships = [
+      { id: "M1", role: "mentor", status: "opted_out", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
+    expect(continueBtns.length).toBe(0);
+  });
+
+  it("hides 'Tiếp tục sang Mùa 12' when S11 status is cancelled", () => {
+    const memberships = [
+      { id: "M1", role: "mentor", status: "cancelled", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
+    expect(continueBtns.length).toBe(0);
+  });
+
+  it("hides 'Tiếp tục sang Mùa 12' when S11 status is paused", () => {
+    const memberships = [
+      { id: "M1", role: "mentor", status: "paused", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
+    expect(continueBtns.length).toBe(0);
+  });
+
+  it("hides 'Tiếp tục sang Mùa 12' when S11 status is unknown", () => {
+    const memberships = [
+      { id: "M1", role: "mentor", status: "unknown_status_123", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    const continueBtns = screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" });
+    expect(continueBtns.length).toBe(0);
+  });
+
+
   it("does not display 'Tiếp tục sang Mùa 12' when person already has S12 role", () => {
     const memberships = [
       { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },

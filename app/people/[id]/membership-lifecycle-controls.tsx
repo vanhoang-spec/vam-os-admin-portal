@@ -104,7 +104,8 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
   const missingS12Roles: { role: string; programId: string; seasonId: string; programLabel: string; seasonLabel: string }[] = [];
 
   if (uehmProgram && s11Season && s12Season && canOperateUehmS12) {
-    const s11Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S11");
+    const isContinuationEligible = (status: string) => status === "active" || status === "completed";
+    const s11Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S11" && isContinuationEligible(m.status));
     const s12Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S12");
 
     for (const s11 of s11Memberships) {
