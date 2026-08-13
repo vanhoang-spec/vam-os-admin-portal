@@ -820,4 +820,72 @@ describe("Season 11 -> Season 12 Transition UX", () => {
     render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
     expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
   });
+
+  it("suppresses CTA when same-role Mentor membership exists with normalization on BOTH records", () => {
+    const memberships = [
+      { id: "M1", role: " mentor ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
+      { id: "M2", role: "MENTOR", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+    ];
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+    expect(screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" }).length).toBe(0);
+  });
+
+  it("suppresses CTA when same-role Mentee membership exists with cross-case suppression", () => {
+    const memberships = [
+      { id: "M1", role: "Mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
+      { id: "M2", role: "mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+    ];
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+    expect(screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" }).length).toBe(0);
+  });
+
+  it("renders CTA for opposite-role even with normalization", () => {
+    const memberships = [
+      { id: "M1", role: " MENTOR ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
+      { id: "M2", role: "mEnTeE", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+    ];
+    render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+    expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
+  });
+
+  it("submits normalized lowercase role and exact targets in continuation form (Mentor)", () => {
+    const memberships = [
+      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+    const { container } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    // Find the hidden inputs for the transition form
+    const roleInput = container.querySelector('input[name="role"]');
+    const programIdInput = container.querySelector('input[name="program_id"]');
+    const seasonIdInput = container.querySelector('input[name="season_id"]');
+
+    expect(roleInput).not.toBeNull();
+    expect(roleInput?.getAttribute("value")).toBe("mentor");
+
+    expect(programIdInput).not.toBeNull();
+    expect(programIdInput?.getAttribute("value")).toBe("P1");
+
+    expect(seasonIdInput).not.toBeNull();
+    expect(seasonIdInput?.getAttribute("value")).toBe("S12");
+  });
+
+  it("submits normalized lowercase role and exact targets in continuation form (Mentee)", () => {
+    const memberships = [
+      { id: "M1", role: " mEntEe ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+    ];
+    const { container } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+
+    const roleInput = container.querySelector('input[name="role"]');
+    const programIdInput = container.querySelector('input[name="program_id"]');
+    const seasonIdInput = container.querySelector('input[name="season_id"]');
+
+    expect(roleInput).not.toBeNull();
+    expect(roleInput?.getAttribute("value")).toBe("mentee");
+
+    expect(programIdInput).not.toBeNull();
+    expect(programIdInput?.getAttribute("value")).toBe("P1");
+
+    expect(seasonIdInput).not.toBeNull();
+    expect(seasonIdInput?.getAttribute("value")).toBe("S12");
+  });
 });
