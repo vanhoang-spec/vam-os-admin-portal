@@ -5,7 +5,7 @@ import { addMembershipRoleAction, transitionMembershipAction } from "@/app/actio
 import { availableMembershipActions, MEMBERSHIP_ACTION_LABELS, membershipOperationNeedsReason, type MembershipLifecycleOperation, initialMembershipLifecycleState } from "@/lib/membership-lifecycle";
 import { SubmitButton } from "@/components/submit-button";
 
-type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; seasonId?: string; };
+type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; programId?: string; seasonId?: string; };
 type Option = { id: string; label: string; code?: string; programId?: string };
 
 function Feedback({ state }: { state: typeof initialMembershipLifecycleState }) {

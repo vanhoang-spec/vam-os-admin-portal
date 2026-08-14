@@ -203,6 +203,7 @@ export type Season = JsonRecord & {
   id: string;
   code: string | null;
   name: string | null;
+  program_id: string | null;
 };
 
 export type IntakeBatch = JsonRecord & {

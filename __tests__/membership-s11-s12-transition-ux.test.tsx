@@ -877,6 +877,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
           programLabel: "UEHM",
           seasonLabel: "Mùa 11",
           programCode: "VAM",          // ← legacy VAM program code
+          programId: LEGACY_VAM_PROGRAM_ID, // ← legacy VAM program ID
           seasonCode: "UEHM-S11",
           seasonId: UEHM_S11_SEASON_ID, // ← correct UEHM-S11 season
         },
@@ -937,6 +938,28 @@ describe("Season 11 -> Season 12 Transition UX", () => {
           memberships={memberships}
           programs={PROGRAMS}
           seasons={BAD_LINK_SEASONS}
+          enabled={true}
+          canOperateUehmS12={true}
+        />,
+      );
+      expect(screen.queryByRole("button", { name: "Tiếp tục sang Mùa 12" })).toBeNull();
+    });
+
+    // 3.5. Season with S11 matching but S12 wrong program linkage => fail closed
+    it("fails closed when S12 season catalog has wrong program linkage", () => {
+      const BAD_S12_LINK_SEASONS = [
+        { id: UEHM_S11_SEASON_ID, label: "Mùa 11", code: "UEHM-S11", programId: UEHM_PROGRAM_ID },
+        { id: UEHM_S12_SEASON_ID, label: "Mùa 12", code: "UEHM-S12", programId: "WRONG_PROGRAM_ID" },
+      ];
+      const memberships = [
+        { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", seasonId: UEHM_S11_SEASON_ID },
+      ];
+      render(
+        <MembershipLifecycleControls
+          personId={PERSON}
+          memberships={memberships}
+          programs={PROGRAMS}
+          seasons={BAD_S12_LINK_SEASONS}
           enabled={true}
           canOperateUehmS12={true}
         />,
