@@ -47,8 +47,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -82,8 +81,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -113,8 +111,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -144,8 +141,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -175,8 +171,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -206,8 +201,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -237,8 +231,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -268,8 +261,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       {
         id: "M2",
         role: "mentor",
@@ -278,8 +270,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 12",
         programCode: "UEHM",
-        seasonCode: "UEHM-S12",
-      },
+        seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12', },
     ];
 
     render(
@@ -310,8 +301,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -342,8 +332,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -374,8 +363,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 12",
         programCode: "UEHM",
-        seasonCode: "UEHM-S12",
-      },
+        seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12', },
     ];
 
     render(
@@ -406,8 +394,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 12",
         programCode: "UEHM",
-        seasonCode: "UEHM-S12",
-      },
+        seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12', },
     ];
 
     render(
@@ -437,8 +424,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
 
     render(
@@ -468,8 +454,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
     render(
       <MembershipLifecycleControls
@@ -496,8 +481,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
     render(
       <MembershipLifecycleControls
@@ -531,8 +515,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
           programLabel: "UEHM",
           seasonLabel: "Mùa 11",
           programCode: "UEHM",
-          seasonCode: "UEHM-S11",
-        },
+          seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       ];
       const { unmount } = render(
         <MembershipLifecycleControls
@@ -562,8 +545,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       {
         id: "M2",
         role: "mentee",
@@ -572,8 +554,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
     render(
       <MembershipLifecycleControls
@@ -604,8 +585,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       {
         id: "M2",
         role: "mentee",
@@ -614,8 +594,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
     ];
     render(
       <MembershipLifecycleControls
@@ -646,8 +625,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       {
         id: "M2",
         role: "mentee",
@@ -656,8 +634,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       {
         id: "M3",
         role: "mentor",
@@ -666,8 +643,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 12",
         programCode: "UEHM",
-        seasonCode: "UEHM-S12",
-      },
+        seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12', },
     ];
     render(
       <MembershipLifecycleControls
@@ -698,8 +674,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       {
         id: "M2",
         role: "mentee",
@@ -708,8 +683,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 11",
         programCode: "UEHM",
-        seasonCode: "UEHM-S11",
-      },
+        seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
       {
         id: "M3",
         role: "mentee",
@@ -718,8 +692,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
         programLabel: "UEHM",
         seasonLabel: "Mùa 12",
         programCode: "UEHM",
-        seasonCode: "UEHM-S12",
-      },
+        seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12', },
     ];
     render(
       <MembershipLifecycleControls
@@ -751,8 +724,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
           programLabel: "UEHM",
           seasonLabel: "Mùa 11",
           programCode: "UEHM",
-          seasonCode: "UEHM-S11",
-        },
+          seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11', },
         {
           id: "M2",
           role: "mentor",
@@ -761,8 +733,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
           programLabel: "UEHM",
           seasonLabel: "Mùa 12",
           programCode: "UEHM",
-          seasonCode: "UEHM-S12",
-        },
+          seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12', },
       ];
       const { unmount } = render(
         <MembershipLifecycleControls
@@ -785,7 +756,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
   it("normalizes role casing and whitespace for continuation eligibility", () => {
     for (const role of ["mentor", "Mentor", " MENTOR ", "mentee", "Mentee"]) {
       const memberships = [
-        { id: "M1", role, status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+        { id: "M1", role, status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
       ];
       const { unmount } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
       expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
@@ -796,7 +767,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
   it("normalizes status casing and whitespace for continuation eligibility", () => {
     for (const status of ["active", "Active", " completed "]) {
       const memberships = [
-        { id: "M1", role: "mentor", status, intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+        { id: "M1", role: "mentor", status, intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
       ];
       const { unmount } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
       expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
@@ -806,8 +777,8 @@ describe("Season 11 -> Season 12 Transition UX", () => {
 
   it("suppresses CTA when same-role S12 membership exists despite role casing differences", () => {
     const memberships = [
-      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
-      { id: "M2", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' },
+      { id: "M2", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12' }
     ];
     render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
     expect(screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" }).length).toBe(0);
@@ -815,7 +786,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
 
   it("Lê Thị Thu Hạ-shaped fixture: renders CTA successfully", () => {
     const memberships = [
-      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
     ];
     render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
     expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
@@ -823,8 +794,8 @@ describe("Season 11 -> Season 12 Transition UX", () => {
 
   it("suppresses CTA when same-role Mentor membership exists with normalization on BOTH records", () => {
     const memberships = [
-      { id: "M1", role: " mentor ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
-      { id: "M2", role: "MENTOR", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+      { id: "M1", role: " mentor ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' },
+      { id: "M2", role: "MENTOR", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12' }
     ];
     render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
     expect(screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" }).length).toBe(0);
@@ -832,8 +803,8 @@ describe("Season 11 -> Season 12 Transition UX", () => {
 
   it("suppresses CTA when same-role Mentee membership exists with cross-case suppression", () => {
     const memberships = [
-      { id: "M1", role: "Mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
-      { id: "M2", role: "mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+      { id: "M1", role: "Mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' },
+      { id: "M2", role: "mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12' }
     ];
     render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
     expect(screen.queryAllByRole("button", { name: "Tiếp tục sang Mùa 12" }).length).toBe(0);
@@ -841,8 +812,8 @@ describe("Season 11 -> Season 12 Transition UX", () => {
 
   it("renders CTA for opposite-role even with normalization", () => {
     const memberships = [
-      { id: "M1", role: " MENTOR ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" },
-      { id: "M2", role: "mEnTeE", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12" }
+      { id: "M1", role: " MENTOR ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' },
+      { id: "M2", role: "mEnTeE", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12' }
     ];
     render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
     expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
@@ -850,7 +821,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
 
   it("submits normalized lowercase role and exact targets in continuation form (Mentor)", () => {
     const memberships = [
-      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+      { id: "M1", role: "Mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
     ];
     const { container } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
 
@@ -871,7 +842,7 @@ describe("Season 11 -> Season 12 Transition UX", () => {
 
   it("submits normalized lowercase role and exact targets in continuation form (Mentee)", () => {
     const memberships = [
-      { id: "M1", role: " mEntEe ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
+      { id: "M1", role: " mEntEe ", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
     ];
     const { container } = render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
 
@@ -889,38 +860,63 @@ describe("Season 11 -> Season 12 Transition UX", () => {
     expect(seasonIdInput?.getAttribute("value")).toBe("S12");
   });
 
-  describe("S12 continuation diagnostic", () => {
-    const TARGET_PERSON = "74f882de-338d-47da-a759-98bd32659b59";
-    const memberships = [
-      { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11" }
-    ];
-
-    it("renders only for Hạ on Preview/Staging with authorized operator", () => {
-      process.env.NEXT_PUBLIC_VERCEL_ENV = "preview";
-      render(<MembershipLifecycleControls personId={TARGET_PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
-      expect(screen.queryByTestId("s12-diagnostic")).not.toBeNull();
-      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
-    });
-
-    it("does not render in Production", () => {
-      process.env.NEXT_PUBLIC_VERCEL_ENV = "production";
-      render(<MembershipLifecycleControls personId={TARGET_PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
-      expect(screen.queryByTestId("s12-diagnostic")).toBeNull();
-      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
-    });
-
-    it("does not render for another person", () => {
-      process.env.NEXT_PUBLIC_VERCEL_ENV = "preview";
+  describe("S12 Continuation Program Identity Remediation", () => {
+    it("renders CTA when runtime programCode is VAM but resolved identity is UEHM S11", () => {
+      const memberships = [
+        { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "VAM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
+      ];
       render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
-      expect(screen.queryByTestId("s12-diagnostic")).toBeNull();
-      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+      expect(screen.queryByText("Tiếp tục sang Mùa 12")).not.toBeNull();
     });
 
-    it("does not render for unauthorized operator", () => {
-      process.env.NEXT_PUBLIC_VERCEL_ENV = "preview";
-      render(<MembershipLifecycleControls personId={TARGET_PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={false} />);
-      expect(screen.queryByTestId("s12-diagnostic")).toBeNull();
-      delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    it("does not render CTA for unrelated VAM membership", () => {
+      const memberships = [
+        { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "VAM", seasonLabel: "Mùa 10", programCode: "VAM", seasonCode: "VAM-S10", programId: 'P2', seasonId: 'S10' }
+      ];
+      render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByText("Tiếp tục sang Mùa 12")).toBeNull();
+    });
+
+    it("renders Mentor CTA for active S11 mentor with no S12 same-role", () => {
+      const memberships = [
+        { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
+      ];
+      render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByText("Tiếp tục sang Mùa 12")).not.toBeNull();
+    });
+
+    it("renders Mentee CTA for completed S11 mentee with no S12 same-role", () => {
+      const memberships = [
+        { id: "M1", role: "mentee", status: "completed", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
+      ];
+      render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByText("Tiếp tục sang Mùa 12")).not.toBeNull();
+    });
+
+    it("suppresses CTA when same-role S12 membership exists regardless of casing or status", () => {
+      const memberships = [
+        { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' },
+        { id: "M2", role: " MENTOR ", status: "withdrawn", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12' }
+      ];
+      render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByText("Tiếp tục sang Mùa 12")).toBeNull();
+    });
+
+    it("does not suppress CTA when opposite-role S12 membership exists", () => {
+      const memberships = [
+        { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' },
+        { id: "M2", role: "mentee", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 12", programCode: "UEHM", seasonCode: "UEHM-S12", programId: 'P1', seasonId: 'S12' }
+      ];
+      render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={true} />);
+      expect(screen.queryByText("Tiếp tục sang Mùa 12")).not.toBeNull();
+    });
+
+    it("does not render CTA for unauthorized operator", () => {
+      const memberships = [
+        { id: "M1", role: "mentor", status: "active", intakeBatchCode: null, programLabel: "UEHM", seasonLabel: "Mùa 11", programCode: "UEHM", seasonCode: "UEHM-S11", programId: 'P1', seasonId: 'S11' }
+      ];
+      render(<MembershipLifecycleControls personId={PERSON} memberships={memberships} programs={PROGRAMS} seasons={SEASONS} enabled={true} canOperateUehmS12={false} />);
+      expect(screen.queryByText("Tiếp tục sang Mùa 12")).toBeNull();
     });
   });
 });

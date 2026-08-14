@@ -5,7 +5,7 @@ import { addMembershipRoleAction, transitionMembershipAction } from "@/app/actio
 import { availableMembershipActions, MEMBERSHIP_ACTION_LABELS, membershipOperationNeedsReason, type MembershipLifecycleOperation, initialMembershipLifecycleState } from "@/lib/membership-lifecycle";
 import { SubmitButton } from "@/components/submit-button";
 
-type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; };
+type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; programId?: string; seasonId?: string; };
 type Option = { id: string; label: string; code?: string };
 
 function Feedback({ state }: { state: typeof initialMembershipLifecycleState }) {
@@ -112,8 +112,8 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
     const r = normalize(role);
     return r === "mentor" || r === "mentee";
   };
-  const s11Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S11" && isContinuationEligible(m.status) && isParticipantRole(m.role));
-  const s12Memberships = memberships.filter((m) => m.programCode === "UEHM" && m.seasonCode === "UEHM-S12");
+  const s11Memberships = memberships.filter((m) => uehmProgram && s11Season && m.programId === uehmProgram.id && m.seasonId === s11Season.id && isContinuationEligible(m.status) && isParticipantRole(m.role));
+  const s12Memberships = memberships.filter((m) => uehmProgram && s12Season && m.programId === uehmProgram.id && m.seasonId === s12Season.id);
 
   const finalBranch = !!(uehmProgram && s11Season && s12Season && canOperateUehmS12);
   let sameRoleSuppressionResult = false;
@@ -122,7 +122,6 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
     for (const s11 of s11Memberships) {
       const normalizedRole = normalize(s11.role);
       const isSuppressed = s12Memberships.some((s12) => normalize(s12.role) === normalizedRole);
-      if (isSuppressed) sameRoleSuppressionResult = true;
       if (!isSuppressed) {
         if (!missingS12Roles.some((m) => m.role === normalizedRole)) {
           missingS12Roles.push({ role: normalizedRole, programId: uehmProgram.id, seasonId: s12Season.id, programLabel: uehmProgram.label, seasonLabel: s12Season.label });
@@ -133,33 +132,6 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
 
   return (
     <div className="grid gap-4">
-      {process.env.NEXT_PUBLIC_VERCEL_ENV === "preview" && personId === "74f882de-338d-47da-a759-98bd32659b59" && canOperateUehmS12 === true && (
-        <section data-testid="s12-diagnostic" className="rounded-md border border-red-500 bg-red-50 p-3 text-xs font-mono">
-          <h3 className="font-bold text-red-700">S12 continuation diagnostic</h3>
-          <ul className="list-inside list-disc">
-            <li>uehmProgram found: {uehmProgram ? `yes / ${uehmProgram.id} / ${uehmProgram.code}` : "no"}</li>
-            <li>s11Season found: {s11Season ? `yes / ${s11Season.id} / ${s11Season.code}` : "no"}</li>
-            <li>s12Season found: {s12Season ? `yes / ${s12Season.id} / ${s12Season.code}` : "no"}</li>
-            <li>canOperateUehmS12: {String(canOperateUehmS12)}</li>
-            <li>memberships:
-              <ul className="ml-4 list-inside list-disc">
-                {memberships.map(m => (
-                  <li key={m.id}>
-                    {m.programCode ?? "null"}/{m.seasonCode ?? "null"} - raw role: &quot;{m.role}&quot; (norm: &quot;{normalize(m.role)}&quot;) - raw status: &quot;{m.status}&quot; (norm: &quot;{normalize(m.status)}&quot;)
-                  </li>
-                ))}
-              </ul>
-            </li>
-            <li>s11Memberships.length: {s11Memberships.length}</li>
-            <li>s12Memberships.length: {s12Memberships.length}</li>
-            <li>same-role suppression result: {String(sameRoleSuppressionResult)}</li>
-            <li>missingS12Roles.length: {missingS12Roles.length}</li>
-            <li>missingS12Roles role values: {missingS12Roles.map(m => m.role).join(", ") || "none"}</li>
-            <li>final boolean/branch: {String(finalBranch)}</li>
-          </ul>
-        </section>
-      )}
-
       {memberships.map((membership) => {
         const actions = availableMembershipActions(membership.status);
         const isLocked = pendingMembershipId === membership.id;
