@@ -20,23 +20,29 @@ vi.mock("@/app/actions/membership-lifecycle", () => ({
 
 import { MembershipLifecycleControls } from "@/app/people/[id]/membership-lifecycle-controls";
 
+import { LEGACY_PREDECESSOR_SEASON_ID, CONTINUATION_TARGET_SEASON_ID, CONTINUATION_TARGET_PROGRAM_ID } from "@/lib/season-lineage";
+
 const PERSON = "11111111-1111-4111-8111-111111111111";
 
 // ── Catalog constants ────────────────────────────────────────────────
 // UEHM program has its own UUID. Legacy VAM is a different program UUID.
-const UEHM_PROGRAM_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const LEGACY_VAM_PROGRAM_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const UEHM_S11_SEASON_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const UEHM_S12_SEASON_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const UEHM_PROGRAM_ID = CONTINUATION_TARGET_PROGRAM_ID;
+const LEGACY_VAM_PROGRAM_ID = "08b28067-d9c7-4fe9-9fe8-47054f0ac577";
+const UEHM_S11_SEASON_ID = LEGACY_PREDECESSOR_SEASON_ID;
+const UEHM_S12_SEASON_ID = CONTINUATION_TARGET_SEASON_ID;
 const UNRELATED_SEASON_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 const PROGRAMS = [
   { id: UEHM_PROGRAM_ID, label: "UEHM", code: "UEHM" },
 ];
 const SEASONS = [
-  { id: UEHM_S11_SEASON_ID, label: "Mùa 11", code: "UEHM-S11", programId: UEHM_PROGRAM_ID },
+  { id: UEHM_S11_SEASON_ID, label: "Mùa 11", code: "UEHM-S11", programId: LEGACY_VAM_PROGRAM_ID },
   { id: UEHM_S12_SEASON_ID, label: "Mùa 12", code: "UEHM-S12", programId: UEHM_PROGRAM_ID },
 ];
+
+if (SEASONS[0].programId === SEASONS[1].programId) {
+  throw new Error("S11.programId !== S12.programId guard failed");
+}
 
 describe("Season 11 -> Season 12 Transition UX", () => {
   beforeEach(() => {
@@ -923,10 +929,10 @@ describe("Season 11 -> Season 12 Transition UX", () => {
       expect(screen.queryByRole("button", { name: "Tiếp tục sang Mùa 12" })).toBeNull();
     });
 
-    // 3. Season with matching code but wrong program linkage => fail closed
-    it("fails closed when season catalog has wrong program linkage", () => {
-      const BAD_LINK_SEASONS = [
-        { id: UEHM_S11_SEASON_ID, label: "Mùa 11", code: "UEHM-S11", programId: "WRONG_PROGRAM_ID" },
+    // 3. Season with matching code but wrong program linkage => S11 program ID is ignored, should still render
+    it("renders CTA even when S11 season catalog has wrong program linkage because S11 programId check is removed", () => {
+      const WEIRD_LINK_SEASONS = [
+        { id: UEHM_S11_SEASON_ID, label: "Mùa 11", code: "UEHM-S11", programId: "SOME_OTHER_PROGRAM_ID" },
         { id: UEHM_S12_SEASON_ID, label: "Mùa 12", code: "UEHM-S12", programId: UEHM_PROGRAM_ID },
       ];
       const memberships = [
@@ -937,18 +943,18 @@ describe("Season 11 -> Season 12 Transition UX", () => {
           personId={PERSON}
           memberships={memberships}
           programs={PROGRAMS}
-          seasons={BAD_LINK_SEASONS}
+          seasons={WEIRD_LINK_SEASONS}
           enabled={true}
           canOperateUehmS12={true}
         />,
       );
-      expect(screen.queryByRole("button", { name: "Tiếp tục sang Mùa 12" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Tiếp tục sang Mùa 12" })).not.toBeNull();
     });
 
     // 3.5. Season with S11 matching but S12 wrong program linkage => fail closed
     it("fails closed when S12 season catalog has wrong program linkage", () => {
       const BAD_S12_LINK_SEASONS = [
-        { id: UEHM_S11_SEASON_ID, label: "Mùa 11", code: "UEHM-S11", programId: UEHM_PROGRAM_ID },
+        { id: UEHM_S11_SEASON_ID, label: "Mùa 11", code: "UEHM-S11", programId: LEGACY_VAM_PROGRAM_ID },
         { id: UEHM_S12_SEASON_ID, label: "Mùa 12", code: "UEHM-S12", programId: "WRONG_PROGRAM_ID" },
       ];
       const memberships = [
