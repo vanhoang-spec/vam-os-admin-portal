@@ -63,7 +63,7 @@ type ResolverResult =
     };
 
 export function resolveContinuationLineage(
-  programs: Array<{ id: string; code?: string; is_active?: boolean } & Record<string, any>>,
+  programs: Array<{ id: string; code?: string; isActive?: boolean | null } & Record<string, any>>,
   seasons: Array<{ id: string; code?: string | null; program_id?: string | null; programId?: string } & Record<string, any>>
 ): ResolverResult {
   const targetPrograms = programs.filter(
@@ -74,7 +74,7 @@ export function resolveContinuationLineage(
   if (targetPrograms.length > 1) return { ok: false, reason: "ambiguous_program" };
 
   const targetProgram = targetPrograms[0];
-  if (targetProgram.is_active === false || targetProgram.isActive === false) {
+  if (targetProgram.isActive !== true) {
     return { ok: false, reason: "program_inactive" };
   }
 

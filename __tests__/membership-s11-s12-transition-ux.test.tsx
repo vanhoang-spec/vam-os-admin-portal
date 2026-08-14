@@ -58,7 +58,7 @@ describe.each(FIXTURES)(
     UEHM_S12_SEASON_ID,
   }) => {
     const PROGRAMS = [
-      { id: UEHM_PROGRAM_ID, label: "UEHM", code: "UEHM", is_active: true },
+      { id: UEHM_PROGRAM_ID, label: "UEHM", code: "UEHM", isActive: true },
     ];
     const UNRELATED_SEASON_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     const SEASONS = [

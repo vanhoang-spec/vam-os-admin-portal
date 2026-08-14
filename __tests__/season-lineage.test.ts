@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { resolveContinuationLineage } from "@/lib/season-lineage";
 
 const STAGING_UEHM_PROGRAM = "9722d13c-c82a-46e9-b6bd-0a70e16a37c7";
@@ -29,7 +30,7 @@ const FIXTURES = [
 
 describe("Season Lineage Resolver", () => {
   describe.each(FIXTURES)("$name", ({ uehmProgramId, s11SeasonId, s11ProgramId, s12SeasonId }) => {
-    const validPrograms = [{ id: uehmProgramId, code: "UEHM" }];
+    const validPrograms = [{ id: uehmProgramId, code: "UEHM", isActive: true }];
     const validSeasons = [
       { id: s11SeasonId, code: "UEHM-S11", programId: s11ProgramId },
       { id: s12SeasonId, code: "UEHM-S12", programId: uehmProgramId },
@@ -64,12 +65,48 @@ describe("Season Lineage Resolver", () => {
     });
 
     it("fails with program_inactive", () => {
-      const programs = [{ id: uehmProgramId, code: "UEHM", is_active: false }];
+      const programs = [{ id: uehmProgramId, code: "UEHM", isActive: false }];
       expect(resolveContinuationLineage(programs, validSeasons)).toEqual({
         ok: false,
         reason: "program_inactive",
       });
     });
+
+    it.each([undefined, null])("fails closed when program activity is %s", (isActive) => {
+      const programs = [{ id: uehmProgramId, code: "UEHM", isActive }];
+      expect(resolveContinuationLineage(programs, validSeasons)).toEqual({
+        ok: false,
+        reason: "program_inactive",
+      });
+    });
+
+    it.each(["UEHM-S11-extra", "UEHM-S110", "UEHM-S1"])(
+      "does not accept near-match source code %s",
+      (code) => {
+        const seasons = [
+          { ...validSeasons[0], code },
+          validSeasons[1],
+        ];
+        expect(resolveContinuationLineage(validPrograms, seasons)).toEqual({
+          ok: false,
+          reason: "missing_source",
+        });
+      },
+    );
+
+    it.each(["UEHM-S12-extra", "UEHM-S120"])(
+      "does not accept near-match target code %s",
+      (code) => {
+        const seasons = [
+          validSeasons[0],
+          { ...validSeasons[1], code },
+        ];
+        expect(resolveContinuationLineage(validPrograms, seasons)).toEqual({
+          ok: false,
+          reason: "missing_target",
+        });
+      },
+    );
 
     it("fails with missing_source", () => {
       const seasons = [validSeasons[1]]; // Only S12
@@ -140,5 +177,17 @@ describe("Season Lineage Resolver", () => {
       const result = resolveContinuationLineage(validPrograms, seasons);
       expect(result.ok).toBe(true);
     });
+  });
+});
+
+describe("shared lineage source guards", () => {
+  it("contains no UUID literals", () => {
+    const uuid = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
+    for (const path of [
+      "lib/season-lineage.ts",
+      "app/people/[id]/membership-lifecycle-controls.tsx",
+    ]) {
+      expect(readFileSync(path, "utf8"), path).not.toMatch(uuid);
+    }
   });
 });

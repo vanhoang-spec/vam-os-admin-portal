@@ -32,7 +32,13 @@ type Membership = {
   programId?: string;
   seasonId?: string;
 };
-type Option = { id: string; label: string; code?: string; programId?: string; isActive?: boolean };
+type Option = {
+  id: string;
+  label: string;
+  code?: string;
+  programId?: string;
+  isActive?: boolean | null;
+};
 
 function Feedback({
   state,
