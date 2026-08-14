@@ -14,9 +14,9 @@ import {
 } from "@/lib/membership-lifecycle";
 import { SubmitButton } from "@/components/submit-button";
 import {
-  LEGACY_PREDECESSOR_SEASON_ID,
-  CONTINUATION_TARGET_SEASON_ID,
-  CONTINUATION_TARGET_PROGRAM_ID,
+  resolveContinuationLineage,
+  isEligibleSourceMembership,
+  isSuppressedForRole,
 } from "@/lib/season-lineage";
 
 type Membership = {
@@ -32,7 +32,7 @@ type Membership = {
   programId?: string;
   seasonId?: string;
 };
-type Option = { id: string; label: string; code?: string; programId?: string };
+type Option = { id: string; label: string; code?: string; programId?: string; isActive?: boolean };
 
 function Feedback({
   state,
@@ -180,18 +180,7 @@ export function MembershipLifecycleControls({
       </p>
     );
 
-  const uehmProgram = programs.find(
-    (p) => p.id === CONTINUATION_TARGET_PROGRAM_ID && p.code === "UEHM",
-  );
-  const s11Season = seasons.find(
-    (s) => s.id === LEGACY_PREDECESSOR_SEASON_ID && s.code === "UEHM-S11",
-  );
-  const s12Season = seasons.find(
-    (s) =>
-      s.id === CONTINUATION_TARGET_SEASON_ID &&
-      s.code === "UEHM-S12" &&
-      s.programId === CONTINUATION_TARGET_PROGRAM_ID,
-  );
+  const lineage = resolveContinuationLineage(programs, seasons);
 
   const missingS12Roles: {
     role: string;
@@ -205,51 +194,27 @@ export function MembershipLifecycleControls({
     String(val ?? "")
       .trim()
       .toLowerCase();
-  const isContinuationEligible = (status: string) => {
-    const s = normalize(status);
-    return s === "active" || s === "completed";
-  };
-  const isParticipantRole = (role: string) => {
-    const r = normalize(role);
-    return r === "mentor" || r === "mentee";
-  };
 
-  // Final fail-closed catalog contract
-  const catalogValid = !!(uehmProgram && s11Season && s12Season);
-
-  // Source eligibility: match by season identity only. Do NOT require
-  // membership.programId === uehmProgram.id because historical rows (e.g. Hạ)
-  // may legitimately carry a legacy VAM program_id while their season_id
-  // correctly points to UEHM-S11.
-  const s11Memberships = memberships.filter(
-    (m) =>
-      m.seasonId === LEGACY_PREDECESSOR_SEASON_ID &&
-      isContinuationEligible(m.status) &&
-      isParticipantRole(m.role),
-  );
-
-  // S12 suppression:
-  // Suppress continuation for role R iff an existing membership has:
-  // membership.seasonId === CONTINUATION_TARGET_SEASON_ID
-  // AND normalized membership.role === normalized R
-  const s12Memberships = memberships.filter(
-    (m) => m.seasonId === CONTINUATION_TARGET_SEASON_ID,
-  );
-
-  const finalBranch = !!(catalogValid && canOperateUehmS12);
+  const finalBranch = lineage.ok && canOperateUehmS12;
 
   if (finalBranch) {
+    const uehmProgram = programs.find((p) => p.id === lineage.targetProgramId)!;
+    const s12Season = seasons.find((s) => s.id === lineage.targetSeasonId)!;
+
+    const s11Memberships = memberships.filter((m) =>
+      isEligibleSourceMembership(m, lineage.sourceSeasonId)
+    );
+
     for (const s11 of s11Memberships) {
       const normalizedRole = normalize(s11.role);
-      const isSuppressed = s12Memberships.some(
-        (s12) => normalize(s12.role) === normalizedRole,
-      );
+      const isSuppressed = isSuppressedForRole(memberships, lineage.targetSeasonId, normalizedRole);
+
       if (!isSuppressed) {
         if (!missingS12Roles.some((m) => m.role === normalizedRole)) {
           missingS12Roles.push({
             role: normalizedRole,
-            programId: CONTINUATION_TARGET_PROGRAM_ID,
-            seasonId: CONTINUATION_TARGET_SEASON_ID,
+            programId: lineage.targetProgramId,
+            seasonId: lineage.targetSeasonId,
             programLabel: uehmProgram.label,
             seasonLabel: s12Season.label,
           });
