@@ -609,7 +609,7 @@ export async function getSeasons(scope?: ScopeFilter) {
   // Class C by construction rather than by volume: `id` is the primary key, so
   // the result can never exceed the granted-season list, but that list has no
   // enforced ceiling. Chunk-and-page rather than assume it stays small.
-  const { data, error } = await selectInChunks<Season>("seasons", "id", scope.allowedSeasonIds, "id,code,name");
+  const { data, error } = await selectInChunks<Season>("seasons", "id", scope.allowedSeasonIds, "id,code,name,program_id");
   if (error) {
     logDataError("seasons.getSeasons", error);
     const err = error as { message?: string };

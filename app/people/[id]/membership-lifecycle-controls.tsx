@@ -5,8 +5,8 @@ import { addMembershipRoleAction, transitionMembershipAction } from "@/app/actio
 import { availableMembershipActions, MEMBERSHIP_ACTION_LABELS, membershipOperationNeedsReason, type MembershipLifecycleOperation, initialMembershipLifecycleState } from "@/lib/membership-lifecycle";
 import { SubmitButton } from "@/components/submit-button";
 
-type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; programId?: string; seasonId?: string; };
-type Option = { id: string; label: string; code?: string };
+type Membership = { id: string; role: string; status: string; intakeBatchCode: string | null; programLabel: string; seasonLabel: string; authorizationScopeLevel?: string | null; programCode?: string | null; seasonCode?: string | null; seasonId?: string; };
+type Option = { id: string; label: string; code?: string; programId?: string };
 
 function Feedback({ state }: { state: typeof initialMembershipLifecycleState }) {
   return state.message ? <p role="status" className={state.ok ? "text-sm text-green-700" : "text-sm text-red-700"}>{state.message}</p> : null;
@@ -112,11 +112,17 @@ export function MembershipLifecycleControls({ personId, memberships, programs, s
     const r = normalize(role);
     return r === "mentor" || r === "mentee";
   };
-  const s11Memberships = memberships.filter((m) => uehmProgram && s11Season && m.programId === uehmProgram.id && m.seasonId === s11Season.id && isContinuationEligible(m.status) && isParticipantRole(m.role));
-  const s12Memberships = memberships.filter((m) => uehmProgram && s12Season && m.programId === uehmProgram.id && m.seasonId === s12Season.id);
+  // Fail closed: catalog seasons must link to the UEHM program.
+  const seasonLinkValid = !!(uehmProgram && s11Season?.programId === uehmProgram.id && s12Season?.programId === uehmProgram.id);
 
-  const finalBranch = !!(uehmProgram && s11Season && s12Season && canOperateUehmS12);
-  let sameRoleSuppressionResult = false;
+  // Source eligibility: match by season identity only. Do NOT require
+  // membership.programId === uehmProgram.id because historical rows (e.g. Hạ)
+  // may legitimately carry a legacy VAM program_id while their season_id
+  // correctly points to UEHM-S11.
+  const s11Memberships = memberships.filter((m) => s11Season && seasonLinkValid && m.seasonId === s11Season.id && isContinuationEligible(m.status) && isParticipantRole(m.role));
+  const s12Memberships = memberships.filter((m) => s12Season && seasonLinkValid && m.seasonId === s12Season.id);
+
+  const finalBranch = !!(uehmProgram && s11Season && s12Season && seasonLinkValid && canOperateUehmS12);
 
   if (finalBranch) {
     for (const s11 of s11Memberships) {
