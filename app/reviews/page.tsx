@@ -66,7 +66,7 @@ export default async function ReviewsPage() {
 
   const reviewerOnly = isReviewerOnly(adminUser.role);
   const canBulkAssign = canBulkAssignReviews(adminUser.role);
-  const scope = await getScopeFilter(await getAdminScopeContext());
+  const scope = await getScopeFilter(await getAdminScopeContext(), "review");
 
   const result = reviewerOnly
     ? await getMyApplicationReviews(adminUser.id, scope)
@@ -190,7 +190,7 @@ export default async function ReviewsPage() {
                     <tr key={row.id} className={`hover:bg-vam-mint/40 ${overdue ? "bg-red-50/60" : ""}`}>
                       <td className="px-4 py-3 font-medium text-vam-ink">
                         <Link
-                          href={`/applications/${row.application_id}`}
+                          href={reviewerOnly ? `/reviews/${row.id}` : `/applications/${row.application_id}`}
                           className="hover:text-vam-green hover:underline"
                         >
                           {displayText(row.applicant_name)}

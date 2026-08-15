@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, ErrorBox, InternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
-import { getDashboardData, getOperationsData, keyById } from "@/lib/data";
+import { getDashboardData, getOperationsData, getRestrictedDashboardSummary, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText, formatMonthVN } from "@/lib/utils";
 import { SEASON_CONFIG } from "@/lib/season-config";
@@ -89,7 +89,23 @@ function countByLabel(rows: Array<Record<string, unknown>>, key: string, fallbac
 export default async function DashboardPage(props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
 
-  const scope = await getScopeFilter(await getAdminScopeContext());
+  const scopeContext = await getAdminScopeContext();
+  const scope = await getScopeFilter(scopeContext, "read");
+  if (scopeContext.globalRole === "viewer" || scopeContext.globalRole === "reviewer") {
+    const summary = await getRestrictedDashboardSummary(scope);
+    return (
+      <>
+        <PageHeader title="Tổng quan" description="Tổng quan trạng thái vận hành trong phạm vi được cấp." />
+        <ErrorBox message={summary.error} />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiCard label="Mùa trong phạm vi" value={summary.seasonCount} />
+          <KpiCard label="Ứng tuyển" value={summary.applicationCount} />
+          <KpiCard label="Tổng match" value={summary.matchCount} />
+          <KpiCard label="Match active" value={summary.activeMatchCount} />
+        </div>
+      </>
+    );
+  }
   const [data, opsData] = await Promise.all([
     getDashboardData(scope),
     getOperationsData(scope)

@@ -31,6 +31,8 @@ import { MembershipLifecycleControls } from "./membership-lifecycle-controls";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 import { SubmitButton } from "@/components/submit-button";
+import { canBrowsePeople } from "@/lib/read-access";
+import { redirect } from "next/navigation";
 
 type MentorMenteeRow = Match & {
   mentee?: Person;
@@ -232,11 +234,13 @@ function isMissingOptionalTableError(error: string | null, tableName: string) {
 export default async function PersonDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser || !canBrowsePeople(adminUser.role)) redirect("/");
+
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
+  const scope = await getScopeFilter(scopeContext, "operate");
   const canOperateUehmS12 = await canOperateSeason(scopeContext, "UEHM-S12");
   const [
-    adminUser,
     person,
     people,
     mentors,
@@ -258,7 +262,6 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
     seasonMemberships,
     crmNotes
   ] = await Promise.all([
-    getCurrentAdminUser(),
     getPerson(params.id, scope),
     getPeople(scope),
     getMentorProfiles(scope),

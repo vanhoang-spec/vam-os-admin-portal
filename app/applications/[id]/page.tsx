@@ -20,6 +20,8 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import type { ApplicationDecision, ApplicationReview, JsonRecord, Match } from "@/lib/types";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
+import { canBrowseApplications } from "@/lib/read-access";
+import { redirect } from "next/navigation";
 import {
   mentorExperienceFromAnswers,
   summarizeAcknowledgements,
@@ -83,11 +85,13 @@ function roundLabel(round: string) {
 export default async function ApplicationDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
+
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
-  const [adminUser, application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =
+  const scope = await getScopeFilter(scopeContext, "operate");
+  const [application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =
     await Promise.all([
-      getCurrentAdminUser(),
       getApplication(params.id, scope),
       getPeople(scope),
       getSeasons(scope),

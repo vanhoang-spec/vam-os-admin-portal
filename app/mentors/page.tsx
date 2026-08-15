@@ -7,6 +7,8 @@ import { getIntakeBatches, getMatches, getMentorProfiles, getPeople, getSeasons,
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Match, MentorProfile, Person } from "@/lib/types";
 import { displayOptional, displayText } from "@/lib/utils";
+import { canBrowseParticipants } from "@/lib/read-access";
+import { redirect } from "next/navigation";
 
 type Row = MentorProfile & {
   person?: Person;
@@ -49,8 +51,10 @@ function vamSeniorityDisplay(mentor: MentorProfile, mentorMatches: Match[]) {
 }
 
 export default async function MentorsPage() {
+  const routeUser = await getCurrentAdminUser();
+  if (!routeUser || !canBrowseParticipants(routeUser.role)) redirect("/");
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
+  const scope = await getScopeFilter(scopeContext, "operate");
   const [mentors, people, matches, intakeBatches, seasons, adminUser] = await Promise.all([
     getMentorProfiles(scope),
     getPeople(scope),

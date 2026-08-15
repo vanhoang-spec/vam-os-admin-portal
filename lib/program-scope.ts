@@ -40,6 +40,8 @@ export type ScopeFilter = {
   allowedSeasonIds?: string[];
 };
 
+export type ScopeCapability = "read" | "review" | "operate";
+
 const SCOPE_LEVELS = new Set(["full_access", "operations", "review", "read"]);
 const SCOPE_RANK: Record<ScopeLevel, number> = {
   read: 1,
@@ -206,11 +208,24 @@ export async function getAllowedSeasonIds(ctx: AdminScopeContext): Promise<strin
   return unique(allowed);
 }
 
-export async function getScopeFilter(ctx: AdminScopeContext): Promise<ScopeFilter | undefined> {
+function admitsCapability(level: ScopeLevel, capability: ScopeCapability) {
+  if (capability === "review") return level === "full_access" || level === "review";
+  if (capability === "operate") return level === "full_access" || level === "operations";
+  return true;
+}
+
+export async function getScopeFilter(
+  ctx: AdminScopeContext,
+  capability: ScopeCapability = "read"
+): Promise<ScopeFilter | undefined> {
   if (ctx.isSuperAdmin) return undefined;
+  const eligibleContext = {
+    ...ctx,
+    programScopes: ctx.programScopes.filter((scope) => admitsCapability(scope.scopeLevel, capability))
+  };
   const [allowedProgramIds, allowedSeasonIds] = await Promise.all([
-    getAllowedProgramIds(ctx),
-    getAllowedSeasonIds(ctx)
+    getAllowedProgramIds(eligibleContext),
+    getAllowedSeasonIds(eligibleContext)
   ]);
   return { allowedProgramIds, allowedSeasonIds };
 }

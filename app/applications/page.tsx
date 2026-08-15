@@ -5,6 +5,9 @@ import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Application, Person, Season } from "@/lib/types";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canBrowseApplications } from "@/lib/read-access";
+import { redirect } from "next/navigation";
 
 
 // ── Row type ──────────────────────────────────────────────────────────────────
@@ -43,7 +46,9 @@ function consentFilter(value: unknown) {
 }
 
 export default async function ApplicationsPage() {
-  const scope = await getScopeFilter(await getAdminScopeContext());
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
+  const scope = await getScopeFilter(await getAdminScopeContext(), "operate");
   const [applications, people, seasons, intakeBatchesRes] = await Promise.all([
     getApplications(scope),
     getPeople(scope),

@@ -7,6 +7,8 @@ import { getIntakeBatches, getMatches, getMenteeProfiles, getMentorProfiles, get
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayOptional, displayText } from "@/lib/utils";
+import { canBrowseParticipants } from "@/lib/read-access";
+import { redirect } from "next/navigation";
 
 type Row = MenteeProfile & {
   person?: Person;
@@ -38,8 +40,10 @@ function statusRank(match: Match) {
 }
 
 export default async function MenteesPage() {
+  const routeUser = await getCurrentAdminUser();
+  if (!routeUser || !canBrowseParticipants(routeUser.role)) redirect("/");
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
+  const scope = await getScopeFilter(scopeContext, "operate");
   const [mentees, people, mentors, matches, intakeBatches, seasons, adminUser] = await Promise.all([
     getMenteeProfiles(scope),
     getPeople(scope),

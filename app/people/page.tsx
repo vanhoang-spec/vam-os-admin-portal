@@ -2,8 +2,13 @@ import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getPeople } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canBrowsePeople } from "@/lib/read-access";
+import { redirect } from "next/navigation";
 export default async function PeoplePage() {
-  const scope = await getScopeFilter(await getAdminScopeContext());
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser || !canBrowsePeople(adminUser.role)) redirect("/");
+  const scope = await getScopeFilter(await getAdminScopeContext(), "operate");
   const people = await getPeople(scope);
   return (
     <>

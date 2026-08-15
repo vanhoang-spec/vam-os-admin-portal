@@ -5,7 +5,7 @@ import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import {
   getApplication,
   getApplicationReviewById,
-  getPeople,
+  getPerson,
   getSeasons,
   keyById
 } from "@/lib/data";
@@ -45,10 +45,10 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   if (!canReview(adminUser.role)) redirect("/");
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
-  const [reviewResult, people, seasons] = await Promise.all([
-    getApplicationReviewById(params.id, scope),
-    getPeople(scope),
+  const scope = await getScopeFilter(scopeContext, "review");
+  const reviewerConstraint = adminUser.role === "reviewer" ? adminUser.id : undefined;
+  const [reviewResult, seasons] = await Promise.all([
+    getApplicationReviewById(params.id, scope, reviewerConstraint),
     getSeasons(scope)
   ]);
 
@@ -72,10 +72,10 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   // Fetch application for this review
   const appResult = await getApplication(review.application_id, scope);
   const app = appResult.data;
+  const personResult = app?.person_id ? await getPerson(app.person_id, scope) : { data: null, error: null };
 
-  const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
-  const person = app?.person_id ? peopleById.get(app.person_id) : undefined;
+  const person = personResult.data ?? undefined;
   const season = app?.season_id ? seasonsById.get(app.season_id) : undefined;
 
   // Coalesced identity (same as application detail page)
@@ -103,7 +103,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   const isOwner = review.reviewer_admin_user_id === adminUser.id;
   const canEdit = isOwner || ["super_admin", "admin", "core_team"].includes(adminUser.role);
 
-  const error = reviewResult.error ?? appResult.error ?? people.error ?? seasons.error;
+  const error = reviewResult.error ?? appResult.error ?? personResult.error ?? seasons.error;
 
   return (
     <>
@@ -145,14 +145,14 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
                 ["Nộp lúc", formatDate(app.submitted_at)]
               ]}
             />
-            <div className="mt-3">
+            {adminUser.role !== "reviewer" ? <div className="mt-3">
               <Link
                 href={`/applications/${app.id}`}
                 className="text-sm font-medium text-vam-green hover:underline"
               >
                 Xem chi tiết đơn ứng tuyển →
               </Link>
-            </div>
+            </div> : null}
           </Card>
 
           {/* Raw payload answers */}
@@ -218,7 +218,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
             ← Quay lại Reviews
           </Link>
         )}
-        {app && (
+        {app && adminUser.role !== "reviewer" && (
           <Link
             href={`/applications/${app.id}`}
             className="text-sm font-medium text-vam-green"

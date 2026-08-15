@@ -1501,6 +1501,22 @@ export async function getDashboardData(scope?: ScopeFilter) {
   };
 }
 
+/** Aggregate-only dashboard payload for roles that must not receive People/CRM PII. */
+export async function getRestrictedDashboardSummary(scope?: ScopeFilter) {
+  const [seasons, matches, applications] = await Promise.all([
+    getSeasons(scope),
+    selectScopedBySeason<Match>("matches", "id,season_id,status", scope),
+    selectScopedBySeason<Application>("applications", "id,season_id,status,final_status", scope)
+  ]);
+  return {
+    seasonCount: seasons.data.length,
+    matchCount: matches.data.length,
+    activeMatchCount: matches.data.filter((row) => normalizeStatus(row.status) === "active").length,
+    applicationCount: applications.data.length,
+    error: seasons.error || matches.error || applications.error
+  };
+}
+
 async function getDuplicateEmailCount(scope?: ScopeFilter) {
   const people = await getPeople(scope);
   if (people.error) return { data: 0, error: people.error };
@@ -1612,14 +1628,19 @@ export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<Que
   return { data, error: apps.error };
 }
 
-export async function getApplicationReviewById(id: string, scope?: ScopeFilter): Promise<QueryResult<ApplicationReview | null>> {
+export async function getApplicationReviewById(
+  id: string,
+  scope?: ScopeFilter,
+  reviewerAdminUserId?: string
+): Promise<QueryResult<ApplicationReview | null>> {
   const client = await dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview | null>(null);
-  const { data, error } = await client
+  let query = client
     .from("application_reviews")
     .select("*")
-    .eq("id", id)
-    .maybeSingle();
+    .eq("id", id);
+  if (reviewerAdminUserId) query = query.eq("reviewer_admin_user_id", reviewerAdminUserId);
+  const { data, error } = await query.maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (application_reviews: ${error.message})` };
   if (scope && data?.application_id) {
     const app = await getApplication(data.application_id as string, scope);

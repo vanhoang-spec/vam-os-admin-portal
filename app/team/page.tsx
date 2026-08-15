@@ -11,6 +11,9 @@ import {
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { MenteeProfile, MentorProfile, OperationalTeamAssignment, Person, Season } from "@/lib/types";
 import { displayCode, displayText } from "@/lib/utils";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canBrowseTeam } from "@/lib/read-access";
+import { redirect } from "next/navigation";
 
 function normalize(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -101,10 +104,12 @@ type SupportRow = OperationalTeamAssignment & {
 };
 
 export default async function TeamViewPage(props: { searchParams?: Promise<{ q?: string | string[]; group?: string | string[]; functional?: string | string[]; status?: string | string[] }> }) {
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser || !canBrowseTeam(adminUser.role)) redirect("/");
   const searchParams = await props.searchParams;
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
+  const scope = await getScopeFilter(scopeContext, "operate");
   const [assignments, people, mentors, mentees, seasons] = await Promise.all([
     getOperationalTeamAssignments(scope),
     getPeople(scope),
