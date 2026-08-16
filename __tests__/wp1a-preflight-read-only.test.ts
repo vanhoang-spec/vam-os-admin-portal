@@ -86,7 +86,15 @@ describe("WP1-A2 preflight is read-only", () => {
   });
 
   it("carries no apply, rollback or verifier SQL yet", () => {
+    // preflight_v2.sql and staff_scope_manifest_v2.json joined the package in
+    // WP1-A2; both are read-only artifacts and are guarded by
+    // __tests__/wp1a2-staff-scope-manifest.test.ts. Migration SQL is still absent.
     const files = readdirSync(PACKAGE_DIR).sort();
-    expect(files).toEqual(["README.md", "preflight.sql"]);
+    expect(files).toEqual([
+      "README.md",
+      "preflight.sql",
+      "preflight_v2.sql",
+      "staff_scope_manifest_v2.json"
+    ]);
   });
 });

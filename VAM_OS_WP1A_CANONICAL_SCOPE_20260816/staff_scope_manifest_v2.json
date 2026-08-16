@@ -1,0 +1,382 @@
+{
+  "manifest_version": 2,
+  "work_package": "WP1-A2",
+  "title": "Owner-approved staff scope convergence manifest",
+  "date": "2026-08-16",
+  "branch": "fix/wp1a-canonical-scope",
+  "environment": "production",
+  "authority": "owner",
+  "apply_authorized": false,
+  "status": "PENDING_OWNER_SYNTHETIC_DISPOSITION",
+
+  "how_to_read_this": [
+    "Every conversion in this manifest is keyed on an EXACT scope_id/email pair supplied by the owner.",
+    "Nothing here is derived from a generic legacy-string rule. In particular there is no \"VAM\" -> UEHM mapping: two rows storing \"VAM\" convert because the owner named their scope_id, and a third row storing \"VAM\" (the synthetic reviewer) does not convert at all.",
+    "This file is DATA, not an instruction to write. No apply SQL exists in this package. preflight_v2.sql reads Production and decides whether this manifest is safe to apply; it never writes.",
+    "A row whose stored values no longer match `current` is DRIFT and fails the preflight. The manifest is then stale and must be re-cut from a fresh owner inventory."
+  ],
+
+  "catalog": {
+    "program": {
+      "id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "code": "UEHM",
+      "name": "UEH Mentoring"
+    },
+    "seasons": [
+      { "id": "710f4ec9-1cf7-461e-98d4-f33799047add", "code": "UEHM-S11", "role_in_plan": "history" },
+      { "id": "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1", "code": "UEHM-S12", "role_in_plan": "operating" }
+    ]
+  },
+
+  "scope_levels": {
+    "canonical": ["full_access", "operations", "review", "read"],
+    "global_only": ["super_admin is a PLATFORM role on admin_users, never a scope level"],
+    "rejected_legacy": {
+      "admin": "Not a canonical scope level and must not become one. WP1-A1 drops it at read time; the base code coerced it to `read`, which is why Liễu currently has working read authority that A1 would remove."
+    }
+  },
+
+  "classification_vocabulary": {
+    "KEEP_CONVERT_S11": "An existing source row whose identity is rewritten in place to canonical UEHM/S11, preserving id and created_at.",
+    "ADD_S12": "A new canonical UEHM/S12 full_access grant, inserted idempotently.",
+    "ADD_S11": "A new canonical UEHM/S11 full_access grant, inserted because the account has no S11 source row that could be converted without misrepresenting what the source row was. Used once, for Liễu.",
+    "RETIRE_LEGACY_PROGRAM_WIDE": "A program-wide (season_id NULL) legacy row that is canonicalized and set inactive in place. History is preserved; the row is never deleted.",
+    "HISTORICAL_CANONICALIZE_ONLY": "An already-inactive row whose stored identifiers are rewritten purely so table-wide constraints can be applied. Status is not touched.",
+    "SYNTHETIC_REQUIRES_OWNER_DECISION": "A synthetic/test row that is active and non-canonical. No disposition is encoded. It blocks apply."
+  },
+
+  "source_rows": [
+    {
+      "manifest_key": "ueh_shared_admin",
+      "classification": "KEEP_CONVERT_S11",
+      "account": {
+        "display_label": "UEH shared Admin",
+        "email": "uehmentoring@gmail.com",
+        "platform_role": "admin",
+        "account_status": "active",
+        "auth_user_id": "0cbe980a-6027-4645-828d-d994a1a38869",
+        "auth_user_id_source": "owner_evidence_wp1a1",
+        "platform_role_change": "none"
+      },
+      "current": {
+        "scope_id": "68fe466c-d812-4b37-baeb-eb5fe4ea24ec",
+        "program_id": "UEH Mentoring",
+        "season_id": "UEHM-S11",
+        "scope_level": "full_access",
+        "scope_status": "active"
+      },
+      "notes": "Stores a program NAME and a season CODE. Neither is accepted by vam063_authorized_for_scope."
+    },
+    {
+      "manifest_key": "lieu",
+      "classification": "RETIRE_LEGACY_PROGRAM_WIDE",
+      "account": {
+        "display_label": "Liễu",
+        "email": "lieu.nguyen@hoatay.com.vn",
+        "platform_role": "admin",
+        "account_status": "active",
+        "auth_user_id": null,
+        "auth_user_id_source": "resolved_by_preflight_from_email",
+        "platform_role_change": "none"
+      },
+      "current": {
+        "scope_id": "17a86485-c241-4cff-9bd5-60efe75b802a",
+        "program_id": "UEHM",
+        "season_id": null,
+        "scope_level": "admin",
+        "scope_status": "active"
+      },
+      "notes": "The only program-wide row in the inventory, and the only row carrying the legacy scope level \"admin\". Both properties are why it cannot stay active after A2."
+    },
+    {
+      "manifest_key": "hoang",
+      "classification": "KEEP_CONVERT_S11",
+      "account": {
+        "display_label": "Hoàng",
+        "email": "hoang.nguyen@embassy.edu.vn",
+        "platform_role": "admin",
+        "account_status": "active",
+        "auth_user_id": null,
+        "auth_user_id_source": "resolved_by_preflight_from_email",
+        "platform_role_change": "none"
+      },
+      "current": {
+        "scope_id": "60ef3d0b-8f41-4c76-aad7-dc91f26a470a",
+        "program_id": "VAM",
+        "season_id": "UEHM-S11",
+        "scope_level": "operations",
+        "scope_status": "active"
+      },
+      "notes": "Converts because the owner named THIS scope_id. The stored string \"VAM\" is not what authorizes the conversion and must never be treated as a rule."
+    },
+    {
+      "manifest_key": "toan",
+      "classification": "KEEP_CONVERT_S11",
+      "account": {
+        "display_label": "Lý Đức Toàn",
+        "email": "lyductoan@gmail.com",
+        "platform_role": "admin",
+        "account_status": "active",
+        "auth_user_id": null,
+        "auth_user_id_source": "resolved_by_preflight_from_email",
+        "platform_role_change": "none"
+      },
+      "current": {
+        "scope_id": "1e58beb9-b7ce-4392-ac81-429743f61534",
+        "program_id": "VAM",
+        "season_id": "UEHM-S11",
+        "scope_level": "operations",
+        "scope_status": "active"
+      },
+      "notes": "Same shape as Hoàng and the same reasoning: a per-account owner decision keyed on this exact scope_id."
+    },
+    {
+      "manifest_key": "synthetic_viewer_test",
+      "classification": "SYNTHETIC_REQUIRES_OWNER_DECISION",
+      "account": {
+        "display_label": "VAM viewer test account (synthetic)",
+        "email": "viewer.vam.test@redsquarevietnam.com",
+        "platform_role": "reviewer",
+        "account_status": "active",
+        "auth_user_id": null,
+        "auth_user_id_source": "resolved_by_preflight_from_email",
+        "platform_role_change": "none"
+      },
+      "current": {
+        "scope_id": "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
+        "program_id": "VAM",
+        "season_id": "UEHM-S11",
+        "scope_level": "operations",
+        "scope_status": "active"
+      },
+      "notes": "Active, synthetic, non-canonical. It stores \"VAM\" exactly like Hoàng and Toàn, which is the whole argument against a generic string rule: the same legacy value means convert for two accounts and nothing at all for this one."
+    },
+    {
+      "manifest_key": "historical_admin_test",
+      "classification": "HISTORICAL_CANONICALIZE_ONLY",
+      "account": {
+        "display_label": "VAM admin test account (inactive, historical)",
+        "email": "admin.vam.test@redsquarevietnam.com",
+        "platform_role": "admin",
+        "account_status": "inactive",
+        "auth_user_id": null,
+        "auth_user_id_source": "resolved_by_preflight_from_email",
+        "platform_role_change": "none"
+      },
+      "current": {
+        "scope_id": "eaa60d5c-66eb-4ef8-a8c0-0db0bc701028",
+        "program_id": "VAM",
+        "season_id": "UEHM-S11",
+        "scope_level": "full_access",
+        "scope_status": "inactive"
+      },
+      "notes": "Inactive account, inactive grant. It appears here only because the planned constraints are table-wide."
+    }
+  ],
+
+  "targets": [
+    {
+      "target_key": "ueh_shared_admin/S11",
+      "manifest_key": "ueh_shared_admin",
+      "classification": "KEEP_CONVERT_S11",
+      "action": "UPDATE_IN_PLACE",
+      "source_scope_id": "68fe466c-d812-4b37-baeb-eb5fe4ea24ec",
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "710f4ec9-1cf7-461e-98d4-f33799047add",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "preserves": ["id", "created_at"],
+      "rationale": "Same account, same season, same authority — only the identifiers change. Converting in place keeps the row's meaning true and its audit anchor stable."
+    },
+    {
+      "target_key": "ueh_shared_admin/S12",
+      "manifest_key": "ueh_shared_admin",
+      "classification": "ADD_S12",
+      "action": "INSERT",
+      "source_scope_id": null,
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "rationale": "Season 12 is the operating season and no grant for it exists."
+    },
+    {
+      "target_key": "lieu/LEGACY",
+      "manifest_key": "lieu",
+      "classification": "RETIRE_LEGACY_PROGRAM_WIDE",
+      "action": "RETIRE_IN_PLACE",
+      "source_scope_id": "17a86485-c241-4cff-9bd5-60efe75b802a",
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": null,
+      "scope_level": "full_access",
+      "scope_status": "inactive",
+      "preserves": ["id", "created_at"],
+      "pre_image": {
+        "program_id": "UEHM",
+        "season_id": null,
+        "scope_level": "admin",
+        "scope_status": "active"
+      },
+      "rationale": "The row is retired rather than converted into a season grant: it WAS a program-wide claim, and rewriting it into UEHM/S11 would make the audit record say something that never happened. It is never deleted.",
+      "owner_visible_history_rewrite": {
+        "field": "scope_level",
+        "from": "admin",
+        "to": "full_access",
+        "why": "The planned role CHECK is table-wide, so no retired row may keep the literal \"admin\". full_access is chosen because it is the authority the owner says this account was meant to have. The pre-image above is the record of what the row actually stored, and the apply must copy it into admin_audit_log before rewriting.",
+        "only_alternative": "Do not apply the role CHECK. That leaves the vocabulary unenforced table-wide and is not recommended."
+      }
+    },
+    {
+      "target_key": "lieu/S11",
+      "manifest_key": "lieu",
+      "classification": "ADD_S11",
+      "action": "INSERT",
+      "source_scope_id": null,
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "710f4ec9-1cf7-461e-98d4-f33799047add",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "rationale": "Replaces the read authority the retired program-wide row conferred over Season 11, in a form vam063_authorized_for_scope accepts."
+    },
+    {
+      "target_key": "lieu/S12",
+      "manifest_key": "lieu",
+      "classification": "ADD_S12",
+      "action": "INSERT",
+      "source_scope_id": null,
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "rationale": "Season 12 operating authority. Without this row, deploying A1 removes Liễu's current (coerced) read authority and replaces it with nothing."
+    },
+    {
+      "target_key": "hoang/S11",
+      "manifest_key": "hoang",
+      "classification": "KEEP_CONVERT_S11",
+      "action": "UPDATE_IN_PLACE",
+      "source_scope_id": "60ef3d0b-8f41-4c76-aad7-dc91f26a470a",
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "710f4ec9-1cf7-461e-98d4-f33799047add",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "preserves": ["id", "created_at"],
+      "pre_image": { "program_id": "VAM", "season_id": "UEHM-S11", "scope_level": "operations", "scope_status": "active" },
+      "rationale": "The row already claims Season 11 for this account; the owner decision raises its level to full_access and gives it a canonical program identity. Converting in place avoids an authority gap and preserves the audit anchor."
+    },
+    {
+      "target_key": "hoang/S12",
+      "manifest_key": "hoang",
+      "classification": "ADD_S12",
+      "action": "INSERT",
+      "source_scope_id": null,
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "rationale": "Season 12 operating authority."
+    },
+    {
+      "target_key": "toan/S11",
+      "manifest_key": "toan",
+      "classification": "KEEP_CONVERT_S11",
+      "action": "UPDATE_IN_PLACE",
+      "source_scope_id": "1e58beb9-b7ce-4392-ac81-429743f61534",
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "710f4ec9-1cf7-461e-98d4-f33799047add",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "preserves": ["id", "created_at"],
+      "pre_image": { "program_id": "VAM", "season_id": "UEHM-S11", "scope_level": "operations", "scope_status": "active" },
+      "rationale": "Identical reasoning to Hoàng, decided per account rather than per stored string."
+    },
+    {
+      "target_key": "toan/S12",
+      "manifest_key": "toan",
+      "classification": "ADD_S12",
+      "action": "INSERT",
+      "source_scope_id": null,
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1",
+      "scope_level": "full_access",
+      "scope_status": "active",
+      "rationale": "Season 12 operating authority."
+    },
+    {
+      "target_key": "historical_admin_test/CANONICALIZE",
+      "manifest_key": "historical_admin_test",
+      "classification": "HISTORICAL_CANONICALIZE_ONLY",
+      "action": "UPDATE_IN_PLACE",
+      "source_scope_id": "eaa60d5c-66eb-4ef8-a8c0-0db0bc701028",
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "710f4ec9-1cf7-461e-98d4-f33799047add",
+      "scope_level": "full_access",
+      "scope_status": "inactive",
+      "preserves": ["id", "created_at", "scope_status"],
+      "pre_image": { "program_id": "VAM", "season_id": "UEHM-S11", "scope_level": "full_access", "scope_status": "inactive" },
+      "program_identity_derivation": "The canonical program is taken from the program that OWNS this row's own season (UEHM-S11 -> UEHM). It is not derived from the string \"VAM\". The preflight proves that ownership rather than assuming it.",
+      "grants_nothing": "status stays inactive, and the account itself is inactive. Both the partial unique index and every read path are keyed on status = 'active', so this row confers no authority before or after the rewrite.",
+      "rationale": "Required purely so the table-wide program_id NOT NULL and canonical-UUID CHECK can be applied. Identifier canonicalization only — never a status change."
+    }
+  ],
+
+  "no_target": [
+    {
+      "manifest_key": "synthetic_viewer_test",
+      "scope_id": "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
+      "classification": "SYNTHETIC_REQUIRES_OWNER_DECISION",
+      "action": "NONE",
+      "reason": "No owner disposition is encoded, so A2 has no authority to touch this row.",
+      "consequence": "The row stays active and non-canonical, which blocks the table-wide program_id CHECK. SAFE_TO_APPLY_V2 is therefore false by construction, not by accident.",
+      "options_for_the_owner": [
+        "RETIRE — set status inactive and canonicalize identifiers. Removes a live non-canonical grant from a synthetic account.",
+        "CANONICALIZE_AS_REVIEWER — convert to UEHM/S11 (and/or S12) at scope level `review`, matching the account's reviewer platform role. NOTE: `review` is refused by vam063_authorized_for_scope, so such a grant reads but never mutates — and the reviewer PII gap on /matches is still open, so activating reviewer access broadly is separately blocked.",
+        "DEFER — leave the row alone and defer the table-wide program_id CHECK to a later work package. A2 would then converge only the four Admins."
+      ],
+      "how_to_authorize": "Set gates.synthetic_disposition.authorized to true here AND set `synthetic_disposition_authorized` to true in preflight_v2.sql, naming the chosen option. Both edits are deliberate owner acts; neither is implied by running the preflight."
+    }
+  ],
+
+  "gates": {
+    "synthetic_disposition": {
+      "authorized": false,
+      "status": "PENDING_OWNER_DECISION",
+      "blocks_apply": true,
+      "scope_id": "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
+      "preflight_check": "[SYNTHETIC_DISPOSITION]"
+    },
+    "historical_canonicalization": {
+      "authorized": true,
+      "status": "PLAN_ENCODED",
+      "blocks_apply": false,
+      "scope_id": "eaa60d5c-66eb-4ef8-a8c0-0db0bc701028",
+      "preflight_check": "[HISTORICAL_INACTIVE]",
+      "why_this_one_needs_no_owner_decision": "It changes stored identifiers on a row that is inactive under an inactive account, so it moves no authority. The synthetic row is active, which is the difference."
+    },
+    "program_wide_grants": {
+      "authorized": false,
+      "status": "DEFERRED_TO_WP1_A3",
+      "reason": "vam063_authorized_for_scope compares s.season_id = p_season_id::text, so a NULL season yields NULL and the grant is refused. Program-wide semantics need a change to that function, which A2 must not make."
+    },
+    "safe_to_apply_v2_expected": false,
+    "expected_blocking_checks": ["[SYNTHETIC_DISPOSITION]"]
+  },
+
+  "post_state_expectation": {
+    "active_grants": 8,
+    "active_grants_detail": "Four Admin accounts x {UEHM/S11, UEHM/S12}, all full_access.",
+    "inactive_grants": 2,
+    "inactive_grants_detail": "Liễu's retired program-wide row and the historical admin test row.",
+    "unresolved": "The synthetic viewer row, unchanged, still active and still non-canonical until the owner decides.",
+    "rows_deleted": 0
+  },
+
+  "out_of_scope": [
+    "Program-wide (season_id NULL) Admin grants and the vam063_authorized_for_scope predicate change — WP1-A3.",
+    "Any change to platform roles on admin_users. All four Admins stay `admin` by explicit owner decision.",
+    "Staff provisioning — WP1-C.",
+    "Season-first operating context — WP1-D.",
+    "Reviewer PII on /matches — tracked separately and still open.",
+    "VAM062 replay."
+  ]
+}
