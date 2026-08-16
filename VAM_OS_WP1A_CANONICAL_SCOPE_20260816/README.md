@@ -313,6 +313,7 @@ Unchanged from §4, and validated table-wide by `[CONSTRAINT_ROW]` against the p
 Executed against a throwaway local PostgreSQL 15.18 container seeded with a fixture reproducing the Production shape (`admin_scope_access` carrying a primary key and nothing else), the owner-supplied catalog, the six inventoried rows, and `vam063_authorized_for_scope` copied verbatim from `supabase_migrations/063`. **Production and Staging were not contacted at any point.**
 
 - **Baseline** — all six rows report `EXACT`; the ten targets report the planned actions from §9; `SAFE_TO_APPLY_V2 = false`, failing on exactly `[SYNTHETIC_DISPOSITION]` and `[CONSTRAINT_ROW]`, with `[CONSTRAINT_ROW]` naming `487a7562…` as the single blocking row.
+- **Wrong scope_id** (the fixture's UEH row placed at a transposed UUID) — `[SOURCE_ROW]` reports `5 of 6 found`, and `[UNKNOWN_ROW]`, `[STAFF_LINKAGE]`, `[SOURCE_DRIFT]` and `[VAM_LEGACY]` all fail. A mistyped identity cannot convert the wrong row; it converts nothing and stops the run.
 - **Drift** (Hoàng's level altered) — `[SOURCE_DRIFT]` fails and his BLOCK 1 verdict flips to `BLOCKED`.
 - **Unknown row** (a seventh active grant) — `[UNKNOWN_ROW]` and `[VAM_LEGACY]` both fail; it is not silently converted.
 - **Historical row secretly active** — `[HISTORICAL_INACTIVE]` and `[SOURCE_DRIFT]` fail.

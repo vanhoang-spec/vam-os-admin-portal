@@ -29,13 +29,77 @@ const UEHM = "61701ee8-64a6-4673-b261-ba12ce9a3ee3";
 const S11 = "710f4ec9-1cf7-461e-98d4-f33799047add";
 const S12 = "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1";
 
+/**
+ * THE OWNER INVENTORY, transcribed from the owner's exact six-row statement.
+ *
+ * This literal is the single source of truth in this file — SCOPE_ID below is
+ * derived from it, never typed twice. It exists because a transposed UUID
+ * (`…-d812-4b37-…` for `…-b37d-4812-…`) once reached the committed manifest,
+ * the preflight and this test at the same time: every copy was consistent with
+ * every other copy, so no cross-file check could have caught it.
+ *
+ * Two guards follow from that. Each row is asserted field by field against this
+ * table, and the set of UUIDs appearing ANYWHERE in the manifest and the
+ * preflight is asserted to be exactly the closed set of identities this work
+ * package is allowed to name — so a stray or mistyped UUID fails immediately
+ * instead of being carried consistently into Production.
+ */
+const OWNER_INVENTORY = [
+  {
+    key: "ueh_shared_admin", email: "uehmentoring@gmail.com",
+    scope_id: "68fe466c-b37d-4812-baeb-eb5fe4ea24ec",
+    platform_role: "admin", account_status: "active",
+    program_id: "UEH Mentoring", season_id: "UEHM-S11",
+    scope_level: "full_access", scope_status: "active"
+  },
+  {
+    key: "lieu", email: "lieu.nguyen@hoatay.com.vn",
+    scope_id: "17a86485-c241-4cff-9bd5-60efe75b802a",
+    platform_role: "admin", account_status: "active",
+    program_id: "UEHM", season_id: null,
+    scope_level: "admin", scope_status: "active"
+  },
+  {
+    key: "hoang", email: "hoang.nguyen@embassy.edu.vn",
+    scope_id: "60ef3d0b-8f41-4c76-aad7-dc91f26a470a",
+    platform_role: "admin", account_status: "active",
+    program_id: "VAM", season_id: "UEHM-S11",
+    scope_level: "operations", scope_status: "active"
+  },
+  {
+    key: "toan", email: "lyductoan@gmail.com",
+    scope_id: "1e58beb9-b7ce-4392-ac81-429743f61534",
+    platform_role: "admin", account_status: "active",
+    program_id: "VAM", season_id: "UEHM-S11",
+    scope_level: "operations", scope_status: "active"
+  },
+  {
+    key: "synthetic_viewer_test", email: "viewer.vam.test@redsquarevietnam.com",
+    scope_id: "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
+    platform_role: "reviewer", account_status: "active",
+    program_id: "VAM", season_id: "UEHM-S11",
+    scope_level: "operations", scope_status: "active"
+  },
+  {
+    key: "historical_admin_test", email: "admin.vam.test@redsquarevietnam.com",
+    scope_id: "eaa60d5c-66eb-4ef8-a8c0-0db0bc701028",
+    platform_role: "admin", account_status: "inactive",
+    program_id: "VAM", season_id: "UEHM-S11",
+    scope_level: "full_access", scope_status: "inactive"
+  }
+] as const;
+
+// The UEH shared Admin's auth identity, pinned from the WP1-A1 evidence run.
+const UEH_AUTH_USER_ID = "0cbe980a-6027-4645-828d-d994a1a38869";
+
+const idOf = (key: string) => OWNER_INVENTORY.find((r) => r.key === key)!.scope_id;
 const SCOPE_ID = {
-  ueh: "68fe466c-d812-4b37-baeb-eb5fe4ea24ec",
-  lieu: "17a86485-c241-4cff-9bd5-60efe75b802a",
-  hoang: "60ef3d0b-8f41-4c76-aad7-dc91f26a470a",
-  toan: "1e58beb9-b7ce-4392-ac81-429743f61534",
-  synthetic: "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
-  historical: "eaa60d5c-66eb-4ef8-a8c0-0db0bc701028"
+  ueh: idOf("ueh_shared_admin"),
+  lieu: idOf("lieu"),
+  hoang: idOf("hoang"),
+  toan: idOf("toan"),
+  synthetic: idOf("synthetic_viewer_test"),
+  historical: idOf("historical_admin_test")
 } as const;
 
 type Row = {
@@ -61,6 +125,85 @@ const rows: Row[] = manifest.source_rows;
 const targets: Target[] = manifest.targets;
 const rowOf = (key: string) => rows.find((r) => r.manifest_key === key)!;
 const targetsOf = (key: string) => targets.filter((t) => t.manifest_key === key);
+
+// ───────────────────────────────────────────────────────────────────────────
+// 0. The six owner-inventory identities are locked, character for character
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("WP1-A2 · the exact owner inventory is locked", () => {
+  it.each(OWNER_INVENTORY.map((r) => [r.key, r] as const))(
+    "%s matches the owner inventory in every field",
+    (key, want) => {
+      const row = rowOf(key);
+      expect(row.account.email).toBe(want.email);
+      expect(row.account.platform_role).toBe(want.platform_role);
+      expect(row.account.account_status).toBe(want.account_status);
+      expect(row.current).toEqual({
+        scope_id: want.scope_id,
+        program_id: want.program_id,
+        season_id: want.season_id,
+        scope_level: want.scope_level,
+        scope_status: want.scope_status
+      });
+      // The preflight carries its own copy of the manifest so it can run
+      // standalone; both copies must name the same row.
+      expect(sql, `${key} scope_id missing from preflight_v2.sql`).toContain(want.scope_id);
+      expect(sql, `${key} email missing from preflight_v2.sql`).toContain(want.email);
+    }
+  );
+
+  it("names six distinct, well-formed scope ids", () => {
+    const ids = OWNER_INVENTORY.map((r) => r.scope_id);
+    expect(new Set(ids).size).toBe(6);
+    for (const id of ids) {
+      expect(id, id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    }
+  });
+
+  it("the manifest and preflight name no UUID outside the approved closed set", () => {
+    // A transposed UUID copied consistently into every file is invisible to any
+    // cross-file comparison. Enumerating what MAY appear is what catches it.
+    const approved = new Set<string>([
+      ...OWNER_INVENTORY.map((r) => r.scope_id),
+      UEHM,
+      S11,
+      S12,
+      UEH_AUTH_USER_ID
+    ]);
+    const uuids = (text: string) =>
+      new Set((text.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g) ?? []).map((u) => u.toLowerCase()));
+
+    for (const [label, text] of [
+      ["staff_scope_manifest_v2.json", readFileSync(MANIFEST_PATH, "utf8")],
+      ["preflight_v2.sql", sql]
+    ] as const) {
+      const found = uuids(text);
+      const unexpected = Array.from(found).filter((u) => !approved.has(u));
+      expect(unexpected, `${label} names unapproved UUID(s)`).toEqual([]);
+      // And every approved identity is actually used, so a silent drop is caught too.
+      if (label === "preflight_v2.sql") {
+        Array.from(approved).forEach((id) => expect(found, `${label} lost ${id}`).toContain(id));
+      }
+    }
+  });
+
+  it("the catalog identities are the owner's canonical UEHM triple", () => {
+    expect(manifest.catalog.program.id).toBe(UEHM);
+    expect(manifest.catalog.program.code).toBe("UEHM");
+    expect(manifest.catalog.program.name).toBe("UEH Mentoring");
+    expect(manifest.catalog.seasons.map((s: any) => [s.code, s.id])).toEqual([
+      ["UEHM-S11", S11],
+      ["UEHM-S12", S12]
+    ]);
+  });
+
+  it("every target program and season is one of those canonical identities", () => {
+    for (const t of targets) {
+      expect(t.program_id, t.target_key).toBe(UEHM);
+      expect([S11, S12, null], t.target_key).toContain(t.season_id);
+    }
+  });
+});
 
 // ───────────────────────────────────────────────────────────────────────────
 // A. The manifest is exactly the known inventory

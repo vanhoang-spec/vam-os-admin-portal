@@ -59,7 +59,7 @@
         "platform_role_change": "none"
       },
       "current": {
-        "scope_id": "68fe466c-d812-4b37-baeb-eb5fe4ea24ec",
+        "scope_id": "68fe466c-b37d-4812-baeb-eb5fe4ea24ec",
         "program_id": "UEH Mentoring",
         "season_id": "UEHM-S11",
         "scope_level": "full_access",
@@ -180,7 +180,7 @@
       "manifest_key": "ueh_shared_admin",
       "classification": "KEEP_CONVERT_S11",
       "action": "UPDATE_IN_PLACE",
-      "source_scope_id": "68fe466c-d812-4b37-baeb-eb5fe4ea24ec",
+      "source_scope_id": "68fe466c-b37d-4812-baeb-eb5fe4ea24ec",
       "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
       "season_id": "710f4ec9-1cf7-461e-98d4-f33799047add",
       "scope_level": "full_access",
