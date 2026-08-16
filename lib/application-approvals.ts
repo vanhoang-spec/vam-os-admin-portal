@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import type { MenteeProfile, MentorProfile, Person } from "@/lib/types";
+import type { JsonRecord, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 // -----------------------------------------------------------------------
 // Phase 042 — Approve an application as official mentor or mentee.
@@ -9,8 +9,8 @@ import type { MenteeProfile, MentorProfile, Person } from "@/lib/types";
 // This module is intentionally narrow in scope:
 //   - Does NOT call createMentorProfile / createMenteeProfile from
 //     people-create.ts (those require a full form payload + canEditRecaps).
-//   - Creates only minimal profile rows from the application's identity
-//     data. Admins fill in the rich fields later via /mentors/[id]/edit.
+//   - Creates or refreshes mentor profiles through a narrow canonical-field
+//     allowlist. Admins fill in unsupported rich fields later.
 //   - Handles dedup by email so re-approving the same applicant is safe.
 //   - Records both an application_decisions audit row and an
 //     admin_audit_log entry.
@@ -60,6 +60,28 @@ export type ApproveApplicationInput = {
   previousStatus: string | null;
 };
 
+type LookupResult<T> =
+  | { ok: true; data: T | null }
+  | { ok: false };
+
+type ApprovalApplicationSource = {
+  person_id: string | null;
+  raw_payload: Record<string, unknown> | null;
+};
+
+export type MentorProfileRefresh = Pick<
+  MentorProfile,
+  | "company_current"
+  | "title_current"
+  | "years_experience_min"
+  | "years_experience_text"
+  | "industry"
+  | "function_area"
+> & {
+  capacity_target?: number | null;
+  first_vam_season?: string | null;
+};
+
 export type ApproveApplicationResult =
   | {
       ok: true;
@@ -97,6 +119,56 @@ function normalizeGenderForPeople(value: string | null | undefined): string | nu
   return null;
 }
 
+function nonBlankText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value.trim();
+  return cleaned || undefined;
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  if (value === null || value === undefined || (typeof value === "string" && !value.trim())) {
+    return undefined;
+  }
+  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isInteger(parsed) || parsed < 0) return undefined;
+  return parsed;
+}
+
+/**
+ * Explicit allowlist from the current S12 mentor application payload to the
+ * profile fields used by current display, editing, matching, search and export.
+ * Unmapped payload fields deliberately remain historical application data.
+ */
+export function buildMentorProfileRefresh(
+  rawPayload: Record<string, unknown> | null | undefined
+): Partial<MentorProfileRefresh> {
+  const payload = rawPayload ?? {};
+  const patch: Partial<MentorProfileRefresh> = {};
+
+  const company = nonBlankText(payload.company_current);
+  if (company !== undefined) patch.company_current = company;
+  const title = nonBlankText(payload.title_current);
+  if (title !== undefined) patch.title_current = title;
+  const functionArea = nonBlankText(payload.function_primary);
+  if (functionArea !== undefined) patch.function_area = functionArea;
+  const industry = nonBlankText(payload.industry_primary);
+  if (industry !== undefined) patch.industry = industry;
+  const experienceBucket = nonBlankText(payload.years_of_experience);
+  if (experienceBucket !== undefined) patch.years_experience_text = experienceBucket;
+  const firstVamSeason = nonBlankText(payload.first_vam_season);
+  if (firstVamSeason !== undefined) patch.first_vam_season = firstVamSeason;
+
+  const capacity = nonNegativeInteger(payload.mentoring_capacity_total);
+  if (capacity !== undefined) patch.capacity_target = capacity;
+
+  // Exact numeric work years and the submitted experience bucket are distinct.
+  // Never derive this value from years_of_experience (for example "16+").
+  const exactWorkYears = nonNegativeInteger(payload.mentor_total_work_years);
+  if (exactWorkYears !== undefined) patch.years_experience_min = exactWorkYears;
+
+  return patch;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -104,24 +176,28 @@ function normalizeGenderForPeople(value: string | null | undefined): string | nu
 async function findPersonByEmail(
   client: ReturnType<typeof getSupabaseServiceRoleClient>,
   email: string
-): Promise<Person | null> {
+): Promise<LookupResult<Person>> {
   const { data, error } = await (client as NonNullable<typeof client>)
     .from("people")
     .select("id,full_name,email_primary,phone_primary,gender")
     .ilike("email_primary", email)
-    .limit(1)
     .maybeSingle();
   if (error) {
     log("findPersonByEmail", error);
-    return null;
+    return { ok: false };
   }
-  return (data as Person) ?? null;
+  const person = (data as Person) ?? null;
+  if (person && person.email_primary?.trim().toLowerCase() !== email) {
+    log("findPersonByEmail returned a non-exact candidate", { code: "IDENTITY_MISMATCH" });
+    return { ok: false };
+  }
+  return { ok: true, data: person };
 }
 
 async function findPersonById(
   client: ReturnType<typeof getSupabaseServiceRoleClient>,
   id: string
-): Promise<Person | null> {
+): Promise<LookupResult<Person>> {
   const { data, error } = await (client as NonNullable<typeof client>)
     .from("people")
     .select("id,full_name,email_primary,phone_primary,gender")
@@ -129,35 +205,41 @@ async function findPersonById(
     .maybeSingle();
   if (error) {
     log("findPersonById", error);
-    return null;
+    return { ok: false };
   }
-  return (data as Person) ?? null;
+  return { ok: true, data: (data as Person) ?? null };
 }
 
 async function findMentorProfileByPersonId(
   client: ReturnType<typeof getSupabaseServiceRoleClient>,
   personId: string
-): Promise<MentorProfile | null> {
-  const { data } = await (client as NonNullable<typeof client>)
+): Promise<LookupResult<MentorProfile>> {
+  const { data, error } = await (client as NonNullable<typeof client>)
     .from("mentor_profiles")
     .select("id,person_id,mentor_code")
     .eq("person_id", personId)
-    .limit(1)
     .maybeSingle();
-  return (data as MentorProfile) ?? null;
+  if (error) {
+    log("findMentorProfileByPersonId", error);
+    return { ok: false };
+  }
+  return { ok: true, data: (data as MentorProfile) ?? null };
 }
 
 async function findMenteeProfileByPersonId(
   client: ReturnType<typeof getSupabaseServiceRoleClient>,
   personId: string
-): Promise<MenteeProfile | null> {
-  const { data } = await (client as NonNullable<typeof client>)
+): Promise<LookupResult<MenteeProfile>> {
+  const { data, error } = await (client as NonNullable<typeof client>)
     .from("mentee_profiles")
     .select("id,person_id,mentee_code")
     .eq("person_id", personId)
-    .limit(1)
     .maybeSingle();
-  return (data as MenteeProfile) ?? null;
+  if (error) {
+    log("findMenteeProfileByPersonId", error);
+    return { ok: false };
+  }
+  return { ok: true, data: (data as MenteeProfile) ?? null };
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +256,20 @@ export async function approveApplication(
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
+  // Load profile input from the stored application, never from a client-sent
+  // raw_payload. This also proves the target application exists before writes.
+  const { data: applicationSourceData, error: applicationSourceError } = await client
+    .from("applications")
+    .select("person_id,raw_payload")
+    .eq("id", input.applicationId)
+    .maybeSingle();
+  if (applicationSourceError || !applicationSourceData) {
+    log("load approval application source failed", applicationSourceError);
+    return { ok: false, message: "Không thể tải đơn ứng tuyển. " + SAFE_ERROR };
+  }
+  const applicationSource = applicationSourceData as ApprovalApplicationSource;
+  const mentorProfileRefresh = buildMentorProfileRefresh(applicationSource.raw_payload);
+
   // ------------------------------------------------------------------
   // 1. Resolve person (find by email or create new)
   // ------------------------------------------------------------------
@@ -183,21 +279,21 @@ export async function approveApplication(
 
   const emailNorm = input.emailPrimary?.trim().toLowerCase() ?? null;
 
-  if (emailNorm) {
-    person = await findPersonByEmail(client, emailNorm);
-  }
-
-  // If application already has a person_id link, prefer that
-  if (!person) {
-    const { data: appRow } = await client
-      .from("applications")
-      .select("person_id")
-      .eq("id", input.applicationId)
-      .maybeSingle();
-    const existingPersonId = (appRow as { person_id?: string | null } | null)?.person_id;
-    if (existingPersonId) {
-      person = await findPersonById(client, existingPersonId);
+  // An existing application linkage is authoritative. For an unlinked
+  // application, email lookup must resolve zero or one row; maybeSingle fails
+  // closed if data corruption has produced multiple candidates.
+  if (applicationSource.person_id) {
+    const linkedPerson = await findPersonById(client, applicationSource.person_id);
+    if (!linkedPerson.ok || !linkedPerson.data) {
+      return { ok: false, message: "Không thể xác định hồ sơ người đã liên kết. " + SAFE_ERROR };
     }
+    person = linkedPerson.data;
+  } else if (emailNorm) {
+    const emailPerson = await findPersonByEmail(client, emailNorm);
+    if (!emailPerson.ok) {
+      return { ok: false, message: "Không thể xác định duy nhất hồ sơ người theo email. " + SAFE_ERROR };
+    }
+    person = emailPerson.data;
   }
 
   if (!person) {
@@ -232,9 +328,24 @@ export async function approveApplication(
     input.targetRole === "mentor" ? "approved_as_mentor" : "approved_as_mentee";
 
   if (input.targetRole === "mentor") {
-    const existing = await findMentorProfileByPersonId(client, person.id);
+    const profileLookup = await findMentorProfileByPersonId(client, person.id);
+    if (!profileLookup.ok) {
+      return { ok: false, message: "Không thể xác định duy nhất mentor profile. " + SAFE_ERROR };
+    }
+    const existing = profileLookup.data;
     if (existing) {
-      // Reuse — profile already exists (idempotent re-approval)
+      // Reuse and refresh only explicitly allowlisted, non-blank canonical
+      // fields. mentor_code and creation provenance are intentionally absent.
+      if (Object.keys(mentorProfileRefresh).length > 0) {
+        const { error: refreshError } = await client
+          .from("mentor_profiles")
+          .update(mentorProfileRefresh as JsonRecord)
+          .eq("id", existing.id);
+        if (refreshError) {
+          log("refresh mentor_profile failed", refreshError);
+          return { ok: false, message: "Không thể cập nhật mentor profile. " + SAFE_ERROR };
+        }
+      }
       profileId = existing.id;
       profileCreated = false;
     } else {
@@ -244,7 +355,8 @@ export async function approveApplication(
           person_id: person.id,
           mentor_code: null, // Admin sets via /mentors/[id]/edit
           source_application_id: input.applicationId,
-          intake_batch_id: input.intakeBatchId ?? null
+          intake_batch_id: input.intakeBatchId ?? null,
+          ...mentorProfileRefresh
         })
         .select("id")
         .maybeSingle();
@@ -257,7 +369,11 @@ export async function approveApplication(
       profileCreated = true;
     }
   } else {
-    const existing = await findMenteeProfileByPersonId(client, person.id);
+    const profileLookup = await findMenteeProfileByPersonId(client, person.id);
+    if (!profileLookup.ok) {
+      return { ok: false, message: "Không thể xác định duy nhất mentee profile. " + SAFE_ERROR };
+    }
+    const existing = profileLookup.data;
     if (existing) {
       profileId = existing.id;
       profileCreated = false;

@@ -13,7 +13,11 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() }));
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { approveApplication, type ApproveApplicationInput } from "@/lib/application-approvals";
+import {
+  approveApplication,
+  buildMentorProfileRefresh,
+  type ApproveApplicationInput
+} from "@/lib/application-approvals";
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
@@ -57,8 +61,12 @@ function baseInput(overrides: Partial<ApproveApplicationInput> = {}): ApproveApp
   };
 }
 
-function makeClient(fromResponses: unknown[]) {
+function makeClient(
+  fromResponses: unknown[],
+  applicationSource: Record<string, unknown> = { person_id: null, raw_payload: {} }
+) {
   const fromMock = vi.fn();
+  fromMock.mockReturnValueOnce(makeChain({ data: applicationSource }));
   fromResponses.forEach((r) => fromMock.mockReturnValueOnce(r));
   fromMock.mockReturnValue(makeChain()); // fallback for audit inserts
   return { from: fromMock };
@@ -68,6 +76,48 @@ function makeClient(fromResponses: unknown[]) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+});
+
+describe("mentor application → canonical profile mapping", () => {
+  it("keeps exact work years distinct from the submitted experience bucket", () => {
+    expect(buildMentorProfileRefresh({
+      company_current: "  Công ty APFCO  ",
+      title_current: "Phó chủ tịch HĐQT",
+      function_primary: "finance_accounting",
+      industry_primary: "finance_banking",
+      mentoring_capacity_total: "1",
+      mentor_total_work_years: 25,
+      years_of_experience: "16+",
+      first_vam_season: "UEHM-S10"
+    })).toEqual({
+      company_current: "Công ty APFCO",
+      title_current: "Phó chủ tịch HĐQT",
+      function_area: "finance_accounting",
+      industry: "finance_banking",
+      years_experience_text: "16+",
+      first_vam_season: "UEHM-S10",
+      capacity_target: 1,
+      years_experience_min: 25
+    });
+  });
+
+  it("omits blank, invalid and unsupported values instead of clearing or mass-assigning", () => {
+    const patch = buildMentorProfileRefresh({
+      company_current: "   ",
+      title_current: "CFO",
+      mentor_total_work_years: "",
+      mentoring_capacity_total: "not-a-number",
+      linkedin_url: "https://example.com/profile",
+      current_city: "Hồ Chí Minh",
+      mentor_code: "MUST-NOT-COPY"
+    });
+
+    expect(patch).toEqual({ title_current: "CFO" });
+    expect(patch).not.toHaveProperty("company_current");
+    expect(patch).not.toHaveProperty("linkedin_url");
+    expect(patch).not.toHaveProperty("current_city");
+    expect(patch).not.toHaveProperty("mentor_code");
+  });
 });
 
 // ── Input validation (pure — no DB) ──────────────────────────────────────────
@@ -120,7 +170,6 @@ describe("approveApplication — person deduplication", () => {
     const newProfile = { id: PROFILE_UUID };
     const client = makeClient([
       makeChain({ data: null }),            // ilike email → NOT found
-      makeChain({ data: null }),            // applications.select person_id → no link
       makeChain({ data: newPerson }),       // people.insert → created
       makeChain({ data: null }),            // findMentorProfileByPersonId → not found
       makeChain({ data: newProfile }),      // mentor_profiles.insert → created
@@ -195,6 +244,150 @@ describe("approveApplication — profile reuse (app-layer idempotency)", () => {
       expect(result.profileCreated).toBe(true);
     }
   });
+
+  it("refreshes one returning mentor profile, links the application, and never touches memberships", async () => {
+    const existingPerson = { id: PERSON_UUID, full_name: "Nguyễn Đức Thắng", email_primary: "thangnguyen@redsquarevietnam.com" };
+    const existingProfile = { id: PROFILE_UUID, person_id: PERSON_UUID, mentor_code: "UEHRM01017" };
+    const profileUpdateSpy = vi.fn().mockReturnValue(makeChain({ data: null, error: null }));
+    const profileInsertSpy = vi.fn().mockReturnValue(makeChain({ data: { id: "unexpected" } }));
+    const profileMutationChain = makeChain() as Record<string, unknown>;
+    profileMutationChain.update = profileUpdateSpy;
+    profileMutationChain.insert = profileInsertSpy;
+    const applicationUpdateSpy = vi.fn().mockReturnValue(makeChain({ data: null, error: null }));
+    const applicationMutationChain = makeChain() as Record<string, unknown>;
+    applicationMutationChain.update = applicationUpdateSpy;
+
+    const client = makeClient([
+      makeChain({ data: existingPerson }),
+      makeChain({ data: existingProfile }),
+      profileMutationChain,
+      applicationMutationChain
+    ], {
+      person_id: null,
+      raw_payload: {
+        company_current: "Công ty cổ phần nông sản thực phẩm Quảng Ngãi (APFCO)",
+        title_current: "Phó chủ tịch HĐQT",
+        function_primary: "finance_accounting",
+        industry_primary: "finance_banking",
+        mentoring_capacity_total: "1",
+        years_of_experience: "16+",
+        mentor_total_work_years: 25,
+        first_vam_season: "   "
+      }
+    });
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await approveApplication(baseInput({
+      fullName: "Nguyễn Đức Thắng",
+      emailPrimary: "thangnguyen@redsquarevietnam.com"
+    }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      personId: PERSON_UUID,
+      profileId: PROFILE_UUID,
+      personCreated: false,
+      profileCreated: false
+    });
+    expect(profileUpdateSpy).toHaveBeenCalledWith({
+      company_current: "Công ty cổ phần nông sản thực phẩm Quảng Ngãi (APFCO)",
+      title_current: "Phó chủ tịch HĐQT",
+      function_area: "finance_accounting",
+      industry: "finance_banking",
+      years_experience_text: "16+",
+      capacity_target: 1,
+      years_experience_min: 25
+    });
+    const refresh = profileUpdateSpy.mock.calls[0][0] as Record<string, unknown>;
+    expect(refresh).not.toHaveProperty("mentor_code");
+    expect(refresh).not.toHaveProperty("source_application_id");
+    expect(refresh).not.toHaveProperty("first_vam_season");
+    expect(profileInsertSpy).not.toHaveBeenCalled();
+    expect(applicationUpdateSpy).toHaveBeenCalledWith({
+      status: "approved_as_mentor",
+      person_id: PERSON_UUID
+    });
+    expect((client.from as ReturnType<typeof vi.fn>).mock.calls.map(([table]) => table))
+      .not.toContain("person_season_memberships");
+  });
+
+  it("uses the same canonical mapping when creating a new mentor profile", async () => {
+    const existingPerson = { id: PERSON_UUID, full_name: "New Mentor", email_primary: "test@example.com" };
+    const profileInsertSpy = vi.fn().mockReturnValue(makeChain({ data: { id: PROFILE_UUID } }));
+    const profileInsertChain = makeChain() as Record<string, unknown>;
+    profileInsertChain.insert = profileInsertSpy;
+    const client = makeClient([
+      makeChain({ data: existingPerson }),
+      makeChain({ data: null }),
+      profileInsertChain,
+      makeChain({ data: null, error: null })
+    ], {
+      person_id: null,
+      raw_payload: {
+        company_current: "New Co",
+        title_current: "CEO",
+        mentor_total_work_years: "25",
+        years_of_experience: "16+"
+      }
+    });
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await approveApplication(baseInput());
+
+    expect(result).toMatchObject({ ok: true, profileCreated: true });
+    expect(profileInsertSpy).toHaveBeenCalledWith(expect.objectContaining({
+      person_id: PERSON_UUID,
+      source_application_id: APP_UUID,
+      company_current: "New Co",
+      title_current: "CEO",
+      years_experience_min: 25,
+      years_experience_text: "16+"
+    }));
+  });
+});
+
+describe("approveApplication — ambiguous identity fails closed", () => {
+  it("does not create a person or profile when normalized email has multiple candidates", async () => {
+    const client = makeClient([
+      makeChain({ data: null, error: { code: "PGRST116", message: "multiple rows returned" } })
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await approveApplication(baseInput());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/duy nhất|email/i);
+    expect((client.from as ReturnType<typeof vi.fn>).mock.calls.map(([table]) => table))
+      .toEqual(["applications", "people"]);
+  });
+
+  it("does not fall back to email or create a person when an existing person_id link is invalid", async () => {
+    const client = makeClient(
+      [makeChain({ data: null, error: null })],
+      { person_id: "missing-person", raw_payload: {} }
+    );
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await approveApplication(baseInput());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/đã liên kết|hồ sơ người/i);
+    expect((client.from as ReturnType<typeof vi.fn>).mock.calls.map(([table]) => table))
+      .toEqual(["applications", "people"]);
+  });
+
+  it("rejects a non-exact candidate returned by case-insensitive pattern matching", async () => {
+    const client = makeClient([
+      makeChain({ data: { id: "wrong-person", email_primary: "axb@example.com" } })
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await approveApplication(baseInput({ emailPrimary: "a_b@example.com" }));
+
+    expect(result.ok).toBe(false);
+    expect((client.from as ReturnType<typeof vi.fn>).mock.calls.map(([table]) => table))
+      .toEqual(["applications", "people"]);
+  });
 });
 
 // ── Non-transactional partial failure ─────────────────────────────────────────
@@ -233,6 +426,9 @@ describe("approveApplication — gender normalization", () => {
     // inspecting what data was passed to the mock (via spy on the insert chain).
     const insertSpy = vi.fn().mockReturnValue(makeChain({ data: { id: PERSON_UUID, full_name: "Test" } }));
     const mockFrom = vi.fn().mockImplementation((table: string) => {
+      if (table === "applications") {
+        return makeChain({ data: { person_id: null, raw_payload: {} } });
+      }
       if (table === "people") {
         const chain: Record<string, unknown> = {};
         chain.ilike = () => makeChain({ data: null }); // email not found
@@ -317,7 +513,6 @@ describe("approveApplication — raw DB error text safety", () => {
     };
     const client = makeClient([
       makeChain({ data: null }),            // email lookup → not found
-      makeChain({ data: null }),            // existing application link → none
       makeChain({ data: null, error: sensitiveDbError }), // people.insert FAILS
     ]);
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
@@ -357,7 +552,6 @@ describe("approveApplication — approval retry safety (non-transactional mitiga
     //            application status UPDATE FAILS → ok:false
     const clientCall1 = makeClient([
       makeChain({ data: null }),              // findPersonByEmail → NOT found
-      makeChain({ data: null }),              // applications.select person_id → none
       makeChain({ data: createdPerson }),     // people.insert → CREATED
       makeChain({ data: null }),              // findMentorProfileByPersonId → NOT found
       makeChain({ data: createdProfile }),    // mentor_profiles.insert → CREATED

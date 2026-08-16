@@ -21,6 +21,7 @@ import type { ApplicationDecision, ApplicationReview, JsonRecord, Match } from "
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { canBrowseApplications } from "@/lib/read-access";
+import { findReturningMentorProfile } from "@/lib/returning-mentor";
 import { redirect } from "next/navigation";
 import {
   mentorExperienceFromAnswers,
@@ -149,6 +150,16 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const displayGender     = application.data.gender        ?? person?.gender        ?? null;
   const displayStatus     = application.data.status        ?? application.data.final_status ?? null;
   const displayConsentVal = application.data.consent_data_storage ?? application.data.consent_pdpa;
+  const returningMentorProfile = findReturningMentorProfile(
+    {
+      person_id: application.data.person_id,
+      email_primary: displayEmail,
+      role_applied: application.data.role_applied,
+      status: application.data.status
+    },
+    people.data,
+    mentors.data
+  );
   const commitmentRole =
     application.data.role_applied === "mentor" || application.data.role_applied === "mentee"
       ? (application.data.role_applied as ApplicationCommitmentRole)
@@ -481,6 +492,11 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                 ["Chức danh", displayText(mentorProfile.title_current)]
               ]}
             />
+          ) : returningMentorProfile ? (
+            <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              <div className="font-semibold">Đã tìm thấy Mentor hiện hữu</div>
+              <div className="mt-1">Mã mentor: {displayText(returningMentorProfile.mentor_code)}</div>
+            </div>
           ) : (
             <EmptyState message="Chưa có mentor profile liên quan." />
           )}
