@@ -4,7 +4,6 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { createHash, randomUUID } from "crypto";
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
-import { SEASON_CONFIG } from "@/lib/season-config";
 import type { JsonRecord } from "@/lib/types";
 import { isValidEmail, normalizeEmail } from "@/lib/identity";
 import { findExactAuthUsers, resolveAuthOwnership } from "@/lib/account-auth-ownership";
@@ -82,7 +81,25 @@ function serviceClient() {
   return { client, error: null };
 }
 
-async function validateExplicitAdminScope(client: any, programValue: unknown, seasonValue: unknown): Promise<
+const CANONICAL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isCanonicalScopeIdentifier(value: unknown) {
+  return typeof value === "string" && CANONICAL_ID_PATTERN.test(value.trim());
+}
+
+/**
+ * The canonical write boundary for a scope grant.
+ *
+ * Every grant this module persists must name a program and a season by their
+ * catalog UUID, proven to exist and proven to belong to each other. A program
+ * name, a season code, or any other human-readable identifier is rejected here
+ * rather than resolved implicitly — Production already carries one grant that
+ * stored a program NAME, which the application's tolerant matching accepted and
+ * `vam063_authorized_for_scope`'s exact matching refused. Resolution of
+ * human-readable codes belongs at an import/UI boundary that looks them up in
+ * the catalog first; it does not belong in the persistence path.
+ */
+export async function validateExplicitAdminScope(client: any, programValue: unknown, seasonValue: unknown): Promise<
   | { ok: true; programId: string; seasonId: string }
   | { ok: false; result: AdminUserMutationResult }
 > {
@@ -102,6 +119,14 @@ async function validateExplicitAdminScope(client: any, programValue: unknown, se
   });
   if (!programId) return reject("missing_program", "Phải chọn chương trình hợp lệ. Không có thay đổi nào được thực hiện.");
   if (!seasonId) return reject("missing_season", "Phải chọn season hợp lệ. Không có thay đổi nào được thực hiện.");
+  // Reject a non-canonical identifier before it reaches the database, so the
+  // failure is a named validation outcome rather than a driver-level cast error.
+  if (!isCanonicalScopeIdentifier(programId)) {
+    return reject("non_canonical_program", "Chương trình phải được chọn theo định danh chuẩn. Không có thay đổi nào được thực hiện.");
+  }
+  if (!isCanonicalScopeIdentifier(seasonId)) {
+    return reject("non_canonical_season", "Season phải được chọn theo định danh chuẩn. Không có thay đổi nào được thực hiện.");
+  }
 
   const { data: program, error: programError } = await client
     .from("programs")
@@ -149,10 +174,6 @@ export async function requireSuperAdmin(): Promise<CurrentAdminUser | null> {
 function cleanText(value: unknown) {
   const text = String(value ?? "").trim();
   return text || null;
-}
-
-function scopeText(value: unknown, fallback: string) {
-  return String(value ?? "").trim() || fallback;
 }
 
 function validRole(value: unknown): AdminRole {
@@ -366,7 +387,25 @@ async function recordAuthReconciliation(client:any,actorId:string,operationId:st
   if(error)throw new Error("CRITICAL_RECONCILIATION_RECORDING_FAILED");
 }
 
-async function upsertScope(client: any, input: {
+/**
+ * Persist one scope grant.
+ *
+ * Two rules this function is responsible for:
+ *
+ *  1. CANONICAL IDENTITY OR NOTHING. It previously substituted the literals
+ *     "VAM" and SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE when the caller
+ *     supplied no program or season. Those are a program that exists in no
+ *     catalog and a hard-coded season code — exactly the non-canonical shape
+ *     WP1-A2 has to convert away. A missing or unresolvable identity is now a
+ *     rejection, never a guess.
+ *
+ *  2. HISTORY IS NOT REVIVED. The existence probe is restricted to ACTIVE
+ *     grants. An inactive grant is a retired authority; re-provisioning the
+ *     same scope mints a new active grant beside it rather than silently
+ *     flipping the retired one back on. Full reconciliation of overlapping
+ *     grants belongs to WP1-C.
+ */
+export async function upsertScope(client: any, input: {
   authUserId: string;
   scopeId?: string | null;
   programId?: unknown;
@@ -374,10 +413,13 @@ async function upsertScope(client: any, input: {
   role?: unknown;
   status?: unknown;
 }) {
+  const canonical = await validateExplicitAdminScope(client, input.programId, input.seasonId);
+  if (!canonical.ok) throw new Error(canonical.result.message);
+
   const payload = {
     user_id: input.authUserId,
-    program_id: scopeText(input.programId, "VAM"),
-    season_id: scopeText(input.seasonId, SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE),
+    program_id: canonical.programId,
+    season_id: canonical.seasonId,
     role: validScopeRole(input.role),
     status: validScopeStatus(input.status)
   };
@@ -395,11 +437,16 @@ async function upsertScope(client: any, input: {
     .eq("user_id", input.authUserId)
     .eq("program_id", payload.program_id)
     .eq("season_id", payload.season_id)
+    .eq("status", "active")
     .order("updated_at", { ascending: false })
     .limit(1);
   if (existingError) throw new Error(`KhĂ´ng thá»ƒ kiá»ƒm tra phĂ¢n quyá»n hiá»‡n cĂ³: ${existingError.message}`);
 
   const existing = existingRows?.[0];
+
+  // Nothing active to change and nothing being granted: retiring an already
+  // retired scope must not insert a fresh inactive history row.
+  if (!existing?.id && payload.status !== "active") return;
 
   const result = existing?.id
     ? await client.from("admin_scope_access").update(payload).eq("id", existing.id)

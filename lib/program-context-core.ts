@@ -113,6 +113,48 @@ export function resolveAccessiblePrograms(principal: ProgramAccessPrincipal, cat
   return catalog.programs.filter((program) => program.isActive && ids.has(program.id));
 }
 
+/**
+ * A grant with no season names the whole program: every season inside it,
+ * present and future. A grant that names a season authorizes that season only.
+ * These two predicates are the single definition of that split — both
+ * `requireSeasonAccess` (the enforcement path) and `resolveAccessibleSeasons`
+ * (the option-listing path) read from them so the two can never drift into
+ * offering a season that enforcement then refuses, or the reverse.
+ */
+function hasProgramWideGrant(principal: ProgramAccessPrincipal, programId: string, catalog: ProgramContextCatalog) {
+  return principal.grants.some((grant) => {
+    if (grant.seasonId) return false;
+    return programForGrant(grant, catalog)?.id === programId;
+  });
+}
+
+function hasDirectSeasonGrant(principal: ProgramAccessPrincipal, season: SeasonCatalogRow) {
+  return principal.grants.some((grant) => {
+    const value = clean(grant.seasonId);
+    if (!value) return false;
+    return value === season.id || normalizeCode(value) === normalizeCode(season.code);
+  });
+}
+
+/**
+ * The seasons a principal may actually operate in.
+ *
+ * Program accessibility is NOT sufficient: a reviewer granted only UEHM-S12
+ * can reach the UEHM program but must never be offered UEHM-S11. Listing a
+ * season the holder cannot read would either leak the existence of another
+ * season's scope or hand them a selector entry that renders empty — and a
+ * selector must narrow an existing authority, never imply a new one.
+ */
+export function resolveAccessibleSeasons(principal: ProgramAccessPrincipal, catalog: ProgramContextCatalog) {
+  requireAuthenticated(principal);
+  const programIds = new Set(resolveAccessiblePrograms(principal, catalog).map((program) => program.id));
+  const seasons = catalog.seasons.filter((season) => programIds.has(season.programId));
+  if (principal.isSuperAdmin) return seasons;
+  return seasons.filter(
+    (season) => hasProgramWideGrant(principal, season.programId, catalog) || hasDirectSeasonGrant(principal, season)
+  );
+}
+
 export function requireProgramAccess(principal: ProgramAccessPrincipal, program: ProgramCatalogRow, catalog: ProgramContextCatalog) {
   requireAuthenticated(principal);
   if (principal.isSuperAdmin) return;
@@ -131,16 +173,9 @@ export function requireSeasonAccess(
   requireProgramAccess(principal, program, catalog);
   assertSeasonBelongsToProgram(season, program);
   if (principal.isSuperAdmin) return;
-  const hasProgramGrant = principal.grants.some((grant) => {
-    if (grant.seasonId) return false;
-    const grantedProgram = programForGrant(grant, catalog);
-    return grantedProgram?.id === program.id;
-  });
-  const hasSeasonGrant = principal.grants.some((grant) => {
-    const value = clean(grant.seasonId);
-    return value === season.id || normalizeCode(value) === normalizeCode(season.code);
-  });
-  if (!hasProgramGrant && !hasSeasonGrant) throw new ProgramContextError("not_found");
+  if (!hasProgramWideGrant(principal, program.id, catalog) && !hasDirectSeasonGrant(principal, season)) {
+    throw new ProgramContextError("not_found");
+  }
 }
 
 export function assertSeasonBelongsToProgram(season: SeasonCatalogRow, program: ProgramCatalogRow) {

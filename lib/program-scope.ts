@@ -48,9 +48,22 @@ const SCOPE_RANK: Record<ScopeLevel, number> = {
   full_access: 4
 };
 
-function asScopeLevel(value: unknown): ScopeLevel {
-  const text = String(value ?? "read");
-  return SCOPE_LEVELS.has(text) ? (text as ScopeLevel) : "read";
+/**
+ * Fail closed on an unrecognised scope level.
+ *
+ * This used to normalise anything it did not understand — NULL, empty string,
+ * a typo, a value from a future migration — into "read", which granted real
+ * read authority on the strength of a value the system could not interpret.
+ * `admin_scope_access.role` is nullable on Production and carries no CHECK
+ * constraint, so that fallback was reachable by a single bad write.
+ *
+ * A grant whose level cannot be resolved now confers NOTHING and is dropped
+ * during resolution. It is not downgraded to the weakest usable level.
+ */
+function asScopeLevel(value: unknown): ScopeLevel | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  return SCOPE_LEVELS.has(text) ? (text as ScopeLevel) : null;
 }
 
 function clean(value: unknown) {
@@ -126,18 +139,44 @@ export const getAdminScopeContext = cache(async (): Promise<AdminScopeContext> =
     return { adminUser, authUserId, globalRole, isSuperAdmin: false, programScopes: [], scopeError: SCOPE_RESOLUTION_ERROR };
   }
 
+  const rows = (data ?? []) as JsonRecord[];
+  const programScopes: ProgramScope[] = [];
+  let droppedGrants = 0;
+
+  for (const row of rows) {
+    const scopeLevel = asScopeLevel(row.role);
+    const programId = clean(row.program_id);
+    const seasonId = clean(row.season_id);
+
+    // An unreadable level, or a grant that names neither a program nor a
+    // season, is not a weaker grant — it is not a grant. Dropping it here is
+    // what stops it reaching the scope-blind `canOperateAnyScope` family, which
+    // inspects only the level and would otherwise unlock every mutation entry
+    // point on the strength of a row that authorizes no program at all.
+    //
+    // One malformed row must not poison the others: a holder with a valid
+    // UEHM-S12 grant keeps it even if a second row is unusable.
+    if (!scopeLevel || (!programId && !seasonId)) {
+      droppedGrants += 1;
+      continue;
+    }
+    programScopes.push({ programId, seasonId, scopeLevel, status: "active" });
+  }
+
+  if (droppedGrants > 0) {
+    console.warn("[program-scope] dropped unusable admin_scope_access grants", {
+      droppedGrants,
+      totalGrants: rows.length
+    });
+  }
+
   return {
     adminUser,
     authUserId,
     globalRole,
     isSuperAdmin: false,
     scopeError: null,
-    programScopes: ((data ?? []) as JsonRecord[]).map((row) => ({
-      programId: clean(row.program_id),
-      seasonId: clean(row.season_id),
-      scopeLevel: asScopeLevel(row.role),
-      status: "active"
-    }))
+    programScopes
   };
 });
 
