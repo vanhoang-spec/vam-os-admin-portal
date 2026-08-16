@@ -85,16 +85,22 @@ describe("WP1-A2 preflight is read-only", () => {
     expect(executable).not.toMatch(/season_id\s*=\s*null/i);
   });
 
-  it("carries no apply, rollback or verifier SQL yet", () => {
+  it("carries exactly the expected package files, and no others", () => {
     // preflight_v2.sql and staff_scope_manifest_v2.json joined the package in
-    // WP1-A2; both are read-only artifacts and are guarded by
-    // __tests__/wp1a2-staff-scope-manifest.test.ts. Migration SQL is still absent.
+    // WP1-A2; apply/verifier/rollback joined it once the owner's Production
+    // preflight returned SAFE_TO_APPLY_V2 = true. Every one of them is guarded
+    // by its own test — __tests__/wp1a2-staff-scope-manifest.test.ts for the
+    // manifest, __tests__/wp1a2-apply-package.test.ts for the migration SQL.
+    // This assertion exists so a NEW, unguarded file cannot appear unnoticed.
     const files = readdirSync(PACKAGE_DIR).sort();
     expect(files).toEqual([
       "README.md",
+      "apply.sql",
       "preflight.sql",
       "preflight_v2.sql",
-      "staff_scope_manifest_v2.json"
+      "rollback.sql",
+      "staff_scope_manifest_v2.json",
+      "verifier.sql"
     ]);
   });
 });

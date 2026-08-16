@@ -867,14 +867,27 @@ describe("WP1-A2 · SAFE_TO_APPLY_V2 is derived, never asserted", () => {
   });
 });
 
-describe("WP1-A2 · the package still carries no migration", () => {
-  it("has a preflight and a manifest, and no apply, verifier or rollback SQL", () => {
+describe("WP1-A2 · the package carries the authored migration, and nothing more", () => {
+  it("has the manifest, both preflights, and exactly the three migration files", () => {
+    // apply/verifier/rollback were authored only after the owner ran
+    // preflight_v2 against Production and it returned SAFE_TO_APPLY_V2 = true.
+    // Their contents are locked by wp1a2-apply-package.test.ts.
     expect(readdirSync(PACKAGE_DIR).sort()).toEqual([
       "README.md",
+      "apply.sql",
       "preflight.sql",
       "preflight_v2.sql",
-      "staff_scope_manifest_v2.json"
+      "rollback.sql",
+      "staff_scope_manifest_v2.json",
+      "verifier.sql"
     ]);
+  });
+
+  it("still refuses to authorize its own execution", () => {
+    // Authoring the package is not permission to run it. The manifest's
+    // apply_authorized flag stays false until the owner executes deliberately,
+    // after independent security review.
+    expect(manifest.apply_authorized).toBe(false);
   });
 
   it("keeps the V1 preflight intact as prior evidence", () => {

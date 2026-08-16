@@ -1,6 +1,6 @@
 # VAM OS — WP1-A2 Canonical Staff Scope Convergence
 
-**Package status: PREFLIGHT ONLY. No migration exists in this package yet, and none may be applied from it.**
+**Package status: AUTHORED, LOCALLY VALIDATED, NOT EXECUTED. Nothing in this package has been run against Production or Staging.**
 
 Date: 16 Aug 2026
 Base: `f8bdfafcbf1a3e18151d7d679da66fa6fb353100`
@@ -11,8 +11,15 @@ Branch: `fix/wp1a-canonical-scope`
 | `staff_scope_manifest_v2.json` | The owner-approved staff convergence manifest: six inventoried rows, their exact current values, and their approved targets | No |
 | `preflight_v2.sql` | Read-only proof that the manifest is safe to apply, and the `SAFE_TO_APPLY_V2` gate | No |
 | `preflight.sql` | V1. Read-only classification of Production `admin_scope_access` and the `SAFE_TO_APPLY` gate. Preserved as prior evidence | No |
+| `apply.sql` | **The convergence.** One transaction: locks, preconditions, audit pre-image, six in-place conversions, six inserts, six constraints, postconditions | **Yes — once** |
+| `verifier.sql` | Read-only proof of the post-apply state, and the `A2_VERIFIED` gate | No |
+| `rollback.sql` | Emergency reversal to the exact pre-A2 state, with its own eligibility guards | **Yes — emergency only** |
 
-`apply.sql`, `verifier.sql` and `rollback.sql` are **deliberately absent**. They are authored only after `preflight_v2.sql` has been run against Production by the owner and has returned `SAFE_TO_APPLY_V2 = true`, because the migration's write set depends on what the preflight finds. Section 8 documents the transaction strategy that apply will follow; it is a design, not a script.
+The three migration files were authored **only after** the owner ran `preflight_v2.sql` against Production on 16 Aug 2026 and it returned `SAFE_TO_APPLY_V2 = true` with every gating check passing: 6 rows (5 active, 1 inactive), 0 unknown rows, 0 drift, 0 target collisions, 0 projected constraint blockers, 4/4 real Admin accounts usable, 2/2 test accounts exact, and all `[DEMO_VIEWER_*]`, `[LIEU_LEGACY]`, `[HISTORICAL_INACTIVE]`, `[NO_REACTIVATION]` and `[RPC_COMPAT]` checks PASS. That result is the evidence this package's write set is built on; sections 12–15 describe what was built.
+
+**Authoring is not authorization.** `staff_scope_manifest_v2.json` still carries `apply_authorized: false`, and a test asserts it. The owner executes deliberately, after independent security review, following the runbook in §13.
+
+> The manifest's `gates.production_result` still reads `UNKNOWN_UNTIL_OWNER_EXECUTES`. That field is now stale — the owner has executed — and it is **deliberately left unedited**: the manifest is the locked owner decision record, and this authoring pass was scoped to the three SQL files, the tests and this README. The Production result is recorded here instead.
 
 **Sections 1–6 describe WP1-A2 as originally scoped — the single UEH Admin row. Sections 7–11 supersede that scope with the full owner-approved staff manifest.** The earlier sections are kept because the V1 preflight and its findings are still the evidence baseline for the table's shape and its lack of constraints.
 
@@ -133,7 +140,7 @@ Constraints 4 and 5 are NULL-permissive by SQL semantics: a NULL `role` or `stat
 - WP1-A1 drops a NULL/unrecognised scope level at read time in the application, rather than relying on the database to reject it;
 - the preflight reports NULL-status rows as INFO with a recommendation, instead of pretending constraint 5 would catch them.
 
-Pairing constraint 5 with `SET NOT NULL` is a reasonable follow-up and is an owner decision, not a WP1-A2 assumption.
+**This open question is now closed by the owner.** The WP1-A2 contract of 16 Aug 2026 requires `role` NOT NULL and `status` NOT NULL, so `apply.sql` folds an `IS NOT NULL` conjunct into constraints 4 and 5 — see §12.2 for why it is a conjunct rather than a column attribute.
 
 ---
 
@@ -310,9 +317,11 @@ So the flag cannot widen the disposition, and targets cannot act without the fla
 
 ---
 
-## 9. The future A2 apply — design only, not authored
+## 9. The A2 apply — the design, now implemented
 
-`apply.sql` does not exist and must not be written until `preflight_v2.sql` returns `SAFE_TO_APPLY_V2 = true`. When it is written, it should be a single transaction in this order:
+> This section was written before the apply existed. It is kept as the design of record; §12 documents what was actually built and where it went further.
+
+`apply.sql` is a single transaction in this order:
 
 1. **Lock and re-read the exact rows.** `select … where id in (…) for update`, addressed by the six manifest `scope_id`s. Never by a `program_id` pattern.
 2. **Re-verify every source value inside the transaction.** Compare against the same inventory literals the preflight used, and `raise exception` on the first mismatch. The preflight proves the state at read time; only this step proves it at write time.
@@ -433,3 +442,173 @@ Anti/browser role UAT  →  only then share the demo credentials
 ```
 
 The ordering constraint is unchanged and still load-bearing: **A1 must not deploy before A2 converges.** A1 drops the non-canonical scope level `"admin"` at read time, which is the only thing giving Liễu working authority today.
+
+---
+
+# WP1-A2 · The authored package
+
+## 12. `apply.sql`
+
+One transaction, in the order §9 designed. `BEGIN` → locks and preconditions → audit pre-image → six in-place conversions → one platform-role change → six inserts → six constraints → postconditions → `COMMIT`.
+
+**Nothing partial can commit.** Every guard is a `raise exception`, which aborts the transaction; and a `COMMIT` issued inside an already-aborted transaction is executed by PostgreSQL as a `ROLLBACK`, so even a client without `ON_ERROR_STOP` cannot half-apply this file. There is no savepoint, no retry, and no branch that repairs what it finds. **Drift aborts.**
+
+### 12.1 The six rows it creates
+
+Deterministic UUIDs, authored into the package rather than generated. This is what lets `verifier.sql` prove *exactly these rows* and `rollback.sql` remove *exactly these rows*, instead of "any row matching these values" — which is the shape that deletes someone else's legitimate grant.
+
+| id | Account | Grant | Why |
+|---|---|---|---|
+| `a2000001-0000-4a20-8a20-000000000001` | uehmentoring@gmail.com | UEHM / S12 / `full_access` / active | Season 12 operating authority |
+| `a2000002-0000-4a20-8a20-000000000002` | lieu.nguyen@hoatay.com.vn | UEHM / S11 / `full_access` / active | Replaces the Season 11 read authority her retired program-wide row conferred |
+| `a2000003-0000-4a20-8a20-000000000003` | lieu.nguyen@hoatay.com.vn | UEHM / S12 / `full_access` / active | Season 12 operating authority |
+| `a2000004-0000-4a20-8a20-000000000004` | hoang.nguyen@embassy.edu.vn | UEHM / S12 / `full_access` / active | Season 12 operating authority |
+| `a2000005-0000-4a20-8a20-000000000005` | lyductoan@gmail.com | UEHM / S12 / `full_access` / active | Season 12 operating authority |
+| `a2000006-0000-4a20-8a20-000000000006` | viewer.vam.test@redsquarevietnam.com | UEHM / S12 / `read` / active | The controlled demo viewer's **entire** post-plan authority |
+
+The `a2…` prefix is deliberate and permanent: a row created by this package is identifiable as such forever, in a table where every other id is opaque.
+
+### 12.2 NOT NULL is a named CHECK, not a column attribute
+
+The owner contract requires `program_id`, `role` and `status` to be NOT NULL. `apply.sql` expresses all three as conjuncts inside the named constraints — `check (program_id is not null)`, `check (role is not null and role in (…))`, `check (status is not null and status in (…))` — rather than as `ALTER COLUMN … SET NOT NULL`.
+
+Two operational reasons, and one honest trade-off:
+
+- **Exact reversibility.** A named constraint is droppable by name. A column attribute is not: reverting `SET NOT NULL` would require knowing whether the attribute predated this package, and Production's `status` column was added by a manual hotfix of unknown nullability — `[NAME_COLLISION]` proved migrations 020/026 were never applied there, so the schema history does not answer the question. Rollback would have had to guess.
+- **The six names the preflight cleared.** `[NAME_COLLISION]` proved exactly six object names free. `admin_scope_access_program_id_not_null` is one of them, which is itself evidence the design intended a named constraint. `role`/`status` NOT NULL were given no seventh and eighth name, so they live inside the constraints that already carry their vocabulary.
+- **The trade-off:** `pg_attribute.attnotnull` stays false, so introspection tools and the planner still see the columns as nullable. Enforcement for every write is identical. Promoting them to true column attributes is a clean follow-up once the owner decides, and is not assumed here.
+
+### 12.3 Idempotency: refuse, don't re-converge
+
+A second run aborts at `[ALREADY_APPLIED]` — the guard reads both its own six row ids and its own six constraint names. It is never a silent no-op and never a partial re-convergence, so operational history stays readable. The insert is a guarded `INSERT … SELECT … WHERE NOT EXISTS`, never an `ON CONFLICT` upsert: if something unexpected already holds a canonical target key, the row is simply not inserted and the postconditions then abort the whole transaction. Unexpected state stops the run; it never gets absorbed.
+
+---
+
+## 13. Audit: what A2 records, and what it refuses to invent
+
+`apply.sql` writes **one `admin_audit_log` row per affected account, before any row is modified.** Six rows, using the mechanism and vocabulary the application already uses. No new table, no new event type, no schema change, and no weakening of any audit constraint.
+
+| Field | Value | Evidence |
+|---|---|---|
+| `action_type` | `update_admin_user` | `lib/admin-users.ts` writes exactly this when an account's role and scope change together. It is present in **both** the legacy vocabulary and the VAM062 superset, so it is safe whichever `admin_audit_log_action_type_check` Production currently carries |
+| `target_admin_user_id` | the affected `admin_users.id` | the column's FK target |
+| `before_data` | live pre-image `{user, scopes}` | the shape `snapshotAdminUser` produces |
+| `after_data` | the planned post-state | see below |
+| `actor_admin_user_id` | **NULL** | the column is nullable precisely for writes with no interactive actor. This is a migration executed by the owner, not an admin acting through the console; attributing it to a person's `admin_users` row would be a fiction |
+
+**`after_data` is the plan, not an observation** — and the postconditions abort the transaction unless the committed state equals it exactly. So an audit row can never survive describing something that did not happen, while the instruction "record the pre-image *before* rewriting it" is honoured literally.
+
+The account snapshot is deliberately **narrower** than the application's: `id, auth_user_id, email, role, status`, with no `full_name`. `admin_audit_log` is readable by super_admins and this record needs no further personal data to be a complete account of the authority change.
+
+### The apply refuses rather than guesses
+
+`[AUDIT_CONTRACT]` is a precondition, not a hope. It aborts the run if `admin_audit_log` is absent, if any of the five columns it writes is missing, if a live `action_type` CHECK does not admit `update_admin_user`, or if an affected account does not resolve to an `admin_users.id`. **A hostile fixture with an incompatible vocabulary aborts at that check with no partial state.** Widening an audit constraint to make a write fit is not in this package's scope, and a test asserts no file here contains `ALTER TABLE public.admin_audit_log`.
+
+### Liễu's `"admin"` → `full_access` rewrite, and where the truth survives
+
+This is the one field in the whole convergence whose stored value cannot be preserved: the table-wide `role` CHECK makes the literal `"admin"` unrepresentable on any row, retired or not. The retired row records `full_access` — the authority the owner says the account was meant to hold — and the pre-image `{program_id: "UEHM", season_id: null, role: "admin", status: "active"}` is written to `admin_audit_log` **first**. A postcondition then fails the whole transaction if that exact pre-image was not recorded exactly once, and `[AUDIT_PREIMAGE]` re-proves it in the verifier. The only alternative was to not apply the `role` CHECK at all, which leaves the vocabulary unenforced table-wide; that is recorded in the manifest as the owner's rejected option, not assumed away.
+
+---
+
+## 14. The owner execution sequence
+
+**Do not run any of this until independent security review has passed.** Run `apply.sql` and `rollback.sql` with `ON_ERROR_STOP` enabled.
+
+1. Run **`preflight_v2.sql`** against Production. Read-only.
+2. Confirm **`SAFE_TO_APPLY_V2 = true`** and that every gating check is PASS. A single FAIL means Production disagrees with the locked manifest: **re-cut the manifest from a fresh owner inventory, never adjust the target to fit what was found.**
+3. **Snapshot and keep the full preflight output** — all three blocks — with the run timestamp. It is the evidence the apply's write set was built against.
+4. Execute **`apply.sql` exactly once.** It will emit `NOTICE` lines for its preconditions and postconditions, then a one-row summary, then `COMMIT`. If it raises instead, nothing was written — see step 7.
+5. **Immediately** execute **`verifier.sql`.** Read-only. Record all rows.
+6. Proceed only if **`A2_VERIFIED = true`**.
+7. **If `apply.sql` failed before COMMIT: no rollback is needed and none may be run.** The transaction aborted, so nothing was written; `rollback.sql` run in that state aborts at `[NOT_APPLIED]`. Read the abort message, reconcile the drift it names, and start again at step 1.
+8. **If `apply.sql` committed but `verifier.sql` fails: STOP.** Do not deploy A1, do not share the demo credentials, and do not run anything else against the table. Read the failing checks, then evaluate rollback eligibility (§15) with the owner.
+9. **Rollback only via `rollback.sql`, and only if its own guards pass.** It refuses if the database is no longer exactly the state A2 left behind.
+10. After a successful verification:
+    - verify the four real Admin accounts — each should see Season 11 and Season 12, and be able to operate Season 12;
+    - verify the demo viewer account — read-only, Season 12 only, no `/matches` detail access;
+    - **only then** proceed toward the WP1-A1 deployment.
+
+> **DO NOT SHARE THE DEMO CREDENTIALS UNTIL ANTI/BROWSER VIEWER UAT PASSES.** The verifier proves what the database grants — nothing beyond UEHM/S12 `read`. It does not prove every application route renders PII-safely for a `viewer`. The reviewer PII gap on `/matches` is still open, and this is a shared credential intended for exactly the people who must not see reviewer-level PII.
+
+---
+
+## 15. `rollback.sql` — emergency only
+
+A deliberate reversal to the exact pre-A2 state recorded by the final Production preflight. **It is not a routine undo.**
+
+### What it restores
+
+| Row | Restored to |
+|---|---|
+| `68fe466c…` UEH shared Admin | `"UEH Mentoring"` / `"UEHM-S11"` / `full_access` / active |
+| `17a86485…` Liễu | `"UEHM"` / NULL / `"admin"` / **active** |
+| `60ef3d0b…` Hoàng | `"VAM"` / `"UEHM-S11"` / `operations` / active |
+| `1e58beb9…` Toàn | `"VAM"` / `"UEHM-S11"` / `operations` / active |
+| `487a7562…` demo account | `"VAM"` / `"UEHM-S11"` / `operations` / **active** |
+| `eaa60d5c…` historical admin | `"VAM"` / `"UEHM-S11"` / `full_access` / inactive |
+| `admin_users` | viewer.vam.test: `viewer` → `reviewer` (status untouched) |
+
+Plus: the six `a2…` rows are deleted, and the six A2 objects are dropped by exact name. `id` and `created_at` survive both directions of the round trip. **No inventoried row is deleted in any branch** — the single `DELETE` in the entire package targets only the six ids A2 authored, each additionally guarded on the exact values A2 wrote.
+
+The constraints are dropped **first**, because the restored values are deliberately non-canonical: `"UEH Mentoring"` and `"VAM"` are not UUID strings and `"admin"` is not a canonical scope level. `DROP … IF EXISTS` is not used anywhere: the guards have already proved all six objects are present, and `IF EXISTS` would silently tolerate a state this file refuses.
+
+### When it refuses
+
+Later legitimate operational work is worth more than a clean reversal, so every one of these aborts the run with nothing changed:
+
+| Condition | Abort |
+|---|---|
+| none of the six A2 rows exist (the apply never committed, or it was already rolled back) | `[NOT_APPLIED]` |
+| the A2 constraints or index are missing | `[NOT_APPLIED]` |
+| the table holds anything other than exactly those 12 rows | `[ORGANIC_CHANGE]` |
+| any of the 12 rows holds a value A2 did not write | `[ORGANIC_CHANGE]` |
+| any row has moved to a different account | `[ORGANIC_CHANGE]` |
+| any of the six accounts has a platform role or status A2 did not leave | `[ORGANIC_CHANGE]` |
+| the six apply audit rows are not intact | `[AUDIT_CONTRACT]` |
+
+If it aborts, the state must be reconciled by hand from the evidence. It must not be forced.
+
+### The audit trail is retained, not rewound
+
+Nothing in the live audit contract treats `admin_audit_log` rows as reversible: the application only ever inserts and reads them, migration 062 revokes `DELETE` from `authenticated`, and no code path anywhere deletes one. So the rollback **deletes no audit row** and instead **appends its own six**, recording the reversal with the same mechanism and vocabulary. An audit trail that can be rewound is not an audit trail.
+
+### What a rollback re-creates, and the ordering it forces
+
+Reversing restores Liễu's legacy `"admin"` level — from which she regains authority **only** through the base code's coercion of `"admin"` to `read`. **After a rollback, WP1-A1 must not be deployed:** A1 drops that level at read time and would leave her with nothing. Reversing also restores `reviewer` and an active S11 `operations` scope to a shared demo credential while the `/matches` PII gap is open, so those credentials must be in nobody's hands when it runs.
+
+---
+
+## 16. Local validation of the authored package
+
+Executed against a throwaway local PostgreSQL **15.18** container seeded with a fixture reproducing the Production shape (`admin_scope_access` carrying a primary key and nothing else), the owner catalog, the exact six-row inventory, the **legacy** `admin_audit_log_action_type_check` vocabulary — the stricter of the two states Production could be in — and `vam063_authorized_for_scope` copied verbatim from `supabase_migrations/063`. **Production and Staging were not contacted at any point.** 50 assertions, all passing.
+
+**Round trip:** `preflight_v2` → `SAFE_TO_APPLY_V2 = true` · `apply.sql` → COMMIT · `verifier.sql` → `A2_VERIFIED = true` · `rollback.sql` → COMMIT · scope rows and accounts byte-identical to the pre-A2 baseline · audit trail 12 rows (6 apply + 6 rollback, none deleted) · `preflight_v2` again → `SAFE_TO_APPLY_V2 = true`, recognising the restored baseline. Re-running `apply.sql` after a successful commit aborts at `[ALREADY_APPLIED]` and changes nothing.
+
+**Hostile cases.** Each was applied to the baseline, run, and reverted. Every one failed closed with no partial commit and no leaked constraint or index.
+
+| Injected before apply | Aborts at |
+|---|---|
+| a source row's level drifted | `[SOURCE_DRIFT]` |
+| an unexpected seventh scope row | `[UNKNOWN_ROW]` |
+| a manifest row moved onto a canonical target key | `[SOURCE_DRIFT]` |
+| a foreign active row already holding a canonical target key | `[UNKNOWN_ROW]` |
+| the demo account's platform role changed | `[DEMO_VIEWER_ROLE]` |
+| the historical account unexpectedly active | `[HISTORICAL_INACTIVE]` |
+| the historical scope row unexpectedly active | `[SOURCE_DRIFT]` |
+| an Admin account suspended | `[STAFF_IDENTITY]` |
+| a scope row moved to another account | `[SOURCE_DRIFT]` |
+| an `action_type` CHECK that cannot admit `update_admin_user` | `[AUDIT_CONTRACT]` |
+
+| Injected after apply, before rollback | Aborts at |
+|---|---|
+| an A2-created row edited organically | `[ORGANIC_CHANGE]` |
+| a thirteenth row appeared | `[ORGANIC_CHANGE]` |
+| the demo account's platform role changed | `[ORGANIC_CHANGE]` |
+| the apply never committed | `[NOT_APPLIED]` |
+| rollback run a second time | `[NOT_APPLIED]` |
+
+**Read-only guard:** `UPDATE` and `DELETE` inside `SET TRANSACTION READ ONLY` are rejected with SQLSTATE `25006`.
+
+> One honest note on coverage: the apply carries a `[TARGET_COLLISION]` precondition, and **no hostile case reaches it.** Any row that could collide is either one of the inventoried six — in which case moving it onto a target key is itself `[SOURCE_DRIFT]` — or a row the manifest does not name, which is `[UNKNOWN_ROW]`. `[TARGET_COLLISION]` is therefore defence in depth against a state the earlier guards already exclude, not an independently exercised check. It is kept because the earlier guards' exhaustiveness is a property of today's six-row table, not a law.
+
+**Static tests:** `__tests__/wp1a2-apply-package.test.ts` locks the properties whose erosion would silently move authority — the closed UUID set across all three files, one transaction per file, every write addressed by an exact id or email, no `DELETE` in the apply, no generic `VAM → UEHM` rule, the constraint contract including the NOT NULL conjuncts and the role-free uniqueness key, the verifier's read-only-ness and derived verdict, the rollback's exact guards and retained audit trail, and the blast radius (no function replacement, no RLS change, no migration replay, no write outside `admin_scope_access` / `admin_users` / `admin_audit_log`).
