@@ -66,7 +66,7 @@ export default async function ReviewsPage() {
 
   const reviewerOnly = isReviewerOnly(adminUser.role);
   const canBulkAssign = canBulkAssignReviews(adminUser.role);
-  const scope = await getScopeFilter(await getAdminScopeContext(), "review");
+  const scope = await getScopeFilter(await getAdminScopeContext());
 
   const result = reviewerOnly
     ? await getMyApplicationReviews(adminUser.id, scope)

@@ -48,7 +48,7 @@ function consentFilter(value: unknown) {
 export default async function ApplicationsPage() {
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
-  const scope = await getScopeFilter(await getAdminScopeContext(), "operate");
+  const scope = await getScopeFilter(await getAdminScopeContext());
   const [applications, people, seasons, intakeBatchesRes] = await Promise.all([
     getApplications(scope),
     getPeople(scope),

@@ -45,7 +45,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   if (!canReview(adminUser.role)) redirect("/");
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext, "review");
+  const scope = await getScopeFilter(scopeContext);
   const reviewerConstraint = adminUser.role === "reviewer" ? adminUser.id : undefined;
   const [reviewResult, seasons] = await Promise.all([
     getApplicationReviewById(params.id, scope, reviewerConstraint),

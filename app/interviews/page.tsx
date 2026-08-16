@@ -31,7 +31,13 @@ export default async function InterviewsPage(props: { searchParams: Promise<{ in
     getIntakeBatches(scope),
     // Only fetch candidates when a batch is selected (to avoid showing all seasons)
     intakeBatchId
-      ? getInterviewCandidates({ intakeBatchId, roleApplied, scope })
+      ? getInterviewCandidates({
+          intakeBatchId,
+          roleApplied,
+          scope,
+          actorRole: adminUser.role,
+          actorAdminUserId: adminUser.id
+        })
       : Promise.resolve({ data: [] as Awaited<ReturnType<typeof getInterviewCandidates>>["data"], error: null })
   ]);
 
@@ -115,6 +121,7 @@ export default async function InterviewsPage(props: { searchParams: Promise<{ in
         <InterviewsClient
           rows={candidates.data}
           currentUserId={adminUser.id}
+          showApplicationLinks={adminUser.role !== "reviewer"}
         />
       )}
     </>

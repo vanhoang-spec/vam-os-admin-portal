@@ -101,7 +101,7 @@ function ClaimInterviewButton({
   }
 
   const buttonLabel =
-    row.interview_review_id && !myReviewId ? "Bắt đầu (song song)" : "Bắt đầu phỏng vấn";
+    row.has_active_interview_review && !myReviewId ? "Bắt đầu (song song)" : "Bắt đầu phỏng vấn";
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -127,10 +127,12 @@ function ClaimInterviewButton({
 
 export function InterviewsClient({
   rows,
-  currentUserId
+  currentUserId,
+  showApplicationLinks
 }: {
   rows: InterviewCandidateRow[];
   currentUserId: string;
+  showApplicationLinks: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -213,7 +215,7 @@ export function InterviewsClient({
       {/* Search */}
       <input
         type="search"
-        placeholder="Tìm theo tên, email, SĐT, SBD…"
+        placeholder={showApplicationLinks ? "Tìm theo tên, email, SĐT, SBD…" : "Tìm theo tên hoặc SBD…"}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full max-w-sm rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
@@ -246,12 +248,18 @@ export function InterviewsClient({
                 return (
                   <tr key={row.id} className="hover:bg-vam-mint/30">
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/applications/${row.id}`}
-                        className="font-medium text-vam-ink hover:text-vam-green hover:underline"
-                      >
-                        {row.full_name ?? <span className="text-slate-400">(Chưa có tên)</span>}
-                      </Link>
+                      {showApplicationLinks ? (
+                        <Link
+                          href={`/applications/${row.id}`}
+                          className="font-medium text-vam-ink hover:text-vam-green hover:underline"
+                        >
+                          {row.full_name ?? <span className="text-slate-400">(Chưa có tên)</span>}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-vam-ink">
+                          {row.full_name ?? <span className="text-slate-400">(Chưa có tên)</span>}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       <div>{row.email_primary ?? <span className="text-slate-300">—</span>}</div>

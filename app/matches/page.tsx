@@ -38,6 +38,8 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
     getCurrentAdminUser(),
     getIntakeBatches(scope)
   ]);
+  const matchAudienceRole = adminUser?.role ?? "viewer";
+  const viewerSafe = matchAudienceRole === "viewer";
   const allowManage = canManageMatches(adminUser?.role) && canOperateAnyScope(scopeContext);
 
   const batchFilter = selectedParam(searchParams?.batch).trim();
@@ -48,7 +50,8 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
   const matchListRes = await getMatchList({
     intakeBatchId: batchFilter || null,
     status: statusFilter !== "all" ? statusFilter : null,
-    scope
+    scope,
+    audienceRole: matchAudienceRole
   });
 
   // Load candidates only when a batch is selected
@@ -224,15 +227,15 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                       <tr key={row.id} className="hover:bg-vam-mint/30">
                         <td className="px-4 py-3 align-top">
                           <div className="break-words font-medium leading-5 text-vam-ink">
-                            {displayText(row.mentor_name)}
+                            {viewerSafe ? "Ẩn với Viewer" : displayText(row.mentor_name)}
                           </div>
-                          <div className="mt-0.5 break-all text-xs leading-4 text-slate-500">{displayText(row.mentor_email)}</div>
+                          {!viewerSafe ? <div className="mt-0.5 break-all text-xs leading-4 text-slate-500">{displayText(row.mentor_email)}</div> : null}
                         </td>
                         <td className="px-4 py-3 align-top">
                           <div className="break-words font-medium leading-5 text-vam-ink">
-                            {displayText(row.mentee_name)}
+                            {viewerSafe ? "Ẩn với Viewer" : displayText(row.mentee_name)}
                           </div>
-                          <div className="mt-0.5 break-all text-xs leading-4 text-slate-500">{displayText(row.mentee_email)}</div>
+                          {!viewerSafe ? <div className="mt-0.5 break-all text-xs leading-4 text-slate-500">{displayText(row.mentee_email)}</div> : null}
                         </td>
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
                           <div>{row.batch_code ?? row.match_type ?? "—"}</div>
@@ -241,7 +244,7 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                           </div>
                         </td>
                         <td className="px-4 py-3 align-top">
-                          <StatusBadge status={row.status} />
+                          <StatusBadge status={row.status ?? null} />
                           {row.end_reason ? (
                             <div className="mt-1 text-[11px] text-slate-500">{row.end_reason}</div>
                           ) : null}
@@ -254,12 +257,14 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                         </td>
                         <td className="px-4 py-3 align-top">
                           <div className="flex flex-col gap-2 2xl:flex-row 2xl:flex-wrap">
-                            <Link
-                              href={`/matches/${row.id}`}
-                              className="inline-flex rounded border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
-                            >
-                              Chi tiết
-                            </Link>
+                            {!viewerSafe ? (
+                              <Link
+                                href={`/matches/${row.id}`}
+                                className="inline-flex rounded border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                              >
+                                Chi tiết
+                              </Link>
+                            ) : null}
                             {allowManage && row.status === "active" ? (
                               <MatchCancelForm matchId={row.id} />
                             ) : null}

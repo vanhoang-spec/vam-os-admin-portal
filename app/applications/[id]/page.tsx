@@ -89,7 +89,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext, "operate");
+  const scope = await getScopeFilter(scopeContext);
   const [application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =
     await Promise.all([
       getApplication(params.id, scope),

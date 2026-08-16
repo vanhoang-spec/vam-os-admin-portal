@@ -109,7 +109,7 @@ export default async function TeamViewPage(props: { searchParams?: Promise<{ q?:
   const searchParams = await props.searchParams;
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext, "operate");
+  const scope = await getScopeFilter(scopeContext);
   const [assignments, people, mentors, mentees, seasons] = await Promise.all([
     getOperationalTeamAssignments(scope),
     getPeople(scope),

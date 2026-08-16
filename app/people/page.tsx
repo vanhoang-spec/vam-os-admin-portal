@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 export default async function PeoplePage() {
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowsePeople(adminUser.role)) redirect("/");
-  const scope = await getScopeFilter(await getAdminScopeContext(), "operate");
+  const scope = await getScopeFilter(await getAdminScopeContext());
   const people = await getPeople(scope);
   return (
     <>

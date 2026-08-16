@@ -62,7 +62,7 @@ export type EnrichedMatch = Match & {
 export type MatchListResult = {
   ok: boolean;
   error: string | null;
-  data: EnrichedMatch[];
+  data: Array<Partial<EnrichedMatch> & Pick<Match, "id">>;
 };
 
 export type MatchRelatedDisplayData = {
@@ -221,6 +221,7 @@ export async function getMatchList(filters?: {
   intakeBatchId?: string | null;
   status?: string | null;
   scope?: ScopeFilter;
+  audienceRole?: string | null;
 }): Promise<MatchListResult> {
   const { client, error } = clientResult();
   if (!client) return { ok: false, error, data: [] };
@@ -243,10 +244,13 @@ export async function getMatchList(filters?: {
     }
   }
 
-  let query = client.from("matches").select(
-    "id,season_id,mentor_person_id,mentee_person_id,status,match_type," +
-    "match_source_raw,matched_at,notes,match_confidence"
-  ).order("matched_at", { ascending: false }).order("id", { ascending: false });
+  const viewerSafe = filters?.audienceRole === "viewer";
+  const matchProjection = viewerSafe
+    ? "id,season_id,status,match_type,match_source_raw,matched_at"
+    : "id,season_id,mentor_person_id,mentee_person_id,status,match_type," +
+      "match_source_raw,matched_at,notes,match_confidence";
+  let query = client.from("matches").select(matchProjection)
+    .order("matched_at", { ascending: false }).order("id", { ascending: false });
 
   if (batchSeasonId) {
     query = query.eq("season_id", batchSeasonId);
@@ -266,6 +270,33 @@ export async function getMatchList(filters?: {
   }
 
   const matches = (matchRows ?? []) as unknown as Match[];
+
+  if (viewerSafe) {
+    const seasonIds = uniqueStrings(matches.map((match) => match.season_id));
+    const seasonBatchesRows = seasonIds.length
+      ? await selectRowsByColumn(client, "intake_batches", "id,season_id,code", "season_id", seasonIds)
+      : [];
+    const batchBySeasonId = new Map<string, JsonRecord>();
+    for (const batch of seasonBatchesRows) {
+      const seasonId = clean(batch.season_id);
+      if (seasonId && !batchBySeasonId.has(seasonId)) batchBySeasonId.set(seasonId, batch);
+    }
+    return {
+      ok: true,
+      error: null,
+      data: matches.map((match) => ({
+        id: match.id,
+        season_id: match.season_id,
+        status: match.status,
+        match_type: match.match_type,
+        match_source_raw: match.match_source_raw,
+        matched_at: match.matched_at ?? null,
+        batch_code: match.season_id
+          ? (batchBySeasonId.get(match.season_id)?.code as string | null) ?? null
+          : null
+      }))
+    };
+  }
 
   // Collect person IDs to resolve names
   const personIds = new Set<string>();

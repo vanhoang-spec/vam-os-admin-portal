@@ -54,7 +54,7 @@ export default async function MentorsPage() {
   const routeUser = await getCurrentAdminUser();
   if (!routeUser || !canBrowseParticipants(routeUser.role)) redirect("/");
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext, "operate");
+  const scope = await getScopeFilter(scopeContext);
   const [mentors, people, matches, intakeBatches, seasons, adminUser] = await Promise.all([
     getMentorProfiles(scope),
     getPeople(scope),

@@ -4,9 +4,15 @@ import { getMatch, getSeasons, keyById } from "@/lib/data";
 import { getMatchRelatedDisplayData } from "@/lib/matches";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { redirect } from "next/navigation";
 
 export default async function MatchDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
+
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser) redirect("/login");
+  if (adminUser?.role === "viewer") redirect("/matches");
 
   const scope = await getScopeFilter(await getAdminScopeContext());
   const [match, seasons] = await Promise.all([

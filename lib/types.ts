@@ -240,14 +240,18 @@ export type ReviewerPoolRow = {
 export type InterviewCandidateRow = {
   id: string;
   full_name: string | null;
-  email_primary: string | null;
-  phone_primary: string | null;
+  /** Present only when the actor may receive applicant contact details. */
+  email_primary?: string | null;
+  /** Present only when the actor may receive applicant contact details. */
+  phone_primary?: string | null;
   status: string | null;
   intake_batch_id: string | null;
   role_applied: string | null;
   sbd: string | null;
   submitted_at: string | null;
-  /** null when no active interview review exists yet. */
+  /** Enough queue state to label a parallel claim without exposing another reviewer. */
+  has_active_interview_review: boolean;
+  /** Current actor's review ID for reviewer queues; primary review ID for admin queues. */
   interview_review_id: string | null;
   interview_review_status: string | null;
   interview_reviewer_admin_user_id: string | null;

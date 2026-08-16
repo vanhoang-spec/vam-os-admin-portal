@@ -90,7 +90,15 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
   const searchParams = await props.searchParams;
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext, "read");
+  const scope = await getScopeFilter(scopeContext);
+  if (scopeContext.scopeError) {
+    return (
+      <>
+        <PageHeader title="Tổng quan" description="Không thể xác minh phạm vi dữ liệu." />
+        <ErrorBox message={scopeContext.scopeError} />
+      </>
+    );
+  }
   if (scopeContext.globalRole === "viewer" || scopeContext.globalRole === "reviewer") {
     const summary = await getRestrictedDashboardSummary(scope);
     return (

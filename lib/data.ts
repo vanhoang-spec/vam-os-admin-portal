@@ -2212,6 +2212,8 @@ export async function getInterviewCandidates(filters?: {
   roleApplied?: string | null;
   includeCompleted?: boolean;
   scope?: ScopeFilter;
+  actorRole?: string | null;
+  actorAdminUserId?: string | null;
 }): Promise<QueryResult<InterviewCandidateRow[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<InterviewCandidateRow[]>([]);
@@ -2245,9 +2247,13 @@ export async function getInterviewCandidates(filters?: {
   const byStatusAndBatch = narrow;
   narrow = (query) => byStatusAndBatch(query).eq("role_applied", roleApplied);
 
+  const reviewerQueue = filters?.actorRole === "reviewer";
+  const applicationProjection = reviewerQueue
+    ? "id,full_name,status,intake_batch_id,role_applied,sbd,submitted_at"
+    : "id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at";
   const { data: appRows, error: appsErr } = await readAllPages<JsonRecord>(
     "applications",
-    "id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at",
+    applicationProjection,
     (projection) => narrow(client.from("applications").select(projection))
   );
   if (appsErr) {
@@ -2259,8 +2265,8 @@ export async function getInterviewCandidates(filters?: {
   const appList = (appRows as unknown as {
     id: string;
     full_name: string | null;
-    email_primary: string | null;
-    phone_primary: string | null;
+    email_primary?: string | null;
+    phone_primary?: string | null;
     status: string | null;
     intake_batch_id: string | null;
     role_applied: string | null;
@@ -2311,10 +2317,54 @@ export async function getInterviewCandidates(filters?: {
     }
   }
 
+  // A reviewer receives contact details only after ownership exists. The
+  // unowned queue query above never selects contact or private application
+  // data, so those fields cannot accidentally cross the server/client boundary.
+  const ownedReviewByAppId = new Map<string, { id: string; status: string; reviewer_admin_user_id: string | null }>();
+  if (reviewerQueue && filters?.actorAdminUserId) {
+    for (const row of orderedReviews) {
+      if (row.reviewer_admin_user_id !== filters.actorAdminUserId) continue;
+      const appId = String(row.application_id);
+      if (!ownedReviewByAppId.has(appId)) {
+        ownedReviewByAppId.set(appId, {
+          id: String(row.id),
+          status: String(row.status ?? ""),
+          reviewer_admin_user_id: filters.actorAdminUserId
+        });
+      }
+    }
+  }
+
+  const ownedAppIds = Array.from(ownedReviewByAppId.keys());
+  const ownedContacts = reviewerQueue && ownedAppIds.length
+    ? await selectInChunks<JsonRecord>(
+        "applications",
+        "id",
+        ownedAppIds,
+        "id,email_primary,phone_primary"
+      )
+    : { data: [] as JsonRecord[], error: null };
+  if (ownedContacts.error) {
+    logDataError("getInterviewCandidates.ownedContacts", ownedContacts.error);
+    const err = ownedContacts.error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (applications: ${err.message ?? "Bad Request"})` };
+  }
+  const contactByAppId = new Map(ownedContacts.data.map((row) => [String(row.id), row]));
+
   const data: InterviewCandidateRow[] = appList.map((a) => {
-    const review = reviewByAppId.get(a.id) ?? null;
+    const activeReview = reviewByAppId.get(a.id) ?? null;
+    const ownedReview = ownedReviewByAppId.get(a.id) ?? null;
+    const review = reviewerQueue ? ownedReview : activeReview;
+    const contact = contactByAppId.get(a.id);
     return {
       ...a,
+      ...(contact
+        ? {
+            email_primary: (contact.email_primary as string | null) ?? null,
+            phone_primary: (contact.phone_primary as string | null) ?? null
+          }
+        : {}),
+      has_active_interview_review: Boolean(activeReview || ownedReview),
       interview_review_id: review?.id ?? null,
       interview_review_status: review?.status ?? null,
       interview_reviewer_admin_user_id: review?.reviewer_admin_user_id ?? null

@@ -238,7 +238,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
   if (!adminUser || !canBrowsePeople(adminUser.role)) redirect("/");
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext, "operate");
+  const scope = await getScopeFilter(scopeContext);
   const canOperateUehmS12 = await canOperateSeason(scopeContext, "UEHM-S12");
   const [
     person,

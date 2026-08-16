@@ -43,7 +43,7 @@ export default async function MenteesPage() {
   const routeUser = await getCurrentAdminUser();
   if (!routeUser || !canBrowseParticipants(routeUser.role)) redirect("/");
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext, "operate");
+  const scope = await getScopeFilter(scopeContext);
   const [mentees, people, mentors, matches, intakeBatches, seasons, adminUser] = await Promise.all([
     getMenteeProfiles(scope),
     getPeople(scope),
