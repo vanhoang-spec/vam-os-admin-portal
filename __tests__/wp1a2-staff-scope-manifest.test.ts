@@ -8,11 +8,14 @@
  *   1. The manifest is EXHAUSTIVE and EXACT — it names the six inventoried rows
  *      and nothing else, with the values the owner recorded.
  *   2. Conversion is keyed on scope_id, never on a stored legacy string. The
- *      sharpest proof is that the synthetic reviewer row is byte-identical to
- *      Hoàng's and Toàn's in every stored field, and converts to nothing.
+ *      sharpest proof is that the demo account's row is byte-identical to
+ *      Hoàng's and Toàn's in every stored field, and converges the OPPOSITE
+ *      way — theirs rise to full_access, its is retired and replaced by `read`.
  *   3. Nothing inactive becomes active, and no program-wide grant is created.
- *   4. The preflight cannot write, and cannot report SAFE_TO_APPLY_V2 = true
- *      while the synthetic row has no owner disposition.
+ *   4. The controlled demo viewer ends up with exactly one active grant —
+ *      UEHM/S12 `read` — a `viewer` platform role, and no path to reviewer,
+ *      operations, full_access or Season 11.
+ *   5. The preflight cannot write, and never asserts its own verdict.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -102,11 +105,43 @@ const SCOPE_ID = {
   historical: idOf("historical_admin_test")
 } as const;
 
+/**
+ * THE OWNER'S FINAL DISPOSITION for viewer.vam.test@redsquarevietnam.com,
+ * transcribed from the owner's statement of 16 Aug 2026. The account is
+ * REPURPOSED as a controlled demo viewer, not retired.
+ */
+const DEMO = {
+  key: "synthetic_viewer_test",
+  email: "viewer.vam.test@redsquarevietnam.com",
+  classification: "REPURPOSE_AS_CONTROLLED_DEMO_VIEWER",
+  platform_role_from: "reviewer",
+  platform_role_to: "viewer",
+  account_status: "active",
+  retired_target: "demo_viewer/S11_RETIRE",
+  active_target: "demo_viewer/S12",
+  platform_target: "demo_viewer/PLATFORM_ROLE",
+  active_scope_level: "read"
+} as const;
+
+/** Scope levels that can mutate or decide. The demo account may hold none of these, active. */
+const MUTATION_OR_REVIEW_LEVELS = ["full_access", "operations", "review"] as const;
+
 type Row = {
   manifest_key: string;
   classification: string;
   account: { email: string; platform_role: string; account_status: string; platform_role_change: string };
   current: { scope_id: string; program_id: string | null; season_id: string | null; scope_level: string; scope_status: string };
+};
+type PlatformTarget = {
+  target_key: string;
+  manifest_key: string;
+  classification: string;
+  action: string;
+  table: string;
+  keyed_on: { email: string };
+  from: { role: string; status: string };
+  to: { role: string; status: string };
+  account_status_change: string;
 };
 type Target = {
   target_key: string;
@@ -123,8 +158,10 @@ type Target = {
 
 const rows: Row[] = manifest.source_rows;
 const targets: Target[] = manifest.targets;
+const platformTargets: PlatformTarget[] = manifest.platform_account_targets;
 const rowOf = (key: string) => rows.find((r) => r.manifest_key === key)!;
 const targetsOf = (key: string) => targets.filter((t) => t.manifest_key === key);
+const targetByKey = (key: string) => targets.find((t) => t.target_key === key)!;
 
 // ───────────────────────────────────────────────────────────────────────────
 // 0. The six owner-inventory identities are locked, character for character
@@ -255,9 +292,17 @@ describe("WP1-A2 · the manifest is exactly the owner inventory", () => {
       expect(rowOf(key).account.account_status, key).toBe("active");
       expect(rowOf(key).account.platform_role_change, key).toBe("none");
     }
-    // The synthetic account's reviewer role is likewise recorded, not rewritten.
-    expect(rowOf("synthetic_viewer_test").account.platform_role).toBe("reviewer");
-    expect(rows.every((r) => r.account.platform_role_change === "none")).toBe(true);
+    // The historical test account keeps its role too — it is inactive, and
+    // A2 must not touch a retired identity beyond its stored identifiers.
+    expect(rowOf("historical_admin_test").account.platform_role_change).toBe("none");
+  });
+
+  it("changes exactly one platform role in the whole package, and it is the demo account", () => {
+    const changed = rows.filter((r) => r.account.platform_role_change !== "none");
+    expect(changed.map((r) => r.manifest_key)).toEqual([DEMO.key]);
+    expect(changed[0].account.platform_role_change).toBe("reviewer_to_viewer");
+    expect(platformTargets).toHaveLength(1);
+    expect(platformTargets[0].manifest_key).toBe(DEMO.key);
   });
 
   it("uses only the agreed classification vocabulary", () => {
@@ -266,10 +311,26 @@ describe("WP1-A2 · the manifest is exactly the owner inventory", () => {
     expect(allowed).toContain("ADD_S12");
     expect(allowed).toContain("RETIRE_LEGACY_PROGRAM_WIDE");
     expect(allowed).toContain("HISTORICAL_CANONICALIZE_ONLY");
-    expect(allowed).toContain("SYNTHETIC_REQUIRES_OWNER_DECISION");
-    for (const item of [...rows, ...targets]) {
+    expect(allowed).toContain("REPURPOSE_AS_CONTROLLED_DEMO_VIEWER");
+    expect(allowed).toContain("RETIRE_SUPERSEDED_SEASON_SCOPE");
+    expect(allowed).toContain("ADD_S12_DEMO_READ");
+    expect(allowed).toContain("PLATFORM_ROLE_DOWNGRADE_TO_VIEWER");
+    for (const item of [...rows, ...targets, ...platformTargets]) {
       expect(allowed, item.manifest_key).toContain(item.classification);
     }
+  });
+
+  it("retires the placeholder classification without erasing it from the record", () => {
+    // The vocabulary entry stays so the manifest's earlier state is legible,
+    // but nothing may still be classified as undecided.
+    expect(Object.keys(manifest.classification_vocabulary)).toContain("SYNTHETIC_REQUIRES_OWNER_DECISION");
+    for (const item of [...rows, ...targets, ...platformTargets]) {
+      expect(item.classification, item.manifest_key).not.toBe("SYNTHETIC_REQUIRES_OWNER_DECISION");
+    }
+    expect(manifest.no_target).toEqual([]);
+    const superseded = manifest.superseded_decisions.find((s: any) => s.manifest_key === DEMO.key);
+    expect(superseded.was).toBe("SYNTHETIC_REQUIRES_OWNER_DECISION");
+    expect(superseded.now).toBe(DEMO.classification);
   });
 
   it("never admits the legacy scope level 'admin' as a canonical level", () => {
@@ -322,16 +383,42 @@ describe("WP1-A2 · no legacy string drives a conversion", () => {
     expect(targets.filter((t) => t.manifest_key !== "toan" && t.source_scope_id === SCOPE_ID.toan)).toEqual([]);
   });
 
-  it("three rows store identical legacy values and get three different outcomes", () => {
+  it("three rows store identical legacy values and get opposite outcomes", () => {
     // This is the property a value-driven rule cannot have. Hoàng, Toàn and the
-    // synthetic reviewer row are indistinguishable by stored value.
+    // demo account's row are indistinguishable by stored value, and the owner's
+    // decisions on them point in opposite directions.
     const shape = (k: string) => JSON.stringify({ ...rowOf(k).current, scope_id: undefined });
-    expect(shape("synthetic_viewer_test")).toBe(shape("hoang"));
-    expect(shape("synthetic_viewer_test")).toBe(shape("toan"));
+    expect(shape(DEMO.key)).toBe(shape("hoang"));
+    expect(shape(DEMO.key)).toBe(shape("toan"));
 
-    expect(targetsOf("hoang").length).toBeGreaterThan(0);
-    expect(targetsOf("toan").length).toBeGreaterThan(0);
-    expect(targetsOf("synthetic_viewer_test")).toEqual([]);
+    // Hoàng and Toàn: the row stays active and RISES to full_access.
+    for (const key of ["hoang", "toan"]) {
+      const s11 = targetByKey(`${key}/S11`);
+      expect(s11.scope_status, key).toBe("active");
+      expect(s11.scope_level, key).toBe("full_access");
+    }
+    // The demo account: the identical row is RETIRED, and the only authority
+    // it gains is read-only, in a different season.
+    expect(targetByKey(DEMO.retired_target).scope_status).toBe("inactive");
+    expect(targetByKey(DEMO.active_target).scope_level).toBe(DEMO.active_scope_level);
+    expect(targetByKey(DEMO.active_target).season_id).toBe(S12);
+  });
+
+  it("no unrelated row inherits the demo disposition", () => {
+    // The disposition is keyed to one scope_id and one account. Every other
+    // "VAM" row — including two that are byte-identical — must be untouched by it.
+    const demoClassifications = [DEMO.classification, "RETIRE_SUPERSEDED_SEASON_SCOPE", "ADD_S12_DEMO_READ", "PLATFORM_ROLE_DOWNGRADE_TO_VIEWER"];
+    for (const item of [...rows, ...targets, ...platformTargets]) {
+      if (item.manifest_key === DEMO.key) continue;
+      expect(demoClassifications, item.manifest_key).not.toContain(item.classification);
+    }
+    // And no demo target may reach another account's scope row.
+    for (const t of targetsOf(DEMO.key)) {
+      if (t.source_scope_id === null) continue;
+      expect(t.source_scope_id).toBe(SCOPE_ID.synthetic);
+    }
+    // No `read` grant is issued to anyone else.
+    expect(targets.filter((t) => t.scope_level === "read").map((t) => t.target_key)).toEqual([DEMO.active_target]);
   });
 
   it("carries no generic VAM → UEHM rewrite in the manifest or the preflight", () => {
@@ -391,28 +478,174 @@ describe("WP1-A2 · the legacy program-wide row", () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// D. The synthetic reviewer row is not silently converted
+// D. The controlled demo viewer — the owner's final disposition
 // ───────────────────────────────────────────────────────────────────────────
 
-describe("WP1-A2 · the synthetic reviewer row", () => {
-  it("has no target of any kind", () => {
-    expect(rowOf("synthetic_viewer_test").classification).toBe("SYNTHETIC_REQUIRES_OWNER_DECISION");
-    expect(targetsOf("synthetic_viewer_test")).toEqual([]);
-    const parked = manifest.no_target.find((n: any) => n.manifest_key === "synthetic_viewer_test");
-    expect(parked.action).toBe("NONE");
-    expect(parked.scope_id).toBe(SCOPE_ID.synthetic);
+describe("WP1-A2 · the demo account is repurposed, not retired", () => {
+  it("is classified as a controlled demo viewer and keeps its account alive", () => {
+    expect(rowOf(DEMO.key).classification).toBe(DEMO.classification);
+    expect(rowOf(DEMO.key).account.email).toBe(DEMO.email);
+    expect(rowOf(DEMO.key).account.account_status).toBe(DEMO.account_status);
+    // Retiring the account was the earlier plan and is explicitly not this one.
+    expect(platformTargets[0].to.status).toBe(DEMO.account_status);
+    expect(platformTargets[0].account_status_change).toBe("none");
   });
 
-  it("is gated as unauthorized and blocks apply", () => {
-    expect(manifest.gates.synthetic_disposition.authorized).toBe(false);
-    expect(manifest.gates.synthetic_disposition.blocks_apply).toBe(true);
+  it("targets platform role viewer, dropped from reviewer, on that email alone", () => {
+    const pt = platformTargets.find((p) => p.target_key === DEMO.platform_target)!;
+    expect(pt.table).toBe("public.admin_users");
+    expect(pt.keyed_on.email).toBe(DEMO.email);
+    expect(pt.from.role).toBe(DEMO.platform_role_from);
+    expect(pt.to.role).toBe(DEMO.platform_role_to);
+    // The source row still records the role the owner INVENTORIED, unchanged.
+    expect(rowOf(DEMO.key).account.platform_role).toBe(DEMO.platform_role_from);
+    expect(platformTargets.filter((p) => p.manifest_key !== DEMO.key)).toEqual([]);
+  });
+
+  it("never targets reviewer, operations or full_access for this account", () => {
+    expect(platformTargets.every((p) => p.to.role === DEMO.platform_role_to)).toBe(true);
+    for (const t of targetsOf(DEMO.key)) {
+      if (t.scope_status !== "active") continue;
+      expect(MUTATION_OR_REVIEW_LEVELS, t.target_key).not.toContain(t.scope_level as any);
+    }
+    expect(manifest.gates.demo_viewer_safety.target_platform_role).toBe(DEMO.platform_role_to);
+    for (const forbidden of ["reviewer platform role", "operations scope", "full_access scope", "review scope"]) {
+      expect(manifest.gates.demo_viewer_safety.forbidden_after_apply).toContain(forbidden);
+    }
+  });
+
+  it("retires the historical S11 operations scope in place, preserving what it meant", () => {
+    const t = targetByKey(DEMO.retired_target);
+    expect(t.classification).toBe("RETIRE_SUPERSEDED_SEASON_SCOPE");
+    expect(t.action).toBe("RETIRE_IN_PLACE");
+    expect(t.source_scope_id).toBe(SCOPE_ID.synthetic);
+    expect(t.scope_status).toBe("inactive");
+    // Identifiers canonicalized so the table-wide constraints can apply…
+    expect(t.program_id).toBe(UEHM);
+    expect(t.season_id).toBe(S11);
+    // …but the level it actually held is preserved, so the history stays true.
+    expect(t.scope_level).toBe(rowOf(DEMO.key).current.scope_level);
+    expect(t.scope_level).toBe("operations");
+    expect(t.preserves).toEqual(expect.arrayContaining(["id", "created_at"]));
+    expect((t as any).pre_image).toEqual({
+      program_id: "VAM", season_id: "UEHM-S11", scope_level: "operations", scope_status: "active"
+    });
+    expect(manifest.post_state_expectation.rows_deleted).toBe(0);
+  });
+
+  it("does not rewrite the S11 history row into the new S12 read row", () => {
+    // Rewriting it would make created_at describe a grant that did not exist.
+    const t: any = targetByKey(DEMO.retired_target);
+    expect(t.season_id).not.toBe(S12);
+    expect(t.why_not_rewritten_into_the_s12_read_row).toMatch(/history|destroy|did not exist/i);
+    expect(targetByKey(DEMO.active_target).source_scope_id).toBeNull();
+  });
+
+  it("creates exactly one new active scope, and it is UEHM/S12 read", () => {
+    const active = targetsOf(DEMO.key).filter((t) => t.scope_status === "active");
+    expect(active.map((t) => t.target_key)).toEqual([DEMO.active_target]);
+    expect(active[0].action).toBe("INSERT");
+    expect(active[0].program_id).toBe(UEHM);
+    expect(active[0].season_id).toBe(S12);
+    expect(active[0].scope_level).toBe(DEMO.active_scope_level);
+  });
+
+  it("leaves the account no active Season 11 authority", () => {
+    const activeS11 = targetsOf(DEMO.key).filter((t) => t.scope_status === "active" && t.season_id === S11);
+    expect(activeS11).toEqual([]);
+    expect(manifest.gates.demo_viewer_safety.forbidden_after_apply).toContain("any active UEHM-S11 grant");
+  });
+
+  it("encodes the disposition as exactly three acts and nothing more", () => {
+    expect(targetsOf(DEMO.key).map((t) => t.target_key).sort()).toEqual([DEMO.active_target, DEMO.retired_target].sort());
+    expect(manifest.gates.synthetic_disposition.encoded_as).toEqual({
+      scope_targets: [DEMO.retired_target, DEMO.active_target],
+      platform_account_targets: [DEMO.platform_target]
+    });
+  });
+
+  it("is gated as authorized and no longer blocks apply", () => {
+    expect(manifest.gates.synthetic_disposition.authorized).toBe(true);
+    expect(manifest.gates.synthetic_disposition.blocks_apply).toBe(false);
+    expect(manifest.gates.synthetic_disposition.status).toBe("OWNER_DECIDED_REPURPOSE_AS_CONTROLLED_DEMO_VIEWER");
+    // The apply SQL is still unauthorized: it is authored only after the owner
+    // runs this preflight against Production and it returns true there.
     expect(manifest.apply_authorized).toBe(false);
   });
 
-  it("has its own named preflight check rather than a generic count", () => {
+  it("keeps [SYNTHETIC_DISPOSITION] as a named check instead of deleting it", () => {
+    // The unresolved gate did not vanish when the owner decided; it became an
+    // exact validation of what was decided.
     expect(sql).toContain("[SYNTHETIC_DISPOSITION]");
     expect(manifest.gates.synthetic_disposition.preflight_check).toBe("[SYNTHETIC_DISPOSITION]");
-    expect(manifest.gates.expected_blocking_checks).toContain("[SYNTHETIC_DISPOSITION]");
+    expect(manifest.gates.expected_blocking_checks).toEqual([]);
+    const check = sql.slice(sql.indexOf("90,"), sql.indexOf("91,"));
+    expect(check).toContain("demo_expected_scope_targets");
+    expect(check).toContain("demo_expected_platform_targets");
+    expect(check).toContain("scope_targets_beyond_decision");
+    expect(check).toContain("platform_targets_on_other_accounts");
+  });
+
+  it("carries the five demo-viewer safety checks in the preflight", () => {
+    const required = [
+      "[DEMO_VIEWER_ROLE]",
+      "[DEMO_VIEWER_ACCOUNT_STATUS]",
+      "[DEMO_VIEWER_S12_SCOPE]",
+      "[DEMO_VIEWER_S11_ACTIVE]",
+      "[DEMO_VIEWER_MUTATION_SCOPE]"
+    ];
+    for (const name of required) expect(sql, name).toContain(name);
+    expect(manifest.gates.demo_viewer_safety.preflight_checks).toEqual(required);
+    // Each must be a gating FAIL, never an INFO row. Read the executable body,
+    // not the file — the header comment lists every check name too.
+    for (const name of required) {
+      const body = withoutComments.slice(withoutComments.indexOf(name), withoutComments.indexOf(name) + 2400);
+      expect(body, `${name} must gate the verdict`).toMatch(/then 'PASS' else 'FAIL' end/);
+      expect(body, `${name} must not be INFO`).not.toMatch(/^\s*'INFO',/m);
+    }
+  });
+
+  it("claims no more than the database can prove, and defers PII safety to UAT", () => {
+    expect(manifest.gates.demo_viewer_safety.what_these_checks_do_not_prove).toMatch(/not prove every application route is PII-safe/i);
+    expect(manifest.gates.demo_viewer_safety.what_these_checks_do_not_prove).toMatch(/Anti/);
+    expect(sql).toMatch(/DOES NOT PROVE EVERY APPLICATION ROUTE IS PII-SAFE/);
+    expect(sql).toMatch(/Browser role UAT/i);
+  });
+
+  it("records the operating policy for a shared credential", () => {
+    const policy = manifest.demo_viewer_operating_policy;
+    expect(policy.account).toBe(DEMO.email);
+    expect(policy.must_never_be_used_for).toEqual(expect.arrayContaining(["real operational work of any kind"]));
+    expect(policy.audit_attribution_limit).toMatch(/never the individual human/i);
+    expect(policy.long_term_target).toMatch(/WP1-C/);
+    expect(policy.before_sharing_credentials).toMatch(/UAT/i);
+  });
+});
+
+describe("WP1-A2 · the demo target is representable and inert in the live code", () => {
+  it("uses a platform role the application actually recognises", () => {
+    const authConstants = readFileSync("lib/auth-constants.ts", "utf8");
+    const adminUsers = readFileSync("lib/admin-users.ts", "utf8");
+    expect(authConstants).toContain(`"${DEMO.platform_role_to}"`);
+    expect(adminUsers).toMatch(new RegExp(`ADMIN_ROLES\\s*=\\s*new Set\\(\\[[^\\]]*"${DEMO.platform_role_to}"`));
+  });
+
+  it("uses a scope level that cannot operate or review", () => {
+    const programScope = readFileSync("lib/program-scope.ts", "utf8");
+    expect(programScope).toMatch(new RegExp(`SCOPE_LEVELS\\s*=\\s*new Set\\(\\[[^\\]]*"${DEMO.active_scope_level}"`));
+    // canOperateSeason / canReviewSeason enumerate the levels they accept, and
+    // `read` is in neither list.
+    const canOperate = programScope.slice(programScope.indexOf("export async function canOperateSeason"));
+    expect(canOperate.slice(0, 260)).not.toContain(`"${DEMO.active_scope_level}"`);
+    const canReview = programScope.slice(programScope.indexOf("export async function canReviewSeason"));
+    expect(canReview.slice(0, 260)).not.toContain(`"${DEMO.active_scope_level}"`);
+  });
+
+  it("cannot mutate through the live RPC, whose level filter excludes read", () => {
+    const rpc = readFileSync("supabase_migrations/063_review_only_membership_lifecycle_operations.sql", "utf8");
+    const fn = rpc.slice(rpc.indexOf("create function public.vam063_authorized_for_scope"));
+    expect(fn.slice(0, 900)).toContain("role in ('full_access','operations')");
+    expect(fn.slice(0, 900)).not.toContain(`'${DEMO.active_scope_level}'`);
   });
 });
 
@@ -557,13 +790,22 @@ describe("WP1-A2 · preflight_v2 is read-only", () => {
   });
 });
 
-describe("WP1-A2 · SAFE_TO_APPLY_V2 is false until the owner disposes of the synthetic row", () => {
-  it("ships with the disposition switch off", () => {
-    expect(withoutComments).toMatch(/false\s+as\s+synthetic_disposition_authorized/i);
-    expect(withoutComments).not.toMatch(/true\s+as\s+synthetic_disposition_authorized/i);
-    expect(withoutComments).toMatch(/'PENDING_OWNER_DECISION'/);
-    expect(manifest.gates.safe_to_apply_v2_expected).toBe(false);
-    expect(manifest.status).toBe("PENDING_OWNER_SYNTHETIC_DISPOSITION");
+describe("WP1-A2 · SAFE_TO_APPLY_V2 is derived, never asserted", () => {
+  it("ships with the owner's decision encoded, and names it", () => {
+    expect(withoutComments).toMatch(/true\s+as\s+synthetic_disposition_authorized/i);
+    expect(withoutComments).toMatch(/'REPURPOSE_AS_CONTROLLED_DEMO_VIEWER'::text\s+as\s+synthetic_disposition/i);
+    expect(withoutComments).not.toMatch(/'PENDING_OWNER_DECISION'/);
+    expect(manifest.status).toBe("OWNER_DISPOSITION_ENCODED_PENDING_PRODUCTION_PREFLIGHT");
+  });
+
+  it("expects true only against the locked local fixture, and UNKNOWN in Production", () => {
+    // The encoded plan is now internally complete, so a run that matches the
+    // locked inventory CAN reach true. That is a statement about the plan, not
+    // a prediction about Production.
+    expect(manifest.gates.safe_to_apply_v2_expected).toBe(true);
+    expect(manifest.gates.expected_blocking_checks).toEqual([]);
+    expect(manifest.gates.production_result).toBe("UNKNOWN_UNTIL_OWNER_EXECUTES");
+    expect(manifest.gates.production_note).toMatch(/DERIVED from the checks/i);
   });
 
   it("derives the verdict from the checks rather than asserting it", () => {
@@ -571,12 +813,57 @@ describe("WP1-A2 · SAFE_TO_APPLY_V2 is false until the owner disposes of the sy
     expect(withoutComments).toMatch(/exists\s*\(\s*select\s+1\s+from\s+checks\s+where\s+result\s*=\s*'FAIL'\s*\)/i);
   });
 
-  it("requires the synthetic check to see BOTH an authorization and an encoded target", () => {
-    // Flipping the flag alone must not clear the gate: with no target for that
-    // scope_id the row survives the plan unchanged and still blocks the
-    // table-wide program_id constraint.
-    const check = sql.slice(sql.indexOf("[SYNTHETIC_DISPOSITION]"));
-    expect(check).toMatch(/synthetic_disposition_authorized[\s\S]{0,200}targets\s+t\s+where\s+t\.manifest_key\s*=\s*'synthetic_viewer_test'/);
+  it("hard-codes no PASS anywhere in the check set", () => {
+    // Every gating result must come from a CASE over observed state. A bare
+    // 'PASS' literal that is not the true-branch of a case would be a lie.
+    const passLiterals = withoutComments.match(/'PASS'/g) ?? [];
+    const guardedPass = withoutComments.match(/then\s+'PASS'\s+else\s+'FAIL'\s+end/g) ?? [];
+    const verdictPass = withoutComments.match(/then\s+'FAIL'\s+else\s+'PASS'\s+end/g) ?? [];
+    expect(passLiterals.length).toBe(guardedPass.length + verdictPass.length);
+    expect(guardedPass.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("requires the disposition check to see the authorization AND the exact encoded targets", () => {
+    // Setting the flag alone must not clear the gate, and neither must encoding
+    // targets without it. The check reads both, plus the two "nothing beyond
+    // this" counters that stop the disposition being silently widened.
+    // [DEMO_VIEWER_ROLE] is also cross-referenced by an earlier check's prose,
+    // so search for the section boundary from the disposition check onward.
+    const start = withoutComments.indexOf("[SYNTHETIC_DISPOSITION]");
+    const check = withoutComments.slice(start, withoutComments.indexOf("[DEMO_VIEWER_ROLE]", start));
+    expect(check).toMatch(/e\.synthetic_disposition_authorized/);
+    expect(check).toMatch(/d\.scope_target_count\s*=\s*e\.demo_expected_scope_targets/);
+    expect(check).toMatch(/d\.platform_target_count\s*=\s*e\.demo_expected_platform_targets/);
+    expect(check).toMatch(/d\.s11_retire_encoded\s*=\s*1/);
+    expect(check).toMatch(/d\.s12_read_encoded\s*=\s*1/);
+    expect(check).toMatch(/d\.scope_targets_beyond_decision\s*=\s*0/);
+    expect(check).toMatch(/d\.platform_targets_on_other_accounts\s*=\s*0/);
+  });
+
+  it("projects the post-plan constraint and uniqueness state over every row, of any status", () => {
+    // Requirement: zero blockers and zero duplicate active keys after the plan.
+    const constraintCheck = withoutComments.slice(
+      withoutComments.indexOf("[CONSTRAINT_ROW]"),
+      withoutComments.indexOf("[RPC_COMPAT]")
+    );
+    expect(constraintCheck).toMatch(/from post_plan_violations where violates/);
+    expect(constraintCheck).toMatch(/v_program_null|v_program_format|v_season_format|v_level|v_status/);
+    // The projection must include every row, not just active ones.
+    const projection = sql.slice(sql.indexOf("post_plan_checked as ("), sql.indexOf("active_keys as ("));
+    expect(projection).not.toMatch(/where\s+.*status_key\s*=\s*'active'/);
+    // Both the demo targets participate in it, via source_scope_id / INSERT.
+    expect(sql).toContain("demo_viewer/S11_RETIRE");
+    expect(sql).toContain("demo_viewer/S12");
+  });
+
+  it("counts the demo account's post-plan authority from that same projection", () => {
+    // Not from the manifest — otherwise a grant nobody declared would be invisible.
+    const demoPost = sql.slice(sql.indexOf("demo_post as ("), sql.indexOf("checks as ("));
+    expect(demoPost).toContain("post_plan_violations");
+    expect(demoPost).toMatch(/active_s12_read/);
+    expect(demoPost).toMatch(/active_s11/);
+    expect(demoPost).toMatch(/active_mutation_or_review/);
+    for (const level of MUTATION_OR_REVIEW_LEVELS) expect(demoPost).toContain(`'${level}'`);
   });
 });
 

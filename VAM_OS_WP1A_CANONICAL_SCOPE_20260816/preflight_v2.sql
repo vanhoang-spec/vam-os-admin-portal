@@ -25,10 +25,11 @@
 --   manifest is not a function of the stored strings. THREE active rows store
 --   the program identity "VAM". Two of them (Hoang, Toan) converge to UEHM
 --   Season 11 full_access because the owner named those exact scope_ids. The
---   third (a synthetic reviewer test account) converges to NOTHING, and blocks
---   the migration until the owner disposes of it. A rule keyed on the string
---   "VAM" would convert all three and would silently grant a synthetic account
---   real authority in Production.
+--   third (the repurposed demo account) converges the OPPOSITE way — its S11
+--   operations grant is RETIRED and replaced by a Season 12 `read` grant, and
+--   its platform role drops reviewer -> viewer. A rule keyed on the string
+--   "VAM" would convert all three identically and would silently hand a shared
+--   demonstration login real operating authority in Production.
 --
 --   V2 is therefore MANIFEST-DRIVEN, not string-driven. Every conversion is
 --   keyed on an exact (scope_id, email) pair from staff_scope_manifest_v2.json,
@@ -46,10 +47,12 @@
 --   * It does not create a program-wide (season_id IS NULL) grant. That is
 --     WP1-A3 and requires a change to vam063_authorized_for_scope.
 --   * It does not modify vam063_authorized_for_scope or any other function.
---   * It does not change any platform role on admin_users. All four staff
---     accounts stay `admin` by explicit owner decision.
---   * It does not dispose of the synthetic reviewer test row. It refuses to
---     proceed while that row is undisposed, which is a different thing.
+--   * It does not change any platform role. It VALIDATES one planned platform
+--     role change (viewer.vam.test, reviewer -> viewer) that a future apply
+--     would make. All four real Admin accounts stay `admin`.
+--   * It does not decide the demo account's disposition. The owner decided it
+--     on 16 Aug 2026; this file proves the encoded plan is exactly that
+--     decision and nothing wider.
 --
 -- PRIVACY
 --   The six email addresses below are the owner-supplied manifest keys and are
@@ -74,18 +77,40 @@
 --   [LIEU_LEGACY]            the program-wide legacy row is not in its known shape,
 --                            or the plan would leave an active program-wide row
 --   [VAM_LEGACY]             an unmanaged active row carries a legacy identity
---   [SYNTHETIC_DISPOSITION]  the active synthetic row has no owner disposition
+--   [SYNTHETIC_DISPOSITION]  the encoded demo-viewer plan is not exactly the
+--                            disposition the owner authorized
+--   [DEMO_VIEWER_ROLE]           the demo account's target platform role is not `viewer`
+--   [DEMO_VIEWER_ACCOUNT_STATUS] the demo account is not left active, unchanged
+--   [DEMO_VIEWER_S12_SCOPE]      not exactly one active UEHM-S12 `read` grant
+--   [DEMO_VIEWER_S11_ACTIVE]     an active Season 11 grant survives the plan
+--   [DEMO_VIEWER_MUTATION_SCOPE] an active operations/full_access/review grant survives
 --   [HISTORICAL_INACTIVE]    a historical row or account is not inactive
 --   [NO_REACTIVATION]        the plan would activate something inactive
 --   [CONSTRAINT_ROW]         a row of ANY status would violate a planned constraint
 --   [RPC_COMPAT]             the live RPC would not accept the planned targets
 --
--- THE ONE OWNER SWITCH IN THIS FILE
---   `synthetic_disposition_authorized` in BLOCK 3 is false. While it is false,
---   [SYNTHETIC_DISPOSITION] fails and SAFE_TO_APPLY_V2 is false. That is the
---   intended outcome of this run. Flipping it is not sufficient on its own — see
---   the note on that check — and it is an explicit owner act, never a side
---   effect of running this file.
+-- THE OWNER DECISION ENCODED IN THIS FILE
+--   `synthetic_disposition_authorized` in BLOCK 3 is now TRUE, and the
+--   disposition it names is REPURPOSE_AS_CONTROLLED_DEMO_VIEWER — the owner's
+--   final decision of 16 Aug 2026 for viewer.vam.test@redsquarevietnam.com.
+--   The account is NOT retired. It is kept as a shared, view-only demonstration
+--   login and is stripped of everything else:
+--
+--       platform role     reviewer      -> viewer          (admin_users)
+--       account status    active        -> active          (unchanged)
+--       UEHM/S11          operations active -> operations INACTIVE, canonicalized
+--       UEHM/S12          (none)        -> read ACTIVE     (new row)
+--
+--   The flag no longer gates on "has the owner decided?" — that is settled. It
+--   gates on "is what is encoded EXACTLY what was decided?", which is why
+--   [SYNTHETIC_DISPOSITION] still fails if the flag is set without the three
+--   targets, or if targets exist beyond the three. Five further named
+--   [DEMO_VIEWER_*] checks prove the post-plan account cannot review, operate,
+--   approve, or reach Season 11.
+--
+--   SAFE_TO_APPLY_V2 is still DERIVED from the checks, never asserted. Nothing
+--   in this file hard-codes a PASS, and the Production result is unknown until
+--   the owner runs it.
 -- =============================================================================
 
 
@@ -102,6 +127,10 @@
 -- that has changed since the inventory was taken is DRIFT, and drift fails the
 -- run rather than being absorbed — the manifest would be describing a row that
 -- no longer exists as described.
+--
+-- want_platform_role / want_account_status are the values the owner INVENTORIED,
+-- so they are drift guards, not goals. The single planned platform-role change
+-- is reported separately, in target_platform_role / target_account_status.
 -- #############################################################################
 
 begin;
@@ -145,13 +174,23 @@ manifest(manifest_key, email, label, want_platform_role, want_account_status,
      'reviewer', 'active', null,
      '487a7562-bb40-4c5c-9dc1-0fe363f1158a',
      'VAM', 'UEHM-S11', 'operations', 'active',
-     'SYNTHETIC_REQUIRES_OWNER_DECISION'),
+     'REPURPOSE_AS_CONTROLLED_DEMO_VIEWER'),
 
     ('historical_admin_test', 'admin.vam.test@redsquarevietnam.com', 'VAM admin test (historical)',
      'admin', 'inactive', null,
      'eaa60d5c-66eb-4ef8-a8c0-0db0bc701028',
      'VAM', 'UEHM-S11', 'full_access', 'inactive',
      'HISTORICAL_CANONICALIZE_ONLY')
+),
+-- The owner-approved PLATFORM ACCOUNT targets, verbatim from
+-- staff_scope_manifest_v2.json -> platform_account_targets. Exactly one row: the
+-- demo account's reviewer -> viewer downgrade. Every other account is absent
+-- here, and absence means "no platform change", which is the default below.
+platform_targets(manifest_key, platform_target_key, platform_action,
+                 tgt_platform_role, tgt_account_status) as (
+  values
+    ('synthetic_viewer_test'::text, 'demo_viewer/PLATFORM_ROLE'::text,
+     'UPDATE_IN_PLACE'::text, 'viewer'::text, 'active'::text)
 ),
 -- Account resolution by email. min() is safe only because a row_count other
 -- than 1 is itself reported and fails the run.
@@ -193,6 +232,10 @@ compared as (
     m.want_platform_role,
     m.want_account_status,
     m.want_auth_user_id,
+    -- No platform target means the account keeps exactly what it has today.
+    coalesce(pt.tgt_platform_role,   m.want_platform_role)  as target_platform_role,
+    coalesce(pt.tgt_account_status,  m.want_account_status) as target_account_status,
+    coalesce(pt.platform_target_key, '<no platform change>') as platform_target_key,
     sr.scope_rows,
     sr.row_user_id,
     sr.got_program, m.cur_program,
@@ -229,6 +272,7 @@ compared as (
   from manifest m
   join accounts a    on a.manifest_key  = m.manifest_key
   join source_rows sr on sr.manifest_key = m.manifest_key
+  left join platform_targets pt on pt.manifest_key = m.manifest_key
 )
 select
   manifest_key,
@@ -239,8 +283,11 @@ select
   account_rows,
   account_role  as account_platform_role,
   want_platform_role,
+  target_platform_role,
   account_status,
   want_account_status,
+  target_account_status,
+  platform_target_key,
   auth_user_id,
   auth_identity_state,
   -- Scope row facts
@@ -255,9 +302,11 @@ select
     when account_rows <> 1
       then 'BLOCKED: email does not resolve to exactly one admin_users row'
     when account_role is distinct from want_platform_role
-      then 'BLOCKED: platform role is not the owner-approved role (A2 changes no platform role)'
+      then 'BLOCKED: platform role is not the role the owner inventoried — the plan starts from a state Production no longer has'
     when account_status is distinct from want_account_status
       then 'BLOCKED: account status is not what the manifest recorded'
+    when target_account_status is distinct from account_status
+      then 'BLOCKED: a platform target would change account status, which no A2 disposition authorizes'
     when auth_user_id is null
       then 'BLOCKED: account has no auth_user_id, so no grant can be keyed to it'
     when auth_identity_state = 'CONTRADICTS_OWNER_EVIDENCE'
@@ -276,7 +325,7 @@ order by
   case classification
     when 'KEEP_CONVERT_S11' then 0
     when 'RETIRE_LEGACY_PROGRAM_WIDE' then 1
-    when 'SYNTHETIC_REQUIRES_OWNER_DECISION' then 2
+    when 'REPURPOSE_AS_CONTROLLED_DEMO_VIEWER' then 2
     else 3
   end,
   manifest_key;
@@ -334,17 +383,16 @@ manifest(manifest_key, email, label, want_platform_role, want_account_status,
      'VAM', 'UEHM-S11', 'operations', 'active', 'KEEP_CONVERT_S11'),
     ('synthetic_viewer_test', 'viewer.vam.test@redsquarevietnam.com', 'VAM viewer test (synthetic)',
      'reviewer', 'active', null, '487a7562-bb40-4c5c-9dc1-0fe363f1158a',
-     'VAM', 'UEHM-S11', 'operations', 'active', 'SYNTHETIC_REQUIRES_OWNER_DECISION'),
+     'VAM', 'UEHM-S11', 'operations', 'active', 'REPURPOSE_AS_CONTROLLED_DEMO_VIEWER'),
     ('historical_admin_test', 'admin.vam.test@redsquarevietnam.com', 'VAM admin test (historical)',
      'admin', 'inactive', null, 'eaa60d5c-66eb-4ef8-a8c0-0db0bc701028',
      'VAM', 'UEHM-S11', 'full_access', 'inactive', 'HISTORICAL_CANONICALIZE_ONLY')
 ),
 -- The owner-approved TARGET grants, verbatim from staff_scope_manifest_v2.json.
 --
--- The synthetic reviewer row has NO entry here, deliberately. Authorizing its
--- disposition therefore takes TWO deliberate edits — a target row here and the
--- flag in BLOCK 3 — and neither can be made by accident. See the note on the
--- [SYNTHETIC_DISPOSITION] check.
+-- The demo account now HAS entries here — two of them, encoding the owner's
+-- final disposition of 16 Aug 2026 — plus a platform-role target that lives in
+-- BLOCK 3 because it acts on admin_users rather than admin_scope_access.
 targets(target_key, manifest_key, classification, action, source_scope_id,
         tgt_program, tgt_season, tgt_level, tgt_status) as (
   values
@@ -375,6 +423,17 @@ targets(target_key, manifest_key, classification, action, source_scope_id,
     ('toan/S12', 'toan', 'ADD_S12', 'INSERT', null,
      '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '32fbfc86-1d67-4158-b9d4-1e6bff48b2c1', 'full_access', 'active'),
 
+    -- Controlled demo viewer. The S11 row is RETIRED, not converted, because its
+    -- authority MEANING is being replaced: it claimed Season 11 operations, and
+    -- the account will hold Season 12 read instead. Its level `operations` is
+    -- preserved on the retired row (unlike Lieu's `admin`, which is not a
+    -- canonical value) so the audit record keeps saying what was actually held.
+    ('demo_viewer/S11_RETIRE', 'synthetic_viewer_test', 'RETIRE_SUPERSEDED_SEASON_SCOPE',
+     'RETIRE_IN_PLACE', '487a7562-bb40-4c5c-9dc1-0fe363f1158a',
+     '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '710f4ec9-1cf7-461e-98d4-f33799047add', 'operations', 'inactive'),
+    ('demo_viewer/S12', 'synthetic_viewer_test', 'ADD_S12_DEMO_READ', 'INSERT', null,
+     '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '32fbfc86-1d67-4158-b9d4-1e6bff48b2c1', 'read', 'active'),
+
     -- Inactive historical row: identifiers only, status untouched.
     ('historical_admin_test/CANONICALIZE', 'historical_admin_test', 'HISTORICAL_CANONICALIZE_ONLY',
      'UPDATE_IN_PLACE', 'eaa60d5c-66eb-4ef8-a8c0-0db0bc701028',
@@ -389,8 +448,8 @@ accounts as (
 -- Every row in the table as it would stand AFTER the manifest is applied, plus
 -- the rows the manifest would insert. Rows the manifest does not name keep their
 -- stored identity: the plan does not touch them, so neither does this
--- projection. That is what keeps the synthetic reviewer row visible below as a
--- surviving active non-canonical grant rather than an assumed-away one.
+-- projection. That is what keeps any row nobody has decided about visible below
+-- as a surviving active non-canonical grant rather than an assumed-away one.
 post_plan as (
   select
     s.id                                                              as scope_id,
@@ -496,19 +555,27 @@ expected as (
     'eaa60d5c-66eb-4ef8-a8c0-0db0bc701028'::uuid as historical_scope_id,
     '17a86485-c241-4cff-9bd5-60efe75b802a'::uuid as lieu_legacy_scope_id,
     -- ─────────────────────────────────────────────────────────────────────────
-    -- THE OWNER SWITCH. False until the owner explicitly decides what happens to
-    -- the active synthetic reviewer grant. While it is false,
-    -- [SYNTHETIC_DISPOSITION] fails and SAFE_TO_APPLY_V2 is false. That is the
-    -- expected result of this run, not a defect in it.
+    -- THE OWNER DECISION. Settled on 16 Aug 2026: the account is repurposed as a
+    -- controlled, view-only demonstration login, NOT retired.
     --
-    -- Flipping this alone is NOT enough and is not meant to be: with no target
-    -- row for that scope_id in BLOCK 2, the row survives the plan unchanged and
-    -- [CONSTRAINT_ROW] still fails on it. Authorizing the disposition means
-    -- writing the chosen target into the manifest AND into BLOCK 2 AND flipping
-    -- this flag. Three deliberate acts, none of them reachable by accident.
+    -- Setting this true was never sufficient on its own and still is not. The
+    -- check below also requires the three encoded targets — two scope targets in
+    -- the `targets` CTE and one platform target in `platform_targets` — and
+    -- requires that NOTHING BEYOND those three exists for this account. So the
+    -- flag cannot widen the disposition, and the targets cannot act without it.
+    --
+    -- The expected state of every field is spelled out here rather than inline,
+    -- so the demo-viewer checks compare against a single declared target.
     -- ─────────────────────────────────────────────────────────────────────────
-    false                                        as synthetic_disposition_authorized,
-    'PENDING_OWNER_DECISION'::text               as synthetic_disposition
+    true                                         as synthetic_disposition_authorized,
+    'REPURPOSE_AS_CONTROLLED_DEMO_VIEWER'::text  as synthetic_disposition,
+    'viewer.vam.test@redsquarevietnam.com'::text as demo_email,
+    'reviewer'::text                             as demo_role_from,
+    'viewer'::text                               as demo_role_to,
+    'active'::text                               as demo_account_status,
+    'read'::text                                 as demo_scope_level,
+    2::int                                       as demo_expected_scope_targets,
+    1::int                                       as demo_expected_platform_targets
 ),
 manifest(manifest_key, email, label, want_platform_role, want_account_status,
          want_auth_user_id, scope_id, cur_program, cur_season, cur_level,
@@ -530,7 +597,7 @@ manifest(manifest_key, email, label, want_platform_role, want_account_status,
      'VAM', 'UEHM-S11', 'operations', 'active', 'KEEP_CONVERT_S11'),
     ('synthetic_viewer_test', 'viewer.vam.test@redsquarevietnam.com', 'VAM viewer test (synthetic)',
      'reviewer', 'active', null, '487a7562-bb40-4c5c-9dc1-0fe363f1158a',
-     'VAM', 'UEHM-S11', 'operations', 'active', 'SYNTHETIC_REQUIRES_OWNER_DECISION'),
+     'VAM', 'UEHM-S11', 'operations', 'active', 'REPURPOSE_AS_CONTROLLED_DEMO_VIEWER'),
     ('historical_admin_test', 'admin.vam.test@redsquarevietnam.com', 'VAM admin test (historical)',
      'admin', 'inactive', null, 'eaa60d5c-66eb-4ef8-a8c0-0db0bc701028',
      'VAM', 'UEHM-S11', 'full_access', 'inactive', 'HISTORICAL_CANONICALIZE_ONLY')
@@ -559,9 +626,23 @@ targets(target_key, manifest_key, classification, action, source_scope_id,
      '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '710f4ec9-1cf7-461e-98d4-f33799047add', 'full_access', 'active'),
     ('toan/S12', 'toan', 'ADD_S12', 'INSERT', null,
      '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '32fbfc86-1d67-4158-b9d4-1e6bff48b2c1', 'full_access', 'active'),
+    ('demo_viewer/S11_RETIRE', 'synthetic_viewer_test', 'RETIRE_SUPERSEDED_SEASON_SCOPE',
+     'RETIRE_IN_PLACE', '487a7562-bb40-4c5c-9dc1-0fe363f1158a',
+     '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '710f4ec9-1cf7-461e-98d4-f33799047add', 'operations', 'inactive'),
+    ('demo_viewer/S12', 'synthetic_viewer_test', 'ADD_S12_DEMO_READ', 'INSERT', null,
+     '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '32fbfc86-1d67-4158-b9d4-1e6bff48b2c1', 'read', 'active'),
     ('historical_admin_test/CANONICALIZE', 'historical_admin_test', 'HISTORICAL_CANONICALIZE_ONLY',
      'UPDATE_IN_PLACE', 'eaa60d5c-66eb-4ef8-a8c0-0db0bc701028',
      '61701ee8-64a6-4673-b261-ba12ce9a3ee3', '710f4ec9-1cf7-461e-98d4-f33799047add', 'full_access', 'inactive')
+),
+-- The owner-approved PLATFORM ACCOUNT targets. Exactly one, and it is the only
+-- platform-role change in the whole of WP1-A2.
+platform_targets(platform_target_key, manifest_key, classification, action,
+                 tgt_platform_role, tgt_account_status) as (
+  values
+    ('demo_viewer/PLATFORM_ROLE'::text, 'synthetic_viewer_test'::text,
+     'PLATFORM_ROLE_DOWNGRADE_TO_VIEWER'::text, 'UPDATE_IN_PLACE'::text,
+     'viewer'::text, 'active'::text)
 ),
 accounts as (
   select
@@ -753,6 +834,79 @@ target_dupes as (
     having count(*) > 1
   ) d
 ),
+-- ── The controlled demo viewer ────────────────────────────────────────────────
+-- What the plan ENCODES for viewer.vam.test@redsquarevietnam.com. This CTE reads
+-- only the manifest copies above, so it answers "is the encoded plan exactly the
+-- owner's decision?" independently of what Production currently holds.
+demo_plan as (
+  select
+    a.auth_user_id,
+    a.account_role   as role_today,
+    a.account_status as status_today,
+    (select count(*) from targets t where t.manifest_key = 'synthetic_viewer_test')          as scope_target_count,
+    (select count(*) from platform_targets p where p.manifest_key = 'synthetic_viewer_test') as platform_target_count,
+    (select string_agg(t.target_key || '[' || t.tgt_level || '/' || t.tgt_status || ']', ', ' order by t.target_key)
+       from targets t where t.manifest_key = 'synthetic_viewer_test')                        as scope_target_detail,
+    (select min(p.tgt_platform_role)  from platform_targets p where p.manifest_key = 'synthetic_viewer_test') as target_role,
+    (select min(p.tgt_account_status) from platform_targets p where p.manifest_key = 'synthetic_viewer_test') as target_account_status,
+    -- Exactly the two scope targets the owner named, in exactly their shapes.
+    (select count(*) from targets t, expected e
+      where t.target_key = 'demo_viewer/S11_RETIRE'
+        and t.manifest_key = 'synthetic_viewer_test'
+        and t.action = 'RETIRE_IN_PLACE'
+        and t.source_scope_id = e.synthetic_scope_id
+        and t.tgt_program = e.uehm_program_id
+        and t.tgt_season  = e.uehm_s11_id
+        and t.tgt_status  = 'inactive')                                                      as s11_retire_encoded,
+    (select count(*) from targets t, expected e
+      where t.target_key = 'demo_viewer/S12'
+        and t.manifest_key = 'synthetic_viewer_test'
+        and t.action = 'INSERT'
+        and t.source_scope_id is null
+        and t.tgt_program = e.uehm_program_id
+        and t.tgt_season  = e.uehm_s12_id
+        and t.tgt_level   = e.demo_scope_level
+        and t.tgt_status  = 'active')                                                        as s12_read_encoded,
+    -- Nothing outside those two may be encoded for this account.
+    (select count(*) from targets t
+      where t.manifest_key = 'synthetic_viewer_test'
+        and t.target_key not in ('demo_viewer/S11_RETIRE', 'demo_viewer/S12'))               as scope_targets_beyond_decision,
+    -- No OTHER account may be touched by a platform target.
+    (select count(*) from platform_targets p where p.manifest_key <> 'synthetic_viewer_test') as platform_targets_on_other_accounts
+  from accounts a
+  where a.manifest_key = 'synthetic_viewer_test'
+),
+-- What the account would actually HOLD after the plan, read off the same
+-- post-plan projection every other check uses. A null auth_user_id yields zero
+-- rows here, which fails the "exactly one" checks — the safe direction.
+demo_post as (
+  select
+    (select count(*) from post_plan_violations p, demo_plan d
+      where p.user_id = d.auth_user_id and p.status_key = 'active')                          as active_grants,
+    (select count(*) from post_plan_violations p, demo_plan d, expected e
+      where p.user_id = d.auth_user_id and p.status_key = 'active'
+        and p.program_key = e.uehm_program_id
+        and p.season_key  = e.uehm_s12_id
+        and p.level_key   = e.demo_scope_level)                                              as active_s12_read,
+    (select count(*) from post_plan_violations p, demo_plan d, expected e
+      where p.user_id = d.auth_user_id and p.status_key = 'active'
+        and p.season_key = e.uehm_s11_id)                                                    as active_s11,
+    (select count(*) from post_plan_violations p, demo_plan d
+      where p.user_id = d.auth_user_id and p.status_key = 'active'
+        and p.season_key is null)                                                            as active_program_wide,
+    (select count(*) from post_plan_violations p, demo_plan d
+      where p.user_id = d.auth_user_id and p.status_key = 'active'
+        and p.level_key in ('full_access', 'operations', 'review'))                          as active_mutation_or_review,
+    (select count(*) from post_plan_violations p, demo_plan d, expected e
+      where p.scope_id = e.synthetic_scope_id
+        and p.status_key = 'inactive'
+        and p.program_key = e.uehm_program_id
+        and p.season_key  = e.uehm_s11_id
+        and p.level_key   = 'operations')                                                    as s11_row_retired_canonical,
+    (select string_agg(coalesce(p.season_key, '<program-wide>') || '/' || coalesce(p.level_key, '<null>'), ', ')
+       from post_plan_violations p, demo_plan d
+      where p.user_id = d.auth_user_id and p.status_key = 'active')                          as active_detail
+),
 checks as (
 
   -- ── Section 1. Environment and table shape ────────────────────────────────
@@ -834,7 +988,7 @@ checks as (
                 where manifest_key in ('ueh_shared_admin','lieu','hoang','toan')
                   and account_rows = 1 and account_role = 'admin' and account_status = 'active' and auth_user_id is not null) = 4
          then 'PASS' else 'FAIL' end,
-    'All four keep platform role `admin` by explicit owner decision; A2 changes no platform role. A role or status other than admin/active here means Production disagrees with the manifest and the manifest must be re-cut, not overridden. Detail: '
+    'All four keep platform role `admin` by explicit owner decision. A2 changes exactly ONE platform role in total — the demo account, reviewer -> viewer, proved by [DEMO_VIEWER_ROLE] — and none of these four. A role or status other than admin/active here means Production disagrees with the manifest and the manifest must be re-cut, not overridden. Detail: '
       || coalesce((select string_agg(manifest_key || '(rows=' || account_rows || ',role=' || coalesce(account_role,'<null>')
                      || ',status=' || coalesce(account_status,'<null>') || ',auth=' || case when auth_user_id is null then 'null' else 'set' end || ')', '; ' order by manifest_key)
                    from accounts where manifest_key in ('ueh_shared_admin','lieu','hoang','toan')), '<none>')
@@ -1027,24 +1181,98 @@ checks as (
       || (select count(*)::text from manifest m join targets t on t.manifest_key = m.manifest_key
            where upper(btrim(m.cur_program)) = 'VAM' and t.source_scope_id = m.scope_id) || ' of them have an owner-approved target',
     'INFO',
-    'Four rows in the inventory store "VAM", and the string itself decides nothing. Hoang and Toan converge to UEHM/S11 full_access because the owner named their exact scope_ids. The inactive historical test row is canonicalized in place without being reactivated. The synthetic reviewer row does not converge at all and blocks this run. One legacy string, three different outcomes — which is the whole argument for a manifest keyed on scope_id.'
+    'Four rows in the inventory store "VAM", and the string itself decides nothing. Hoang and Toan converge UP to UEHM/S11 full_access because the owner named their exact scope_ids. The demo account converges the opposite way: its identically-stored row is RETIRED and replaced by a UEHM/S12 read grant. The inactive historical test row is canonicalized in place without being reactivated. One legacy string, three opposite outcomes — which is the whole argument for a manifest keyed on scope_id rather than on stored values.'
 
-  -- ── Section 9. The synthetic active account (requirement G) ───────────────
+  -- ── Section 9. The controlled demo viewer (requirement G) ─────────────────
+  --
+  -- The owner decided this account's disposition on 16 Aug 2026. The check that
+  -- used to ask "has anyone decided?" now asks the sharper question: "is what is
+  -- encoded EXACTLY the decision, and nothing wider?" It fails if the flag is
+  -- set without the three targets, if any target's shape differs by one field,
+  -- or if a fourth target appears for this account.
   union all
   select
     90,
-    '[SYNTHETIC_DISPOSITION] the active synthetic test grant has an explicit owner disposition',
-    'an owner-approved disposition AND a target encoded for it',
-    'disposition=' || e.synthetic_disposition
-      || ' authorized=' || e.synthetic_disposition_authorized
-      || ' targets_encoded=' || (select count(*)::text from targets t where t.manifest_key = 'synthetic_viewer_test')
-      || ' live_state=' || coalesce((select 'status=' || coalesce(got_status,'<null>') || ' program=' || coalesce(got_program,'<null>')
-                                     || ' level=' || coalesce(got_level,'<null>') from drift where manifest_key = 'synthetic_viewer_test'), '<row not found>'),
+    '[SYNTHETIC_DISPOSITION] the encoded plan is exactly the owner-approved demo-viewer disposition',
+    'authorized=true, disposition=REPURPOSE_AS_CONTROLLED_DEMO_VIEWER, 2 scope targets (S11 retire + S12 read) and 1 platform target (reviewer->viewer), and nothing beyond them',
+    'authorized=' || e.synthetic_disposition_authorized
+      || ' disposition=' || e.synthetic_disposition
+      || ' scope_targets=' || d.scope_target_count || '/' || e.demo_expected_scope_targets
+      || ' platform_targets=' || d.platform_target_count || '/' || e.demo_expected_platform_targets
+      || ' s11_retire_exact=' || d.s11_retire_encoded
+      || ' s12_read_exact=' || d.s12_read_encoded
+      || ' beyond_decision=' || d.scope_targets_beyond_decision
+      || ' encoded=[' || coalesce(d.scope_target_detail, '<none>') || ']',
     case when e.synthetic_disposition_authorized
-           and (select count(*) from targets t where t.manifest_key = 'synthetic_viewer_test') > 0
+           and e.synthetic_disposition = 'REPURPOSE_AS_CONTROLLED_DEMO_VIEWER'
+           and d.scope_target_count    = e.demo_expected_scope_targets
+           and d.platform_target_count = e.demo_expected_platform_targets
+           and d.s11_retire_encoded = 1
+           and d.s12_read_encoded   = 1
+           and d.scope_targets_beyond_decision = 0
+           and d.platform_targets_on_other_accounts = 0
          then 'PASS' else 'FAIL' end,
-    'viewer.vam.test@redsquarevietnam.com holds an ACTIVE, non-canonical grant on a synthetic account whose platform role is reviewer. It is not silently mapped to a reviewer scope, and it is not silently retired: either would be an authorization decision this package has no standing to make. It is reported as its own named check rather than folded into an unconvertible count, because it is the single reason SAFE_TO_APPLY_V2 is false and it must not be readable as a rounding error. Owner options are enumerated in staff_scope_manifest_v2.json under no_target.options_for_the_owner. NOTE: if the chosen disposition is to canonicalize it as a reviewer, the reviewer PII gap on /matches is a separate, still-open blocker on activating reviewer access.'
-  from expected e
+    'The owner CHANGED the earlier disposition: the account is NOT retired. It is kept as a shared, view-only demonstration login for people awaiting individual provisioning under WP1-C, and stripped of everything else. Three coordinated acts on one identity — retire the superseded UEHM/S11 operations grant in place (never delete), drop the platform role reviewer -> viewer, and insert one UEHM/S12 `read` grant. The S11 row is RETIRED rather than rewritten because its authority MEANING is being replaced, which is the same rule already applied to the legacy program-wide row; rewriting it into an S12 read row would make its history false. Its level `operations` is preserved on the retired row, unlike that row''s `admin`, because `operations` is already canonical and the audit record can keep saying what was actually held. CANONICALIZE_AS_REVIEWER is now explicitly refused: the reviewer PII gap on /matches is still open, and this account is about to be shared with exactly the population that must not see reviewer-level PII.'
+  from expected e, demo_plan d
+
+  union all
+  select
+    91,
+    '[DEMO_VIEWER_ROLE] the demo account''s target platform role is viewer, and only this account changes role',
+    'target role = viewer (from reviewer); 0 platform targets on any other account',
+    'today=' || coalesce(d.role_today, '<none>') || ' target=' || coalesce(d.target_role, '<none>')
+      || ' expected_from=' || e.demo_role_from || ' expected_to=' || e.demo_role_to
+      || ' platform_targets_elsewhere=' || d.platform_targets_on_other_accounts,
+    case when d.role_today  = e.demo_role_from
+           and d.target_role = e.demo_role_to
+           and d.platform_targets_on_other_accounts = 0
+         then 'PASS' else 'FAIL' end,
+    '`viewer` is the lowest platform role the application recognises (lib/auth-constants.ts), the fallback validRole() returns, and the only role app/matches/page.tsx renders in PII-suppressed mode while app/matches/[id]/page.tsx redirects away entirely. The target must not drift back toward `reviewer`: that role is what the account holds TODAY, and leaving it would keep review authority on a credential about to be shared. This is the only platform-role change in WP1-A2 — all four real Admin accounts keep `admin`, proved by [STAFF_IDENTITY].'
+  from expected e, demo_plan d
+
+  union all
+  select
+    92,
+    '[DEMO_VIEWER_ACCOUNT_STATUS] the demo account stays active, and the plan does not change its status',
+    'active today, active after the plan, status change = none',
+    'today=' || coalesce(d.status_today, '<none>') || ' target=' || coalesce(d.target_account_status, '<none>'),
+    case when d.status_today = e.demo_account_status
+           and d.target_account_status = e.demo_account_status
+         then 'PASS' else 'FAIL' end,
+    'The account is deliberately kept alive — retiring it was the earlier plan and is not what the owner chose. This check exists in both directions: it fails if Production has already deactivated the account (the plan would then be issuing an active grant to a dead account, which [NO_REACTIVATION] also refuses), and it fails if any encoded target would change the status at all.'
+  from expected e, demo_plan d
+
+  union all
+  select
+    93,
+    '[DEMO_VIEWER_S12_SCOPE] after the plan the account holds exactly one active grant: UEHM/S12 read',
+    'exactly 1 active grant, and it is UEHM / UEHM-S12 / read',
+    'active_total=' || dp.active_grants || ' active_s12_read=' || dp.active_s12_read
+      || ' active_program_wide=' || dp.active_program_wide
+      || ' [' || coalesce(dp.active_detail, '<none>') || ']',
+    case when dp.active_s12_read = 1 and dp.active_grants = 1 then 'PASS' else 'FAIL' end,
+    'Two conditions, both required. Exactly ONE active UEHM/S12 `read` grant means the demo works and is not silently duplicated; a total of exactly ONE active grant means no second scope of any shape survives beside it. Computed over the whole post-plan projection, so a grant the manifest never named would still be counted here and would still fail. Season 12 is the operating season, which is what makes the demo representative; Season 11 is excluded on purpose.'
+  from demo_post dp
+
+  union all
+  select
+    94,
+    '[DEMO_VIEWER_S11_ACTIVE] no active Season 11 authority survives the plan, and the old row is retired canonically',
+    '0 active S11 grants; the S11 source row inactive, canonical, level operations',
+    'active_s11=' || dp.active_s11 || ' s11_row_retired_canonical=' || dp.s11_row_retired_canonical,
+    case when dp.active_s11 = 0 and dp.s11_row_retired_canonical = 1 then 'PASS' else 'FAIL' end,
+    'The convergence must leave NO active S11 grant for this account. The row itself survives as history — id and created_at intact, never deleted, identifiers canonicalized so the table-wide constraints apply, level `operations` preserved so the record still says what the account actually held, and status inactive so the partial unique index and every status = ''active'' read path stop seeing it. A count of 1 on the retirement means the row is present in exactly that shape; 0 means it was rewritten into something else, deleted, or left active.'
+  from demo_post dp
+
+  union all
+  select
+    95,
+    '[DEMO_VIEWER_MUTATION_SCOPE] the account holds no active operations, full_access or review grant after the plan',
+    '0 active grants at operations, full_access or review',
+    dp.active_mutation_or_review || ' mutation/review-capable active grant(s)',
+    case when dp.active_mutation_or_review = 0 then 'PASS' else 'FAIL' end,
+    'The database-side proof that a shared demo login cannot act. vam063_authorized_for_scope filters role in (full_access, operations), so a `read` grant is refused every membership lifecycle mutation; lib/program-scope.ts canOperateSeason accepts only full_access/operations and canReviewSeason only full_access/review, so `read` fails both and the account cannot approve or review an application. THIS DOES NOT PROVE EVERY APPLICATION ROUTE IS PII-SAFE FOR A VIEWER. It proves the grant confers no mutation or review authority. Browser role UAT with Anti is required separately, after deployment and before the credentials are shared with anyone.'
+  from demo_post dp
 
   -- ── Section 10. The inactive historical account (requirement H) ───────────
   union all
@@ -1140,7 +1368,7 @@ checks as (
     'informational',
     'season NULL refused; levels review/read refused for mutations',
     'INFO',
-    'The RPC predicate is s.season_id = p_season_id::text, so a program-wide grant yields NULL and is refused — that is why the legacy program-wide row cannot be replaced by another one, and why WP1-A3 exists. Its level filter is role in (full_access, operations), so review and read grants read but never mutate — relevant if the owner disposes of the synthetic row by canonicalizing it as a reviewer.'
+    'The RPC predicate is s.season_id = p_season_id::text, so a program-wide grant yields NULL and is refused — that is why the legacy program-wide row cannot be replaced by another one, and why WP1-A3 exists. Its level filter is role in (full_access, operations), so review and read grants read but never mutate. That refusal is not a limitation here — it is load-bearing: it is what makes the controlled demo viewer''s UEHM/S12 `read` grant incapable of any membership lifecycle mutation, and it is what [DEMO_VIEWER_MUTATION_SCOPE] depends on.'
 )
 select seq, check_name, expected, actual, result, details from checks
 union all
@@ -1154,8 +1382,8 @@ select
     when exists (select 1 from checks where result = 'FAIL')
       then 'BLOCKED by ' || (select count(*)::text from checks where result = 'FAIL') || ' failing check(s): '
            || (select string_agg(check_name, '; ' order by seq) from checks where result = 'FAIL')
-           || '. Do not author or apply the WP1-A2 migration, and do not deploy WP1-A1, until every one is resolved. A run that fails ONLY on [SYNTHETIC_DISPOSITION] and [CONSTRAINT_ROW] is the expected outcome of this package as committed: both trace to one undisposed synthetic row, and both clear together once the owner decides.'
-    else 'All gating checks passed against this baseline. The A2 apply may now be authored. INFO rows remain owner decisions and must be read before applying.'
+           || '. Do not author or apply the WP1-A2 migration, and do not deploy WP1-A1, until every one is resolved. Every one of the six inventoried rows now carries an encoded owner disposition, so there is no longer an expected failure in this package: a FAIL here means Production disagrees with the locked manifest, and the manifest must be re-cut from a fresh owner inventory rather than adjusted to fit.'
+    else 'All gating checks passed against this baseline. The A2 apply may now be authored. INFO rows remain owner decisions and must be read before applying. NOTE: the demo-viewer checks prove the DATABASE grants that account nothing beyond UEHM/S12 read; they do not prove every application route is PII-safe for a viewer. Anti/browser role UAT is still required before the shared credentials are given to anyone.'
   end
 order by 1;
 

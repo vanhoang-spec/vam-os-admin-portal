@@ -7,13 +7,14 @@
   "environment": "production",
   "authority": "owner",
   "apply_authorized": false,
-  "status": "PENDING_OWNER_SYNTHETIC_DISPOSITION",
+  "status": "OWNER_DISPOSITION_ENCODED_PENDING_PRODUCTION_PREFLIGHT",
 
   "how_to_read_this": [
     "Every conversion in this manifest is keyed on an EXACT scope_id/email pair supplied by the owner.",
-    "Nothing here is derived from a generic legacy-string rule. In particular there is no \"VAM\" -> UEHM mapping: two rows storing \"VAM\" convert because the owner named their scope_id, and a third row storing \"VAM\" (the synthetic reviewer) does not convert at all.",
+    "Nothing here is derived from a generic legacy-string rule. In particular there is no \"VAM\" -> UEHM mapping: two rows storing \"VAM\" convert to Admin authority because the owner named their scope_id, a third row storing \"VAM\" (the repurposed demo account) is retired and replaced by a read-only grant, and a fourth is canonicalized while staying inactive. One string, three outcomes.",
     "This file is DATA, not an instruction to write. No apply SQL exists in this package. preflight_v2.sql reads Production and decides whether this manifest is safe to apply; it never writes.",
-    "A row whose stored values no longer match `current` is DRIFT and fails the preflight. The manifest is then stale and must be re-cut from a fresh owner inventory."
+    "A row whose stored values no longer match `current` is DRIFT and fails the preflight. The manifest is then stale and must be re-cut from a fresh owner inventory.",
+    "`source_rows[].current` is the LOCKED owner inventory of 16 Aug 2026 and is never edited to reflect a decision. Decisions live in `targets` and `platform_account_targets`."
   ],
 
   "catalog": {
@@ -42,7 +43,16 @@
     "ADD_S11": "A new canonical UEHM/S11 full_access grant, inserted because the account has no S11 source row that could be converted without misrepresenting what the source row was. Used once, for Liễu.",
     "RETIRE_LEGACY_PROGRAM_WIDE": "A program-wide (season_id NULL) legacy row that is canonicalized and set inactive in place. History is preserved; the row is never deleted.",
     "HISTORICAL_CANONICALIZE_ONLY": "An already-inactive row whose stored identifiers are rewritten purely so table-wide constraints can be applied. Status is not touched.",
-    "SYNTHETIC_REQUIRES_OWNER_DECISION": "A synthetic/test row that is active and non-canonical. No disposition is encoded. It blocks apply."
+
+    "REPURPOSE_AS_CONTROLLED_DEMO_VIEWER": "The owner's final disposition for viewer.vam.test@redsquarevietnam.com. The account is NOT retired: it is kept alive deliberately as a shared, view-only demonstration login for people who have no individual staff account yet. Because the authority the account carries is being REPLACED rather than respelled, the disposition is three coordinated acts on exactly one identity: the existing S11 operations scope is retired in place (RETIRE_SUPERSEDED_SEASON_SCOPE), the platform role drops reviewer -> viewer (PLATFORM_ROLE_DOWNGRADE_TO_VIEWER), and one new S12 read grant is created (ADD_S12_DEMO_READ). It is keyed to scope_id 487a7562-bb40-4c5c-9dc1-0fe363f1158a and account viewer.vam.test@redsquarevietnam.com and applies to nothing else.",
+
+    "RETIRE_SUPERSEDED_SEASON_SCOPE": "An existing ACTIVE season grant whose authority MEANING is being replaced, not merely respelled. It is canonicalized so the table-wide constraints can be applied, then set inactive in place; id and created_at survive and the row is never deleted. It keeps its historical scope_level so the audit record continues to say what the account actually held. Distinct from KEEP_CONVERT_S11, which is used only where the meaning is unchanged.",
+
+    "ADD_S12_DEMO_READ": "A new canonical UEHM/S12 grant at scope level `read`, inserted idempotently. Read-only by construction: vam063_authorized_for_scope filters role in (full_access, operations), and the application's canOperateSeason/canReviewSeason both refuse `read`.",
+
+    "PLATFORM_ROLE_DOWNGRADE_TO_VIEWER": "A change to public.admin_users.role, from reviewer to viewer, for exactly one named email. It is the only platform-role change in WP1-A2; all four real Admin accounts keep `admin`. It lives in platform_account_targets, not in targets, because it acts on a different table than admin_scope_access.",
+
+    "SYNTHETIC_REQUIRES_OWNER_DECISION": "SUPERSEDED on 16 Aug 2026 and carried by no row or target any more. It was the placeholder classification for viewer.vam.test@redsquarevietnam.com while its disposition was undecided. Retained in this vocabulary so the earlier state of the manifest stays legible; see superseded_decisions."
   },
 
   "source_rows": [
@@ -132,15 +142,15 @@
     },
     {
       "manifest_key": "synthetic_viewer_test",
-      "classification": "SYNTHETIC_REQUIRES_OWNER_DECISION",
+      "classification": "REPURPOSE_AS_CONTROLLED_DEMO_VIEWER",
       "account": {
-        "display_label": "VAM viewer test account (synthetic)",
+        "display_label": "Controlled demo viewer (repurposed synthetic account)",
         "email": "viewer.vam.test@redsquarevietnam.com",
         "platform_role": "reviewer",
         "account_status": "active",
         "auth_user_id": null,
         "auth_user_id_source": "resolved_by_preflight_from_email",
-        "platform_role_change": "none"
+        "platform_role_change": "reviewer_to_viewer"
       },
       "current": {
         "scope_id": "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
@@ -149,7 +159,7 @@
         "scope_level": "operations",
         "scope_status": "active"
       },
-      "notes": "Active, synthetic, non-canonical. It stores \"VAM\" exactly like Hoàng and Toàn, which is the whole argument against a generic string rule: the same legacy value means convert for two accounts and nothing at all for this one."
+      "notes": "Active, non-canonical, and now repurposed rather than retired. It stores \"VAM\" exactly like Hoàng and Toàn, which is still the whole argument against a generic string rule: the same legacy value means raise-to-Admin for two accounts, retire-and-replace-with-read for this one, and identifier-only canonicalization for the inactive fourth."
     },
     {
       "manifest_key": "historical_admin_test",
@@ -303,6 +313,39 @@
       "rationale": "Season 12 operating authority."
     },
     {
+      "target_key": "demo_viewer/S11_RETIRE",
+      "manifest_key": "synthetic_viewer_test",
+      "classification": "RETIRE_SUPERSEDED_SEASON_SCOPE",
+      "action": "RETIRE_IN_PLACE",
+      "source_scope_id": "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "710f4ec9-1cf7-461e-98d4-f33799047add",
+      "scope_level": "operations",
+      "scope_status": "inactive",
+      "preserves": ["id", "created_at", "scope_level"],
+      "pre_image": { "program_id": "VAM", "season_id": "UEHM-S11", "scope_level": "operations", "scope_status": "active" },
+      "rationale": "The same semantic rule already applied to Liễu, in the other direction. UPDATE IN PLACE is for a row whose meaning is unchanged and whose spelling is wrong; this row's MEANING is being replaced — it claimed Season 11 operations authority and the account will hold Season 12 read authority instead. So the row is retired, not rewritten. Its identifiers are canonicalized because the planned constraints are table-wide, and its scope_level `operations` is deliberately PRESERVED, unlike Liễu's `admin`, because `operations` is already canonical and the audit record can therefore keep saying exactly what this account held.",
+      "why_not_rewritten_into_the_s12_read_row": "Rewriting this row into UEHM/S12/read would destroy the only record that the account ever held S11 operations authority, and would make its created_at describe a grant that did not exist then. The new authority is a new row.",
+      "grants_nothing_after_apply": "status becomes inactive, so the partial unique index and every application read path (all keyed on status = 'active') stop seeing it."
+    },
+    {
+      "target_key": "demo_viewer/S12",
+      "manifest_key": "synthetic_viewer_test",
+      "classification": "ADD_S12_DEMO_READ",
+      "action": "INSERT",
+      "source_scope_id": null,
+      "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3",
+      "season_id": "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1",
+      "scope_level": "read",
+      "scope_status": "active",
+      "rationale": "The account's entire post-plan authority: one season, read only. Season 12 is the operating season, so the demo shows the system as it currently stands; Season 11 is deliberately excluded so the demo cannot browse historical cohorts.",
+      "read_only_proof": [
+        "vam063_authorized_for_scope filters `role in ('full_access','operations')`, so this grant is refused for every membership lifecycle mutation.",
+        "lib/program-scope.ts canOperateSeason returns true only for full_access/operations; canReviewSeason only for full_access/review. `read` fails both.",
+        "The account's platform role becomes `viewer`, which app/matches/[id]/page.tsx redirects away and app/matches/page.tsx renders in viewer-safe (PII-suppressed) mode."
+      ]
+    },
+    {
       "target_key": "historical_admin_test/CANONICALIZE",
       "manifest_key": "historical_admin_test",
       "classification": "HISTORICAL_CANONICALIZE_ONLY",
@@ -320,30 +363,74 @@
     }
   ],
 
-  "no_target": [
+  "platform_account_targets": [
+    {
+      "target_key": "demo_viewer/PLATFORM_ROLE",
+      "manifest_key": "synthetic_viewer_test",
+      "classification": "PLATFORM_ROLE_DOWNGRADE_TO_VIEWER",
+      "action": "UPDATE_IN_PLACE",
+      "table": "public.admin_users",
+      "keyed_on": { "email": "viewer.vam.test@redsquarevietnam.com" },
+      "from": { "role": "reviewer", "status": "active" },
+      "to": { "role": "viewer", "status": "active" },
+      "account_status_change": "none",
+      "rationale": "The account must not retain reviewer authority once it is shared with unprovisioned people. `viewer` is the lowest role in lib/auth-constants.ts and is the only platform role the application treats as PII-suppressed on /matches.",
+      "vocabulary_evidence": [
+        "lib/admin-users.ts ADMIN_ROLES includes `viewer`; validRole() falls back to `viewer`, so the value is representable and is the safe default.",
+        "app/admin/users/actions.ts accepts `viewer` in its explicit role whitelist.",
+        "app/matches/[id]/page.tsx redirects a `viewer` away from the match detail page; app/matches/page.tsx sets viewerSafe for a `viewer`."
+      ],
+      "not_authorized_for_any_other_account": "This is the ONLY platform-role change in WP1-A2. The four real Admin accounts keep `admin`, and the historical admin test account keeps `admin`/inactive."
+    }
+  ],
+
+  "no_target": [],
+
+  "superseded_decisions": [
     {
       "manifest_key": "synthetic_viewer_test",
       "scope_id": "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
-      "classification": "SYNTHETIC_REQUIRES_OWNER_DECISION",
-      "action": "NONE",
-      "reason": "No owner disposition is encoded, so A2 has no authority to touch this row.",
-      "consequence": "The row stays active and non-canonical, which blocks the table-wide program_id CHECK. SAFE_TO_APPLY_V2 is therefore false by construction, not by accident.",
-      "options_for_the_owner": [
-        "RETIRE — set status inactive and canonicalize identifiers. Removes a live non-canonical grant from a synthetic account.",
-        "CANONICALIZE_AS_REVIEWER — convert to UEHM/S11 (and/or S12) at scope level `review`, matching the account's reviewer platform role. NOTE: `review` is refused by vam063_authorized_for_scope, so such a grant reads but never mutates — and the reviewer PII gap on /matches is still open, so activating reviewer access broadly is separately blocked.",
-        "DEFER — leave the row alone and defer the table-wide program_id CHECK to a later work package. A2 would then converge only the four Admins."
-      ],
-      "how_to_authorize": "Set gates.synthetic_disposition.authorized to true here AND set `synthetic_disposition_authorized` to true in preflight_v2.sql, naming the chosen option. Both edits are deliberate owner acts; neither is implied by running the preflight."
+      "was": "SYNTHETIC_REQUIRES_OWNER_DECISION",
+      "now": "REPURPOSE_AS_CONTROLLED_DEMO_VIEWER",
+      "superseded_on": "2026-08-16",
+      "previous_state": "The row was parked with no target of any kind, which left it active and non-canonical and made SAFE_TO_APPLY_V2 false by construction. Three options were put to the owner: RETIRE, CANONICALIZE_AS_REVIEWER, or DEFER the table-wide program_id CHECK.",
+      "what_the_owner_chose_instead": "None of the three. The account is kept alive as a controlled demo login, which required a fourth disposition: retire the superseded S11 operations scope, downgrade the platform role to viewer, and create one S12 read grant.",
+      "why_not_canonicalize_as_reviewer": "That option is now explicitly refused. It would leave the account able to review, and the reviewer PII gap on /matches is still open — the account is going to be shared with people who have no individual login, which is precisely the population that must not see reviewer-level PII.",
+      "why_not_retire": "Retiring the account would have removed the only way to show the system to people awaiting individual provisioning under WP1-C."
     }
   ],
 
   "gates": {
     "synthetic_disposition": {
-      "authorized": false,
-      "status": "PENDING_OWNER_DECISION",
-      "blocks_apply": true,
+      "authorized": true,
+      "status": "OWNER_DECIDED_REPURPOSE_AS_CONTROLLED_DEMO_VIEWER",
+      "blocks_apply": false,
       "scope_id": "487a7562-bb40-4c5c-9dc1-0fe363f1158a",
-      "preflight_check": "[SYNTHETIC_DISPOSITION]"
+      "preflight_check": "[SYNTHETIC_DISPOSITION]",
+      "decided_on": "2026-08-16",
+      "encoded_as": {
+        "scope_targets": ["demo_viewer/S11_RETIRE", "demo_viewer/S12"],
+        "platform_account_targets": ["demo_viewer/PLATFORM_ROLE"]
+      },
+      "note": "The check did not disappear when the decision was made. It now proves the encoded disposition is EXACTLY the one the owner named, and it fails if the disposition is authorized without a target, or if a target exists that the authorization does not cover."
+    },
+    "demo_viewer_safety": {
+      "authorized": true,
+      "status": "ENCODED",
+      "blocks_apply": false,
+      "email": "viewer.vam.test@redsquarevietnam.com",
+      "target_platform_role": "viewer",
+      "target_account_status": "active",
+      "target_active_scope": { "program_id": "61701ee8-64a6-4673-b261-ba12ce9a3ee3", "season_id": "32fbfc86-1d67-4158-b9d4-1e6bff48b2c1", "scope_level": "read" },
+      "forbidden_after_apply": ["reviewer platform role", "operations scope", "full_access scope", "review scope", "any active UEHM-S11 grant", "any second active grant"],
+      "preflight_checks": [
+        "[DEMO_VIEWER_ROLE]",
+        "[DEMO_VIEWER_ACCOUNT_STATUS]",
+        "[DEMO_VIEWER_S12_SCOPE]",
+        "[DEMO_VIEWER_S11_ACTIVE]",
+        "[DEMO_VIEWER_MUTATION_SCOPE]"
+      ],
+      "what_these_checks_do_not_prove": "They prove the DATABASE cannot hand this account mutation or review authority. They do not prove every application route is PII-safe for a viewer. Browser role UAT with Anti is required separately, after deployment and before the credentials are shared with anyone."
     },
     "historical_canonicalization": {
       "authorized": true,
@@ -358,17 +445,36 @@
       "status": "DEFERRED_TO_WP1_A3",
       "reason": "vam063_authorized_for_scope compares s.season_id = p_season_id::text, so a NULL season yields NULL and the grant is refused. Program-wide semantics need a change to that function, which A2 must not make."
     },
-    "safe_to_apply_v2_expected": false,
-    "expected_blocking_checks": ["[SYNTHETIC_DISPOSITION]"]
+    "safe_to_apply_v2_expected": true,
+    "expected_blocking_checks": [],
+    "expected_against": "the local fixture that reproduces this exact six-row inventory",
+    "production_result": "UNKNOWN_UNTIL_OWNER_EXECUTES",
+    "production_note": "SAFE_TO_APPLY_V2 is DERIVED from the checks at run time; it is never asserted. This field records only that the encoded plan is now internally complete, so a Production run that matches the locked inventory CAN reach true. Any drift, unknown row, or catalog mismatch in Production still makes it false."
   },
 
   "post_state_expectation": {
-    "active_grants": 8,
-    "active_grants_detail": "Four Admin accounts x {UEHM/S11, UEHM/S12}, all full_access.",
-    "inactive_grants": 2,
-    "inactive_grants_detail": "Liễu's retired program-wide row and the historical admin test row.",
-    "unresolved": "The synthetic viewer row, unchanged, still active and still non-canonical until the owner decides.",
+    "active_grants": 9,
+    "active_grants_detail": "Four Admin accounts x {UEHM/S11, UEHM/S12} at full_access (8), plus the controlled demo viewer's single UEHM/S12 read grant (1).",
+    "inactive_grants": 3,
+    "inactive_grants_detail": "Liễu's retired program-wide row, the demo viewer's retired UEHM/S11 operations row, and the historical admin test row.",
+    "unresolved": "None. Every one of the six inventoried rows now has an encoded disposition.",
+    "platform_role_changes": 1,
+    "platform_role_changes_detail": "viewer.vam.test@redsquarevietnam.com only: reviewer -> viewer. All five other accounts keep their platform role.",
     "rows_deleted": 0
+  },
+
+  "demo_viewer_operating_policy": {
+    "account": "viewer.vam.test@redsquarevietnam.com",
+    "purpose": "A shared, view-only demonstration login for people who have not yet been provisioned an individual staff account.",
+    "must_never_be_used_for": [
+      "real operational work of any kind",
+      "approving, reviewing or deciding an application",
+      "any membership lifecycle mutation",
+      "anything an auditor would later need attributed to a named person"
+    ],
+    "audit_attribution_limit": "Credentials are shared, so admin_audit_log can only ever record THIS ACCOUNT, never the individual human who acted. That is an accepted, bounded consequence of a read-only demo grant, and it is the main reason the account holds no mutation authority: with read-only scope there is nothing consequential left to misattribute.",
+    "long_term_target": "Individual per-person provisioning under WP1-C. This account is an interim measure and is expected to be retired once WP1-C ships. WP1-C is NOT implemented by this package.",
+    "before_sharing_credentials": "Anti/browser role UAT must pass first, after WP1-A2 converges and WP1-A1 deploys. The preflight proves the database grants nothing beyond read; it does not prove every route renders PII-safely for a viewer."
   },
 
   "out_of_scope": [
