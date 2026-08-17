@@ -20,16 +20,29 @@
 -- everything it checks. The preflight exists so the owner learns about a
 -- baseline mismatch before a lock is taken.
 --
+-- WHAT APPLYING THIS FILE DOES NOT CLOSE
+-- P0-RT-10 (membership restoration on an accepted renewal) and P0-RT-11 (the
+-- server-side renewal direct-approval guard) are NOT implemented here. Both are
+-- normative requirements on the runtime/UI package, specified in README §8.1
+-- and test-pinned. This file's contribution to them is proof, not code: Section
+-- 0 and Section 1 assert that vam063_reactivate_membership exists, is a
+-- hardened definer and is executable by service_role, which is what makes
+-- P0-RT-10 implementable with no new SQL at all. Both remain BLOCKING before
+-- any real renewal invite is generated. A successful apply and a PASS verifier
+-- do not change that.
+--
 -- REFUSES on any of:
 --   [ENV_NOT_PRODUCTION]     vam062_* functions exist — this is Staging
 --   [UUID_FN_MISSING]        gen_random_uuid() does not resolve
 --   [LIFECYCLE_NOT_EXECUTABLE]
---                            service_role cannot execute the two vam063 entry
---                            points the renewal orchestration calls, so the
---                            S12 release T4 has not been run here
+--                            service_role cannot execute the three vam063
+--                            entry points the renewal orchestration calls, so
+--                            the S12 release T4 has not been run here
 --   [LIFECYCLE_HARDENING]    a vam063 function this package calls is not
 --                            SECURITY DEFINER with a pinned search_path
---   plus every refusal of Section 1, listed in the canonical migration.
+--   plus every refusal of Section 1, listed in the canonical migration —
+--   including [APPLICATION_SUBMITTED_AT_TYPE], which pins the one column
+--   whose TYPE, not merely its presence, changes what the accept path records.
 --
 -- SUPABASE SQL EDITOR COMPATIBILITY
 -- ZERO psql meta-commands. Nothing in this file begins with a backslash; the
@@ -68,13 +81,19 @@ set local timezone          = 'UTC';
 do $m071_guard$
 declare
   v_txt text;
-  -- The two vam063 entry points the renewal orchestration calls. The DECLINE
+  -- The three vam063 entry points the renewal orchestration calls. The DECLINE
   -- path calls vam063_opt_out_membership internally, as the owner, and needs
   -- no grant for that. The CONFIRM orchestration calls
-  -- vam063_add_membership_role from the Node process over PostgREST, and that
-  -- one does need the service_role EXECUTE grant the S12 release T4 installs.
+  -- vam063_add_membership_role and — for the P0-RT-10 restoration case, where
+  -- the mentor declined, was legitimately re-invited and then accepted —
+  -- vam063_reactivate_membership, both from the Node process over PostgREST,
+  -- and those do need the service_role EXECUTE grant the S12 release T4
+  -- installs. Checking reactivate here rather than discovering it missing at
+  -- the first restoration is the point: P0-RT-10 is specified as needing no
+  -- new SQL, which is only true while this grant exists.
   v_called constant text[] := array[
     'public.vam063_add_membership_role(uuid,uuid,uuid,uuid,text,text)',
+    'public.vam063_reactivate_membership(uuid,uuid,text)',
     'public.vam063_opt_out_membership(uuid,uuid,text)'
   ];
 begin
@@ -108,6 +127,7 @@ begin
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and p.proname = any (array['vam063_add_membership_role', 'vam063_opt_out_membership',
+                               'vam063_reactivate_membership',
                                'vam063_authorized_for_scope']::text[])
     and (not p.prosecdef
          or p.proconfig is null
@@ -135,11 +155,16 @@ declare
     'person_season_memberships', 'person_season_membership_log'
   ];
   -- The Production membership-lifecycle surface installed by the S12 release
-  -- T3/T4. These functions are CALLED by this package; none is modified.
+  -- T3/T4. These functions are CALLED by this package or, in the case of
+  -- vam063_reactivate_membership, by the P0-RT-10 confirm orchestration this
+  -- package specifies. None of them is modified here. Requiring the whole set
+  -- to exist before the functions are installed is what makes P0-RT-10
+  -- implementable with no new SQL: the transition it needs is already there.
   v_lifecycle constant text[] := array[
     'public.vam063_trusted_api_role()',
     'public.vam063_authorized_for_scope(uuid,uuid,uuid)',
     'public.vam063_add_membership_role(uuid,uuid,uuid,uuid,text,text)',
+    'public.vam063_reactivate_membership(uuid,uuid,text)',
     'public.vam063_opt_out_membership(uuid,uuid,text)'
   ];
   -- Every action_type this package writes. M070 added the first two; the
@@ -179,7 +204,7 @@ begin
   from unnest(v_lifecycle) f
   where to_regprocedure(f) is null;
   if v_missing is not null then
-    raise exception 'M071 ABORTED [LIFECYCLE_MISSING]: %. The S12 release T3 has not been applied here; the decline and confirm paths call these functions by name and would fail at their first real use.', v_missing;
+    raise exception 'M071 ABORTED [LIFECYCLE_MISSING]: %. The S12 release T3 has not been applied here; the decline and confirm paths call these functions by name, and the P0-RT-10 orchestration calls vam063_reactivate_membership, so they would fail at their first real use.', v_missing;
   end if;
 
   -- The audit vocabulary must already admit every value written below.
@@ -338,6 +363,43 @@ begin
   );
   if v_txt is not null then
     raise exception 'M071 ABORTED [APPLICATION_COLUMN_CONTRACT]: applications does not carry: %.', v_txt;
+  end if;
+
+  -- ══ THE applications.submitted_at TYPE CONTRACT ═══════════════════════════
+  -- Presence is not enough for this one column, because the accept path writes
+  -- a value into it whose MEANING depends on the column's type, and this
+  -- repository's own artifacts disagree about which type Production carries:
+  --
+  --   date                       migration 038 documents submitted_at as a
+  --                              legacy DATE column left untouched, and the
+  --                              bootstrap in 059 — written from the live
+  --                              metadata — declares `submitted_at date`.
+  --   timestamp with time zone   the S12 release baseline reproduction
+  --                              declares `submitted_at timestamptz not null
+  --                              default now()`.
+  --
+  -- Both are supported and are the ONLY supported shapes. The accept path
+  -- writes v_now, the transaction timestamp: into timestamptz that preserves
+  -- the actual submission instant, and into date PostgreSQL applies the
+  -- ordinary assignment cast and stores the calendar day — which is exactly
+  -- what the previous current_date literal stored, so the legacy shape loses
+  -- nothing and the modern shape stops losing the time of day.
+  --
+  -- The date rendering of a timestamptz depends on the session TimeZone, as it
+  -- already did for current_date. That is a property of the column type, not of
+  -- this change, and it is why the runtime is required to run under UTC.
+  --
+  -- A third shape — timestamp WITHOUT time zone, text, an epoch integer — is
+  -- refused rather than adapted to. Two of those three would still accept the
+  -- assignment silently and record something nobody specified.
+  select format_type(a.atttypid, a.atttypmod) into v_txt
+  from pg_attribute a
+  where a.attrelid = to_regclass('public.applications')
+    and a.attname = 'submitted_at' and a.attnum > 0 and not a.attisdropped;
+  if v_txt is null
+     or v_txt <> all (array['date', 'timestamp with time zone']::text[]) then
+    raise exception 'M071 ABORTED [APPLICATION_SUBMITTED_AT_TYPE]: applications.submitted_at is %, and the accept path supports only date or timestamp with time zone. Re-derive this package against this database before applying.',
+      coalesce(v_txt, '<absent>');
   end if;
 
   -- 'submitted' and 's12_mentor_renewal' must both be writable. A CHECK that
@@ -860,6 +922,14 @@ begin
   -- 'mentor' literal is resolved to whatever type role_applied carries (text
   -- in the Production baseline, an enum elsewhere), and it is provably the
   -- invite's own role because the check above refused anything else.
+  --
+  -- submitted_at is written as v_now — the SAME transaction timestamp that
+  -- claims the invite two statements below — and not as current_date. The two
+  -- records of one submission therefore agree by construction. Section 1 has
+  -- already proved the column is date or timestamptz and refused anything
+  -- else: on timestamptz this preserves the actual submission instant, which
+  -- current_date silently discarded; on the legacy date column PostgreSQL
+  -- applies the assignment cast and stores precisely what current_date stored.
   insert into public.applications (
     person_id, season_id, intake_batch_id, role_applied, status, source,
     full_name, email_primary, phone_primary,
@@ -881,7 +951,7 @@ begin
       'renewal_submitted_at', v_now,
       'renewal',              p_raw_payload
     ),
-    current_date
+    v_now
   )
   returning id into v_app_id;
 

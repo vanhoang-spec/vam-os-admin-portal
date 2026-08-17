@@ -719,10 +719,296 @@ describe("M070 and Season 11 are untouched", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Independent security review remediation — H-1, M-1, M-2, M-3.
+//
+// Each block below pins the REMEDIATED property, not the prose around it: the
+// type gate that makes the accept path's write meaning-stable, the transaction
+// timestamp that replaced current_date, the five measured authorization
+// evidence fields that replaced a stale narrative claim, and the two normative
+// runtime contracts (P0-RT-10, P0-RT-11) whose specifications are the entire
+// deliverable for a package that deliberately ships no code for them.
+// ---------------------------------------------------------------------------
+
+describe("M-2 — the applications.submitted_at type contract", () => {
+  const SUPPORTED = "array['date', 'timestamp with time zone']::text[]";
+
+  it("the preflight, the migration and apply all gate the column's TYPE, not only its presence", () => {
+    for (const [name, sql] of Object.entries({ migration, apply, preflight })) {
+      expect(`${name}:tag:${sql.includes("[APPLICATION_SUBMITTED_AT_TYPE]")}`).toBe(`${name}:tag:true`);
+      const body = stripComments(sql).replace(/\s+/g, " ");
+      // The gate reads the live catalog rather than trusting a repository
+      // artifact, and refuses anything outside the two supported shapes.
+      expect(`${name}:read:${/format_type\(a\.atttypid, a\.atttypmod\) into v_txt/.test(body)}`)
+        .toBe(`${name}:read:true`);
+      expect(`${name}:supported:${body.includes(`v_txt <> all (${SUPPORTED})`)}`)
+        .toBe(`${name}:supported:true`);
+    }
+  });
+
+  it("every artifact names the same two supported shapes and no third", () => {
+    // A third shape appearing in one file and not another is exactly how a
+    // gate stops being a gate. `date` and `timestamp with time zone` are the
+    // only two the repository's own schema history justifies.
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const declared = unique(captures(stripComments(sql), /array\[('date', 'timestamp with time zone')\]/g));
+      if (name === "rollback") {
+        expect(`${name}:${JSON.stringify(declared)}`).toBe(`${name}:[]`);
+      } else {
+        expect(`${name}:${JSON.stringify(declared)}`).toBe(
+          `${name}:${JSON.stringify(["'date', 'timestamp with time zone'"])}`
+        );
+      }
+    }
+  });
+
+  it("the verifier re-proves the type contract after apply and FAILS on a third shape", () => {
+    expect(verifier).toContain("'V27', 'applications_submitted_at_type_contract'");
+    const v27 = verifier.slice(verifier.indexOf("'V27'"), verifier.indexOf("'V28'"));
+    expect(v27.replace(/\s+/g, " ")).toContain(`= any (${SUPPORTED})`);
+    expect(v27).toContain("then 'PASS' else 'FAIL' end");
+    // Type-stable on PG15: the detail is text in every branch.
+    expect(v27).toContain("'<absent>'");
+  });
+});
+
+describe("M-2 — the accept path records the transaction timestamp", () => {
+  const accept = () => stripComments(functionBody(migration, "vam071_submit_renewal_accepted")).replace(/\s+/g, " ");
+
+  it("writes v_now into applications.submitted_at, never current_date", () => {
+    const body = accept();
+    // The INSERT's last value is submitted_at. current_date would discard the
+    // time of day on a timestamptz column while the invite row records the
+    // same submission to the microsecond.
+    expect(body).toContain("'renewal', p_raw_payload ), v_now ) returning id into v_app_id");
+    expect(`current_date:${body.includes("current_date")}`).toBe("current_date:false");
+  });
+
+  it("uses the SAME v_now for the application row and for the invite claim", () => {
+    const body = accept();
+    const assigned = body.indexOf("v_now := now();");
+    const inserted = body.indexOf("insert into public.applications");
+    const claimed = body.indexOf("update public.person_season_invites i set submitted_at = v_now");
+    expect(assigned).toBeGreaterThan(0);
+    expect(inserted).toBeGreaterThan(assigned);
+    expect(claimed).toBeGreaterThan(inserted);
+    // Assigned exactly once, so the two records of one submission cannot drift.
+    expect(matches(body, /v_now := now\(\)/g).length).toBe(1);
+  });
+
+  it("needs no dynamic SQL to support either column shape", () => {
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const body = stripComments(sql).toLowerCase();
+      for (const forbidden of ["execute format(", "execute '", "quote_ident("]) {
+        expect(`${name}:${forbidden}:${body.includes(forbidden)}`).toBe(`${name}:${forbidden}:false`);
+      }
+    }
+  });
+});
+
+describe("H-1 — the WP1-A2 authorization state is measured, not narrated", () => {
+  const EVIDENCE = [
+    "active_super_admins=",
+    "admins_scoped_for_s12=",
+    "scope_rows_uuid_program=",
+    "scope_rows_nonuuid_program=",
+    "uehm_s12_season_rows="
+  ];
+
+  it("BLOCK 2 emits all five authorization evidence fields", () => {
+    for (const field of EVIDENCE) {
+      expect(`${field}:${preflight.includes(field)}`).toBe(`${field}:true`);
+    }
+  });
+
+  it("the evidence is read from the live catalog with the RPC's own predicate", () => {
+    const body = stripComments(preflight).replace(/\s+/g, " ");
+    // admins_scoped_for_s12 must evaluate what vam063_authorized_for_scope
+    // evaluates, or it is reporting a different question's answer.
+    expect(body).toContain("s.program_id = se.program_id::text and s.season_id = se.id::text");
+    // The UUID-shape split is on ACTIVE rows only — retired grants carry no
+    // authority and would make the count unreadable.
+    expect(body).toContain("from public.admin_scope_access s where s.status = 'active'");
+    expect(body).toContain("from public.seasons se where se.code = 'UEHM-S12'");
+  });
+
+  it("no artifact asserts the stale WP1-A2 claims as current fact", () => {
+    // The three claims the independent review proved stale: that WP1-A2 is
+    // authored-but-unexecuted, that Production still stores codes, and that
+    // create/revoke/confirm are necessarily super_admin-only today.
+    for (const [name, text] of Object.entries({ readme, preflight, apply, migration, verifier })) {
+      const stale = [
+        /WP1-A2[^.]{0,120}?(?:is authored|authored, not executed|authored but not executed|until WP1-A2)/i,
+        /stores\s+codes/i,
+        /super_admin-only/i
+      ].filter((re) => re.test(text)).map((re) => re.source);
+      expect(`${name}:${JSON.stringify(stale)}`).toBe(`${name}:[]`);
+    }
+  });
+
+  it("replaces them with the release-record framing rather than a live claim", () => {
+    for (const [name, text] of Object.entries({ readme, preflight })) {
+      expect(`${name}:record:${/release record/i.test(text)}`).toBe(`${name}:record:true`);
+      expect(`${name}:wp1a2:${text.includes("WP1-A2")}`).toBe(`${name}:wp1a2:true`);
+    }
+    // Stated as an expectation to read the evidence against, never as a gate.
+    expect(readme).toContain("evidence outputs, not repository facts and not gates");
+  });
+
+  it("weakens no refusal — every preflight gate is still raised", () => {
+    for (const tag of [
+      "[ENV_NOT_PRODUCTION]",
+      "[UUID_FN_MISSING]",
+      "[PREREQ_TABLE_MISSING]",
+      "[M070_ARBITER_MISSING]",
+      "[M070_CONTRACT_DRIFT]",
+      "[LIFECYCLE_MISSING]",
+      "[LIFECYCLE_NOT_EXECUTABLE]",
+      "[LIFECYCLE_HARDENING]",
+      "[AUDIT_VOCAB_MISSING]",
+      "[AUDIT_CONTRACT]",
+      "[FORCE_RLS_SET]",
+      "[ALREADY_APPLIED]",
+      "[PROFILE_COLUMN_CONTRACT]",
+      "[APPLICATION_COLUMN_CONTRACT]",
+      "[APPLICATION_SUBMITTED_AT_TYPE]",
+      "[APPLICATION_STATUS_VOCAB]",
+      "[APPLICATION_SOURCE_VOCAB]",
+      "[APPLICATION_ROLE_VOCAB]"
+    ]) {
+      expect(`${tag}:${new RegExp(`raise exception 'M071 PREFLIGHT REFUSED \\${tag}`).test(preflight)}`)
+        .toBe(`${tag}:true`);
+    }
+  });
+});
+
+describe("P0-RT-10 — membership restoration is specified over the existing vam063 surface", () => {
+  it("the README states the whole status mapping, including every fail-closed state", () => {
+    expect(readme).toContain("P0-RT-10");
+    for (const fragment of [
+      "vam063_add_membership_role",
+      "vam063_reactivate_membership",
+      "`opted_out`",
+      "`paused`",
+      "`invited`",
+      "`withdrawn`, `cancelled`",
+      "fail-closed"
+    ]) {
+      expect(`${fragment}:${readme.includes(fragment)}`).toBe(`${fragment}:true`);
+    }
+    // The actor is the confirming admin, not the invite's issuer.
+    expect(readme).toContain("**current confirming Admin** in every branch");
+  });
+
+  it("names no invented lifecycle status and no duplicate membership", () => {
+    for (const invented of ["renewal_declined", "not_renewing", "lapsed", "renewed"]) {
+      expect(`${invented}:${new RegExp(`status[^.\\n]{0,40}'${invented}'`).test(readme)}`)
+        .toBe(`${invented}:false`);
+    }
+    expect(readme).toContain("No new lifecycle status, no second membership row, no new RPC");
+  });
+
+  it("the required vam063 function is a proven prerequisite, in every artifact that gates", () => {
+    const SIG = "public.vam063_reactivate_membership(uuid,uuid,text)";
+    for (const [name, sql] of Object.entries({ migration, apply, preflight })) {
+      expect(`${name}:${sql.includes(SIG)}`).toBe(`${name}:true`);
+    }
+    // apply Section 0 and the preflight also require service_role to be able to
+    // execute it, because the orchestration calls it over PostgREST.
+    for (const [name, sql] of Object.entries({ apply, preflight })) {
+      const called = sql.slice(sql.indexOf("v_called constant text[] :="));
+      expect(`${name}:${called.slice(0, 400).includes("vam063_reactivate_membership")}`).toBe(`${name}:true`);
+    }
+    expect(verifier).toContain("'V28', 'p0_rt_10_lifecycle_surface_available'");
+  });
+
+  it("adds no membership SQL to this package — the requirement is normative, not implemented here", () => {
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const body = stripComments(sql);
+      // Named in prerequisite/verifier inventories only; never invoked.
+      expect(`${name}:perform:${/perform\s+public\.vam063_reactivate_membership\s*\(/.test(body)}`)
+        .toBe(`${name}:perform:false`);
+      expect(`${name}:select:${/from\s+public\.vam063_reactivate_membership\s*\(/.test(body)}`)
+        .toBe(`${name}:select:false`);
+    }
+  });
+});
+
+describe("P0-RT-11 — the renewal direct-approval guard", () => {
+  it("the README specifies a SERVER-SIDE refusal, not a UI rule", () => {
+    expect(readme).toContain("P0-RT-11");
+    expect(readme).toContain("**This must be a server-side refusal, not a UI hiding rule.**");
+    expect(readme).toContain("`approveApplication` in `lib/application-approvals.ts`");
+    expect(readme).toContain("before any write");
+  });
+
+  it("specifies the trigger as a union, so neither key alone can be edited around", () => {
+    expect(readme).toContain("`applications.source = 's12_mentor_renewal'`");
+    expect(readme).toContain("`application_id = applications.id`");
+  });
+
+  it("specifies the exact evidence query and its fail-closed semantics", () => {
+    for (const fragment of [
+      "action_type = 'confirm_renewal'",
+      "details ->> 'application_id'",
+      "service-role",
+      "Zero rows → return the ordinary failure result and **write nothing**",
+      "A query **error** must also refuse"
+    ]) {
+      expect(`${fragment}:${readme.includes(fragment)}`).toBe(`${fragment}:true`);
+    }
+  });
+
+  it("the evidence the guard depends on is actually written, and written unconditionally", () => {
+    const body = stripComments(functionBody(migration, "vam071_confirm_renewal_profile")).replace(/\s+/g, " ");
+    expect(body).toContain("insert into public.admin_audit_log");
+    expect(body).toContain("'confirm_renewal', 'confirm_renewal',");
+    expect(body).toContain("'application_id', p_application_id,");
+
+    // Unconditional: the audit INSERT sits OUTSIDE the `if array_length(
+    // v_applied, 1) is not null` block that guards the profile UPDATE, so a
+    // confirmation that legitimately applied no field still leaves evidence
+    // and a correct renewal is never blocked by its own emptiness.
+    const guard = body.indexOf("if array_length(v_applied, 1) is not null then");
+    const audit = body.indexOf("insert into public.admin_audit_log");
+    expect(guard).toBeGreaterThan(0);
+    expect(audit).toBeGreaterThan(guard);
+    expect(body.slice(guard, audit)).toContain("end if; end if;");
+  });
+
+  it("is deferred to the runtime package, and every artifact says so rather than implying otherwise", () => {
+    // The guard lives in a code path M071 does not own. What M071 owes is the
+    // specification; a claim to have implemented it would be false, and the
+    // migration header states the deferral where a reader meets it first.
+    expect(readme).toContain("Not implemented in this SQL-only package");
+    for (const [name, sql] of Object.entries({ migration, apply })) {
+      expect(`${name}:${sql.includes("P0-RT-11")}`).toBe(`${name}:true`);
+      expect(`${name}:${sql.includes("NOT implemented here")}`).toBe(`${name}:true`);
+    }
+  });
+});
+
 describe("README", () => {
   it("carries every P0-RT requirement id", () => {
-    for (let i = 1; i <= 8; i += 1) {
+    for (let i = 1; i <= 11; i += 1) {
       expect(`P0-RT-${i}:${readme.includes(`P0-RT-${i}`)}`).toBe(`P0-RT-${i}:true`);
+    }
+  });
+
+  it("records the accepted confirm ordering rather than reverting to the old prose", () => {
+    expect(readme).toContain("`vam071_confirm_renewal_profile` → membership lifecycle operation → `approveApplication`");
+    expect(readme).toContain("The independent review accepted this ordering.");
+  });
+
+  it("lists the deferred LOW findings instead of silently widening this remediation", () => {
+    for (const deferred of [
+      "Blank-integer guard NULL semantics",
+      "Normalisation/audit divergence",
+      "BLOCK 2 `AUDITCOLS` presentation",
+      "Uncast `array[]` style inconsistency",
+      "Isolation-level uniform-error nuance"
+    ]) {
+      expect(`${deferred}:${readme.includes(deferred)}`).toBe(`${deferred}:true`);
     }
   });
 

@@ -50,6 +50,9 @@
 --                               ceiling columns, or its type has drifted
 --   [APPLICATION_COLUMN_CONTRACT] applications is missing a column the accept
 --                               path writes
+--   [APPLICATION_SUBMITTED_AT_TYPE] applications.submitted_at is neither date
+--                               nor timestamp with time zone — the only two
+--                               shapes the accept path's v_now write supports
 --   [APPLICATION_STATUS_VOCAB]  the applications status CHECK does not admit
 --                               'submitted'
 --   [APPLICATION_SOURCE_VOCAB]  the applications source CHECK does not admit
@@ -57,13 +60,46 @@
 --   [APPLICATION_ROLE_VOCAB]    role_applied is an enum with no 'mentor' label
 --
 -- REPORTED BUT NOT REFUSED, because it is an operational fact rather than a
--- defect: how many admins can currently pass vam063_authorized_for_scope for
--- the Season 12 scope. On today's Production, admin_scope_access stores CODES
--- where that function compares UUIDs, so the only route through it is an
--- active super_admin. That is the accepted state recorded by the S12 release
--- (Decision A) and by WP1-A2, which is authored but not executed. It means
--- create, revoke and confirm are super_admin-only until WP1-A2 lands. BLOCK 2
--- emits the count so the owner can see it rather than discover it.
+-- defect: WHO can currently pass vam063_authorized_for_scope for the Season 12
+-- scope.
+--
+-- The project release record says WP1-A2 — the canonical staff scope
+-- convergence that rewrites admin_scope_access.program_id / season_id from
+-- names and codes to UUIDs — was applied to Production, verified PASS and
+-- CLOSED. This file asserts nothing about that either way. A release record is
+-- a statement about the past; the authorization state that matters here is the
+-- one this database is in NOW, and the only honest way to know it is to read
+-- it. BLOCK 2 therefore MEASURES the current authorization state instead of
+-- narrating it, and the owner confirms it empirically before apply.
+--
+-- What BLOCK 2 reports, and how to read it:
+--
+--   active_super_admins            active admin_users with role super_admin.
+--   admins_scoped_for_s12          active admins who pass the SAME predicate
+--                                  vam063_authorized_for_scope evaluates, for
+--                                  the UEHM-S12 program/season pair.
+--   scope_rows_uuid_program        active admin_scope_access rows whose
+--                                  program_id is UUID-shaped.
+--   scope_rows_nonuuid_program     active rows whose program_id is NULL or is
+--                                  not UUID-shaped.
+--   uehm_s12_season_rows           seasons rows with code UEHM-S12.
+--
+-- On a Production where WP1-A2 is genuinely in place, expect:
+--
+--   admins_scoped_for_s12 > active_super_admins   scoped Admins now pass on
+--                                                 their own grants, not only
+--                                                 super_admins by role
+--   scope_rows_nonuuid_program = 0                no active grant still holds
+--                                                 a name or a code
+--   uehm_s12_season_rows = 1                      the S12 scope resolves once
+--
+-- These are EVIDENCE OUTPUTS, not assertions and not repository facts. None of
+-- them gates the apply: the renewal runtime is correct whoever can reach it,
+-- and a narrow authorization surface is a reason not to announce the feature
+-- rather than a reason to refuse the install. A reading that contradicts the
+-- expectation above means the release record and the database disagree, and
+-- that has to be resolved before renewal invites are generated — not by
+-- editing this file.
 --
 -- SUPABASE SQL EDITOR COMPATIBILITY
 -- ZERO psql meta-commands. The block markers are ordinary `select … as phase`
@@ -87,14 +123,21 @@ declare
     'applications', 'admin_audit_log', 'mentor_profiles',
     'person_season_memberships', 'person_season_membership_log'
   ];
+  -- vam063_reactivate_membership is here because P0-RT-10 — restoring an
+  -- opted_out membership when a mentor declines, is legitimately re-invited and
+  -- then accepts — is specified as needing NO new SQL. That is only true while
+  -- this exact function exists and service_role can execute it, so both are
+  -- proved here rather than assumed.
   v_lifecycle constant text[] := array[
     'public.vam063_trusted_api_role()',
     'public.vam063_authorized_for_scope(uuid,uuid,uuid)',
     'public.vam063_add_membership_role(uuid,uuid,uuid,uuid,text,text)',
+    'public.vam063_reactivate_membership(uuid,uuid,text)',
     'public.vam063_opt_out_membership(uuid,uuid,text)'
   ];
   v_called constant text[] := array[
     'public.vam063_add_membership_role(uuid,uuid,uuid,uuid,text,text)',
+    'public.vam063_reactivate_membership(uuid,uuid,text)',
     'public.vam063_opt_out_membership(uuid,uuid,text)'
   ];
   v_actions constant text[] := array[
@@ -177,6 +220,7 @@ begin
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and p.proname = any (array['vam063_add_membership_role', 'vam063_opt_out_membership',
+                               'vam063_reactivate_membership',
                                'vam063_authorized_for_scope']::text[])
     and (not p.prosecdef or p.proconfig is null
          or not (array_to_string(p.proconfig, ',') like '%search_path=public%'));
@@ -316,6 +360,26 @@ begin
     raise exception 'M071 PREFLIGHT REFUSED [APPLICATION_COLUMN_CONTRACT]: applications does not carry: %.', v_txt;
   end if;
 
+  -- The one column whose TYPE, not merely its presence, decides what the
+  -- accept path records. This repository's own artifacts disagree: migration
+  -- 038 documents applications.submitted_at as a legacy DATE column and the
+  -- bootstrap in 059 declares `submitted_at date`, while the S12 release
+  -- baseline reproduction declares `submitted_at timestamptz not null default
+  -- now()`. Both are supported and are the ONLY supported shapes. The accept
+  -- path writes v_now, the transaction timestamp: into timestamptz that keeps
+  -- the actual submission instant, and into date PostgreSQL applies the
+  -- ordinary assignment cast and stores the calendar day. Anything else is
+  -- refused here and again in apply.sql Section 1, byte-identically.
+  select format_type(a.atttypid, a.atttypmod) into v_txt
+  from pg_attribute a
+  where a.attrelid = to_regclass('public.applications')
+    and a.attname = 'submitted_at' and a.attnum > 0 and not a.attisdropped;
+  if v_txt is null
+     or v_txt <> all (array['date', 'timestamp with time zone']::text[]) then
+    raise exception 'M071 PREFLIGHT REFUSED [APPLICATION_SUBMITTED_AT_TYPE]: applications.submitted_at is %, and the accept path supports only date or timestamp with time zone.',
+      coalesce(v_txt, '<absent>');
+  end if;
+
   select string_agg(c.conname::text, ', ' order by c.conname::text) into v_txt
   from pg_constraint c
   where c.conrelid = to_regclass('public.applications') and c.contype = 'c'
@@ -347,7 +411,7 @@ begin
     raise exception 'M071 PREFLIGHT REFUSED [APPLICATION_ROLE_VOCAB]: applications.role_applied is an enum with no ''mentor'' label.';
   end if;
 
-  raise notice 'M071 PREFLIGHT PASSED. M070 is applied with its three arbiters and six CHECKs intact, the S12 release T3/T4 lifecycle surface exists and is executable by service_role, admin_audit_log satisfies the M071 audit INSERT contract, no table these functions write has FORCE RLS, no vam071_* object exists, and every column the accept and confirm paths write is present with the expected type. Record BLOCK 2 in full, then run apply.sql.';
+  raise notice 'M071 PREFLIGHT PASSED. M070 is applied with its three arbiters and six CHECKs intact, the S12 release T3/T4 lifecycle surface — including vam063_reactivate_membership, which P0-RT-10 depends on — exists and is executable by service_role, admin_audit_log satisfies the M071 audit INSERT contract, no table these functions write has FORCE RLS, no vam071_* object exists, and every column the accept and confirm paths write is present with the expected type, applications.submitted_at included. Record BLOCK 2 in full and read its authorization evidence, then run apply.sql.';
 end
 $m071_preflight$;
 
@@ -356,15 +420,23 @@ rollback;
 -- =============================================================================
 -- BLOCK 2 — evidence. Run as a SEPARATE editor run.
 --
--- Emits one row. The sixth field is AUDITCONTRACT13 only when all thirteen
--- admin_audit_log columns satisfy the M071 audit INSERT contract, and the
--- seventh reports how many ACTIVE admins can currently pass
--- vam063_authorized_for_scope for a UEHM-S12 scope. That last number is
--- REPORTED, NOT GATED: on today's Production it is expected to equal the
--- number of active super_admins, because admin_scope_access stores codes where
--- the function compares UUIDs. A zero there would mean nobody can create,
--- revoke or confirm a renewal, which is not a reason to refuse the apply but
--- is very much a reason not to announce the feature.
+-- Emits one row. Everything here is REPORTED, NOT GATED. Nothing in this block
+-- can refuse the apply, and nothing in it asserts a repository fact: each field
+-- is a measurement of this database taken at the moment it runs.
+--
+-- Read the authorization group together, against the expectation stated in the
+-- file header. A Production where WP1-A2 is in place shows
+-- admins_scoped_for_s12 strictly greater than active_super_admins,
+-- scope_rows_nonuuid_program = 0 and uehm_s12_season_rows = 1. A reading that
+-- contradicts that means the release record and this database disagree, and
+-- that is resolved before renewal invites are generated — never by editing this
+-- file. A ZERO in admins_scoped_for_s12 would mean nobody can create, revoke or
+-- confirm a renewal at all: still not a reason to refuse the apply, but very
+-- much a reason not to announce the feature.
+--
+-- audit_contract is AUDITCONTRACT13 only when admin_audit_log carries exactly
+-- the thirteen columns the M071 audit INSERT contract enumerates; BLOCK 1
+-- section 6 is what actually proves the contract holds, and it refuses.
 -- =============================================================================
 
 select 'M071 PREFLIGHT — READ ONLY — BLOCK 2: evidence' as phase;
@@ -424,6 +496,47 @@ scoped as (
     )
   )
 ),
+supers as (
+  -- The comparison baseline for `scoped`. vam063_authorized_for_scope admits an
+  -- active super_admin by ROLE, with no admin_scope_access row involved at all,
+  -- so this is exactly the count `scoped` would collapse to if every scoped
+  -- grant still failed to match.
+  select coalesce(count(*), 0)::text as n
+  from public.admin_users a
+  where a.status = 'active' and a.role = 'super_admin'
+),
+scope_shape as (
+  -- What ACTIVE admin_scope_access rows actually hold in program_id. The RPC
+  -- compares that column against a UUID rendered as text, so a name or a code
+  -- there matches nothing. Counted, not judged: both numbers are printed and
+  -- the header says how to read them.
+  select
+    coalesce(count(*) filter (
+      where s.program_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    ), 0)::text as uuid_shaped,
+    coalesce(count(*) filter (
+      where s.program_id is null
+         or s.program_id !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    ), 0)::text as non_uuid_shaped
+  from public.admin_scope_access s
+  where s.status = 'active'
+),
+s12_season as (
+  -- The S12 scope must resolve exactly once, or `scoped` above is answering a
+  -- different question than the one it appears to answer.
+  select coalesce(count(*), 0)::text as n
+  from public.seasons se where se.code = 'UEHM-S12'
+),
+submitted_at_type as (
+  -- Evidence for the type contract BLOCK 1 refuses on, so the owner records
+  -- WHICH of the two supported shapes this database actually carries.
+  select coalesce((
+    select format_type(a.atttypid, a.atttypmod)
+    from pg_attribute a
+    where a.attrelid = to_regclass('public.applications')
+      and a.attname = 'submitted_at' and a.attnum > 0 and not a.attisdropped
+  ), '<absent>') as t
+),
 m071 as (
   select count(*)::text as n
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
@@ -437,7 +550,15 @@ select
   'm070_vocab=' || (select n from vocab) || '/3'             as audit_vocabulary,
   case when (select n from auditcols) = '13'
        then 'AUDITCONTRACT13' else 'AUDITCOLS=' || (select n from auditcols) end as audit_contract,
+  'active_super_admins=' || (select n from supers)           as active_super_admins,
   'admins_scoped_for_s12=' || (select n from scoped)         as authorized_admins,
+  'scope_rows_uuid_program=' || (select uuid_shaped from scope_shape)
+                                                             as scope_rows_uuid_program,
+  'scope_rows_nonuuid_program=' || (select non_uuid_shaped from scope_shape)
+                                                             as scope_rows_nonuuid_program,
+  'uehm_s12_season_rows=' || (select n from s12_season)      as uehm_s12_season_rows,
+  'applications.submitted_at=' || (select t from submitted_at_type)
+                                                             as submitted_at_type,
   'vam071_objects=' || (select n from m071)                  as unapplied_proof,
   current_setting('server_version')                          as server_version,
   now()                                                      as observed_at;

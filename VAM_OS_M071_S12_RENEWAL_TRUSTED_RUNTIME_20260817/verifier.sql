@@ -33,6 +33,15 @@
 -- statement. The check table is the LAST row-returning statement, so it is what
 -- the editor displays. Read every row.
 --
+-- WHAT IS VERIFIED BEYOND THIS PACKAGE'S OWN OBJECTS
+-- Two checks read state this package does not own, because two of its
+-- guarantees rest on that state and would fail silently if it drifted:
+--   V27  applications.submitted_at is still date or timestamp with time zone,
+--        the only two shapes the accept path's v_now write supports.
+--   V28  vam063_reactivate_membership still exists, is still a hardened
+--        definer and is still executable by service_role, which is what makes
+--        P0-RT-10's membership restoration implementable with no new SQL.
+--
 -- POSTGRESQL 15 TYPE STABILITY
 -- Every branch of every CASE returns text, every catalog "char" value is cast
 -- ::text before it is concatenated, and every diagnostic is wrapped in
@@ -514,6 +523,58 @@ results(check_id, check_name, status, detail) as (
     (select count(*)::text from public.person_season_invites) || ' invite row(s); '
       || (select count(*)::text from public.person_season_invites where outcome = 'accepted') || ' accepted; '
       || (select count(*)::text from public.person_season_invites where outcome = 'declined') || ' declined'
+
+  -- V27 ─ the applications.submitted_at TYPE contract, re-proved after apply.
+  -- The accept path writes v_now — the transaction timestamp — into this
+  -- column, and what that MEANS depends on the column's type. Two shapes are
+  -- supported and only two: `date`, the legacy Production column migration 038
+  -- documents and the 059 bootstrap declares, and `timestamp with time zone`,
+  -- which the S12 release baseline reproduction declares. On timestamptz the
+  -- real submission instant survives; on date PostgreSQL applies the ordinary
+  -- assignment cast and stores the calendar day. A third shape means the
+  -- column drifted after apply and every renewal submitted since then recorded
+  -- something nobody specified, so this FAILS rather than reporting.
+  union all
+  select 'V27', 'applications_submitted_at_type_contract',
+    case when coalesce((
+           select format_type(a.atttypid, a.atttypmod) from pg_attribute a
+           where a.attrelid = to_regclass('public.applications')
+             and a.attname = 'submitted_at' and a.attnum > 0 and not a.attisdropped
+         ), '<absent>') = any (array['date', 'timestamp with time zone']::text[])
+    then 'PASS' else 'FAIL' end,
+    'applications.submitted_at=' || coalesce((
+      select format_type(a.atttypid, a.atttypmod) from pg_attribute a
+      where a.attrelid = to_regclass('public.applications')
+        and a.attname = 'submitted_at' and a.attnum > 0 and not a.attisdropped
+    ), '<absent>') || '; supported=date|timestamp with time zone'
+
+  -- V28 ─ the lifecycle surface P0-RT-10 depends on. The confirm orchestration
+  -- restores an opted_out membership through vam063_reactivate_membership
+  -- rather than inventing a status or a second membership row, which is only
+  -- possible while that function exists, is a hardened definer, and is
+  -- executable by service_role. Verified here so P0-RT-10's "no new SQL" claim
+  -- is a checked property of this database rather than a note in a README.
+  union all
+  -- The function is located by OID rather than by name, and every property is
+  -- read from the SAME pg_proc row, so has_function_privilege is never handed a
+  -- function that does not exist: an absent function yields no row, the exists
+  -- is false, and the detail reads <absent>. PostgreSQL does not promise to
+  -- short-circuit AND, so a guard written as a conjunct would not have been one.
+  select 'V28', 'p0_rt_10_lifecycle_surface_available',
+    case when exists (
+      select 1 from pg_proc p
+      where p.oid = to_regprocedure('public.vam063_reactivate_membership(uuid,uuid,text)')::oid
+        and p.prosecdef
+        and coalesce(array_to_string(p.proconfig, ','), '') like '%search_path=public%'
+        and has_function_privilege('service_role', p.oid, 'execute')
+    ) then 'PASS' else 'FAIL' end,
+    coalesce((
+      select 'definer=' || p.prosecdef::text
+          || ' path=[' || coalesce(array_to_string(p.proconfig, ','), '') || ']'
+          || ' service_role_execute=' || has_function_privilege('service_role', p.oid, 'execute')::text
+      from pg_proc p
+      where p.oid = to_regprocedure('public.vam063_reactivate_membership(uuid,uuid,text)')::oid
+    ), '<absent>')
 )
 select check_id, check_name, status, detail from results
 union all

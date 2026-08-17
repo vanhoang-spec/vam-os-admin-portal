@@ -8,6 +8,7 @@
 | Workspace | `C:\vam-renewal-runtime-p0` |
 | Branch | `feat/s12-renewal-runtime-p0` |
 | Base | `b9171a174a650240d94b8e4aba1dead616ffa0c9` |
+| Revision | Remediated 17 Aug 2026 after independent security review — H-1 (§7.3), M-2 (L1), M-1 (P0-RT-10), M-3 (P0-RT-11). The review's verdict was `M071_STATIC_SECURITY = PASS` with remediation required; no gate was weakened by any change below |
 | Target | Production `vam-os-mvp` / `qkkroesfiazsejkzflcd`, after the S12 release T1–T4 and after M070 |
 | Migration number | **071** — proven unclaimed, see §9 |
 
@@ -107,7 +108,15 @@ No audit row records the digest either. The invite table already holds it; an au
 | **P0-RT-5** | Two independent mechanisms | (a) the `raw_payload` nesting makes `buildMentorProfileRefresh` emit nothing over a renewal application — §5; (b) `first_vam_season` and `prior_vam_involvement` are refused **by name** in the confirm RPC, so widening the column ceiling later cannot open them. `buildMentorProfileRefresh` is unmodified. |
 | **P0-RT-6** | `vam071_confirm_renewal_profile` | No canonical column is writable except through this function, and it writes only fields whose before-value the caller carried and whose after-value it confirmed. The `confirm_renewal` audit row carries the diff the admin was shown **and** the fields actually applied. |
 | **P0-RT-7** | `vam071_confirm_renewal_profile` + orchestration | The RPC resolves the actor from `admin_users` and applies `vam063_authorized_for_scope` to **that** admin; a test asserts the confirm body never references `v_inv.created_by`. The orchestrator passes the same current admin to `vam063_add_membership_role`. |
-| **P0-RT-8** | Orchestration, §7 | `vam063_add_membership_role` → `approveApplication` → done, in that order, membership logic never inside `approveApplication`, retry always safe. One refinement, stated openly: `vam071_confirm_renewal_profile` (which P0-RT-8 does not name) runs **first**, so a drift refusal costs nothing. See §7.2. |
+| **P0-RT-8** | Orchestration, §7 | membership lifecycle → `approveApplication` → done, in that order, membership logic never inside `approveApplication`, retry always safe. One refinement, **ruled on and accepted by the independent review**: `vam071_confirm_renewal_profile` (which P0-RT-8 does not name) runs **first**, so a drift refusal costs nothing and the confirm audit is atomic with the mutation it attests. See §7.2. |
+
+Three further requirement ids are **normative on the runtime/UI package and closed by nothing in this one**. They are stated in full in §8.1, and the tests pin their specifications so the wording cannot quietly soften:
+
+| | Owner | What it requires |
+|---|---|---|
+| **P0-RT-9** | runtime | `p_expected_profile` carries every candidate field, not only the changed ones (§6.2) |
+| **P0-RT-10** | runtime | the full membership status→action mapping at step 6, restoring `opted_out` through `vam063_reactivate_membership` and failing closed on every state that has no legitimate existing transition |
+| **P0-RT-11** | runtime | a **server-side** refusal in `approveApplication` for any renewal-source or invite-bound application with no `confirm_renewal` audit evidence |
 
 ---
 
@@ -198,9 +207,12 @@ That is the safe direction (nothing unshown is written), but it is silent, so it
    diff      = buildRenewalProfileDiff(freshProfile, candidate)
 4. the admin is shown the field-level diff and confirms THAT diff
 5. vam071_confirm_renewal_profile(actor, applicationId, expected, update, diff)
-6. vam063_add_membership_role(actor = the CURRENT confirming admin, …)          Case A → noop, Case B → created
-7. approveApplication(…)                                                        unchanged; writes no profile column
+6. the membership lifecycle action selected by P0-RT-10 (§8.1)                  exactly one, chosen by current status
+7. approveApplication(…)                                                        unchanged; writes no profile column,
+                                                                                and refuses without step 5's evidence (P0-RT-11)
 ```
+
+Step 6 was `vam063_add_membership_role` alone in the first cut of this package. That is correct only for the two cases it was written for — no membership, or an already-active one — and **wrong for the reachable case where the mentor previously declined**, because `vam063_add_membership_role` finds the existing row and returns `noop` while the membership stays `opted_out`. P0-RT-10 replaces it with the full status→action mapping and is normative on the runtime package.
 
 ### 7.2 One refinement of P0-RT-8's ordering, stated openly
 
@@ -211,15 +223,27 @@ Two reasons, both concrete:
 - **The audit becomes atomic with the mutation it attests.** Written after step 7, a crash between the profile write and the audit INSERT leaves a canonical column changed with no record of who authorised it or what they were shown. Inside step 5, an unaudited canonical renewal write is not representable — the audit INSERT failing rolls the UPDATE back with it. P0-RT-6 asks for durable evidence of the confirmation; this is the strongest available form of it.
 - **A drift refusal costs nothing.** Drift is the only condition that can refuse at this stage, and it is a legitimate, expected outcome (a colleague edited the profile). Running the profile confirmation first means a drift refusal happens before a membership row is created, rather than after.
 
-Both remaining failure modes stay retry-safe. If step 5 commits and step 6 or 7 fails, retry: step 5 returns `noop` (§6.1), step 6 returns `noop` (its advisory lock plus the live `UNIQUE(person_id, season_id, role)`), step 7 is attempted again. There is no compensating delete and no membership row is ever removed to undo a failed approval.
+Both remaining failure modes stay retry-safe. If step 5 commits and step 6 or 7 fails, retry: step 5 returns `noop` (§6.1), step 6 is idempotent in every branch P0-RT-10 allows (`add_membership_role` returns `noop` behind its advisory lock plus the live `UNIQUE(person_id, season_id, role)`; `reactivate_membership` returns `noop` once the membership is already `active`), step 7 is attempted again. There is no compensating delete and no membership row is ever removed to undo a failed approval.
 
-**This is a deviation from the literal text of P0-RT-8 and is flagged for the independent reviewer to rule on** — §10, INFO-1. If the reviewer prefers the literal ordering, moving step 5 to sit between steps 6 and 7 requires no change to any function.
+**The independent review accepted this ordering.** `vam071_confirm_renewal_profile` → membership lifecycle operation → `approveApplication` is the normative runtime contract, and it is not reverted to match P0-RT-8's earlier prose. INFO-1 below records the deviation; it is now a ruled-on decision rather than an open question.
 
-### 7.3 Who can actually do this today
+### 7.3 Who can actually do this today, and how that is established
 
-`vam063_authorized_for_scope` matches `admin_scope_access.program_id` / `season_id` against **UUIDs**. Live Production stores **codes** in those columns, so on today's data that branch matches nothing and **the only route through is an active `super_admin`**. That is the accepted state recorded by the S12 release (Decision A) and the thing WP1-A2 converts — and WP1-A2 is authored, not executed.
+`vam063_authorized_for_scope` admits an active `super_admin` by role, or an active `admin_scope_access` row matching the **UUID** of the program and of the season. Whether a given admin passes it therefore depends entirely on what `admin_scope_access` currently holds.
 
-Consequence, and it is operational rather than a defect: **create, revoke and confirm are super_admin-only until WP1-A2 lands.** The preflight's BLOCK 2 emits the count of admins who would pass, so this is read rather than discovered. A zero there is not a reason to refuse the apply, but it is very much a reason not to announce the feature.
+**The project release record says WP1-A2 — the canonical staff scope convergence that rewrites those columns from names and codes to UUIDs — was applied to Production, verified PASS, and closed.** This package asserts nothing further about that. A release record is a statement about the past, and the authorization state that governs a renewal is the one the database is in at apply time.
+
+So the preflight **measures it** instead of narrating it. BLOCK 2 reports five fields — `active_super_admins`, `admins_scoped_for_s12`, `scope_rows_uuid_program`, `scope_rows_nonuuid_program`, `uehm_s12_season_rows` — and the owner reads them before apply. On a Production where WP1-A2 is in place, expect:
+
+| Evidence | Expected reading | What it means |
+|---|---|---|
+| `admins_scoped_for_s12` > `active_super_admins` | scoped Admins pass on their own grants | authorization is no longer role-only |
+| `scope_rows_nonuuid_program` = `0` | no active grant still holds a name or a code | the conversion covered the live set |
+| `uehm_s12_season_rows` = `1` | the S12 scope resolves exactly once | the count above is answering the right question |
+
+These are **evidence outputs, not repository facts and not gates.** Nothing in BLOCK 2 can refuse the apply: the renewal runtime is correct whoever can reach it, and a narrow authorization surface is a reason not to announce the feature rather than a reason to refuse the install. A reading that contradicts the table means the release record and the database disagree, which is resolved before renewal invites are generated — never by editing the preflight to match.
+
+A zero in `admins_scoped_for_s12` would mean nobody can create, revoke or confirm a renewal at all. Still not a refusal; still very much a reason not to announce the feature.
 
 ---
 
@@ -230,6 +254,68 @@ Out of scope for this package; binding on the next one. These are stated here be
 ### 8.1 Requirements
 
 - **P0-RT-9 (new).** `p_expected_profile` must carry an entry for **every field in the candidate**, not only the changed ones. Sending only the diff's fields leaves a silent gap — §6.2.
+
+#### P0-RT-10 (new, **blocking**) — membership restoration on an accepted renewal
+
+**The defect this closes is reachable, not theoretical.** A mentor declines; `vam071_submit_renewal_declined` opts the S12 membership out through `vam063_opt_out_membership`. An admin then legitimately revokes-and-reissues, or issues a fresh invite for a corrected address; the mentor accepts. Step 6 of §7.1, as first written, called `vam063_add_membership_role`, which finds the existing `(person, season, role)` row behind its advisory lock and returns `'noop'`. **The mentor is renewed, the application is approved, and the membership is still `opted_out`.**
+
+The fix invents nothing. No new lifecycle status, no second membership row, no new RPC: the existing `vam063` surface already carries every transition this needs, which is why this is a runtime requirement and not more SQL in this package. `apply.sql` Section 0 and `preflight.sql` prove `vam063_reactivate_membership(uuid,uuid,text)` exists, is a hardened definer and is executable by `service_role`; `verifier.sql` V28 re-proves it after apply.
+
+Step 6 resolves the membership for **exactly** `(person_id, season_id, role = 'mentor')` taken from the invite — never from the client — and then performs **exactly one** of:
+
+| Current membership | Required action | Result |
+|---|---|---|
+| none | `vam063_add_membership_role(actor, person_id, program_id, season_id, 'mentor', reason)` | `created` → proceed to step 7 |
+| `active` | `vam063_add_membership_role(…)` → `noop`, or no call at all | proceed to step 7 |
+| `opted_out` | `vam063_reactivate_membership(actor, membership_id, reason)` | `transitioned` → `active`, proceed to step 7 |
+| `paused` | **none — refuse** | stop before step 7 |
+| `invited` | **none — refuse** | stop before step 7 |
+| `withdrawn`, `cancelled` | **none — refuse** | stop before step 7 |
+| `completed`, `graduated`, anything else | **none — refuse** | stop before step 7 |
+
+`actor` is the **current confirming Admin** in every branch — the same admin `vam071_confirm_renewal_profile` already resolved and scope-checked in step 5, never the invite's `created_by`. Both `vam063` entry points re-check that admin's scope themselves.
+
+Three points about the refusals, because the mapping is deliberately narrower than what `vam063` would accept:
+
+- `vam063_reactivate_membership`'s allowed-from set is `paused, withdrawn, opted_out, cancelled`. It **would** accept `paused`, `withdrawn` and `cancelled`. The renewal orchestration must not use it for them. A pause is an operational hold and a withdrawal or cancellation is a deliberate administrative decision, each taken for a reason the renewal knows nothing about; silently reversing one because a mentor clicked YES is precisely the "forcing activation" this fails closed against. Reversing them stays what it already is — an explicit, reasoned admin action in the membership console.
+- `invited` has **no** legitimate transition to `active` anywhere in the `vam063` surface (`reactivate`'s allowed-from does not include it). There is therefore no existing lifecycle action to take, and P0 does not add one.
+- **Refusal is fail-closed, not a rollback.** Step 5 has already committed; it is not undone, and nothing compensating is written. The orchestration stops before `approveApplication`, the application stays `submitted`, and the admin is shown the membership's actual status and told to resolve it through the membership console. The whole confirmation is then simply re-run: step 5 returns `noop` (§6.1), step 6 now takes the `active` branch, step 7 proceeds. Every branch above is idempotent, so retry is always safe.
+
+#### P0-RT-11 (new, **blocking**) — the renewal direct-approval guard
+
+**A renewal application is an ordinary `applications` row** — `source = 's12_mentor_renewal'`, `status = 'submitted'` — which means the pre-existing admin approval path can approve it directly, without `vam071_confirm_renewal_profile` ever running. That is unacceptable for live P0 on three counts: the admin's field-level diff is bypassed, no `confirm_renewal` audit row is written for a canonical renewal, and the mentor's profile stays stale while the application reads `approved_as_mentor`.
+
+**This must be a server-side refusal, not a UI hiding rule.** Hiding the legacy approve button leaves the server action, the old route and any future caller open. The guard belongs in `approveApplication` in `lib/application-approvals.ts` — the single function every approval path already funnels through — and it must fire **before any write**, above the person resolution.
+
+*Trigger.* The guard applies when **either** holds, evaluated as a union rather than a single key:
+
+1. `applications.source = 's12_mentor_renewal'`; **or**
+2. a `public.person_season_invites` row has `application_id = applications.id`.
+
+`source` alone would be a guard on a column that a future admin edit surface could make writable; the invite binding alone would miss a renewal row whose invite was somehow unbound. Either one triggering is the safe direction.
+
+*Evidence.* The smallest durable proof of confirmation that the current schema already makes unambiguous is the `confirm_renewal` audit row `vam071_confirm_renewal_profile` writes in the same transaction as the profile mutation (§6, step 8):
+
+```sql
+select 1
+  from public.admin_audit_log
+ where action_type = 'confirm_renewal'
+   and details ->> 'application_id' = <the application id being approved>
+ limit 1;
+```
+
+Four properties make that exact rather than approximate:
+
+- **One writer.** `vam071_confirm_renewal_profile` is the only thing in the database that writes `action_type = 'confirm_renewal'`, and verifier V01/V02 pin the `vam071_*` surface to exactly seven functions with exactly those signatures.
+- **Always written.** The audit INSERT in step 8 is unconditional — it runs even when the fresh write set is empty and the function returns `noop`. A confirmation that legitimately applied no field still leaves evidence, so a correct renewal is never blocked by its own emptiness.
+- **Transitively carries the rest.** The row cannot exist unless the confirm RPC had already proved the application is bound to exactly one **accepted** invite, that the person/season/source binding matches exactly, and that the acting admin was scope-authorized for that program-season.
+- **Monotonic.** No path deletes `admin_audit_log` rows, so the evidence only ever appears. A stale read can only be a false negative, which refuses — the safe direction — so there is no exploitable window between the check and the approval.
+
+*Query semantics.* Run it through the **service-role** client in the same request that performs the approval; `admin_audit_log` is not reachable by `anon` or `authenticated`, and a client-side check would be worthless anyway. No caching, no memoisation across requests.
+
+*Refusal.* Zero rows → return the ordinary failure result and **write nothing**: no person, no profile, no status change. A query **error** must also refuse — fail closed, never approve because the evidence lookup broke.
+
+**This is a blocker before real renewal invites are generated.** Until it exists, every issued renewal link is one direct approval away from a stale canonical profile with no audit trail.
 - **The candidate reads `raw_payload.renewal`**, not `raw_payload`. `buildRenewalProfileRefresh(application.raw_payload.renewal)`. Reading the top level would produce an empty candidate and an empty diff, and the renewal would confirm nothing while appearing to succeed.
 - **Every RPC failure renders `RENEWAL_GATE_FAILURE_MESSAGE`.** The submit RPCs already return one uniform message and one SQLSTATE, but the runtime must not widen that by surfacing PostgREST's `code`, `hint` or `details` on the `/renew` route.
 - **`membership_outcome` from the decline RPC must be surfaced.** `deferred_actor_unauthorized` means the decline is recorded and the S12 membership is still active. The admin console needs a list of declined renewals whose membership was not opted out, or that state is invisible.
@@ -258,6 +344,10 @@ Production READ-ONLY preflight.sql        ← the next execution gate
 verifier.sql — every check PASS and M071_VERIFIED = PASS
         ↓
 (only then)  Codex begins the runtime/UI package
+        ↓
+P0-RT-9, P0-RT-10 and P0-RT-11 all closed
+        ↓
+(only then)  the first real renewal invite is generated
 ```
 
 Run each file as its own Supabase SQL Editor run. `preflight.sql` is two separate runs (BLOCK 1, then BLOCK 2) — the editor surfaces only the last row-returning statement, and `set transaction read only` must be the first thing in its transaction.
@@ -293,11 +383,15 @@ A fifth defect class, specific to this package, is avoided the same way: `vam071
 
 **M1 — A self-service decline has no admin actor, but `vam063_opt_out_membership` requires one.** Resolved by attributing to the invite's `created_by` — the only admin who has actually made a decision about this specific renewal — with the mentor-initiated origin stated in the membership log reason. If that admin is no longer active or scope-authorized, the opt-out is **deferred**, not forced: the decline is recorded, the membership is left untouched, and `membership_outcome = 'deferred_actor_unauthorized'` is returned. Leaving a membership active is the safe direction; refusing the whole decline would leave the invite live and tell the mentor their link is broken. **The UI must surface this** (§8.1) or the state is invisible.
 
-**M2 — Create, revoke and confirm are `super_admin`-only on today's Production data.** Not a defect in this package; a consequence of `admin_scope_access` storing codes where `vam063_authorized_for_scope` compares UUIDs. Reported by the preflight rather than assumed (§7.3). WP1-A2 is the fix and it is authored, not executed.
+**M2 — Who can create, revoke and confirm is a measured fact, not a narrated one.** `vam063_authorized_for_scope` admits an active `super_admin` by role or a UUID-matching active `admin_scope_access` grant. The project release record says WP1-A2 converted those grants and is closed; this package asserts nothing beyond that and instead **measures the live authorization state** in preflight BLOCK 2, with the expected reading stated in §7.3. Reported, never gated. *(Remediation of independent-review finding H-1: the earlier text asserted as current fact that Production still stored codes, that create/revoke/confirm were necessarily `super_admin`-only, and that WP1-A2 was unexecuted. All three are removed; none is replaced by an unsupported live claim.)*
+
+**M3 — A renewal application can be approved without ever being confirmed.** `source = 's12_mentor_renewal'`, `status = 'submitted'` is an ordinary approvable row, so the pre-existing approval path bypasses the admin diff, writes no `confirm_renewal` audit row, and leaves the profile stale under an approved application. Closed by **P0-RT-11** (§8.1) as a normative **server-side** guard in `approveApplication`, keyed on the invite binding or the renewal source and gated on the exact `confirm_renewal` audit evidence. Not implemented in this SQL-only package — the guard belongs in a code path this package does not own and does not modify — and **blocking before any real renewal invite is generated**. *(Independent-review finding M-3.)*
+
+**M4 — `vam063_add_membership_role` alone cannot restore a declined-then-reinvited mentor.** Decline → `opted_out` → legitimate re-invite → accept → `add_membership_role` sees the existing row and returns `noop`, leaving the membership `opted_out` while the application is approved. Closed by **P0-RT-10** (§8.1): the full status→action mapping over the existing `vam063` surface, restoring `opted_out` through `vam063_reactivate_membership` and failing closed on `paused`, `invited` and every terminal status rather than forcing activation. No new lifecycle status, no duplicate membership, and no new SQL — this package adds only the prerequisite and verifier checks that keep the required `vam063` function present and executable. *(Independent-review finding M-1.)*
 
 ### LOW
 
-**L1 — `applications.submitted_at` has two live shapes across the repository** (`date` in the staging bootstrap, `timestamptz not null default now()` in the Production baseline reproduction). The accept RPC writes `current_date`, which is a valid assignment cast into either. The preflight pins the column's presence but deliberately not its type, because both are writable.
+**L1 — `applications.submitted_at` had two live shapes across the repository and the accept path wrote `current_date`.** Migration 038 documents it as a legacy `date` column and the 059 bootstrap declares `submitted_at date`; the S12 release baseline reproduction declares `timestamptz not null default now()`. `current_date` is assignable into either, but on a `timestamptz` column it silently discards the time of day of a submission the invite row records to the microsecond. **Remediated:** both shapes are now the *only* supported ones and are gated explicitly — preflight `[APPLICATION_SUBMITTED_AT_TYPE]`, `apply.sql` Section 1 byte-identically, verifier V27 — and the accept path writes `v_now`, the same transaction timestamp that claims the invite two statements later, so the two records of one submission agree by construction. On a `date` column PostgreSQL applies the ordinary assignment cast and stores exactly what `current_date` stored; on `timestamptz` the real instant now survives. No dynamic SQL was needed or used. The date rendering of a `timestamptz` depends on the session `TimeZone`, as it already did for `current_date`, which is why every runbook step sets UTC. *(Independent-review finding M-2.)*
 
 **L2 — The 60-day maximum invite lifetime is a ceiling this package chose,** not a policy the brief specified. It refuses only unbounded expiries; the caller still chooses. Changing it is a one-line change to `vam071_create_renewal_invite` and a re-verify.
 
@@ -305,7 +399,7 @@ A fifth defect class, specific to this package, is avoided the same way: `vam071
 
 ### INFO
 
-**INFO-1 — The `confirm_renewal` audit row is written inside the profile-write transaction rather than after `approveApplication`,** a refinement of P0-RT-8's literal ordering. Reasoned in §7.2, flagged here for the reviewer to rule on. Reverting to the literal order requires no change to any function.
+**INFO-1 — The `confirm_renewal` audit row is written inside the profile-write transaction rather than after `approveApplication`,** a refinement of P0-RT-8's literal ordering. Reasoned in §7.2. **The independent review ruled on this and accepted it**: `vam071_confirm_renewal_profile` → membership lifecycle operation → `approveApplication` is the normative runtime contract and is not reverted to match the earlier prose. This entry is now a record of a closed decision, not an open question — and P0-RT-11 depends on it, since the audit row it uses as evidence is exactly the one this ordering makes atomic with the mutation.
 
 **INFO-2 — The verifier pins body properties by anchored regex and emits body seals as *evidence*, not as assertions against a literal.** No database was contacted while authoring this package, so a hard-coded expected hash would be a guess whose first FAIL would be indistinguishable from a real defect. The verifier's own header says so rather than implying more proof than it has.
 
@@ -317,6 +411,13 @@ A fifth defect class, specific to this package, is avoided the same way: `vam071
 | **D2** | `mentor_profiles.person_id` has no unique constraint. Adding one is the right fix for H2 but is a schema change to a table this package does not own, and it would fail on any pre-existing duplicate. Belongs in its own ticket with its own data audit. |
 | **D3** | `public.set_updated_at()` has no pinned `search_path`. Unchanged from M070's D5: pre-existing shared infrastructure with 17 Production triggers, and a blast radius far wider than this package. |
 | **D4** | `rollback.sql` carries no `[ENV_NOT_PRODUCTION]` guard, matching M070's D7 and for the same reason: a rollback that refuses to run on the environment it is needed on is worse than one that runs. Its protection is state-based — `DROP … IF EXISTS` over an exact seven-name inventory. |
+| **D5** | **Blank-integer guard NULL semantics.** The confirm RPC's integer-field guard is `nullif(btrim(coalesce(…, '')), '') !~ '^[0-9]+$'`, which refuses a blank or absent value rather than treating it as "clear this field". Deliberately not changed under a narrow remediation: it fails closed, and deciding whether a renewal may *blank* an integer column is a product question, not a defect fix. |
+| **D6** | **Normalisation/audit divergence.** The drift comparison and the write-set recomputation both normalise (trim, empty-as-absent), while `before_data` in the `confirm_renewal` audit row carries the raw `jsonb` value from the locked profile and `after_data` carries the normalised text. The audit is therefore truthful about both sides but not symmetric in rendering. Recorded, not changed. |
+| **D7** | **BLOCK 2 `AUDITCOLS` presentation.** The field reads `AUDITCONTRACT13` or `AUDITCOLS=<n>`, which mixes a verdict token and a count in one column. BLOCK 1 section 6 is what actually proves the contract and refuses; this is a display nit. |
+| **D8** | **Uncast `array[]` style inconsistency.** Some array literals in these files carry an explicit `::text[]` and some do not, in positions where PostgreSQL resolves the type unambiguously. Every position that could be ambiguous is cast — the tests enforce that — so the remainder is stylistic. |
+| **D9** | **Isolation-level uniform-error nuance.** Under a non-default isolation level a serialization failure on the submit paths surfaces as a `40001` rather than as the uniform `42501` refusal, which is a distinguishable outcome for a probing bearer-token holder. The information it leaks is "there was contention", not which invite exists. |
+
+Each of D5–D9 is an independent-review LOW finding, deliberately **not** fixed in this remediation: none of them is touched by the H-1, M-1, M-2 or M-3 changes, and widening a narrow security remediation to sweep them in is how a reviewed diff stops being reviewable.
 
 ---
 
@@ -324,6 +425,8 @@ A fifth defect class, specific to this package, is avoided the same way: `vam071
 
 **Validated:** every property in `__tests__/m071-renewal-trusted-runtime.test.ts`, which includes the two executable cross-checks against the real TypeScript allowlists (§5.3), the byte-identity of `apply.sql` and the canonical migration, and the absence of every defect class M070's failures taught.
 
-**Not validated:** anything that requires a database. No SQL in this package has been executed anywhere. The column contracts, the audit INSERT contract, the `role_applied` type, the lifecycle surface and the `admin_scope_access` representation are all **asserted by the preflight against the live catalog** rather than assumed — which is why the preflight is the next execution gate and why it refuses rather than adapts. Its first-ever execution against any database will be that Production read-only run.
+**Not validated:** anything that requires a database. No SQL in this package has been executed anywhere. The column contracts — `applications.submitted_at`'s **type** now included — the audit INSERT contract, the `role_applied` type, the `vam063` lifecycle surface `P0-RT-10` depends on, and the live `admin_scope_access` representation are all **read from the live catalog by the preflight** rather than assumed. The first four are refusals; the fifth is evidence the owner reads (§7.3). That is why the preflight is the next execution gate and why it refuses rather than adapts, and its first-ever execution against any database will still be that Production read-only run.
+
+**Not closed by this package, and blocking:** P0-RT-10 and P0-RT-11 are specifications, not code. Until the runtime package implements both, a declined-then-reinvited mentor can end up renewed with an `opted_out` membership, and any renewal application can be approved through the legacy path with no confirmation and no audit.
 
 That is the honest state of this package, and the reason `SAFE_TO_BEGIN_CODEX_UI_IMPLEMENTATION` is **NO**.
