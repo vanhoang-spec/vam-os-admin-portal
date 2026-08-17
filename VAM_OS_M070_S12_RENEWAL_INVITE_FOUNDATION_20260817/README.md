@@ -17,6 +17,7 @@ residual risk sits.
 | Scope | **Security / DB foundation only.** No `/renew` page, no renewal form, no `/admin/renewals`, no email, no batch invitation |
 | Revision | R2 — post independent review (`M070_STATIC_SECURITY = PASS`, `REMEDIATION_REQUIRED = YES`). One SQL token changed ([§10.1](#101-why-the-drop-is-if-exists-independent-review-remediation)); the normative [§7](#7-p0-runtime-blockers--the-runtime-package-must-not-ship-without-these) and [§8](#8-environment-and-the-next-execution-gate) added. No redesign |
 | | R3 — Supabase SQL Editor compatibility. Three `\echo` meta-commands removed from `preflight.sql` and `verifier.sql`; the runbook rewritten for the SQL Editor. No security semantics changed — see [§9.0](#90-the-execution-path-is-the-supabase-sql-editor) |
+| | R4 — one `::text` cast added in `preflight.sql` BLOCK 2, where `text[] \|\| 'literal'` was ambiguous to the operator resolver. Evidence column only; no gate, no security semantics — see [§9.5](#95-r4-the-array-concatenation-defect-in-block-2) |
 | Next execution gate | **Production READ-ONLY preflight** — not a Staging apply. See [§8](#8-environment-and-the-next-execution-gate) |
 
 | File | Role | Writes? |
@@ -837,6 +838,53 @@ reviewed and applied first, and the `/renew` route, the renewal form, the admin
 confirmation screen and the invitation tooling are separate packages built on
 top of a verified base.
 
+### 9.5 R4 — the array-concatenation defect in BLOCK 2
+
+BLOCK 2's `audit_vocab_unexpected` column asked which admitted values fall
+outside *BASE52 plus `set_application_form_state`*, and expressed "plus" as
+
+```sql
+where x <> all (b52 || 'set_application_form_state')      -- R3 and earlier
+```
+
+`b52` is `text[]`; a bare `'literal'` is type `unknown`. PostgreSQL has both
+`anyarray || anyarray` and `anyarray || anyelement`, and an `unknown` right
+operand fits **either** — as `text[]` or as `text` — so the resolver has two
+equally good candidates and refuses to pick:
+
+```
+ERROR:  42725: operator is not unique: text[] || unknown
+HINT:   Could not choose a best candidate operator. You might need to add
+        explicit type casts.
+```
+
+The fix is one cast, which leaves exactly one candidate
+(`anyarray || anyelement`):
+
+```sql
+where x <> all (b52 || 'set_application_form_state'::text)   -- R4
+```
+
+**Why only this one site.** The identical predicate appears four more times, as
+`v_base52 || v_m069`, in BLOCK 1's guard and in `apply.sql` / the canonical
+migration — and none of them was affected. plpgsql passes its declared
+variables as **typed** parameters, so there the right operand is already known
+to be `text` and only one candidate ever existed. The exposure was specific to
+the pure-SQL copy, where the value is written as a literal. That asymmetry is
+exactly why the defect survived review, so
+`__tests__/m070-renewal-invite-foundation.test.ts` now carries a targeted gate:
+any `<array-identifier> || 'literal'` without an explicit cast fails the build,
+and the gate ships with its own negative control so it cannot rot into a
+predicate that matches nothing.
+
+**Blast radius: none beyond the message text.** `audit_vocab_unexpected` is an
+**evidence column in the read-only BLOCK 2**, not a gate. The refusal that
+actually protects the audit vocabulary is `[AUDIT_VOCAB_UNEXPECTED]` in BLOCK 1
+— plpgsql, unaffected, and unchanged by R4 — and it is re-asserted a third time
+inside `apply.sql` Section 0. Nothing about what the preflight *refuses* moved.
+`apply.sql`, `rollback.sql`, `verifier.sql` and the canonical migration are
+byte-unchanged by R4.
+
 ---
 
 ## 10. Rollback
@@ -956,6 +1004,22 @@ the strongest available statement that no security semantics moved. **R3
 executed no SQL and contacted no database.** The package as a whole has still
 never been run anywhere; the failed paste is the only time any of it has been
 sent to a server, and it did not get past the parser.
+
+**R4, and what it says about the limits of static review.** With the parse
+error gone, BLOCK 2 got far enough to be *planned*, and the planner rejected
+`text[] || 'literal'` as ambiguous (§9.5). This is the second defect in a row
+that no amount of reading found and one execution did — which is the argument
+for the staged gate, not against it: BLOCK 2 is read-only, wrapped in
+`SET TRANSACTION READ ONLY`, and its failure changed nothing. R4 changed
+`preflight.sql` (one `::text`), this README and the tests; `apply.sql`,
+`rollback.sql`, `verifier.sql` and the canonical migration are byte-unchanged
+by it. **R4 executed no SQL and contacted no database.**
+
+The honest reading of §11 has not changed, and if anything is sharper now: the
+first clean run of each file is part of the review. `verifier.sql` has still
+never been planned by a server, and its anchored regexes are still the reason a
+first FAIL there should be reconciled rather than assumed to be a defect in the
+database.
 
 ---
 

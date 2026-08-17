@@ -460,6 +460,62 @@ describe("owner-executable SQL is Supabase SQL Editor compatible", () => {
     }
   });
 
+  // -------------------------------------------------------------------------
+  // Array concatenation against a bare literal.
+  //
+  // `text[] || 'literal'` does not fail at parse time and does not look wrong.
+  // It fails when the statement is planned, with
+  //     ERROR: 42725: operator is not unique: text[] || unknown
+  // because a bare literal is type `unknown` and BOTH `anyarray || anyarray`
+  // (unknown -> text[]) and `anyarray || anyelement` (unknown -> text) are
+  // equally good readings, so PostgreSQL refuses to choose.
+  //
+  // The plpgsql copies of the same predicate are immune — plpgsql passes
+  // declared variables as typed parameters — which is exactly why the defect
+  // survived review in the pure-SQL copy. This is a targeted regression gate
+  // for that asymmetry, not a general type checker.
+  // -------------------------------------------------------------------------
+  it("every array concatenation with a literal carries an explicit cast", () => {
+    // Identifiers that hold an array in these files.
+    const ARRAY_IDENTS = [
+      "b52", "b", "vals", "v_base52", "v_actual", "v_m070", "v_new", "v_post",
+      "v_expected_vocab", "v_fk_targets", "v_audit_cols"
+    ];
+    const ident = ARRAY_IDENTS.map((i) => i.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    // <array-ident> || 'literal'   with no ::cast on the literal.
+    // Deliberately NOT a global regex: `.test()` on a /g regex carries
+    // `lastIndex` between calls, which would make this silently skip lines.
+    const uncast = new RegExp(`\\b(?:${ident})\\s*\\|\\|\\s*'[^']*'(?!\\s*::)`);
+
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const offenders = stripComments(sql)
+        .split(/\r?\n/)
+        .map((line, i) => [i + 1, line] as const)
+        .filter(([, line]) => uncast.test(line))
+        .map(([n, line]) => `L${n}: ${line.trim()}`);
+      expect(`${name}:${offenders.join(" | ")}`).toBe(`${name}:`);
+    }
+
+    // Negative control, in-test: the predicate must actually fire on the exact
+    // line that failed, and must not fire on the fixed one or on the plpgsql
+    // form. Without this, a gate that matches nothing passes forever.
+    expect(uncast.test("where x <> all (b52 || 'set_application_form_state')")).toBe(true);
+    expect(uncast.test("where x <> all (b52 || 'set_application_form_state'::text)")).toBe(false);
+    expect(uncast.test("where x <> all (v_base52 || v_m069)")).toBe(false);
+    expect(uncast.test("select 'M070:' || 'ABSENT'")).toBe(false);
+  });
+
+  it("the preflight's BASE53 predicate concatenates a text-cast literal", () => {
+    // The positive form of the check above: the fix is present, and it is the
+    // cast form rather than the predicate having been deleted.
+    expect(preflight).toContain("b52 || 'set_application_form_state'::text");
+    expect(preflight).toContain("operator is not unique: text[] || unknown");
+    // The plpgsql copies stay as they are — typed variables, no cast needed.
+    expect(preflight).toContain("where x <> all (v_base52 || v_m069)");
+    expect(apply).toContain("where x <> all (v_base52 || v_m069)");
+    expect(migration).toContain("where x <> all (v_base52 || v_m069)");
+  });
+
   it("the README runbook tells the owner to paste, not to \\i a path", () => {
     expect(readme).toContain("### 9.0 The execution path is the Supabase SQL Editor");
     expect(readme).toContain("42601: syntax error");

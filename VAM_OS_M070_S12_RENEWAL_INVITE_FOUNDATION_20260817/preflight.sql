@@ -354,9 +354,22 @@ select
             from base, unnest(b52) x
             where x <> all (coalesce((select vals from parsed), array[]::text[]))), '<none>')
                                                                        as audit_vocab_missing,
+  -- `::text` on the literal is REQUIRED, not stylistic. `b52` is text[] and a
+  -- bare 'literal' is type `unknown`, which leaves PostgreSQL two equally good
+  -- readings of `||` — `anyarray || anyarray` (unknown → text[]) and
+  -- `anyarray || anyelement` (unknown → text) — so it refuses to choose:
+  --     ERROR: 42725: operator is not unique: text[] || unknown
+  --     HINT:  Could not choose a best candidate operator.
+  -- The cast leaves exactly one candidate, `anyarray || anyelement`.
+  --
+  -- The plpgsql copies of this same predicate (`v_base52 || v_m069`, in BLOCK 1
+  -- above and in apply.sql) never had the problem: plpgsql passes its declared
+  -- variables as typed parameters, so the right operand is already known to be
+  -- text there. Only this pure-SQL copy, where the value is written as a
+  -- literal, was exposed.
   coalesce((select array_to_string(array_agg(x order by x), ', ')
             from base, unnest(coalesce((select vals from parsed), array[]::text[])) x
-            where x <> all (b52 || 'set_application_form_state')), '<none>')
+            where x <> all (b52 || 'set_application_form_state'::text)), '<none>')
                                                                        as audit_vocab_unexpected,
   (select convalidated from pg_constraint
     where conrelid = to_regclass('public.admin_audit_log')
