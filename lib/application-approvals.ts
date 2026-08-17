@@ -67,6 +67,8 @@ type LookupResult<T> =
 type ApprovalApplicationSource = {
   person_id: string | null;
   raw_payload: Record<string, unknown> | null;
+  source?: string | null;
+  renewal_invites?: Array<{ id?: string | null }> | null;
 };
 
 export type MentorProfileRefresh = Pick<
@@ -260,7 +262,9 @@ export async function approveApplication(
   // raw_payload. This also proves the target application exists before writes.
   const { data: applicationSourceData, error: applicationSourceError } = await client
     .from("applications")
-    .select("person_id,raw_payload")
+    .select(
+      "person_id,raw_payload,source,renewal_invites:person_season_invites!person_season_invites_application_id_fkey(id)"
+    )
     .eq("id", input.applicationId)
     .maybeSingle();
   if (applicationSourceError || !applicationSourceData) {
@@ -268,6 +272,48 @@ export async function approveApplication(
     return { ok: false, message: "Không thể tải đơn ứng tuyển. " + SAFE_ERROR };
   }
   const applicationSource = applicationSourceData as ApprovalApplicationSource;
+
+  // P0-RT-11 — renewal approval is impossible until M071 has durably recorded
+  // the admin's profile confirmation. This check lives in the shared approval
+  // boundary, before the first INSERT/UPDATE, so every caller is protected.
+  // The invite binding is checked independently of `source`: a malformed or
+  // legacy source value must not turn an invite-bound renewal into an ordinary
+  // application. The relationship is read in the same trusted query as the
+  // application; a query failure above therefore refuses before any write.
+  const inviteBindings = Array.isArray(applicationSource.renewal_invites)
+    ? applicationSource.renewal_invites
+    : [];
+  const isRenewal =
+    applicationSource.source === "s12_mentor_renewal" || inviteBindings.length > 0;
+
+  if (isRenewal) {
+    const { data: confirmationRows, error: confirmationError } = await client
+      .from("admin_audit_log")
+      .select("id,details")
+      .eq("action_type", "confirm_renewal")
+      .eq("details->>application_id", input.applicationId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const confirmation = Array.isArray(confirmationRows) ? confirmationRows[0] : null;
+    const confirmedApplicationId = String(
+      (confirmation as { details?: { application_id?: unknown } } | null)?.details?.application_id ?? ""
+    );
+    if (
+      confirmationError ||
+      !confirmation ||
+      confirmedApplicationId !== input.applicationId
+    ) {
+      log("renewal approval refused: durable confirmation evidence missing or untrusted", {
+        code: confirmationError?.code ?? "RENEWAL_CONFIRMATION_REQUIRED"
+      });
+      return {
+        ok: false,
+        message: "Đơn gia hạn chưa có xác nhận hồ sơ hợp lệ. Không có thay đổi nào được thực hiện."
+      };
+    }
+  }
+
   const mentorProfileRefresh = buildMentorProfileRefresh(applicationSource.raw_payload);
 
   // ------------------------------------------------------------------

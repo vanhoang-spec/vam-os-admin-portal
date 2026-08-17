@@ -1,0 +1,214 @@
+import { describe, expect, it, vi } from "vitest";
+import { createRenewalInvite, reconcileRenewalMembership, submitRenewalAccepted, submitRenewalDeclined, confirmRenewalAndApprove, regenerateRenewalInvite, revokeRenewalInvite } from "@/lib/renewal-runtime";
+import { hashRenewalInviteToken, mintRenewalInviteToken, type RenewalInviteRow } from "@/lib/renewal-invite-token";
+import { renewalDeclineAttention, renewalInviteState } from "@/lib/renewal-console";
+
+const IDS = {
+  invite: "00000000-0000-4000-8000-000000000001",
+  person: "00000000-0000-4000-8000-000000000002",
+  program: "00000000-0000-4000-8000-000000000003",
+  season: "00000000-0000-4000-8000-000000000004",
+  application: "00000000-0000-4000-8000-000000000005",
+  membership: "00000000-0000-4000-8000-000000000006",
+  profile: "00000000-0000-4000-8000-000000000007"
+};
+
+function query(result: { data?: unknown; error?: unknown }) {
+  const chain: Record<string, any> = {};
+  for (const method of ["select", "eq", "order", "limit", "in", "gt", "range"]) {
+    chain[method] = vi.fn(() => chain);
+  }
+  chain.maybeSingle = vi.fn(async () => ({ data: null, error: null, ...result }));
+  return chain;
+}
+
+function invite(token: string): RenewalInviteRow {
+  return {
+    id: IDS.invite,
+    token_hash: hashRenewalInviteToken(token),
+    person_id: IDS.person,
+    program_id: IDS.program,
+    season_id: IDS.season,
+    role: "mentor",
+    expires_at: "2099-01-01T00:00:00.000Z",
+    revoked_at: null,
+    submitted_at: null,
+    outcome: null,
+    application_id: null
+  };
+}
+
+function acceptedForm() {
+  const form = new FormData();
+  form.set("participation_confirmed", "yes");
+  form.set("consent_data_storage", "yes");
+  form.set("availability_commitment", "Hai buổi mỗi tháng");
+  form.set("company_current", "Acme");
+  form.set("first_vam_season", "MUST_NOT_PASS");
+  form.set("person_id", "MUST_NOT_PASS");
+  return form;
+}
+
+describe("P0 public renewal submission boundary", () => {
+  it("hashes the raw token, sends the renewal payload to M071, and never sends identity/lineage fields", async () => {
+    const { token, tokenHash } = mintRenewalInviteToken();
+    const from = vi.fn(() => query({ data: invite(token) }));
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "accepted" }], error: null }));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const result = await submitRenewalAccepted(token, acceptedForm(), { from, rpc } as any);
+
+    expect(result).toMatchObject({ ok: true, outcome: "accepted" });
+    expect(rpc).toHaveBeenCalledWith("vam071_submit_renewal_accepted", {
+      p_token_hash: tokenHash,
+      p_raw_payload: {
+        participation_confirmed: true,
+        availability_commitment: "Hai buổi mỗi tháng",
+        company_current: "Acme"
+      },
+      p_consent_data_storage: true
+    });
+    expect(JSON.stringify(rpc.mock.calls)).not.toContain(token);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(token);
+  });
+
+  it("replay is refused by the shared submit gate before the accepted RPC", async () => {
+    const { token } = mintRenewalInviteToken();
+    const used = { ...invite(token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted" as const, application_id: IDS.application };
+    const rpc = vi.fn();
+    const result = await submitRenewalAccepted(token, acceptedForm(), { from: () => query({ data: used }), rpc } as any);
+    expect(result.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("decline acknowledges deferred_actor_unauthorized without exposing it to the mentor", async () => {
+    const { token } = mintRenewalInviteToken();
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "declined", membership_outcome: "deferred_actor_unauthorized" }], error: null }));
+    const result = await submitRenewalDeclined(token, { from: () => query({ data: invite(token) }), rpc } as any);
+    expect(result).toMatchObject({ ok: true, outcome: "declined" });
+    expect(result.message).not.toMatch(/deferred|unauthorized/i);
+    expect(renewalDeclineAttention("declined", "active")).toMatchObject({ needsAttention: true });
+  });
+});
+
+describe("P0-RT-10 exact membership reconciliation", () => {
+  function clientFor(status: string | null, rpcOutcome = "transitioned") {
+    const rpc = vi.fn(async (name: string) => ({
+      data: [{ outcome_status: name === "vam063_add_membership_role" ? "created" : rpcOutcome, membership_id: IDS.membership }],
+      error: null
+    }));
+    const from = vi.fn(() => query({ data: status === null ? null : { id: IDS.membership, status } }));
+    return { client: { from, rpc } as any, rpc };
+  }
+
+  const input = { actorAdminUserId: "admin-1", personId: IDS.person, programId: IDS.program, seasonId: IDS.season, role: "mentor" as const };
+
+  it("none → vam063_add_membership_role", async () => {
+    const { client, rpc } = clientFor(null);
+    expect(await reconcileRenewalMembership(client, input)).toMatchObject({ ok: true, outcome: "created" });
+    expect(rpc).toHaveBeenCalledWith("vam063_add_membership_role", expect.objectContaining({ p_person_id: IDS.person, p_season_id: IDS.season, p_role: "mentor" }));
+  });
+
+  it("active → noop with zero RPC writes", async () => {
+    const { client, rpc } = clientFor("active");
+    expect(await reconcileRenewalMembership(client, input)).toMatchObject({ ok: true, outcome: "noop" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("opted_out → vam063_reactivate_membership", async () => {
+    const { client, rpc } = clientFor("opted_out");
+    expect(await reconcileRenewalMembership(client, input)).toMatchObject({ ok: true, outcome: "reactivated" });
+    expect(rpc).toHaveBeenCalledWith("vam063_reactivate_membership", expect.objectContaining({ p_membership_id: IDS.membership }));
+  });
+
+  it.each(["paused", "invited", "withdrawn", "cancelled", "completed", "graduated", "mystery"])("%s → refuse with zero RPC writes", async (status) => {
+    const { client, rpc } = clientFor(status);
+    expect(await reconcileRenewalMembership(client, input)).toMatchObject({ ok: false, status });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin invite and confirmation controls", () => {
+  it("creates a 32-byte bearer path once while sending only its hash to SQL", async () => {
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "created", invite_id: IDS.invite }], error: null }));
+    const result = await createRenewalInvite({ actorAdminUserId: "admin-1", personId: IDS.person, programId: IDS.program, seasonId: IDS.season, expiresAt: "2026-09-01T00:00:00.000Z" }, { rpc } as any);
+    expect(result.ok).toBe(true);
+    expect(result.renewalPath).toMatch(/^\/renew\/[A-Za-z0-9_-]{43}$/);
+    const params = (rpc.mock.calls as unknown[][])[0]?.[1] as Record<string, unknown>;
+    expect(params.p_token_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(params)).not.toContain(String(result.renewalPath).slice("/renew/".length));
+  });
+
+  it("revokes through M071 and regenerates strictly revoke → create with a new one-time link", async () => {
+    const rpc = vi.fn(async (name: string) => ({
+      data: [{ outcome_status: name === "vam071_revoke_renewal_invite" ? "revoked" : "created", invite_id: IDS.invite }],
+      error: null
+    }));
+    const revokeResult = await revokeRenewalInvite({ actorAdminUserId: "admin-1", inviteId: IDS.invite }, { rpc } as any);
+    expect(revokeResult).toMatchObject({ ok: true, outcome: "revoked" });
+
+    rpc.mockClear();
+    const from = vi.fn(() => query({ data: { id: IDS.invite, person_id: IDS.person, program_id: IDS.program, season_id: IDS.season, role: "mentor", submitted_at: null } }));
+    const regenerated = await regenerateRenewalInvite({ actorAdminUserId: "admin-1", inviteId: IDS.invite, expiresAt: "2026-09-01T00:00:00.000Z" }, { from, rpc } as any);
+    expect(regenerated).toMatchObject({ ok: true, outcome: "regenerated" });
+    expect(regenerated.renewalPath).toMatch(/^\/renew\/[A-Za-z0-9_-]{43}$/);
+    expect(rpc.mock.calls.map((call) => call[0])).toEqual(["vam071_revoke_renewal_invite", "vam071_create_renewal_invite"]);
+  });
+
+  it("derives every invite status displayed by the admin console", () => {
+    const base = { expires_at: "2026-09-01T00:00:00.000Z", revoked_at: null, outcome: null };
+    const now = Date.parse("2026-08-17T00:00:00.000Z");
+    expect(renewalInviteState(base, now)).toBe("live");
+    expect(renewalInviteState({ ...base, expires_at: "2026-08-01T00:00:00.000Z" }, now)).toBe("expired");
+    expect(renewalInviteState({ ...base, revoked_at: "2026-08-16T00:00:00.000Z" }, now)).toBe("revoked");
+    expect(renewalInviteState({ ...base, outcome: "accepted" }, now)).toBe("accepted");
+    expect(renewalInviteState({ ...base, outcome: "declined" }, now)).toBe("declined");
+  });
+
+  it("stale profile confirmation refusal stops before membership and approval writes", async () => {
+    const inviteRow = { ...invite(mintRenewalInviteToken().token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted", application_id: IDS.application };
+    const application = { id: IDS.application, person_id: IDS.person, season_id: IDS.season, role_applied: "mentor", status: "submitted", source: "s12_mentor_renewal", full_name: "Mentor", email_primary: "m@example.com", phone_primary: null, gender: null, intake_batch_id: null, raw_payload: { renewal: { company_current: "New Co" } } };
+    const person = { id: IDS.person, full_name: "Mentor", email_primary: "m@example.com", phone_primary: null };
+    const profile = { id: IDS.profile, person_id: IDS.person, mentor_code: "M01", company_current: "Old Co", title_current: null, years_experience_min: null, years_experience_text: null, capacity_target: null, industry: null, function_area: null, first_vam_season: "S11", prior_vam_involvement: null };
+    const from = vi.fn((table: string) => query({ data: table === "person_season_invites" ? inviteRow : table === "applications" ? application : table === "people" ? person : table === "mentor_profiles" ? profile : null }));
+    const rpc = vi.fn(async (name: string) => name === "vam071_confirm_renewal_profile" ? { data: null, error: { code: "40001" } } : { data: [], error: null });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await confirmRenewalAndApprove({
+      applicationId: IDS.application,
+      actorAdminUserId: "admin-1",
+      actorName: "Admin",
+      reviewed: {
+        applicationId: IDS.application,
+        expectedProfile: { company_current: "Old Co" },
+        profileUpdate: { company_current: "New Co" },
+        diff: [{ field: "company_current", before: "Old Co", after: "New Co" }]
+      }
+    }, { from, rpc } as any);
+    expect(result).toMatchObject({ ok: false, outcome: "profile_confirmation_refused" });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("vam071_confirm_renewal_profile", expect.objectContaining({
+      p_expected_profile: { company_current: "Old Co" },
+      p_profile_update: { company_current: "New Co" }
+    }));
+    expect(from).not.toHaveBeenCalledWith("person_season_memberships");
+  });
+
+  it("retry after approval converges without a second approval mutation", async () => {
+    const minted = mintRenewalInviteToken();
+    const inviteRow = { ...invite(minted.token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted", application_id: IDS.application };
+    const application = { id: IDS.application, person_id: IDS.person, season_id: IDS.season, role_applied: "mentor", status: "approved_as_mentor", source: "s12_mentor_renewal", full_name: "Mentor", email_primary: "m@example.com", phone_primary: null, gender: null, intake_batch_id: null, raw_payload: { renewal: {} } };
+    const person = { id: IDS.person, full_name: "Mentor", email_primary: "m@example.com", phone_primary: null };
+    const profile = { id: IDS.profile, person_id: IDS.person, mentor_code: "M01", company_current: "Same", title_current: null, years_experience_min: null, years_experience_text: null, capacity_target: null, industry: null, function_area: null, first_vam_season: "S11" };
+    const from = vi.fn((table: string) => query({ data: table === "person_season_invites" ? inviteRow : table === "applications" ? application : table === "people" ? person : table === "mentor_profiles" ? profile : table === "person_season_memberships" ? { id: IDS.membership, status: "active" } : null }));
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "noop" }], error: null }));
+    const result = await confirmRenewalAndApprove({
+      applicationId: IDS.application,
+      actorAdminUserId: "admin-1",
+      actorName: "Admin",
+      reviewed: { applicationId: IDS.application, expectedProfile: {}, profileUpdate: {}, diff: [] }
+    }, { from, rpc } as any);
+    expect(result).toMatchObject({ ok: true, outcome: "renewal_already_complete" });
+    expect(from.mock.calls.map((call) => call[0])).not.toContain("admin_audit_log");
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+});

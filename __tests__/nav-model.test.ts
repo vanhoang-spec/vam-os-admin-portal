@@ -300,7 +300,7 @@ const OPS_ADMIN_ROUTES = [
 // core_team as well, because the screen is useful read-only; the ability to
 // CHANGE a form's state is gated separately by canToggleApplicationForm plus
 // season scope, not by nav visibility.
-const ADMIN_TIER_ROUTES = ["/admin", "/admin/seasons-forms", "/team"];
+const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team"];
 
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       BASE_ROUTE_ARR,

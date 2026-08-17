@@ -863,23 +863,11 @@ describe("deferred findings are recorded rather than silently dropped", () => {
   });
 });
 
-describe("runtime UI is deliberately not started", () => {
-  it("no /renew route and no admin renewals route exist yet", () => {
-    for (const rel of [
-      "app/renew",
-      "app/admin/renewals",
-      "app/actions/renewal.ts",
-      "app/actions/renewals.ts"
-    ]) {
-      let existed = true;
-      try {
-        readFileSync(path.join(ROOT, rel));
-      } catch {
-        existed = false;
-      }
-      // Directories throw EISDIR rather than ENOENT, so treat a thrown EISDIR
-      // as "it exists" by probing the directory listing instead.
-      expect(`${rel}:${existed}`).toBe(`${rel}:false`);
-    }
+describe("P0 runtime UI is wired after the closed M070 foundation", () => {
+  it("provides the public renewal route, admin console, and shared actions", () => {
+    expect(read("app/renew/[token]/page.tsx")).toContain("loadRenewalPage");
+    expect(read("app/admin/renewals/page.tsx")).toContain("loadRenewalConsoleData");
+    expect(read("app/actions/renewals.ts")).toContain("submitRenewalAccepted");
+    expect(read("app/actions/renewals.ts")).toContain("confirmRenewalAndApprove");
   });
 });

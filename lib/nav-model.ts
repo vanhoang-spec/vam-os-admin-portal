@@ -82,6 +82,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
       label: "Quản trị",
       items: [
         { href: "/admin", label: "Quản trị" },
+        { href: "/admin/renewals", label: "Gia hạn mentor S12" },
         // M069. Visible to the admin tier (core_team included) because the
         // screen is useful read-only; the toggle itself is gated separately
         // by canToggleApplicationForm + season scope.

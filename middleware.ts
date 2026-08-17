@@ -149,10 +149,25 @@ async function authAllowsRequest(request: NextRequest) {
 }
 
 export async function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/register/") || request.nextUrl.pathname.startsWith("/checkin/")) {
+  if (
+    request.nextUrl.pathname.startsWith("/register/") ||
+    request.nextUrl.pathname.startsWith("/checkin/") ||
+    request.nextUrl.pathname.startsWith("/renew/")
+  ) {
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-vam-public-route", request.nextUrl.pathname.startsWith("/checkin/") ? "checkin" : "register");
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    const publicRoute = request.nextUrl.pathname.startsWith("/checkin/")
+      ? "checkin"
+      : request.nextUrl.pathname.startsWith("/renew/")
+        ? "renewal"
+        : "register";
+    requestHeaders.set("x-vam-public-route", publicRoute);
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    if (publicRoute === "renewal") {
+      response.headers.set("Referrer-Policy", "no-referrer");
+      response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      response.headers.set("Pragma", "no-cache");
+    }
+    return response;
   }
 
   // Stage 2 first: if a real Supabase session resolves to an active

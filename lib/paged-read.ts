@@ -166,6 +166,7 @@ export const PAGE_ORDER = {
   mentoring_recaps: { strategy: "keyset", key: "id" },
   operational_team_assignments: { strategy: "keyset", key: "id" },
   people: { strategy: "keyset", key: "id" },
+  person_season_invites: { strategy: "keyset", key: "id" },
   person_season_memberships: { strategy: "keyset", key: "id" },
   programs: { strategy: "keyset", key: "id" },
   review_assignment_batches: { strategy: "keyset", key: "id" },
