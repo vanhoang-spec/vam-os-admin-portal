@@ -509,11 +509,113 @@ describe("owner-executable SQL is Supabase SQL Editor compatible", () => {
     // The positive form of the check above: the fix is present, and it is the
     // cast form rather than the predicate having been deleted.
     expect(preflight).toContain("b52 || 'set_application_form_state'::text");
-    expect(preflight).toContain("operator is not unique: text[] || unknown");
+    // The error code recorded must be the one Production actually returned.
+    expect(preflight).toContain("22P02: malformed array literal");
+    expect(preflight).not.toContain("42725: operator is not unique: text[] || unknown");
     // The plpgsql copies stay as they are — typed variables, no cast needed.
     expect(preflight).toContain("where x <> all (v_base52 || v_m069)");
     expect(apply).toContain("where x <> all (v_base52 || v_m069)");
     expect(migration).toContain("where x <> all (v_base52 || v_m069)");
+  });
+
+  // -------------------------------------------------------------------------
+  // Internal `"char"` catalog columns concatenated into diagnostic text.
+  //
+  // `text || "char"` is ambiguous — `text || text` (via the IMPLICIT "char"
+  // -> text cast) and `text || anynonarray` are both viable, neither is better,
+  // and the resolver gives up with 42725. Because that is a PLANNING error it
+  // takes the entire file down: no result grid, not one FAILing row.
+  //
+  // The contrast that makes this worth a gate: `text || int2` is fine, because
+  // int2 -> text is an ASSIGNMENT cast, so only one candidate survives. Whether
+  // an uncast catalog value is harmless or fatal depends entirely on which
+  // implicit casts happen to exist for its type — which is not something a
+  // reader reliably knows. So the rule is mechanical: any of these columns
+  // reaching a string carries `::text`.
+  //
+  // This is a targeted inventory, NOT a general SQL type checker. It lists the
+  // internal-"char" catalog columns that actually appear in M070 SQL plus the
+  // ones a migration package plausibly reaches for.
+  // -------------------------------------------------------------------------
+  it("every internal-\"char\" catalog column is cast before it reaches text", () => {
+    const CHAR_COLUMNS = [
+      "tgenabled",                                       // pg_trigger
+      "contype", "confdeltype", "confupdtype", "confmatchtype", // pg_constraint
+      "relkind", "relpersistence", "relreplident",       // pg_class
+      "prokind", "provolatile", "proparallel",           // pg_proc
+      "attidentity", "attgenerated", "attstorage",       // pg_attribute
+      "polcmd",                                          // pg_policy
+      "typtype", "typcategory",                          // pg_type
+      "deptype"                                          // pg_depend
+    ];
+    const col = CHAR_COLUMNS.join("|");
+
+    // `|| <qualifier?><char-column>` not followed by `::`
+    const uncastRight = new RegExp(`\\|\\|\\s*(?:[a-z_]+\\.)?(?:${col})\\b(?!\\s*::)`);
+    // `<char-column> ||`  — the column on the left of a concatenation
+    const uncastLeft = new RegExp(`\\b(?:[a-z_]+\\.)?(?:${col})\\b\\s*\\|\\|`);
+    // `string_agg(<char-column>` with no cast
+    const uncastAgg = new RegExp(
+      `string_agg\\s*\\(\\s*(?:[a-z_]+\\.)?(?:${col})\\b(?!\\s*::)`
+    );
+
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const offenders = stripComments(sql)
+        .split(/\r?\n/)
+        .map((line, i) => [i + 1, line] as const)
+        .filter(
+          ([, line]) =>
+            uncastRight.test(line) || uncastLeft.test(line) || uncastAgg.test(line)
+        )
+        .map(([n, line]) => `L${n}: ${line.trim().slice(0, 90)}`);
+      expect(`${name}:${offenders.join(" | ")}`).toBe(`${name}:`);
+    }
+
+    // Negative controls. Without these a gate that matches nothing passes
+    // forever — and this one has a lot of alternation to get wrong.
+    const BAD = [
+      "' enabled=' || t.tgenabled",
+      "' enabled=' || tgenabled",
+      "|| c.relkind",
+      "|| a.attgenerated",
+      "select string_agg(t.tgenabled, ', ')",
+      "select c.confdeltype || '/' || x"
+    ];
+    const GOOD = [
+      "' enabled=' || t.tgenabled::text",
+      "|| c.relkind::text",
+      "select string_agg(t.tgenabled::text, ', ')",
+      "' tgtype=' || t.tgtype", // int2: assignment-only cast, one candidate
+      "|| c.relname", // name: not "char"
+      "and t.tgenabled = 'O'", // comparison, not concatenation
+      "c.confdeltype::text as ondel"
+    ];
+    for (const line of BAD) {
+      const caught =
+        uncastRight.test(line) || uncastLeft.test(line) || uncastAgg.test(line);
+      expect(`BAD ${JSON.stringify(line)}:${caught}`).toBe(
+        `BAD ${JSON.stringify(line)}:true`
+      );
+    }
+    for (const line of GOOD) {
+      const flagged =
+        uncastRight.test(line) || uncastLeft.test(line) || uncastAgg.test(line);
+      expect(`GOOD ${JSON.stringify(line)}:${flagged}`).toBe(
+        `GOOD ${JSON.stringify(line)}:false`
+      );
+    }
+  });
+
+  it("V16's detail casts tgenabled, and its PASS predicate is untouched", () => {
+    expect(verifier).toContain("' enabled=' || t.tgenabled::text");
+    // The status predicate compares tgenabled rather than concatenating it —
+    // `"char" = unknown` resolves to `"char" = "char"` and was never ambiguous.
+    // It must still be there, unchanged, so the fix is provably presentation-only.
+    expect(verifier).toContain("and t.tgenabled = 'O'");
+    expect(verifier).toContain("and t.tgtype & 2 = 2");
+    expect(verifier).toContain("and t.tgtype & 1 = 1");
+    expect(verifier).toContain("and t.tgtype & 16 = 16");
+    expect(verifier).toContain("t.tgfoid = to_regprocedure('public.set_updated_at()')");
   });
 
   it("the README runbook tells the owner to paste, not to \\i a path", () => {

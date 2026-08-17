@@ -345,7 +345,29 @@ results(check_id, check_name, status, detail) as (
         and t.tgenabled = 'O'
     ) and (select count(*) from pg_trigger where tgrelid = (select oid from tbl) and not tgisinternal) = 1
     then 'PASS' else 'FAIL' end,
-    coalesce((select string_agg(t.tgname || '->' || p.proname || ' tgtype=' || t.tgtype || ' enabled=' || t.tgenabled, ', ' order by t.tgname)
+    -- `t.tgenabled::text` is REQUIRED. pg_trigger.tgenabled is the internal
+    -- single-byte type `"char"`, not text, and `text || "char"` leaves two
+    -- viable candidates:
+    --     text || text          ("char" -> text exists as an IMPLICIT cast)
+    --     text || anynonarray   (anynonarray binds to "char" directly)
+    -- Neither is strictly better, so the resolver refuses:
+    --     ERROR: 42725: operator is not unique: text || "char"
+    -- and because this is a planning error it takes the ENTIRE verifier file
+    -- down with it — no result grid at all, not one FAILing row. The cast makes
+    -- `text || text` the unique best candidate.
+    --
+    -- `t.tgtype` deliberately carries NO cast: it is int2, and int2 -> text is
+    -- an ASSIGNMENT cast rather than an implicit one, so `text || text` is not
+    -- a candidate and `text || anynonarray` wins outright. One candidate, no
+    -- ambiguity. The asymmetry is the whole lesson here — an uncast catalog
+    -- value is safe or fatal depending on whether an implicit cast to text
+    -- happens to exist for its type.
+    --
+    -- Every other catalog value this file puts into a diagnostic string was
+    -- already cast: relkind (V01), confdeltype (V04, also "char"), conname,
+    -- relname, attname, relrowsecurity, relforcerowsecurity, convalidated.
+    -- V16 was the one that was missed.
+    coalesce((select string_agg(t.tgname || '->' || p.proname || ' tgtype=' || t.tgtype || ' enabled=' || t.tgenabled::text, ', ' order by t.tgname)
               from pg_trigger t join pg_proc p on p.oid = t.tgfoid
               where t.tgrelid = (select oid from tbl) and not t.tgisinternal), '<none>')
 

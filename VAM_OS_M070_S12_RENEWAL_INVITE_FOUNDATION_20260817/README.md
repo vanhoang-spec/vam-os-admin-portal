@@ -1,9 +1,26 @@
 # VAM OS — M070 Season 12 Returning-Mentor Renewal Invite Foundation
 
-**Package status: AUTHORED, NOT EXECUTED. Nothing in this package has been run
-against Production, Staging, or any database.** No SQL here has been executed
-anywhere, including locally — see §11 for exactly what that costs and where the
-residual risk sits.
+**Package status: APPLIED TO PRODUCTION on 17 Aug 2026. VERIFICATION PENDING.**
+
+| Step | State |
+|---|---|
+| `preflight.sql` | **RUN, PASSED.** BLOCK 1 `PASSED`; BLOCK 2 token `M070:ABSENT:BASE53:VALIDATED:FKTARGETS5:UPDATEDAT` |
+| `apply.sql` | **RUN ONCE, COMMITTED** — `Success. No rows returned.` |
+| `verifier.sql` | **NOT YET PASSED.** First attempt aborted on a type-resolution defect in its own diagnostics (§9.6, fixed here). To be re-run once, after independent delta review |
+| `rollback.sql` | not run, and not to be run |
+
+**`public.person_season_invites` now exists in Production.** Do not run
+`apply.sql` again — its `[ALREADY_APPLIED]` guard will refuse, which is correct
+but is not a reason to try. Do not author a second migration. Do not roll back.
+
+The token confirms the live baseline was **BASE53** — M069 had been applied — so
+the audit vocabulary went from 53 values to 56, preserving all 53 by
+construction (§5.3). That is exactly the case §5.4 exists to handle, and it is
+why nothing here hard-codes 52.
+
+> Sections written before the apply still describe this package as unexecuted in
+> places. Where that matters it has been corrected in place; §11 carries the
+> full, accurate execution history.
 
 | | |
 |---|---|
@@ -17,8 +34,9 @@ residual risk sits.
 | Scope | **Security / DB foundation only.** No `/renew` page, no renewal form, no `/admin/renewals`, no email, no batch invitation |
 | Revision | R2 — post independent review (`M070_STATIC_SECURITY = PASS`, `REMEDIATION_REQUIRED = YES`). One SQL token changed ([§10.1](#101-why-the-drop-is-if-exists-independent-review-remediation)); the normative [§7](#7-p0-runtime-blockers--the-runtime-package-must-not-ship-without-these) and [§8](#8-environment-and-the-next-execution-gate) added. No redesign |
 | | R3 — Supabase SQL Editor compatibility. Three `\echo` meta-commands removed from `preflight.sql` and `verifier.sql`; the runbook rewritten for the SQL Editor. No security semantics changed — see [§9.0](#90-the-execution-path-is-the-supabase-sql-editor) |
-| | R4 — one `::text` cast added in `preflight.sql` BLOCK 2, where `text[] \|\| 'literal'` was ambiguous to the operator resolver. Evidence column only; no gate, no security semantics — see [§9.5](#95-r4-the-array-concatenation-defect-in-block-2) |
-| Next execution gate | **Production READ-ONLY preflight** — not a Staging apply. See [§8](#8-environment-and-the-next-execution-gate) |
+| | R4 — one `::text` cast added in `preflight.sql` BLOCK 2, where the untyped literal was bound to the array type. Evidence column only; no gate, no security semantics — see [§9.5](#95-r4-the-array-concatenation-defect-in-block-2) |
+| | R5 — one `::text` cast added in `verifier.sql` V16's **detail** column, where `text \|\| "char"` aborted the whole verifier. Diagnostics only; no PASS/FAIL predicate touched — see [§9.6](#96-r5-the-verifier-catalog-char-defect) |
+| Next execution gate | **Re-run `verifier.sql` once**, after independent delta review of R5. Read-only. See [§9.3](#93-step-3--verify-read-only) |
 
 | File | Role | Writes? |
 |---|---|---|
@@ -720,7 +738,9 @@ anywhere.
 
 ## 9. Owner execution sequence
 
-**Do not run any of this until independent security review has passed.**
+**Steps 1 and 2 have been performed on Production. Step 3 has not yet
+succeeded.** The sequence is kept in full because it is the record of what was
+run, and because §9.3 is the only step still outstanding.
 
 ### 9.0 The execution path is the Supabase SQL Editor
 
@@ -831,6 +851,20 @@ fails, do not build anything on top of the table until it is resolved. Each row
 carries the **live** definition in `detail`, so a failure can be read directly
 rather than inferred.
 
+> **STATUS: OUTSTANDING.** The first attempt on Production aborted before
+> producing any grid, on a type-resolution defect in V16's own diagnostics
+> (§9.6). No check was evaluated, so **nothing is known yet about whether the
+> apply landed as reviewed** — the absence of a FAIL is not a PASS. The file is
+> read-only and the failure mutated nothing.
+>
+> R5 fixes that defect. Re-run this step **once**, after independent delta
+> review of R5, and record the full grid.
+>
+> Expect the audit-vocabulary check (V20) to reflect the **BASE53** baseline the
+> preflight token recorded: the live vocabulary should now admit 56 values —
+> the 53 that were there plus M070's three. V20 is a superset test precisely so
+> that either baseline verifies (§5.4).
+
 ### 9.4 Step 4 — deploy nothing
 
 There is no runtime for this table yet. That is intentional: the foundation is
@@ -847,19 +881,29 @@ outside *BASE52 plus `set_application_form_state`*, and expressed "plus" as
 where x <> all (b52 || 'set_application_form_state')      -- R3 and earlier
 ```
 
-`b52` is `text[]`; a bare `'literal'` is type `unknown`. PostgreSQL has both
-`anyarray || anyarray` and `anyarray || anyelement`, and an `unknown` right
-operand fits **either** — as `text[]` or as `text` — so the resolver has two
-equally good candidates and refuses to pick:
+`b52` is `text[]`; a bare `'literal'` is type `unknown`, so `||` has two
+readings: `anyarray || anyarray` (unknown → `text[]`, i.e. `array_cat`) and
+`anyarray || anyelement` (unknown → `text`, i.e. append one element).
+
+**What Production actually returned:**
 
 ```
-ERROR:  42725: operator is not unique: text[] || unknown
-HINT:   Could not choose a best candidate operator. You might need to add
-        explicit type casts.
+ERROR: 22P02: malformed array literal: "set_application_form_state"
 ```
 
-The fix is one cast, which leaves exactly one candidate
-(`anyarray || anyelement`):
+The resolver bound the untyped literal to the **array** type and then tried to
+parse `set_application_form_state` as an array literal, which it is not. This is
+a runtime input-parsing failure, not an ambiguity refusal.
+
+> **Correction.** The R4 revision of this section, and the comment in
+> `preflight.sql`, predicted `42725: operator is not unique: text[] || unknown`.
+> That prediction was wrong — reasonable-sounding, and not what the server did.
+> Both have been corrected to the observed `22P02`. The **fix was and remains
+> correct**; only the diagnosis was wrong, which is its own small lesson about
+> how much confidence a derived-but-unexecuted claim deserves.
+
+The fix is one cast, which pins the element-append reading so no array coercion
+is attempted at all:
 
 ```sql
 where x <> all (b52 || 'set_application_form_state'::text)   -- R4
@@ -869,25 +913,99 @@ where x <> all (b52 || 'set_application_form_state'::text)   -- R4
 `v_base52 || v_m069`, in BLOCK 1's guard and in `apply.sql` / the canonical
 migration — and none of them was affected. plpgsql passes its declared
 variables as **typed** parameters, so there the right operand is already known
-to be `text` and only one candidate ever existed. The exposure was specific to
-the pure-SQL copy, where the value is written as a literal. That asymmetry is
+to be `text` and only one reading ever existed. The exposure was specific to the
+pure-SQL copy, where the value is written as a literal. That asymmetry is
 exactly why the defect survived review, so
-`__tests__/m070-renewal-invite-foundation.test.ts` now carries a targeted gate:
-any `<array-identifier> || 'literal'` without an explicit cast fails the build,
-and the gate ships with its own negative control so it cannot rot into a
-predicate that matches nothing.
+`__tests__/m070-renewal-invite-foundation.test.ts` carries a targeted gate: any
+`<array-identifier> || 'literal'` without an explicit cast fails the build, and
+the gate ships with its own negative control so it cannot rot into a predicate
+that matches nothing.
 
 **Blast radius: none beyond the message text.** `audit_vocab_unexpected` is an
 **evidence column in the read-only BLOCK 2**, not a gate. The refusal that
 actually protects the audit vocabulary is `[AUDIT_VOCAB_UNEXPECTED]` in BLOCK 1
 — plpgsql, unaffected, and unchanged by R4 — and it is re-asserted a third time
-inside `apply.sql` Section 0. Nothing about what the preflight *refuses* moved.
-`apply.sql`, `rollback.sql`, `verifier.sql` and the canonical migration are
-byte-unchanged by R4.
+inside `apply.sql` Section 0. Nothing about what the preflight *refuses* moved,
+which is why the preflight's verdict on Production is trustworthy despite this
+column having failed on the first attempt.
+
+### 9.6 R5 — the verifier catalog-`"char"` defect
+
+The owner ran `verifier.sql` against Production and got **no result grid at
+all**:
+
+```
+ERROR: 42725: operator is not unique: text || "char"
+LINE 348: ... ' tgtype=' || t.tgtype || ' enabled=' || t.tgenabled ...
+HINT:  Could not choose a best candidate operator.
+```
+
+**The root cause.** `pg_trigger.tgenabled` is the internal single-byte type
+`"char"` — not `text`, and not `character(1)`. `text || "char"` leaves two
+viable candidates:
+
+| candidate | why it is viable |
+|---|---|
+| `text \|\| text` | `"char"` → `text` exists as an **implicit** cast |
+| `text \|\| anynonarray` | `anynonarray` binds to `"char"` directly, no cast |
+
+Neither is strictly better, so the resolver refuses. Because this is a
+**planning** error it aborts the entire file — not one FAILing row, no grid.
+
+**The contrast that matters.** `t.tgtype` on the same line is `int2` and needs
+**no** cast: `int2` → `text` is an **assignment** cast, not an implicit one, so
+`text || text` is not a candidate and `text || anynonarray` wins outright. One
+candidate, no ambiguity. Whether an uncast catalog value is harmless or fatal
+depends entirely on which implicit casts happen to exist for its type — which is
+not something a reader reliably knows, and is why the gate for this is
+mechanical rather than judgement-based.
+
+**The fix**, in V16's `detail` expression only:
+
+```sql
+' enabled=' || t.tgenabled::text
+```
+
+**This is presentation-only, and that is provable.** V16 is
+`select 'V16', 'updated_at_trigger_reuses_shared_fn', <status>, <detail>`. The
+failing expression is the **fourth** argument, `detail`. The `status` argument
+is a separate `case when exists (…) then 'PASS' else 'FAIL' end` over
+`tgrelid`, `tgname`, `tgisinternal`, `tgfoid`, three `tgtype` bit tests and
+`tgenabled = 'O'` — and `"char" = unknown` resolves to `"char" = "char"`, which
+was never ambiguous and is untouched. A test asserts every one of those
+predicate terms is still present, so "presentation-only" is checked, not
+asserted.
+
+**Every other catalog value in this file was already cast** — `relkind` (V01),
+`confdeltype` (V04, also `"char"`), `conname`, `relname`, `attname`,
+`relrowsecurity`, `relforcerowsecurity`, `convalidated`. V16 was the one that
+was missed, which makes this a lapse rather than a misunderstanding.
+
+**This defect class was already documented in this repository, and that is the
+uncomfortable part.** The M069 README records, under "Executed, not only
+reasoned about", that `text || "char"` in *its* V09 detail expression "aborted
+the **entire** verifier file on PG15" — found by running it on PostgreSQL 15.18
+and fixed there. The lesson existed in the repo and was not carried into M070's
+verifier. The static gate added in R5 is the mechanism that makes carrying it
+forward automatic instead of a matter of remembering: an inventory of internal
+`"char"` catalog columns, asserted cast wherever they reach a string, in every
+owner-executable M070 file, with BAD/GOOD negative controls.
+
+**Unchanged by R5:** the 23 checks and their identities, every PASS/FAIL
+predicate, every anchored structural pattern, the `M070_VERIFIED` derivation,
+the read-only transaction, and `apply.sql` / `rollback.sql` / `preflight.sql`'s
+executable content / the canonical migration.
 
 ---
 
 ## 10. Rollback
+
+> **Not applicable to the current situation, and not to be run.** M070 is
+> applied and the table is live. The outstanding step is a verifier re-run
+> (§9.3), not a reversal. Rolling back now would drop a table whose verification
+> has not yet been read — which is the opposite of what an unverified apply
+> calls for. `rollback.sql` is unchanged by R5 and is documented here for
+> completeness only.
 
 `rollback.sql` **refuses while the table holds any row at all** — stricter than
 M069's "refuses while a form is open", and deliberately so. A form's state is
@@ -954,72 +1072,60 @@ the 43-character invariant, the digest identity, the constant-time comparison,
 every gate branch including the seven-way uniform-failure proof, the strip, the
 delta semantics and the diff are all exercised, not merely described.
 
-**Not executed:** every line of SQL in this package. No PostgreSQL instance was
-contacted — not Production, not Staging, not a local container. The SQL is
-therefore validated by static analysis and by review, and two consequences
-follow honestly:
+**Executed against Production, 17 Aug 2026** — this section was originally
+written when nothing had been run, and is now the execution record.
 
-1. **`verifier.sql` pins definitions with anchored regexes, not with hard-coded
-   rendered literals.** M069's verifier compares the complete
-   `pg_get_constraintdef(oid, true)` text against a constant — the strongest
-   possible test — but its constants were **reconciled against a live PostgreSQL
-   15.18 catalog before they were trusted**, because the server's rendering of
-   parentheses and casts cannot be derived with certainty from the source. A
-   hard-coded literal here would be a guess wearing the costume of a proof, and
-   its first FAIL would be indistinguishable from a real defect. The anchored
-   regexes still reject every mutation M069 documents (an extra `OR` disjunct, an
-   inverted operator, the wrong column — none matches a pattern anchored at both
-   ends); what they do not do is prove the rendering byte-for-byte. Every check
-   emits the **live** definition in `detail` whether it passes or fails, so a
-   reviewer reads what is installed rather than a verdict about it.
-2. **The first real run is part of the review, not a formality.** A syntax or
-   catalog-shape error in the SQL would surface there. `apply.sql` is one
-   transaction with a guard block that raises before the first mutation, and a
-   `COMMIT` issued inside an already-aborted transaction is executed by
-   PostgreSQL as a `ROLLBACK`, so a failure leaves nothing behind — but the
-   review should treat "this has never been executed" as a stated fact about the
-   package rather than an omission to discover.
+| Artifact | Run? | Outcome |
+|---|---|---|
+| `preflight.sql` BLOCK 1 | yes | `PASSED` — every refusal evaluated, none fired |
+| `preflight.sql` BLOCK 2 | yes | token `M070:ABSENT:BASE53:VALIDATED:FKTARGETS5:UPDATEDAT` |
+| `apply.sql` | yes, **once** | committed — `Success. No rows returned.` |
+| `verifier.sql` | attempted | **aborted before producing any grid** (§9.6). Re-run pending |
+| `rollback.sql` | no | and not to be run |
+| canonical migration | not run directly | its content is `apply.sql`'s shared region, which did run |
 
-**Still true after the R2 remediation of 17 Aug 2026.** That round changed one
-SQL token (`DROP TABLE` → `DROP TABLE IF EXISTS` in `rollback.sql`), added the
-normative §7 and §8, and added test assertions. **No SQL was executed, and no
-database was contacted, in that round either.** `apply.sql`, `preflight.sql`,
-`verifier.sql` and the canonical migration are byte-unchanged by it — only
-`rollback.sql`, this README and the tests moved, and the checksums were
-regenerated accordingly.
+Nothing was ever run against Staging, and nothing against a local container.
 
-**R3, and the one thing that did reach Production.** The owner pasted
-`preflight.sql` into the Supabase Production SQL Editor and it failed at
-`LINE 65` with `42601: syntax error at or near "\"` — the `\echo` banner. That
-is a **parse** failure: PostgreSQL rejected the statement text before executing
-any statement in it, so no read ran, no lock was taken, and no write of any kind
-occurred. Production was not mutated and no `apply.sql` or migration SQL was
-ever authorized or run. The banners were cosmetic; they are now
-`select … as phase;` statements (§9.0), and a test fails the build if a
-backslash-leading line reappears in any owner-executable M070 file.
+### What the three execution failures cost, and what they did not
 
-R3 changed `preflight.sql`, `verifier.sql` and this README. `apply.sql`,
-`rollback.sql` and the canonical migration are byte-unchanged by it, which is
-the strongest available statement that no security semantics moved. **R3
-executed no SQL and contacted no database.** The package as a whole has still
-never been run anywhere; the failed paste is the only time any of it has been
-sent to a server, and it did not get past the parser.
+Three defects reached a server before being found. It is worth being precise
+about what each one actually did, because the pattern is the argument for the
+staged gate rather than against it:
 
-**R4, and what it says about the limits of static review.** With the parse
-error gone, BLOCK 2 got far enough to be *planned*, and the planner rejected
-`text[] || 'literal'` as ambiguous (§9.5). This is the second defect in a row
-that no amount of reading found and one execution did — which is the argument
-for the staged gate, not against it: BLOCK 2 is read-only, wrapped in
-`SET TRANSACTION READ ONLY`, and its failure changed nothing. R4 changed
-`preflight.sql` (one `::text`), this README and the tests; `apply.sql`,
-`rollback.sql`, `verifier.sql` and the canonical migration are byte-unchanged
-by it. **R4 executed no SQL and contacted no database.**
+| Round | Defect | Where it failed | Damage |
+|---|---|---|---|
+| R3 | `\echo` psql meta-command | **parse**, before any statement ran | none — nothing executed |
+| R4 | untyped literal bound to `text[]` | **execution**, inside a read-only transaction | none — `22P02`, rolled back |
+| R5 | `text \|\| "char"` in a diagnostic | **planning**, whole file aborted | none — verifier is read-only |
 
-The honest reading of §11 has not changed, and if anything is sharper now: the
-first clean run of each file is part of the review. `verifier.sql` has still
-never been planned by a server, and its anchored regexes are still the reason a
-first FAIL there should be reconciled rather than assumed to be a defect in the
-database.
+Every one of them landed on a read-only or not-yet-executing path. The single
+mutating artifact, `apply.sql`, ran once and committed cleanly — because it is
+the file that carries a self-contained Section 0 guard, one transaction, and a
+`COMMIT` that PostgreSQL executes as a `ROLLBACK` if the transaction is already
+aborted.
+
+### The claim that has not survived, stated plainly
+
+The earlier revisions of this section argued that `verifier.sql`'s **anchored
+regexes** were the right choice *because* nothing had been executed: a
+hard-coded rendered literal would have been "a guess wearing the costume of a
+proof". That reasoning still holds for the regexes themselves — they reject
+every mutation M069 documents, and they do not depend on guessing how the server
+renders parentheses.
+
+But the surrounding claim, that careful static review plus a first execution
+would be enough, has now been falsified three times in three rounds, twice by
+type-resolution behaviour that is simply not derivable from reading. The honest
+conclusion is not that the artifacts are unsound — the apply's own execution is
+evidence they are — but that **static review of SQL in this repository should be
+treated as necessary and not sufficient**, and that the three static gates added
+across R3-R5 (psql meta-commands, array/scalar ambiguity, internal-`"char"`
+casts) are worth more than the prose that preceded them. Each was added only
+after a server found what review had not.
+
+`verifier.sql` has still never produced a grid. Until it does, **nothing is
+confirmed about whether the Production apply landed as reviewed** — and the
+absence of a FAIL is not a PASS.
 
 ---
 

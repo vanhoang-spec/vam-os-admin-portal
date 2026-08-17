@@ -355,12 +355,20 @@ select
             where x <> all (coalesce((select vals from parsed), array[]::text[]))), '<none>')
                                                                        as audit_vocab_missing,
   -- `::text` on the literal is REQUIRED, not stylistic. `b52` is text[] and a
-  -- bare 'literal' is type `unknown`, which leaves PostgreSQL two equally good
-  -- readings of `||` — `anyarray || anyarray` (unknown → text[]) and
-  -- `anyarray || anyelement` (unknown → text) — so it refuses to choose:
-  --     ERROR: 42725: operator is not unique: text[] || unknown
-  --     HINT:  Could not choose a best candidate operator.
-  -- The cast leaves exactly one candidate, `anyarray || anyelement`.
+  -- bare 'literal' is type `unknown`, so `||` has two readings —
+  -- `anyarray || anyarray` (unknown → text[], i.e. array_cat) and
+  -- `anyarray || anyelement` (unknown → text, i.e. append one element).
+  --
+  -- OBSERVED ON PRODUCTION, 17 Aug 2026: the resolver bound the untyped literal
+  -- to the ARRAY type and then tried to parse it as an array literal:
+  --     ERROR: 22P02: malformed array literal: "set_application_form_state"
+  -- That is a runtime input-parsing failure, not an ambiguity refusal, and it
+  -- is the authoritative record of what this line did. (An earlier revision of
+  -- this comment predicted 42725 "operator is not unique"; the server did not
+  -- agree, and the server is what counts.)
+  --
+  -- The cast pins the element-append reading, so no array coercion is attempted
+  -- at all.
   --
   -- The plpgsql copies of this same predicate (`v_base52 || v_m069`, in BLOCK 1
   -- above and in apply.sql) never had the problem: plpgsql passes its declared
