@@ -14,9 +14,16 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/application-approvals", () => ({ approveApplication: vi.fn() }));
+vi.mock("@/lib/program-scope", () => ({
+  getAdminScopeContext: vi.fn(),
+  canOperateSeason: vi.fn()
+}));
+vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() }));
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { approveApplication } from "@/lib/application-approvals";
+import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { approveApplicationAction } from "@/app/actions/application-approvals";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -41,11 +48,39 @@ const validFormData = () =>
   });
 
 const prev = { ok: false as const, message: null };
+const SEASON = "00000000-0000-4000-8000-000000000012";
+const PROGRAM = "00000000-0000-4000-8000-000000000013";
+
+function query(data: unknown) {
+  const chain: Record<string, any> = {};
+  chain.select = vi.fn(() => chain);
+  chain.eq = vi.fn(() => chain);
+  chain.maybeSingle = vi.fn(async () => ({ data, error: null }));
+  return chain;
+}
+
+function scopedClient() {
+  return {
+    from: vi.fn((table: string) =>
+      query(table === "applications"
+        ? { id: "00000000-0000-4000-8000-000000000010", season_id: SEASON }
+        : { id: SEASON, program_id: PROGRAM })
+    )
+  };
+}
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   vi.resetAllMocks();
+  (getAdminScopeContext as Mock).mockResolvedValue({
+    adminUser: null,
+    isSuperAdmin: false,
+    programScopes: [{ programId: PROGRAM, seasonId: SEASON, scopeLevel: "full_access", status: "active" }],
+    scopeError: null
+  });
+  (canOperateSeason as Mock).mockResolvedValue(true);
+  (getSupabaseServiceRoleClient as Mock).mockReturnValue(scopedClient());
 });
 
 // ── Authorization boundary ────────────────────────────────────────────────────
@@ -103,6 +138,36 @@ describe("approveApplicationAction — authorization boundary", () => {
       profileId: "prof-2",
       personCreated: true,
       profileCreated: true,
+    });
+    const result = await approveApplicationAction(prev, validFormData());
+    expect(result.ok).toBe(true);
+    expect(approveApplication).toHaveBeenCalledOnce();
+    expect(canOperateSeason).toHaveBeenCalledWith(expect.anything(), SEASON);
+  });
+
+  it("admin scoped only to another program/season → rejected before approval", async () => {
+    (getCurrentAdminUser as Mock).mockResolvedValue({ id: "admin-1", role: "admin", full_name: "Admin User" });
+    (canOperateSeason as Mock).mockResolvedValue(false);
+    const result = await approveApplicationAction(prev, validFormData());
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/chương trình|mùa/i);
+    expect(approveApplication).not.toHaveBeenCalled();
+  });
+
+  it("super_admin remains permitted for the canonical application scope", async () => {
+    (getCurrentAdminUser as Mock).mockResolvedValue({ id: "super-1", role: "super_admin", full_name: "Super Admin" });
+    (getAdminScopeContext as Mock).mockResolvedValue({
+      adminUser: null,
+      isSuperAdmin: true,
+      programScopes: [],
+      scopeError: null
+    });
+    (approveApplication as Mock).mockResolvedValue({
+      ok: true,
+      personId: "pid-super",
+      profileId: "prof-super",
+      personCreated: false,
+      profileCreated: false
     });
     const result = await approveApplicationAction(prev, validFormData());
     expect(result.ok).toBe(true);

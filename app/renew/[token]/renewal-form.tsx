@@ -3,7 +3,7 @@
 import { useFormState } from "react-dom";
 import { acceptRenewalAction, declineRenewalAction } from "@/app/actions/renewals";
 import { SubmitButton } from "@/components/submit-button";
-import { initialRenewalPublicActionState, type RenewalMentorProfile, type RenewalPerson } from "@/lib/renewal-types";
+import { initialRenewalPublicActionState, type RenewalPublicDisplayDto } from "@/lib/renewal-types";
 
 function fieldClass() {
   return "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink focus:border-vam-green focus:outline-none focus:ring-2 focus:ring-vam-mint";
@@ -25,12 +25,10 @@ function Feedback({ ok, message }: { ok: boolean; message: string }) {
 
 export function RenewalForm({
   token,
-  person,
-  profile
+  display
 }: {
   token: string;
-  person: RenewalPerson;
-  profile: RenewalMentorProfile;
+  display: RenewalPublicDisplayDto;
 }) {
   const [acceptState, acceptAction] = useFormState(
     acceptRenewalAction.bind(null, token),
@@ -58,11 +56,11 @@ export function RenewalForm({
       <section className="rounded-lg border border-vam-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-semibold text-vam-ink">Hồ sơ mentor hiện tại</h2>
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-          <div><span className="font-medium">Họ tên:</span> {person.full_name || "—"}</div>
-          <div><span className="font-medium">Mã mentor:</span> {profile.mentor_code || "—"}</div>
-          <div><span className="font-medium">Email:</span> {person.email_primary || "—"}</div>
-          <div><span className="font-medium">SĐT:</span> {person.phone_primary || "—"}</div>
-          <div><span className="font-medium">Mùa đầu tham gia:</span> {String(profile.first_vam_season ?? "—")}</div>
+          <div><span className="font-medium">Họ tên:</span> {display.fullName || "—"}</div>
+          <div><span className="font-medium">Mã mentor:</span> {display.mentorCode || "—"}</div>
+          <div><span className="font-medium">Email:</span> {display.emailPrimary || "—"}</div>
+          <div><span className="font-medium">SĐT:</span> {display.phonePrimary || "—"}</div>
+          <div><span className="font-medium">Mùa đầu tham gia:</span> {String(display.firstVamSeason ?? "—")}</div>
         </div>
         <p className="mt-3 text-xs text-slate-500">
           Thông tin lịch sử bên trên chỉ để tham khảo. Các trường lineage như mùa đầu tham gia và nội dung tham gia trước đây không thể chỉnh sửa qua quy trình gia hạn.
@@ -85,31 +83,31 @@ export function RenewalForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-medium text-vam-ink">
             Công ty hiện tại
-            <input className={fieldClass()} name="company_current" defaultValue={profile.company_current ?? ""} />
+            <input className={fieldClass()} name="company_current" defaultValue={display.companyCurrent ?? ""} />
           </label>
           <label className="text-sm font-medium text-vam-ink">
             Chức danh hiện tại
-            <input className={fieldClass()} name="title_current" defaultValue={profile.title_current ?? ""} />
+            <input className={fieldClass()} name="title_current" defaultValue={display.titleCurrent ?? ""} />
           </label>
           <label className="text-sm font-medium text-vam-ink">
             Lĩnh vực chuyên môn
-            <input className={fieldClass()} name="function_primary" defaultValue={profile.function_area ?? ""} />
+            <input className={fieldClass()} name="function_primary" defaultValue={display.functionArea ?? ""} />
           </label>
           <label className="text-sm font-medium text-vam-ink">
             Ngành
-            <input className={fieldClass()} name="industry_primary" defaultValue={profile.industry ?? ""} />
+            <input className={fieldClass()} name="industry_primary" defaultValue={display.industry ?? ""} />
           </label>
           <label className="text-sm font-medium text-vam-ink">
             Số năm kinh nghiệm chính xác
-            <input className={fieldClass()} type="number" min="0" step="1" name="mentor_total_work_years" defaultValue={profile.years_experience_min ?? ""} />
+            <input className={fieldClass()} type="number" min="0" step="1" name="mentor_total_work_years" defaultValue={display.yearsExperienceMin ?? ""} />
           </label>
           <label className="text-sm font-medium text-vam-ink">
             Nhóm kinh nghiệm
-            <input className={fieldClass()} name="years_of_experience" defaultValue={profile.years_experience_text ?? ""} />
+            <input className={fieldClass()} name="years_of_experience" defaultValue={display.yearsExperienceText ?? ""} />
           </label>
           <label className="text-sm font-medium text-vam-ink">
             Số mentee có thể đồng hành
-            <input className={fieldClass()} type="number" min="0" step="1" name="mentoring_capacity_total" defaultValue={profile.capacity_target ?? ""} />
+            <input className={fieldClass()} type="number" min="0" step="1" name="mentoring_capacity_total" defaultValue={display.capacityTarget ?? ""} />
           </label>
           <label className="text-sm font-medium text-vam-ink">
             Khả năng sắp xếp thời gian / cam kết

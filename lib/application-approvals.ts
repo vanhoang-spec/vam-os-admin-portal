@@ -66,9 +66,16 @@ type LookupResult<T> =
 
 type ApprovalApplicationSource = {
   person_id: string | null;
+  season_id: string | null;
+  role_applied: string | null;
   raw_payload: Record<string, unknown> | null;
   source?: string | null;
-  renewal_invites?: Array<{ id?: string | null }> | null;
+  renewal_invites?: Array<{
+    id?: string | null;
+    person_id?: string | null;
+    season_id?: string | null;
+    role?: string | null;
+  }> | null;
 };
 
 export type MentorProfileRefresh = Pick<
@@ -263,7 +270,7 @@ export async function approveApplication(
   const { data: applicationSourceData, error: applicationSourceError } = await client
     .from("applications")
     .select(
-      "person_id,raw_payload,source,renewal_invites:person_season_invites!person_season_invites_application_id_fkey(id)"
+      "person_id,season_id,role_applied,raw_payload,source,renewal_invites:person_season_invites!person_season_invites_application_id_fkey(id,person_id,season_id,role)"
     )
     .eq("id", input.applicationId)
     .maybeSingle();
@@ -273,9 +280,11 @@ export async function approveApplication(
   }
   const applicationSource = applicationSourceData as ApprovalApplicationSource;
 
-  // P0-RT-11 — renewal approval is impossible until M071 has durably recorded
-  // the admin's profile confirmation. This check lives in the shared approval
-  // boundary, before the first INSERT/UPDATE, so every caller is protected.
+  // P0-RT-10/11 — renewal approval is impossible until M071 has durably
+  // recorded the admin's profile confirmation AND the exact invite-bound
+  // person+season+role membership is active. These checks live in the shared
+  // approval boundary, before the first INSERT/UPDATE, so every caller is
+  // protected, including the ordinary application page.
   // The invite binding is checked independently of `source`: a malformed or
   // legacy source value must not turn an invite-bound renewal into an ordinary
   // application. The relationship is read in the same trusted query as the
@@ -287,6 +296,32 @@ export async function approveApplication(
     applicationSource.source === "s12_mentor_renewal" || inviteBindings.length > 0;
 
   if (isRenewal) {
+    // A renewal source without exactly one matching invite is ambiguous. The
+    // application and invite are both trusted server reads; browser-supplied
+    // identity, season and role values are never used for this gate.
+    const invite = inviteBindings.length === 1 ? inviteBindings[0] : null;
+    const boundPersonId = String(invite?.person_id ?? "").trim();
+    const boundSeasonId = String(invite?.season_id ?? "").trim();
+    const boundRole = String(invite?.role ?? "").trim();
+    if (
+      !invite ||
+      !boundPersonId ||
+      !boundSeasonId ||
+      !boundRole ||
+      boundPersonId !== applicationSource.person_id ||
+      boundSeasonId !== applicationSource.season_id ||
+      boundRole !== applicationSource.role_applied ||
+      boundRole !== input.targetRole
+    ) {
+      log("renewal approval refused: invite binding missing or ambiguous", {
+        code: "RENEWAL_BINDING_INVALID"
+      });
+      return {
+        ok: false,
+        message: "Liên kết gia hạn không hợp lệ hoặc không duy nhất. Không có thay đổi nào được thực hiện."
+      };
+    }
+
     const { data: confirmationRows, error: confirmationError } = await client
       .from("admin_audit_log")
       .select("id,details")
@@ -310,6 +345,28 @@ export async function approveApplication(
       return {
         ok: false,
         message: "Đơn gia hạn chưa có xác nhận hồ sơ hợp lệ. Không có thay đổi nào được thực hiện."
+      };
+    }
+
+    const { data: membershipData, error: membershipError } = await client
+      .from("person_season_memberships")
+      .select("id,status")
+      .eq("person_id", boundPersonId)
+      .eq("season_id", boundSeasonId)
+      .eq("role", boundRole)
+      .maybeSingle();
+    const membership = membershipData as { id?: string; status?: string | null } | null;
+    if (
+      membershipError ||
+      !membership ||
+      membership.status !== "active"
+    ) {
+      log("renewal approval refused: bound membership is not active", {
+        code: membershipError?.code ?? "RENEWAL_MEMBERSHIP_NOT_ACTIVE"
+      });
+      return {
+        ok: false,
+        message: "Membership gia hạn chưa ở trạng thái active. Không có thay đổi nào được thực hiện."
       };
     }
   }

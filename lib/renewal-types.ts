@@ -20,6 +20,22 @@ export type RenewalMentorProfile = Record<string, unknown> & {
   prior_vam_involvement?: string | null;
 };
 
+/** Small, display-only payload allowed to cross the unauthenticated client boundary. */
+export type RenewalPublicDisplayDto = {
+  fullName: string | null;
+  emailPrimary: string | null;
+  phonePrimary: string | null;
+  mentorCode: string | null;
+  firstVamSeason: string | null;
+  companyCurrent: string | null;
+  titleCurrent: string | null;
+  yearsExperienceMin: number | null;
+  yearsExperienceText: string | null;
+  capacityTarget: number | null;
+  industry: string | null;
+  functionArea: string | null;
+};
+
 export type RenewalPublicActionState = {
   ok: boolean;
   outcome?: "accepted" | "declined";

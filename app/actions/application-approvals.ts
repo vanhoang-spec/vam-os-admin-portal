@@ -4,10 +4,36 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { approveApplication } from "@/lib/application-approvals";
 import { canDecide } from "@/lib/permissions";
+import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { ApprovalActionState } from "@/lib/approval-action-types";
 
 function fail(message: string): ApprovalActionState {
   return { ok: false, message };
+}
+
+type ApprovalScope = { programId: string; seasonId: string };
+
+async function resolveApplicationApprovalScope(
+  client: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
+  applicationId: string
+): Promise<ApprovalScope | null> {
+  const { data: application, error: applicationError } = await client
+    .from("applications")
+    .select("id,season_id")
+    .eq("id", applicationId)
+    .maybeSingle();
+  const seasonId = String(application?.season_id ?? "").trim();
+  if (applicationError || !application || !seasonId) return null;
+
+  const { data: season, error: seasonError } = await client
+    .from("seasons")
+    .select("id,program_id")
+    .eq("id", seasonId)
+    .maybeSingle();
+  const programId = String(season?.program_id ?? "").trim();
+  if (seasonError || !season || String(season.id) !== seasonId || !programId) return null;
+  return { programId, seasonId };
 }
 
 export async function approveApplicationAction(
@@ -36,6 +62,18 @@ export async function approveApplicationAction(
       return fail("target_role phải là 'mentor' hoặc 'mentee'.");
     }
     if (!fullName) return fail("Họ tên ứng viên không được để trống.");
+
+    const scopeContext = await getAdminScopeContext();
+    if (scopeContext.scopeError) {
+      return fail("Không thể xác minh phạm vi duyệt đơn của bạn.");
+    }
+    const client = getSupabaseServiceRoleClient();
+    if (!client) return fail("Không thể tải phạm vi của đơn ứng tuyển.");
+    const approvalScope = await resolveApplicationApprovalScope(client, applicationId);
+    if (!approvalScope) return fail("Không thể xác định chương trình và mùa của đơn ứng tuyển.");
+    if (!(await canOperateSeason(scopeContext, approvalScope.seasonId))) {
+      return fail("Bạn không có quyền duyệt đơn trong chương trình và mùa này.");
+    }
 
     const decidedByName =
       (adminUser.full_name?.trim() || null) ?? adminUser.email ?? null;

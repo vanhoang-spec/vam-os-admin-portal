@@ -1,5 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
-import { createRenewalInvite, reconcileRenewalMembership, submitRenewalAccepted, submitRenewalDeclined, confirmRenewalAndApprove, regenerateRenewalInvite, revokeRenewalInvite } from "@/lib/renewal-runtime";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+
+vi.mock("@/lib/application-approvals", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/application-approvals")>();
+  return { ...actual, approveApplication: vi.fn() };
+});
+
+import { approveApplication } from "@/lib/application-approvals";
+import { buildRenewalPublicDisplayDto, createRenewalInvite, loadRenewalPage, reconcileRenewalMembership, submitRenewalAccepted, submitRenewalDeclined, confirmRenewalAndApprove, regenerateRenewalInvite, revokeRenewalInvite } from "@/lib/renewal-runtime";
 import { hashRenewalInviteToken, mintRenewalInviteToken, type RenewalInviteRow } from "@/lib/renewal-invite-token";
 import { renewalDeclineAttention, renewalInviteState } from "@/lib/renewal-console";
 
@@ -12,6 +19,10 @@ const IDS = {
   membership: "00000000-0000-4000-8000-000000000006",
   profile: "00000000-0000-4000-8000-000000000007"
 };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function query(result: { data?: unknown; error?: unknown }) {
   const chain: Record<string, any> = {};
@@ -50,6 +61,72 @@ function acceptedForm() {
 }
 
 describe("P0 public renewal submission boundary", () => {
+  it("builds the public client DTO without person/profile UUIDs or linkage identifiers", () => {
+    const display = buildRenewalPublicDisplayDto(
+      { id: IDS.person, full_name: "Mentor", email_primary: "m@example.com", phone_primary: "0900" },
+      {
+        id: IDS.profile,
+        person_id: IDS.person,
+        mentor_code: "M01",
+        company_current: "Acme",
+        title_current: "Lead",
+        years_experience_min: 10,
+        years_experience_text: "10+",
+        capacity_target: 2,
+        industry: "Tech",
+        function_area: "Engineering",
+        first_vam_season: "S10",
+        prior_vam_involvement: "internal history"
+      } as any
+    );
+    expect(display).toEqual({
+      fullName: "Mentor",
+      emailPrimary: "m@example.com",
+      phonePrimary: "0900",
+      mentorCode: "M01",
+      firstVamSeason: "S10",
+      companyCurrent: "Acme",
+      titleCurrent: "Lead",
+      yearsExperienceMin: 10,
+      yearsExperienceText: "10+",
+      capacityTarget: 2,
+      industry: "Tech",
+      functionArea: "Engineering"
+    });
+    const serialized = JSON.stringify(display);
+    expect(serialized).not.toContain(IDS.person);
+    expect(serialized).not.toContain(IDS.profile);
+    expect(serialized).not.toMatch(/person_id|profile_id|prior_vam_involvement/);
+  });
+
+  it("returns only the display DTO from the public renewal page loader", async () => {
+    const { token } = mintRenewalInviteToken();
+    const person = { id: IDS.person, full_name: "Mentor", email_primary: "m@example.com", phone_primary: "0900" };
+    const profile = {
+      id: IDS.profile,
+      person_id: IDS.person,
+      mentor_code: "M01",
+      company_current: "Acme",
+      title_current: "Lead",
+      years_experience_min: 10,
+      years_experience_text: "10+",
+      capacity_target: 2,
+      industry: "Tech",
+      function_area: "Engineering",
+      first_vam_season: "S10"
+    };
+    const from = vi.fn((table: string) => query({
+      data: table === "person_season_invites" ? invite(token) : table === "people" ? person : profile
+    }));
+    const result = await loadRenewalPage(token, { from } as any);
+    expect(result.status).toBe("renewable");
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(IDS.invite);
+    expect(serialized).not.toContain(IDS.person);
+    expect(serialized).not.toContain(IDS.profile);
+    expect(serialized).not.toMatch(/person_id|profile_id|token_hash|renewal_invites/);
+  });
+
   it("hashes the raw token, sends the renewal payload to M071, and never sends identity/lineage fields", async () => {
     const { token, tokenHash } = mintRenewalInviteToken();
     const from = vi.fn(() => query({ data: invite(token) }));
@@ -155,6 +232,22 @@ describe("admin invite and confirmation controls", () => {
     expect(rpc.mock.calls.map((call) => call[0])).toEqual(["vam071_revoke_renewal_invite", "vam071_create_renewal_invite"]);
   });
 
+  it("regenerate reports partial failure when revoke succeeds but replacement create fails", async () => {
+    const rpc = vi.fn(async (name: string) =>
+      name === "vam071_revoke_renewal_invite"
+        ? { data: [{ outcome_status: "revoked" }], error: null }
+        : { data: null, error: { code: "CREATE_FAILED" } }
+    );
+    const from = vi.fn(() => query({ data: { id: IDS.invite, person_id: IDS.person, program_id: IDS.program, season_id: IDS.season, role: "mentor", submitted_at: null } }));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await regenerateRenewalInvite(
+      { actorAdminUserId: "admin-1", inviteId: IDS.invite, expiresAt: "2026-09-01T00:00:00.000Z" },
+      { from, rpc } as any
+    );
+    expect(result).toMatchObject({ ok: false, outcome: "old_invite_revoked_new_invite_failed" });
+    expect(rpc.mock.calls.map((call) => call[0])).toEqual(["vam071_revoke_renewal_invite", "vam071_create_renewal_invite"]);
+  });
+
   it("derives every invite status displayed by the admin console", () => {
     const base = { expires_at: "2026-09-01T00:00:00.000Z", revoked_at: null, outcome: null };
     const now = Date.parse("2026-08-17T00:00:00.000Z");
@@ -193,6 +286,70 @@ describe("admin invite and confirmation controls", () => {
     expect(from).not.toHaveBeenCalledWith("person_season_memberships");
   });
 
+  it("tampered confirmation intent is rejected before confirm, membership, or approval", async () => {
+    const minted = mintRenewalInviteToken();
+    const inviteRow = { ...invite(minted.token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted", application_id: IDS.application };
+    const application = { id: IDS.application, person_id: IDS.person, season_id: IDS.season, role_applied: "mentor", status: "submitted", source: "s12_mentor_renewal", full_name: "Mentor", email_primary: "m@example.com", phone_primary: null, gender: null, intake_batch_id: null, raw_payload: { renewal: { company_current: "New Co" } } };
+    const person = { id: IDS.person, full_name: "Mentor", email_primary: "m@example.com", phone_primary: null };
+    const profile = { id: IDS.profile, person_id: IDS.person, mentor_code: "M01", company_current: "Old Co", title_current: null, years_experience_min: null, years_experience_text: null, capacity_target: null, industry: null, function_area: null, first_vam_season: "S11" };
+    const from = vi.fn((table: string) => query({ data: table === "person_season_invites" ? inviteRow : table === "applications" ? application : table === "people" ? person : table === "mentor_profiles" ? profile : null }));
+    const rpc = vi.fn();
+    const result = await confirmRenewalAndApprove({
+      applicationId: IDS.application,
+      actorAdminUserId: "admin-1",
+      actorName: "Admin",
+      reviewed: {
+        applicationId: IDS.application,
+        expectedProfile: { company_current: "Old Co" },
+        profileUpdate: { company_current: "Attacker Co" },
+        diff: [{ field: "company_current", before: "Old Co", after: "Attacker Co" }]
+      }
+    }, { from, rpc } as any);
+    expect(result).toMatchObject({ ok: false, outcome: "confirmation_intent_invalid" });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalledWith("person_season_memberships");
+    expect(approveApplication).not.toHaveBeenCalled();
+  });
+
+  it("partial failure after confirm stops when membership reconciliation fails", async () => {
+    const minted = mintRenewalInviteToken();
+    const inviteRow = { ...invite(minted.token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted", application_id: IDS.application };
+    const application = { id: IDS.application, person_id: IDS.person, season_id: IDS.season, role_applied: "mentor", status: "submitted", source: "s12_mentor_renewal", full_name: "Mentor", email_primary: "m@example.com", phone_primary: null, gender: null, intake_batch_id: null, raw_payload: { renewal: {} } };
+    const person = { id: IDS.person, full_name: "Mentor", email_primary: "m@example.com", phone_primary: null };
+    const profile = { id: IDS.profile, person_id: IDS.person, mentor_code: "M01", company_current: "Same", title_current: null, years_experience_min: null, years_experience_text: null, capacity_target: null, industry: null, function_area: null, first_vam_season: "S11" };
+    const from = vi.fn((table: string) => query({ data: table === "person_season_invites" ? inviteRow : table === "applications" ? application : table === "people" ? person : table === "mentor_profiles" ? profile : table === "person_season_memberships" ? { id: IDS.membership, status: "paused" } : null }));
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "noop" }], error: null }));
+    const result = await confirmRenewalAndApprove({
+      applicationId: IDS.application,
+      actorAdminUserId: "admin-1",
+      actorName: "Admin",
+      reviewed: { applicationId: IDS.application, expectedProfile: {}, profileUpdate: {}, diff: [] }
+    }, { from, rpc } as any);
+    expect(result).toMatchObject({ ok: false, outcome: "profile_confirmed_membership_refused" });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(approveApplication).not.toHaveBeenCalled();
+  });
+
+  it("partial failure reports confirm+membership success followed by approval failure", async () => {
+    const minted = mintRenewalInviteToken();
+    const inviteRow = { ...invite(minted.token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted", application_id: IDS.application };
+    const application = { id: IDS.application, person_id: IDS.person, season_id: IDS.season, role_applied: "mentor", status: "submitted", source: "s12_mentor_renewal", full_name: "Mentor", email_primary: "m@example.com", phone_primary: null, gender: null, intake_batch_id: null, raw_payload: { renewal: {} } };
+    const person = { id: IDS.person, full_name: "Mentor", email_primary: "m@example.com", phone_primary: null };
+    const profile = { id: IDS.profile, person_id: IDS.person, mentor_code: "M01", company_current: "Same", title_current: null, years_experience_min: null, years_experience_text: null, capacity_target: null, industry: null, function_area: null, first_vam_season: "S11" };
+    const from = vi.fn((table: string) => query({ data: table === "person_season_invites" ? inviteRow : table === "applications" ? application : table === "people" ? person : table === "mentor_profiles" ? profile : table === "person_season_memberships" ? { id: IDS.membership, status: "active" } : null }));
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "noop" }], error: null }));
+    (approveApplication as Mock).mockResolvedValue({ ok: false, message: "approval refused" });
+    const result = await confirmRenewalAndApprove({
+      applicationId: IDS.application,
+      actorAdminUserId: "admin-1",
+      actorName: "Admin",
+      reviewed: { applicationId: IDS.application, expectedProfile: {}, profileUpdate: {}, diff: [] }
+    }, { from, rpc } as any);
+    expect(result).toMatchObject({ ok: false, outcome: "profile_and_membership_confirmed_approval_failed" });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(approveApplication).toHaveBeenCalledOnce();
+  });
+
   it("retry after approval converges without a second approval mutation", async () => {
     const minted = mintRenewalInviteToken();
     const inviteRow = { ...invite(minted.token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted", application_id: IDS.application };
@@ -209,6 +366,8 @@ describe("admin invite and confirmation controls", () => {
     }, { from, rpc } as any);
     expect(result).toMatchObject({ ok: true, outcome: "renewal_already_complete" });
     expect(from.mock.calls.map((call) => call[0])).not.toContain("admin_audit_log");
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(from).not.toHaveBeenCalledWith("person_season_memberships");
+    expect(rpc).not.toHaveBeenCalled();
+    expect(approveApplication).not.toHaveBeenCalled();
   });
 });

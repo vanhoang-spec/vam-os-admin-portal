@@ -33,7 +33,7 @@ export default async function RenewalPage({ params }: { params: Promise<{ token:
           <div className="rounded-lg border border-green-200 bg-green-50 p-5">
             <h2 className="text-lg font-semibold text-green-900">Phản hồi đã được ghi nhận</h2>
             <p className="mt-2 text-sm text-green-800">
-              {data.person?.full_name ? `${data.person.full_name}, ` : ""}
+              {data.displayName ? `${data.displayName}, ` : ""}
               {data.outcome === "accepted"
                 ? "Ban Tổ chức đã nhận xác nhận tiếp tục đồng hành của anh/chị."
                 : "Ban Tổ chức đã ghi nhận anh/chị không tiếp tục trong Season 12."}
@@ -42,7 +42,7 @@ export default async function RenewalPage({ params }: { params: Promise<{ token:
         ) : null}
 
         {data.status === "renewable" ? (
-          <RenewalForm token={token} person={data.person} profile={data.profile} />
+          <RenewalForm token={token} display={data.display} />
         ) : null}
       </div>
     </main>

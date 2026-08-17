@@ -21,6 +21,7 @@ import {
   type RenewalConfirmationIntent,
   type RenewalMentorProfile,
   type RenewalPerson,
+  type RenewalPublicDisplayDto,
   type RenewalPublicActionState
 } from "@/lib/renewal-types";
 
@@ -29,6 +30,7 @@ export type {
   RenewalConfirmationIntent,
   RenewalMentorProfile,
   RenewalPerson,
+  RenewalPublicDisplayDto,
   RenewalPublicActionState
 } from "@/lib/renewal-types";
 
@@ -44,13 +46,11 @@ export type RenewalPageData =
   | {
       status: "completed";
       outcome: "accepted" | "declined";
-      person: RenewalPerson | null;
+      displayName: string | null;
     }
   | {
       status: "renewable";
-      invite: RenewalInviteRow;
-      person: RenewalPerson;
-      profile: RenewalMentorProfile;
+      display: RenewalPublicDisplayDto;
     };
 
 function safeLog(scope: string, error: unknown) {
@@ -153,9 +153,31 @@ async function loadPersonAndProfile(client: DbClient, personId: string) {
   };
 }
 
+export function buildRenewalPublicDisplayDto(
+  person: RenewalPerson,
+  profile: RenewalMentorProfile
+): RenewalPublicDisplayDto {
+  return {
+    fullName: person.full_name,
+    emailPrimary: person.email_primary,
+    phonePrimary: person.phone_primary,
+    mentorCode: profile.mentor_code,
+    firstVamSeason: profile.first_vam_season ?? null,
+    companyCurrent: profile.company_current,
+    titleCurrent: profile.title_current,
+    yearsExperienceMin: profile.years_experience_min,
+    yearsExperienceText: profile.years_experience_text,
+    capacityTarget: profile.capacity_target,
+    industry: profile.industry,
+    functionArea: profile.function_area
+  };
+}
+
 /** Shared page render path. The same gate is called by both submit actions. */
-export async function loadRenewalPage(rawToken: unknown): Promise<RenewalPageData> {
-  const client = getSupabaseServiceRoleClient();
+export async function loadRenewalPage(
+  rawToken: unknown,
+  client = getSupabaseServiceRoleClient()
+): Promise<RenewalPageData> {
   const decision = await resolveRenewalGate(rawToken, "render", client);
   if (decision.status === "denied") return { status: "denied", message: decision.reason };
   if (!client) return { status: "denied", message: SAFE_PUBLIC_FAILURE };
@@ -163,19 +185,22 @@ export async function loadRenewalPage(rawToken: unknown): Promise<RenewalPageDat
   if (decision.status === "completed") {
     const { data } = await client
       .from("people")
-      .select("id,full_name,email_primary,phone_primary")
+      .select("full_name")
       .eq("id", decision.invite.person_id)
       .maybeSingle();
     return {
       status: "completed",
       outcome: decision.outcome,
-      person: (data as RenewalPerson | null) ?? null
+      displayName: String((data as { full_name?: unknown } | null)?.full_name ?? "").trim() || null
     };
   }
 
   const canonical = await loadPersonAndProfile(client, decision.invite.person_id);
   if (!canonical) return { status: "denied", message: SAFE_PUBLIC_FAILURE };
-  return { status: "renewable", invite: decision.invite, ...canonical };
+  return {
+    status: "renewable",
+    display: buildRenewalPublicDisplayDto(canonical.person, canonical.profile)
+  };
 }
 
 export async function submitRenewalAccepted(
@@ -398,6 +423,17 @@ export async function confirmRenewalAndApprove(
   if (!snapshot) return { ok: false, message: "Dữ liệu gia hạn không còn hợp lệ. Vui lòng tải lại." };
   const binding = renewalBindingFromInvite(snapshot.invite);
 
+  // A response retry after approval is already durably complete. Return before
+  // the confirm RPC so no duplicate confirm_renewal audit can be appended.
+  // Incomplete applications still pass through the full drift check below.
+  if (snapshot.application.status === "approved_as_mentor") {
+    return {
+      ok: true,
+      outcome: "renewal_already_complete",
+      message: "Gia hạn đã hoàn tất trước đó; không tạo thêm mutation hoặc log trùng."
+    };
+  }
+
   // The reviewed snapshot is bound to the Server Action by the Server
   // Component that rendered the table. Next encrypts bound Server Action
   // arguments, so the browser cannot replace CURRENT/PROPOSED values. Validate
@@ -460,18 +496,6 @@ export async function confirmRenewalAndApprove(
       ok: false,
       outcome: "profile_confirmed_membership_refused",
       message: `Hồ sơ đã được xác nhận nhưng chưa duyệt đơn. ${membership.message} Có thể thử lại sau khi xử lý membership.`
-    };
-  }
-
-  // A retry after step 6 succeeded but its response was lost converges here.
-  // Re-running approveApplication would not duplicate people/profiles, but it
-  // would append duplicate decision/audit rows. Treat the durable approved
-  // status as completion after the idempotent confirm+membership checks.
-  if (snapshot.application.status === "approved_as_mentor") {
-    return {
-      ok: true,
-      outcome: "renewal_already_complete",
-      message: "Gia hạn đã hoàn tất trước đó; không tạo thêm mutation hoặc log trùng."
     };
   }
 
