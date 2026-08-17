@@ -16,6 +16,7 @@ residual risk sits.
 | Migration number | 070 — the first unclaimed number after 069 |
 | Scope | **Security / DB foundation only.** No `/renew` page, no renewal form, no `/admin/renewals`, no email, no batch invitation |
 | Revision | R2 — post independent review (`M070_STATIC_SECURITY = PASS`, `REMEDIATION_REQUIRED = YES`). One SQL token changed ([§10.1](#101-why-the-drop-is-if-exists-independent-review-remediation)); the normative [§7](#7-p0-runtime-blockers--the-runtime-package-must-not-ship-without-these) and [§8](#8-environment-and-the-next-execution-gate) added. No redesign |
+| | R3 — Supabase SQL Editor compatibility. Three `\echo` meta-commands removed from `preflight.sql` and `verifier.sql`; the runbook rewritten for the SQL Editor. No security semantics changed — see [§9.0](#90-the-execution-path-is-the-supabase-sql-editor) |
 | Next execution gate | **Production READ-ONLY preflight** — not a Staging apply. See [§8](#8-environment-and-the-next-execution-gate) |
 
 | File | Role | Writes? |
@@ -718,44 +719,123 @@ anywhere.
 
 ## 9. Owner execution sequence
 
-**Do not run any of this until independent security review has passed.** Run
-`apply.sql` and `rollback.sql` with `ON_ERROR_STOP` enabled.
+**Do not run any of this until independent security review has passed.**
 
-```sql
-set timezone = 'UTC';
-\i VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/preflight.sql
+### 9.0 The execution path is the Supabase SQL Editor
+
+Every owner-executable file in this package is **plain PostgreSQL SQL with zero
+psql meta-commands**. There is no `\echo`, no `\i`, no `\set`, no `\gexec`,
+nothing beginning with a backslash — asserted by
+`__tests__/m070-renewal-invite-foundation.test.ts`, which fails the build if one
+reappears in `preflight.sql`, `apply.sql`, `verifier.sql`, `rollback.sql` or the
+canonical migration.
+
+**This was a defect, and it is worth stating plainly.** The R2 revision opened
+`preflight.sql` and `verifier.sql` with `\echo` banners. The owner pasted
+`preflight.sql` into the Supabase Production SQL Editor and it failed on the
+first line of the file:
+
+```
+ERROR: 42601: syntax error at or near "\"
+LINE 65: \echo '=== M070 PREFLIGHT — READ ONLY — BLOCK 1: refusals ==='
 ```
 
-Expect `M070 PREFLIGHT PASSED` and a token of the form
+The SQL Editor is not psql; it hands the text to the server, and the server has
+never understood backslash commands. **Nothing was executed** — the parse
+failed before any statement ran, so no read, no lock, and certainly no write
+reached Production. The banners were cosmetic and are now
+`select '…' as phase;` statements, which say the same thing in a way the server
+understands.
+
+**How to run a file:** open the Supabase SQL Editor against the Production
+project, paste the file's contents, and run it. Nothing needs to be uploaded and
+no path is referenced.
+
+### 9.1 Step 1 — preflight (READ ONLY, safe to run any time)
+
+`preflight.sql` is in **two blocks**, and they must be run as **two separate
+editor runs** — paste and run BLOCK 1 (everything up to and including its
+`rollback;`), then paste and run BLOCK 2. Two independent reasons:
+
+- the editor displays the result of the **last** row-returning statement, so a
+  single combined run would hide BLOCK 1's verdict behind BLOCK 2's evidence
+  row;
+- `set transaction read only` must be the first statement in its transaction,
+  which a fresh run guarantees.
+
+Prefix each run with `set timezone = 'UTC';` or the emitted values are not
+comparable across environments.
+
+**BLOCK 1** returns one row when it passes:
+
+| phase | result | detail |
+|---|---|---|
+| `M070 PREFLIGHT — BLOCK 1` | `PASSED` | `every refusal condition was evaluated and none fired` |
+
+If it refuses instead, the editor shows the raised error, e.g.
+`M070 PREFLIGHT REFUSED [AUDIT_VOCAB_UNEXPECTED]: …`. **Stop.** Every refusal
+names its condition in brackets; none is safe to skip.
+
+> The PASS row exists because the Supabase SQL Editor does not surface
+> `raise notice`. Without it, a passing BLOCK 1 produced no visible output —
+> indistinguishable from a file that did nothing. The row is **evidence, not a
+> gate**: it is only reached when the guard did not raise, because PostgreSQL
+> aborts the whole batch at the raising statement. The `NOTICE` is kept as well,
+> for anyone running under psql.
+
+**BLOCK 2** returns the evidence row and the token:
 
 ```
 M070:ABSENT:BASE52:VALIDATED:FKTARGETS5:UPDATEDAT
 ```
 
-(`BASE53` instead of `BASE52` if M069 has been applied.) **If it refuses,
-stop.** Every refusal names its condition in brackets; none is safe to skip.
-Record both blocks in full.
+(`BASE53` instead of `BASE52` if M069 has been applied.) Record both blocks in
+full, with the run timestamp.
+
+Both blocks run inside `begin; set transaction read only; … rollback;`, so the
+session rejects a write with SQLSTATE `25006`, and neither block contains an
+`INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `GRANT`, `REVOKE` or any DDL — also
+asserted by test.
+
+### 9.2 Step 2 — apply (one transaction)
 
 ```sql
 set timezone = 'UTC';
-\i VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/apply.sql
 ```
 
-Expect `M070 Section 0 passed…`, `M070: audit vocabulary extended to N values…`,
-and a clean `COMMIT`.
+then paste and run `apply.sql`.
+
+Expect `M070 Section 0 passed…`, `M070: audit vocabulary extended to N values…`
+and a clean `COMMIT`. The two `NOTICE` lines are visible under psql; in the SQL
+Editor the meaningful signal is that the run **succeeds** rather than raising —
+every refusal raises, and a raise aborts the transaction with nothing written.
+
+`apply.sql` is one transaction that begins with `begin;` and ends with
+`commit;`. Its atomicity does not depend on how the editor manages its own
+session: a `COMMIT` issued inside an already-aborted transaction is executed by
+PostgreSQL as a `ROLLBACK`, so a failure at any guard leaves nothing behind.
+
+If you run it under psql instead, use `ON_ERROR_STOP`.
+
+### 9.3 Step 3 — verify (READ ONLY)
 
 ```sql
 set timezone = 'UTC';
-\i VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/verifier.sql
 ```
+
+then paste and run `verifier.sql`. It returns one table.
 
 **All 23 checks must read PASS and `M070_VERIFIED` must be PASS.** If any check
-fails, do not build anything on top of the table until it is resolved.
+fails, do not build anything on top of the table until it is resolved. Each row
+carries the **live** definition in `detail`, so a failure can be read directly
+rather than inferred.
 
-Step 4 — deploy nothing. There is no runtime for this table yet. That is
-intentional: the foundation is reviewed and applied first, and the `/renew`
-route, the renewal form, the admin confirmation screen and the invitation
-tooling are separate packages built on top of a verified base.
+### 9.4 Step 4 — deploy nothing
+
+There is no runtime for this table yet. That is intentional: the foundation is
+reviewed and applied first, and the `/renew` route, the renewal form, the admin
+confirmation screen and the invitation tooling are separate packages built on
+top of a verified base.
 
 ---
 
@@ -852,13 +932,30 @@ follow honestly:
    review should treat "this has never been executed" as a stated fact about the
    package rather than an omission to discover.
 
-**Still true after the remediation of 17 Aug 2026.** That round changed one SQL
-token (`DROP TABLE` → `DROP TABLE IF EXISTS` in `rollback.sql`), added the
+**Still true after the R2 remediation of 17 Aug 2026.** That round changed one
+SQL token (`DROP TABLE` → `DROP TABLE IF EXISTS` in `rollback.sql`), added the
 normative §7 and §8, and added test assertions. **No SQL was executed, and no
 database was contacted, in that round either.** `apply.sql`, `preflight.sql`,
 `verifier.sql` and the canonical migration are byte-unchanged by it — only
 `rollback.sql`, this README and the tests moved, and the checksums were
 regenerated accordingly.
+
+**R3, and the one thing that did reach Production.** The owner pasted
+`preflight.sql` into the Supabase Production SQL Editor and it failed at
+`LINE 65` with `42601: syntax error at or near "\"` — the `\echo` banner. That
+is a **parse** failure: PostgreSQL rejected the statement text before executing
+any statement in it, so no read ran, no lock was taken, and no write of any kind
+occurred. Production was not mutated and no `apply.sql` or migration SQL was
+ever authorized or run. The banners were cosmetic; they are now
+`select … as phase;` statements (§9.0), and a test fails the build if a
+backslash-leading line reappears in any owner-executable M070 file.
+
+R3 changed `preflight.sql`, `verifier.sql` and this README. `apply.sql`,
+`rollback.sql` and the canonical migration are byte-unchanged by it, which is
+the strongest available statement that no security semantics moved. **R3
+executed no SQL and contacted no database.** The package as a whole has still
+never been run anywhere; the failed paste is the only time any of it has been
+sent to a server, and it did not get past the parser.
 
 ---
 

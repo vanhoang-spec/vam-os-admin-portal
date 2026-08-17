@@ -37,9 +37,20 @@
 -- Every check emits the LIVE definition in `detail` whether it passes or fails,
 -- so the reviewer reads what is actually installed rather than a verdict about
 -- it, and so two environments can be diffed directly.
+--
+-- SUPABASE SQL EDITOR COMPATIBILITY
+-- This file contains ZERO psql meta-commands. The marker below is an ordinary
+-- `select … as phase` statement, not `\echo`, because the owner's execution
+-- path is the Supabase SQL Editor, which is not psql and rejects a
+-- backslash-leading line with `42601: syntax error at or near "\"` before
+-- executing anything. A test fails the build if one ever reappears.
+--
+-- The check table is the LAST row-returning statement, so it is what the editor
+-- displays. Read every row: `M070_VERIFIED` must be PASS and so must all 23
+-- individual checks.
 -- =============================================================================
 
-\echo '=== M070 VERIFIER — READ ONLY ==='
+select 'M070 VERIFIER — READ ONLY' as phase;
 
 begin;
 set transaction read only;

@@ -300,6 +300,179 @@ describe("invite table contract", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Supabase SQL Editor compatibility.
+//
+// The owner's execution path is the Supabase SQL Editor, which is NOT psql: it
+// hands the file text to the server, and the server has never understood
+// backslash commands. A single `\echo` banner therefore failed the whole file
+// at parse time with `42601: syntax error at or near "\"` — before any
+// statement ran. These tests exist so that a cosmetic line can never again
+// stop the owner at line 65 of a security artifact.
+// ---------------------------------------------------------------------------
+
+describe("owner-executable SQL is Supabase SQL Editor compatible", () => {
+  const BS = String.fromCharCode(92);
+
+  // Every psql meta-command named in the remediation brief, plus the rest of
+  // the ones that plausibly appear in a migration package.
+  const PSQL_META = [
+    "echo", "set", "unset", "if", "elif", "else", "endif", "quit", "q",
+    "gset", "gexec", "gdesc", "g", "copy", "timing", "pset", "o", "i", "ir",
+    "c", "connect", "d", "dt", "df", "dn", "watch", "crosstabview", "prompt",
+    "password", "encoding", "errverbose", "sf", "sv", "edit", "e", "setenv"
+  ];
+
+  it.each(Object.keys(ALL_SQL))(
+    "%s has no line beginning with a backslash",
+    (name) => {
+      const offenders = ALL_SQL[name]
+        .split(/\r?\n/)
+        .map((line, i) => [i + 1, line] as const)
+        .filter(([, line]) => new RegExp(`^[ \\t]*${BS}${BS}`).test(line))
+        .map(([n, line]) => `L${n}: ${line.trim()}`);
+      expect(`${name}:${offenders.join(" | ")}`).toBe(`${name}:`);
+    }
+  );
+
+  it("no named psql meta-command appears at the start of any line", () => {
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      for (const meta of PSQL_META) {
+        // `\meta` at line start, followed by whitespace or end of line.
+        const re = new RegExp(`^[ \\t]*${BS}${BS}${meta}(\\s|$)`, "m");
+        expect(`${name}/${BS}${meta}:${re.test(sql)}`).toBe(`${name}/${BS}${meta}:false`);
+      }
+    }
+  });
+
+  it("the only backslashes left are inside SQL string literals", () => {
+    // LIKE escapes (`like 'vam062\_%'`) and regex literals (`~ '^CHECK \(...'`,
+    // `regexp_replace(…, '\s+', …)`) are ordinary PostgreSQL and are fine. A
+    // backslash outside a quoted literal would not be.
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const stray: string[] = [];
+      stripComments(sql)
+        .split(/\r?\n/)
+        .forEach((line, i) => {
+          let inQuote = false;
+          for (let k = 0; k < line.length; k += 1) {
+            if (line[k] === "'") inQuote = !inQuote;
+            else if (line[k] === BS && !inQuote) stray.push(`L${i + 1}: ${line.trim()}`);
+          }
+        });
+      expect(`${name}:${stray.join(" | ")}`).toBe(`${name}:`);
+    }
+  });
+
+  it("no psql variable interpolation is relied on", () => {
+    // `:name`, `:'name'` and `:"name"` are psql-only and would be sent to the
+    // server verbatim by the editor. `::cast` and plpgsql `:=` are not that.
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const cleaned = stripComments(sql).replace(/::/g, "").replace(/:=/g, "");
+      const hits = cleaned.match(/(?<![:\w]):(?:'[A-Za-z_]\w*'|"[A-Za-z_]\w*"|[A-Za-z_]\w*)/g) ?? [];
+      // The token literal `':FKTARGETS'` is a quoted SQL string being
+      // concatenated, not an interpolation — psql does not substitute inside
+      // single quotes, and the editor has no psql at all.
+      const real = hits.filter((h) => h !== ":FKTARGETS");
+      expect(`${name}:${real.join(",")}`).toBe(`${name}:`);
+    }
+  });
+
+  it("the block markers survived as ordinary SQL, not as comments", () => {
+    // The `\echo` banners carried information the owner reads. Deleting them
+    // would also have made the file compatible; replacing them keeps the file
+    // readable AND makes the marker visible in the editor's result pane.
+    expect(preflight).toContain(
+      "select 'M070 PREFLIGHT — READ ONLY — BLOCK 1: refusals' as phase;"
+    );
+    expect(preflight).toContain(
+      "select 'M070 PREFLIGHT — READ ONLY — BLOCK 2: evidence + token' as phase;"
+    );
+    expect(verifier).toContain("select 'M070 VERIFIER — READ ONLY' as phase;");
+  });
+
+  it("a passing preflight BLOCK 1 returns a visible row, because NOTICE is not shown", () => {
+    // The Supabase SQL Editor does not surface `raise notice`, so a passing
+    // BLOCK 1 previously produced no output at all.
+    expect(preflight).toContain("'M070 PREFLIGHT — BLOCK 1'");
+    expect(preflight).toContain("'PASSED'");
+    // It is evidence, not a gate: it must sit AFTER the guard block, so a
+    // refusal aborts the batch before it can be reached.
+    expect(preflight.indexOf("$m070_preflight$;")).toBeLessThan(
+      preflight.indexOf("'M070 PREFLIGHT — BLOCK 1'")
+    );
+    // …and still inside the read-only transaction it reports on. `^rollback;`
+    // so the prose in the header that quotes the pattern is not matched.
+    expect(preflight.indexOf("'M070 PREFLIGHT — BLOCK 1'")).toBeLessThan(
+      preflight.search(/^rollback;/m)
+    );
+    // The NOTICE is kept for psql users, who get both.
+    expect(preflight).toContain("raise notice 'M070 PREFLIGHT PASSED.");
+  });
+
+  it("parses as ordinary SQL as far as can be established without a server", () => {
+    // Not a SQL parser, and no dependency was added to build one. These are the
+    // structural properties a paste into the editor depends on, each of which
+    // would have caught the `\echo` defect on its own.
+    for (const [name, sql] of Object.entries(ALL_SQL)) {
+      const body = stripComments(sql);
+
+      // 1. Dollar-quoted blocks are balanced — an unclosed $tag$ swallows the
+      //    rest of the file and turns every later statement into string data.
+      const tags = body.match(/\$[a-z0-9_]*\$/gi) ?? [];
+      const counts = new Map<string, number>();
+      for (const t of tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+      for (const [tag, n] of Array.from(counts.entries())) {
+        expect(`${name}/${tag}:${n % 2}`).toBe(`${name}/${tag}:0`);
+      }
+
+      // 2. Single quotes balance outside dollar-quoted bodies.
+      const outside = body.replace(/\$([a-z0-9_]*)\$[\s\S]*?\$\1\$/gi, "");
+      expect(`${name}:${(outside.match(/'/g) ?? []).length % 2}`).toBe(`${name}:0`);
+
+      // 3. Parentheses balance outside dollar-quoted bodies and string literals.
+      const noStrings = outside.replace(/'[^']*'/g, "''");
+      let depth = 0;
+      let wentNegative = false;
+      for (const ch of noStrings) {
+        if (ch === "(") depth += 1;
+        else if (ch === ")") {
+          depth -= 1;
+          if (depth < 0) wentNegative = true;
+        }
+      }
+      expect(`${name}:depth=${depth}:negative=${wentNegative}`).toBe(
+        `${name}:depth=0:negative=false`
+      );
+
+      // 4. Every non-blank, non-comment line is SQL — nothing begins with a
+      //    character class that only a client-side tool would understand.
+      const clientOnly = body
+        .split(/\r?\n/)
+        .map((l, i) => [i + 1, l.trim()] as const)
+        .filter(([, l]) => l.length > 0)
+        .filter(([, l]) => new RegExp(`^[${BS}${BS}@%!#]`).test(l))
+        .map(([n, l]) => `L${n}: ${l}`);
+      expect(`${name}:${clientOnly.join(" | ")}`).toBe(`${name}:`);
+
+      // 5. The file ends on a terminated statement.
+      expect(`${name}:${body.trim().endsWith(";")}`).toBe(`${name}:true`);
+    }
+  });
+
+  it("the README runbook tells the owner to paste, not to \\i a path", () => {
+    expect(readme).toContain("### 9.0 The execution path is the Supabase SQL Editor");
+    expect(readme).toContain("42601: syntax error");
+    expect(readme).toContain("paste");
+    // The runbook must not hand back a psql-only instruction.
+    const runbook = readme.slice(
+      readme.indexOf("## 9. Owner execution sequence"),
+      readme.indexOf("## 10. Rollback")
+    );
+    expect(new RegExp(`^[ \\t]*${BS}${BS}i `, "m").test(runbook)).toBe(false);
+  });
+});
+
 describe("preflight and verifier are read-only", () => {
   const WRITES =
     /\b(insert\s+into|update\s+\w|delete\s+from|truncate|merge\s+into|create\s+(table|index|function|trigger|policy)|drop\s+|alter\s+table|grant\s+|revoke\s+)/i;

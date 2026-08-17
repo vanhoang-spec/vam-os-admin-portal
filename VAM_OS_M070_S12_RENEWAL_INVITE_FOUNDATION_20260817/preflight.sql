@@ -60,9 +60,23 @@
 -- not to this one. What M070 does need from admin_audit_log — ordinary table,
 -- no FORCE RLS, text action_type, exactly one VALIDATED parseable CHECK — is
 -- checked above.
+--
+-- SUPABASE SQL EDITOR COMPATIBILITY
+-- This file contains ZERO psql meta-commands. The block markers below are
+-- ordinary `select … as phase` statements, not `\echo`, because the owner's
+-- execution path is the Supabase SQL Editor, which is not psql and rejects a
+-- backslash line with `42601: syntax error at or near "\"` before executing
+-- anything. A test fails the build if a backslash-leading line ever reappears
+-- in any owner-executable M070 file.
+--
+-- Run BLOCK 1 and BLOCK 2 as SEPARATE editor runs. Two reasons, both real:
+-- the editor surfaces the result of the last row-returning statement, so a
+-- single run would hide BLOCK 1 behind BLOCK 2's evidence row; and
+-- `set transaction read only` must be the first thing in its transaction, which
+-- a fresh run guarantees.
 -- =============================================================================
 
-\echo '=== M070 PREFLIGHT — READ ONLY — BLOCK 1: refusals ==='
+select 'M070 PREFLIGHT — READ ONLY — BLOCK 1: refusals' as phase;
 
 begin;
 set transaction read only;
@@ -261,9 +275,28 @@ begin
 end
 $m070_preflight$;
 
+-- The PASS signal, as a ROW rather than only as a NOTICE.
+--
+-- `raise notice` output is not surfaced by the Supabase SQL Editor, so on that
+-- execution path a passing BLOCK 1 previously produced no visible output at
+-- all — indistinguishable, to the reader, from a file that did nothing. A
+-- refusal is still unmissable (it raises, and the editor shows the error), but
+-- "nothing happened" is a bad way to say PASS.
+--
+-- This is evidence, not a gate: it is only REACHED when the guard above did not
+-- raise. If the guard raises, PostgreSQL aborts the whole batch at that
+-- statement, this select never runs, and the refusal is what the owner sees.
+-- The NOTICE is kept for psql users, who get both.
+select
+  'M070 PREFLIGHT — BLOCK 1'                                          as phase,
+  'PASSED'                                                            as result,
+  'every refusal condition was evaluated and none fired'              as detail,
+  'Run BLOCK 2 (below) as a separate editor run for the evidence row and token.'
+                                                                      as next_step;
+
 rollback;
 
-\echo '=== M070 PREFLIGHT — READ ONLY — BLOCK 2: evidence + token ==='
+select 'M070 PREFLIGHT — READ ONLY — BLOCK 2: evidence + token' as phase;
 
 begin;
 set transaction read only;
