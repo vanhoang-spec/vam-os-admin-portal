@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
+import { escapeLikePattern } from "@/lib/apply-abuse-core";
 import type { JsonRecord } from "@/lib/types";
 
 export type ApplicationRole = "mentor" | "mentee";
@@ -125,7 +126,7 @@ export async function submitPilotApplication(
     .maybeSingle();
   if (seasonErr) {
     log("season lookup failed", seasonErr);
-    return { ok: false, code: "db", message: `${SAFE_ERROR} (seasons: ${seasonErr.message})` };
+    return { ok: false, code: "db", message: SAFE_ERROR };
   }
   if (!seasonRow) {
     return {
@@ -144,7 +145,7 @@ export async function submitPilotApplication(
     .maybeSingle();
   if (batchErr) {
     log("intake_batch lookup failed", batchErr);
-    return { ok: false, code: "db", message: `${SAFE_ERROR} (intake_batches: ${batchErr.message})` };
+    return { ok: false, code: "db", message: SAFE_ERROR };
   }
   if (!batchRow) {
     return {
@@ -154,18 +155,22 @@ export async function submitPilotApplication(
     };
   }
 
-  // Duplicate check: same batch + same role + same normalised email
+  // Duplicate check: same batch + same role + same normalised email.
+  //
+  // `%` and `_` are ilike wildcards and both are legal in an email local part,
+  // so the pattern is escaped — otherwise "a_b@x.test" would match "aXb@x.test"
+  // and a first-time applicant would be told they had already applied.
   const { data: dupRow, error: dupErr } = await client
     .from("applications")
     .select("id")
     .eq("intake_batch_id", batchRow.id)
     .eq("role_applied", input.role)
-    .ilike("email_primary", emailPrimary)
+    .ilike("email_primary", escapeLikePattern(emailPrimary))
     .limit(1)
     .maybeSingle();
   if (dupErr) {
     log("duplicate check failed", dupErr);
-    return { ok: false, code: "db", message: `${SAFE_ERROR} (dedup: ${dupErr.message})` };
+    return { ok: false, code: "db", message: SAFE_ERROR };
   }
   if (dupRow) {
     return {
@@ -200,7 +205,7 @@ export async function submitPilotApplication(
 
   if (insertErr) {
     log("insert applications failed", insertErr);
-    return { ok: false, code: "db", message: `${SAFE_ERROR} (applications: ${insertErr.message})` };
+    return { ok: false, code: "db", message: SAFE_ERROR };
   }
   if (!inserted) {
     log("insert applications returned no row", { batch: input.intakeBatchCode, role: input.role });

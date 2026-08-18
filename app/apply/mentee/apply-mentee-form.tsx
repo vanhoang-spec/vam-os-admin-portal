@@ -137,7 +137,7 @@ const REFERRER_OPTIONS = [
   { value: "other", label: "Khác" }
 ];
 
-export function ApplyMenteeForm() {
+export function ApplyMenteeForm({ applyToken = "" }: { applyToken?: string }) {
   // Redirect on success is handled server-side via redirect() in the action.
   // useFormState is kept only to surface error states (validation / duplicate / db).
   const [state, formAction] = useFormState<ApplyActionState, FormData>(
@@ -147,6 +147,16 @@ export function ApplyMenteeForm() {
 
   return (
     <form action={formAction} className="grid gap-6">
+      {/* The submitted token is re-checked server-side; the page gate alone
+          cannot protect a server action, which is a plain POST endpoint. */}
+      <input type="hidden" name="apply_token" value={applyToken} />
+      {/* Honeypot: hidden from people, tempting to naive bots. A filled value
+          means the submission is discarded. Not type="hidden", because some
+          bots skip those; hidden via CSS and removed from the a11y tree. */}
+      <div aria-hidden="true" className="absolute left-[-9999px] top-auto h-px w-px overflow-hidden">
+        <label htmlFor="website">Website</label>
+        <input id="website" type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+      </div>
       <FormBanner state={state} />
 
       <FormSection title="1. Đồng ý & quyền riêng tư">
