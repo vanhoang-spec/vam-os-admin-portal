@@ -4,6 +4,8 @@ import { Resend } from "resend";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import {
   buildApplicationConfirmationEmail,
+  buildInterviewInviteEmail,
+  buildInterviewScheduleEmail,
   buildMentorConfirmationLinkEmail,
   buildReviewBatchAssignedEmail,
   buildReviewerInviteEmail,
@@ -290,5 +292,69 @@ export async function sendReviewBatchAssigned(input: {
     "review_batch_assigned",
     { ...built, to: input.toEmail },
     input.assignmentBatchId ? { table: "review_assignment_batches", id: input.assignmentBatchId } : null
+  );
+}
+
+/**
+ * Tell an interviewer which candidates they have been booked to interview.
+ * Both this and sendInterviewInvite use the `interview_scheduled` kind; the
+ * related_table distinguishes the interviewer's copy (a review row) from the
+ * candidate's copy (their application).
+ */
+export async function sendInterviewSchedule(input: {
+  toEmail: string;
+  interviewerName: string;
+  seasonLabel: string;
+  interviewCount: number;
+  firstSlotLabel?: string | null;
+  modeLabel?: string | null;
+  location?: string | null;
+  reviewId?: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base) {
+    return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  }
+
+  const built = buildInterviewScheduleEmail({
+    interviewerName: input.interviewerName,
+    seasonLabel: input.seasonLabel,
+    interviewCount: input.interviewCount,
+    firstSlotLabel: input.firstSlotLabel ?? null,
+    modeLabel: input.modeLabel ?? null,
+    location: input.location ?? null,
+    interviewsUrl: `${base}/interviews`
+  });
+
+  return deliver(
+    "interview_scheduled",
+    { ...built, to: input.toEmail },
+    input.reviewId ? { table: "application_reviews", id: input.reviewId } : null
+  );
+}
+
+/** Send a candidate the time, mode and place of their interview. */
+export async function sendInterviewInvite(input: {
+  toEmail: string;
+  candidateName: string;
+  seasonLabel: string;
+  timeLabel: string;
+  modeLabel?: string | null;
+  location?: string | null;
+  applicationId: string;
+}): Promise<SendEmailResult> {
+  const built = buildInterviewInviteEmail({
+    candidateName: input.candidateName,
+    seasonLabel: input.seasonLabel,
+    timeLabel: input.timeLabel,
+    modeLabel: input.modeLabel ?? null,
+    location: input.location ?? null
+  });
+
+  return deliver(
+    "interview_scheduled",
+    { ...built, to: input.toEmail },
+    { table: "applications", id: input.applicationId }
   );
 }

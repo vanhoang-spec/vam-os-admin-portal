@@ -313,3 +313,122 @@ export function buildReviewBatchAssignedEmail(input: {
 
   return { to: "", subject, text: lines.join("\n"), html };
 }
+
+/** The interview appointments one interviewer has just been given. */
+export function buildInterviewScheduleEmail(input: {
+  interviewerName: string;
+  seasonLabel: string;
+  interviewCount: number;
+  firstSlotLabel?: string | null;
+  modeLabel?: string | null;
+  location?: string | null;
+  interviewsUrl: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.interviewerName);
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const count = Math.max(0, Math.floor(Number(input.interviewCount) || 0));
+  const first = input.firstSlotLabel ? safeDisplayName(input.firstSlotLabel) : null;
+  const modeLabel = input.modeLabel ? safeDisplayName(input.modeLabel) : null;
+  const location = input.location ? safeDisplayName(input.location, "") : null;
+
+  const subject = `[VAM Mentoring] Lịch phỏng vấn ${count} ứng viên — ${season}`;
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Ban tổ chức đã xếp lịch cho anh/chị phỏng vấn ${count} ứng viên mentee ${season}.`,
+    ""
+  ];
+  if (first) lines.push(`Ca đầu tiên: ${first}`);
+  if (modeLabel) lines.push(`Hình thức: ${modeLabel}`);
+  if (location) lines.push(`Địa điểm / đường dẫn: ${location}`);
+  if (first || modeLabel || location) lines.push("");
+  lines.push(
+    "Danh sách đầy đủ kèm giờ từng ca có trong mục “Phỏng vấn” sau khi anh/chị đăng nhập:",
+    input.interviewsUrl,
+    "",
+    "Khi mở hồ sơ, anh/chị sẽ thấy điểm vòng hồ sơ ngay cạnh phiếu chấm phỏng vấn.",
+    "Sau khi nộp điểm, nếu muốn nhận bạn này làm mentee, anh/chị bấm “Chọn làm mentee của tôi” ngay trên màn hình đó.",
+    "",
+    "Nếu lịch chưa phù hợp, anh/chị vui lòng trả lời email này để ban tổ chức sắp xếp lại.",
+    "",
+    "Trân trọng cảm ơn anh/chị.",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const detailRows = [
+    first ? `<li>Ca đầu tiên: <strong>${escapeHtml(first)}</strong></li>` : "",
+    modeLabel ? `<li>Hình thức: <strong>${escapeHtml(modeLabel)}</strong></li>` : "",
+    location ? `<li>Địa điểm / đường dẫn: ${escapeHtml(location)}</li>` : ""
+  ].join("");
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Ban tổ chức đã xếp lịch cho anh/chị phỏng vấn <strong>${count} ứng viên mentee</strong> ${escapeHtml(season)}.</p>`,
+      detailRows ? `<ul>${detailRows}</ul>` : "",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.interviewsUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Xem lịch phỏng vấn của tôi</a></p>`,
+      "<p>Khi mở hồ sơ, anh/chị sẽ thấy điểm vòng hồ sơ ngay cạnh phiếu chấm phỏng vấn. Sau khi nộp điểm, nếu muốn nhận bạn này làm mentee, anh/chị bấm <strong>“Chọn làm mentee của tôi”</strong> ngay trên màn hình đó.</p>",
+      "<p>Nếu lịch chưa phù hợp, anh/chị vui lòng trả lời email này để ban tổ chức sắp xếp lại.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/** The appointment itself, sent to the candidate being interviewed. */
+export function buildInterviewInviteEmail(input: {
+  candidateName: string;
+  seasonLabel: string;
+  timeLabel: string;
+  modeLabel?: string | null;
+  location?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.candidateName, "bạn");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const time = safeDisplayName(input.timeLabel, "");
+  const modeLabel = input.modeLabel ? safeDisplayName(input.modeLabel) : null;
+  const location = input.location ? safeDisplayName(input.location, "") : null;
+
+  const subject = `[VAM Mentoring] Lịch phỏng vấn mentee ${season}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Chúc mừng bạn đã vào vòng phỏng vấn chương trình mentoring ${season}.`,
+    "",
+    "Thông tin buổi phỏng vấn:"
+  ];
+  if (time) lines.push(`- Thời gian: ${time}`);
+  if (modeLabel) lines.push(`- Hình thức: ${modeLabel}`);
+  if (location) lines.push(`- Địa điểm / đường dẫn: ${location}`);
+  lines.push(
+    "",
+    "Bạn vui lòng có mặt trước 5 phút. Buổi phỏng vấn kéo dài khoảng 20–30 phút, xoay quanh mục tiêu và mong đợi của bạn với chương trình.",
+    "",
+    "Nếu thời gian trên không phù hợp, bạn vui lòng trả lời email này sớm nhất có thể để ban tổ chức sắp xếp lại.",
+    "",
+    "Hẹn gặp bạn.",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const detailRows = [
+    time ? `<li>Thời gian: <strong>${escapeHtml(time)}</strong></li>` : "",
+    modeLabel ? `<li>Hình thức: <strong>${escapeHtml(modeLabel)}</strong></li>` : "",
+    location ? `<li>Địa điểm / đường dẫn: ${escapeHtml(location)}</li>` : ""
+  ].join("");
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Chúc mừng bạn đã vào vòng phỏng vấn chương trình mentoring <strong>${escapeHtml(season)}</strong>.</p>`,
+      detailRows ? `<p>Thông tin buổi phỏng vấn:</p><ul>${detailRows}</ul>` : "",
+      "<p>Bạn vui lòng có mặt trước 5 phút. Buổi phỏng vấn kéo dài khoảng 20–30 phút, xoay quanh mục tiêu và mong đợi của bạn với chương trình.</p>",
+      "<p>Nếu thời gian trên không phù hợp, bạn vui lòng trả lời email này sớm nhất có thể để ban tổ chức sắp xếp lại.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
