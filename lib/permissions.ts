@@ -89,3 +89,16 @@ export function canManageMatches(role?: string | null) {
 export function canRecordMentorConfirmation(role?: string | null) {
   return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
 }
+
+/**
+ * Can write the program documents (code of conduct, tips) and the bodies of
+ * the post-matching emails, and send those emails to a cohort.
+ *
+ * Core team and above. Support team is deliberately excluded: their one write
+ * capability stays the mentor confirmation above. Publishing a document puts
+ * text on a public page and mailing a batch reaches hundreds of students —
+ * neither is a phone-call task.
+ */
+export function canManageProgramDocuments(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

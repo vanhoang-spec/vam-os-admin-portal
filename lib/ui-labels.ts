@@ -222,3 +222,81 @@ export const ACCEPTED_VAM_TERMS = [
   "Matching",
   "Recap",
 ] as const;
+
+/**
+ * Vietnamese labels for the fields of the public application forms.
+ *
+ * The raw payload is stored with the form's own field names, which are fine in
+ * a database and unreadable on a page a mentor opens. Anything not listed falls
+ * back to a tidied version of the key rather than being hidden: a question
+ * added to the form later must still be visible to whoever reads the dossier.
+ */
+const APPLICATION_FIELD_LABELS: Record<string, string> = {
+  // Shared
+  full_name: "Họ và tên",
+  preferred_name: "Tên thường gọi",
+  email_primary: "Email",
+  phone_primary: "Số điện thoại",
+  gender: "Giới tính",
+  year_of_birth: "Năm sinh",
+  additional_notes: "Ghi chú thêm",
+  referrer_or_source: "Biết chương trình qua",
+  meeting_format_preference: "Hình thức gặp mong muốn",
+  consent_contact_methods: "Đồng ý cách thức liên hệ",
+  social_contact: "Mạng xã hội / liên hệ khác",
+
+  // Mentee
+  university: "Trường",
+  school_or_faculty: "Khoa / viện",
+  major: "Ngành học",
+  class_cohort: "Lớp / khoá",
+  mssv: "Mã số sinh viên",
+  year_of_study: "Năm học",
+  target_industry: "Ngành mong muốn",
+  target_function: "Lĩnh vực mong muốn",
+  target_soft_skills: "Kỹ năng muốn phát triển",
+  training_topics_interest: "Chủ đề quan tâm",
+  mentoring_goals_text: "Mục tiêu khi tham gia",
+  one_year_vision_text: "Mục tiêu một năm tới",
+  current_difficulty_text: "Khó khăn hiện tại",
+  mentoring_plan_text: "Kế hoạch đồng hành",
+  why_uem_text: "Vì sao chọn chương trình",
+  if_not_effective_text: "Nếu đồng hành chưa hiệu quả",
+  mentor_gender_preference: "Mong muốn về giới tính mentor",
+  available_for_interview: "Sẵn sàng phỏng vấn",
+  available_for_kickoff: "Tham dự kick-off",
+  commitment_understanding: "Cam kết tham gia",
+
+  // Mentor
+  company_current: "Công ty hiện tại",
+  title_current: "Chức danh hiện tại",
+  industry_primary: "Ngành chính",
+  function_primary: "Lĩnh vực chính",
+  secondary_industries_functions: "Ngành / lĩnh vực phụ",
+  years_of_experience: "Số năm kinh nghiệm",
+  highest_degree: "Bằng cấp cao nhất",
+  current_city: "Thành phố",
+  linkedin_url: "LinkedIn",
+  bio_or_cv_url: "Hồ sơ / CV",
+  profile_picture_url: "Ảnh đại diện",
+  mentoring_capacity_total: "Số mentee tối đa",
+  preferred_mentee_persona: "Mong muốn về mentee",
+  meeting_frequency: "Tần suất gặp",
+  preferred_language: "Ngôn ngữ",
+  motivation_text: "Động lực tham gia",
+  sme_mentoring_experience: "Kinh nghiệm mentoring",
+  prior_vam_involvement: "Từng tham gia VAM",
+  first_vam_season: "Mùa đầu tiên",
+  programs_willing_to_join: "Chương trình sẵn sàng tham gia",
+  activities_willing_to_support: "Hoạt động sẵn sàng hỗ trợ",
+  open_to_intro_call: "Sẵn sàng gọi làm quen",
+  can_attend_orientation: "Tham dự orientation"
+};
+
+export function applicationFieldLabel(key: string): string {
+  const known = APPLICATION_FIELD_LABELS[key];
+  if (known) return known;
+  const tidied = String(key ?? "").replace(/_/g, " ").trim();
+  if (!tidied) return key;
+  return tidied.charAt(0).toUpperCase() + tidied.slice(1);
+}
