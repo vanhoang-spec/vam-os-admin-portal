@@ -114,9 +114,23 @@ async function authAllowsRequest(request: NextRequest) {
 }
 
 export async function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/register/") || request.nextUrl.pathname.startsWith("/checkin/")) {
+  // Routes that identify their visitor by a bearer token in the URL rather than
+  // by a Supabase session: public event registration, public check-in, and the
+  // mentor season-confirmation link. Each is flagged with `x-vam-public-route`
+  // so `app/layout.tsx` renders it without the admin shell. The value is
+  // derived from the pathname here and never read from the incoming request,
+  // so a client cannot spoof it.
+  const publicRoute = request.nextUrl.pathname.startsWith("/register/")
+    ? "register"
+    : request.nextUrl.pathname.startsWith("/checkin/")
+      ? "checkin"
+      : request.nextUrl.pathname.startsWith("/confirm/")
+        ? "confirm"
+        : null;
+
+  if (publicRoute) {
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-vam-public-route", request.nextUrl.pathname.startsWith("/checkin/") ? "checkin" : "register");
+    requestHeaders.set("x-vam-public-route", publicRoute);
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 

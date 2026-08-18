@@ -474,10 +474,17 @@ describe("migration immutability", () => {
     expect(gitUnchanged(BASELINE, p)).toBe(true);
   });
 
-  it("changes only migration 059 under supabase_migrations/", () => {
-    const r = spawnSync("git", ["diff", "--name-only", BASELINE, "--", "supabase_migrations/"], {
-      encoding: "utf8",
-    });
+  it("changes only migration 059 among the migrations that already existed", () => {
+    // `--diff-filter=a` excludes files ADDED since the baseline. Migrations are
+    // additive by policy (docs/MIGRATION_PRODUCTION_SYNC.md), so a later,
+    // unrelated migration file is expected and must not fail this check; what
+    // this assertion protects is that this work package did not edit any
+    // pre-existing migration other than 059.
+    const r = spawnSync(
+      "git",
+      ["diff", "--name-only", "--diff-filter=a", BASELINE, "--", "supabase_migrations/"],
+      { encoding: "utf8" }
+    );
     expect(r.status).toBe(0);
     expect(r.stdout.split("\n").filter(Boolean)).toEqual([MIGRATION]);
   });
