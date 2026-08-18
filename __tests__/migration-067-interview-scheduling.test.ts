@@ -225,7 +225,7 @@ describe("migration 067 — privilege contract", () => {
   it("grants service_role insert and select only — the log cannot be edited", () => {
     const grants = executable.match(/^grant [^\n;]+;/gm) ?? [];
     expect(grants).toHaveLength(1);
-    const [grant] = grants;
+    const grant = grants[0] ?? "";
     expect(grant).toContain(`public.${NEW_TABLE}`);
     expect(grant).toContain("select, insert");
     expect(grant).not.toMatch(/\bupdate\b/);

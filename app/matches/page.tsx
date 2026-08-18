@@ -72,6 +72,9 @@ export default async function MatchesPage({
         <Link href="/matches/unmatched" className="text-sm text-vam-green hover:underline">
           Danh sách chưa ghép cặp
         </Link>
+        <Link href="/matches/recommendations" className="text-sm text-vam-green hover:underline">
+          Đề xuất ghép cặp
+        </Link>
         <Link href="/mentors/season-confirmations" className="text-sm text-vam-green hover:underline">
           Xác nhận mentor
         </Link>
