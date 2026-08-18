@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getInterviewCandidates } from "@/lib/data";
-import { canSelfClaimInterview } from "@/lib/permissions";
+import { canBulkAssignReviews, canSelfClaimInterview } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { InterviewsClient } from "./interviews-client";
@@ -45,10 +45,15 @@ export default async function InterviewsPage({
       />
 
       {/* Nav */}
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <Link href="/reviews" className="text-sm text-vam-green hover:underline">
           ← Quay lại Reviews
         </Link>
+        {canBulkAssignReviews(adminUser.role) ? (
+          <Link href="/interviews/schedule" className="text-sm text-vam-green hover:underline">
+            Xếp lịch phỏng vấn
+          </Link>
+        ) : null}
       </div>
 
       <ErrorBox message={intakeBatches.error || candidates.error} />

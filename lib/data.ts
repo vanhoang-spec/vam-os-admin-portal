@@ -1995,7 +1995,9 @@ export async function getInterviewCandidates(filters?: {
   const appIds = appList.map((a) => a.id);
   const { data: reviewRows } = await client
     .from("application_reviews")
-    .select("id,application_id,status,reviewer_admin_user_id")
+    .select(
+      "id,application_id,status,reviewer_admin_user_id,interview_scheduled_at,interview_mode,interview_location"
+    )
     .eq("review_round", "interview")
     .neq("status", "cancelled")
     .in("application_id", appIds)
@@ -2004,7 +2006,14 @@ export async function getInterviewCandidates(filters?: {
   // Map application_id → first active interview review
   const reviewByAppId = new Map<
     string,
-    { id: string; status: string; reviewer_admin_user_id: string | null }
+    {
+      id: string;
+      status: string;
+      reviewer_admin_user_id: string | null;
+      interview_scheduled_at: string | null;
+      interview_mode: string | null;
+      interview_location: string | null;
+    }
   >();
   for (const row of reviewRows ?? []) {
     const appId = row.application_id as string;
@@ -2012,8 +2021,35 @@ export async function getInterviewCandidates(filters?: {
       reviewByAppId.set(appId, {
         id: String(row.id),
         status: String(row.status ?? ""),
-        reviewer_admin_user_id: (row.reviewer_admin_user_id as string | null) ?? null
+        reviewer_admin_user_id: (row.reviewer_admin_user_id as string | null) ?? null,
+        interview_scheduled_at: (row.interview_scheduled_at as string | null) ?? null,
+        interview_mode: (row.interview_mode as string | null) ?? null,
+        interview_location: (row.interview_location as string | null) ?? null
       });
+    }
+  }
+
+  // Name the interviewer: a schedule that only shows an id is unreadable to the
+  // organisers, and an interviewer has to be able to recognise their own rows.
+  const interviewerIds = Array.from(
+    new Set(
+      Array.from(reviewByAppId.values())
+        .map((review) => review.reviewer_admin_user_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const interviewerNameById = new Map<string, string>();
+  if (interviewerIds.length) {
+    const { data: interviewerRows } = await client
+      .from("admin_users")
+      .select("id,full_name,email")
+      .in("id", interviewerIds);
+    for (const row of (interviewerRows ?? []) as Array<{
+      id: string;
+      full_name: string | null;
+      email: string | null;
+    }>) {
+      interviewerNameById.set(row.id, row.full_name ?? row.email ?? "");
     }
   }
 
@@ -2023,7 +2059,13 @@ export async function getInterviewCandidates(filters?: {
       ...a,
       interview_review_id: review?.id ?? null,
       interview_review_status: review?.status ?? null,
-      interview_reviewer_admin_user_id: review?.reviewer_admin_user_id ?? null
+      interview_reviewer_admin_user_id: review?.reviewer_admin_user_id ?? null,
+      interview_reviewer_name: review?.reviewer_admin_user_id
+        ? interviewerNameById.get(review.reviewer_admin_user_id) ?? null
+        : null,
+      interview_scheduled_at: review?.interview_scheduled_at ?? null,
+      interview_mode: review?.interview_mode ?? null,
+      interview_location: review?.interview_location ?? null
     };
   });
 
