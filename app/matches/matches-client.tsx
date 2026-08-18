@@ -10,14 +10,18 @@ import { filterMentees, filterMentors } from "@/lib/match-search";
 import type { MenteeCandidate, MentorCandidate } from "@/lib/matches";
 
 const initialState: MatchActionState = { ok: false, message: null };
-const MAX_LOAD = 3;
+/**
+ * Each mentor carries their own limit for the season (max_mentees), declared on
+ * the confirmation form and topped up by any slot core_team granted. Seasons
+ * that predate confirmations report 3, so nothing changes there.
+ */
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function loadBar(count: number) {
-  if (count === 0) return { label: `0/${MAX_LOAD}`, cls: "text-green-700 bg-green-100" };
-  if (count < MAX_LOAD) return { label: `${count}/${MAX_LOAD}`, cls: "text-amber-700 bg-amber-100" };
-  return { label: `${count}/${MAX_LOAD} — FULL`, cls: "text-red-700 bg-red-100" };
+function loadBar(count: number, cap: number) {
+  if (count === 0) return { label: `0/${cap}`, cls: "text-green-700 bg-green-100" };
+  if (count < cap) return { label: `${count}/${cap}`, cls: "text-amber-700 bg-amber-100" };
+  return { label: `${count}/${cap} — FULL`, cls: "text-red-700 bg-red-100" };
 }
 
 // ── Submit buttons ────────────────────────────────────────────────────────────
@@ -71,7 +75,7 @@ export function ManualMatchForm({
     }
   }, [state.ok, router]);
 
-  const availableMentors = mentors.filter((m) => m.active_match_count < MAX_LOAD);
+  const availableMentors = mentors.filter((m) => m.active_match_count < m.max_mentees);
   const availableMentees = mentees.filter((m) => !m.has_active_match);
 
   const visibleMentors = filterMentors(mentors, mentorSearch);
@@ -118,8 +122,8 @@ export function ManualMatchForm({
           >
             <option value="">-- Chọn Mentor {mentorSearch ? `(${visibleMentors.length} kết quả)` : ""} --</option>
             {visibleMentors.map((m) => {
-              const lb = loadBar(m.active_match_count);
-              const isFull = m.active_match_count >= MAX_LOAD;
+              const lb = loadBar(m.active_match_count, m.max_mentees);
+              const isFull = m.active_match_count >= m.max_mentees;
               return (
                 <option key={m.profile_id} value={m.profile_id} disabled={isFull}>
                   {`[${lb.label}] ${m.full_name ?? m.email_primary ?? m.profile_id}`}
@@ -135,8 +139,8 @@ export function ManualMatchForm({
               <div>{selectedMentor.email_primary}</div>
               {selectedMentor.company_current ? <div>{selectedMentor.title_current} @ {selectedMentor.company_current}</div> : null}
               <div className="mt-1">
-                <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${loadBar(selectedMentor.active_match_count).cls}`}>
-                  Mentee hiện tại: {loadBar(selectedMentor.active_match_count).label}
+                <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${loadBar(selectedMentor.active_match_count, selectedMentor.max_mentees).cls}`}>
+                  Mentee hiện tại: {loadBar(selectedMentor.active_match_count, selectedMentor.max_mentees).label}
                 </span>
               </div>
             </div>
@@ -216,8 +220,10 @@ export function ManualMatchForm({
         <CreateSubmit />
         {!selectedMentorId || !selectedMenteeId ? (
           <span className="text-xs text-slate-500">Chọn cả mentor và mentee để tạo match.</span>
-        ) : selectedMentor && selectedMentor.active_match_count >= MAX_LOAD ? (
-          <span className="text-xs text-red-600">Mentor này đã đạt giới hạn {MAX_LOAD} mentee.</span>
+        ) : selectedMentor && selectedMentor.active_match_count >= selectedMentor.max_mentees ? (
+          <span className="text-xs text-red-600">
+            Mentor này đã đạt giới hạn {selectedMentor.max_mentees} mentee đã xác nhận.
+          </span>
         ) : selectedMentee?.has_active_match ? (
           <span className="text-xs text-red-600">Mentee này đã có mentor active.</span>
         ) : null}

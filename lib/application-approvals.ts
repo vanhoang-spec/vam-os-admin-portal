@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { clampCapacity } from "@/lib/mentor-confirmations-core";
 import type { MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 // -----------------------------------------------------------------------
@@ -69,6 +70,108 @@ export type ApproveApplicationResult =
       profileCreated: boolean;
     }
   | { ok: false; message: string };
+
+// ---------------------------------------------------------------------------
+// Season participation seed for newly approved mentors
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the mentor's season-confirmation row from what they already told us on
+ * the application form (`raw_payload.mentoring_capacity_total`, 1–3).
+ *
+ * Non-fatal in every branch: approving an application must not fail because a
+ * convenience row could not be written. When the capacity is missing or out of
+ * range the row is created as `pending` so an operator asks, rather than
+ * inventing a number that would decide how many mentees this person receives.
+ */
+async function seedMentorSeasonConfirmation(
+  client: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
+  input: {
+    applicationId: string;
+    personId: string;
+    mentorProfileId: string;
+    intakeBatchId: string | null;
+    approvedByAdminUserId: string | null;
+  }
+) {
+  try {
+    if (!input.intakeBatchId) return;
+
+    const { data: batch, error: batchErr } = await client
+      .from("intake_batches")
+      .select("season_id")
+      .eq("id", input.intakeBatchId)
+      .maybeSingle();
+    if (batchErr || !batch) return;
+
+    const seasonId = (batch as { season_id?: string | null }).season_id ?? null;
+    if (!seasonId) return;
+
+    // Only seed where the season actually runs the confirmation process.
+    const { data: existing, error: existingErr } = await client
+      .from("mentor_season_confirmations")
+      .select("id")
+      .eq("season_id", seasonId)
+      .eq("person_id", input.personId)
+      .maybeSingle();
+    if (existingErr) return;
+    if (existing) return; // Never overwrite an answer the mentor already gave.
+
+    const { data: appRow } = await client
+      .from("applications")
+      .select("raw_payload")
+      .eq("id", input.applicationId)
+      .maybeSingle();
+
+    const rawPayload = (appRow as { raw_payload?: Record<string, unknown> | null } | null)?.raw_payload ?? null;
+    const declared = clampCapacity(rawPayload?.mentoring_capacity_total);
+
+    const now = new Date().toISOString();
+    const { data: inserted, error: insertErr } = await client
+      .from("mentor_season_confirmations")
+      .insert(
+        declared
+          ? {
+              person_id: input.personId,
+              mentor_profile_id: input.mentorProfileId,
+              season_id: seasonId,
+              status: "confirmed",
+              max_mentees: declared,
+              response_source: "application",
+              responded_at: now,
+              created_by: input.approvedByAdminUserId
+            }
+          : {
+              person_id: input.personId,
+              mentor_profile_id: input.mentorProfileId,
+              season_id: seasonId,
+              status: "pending",
+              created_by: input.approvedByAdminUserId
+            }
+      )
+      .select("id")
+      .maybeSingle();
+
+    if (insertErr || !inserted) {
+      if (insertErr) log("seed mentor season confirmation failed (non-fatal)", insertErr);
+      return;
+    }
+
+    await client.from("mentor_season_confirmation_log").insert({
+      confirmation_id: (inserted as { id: string }).id,
+      person_id: input.personId,
+      season_id: seasonId,
+      new_status: declared ? "confirmed" : "pending",
+      new_max_mentees: declared,
+      change_type: "created",
+      response_source: declared ? "application" : null,
+      reason: "Tạo từ đơn đăng ký được duyệt",
+      changed_by_admin_user_id: input.approvedByAdminUserId
+    });
+  } catch (err) {
+    log("seed mentor season confirmation crashed (non-fatal)", err);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Gender normalization
@@ -300,6 +403,28 @@ export async function approveApplication(
       ok: false,
       message: "Không thể cập nhật trạng thái đơn. " + SAFE_ERROR
     };
+  }
+
+  // ------------------------------------------------------------------
+  // 3b. Season participation for a newly approved mentor (non-fatal)
+  //
+  // From Season 12, matching reads a mentor's capacity from
+  // mentor_season_confirmations. A mentor approved through this path has just
+  // told us on the application form how many mentees they can take, so seed the
+  // row from that answer instead of making an operator ask again.
+  //
+  // If the form carried no usable answer the row is left pending rather than
+  // guessed at: an unanswered capacity must not silently become a number.
+  // ------------------------------------------------------------------
+
+  if (input.targetRole === "mentor") {
+    await seedMentorSeasonConfirmation(client, {
+      applicationId: input.applicationId,
+      personId: person.id,
+      mentorProfileId: profileId,
+      intakeBatchId: input.intakeBatchId ?? null,
+      approvedByAdminUserId: input.approvedByAdminUserId ?? null
+    });
   }
 
   // ------------------------------------------------------------------

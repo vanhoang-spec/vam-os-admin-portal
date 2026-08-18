@@ -17,10 +17,18 @@ vi.mock("@/lib/program-scope", () => ({
   getAllowedSeasonIds: vi.fn(),
   canAccessSeason: vi.fn(),
 }));
+// From Season 12, createManualMatch resolves each mentor's cap from
+// mentor_season_confirmations. Mocking the loader keeps the from() queue in
+// these tests deterministic; returning null means "this season has no
+// confirmation rows", i.e. the legacy cap of 3 the cases below assert.
+// Per-mentor caps are covered in __tests__/mentor-confirmations-core.test.ts
+// and by the confirmation cases at the end of this file.
+vi.mock("@/lib/mentor-confirmations", () => ({ loadSeasonConfirmationMap: vi.fn() }));
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getAdminScopeContext, canOperateAnyScope, getAllowedSeasonIds, canAccessSeason } from "@/lib/program-scope";
+import { loadSeasonConfirmationMap } from "@/lib/mentor-confirmations";
 import { createManualMatch, cancelMatch } from "@/lib/matches";
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
@@ -74,6 +82,8 @@ beforeEach(() => {
   (canOperateAnyScope as Mock).mockReturnValue(true);
   (getAllowedSeasonIds as Mock).mockResolvedValue([SEASON_UUID]);
   (canAccessSeason as Mock).mockReturnValue(true);
+  // Default: a season with no confirmation rows → legacy cap of 3.
+  (loadSeasonConfirmationMap as Mock).mockResolvedValue(null);
 });
 
 // ── createManualMatch — input validation ──────────────────────────────────────
@@ -482,5 +492,169 @@ describe("cancelMatch — DB error safety", () => {
       expect(result.message).not.toContain(SENSITIVE_MSG);
       expect(result.message).not.toContain("INTERNAL");
     }
+  });
+});
+
+// ── Season 12: per-mentor capacity from mentor_season_confirmations ───────────
+
+describe("createManualMatch — per-mentor capacity (Season 12 confirmations)", () => {
+  const confirmationFor = (row: { status: string; max_mentees: number | null; extra_slots?: number }) =>
+    new Map([[PERSON_UUID, { extra_slots: 0, ...row }]]);
+
+  it("stops at the mentor's own limit of 1, not the legacy 3", async () => {
+    (loadSeasonConfirmationMap as Mock).mockResolvedValue(
+      confirmationFor({ status: "confirmed", max_mentees: 1 })
+    );
+    const client = makeClient([
+      makeChain({ data: MENTOR_PROFILE }), // mentor_profiles
+      makeChain({ data: MENTEE_PROFILE }), // mentee_profiles
+      makeChain({ data: BATCH }),          // intake_batches
+      makeChain({ data: null }),           // matches — mentee has no active match
+      makeChain({ count: 1 }),             // matches — mentor already has 1
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("1/1");
+  });
+
+  it("counts slots core_team granted on top of the declared capacity", async () => {
+    (loadSeasonConfirmationMap as Mock).mockResolvedValue(
+      confirmationFor({ status: "confirmed", max_mentees: 1, extra_slots: 1 })
+    );
+    const client = makeClient([
+      makeChain({ data: MENTOR_PROFILE }),
+      makeChain({ data: MENTEE_PROFILE }),
+      makeChain({ data: BATCH }),
+      makeChain({ data: null }),
+      makeChain({ count: 1 }),                 // 1 of 2 used
+      makeChain({ data: { id: MATCH_UUID } }), // insert succeeds
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses a mentor who has not answered the confirmation yet", async () => {
+    (loadSeasonConfirmationMap as Mock).mockResolvedValue(
+      confirmationFor({ status: "pending", max_mentees: null })
+    );
+    const client = makeClient([
+      makeChain({ data: MENTOR_PROFILE }),
+      makeChain({ data: MENTEE_PROFILE }),
+      makeChain({ data: BATCH }),
+      makeChain({ data: null }),
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("chưa xác nhận");
+  });
+
+  it("refuses a mentor who declined the season", async () => {
+    (loadSeasonConfirmationMap as Mock).mockResolvedValue(
+      confirmationFor({ status: "declined", max_mentees: null })
+    );
+    const client = makeClient([
+      makeChain({ data: MENTOR_PROFILE }),
+      makeChain({ data: MENTEE_PROFILE }),
+      makeChain({ data: BATCH }),
+      makeChain({ data: null }),
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("refuses a mentor with no confirmation row in a season that has them", async () => {
+    // The season uses confirmations, but nobody invited this mentor.
+    (loadSeasonConfirmationMap as Mock).mockResolvedValue(new Map());
+    const client = makeClient([
+      makeChain({ data: MENTOR_PROFILE }),
+      makeChain({ data: MENTEE_PROFILE }),
+      makeChain({ data: BATCH }),
+      makeChain({ data: null }),
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("chưa xác nhận");
+  });
+
+  it("pairs a returning mentor whose profile belongs to an earlier season's batch", async () => {
+    // This is the 442-mentor case: the profile still points at the Season 11
+    // batch, and only the confirmation makes them eligible for Season 12.
+    (loadSeasonConfirmationMap as Mock).mockResolvedValue(
+      confirmationFor({ status: "confirmed", max_mentees: 2 })
+    );
+    const olderBatchProfile = { ...MENTOR_PROFILE, intake_batch_id: "00000000-0000-4000-8000-0000000000ff" };
+    const client = makeClient([
+      makeChain({ data: olderBatchProfile }),
+      makeChain({ data: MENTEE_PROFILE }),
+      makeChain({ data: BATCH }),
+      makeChain({ data: null }),
+      makeChain({ count: 0 }),
+      makeChain({ data: { id: MATCH_UUID } }),
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("still requires batch membership when the season has no confirmations", async () => {
+    (loadSeasonConfirmationMap as Mock).mockResolvedValue(null);
+    const olderBatchProfile = { ...MENTOR_PROFILE, intake_batch_id: "00000000-0000-4000-8000-0000000000ff" };
+    const client = makeClient([
+      makeChain({ data: olderBatchProfile }),
+      makeChain({ data: MENTEE_PROFILE }),
+      makeChain({ data: BATCH }),
+      makeChain({ data: null }),
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await createManualMatch({
+      mentorProfileId: MENTOR_UUID,
+      menteeProfileId: MENTEE_UUID,
+      intakeBatchId: BATCH_UUID,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("batch");
   });
 });

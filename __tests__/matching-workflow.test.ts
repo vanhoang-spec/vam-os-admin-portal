@@ -3,22 +3,23 @@ import {
   matchStatusLabel,
   applicationStatusLabel,
 } from "../lib/ui-labels";
+import { isMentorAvailable, LEGACY_MENTOR_CAP, resolveMentorCap } from "../lib/mentor-confirmations-core";
 
 // ── Matching capacity rules ───────────────────────────────────────────────────
 //
-// Source of truth: lib/matches.ts (MAX_MENTOR_ACTIVE_MATCHES = 3)
-// and app/matches/matches-client.tsx (MAX_LOAD = 3).
-// Both constants are private to their modules; this test validates the
-// business rule boundary independently.
+// Capacity is per mentor from Season 12: each declares 1..3 on the confirmation
+// form and core_team may grant extra slots. lib/matches.ts and
+// app/matches/matches-client.tsx both resolve it through resolveMentorCap, so
+// these tests exercise the real function rather than mirroring a constant —
+// the previous version duplicated a private `3` and could not catch drift.
+//
+// A season with no confirmation rows still reports LEGACY_MENTOR_CAP (3),
+// which is what the boundary cases below assert.
 
-const MAX_ACTIVE_MATCHES = 3; // mirror of lib/matches.ts::MAX_MENTOR_ACTIVE_MATCHES
-
-type MentorSlot = { active_match_count: number };
 type MenteeSlot = { has_active_match: boolean };
 
-function isMentorAvailable(m: MentorSlot) {
-  return m.active_match_count < MAX_ACTIVE_MATCHES;
-}
+/** Legacy season: no confirmation row, so the historical cap applies. */
+const legacyMentor = null;
 
 function isMenteeAvailable(m: MenteeSlot) {
   return !m.has_active_match;
@@ -26,30 +27,25 @@ function isMenteeAvailable(m: MenteeSlot) {
 
 describe("Matching capacity — mentor availability boundary", () => {
   it("mentor with 0 active matches is available", () => {
-    expect(isMentorAvailable({ active_match_count: 0 })).toBe(true);
+    expect(isMentorAvailable(legacyMentor, 0)).toBe(true);
   });
 
   it("mentor with 1 active match is available", () => {
-    expect(isMentorAvailable({ active_match_count: 1 })).toBe(true);
+    expect(isMentorAvailable(legacyMentor, 1)).toBe(true);
   });
 
   it("mentor with 2 active matches is available", () => {
-    expect(isMentorAvailable({ active_match_count: 2 })).toBe(true);
+    expect(isMentorAvailable(legacyMentor, 2)).toBe(true);
   });
 
   it("mentor with 3 active matches is FULL (excluded)", () => {
-    expect(isMentorAvailable({ active_match_count: 3 })).toBe(false);
+    expect(isMentorAvailable(legacyMentor, 3)).toBe(false);
   });
 
   it("mentor with 4 active matches is FULL (excluded)", () => {
-    expect(isMentorAvailable({ active_match_count: 4 })).toBe(false);
+    expect(isMentorAvailable(legacyMentor, 4)).toBe(false);
   });
 
-  it("capacity limit is strictly less-than, not less-than-or-equal", () => {
-    // active_match_count === MAX_ACTIVE_MATCHES (3) must be excluded
-    expect(MAX_ACTIVE_MATCHES - 1 < MAX_ACTIVE_MATCHES).toBe(true);  // 2 available
-    expect(MAX_ACTIVE_MATCHES < MAX_ACTIVE_MATCHES).toBe(false);      // 3 excluded
-  });
 });
 
 describe("Matching capacity — mentee availability (exclusive matching)", () => {
@@ -63,7 +59,8 @@ describe("Matching capacity — mentee availability (exclusive matching)", () =>
 });
 
 describe("Matching capacity — batch filtering", () => {
-  const mentors: MentorSlot[] = [
+  // Legacy season (no confirmation rows): every mentor keeps the cap of 3.
+  const mentors = [
     { active_match_count: 0 },
     { active_match_count: 2 },
     { active_match_count: 3 }, // FULL
@@ -72,9 +69,21 @@ describe("Matching capacity — batch filtering", () => {
   ];
 
   it("filters out full mentors correctly", () => {
-    const available = mentors.filter(isMentorAvailable);
+    const available = mentors.filter((m) => isMentorAvailable(legacyMentor, m.active_match_count));
     expect(available.length).toBe(3);
-    available.forEach((m) => expect(m.active_match_count).toBeLessThan(MAX_ACTIVE_MATCHES));
+    available.forEach((m) => expect(m.active_match_count).toBeLessThan(LEGACY_MENTOR_CAP));
+  });
+
+  it("filters by each mentor's own capacity when the season uses confirmations", () => {
+    const confirmed = (max: number) => ({ status: "confirmed", max_mentees: max, extra_slots: 0 });
+    const roster = [
+      { row: confirmed(1), active: 0 }, // available
+      { row: confirmed(1), active: 1 }, // full at 1
+      { row: confirmed(3), active: 2 }, // available
+      { row: { status: "pending", max_mentees: null, extra_slots: 0 }, active: 0 }, // ineligible
+    ];
+    const available = roster.filter((m) => isMentorAvailable(m.row, m.active));
+    expect(available.length).toBe(2);
   });
 
   const mentees: MenteeSlot[] = [
