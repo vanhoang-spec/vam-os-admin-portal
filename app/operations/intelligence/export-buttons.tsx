@@ -2,9 +2,18 @@
 
 type CsvRow = Record<string, unknown>;
 
+/**
+ * Excel treats a cell starting with = + - @ as a formula, so an exported value
+ * could execute when the file is opened. Prefixing with an apostrophe keeps the
+ * text visible and inert; the value is still quoted afterwards.
+ */
+function neutralizeFormula(text: string) {
+  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+}
+
 function csvValue(value: unknown) {
   const text = String(value ?? "").replace(/\r?\n/g, " ").trim();
-  return `"${text.replace(/"/g, '""')}"`;
+  return `"${neutralizeFormula(text).replace(/"/g, '""')}"`;
 }
 
 function toCsv(rows: CsvRow[]) {
@@ -23,7 +32,10 @@ export function CsvExportButton({ rows, filename, label }: { rows: CsvRow[]; fil
       type="button"
       disabled={!rows.length}
       onClick={() => {
-        const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" });
+        // Excel on Windows only reads a CSV as UTF-8 when it starts with a BOM;
+        // without it Vietnamese names arrive mojibake, and these files are
+        // opened in Excel for mail-merge.
+        const blob = new Blob(["﻿", toCsv(rows)], { type: "text/csv;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
