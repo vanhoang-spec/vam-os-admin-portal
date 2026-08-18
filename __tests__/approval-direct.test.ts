@@ -401,3 +401,115 @@ describe("approveApplication — approval retry safety (non-transactional mitiga
     expect(insertCallCount).toBe(2);
   });
 });
+
+// ── Season participation seed (Season 12 confirmation rows) ──────────────────
+
+describe("approveApplication — mentor season confirmation seed", () => {
+  const BATCH_UUID = "00000000-0000-4000-8000-000000000013";
+  const SEASON_UUID = "00000000-0000-4000-8000-000000000014";
+  const CONFIRMATION_UUID = "00000000-0000-4000-8000-000000000015";
+
+  /** Chain sequence for an approved mentor whose person and profile already exist. */
+  function clientForSeed(rawPayload: Record<string, unknown> | null) {
+    const inserts: Array<Record<string, unknown>> = [];
+    const capturing = (result: { data?: unknown }) => {
+      const chain = makeChain(result) as Record<string, unknown>;
+      const originalInsert = chain.insert as (payload: unknown) => unknown;
+      chain.insert = (payload: unknown) => {
+        inserts.push(payload as Record<string, unknown>);
+        return originalInsert(payload);
+      };
+      return chain;
+    };
+
+    const client = makeClient([
+      makeChain({ data: { id: PERSON_UUID, full_name: "Nguyễn Văn Test", email_primary: "test@example.com" } }),
+      makeChain({ data: { id: PROFILE_UUID, person_id: PERSON_UUID } }),
+      makeChain({ data: null, error: null }),          // update application status
+      makeChain({ data: { season_id: SEASON_UUID } }), // intake_batches lookup
+      makeChain({ data: null }),                       // no existing confirmation
+      makeChain({ data: { raw_payload: rawPayload } }),// applications.raw_payload
+      capturing({ data: { id: CONFIRMATION_UUID } }),  // confirmation insert
+      capturing({ data: null })                        // confirmation log insert
+    ]);
+    return { client, inserts };
+  }
+
+  it("uses the capacity the mentor stated on the application form", async () => {
+    const { client, inserts } = clientForSeed({ mentoring_capacity_total: "3" });
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await approveApplication(baseInput({ intakeBatchId: BATCH_UUID }));
+
+    expect(result.ok).toBe(true);
+    const confirmation = inserts[0];
+    expect(confirmation.status).toBe("confirmed");
+    expect(confirmation.max_mentees).toBe(3);
+    expect(confirmation.response_source).toBe("application");
+  });
+
+  it("defaults to one mentee when the form carried no capacity", async () => {
+    const { client, inserts } = clientForSeed({});
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    await approveApplication(baseInput({ intakeBatchId: BATCH_UUID }));
+
+    expect(inserts[0].status).toBe("confirmed");
+    expect(inserts[0].max_mentees).toBe(1);
+  });
+
+  it("defaults to one mentee when the stated capacity is out of range", async () => {
+    const { client, inserts } = clientForSeed({ mentoring_capacity_total: "9" });
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    await approveApplication(baseInput({ intakeBatchId: BATCH_UUID }));
+
+    expect(inserts[0].max_mentees).toBe(1);
+  });
+
+  it("records the seed in the append-only confirmation log", async () => {
+    const { client, inserts } = clientForSeed({ mentoring_capacity_total: "2" });
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    await approveApplication(baseInput({ intakeBatchId: BATCH_UUID }));
+
+    const logRow = inserts[1];
+    expect(logRow.change_type).toBe("created");
+    expect(logRow.new_status).toBe("confirmed");
+    expect(logRow.new_max_mentees).toBe(2);
+  });
+
+  it("never overwrites an answer the mentor already gave", async () => {
+    const client = makeClient([
+      makeChain({ data: { id: PERSON_UUID, full_name: "Nguyễn Văn Test", email_primary: "test@example.com" } }),
+      makeChain({ data: { id: PROFILE_UUID, person_id: PERSON_UUID } }),
+      makeChain({ data: null, error: null }),
+      makeChain({ data: { season_id: SEASON_UUID } }),
+      makeChain({ data: { id: CONFIRMATION_UUID } }) // a confirmation already exists
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await approveApplication(baseInput({ intakeBatchId: BATCH_UUID }));
+
+    expect(result.ok).toBe(true);
+    const tables = (client.from as Mock).mock.calls.map((call) => call[0]);
+    // The existence check runs once; nothing is written to the confirmation
+    // tables, so an answer the mentor already gave cannot be overwritten.
+    expect(tables.filter((t) => t === "mentor_season_confirmations")).toHaveLength(1);
+    expect(tables).not.toContain("mentor_season_confirmation_log");
+  });
+
+  it("seeds nothing for a mentee approval", async () => {
+    const client = makeClient([
+      makeChain({ data: { id: PERSON_UUID, full_name: "Nguyễn Văn Test", email_primary: "test@example.com" } }),
+      makeChain({ data: { id: PROFILE_UUID, person_id: PERSON_UUID } }),
+      makeChain({ data: null, error: null })
+    ]);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    await approveApplication(baseInput({ intakeBatchId: BATCH_UUID, targetRole: "mentee" }));
+
+    const tables = (client.from as Mock).mock.calls.map((call) => call[0]);
+    expect(tables).not.toContain("mentor_season_confirmations");
+  });
+});

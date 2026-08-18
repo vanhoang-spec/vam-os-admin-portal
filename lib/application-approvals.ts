@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { clampCapacity } from "@/lib/mentor-confirmations-core";
+import { clampCapacity, DEFAULT_MAX_MENTEES } from "@/lib/mentor-confirmations-core";
 import type { MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 // -----------------------------------------------------------------------
@@ -80,9 +80,14 @@ export type ApproveApplicationResult =
  * the application form (`raw_payload.mentoring_capacity_total`, 1–3).
  *
  * Non-fatal in every branch: approving an application must not fail because a
- * convenience row could not be written. When the capacity is missing or out of
- * range the row is created as `pending` so an operator asks, rather than
- * inventing a number that would decide how many mentees this person receives.
+ * convenience row could not be written.
+ *
+ * A mentor approved through this path applied for this season and was accepted,
+ * so they are participating and the row is created as `confirmed`. When the
+ * form carried no usable capacity — an imported or legacy row, since the field
+ * is required on the current form — the smallest capacity applies: a mentor who
+ * did not state a number takes at most one mentee. An operator can raise it
+ * afterwards on /mentors/season-confirmations.
  */
 async function seedMentorSeasonConfirmation(
   client: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
@@ -124,31 +129,21 @@ async function seedMentorSeasonConfirmation(
       .maybeSingle();
 
     const rawPayload = (appRow as { raw_payload?: Record<string, unknown> | null } | null)?.raw_payload ?? null;
-    const declared = clampCapacity(rawPayload?.mentoring_capacity_total);
+    const declared = clampCapacity(rawPayload?.mentoring_capacity_total) ?? DEFAULT_MAX_MENTEES;
 
     const now = new Date().toISOString();
     const { data: inserted, error: insertErr } = await client
       .from("mentor_season_confirmations")
-      .insert(
-        declared
-          ? {
-              person_id: input.personId,
-              mentor_profile_id: input.mentorProfileId,
-              season_id: seasonId,
-              status: "confirmed",
-              max_mentees: declared,
-              response_source: "application",
-              responded_at: now,
-              created_by: input.approvedByAdminUserId
-            }
-          : {
-              person_id: input.personId,
-              mentor_profile_id: input.mentorProfileId,
-              season_id: seasonId,
-              status: "pending",
-              created_by: input.approvedByAdminUserId
-            }
-      )
+      .insert({
+        person_id: input.personId,
+        mentor_profile_id: input.mentorProfileId,
+        season_id: seasonId,
+        status: "confirmed",
+        max_mentees: declared,
+        response_source: "application",
+        responded_at: now,
+        created_by: input.approvedByAdminUserId
+      })
       .select("id")
       .maybeSingle();
 
@@ -161,10 +156,10 @@ async function seedMentorSeasonConfirmation(
       confirmation_id: (inserted as { id: string }).id,
       person_id: input.personId,
       season_id: seasonId,
-      new_status: declared ? "confirmed" : "pending",
+      new_status: "confirmed",
       new_max_mentees: declared,
       change_type: "created",
-      response_source: declared ? "application" : null,
+      response_source: "application",
       reason: "Tạo từ đơn đăng ký được duyệt",
       changed_by_admin_user_id: input.approvedByAdminUserId
     });
