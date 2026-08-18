@@ -223,3 +223,93 @@ export function buildApplicationConfirmationEmail(input: {
 
   return { to: "", subject, text: lines.join("\n"), html };
 }
+
+/** Invitation for a mentor who agreed to score applications this season. */
+export function buildReviewerInviteEmail(input: {
+  mentorName: string;
+  seasonLabel: string;
+  inviteUrl: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName);
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+
+  const subject = `[VAM Mentoring] Tài khoản chấm hồ sơ ${season}`;
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Cảm ơn anh/chị đã nhận lời tham gia chấm hồ sơ mentee ${season}.`,
+    "",
+    "Ban tổ chức đã tạo tài khoản trên VAM OS cho anh/chị. Vui lòng đặt mật khẩu qua đường dẫn dưới đây:",
+    input.inviteUrl,
+    "",
+    "Sau khi đăng nhập, anh/chị vào mục “Đánh giá” để xem các hồ sơ được phân công.",
+    "Đường dẫn đặt mật khẩu là riêng cho anh/chị, vui lòng không chuyển tiếp.",
+    "",
+    "Trân trọng cảm ơn anh/chị.",
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Cảm ơn anh/chị đã nhận lời tham gia chấm hồ sơ mentee <strong>${escapeHtml(season)}</strong>.</p>`,
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.inviteUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu và đăng nhập</a></p>`,
+      "<p>Sau khi đăng nhập, anh/chị vào mục <strong>Đánh giá</strong> để xem các hồ sơ được phân công.</p>",
+      "<p>Đường dẫn đặt mật khẩu là riêng cho anh/chị, vui lòng không chuyển tiếp.</p>",
+      `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.inviteUrl)}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/** Notice that a batch of applications is waiting for this reviewer. */
+export function buildReviewBatchAssignedEmail(input: {
+  reviewerName: string;
+  seasonLabel: string;
+  assignmentCount: number;
+  reviewsUrl: string;
+  dueLabel?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.reviewerName);
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const count = Math.max(0, Math.floor(Number(input.assignmentCount) || 0));
+  const due = input.dueLabel ? safeDisplayName(input.dueLabel) : null;
+
+  const subject = `[VAM Mentoring] ${count} hồ sơ mentee chờ anh/chị chấm — ${season}`;
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Ban tổ chức vừa phân công ${count} hồ sơ mentee ${season} cho anh/chị chấm.`,
+    "",
+    "Anh/chị đăng nhập VAM OS và vào mục “Đánh giá” để bắt đầu:",
+    input.reviewsUrl,
+    "",
+    "Mỗi hồ sơ được chấm theo 5 tiêu chí (thang điểm 1–5) kèm một đề xuất.",
+    ""
+  ];
+  if (due) lines.push(`Ban tổ chức mong nhận kết quả trước ${due}.`, "");
+  lines.push(
+    "Nếu anh/chị cần hỗ trợ hoặc muốn điều chỉnh số lượng hồ sơ, vui lòng trả lời email này.",
+    "",
+    "Trân trọng cảm ơn anh/chị.",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Ban tổ chức vừa phân công <strong>${count} hồ sơ mentee</strong> ${escapeHtml(season)} cho anh/chị chấm.</p>`,
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.reviewsUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở danh sách hồ sơ</a></p>`,
+      "<p>Mỗi hồ sơ được chấm theo 5 tiêu chí (thang điểm 1–5) kèm một đề xuất.</p>",
+      due ? `<p>Ban tổ chức mong nhận kết quả trước <strong>${escapeHtml(due)}</strong>.</p>` : "",
+      "<p>Nếu anh/chị cần hỗ trợ hoặc muốn điều chỉnh số lượng hồ sơ, vui lòng trả lời email này.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}

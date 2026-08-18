@@ -1123,3 +1123,121 @@ export async function loadSeasonConfirmationMap(
 
   return new Map(rows.map((row) => [row.person_id, row]));
 }
+
+// ── Reviewer pool ─────────────────────────────────────────────────────────────
+
+export type SeasonReviewerCandidate = {
+  confirmation_id: string;
+  person_id: string;
+  full_name: string | null;
+  email_primary: string | null;
+  mentor_code: string | null;
+  status: string;
+  max_mentees: number | null;
+  agree_to_review: boolean | null;
+  agree_to_interview: boolean | null;
+  /** admin_users row matched by email, when the mentor already has an account. */
+  admin_user_id: string | null;
+  admin_user_role: string | null;
+  admin_user_status: string | null;
+};
+
+export type SeasonReviewerPoolResult = {
+  ok: boolean;
+  error: string | null;
+  rows: SeasonReviewerCandidate[];
+  season: SeasonRef | null;
+};
+
+/**
+ * Mentors who confirmed for a season, with the account state needed to turn the
+ * ones who agreed to score applications into reviewers.
+ *
+ * This is season-based on purpose. The older batch-based pool in lib/data.ts
+ * lists mentors by the intake batch their profile sits in, which excludes every
+ * returning mentor — exactly the people who volunteer to review.
+ */
+export async function listSeasonReviewerCandidates(input: {
+  seasonIdOrCode: string;
+}): Promise<SeasonReviewerPoolResult> {
+  const { client, error: clientError } = clientResult();
+  if (!client) return { ok: false, error: clientError, rows: [], season: null };
+
+  const season = await resolveSeason(input.seasonIdOrCode);
+  if (!season) return { ok: false, error: "Không tìm thấy mùa.", rows: [], season: null };
+
+  const ctx = await getAdminScopeContext();
+  if (!(await canReadSeason(ctx, season.id))) {
+    return { ok: false, error: "Bạn không có quyền xem dữ liệu của mùa này.", rows: [], season };
+  }
+
+  const { data, error } = await client
+    .from("mentor_season_confirmations")
+    .select(ROW_COLUMNS)
+    .eq("season_id", season.id)
+    .eq("status", "confirmed")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    log("reviewer candidate list failed", error);
+    return { ok: false, error: SAFE_ERROR, rows: [], season };
+  }
+
+  const rows = (data ?? []) as unknown as MentorConfirmationRow[];
+  if (rows.length === 0) return { ok: true, error: null, rows: [], season };
+
+  const personIds = Array.from(new Set(rows.map((row) => row.person_id)));
+  const profileIds = Array.from(
+    new Set(rows.map((row) => row.mentor_profile_id).filter((value): value is string => Boolean(value)))
+  );
+
+  const [peopleRes, profileRes, adminRes] = await Promise.all([
+    client.from("people").select("id,full_name,email_primary").in("id", personIds),
+    profileIds.length
+      ? client.from("mentor_profiles").select("id,mentor_code").in("id", profileIds)
+      : Promise.resolve({ data: [], error: null } as { data: JsonRecord[]; error: null }),
+    client.from("admin_users").select("id,email,role,status")
+  ]);
+
+  if (peopleRes.error) log("reviewer candidate people lookup failed", peopleRes.error);
+  if (adminRes.error) log("reviewer candidate admin lookup failed", adminRes.error);
+
+  const peopleById = new Map(
+    ((peopleRes.data ?? []) as Array<{ id: string; full_name: string | null; email_primary: string | null }>).map(
+      (row) => [row.id, row]
+    )
+  );
+  const codeByProfileId = new Map(
+    ((profileRes.data ?? []) as Array<{ id: string; mentor_code: string | null }>).map((row) => [
+      row.id,
+      row.mentor_code
+    ])
+  );
+  const adminByEmail = new Map(
+    ((adminRes.data ?? []) as Array<{ id: string; email: string; role: string | null; status: string | null }>).map(
+      (row) => [String(row.email ?? "").trim().toLowerCase(), row]
+    )
+  );
+
+  const candidates: SeasonReviewerCandidate[] = rows.map((row) => {
+    const person = peopleById.get(row.person_id);
+    const email = String(person?.email_primary ?? "").trim().toLowerCase();
+    const account = email ? adminByEmail.get(email) : undefined;
+    return {
+      confirmation_id: row.id,
+      person_id: row.person_id,
+      full_name: person?.full_name ?? null,
+      email_primary: person?.email_primary ?? null,
+      mentor_code: row.mentor_profile_id ? codeByProfileId.get(row.mentor_profile_id) ?? null : null,
+      status: row.status,
+      max_mentees: row.max_mentees,
+      agree_to_review: row.agree_to_review,
+      agree_to_interview: row.agree_to_interview,
+      admin_user_id: account?.id ?? null,
+      admin_user_role: account?.role ?? null,
+      admin_user_status: account?.status ?? null
+    };
+  });
+
+  return { ok: true, error: null, rows: candidates, season };
+}

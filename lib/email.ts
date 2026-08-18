@@ -5,6 +5,8 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import {
   buildApplicationConfirmationEmail,
   buildMentorConfirmationLinkEmail,
+  buildReviewBatchAssignedEmail,
+  buildReviewerInviteEmail,
   evaluateEmailGate,
   isSafeAppLink,
   normalizeEmailAddress,
@@ -226,5 +228,67 @@ export async function sendApplicationConfirmation(input: {
     input.role === "mentor" ? "mentor_application_confirmation" : "mentee_application_confirmation",
     { ...built, to: input.toEmail },
     { table: "applications", id: input.applicationId }
+  );
+}
+
+/**
+ * Invite a mentor who agreed to score applications.
+ *
+ * The link comes from Supabase Auth (`generateLink`), not from us, so it is
+ * validated as an absolute https URL rather than against our own base URL —
+ * Supabase hosts the password-setting page.
+ */
+export async function sendReviewerInvite(input: {
+  toEmail: string;
+  mentorName: string;
+  seasonLabel: string;
+  inviteUrl: string;
+  adminUserId?: string | null;
+}): Promise<SendEmailResult> {
+  const url = String(input.inviteUrl ?? "").trim();
+  if (!url.startsWith("https://") || /[\r\n\s]/.test(url)) {
+    return { ok: false, skipped: false, reason: "Đường dẫn mời không hợp lệ." };
+  }
+
+  const built = buildReviewerInviteEmail({
+    mentorName: input.mentorName,
+    seasonLabel: input.seasonLabel,
+    inviteUrl: url
+  });
+
+  return deliver(
+    "reviewer_invite",
+    { ...built, to: input.toEmail },
+    input.adminUserId ? { table: "admin_users", id: input.adminUserId } : null
+  );
+}
+
+/** Tell a reviewer that a batch of applications is waiting for them. */
+export async function sendReviewBatchAssigned(input: {
+  toEmail: string;
+  reviewerName: string;
+  seasonLabel: string;
+  assignmentCount: number;
+  dueLabel?: string | null;
+  assignmentBatchId?: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base) {
+    return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  }
+
+  const built = buildReviewBatchAssignedEmail({
+    reviewerName: input.reviewerName,
+    seasonLabel: input.seasonLabel,
+    assignmentCount: input.assignmentCount,
+    reviewsUrl: `${base}/reviews`,
+    dueLabel: input.dueLabel ?? null
+  });
+
+  return deliver(
+    "review_batch_assigned",
+    { ...built, to: input.toEmail },
+    input.assignmentBatchId ? { table: "review_assignment_batches", id: input.assignmentBatchId } : null
   );
 }

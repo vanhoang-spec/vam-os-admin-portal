@@ -4,6 +4,8 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageReviewers } from "@/lib/permissions";
 import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { sendReviewerInvite } from "@/lib/email";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
 // ---------------------------------------------------------------------------
 // Phase 044A-2 — Enable mentor as reviewer
@@ -143,20 +145,18 @@ export async function enableMentorAsReviewer(input: {
     const currentStatus = String(existing.status ?? "inactive");
     const adminUserId = String(existing.id);
 
-    // A1: Higher privilege — never downgrade, just reactivate if needed
+    // A1: Higher privilege — never downgrade, and never reactivate from here.
+    //
+    // Reactivating would make this button an indirect privilege-restoration
+    // path: any staff member who can edit people.email_primary could point a
+    // mentor row at a suspended super_admin's address and press "cấp quyền".
+    // Re-enabling a staff account is a decision for /admin/users, where it is
+    // audited as such.
     if (PRESERVE_ROLES.has(currentRole)) {
       if (currentStatus !== "active") {
-        const { error: activateErr } = await client
-          .from("admin_users")
-          .update({ status: "active" })
-          .eq("id", adminUserId);
-        if (activateErr) {
-          log("reactivate higher-role user", activateErr);
-          return { ok: false, message: `Không thể kích hoạt tài khoản: ${activateErr.message}` };
-        }
         return {
-          ok: true,
-          message: `Người này đã có quyền ${currentRole} — đã kích hoạt lại tài khoản.`,
+          ok: false,
+          message: `Email này thuộc tài khoản ${currentRole} đang bị khoá. Việc mở lại tài khoản quản trị phải thực hiện ở mục Quản lý người dùng, không qua danh sách reviewer.`,
           adminUserId
         };
       }
@@ -205,27 +205,35 @@ export async function enableMentorAsReviewer(input: {
   let authUserId: string | null = null;
   let authInvited = false;
 
+  // The Auth user is created with generateLink rather than inviteUserByEmail:
+  // generateLink creates the user and returns the link WITHOUT sending mail, so
+  // the invitation goes out through our own provider. Supabase's built-in SMTP
+  // allows only a handful of messages an hour, which is unusable for a round of
+  // reviewer invitations.
+  let inviteUrl: string | null = null;
+
   try {
-    // Try to find existing Supabase Auth user first
     const foundAuth = await findAuthUserByEmail(client, email);
     if (foundAuth?.id) {
       authUserId = foundAuth.id;
     } else {
-      // Invite the user — this sends an email and creates a Supabase Auth user
-      const { data: inviteData, error: inviteErr } = await (client as any).auth.admin.inviteUserByEmail(email);
-      if (!inviteErr && inviteData?.user?.id) {
-        authUserId = inviteData.user.id;
-        authInvited = true;
+      const { data: linkData, error: linkErr } = await (client as any).auth.admin.generateLink({
+        type: "invite",
+        email
+      });
+      if (!linkErr && linkData?.user?.id) {
+        authUserId = linkData.user.id;
+        inviteUrl = String(linkData?.properties?.action_link ?? "") || null;
       } else {
-        // Race condition: check again after invite failure
+        // Race: another request may have created the user in between.
         const recheck = await findAuthUserByEmail(client, email);
         if (recheck?.id) authUserId = recheck.id;
-        // If still not found, proceed without auth_user_id:
-        // admin-auth.ts will auto-link on first login via email backfill.
+        // Still nothing: proceed without auth_user_id. admin-auth.ts links the
+        // row by email on first login.
       }
     }
   } catch (authErr) {
-    // Auth failure is non-fatal: admin_users row still created.
+    // Auth failure is non-fatal: the admin_users row is still created.
     log("Auth invite (non-fatal)", authErr);
   }
 
@@ -248,11 +256,32 @@ export async function enableMentorAsReviewer(input: {
     return { ok: false, message: `Không thể tạo tài khoản reviewer: ${insertErr?.message ?? "unknown error"}` };
   }
 
+  // Send the invitation ourselves. Non-fatal: the account exists either way, and
+  // an operator can re-send from /admin/users.
+  let sendNote = "";
+  if (inviteUrl) {
+    try {
+      const sent = await sendReviewerInvite({
+        toEmail: email,
+        mentorName: fullName ?? "",
+        seasonLabel: SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE,
+        inviteUrl,
+        adminUserId: newRow.id
+      });
+      authInvited = sent.ok && !sent.skipped;
+      if (sent.skipped) sendNote = " Email chưa gửi vì cấu hình gửi email đang tắt.";
+      else if (!sent.ok) sendNote = " Chưa gửi được email mời — vui lòng gửi lại từ mục Quản lý người dùng.";
+    } catch (sendErr) {
+      log("reviewer invite email (non-fatal)", sendErr);
+      sendNote = " Chưa gửi được email mời — vui lòng gửi lại từ mục Quản lý người dùng.";
+    }
+  }
+
   const message = authInvited
-    ? "Đã tạo tài khoản reviewer và gửi email mời đăng nhập qua Supabase Auth."
+    ? "Đã tạo tài khoản reviewer và gửi email mời đặt mật khẩu."
     : authUserId
-    ? "Đã tạo tài khoản reviewer và liên kết Auth user hiện có."
-    : "Đã tạo tài khoản reviewer. Auth invitation chưa được gửi — cần gửi reset password riêng qua Supabase dashboard hoặc /admin/users.";
+      ? `Đã tạo tài khoản reviewer và liên kết tài khoản đăng nhập sẵn có.${sendNote}`
+      : `Đã tạo tài khoản reviewer. Chưa tạo được liên kết đăng nhập — vui lòng gửi lời mời từ mục Quản lý người dùng.${sendNote}`;
 
   return { ok: true, message, adminUserId: newRow.id, authInvited };
 }
