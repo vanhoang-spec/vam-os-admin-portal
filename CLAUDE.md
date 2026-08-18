@@ -33,7 +33,10 @@ Vitest runs in a `node` environment against `__tests__/**/*.test.ts` only, with 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` fallback)
 - `SUPABASE_SERVICE_ROLE_KEY` — **server-only**; most data reads and all admin_users lookups depend on it
 - `VAM_OS_ADMIN_PASSWORD` — shared MVP unlock gate; unset ⇒ gate is bypassed
-- `VAM_OS_APPLY_TOKEN` / `VAM_OS_APPLICATION_PILOT_TOKEN`, `VAM_OS_ENABLE_MENTOR_APPLICATION`, `VAM_OS_ENABLE_MENTEE_APPLICATION` — public intake form gates
+- `VAM_OS_APPLY_TOKEN` / `VAM_OS_APPLICATION_PILOT_TOKEN`, `VAM_OS_ENABLE_MENTOR_APPLICATION`, `VAM_OS_ENABLE_MENTEE_APPLICATION`, `VAM_OS_ALLOW_TOKENLESS_APPLICATIONS` — public intake form gates
+- `VAM_OS_RATE_LIMIT_SALT` — server-only salt for the hashed-IP rate limit on public forms (`apply_submission_log`)
+- `VAM_OS_PUBLIC_BASE_URL` — absolute origin (no trailing slash) used to build links placed in emails; falls back to the request origin
+- `VAM_OS_EMAIL_ENABLED`, `RESEND_API_KEY`, `VAM_OS_EMAIL_FROM`, `VAM_OS_EMAIL_REPLY_TO` — outbound email. `lib/email.ts` sends only when `VAM_OS_EMAIL_ENABLED=true` **and** the runtime is production, so preview deploys never mail real people; every attempt (including skipped ones) is logged to `public.outbound_emails`.
 
 Known Supabase project refs are hardcoded in `lib/supabase.ts` and `lib/preview-environment.ts`: staging `ljfneyuvpxrmejpxsmpz`, production `qkkroesfiazsejkzflcd`. `PreviewEnvironmentBanner` warns loudly when a preview/dev deploy is pointed at production.
 

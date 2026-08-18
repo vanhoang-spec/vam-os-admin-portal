@@ -1,0 +1,225 @@
+/**
+ * lib/email-core.ts
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Pure, dependency-light email helpers: send-gating, address normalisation and
+ * the Vietnamese templates. No network, no Supabase, no `next/headers` — so the
+ * whole surface is unit-testable and safe to import from anywhere on the server.
+ *
+ * Sending itself lives in lib/email.ts (Resend + outbound_emails logging).
+ *
+ * Template rule: every template is fully server-authored. The only values
+ * interpolated are ones the operator controls (a mentor's own name, a season
+ * code, a link this application generated). Applicant free text is never echoed
+ * into an email body, so a public form can never be used to compose a message.
+ */
+
+export type EmailKind =
+  | "mentor_confirmation_link"
+  | "mentee_application_confirmation"
+  | "mentor_application_confirmation"
+  | "review_batch_assigned"
+  | "interview_scheduled"
+  | "reviewer_invite";
+
+export type EmailMessage = {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+};
+
+export type EmailGateEnv = {
+  VAM_OS_EMAIL_ENABLED?: string;
+  VERCEL_ENV?: string;
+  NODE_ENV?: string;
+  RESEND_API_KEY?: string;
+  VAM_OS_EMAIL_FROM?: string;
+};
+
+export type EmailGateResult =
+  | { canSend: true }
+  | { canSend: false; reason: string };
+
+/**
+ * Decide whether this deployment may send mail at all.
+ *
+ * Two independent switches must both be on, so neither a stray env var nor a
+ * preview deployment can mail real mentors:
+ *   1. VAM_OS_EMAIL_ENABLED === "true"  (explicit opt-in, same convention as
+ *      the season-config feature flags)
+ *   2. the runtime is production        (VERCEL_ENV === "production", or a
+ *      local NODE_ENV === "production" build when VERCEL_ENV is absent)
+ * Configuration (API key + From address) must also be present.
+ */
+export function evaluateEmailGate(env: EmailGateEnv): EmailGateResult {
+  if (env.VAM_OS_EMAIL_ENABLED !== "true") {
+    return { canSend: false, reason: "VAM_OS_EMAIL_ENABLED chưa bật" };
+  }
+
+  const isProductionRuntime = env.VERCEL_ENV
+    ? env.VERCEL_ENV === "production"
+    : env.NODE_ENV === "production";
+  if (!isProductionRuntime) {
+    return { canSend: false, reason: "Môi trường không phải production" };
+  }
+
+  if (!env.RESEND_API_KEY?.trim()) {
+    return { canSend: false, reason: "RESEND_API_KEY chưa cấu hình" };
+  }
+  if (!env.VAM_OS_EMAIL_FROM?.trim()) {
+    return { canSend: false, reason: "VAM_OS_EMAIL_FROM chưa cấu hình" };
+  }
+
+  return { canSend: true };
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeEmailAddress(value: unknown): string | null {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text || !EMAIL_PATTERN.test(text)) return null;
+  // A newline in a recipient is a header-injection attempt; reject rather than strip.
+  if (/[\r\n]/.test(text)) return null;
+  return text;
+}
+
+/** Escape text before it is placed in an HTML body. */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** A person's display name, trimmed and bounded; falls back to a neutral greeting. */
+export function safeDisplayName(value: unknown, fallback = "anh/chị"): string {
+  const text = String(value ?? "").replace(/[\r\n\t]+/g, " ").trim();
+  if (!text) return fallback;
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+}
+
+/**
+ * Only ever accept a link this application generated. A confirmation email must
+ * not be able to carry an arbitrary URL supplied by a caller.
+ */
+export function isSafeAppLink(url: string, baseUrl: string): boolean {
+  const base = baseUrl.trim().replace(/\/+$/, "");
+  if (!base.startsWith("https://") && !base.startsWith("http://localhost")) return false;
+  if (!url.startsWith(`${base}/`)) return false;
+  if (/[\r\n\s]/.test(url)) return false;
+  return true;
+}
+
+const SIGNATURE_TEXT = "Ban tổ chức VAM Mentoring\nVietnam Alumni Mentoring";
+const SIGNATURE_HTML =
+  '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Ban tổ chức VAM Mentoring<br />Vietnam Alumni Mentoring</p>';
+
+function wrapHtml(bodyHtml: string): string {
+  return [
+    '<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;color:#14352a">',
+    bodyHtml,
+    SIGNATURE_HTML,
+    "</div>"
+  ].join("");
+}
+
+/** Invitation asking a Season 11 mentor to confirm participation in the new season. */
+export function buildMentorConfirmationLinkEmail(input: {
+  mentorName: string;
+  seasonLabel: string;
+  confirmUrl: string;
+  deadlineLabel?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName);
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const deadline = input.deadlineLabel ? safeDisplayName(input.deadlineLabel) : null;
+
+  const subject = `[VAM Mentoring] Xác nhận đồng hành ${season}`;
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Ban tổ chức VAM Mentoring đang chuẩn bị cho ${season} và rất mong tiếp tục đồng hành cùng anh/chị.`,
+    "",
+    "Anh/chị vui lòng xác nhận qua đường dẫn dành riêng dưới đây (khoảng 1 phút):",
+    input.confirmUrl,
+    "",
+    "Trong biểu mẫu, anh/chị cho biết:",
+    "- Có tiếp tục tham gia mùa này hay không",
+    "- Số mentee tối đa có thể nhận (1 đến 3)",
+    "- Có sẵn sàng tham gia chấm hồ sơ và phỏng vấn mentee hay không",
+    ""
+  ];
+  if (deadline) {
+    lines.push(`Đường dẫn có hiệu lực đến ${deadline}.`, "");
+  }
+  lines.push(
+    "Đường dẫn là riêng cho anh/chị, vui lòng không chuyển tiếp cho người khác.",
+    "Nếu cần hỗ trợ, anh/chị chỉ cần trả lời email này.",
+    "",
+    "Trân trọng cảm ơn anh/chị.",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Ban tổ chức VAM Mentoring đang chuẩn bị cho <strong>${escapeHtml(season)}</strong> và rất mong tiếp tục đồng hành cùng anh/chị.</p>`,
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.confirmUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Xác nhận đồng hành ${escapeHtml(season)}</a></p>`,
+      "<p>Trong biểu mẫu, anh/chị cho biết:</p>",
+      "<ul><li>Có tiếp tục tham gia mùa này hay không</li><li>Số mentee tối đa có thể nhận (1 đến 3)</li><li>Có sẵn sàng tham gia chấm hồ sơ và phỏng vấn mentee hay không</li></ul>",
+      deadline ? `<p>Đường dẫn có hiệu lực đến <strong>${escapeHtml(deadline)}</strong>.</p>` : "",
+      "<p>Đường dẫn là riêng cho anh/chị, vui lòng không chuyển tiếp cho người khác. Nếu cần hỗ trợ, anh/chị chỉ cần trả lời email này.</p>",
+      `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.confirmUrl)}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/** Receipt sent to an applicant right after a public application is stored. */
+export function buildApplicationConfirmationEmail(input: {
+  applicantName: string;
+  role: "mentor" | "mentee";
+  seasonLabel: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.applicantName, input.role === "mentor" ? "anh/chị" : "bạn");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const roleLabel = input.role === "mentor" ? "mentor" : "mentee";
+  const you = input.role === "mentor" ? "anh/chị" : "bạn";
+
+  const subject = `[VAM Mentoring] Đã nhận đơn đăng ký ${roleLabel} — ${season}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Ban tổ chức VAM Mentoring đã nhận được đơn đăng ký ${roleLabel} của ${you} cho ${season}.`,
+    "",
+    "Các bước tiếp theo:",
+    "1. Ban tổ chức rà soát và chấm hồ sơ",
+    "2. Nếu hồ sơ phù hợp, ban tổ chức sẽ mời phỏng vấn qua email",
+    "3. Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn",
+    "",
+    `Đây là email xác nhận tự động, ${you} không cần trả lời.`,
+    `Nếu ${you} cần chỉnh sửa thông tin đã gửi, vui lòng trả lời email này để ban tổ chức hỗ trợ.`,
+    "",
+    `Cảm ơn ${you} đã quan tâm đến chương trình.`,
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Ban tổ chức VAM Mentoring đã nhận được đơn đăng ký <strong>${escapeHtml(roleLabel)}</strong> của ${escapeHtml(you)} cho <strong>${escapeHtml(season)}</strong>.</p>`,
+      "<p>Các bước tiếp theo:</p>",
+      "<ol><li>Ban tổ chức rà soát và chấm hồ sơ</li><li>Nếu hồ sơ phù hợp, ban tổ chức sẽ mời phỏng vấn qua email</li><li>Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn</li></ol>",
+      `<p>Đây là email xác nhận tự động, ${escapeHtml(you)} không cần trả lời. Nếu cần chỉnh sửa thông tin đã gửi, vui lòng trả lời email này để ban tổ chức hỗ trợ.</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
