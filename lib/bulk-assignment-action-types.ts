@@ -14,6 +14,10 @@ export type BulkAssignmentActionState = {
   minPerReviewer?: number;
   maxPerReviewer?: number;
   skippedAlreadyAssigned?: number;
+  /** Eligible applications left for the next round because every reviewer was full. */
+  unassignedDueToCap?: number;
+  notifiedReviewers?: number;
+  notifyFailures?: number;
   batchId?: string;
 };
 

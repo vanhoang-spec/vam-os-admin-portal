@@ -2,6 +2,9 @@ import "server-only";
 
 import { canReviewSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { canReview } from "@/lib/permissions";
+import { sendReviewBatchAssigned } from "@/lib/email";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
 // ---------------------------------------------------------------------------
 // Phase 044a — Bulk-assign applications to reviewers for profile screening.
@@ -56,6 +59,15 @@ export type BulkAssignInput = {
   excludeAlreadyAssigned: boolean;
   assignmentNote: string | null;
   assignedByAdminUserId: string;
+  /**
+   * Most applications one reviewer may receive in this run. The Season 12
+   * process hands out batches of ten so a mentor sees a finite, finishable
+   * pile. Null means "no cap", the pre-Season-12 behaviour.
+   */
+  maxPerReviewer?: number | null;
+  /** Email each reviewer the size of their new batch. */
+  notifyReviewers?: boolean;
+  seasonLabel?: string | null;
 };
 
 export type BulkAssignResult =
@@ -66,6 +78,10 @@ export type BulkAssignResult =
       minPerReviewer: number;
       maxPerReviewer: number;
       skippedAlreadyAssigned: number;
+      /** Eligible applications left over because every reviewer hit the cap. */
+      unassignedDueToCap: number;
+      notifiedReviewers: number;
+      notifyFailures: number;
       batchId: string;
     }
   | { ok: false; message: string };
@@ -92,6 +108,44 @@ export async function bulkAssignApplicationReviews(
   if (!client) return { ok: false, message: SAFE_ERROR };
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
+
+  // --- 0. The reviewer ids arrive from a form, so verify them before writing
+  // hundreds of rows against them. Without this an id belonging to a viewer —
+  // or to nobody — is stored as reviewer_admin_user_id and the applications
+  // land with someone who cannot open them.
+  const { data: reviewerRowsForCheck, error: reviewerCheckErr } = await client
+    .from("admin_users")
+    .select("id,email,full_name,role,status")
+    .in("id", input.reviewerAdminUserIds);
+
+  if (reviewerCheckErr) {
+    log("reviewer validation lookup", reviewerCheckErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  const reviewerById = new Map(
+    ((reviewerRowsForCheck ?? []) as Array<{
+      id: string;
+      email: string | null;
+      full_name: string | null;
+      role: string | null;
+      status: string | null;
+    }>).map((row) => [row.id, row])
+  );
+
+  const invalidReviewers = input.reviewerAdminUserIds.filter((id) => {
+    const row = reviewerById.get(id);
+    if (!row) return true;
+    if (String(row.status ?? "") !== "active") return true;
+    return !canReview(row.role);
+  });
+
+  if (invalidReviewers.length > 0) {
+    return {
+      ok: false,
+      message: `${invalidReviewers.length} reviewer được chọn không hợp lệ (tài khoản không tồn tại, đang khoá, hoặc không có quyền chấm). Vui lòng tải lại danh sách reviewer.`
+    };
+  }
 
   // --- 1. Fetch eligible applications
   let appQuery = client
@@ -183,14 +237,9 @@ export async function bulkAssignApplicationReviews(
     if (id) workloadByReviewer.set(id, (workloadByReviewer.get(id) ?? 0) + 1);
   }
 
-  // Fetch emails for tiebreaking
-  const { data: reviewerRows } = await client
-    .from("admin_users")
-    .select("id,email")
-    .in("id", input.reviewerAdminUserIds);
-
+  // Emails come from the validation lookup above — no second round trip.
   const emailById = new Map<string, string>(
-    (reviewerRows ?? []).map((r) => [r.id as string, (r.email as string) ?? ""])
+    input.reviewerAdminUserIds.map((id) => [id, reviewerById.get(id)?.email ?? ""])
   );
 
   // --- 4. Sort reviewers: workload ASC, email ASC
@@ -226,19 +275,57 @@ export async function bulkAssignApplicationReviews(
     log("review_assignment_batches insert threw (non-fatal)", "table may not exist");
   }
 
-  // --- 6. Build review rows (round-robin by sorted reviewer index)
+  // --- 6. Build review rows: round-robin, but never past the per-reviewer cap.
+  //
+  // Reviewers are already ordered by current workload, so the first pass gives
+  // the least-loaded mentors their first application, the second pass their
+  // second, and so on. A reviewer who reaches the cap drops out; when everyone
+  // is full the remaining applications are left for the next round and reported
+  // back rather than silently dropped.
   const now = new Date().toISOString();
-  const n = sortedReviewers.length;
-  const reviewRows = appsToAssign.map((app, i) => ({
-    application_id: app.id,
-    review_round: "profile_screening" as const,
-    reviewer_admin_user_id: sortedReviewers[i % n],
-    assigned_by: input.assignedByAdminUserId,
-    assigned_at: now,
-    due_at: input.dueAt ?? null,
-    status: "assigned" as const,
-    assignment_batch_id: batchId
-  }));
+  const cap =
+    input.maxPerReviewer && input.maxPerReviewer > 0
+      ? Math.floor(input.maxPerReviewer)
+      : Number.POSITIVE_INFINITY;
+
+  const assignedCountByReviewer = new Map<string, number>(sortedReviewers.map((id) => [id, 0]));
+  const reviewRows: Array<Record<string, unknown>> = [];
+  let cursor = 0;
+
+  for (const app of appsToAssign) {
+    // Find the next reviewer with room; stop when nobody has any.
+    let reviewerId: string | null = null;
+    for (let step = 0; step < sortedReviewers.length; step++) {
+      const candidate = sortedReviewers[(cursor + step) % sortedReviewers.length];
+      if ((assignedCountByReviewer.get(candidate) ?? 0) < cap) {
+        reviewerId = candidate;
+        cursor = (cursor + step + 1) % sortedReviewers.length;
+        break;
+      }
+    }
+    if (!reviewerId) break;
+
+    assignedCountByReviewer.set(reviewerId, (assignedCountByReviewer.get(reviewerId) ?? 0) + 1);
+    reviewRows.push({
+      application_id: app.id,
+      review_round: "profile_screening" as const,
+      reviewer_admin_user_id: reviewerId,
+      assigned_by: input.assignedByAdminUserId,
+      assigned_at: now,
+      due_at: input.dueAt ?? null,
+      status: "assigned" as const,
+      assignment_batch_id: batchId
+    });
+  }
+
+  const unassignedDueToCap = appsToAssign.length - reviewRows.length;
+
+  if (reviewRows.length === 0) {
+    return {
+      ok: false,
+      message: `Tất cả reviewer đã đạt giới hạn ${input.maxPerReviewer} hồ sơ trong lượt này. Chọn thêm reviewer hoặc tăng giới hạn.`
+    };
+  }
 
   // --- 7. Bulk insert
   const { error: insertErr } = await client.from("application_reviews").insert(reviewRows);
@@ -248,8 +335,9 @@ export async function bulkAssignApplicationReviews(
   }
 
   // --- 8. Advance applications.status → screening_assigned (non-fatal)
+  const assignedAppIds = new Set(reviewRows.map((row) => row.application_id as string));
   const advanceIds = appsToAssign
-    .filter((a) => ADVANCE_STATUSES.has(a.status))
+    .filter((a) => assignedAppIds.has(a.id) && ADVANCE_STATUSES.has(a.status))
     .map((a) => a.id);
 
   if (advanceIds.length > 0) {
@@ -262,20 +350,59 @@ export async function bulkAssignApplicationReviews(
     }
   }
 
-  // --- Compute distribution stats
-  const perReviewerCounts = sortedReviewers.map((_, i) =>
-    reviewRows.filter((_, j) => j % n === i).length
-  );
+  // --- 9. Tell each reviewer what is waiting for them (non-fatal).
+  //
+  // A batch nobody knows about is a batch nobody scores, so this is part of
+  // assigning — but a mail failure must never undo rows that are already
+  // written, hence the per-reviewer try/catch and the counters in the result.
+  let notifiedReviewers = 0;
+  let notifyFailures = 0;
+
+  if (input.notifyReviewers) {
+    for (const reviewerId of sortedReviewers) {
+      const count = assignedCountByReviewer.get(reviewerId) ?? 0;
+      if (count === 0) continue;
+      const reviewer = reviewerById.get(reviewerId);
+      const email = String(reviewer?.email ?? "").trim();
+      if (!email) {
+        notifyFailures++;
+        continue;
+      }
+      try {
+        const sent = await sendReviewBatchAssigned({
+          toEmail: email,
+          reviewerName: reviewer?.full_name ?? "",
+          seasonLabel: input.seasonLabel ?? SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE,
+          assignmentCount: count,
+          dueLabel: input.dueAt ? new Date(input.dueAt).toLocaleDateString("vi-VN") : null,
+          assignmentBatchId: batchId
+        });
+        if (sent.ok && !sent.skipped) notifiedReviewers++;
+        else if (!sent.ok) notifyFailures++;
+      } catch (err) {
+        log("reviewer notification email (non-fatal)", err);
+        notifyFailures++;
+      }
+    }
+  }
+
+  // --- Compute distribution stats from what was actually written
+  const perReviewerCounts = sortedReviewers
+    .map((id) => assignedCountByReviewer.get(id) ?? 0)
+    .filter((count) => count > 0);
   const minPerReviewer = perReviewerCounts.length ? Math.min(...perReviewerCounts) : 0;
   const maxPerReviewer = perReviewerCounts.length ? Math.max(...perReviewerCounts) : 0;
 
   return {
     ok: true,
-    applicationsAssigned: appsToAssign.length,
-    reviewersCount: sortedReviewers.length,
+    applicationsAssigned: reviewRows.length,
+    reviewersCount: perReviewerCounts.length,
     minPerReviewer,
     maxPerReviewer,
     skippedAlreadyAssigned,
+    unassignedDueToCap,
+    notifiedReviewers,
+    notifyFailures,
     batchId: batchId ?? ""
   };
 }
