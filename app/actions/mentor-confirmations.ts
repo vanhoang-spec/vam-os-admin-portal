@@ -28,6 +28,7 @@ function revalidateRoster() {
   revalidatePath(ADMIN_PATH);
   revalidatePath("/mentors");
   revalidatePath("/matches");
+  revalidatePath("/matches/unmatched");
 }
 
 function text(formData: FormData, key: string) {
