@@ -456,7 +456,7 @@
       <h3>Sau khi merge</h3>
       <ul>
         <li>Danh sách người chấm lấy từ <strong>mentor đã xác nhận mùa 12</strong>, hiện rõ ai “đồng ý chấm”, ai “đồng ý phỏng vấn”, hạn mức bao nhiêu.</li>
-        <li>Email mời tạo tài khoản gửi bằng dịch vụ của mình (Resend) thay vì email mặc định của nền tảng — vốn chỉ vài email mỗi giờ, không đủ cho một đợt mời.</li>
+        <li>Email mời tạo tài khoản gửi bằng dịch vụ gửi thư riêng (Brevo) thay vì email mặc định của nền tảng — vốn chỉ vài email mỗi giờ, không đủ cho một đợt mời.</li>
         <li>Chia <strong>theo lô, mặc định 10 hồ sơ/người</strong>. Ai đầy thì dừng; hồ sơ dư <strong>để lại lượt sau và báo rõ</strong> thay vì lặng lẽ bỏ.</li>
         <li>Mỗi người chấm nhận email “bạn có N hồ sơ chờ chấm”.</li>
         <li><span class="pill fix">Vá lỗi</span> Mã người chấm được xác thực trước khi ghi; nút cấp quyền không mở lại được tài khoản quản trị bị khoá.</li>
@@ -696,7 +696,7 @@
     <tbody>
       <tr>
         <td class="step">Gửi 442 email mời xác nhận</td>
-        <td>Gói miễn phí của dịch vụ gửi mail giới hạn 100 email/ngày. Hoặc nâng gói trả phí, hoặc chia làm 5 đợt — màn hình đã có nút gửi theo đợt (tối đa 50 email mỗi lần bấm).</td>
+        <td>Gói miễn phí của Brevo cho ~300 email/ngày, nên 442 link chia 2 ngày là xong — màn hình có nút gửi theo đợt (tối đa 50 email mỗi lần bấm) và tự nhớ ai đã nhận, nên chia nhiều đợt không sợ trùng hay sót.</td>
       </tr>
       <tr>
         <td class="step">Mentor không phản hồi link xác nhận</td>
@@ -737,11 +737,17 @@
       </p>
     </li>
     <li>
-      <h3>Đặt cấu hình gửi email (Resend)</h3>
+      <h3>Đặt cấu hình gửi email (Brevo)</h3>
       <p>
-        Tạo tài khoản, xác minh tên miền gửi, rồi đặt các biến: khoá API, địa chỉ gửi, địa chỉ nhận thư
-        trả lời, cờ bật gửi email, địa chỉ web chính thức, và chuỗi ngẫu nhiên cho bộ đếm chống spam.
-        Tất cả đã liệt kê sẵn trong tệp mẫu cấu hình của dự án.
+        Tạo tài khoản Brevo, <strong>xác minh tên miền gửi (SPF + DKIM)</strong>, rồi đặt các biến: khoá
+        API, địa chỉ gửi, địa chỉ nhận thư trả lời, cờ bật gửi email, địa chỉ web chính thức, và chuỗi
+        ngẫu nhiên cho bộ đếm chống spam. Tất cả đã liệt kê sẵn trong tệp mẫu cấu hình của dự án.
+      </p>
+      <p>
+        Chọn Brevo vì gói miễn phí cho <strong>~300 thư/ngày</strong>, trong khi cả mùa cần khoảng
+        <strong>2.700 thư</strong> gửi dồn theo đợt — con số quyết định là hạn mức <em>mỗi ngày</em>, không
+        phải mỗi tháng. Hệ thống vẫn hỗ trợ nhà cung cấp thứ hai (Resend): đổi một biến cấu hình là
+        chuyển, không phải sửa code, hữu ích nếu một bên khoá tài khoản giữa mùa.
       </p>
     </li>
     <li>
