@@ -3,16 +3,22 @@ import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import {
+  getActiveAdminUsers,
   getApplication,
   getApplicationReviewById,
+  getApplicationReviewsForApplication,
   getPeople,
   getSeasons,
   keyById
 } from "@/lib/data";
 import { canReview } from "@/lib/permissions";
 import { displayText, formatDate } from "@/lib/utils";
+import { formatInterviewTimeVi, INTERVIEW_MODE_LABELS } from "@/lib/interview-scheduling-core";
+import { getMentorSelectionContext } from "@/lib/mentor-selection";
 import { Card, DetailGrid, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewForm } from "./review-form";
+import { ScreeningSummary } from "./screening-summary";
+import { SelectMenteePanel } from "./select-mentee-panel";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,7 +111,31 @@ export default async function ReviewDetailPage({
   const isOwner = review.reviewer_admin_user_id === adminUser.id;
   const canEdit = isOwner || ["super_admin", "admin", "core_team"].includes(adminUser.role);
 
-  const error = reviewResult.error ?? appResult.error ?? people.error ?? seasons.error;
+  const isInterview = review.review_round === "interview";
+
+  // An interviewer scores against what the form already said, so the screening
+  // round is loaded alongside the interview form. Once their own score is in,
+  // their standing for taking this candidate as a mentee is loaded too.
+  const [applicationReviews, reviewerDirectory, selectionContext] = await Promise.all([
+    isInterview
+      ? getApplicationReviewsForApplication(review.application_id, scope)
+      : Promise.resolve(
+          { data: [], error: null } as Awaited<ReturnType<typeof getApplicationReviewsForApplication>>
+        ),
+    isInterview
+      ? getActiveAdminUsers()
+      : Promise.resolve({ data: [], error: null } as Awaited<ReturnType<typeof getActiveAdminUsers>>),
+    isInterview && isOwner && isSubmitted && app?.role_applied === "mentee"
+      ? getMentorSelectionContext({ applicationId: review.application_id })
+      : Promise.resolve(null)
+  ]);
+
+  const reviewerNameById = new Map(
+    reviewerDirectory.data.map((row) => [row.id, row.full_name ?? row.email])
+  );
+
+  const error =
+    reviewResult.error ?? appResult.error ?? people.error ?? seasons.error ?? applicationReviews.error;
 
   return (
     <>
@@ -125,7 +155,20 @@ export default async function ReviewDetailPage({
             ["Hạn nộp", review.due_at ? formatDate(review.due_at) : "-"],
             ["Nộp lúc", review.submitted_at ? formatDate(review.submitted_at) : "-"],
             ["Điểm tổng", review.total_score !== null ? String(review.total_score) : "-"],
-            ["Đề xuất", displayText(review.recommendation)]
+            ["Đề xuất", displayText(review.recommendation)],
+            ...(review.interview_scheduled_at
+              ? ([
+                  ["Lịch phỏng vấn", formatInterviewTimeVi(review.interview_scheduled_at) ?? "-"],
+                  [
+                    "Hình thức",
+                    review.interview_mode
+                      ? INTERVIEW_MODE_LABELS[review.interview_mode as "online" | "offline"] ??
+                        review.interview_mode
+                      : "-"
+                  ],
+                  ["Địa điểm / đường dẫn", review.interview_location ?? "-"]
+                ] as Array<[string, unknown]>)
+              : [])
           ]}
         />
       </Card>
@@ -185,6 +228,13 @@ export default async function ReviewDetailPage({
         <ErrorBox message={appResult.error ?? "Không tìm thấy đơn ứng tuyển liên quan."} />
       )}
 
+      {/* What the form round said — the interviewer scores against this */}
+      {isInterview ? (
+        <div className="mb-4">
+          <ScreeningSummary reviews={applicationReviews.data} reviewerNameById={reviewerNameById} />
+        </div>
+      ) : null}
+
       {/* Scoring form */}
       <Card className="mb-4">
         <h2 className="mb-4 text-base font-semibold text-vam-ink">
@@ -209,6 +259,22 @@ export default async function ReviewDetailPage({
           </div>
         )}
       </Card>
+
+      {/* After the interview: the mentor may take this candidate as their mentee */}
+      {selectionContext?.available ? (
+        <Card className="mb-4">
+          <SelectMenteePanel
+            applicationId={review.application_id}
+            candidateName={displayFullName ?? "Ứng viên"}
+            cap={selectionContext.cap}
+            activeCount={selectionContext.activeCount}
+            canSelect={selectionContext.canSelect}
+            capExceeded={selectionContext.capExceeded}
+            alreadyMine={Boolean(selectionContext.alreadyMineMatchId)}
+            blockedMessage={selectionContext.message}
+          />
+        </Card>
+      ) : null}
 
       <div className="flex gap-4">
         {review.review_round === "interview" ? (

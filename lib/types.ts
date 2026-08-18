@@ -250,6 +250,11 @@ export type InterviewCandidateRow = {
   interview_review_id: string | null;
   interview_review_status: string | null;
   interview_reviewer_admin_user_id: string | null;
+  interview_reviewer_name: string | null;
+  /** Migration 067 - the appointment; null for a review claimed on the day. */
+  interview_scheduled_at: string | null;
+  interview_mode: string | null;
+  interview_location: string | null;
 };
 
 export type Program = JsonRecord & {

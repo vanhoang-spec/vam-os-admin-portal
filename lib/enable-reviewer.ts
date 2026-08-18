@@ -128,7 +128,7 @@ export async function enableMentorAsReviewer(input: {
   // --- Look up existing admin_user by email
   const { data: existing, error: lookupErr } = await client
     .from("admin_users")
-    .select("id,role,status,auth_user_id")
+    .select("id,role,status,auth_user_id,linked_person_id")
     .eq("email", email)
     .maybeSingle();
 
@@ -144,6 +144,18 @@ export async function enableMentorAsReviewer(input: {
     const currentRole = String(existing.role ?? "viewer");
     const currentStatus = String(existing.status ?? "inactive");
     const adminUserId = String(existing.id);
+
+    // Record which mentor this login is, if nobody has yet (migration 067).
+    // Without it, a mentor choosing their own mentee has to be identified by
+    // email alone, which fails whenever an address appears twice in people.
+    if (!existing.linked_person_id) {
+      const { error: linkErr } = await client
+        .from("admin_users")
+        .update({ linked_person_id: input.personId.trim() })
+        .eq("id", adminUserId)
+        .is("linked_person_id", null);
+      if (linkErr) log("link admin account to person (non-fatal)", linkErr);
+    }
 
     // A1: Higher privilege — never downgrade, and never reactivate from here.
     //
@@ -241,7 +253,10 @@ export async function enableMentorAsReviewer(input: {
     email,
     full_name: fullName,
     role: "reviewer",
-    status: "active"
+    status: "active",
+    // Migration 067: the account is created FROM a mentor record, so the link
+    // between login and mentor is known here and never has to be guessed later.
+    linked_person_id: input.personId.trim()
   };
   if (authUserId) insertPayload.auth_user_id = authUserId;
 

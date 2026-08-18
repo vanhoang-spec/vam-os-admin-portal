@@ -9,6 +9,7 @@ import {
   initialClaimInterviewActionState,
   type ClaimInterviewActionState
 } from "@/lib/interview-claim-action-types";
+import { formatInterviewTimeVi, INTERVIEW_MODE_LABELS } from "@/lib/interview-scheduling-core";
 import type { InterviewCandidateRow } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -17,6 +18,7 @@ import type { InterviewCandidateRow } from "@/lib/types";
 
 type StatusFilter =
   | "all"
+  | "mine"
   | "invited_to_interview"
   | "interview_scheduled"
   | "interview_in_progress"
@@ -138,7 +140,11 @@ export function InterviewsClient({
   // Client-side filter
   const filtered = rows.filter((row) => {
     const s = row.status ?? "";
-    if (statusFilter !== "all" && s !== statusFilter) return false;
+    if (statusFilter === "mine") {
+      if (row.interview_reviewer_admin_user_id !== currentUserId) return false;
+    } else if (statusFilter !== "all" && s !== statusFilter) {
+      return false;
+    }
     if (search) {
       const q = search.toLowerCase();
       const matchName = row.full_name?.toLowerCase().includes(q);
@@ -150,9 +156,16 @@ export function InterviewsClient({
     return true;
   });
 
+  // An interviewer's own appointments read as a schedule, so show them in time
+  // order rather than in the order the applications were submitted.
+  if (statusFilter === "mine") {
+    filtered.sort((a, b) => (a.interview_scheduled_at ?? "").localeCompare(b.interview_scheduled_at ?? ""));
+  }
+
   // Summary counts
   const counts = {
     all: rows.length,
+    mine: rows.filter((r) => r.interview_reviewer_admin_user_id === currentUserId).length,
     invited_to_interview: rows.filter((r) => r.status === "invited_to_interview").length,
     interview_scheduled: rows.filter((r) => r.status === "interview_scheduled").length,
     interview_in_progress: rows.filter((r) => r.status === "interview_in_progress").length,
@@ -165,6 +178,12 @@ export function InterviewsClient({
       label: `Tất cả (${counts.all})`,
       activeClass: "border-vam-green bg-vam-green text-white",
       inactiveClass: "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+    },
+    {
+      value: "mine",
+      label: `Lịch của tôi (${counts.mine})`,
+      activeClass: "border-vam-green bg-vam-green text-white",
+      inactiveClass: "border-vam-green/40 bg-vam-mint text-vam-green hover:bg-vam-mint/70"
     },
     {
       value: "invited_to_interview",
@@ -235,6 +254,7 @@ export function InterviewsClient({
                 <th className="px-4 py-3">Email / SĐT</th>
                 <th className="px-4 py-3">SBD</th>
                 <th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3">Lịch PV</th>
                 <th className="px-4 py-3">Review PV</th>
                 <th className="px-4 py-3">Thao tác</th>
               </tr>
@@ -270,6 +290,25 @@ export function InterviewsClient({
                       >
                         {STATUS_LABELS[statusKey] ?? statusKey}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.interview_scheduled_at ? (
+                        <>
+                          <div className="text-vam-ink">{formatInterviewTimeVi(row.interview_scheduled_at)}</div>
+                          <div className="text-slate-400">
+                            {row.interview_mode
+                              ? INTERVIEW_MODE_LABELS[row.interview_mode as "online" | "offline"] ??
+                                row.interview_mode
+                              : ""}
+                            {row.interview_location ? ` · ${row.interview_location}` : ""}
+                          </div>
+                          {row.interview_reviewer_name ? (
+                            <div className="text-slate-400">PV: {row.interview_reviewer_name}</div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-slate-300">Chưa xếp</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {row.interview_review_id ? (

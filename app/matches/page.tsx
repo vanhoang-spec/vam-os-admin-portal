@@ -68,6 +68,15 @@ export default async function MatchesPage({
         title="Matching Mentor – Mentee"
         description="Tạo và quản lý ghép cặp thủ công theo batch. Dữ liệu match từ các mùa trước vẫn hiển thị đầy đủ."
       />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Link href="/matches/unmatched" className="text-sm text-vam-green hover:underline">
+          Danh sách chưa ghép cặp
+        </Link>
+        <Link href="/mentors/season-confirmations" className="text-sm text-vam-green hover:underline">
+          Xác nhận mentor
+        </Link>
+      </div>
+
       {matchListRes.error ? <ErrorBox message={matchListRes.error} /> : null}
       {intakeBatchesRes.error ? <ErrorBox message={intakeBatchesRes.error} /> : null}
 
