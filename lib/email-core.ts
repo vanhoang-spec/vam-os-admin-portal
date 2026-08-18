@@ -19,7 +19,13 @@ export type EmailKind =
   | "mentor_application_confirmation"
   | "review_batch_assigned"
   | "interview_scheduled"
-  | "reviewer_invite";
+  | "reviewer_invite"
+  // The four post-matching sends (migration 069). Their bodies come from an
+  // approved template rather than from a builder in this file.
+  | "mentee_selected"
+  | "mentee_mentor_intro"
+  | "mentor_mentee_package"
+  | "kickoff_invite";
 
 export type EmailMessage = {
   to: string;
@@ -431,4 +437,32 @@ export function buildInterviewInviteEmail(input: {
   );
 
   return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Turn the plain text of an approved template into the HTML half of the email.
+ *
+ * The text was typed by an organiser, so it is escaped first and only then
+ * given paragraphs, line breaks and links — the same rule as the public
+ * document pages. Only http(s) links are made clickable, and only the ones the
+ * template itself contains.
+ */
+export function textToHtmlEmail(text: string): string {
+  const escaped = escapeHtml(String(text ?? "").replace(/\r\n/g, "\n").trim());
+  if (!escaped) return "";
+
+  const linked = escaped.replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+    // Trailing punctuation belongs to the sentence, not to the address.
+    const trimmed = url.replace(/[.,;:)\]]+$/, "");
+    const tail = url.slice(trimmed.length);
+    return `<a href="${trimmed}" style="color:#16834c">${trimmed}</a>${tail}`;
+  });
+
+  const paragraphs = linked
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p>${block.replace(/\n/g, "<br />")}</p>`);
+
+  return wrapHtml(paragraphs.join(""));
 }

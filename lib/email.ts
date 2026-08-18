@@ -7,6 +7,7 @@ import {
   buildInterviewInviteEmail,
   buildInterviewScheduleEmail,
   buildMentorConfirmationLinkEmail,
+  textToHtmlEmail,
   buildReviewBatchAssignedEmail,
   buildReviewerInviteEmail,
   evaluateEmailGate,
@@ -74,6 +75,7 @@ async function logOutboundEmail(row: {
   providerMessageId?: string | null;
   error?: string | null;
   relation?: EmailRelation | null;
+  batchId?: string | null;
 }) {
   const client = getSupabaseServiceRoleClient();
   if (!client) return;
@@ -86,7 +88,8 @@ async function logOutboundEmail(row: {
     provider_message_id: row.providerMessageId ?? null,
     error: row.error ? row.error.slice(0, 500) : null,
     related_table: row.relation?.table ?? null,
-    related_id: row.relation?.id ?? null
+    related_id: row.relation?.id ?? null,
+    batch_id: row.batchId ?? null
   });
   if (error) {
     // Logging must never break the caller; surface it in server logs only.
@@ -101,7 +104,8 @@ async function logOutboundEmail(row: {
 async function deliver(
   kind: EmailKind,
   message: EmailMessage,
-  relation?: EmailRelation | null
+  relation?: EmailRelation | null,
+  batchId?: string | null
 ): Promise<SendEmailResult> {
   const to = normalizeEmailAddress(message.to);
   if (!to) {
@@ -111,7 +115,8 @@ async function deliver(
       subject: message.subject,
       status: "failed",
       error: "Địa chỉ email không hợp lệ",
-      relation
+      relation,
+      batchId
     });
     return { ok: false, skipped: false, reason: "Địa chỉ email không hợp lệ" };
   }
@@ -124,7 +129,8 @@ async function deliver(
       subject: message.subject,
       status: "skipped",
       error: gate.reason,
-      relation
+      relation,
+      batchId
     });
     return { ok: true, skipped: true, reason: gate.reason };
   }
@@ -162,7 +168,8 @@ async function deliver(
       subject: message.subject,
       status: "sent",
       providerMessageId: data?.id ?? null,
-      relation
+      relation,
+      batchId
     });
     return { ok: true, skipped: false, providerMessageId: data?.id ?? null };
   } catch (err) {
@@ -173,7 +180,8 @@ async function deliver(
       subject: message.subject,
       status: "failed",
       error: detail,
-      relation
+      relation,
+      batchId
     });
     console.error("[email] resend threw", { kind });
     return { ok: false, skipped: false, reason: "Không gửi được email. Vui lòng thử lại sau." };
@@ -356,5 +364,37 @@ export async function sendInterviewInvite(input: {
     "interview_scheduled",
     { ...built, to: input.toEmail },
     { table: "applications", id: input.applicationId }
+  );
+}
+
+/**
+ * Send a message built from an APPROVED template.
+ *
+ * The subject and body arrive already rendered — placeholders filled, checked
+ * for leftovers — from lib/post-match-emails.ts. This function only turns the
+ * text into the HTML half and records the attempt against its batch.
+ *
+ * It is the only sender whose words are not fixed in code, which is exactly
+ * why the template it comes from has to be approved by a person first.
+ */
+export async function sendTemplatedEmail(input: {
+  kind: EmailKind;
+  toEmail: string;
+  subject: string;
+  body: string;
+  relation?: EmailRelation | null;
+  batchId?: string | null;
+}): Promise<SendEmailResult> {
+  const subject = String(input.subject ?? "").replace(/[\r\n]+/g, " ").trim();
+  const body = String(input.body ?? "").trim();
+  if (!subject || !body) {
+    return { ok: false, skipped: false, reason: "Thư chưa có tiêu đề hoặc nội dung." };
+  }
+
+  return deliver(
+    input.kind,
+    { to: input.toEmail, subject, text: body, html: textToHtmlEmail(body) },
+    input.relation ?? null,
+    input.batchId ?? null
   );
 }
