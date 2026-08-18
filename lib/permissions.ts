@@ -73,3 +73,19 @@ export function canSelfClaimInterview(role?: string | null) {
 export function canManageMatches(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can record a mentor's season confirmation (continue yes/no + max mentees)
+ * on the mentor's behalf, after reaching them by phone.
+ *
+ * This is the ONE predicate that includes support_team: chasing the mentors who
+ * did not answer the emailed link is exactly their job, and the write is narrow
+ * — a decision plus a number on a single season row, always paired with
+ * `canOperateSeason` in lib/mentor-confirmations.ts.
+ *
+ * Reviewer is excluded: a mentor acting as a reviewer must not be able to set
+ * another mentor's capacity.
+ */
+export function canRecordMentorConfirmation(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}

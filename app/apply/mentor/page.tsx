@@ -42,7 +42,7 @@ export default function ApplyMentorPage({
         </p>
       </header>
 
-      <ApplyMentorForm />
+      <ApplyMentorForm applyToken={tokenRaw ?? ""} />
     </>
   );
 }

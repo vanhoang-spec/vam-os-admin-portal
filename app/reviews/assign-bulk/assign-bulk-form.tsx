@@ -363,6 +363,33 @@ export function AssignBulkForm({
         <h2 className="mb-3 text-sm font-semibold text-slate-700">D — Tuỳ chọn</h2>
         <div className="flex flex-wrap gap-4">
           <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500">Số hồ sơ mỗi reviewer</label>
+            <input
+              type="number"
+              name="max_per_reviewer"
+              min={1}
+              max={100}
+              defaultValue={10}
+              className="w-32 rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
+            />
+            <span className="text-[11px] text-slate-400">
+              Hồ sơ vượt quá sẽ để lại cho lượt giao sau.
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500">Thông báo</label>
+            <label className="flex items-center gap-2 py-1.5 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="notify_reviewers"
+                value="1"
+                defaultChecked
+                className="h-4 w-4 rounded border-vam-line text-vam-green focus:ring-vam-mint"
+              />
+              Gửi email báo cho reviewer
+            </label>
+          </div>
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-500">Hạn nộp (tuỳ chọn)</label>
             <input
               type="datetime-local"

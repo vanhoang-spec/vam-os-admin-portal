@@ -11,6 +11,7 @@ import {
   canManageReviewers,
   canSelfClaimInterview,
   canManageMatches,
+  canRecordMentorConfirmation,
 } from "../lib/permissions";
 
 // ── Role sets ─────────────────────────────────────────────────────────────────
@@ -157,9 +158,46 @@ describe("canManageMatches", () => {
   it("denies null", () => expect(canManageMatches(null)).toBe(false));
 });
 
+// ── canRecordMentorConfirmation (admin tier + support_team) ───────────────────
+
+describe("canRecordMentorConfirmation", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`grants ${role}`, () => expect(canRecordMentorConfirmation(role)).toBe(true));
+  });
+  it("grants support_team (phone follow-up is their job)", () =>
+    expect(canRecordMentorConfirmation("support_team")).toBe(true));
+  it("denies reviewer (a mentor must not set another mentor's capacity)", () =>
+    expect(canRecordMentorConfirmation("reviewer")).toBe(false));
+  it("denies viewer", () => expect(canRecordMentorConfirmation("viewer")).toBe(false));
+  it("denies null", () => expect(canRecordMentorConfirmation(null)).toBe(false));
+  it("denies undefined", () => expect(canRecordMentorConfirmation(undefined)).toBe(false));
+  it("denies an unknown role", () => expect(canRecordMentorConfirmation("ghost_role")).toBe(false));
+});
+
 // ── Role set consistency ───────────────────────────────────────────────────────
 
 describe("role set consistency", () => {
+  it("canRecordMentorConfirmation is canDecide plus support_team, and nothing else", () => {
+    const roles = ["super_admin", "admin", "core_team", "reviewer", "support_team", "viewer"];
+    roles.forEach((r) => {
+      const expected = canDecide(r) || r === "support_team";
+      expect(canRecordMentorConfirmation(r), r).toBe(expected);
+    });
+  });
+
+  it("support_team gains no other write capability from this change", () => {
+    expect(canManageMatches("support_team")).toBe(false);
+    expect(canDecide("support_team")).toBe(false);
+    expect(canReview("support_team")).toBe(false);
+    expect(canAssignReview("support_team")).toBe(false);
+    expect(canBulkAssignReviews("support_team")).toBe(false);
+    expect(canManageReviewers("support_team")).toBe(false);
+    expect(canSelfClaimInterview("support_team")).toBe(false);
+    expect(canEditRecap({ role: "support_team" })).toBe(false);
+    expect(canManageUsers("support_team")).toBe(false);
+    expect(canAccessAdminUser("support_team")).toBe(false);
+  });
+
   it("canManageMatches and canDecide have the same allowed set (admin tier)", () => {
     const roles = ["super_admin", "admin", "core_team", "reviewer", "support_team", "viewer"];
     roles.forEach((r) => {

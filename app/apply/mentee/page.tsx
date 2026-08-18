@@ -41,7 +41,7 @@ export default function ApplyMenteePage({
         </p>
       </header>
 
-      <ApplyMenteeForm />
+      <ApplyMenteeForm applyToken={tokenRaw ?? ""} />
     </>
   );
 }

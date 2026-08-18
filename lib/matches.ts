@@ -4,12 +4,43 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageMatches } from "@/lib/permissions";
 import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { loadSeasonConfirmationMap } from "@/lib/mentor-confirmations";
+import { LEGACY_MENTOR_CAP, resolveMentorCap } from "@/lib/mentor-confirmations-core";
 import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const SAFE_ERROR = "Không thể thực hiện tác vụ. Vui lòng kiểm tra cấu hình Supabase và server logs.";
-const MAX_MENTOR_ACTIVE_MATCHES = 3;
+
+/**
+ * How many mentees a mentor may hold in a season.
+ *
+ * From Season 12 this is per mentor: they declare it themselves on the
+ * confirmation form (1–3), and core_team can grant extra slots after an
+ * interview. `resolveMentorCap` in lib/mentor-confirmations-core.ts decides it,
+ * and returns LEGACY_MENTOR_CAP (3) for a season that has no confirmation rows
+ * at all — which is what keeps Season 11 behaving exactly as before.
+ */
+async function resolveSeasonCaps(seasonId: string | null) {
+  if (!seasonId) return null;
+  return loadSeasonConfirmationMap(seasonId);
+}
+
+function capForMentor(
+  confirmations: Map<string, { status?: string | null; max_mentees?: number | null; extra_slots?: number | null }> | null,
+  personId: string | null
+) {
+  // No confirmation rows at all for this season → pre-confirmation season, so
+  // every mentor keeps the historical cap.
+  if (!confirmations) return LEGACY_MENTOR_CAP;
+  if (!personId) return 0;
+  const row = confirmations.get(personId);
+  // The season DOES use confirmations and this mentor has no row: they were
+  // never invited, so they are not eligible — never fall back to the legacy cap
+  // here, which would silently make an uninvited mentor matchable.
+  if (!row) return 0;
+  return resolveMentorCap(row);
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +59,8 @@ export type MentorCandidate = {
   company_current: string | null;
   title_current: string | null;
   active_match_count: number;
+  /** Mentees this mentor may hold this season: confirmed capacity plus granted slots. */
+  max_mentees: number;
 };
 
 export type MenteeCandidate = {
@@ -369,6 +402,43 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
     log("mentor_profiles fetch failed", mentorProfilesRes.error);
     return { ...empty, ok: false, error: SAFE_ERROR };
   }
+
+  // Season 12 onwards, eligibility is "confirmed for this season", not "profile
+  // sits in this batch". Returning mentors carry a profile from an earlier
+  // season's batch, so without this union the 442 Season 11 mentors would be
+  // invisible to Season 12 matching even after confirming.
+  const confirmations = await resolveSeasonCaps(selectedSeasonId);
+  const mentorProfileRows = [...((mentorProfilesRes.data ?? []) as JsonRecord[])];
+
+  if (confirmations) {
+    const alreadyListed = new Set(
+      mentorProfileRows.map((row) => String(row.person_id ?? "")).filter(Boolean)
+    );
+    const confirmedPersonIds = Array.from(confirmations.entries())
+      .filter(([personId, row]) => !alreadyListed.has(personId) && resolveMentorCap(row) > 0)
+      .map(([personId]) => personId);
+
+    if (confirmedPersonIds.length > 0) {
+      const { data: extraProfiles, error: extraError } = await client
+        .from("mentor_profiles")
+        .select("id,person_id,mentor_code,company_current,title_current")
+        .in("person_id", confirmedPersonIds);
+
+      if (extraError) {
+        log("confirmed mentor profile fetch failed", extraError);
+        return { ...empty, ok: false, error: SAFE_ERROR };
+      }
+
+      // A person can carry several profiles across seasons; keep one.
+      const seen = new Set<string>();
+      for (const row of (extraProfiles ?? []) as JsonRecord[]) {
+        const personId = String(row.person_id ?? "");
+        if (!personId || seen.has(personId)) continue;
+        seen.add(personId);
+        mentorProfileRows.push(row);
+      }
+    }
+  }
   if (menteeProfilesRes.error) {
     log("mentee_profiles fetch failed", menteeProfilesRes.error);
     return { ...empty, ok: false, error: SAFE_ERROR };
@@ -395,8 +465,8 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
 
   // Resolve person_ids to names/emails
   const allPersonIds = new Set<string>();
-  for (const mp of mentorProfilesRes.data ?? []) {
-    if ((mp as JsonRecord).person_id) allPersonIds.add((mp as JsonRecord).person_id as string);
+  for (const mp of mentorProfileRows) {
+    if (mp.person_id) allPersonIds.add(mp.person_id as string);
   }
   for (const mp of menteeProfilesRes.data ?? []) {
     if ((mp as JsonRecord).person_id) allPersonIds.add((mp as JsonRecord).person_id as string);
@@ -408,21 +478,27 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
 
   const peopleById = new Map(peopleRows.map((p: JsonRecord) => [p.id as string, p]));
 
-  const mentors: MentorCandidate[] = (mentorProfilesRes.data ?? []).map((mp: JsonRecord) => {
-    const person = mp.person_id ? peopleById.get(mp.person_id as string) : undefined;
-    const personId = (mp.person_id as string | null) ?? null;
-    const count = personId ? (mentorMatchCountByPersonId.get(personId) ?? 0) : 0;
-    return {
-      profile_id: mp.id as string,
-      person_id: (mp.person_id as string | null) ?? null,
-      full_name: (person?.full_name as string | null) ?? null,
-      email_primary: (person?.email_primary as string | null) ?? null,
-      mentor_code: (mp.mentor_code as string | null) ?? null,
-      company_current: (mp.company_current as string | null) ?? null,
-      title_current: (mp.title_current as string | null) ?? null,
-      active_match_count: count
-    };
-  }).sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "vi"));
+  const mentors: MentorCandidate[] = mentorProfileRows
+    .map((mp: JsonRecord) => {
+      const person = mp.person_id ? peopleById.get(mp.person_id as string) : undefined;
+      const personId = (mp.person_id as string | null) ?? null;
+      const count = personId ? (mentorMatchCountByPersonId.get(personId) ?? 0) : 0;
+      return {
+        profile_id: mp.id as string,
+        person_id: personId,
+        full_name: (person?.full_name as string | null) ?? null,
+        email_primary: (person?.email_primary as string | null) ?? null,
+        mentor_code: (mp.mentor_code as string | null) ?? null,
+        company_current: (mp.company_current as string | null) ?? null,
+        title_current: (mp.title_current as string | null) ?? null,
+        active_match_count: count,
+        max_mentees: capForMentor(confirmations, personId)
+      };
+    })
+    // A mentor who has not confirmed, or who declined, has a cap of 0 and cannot
+    // be paired this season — so they are never offered as a candidate.
+    .filter((mentor) => mentor.max_mentees > 0)
+    .sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "vi"));
 
   const mentees: MenteeCandidate[] = (menteeProfilesRes.data ?? []).map((mp: JsonRecord) => {
     const person = mp.person_id ? peopleById.get(mp.person_id as string) : undefined;
@@ -528,13 +604,14 @@ export async function createManualMatch(input: {
   const mp = mentorProfile as JsonRecord;
   const mpe = menteeProfile as JsonRecord;
 
-  // Verify batch membership (both profiles must belong to this batch)
-  if (mp.intake_batch_id && mp.intake_batch_id !== intakeBatchId) {
-    return { ok: false, message: "Mentor không thuộc batch đã chọn." };
-  }
+  // Mentees are always recruited into the batch being matched.
   if (mpe.intake_batch_id && mpe.intake_batch_id !== intakeBatchId) {
     return { ok: false, message: "Mentee không thuộc batch đã chọn." };
   }
+  // Mentors are not: a returning mentor keeps the profile from the season they
+  // first joined, so batch membership is checked below only when the season has
+  // no confirmation regime to authorise them instead.
+  const mentorInSelectedBatch = !mp.intake_batch_id || mp.intake_batch_id === intakeBatchId;
 
   const mentorPersonId = (mp.person_id as string | null) ?? null;
   const menteePersonId = (mpe.person_id as string | null) ?? null;
@@ -575,7 +652,26 @@ export async function createManualMatch(input: {
     return { ok: false, message: "Mentee này đã có mentor đang active. Hủy match cũ trước khi tạo match mới." };
   }
 
-  // Rule: mentor can have at most 3 active mentees
+  // Rule: a mentor may hold only as many mentees as they confirmed for this
+  // season (plus any slot core_team granted). Seasons with no confirmation rows
+  // keep the historical cap of 3 — see resolveMentorCap.
+  const confirmations = await resolveSeasonCaps(seasonId as string | null);
+  const mentorCap = capForMentor(confirmations, mentorPersonId);
+
+  // Without a confirmation regime the batch is the only thing tying a mentor to
+  // the season, so it stays mandatory there.
+  if (!confirmations && !mentorInSelectedBatch) {
+    return { ok: false, message: "Mentor không thuộc batch đã chọn." };
+  }
+
+  if (mentorCap <= 0) {
+    return {
+      ok: false,
+      message:
+        "Mentor này chưa xác nhận tham gia mùa này (hoặc đã từ chối) nên không thể ghép cặp. Vui lòng ghi nhận xác nhận trước."
+    };
+  }
+
   const { count: mentorActiveCount, error: mentorCountErr } = await client
     .from("matches")
     .select("id", { count: "exact", head: true })
@@ -586,10 +682,10 @@ export async function createManualMatch(input: {
     log("count mentor active matches failed", mentorCountErr);
     return { ok: false, message: SAFE_ERROR };
   }
-  if ((mentorActiveCount ?? 0) >= MAX_MENTOR_ACTIVE_MATCHES) {
+  if ((mentorActiveCount ?? 0) >= mentorCap) {
     return {
       ok: false,
-      message: `Mentor này đã có ${mentorActiveCount}/${MAX_MENTOR_ACTIVE_MATCHES} mentee. Không thể thêm mentee mới.`
+      message: `Mentor này đã có ${mentorActiveCount}/${mentorCap} mentee. Không thể thêm mentee mới.`
     };
   }
 

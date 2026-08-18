@@ -1031,10 +1031,16 @@ describe("migration immutability", () => {
     expect(gitUnchanged(BASELINE_HEAD, p)).toBe(true);
   });
 
-  it("changes migration 059 and nothing else under supabase_migrations/", () => {
-    const r = spawnSync("git", ["diff", "--name-only", BASELINE_HEAD, "--", "supabase_migrations/"], {
-      encoding: "utf8",
-    });
+  it("changes migration 059 and no other pre-existing migration", () => {
+    // `--diff-filter=a` excludes files ADDED since the baseline. Migrations are
+    // additive by policy (docs/MIGRATION_PRODUCTION_SYNC.md), so a later,
+    // unrelated migration file is expected here; the point of this assertion is
+    // that no migration that already existed was edited except 059.
+    const r = spawnSync(
+      "git",
+      ["diff", "--name-only", "--diff-filter=a", BASELINE_HEAD, "--", "supabase_migrations/"],
+      { encoding: "utf8" }
+    );
     expect(r.status).toBe(0);
     expect(r.stdout.split("\n").filter(Boolean)).toEqual([M059]);
   });

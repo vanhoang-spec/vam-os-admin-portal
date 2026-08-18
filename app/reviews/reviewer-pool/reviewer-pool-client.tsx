@@ -10,6 +10,17 @@ import {
 } from "@/lib/enable-reviewer-action-types";
 import type { ReviewerPoolRow } from "@/lib/types";
 
+/**
+ * A pool row, optionally carrying what the mentor said on the season
+ * confirmation form. The season-sourced list fills these in; the older
+ * batch-sourced fallback leaves them undefined.
+ */
+export type ReviewerPoolClientRow = ReviewerPoolRow & {
+  agree_to_review?: boolean | null;
+  agree_to_interview?: boolean | null;
+  max_mentees?: number | null;
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -17,7 +28,7 @@ import type { ReviewerPoolRow } from "@/lib/types";
 type AccountStatus = "no_account" | "reviewer_active" | "reviewer_inactive" | "higher_active" | "higher_inactive" | "other";
 
 /** Maps a pool row to a display status bucket. */
-function getAccountStatus(row: ReviewerPoolRow): AccountStatus {
+function getAccountStatus(row: ReviewerPoolClientRow): AccountStatus {
   if (!row.admin_user_id) return "no_account";
   const role = String(row.admin_user_role ?? "");
   const status = String(row.admin_user_status ?? "");
@@ -138,7 +149,13 @@ function EnableReviewerButton({
 // Main client component
 // ---------------------------------------------------------------------------
 
-export function ReviewerPoolClient({ rows }: { rows: ReviewerPoolRow[] }) {
+export function ReviewerPoolClient({
+  rows,
+  showAgreementColumns = false
+}: {
+  rows: ReviewerPoolClientRow[];
+  showAgreementColumns?: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterOption>("all");
 
@@ -231,6 +248,13 @@ export function ReviewerPoolClient({ rows }: { rows: ReviewerPoolRow[] }) {
                 <th className="px-4 py-3">Tên mentor</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Mentor code</th>
+                {showAgreementColumns ? (
+                  <>
+                    <th className="px-4 py-3">Đồng ý chấm</th>
+                    <th className="px-4 py-3">Đồng ý phỏng vấn</th>
+                    <th className="px-4 py-3">Nhận tối đa</th>
+                  </>
+                ) : null}
                 <th className="px-4 py-3">Tài khoản hiện tại</th>
                 <th className="px-4 py-3">Thao tác</th>
               </tr>
@@ -247,6 +271,31 @@ export function ReviewerPoolClient({ rows }: { rows: ReviewerPoolRow[] }) {
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">
                       {row.mentor_code ?? <span className="text-slate-300">—</span>}
                     </td>
+                    {showAgreementColumns ? (
+                      <>
+                        <td className="px-4 py-3 text-xs">
+                          {row.agree_to_review === true ? (
+                            <span className="font-medium text-vam-green">Có</span>
+                          ) : row.agree_to_review === false ? (
+                            <span className="text-slate-500">Không</span>
+                          ) : (
+                            <span className="text-slate-300">Chưa trả lời</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {row.agree_to_interview === true ? (
+                            <span className="font-medium text-vam-green">Có</span>
+                          ) : row.agree_to_interview === false ? (
+                            <span className="text-slate-500">Không</span>
+                          ) : (
+                            <span className="text-slate-300">Chưa trả lời</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-600">
+                          {row.max_mentees ? `${row.max_mentees} mentee` : "—"}
+                        </td>
+                      </>
+                    ) : null}
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_CLASS[bucket]}`}

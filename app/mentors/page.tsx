@@ -3,6 +3,7 @@ import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { canRecordMentorConfirmation } from "@/lib/permissions";
 import { getIntakeBatches, getMatches, getMentorProfiles, getPeople, getSeasons, keyById } from "@/lib/data";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Match, MentorProfile, Person } from "@/lib/types";
@@ -111,13 +112,21 @@ export default async function MentorsPage() {
   return (
     <>
       <PageHeader title="Mentor" description="Hồ sơ mentor đã được import vào VAM OS." />
-      {allowCreate ? (
-        <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
+        {allowCreate ? (
           <Link href="/mentors/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
             Tạo mentor mới
           </Link>
-        </div>
-      ) : null}
+        ) : null}
+        {canRecordMentorConfirmation(adminUser?.role) ? (
+          <Link
+            href="/mentors/season-confirmations"
+            className="inline-flex w-fit rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Xác nhận mentor mùa mới
+          </Link>
+        ) : null}
+      </div>
       <ErrorBox message={mentors.error || people.error || matches.error || intakeBatches.error || seasons.error} />
       <FilterableTable
         rows={rows}

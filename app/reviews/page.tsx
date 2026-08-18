@@ -134,6 +134,12 @@ export default async function ReviewsPage() {
             Tiến độ review
           </Link>
           <Link
+            href="/reviews/selection"
+            className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Chốt danh sách phỏng vấn
+          </Link>
+          <Link
             href="/reviews/reviewer-pool"
             className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >

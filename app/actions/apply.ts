@@ -8,6 +8,10 @@ import {
   type ApplicationSubmissionResult
 } from "@/lib/applications-create";
 import type { ApplyActionState } from "@/lib/apply-types";
+import { guardPublicSubmission, recordAcceptedSubmission, recordGateRejection } from "@/lib/apply-abuse";
+import { HONEYPOT_FIELD, truncateFieldValues, truncateShortField } from "@/lib/apply-abuse-core";
+import { evaluateApplyGate } from "@/lib/apply-gate";
+import { sendApplicationConfirmation } from "@/lib/email";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
@@ -28,6 +32,67 @@ function formBoolean(formData: FormData, key: string): boolean {
   const value = formData.get(key);
   if (value === null) return false;
   return value === "true" || value === "on" || value === "1";
+}
+
+/**
+ * Everything that must hold before a public submission is stored.
+ *
+ * The form gate is re-evaluated HERE, not only in the page: a server action is
+ * a plain POST endpoint, so a caller who kept an action id from an earlier,
+ * legitimately-open page load would otherwise bypass the enable flag and the
+ * token entirely.
+ */
+async function guardSubmission(
+  formData: FormData,
+  role: ApplicationRole
+): Promise<{ ok: true; ipHash: string | null } | { ok: false; state: ApplyActionState }> {
+  const route = role === "mentor" ? "apply_mentor" : "apply_mentee";
+
+  const guard = await guardPublicSubmission({
+    route,
+    honeypotValue: formData.get(HONEYPOT_FIELD)
+  });
+
+  if (!guard.allowed) {
+    // A honeypot hit is answered as if it succeeded — naming the trap would
+    // only teach the next attempt to avoid it.
+    return {
+      ok: false,
+      state: { ok: guard.reason === "honeypot", message: guard.message }
+    };
+  }
+
+  const gate = evaluateApplyGate(formText(formData, "apply_token") || undefined, role);
+  if (gate.status === "closed") {
+    await recordGateRejection(route, guard.ipHash ?? null);
+    return { ok: false, state: { ok: false, message: gate.reason } };
+  }
+
+  return { ok: true, ipHash: guard.ipHash ?? null };
+}
+
+/**
+ * Acknowledge the submission by email. Never fatal: the application is already
+ * stored, and an applicant must not be told their submission failed because a
+ * mail provider was unreachable.
+ */
+async function acknowledgeSubmission(input: {
+  applicationId: string;
+  role: ApplicationRole;
+  fullName: string;
+  emailPrimary: string;
+}) {
+  try {
+    await sendApplicationConfirmation({
+      toEmail: input.emailPrimary,
+      applicantName: input.fullName,
+      role: input.role,
+      seasonLabel: SEASON_CODE,
+      applicationId: input.applicationId
+    });
+  } catch (err) {
+    console.error("[apply] confirmation email failed (non-fatal)", err);
+  }
 }
 
 function fail(scope: string, err: unknown): ApplyActionState {
@@ -61,12 +126,17 @@ export async function submitMentorApplicationAction(
   _previous: ApplyActionState,
   formData: FormData
 ): Promise<ApplyActionState> {
+  let ipHash: string | null = null;
   try {
+    const guard = await guardSubmission(formData, "mentor");
+    if (!guard.ok) return guard.state;
+    ipHash = guard.ipHash;
+
     // Top-level columns
-    const fullName = formText(formData, "full_name");
-    const emailPrimary = formText(formData, "email_primary");
-    const phonePrimary = formText(formData, "phone_primary");
-    const gender = formText(formData, "gender");
+    const fullName = truncateShortField(formText(formData, "full_name"));
+    const emailPrimary = truncateShortField(formText(formData, "email_primary"));
+    const phonePrimary = truncateShortField(formText(formData, "phone_primary"));
+    const gender = truncateShortField(formText(formData, "gender"));
     const consentDataStorage = formBoolean(formData, "consent_data_storage");
 
     // raw_payload: every other Spec v2 mentor field, in declared order
@@ -157,7 +227,8 @@ export async function submitMentorApplicationAction(
       phonePrimary,
       gender: gender || null,
       consentDataStorage,
-      rawPayload
+      // Cap every stored string so one request cannot write unbounded text.
+      rawPayload: truncateFieldValues(rawPayload)
     });
 
     // On failure return the error state immediately.
@@ -165,6 +236,17 @@ export async function submitMentorApplicationAction(
     // because it throws NEXT_REDIRECT internally, which the catch block
     // would otherwise swallow and convert into a generic error state.
     if (!result.ok) return resultToState(result);
+
+    await recordAcceptedSubmission("apply_mentor", ipHash);
+    // Inside the try and before the redirect below: redirect() throws, so
+    // anything after it never runs.
+    await acknowledgeSubmission({
+      applicationId: result.applicationId,
+      role: "mentor",
+      fullName,
+      emailPrimary
+    });
+
     revalidatePath("/admin/applications");
   } catch (err) {
     return fail("submitMentorApplicationAction", err);
@@ -183,12 +265,17 @@ export async function submitMenteeApplicationAction(
   _previous: ApplyActionState,
   formData: FormData
 ): Promise<ApplyActionState> {
+  let ipHash: string | null = null;
   try {
+    const guard = await guardSubmission(formData, "mentee");
+    if (!guard.ok) return guard.state;
+    ipHash = guard.ipHash;
+
     // Top-level columns
-    const fullName = formText(formData, "full_name");
-    const emailPrimary = formText(formData, "email_primary");
-    const phonePrimary = formText(formData, "phone_primary");
-    const gender = formText(formData, "gender");
+    const fullName = truncateShortField(formText(formData, "full_name"));
+    const emailPrimary = truncateShortField(formText(formData, "email_primary"));
+    const phonePrimary = truncateShortField(formText(formData, "phone_primary"));
+    const gender = truncateShortField(formText(formData, "gender"));
     const consentDataStorage = formBoolean(formData, "consent_data_storage");
 
     // raw_payload: every other Spec v2 mentee field
@@ -283,10 +370,22 @@ export async function submitMenteeApplicationAction(
       phonePrimary,
       gender: gender || null,
       consentDataStorage,
-      rawPayload
+      // Cap every stored string so one request cannot write unbounded text.
+      rawPayload: truncateFieldValues(rawPayload)
     });
 
     if (!result.ok) return resultToState(result);
+
+    await recordAcceptedSubmission("apply_mentee", ipHash);
+    // Inside the try and before the redirect below: redirect() throws, so
+    // anything after it never runs.
+    await acknowledgeSubmission({
+      applicationId: result.applicationId,
+      role: "mentee",
+      fullName,
+      emailPrimary
+    });
+
     revalidatePath("/admin/applications");
   } catch (err) {
     return fail("submitMenteeApplicationAction", err);

@@ -20,9 +20,9 @@ export default function ApplyThanksPage({
         </div>
         <h1 className="text-2xl font-semibold text-vam-ink">Cảm ơn anh/chị/bạn đã đăng ký.</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Hồ sơ {roleLabel} của bạn đã được ghi nhận trong hệ thống VAM OS. BTC chương trình
-          sẽ liên hệ qua email/Zalo sau khi review. Vui lòng kiểm tra hộp thư trong vòng
-          7-10 ngày tới.
+          Hồ sơ {roleLabel} của bạn đã được ghi nhận trong hệ thống VAM OS. Một email xác nhận
+          vừa được gửi tới địa chỉ bạn điền trong đơn — nếu chưa thấy, vui lòng kiểm tra thư mục
+          Spam. BTC chương trình sẽ liên hệ sau khi review, trong vòng 7-10 ngày tới.
         </p>
         <p className="mt-3 text-xs text-slate-500">
           Nếu bạn có thắc mắc, vui lòng phản hồi email mời ban đầu hoặc liên hệ trực tiếp BTC.
