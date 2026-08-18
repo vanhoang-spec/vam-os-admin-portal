@@ -96,3 +96,5 @@ docs/audits/inputs/VAM_OS_PRODUCTION_BASELINE_GAPS_2026-07-22.json
 
 # Supabase CLI machine state: linked project ref, pooler URL, platform versions
 supabase/.temp/
+
+.vercel

@@ -160,4 +160,18 @@ describe("renewal server actions — exact season authorization", () => {
     expect(result.ok).toBe(false);
     expect(createRenewalInvite).not.toHaveBeenCalled();
   });
+
+  it("accepts UUID v7 and v8 in payloads without failing UUID validation", async () => {
+    const v7 = "018e6e5a-73d7-7f5b-9d62-123456789abc";
+    const v8 = "018e6e5a-73d7-8f5b-9d62-123456789abc";
+    const result = await createRenewalInviteAction(previous, form({
+      person_id: v7,
+      program_id: v8,
+      season_id: IDS.season,
+      expires_days: "14"
+    }));
+    // Should pass UUID check. If it fails later due to mock data mismatch,
+    // the error will be different than the UUID validation error.
+    expect(result.message).not.toBe("Person, program hoặc season không hợp lệ.");
+  });
 });

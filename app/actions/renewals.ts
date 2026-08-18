@@ -18,7 +18,7 @@ import {
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { isValidUuid } from "@/lib/events";
 
 function value(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -43,7 +43,7 @@ async function authorizedOperator(seasonId: string) {
 }
 
 async function scopedInvite(inviteId: string) {
-  if (!UUID.test(inviteId)) return null;
+  if (!isValidUuid(inviteId)) return null;
   const client = getSupabaseServiceRoleClient();
   if (!client) return null;
   const { data, error } = await client
@@ -81,7 +81,7 @@ export async function createRenewalInviteAction(
     const programId = value(formData, "program_id");
     const seasonId = value(formData, "season_id");
     const days = Number(value(formData, "expires_days") || "14");
-    if (![personId, programId, seasonId].every((item) => UUID.test(item))) {
+    if (!isValidUuid(personId) || !isValidUuid(programId) || !isValidUuid(seasonId)) {
       return adminFail("Person, program hoặc season không hợp lệ.");
     }
     if (!Number.isInteger(days) || days < 1 || days > 60) {
@@ -178,7 +178,7 @@ export async function confirmRenewalAction(
 ): Promise<RenewalAdminActionState> {
   try {
     const applicationId = String(reviewed.applicationId ?? "").trim();
-    if (!UUID.test(applicationId)) return adminFail("Application không hợp lệ.");
+    if (!isValidUuid(applicationId)) return adminFail("Application không hợp lệ.");
     const client = getSupabaseServiceRoleClient();
     if (!client) return adminFail("Dịch vụ gia hạn chưa sẵn sàng.");
     const { data: invite, error } = await client
