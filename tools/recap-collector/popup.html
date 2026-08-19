@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <title>VAM Recap Collector</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Thu recap từ group</h1>
+      <a id="settings" href="#">Cài đặt</a>
+    </header>
+
+    <section id="setup" hidden>
+      <p class="warn">Chưa cấu hình. Mở <strong>Cài đặt</strong> để nhập địa chỉ VAM OS và mã kết nối.</p>
+    </section>
+
+    <section id="wrong-page" hidden>
+      <p class="warn">Trang đang mở không phải feed của group đã cấu hình. Mở group rồi bấm lại.</p>
+    </section>
+
+    <section id="sorting" hidden>
+      <p class="warn">Group đang xem theo “Phù hợp nhất”, dễ sót bài.</p>
+      <button id="fix-sorting" class="secondary">Chuyển sang “Mới nhất”</button>
+    </section>
+
+    <section id="main" hidden>
+      <label for="period">Kỳ thu</label>
+      <select id="period"></select>
+
+      <div class="range">
+        <label>Từ <input id="from" type="date" /></label>
+        <label>Đến <input id="to" type="date" /></label>
+      </div>
+
+      <button id="scan">Quét bài trong kỳ</button>
+
+      <p id="progress" class="muted" aria-live="polite"></p>
+
+      <div id="result" hidden>
+        <p id="summary"></p>
+        <button id="send">Gửi vào VAM OS</button>
+        <button id="csv" class="secondary">Tải CSV (dự phòng)</button>
+      </div>
+
+      <p id="status" aria-live="polite"></p>
+    </section>
+
+    <footer>
+      <p class="muted">
+        Quét trùng ngày không sao: bài nào đã thu rồi thì VAM OS tự bỏ qua.
+      </p>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

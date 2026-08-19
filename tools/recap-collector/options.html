@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cài đặt — VAM Recap Collector</title>
+    <link rel="stylesheet" href="popup.css" />
+    <style>
+      body { width: 460px; }
+    </style>
+  </head>
+  <body>
+    <header><h1>Cài đặt</h1></header>
+
+    <label for="appUrl">Địa chỉ VAM OS</label>
+    <input id="appUrl" type="url" placeholder="https://vam-os.vercel.app" />
+
+    <label for="token" style="margin-top: 10px">Mã kết nối (do super admin cấp)</label>
+    <input id="token" type="password" placeholder="dán mã vào đây" />
+
+    <label for="groups" style="margin-top: 10px">Mã group Facebook (cách nhau bằng dấu phẩy)</label>
+    <input id="groups" type="text" placeholder="123456789, 987654321" />
+
+    <button id="save">Lưu</button>
+    <p id="status" aria-live="polite"></p>
+
+    <footer>
+      <p class="muted">
+        Mã kết nối nằm trong máy này, đừng chia sẻ cho ai. Nếu lộ, báo super admin
+        đổi mã trong cấu hình VAM OS là mã cũ hết tác dụng ngay.
+      </p>
+    </footer>
+
+    <script src="options.js"></script>
+  </body>
+</html>

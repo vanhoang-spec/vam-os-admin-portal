@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "VAM Recap Collector",
+  "version": "1.0.0",
+  "description": "Thu bài recap mentee đăng trong group Facebook và gửi vào VAM OS để ban tổ chức duyệt.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["https://*.facebook.com/*"],
+  "optional_host_permissions": ["https://*/*"],
+  "action": {
+    "default_title": "VAM Recap Collector",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html"
+}
