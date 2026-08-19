@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Hướng dẫn chuyển GitHub và Vercel</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; padding-left: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 32%; }
+
+  .note, .stop {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+
+  .check { background: var(--mint); border: 1px solid #bfe2cd; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+<style>
+  .kv { font-family: Consolas, "Courier New", monospace; font-size: 9pt; }
+  .yes { color: var(--green-dark); font-weight: 700; }
+  .no  { color: var(--stop-ink); font-weight: 700; }
+  .opt {
+    border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px;
+    margin-bottom: 10px; page-break-inside: avoid;
+  }
+  .opt.pick { background: var(--mint); border-color: #bfe2cd; }
+  .opt h4 { margin: 0 0 4px; font-size: 11pt; }
+  .opt .price { float: right; font-size: 10pt; font-weight: 700; color: var(--green-dark); }
+  .opt p { margin: 0; font-size: 9.5pt; color: var(--muted); }
+  .badge {
+    display: inline-block; font-size: 8pt; font-weight: 700; padding: 1px 8px;
+    border-radius: 20px; background: var(--green); color: #fff; margin-left: 6px;
+    vertical-align: middle;
+  }
+  .who { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 14px; }
+  .whobox { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .whobox .wt { font-weight: 700; font-size: 10.5pt; margin-bottom: 3px; }
+  .whobox .ws { font-size: 9.5pt; color: var(--muted); }
+  .whobox.hi { background: var(--mint); border-color: #bfe2cd; }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Tài liệu vận hành</div>
+  <h1>Chuyển GitHub và Vercel,<br />hoặc cùng làm chủ</h1>
+  <div class="sub">Hướng dẫn từng bước — không cần biết lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Anh hỏi có cách nào thêm đồng sở hữu, hoặc hai người cùng làm và cùng deploy được không.
+    Câu trả lời khác nhau ở hai nơi, và có một điều về Vercel đáng biết ngay:
+    <strong>hôm nay anh không deploy được, kể cả khi anh push code lên GitHub.</strong>
+  </p>
+  <p class="lead">
+    Tài liệu này giải thích vì sao, rồi đưa ra ba phương án kèm chi phí thật, và các bước cho
+    phương án được đề xuất.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Kho mã nguồn</dt><dd>ThangNguyen-bot/vam-os-admin-portal</dd></div>
+    <div><dt>GitHub</dt><dd>Đồng sở hữu được — miễn phí</dd></div>
+    <div><dt>Vercel</dt><dd>Đồng sở hữu được — có phí</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ CÂU TRẢ LỜI NGẮN ══════════ -->
+<section class="page">
+  <h2 class="plain">Câu trả lời ngắn</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30%">Nơi</th>
+        <th style="width:22%">Đồng sở hữu?</th>
+        <th style="width:26%">Hai người cùng deploy?</th>
+        <th>Chi phí</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="key">GitHub — kho cá nhân<br /><span style="font-size:8.5pt;color:var(--muted)">(tình trạng hôm nay)</span></td>
+        <td><span class="no">Không</span></td>
+        <td>Đẩy code được, nhưng không sửa được cài đặt</td>
+        <td>0 đ</td>
+      </tr>
+      <tr>
+        <td class="key">GitHub — Organization</td>
+        <td><span class="yes">Có</span>, nhiều chủ</td>
+        <td><span class="yes">Có</span></td>
+        <td><strong>0 đ</strong></td>
+      </tr>
+      <tr>
+        <td class="key">Vercel — tài khoản Hobby<br /><span style="font-size:8.5pt;color:var(--muted)">(tình trạng hôm nay)</span></td>
+        <td><span class="no">Không</span></td>
+        <td><span class="no">Không</span> — chỉ chủ tài khoản</td>
+        <td>0 đ</td>
+      </tr>
+      <tr>
+        <td class="key">Vercel — Team gói Pro</td>
+        <td><span class="yes">Có</span>, nhiều chủ</td>
+        <td><span class="yes">Có</span></td>
+        <td>~20 USD/người/tháng</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Nói gọn</h3>
+    <p style="margin:0">
+      <strong>GitHub cho đồng sở hữu miễn phí</strong> — chỉ cần chuyển kho mã nguồn từ tài khoản cá nhân
+      của anh Thắng vào một <em>Organization</em>, rồi đặt cả hai làm chủ.
+      <strong>Vercel thì đồng sở hữu phải trả tiền</strong> — gói miễn phí của Vercel về nguyên tắc
+      không cho phép nhiều người.
+    </p>
+  </div>
+
+  <div class="note">
+    <h3>Vì sao GitHub cá nhân không thể có hai chủ</h3>
+    <p style="margin:0">
+      Tài liệu GitHub ghi rõ: kho mã nguồn thuộc tài khoản cá nhân <strong>có đúng một chủ</strong>, và
+      người được mời vào chỉ có <strong>một mức quyền duy nhất</strong> — không có mức “quản trị”.
+      Người cộng tác đẩy code lên được, tạo và gộp pull request được, nhưng
+      <em>không</em> mời được người khác, <em>không</em> đổi được chế độ công khai/riêng tư,
+      <em>không</em> sửa được cài đặt, <em>không</em> xoá được kho. Muốn nhiều chủ thì phải dùng Organization —
+      đây là khuyến nghị chính thức của GitHub.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ VÌ SAO KHÔNG DEPLOY ĐƯỢC ══════════ -->
+<section class="page">
+  <h2 class="plain">Vì sao hôm nay anh không deploy được</h2>
+
+  <p>
+    Đây là phần đáng ngạc nhiên nhất, và nó giải thích một chuyện anh đã sống chung lâu nay:
+    vì sao mọi lần đưa lên bản chạy thật đều phải qua anh Thắng.
+  </p>
+
+  <div class="stop">
+    <h3>Quy định của Vercel với tài khoản Hobby</h3>
+    <p style="margin:0 0 6px">
+      Tài liệu Vercel ghi: <em>“Gói Hobby không hỗ trợ cộng tác với kho mã nguồn riêng tư.”</em> Và:
+      <em>“Để một commit được deploy dưới tài khoản Hobby, tác giả commit phải chính là chủ tài khoản
+      Hobby đang chứa dự án.”</em>
+    </p>
+    <p style="margin:0">
+      Nghĩa là: anh push code lên GitHub, GitHub nhận, nhưng <strong>Vercel từ chối dựng bản mới</strong>
+      vì tác giả commit không phải anh Thắng. Không phải anh làm sai — hệ thống được thiết kế như vậy.
+    </p>
+  </div>
+
+  <p>
+    Kho mã nguồn này là riêng tư. (Nếu để công khai thì Vercel cho cộng tác miễn phí — nhưng
+    <strong>không nên</strong>: mã nguồn chứa cấu trúc cơ sở dữ liệu, mã dự án Supabase và toàn bộ
+    logic nghiệp vụ của chương trình.)
+  </p>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Vercel Team cho phép nhiều chủ thật sự</h3>
+
+  <table>
+    <thead><tr><th style="width:28%">Vai trò</th><th>Làm được gì</th></tr></thead>
+    <tbody>
+      <tr><td class="key">Owner — chủ</td><td>Toàn quyền: cài đặt, thành viên, thanh toán, mọi dự án. <strong>Một team có thể có nhiều Owner</strong> — Vercel còn khuyên nên có ít nhất hai người.</td></tr>
+      <tr><td class="key">Member — thành viên</td><td>Deploy, quản lý dự án, tên miền, biến môi trường. Không mời người, không đụng thanh toán.</td></tr>
+      <tr><td class="key">Developer</td><td>Deploy được, sửa biến môi trường của bản thử nghiệm. Không sửa được biến của bản chạy thật.</td></tr>
+      <tr><td class="key">Billing</td><td>Chỉ lo thanh toán. <strong>Không tốn thêm tiền ghế</strong>, và chỉ định được một người.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Có 14 ngày dùng thử Pro miễn phí</h3>
+    <p style="margin:0">
+      Vercel cho dùng thử gói Pro 14 ngày, đủ tính năng cộng tác. Anh có thể làm toàn bộ các bước
+      trong tài liệu này, chạy thử một đợt deploy, rồi mới quyết định trả tiền hay không.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ BA PHƯƠNG ÁN ══════════ -->
+<section class="page">
+  <h2 class="plain">Ba phương án</h2>
+
+  <div class="opt pick">
+    <span class="price">~20 USD/tháng</span>
+    <h4>Phương án A — GitHub Organization + Vercel Pro một ghế <span class="badge">Đề xuất</span></h4>
+    <p>
+      Kho mã nguồn vào một GitHub Organization, <strong>cả hai đều là chủ</strong> (miễn phí).
+      Vercel: tạo team Pro đứng tên anh, <strong>chỉ anh giữ ghế</strong>. Anh Thắng vẫn xem code,
+      duyệt pull request, gộp code như hiện nay — chỉ khác là <strong>anh bấm deploy</strong>.
+      Rẻ nhất trong các phương án cho anh toàn quyền.
+    </p>
+  </div>
+
+  <div class="opt">
+    <span class="price">~40 USD/tháng</span>
+    <h4>Phương án B — GitHub Organization + Vercel Pro hai ghế</h4>
+    <p>
+      Giống trên, nhưng anh Thắng cũng có ghế Vercel. <strong>Cả hai cùng deploy được</strong>,
+      cùng xem được nhật ký lỗi, cùng sửa được cấu hình. Chọn phương án này nếu anh Thắng còn
+      hỗ trợ kỹ thuật thường xuyên và anh không muốn thành nút thắt mỗi lần cần đưa bản mới lên.
+    </p>
+  </div>
+
+  <div class="opt">
+    <span class="price">0 đ</span>
+    <h4>Phương án C — Chuyển hết sang tài khoản cá nhân của anh</h4>
+    <p>
+      Kho mã nguồn và dự án Vercel đều về tài khoản cá nhân của anh, vẫn gói miễn phí.
+      Không tốn đồng nào, nhưng <strong>chỉ đổi chiều vấn đề</strong>: từ nay chỉ commit của
+      <em>anh</em> mới deploy được, anh Thắng thì không. Và kho mã nguồn lại quay về chỗ chỉ có
+      một chủ duy nhất.
+    </p>
+  </div>
+
+  <div class="note">
+    <h3>Gợi ý cách chọn</h3>
+    <p style="margin:0">
+      Nếu mục tiêu là <strong>anh nắm quyền và không phụ thuộc ai</strong> thì chọn A. Nếu mục tiêu là
+      <strong>hai người làm việc song song lâu dài</strong> thì chọn B — 20 USD chênh lệch mỗi tháng
+      rẻ hơn nhiều so với việc chờ nhau. Chỉ chọn C nếu anh Thắng sắp rút hẳn khỏi dự án.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ GITHUB ══════════ -->
+<section class="page">
+  <h2 class="plain">Phần 1 — GitHub: tạo Organization và chuyển kho mã nguồn</h2>
+
+  <p>
+    Phần này <strong>miễn phí</strong> ở cả ba phương án và nên làm trước. GitHub Organization gói Free
+    cho không giới hạn kho mã nguồn riêng tư và không giới hạn thành viên.
+  </p>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Anh: tạo Organization</h3>
+      <p class="sub-step">Đăng nhập GitHub bằng tài khoản của anh (<span class="kv">hoang-embassy</span>).</p>
+      <p class="sub-step">Bấm ảnh đại diện góc trên bên phải &rarr; <strong>Your organizations</strong> &rarr; <strong>New organization</strong> &rarr; chọn gói <strong>Free</strong>.</p>
+      <p class="sub-step">Đặt tên, ví dụ <span class="kv">vietnam-alumni-mentoring</span>. Tên này sẽ nằm trong địa chỉ kho mã nguồn nên chọn cho gọn và lâu dài.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Anh: mời anh Thắng làm Owner của Organization</h3>
+      <p class="sub-step">Vào Organization &rarr; <strong>People</strong> &rarr; <strong>Invite member</strong> &rarr; nhập <span class="kv">ThangNguyen-bot</span>.</p>
+      <p class="sub-step">Chọn vai trò <strong>Owner</strong>. Đây chính là phần “đồng sở hữu” mà anh hỏi.</p>
+      <p class="sub-step">Anh Thắng nhận email và bấm chấp nhận.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Anh Thắng: chuyển kho mã nguồn vào Organization</h3>
+      <p class="sub-step">
+        Mở <span class="kv">github.com/ThangNguyen-bot/vam-os-admin-portal</span> &rarr;
+        <strong>Settings</strong> &rarr; kéo xuống cuối, mục <strong>Danger Zone</strong> &rarr;
+        <strong>Transfer ownership</strong>.
+      </p>
+      <p class="sub-step">Nhập tên Organization vừa tạo &rarr; xác nhận bằng cách gõ tên kho mã nguồn.</p>
+      <div class="stop">
+        <h3>Anh phải chấp nhận trong vòng 1 ngày</h3>
+        <p style="margin:0">
+          GitHub gửi email xác nhận và lời mời chỉ có hiệu lực <strong>một ngày</strong>. Quá hạn thì phải
+          làm lại từ đầu. Hai người nên làm cùng lúc.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Những gì đi theo kho mã nguồn — nhiều hơn anh nghĩ</h3>
+    <p style="margin:0 0 6px">
+      Theo tài liệu GitHub, chuyển kho mã nguồn mang theo: toàn bộ lịch sử code, các issue, pull request,
+      wiki, sao (star), người theo dõi, <strong>webhook, khoá bí mật (secrets) và deploy key</strong>.
+    </p>
+    <p style="margin:0">
+      Và <strong>mọi đường dẫn cũ tự động chuyển hướng sang địa chỉ mới</strong> — kể cả lệnh
+      <span class="kv">git clone</span>, <span class="kv">git push</span>. Không có gì gãy ngay lập tức.
+      Dù vậy vẫn nên cập nhật lại địa chỉ trên máy của mỗi người cho sạch.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ VERCEL ══════════ -->
+<section class="page">
+  <h2 class="plain">Phần 2 — Vercel: tạo Team và chuyển dự án</h2>
+
+  <div class="stop">
+    <h3>Làm phần này SAU khi xong phần GitHub</h3>
+    <p style="margin:0">
+      Chuyển kho mã nguồn sang Organization sẽ làm đứt liên kết giữa Vercel và GitHub. Nếu làm Vercel
+      trước thì phải nối lại hai lần. Làm GitHub xong rồi mới đụng Vercel thì chỉ nối lại một lần.
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Anh: chép lại toàn bộ biến môi trường trước khi động vào gì</h3>
+      <p class="sub-step">
+        Nhờ anh Thắng mở dự án trên Vercel &rarr; <strong>Settings</strong> &rarr;
+        <strong>Environment Variables</strong>, chụp lại hoặc chép ra danh sách đầy đủ.
+      </p>
+      <div class="note">
+        <h3>Chép vào đâu</h3>
+        <p style="margin:0">
+          Đây là các khoá bí mật — khoá Supabase, khoá gửi email, mã kết nối. Chép vào
+          <strong>trình quản lý mật khẩu</strong>, đừng gửi qua tin nhắn nhóm hay email.
+          Nếu sau khi chuyển mà thiếu biến nào, đây là bản để khôi phục.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Anh: tạo Team trên Vercel</h3>
+      <p class="sub-step">Đăng nhập <span class="kv">vercel.com</span> bằng tài khoản của anh &rarr; bấm ô chọn team góc trên bên trái &rarr; <strong>Create Team</strong>.</p>
+      <p class="sub-step">Đặt tên team, chọn gói <strong>Pro</strong>. Nếu được mời dùng thử 14 ngày thì cứ nhận.</p>
+      <p class="sub-step">
+        <strong>Phương án B:</strong> vào <strong>Settings</strong> &rarr; <strong>Members</strong> &rarr;
+        mời anh Thắng với vai trò <strong>Owner</strong>. Bỏ qua bước này nếu chọn phương án A.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Anh Thắng: chuyển dự án sang team của anh</h3>
+      <p class="sub-step">
+        Mở dự án VAM OS trên Vercel &rarr; <strong>Settings</strong> &rarr; <strong>Advanced</strong>
+        &rarr; mục <strong>Transfer Project</strong> &rarr; chọn team của anh.
+      </p>
+      <p class="sub-step">
+        Nếu Vercel báo phải gỡ tên miền trước, làm theo hướng dẫn trên màn hình rồi gắn lại sau khi chuyển.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Anh: nối lại dự án với kho mã nguồn ở địa chỉ mới</h3>
+      <p class="sub-step">
+        Trong dự án &rarr; <strong>Settings</strong> &rarr; <strong>Git</strong>. Nếu thấy báo mất kết nối,
+        bấm nối lại và chọn kho <span class="kv">vam-os-admin-portal</span> trong Organization mới.
+      </p>
+      <p class="sub-step">
+        GitHub sẽ hỏi cho phép cài ứng dụng Vercel vào Organization — đồng ý, và cấp quyền cho đúng
+        kho mã nguồn này.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">5</div>
+    <div class="body">
+      <h3>Anh: đối chiếu lại biến môi trường</h3>
+      <p class="sub-step">
+        Mở <strong>Settings</strong> &rarr; <strong>Environment Variables</strong>, so với bản đã chép ở bước 1.
+        Thiếu cái nào thì thêm lại.
+      </p>
+      <p class="sub-step">
+        Đặc biệt kiểm tra bốn biến này, thiếu một cái là web app hỏng ngay:
+        <span class="kv">NEXT_PUBLIC_SUPABASE_URL</span>,
+        <span class="kv">NEXT_PUBLIC_SUPABASE_ANON_KEY</span>,
+        <span class="kv">SUPABASE_SERVICE_ROLE_KEY</span>,
+        <span class="kv">VAM_OS_PUBLIC_BASE_URL</span>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ KIỂM TRA ══════════ -->
+<section class="page">
+  <h2 class="plain">Kiểm tra sau khi chuyển</h2>
+
+  <p>Làm theo đúng thứ tự. Bước 3 là bước quan trọng nhất — nó chính là thứ hôm nay chưa chạy được.</p>
+
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:42%">Việc kiểm tra</th><th>Kết quả đúng</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Mở web app VAM OS, đăng nhập, mở bảng vận hành</td>
+        <td>Chạy bình thường, có số liệu</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Trên Vercel, mở tab <strong>Deployments</strong></td>
+        <td>Thấy lịch sử các lần deploy cũ</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>Anh</strong> sửa một chữ nhỏ trong tài liệu, commit và push lên nhánh chính</td>
+        <td><strong>Vercel tự dựng bản mới.</strong> Đây là thứ hôm nay không chạy.</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>Phương án B: anh Thắng cũng push thử một commit</td>
+        <td>Cũng tự dựng bản mới</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td>Kiểm tra tên miền web app còn trỏ đúng</td>
+        <td>Mở đúng địa chỉ quen thuộc, không phải địa chỉ tạm của Vercel</td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td>Trên Vercel &rarr; <strong>Settings</strong> &rarr; <strong>Cron Jobs</strong></td>
+        <td>Vẫn còn lịch chạy hằng ngày (nhắc thu recap)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="stop">
+    <h3>Nếu bước 3 không dựng bản mới</h3>
+    <p style="margin:0 0 6px">Kiểm tra ba thứ, theo thứ tự:</p>
+    <p style="margin:0">
+      <strong>a.</strong> Tài khoản Vercel của anh đã nối với tài khoản GitHub của anh chưa
+      (Account Settings &rarr; Login Connections). <br />
+      <strong>b.</strong> Email trong cấu hình git trên máy anh có trùng với email đã xác minh
+      trên GitHub không — chạy <span class="kv">git config user.email</span> để xem. <br />
+      <strong>c.</strong> Dự án Vercel đã nối đúng kho mã nguồn ở Organization mới chưa.
+    </p>
+  </div>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Việc dọn dẹp sau cùng</h3>
+  <ul>
+    <li>Mỗi người cập nhật lại địa chỉ kho trên máy mình: <span class="kv">git remote set-url origin &lt;địa chỉ mới&gt;</span>. Đường dẫn cũ vẫn chuyển hướng, nhưng để sạch.</li>
+    <li>Nếu chọn phương án A, anh Thắng vẫn là Owner trên GitHub — vẫn xem, duyệt và gộp code như cũ.</li>
+    <li>Nhắc lại: <strong>Supabase là việc chuyển giao riêng</strong>, có tài liệu riêng.</li>
+  </ul>
+</section>
+
+<!-- ══════════ TÓM TẮT ══════════ -->
+<section class="page">
+  <h2 class="plain">Ai làm gì — tóm tắt một trang</h2>
+
+  <div class="who">
+    <div class="whobox hi">
+      <div class="wt">1 · Anh</div>
+      <div class="ws">Tạo GitHub Organization gói Free. Mời anh Thắng làm Owner.</div>
+    </div>
+    <div class="whobox">
+      <div class="wt">2 · Anh Thắng</div>
+      <div class="ws">Chuyển kho mã nguồn vào Organization. Anh chấp nhận trong vòng 1 ngày.</div>
+    </div>
+  </div>
+  <div class="who">
+    <div class="whobox">
+      <div class="wt">3 · Anh Thắng</div>
+      <div class="ws">Chép danh sách biến môi trường trên Vercel gửi anh (qua trình quản lý mật khẩu).</div>
+    </div>
+    <div class="whobox hi">
+      <div class="wt">4 · Anh</div>
+      <div class="ws">Tạo Vercel Team gói Pro. Phương án B thì mời thêm anh Thắng làm Owner.</div>
+    </div>
+  </div>
+  <div class="who">
+    <div class="whobox">
+      <div class="wt">5 · Anh Thắng</div>
+      <div class="ws">Chuyển dự án Vercel sang team của anh.</div>
+    </div>
+    <div class="whobox hi">
+      <div class="wt">6 · Anh</div>
+      <div class="ws">Nối lại GitHub, đối chiếu biến môi trường, push thử một commit.</div>
+    </div>
+  </div>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Chi phí gộp cả ba hệ thống</h3>
+
+  <table>
+    <thead><tr><th style="width:34%">Hệ thống</th><th style="width:33%">Phương án A</th><th>Phương án B</th></tr></thead>
+    <tbody>
+      <tr><td class="key">GitHub Organization</td><td>0 đ</td><td>0 đ</td></tr>
+      <tr><td class="key">Vercel Pro</td><td>~20 USD</td><td>~40 USD</td></tr>
+      <tr><td class="key">Supabase Pro <span style="font-size:8.5pt;color:var(--muted)">(tài liệu riêng)</span></td><td>~25–35 USD</td><td>~25–35 USD</td></tr>
+      <tr><td class="key"><strong>Tổng mỗi tháng</strong></td><td><strong>~45–55 USD</strong></td><td><strong>~65–75 USD</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <h3>Về các con số</h3>
+    <p style="margin:0">
+      Giá lấy theo bảng giá công bố tại thời điểm 19/08/2026. <strong>Xem lại số thật trên màn hình
+      thanh toán trước khi bấm xác nhận</strong> — giá có thể đã đổi. Có thể dùng thử Vercel Pro
+      14 ngày miễn phí trước khi quyết định.
+    </p>
+  </div>
+
+  <div class="check">
+    <h3>Điều đáng nhớ nhất trong tài liệu này</h3>
+    <p style="margin:0">
+      <strong>GitHub cho đồng sở hữu miễn phí; Vercel thì không.</strong> Và cho tới khi làm xong,
+      anh vẫn không tự đưa được bản mới lên — mọi lần deploy vẫn phải qua anh Thắng, không phải vì
+      thiếu quyền trên GitHub, mà vì quy định của gói Vercel miễn phí.
+    </p>
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS · Hướng dẫn chuyển GitHub và Vercel · 19/08/2026 ·
+    Quy định về quyền và giới hạn lấy từ tài liệu chính thức của GitHub và Vercel.
+  </footer>
+</section>
+
+</body>
+
+</html>
