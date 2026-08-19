@@ -9,6 +9,11 @@ import { approveApplication } from "@/lib/application-approvals";
 import { buildRenewalPublicDisplayDto, createRenewalInvite, loadRenewalPage, reconcileRenewalMembership, submitRenewalAccepted, submitRenewalDeclined, confirmRenewalAndApprove, regenerateRenewalInvite, revokeRenewalInvite } from "@/lib/renewal-runtime";
 import { hashRenewalInviteToken, mintRenewalInviteToken, type RenewalInviteRow } from "@/lib/renewal-invite-token";
 import { renewalDeclineAttention, renewalInviteState } from "@/lib/renewal-console";
+import {
+  ACTIVE_READING_KEYS,
+  CONFIRMATION_PHRASES,
+  requiredCheckboxAcknowledgements
+} from "@/lib/application-commitments";
 
 const IDS = {
   invite: "00000000-0000-4000-8000-000000000001",
@@ -49,14 +54,31 @@ function invite(token: string): RenewalInviteRow {
   };
 }
 
+/**
+ * A submission that satisfies the M073 acceptance gate. The commitments are
+ * applied from the canonical mentor set rather than a list held here, so this
+ * helper cannot drift away from what the runtime enforces.
+ */
 function acceptedForm() {
   const form = new FormData();
   form.set("participation_confirmed", "yes");
   form.set("consent_data_storage", "yes");
   form.set("company_current", "Acme");
+  form.set("mentoring_capacity_total", "1");
+  for (const entry of requiredCheckboxAcknowledgements("mentor")) form.set(entry.key, "true");
+  form.set(ACTIVE_READING_KEYS.mentor, CONFIRMATION_PHRASES.mentor);
   form.set("first_vam_season", "MUST_NOT_PASS");
   form.set("person_id", "MUST_NOT_PASS");
   return form;
+}
+
+/** The commitments block the canonical set produces when every box is ticked. */
+function expectedCommitments() {
+  const commitments: Record<string, boolean | string> = {};
+  for (const entry of requiredCheckboxAcknowledgements("mentor")) commitments[entry.key] = true;
+  commitments[`${ACTIVE_READING_KEYS.mentor}_matched`] = true;
+  commitments[`${ACTIVE_READING_KEYS.mentor}_text`] = CONFIRMATION_PHRASES.mentor;
+  return commitments;
 }
 
 describe("P0 public renewal submission boundary", () => {
@@ -140,19 +162,9 @@ describe("P0 public renewal submission boundary", () => {
       p_raw_payload: {
         participation_confirmed: true,
         company_current: "Acme",
-        commitments: {
-          MENTOR_TIME_COMMITMENT_V1: false,
-          MENTOR_ELIGIBILITY_V1: false,
-          MENTOR_MATCH_EXPECTATION_V1: false,
-          MENTOR_MENTORING_PRINCIPLE_V1: false,
-          MENTOR_NO_GHOST_V1: false,
-          MENTOR_BOUNDARIES_V1: false,
-          MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1: false,
-          MENTOR_CONFLICT_ESCALATION_V1: false,
-          MENTOR_ACTIVE_READING_V1_matched: false,
-          MENTOR_ACTIVE_READING_V1_text: ""
-        },
-        commitments_completed: false
+        mentoring_capacity_total: 1,
+        commitments: expectedCommitments(),
+        commitments_completed: true
       },
       p_consent_data_storage: true
     });

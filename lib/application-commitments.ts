@@ -169,6 +169,43 @@ export function acknowledgementsForRole(role: ApplicationCommitmentRole) {
   );
 }
 
+/**
+ * The typed active-reading entry for each role. It is confirmed by exact phrase
+ * rather than by a checkbox, so every "which boxes must be ticked" question has
+ * to exclude it. Naming it once here is what lets the renewal runtime, the
+ * renewal form and the application validators agree without any of them
+ * restating the list.
+ */
+export const ACTIVE_READING_KEYS = Object.freeze({
+  mentor: "MENTOR_ACTIVE_READING_V1",
+  mentee: "MENTEE_ACTIVE_READING_V1"
+} as const);
+
+/** The canonical confirmation phrase per role, keyed the same way. */
+export const CONFIRMATION_PHRASES = Object.freeze({
+  mentor: MENTOR_CONFIRMATION_PHRASE,
+  mentee: MENTEE_CONFIRMATION_PHRASE
+} as const);
+
+/**
+ * THE canonical required-checkbox set for a role: every application-stage
+ * acknowledgement except the typed active-reading one.
+ *
+ * This is the single source of truth for the S12 renewal as well as the public
+ * application. A renewal that restated the list would be a second policy
+ * allowlist, and M070 section 6.2 already recorded why that is the wrong shape:
+ * two lists drift, and the copy nobody updates is the one that silently
+ * widens — here, into reporting a mentor as fully committed to a set that has
+ * grown since the copy was written.
+ *
+ * Collection stage is honoured by `acknowledgementsForRole`, so an entry like
+ * MENTOR_CONDUCT_V1 that is deliberately collected post-approval is excluded
+ * here for free, and promoting it later requires no edit in any consumer.
+ */
+export function requiredCheckboxAcknowledgements(role: ApplicationCommitmentRole) {
+  return acknowledgementsForRole(role).filter((entry) => entry.key !== ACTIVE_READING_KEYS[role]);
+}
+
 export function normalizeConfirmation(value: string): string {
   return value
     .normalize("NFC")
@@ -259,8 +296,7 @@ export function validateMentorCommitments(input: {
       message: "Vui lòng nhập quy mô đội ngũ lớn nhất đã trực tiếp quản lý (tối thiểu 1)."
     };
   }
-  const missing = acknowledgementsForRole("mentor")
-    .filter((entry) => entry.key !== "MENTOR_ACTIVE_READING_V1")
+  const missing = requiredCheckboxAcknowledgements("mentor")
     .find((entry) => !input.acceptedKeys.has(entry.key));
   if (missing) return {
     ok: false,
@@ -284,8 +320,7 @@ export function validateMenteeCommitments(input: {
   acceptedKeys: ReadonlySet<string>;
   activeReading: string;
 }): CommitmentValidation {
-  const missing = acknowledgementsForRole("mentee")
-    .filter((entry) => entry.key !== "MENTEE_ACTIVE_READING_V1")
+  const missing = requiredCheckboxAcknowledgements("mentee")
     .find((entry) => !input.acceptedKeys.has(entry.key));
   if (missing) return {
     ok: false,

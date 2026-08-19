@@ -2,9 +2,10 @@ import "server-only";
 
 import { approveApplication } from "@/lib/application-approvals";
 import {
-  APPLICATION_ACKNOWLEDGEMENTS as ACK,
+  ACTIVE_READING_KEYS,
   confirmationMatches,
-  MENTOR_CONFIRMATION_PHRASE
+  CONFIRMATION_PHRASES,
+  requiredCheckboxAcknowledgements
 } from "@/lib/application-commitments";
 import {
   evaluateRenewalInviteGate,
@@ -22,6 +23,8 @@ import {
 } from "@/lib/renewal-profile-safety";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import {
+  isRenewalMenteeCapacity,
+  RENEWAL_MENTEE_CAPACITY_CHOICES,
   type RenewalAdminActionState,
   type RenewalConfirmationIntent,
   type RenewalMentorProfile,
@@ -82,26 +85,17 @@ function nonBlank(formData: FormData, key: string) {
 export function renewalPayloadFromFormData(formData: FormData): Record<string, unknown> {
   const commitments: Record<string, boolean | string> = {};
   let commitmentsCompleted = true;
-  for (const entry of [
-    ACK.MENTOR_TIME_COMMITMENT_V1,
-    ACK.MENTOR_ELIGIBILITY_V1,
-    ACK.MENTOR_MATCH_EXPECTATION_V1,
-    ACK.MENTOR_MENTORING_PRINCIPLE_V1,
-    ACK.MENTOR_NO_GHOST_V1,
-    ACK.MENTOR_BOUNDARIES_V1,
-    ACK.MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1,
-    ACK.MENTOR_CONFLICT_ESCALATION_V1
-  ]) {
+  for (const entry of requiredCheckboxAcknowledgements("mentor")) {
     const checked = formData.get(entry.key) === "true";
     commitments[entry.key] = checked;
     if (!checked) commitmentsCompleted = false;
   }
-  const activeReading = String(formData.get("MENTOR_ACTIVE_READING_V1") ?? "").trim();
-  const activeReadingMatches = confirmationMatches(activeReading, MENTOR_CONFIRMATION_PHRASE);
+  const activeReading = String(formData.get(ACTIVE_READING_KEYS.mentor) ?? "").trim();
+  const activeReadingMatches = confirmationMatches(activeReading, CONFIRMATION_PHRASES.mentor);
   if (!activeReadingMatches) commitmentsCompleted = false;
 
-  commitments.MENTOR_ACTIVE_READING_V1_matched = activeReadingMatches;
-  commitments.MENTOR_ACTIVE_READING_V1_text = activeReading;
+  commitments[`${ACTIVE_READING_KEYS.mentor}_matched`] = activeReadingMatches;
+  commitments[`${ACTIVE_READING_KEYS.mentor}_text`] = activeReading;
 
   const payload: Record<string, unknown> = {
     participation_confirmed: formData.get("participation_confirmed") === "yes",
@@ -120,7 +114,11 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
     "mentoring_capacity_total"
   ]) {
     const value = nonBlank(formData, key);
-    if (value !== undefined) payload[key] = key === "mentoring_capacity_total" ? Number(value) : value;
+    if (value === undefined) continue;
+    // Number("") is 0 and Number("abc") is NaN; nonBlank has already removed
+    // the empty case, and the acceptance gate refuses anything that is not one
+    // of the offered choices, so no unvalidated number reaches M071.
+    payload[key] = key === "mentoring_capacity_total" ? Number(value) : value;
   }
 
   for (const [key, value] of Object.entries(payload)) {
@@ -233,18 +231,86 @@ export async function loadRenewalPage(
   };
 }
 
-export async function submitRenewalAccepted(
-  rawToken: unknown,
-  formData: FormData,
-  client = getSupabaseServiceRoleClient()
-): Promise<RenewalPublicActionState> {
+/**
+ * Normalised optional free text from the public renewal form.
+ *
+ * "" and whitespace-only mean the mentor chose not to say anything, and that is
+ * NULL rather than an empty string: a column holding '' and a column holding
+ * NULL would render identically in the console while comparing differently in
+ * every query written later.
+ */
+export function normalizeOptionalFeedback(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+export type RenewalAcceptanceValidation =
+  | { ok: true; payload: Record<string, unknown> }
+  | { ok: false; message: string };
+
+/**
+ * P0-RT-12. The server-side acceptance gate.
+ *
+ * The renewal form marks every commitment `required`, and that attribute is
+ * worth exactly nothing here: the submission arrives at a server action, and a
+ * direct POST never renders the form at all. Before this gate existed the
+ * runtime computed `commitments_completed` and then submitted regardless, so
+ * an accepted Season 12 renewal could carry every commitment false and an
+ * unmatched acknowledgement while the console reported it as a live mentor.
+ *
+ * Fails CLOSED and BEFORE M071: a submission that does not satisfy every
+ * condition never reaches the trusted RPC, so no invite is claimed, no
+ * applications row is written and the invite stays usable for a corrected
+ * resubmission.
+ *
+ * The required set is read from `requiredCheckboxAcknowledgements("mentor")`,
+ * so this function has no list of its own to fall out of date.
+ */
+export function validateRenewalAcceptance(formData: FormData): RenewalAcceptanceValidation {
   const payload = renewalPayloadFromFormData(formData);
+
   if (payload.participation_confirmed !== true) {
     return { ok: false, message: "Vui lòng xác nhận tiếp tục đồng hành trong Season 12." };
   }
   if (formData.get("consent_data_storage") !== "yes") {
     return { ok: false, message: "Vui lòng đồng ý lưu trữ dữ liệu để gửi xác nhận gia hạn." };
   }
+
+  if (!isRenewalMenteeCapacity(payload.mentoring_capacity_total)) {
+    return {
+      ok: false,
+      message: `Vui lòng chọn số mentee có thể đồng hành: ${RENEWAL_MENTEE_CAPACITY_CHOICES.join(", ")}.`
+    };
+  }
+
+  const missing = requiredCheckboxAcknowledgements("mentor").find(
+    (entry) => formData.get(entry.key) !== "true"
+  );
+  if (missing) {
+    return { ok: false, message: `Vui lòng xác nhận: ${missing.wording}` };
+  }
+
+  const activeReading = String(formData.get(ACTIVE_READING_KEYS.mentor) ?? "");
+  if (!confirmationMatches(activeReading, CONFIRMATION_PHRASES.mentor)) {
+    return {
+      ok: false,
+      message:
+        "Câu xác nhận chủ động của Mentor chưa đúng. Vui lòng nhập lại chính xác câu được hiển thị."
+    };
+  }
+
+  return { ok: true, payload };
+}
+
+export async function submitRenewalAccepted(
+  rawToken: unknown,
+  formData: FormData,
+  client = getSupabaseServiceRoleClient()
+): Promise<RenewalPublicActionState> {
+  const validation = validateRenewalAcceptance(formData);
+  if (!validation.ok) return { ok: false, message: validation.message };
+  const payload = validation.payload;
 
   const decision = await resolveRenewalGate(rawToken, "submit", client);
   if (decision.status !== "renewable" || !client) {
@@ -275,7 +341,7 @@ export async function submitRenewalAccepted(
 
 export async function submitRenewalDeclined(
   rawToken: unknown,
-  formData: FormData,
+  formData?: FormData,
   client = getSupabaseServiceRoleClient()
 ): Promise<RenewalPublicActionState> {
   const decision = await resolveRenewalGate(rawToken, "submit", client);
@@ -285,8 +351,15 @@ export async function submitRenewalDeclined(
   const tokenHash = safeHashRenewalInviteToken(rawToken);
   if (!tokenHash) return { ok: false, message: SAFE_PUBLIC_FAILURE };
 
+  // M073. The feedback is a parameter of the same trusted call that claims the
+  // invite, so it is written by the single winner UPDATE or not at all. There
+  // is deliberately no second statement here: the previous implementation
+  // followed the RPC with an unlinked applications INSERT, which M070's
+  // application-binding constraint makes permanently orphanable and which the
+  // applications_status_check refused outright.
   const { data, error } = await client.rpc("vam071_submit_renewal_declined", {
-    p_token_hash: tokenHash
+    p_token_hash: tokenHash,
+    p_decline_feedback: normalizeOptionalFeedback(formData?.get("decline_feedback"))
   });
   if (error) {
     safeLog("declined submission refused", error);
@@ -295,19 +368,6 @@ export async function submitRenewalDeclined(
   const result = firstRow(data);
   if (result?.outcome_status !== "declined") {
     return { ok: false, message: SAFE_PUBLIC_FAILURE };
-  }
-
-  const declineFeedback = nonBlank(formData, "decline_feedback");
-  if (declineFeedback) {
-    const rawPayload = { renewal: { outcome: "declined", decline_feedback: declineFeedback } };
-    await client.from("applications").insert({
-      person_id: decision.invite.person_id,
-      season_id: decision.invite.season_id,
-      role_applied: "mentor",
-      status: "declined_renewal",
-      source: "s12_mentor_renewal",
-      raw_payload: rawPayload
-    });
   }
 
   // `deferred_actor_unauthorized` is deliberately not exposed to the bearer.

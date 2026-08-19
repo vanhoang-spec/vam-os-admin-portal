@@ -4,7 +4,15 @@ import { useFormState } from "react-dom";
 import { acceptRenewalAction, declineRenewalAction } from "@/app/actions/renewals";
 import { SubmitButton } from "@/components/submit-button";
 import { initialRenewalPublicActionState, type RenewalPublicDisplayDto } from "@/lib/renewal-types";
-import { APPLICATION_ACKNOWLEDGEMENTS as ACK, MENTOR_CONFIRMATION_PHRASE } from "@/lib/application-commitments";
+import {
+  ACTIVE_READING_KEYS,
+  CONFIRMATION_PHRASES,
+  requiredCheckboxAcknowledgements
+} from "@/lib/application-commitments";
+import {
+  RENEWAL_MENTEE_CAPACITY_CHOICES,
+  RENEWAL_MENTEE_CAPACITY_DEFAULT
+} from "@/lib/renewal-types";
 
 function fieldClass() {
   return "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink focus:border-vam-green focus:outline-none focus:ring-2 focus:ring-vam-mint";
@@ -109,9 +117,15 @@ export function RenewalForm({
           <fieldset className="sm:col-span-2">
             <legend className="text-sm font-medium text-vam-ink mb-2">Số mentee có thể đồng hành tối đa trong mùa này</legend>
             <div className="flex gap-4">
-              {[1, 2, 3].map((num) => (
+              {RENEWAL_MENTEE_CAPACITY_CHOICES.map((num) => (
                 <label key={num} className="flex items-center gap-2 text-sm text-vam-ink">
-                  <input type="radio" name="mentoring_capacity_total" value={num} defaultChecked={num === 1} required />
+                  <input
+                    type="radio"
+                    name="mentoring_capacity_total"
+                    value={num}
+                    defaultChecked={num === RENEWAL_MENTEE_CAPACITY_DEFAULT}
+                    required
+                  />
                   {num} mentee
                 </label>
               ))}
@@ -124,34 +138,15 @@ export function RenewalForm({
 
         <div className="rounded-lg border-2 border-vam-green bg-vam-mint/40 p-4">
           <p className="mb-2 text-xs font-bold uppercase tracking-wide text-vam-green">
-            Cam kết thời gian — Bắt buộc
+            Cam kết Mentor — Bắt buộc
           </p>
           <p className="mb-3 text-sm text-vam-ink">
             Dành tối thiểu <strong className="text-base">1–2 giờ/tháng cho mỗi Mentee</strong> trong suốt mùa mentoring.
           </p>
-          {[
-            ACK.MENTOR_TIME_COMMITMENT_V1,
-            ACK.MENTOR_ELIGIBILITY_V1,
-            ACK.MENTOR_MATCH_EXPECTATION_V1,
-            ACK.MENTOR_MENTORING_PRINCIPLE_V1,
-            ACK.MENTOR_NO_GHOST_V1
-          ].map((entry) => (
-            <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
-              <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
-              <span>{entry.wording}</span>
-            </label>
-          ))}
-        </div>
-
-        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-vam-ink">
-            Ranh giới nghề nghiệp, an toàn và bảo mật
-          </h3>
-          {[
-            ACK.MENTOR_BOUNDARIES_V1,
-            ACK.MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1,
-            ACK.MENTOR_CONFLICT_ESCALATION_V1
-          ].map((entry) => (
+          {/* Rendered from the canonical mentor acknowledgements. The form does
+              not keep a list of its own, so a commitment added to the policy
+              source appears here and is enforced server-side without an edit. */}
+          {requiredCheckboxAcknowledgements("mentor").map((entry) => (
             <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
               <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
               <span>{entry.wording}</span>
@@ -164,9 +159,9 @@ export function RenewalForm({
             Vui lòng nhập lại câu dưới đây để xác nhận bạn đã đọc và hiểu các nguyên tắc chính.
           </label>
           <p className="mb-3 text-sm italic text-slate-600">
-            {MENTOR_CONFIRMATION_PHRASE}
+            {CONFIRMATION_PHRASES.mentor}
           </p>
-          <input className={fieldClass()} name="MENTOR_ACTIVE_READING_V1" required />
+          <input className={fieldClass()} name={ACTIVE_READING_KEYS.mentor} required />
         </div>
 
         <div className="rounded-md border border-vam-line bg-slate-50 p-4">

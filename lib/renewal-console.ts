@@ -90,7 +90,7 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
   const [people, profiles, invites, applications, memberships] = await Promise.all([
     readAllPages<Row>("people", "id,full_name,email_primary", (columns) => client.from("people").select(columns)),
     readAllPages<Row>("mentor_profiles", "id,person_id,mentor_code,company_current,title_current,years_experience_min,years_experience_text,capacity_target,industry,function_area,first_vam_season", (columns) => client.from("mentor_profiles").select(columns)),
-    readAllPages<Row>("person_season_invites", "id,person_id,program_id,season_id,role,created_at,expires_at,revoked_at,submitted_at,outcome,application_id", (columns) => client.from("person_season_invites").select(columns).eq("season_id", season.id).eq("role", "mentor")),
+    readAllPages<Row>("person_season_invites", "id,person_id,program_id,season_id,role,created_at,expires_at,revoked_at,submitted_at,outcome,application_id,decline_feedback", (columns) => client.from("person_season_invites").select(columns).eq("season_id", season.id).eq("role", "mentor")),
     readAllPages<Row>("applications", "id,person_id,season_id,status,source,raw_payload", (columns) => client.from("applications").select(columns).eq("season_id", season.id).eq("source", "s12_mentor_renewal")),
     readAllPages<Row>("person_season_memberships", "id,person_id,season_id,role,status", (columns) => client.from("person_season_memberships").select(columns).eq("season_id", season.id).eq("role", "mentor"))
   ]);
@@ -125,10 +125,11 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
     .map((invite) => {
       const personId = String(invite.person_id);
       const person = peopleById.get(personId);
-      // For declined invites, there is no linked application_id, so we find it by person_id and season_id
-      const app = invite.application_id
-        ? applicationsById.get(String(invite.application_id))
-        : (invite.outcome === "declined" ? applications.data.find(a => a.person_id === personId && a.status === 'declined_renewal') || null : null);
+      // M070 binds an application to an invite ONLY for an accepted outcome, so
+      // application_id is the whole lookup. A declined invite has none by
+      // constraint, and its feedback is read from the invite itself rather than
+      // searched for among applications by person and season.
+      const app = invite.application_id ? applicationsById.get(String(invite.application_id)) : null;
       const profileRows = profilesByPerson.get(personId) ?? [];
       const profile = profileRows.length === 1 ? profileRows[0] : {};
       const raw = app?.raw_payload && typeof app.raw_payload === "object" ? app.raw_payload : {};
@@ -154,7 +155,7 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
         attentionReason: attention.reason,
         diff,
         coreTeamNote: typeof renewal.core_team_note === "string" ? renewal.core_team_note : null,
-        declineFeedback: typeof renewal.decline_feedback === "string" ? renewal.decline_feedback : null,
+        declineFeedback: typeof invite.decline_feedback === "string" ? invite.decline_feedback : null,
         commitmentsCompleted: typeof renewal.commitments_completed === "boolean" ? renewal.commitments_completed : null
       };
     })

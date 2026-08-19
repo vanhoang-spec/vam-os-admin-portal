@@ -27,6 +27,7 @@ scripts/*.js
 .vercel
 .env.vercel
 .env.vercel.prod
+.env.preview
 tsconfig.tsbuildinfo
 
 # ── Sensitive local data artifacts — do not commit PII/import workbooks/exports ──

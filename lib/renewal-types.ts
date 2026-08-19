@@ -1,3 +1,25 @@
+/**
+ * The mentee-capacity choices a Season 12 renewal offers, and the only values
+ * the server accepts. Declared here — not in the runtime, which is
+ * `server-only` — so the public form and the trusted submission path are
+ * driven by ONE list rather than by a radio group that happens to agree with a
+ * validator.
+ *
+ * The renewal always defaults to 1. A mentor who carried 3 mentees in Season 11
+ * re-chooses deliberately for Season 12; last season's number is shown as
+ * context and is never pre-selected, because capacity is a fresh commitment
+ * each season rather than a value that persists until someone lowers it.
+ */
+export const RENEWAL_MENTEE_CAPACITY_CHOICES = Object.freeze([1, 2, 3] as const);
+
+export type RenewalMenteeCapacity = (typeof RENEWAL_MENTEE_CAPACITY_CHOICES)[number];
+
+export const RENEWAL_MENTEE_CAPACITY_DEFAULT: RenewalMenteeCapacity = 1;
+
+export function isRenewalMenteeCapacity(value: unknown): value is RenewalMenteeCapacity {
+  return (RENEWAL_MENTEE_CAPACITY_CHOICES as readonly number[]).includes(value as number);
+}
+
 export type RenewalPerson = {
   id: string;
   full_name: string | null;
