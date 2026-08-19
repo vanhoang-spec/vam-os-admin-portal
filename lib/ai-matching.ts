@@ -7,6 +7,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { createManualMatch } from "@/lib/matches";
 import { approveApplication } from "@/lib/application-approvals";
 import { resolveMentorCap } from "@/lib/mentor-confirmations-core";
+import { callProvider } from "@/lib/ai-provider";
 import {
   assignPairs,
   buildAnonymousPool,
@@ -226,74 +227,6 @@ async function loadPool(
   });
 
   return { mentees, mentors, totalWaiting: waiting.length };
-}
-
-// ── Talking to the provider ──────────────────────────────────────────────────
-
-type ProviderReply = {
-  content: string;
-  promptTokens: number;
-  completionTokens: number;
-};
-
-async function callProvider(input: {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  prompt: string;
-  attempt?: number;
-}): Promise<ProviderReply> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(`${input.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${input.apiKey}`
-      },
-      body: JSON.stringify({
-        model: input.model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: input.prompt }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-        max_tokens: 2000
-      }),
-      signal: controller.signal,
-      cache: "no-store"
-    });
-
-    if (!response.ok) {
-      // A 5xx is worth one retry; a 4xx is a configuration problem and is not.
-      if (response.status >= 500 && (input.attempt ?? 0) < 1) {
-        return callProvider({ ...input, attempt: (input.attempt ?? 0) + 1 });
-      }
-      throw new Error(`Provider trả về HTTP ${response.status}`);
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-
-    return {
-      content: String(payload?.choices?.[0]?.message?.content ?? ""),
-      promptTokens: Number(payload?.usage?.prompt_tokens ?? 0) || 0,
-      completionTokens: Number(payload?.usage?.completion_tokens ?? 0) || 0
-    };
-  } catch (err) {
-    const aborted = (err as { name?: string })?.name === "AbortError";
-    if (!aborted && (input.attempt ?? 0) < 1) {
-      return callProvider({ ...input, attempt: (input.attempt ?? 0) + 1 });
-    }
-    throw new Error(aborted ? "Provider không phản hồi kịp thời." : String((err as Error)?.message ?? err));
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 // ── Running ──────────────────────────────────────────────────────────────────
@@ -530,10 +463,9 @@ async function proposePairs(input: {
       });
 
       const reply = await callProvider({
-        baseUrl: input.gate.baseUrl,
-        apiKey: input.gate.apiKey,
-        model: input.gate.model,
-        prompt
+        config: input.gate,
+        systemPrompt: SYSTEM_PROMPT,
+        userPrompt: prompt
       });
       promptTokens += reply.promptTokens;
       completionTokens += reply.completionTokens;

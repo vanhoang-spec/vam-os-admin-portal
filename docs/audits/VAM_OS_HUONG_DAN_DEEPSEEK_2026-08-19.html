@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Hướng dẫn kết nối DeepSeek cho đề xuất ghép cặp</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 29pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 34%; }
+
+  .note, .stop, .check {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+  .check { background: var(--mint); border: 1px solid #bfe2cd; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  .flow { display: flex; gap: 8px; margin: 4px 0 16px; }
+  .flow div {
+    flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px;
+    font-size: 9pt; background: #fff;
+  }
+  .flow div b { display: block; margin-bottom: 3px; color: var(--green-dark); }
+  .flow div.human { background: var(--mint); border-color: #bfe2cd; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Tài liệu vận hành</div>
+  <h1>Kết nối DeepSeek<br />cho phần đề xuất ghép cặp</h1>
+  <div class="sub">Hướng dẫn từng bước — không cần biết lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Phần ghép cặp có trợ lý: sau khi các mentor đã tự chọn mentee mà họ phỏng vấn, những bạn còn lại
+    được hệ thống đề xuất ghép với mentor còn suất. DeepSeek chỉ <strong>chấm điểm mức độ phù hợp</strong>;
+    việc ghép do hệ thống làm theo hạn mức, và <strong>không cặp nào thành thật cho tới khi ban tổ chức
+    bấm duyệt</strong>.
+  </p>
+  <p class="lead">
+    Phần code đã xong. Tài liệu này chỉ còn ba việc: tạo tài khoản và khoá, dán vào cấu hình,
+    chạy thử trên bản staging trước khi dùng thật.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Thời gian cần</dt><dd>~30 phút</dd></div>
+    <div><dt>Chi phí</dt><dd>Trả theo lượng dùng — ước tính dưới 1 USD cho cả mùa</dd></div>
+    <div><dt>Cần có sẵn</dt><dd>Thẻ thanh toán để nạp tiền · quyền vào Vercel</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ AI LÀM GÌ ══════════ -->
+<section class="page">
+  <h2 class="plain">Trợ lý này làm gì, và không làm gì</h2>
+
+  <div class="flow">
+    <div><b>1. Hệ thống</b>Lấy danh sách mentee chưa có mentor và mentor còn suất, thay tên bằng mã E001 / M001</div>
+    <div><b>2. DeepSeek</b>Chấm điểm phù hợp cho từng cặp trong danh sách rút gọn, kèm một câu lý do</div>
+    <div><b>3. Hệ thống</b>Ghép theo điểm giảm dần, tôn trọng hạn mức từng mentor</div>
+    <div class="human"><b>4. Ban tổ chức</b>Duyệt từng cặp — chỉ khi bấm duyệt mới thành cặp thật</div>
+  </div>
+
+  <p><strong>Ba lằn ranh, đã được ép bằng code chứ không phải bằng lời hứa:</strong></p>
+  <ul>
+    <li><strong>Không gửi ra ngoài thứ gì nhận dạng được ai.</strong> Chỉ có mã và tiêu chí (ngành, lĩnh
+      vực, mục tiêu, kỹ năng muốn phát triển). Tên, email, số điện thoại, MSSV, tên trường, tên công ty
+      đều không gửi; phần trả lời tự do còn được lọc bỏ email/số điện thoại/link và <em>chính tên của ứng
+      viên</em> trước khi gửi.</li>
+    <li><strong>AI không quyết ai với ai.</strong> Nếu mô hình trả về mã không có thật, hoặc chấm mọi cặp
+      đều 10/10, hệ thống vẫn ghép đúng luật — hoặc từ chối cả mẻ nếu kết quả vi phạm hạn mức.</li>
+    <li><strong>Không có nút "duyệt tất cả".</strong> Mỗi cặp cần một lần bấm của người thật, và hạn mức
+      mentor được kiểm tra lại đúng lúc bấm.</li>
+  </ul>
+
+  <p><strong>Trợ lý còn được dùng ở hai chỗ nhỏ hơn:</strong> soạn <em>bản nháp</em> mẫu thư (chỉ nhận
+    mục đích thư và tên các ô điền, không nhận dữ liệu của ai), và soạn <em>giới thiệu ngắn về mentor</em>
+    từ chức danh / công ty / ngành / số năm kinh nghiệm. Cả hai đều là bản nháp để support team sửa.</p>
+
+  <div class="note">
+    <h3>Không bật cũng không sao</h3>
+    Nếu chưa muốn dùng AI, bỏ qua tài liệu này: mọi thứ khác vẫn chạy bình thường, chỉ là nút
+    "Chạy đề xuất" báo chưa bật và ban tổ chức ghép tay như cũ. Có thể bật sau, giữa mùa cũng được.
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 1 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 1 — Tạo tài khoản và nạp tiền</h2>
+
+  <div class="stop">
+    <h3>DeepSeek không miễn phí</h3>
+    Khác với Brevo, DeepSeek tính tiền theo lượng chữ xử lý và <strong>yêu cầu nạp trước</strong>.
+    Tin tốt: khối lượng của mình rất nhỏ. Một lần chạy đề xuất cho 40 mentee chỉ tốn vài xu;
+    ước tính <strong>cả mùa dưới 1 USD</strong>. Nạp mức tối thiểu là đủ dùng nhiều mùa.
+    Giá chính thức xem tại trang pricing của DeepSeek — con số ở đây chỉ để hình dung quy mô.
+  </div>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Đăng ký</h3>
+      <p class="sub-step">Mở <code>https://platform.deepseek.com</code> → <strong>Sign up</strong>.
+        Dùng email công việc của chương trình.</p>
+      <p class="sub-step">Xác nhận email, đăng nhập vào trang quản trị.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Nạp tiền vào tài khoản</h3>
+      <p class="sub-step">Tìm mục <strong>Top up</strong> / <strong>Billing</strong> ở thanh bên hoặc
+        góc trên. Nạp mức nhỏ nhất mà hệ thống cho phép.</p>
+      <p class="sub-step">Chưa nạp thì gọi API sẽ bị từ chối với lỗi "insufficient balance",
+        và app sẽ báo lần chạy thất bại.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Tạo khoá API</h3>
+      <p class="sub-step">Vào mục <strong>API keys</strong> → <strong>Create new API key</strong> →
+        đặt tên <code>VAM OS</code> → tạo.</p>
+      <p class="sub-step">Khoá dạng <code>sk-…</code> chỉ hiện <strong>một lần</strong>. Chép ngay và
+        lưu vào nơi an toàn dùng chung của ban tổ chức.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <h3>Khoá này tiêu tiền</h3>
+    Ai có khoá đều gọi được API và trừ vào số dư của chương trình. Không dán vào chat, email hay
+    ảnh chụp màn hình. Nếu lỡ lộ: xoá khoá cũ trong DeepSeek, tạo khoá mới, cập nhật Vercel.
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 2 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 2 — Dán cấu hình vào Vercel</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Thêm biến</h3>
+      <p class="sub-step"><code>vercel.com</code> → dự án web app → <strong>Settings</strong> →
+        <strong>Environment Variables</strong>. Với mỗi dòng dưới đây: gõ Name, dán Value, chọn môi
+        trường, <strong>Save</strong>.</p>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>Tên biến</th><th style="width:30%">Giá trị</th><th>Ghi chú</th></tr></thead>
+    <tbody>
+      <tr><td class="key">VAM_OS_AI_MATCHING_ENABLED</td><td><code>true</code></td><td>Công tắc chính. Không có biến này thì nút "Chạy đề xuất" bị khoá.</td></tr>
+      <tr><td class="key">DEEPSEEK_API_KEY</td><td><code>sk-…</code></td><td>Khoá vừa tạo ở bước 1.</td></tr>
+      <tr><td class="key">DEEPSEEK_MODEL</td><td><code>deepseek-chat</code></td><td><em>Không bắt buộc.</em> Bỏ trống thì hệ thống tự dùng <code>deepseek-chat</code>.</td></tr>
+      <tr><td class="key">DEEPSEEK_BASE_URL</td><td><code>https://api.deepseek.com</code></td><td><em>Không bắt buộc.</em> Chỉ đổi khi DeepSeek đổi địa chỉ. Bắt buộc là <code>https</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Đặt cho staging trước</h3>
+      <p class="sub-step">Khác với email, phần này <strong>chạy được cả trên staging</strong> — đó là
+        chỗ nên thử đầu tiên. Nếu bạn có dự án/môi trường staging riêng, đặt biến ở đó trước.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Deploy lại</h3>
+      <p class="sub-step"><strong>Deployments</strong> → bản mới nhất → <strong>…</strong> →
+        <strong>Redeploy</strong>. Biến mới chỉ có hiệu lực sau khi deploy lại.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>Một lưu ý về thời gian chạy</h3>
+    Một lần chạy gọi DeepSeek nhiều lượt nên có thể mất vài phút. Trang đề xuất đã khai báo thời gian
+    chạy dài (tối đa 300 giây); gói Vercel cần cho phép mức này. Nếu gói hiện tại giới hạn thấp hơn,
+    giảm ô <em>"Mentee mỗi lượt hỏi"</em> để mỗi lần chạy nhẹ hơn.
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 3 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 3 — Chạy thử trên staging</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Mở trang đề xuất</h3>
+      <p class="sub-step">Đăng nhập → <strong>Ghép cặp</strong> → <strong>Đề xuất ghép cặp</strong>
+        (đường dẫn <code>/matches/recommendations</code>).</p>
+      <p class="sub-step">Nếu đầu trang có dải màu vàng "Chưa bật ghép cặp bằng AI…", nghĩa là biến
+        chưa tới nơi — xem bảng lỗi ở trang sau.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Chọn mùa và bấm "Chạy đề xuất"</h3>
+      <p class="sub-step">Ba ô tham số, để mặc định là được:</p>
+      <table>
+        <thead><tr><th style="width:34%">Ô</th><th style="width:14%">Mặc định</th><th>Ý nghĩa</th></tr></thead>
+        <tbody>
+          <tr><td>Số vòng</td><td>3</td><td>Chạy tối đa 3 lượt; mentor đã đầy sau vòng 1 không được đưa vào vòng 2.</td></tr>
+          <tr><td>Mentor gợi ý mỗi mentee</td><td>10</td><td>Số mentor đưa vào so sánh cho mỗi mentee. Cao hơn thì kỹ hơn nhưng tốn hơn.</td></tr>
+          <tr><td>Mentee mỗi lượt hỏi</td><td>6</td><td>Số mentee gộp trong một lần gọi. Giảm nếu hay bị quá thời gian.</td></tr>
+        </tbody>
+      </table>
+      <p class="sub-step">Mỗi lần chạy xử lý tối đa <strong>40 mentee</strong>. Nhiều hơn thì duyệt xong
+        đợt này rồi chạy tiếp.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Đọc kết quả</h3>
+      <p class="sub-step">Bảng hiện từng cặp: mentee, mentor được đề xuất kèm <strong>số suất còn lại</strong>,
+        vòng, điểm phù hợp và một câu lý do tiếng Việt. Tất cả ở trạng thái <strong>Chờ duyệt</strong>.</p>
+      <p class="sub-step">Dòng trạng thái phía trên cho biết đã dùng bao nhiêu token — đó là thước đo chi phí.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Duyệt thử một cặp</h3>
+      <p class="sub-step">Bấm <strong>Duyệt &amp; tạo cặp</strong> ở một dòng → kiểm tra cặp đó xuất hiện
+        trong danh sách ghép cặp. Bấm <strong>Bỏ qua</strong> ở một dòng khác để thấy nó chuyển trạng thái.</p>
+      <p class="sub-step">Muốn xoá cả danh sách để chạy lại: <strong>Huỷ danh sách</strong>.</p>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Xong bước 3 khi</h3>
+    Chạy được một lần trên staging, thấy bảng đề xuất, duyệt được một cặp và bỏ qua được một cặp.
+    Lúc đó mới đặt biến cho production.
+  </div>
+</section>
+
+<!-- ══════════ LỖI + CHI PHÍ ══════════ -->
+<section class="page">
+  <h2 class="plain">Gặp lỗi thì làm gì</h2>
+
+  <table>
+    <thead><tr><th style="width:42%">Bạn thấy</th><th>Nguyên nhân và cách sửa</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><em>"Chưa bật ghép cặp bằng AI: VAM_OS_AI_MATCHING_ENABLED chưa bật"</em></td>
+        <td>Chưa đặt biến, sai chữ (phải đúng <code>true</code> chữ thường), hoặc <strong>chưa deploy lại</strong>.</td>
+      </tr>
+      <tr>
+        <td><em>"… DEEPSEEK_API_KEY chưa cấu hình"</em></td>
+        <td>Thiếu khoá hoặc sai tên biến. Xoá và thêm lại.</td>
+      </tr>
+      <tr>
+        <td><em>"… DEEPSEEK_BASE_URL phải là https"</em></td>
+        <td>Đã sửa biến địa chỉ và gõ nhầm. Xoá biến đó đi là hệ thống dùng mặc định.</td>
+      </tr>
+      <tr>
+        <td>Lần chạy thất bại — <em>HTTP 401</em></td>
+        <td>Khoá sai hoặc đã bị xoá bên DeepSeek. Tạo khoá mới, cập nhật, deploy lại.</td>
+      </tr>
+      <tr>
+        <td>Lần chạy thất bại — <em>HTTP 402 / insufficient balance</em></td>
+        <td>Hết số dư. Nạp thêm ở mục Billing.</td>
+      </tr>
+      <tr>
+        <td><em>"Provider không phản hồi kịp thời"</em></td>
+        <td>Giảm ô "Mentee mỗi lượt hỏi" xuống 3–4 rồi chạy lại. Dữ liệu không bị hỏng: lần chạy được đánh dấu thất bại và không lưu cặp nào.</td>
+      </tr>
+      <tr>
+        <td><em>"Đang có một lần chạy khác cho mùa này"</em></td>
+        <td>Có lần chạy chưa kết thúc — mỗi mùa chỉ cho một lần chạy tại một thời điểm. Đợi, hoặc bấm "Huỷ danh sách" cho lần cũ.</td>
+      </tr>
+      <tr>
+        <td>Chạy xong nhưng <em>0 đề xuất</em></td>
+        <td>Không còn mentee chờ ghép, hoặc không mentor nào còn suất. Xem trang <strong>Danh sách chưa ghép</strong> để biết đang thiếu bên nào.</td>
+      </tr>
+      <tr>
+        <td>Duyệt báo <em>"Mentor này đã có n/n mentee"</em></td>
+        <td>Mentor đầy chỗ sau khi đề xuất được tính. Đúng thiết kế: cấp thêm suất cho mentor rồi duyệt lại, hoặc bỏ qua cặp này.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="plain" style="margin-top:20px">Chi phí và cách theo dõi</h2>
+  <ul>
+    <li>Mỗi lần chạy ghi lại số token đã dùng, hiện ngay trên dòng trạng thái của bảng đề xuất.</li>
+    <li>Trang quản trị DeepSeek có mục <strong>Usage</strong> để xem tổng chi tiêu theo ngày.</li>
+    <li>Với quy mô của chương trình (vài chục mentee mỗi mùa), chi phí thực tế ở mức
+      <strong>vài nghìn đến vài chục nghìn đồng cho cả mùa</strong>. Nếu thấy con số lớn bất thường,
+      dừng lại và hỏi — nhiều khả năng có người chạy lặp nhiều lần.</li>
+  </ul>
+
+  <div class="note">
+    <h3>Muốn tắt trợ lý</h3>
+    Xoá biến <code>VAM_OS_AI_MATCHING_ENABLED</code> (hoặc đổi giá trị khác <code>true</code>) rồi deploy lại.
+    Các đề xuất đã có vẫn xem và duyệt được; chỉ không chạy lần mới. Không ảnh hưởng gì tới ghép cặp thủ công.
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS Admin Portal · Hướng dẫn kết nối DeepSeek · 19/08/2026 · Đi kèm pull request #37
+  </footer>
+</section>
+
+</body>
+</html>

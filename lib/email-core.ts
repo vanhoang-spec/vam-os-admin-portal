@@ -19,7 +19,13 @@ export type EmailKind =
   | "mentor_application_confirmation"
   | "review_batch_assigned"
   | "interview_scheduled"
-  | "reviewer_invite";
+  | "reviewer_invite"
+  // The four post-matching sends (migration 069). Their bodies come from an
+  // approved template rather than from a builder in this file.
+  | "mentee_selected"
+  | "mentee_mentor_intro"
+  | "mentor_mentee_package"
+  | "kickoff_invite";
 
 export type EmailMessage = {
   to: string;
@@ -28,17 +34,60 @@ export type EmailMessage = {
   html: string;
 };
 
+/** Who actually puts the message on the wire. */
+export const EMAIL_PROVIDERS = ["brevo", "resend"] as const;
+export type EmailProvider = (typeof EMAIL_PROVIDERS)[number];
+
+/** Brevo unless told otherwise: 300 emails a day on the free plan, against 100. */
+export const DEFAULT_EMAIL_PROVIDER: EmailProvider = "brevo";
+
 export type EmailGateEnv = {
   VAM_OS_EMAIL_ENABLED?: string;
   VERCEL_ENV?: string;
   NODE_ENV?: string;
+  VAM_OS_EMAIL_PROVIDER?: string;
+  BREVO_API_KEY?: string;
   RESEND_API_KEY?: string;
   VAM_OS_EMAIL_FROM?: string;
 };
 
 export type EmailGateResult =
-  | { canSend: true }
+  | { canSend: true; provider: EmailProvider; apiKey: string; from: string }
   | { canSend: false; reason: string };
+
+/** Which provider this deployment is configured to use. */
+export function resolveEmailProvider(value: unknown): EmailProvider {
+  const text = String(value ?? "").trim().toLowerCase();
+  return (EMAIL_PROVIDERS as readonly string[]).includes(text)
+    ? (text as EmailProvider)
+    : DEFAULT_EMAIL_PROVIDER;
+}
+
+export type SenderAddress = { name: string | null; email: string };
+
+/**
+ * Split the configured From value.
+ *
+ * The env var is written the way a mail client shows it —
+ * "VAM Mentoring <no-reply@vam.vn>" — because that is what an operator copies
+ * from a provider's dashboard. Brevo wants the two halves separately, so the
+ * parsing lives here where it can be tested rather than inline at the call.
+ */
+export function parseSenderAddress(value: unknown): SenderAddress | null {
+  const text = String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+  if (!text) return null;
+
+  const angled = text.match(/^(.*)<([^<>]+)>$/);
+  if (angled) {
+    const email = normalizeEmailAddress(angled[2]);
+    if (!email) return null;
+    const name = angled[1].trim().replace(/^["']|["']$/g, "").trim();
+    return { name: name || null, email };
+  }
+
+  const email = normalizeEmailAddress(text);
+  return email ? { name: null, email } : null;
+}
 
 /**
  * Decide whether this deployment may send mail at all.
@@ -49,7 +98,10 @@ export type EmailGateResult =
  *      the season-config feature flags)
  *   2. the runtime is production        (VERCEL_ENV === "production", or a
  *      local NODE_ENV === "production" build when VERCEL_ENV is absent)
- * Configuration (API key + From address) must also be present.
+ * Configuration must also be present: a From address, and the API key of the
+ * provider this deployment uses. The resolved provider and key are returned, so
+ * the sender never reads the environment a second time and cannot end up
+ * calling one provider with another provider's key.
  */
 export function evaluateEmailGate(env: EmailGateEnv): EmailGateResult {
   if (env.VAM_OS_EMAIL_ENABLED !== "true") {
@@ -63,14 +115,23 @@ export function evaluateEmailGate(env: EmailGateEnv): EmailGateResult {
     return { canSend: false, reason: "Môi trường không phải production" };
   }
 
-  if (!env.RESEND_API_KEY?.trim()) {
-    return { canSend: false, reason: "RESEND_API_KEY chưa cấu hình" };
+  const provider = resolveEmailProvider(env.VAM_OS_EMAIL_PROVIDER);
+  const apiKey = (provider === "brevo" ? env.BREVO_API_KEY : env.RESEND_API_KEY)?.trim() ?? "";
+  if (!apiKey) {
+    return {
+      canSend: false,
+      reason: provider === "brevo" ? "BREVO_API_KEY chưa cấu hình" : "RESEND_API_KEY chưa cấu hình"
+    };
   }
-  if (!env.VAM_OS_EMAIL_FROM?.trim()) {
+  const from = env.VAM_OS_EMAIL_FROM?.trim() ?? "";
+  if (!from) {
     return { canSend: false, reason: "VAM_OS_EMAIL_FROM chưa cấu hình" };
   }
+  if (!parseSenderAddress(from)) {
+    return { canSend: false, reason: "VAM_OS_EMAIL_FROM không phải địa chỉ hợp lệ" };
+  }
 
-  return { canSend: true };
+  return { canSend: true, provider, apiKey, from };
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -431,4 +492,32 @@ export function buildInterviewInviteEmail(input: {
   );
 
   return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Turn the plain text of an approved template into the HTML half of the email.
+ *
+ * The text was typed by an organiser, so it is escaped first and only then
+ * given paragraphs, line breaks and links — the same rule as the public
+ * document pages. Only http(s) links are made clickable, and only the ones the
+ * template itself contains.
+ */
+export function textToHtmlEmail(text: string): string {
+  const escaped = escapeHtml(String(text ?? "").replace(/\r\n/g, "\n").trim());
+  if (!escaped) return "";
+
+  const linked = escaped.replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+    // Trailing punctuation belongs to the sentence, not to the address.
+    const trimmed = url.replace(/[.,;:)\]]+$/, "");
+    const tail = url.slice(trimmed.length);
+    return `<a href="${trimmed}" style="color:#16834c">${trimmed}</a>${tail}`;
+  });
+
+  const paragraphs = linked
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p>${block.replace(/\n/g, "<br />")}</p>`);
+
+  return wrapHtml(paragraphs.join(""));
 }

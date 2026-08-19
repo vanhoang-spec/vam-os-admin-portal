@@ -10,23 +10,32 @@ import { describe, it, expect } from "vitest";
 import {
   buildApplicationConfirmationEmail,
   buildMentorConfirmationLinkEmail,
+  DEFAULT_EMAIL_PROVIDER,
   escapeHtml,
   evaluateEmailGate,
   isSafeAppLink,
   normalizeEmailAddress,
+  parseSenderAddress,
+  resolveEmailProvider,
   safeDisplayName
 } from "@/lib/email-core";
 
 const FULL_CONFIG = {
   VAM_OS_EMAIL_ENABLED: "true",
   VERCEL_ENV: "production",
-  RESEND_API_KEY: "re_test_key",
+  VAM_OS_EMAIL_PROVIDER: "brevo",
+  BREVO_API_KEY: "xkeysib-test",
   VAM_OS_EMAIL_FROM: "VAM Mentoring <no-reply@example.test>"
 };
 
 describe("evaluateEmailGate", () => {
-  it("allows sending only when every switch is on", () => {
-    expect(evaluateEmailGate(FULL_CONFIG)).toEqual({ canSend: true });
+  it("allows sending only when every switch is on, and says who will send", () => {
+    expect(evaluateEmailGate(FULL_CONFIG)).toEqual({
+      canSend: true,
+      provider: "brevo",
+      apiKey: "xkeysib-test",
+      from: "VAM Mentoring <no-reply@example.test>"
+    });
   });
 
   it("refuses when the explicit opt-in is missing or not exactly 'true'", () => {
@@ -52,9 +61,41 @@ describe("evaluateEmailGate", () => {
   });
 
   it("refuses when provider configuration is incomplete", () => {
-    expect(evaluateEmailGate({ ...FULL_CONFIG, RESEND_API_KEY: "" }).canSend).toBe(false);
-    expect(evaluateEmailGate({ ...FULL_CONFIG, RESEND_API_KEY: "   " }).canSend).toBe(false);
+    expect(evaluateEmailGate({ ...FULL_CONFIG, BREVO_API_KEY: "" }).canSend).toBe(false);
+    expect(evaluateEmailGate({ ...FULL_CONFIG, BREVO_API_KEY: "   " }).canSend).toBe(false);
     expect(evaluateEmailGate({ ...FULL_CONFIG, VAM_OS_EMAIL_FROM: undefined }).canSend).toBe(false);
+  });
+
+  it("asks for the key of the provider it was told to use, and no other", () => {
+    // A Resend key does not open the gate while the provider is Brevo: calling
+    // one provider with another's key would fail at the wire, after the row was
+    // already counted as attempted.
+    const wrongKey = evaluateEmailGate({
+      ...FULL_CONFIG,
+      BREVO_API_KEY: undefined,
+      RESEND_API_KEY: "re_test_key"
+    });
+    expect(wrongKey.canSend).toBe(false);
+    if (!wrongKey.canSend) expect(wrongKey.reason).toContain("BREVO_API_KEY");
+
+    const resend = evaluateEmailGate({
+      ...FULL_CONFIG,
+      VAM_OS_EMAIL_PROVIDER: "resend",
+      BREVO_API_KEY: undefined,
+      RESEND_API_KEY: "re_test_key"
+    });
+    expect(resend.canSend).toBe(true);
+    if (resend.canSend) {
+      expect(resend.provider).toBe("resend");
+      expect(resend.apiKey).toBe("re_test_key");
+    }
+  });
+
+  it("refuses a From value that is not an address", () => {
+    for (const from of ["VAM Mentoring", "no-reply@", "<>", "a b c"]) {
+      const result = evaluateEmailGate({ ...FULL_CONFIG, VAM_OS_EMAIL_FROM: from });
+      expect(result.canSend, from).toBe(false);
+    }
   });
 
   it("reports a Vietnamese reason when it refuses", () => {
@@ -225,5 +266,58 @@ describe("buildApplicationConfirmationEmail", () => {
     expect(built.text.split("\n")[0]).toBe(
       'Chào A</p><a href="https://evil.test">click</a> Bcc: x@y.z,'
     );
+  });
+});
+
+describe("resolveEmailProvider", () => {
+  it("defaults to Brevo, the provider with the higher daily allowance", () => {
+    expect(DEFAULT_EMAIL_PROVIDER).toBe("brevo");
+    for (const value of [undefined, "", "   ", "mailgun", "postmark"]) {
+      expect(resolveEmailProvider(value), String(value)).toBe("brevo");
+    }
+  });
+
+  it("accepts either provider, however it was typed", () => {
+    expect(resolveEmailProvider("resend")).toBe("resend");
+    expect(resolveEmailProvider(" RESEND ")).toBe("resend");
+    expect(resolveEmailProvider("Brevo")).toBe("brevo");
+  });
+});
+
+describe("parseSenderAddress", () => {
+  it("splits the display form an operator copies from a dashboard", () => {
+    expect(parseSenderAddress("VAM Mentoring <no-reply@vam.test>")).toEqual({
+      name: "VAM Mentoring",
+      email: "no-reply@vam.test"
+    });
+  });
+
+  it("accepts a bare address", () => {
+    expect(parseSenderAddress("no-reply@vam.test")).toEqual({
+      name: null,
+      email: "no-reply@vam.test"
+    });
+  });
+
+  it("drops quotes around the name and lowercases the address", () => {
+    expect(parseSenderAddress('"VAM Mentoring" <No-Reply@VAM.test>')).toEqual({
+      name: "VAM Mentoring",
+      email: "no-reply@vam.test"
+    });
+  });
+
+  it("keeps a Vietnamese display name intact", () => {
+    expect(parseSenderAddress("Ban tổ chức VAM <btc@vam.test>")?.name).toBe("Ban tổ chức VAM");
+  });
+
+  it("refuses anything that is not an address", () => {
+    for (const value of ["", "   ", "VAM Mentoring", "VAM <not-an-email>", null, undefined]) {
+      expect(parseSenderAddress(value), String(value)).toBeNull();
+    }
+  });
+
+  it("refuses a header-injection attempt", () => {
+    // A newline in the From would let a caller append its own headers.
+    expect(parseSenderAddress("VAM <a@b.test>\nBcc: victim@x.test")).toBeNull();
   });
 });

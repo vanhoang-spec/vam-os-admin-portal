@@ -12,7 +12,13 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const publicRoute = headers().get("x-vam-public-route");
-  if (publicRoute === "register" || publicRoute === "checkin" || publicRoute === "confirm") {
+  if (
+    publicRoute === "register" ||
+    publicRoute === "checkin" ||
+    publicRoute === "confirm" ||
+    publicRoute === "documents" ||
+    publicRoute === "mentee-dossier"
+  ) {
     return (
       <html lang="vi">
         <body><PreviewEnvironmentBanner />{children}</body>

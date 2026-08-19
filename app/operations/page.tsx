@@ -324,6 +324,18 @@ export default async function OperationsPage({ searchParams }: { searchParams?: 
   return (
     <>
       <PageHeader title="Vận hành" description="Dashboard KPI toàn chương trình; quyền người dùng chỉ giới hạn thao tác và dữ liệu chi tiết." />
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Link href="/operations/documents" className="text-sm text-vam-green hover:underline">
+          Tài liệu chương trình
+        </Link>
+        <Link href="/operations/email-templates" className="text-sm text-vam-green hover:underline">
+          Mẫu thư sau ghép cặp
+        </Link>
+        <Link href="/operations/communications" className="text-sm text-vam-green hover:underline">
+          Gửi thư sau ghép cặp
+        </Link>
+      </div>
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu operations. Một số chỉ số có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />
