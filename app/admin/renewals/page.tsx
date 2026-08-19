@@ -130,6 +130,20 @@ export default async function AdminRenewalsPage() {
             {row.inviteState === "accepted" ? (
               <div className="mt-5">
                 <h4 className="text-sm font-semibold text-vam-ink">Thay đổi hồ sơ chờ xác nhận</h4>
+                
+                {row.commitmentsCompleted === true ? (
+                  <p className="mt-2 text-sm text-green-700 font-medium">Cam kết Mentor: Đã xác nhận đầy đủ</p>
+                ) : row.commitmentsCompleted === false ? (
+                  <p className="mt-2 text-sm text-red-700 font-medium">Cam kết Mentor: Chưa xác nhận đủ hoặc lỗi dữ liệu</p>
+                ) : null}
+
+                {row.coreTeamNote ? (
+                  <div className="mt-2 rounded-md bg-slate-50 p-3">
+                    <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Ý kiến / Lưu ý cho Core Team</span>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{row.coreTeamNote}</p>
+                  </div>
+                ) : null}
+
                 {!row.diff.length ? <p className="mt-2 text-sm text-slate-500">Mentor không đề xuất thay đổi trường hồ sơ canonical nào.</p> : (
                   <div className="mt-2 overflow-x-auto rounded-md border border-vam-line">
                     <table className="min-w-full divide-y divide-vam-line text-sm">
@@ -140,6 +154,13 @@ export default async function AdminRenewalsPage() {
                     </table>
                   </div>
                 )}
+              </div>
+            ) : row.inviteState === "declined" ? (
+              <div className="mt-5">
+                <div className="rounded-md bg-red-50 p-3 border border-red-100">
+                  <span className="block text-xs font-semibold text-red-800 uppercase tracking-wider mb-1">Ý kiến / Góp ý / Lý do chưa thể tiếp tục</span>
+                  <p className="text-sm text-red-900 whitespace-pre-wrap">{row.declineFeedback || "—"}</p>
+                </div>
               </div>
             ) : null}
           </article>

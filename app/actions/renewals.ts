@@ -67,9 +67,9 @@ export async function acceptRenewalAction(
 export async function declineRenewalAction(
   rawToken: string,
   _previous: RenewalPublicActionState,
-  _formData: FormData
+  formData: FormData
 ): Promise<RenewalPublicActionState> {
-  return submitRenewalDeclined(rawToken);
+  return submitRenewalDeclined(rawToken, formData);
 }
 
 export async function createRenewalInviteAction(

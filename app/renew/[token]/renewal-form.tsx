@@ -4,6 +4,7 @@ import { useFormState } from "react-dom";
 import { acceptRenewalAction, declineRenewalAction } from "@/app/actions/renewals";
 import { SubmitButton } from "@/components/submit-button";
 import { initialRenewalPublicActionState, type RenewalPublicDisplayDto } from "@/lib/renewal-types";
+import { APPLICATION_ACKNOWLEDGEMENTS as ACK, MENTOR_CONFIRMATION_PHRASE } from "@/lib/application-commitments";
 
 function fieldClass() {
   return "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink focus:border-vam-green focus:outline-none focus:ring-2 focus:ring-vam-mint";
@@ -105,14 +106,74 @@ export function RenewalForm({
             Nhóm kinh nghiệm
             <input className={fieldClass()} name="years_of_experience" defaultValue={display.yearsExperienceText ?? ""} />
           </label>
-          <label className="text-sm font-medium text-vam-ink">
-            Số mentee có thể đồng hành
-            <input className={fieldClass()} type="number" min="0" step="1" name="mentoring_capacity_total" defaultValue={display.capacityTarget ?? ""} />
+          <fieldset className="sm:col-span-2">
+            <legend className="text-sm font-medium text-vam-ink mb-2">Số mentee có thể đồng hành tối đa trong mùa này</legend>
+            <div className="flex gap-4">
+              {[1, 2, 3].map((num) => (
+                <label key={num} className="flex items-center gap-2 text-sm text-vam-ink">
+                  <input type="radio" name="mentoring_capacity_total" value={num} defaultChecked={num === 1} required />
+                  {num} mentee
+                </label>
+              ))}
+            </div>
+            {display.capacityTarget ? (
+              <p className="mt-1 text-xs text-slate-500">Mùa trước: {display.capacityTarget} mentee</p>
+            ) : null}
+          </fieldset>
+        </div>
+
+        <div className="rounded-lg border-2 border-vam-green bg-vam-mint/40 p-4">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-vam-green">
+            Cam kết thời gian — Bắt buộc
+          </p>
+          <p className="mb-3 text-sm text-vam-ink">
+            Dành tối thiểu <strong className="text-base">1–2 giờ/tháng cho mỗi Mentee</strong> trong suốt mùa mentoring.
+          </p>
+          {[
+            ACK.MENTOR_TIME_COMMITMENT_V1,
+            ACK.MENTOR_ELIGIBILITY_V1,
+            ACK.MENTOR_MATCH_EXPECTATION_V1,
+            ACK.MENTOR_MENTORING_PRINCIPLE_V1,
+            ACK.MENTOR_NO_GHOST_V1
+          ].map((entry) => (
+            <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
+              <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
+              <span>{entry.wording}</span>
+            </label>
+          ))}
+        </div>
+
+        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-vam-ink">
+            Ranh giới nghề nghiệp, an toàn và bảo mật
+          </h3>
+          {[
+            ACK.MENTOR_BOUNDARIES_V1,
+            ACK.MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1,
+            ACK.MENTOR_CONFLICT_ESCALATION_V1
+          ].map((entry) => (
+            <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
+              <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
+              <span>{entry.wording}</span>
+            </label>
+          ))}
+        </div>
+
+        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+          <label className="text-sm font-medium text-vam-ink block mb-2">
+            Vui lòng nhập lại câu dưới đây để xác nhận bạn đã đọc và hiểu các nguyên tắc chính.
           </label>
-          <label className="text-sm font-medium text-vam-ink">
-            Khả năng sắp xếp thời gian / cam kết
-            <textarea className={fieldClass()} name="availability_commitment" rows={3} required />
+          <p className="mb-3 text-sm italic text-slate-600">
+            {MENTOR_CONFIRMATION_PHRASE}
+          </p>
+          <input className={fieldClass()} name="MENTOR_ACTIVE_READING_V1" required />
+        </div>
+
+        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+          <label className="text-sm font-medium text-vam-ink block mb-2">
+            Ý kiến / Lưu ý cho Core Team (Không bắt buộc)
           </label>
+          <textarea className={fieldClass()} name="core_team_note" rows={3} placeholder="Ví dụ: Anh có mentor cũ năm ngoái, em ưu tiên match bạn đó nhé..." />
         </div>
 
         <label className="flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm">
@@ -132,15 +193,24 @@ export function RenewalForm({
           Chọn mục này nếu anh/chị chưa thể tiếp tục đồng hành trong mùa này.
         </p>
         <Feedback ok={declineState.ok} message={declineState.message} />
+        <div className="mt-4 mb-4">
+          <label className="text-sm font-medium text-vam-ink block mb-2">
+            Ý kiến / Góp ý / Lý do chưa thể tiếp tục (Không bắt buộc)
+          </label>
+          <p className="mb-2 text-xs text-slate-500">
+            Nếu thuận tiện, anh/chị có thể chia sẻ lý do chưa thể tiếp tục đồng hành trong Season 12 hoặc góp ý để chương trình cải thiện tốt hơn.
+          </p>
+          <textarea className={fieldClass()} name="decline_feedback" rows={3} placeholder="Ví dụ: chưa sắp xếp được thời gian, thay đổi công việc, chưa phù hợp với cách matching, mong muốn chương trình điều chỉnh..., hoặc góp ý khác." />
+        </div>
         <div className="mt-3">
           <SubmitButton
             variant="danger"
             pendingText="Đang ghi nhận..."
             onClick={(event) => {
-              if (!window.confirm("Xác nhận không tiếp tục đồng hành trong Season 12?")) event.preventDefault();
+              if (!window.confirm("Anh/chị xác nhận không tiếp tục tham gia với vai trò Mentor trong Season 12?")) event.preventDefault();
             }}
           >
-            Tôi không tiếp tục Season 12
+            Xác nhận không tiếp tục
           </SubmitButton>
         </div>
       </form>

@@ -28,6 +28,9 @@ export type RenewalConsoleRow = {
   needsAttention: boolean;
   attentionReason: string | null;
   diff: RenewalProfileDiffEntry[];
+  coreTeamNote: string | null;
+  declineFeedback: string | null;
+  commitmentsCompleted: boolean | null;
 };
 
 export type RenewalConsoleData = {
@@ -122,12 +125,15 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
     .map((invite) => {
       const personId = String(invite.person_id);
       const person = peopleById.get(personId);
-      const app = invite.application_id ? applicationsById.get(String(invite.application_id)) : null;
+      // For declined invites, there is no linked application_id, so we find it by person_id and season_id
+      const app = invite.application_id
+        ? applicationsById.get(String(invite.application_id))
+        : (invite.outcome === "declined" ? applications.data.find(a => a.person_id === personId && a.status === 'declined_renewal') || null : null);
       const profileRows = profilesByPerson.get(personId) ?? [];
       const profile = profileRows.length === 1 ? profileRows[0] : {};
       const raw = app?.raw_payload && typeof app.raw_payload === "object" ? app.raw_payload : {};
       const renewal = raw.renewal && typeof raw.renewal === "object" && !Array.isArray(raw.renewal) ? raw.renewal : {};
-      const diff = app ? buildRenewalProfileDiff(profile, buildRenewalProfileRefresh(renewal)) : [];
+      const diff = app && invite.outcome === "accepted" ? buildRenewalProfileDiff(profile, buildRenewalProfileRefresh(renewal)) : [];
       const membershipStatus = membershipByPerson.get(personId)?.status ? String(membershipByPerson.get(personId)?.status) : null;
       const state = renewalInviteState(invite);
       const attention = renewalDeclineAttention(state, membershipStatus);
@@ -146,7 +152,10 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
         membershipStatus,
         needsAttention: attention.needsAttention,
         attentionReason: attention.reason,
-        diff
+        diff,
+        coreTeamNote: typeof renewal.core_team_note === "string" ? renewal.core_team_note : null,
+        declineFeedback: typeof renewal.decline_feedback === "string" ? renewal.decline_feedback : null,
+        commitmentsCompleted: typeof renewal.commitments_completed === "boolean" ? renewal.commitments_completed : null
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));

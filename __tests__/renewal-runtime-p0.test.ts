@@ -53,7 +53,6 @@ function acceptedForm() {
   const form = new FormData();
   form.set("participation_confirmed", "yes");
   form.set("consent_data_storage", "yes");
-  form.set("availability_commitment", "Hai buổi mỗi tháng");
   form.set("company_current", "Acme");
   form.set("first_vam_season", "MUST_NOT_PASS");
   form.set("person_id", "MUST_NOT_PASS");
@@ -140,8 +139,20 @@ describe("P0 public renewal submission boundary", () => {
       p_token_hash: tokenHash,
       p_raw_payload: {
         participation_confirmed: true,
-        availability_commitment: "Hai buổi mỗi tháng",
-        company_current: "Acme"
+        company_current: "Acme",
+        commitments: {
+          MENTOR_TIME_COMMITMENT_V1: false,
+          MENTOR_ELIGIBILITY_V1: false,
+          MENTOR_MATCH_EXPECTATION_V1: false,
+          MENTOR_MENTORING_PRINCIPLE_V1: false,
+          MENTOR_NO_GHOST_V1: false,
+          MENTOR_BOUNDARIES_V1: false,
+          MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1: false,
+          MENTOR_CONFLICT_ESCALATION_V1: false,
+          MENTOR_ACTIVE_READING_V1_matched: false,
+          MENTOR_ACTIVE_READING_V1_text: ""
+        },
+        commitments_completed: false
       },
       p_consent_data_storage: true
     });
@@ -161,7 +172,7 @@ describe("P0 public renewal submission boundary", () => {
   it("decline acknowledges deferred_actor_unauthorized without exposing it to the mentor", async () => {
     const { token } = mintRenewalInviteToken();
     const rpc = vi.fn(async () => ({ data: [{ outcome_status: "declined", membership_outcome: "deferred_actor_unauthorized" }], error: null }));
-    const result = await submitRenewalDeclined(token, { from: () => query({ data: invite(token) }), rpc } as any);
+    const result = await submitRenewalDeclined(token, new FormData(), { from: () => query({ data: invite(token) }), rpc } as any);
     expect(result).toMatchObject({ ok: true, outcome: "declined" });
     expect(result.message).not.toMatch(/deferred|unauthorized/i);
     expect(renewalDeclineAttention("declined", "active")).toMatchObject({ needsAttention: true });

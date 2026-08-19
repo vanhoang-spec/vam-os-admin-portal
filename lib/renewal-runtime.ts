@@ -2,6 +2,11 @@ import "server-only";
 
 import { approveApplication } from "@/lib/application-approvals";
 import {
+  APPLICATION_ACKNOWLEDGEMENTS as ACK,
+  confirmationMatches,
+  MENTOR_CONFIRMATION_PHRASE
+} from "@/lib/application-commitments";
+import {
   evaluateRenewalInviteGate,
   mintRenewalInviteToken,
   renewalBindingFromInvite,
@@ -75,9 +80,34 @@ function nonBlank(formData: FormData, key: string) {
  * Blank values are omitted, preserving canonical profile columns.
  */
 export function renewalPayloadFromFormData(formData: FormData): Record<string, unknown> {
+  const commitments: Record<string, boolean | string> = {};
+  let commitmentsCompleted = true;
+  for (const entry of [
+    ACK.MENTOR_TIME_COMMITMENT_V1,
+    ACK.MENTOR_ELIGIBILITY_V1,
+    ACK.MENTOR_MATCH_EXPECTATION_V1,
+    ACK.MENTOR_MENTORING_PRINCIPLE_V1,
+    ACK.MENTOR_NO_GHOST_V1,
+    ACK.MENTOR_BOUNDARIES_V1,
+    ACK.MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1,
+    ACK.MENTOR_CONFLICT_ESCALATION_V1
+  ]) {
+    const checked = formData.get(entry.key) === "true";
+    commitments[entry.key] = checked;
+    if (!checked) commitmentsCompleted = false;
+  }
+  const activeReading = String(formData.get("MENTOR_ACTIVE_READING_V1") ?? "").trim();
+  const activeReadingMatches = confirmationMatches(activeReading, MENTOR_CONFIRMATION_PHRASE);
+  if (!activeReadingMatches) commitmentsCompleted = false;
+
+  commitments.MENTOR_ACTIVE_READING_V1_matched = activeReadingMatches;
+  commitments.MENTOR_ACTIVE_READING_V1_text = activeReading;
+
   const payload: Record<string, unknown> = {
     participation_confirmed: formData.get("participation_confirmed") === "yes",
-    availability_commitment: nonBlank(formData, "availability_commitment")
+    commitments,
+    commitments_completed: commitmentsCompleted,
+    core_team_note: nonBlank(formData, "core_team_note")
   };
 
   for (const key of [
@@ -90,7 +120,7 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
     "mentoring_capacity_total"
   ]) {
     const value = nonBlank(formData, key);
-    if (value !== undefined) payload[key] = value;
+    if (value !== undefined) payload[key] = key === "mentoring_capacity_total" ? Number(value) : value;
   }
 
   for (const [key, value] of Object.entries(payload)) {
@@ -245,6 +275,7 @@ export async function submitRenewalAccepted(
 
 export async function submitRenewalDeclined(
   rawToken: unknown,
+  formData: FormData,
   client = getSupabaseServiceRoleClient()
 ): Promise<RenewalPublicActionState> {
   const decision = await resolveRenewalGate(rawToken, "submit", client);
@@ -265,6 +296,20 @@ export async function submitRenewalDeclined(
   if (result?.outcome_status !== "declined") {
     return { ok: false, message: SAFE_PUBLIC_FAILURE };
   }
+
+  const declineFeedback = nonBlank(formData, "decline_feedback");
+  if (declineFeedback) {
+    const rawPayload = { renewal: { outcome: "declined", decline_feedback: declineFeedback } };
+    await client.from("applications").insert({
+      person_id: decision.invite.person_id,
+      season_id: decision.invite.season_id,
+      role_applied: "mentor",
+      status: "declined_renewal",
+      source: "s12_mentor_renewal",
+      raw_payload: rawPayload
+    });
+  }
+
   // `deferred_actor_unauthorized` is deliberately not exposed to the bearer.
   // The durable invite+membership state makes it prominent in the admin list.
   return {
