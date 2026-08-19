@@ -107,12 +107,15 @@ describe("renewal server actions — exact season authorization", () => {
     }));
     await revokeRenewalInviteAction(previous, form({ invite_id: IDS.invite }));
     await regenerateRenewalInviteAction(previous, form({ invite_id: IDS.invite, expires_days: "14" }));
-    await confirmRenewalAction({
-      applicationId: IDS.application,
-      expectedProfile: {},
-      profileUpdate: {},
-      diff: []
-    }, previous, new FormData());
+    await confirmRenewalAction(previous, form({
+      application_id: IDS.application,
+      reviewed: JSON.stringify({
+        applicationId: IDS.application,
+        expectedProfile: {},
+        profileUpdate: {},
+        diff: []
+      })
+    }));
 
     expect(createRenewalInvite).toHaveBeenCalledOnce();
     expect(revokeRenewalInvite).toHaveBeenCalledOnce();
@@ -134,12 +137,15 @@ describe("renewal server actions — exact season authorization", () => {
       })),
       revokeRenewalInviteAction(previous, form({ invite_id: IDS.invite })),
       regenerateRenewalInviteAction(previous, form({ invite_id: IDS.invite, expires_days: "14" })),
-      confirmRenewalAction({
-        applicationId: IDS.application,
-        expectedProfile: {},
-        profileUpdate: {},
-        diff: []
-      }, previous, new FormData())
+      confirmRenewalAction(previous, form({
+        application_id: IDS.application,
+        reviewed: JSON.stringify({
+          applicationId: IDS.application,
+          expectedProfile: {},
+          profileUpdate: {},
+          diff: []
+        })
+      }))
     ]);
 
     expect(results.every((result) => !result.ok)).toBe(true);

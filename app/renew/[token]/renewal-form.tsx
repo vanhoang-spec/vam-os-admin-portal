@@ -180,7 +180,7 @@ export function RenewalForm({
           <label className="text-sm font-medium text-vam-ink block mb-2">
             Ý kiến / Lưu ý cho Core Team (Không bắt buộc)
           </label>
-          <textarea className={fieldClass()} name="core_team_note" rows={3} placeholder="Ví dụ: Anh có mentor cũ năm ngoái, em ưu tiên match bạn đó nhé..." />
+          <textarea className={fieldClass()} name="core_team_note" rows={3} />
         </div>
 
         <label className="flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm">

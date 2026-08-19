@@ -171,14 +171,71 @@ export async function regenerateRenewalInviteAction(
   }
 }
 
+/**
+ * Parses the reviewed CURRENT/PROPOSED snapshot the console rendered.
+ *
+ * It arrives as a form field rather than as a bound Server Action argument.
+ * The previous shape closed over `reviewed` in an INLINE Server Action, which
+ * made the confirm control the only action on this page carrying an encrypted
+ * bound closure — and the only one that failed. Nothing here trusts the parsed
+ * value: it is a claim about what the admin was shown, and every part of it is
+ * re-bound to the database downstream.
+ *
+ *   profileUpdate  must equal buildRenewalProfileRefresh() over the mentor's
+ *                  own stored raw_payload, checked in confirmRenewalAndApprove.
+ *                  A tampered value cannot match and is refused.
+ *   expectedProfile must equal the LIVE mentor_profiles row, checked inside
+ *                  vam071_confirm_renewal_profile. A tampered value refuses on
+ *                  drift instead of writing.
+ *   applicationId  selects the row; authorization is re-resolved from the
+ *                  invite's own season below, never from the client.
+ *
+ * So the form field can be edited, and editing it can only cause a refusal.
+ */
+function parseReviewedIntent(raw: string): RenewalConfirmationIntent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const candidate = parsed as Record<string, unknown>;
+  const isScalar = (v: unknown) => typeof v === "string" || typeof v === "number" || v === null;
+  const isRecord = (v: unknown) =>
+    Boolean(v) && typeof v === "object" && !Array.isArray(v) &&
+    Object.values(v as Record<string, unknown>).every(isScalar);
+
+  if (typeof candidate.applicationId !== "string") return null;
+  if (!isRecord(candidate.expectedProfile) || !isRecord(candidate.profileUpdate)) return null;
+  if (!Array.isArray(candidate.diff)) return null;
+  const diffOk = candidate.diff.every((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const e = entry as Record<string, unknown>;
+    return typeof e.field === "string" && isScalar(e.before) && isScalar(e.after);
+  });
+  if (!diffOk) return null;
+
+  return {
+    applicationId: candidate.applicationId,
+    expectedProfile: candidate.expectedProfile as RenewalConfirmationIntent["expectedProfile"],
+    profileUpdate: candidate.profileUpdate as RenewalConfirmationIntent["profileUpdate"],
+    diff: candidate.diff as RenewalConfirmationIntent["diff"]
+  };
+}
+
 export async function confirmRenewalAction(
-  reviewed: RenewalConfirmationIntent,
   _previous: RenewalAdminActionState,
-  _formData: FormData
+  formData: FormData
 ): Promise<RenewalAdminActionState> {
   try {
+    const reviewed = parseReviewedIntent(value(formData, "reviewed"));
+    if (!reviewed) return adminFail("Diff xác nhận không hợp lệ. Vui lòng tải lại trang.");
     const applicationId = String(reviewed.applicationId ?? "").trim();
     if (!isValidUuid(applicationId)) return adminFail("Application không hợp lệ.");
+    if (applicationId !== value(formData, "application_id")) {
+      return adminFail("Diff xác nhận không khớp đơn gia hạn. Vui lòng tải lại trang.");
+    }
     const client = getSupabaseServiceRoleClient();
     if (!client) return adminFail("Dịch vụ gia hạn chưa sẵn sàng.");
     const { data: invite, error } = await client

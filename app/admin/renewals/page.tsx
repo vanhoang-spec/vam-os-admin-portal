@@ -1,11 +1,9 @@
 import { ErrorBox, KpiCard, PageHeader } from "@/components/ui";
-import { confirmRenewalAction } from "@/app/actions/renewals";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { loadRenewalConsoleData, loadRenewalSeasonContext } from "@/lib/renewal-console";
 import { canAccessAdminUser } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { displayText, formatDate } from "@/lib/utils";
-import type { RenewalAdminActionState } from "@/lib/renewal-types";
 import type { RenewalConsoleRow } from "@/lib/renewal-console";
 import { CreateRenewalInviteForm, RenewalInviteActions as RenewalInviteControls } from "./renewal-controls";
 
@@ -29,32 +27,6 @@ const FIELD_LABEL: Record<string, string> = {
   years_experience_text: "Nhóm kinh nghiệm",
   capacity_target: "Số mentee có thể đồng hành"
 };
-
-function RenewalRowActions({ row }: { row: RenewalConsoleRow }) {
-  const reviewed = {
-    applicationId: row.applicationId ?? "",
-    expectedProfile: Object.fromEntries(row.diff.map((entry) => [entry.field, entry.before])),
-    profileUpdate: Object.fromEntries(
-      row.diff
-        .filter((entry) => entry.after !== null)
-        .map((entry) => [entry.field, entry.after as string | number])
-    ),
-    diff: row.diff
-  };
-
-  // An inline Server Action encrypts its captured `reviewed` snapshot. The
-  // browser receives an opaque closure rather than editable hidden JSON, so
-  // M071 validates exactly the CURRENT/PROPOSED values rendered for this row.
-  async function confirmReviewed(
-    state: RenewalAdminActionState,
-    formData: FormData
-  ): Promise<RenewalAdminActionState> {
-    "use server";
-    return confirmRenewalAction(reviewed, state, formData);
-  }
-
-  return <RenewalInviteControls row={row} confirmAction={confirmReviewed} />;
-}
 
 export default async function AdminRenewalsPage() {
   const context = await getAdminScopeContext();
@@ -124,7 +96,7 @@ export default async function AdminRenewalsPage() {
                 </div>
                 {row.attentionReason ? <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{row.attentionReason}</p> : null}
               </div>
-              <RenewalRowActions row={row} />
+              <RenewalInviteControls row={row} />
             </div>
 
             {row.inviteState === "accepted" ? (

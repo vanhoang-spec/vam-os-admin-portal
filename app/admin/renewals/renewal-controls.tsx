@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormState } from "react-dom";
 import {
+  confirmRenewalAction,
   createRenewalInviteAction,
   regenerateRenewalInviteAction,
   revokeRenewalInviteAction
@@ -83,16 +84,26 @@ export function CreateRenewalInviteForm({
   );
 }
 
-export function RenewalInviteActions({
-  row,
-  confirmAction
-}: {
-  row: RenewalConsoleRow;
-  confirmAction: (state: RenewalAdminActionState, formData: FormData) => Promise<RenewalAdminActionState>;
-}) {
+export function RenewalInviteActions({ row }: { row: RenewalConsoleRow }) {
   const [revokeState, revokeAction] = useFormState(revokeRenewalInviteAction, initialRenewalAdminActionState);
   const [regenerateState, regenerateAction] = useFormState(regenerateRenewalInviteAction, initialRenewalAdminActionState);
-  const [confirmState, confirmFormAction] = useFormState(confirmAction, initialRenewalAdminActionState);
+  const [confirmState, confirmFormAction] = useFormState(confirmRenewalAction, initialRenewalAdminActionState);
+
+  // The CURRENT/PROPOSED snapshot the admin is looking at, submitted with the
+  // confirmation so the server validates exactly what was on screen. It is a
+  // claim, not a trusted input: profileUpdate is re-derived from the mentor's
+  // stored payload and expectedProfile is re-checked against the live profile
+  // by M071, so an edited value can only produce a refusal.
+  const reviewed = JSON.stringify({
+    applicationId: row.applicationId ?? "",
+    expectedProfile: Object.fromEntries(row.diff.map((entry) => [entry.field, entry.before])),
+    profileUpdate: Object.fromEntries(
+      row.diff
+        .filter((entry) => entry.after !== null)
+        .map((entry) => [entry.field, entry.after as string | number])
+    ),
+    diff: row.diff
+  });
   const canReplace = ["live", "expired", "revoked"].includes(row.inviteState);
   const canRevoke = row.inviteState === "live" || row.inviteState === "expired";
   const canConfirm = row.inviteState === "accepted" && Boolean(row.applicationId) && !String(row.applicationStatus ?? "").startsWith("approved_as_");
@@ -121,6 +132,8 @@ export function RenewalInviteActions({
         ) : null}
         {canConfirm ? (
           <form action={confirmFormAction}>
+            <input type="hidden" name="application_id" value={row.applicationId ?? ""} />
+            <input type="hidden" name="reviewed" value={reviewed} />
             <SubmitButton pendingText="Đang xác nhận..." onClick={(event) => { if (!window.confirm("Xác nhận đúng diff bên dưới, đối soát membership và duyệt gia hạn?")) event.preventDefault(); }}>
               Xác nhận & hoàn tất
             </SubmitButton>
