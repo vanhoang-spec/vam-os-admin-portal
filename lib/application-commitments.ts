@@ -7,6 +7,7 @@ export type AcknowledgementDefinition = Readonly<{
   wording: string;
   helper?: string;
   collectionStage?: "application" | "post_approval_after_orientation";
+  category?: "professional_safety";
 }>;
 
 export const MENTOR_CONFIRMATION_PHRASE =
@@ -57,6 +58,7 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
     key: "MENTOR_BOUNDARIES_V1",
     version: 1,
     role: "mentor",
+    category: "professional_safety",
     wording:
       "Tôi cam kết duy trì ranh giới nghề nghiệp phù hợp và không lợi dụng vai trò Mentor cho bất kỳ mục đích cá nhân, tài chính, thương mại hoặc tình cảm không phù hợp nào."
   },
@@ -64,6 +66,7 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
     key: "MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1",
     version: 1,
     role: "mentor",
+    category: "professional_safety",
     wording:
       "Tôi cam kết tôn trọng, không phân biệt đối xử, không quấy rối và bảo vệ sự an toàn, quyền riêng tư cũng như tính bảo mật của Mentee."
   },
@@ -71,6 +74,7 @@ export const APPLICATION_ACKNOWLEDGEMENTS = Object.freeze({
     key: "MENTOR_CONFLICT_ESCALATION_V1",
     version: 1,
     role: "mentor",
+    category: "professional_safety",
     wording:
       "Tôi sẽ chủ động thông báo cho Ban Tổ chức khi phát sinh xung đột lợi ích, vấn đề vượt quá phạm vi chuyên môn, hoặc tình huống có thể ảnh hưởng đến sự an toàn hoặc chất lượng của mối quan hệ mentoring."
   },
