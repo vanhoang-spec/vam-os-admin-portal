@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Hướng dẫn chuyển dự án Supabase</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; padding-left: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 32%; }
+
+  .note, .stop {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+
+  .check { background: var(--mint); border: 1px solid #bfe2cd; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+<style>
+  .who { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 16px; }
+  .whobox { border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px; }
+  .whobox .wt { font-weight: 700; font-size: 10.5pt; margin-bottom: 3px; }
+  .whobox .ws { font-size: 9.5pt; color: var(--muted); }
+  .whobox.hi { background: var(--mint); border-color: #bfe2cd; }
+  .arrowline { text-align: center; color: var(--green); font-size: 14pt; margin: 4px 0 10px; }
+  .badge {
+    display: inline-block; font-size: 8.5pt; font-weight: 700; padding: 2px 9px;
+    border-radius: 20px; background: var(--green); color: #fff; margin-right: 6px;
+  }
+  .badge.grey { background: #7d8f87; }
+  .kv { font-family: Consolas, "Courier New", monospace; font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Tài liệu vận hành</div>
+  <h1>Chuyển dự án Supabase<br />sang tài khoản của anh</h1>
+  <div class="sub">Hướng dẫn từng bước — không cần biết lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Hai cơ sở dữ liệu của VAM OS hiện nằm trong tài khoản Supabase của anh Thắng. Tài liệu này
+    hướng dẫn chuyển chúng sang tài khoản của anh bằng đúng chức năng
+    <strong>“Transfer project”</strong> mà Supabase làm sẵn — <strong>không đổi địa chỉ,
+    không đổi khoá, không phải sửa một dòng code nào</strong>.
+  </p>
+  <p class="lead">
+    Điểm quan trọng nhất, và cũng dễ bị hiểu ngược: <strong>người bấm nút chuyển là anh Thắng,
+    không phải anh.</strong> Lý do và cách sắp xếp nằm ở trang 3.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Thời gian cần</dt><dd>~20 phút, hai người cùng online</dd></div>
+    <div><dt>Gián đoạn dịch vụ</dt><dd>Không (chiều Free → Pro)</dd></div>
+    <div><dt>Phải sửa code</dt><dd>Không</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ TRƯỚC / SAU ══════════ -->
+<section class="page">
+  <h2 class="plain">Đang thế nào, sẽ thành thế nào</h2>
+
+  <div class="who">
+    <div class="whobox">
+      <div class="wt">Hôm nay</div>
+      <div class="ws">
+        Hai dự án nằm trong tổ chức Supabase <strong>gói Free</strong> của anh Thắng
+        (thangnguyen@redsquarevietnam.com).
+      </div>
+    </div>
+    <div class="whobox hi">
+      <div class="wt">Sau khi chuyển</div>
+      <div class="ws">
+        Hai dự án nằm trong tổ chức Supabase <strong>gói Pro</strong> của anh. Anh là chủ,
+        anh trả tiền, anh cấp quyền cho ai tuỳ ý.
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:24%">Dự án</th><th style="width:30%">Mã dự án</th><th>Là gì</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="key">vam-os-mvp</td>
+        <td class="kv">qkkroesfiazsejkzflcd</td>
+        <td><strong>Bản chạy thật (production)</strong> — dữ liệu thật của mentor, mentee, cặp ghép</td>
+      </tr>
+      <tr>
+        <td class="key">staging</td>
+        <td class="kv">ljfneyuvpxrmejpxsmpz</td>
+        <td><strong>Bản thử nghiệm</strong> — nơi chạy thử trước khi đụng vào bản thật</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:12pt;margin:18px 0 8px">Ba thứ anh được thêm khi lên gói Pro</h3>
+  <ul>
+    <li><strong>Sao lưu hằng ngày.</strong> Gói Free <em>không</em> có sao lưu tự động. Nghĩa là hôm nay,
+      nếu dữ liệu bản chạy thật hỏng, không có bản sao nào để khôi phục. Đây là lý do đáng làm nhất.</li>
+    <li><strong>Quyền chủ sở hữu.</strong> Hôm nay nếu tài khoản anh Thắng gặp vấn đề, anh không có
+      đường vào cơ sở dữ liệu.</li>
+    <li><strong>Cơ sở dữ liệu không bị tạm dừng.</strong> Dự án gói Free bị tạm dừng khi không hoạt động
+      một thời gian.</li>
+  </ul>
+
+  <div class="check">
+    <h3>Vì sao phải “chuyển”, không phải “tạo mới rồi chép dữ liệu qua”</h3>
+    <p style="margin:0">
+      Mã dự án (<span class="kv">qkkroesfiazsejkzflcd</span> và <span class="kv">ljfneyuvpxrmejpxsmpz</span>)
+      được <strong>ghi cứng trong code</strong> của web app — dùng để cảnh báo khi ai đó lỡ trỏ bản thử
+      nghiệm vào dữ liệu thật. Tạo dự án mới sẽ sinh mã mới, làm hỏng lớp bảo vệ đó và phải sửa code,
+      sửa cấu hình, chép lại toàn bộ dữ liệu. Chức năng “Transfer project” thì <strong>giữ nguyên
+      cùng một dự án</strong>, chỉ đổi tổ chức đang sở hữu nó.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ AI LÀM GÌ ══════════ -->
+<section class="page">
+  <h2 class="plain">Ai bấm nút — điểm dễ hiểu ngược nhất</h2>
+
+  <p>
+    Supabase quy định người thực hiện chuyển phải:
+  </p>
+
+  <table>
+    <thead><tr><th style="width:44%">Ở tổ chức nào</th><th>Cần quyền gì</th></tr></thead>
+    <tbody>
+      <tr><td class="key">Tổ chức đang giữ dự án (của anh Thắng)</td><td><strong>Owner</strong> — chủ sở hữu</td></tr>
+      <tr><td class="key">Tổ chức nhận dự án (của anh)</td><td><strong>Member</strong> — chỉ cần là thành viên</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Ghép hai điều kiện lại thì người duy nhất làm được ngay là <strong>anh Thắng</strong> — vì anh ấy
+    đã là chủ tổ chức bên kia rồi. Anh chỉ cần <strong>mời anh Thắng làm thành viên</strong> tổ chức của
+    anh, rồi anh ấy bấm chuyển.
+  </p>
+
+  <div class="who">
+    <div class="whobox">
+      <div class="wt"><span class="badge grey">Bước 1</span> Anh làm</div>
+      <div class="ws">Mời anh Thắng vào tổ chức Pro của anh với vai trò thành viên.</div>
+    </div>
+    <div class="whobox hi">
+      <div class="wt"><span class="badge">Bước 2</span> Anh Thắng làm</div>
+      <div class="ws">Vào từng dự án, bấm Transfer project, chọn tổ chức của anh.</div>
+    </div>
+  </div>
+  <div class="arrowline">&#9660;</div>
+  <div class="who">
+    <div class="whobox">
+      <div class="wt"><span class="badge grey">Bước 3</span> Anh làm</div>
+      <div class="ws">Kiểm tra web app còn chạy, bật sao lưu hằng ngày.</div>
+    </div>
+    <div class="whobox">
+      <div class="wt"><span class="badge grey">Bước 4</span> Anh làm</div>
+      <div class="ws">Gỡ anh Thắng ra khỏi tổ chức, hoặc để lại quyền phù hợp.</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>Cách khác, nếu anh Thắng muốn anh tự làm</h3>
+    <p style="margin:0">
+      Anh Thắng nâng anh lên <strong>Owner</strong> tổ chức của anh ấy, rồi anh tự bấm chuyển. Cách này
+      cũng chạy nhưng phải giao quyền chủ sở hữu — nhiều hơn mức cần thiết. Cách ở trên nhẹ hơn cho cả hai:
+      anh Thắng chỉ vào tổ chức của anh với vai trò thành viên, xong việc thì gỡ ra.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ KIỂM TRA TRƯỚC ══════════ -->
+<section class="page">
+  <h2 class="plain">Kiểm tra trước khi bắt đầu</h2>
+
+  <p>
+    Supabase sẽ <strong>chặn</strong> việc chuyển nếu dự án còn vướng một trong ba thứ dưới đây.
+    Kiểm tra trước để khỏi mất công mở ra rồi phải đóng lại.
+  </p>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Không còn kết nối GitHub đang hoạt động</h3>
+      <p class="sub-step">
+        Vào dự án &rarr; <strong>Settings</strong> &rarr; <strong>Integrations</strong>. Nếu thấy GitHub
+        đang kết nối thì ngắt kết nối, chuyển xong nối lại. Theo kiểm tra trong mã nguồn, dự án này
+        <strong>không dùng kết nối đó</strong> — nhưng vẫn nên nhìn cho chắc.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Không có “log drain” nào đang bật</h3>
+      <p class="sub-step">
+        Đây là chức năng đẩy nhật ký hệ thống ra ngoài, chỉ có ở gói cao. Gói Free không bật được nên
+        gần như chắc chắn không có. Xem ở <strong>Settings</strong> &rarr; <strong>Log Drains</strong>.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Không có vai trò gán riêng cho dự án</h3>
+      <p class="sub-step">
+        Chỉ áp dụng với gói Team và Enterprise. Không liên quan đến trường hợp này.
+      </p>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Và một việc nên làm dù không bắt buộc</h3>
+    <p style="margin:0 0 6px">
+      <strong>Tải một bản sao lưu thủ công của bản chạy thật trước khi chuyển.</strong>
+      Vào dự án <span class="kv">vam-os-mvp</span> &rarr; <strong>Database</strong> &rarr;
+      <strong>Backups</strong> &rarr; tải bản dump về máy.
+    </p>
+    <p style="margin:0">
+      Việc chuyển không đụng gì tới dữ liệu, nhưng đây là dữ liệu thật của hơn một nghìn người và gói Free
+      hiện không có sao lưu tự động. Có một bản trong tay trước khi động vào bất cứ thứ gì là thói quen đúng.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ CÁC BƯỚC ══════════ -->
+<section class="page">
+  <h2 class="plain">Các bước thực hiện</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Anh: tạo tổ chức Pro (nếu chưa có)</h3>
+      <p class="sub-step">Đăng nhập <span class="kv">supabase.com/dashboard</span> bằng tài khoản của anh.</p>
+      <p class="sub-step">Góc trên bên trái là tên tổ chức đang chọn &rarr; bấm vào &rarr; <strong>New organization</strong>.</p>
+      <p class="sub-step">Đặt tên (ví dụ <em>Vietnam Alumni Mentoring</em>), chọn gói <strong>Pro</strong>, nhập thẻ thanh toán.</p>
+      <p class="sub-step">
+        <strong>Làm sao biết đã đúng:</strong> vào <strong>Organization settings</strong> &rarr;
+        <strong>Billing</strong>, thấy ghi <em>Pro Plan</em>.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Anh: mời anh Thắng làm thành viên</h3>
+      <p class="sub-step">Trong tổ chức Pro vừa tạo &rarr; <strong>Organization settings</strong> &rarr; <strong>Team</strong> &rarr; <strong>Invite</strong>.</p>
+      <p class="sub-step">Nhập <span class="kv">thangnguyen@redsquarevietnam.com</span>, chọn vai trò <strong>Member</strong> (không cần Owner).</p>
+      <p class="sub-step">Nhắn anh Thắng kiểm tra email và bấm nhận lời mời.</p>
+      <p class="sub-step">
+        <strong>Làm sao biết đã đúng:</strong> trong danh sách Team thấy tên anh Thắng, trạng thái không
+        còn là <em>Invited</em>.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Anh Thắng: chuyển dự án bản thử nghiệm trước</h3>
+      <p class="sub-step">
+        Làm <strong>staging</strong> (<span class="kv">ljfneyuvpxrmejpxsmpz</span>) trước, không phải
+        bản chạy thật. Có trục trặc gì thì gặp ở chỗ không gây hại.
+      </p>
+      <p class="sub-step">Mở dự án staging &rarr; <strong>Settings</strong> &rarr; <strong>General</strong> &rarr; kéo xuống mục <strong>Transfer project</strong>.</p>
+      <p class="sub-step">Chọn tổ chức đích là tổ chức Pro của anh &rarr; xác nhận.</p>
+      <p class="sub-step">
+        <strong>Làm sao biết đã đúng:</strong> anh đăng nhập tài khoản của mình, thấy dự án staging
+        nằm trong tổ chức của anh, mã dự án vẫn là <span class="kv">ljfneyuvpxrmejpxsmpz</span>.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Anh Thắng: chuyển dự án bản chạy thật</h3>
+      <p class="sub-step">Làm y hệt bước 3, với dự án <strong>vam-os-mvp</strong> (<span class="kv">qkkroesfiazsejkzflcd</span>).</p>
+      <p class="sub-step">
+        Chiều Free &rarr; Pro <strong>không gây gián đoạn</strong>. (Chiều ngược lại, Pro &rarr; Free,
+        mới có gián đoạn 1–2 phút — nhưng ta không đi chiều đó.)
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">5</div>
+    <div class="body">
+      <h3>Anh: bật sao lưu hằng ngày</h3>
+      <p class="sub-step">
+        Mở dự án <strong>vam-os-mvp</strong> &rarr; <strong>Database</strong> &rarr; <strong>Backups</strong>.
+        Gói Pro cho sao lưu tự động hằng ngày — xác nhận nó đang bật.
+      </p>
+      <p class="sub-step">
+        Đây chính là thứ mà suốt thời gian qua chưa hề có. Đừng bỏ qua bước này.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ KIỂM TRA SAU ══════════ -->
+<section class="page">
+  <h2 class="plain">Kiểm tra sau khi chuyển</h2>
+
+  <p>
+    Việc chuyển giữ nguyên cùng một dự án, nên địa chỉ và các khoá kết nối không đổi — và vì thế
+    <strong>không phải sửa gì trên Vercel</strong>. Nhưng đừng tin, hãy kiểm tra. Bốn việc sau, làm theo thứ tự:
+  </p>
+
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:40%">Việc kiểm tra</th><th>Kết quả đúng</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Mở web app VAM OS, đăng nhập bằng tài khoản của anh</td>
+        <td>Đăng nhập được, thấy bảng vận hành có số liệu</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>Mở trang <span class="kv">/admin/debug-auth</span> trên web app</td>
+        <td>Dòng <em>Is production ref</em> ghi <strong>yes</strong></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>Mở một trang có dữ liệu thật, ví dụ danh sách mentee</td>
+        <td>Danh sách hiện đầy đủ như trước</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>Trong Supabase, mở <strong>Database</strong> &rarr; <strong>Backups</strong></td>
+        <td>Có lịch sao lưu hằng ngày</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="stop">
+    <h3>Nếu bước 2 ghi “no”, dừng lại</h3>
+    <p style="margin:0">
+      Nghĩa là mã dự án đã đổi — trường hợp này không nên xảy ra với chức năng Transfer, nhưng nếu xảy ra
+      thì đừng tự sửa. Chụp màn hình, nhắn lại, vì lúc đó phải sửa mã trong code và cấu hình trên Vercel
+      cho khớp.
+    </p>
+  </div>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Sau khi mọi thứ chạy đúng</h3>
+  <ul>
+    <li>Gỡ anh Thắng khỏi tổ chức của anh, <em>hoặc</em> giữ lại vai trò Member nếu anh ấy vẫn còn hỗ trợ kỹ thuật — tuỳ anh.</li>
+    <li>Kiểm tra tổ chức Free cũ của anh Thắng đã trống, để anh ấy đóng nếu muốn.</li>
+    <li>Nhớ rằng <strong>GitHub và Vercel vẫn đứng tên anh Thắng</strong> — đó là hai việc chuyển giao riêng, không nằm trong tài liệu này.</li>
+  </ul>
+</section>
+
+<!-- ══════════ CHI PHÍ & SỰ CỐ ══════════ -->
+<section class="page">
+  <h2 class="plain">Chi phí và xử lý sự cố</h2>
+
+  <h3 style="font-size:12pt;margin:0 0 8px">Chi phí hằng tháng</h3>
+  <p>
+    Con số dưới đây tính theo bảng giá tại thời điểm 16/08/2026. <strong>Xem lại số thật trên màn hình
+    thanh toán trước khi bấm xác nhận</strong> — giá có thể đã đổi.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:46%">Phương án</th><th>Ước tính mỗi tháng</th></tr></thead>
+    <tbody>
+      <tr><td class="key">Chuyển cả hai dự án sang tổ chức Pro</td><td>khoảng <strong>35 USD</strong></td></tr>
+      <tr><td class="key">Chỉ chuyển bản chạy thật, để bản thử nghiệm ở một tổ chức Free</td><td>khoảng <strong>25 USD</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <h3>Vì sao chênh nhau</h3>
+    <p style="margin:0">
+      Dự án cỡ nhỏ nằm trong tổ chức Pro bị tính theo mức giá cao hơn mức nó đang dùng. Nếu muốn tiết kiệm,
+      để bản thử nghiệm lại một tổ chức Free riêng cũng được — bản thử nghiệm không có dữ liệu thật nên
+      không cần sao lưu. Đánh đổi là anh phải quản lý hai tổ chức thay vì một.
+    </p>
+  </div>
+
+  <h3 style="font-size:12pt;margin:22px 0 8px">Nếu gặp trục trặc</h3>
+
+  <table>
+    <thead><tr><th style="width:42%">Hiện tượng</th><th>Nên làm gì</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Nút <strong>Transfer project</strong> bị mờ, không bấm được</td>
+        <td>Anh Thắng chưa nhận lời mời vào tổ chức của anh, hoặc chưa là Owner ở tổ chức nguồn. Kiểm tra lại bước 2.</td>
+      </tr>
+      <tr>
+        <td>Báo lỗi liên quan <strong>GitHub integration</strong></td>
+        <td>Ngắt kết nối GitHub trong Settings &rarr; Integrations, chuyển xong nối lại.</td>
+      </tr>
+      <tr>
+        <td>Không thấy tổ chức của anh trong danh sách chọn</td>
+        <td>Anh Thắng đang đăng nhập nhầm tài khoản, hoặc lời mời chưa được nhận.</td>
+      </tr>
+      <tr>
+        <td>Web app báo lỗi kết nối ngay sau khi chuyển</td>
+        <td>Đợi 2–3 phút rồi tải lại. Vẫn lỗi thì mở <span class="kv">/admin/debug-auth</span> và chụp màn hình gửi lại.</td>
+      </tr>
+      <tr>
+        <td>Muốn quay lại như cũ</td>
+        <td>Chuyển ngược được, nhưng chiều Pro &rarr; Free có gián đoạn 1–2 phút và mất sao lưu tự động.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Tóm lại trong ba câu</h3>
+    <p style="margin:0">
+      Anh mời anh Thắng vào tổ chức Pro của anh với vai trò thành viên. Anh Thắng bấm Transfer project trên
+      từng dự án — bản thử nghiệm trước, bản chạy thật sau. Anh kiểm tra web app còn chạy và bật sao lưu
+      hằng ngày. Không ai phải sửa code, không ai phải sửa cấu hình.
+    </p>
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS · Hướng dẫn chuyển dự án Supabase · 19/08/2026 ·
+    Quy định về quyền và điều kiện chặn lấy từ tài liệu chính thức của Supabase.
+  </footer>
+</section>
+
+</body>
+
+</html>

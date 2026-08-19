@@ -39,6 +39,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // the layout is dynamic by construction and that sentinel never fires.
   const adminUser = await getCurrentAdminUser();
 
+  // A participant route reached by somebody who is not staff renders bare: the
+  // page supplies its own frame (components/participant-shell.tsx), which has no
+  // operations navigation in it at all. Staff visiting the same route — the
+  // programme picker is shared — keep the shell they know.
+  //
+  // The header is set by middleware from the pathname, so it cannot be spoofed;
+  // the decision to strip the shell still rests on the admin lookup, not on the
+  // header alone.
+  if (headers().get("x-vam-participant-route") && !adminUser) {
+    return (
+      <html lang="vi">
+        <body><PreviewEnvironmentBanner />{children}</body>
+      </html>
+    );
+  }
+
   return (
     <html lang="vi">
       <body>

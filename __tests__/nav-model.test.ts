@@ -289,7 +289,16 @@ const BASE_ROUTE_ARR = [
   "/applications", "/matches", "/events", "/data-issues",
 ];
 
-const SUPER_ADMIN_BASE_ROUTES = ["/portfolio", ...BASE_ROUTE_ARR];
+const SUPER_ADMIN_BASE_ROUTES = [
+  "/portfolio",
+  // Migration 071: the cross-programme reporting console and the screen that
+  // decides who may enter which programme. Super admin only — the pages
+  // themselves return not-found for anybody else, so a wider nav entry would
+  // only produce dead links.
+  "/bao-cao",
+  "/admin/participants",
+  ...BASE_ROUTE_ARR
+];
 
 const OPS_ADMIN_ROUTES = [
   "/operations/tasks",
@@ -308,11 +317,42 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team"],
   admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
   super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],
+  // Read-only reporting. One link, because middleware admits it to one screen.
+  vam_admin:    ["/bao-cao"],
 };
 
 function sortedRoutes(arr: string[]) {
   return [...arr].sort();
 }
+
+describe("vam_admin — the reporting account", () => {
+  it("is offered the reporting console and nothing else", () => {
+    const hrefs = allNavHrefs(buildNavGroups(makeUser("vam_admin" as CurrentAdminUser["role"])));
+    expect(hrefs).toEqual(["/bao-cao"]);
+  });
+
+  it("is never offered an operational screen, however the nav grows", () => {
+    const hrefs = allNavHrefs(buildNavGroups(makeUser("vam_admin" as CurrentAdminUser["role"])));
+    for (const forbidden of [
+      "/",
+      "/operations",
+      "/people",
+      "/mentors",
+      "/mentees",
+      "/matches",
+      "/applications",
+      "/events",
+      "/data-issues",
+      "/admin",
+      "/admin/users",
+      "/admin/participants",
+      "/portfolio",
+      "/reviews"
+    ]) {
+      expect(hrefs, forbidden).not.toContain(forbidden);
+    }
+  });
+});
 
 describe("Explicit per-role route set — equivalence with nav-model permission gates", () => {
   const roles = Object.keys(EXPECTED_ROUTES) as CurrentAdminUser["role"][];

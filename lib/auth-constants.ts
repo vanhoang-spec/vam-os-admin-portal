@@ -13,7 +13,11 @@ export const ADMIN_ROLES = [
   "support_team",
   "core_team",
   "admin",
-  "super_admin"
+  "super_admin",
+  // Migration 071. Reads and exports across every programme, operates none of
+  // them. Every predicate below and in lib/permissions.ts is an allow-list, so
+  // adding the value here grants nothing on its own — which is the point.
+  "vam_admin"
 ] as const;
 
 export type AdminRole = (typeof ADMIN_ROLES)[number];
@@ -64,5 +68,6 @@ export function roleLabel(role: AdminRole | string | null | undefined) {
   if (role === "support_team") return "Support team";
   if (role === "reviewer") return "Reviewer";
   if (role === "viewer") return "Viewer";
+  if (role === "vam_admin") return "VAM admin (chỉ báo cáo)";
   return `Vai trò không xác định: ${role ?? "(không có giá trị)"}`;
 }

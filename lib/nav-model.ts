@@ -23,6 +23,14 @@ function roleIn(role: string | undefined, allowed: string[]) {
 
 export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[] {
   const role = adminUser?.role;
+
+  // vam_admin (migration 071) reads and exports across programmes and operates
+  // nothing. Middleware turns it away from every other path, so offering the
+  // usual navigation would be offering a wall of dead links.
+  if (role === "vam_admin") {
+    return [{ key: "reports", label: "Báo cáo", href: "/bao-cao" }];
+  }
+
   const showReviews = roleIn(role, ["super_admin", "admin", "core_team", "reviewer"]);
   const showAdminTier = roleIn(role, ["super_admin", "admin", "core_team"]);
   const showUserMgmt = roleIn(role, ["super_admin", "admin"]);
@@ -34,6 +42,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
           label: "Tổng quan",
           items: [
             { href: "/portfolio", label: "Danh mục chương trình" },
+            { href: "/bao-cao", label: "Báo cáo toàn hệ thống" },
+            { href: "/admin/participants", label: "Tài khoản mentor và mentee" },
             { href: "/", label: "Tổng quan vận hành hiện tại" },
           ],
         }
