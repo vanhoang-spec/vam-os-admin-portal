@@ -48,6 +48,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/operations/monthly", label: "Báo cáo tháng" },
             { href: "/operations/intelligence", label: "Phân tích mùa" },
             { href: "/recaps/create", label: "Tạo báo cáo" },
+            { href: "/operations/recap-import", label: "Thu recap từ Facebook" },
           ],
         }
       : { key: "operations", label: "Vận hành", href: "/operations" },

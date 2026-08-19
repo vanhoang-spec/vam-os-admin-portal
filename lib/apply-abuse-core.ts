@@ -12,7 +12,7 @@
  *   3. field-length caps, so a single request cannot store unbounded text
  */
 
-export type ApplyRoute = "apply_mentee" | "apply_mentor" | "confirm";
+export type ApplyRoute = "apply_mentee" | "apply_mentor" | "confirm" | "recap_import";
 
 /**
  * Submissions allowed per hashed IP per hour.

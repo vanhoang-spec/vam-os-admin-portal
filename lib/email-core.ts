@@ -25,7 +25,10 @@ export type EmailKind =
   | "mentee_selected"
   | "mentee_mentor_intro"
   | "mentor_mentee_package"
-  | "kickoff_invite";
+  | "kickoff_invite"
+  // Internal, to the organisers: time to collect the group posts (migration 070).
+  // Server-authored like the two above it, not a template anybody has to approve.
+  | "recap_period_reminder";
 
 export type EmailMessage = {
   to: string;
@@ -520,4 +523,60 @@ export function textToHtmlEmail(text: string): string {
     .map((block) => `<p>${block.replace(/\n/g, "<br />")}</p>`);
 
   return wrapHtml(paragraphs.join(""));
+}
+
+/**
+ * The twice-monthly nudge to collect what the group has posted.
+ *
+ * Internal mail, to the organisers, written here rather than in the approval
+ * queue: a reminder that only works after somebody approves a template is a
+ * reminder that will not go out the first time it matters.
+ */
+export function buildRecapPeriodReminderEmail(input: {
+  recipientName: string;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  importUrl: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.recipientName);
+  const period = safeDisplayName(input.periodLabel, "kỳ này");
+  const range = `${input.periodStart} → ${input.periodEnd}`;
+
+  const subject = `[VAM OS] Đến kỳ thu recap từ group Facebook (${period})`;
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Hôm nay là mốc thu recap ${period} (${range}).`,
+    "",
+    "Các bước:",
+    "1. Mở group Facebook của chương trình, chọn xem bài theo thứ tự mới nhất.",
+    "2. Bấm biểu tượng VAM Recap Collector trên thanh Chrome, chọn kỳ, bấm “Quét bài trong kỳ”.",
+    "3. Bấm “Gửi vào VAM OS”, rồi vào màn hình dưới đây để duyệt:",
+    input.importUrl,
+    "",
+    "Quét trùng ngày không sao cả: bài nào đã thu rồi thì hệ thống tự bỏ qua,",
+    "nên nếu lỡ kỳ trước thì cứ quét rộng ra để lấy lại phần đã sót.",
+    "",
+    "Trân trọng,",
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Hôm nay là mốc thu recap <strong>${escapeHtml(period)}</strong> (${escapeHtml(range)}).</p>`,
+      "<ol>",
+      "<li>Mở group Facebook của chương trình, chọn xem bài theo thứ tự mới nhất.</li>",
+      "<li>Bấm biểu tượng <strong>VAM Recap Collector</strong> trên thanh Chrome, chọn kỳ, bấm “Quét bài trong kỳ”.</li>",
+      "<li>Bấm “Gửi vào VAM OS”, rồi duyệt các bài đã thu.</li>",
+      "</ol>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.importUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở màn hình duyệt recap</a></p>`,
+      "<p>Quét trùng ngày không sao cả: bài nào đã thu rồi thì hệ thống tự bỏ qua, nên nếu lỡ kỳ trước thì cứ quét rộng ra để lấy lại phần đã sót.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
 }

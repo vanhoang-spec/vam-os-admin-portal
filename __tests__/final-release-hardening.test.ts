@@ -54,6 +54,9 @@ describe("single-step application authentication", () => {
     expect(middleware).toContain("login|apply|reset-password|e2e-harness|_next/static|_next/image");
     expect(middleware).toContain('request.nextUrl.pathname.startsWith("/register/")');
     expect(middleware).toContain('request.nextUrl.pathname.startsWith("/checkin/")');
+    // The two endpoints a program calls: each carries its own bearer secret and
+    // refuses outright when that secret is unset (lib/machine-auth.ts).
+    expect(middleware).toContain("api/recap-import|api/cron");
   });
 
   it("does not expose an unlock secret in middleware or client components", () => {

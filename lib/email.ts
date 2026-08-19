@@ -7,6 +7,7 @@ import {
   buildInterviewScheduleEmail,
   buildMentorConfirmationLinkEmail,
   textToHtmlEmail,
+  buildRecapPeriodReminderEmail,
   buildReviewBatchAssignedEmail,
   buildReviewerInviteEmail,
   evaluateEmailGate,
@@ -550,4 +551,35 @@ export async function sendTemplatedEmail(input: {
     input.relation ?? null,
     input.batchId ?? null
   );
+}
+
+/**
+ * Tell one organiser that a collection period has closed.
+ *
+ * `related` points at nothing: the reminder is about a date, not about a row.
+ * The log line in `outbound_emails` is still written, so a missed reminder is
+ * visible after the fact.
+ */
+export async function sendRecapPeriodReminder(input: {
+  toEmail: string;
+  recipientName: string;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base) {
+    return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  }
+
+  const built = buildRecapPeriodReminderEmail({
+    recipientName: input.recipientName,
+    periodLabel: input.periodLabel,
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    importUrl: `${base}/operations/recap-import`
+  });
+
+  return deliver("recap_period_reminder", { ...built, to: input.toEmail }, null);
 }

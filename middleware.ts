@@ -153,5 +153,12 @@ export const config = {
   // /apply/mentee) bypass the admin auth + unlock gate. Those routes
   // are protected by their own per-route token check (see
   // `app/apply/*/page.tsx` + `VAM_OS_APPLICATION_PILOT_TOKEN`).
-  matcher: ["/((?!login|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
+  //
+  // Two machine endpoints are excluded as well, because a browser redirect to
+  // /login is a useless answer to a program: `api/recap-import` (the Chrome
+  // collector, bearer `VAM_OS_RECAP_IMPORT_TOKEN`) and `api/cron/*` (Vercel
+  // Cron, bearer `CRON_SECRET`). Both check their own token before touching
+  // anything, and both refuse the request outright when the secret is unset.
+  // Every other /api path stays behind this gate.
+  matcher: ["/((?!login|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|api/recap-import|api/cron).*)"]
 };

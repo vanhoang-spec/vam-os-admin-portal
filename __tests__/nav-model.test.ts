@@ -86,6 +86,7 @@ describe("buildNavGroups — super_admin", () => {
     expect(opHrefs).toContain("/operations/monthly");
     expect(opHrefs).toContain("/operations/intelligence");
     expect(opHrefs).toContain("/recaps/create");
+    expect(opHrefs).toContain("/operations/recap-import");
   });
 });
 
@@ -278,7 +279,8 @@ describe("allNavHrefs", () => {
 //                                 /applications, /matches, /events, /data-issues
 //   showAdminTier (+core):       /operations → accordion; adds /operations/tasks,
 //                                 /operations/monthly, /operations/intelligence,
-//                                 /recaps/create; also + /admin, /team
+//                                 /recaps/create, /operations/recap-import;
+//                                 also + /admin, /team
 //   canReview (+reviewer):       + /reviews, /interviews
 //   canManageUsers (+admin):     + /admin/users
 
@@ -294,6 +296,9 @@ const OPS_ADMIN_ROUTES = [
   "/operations/monthly",
   "/operations/intelligence",
   "/recaps/create",
+  // Migration 070: reviewing what the Chrome collector brought back from the
+  // group. Admin-tier only, because approving an item writes a recap.
+  "/operations/recap-import",
 ];
 
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
