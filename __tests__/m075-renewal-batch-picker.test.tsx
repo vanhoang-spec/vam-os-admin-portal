@@ -407,3 +407,53 @@ describe("M075 picker — one-time raw link handoff", () => {
     expect(text).toContain('"Tran, Bao ""Ngoc"""');
   });
 });
+
+describe("M075 picker — never escalates a bad state into a route error", () => {
+  // A throw in this Client Component unwinds to app/error.tsx and replaces the
+  // whole /admin/renewals console with the generic runtime error, destroying the
+  // operator's selection AND any raw links the batch had already produced. These
+  // are the shapes that previously did exactly that.
+  const BAD_STATES: Array<[string, any]> = [
+    ["missing results", { ok: false, message: "boom" }],
+    ["null results", { ok: false, message: "boom", results: null }],
+    ["results not an array", { ok: false, message: "boom", results: { a: 1 } }],
+    ["null state", null],
+    ["undefined state", undefined],
+    ["empty object", {}],
+    ["message not a string", { ok: false, message: 42, results: [] }],
+    ["results containing null rows", { ok: true, message: "x", results: [null, undefined] }]
+  ];
+
+  for (const [name, bad] of BAD_STATES) {
+    it(`renders without throwing: ${name}`, () => {
+      formState = bad;
+      expect(() => renderPicker()).not.toThrow();
+    });
+  }
+
+  it("still shows the picker so the operator can retry", () => {
+    formState = { ok: false, message: "boom" };
+    renderPicker();
+    expect(searchBox()).toBeTruthy();
+    expect(screen.getByText("Đã chọn 0 mentor")).toBeTruthy();
+  });
+
+  it("renders an unrecognised outcome as text rather than a blank cell", () => {
+    formState = {
+      ok: true,
+      message: "x",
+      results: [
+        {
+          personId: ROSTER[0].personId,
+          fullName: "Validation Mentor 01",
+          mentorCode: "VM-001",
+          email: "a@b.c",
+          outcome: "some_future_outcome",
+          expiresAt: null
+        }
+      ]
+    };
+    expect(() => renderPicker()).not.toThrow();
+    expect(screen.getByText("some_future_outcome")).toBeTruthy();
+  });
+});

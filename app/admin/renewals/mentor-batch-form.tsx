@@ -38,6 +38,16 @@ const OUTCOME_CLASS: Record<RenewalBatchRow["outcome"], string> = {
   failed: "text-red-700"
 };
 
+/**
+ * Label for an outcome, tolerant of a value this build does not recognise.
+ * The action and the UI are deployed together, but a cached client bundle can
+ * outlive a server change, and an unlabelled cell is a better failure than a
+ * blank one.
+ */
+function outcomeLabel(outcome: unknown): string {
+  return RENEWAL_BATCH_OUTCOME_LABEL[outcome as RenewalBatchRow["outcome"]] ?? String(outcome ?? "—");
+}
+
 /** RFC 4180 quoting: wrap in quotes and double any embedded quote. */
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
@@ -76,10 +86,42 @@ export function BatchRenewalInviteForm({
   programId: string;
   seasonId: string;
 }) {
-  const [state, action] = useFormState(createRenewalInviteBatchAction, initialRenewalBatchState);
+  const [rawState, action] = useFormState(createRenewalInviteBatchAction, initialRenewalBatchState);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const lastResultsRef = useRef<RenewalBatchRow[] | null>(null);
+
+  /**
+   * Normalise whatever the action handed back before ANY of it is read.
+   *
+   * This component renders inside the /admin/renewals route, so a throw here is
+   * not a broken panel — it unwinds to app/error.tsx and replaces the entire
+   * console with the generic runtime error, losing the operator's selection and
+   * any links the batch had already produced. Reading `state.results.length` on
+   * a state that lacks `results` did exactly that.
+   *
+   * A form state is data arriving from another process, and this component must
+   * treat it as such rather than trusting its declared TypeScript shape: a type
+   * is a compile-time promise, and the failure being defended against is one
+   * where that promise was already broken at runtime. Nothing below may assume
+   * a field exists.
+   */
+  // Memoised on `rawState` so the normalised array keeps a STABLE identity
+  // across renders. Rebuilding it every render would make the effect below —
+  // which compares `results` against a ref — fire on every render and, once a
+  // batch had created anything, call setSelected in a loop.
+  const results = useMemo<RenewalBatchRow[]>(
+    () =>
+      Array.isArray(rawState?.results)
+        ? (rawState.results.filter((row) => row && typeof row === "object") as RenewalBatchRow[])
+        : [],
+    [rawState]
+  );
+  const state = {
+    ok: rawState?.ok === true,
+    message: typeof rawState?.message === "string" ? rawState.message : "",
+    results
+  };
 
   const selectableCount = useMemo(() => mentors.filter((m) => m.selectable).length, [mentors]);
 
@@ -141,7 +183,7 @@ export function BatchRenewalInviteForm({
           csvCell(row.email),
           csvCell(row.renewalPath ? `${origin}${row.renewalPath}` : ""),
           csvCell(row.expiresAt),
-          csvCell(RENEWAL_BATCH_OUTCOME_LABEL[row.outcome])
+          csvCell(outcomeLabel(row.outcome))
         ].join(",")
       );
     }
@@ -359,8 +401,8 @@ export function BatchRenewalInviteForm({
                         "—"
                       )}
                     </td>
-                    <td className={`px-3 py-2 font-medium ${OUTCOME_CLASS[row.outcome]}`}>
-                      {RENEWAL_BATCH_OUTCOME_LABEL[row.outcome]}
+                    <td className={`px-3 py-2 font-medium ${OUTCOME_CLASS[row.outcome] ?? "text-slate-600"}`}>
+                      {outcomeLabel(row.outcome)}
                     </td>
                   </tr>
                 ))}
