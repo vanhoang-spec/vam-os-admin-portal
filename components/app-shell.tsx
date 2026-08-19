@@ -335,7 +335,19 @@ export function AppShell({
     prevDrawerOpenRef.current = drawerOpen;
   }, [drawerOpen]);
 
-  if (pathname === "/login" || pathname.startsWith("/apply")) {
+  // Routes that render themselves, with no shell and no session.
+  //
+  // `/reset-password` belongs here and had been missing: it is excluded from the
+  // middleware matcher and carries no public-route header, so a logged-out
+  // visitor following a Supabase recovery link fell through to the "Cần đăng
+  // nhập" card below and never saw the form. Nothing used that path until now,
+  // which is why it went unnoticed — and it is exactly the state every invited
+  // mentor and mentee arrives in.
+  if (
+    pathname === "/login" ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/apply")
+  ) {
     return <>{children}</>;
   }
 

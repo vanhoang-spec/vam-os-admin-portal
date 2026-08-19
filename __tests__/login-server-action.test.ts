@@ -4,9 +4,25 @@ import { findAdminUserForAuthUser } from "@/lib/admin-auth";
 import * as adminAuth from "@/lib/admin-auth";
 import * as supabaseServer from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { resolveParticipantForAuthUser } from "@/lib/participant-auth";
+import { getProgramsForPerson } from "@/lib/participant-programs";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
+// The action now resolves participants too, and that module memoises its read
+// with React cache — which only exists in a server render. Same shim the scoped
+// visibility suites use.
+vi.mock("react", () => ({ cache: (fn: any) => fn }));
+
+// The participant half of the action. Defaulted to "nobody" so every existing
+// assertion still reads as "no admin row and no participant link means denied";
+// the cases that exercise the new path set it explicitly.
+vi.mock("@/lib/participant-auth", () => ({
+  resolveParticipantForAuthUser: vi.fn(async () => ({ state: "none" }))
+}));
+vi.mock("@/lib/participant-programs", () => ({
+  getProgramsForPerson: vi.fn(async () => [])
+}));
 
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleClient: vi.fn(),
@@ -528,4 +544,102 @@ describe("Server-Side Login Flow", () => {
       expect(dbError.error).not.toContain("DB read error");
     });
   });
+
+  /**
+   * Migration 071 opened a second way in. Staff resolution still runs first and
+   * is unchanged; the participant path runs only when there is no admin row.
+   */
+  describe("loginAction — mentors and mentees", () => {
+    const account = {
+      state: "participant" as const,
+      account: {
+        id: "acc-1",
+        authUserId: "auth-1",
+        personId: "person-1",
+        status: "active" as const,
+        linkSource: "invite",
+        fullName: "Nguyễn Văn A",
+        email: "a@vam.vn"
+      }
+    };
+
+    const program = (code: string, name: string) => ({
+      programId: `p-${code}`,
+      programCode: code,
+      programName: name
+    });
+
+    /** No admin row: the queue answers the admin_users lookup with nothing. */
+    const asParticipant = (resolution: unknown) => {
+      service.queue({ data: [], error: null });
+      (resolveParticipantForAuthUser as Mock).mockResolvedValue(resolution);
+    };
+
+    it("takes a participant in one programme straight to that programme", async () => {
+      asParticipant(account);
+      (getProgramsForPerson as Mock).mockResolvedValue([program("UEHM", "UEH Mentoring")]);
+
+      await expect(loginAction({ error: null }, loginFormData())).rejects.toThrow("NEXT_REDIRECT");
+      expect(redirect).toHaveBeenCalledWith("/ct/UEHM");
+      expect(adminAuth.setAuthCookies).toHaveBeenCalled();
+    });
+
+    it("asks a participant in two programmes to choose", async () => {
+      asParticipant(account);
+      (getProgramsForPerson as Mock).mockResolvedValue([
+        program("UEHM", "UEH Mentoring"),
+        program("BK", "BK Mentoring")
+      ]);
+
+      await expect(loginAction({ error: null }, loginFormData())).rejects.toThrow("NEXT_REDIRECT");
+      expect(redirect).toHaveBeenCalledWith("/chon-chuong-trinh");
+    });
+
+    it("lets somebody in who belongs to no programme yet, and explains there", async () => {
+      asParticipant(account);
+      (getProgramsForPerson as Mock).mockResolvedValue([]);
+
+      await expect(loginAction({ error: null }, loginFormData())).rejects.toThrow("NEXT_REDIRECT");
+      expect(redirect).toHaveBeenCalledWith("/ct");
+    });
+
+    it("passes on the real reason when an address matches nobody", async () => {
+      asParticipant({
+        state: "unmatched",
+        message: "Email này chưa có trong dữ liệu chương trình."
+      });
+
+      const res = await loginAction({ error: null }, loginFormData());
+
+      expect(res.error).toContain("chưa có trong dữ liệu chương trình");
+      expect(adminAuth.setAuthCookies).not.toHaveBeenCalled();
+      expect(mockAuthClient.auth.signOut).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses rather than guessing when an address matches two people", async () => {
+      asParticipant({ state: "ambiguous", message: "Email này đang trùng với nhiều hồ sơ." });
+
+      const res = await loginAction({ error: null }, loginFormData());
+
+      expect(res.error).toContain("trùng với nhiều hồ sơ");
+      expect(adminAuth.setAuthCookies).not.toHaveBeenCalled();
+    });
+
+    it("tells a disabled account it is disabled, not that the password is wrong", async () => {
+      asParticipant({ state: "disabled" });
+
+      const res = await loginAction({ error: null }, loginFormData());
+
+      expect(res.error).toContain("tạm khoá");
+      expect(adminAuth.setAuthCookies).not.toHaveBeenCalled();
+    });
+
+    it("never runs the participant path for somebody who is staff", async () => {
+      service.queue({ data: [linkedRow()], error: null });
+
+      await expect(loginAction({ error: null }, loginFormData())).rejects.toThrow("NEXT_REDIRECT");
+      expect(resolveParticipantForAuthUser).not.toHaveBeenCalled();
+    });
+  });
+
 });

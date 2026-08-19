@@ -7,6 +7,7 @@ import {
   buildInterviewScheduleEmail,
   buildMentorConfirmationLinkEmail,
   textToHtmlEmail,
+  buildParticipantInviteEmail,
   buildRecapPeriodReminderEmail,
   buildReviewBatchAssignedEmail,
   buildReviewerInviteEmail,
@@ -582,4 +583,37 @@ export async function sendRecapPeriodReminder(input: {
   });
 
   return deliver("recap_period_reminder", { ...built, to: input.toEmail }, null);
+}
+
+/**
+ * Hand somebody the account that has been waiting for them.
+ *
+ * The invite URL comes from Supabase's own admin API, so it is not an app link
+ * and is not checked against the public base URL the way the others are. It is
+ * still refused if it is not https, because a plain-http link in a letter to a
+ * thousand people is a credential travelling in the open.
+ */
+export async function sendParticipantInvite(input: {
+  toEmail: string;
+  recipientName: string;
+  inviteUrl: string;
+  programNames?: string[];
+  personId?: string | null;
+}): Promise<SendEmailResult> {
+  const url = String(input.inviteUrl ?? "").trim();
+  if (!url.startsWith("https://") || /[\r\n\s]/.test(url)) {
+    return { ok: false, skipped: false, reason: "Đường dẫn mời không hợp lệ." };
+  }
+
+  const built = buildParticipantInviteEmail({
+    recipientName: input.recipientName,
+    inviteUrl: url,
+    programNames: input.programNames
+  });
+
+  return deliver(
+    "participant_invite",
+    { ...built, to: input.toEmail },
+    input.personId ? { table: "people", id: input.personId } : null
+  );
 }
