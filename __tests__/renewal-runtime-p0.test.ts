@@ -172,6 +172,28 @@ describe("P0 public renewal submission boundary", () => {
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(token);
   });
 
+  it("rejects submission if consent_data_storage is missing", async () => {
+    const { token } = mintRenewalInviteToken();
+    const form = acceptedForm();
+    form.delete("consent_data_storage");
+    const result = await submitRenewalAccepted(token, form, { from: () => query({ data: invite(token) }) } as any);
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Vui lòng đồng ý lưu trữ dữ liệu để gửi xác nhận gia hạn.");
+  });
+
+  it("passes consent_data_storage exactly to the payload in M071 RPC", async () => {
+    const { token, tokenHash } = mintRenewalInviteToken();
+    const from = vi.fn(() => query({ data: invite(token) }));
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "accepted" }], error: null }));
+    const result = await submitRenewalAccepted(token, acceptedForm(), { from, rpc } as any);
+
+    expect(result.ok).toBe(true);
+    // acceptedForm includes consent_data_storage="yes"
+    expect(rpc).toHaveBeenCalledWith("vam071_submit_renewal_accepted", expect.objectContaining({
+      p_consent_data_storage: true
+    }));
+  });
+
   it("replay is refused by the shared submit gate before the accepted RPC", async () => {
     const { token } = mintRenewalInviteToken();
     const used = { ...invite(token), submitted_at: "2026-08-17T00:00:00.000Z", outcome: "accepted" as const, application_id: IDS.application };

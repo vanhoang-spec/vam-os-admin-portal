@@ -146,7 +146,19 @@ export function RenewalForm({
           {/* Rendered from the canonical mentor acknowledgements. The form does
               not keep a list of its own, so a commitment added to the policy
               source appears here and is enforced server-side without an edit. */}
-          {requiredCheckboxAcknowledgements("mentor").map((entry) => (
+          {requiredCheckboxAcknowledgements("mentor").filter(entry => !["MENTOR_BOUNDARIES_V1", "MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1", "MENTOR_CONFLICT_ESCALATION_V1"].includes(entry.key)).map((entry) => (
+            <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
+              <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
+              <span>{entry.wording}</span>
+            </label>
+          ))}
+        </div>
+
+        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-vam-ink">
+            Ranh giới nghề nghiệp, an toàn và bảo mật
+          </h3>
+          {requiredCheckboxAcknowledgements("mentor").filter(entry => ["MENTOR_BOUNDARIES_V1", "MENTOR_RESPECT_SAFETY_CONFIDENTIALITY_V1", "MENTOR_CONFLICT_ESCALATION_V1"].includes(entry.key)).map((entry) => (
             <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
               <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
               <span>{entry.wording}</span>
