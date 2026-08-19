@@ -6,6 +6,7 @@ import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { displayText, formatDate } from "@/lib/utils";
 import type { RenewalConsoleRow } from "@/lib/renewal-console";
 import { CreateRenewalInviteForm, RenewalInviteActions as RenewalInviteControls } from "./renewal-controls";
+import { BatchRenewalInviteForm } from "./mentor-batch-form";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -69,6 +70,8 @@ export default async function AdminRenewalsPage() {
         <KpiCard label="Chờ admin xác nhận" value={pending.length} tone={pending.length ? "warning" : "default"} />
         <KpiCard label="Cần operator xử lý" value={attention.length} tone={attention.length ? "danger" : "default"} />
       </div>
+
+      <BatchRenewalInviteForm mentors={data.mentors} programId={data.season.programId} seasonId={data.season.id} />
 
       <CreateRenewalInviteForm mentors={data.mentors} programId={data.season.programId} seasonId={data.season.id} />
 

@@ -55,6 +55,12 @@ export function CreateRenewalInviteForm({
   seasonId: string;
 }) {
   const [state, action] = useFormState(createRenewalInviteAction, initialRenewalAdminActionState);
+  // loadRenewalConsoleData now also returns mentors who already hold a live
+  // invite or have already accepted, so the BATCH picker can show them as
+  // "Đã có link" instead of silently omitting them. This single-invite <select>
+  // must keep offering only the eligible ones, which is exactly what it offered
+  // before that change.
+  const selectable = mentors.filter((mentor) => mentor.selectable);
   return (
     <form action={action} className="grid gap-4 rounded-lg border border-vam-line bg-white p-5 shadow-soft">
       <div>
@@ -68,16 +74,16 @@ export function CreateRenewalInviteForm({
           Mentor
           <select name="person_id" required className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm">
             <option value="">Chọn mentor…</option>
-            {mentors.map((mentor) => <option key={mentor.personId} value={mentor.personId}>{mentor.label}</option>)}
+            {selectable.map((mentor) => <option key={mentor.personId} value={mentor.personId}>{mentor.label}</option>)}
           </select>
         </label>
         <label className="text-sm font-medium text-vam-ink">
           Hiệu lực (ngày)
           <input name="expires_days" type="number" min="1" max="60" step="1" defaultValue="14" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2 text-sm" />
         </label>
-        <SubmitButton disabled={!mentors.length} pendingText="Đang tạo...">Tạo link</SubmitButton>
+        <SubmitButton disabled={!selectable.length} pendingText="Đang tạo...">Tạo link</SubmitButton>
       </div>
-      {!mentors.length ? <p className="text-sm text-slate-500">Không có mentor đủ điều kiện chưa có link live/renewal accepted.</p> : null}
+      {!selectable.length ? <p className="text-sm text-slate-500">Không có mentor đủ điều kiện chưa có link live/renewal accepted.</p> : null}
       <Feedback state={state} />
       <OneTimeLink path={state.renewalPath} />
     </form>

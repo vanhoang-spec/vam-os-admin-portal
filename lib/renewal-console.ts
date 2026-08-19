@@ -7,9 +7,31 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 type Row = Record<string, any>;
 
+/**
+ * Why a mentor can or cannot be given a renewal link right now.
+ *
+ * `has_live_invite` and `renewal_accepted` were previously expressed by simply
+ * OMITTING the mentor from the picker. They are surfaced instead so the batch
+ * UI can show "Đã có link" rather than leaving an operator to wonder why a
+ * mentor they expect is missing — while remaining unselectable, so the
+ * eligibility RULE is unchanged.
+ */
+export type RenewalMentorStatus = "eligible" | "has_live_invite" | "renewal_accepted";
+
 export type RenewalMentorOption = {
   personId: string;
+  /** Pre-composed "Name · CODE · email", kept for the single-invite <select>. */
   label: string;
+  fullName: string;
+  mentorCode: string | null;
+  email: string | null;
+  status: RenewalMentorStatus;
+  /**
+   * True only for `eligible`. The single-invite form and the batch action both
+   * gate on this, and the server re-derives it independently — the client is
+   * never trusted to decide who may receive a link.
+   */
+  selectable: boolean;
 };
 
 export type RenewalConsoleRow = {
@@ -111,13 +133,34 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
   const acceptedPeople = new Set(invites.data.filter((row) => row.outcome === "accepted").map((row) => String(row.person_id)));
   const livePeople = new Set(invites.data.filter((row) => renewalInviteState(row) === "live").map((row) => String(row.person_id)));
 
-  const mentors = Array.from(profilesByPerson.entries())
-    .filter(([personId, rows]) => rows.length === 1 && peopleById.has(personId) && !acceptedPeople.has(personId) && !livePeople.has(personId))
+  // The eligibility RULE is unchanged: a mentor may receive a link only when
+  // they have exactly one canonical profile, a known person row, no accepted
+  // renewal and no live invite. What changed is that the two "already handled"
+  // cases are now RETURNED with a status instead of being dropped, so the batch
+  // picker can render them as "Đã có link" and refuse to select them. Mentors
+  // with zero or duplicate profiles stay omitted exactly as before — they are a
+  // data-integrity problem, not an operator choice.
+  const mentors: RenewalMentorOption[] = Array.from(profilesByPerson.entries())
+    .filter(([personId, rows]) => rows.length === 1 && peopleById.has(personId))
     .map(([personId, rows]) => {
       const person = peopleById.get(personId)!;
-      const code = rows[0].mentor_code ? ` · ${rows[0].mentor_code}` : "";
-      const email = person.email_primary ? ` · ${person.email_primary}` : "";
-      return { personId, label: `${person.full_name || "Không tên"}${code}${email}` };
+      const mentorCode = rows[0].mentor_code ? String(rows[0].mentor_code) : null;
+      const email = person.email_primary ? String(person.email_primary) : null;
+      const fullName = String(person.full_name || "Không tên");
+      const status: RenewalMentorStatus = acceptedPeople.has(personId)
+        ? "renewal_accepted"
+        : livePeople.has(personId)
+          ? "has_live_invite"
+          : "eligible";
+      return {
+        personId,
+        label: `${fullName}${mentorCode ? ` · ${mentorCode}` : ""}${email ? ` · ${email}` : ""}`,
+        fullName,
+        mentorCode,
+        email,
+        status,
+        selectable: status === "eligible"
+      };
     })
     .sort((a, b) => a.label.localeCompare(b.label, "vi"));
 

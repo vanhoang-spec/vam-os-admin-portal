@@ -15,6 +15,12 @@ import {
   type RenewalConfirmationIntent,
   type RenewalPublicActionState
 } from "@/lib/renewal-runtime";
+import { createRenewalInviteBatch } from "@/lib/renewal-batch";
+import {
+  RENEWAL_BATCH_MAX_SIZE,
+  initialRenewalBatchState,
+  type RenewalBatchState
+} from "@/lib/renewal-types";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -122,6 +128,77 @@ export async function createRenewalInviteAction(
   } catch (error) {
     console.error("[renewal-actions] create failed", { code: (error as { code?: string })?.code ?? "UNKNOWN" });
     return adminFail("Không thể tạo link gia hạn an toàn.");
+  }
+}
+
+/**
+ * Creates renewal links for up to RENEWAL_BATCH_MAX_SIZE mentors at once.
+ *
+ * Authorization is resolved ONCE, from the season the form names, using the
+ * same `authorizedOperator` gate the single-invite action uses — an operator
+ * who cannot create one link cannot create twenty-five.
+ *
+ * The selected person ids arrive as JSON in a single hidden field rather than
+ * as repeated checkbox entries, because the picker only RENDERS a capped slice
+ * of matching mentors and unrendered checkboxes would not be submitted; the
+ * selection lives in React state and is serialised whole.
+ *
+ * Nothing about the selection is trusted: `createRenewalInviteBatch` re-reads
+ * people, profiles and invites, re-derives eligibility per mentor, and calls the
+ * ordinary trusted create path once per mentor. The database's own uniqueness
+ * arbiters remain the final word.
+ */
+export async function createRenewalInviteBatchAction(
+  _previous: RenewalBatchState,
+  formData: FormData
+): Promise<RenewalBatchState> {
+  const batchFail = (message: string): RenewalBatchState => ({ ...initialRenewalBatchState, message });
+  try {
+    const programId = value(formData, "program_id");
+    const seasonId = value(formData, "season_id");
+    const days = Number(value(formData, "expires_days") || "14");
+    if (!isValidUuid(programId) || !isValidUuid(seasonId)) {
+      return batchFail("Program hoặc season không hợp lệ.");
+    }
+    if (!Number.isInteger(days) || days < 1 || days > 60) {
+      return batchFail("Thời hạn link phải từ 1 đến 60 ngày.");
+    }
+
+    let personIds: string[];
+    try {
+      const parsed = JSON.parse(value(formData, "person_ids") || "[]");
+      if (!Array.isArray(parsed)) return batchFail("Danh sách mentor không hợp lệ.");
+      personIds = parsed.map((id) => String(id));
+    } catch {
+      return batchFail("Danh sách mentor không hợp lệ.");
+    }
+    if (!personIds.length) return batchFail("Chưa chọn mentor nào.");
+    if (personIds.some((id) => !isValidUuid(id))) return batchFail("Danh sách mentor chứa ID không hợp lệ.");
+    if (personIds.length > RENEWAL_BATCH_MAX_SIZE) {
+      return batchFail(`Mỗi lần chỉ tạo tối đa ${RENEWAL_BATCH_MAX_SIZE} link. Vui lòng chia nhỏ danh sách.`);
+    }
+
+    const admin = await authorizedOperator(seasonId);
+    const client = getSupabaseServiceRoleClient();
+    if (!admin || !client) return batchFail("Bạn không có quyền operations trong Season 12.");
+
+    const result = await createRenewalInviteBatch(
+      {
+        actorAdminUserId: admin.id as string,
+        personIds,
+        programId,
+        seasonId,
+        expiresAt: new Date(Date.now() + days * 86_400_000).toISOString()
+      },
+      client
+    );
+    revalidatePath("/admin/renewals");
+    return result;
+  } catch (error) {
+    console.error("[renewal-actions] batch create failed", {
+      code: (error as { code?: string })?.code ?? "UNKNOWN"
+    });
+    return batchFail("Không thể tạo link gia hạn hàng loạt an toàn.");
   }
 }
 

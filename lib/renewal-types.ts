@@ -88,3 +88,92 @@ export const initialRenewalAdminActionState: RenewalAdminActionState = {
   ok: false,
   message: ""
 };
+
+/**
+ * ── Batch renewal invite creation ──────────────────────────────────────────
+ *
+ * Declared here rather than in `lib/renewal-runtime.ts` for the same reason the
+ * capacity choices are: the admin console is a Client Component and cannot
+ * import a `server-only` module, so the shape of a batch result and the size
+ * limit the UI enforces must live somewhere both halves can read.
+ */
+
+/**
+ * The largest number of mentors one batch may create links for.
+ *
+ * WHY 25 AND NOT 500
+ * Each mentor costs exactly one `vam071_create_renewal_invite` round trip —
+ * the batch reuses the single-invite trusted path verbatim rather than minting
+ * tokens in bulk, so per-mentor cost cannot be amortised away. This project
+ * sets no `maxDuration` anywhere and has no `vercel.json`, so the Server Action
+ * runs under Vercel's DEFAULT serverless budget, which is 10s on the most
+ * restrictive plan. 25 invites at RENEWAL_BATCH_CONCURRENCY=4 is ~7 waves; even
+ * at a pathological 500ms per round trip that is ~3.5s, leaving the rest of the
+ * budget for authorization, the pre-flight reads and serialisation.
+ *
+ * 25 is also an operationally sensible unit: the links are distributed BY HAND
+ * over Gmail/Zalo, so a batch larger than this is not something a person
+ * finishes in one sitting anyway.
+ *
+ * Raising it safely means setting an explicit `maxDuration` on the renewals
+ * route AND confirming the Vercel plan allows it — not simply editing this
+ * number.
+ */
+export const RENEWAL_BATCH_MAX_SIZE = 25;
+
+/**
+ * How many invite RPCs are in flight at once.
+ *
+ * Bounded rather than unbounded: 25 simultaneous PostgREST calls would burst
+ * the Supabase connection pool for no latency gain worth having, and an
+ * unbounded Promise.all makes one slow call indistinguishable from a hung
+ * batch. Four keeps the wall clock low while staying polite to the pool.
+ */
+export const RENEWAL_BATCH_CONCURRENCY = 4;
+
+/** Why one mentor in a batch ended up the way it did. */
+export type RenewalBatchOutcome =
+  | "created"
+  | "skipped_live_invite"
+  | "not_eligible"
+  | "failed";
+
+/** The operator-facing Vietnamese label for each outcome. */
+export const RENEWAL_BATCH_OUTCOME_LABEL: Record<RenewalBatchOutcome, string> = {
+  created: "Thành công",
+  skipped_live_invite: "Đã có invite đang hiệu lực",
+  not_eligible: "Không đủ điều kiện / không hợp lệ",
+  failed: "Lỗi tạo link"
+};
+
+/**
+ * One mentor's result. `renewalPath` is present ONLY for `created`, only in the
+ * immediate action response, and is never written to any table, log or file.
+ */
+export type RenewalBatchRow = {
+  personId: string;
+  fullName: string;
+  mentorCode: string | null;
+  email: string | null;
+  outcome: RenewalBatchOutcome;
+  expiresAt: string | null;
+  renewalPath?: string;
+};
+
+export type RenewalBatchState = {
+  ok: boolean;
+  message: string;
+  createdCount: number;
+  failedCount: number;
+  skippedCount: number;
+  results: RenewalBatchRow[];
+};
+
+export const initialRenewalBatchState: RenewalBatchState = {
+  ok: false,
+  message: "",
+  createdCount: 0,
+  failedCount: 0,
+  skippedCount: 0,
+  results: []
+};
