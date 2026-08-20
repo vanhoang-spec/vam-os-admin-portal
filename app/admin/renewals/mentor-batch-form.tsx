@@ -28,7 +28,8 @@ const VISIBLE_LIMIT = 50;
 const STATUS_BADGE: Record<RenewalMentorOption["status"], { label: string; className: string } | null> = {
   eligible: null,
   has_live_invite: { label: "Đã có link", className: "border-amber-300 bg-amber-50 text-amber-800" },
-  renewal_accepted: { label: "Đã gia hạn", className: "border-green-300 bg-green-50 text-green-800" }
+  renewal_accepted: { label: "Đã gia hạn", className: "border-green-300 bg-green-50 text-green-800" },
+  renewal_declined: { label: "Đã từ chối", className: "border-red-300 bg-red-50 text-red-800" }
 };
 
 const OUTCOME_CLASS: Record<RenewalBatchRow["outcome"], string> = {
@@ -89,6 +90,16 @@ export function BatchRenewalInviteForm({
   const [rawState, action] = useFormState(createRenewalInviteBatchAction, initialRenewalBatchState);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  // Two-phase submit. No token can be minted while this is false, because the
+  // form renders NO submit control in that phase — the phase-1 button is a
+  // plain type="button". This is a structural guarantee rather than a handler
+  // that could be bypassed by an Enter keypress.
+  const [confirming, setConfirming] = useState(false);
+  // Controlled, because the expiry input is rendered in phase 1 and replaced by
+  // a hidden field in phase 2. An uncontrolled input would remount and silently
+  // revert an operator's 21 days back to the default 14 at the moment they
+  // confirm it.
+  const [expiryDays, setExpiryDays] = useState("14");
   const lastResultsRef = useRef<RenewalBatchRow[] | null>(null);
 
   /**
@@ -123,7 +134,7 @@ export function BatchRenewalInviteForm({
     results
   };
 
-  const selectableCount = useMemo(() => mentors.filter((m) => m.selectable).length, [mentors]);
+  const selectableCount = useMemo(() => mentors.filter((m) => m.batchSelectable).length, [mentors]);
 
   const matches = useMemo(() => mentors.filter((mentor) => matchesMentorQuery(mentor, query)), [mentors, query]);
   const visible = matches.slice(0, VISIBLE_LIMIT);
@@ -137,6 +148,7 @@ export function BatchRenewalInviteForm({
   useEffect(() => {
     if (state.results === lastResultsRef.current) return;
     lastResultsRef.current = state.results;
+    setConfirming(false);
     const created = state.results.filter((row) => row.outcome === "created").map((row) => row.personId);
     if (created.length) setSelected((prev) => prev.filter((id) => !created.includes(id)));
   }, [state.results]);
@@ -152,14 +164,14 @@ export function BatchRenewalInviteForm({
       // in the same place for the same reason. The server re-derives both
       // independently and remains the actual authority.
       const mentor = byId.get(personId);
-      if (!mentor?.selectable) return prev;
+      if (!mentor?.batchSelectable) return prev;
       if (prev.length >= RENEWAL_BATCH_MAX_SIZE) return prev;
       return [...prev, personId];
     });
   }
 
   const remainingSlots = RENEWAL_BATCH_MAX_SIZE - selected.length;
-  const selectableMatches = matches.filter((m) => m.selectable && !selectedSet.has(m.personId));
+  const selectableMatches = matches.filter((m) => m.batchSelectable && !selectedSet.has(m.personId));
   const canSelectAllFiltered = selectableMatches.length > 0 && remainingSlots > 0;
 
   function selectAllFiltered() {
@@ -209,6 +221,8 @@ export function BatchRenewalInviteForm({
         </p>
       </div>
 
+      {!confirming ? (
+      <>
       <label className="text-sm font-medium text-vam-ink">
         Tìm mentor
         <input
@@ -283,7 +297,7 @@ export function BatchRenewalInviteForm({
           const badge = STATUS_BADGE[mentor.status];
           const checked = selectedSet.has(mentor.personId);
           const blockedByLimit = !checked && remainingSlots <= 0;
-          const disabled = !mentor.selectable || blockedByLimit;
+          const disabled = !mentor.batchSelectable || blockedByLimit;
           return (
             <label
               key={mentor.personId}
@@ -313,26 +327,75 @@ export function BatchRenewalInviteForm({
         })}
         {!visible.length ? <p className="px-2 py-2 text-sm text-slate-500">Không có kết quả.</p> : null}
       </fieldset>
+      </>
+      ) : null}
 
-      <form action={action} className="grid gap-3 sm:grid-cols-[150px_auto] sm:items-end">
+      <form action={action} className="grid gap-3">
         <input type="hidden" name="program_id" value={programId} />
         <input type="hidden" name="season_id" value={seasonId} />
         <input type="hidden" name="person_ids" value={JSON.stringify(selected)} />
-        <label className="text-sm font-medium text-vam-ink">
-          Hiệu lực (ngày)
-          <input
-            name="expires_days"
-            type="number"
-            min="1"
-            max="60"
-            step="1"
-            defaultValue="14"
-            className="mt-1 w-full rounded-md border border-vam-line px-3 py-2 text-sm"
-          />
-        </label>
-        <SubmitButton disabled={!selected.length} pendingText="Đang tạo link...">
-          {selected.length ? `Tạo link cho ${selected.length} mentor` : "Tạo link hàng loạt"}
-        </SubmitButton>
+
+        {!confirming ? (
+          <div className="grid gap-3 sm:grid-cols-[150px_auto] sm:items-end">
+            <label className="text-sm font-medium text-vam-ink">
+              Hiệu lực (ngày)
+              <input
+                name="expires_days"
+                type="number"
+                min="1"
+                max="60"
+                step="1"
+                value={expiryDays}
+                onChange={(event) => setExpiryDays(event.target.value)}
+                className="mt-1 w-full rounded-md border border-vam-line px-3 py-2 text-sm"
+              />
+            </label>
+            {/* type="button", NOT a submit: phase 1 renders no submit control at
+                all, so no token can be minted before the operator confirms. */}
+            <button
+              type="button"
+              disabled={!selected.length}
+              onClick={() => setConfirming(true)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-vam-green/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {selected.length ? `Tạo link cho ${selected.length} mentor` : "Tạo link hàng loạt"}
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-3 rounded-md border-2 border-vam-green bg-green-50/40 p-4">
+            {/* The expiry travels as a hidden field here so the value the
+                operator set in phase 1 is exactly the value submitted. */}
+            <input type="hidden" name="expires_days" value={expiryDays} />
+            <p className="text-sm font-semibold text-vam-ink">
+              Bạn sắp tạo {selected.length} link gia hạn Mentor — UEHM Season 12.
+            </p>
+            <ul className="grid gap-1 rounded-md border border-vam-line bg-white p-3 text-sm">
+              {selected.map((personId) => {
+                const mentor = byId.get(personId);
+                return (
+                  <li key={personId} className="text-vam-ink">
+                    {mentor?.fullName ?? personId} — {mentor?.mentorCode ?? "Không có mã"}
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-sm text-slate-600">
+              Hiệu lực: {expiryDays} ngày. Link chỉ hiển thị một lần sau khi tạo.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="inline-flex h-11 items-center justify-center rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <SubmitButton disabled={!selected.length} pendingText="Đang tạo link...">
+                {`Xác nhận tạo ${selected.length} link`}
+              </SubmitButton>
+            </div>
+          </div>
+        )}
       </form>
 
       {!selectableCount ? (

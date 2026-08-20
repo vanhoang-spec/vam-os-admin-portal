@@ -16,7 +16,11 @@ type Row = Record<string, any>;
  * mentor they expect is missing — while remaining unselectable, so the
  * eligibility RULE is unchanged.
  */
-export type RenewalMentorStatus = "eligible" | "has_live_invite" | "renewal_accepted";
+export type RenewalMentorStatus =
+  | "eligible"
+  | "has_live_invite"
+  | "renewal_accepted"
+  | "renewal_declined";
 
 export type RenewalMentorOption = {
   personId: string;
@@ -27,11 +31,27 @@ export type RenewalMentorOption = {
   email: string | null;
   status: RenewalMentorStatus;
   /**
-   * True only for `eligible`. The single-invite form and the batch action both
-   * gate on this, and the server re-derives it independently — the client is
-   * never trusted to decide who may receive a link.
+   * What the TRUSTED CREATE PATH would accept: no accepted renewal and no live
+   * invite for this person, season and role. This is the eligibility rule, and
+   * it is deliberately unchanged by the declined handling below — a mentor who
+   * declined is still a legitimate target for a deliberate re-invitation, and
+   * vam071_create_renewal_invite would still mint them a link.
+   *
+   * The single-invite form gates on THIS, so the individual re-invite path
+   * behaves exactly as it always has. The server re-derives it independently;
+   * the client is never trusted to decide who may receive a link.
    */
   selectable: boolean;
+  /**
+   * Additionally safe to sweep into a BULK selection.
+   *
+   * A mentor who already said no is excluded here — not because the system
+   * forbids re-inviting them, but because re-approaching someone who declined
+   * is a judgement call a human should make one at a time, and "select all
+   * filtered" must never make it silently on their behalf. It is a UI safety
+   * default layered ON TOP of eligibility, never a replacement for it.
+   */
+  batchSelectable: boolean;
 };
 
 export type RenewalConsoleRow = {
@@ -132,6 +152,11 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
   const membershipByPerson = new Map(memberships.data.map((row) => [String(row.person_id), row]));
   const acceptedPeople = new Set(invites.data.filter((row) => row.outcome === "accepted").map((row) => String(row.person_id)));
   const livePeople = new Set(invites.data.filter((row) => renewalInviteState(row) === "live").map((row) => String(row.person_id)));
+  // A mentor who answered "no". Derived from the invite's own recorded outcome,
+  // so this reads the decline lifecycle rather than changing it. Precedence
+  // below puts it BELOW live, so a mentor who declined and was later re-invited
+  // shows their current live link instead of a stale refusal.
+  const declinedPeople = new Set(invites.data.filter((row) => row.outcome === "declined").map((row) => String(row.person_id)));
 
   // The eligibility RULE is unchanged: a mentor may receive a link only when
   // they have exactly one canonical profile, a known person row, no accepted
@@ -147,11 +172,16 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
       const mentorCode = rows[0].mentor_code ? String(rows[0].mentor_code) : null;
       const email = person.email_primary ? String(person.email_primary) : null;
       const fullName = String(person.full_name || "Không tên");
+      // Precedence: accepted > live > declined > eligible. Live above declined
+      // matters — a mentor who declined and was deliberately re-invited holds a
+      // current link, and showing them as "Đã từ chối" would hide it.
       const status: RenewalMentorStatus = acceptedPeople.has(personId)
         ? "renewal_accepted"
         : livePeople.has(personId)
           ? "has_live_invite"
-          : "eligible";
+          : declinedPeople.has(personId)
+            ? "renewal_declined"
+            : "eligible";
       return {
         personId,
         label: `${fullName}${mentorCode ? ` · ${mentorCode}` : ""}${email ? ` · ${email}` : ""}`,
@@ -159,7 +189,12 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
         mentorCode,
         email,
         status,
-        selectable: status === "eligible"
+        // Eligibility, as the trusted create path defines it. A declined mentor
+        // stays TRUE here, which is what keeps the individual re-invite path
+        // working exactly as before.
+        selectable: status === "eligible" || status === "renewal_declined",
+        // Bulk-safe: declined mentors are withheld from sweep selection.
+        batchSelectable: status === "eligible"
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, "vi"));

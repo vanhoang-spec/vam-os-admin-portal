@@ -46,7 +46,11 @@ function mentor(n: number, over: Partial<RenewalMentorOption> = {}): RenewalMent
     mentorCode,
     email,
     status,
-    selectable: over.selectable ?? status === "eligible"
+    // Mirrors lib/renewal-console.ts: a declined mentor stays ELIGIBLE for the
+    // trusted create path (so the individual re-invite flow still offers them)
+    // but is withheld from bulk selection.
+    selectable: over.selectable ?? (status === "eligible" || status === "renewal_declined"),
+    batchSelectable: over.batchSelectable ?? status === "eligible"
   };
 }
 
@@ -55,7 +59,10 @@ const ROSTER = [
   mentor(2),
   mentor(3, { fullName: "Nguyễn Đức Thắng", mentorCode: "UEHM-S9-114", email: "thang@example.com" }),
   mentor(4, { status: "has_live_invite" }),
-  mentor(5, { status: "renewal_accepted" })
+  mentor(5, { status: "renewal_accepted" }),
+  // Named without "Validation" on purpose so it does not disturb the existing
+  // "Validation" match-count assertions.
+  mentor(6, { fullName: "Declined Mentor 06", status: "renewal_declined" })
 ];
 
 function renderPicker(mentors: RenewalMentorOption[] = ROSTER) {
@@ -455,5 +462,155 @@ describe("M075 picker — never escalates a bad state into a route error", () =>
     };
     expect(() => renderPicker()).not.toThrow();
     expect(screen.getByText("some_future_outcome")).toBeTruthy();
+  });
+});
+
+describe("M076 picker — explicit batch confirmation", () => {
+  function confirmTrigger() {
+    return screen.getByRole("button", { name: /Tạo link (cho \d+ mentor|hàng loạt)/i });
+  }
+  function submitButtons() {
+    return Array.from(document.querySelectorAll('button[type="submit"]'));
+  }
+
+  it("renders NO submit control before confirmation, so nothing can be minted", () => {
+    renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    // Structural guarantee: there is no submit button to press, so neither a
+    // click nor an Enter keypress can dispatch the action.
+    expect(submitButtons()).toHaveLength(0);
+    expect(screen.queryByText(/Bạn sắp tạo/i)).toBeNull();
+  });
+
+  it("shows the confirmation with the exact count", () => {
+    renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.click(checkboxFor("Validation Mentor 02"));
+    fireEvent.click(confirmTrigger());
+    expect(screen.getByText(/Bạn sắp tạo 2 link gia hạn Mentor — UEHM Season 12\./i)).toBeTruthy();
+  });
+
+  it("lists every selected mentor with name and mentor code", () => {
+    renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.click(checkboxFor("Validation Mentor 02"));
+    fireEvent.click(confirmTrigger());
+    expect(screen.getByText("Validation Mentor 01 — VM-001")).toBeTruthy();
+    expect(screen.getByText("Validation Mentor 02 — VM-002")).toBeTruthy();
+  });
+
+  it("exposes exactly one submit control once confirmed", () => {
+    renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.click(confirmTrigger());
+    expect(submitButtons()).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /Xác nhận tạo 1 link/i })).toBeTruthy();
+  });
+
+  it("hides the picker while confirming so the selection cannot drift", () => {
+    renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.click(confirmTrigger());
+    expect(screen.queryByLabelText(/Tìm mentor/i)).toBeNull();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("cancel creates nothing and preserves the selection exactly", () => {
+    const { container } = renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.click(checkboxFor("Validation Mentor 02"));
+    const before = personIdsField(container).value;
+    fireEvent.click(confirmTrigger());
+    fireEvent.click(screen.getByRole("button", { name: "Hủy" }));
+
+    expect(submitButtons()).toHaveLength(0);          // back to a mint-proof phase
+    expect(screen.getByText("Đã chọn 2 mentor")).toBeTruthy();
+    expect(personIdsField(container).value).toBe(before);
+    expect(screen.getByLabelText(/Tìm mentor/i)).toBeTruthy();
+  });
+
+  it("submits exactly the confirmed people", () => {
+    const { container } = renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.click(checkboxFor("Validation Mentor 02"));
+    fireEvent.click(confirmTrigger());
+    const ids = JSON.parse(personIdsField(container).value);
+    expect(ids).toHaveLength(2);
+    expect(ids).toEqual([ROSTER[0].personId, ROSTER[1].personId]);
+  });
+
+  it("works for a single mentor", () => {
+    renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.click(confirmTrigger());
+    expect(screen.getByText(/Bạn sắp tạo 1 link/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Xác nhận tạo 1 link/i })).toBeTruthy();
+  });
+
+  it("works at the 25-mentor ceiling", () => {
+    const many = Array.from({ length: RENEWAL_BATCH_MAX_SIZE + 10 }, (_, i) => mentor(i + 1));
+    renderPicker(many);
+    fireEvent.click(screen.getByText(/Chọn tất cả kết quả đang lọc/i));
+    fireEvent.click(confirmTrigger());
+    expect(screen.getByText(new RegExp(`Bạn sắp tạo ${RENEWAL_BATCH_MAX_SIZE} link`))).toBeTruthy();
+    expect(screen.getByRole("button", { name: new RegExp(`Xác nhận tạo ${RENEWAL_BATCH_MAX_SIZE} link`) })).toBeTruthy();
+  });
+
+  it("carries the operator's expiry through confirmation instead of reverting it", () => {
+    const { container } = renderPicker();
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    fireEvent.change(container.querySelector('input[name="expires_days"]') as HTMLInputElement, {
+      target: { value: "21" }
+    });
+    fireEvent.click(confirmTrigger());
+    expect(screen.getByText(/Hiệu lực: 21 ngày/i)).toBeTruthy();
+    expect((container.querySelector('input[name="expires_days"]') as HTMLInputElement).value).toBe("21");
+  });
+
+  it("cannot open confirmation with an empty selection", () => {
+    renderPicker();
+    expect((confirmTrigger() as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/Bạn sắp tạo/i)).toBeNull();
+  });
+});
+
+describe("M076 picker — previously declined mentors", () => {
+  it("labels a mentor who declined and has no newer live invite", () => {
+    renderPicker();
+    expect(screen.getByText("Đã từ chối")).toBeTruthy();
+  });
+
+  it("does not offer them for ordinary batch selection", () => {
+    renderPicker();
+    expect(checkboxFor("Declined Mentor 06").disabled).toBe(true);
+  });
+
+  it("cannot be swept into a selection even if the checkbox is driven directly", () => {
+    const { container } = renderPicker();
+    fireEvent.click(checkboxFor("Declined Mentor 06"));
+    expect(screen.getByText("Đã chọn 0 mentor")).toBeTruthy();
+    expect(JSON.parse(personIdsField(container).value)).toEqual([]);
+  });
+
+  it("is excluded from select-all-filtered", () => {
+    const { container } = renderPicker();
+    fireEvent.change(searchBox(), { target: { value: "Declined" } });
+    expect(screen.queryByText(/Chọn tất cả kết quả đang lọc/i)).toBeNull();
+    expect(JSON.parse(personIdsField(container).value)).toEqual([]);
+  });
+
+  it("keeps the accepted and live-invite protections unchanged", () => {
+    renderPicker();
+    expect(checkboxFor("Validation Mentor 04").disabled).toBe(true);   // live invite
+    expect(checkboxFor("Validation Mentor 05").disabled).toBe(true);   // accepted
+    expect(screen.getByText("Đã có link")).toBeTruthy();
+    expect(screen.getByText("Đã gia hạn")).toBeTruthy();
+  });
+
+  it("still allows ordinary eligible mentors through", () => {
+    renderPicker();
+    expect(checkboxFor("Validation Mentor 01").disabled).toBe(false);
+    fireEvent.click(checkboxFor("Validation Mentor 01"));
+    expect(screen.getByText("Đã chọn 1 mentor")).toBeTruthy();
   });
 });
