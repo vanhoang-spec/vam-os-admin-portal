@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { seedMentorFieldsFromApplication } from "@/lib/mentor-cross-fields";
 import { clampCapacity, DEFAULT_MAX_MENTEES } from "@/lib/mentor-confirmations-core";
 import type { MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
@@ -89,6 +90,46 @@ export type ApproveApplicationResult =
  * did not state a number takes at most one mentee. An operator can raise it
  * afterwards on /mentors/season-confirmations.
  */
+/**
+ * Give a newly approved mentor the fields they named on their application.
+ *
+ * Reads the same two things seedMentorSeasonConfirmation reads — the batch's
+ * season and the application's raw payload — and hands them to the shared
+ * seeder, which refuses to overwrite anything the mentor has already said.
+ */
+async function seedCrossFieldsForApproval(
+  client: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
+  input: { applicationId: string; personId: string; intakeBatchId: string | null }
+) {
+  try {
+    if (!input.intakeBatchId) return;
+
+    const { data: batch } = await client
+      .from("intake_batches")
+      .select("season_id")
+      .eq("id", input.intakeBatchId)
+      .maybeSingle();
+
+    const seasonId = (batch as { season_id?: string | null } | null)?.season_id ?? null;
+    if (!seasonId) return;
+
+    const { data: appRow } = await client
+      .from("applications")
+      .select("raw_payload")
+      .eq("id", input.applicationId)
+      .maybeSingle();
+
+    await seedMentorFieldsFromApplication(client, {
+      personId: input.personId,
+      seasonId,
+      rawPayload:
+        (appRow as { raw_payload?: Record<string, unknown> | null } | null)?.raw_payload ?? null
+    });
+  } catch (err) {
+    log("seed cross fields (non-fatal)", err);
+  }
+}
+
 async function seedMentorSeasonConfirmation(
   client: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
   input: {
@@ -419,6 +460,16 @@ export async function approveApplication(
       mentorProfileId: profileId,
       intakeBatchId: input.intakeBatchId ?? null,
       approvedByAdminUserId: input.approvedByAdminUserId ?? null
+    });
+
+    // Carry the fields they named on the application onto the season, so a
+    // mentor who never opens the portal still appears in the cross-mentoring
+    // sweep. Non-fatal by construction: a missing field must never fail an
+    // approval.
+    await seedCrossFieldsForApproval(client, {
+      applicationId: input.applicationId,
+      personId: person.id,
+      intakeBatchId: input.intakeBatchId ?? null
     });
   }
 

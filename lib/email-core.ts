@@ -30,7 +30,13 @@ export type EmailKind =
   // Server-authored like the two above it, not a template anybody has to approve.
   | "recap_period_reminder"
   // The letter that gives a mentor or a mentee their account (migration 071).
-  | "participant_invite";
+  | "participant_invite"
+  // Cross-mentoring (migration 072). The first carries a token a mentor answers
+  // through; the other three simply tell somebody what was decided.
+  | "cross_invite"
+  | "cross_selected"
+  | "cross_not_selected"
+  | "cross_scheduled";
 
 export type EmailMessage = {
   to: string;
@@ -642,6 +648,222 @@ export function buildParticipantInviteEmail(input: {
           ? `<p>Chương trình: <strong>${escapeHtml(programs[0])}</strong>.</p>`
           : "",
       "<p>Đường dẫn này chỉ dùng được một lần và sẽ hết hạn. Nếu quá hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Ask a mentor whether they can take a cross-mentoring session.
+ *
+ * Carries the field and the topic and nothing about who asked. A mentee wanting
+ * to talk about their career is theirs to disclose in the room, not ours to put
+ * in a letter to twenty mentors.
+ */
+export function buildCrossInviteEmail(input: {
+  mentorName: string;
+  fieldLabel: string;
+  topic?: string | null;
+  seasonLabel: string;
+  respondUrl: string;
+  deadlineLabel?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName);
+  const field = safeDisplayName(input.fieldLabel, "một lĩnh vực");
+  const season = safeDisplayName(input.seasonLabel, "mùa này");
+  const topic = input.topic ? safeDisplayName(input.topic, "") : "";
+  const deadline = input.deadlineLabel ? safeDisplayName(input.deadlineLabel) : null;
+
+  const subject = `[VAM Mentoring] Mời anh/chị nhận một buổi cross-mentoring — ${field}`;
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Có một bạn mentee ${season} mong được nghe chia sẻ về ${field}.`,
+    ""
+  ];
+  if (topic) lines.push(`Bạn ấy quan tâm tới: ${topic}`, "");
+  lines.push(
+    "Nếu anh/chị nhận lời, vui lòng bấm vào đường dẫn dưới đây. Ở đó anh/chị có thể",
+    "điền vài khung giờ rảnh — không bắt buộc, nhưng có thì ban tổ chức xếp lịch dễ hơn:",
+    input.respondUrl,
+    ""
+  );
+  if (deadline) lines.push(`Ban tổ chức mong nhận phản hồi trước ${deadline}.`, "");
+  lines.push(
+    "Có thể nhiều mentor cùng nhận lời cho buổi này, nên ban tổ chức sẽ chọn một",
+    "người và báo lại anh/chị sau. Nhận lời mà chưa được xếp lần này thì lần sau",
+    "anh/chị vẫn nằm trong danh sách mời.",
+    "",
+    "Trân trọng cảm ơn anh/chị.",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Có một bạn mentee ${escapeHtml(season)} mong được nghe chia sẻ về <strong>${escapeHtml(field)}</strong>.</p>`,
+      topic ? `<p>Bạn ấy quan tâm tới: ${escapeHtml(topic)}</p>` : "",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.respondUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Trả lời lời mời</a></p>`,
+      "<p>Ở đó anh/chị có thể điền vài khung giờ rảnh — không bắt buộc, nhưng có thì ban tổ chức xếp lịch dễ hơn.</p>",
+      deadline ? `<p>Ban tổ chức mong nhận phản hồi trước <strong>${escapeHtml(deadline)}</strong>.</p>` : "",
+      "<p>Có thể nhiều mentor cùng nhận lời cho buổi này, nên ban tổ chức sẽ chọn một người và báo lại anh/chị sau. Nhận lời mà chưa được xếp lần này thì lần sau anh/chị vẫn nằm trong danh sách mời.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/** Tell a mentor the session is theirs. */
+export function buildCrossSelectedEmail(input: {
+  mentorName: string;
+  fieldLabel: string;
+  seasonLabel: string;
+  timeLabel?: string | null;
+  location?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName);
+  const field = safeDisplayName(input.fieldLabel, "một lĩnh vực");
+  const time = input.timeLabel ? safeDisplayName(input.timeLabel) : null;
+  const place = input.location ? safeDisplayName(input.location, "") : null;
+
+  const subject = `[VAM Mentoring] Anh/chị nhận buổi cross-mentoring — ${field}`;
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Cảm ơn anh/chị đã nhận lời. Ban tổ chức xin mời anh/chị phụ trách buổi cross-mentoring về ${field}.`,
+    ""
+  ];
+  if (time) lines.push(`Thời gian dự kiến: ${time}`);
+  if (place) lines.push(`Địa điểm: ${place}`);
+  if (time || place) lines.push("");
+  if (!time && !place) {
+    lines.push("Thời gian và địa điểm ban tổ chức sẽ báo lại anh/chị trong ít ngày tới.", "");
+  }
+  lines.push(
+    "Ban tổ chức sẽ mở đăng ký cho các bạn mentee và gửi anh/chị danh sách trước buổi gặp.",
+    "",
+    "Trân trọng cảm ơn anh/chị.",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Cảm ơn anh/chị đã nhận lời. Ban tổ chức xin mời anh/chị phụ trách buổi cross-mentoring về <strong>${escapeHtml(field)}</strong>.</p>`,
+      time ? `<p>Thời gian dự kiến: <strong>${escapeHtml(time)}</strong></p>` : "",
+      place ? `<p>Địa điểm: <strong>${escapeHtml(place)}</strong></p>` : "",
+      !time && !place
+        ? "<p>Thời gian và địa điểm ban tổ chức sẽ báo lại anh/chị trong ít ngày tới.</p>"
+        : "",
+      "<p>Ban tổ chức sẽ mở đăng ký cho các bạn mentee và gửi anh/chị danh sách trước buổi gặp.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Tell a mentor the session went to somebody else.
+ *
+ * The hardest of the four to write, and the one most worth writing carefully: a
+ * mentor who volunteered and was passed over has done nothing wrong, and the
+ * letter should not read as though they had. It also says plainly that they
+ * stay on the list, because the alternative reading — "we are done asking you"
+ * — is the one that loses a mentor.
+ */
+export function buildCrossNotSelectedEmail(input: {
+  mentorName: string;
+  fieldLabel: string;
+  seasonLabel: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName);
+  const field = safeDisplayName(input.fieldLabel, "lĩnh vực này");
+
+  const subject = "[VAM Mentoring] Buổi cross-mentoring lần này đã có người phụ trách";
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    `Cảm ơn anh/chị đã nhận lời cho buổi cross-mentoring về ${field}.`,
+    "",
+    "Lần này ban tổ chức đã xếp được một mentor khác, chủ yếu vì lý do lịch và",
+    "để chia đều cơ hội giữa các anh/chị mentor — không phải vì hồ sơ hay chuyên môn.",
+    "",
+    "Anh/chị vẫn nằm trong danh sách mời cho những buổi tiếp theo cùng lĩnh vực.",
+    "",
+    "Trân trọng cảm ơn anh/chị đã sẵn lòng.",
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Cảm ơn anh/chị đã nhận lời cho buổi cross-mentoring về <strong>${escapeHtml(field)}</strong>.</p>`,
+      "<p>Lần này ban tổ chức đã xếp được một mentor khác, chủ yếu vì lý do lịch và để chia đều cơ hội giữa các anh/chị mentor — không phải vì hồ sơ hay chuyên môn.</p>",
+      "<p>Anh/chị vẫn nằm trong danh sách mời cho những buổi tiếp theo cùng lĩnh vực.</p>",
+      "<p>Trân trọng cảm ơn anh/chị đã sẵn lòng.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Tell the mentee their wish became a session.
+ *
+ * Without this letter a mentee submits a request and hears nothing until an
+ * event appears out of nowhere.
+ */
+export function buildCrossScheduledEmail(input: {
+  menteeName: string;
+  fieldLabel: string;
+  timeLabel?: string | null;
+  location?: string | null;
+  registerUrl?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.menteeName, "bạn");
+  const field = safeDisplayName(input.fieldLabel, "lĩnh vực bạn đề xuất");
+  const time = input.timeLabel ? safeDisplayName(input.timeLabel) : null;
+  const place = input.location ? safeDisplayName(input.location, "") : null;
+
+  const subject = `[VAM Mentoring] Buổi cross-mentoring bạn đề xuất đã có lịch — ${field}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Đề xuất cross-mentoring của bạn về ${field} đã được ban tổ chức xếp lịch.`,
+    ""
+  ];
+  if (time) lines.push(`Thời gian: ${time}`);
+  if (place) lines.push(`Địa điểm: ${place}`);
+  if (time || place) lines.push("");
+  if (input.registerUrl) {
+    lines.push("Bạn đăng ký tham dự tại đây:", input.registerUrl, "");
+  }
+  lines.push(
+    "Buổi này mở cho các bạn mentee khác cùng tham dự, nên nhớ đăng ký sớm nhé.",
+    "",
+    "Hẹn gặp bạn,",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Đề xuất cross-mentoring của bạn về <strong>${escapeHtml(field)}</strong> đã được ban tổ chức xếp lịch.</p>`,
+      time ? `<p>Thời gian: <strong>${escapeHtml(time)}</strong></p>` : "",
+      place ? `<p>Địa điểm: <strong>${escapeHtml(place)}</strong></p>` : "",
+      input.registerUrl
+        ? `<p style="margin:20px 0"><a href="${escapeHtml(input.registerUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đăng ký tham dự</a></p>`
+        : "",
+      "<p>Buổi này mở cho các bạn mentee khác cùng tham dự, nên nhớ đăng ký sớm nhé.</p>"
     ].join("")
   );
 

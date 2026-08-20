@@ -7,6 +7,7 @@ export type EventTypeValue =
   | "closing"
   | "business_case"
   | "job_shadowing"
+  | "cross_mentoring"
   | "other";
 
 export type AttendanceStatusValue =
@@ -29,6 +30,7 @@ export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }>
   { value: "closing", label: "Tổng kết / Closing" },
   { value: "business_case", label: "Business case" },
   { value: "job_shadowing", label: "Job shadowing" },
+  { value: "cross_mentoring", label: "Cross-mentoring" },
   { value: "other", label: "Khác" }
 ];
 

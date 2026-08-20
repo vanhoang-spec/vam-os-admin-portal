@@ -35,6 +35,12 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const showAdminTier = roleIn(role, ["super_admin", "admin", "core_team"]);
   const showUserMgmt = roleIn(role, ["super_admin", "admin"]);
 
+  // Cross-mentoring triage is the second predicate that includes support_team,
+  // and it is there on the owner's explicit instruction: approving a mentee's
+  // wish and picking a mentor is coordination, which is their job. Publishing
+  // the session is not — that stays with canPublishCrossSession.
+  const showCross = roleIn(role, ["super_admin", "admin", "core_team", "support_team"]);
+
   const groups: NavGroupDef[] = [
     role === "super_admin"
       ? {
@@ -57,11 +63,21 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/operations/tasks", label: "Nhiệm vụ & phân công" },
             { href: "/operations/monthly", label: "Báo cáo tháng" },
             { href: "/operations/intelligence", label: "Phân tích mùa" },
+            { href: "/operations/cross", label: "Cross-mentoring" },
             { href: "/recaps/create", label: "Tạo báo cáo" },
             { href: "/operations/recap-import", label: "Thu recap từ Facebook" },
           ],
         }
-      : { key: "operations", label: "Vận hành", href: "/operations" },
+      : showCross
+        ? {
+            key: "operations",
+            label: "Vận hành",
+            items: [
+              { href: "/operations", label: "Tổng quan vận hành" },
+              { href: "/operations/cross", label: "Cross-mentoring" }
+            ]
+          }
+        : { key: "operations", label: "Vận hành", href: "/operations" },
     {
       key: "community",
       label: "Cộng đồng VAM",
