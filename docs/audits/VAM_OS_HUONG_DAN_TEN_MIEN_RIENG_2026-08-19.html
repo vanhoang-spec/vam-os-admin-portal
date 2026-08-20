@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Hướng dẫn đưa web app về tên miền riêng</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; padding-left: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 32%; }
+
+  .note, .stop {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+
+  .check { background: var(--mint); border: 1px solid #bfe2cd; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+<style>
+  .kv { font-family: Consolas, "Courier New", monospace; font-size: 9pt; }
+  .yes { color: var(--green-dark); font-weight: 700; }
+  .no  { color: var(--stop-ink); font-weight: 700; }
+  .split { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; margin: 10px 0 16px; }
+  .sbox { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; text-align: center; }
+  .sbox.hi { background: var(--mint); border-color: #bfe2cd; }
+  .sbox .st { font-weight: 700; font-size: 11pt; margin-bottom: 3px; }
+  .sbox .ss { font-size: 9pt; color: var(--muted); }
+  .plus { font-size: 16pt; color: var(--green); font-weight: 700; }
+  .opt { border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px; margin-bottom: 10px; page-break-inside: avoid; }
+  .opt.pick { background: var(--mint); border-color: #bfe2cd; }
+  .opt h4 { margin: 0 0 4px; font-size: 11pt; }
+  .opt .price { float: right; font-size: 10pt; font-weight: 700; color: var(--green-dark); }
+  .opt p { margin: 0; font-size: 9.5pt; color: var(--muted); }
+  .badge { display: inline-block; font-size: 8pt; font-weight: 700; padding: 1px 8px; border-radius: 20px; background: var(--green); color: #fff; margin-left: 6px; vertical-align: middle; }
+  .badge.warn { background: #b45309; }
+  td.mono { font-family: Consolas, "Courier New", monospace; font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Tài liệu vận hành</div>
+  <h1>Đưa web app về<br />tên miền của anh</h1>
+  <div class="sub">Hướng dẫn từng bước — không cần biết lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Anh hỏi: nếu không deploy trên Vercel mà deploy trên tên miền của anh thì làm thế nào. Có một
+    điều cần tách bạch trước, và nó quyết định toàn bộ câu trả lời:
+    <strong>tên miền là địa chỉ, không phải nơi chạy phần mềm.</strong>
+  </p>
+  <p class="lead">
+    Tin tốt: anh <strong>hoàn toàn đưa được web app về địa chỉ của mình</strong>, miễn phí, chỉ bằng
+    vài dòng cấu hình DNS — mà không cần bỏ Vercel. Còn nếu muốn bỏ Vercel thật thì đó không còn là
+    việc no-code nữa; tài liệu này nói rõ vì sao và mất những gì.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Thời gian cần</dt><dd>~15 phút, cộng thời gian DNS lan truyền</dd></div>
+    <div><dt>Chi phí thêm</dt><dd>0 đồng</dd></div>
+    <div><dt>Phải sửa code</dt><dd>Không</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ KHÁI NIỆM ══════════ -->
+<section class="page">
+  <h2 class="plain">Tên miền và nơi chạy app là hai thứ khác nhau</h2>
+
+  <div class="split">
+    <div class="sbox">
+      <div class="st">Tên miền</div>
+      <div class="ss">Địa chỉ<br />Ví dụ: <span class="kv">vam.edu.vn</span></div>
+    </div>
+    <div class="plus">+</div>
+    <div class="sbox hi">
+      <div class="st">Nơi chạy app</div>
+      <div class="ss">Cái máy thực sự chạy phần mềm<br />Hôm nay là Vercel</div>
+    </div>
+  </div>
+
+  <p>
+    Giống như số nhà và căn nhà. Anh có quyền quản trị <strong>tên miền</strong> nghĩa là anh quyết định
+    số nhà này chỉ về đâu — nhưng vẫn phải có một căn nhà để chỉ tới. Web app VAM OS không phải một
+    trang web tĩnh: nó có phần chạy phía máy chủ (đăng nhập, truy vấn cơ sở dữ liệu, gửi email,
+    nhận dữ liệu từ tiện ích Chrome), nên cần một máy chủ thật sự chạy Node.js.
+  </p>
+
+  <div class="stop">
+    <h3>Hosting đi kèm tên miền thường KHÔNG chạy được app này</h3>
+    <p style="margin:0">
+      Nếu gói tên miền của anh có kèm hosting kiểu cPanel, DirectAdmin hay “web hosting” thông thường,
+      đó là loại chạy website tĩnh hoặc PHP. VAM OS là ứng dụng Next.js chạy trên Node.js —
+      <strong>tải mã nguồn lên hosting kiểu đó sẽ không chạy</strong>. Đây là hiểu lầm phổ biến nhất,
+      nên nói trước để anh không mất công.
+    </p>
+  </div>
+
+  <div class="check">
+    <h3>Nhưng điều anh thực sự muốn thì làm được ngay, và miễn phí</h3>
+    <p style="margin:0">
+      Giữ Vercel làm nơi chạy, và <strong>trỏ tên miền của anh vào đó</strong>. Người dùng gõ địa chỉ
+      của anh, không ai thấy chữ “vercel” ở đâu cả. Quan trọng hơn: vì DNS nằm trong tay anh, bất cứ
+      lúc nào anh cũng <strong>đổi hướng đi nơi khác được</strong> — đó mới là quyền kiểm soát thật sự,
+      và nó không phụ thuộc vào việc ai đứng tên tài khoản Vercel.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ BA PHƯƠNG ÁN ══════════ -->
+<section class="page">
+  <h2 class="plain">Ba phương án</h2>
+
+  <div class="opt pick">
+    <span class="price">0 đồng</span>
+    <h4>Phương án A — Giữ Vercel, trỏ tên miền của anh vào <span class="badge">Đề xuất</span></h4>
+    <p>
+      Thêm tên miền của anh vào dự án Vercel, rồi anh tạo một bản ghi DNS ở nhà cung cấp tên miền.
+      Web app chạy tại địa chỉ của anh, chứng chỉ bảo mật HTTPS Vercel tự cấp và tự gia hạn.
+      Gói Vercel miễn phí đã cho tới 50 tên miền mỗi dự án — <strong>không tốn thêm đồng nào</strong>.
+      Việc duy nhất cần người khác: một lần bấm thêm tên miền trong Vercel.
+    </p>
+  </div>
+
+  <div class="opt">
+    <span class="price">0 đồng thêm</span>
+    <h4>Phương án B — Chuyển dự án Vercel về tài khoản anh, rồi trỏ tên miền</h4>
+    <p>
+      Giống A, nhưng làm sau khi đã chuyển dự án Vercel sang tài khoản của anh (có tài liệu riêng).
+      Khi đó anh tự thêm tên miền, không cần nhờ ai. Đây là đích đến cuối cùng nên hướng tới.
+    </p>
+  </div>
+
+  <div class="opt">
+    <span class="price">~6–12 USD/tháng + người vận hành</span>
+    <h4>Phương án C — Bỏ Vercel, tự chạy trên máy chủ riêng <span class="badge warn">Không phải no-code</span></h4>
+    <p>
+      Thuê một máy chủ ảo (VPS), cài Node.js, cài máy chủ web, cài chứng chỉ bảo mật, cài công cụ
+      tự khởi động lại khi sập, rồi mỗi lần có bản mới phải tự đưa lên. Tiền máy rẻ hơn Vercel,
+      nhưng cần <strong>một người biết quản trị máy chủ Linux, thường xuyên</strong>. Trang 6 nói rõ
+      những gì sẽ mất.
+    </p>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th style="width:40%"></th><th style="width:20%">A / B</th><th>C</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="key">Chạy trên tên miền của anh</td><td><span class="yes">Có</span></td><td><span class="yes">Có</span></td></tr>
+      <tr><td class="key">Chi phí thêm mỗi tháng</td><td><strong>0 đồng</strong></td><td>~6–12 USD + công người</td></tr>
+      <tr><td class="key">HTTPS tự động gia hạn</td><td><span class="yes">Có</span></td><td>Phải tự cài, tự theo dõi</td></tr>
+      <tr><td class="key">Tự động cập nhật khi có code mới</td><td><span class="yes">Có</span></td><td><span class="no">Không</span> — làm tay từng lần</td></tr>
+      <tr><td class="key">Lịch nhắc thu recap tự chạy</td><td><span class="yes">Có</span></td><td><span class="no">Không</span> — phải dựng lại</td></tr>
+      <tr><td class="key">Cần người kỹ thuật thường trực</td><td>Không</td><td><span class="no">Có</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ CÁC BƯỚC ══════════ -->
+<section class="page">
+  <h2 class="plain">Phương án A — các bước cụ thể</h2>
+
+  <div class="note">
+    <h3>Nên dùng tên miền con, đừng dùng tên miền gốc</h3>
+    <p style="margin:0">
+      Ví dụ <span class="kv">os.vam.edu.vn</span> thay vì <span class="kv">vam.edu.vn</span>. Ba lý do:
+      không đụng gì tới website chính đang chạy trên tên miền gốc; cấu hình bằng bản ghi CNAME an toàn
+      hơn bản ghi IP cố định; và sau này muốn đổi nơi chạy thì chỉ sửa một dòng.
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Chọn địa chỉ muốn dùng</h3>
+      <p class="sub-step">
+        Ví dụ <span class="kv">os.vam.edu.vn</span>, <span class="kv">mentoring.vam.edu.vn</span> hoặc
+        <span class="kv">app.vam.edu.vn</span>. Chọn xong thì giữ luôn — địa chỉ này sẽ nằm trong hàng
+        trăm email đã và sẽ gửi cho mentor, mentee.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Anh Thắng: thêm tên miền vào dự án Vercel</h3>
+      <p class="sub-step">
+        Mở dự án VAM OS trên Vercel &rarr; <strong>Settings</strong> &rarr; <strong>Domains</strong>
+        &rarr; <strong>Add Domain</strong> &rarr; nhập địa chỉ đã chọn ở bước 1.
+      </p>
+      <p class="sub-step">
+        Vercel sẽ hiện ra <strong>chính xác bản ghi DNS cần tạo</strong>. Chụp màn hình đó gửi anh.
+      </p>
+      <div class="stop">
+        <h3>Đừng chép giá trị từ tài liệu này</h3>
+        <p style="margin:0">
+          Mỗi dự án Vercel có một giá trị CNAME <strong>riêng</strong>, dạng
+          <span class="kv">d1d4fc829fe7bc7c.vercel-dns-017.com</span>. Phải lấy đúng giá trị hiện trên
+          màn hình của dự án này. Chép nhầm giá trị ở đâu đó là trỏ nhầm sang dự án của người khác.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Anh: tạo bản ghi DNS</h3>
+      <p class="sub-step">
+        Đăng nhập trang quản lý tên miền của anh (nơi anh có quyền admin) &rarr; tìm mục
+        <strong>DNS</strong>, <strong>Quản lý DNS</strong> hoặc <strong>DNS Records</strong> &rarr;
+        <strong>Thêm bản ghi</strong>.
+      </p>
+      <table>
+        <thead><tr><th style="width:22%">Ô</th><th style="width:34%">Điền gì (tên miền con)</th><th>Điền gì (tên miền gốc)</th></tr></thead>
+        <tbody>
+          <tr><td class="key">Loại / Type</td><td class="mono">CNAME</td><td class="mono">A</td></tr>
+          <tr><td class="key">Tên / Host</td><td class="mono">os</td><td class="mono">@</td></tr>
+          <tr><td class="key">Giá trị / Value</td><td>Giá trị CNAME Vercel hiện ở bước 2</td><td>Địa chỉ IP Vercel hiện ở bước 2</td></tr>
+          <tr><td class="key">TTL</td><td colspan="2">Để mặc định, hoặc 3600</td></tr>
+        </tbody>
+      </table>
+      <p class="sub-step">Lưu lại.</p>
+      <p class="sub-step">
+        <strong>Làm sao biết đã đúng:</strong> quay lại màn hình Domains trên Vercel, sau vài phút
+        trạng thái chuyển thành <em>Valid Configuration</em> kèm dấu tick.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Chờ DNS lan truyền</h3>
+      <p class="sub-step">
+        Thường vài phút. Chậm nhất có thể tới 24–48 giờ tuỳ nhà cung cấp. Trong lúc chờ, địa chỉ
+        <span class="kv">.vercel.app</span> cũ vẫn chạy bình thường — không có khoảng gián đoạn nào.
+      </p>
+      <p class="sub-step">
+        Chứng chỉ bảo mật HTTPS do Vercel tự cấp và tự gia hạn, anh không phải làm gì.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ SAU KHI ĐỔI ══════════ -->
+<section class="page">
+  <h2 class="plain">Hai việc bắt buộc sau khi đổi địa chỉ</h2>
+
+  <p>
+    Đây là phần dễ quên nhất, và quên thì hậu quả im lặng — không có thông báo lỗi nào, chỉ là email
+    ngừng gửi được.
+  </p>
+
+  <div class="stop">
+    <h3>1 · Cập nhật biến <span class="kv">VAM_OS_PUBLIC_BASE_URL</span></h3>
+    <p style="margin:0 0 6px">
+      Đây là biến cấu hình cho web app biết địa chỉ chính thức của mình, dùng để dựng các đường link
+      đặt trong email gửi cho mentor và mentee.
+    </p>
+    <p style="margin:0">
+      Web app <strong>kiểm tra mọi đường link trước khi gửi</strong>: link nào không bắt đầu bằng đúng
+      địa chỉ này thì <strong>từ chối gửi email</strong>. Nếu biến vẫn ghi địa chỉ
+      <span class="kv">.vercel.app</span> cũ trong khi app đã chạy ở địa chỉ mới, thư mời xác nhận
+      của mentor sẽ báo <em>“Đường dẫn xác nhận không hợp lệ”</em> và không ai nhận được gì.
+    </p>
+  </div>
+
+  <p>
+    Sửa ở đâu: Vercel &rarr; dự án &rarr; <strong>Settings</strong> &rarr;
+    <strong>Environment Variables</strong> &rarr; sửa <span class="kv">VAM_OS_PUBLIC_BASE_URL</span>
+    thành <span class="kv">https://os.vam.edu.vn</span> (địa chỉ mới, <strong>không có dấu gạch chéo
+    ở cuối</strong>). Sau đó vào tab <strong>Deployments</strong> &rarr; bấm
+    <strong>Redeploy</strong> để bản mới nhận cấu hình mới.
+  </p>
+
+  <div class="check">
+    <h3>2 · Gửi thử một email thật</h3>
+    <p style="margin:0">
+      Đừng chỉ tin cấu hình. Vào chức năng gửi thư xác nhận mentor, gửi một thư về hộp thư của chính
+      anh, mở ra và <strong>bấm vào link trong thư</strong>. Nếu link mở đúng trang trên địa chỉ mới
+      thì mới coi như xong.
+    </p>
+  </div>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Các link cũ đã gửi đi thì sao?</h3>
+  <p>
+    Vẫn chạy. Địa chỉ <span class="kv">.vercel.app</span> không bị gỡ khi thêm tên miền mới — hai địa
+    chỉ cùng trỏ về một ứng dụng. Mentor nào còn giữ email cũ vẫn bấm vào được.
+  </p>
+</section>
+
+<!-- ══════════ PHƯƠNG ÁN C ══════════ -->
+<section class="page">
+  <h2 class="plain">Nếu vẫn muốn rời hẳn Vercel</h2>
+
+  <p>
+    Làm được, và không phải chuyện viển vông — nhưng nó đổi bản chất công việc từ “bấm vài nút” sang
+    “có một hệ thống máy chủ cần chăm”. Dưới đây là những gì mất, nói thẳng.
+  </p>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Mất tự động cập nhật khi có code mới</h3>
+      <p class="sub-step">
+        Hôm nay đẩy code lên là bản mới tự lên. Tự chạy máy chủ thì mỗi lần phải đăng nhập vào máy,
+        kéo code về, dựng lại, khởi động lại. Mỗi lần vài phút và có thể sai.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Mất bản xem thử cho mỗi thay đổi</h3>
+      <p class="sub-step">
+        Hôm nay mỗi pull request có một địa chỉ riêng để xem thử trước khi gộp. Đây là thứ giúp
+        anh duyệt được thay đổi mà không sợ hỏng bản thật.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Lịch nhắc thu recap sẽ ngừng chạy — và ngừng im lặng</h3>
+      <p class="sub-step">
+        Lịch chạy hằng ngày (nhắc BTC thu recap ngày 15 và cuối tháng) được khai báo trong tệp
+        <span class="kv">vercel.json</span>. <strong>Đây là chức năng riêng của Vercel.</strong>
+        Rời Vercel thì tệp đó không còn tác dụng, và <em>không có thông báo lỗi nào cả</em> — chỉ là
+        đến ngày 15 không ai nhận được thư nhắc.
+      </p>
+      <p class="sub-step">
+        Phải dựng lại bằng một dịch vụ hẹn giờ khác gọi vào địa chỉ
+        <span class="kv">/api/cron/recap-reminder</span> kèm mã bí mật. Thêm một thứ nữa để cấu hình
+        và theo dõi.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Phải tự lo chứng chỉ bảo mật</h3>
+      <p class="sub-step">
+        HTTPS phải tự cài và tự gia hạn định kỳ. Quên gia hạn thì trình duyệt hiện cảnh báo đỏ
+        “trang web không an toàn” cho toàn bộ người dùng.
+      </p>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>Có đường giữa: đổi sang nhà cung cấp khác, vẫn không phải quản trị máy chủ</h3>
+    <p style="margin:0">
+      Nếu lý do rời Vercel là chi phí hoặc quyền sở hữu chứ không phải muốn tự quản máy chủ, thì có
+      những nơi tương tự Vercel (Netlify, Render, Railway…) cũng chạy được app này và cũng có gói
+      miễn phí. Nhưng vẫn phải dựng lại phần hẹn giờ, và chuyển nhà cung cấp là <strong>một việc có
+      kế hoạch riêng</strong>, không phải một thay đổi cấu hình. Nếu anh muốn đi hướng này, nói tôi
+      dựng kế hoạch và ước lượng cụ thể.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ KIỂM TRA & TÓM TẮT ══════════ -->
+<section class="page">
+  <h2 class="plain">Kiểm tra và xử lý sự cố</h2>
+
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:40%">Việc kiểm tra</th><th>Kết quả đúng</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Mở địa chỉ mới trên trình duyệt</td><td>Ra trang đăng nhập VAM OS, có ổ khoá xanh</td></tr>
+      <tr><td>2</td><td>Đăng nhập và mở bảng vận hành</td><td>Chạy bình thường, có số liệu</td></tr>
+      <tr><td>3</td><td>Mở địa chỉ <span class="kv">.vercel.app</span> cũ</td><td>Vẫn chạy — link cũ trong email không gãy</td></tr>
+      <tr><td>4</td><td>Gửi một thư xác nhận mentor về hộp thư của anh</td><td>Nhận được thư, link trong thư mở đúng địa chỉ mới</td></tr>
+    </tbody>
+  </table>
+
+  <table>
+    <thead><tr><th style="width:42%">Hiện tượng</th><th>Nên làm gì</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Vercel báo <em>Invalid Configuration</em></td>
+        <td>Bản ghi DNS chưa đúng hoặc chưa lan truyền. Đợi thêm, rồi đối chiếu lại từng ô với ảnh chụp ở bước 2.</td>
+      </tr>
+      <tr>
+        <td>Trình duyệt báo trang không an toàn</td>
+        <td>Chứng chỉ chưa cấp xong. Đợi 10–15 phút. Vẫn vậy thì gỡ tên miền khỏi Vercel rồi thêm lại.</td>
+      </tr>
+      <tr>
+        <td>Địa chỉ mới mở ra website khác của trường</td>
+        <td>Bản ghi DNS bị trùng với bản ghi cũ cùng tên. Xoá bản ghi cũ, giữ bản ghi mới.</td>
+      </tr>
+      <tr>
+        <td>Email báo <em>“Đường dẫn xác nhận không hợp lệ”</em></td>
+        <td>Chưa cập nhật <span class="kv">VAM_OS_PUBLIC_BASE_URL</span>, hoặc đã sửa nhưng chưa redeploy.</td>
+      </tr>
+      <tr>
+        <td>Muốn quay lại như cũ</td>
+        <td>Xoá bản ghi DNS vừa tạo. Web app vẫn chạy ở địa chỉ <span class="kv">.vercel.app</span>. Không mất gì.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Tóm lại</h3>
+    <p style="margin:0 0 6px">
+      Anh <strong>không cần bỏ Vercel</strong> để web app chạy trên tên miền của anh. Thêm tên miền vào
+      dự án, tạo một bản ghi DNS, cập nhật một biến cấu hình, gửi thử một email. Xong, và không tốn
+      thêm đồng nào.
+    </p>
+    <p style="margin:0">
+      Vì DNS nằm trong tay anh, anh giữ được quyền quyết định cuối cùng: bất cứ lúc nào cũng đổi hướng
+      tên miền sang nơi khác được. Đó là quyền kiểm soát thực chất — và nó có được ngay hôm nay,
+      không cần chờ chuyển giao tài khoản nào.
+    </p>
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS · Hướng dẫn đưa web app về tên miền riêng · 19/08/2026 ·
+    Giá trị DNS phải lấy từ màn hình dự án, không chép từ tài liệu.
+  </footer>
+</section>
+
+</body>
+
+</html>

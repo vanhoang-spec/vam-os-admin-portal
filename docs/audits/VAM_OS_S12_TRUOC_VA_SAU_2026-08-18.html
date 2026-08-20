@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Quy trình mùa 12: trước và sau</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+
+  :root {
+    --green: #16834c;
+    --green-dark: #0f5d36;
+    --mint: #eaf6ef;
+    --ink: #14352a;
+    --muted: #5b6b64;
+    --line: #d9e3dd;
+    --before-bg: #fdf3f2;
+    --before-line: #f0cfcb;
+    --before-ink: #9a3128;
+    --after-bg: #f0f8f3;
+    --after-line: #bfe2cd;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: var(--ink);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul { margin: 0 0 8px; padding-left: 18px; }
+  li { margin-bottom: 4px; }
+  strong { font-weight: 600; }
+
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  /* ── Cover ─────────────────────────────────────────────── */
+  .cover {
+    height: 252mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .cover .eyebrow {
+    font-size: 10pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--green);
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; letter-spacing: -0.01em; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta {
+    margin-top: 30px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px 26px;
+    max-width: 155mm;
+  }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  /* ── Section headers ───────────────────────────────────── */
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    border-bottom: 2px solid var(--green);
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+  .section-head .num {
+    font-size: 22pt;
+    font-weight: 700;
+    color: var(--green);
+    line-height: 1;
+  }
+  .section-head h2 { font-size: 15pt; }
+  .section-head .tag {
+    margin-left: auto;
+    font-size: 8.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--green-dark);
+    background: var(--mint);
+    border: 1px solid var(--after-line);
+    border-radius: 999px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+
+  h2.plain {
+    font-size: 15pt;
+    border-bottom: 2px solid var(--green);
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+
+  /* ── Before / after cards ──────────────────────────────── */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .card { border-radius: 8px; padding: 12px 14px; border: 1px solid var(--line); }
+  .card h3 {
+    font-size: 9pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .card ul { padding-left: 16px; margin-bottom: 0; }
+  .card.before { background: var(--before-bg); border-color: var(--before-line); }
+  .card.before h3 { color: var(--before-ink); }
+  .card.after { background: var(--after-bg); border-color: var(--after-line); }
+  .card.after h3 { color: var(--green-dark); }
+
+  .why {
+    border-left: 3px solid var(--green);
+    background: #fbfdfc;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    font-size: 10pt;
+  }
+  .why b { color: var(--green-dark); }
+
+  .seen {
+    font-size: 9.5pt;
+    color: var(--muted);
+    border-top: 1px dashed var(--line);
+    padding-top: 8px;
+  }
+  .seen code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9pt;
+    background: #f3f6f4;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 4px;
+    color: var(--ink);
+  }
+
+  /* ── Tables ────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint);
+    font-size: 8.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--green-dark);
+    border-bottom: 1px solid var(--after-line);
+  }
+  td.step { font-weight: 600; width: 26%; }
+  .pill {
+    display: inline-block;
+    font-size: 8pt;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+  .pill.new { background: var(--mint); color: var(--green-dark); border: 1px solid var(--after-line); }
+  .pill.fix { background: #fff6e8; color: #8a5a12; border: 1px solid #f0dcbb; }
+
+  /* ── Flow diagram ──────────────────────────────────────── */
+  .flow { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .flow-row { display: flex; align-items: stretch; gap: 8px; }
+  .flow-box {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 9.5pt;
+    background: #fff;
+  }
+  .flow-box .t { font-weight: 600; display: block; margin-bottom: 2px; }
+  .flow-box .d { color: var(--muted); font-size: 8.5pt; }
+  .flow-box.is-new { background: var(--after-bg); border-color: var(--after-line); }
+  .flow-arrow { align-self: center; color: var(--green); font-weight: 700; }
+
+  .note {
+    background: #fffdf5;
+    border: 1px solid #f0e2bb;
+    border-radius: 8px;
+    padding: 11px 14px;
+    font-size: 10pt;
+    margin-bottom: 12px;
+  }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+
+  .safe {
+    background: var(--mint);
+    border: 1px solid var(--after-line);
+    border-radius: 8px;
+    padding: 11px 14px;
+    margin-bottom: 12px;
+  }
+  .safe h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  ol.checklist { padding-left: 0; list-style: none; counter-reset: step; margin: 0; }
+  ol.checklist > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 34px;
+    margin-bottom: 13px;
+    page-break-inside: avoid;
+  }
+  ol.checklist > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--green);
+    color: #fff;
+    font-weight: 700;
+    font-size: 10pt;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ol.checklist h3 { font-size: 11pt; margin-bottom: 3px; }
+
+  .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .kv div {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .kv .n { font-size: 17pt; font-weight: 700; color: var(--green); line-height: 1.1; }
+  .kv .l { font-size: 8.5pt; color: var(--muted); margin-top: 3px; }
+
+  footer.doc-foot {
+    margin-top: 20px;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+    font-size: 8.5pt;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ TRANG BÌA ══════════════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Vietnam Alumni Mentoring</div>
+  <h1>Quy trình tuyển mentee mùa 12:<br />trước và sau</h1>
+  <div class="sub">Tài liệu dành cho người duyệt merge — không cần đọc code</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Tài liệu này so sánh <strong>bản đang chạy trên production hôm nay</strong> với <strong>phần đã làm
+    trong ngày 18/08/2026</strong>, đi theo đúng hành trình của một bạn mentee: nộp hồ sơ → nhận email
+    xác nhận → được mentor chấm điểm → được xếp lịch phỏng vấn → được mentor chọn ngay sau phỏng vấn
+    (vòng 1) → phần còn lại được AI đề xuất ghép cặp để ban tổ chức duyệt.
+  </p>
+  <p class="lead">
+    Mỗi phần có ba khối: <strong>hiện tại đang thế nào</strong>, <strong>sau khi merge sẽ thế nào</strong>,
+    và <strong>vì sao điều đó quan trọng</strong>. Trang cuối là danh sách việc cần làm để đưa lên
+    production.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>18 tháng 8, 2026</dd></div>
+    <div><dt>Phạm vi</dt><dd>4 giai đoạn · 3 pull request xếp chồng</dd></div>
+    <div><dt>Thứ tự merge</dt><dd>#35 → #36 → #37</dd></div>
+    <div><dt>Nhánh gốc</dt><dd>migration-062-v3-membership-lifecycle (bản đang chạy production)</dd></div>
+  </div>
+</section>
+
+<!-- ══════════════════ TOÀN CẢNH ══════════════════ -->
+<section class="page">
+  <h2 class="plain">Toàn cảnh: 7 bước, nhìn trong một trang</h2>
+
+  <div class="kv">
+    <div><div class="n">4</div><div class="l">migration cơ sở dữ liệu (chỉ thêm mới)</div></div>
+    <div><div class="n">9</div><div class="l">màn hình mới hoặc được nâng cấp</div></div>
+    <div><div class="n">2.215</div><div class="l">test tự động, tất cả đang xanh</div></div>
+    <div><div class="n">0</div><div class="l">cột dữ liệu cũ bị xoá hoặc đổi</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">Bước</th>
+        <th style="width:39%">Hiện tại (production)</th>
+        <th style="width:39%">Sau khi merge</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="step">1. Nhận hồ sơ mentee</td>
+        <td>Nộp xong không có phản hồi nào. Không có gì chặn nộp hàng loạt.</td>
+        <td><span class="pill new">Mới</span> Email xác nhận tự động, chặn bot và giới hạn số lượt nộp.</td>
+      </tr>
+      <tr>
+        <td class="step">2. Mentor xác nhận mùa mới</td>
+        <td>Không có chỗ lưu. Hệ thống mặc định mọi mentor nhận tối đa 3 mentee.</td>
+        <td><span class="pill new">Mới</span> Link riêng cho từng mentor, hoặc team tick tay sau khi gọi điện. Hạn mức là của từng người.</td>
+      </tr>
+      <tr>
+        <td class="step">3. Chia hồ sơ cho mentor chấm</td>
+        <td>Có chia, nhưng danh sách người chấm bỏ sót toàn bộ mentor mùa 11. Không giới hạn số hồ sơ mỗi người, không có email báo.</td>
+        <td><span class="pill new">Nâng cấp</span> Người chấm lấy từ mentor đã xác nhận; chia theo lô 10 hồ sơ; mỗi người nhận email.</td>
+      </tr>
+      <tr>
+        <td class="step">4. Chốt danh sách phỏng vấn</td>
+        <td>Chưa có. Ban tổ chức tự lọc bên ngoài hệ thống.</td>
+        <td><span class="pill new">Mới</span> Xếp hạng theo điểm, cắt đúng số suất mentor đã xác nhận, thêm 10% dự phòng.</td>
+      </tr>
+      <tr>
+        <td class="step">5. Xếp lịch &amp; chấm phỏng vấn</td>
+        <td>Chỉ có nút “bắt đầu phỏng vấn” trong ngày. Không có chỗ lưu giờ hẹn nên không báo giờ cho ai được.</td>
+        <td><span class="pill new">Mới</span> Xếp ca liên tiếp, gửi lịch cho mentor và giờ hẹn cho từng ứng viên; màn chấm hiện luôn điểm vòng hồ sơ.</td>
+      </tr>
+      <tr>
+        <td class="step">6. Ghép cặp ngay sau phỏng vấn</td>
+        <td>Mentor không có cách nào tự nhận mentee. Mọi cặp do ban tổ chức nhập tay.</td>
+        <td><span class="pill new">Mới</span> Mentor bấm “Chọn làm mentee của tôi”; hệ thống kiểm tra hạn mức của chính họ.</td>
+      </tr>
+      <tr>
+        <td class="step">7. Ghép phần còn lại</td>
+        <td>Ghép tay hoàn toàn: vài chục mentee đối chiếu hàng trăm mentor.</td>
+        <td><span class="pill new">Mới</span> AI đề xuất trên dữ liệu đã ẩn danh; ban tổ chức duyệt <em>từng cặp</em> mới thành cặp thật.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note" style="margin-top:16px">
+    <h3>Một câu tóm tắt</h3>
+    Hôm nay hệ thống chỉ hỗ trợ được phần <em>ghi nhận</em> hồ sơ; toàn bộ phần <em>vận hành</em> — hỏi
+    mentor, chia bài chấm, xếp lịch, ghép cặp — vẫn nằm ngoài hệ thống (Excel, email tay, tin nhắn).
+    Sau thay đổi này, cả quy trình nằm trong một chỗ, <strong>nhưng mọi quyết định vẫn do người bấm</strong>.
+  </div>
+</section>
+
+<!-- ══════════════════ BƯỚC 1 ══════════════════ -->
+<section class="page">
+  <div class="section-head">
+    <span class="num">1</span>
+    <h2>Nhận hồ sơ mentee và xác nhận qua email</h2>
+    <span class="tag">Giai đoạn 1 · PR #35</span>
+  </div>
+
+  <div class="compare avoid-break">
+    <div class="card before">
+      <h3>Hiện tại</h3>
+      <ul>
+        <li>Bạn mentee nộp form xong <strong>không nhận được email nào</strong>. Hệ thống hiện chưa gửi email cho ứng viên hay mentor trong cả quy trình tuyển.</li>
+        <li>Không có gì chặn một người (hoặc một con bot) nộp hàng trăm lần.</li>
+        <li>Chống trùng so email theo kiểu “gần đúng”, nên có trường hợp <strong>báo trùng oan</strong> cho người chưa hề nộp.</li>
+        <li>Khi có lỗi, ứng viên thấy thẳng thông báo lỗi kỹ thuật của cơ sở dữ liệu.</li>
+        <li>Form đang mở công khai không cần mã mời trên production.</li>
+      </ul>
+    </div>
+    <div class="card after">
+      <h3>Sau khi merge</h3>
+      <ul>
+        <li><strong>Email xác nhận tiếng Việt tự động</strong> ngay sau khi nộp, nêu rõ 3 bước tiếp theo (chấm hồ sơ → phỏng vấn → kết quả).</li>
+        <li>Bẫy bot (một ô ẩn mà người thật không bao giờ điền) và giới hạn <strong>30 lượt/giờ</strong> cho mỗi đường truyền mạng.</li>
+        <li>Địa chỉ mạng được <strong>băm</strong> trước khi lưu — hệ thống đếm được số lượt nhưng không giữ địa chỉ thật.</li>
+        <li>So trùng chính xác theo email; thông báo thân thiện thay cho lỗi kỹ thuật.</li>
+        <li>Máy chủ kiểm tra lại “form có đang mở không”, không tin vào trình duyệt.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="why">
+    <b>Vì sao quan trọng.</b> Đây là ấn tượng đầu tiên của chương trình với sinh viên. Không có email
+    xác nhận, ban tổ chức sẽ phải trả lời thủ công câu hỏi “em nộp được chưa ạ?” hàng trăm lần — và
+    một form mở công khai không có bất kỳ hàng rào nào là chỗ rác sẽ vào.
+  </div>
+
+  <div class="seen">
+    <strong>Bạn sẽ thấy gì:</strong> vào <code>/apply/mentee</code> nộp thử một hồ sơ → hộp thư nhận
+    được email “Đã nhận đơn đăng ký mentee”. Nộp lại lần hai bằng cùng email → hệ thống báo đã có hồ sơ,
+    không tạo bản trùng.
+  </div>
+</section>
+
+<!-- ══════════════════ BƯỚC 2 ══════════════════ -->
+<section class="page">
+  <div class="section-head">
+    <span class="num">2</span>
+    <h2>Hỏi 442 mentor mùa 11: có tiếp tục không, nhận mấy mentee?</h2>
+    <span class="tag">Giai đoạn 1 · PR #35</span>
+  </div>
+
+  <div class="compare avoid-break">
+    <div class="card before">
+      <h3>Hiện tại</h3>
+      <ul>
+        <li><strong>Không có chỗ nào trong hệ thống</strong> để lưu “mentor này có tiếp tục mùa 12 không” và “nhận tối đa mấy mentee”.</li>
+        <li>Hệ thống mặc định <strong>mọi mentor nhận tối đa 3</strong> — con số cứng nằm trong code, không sửa được từ giao diện.</li>
+        <li>Màn ghép cặp mùa 12 chỉ nhìn thấy mentor có hồ sơ nộp trong đợt tuyển mùa 12, nên <strong>442 mentor mùa 11 gần như vô hình</strong> với quy trình mới.</li>
+        <li>Muốn biết tổng số suất mentee của cả mùa: phải cộng tay ngoài Excel.</li>
+      </ul>
+    </div>
+    <div class="card after">
+      <h3>Sau khi merge</h3>
+      <ul>
+        <li>Mỗi mentor có <strong>một đường link riêng</strong> (<code>/confirm/…</code>): tiếp tục hay không, nhận tối đa 1–3 mentee, có nhận chấm hồ sơ / phỏng vấn không. <strong>Không cần đăng nhập.</strong></li>
+        <li>Ai không bấm link: support team gọi điện rồi <strong>tick tay</strong> trên trang quản trị — cùng một dòng dữ liệu, không phải import.</li>
+        <li>Trang <code>/mentors/season-confirmations</code>: tổng số suất mentee của cả mùa, lọc “cần xử lý”, tạo link, gửi email theo đợt, xuất CSV.</li>
+        <li>Hạn mức từ nay là <strong>của từng người</strong>: số mentor tự chọn + suất ban tổ chức cấp thêm. Không điền số → mặc định 1.</li>
+        <li>Mentor <strong>chưa trả lời hoặc từ chối = 0 suất</strong>, không lọt vào danh sách ghép cặp.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="why">
+    <b>Vì sao quan trọng.</b> Con số “tổng số suất mentee mà mentor đã xác nhận” là <em>cái quyết định
+    lấy bao nhiêu mentee vào vòng phỏng vấn</em> ở bước 4. Không có nó, mọi bước sau chỉ là ước lượng.
+    Đây là lý do phần này phải làm trước tiên.
+  </div>
+
+  <div class="seen">
+    <strong>Bạn sẽ thấy gì:</strong> mở <code>/mentors/season-confirmations</code> → danh sách mentor
+    với trạng thái và số mentee tối đa, ô tổng “Σ số suất” ở đầu trang. Bấm một link <code>/confirm/…</code>
+    ở chế độ ẩn danh sẽ thấy đúng biểu mẫu mentor nhận được.
+  </div>
+</section>
+
+<!-- ══════════════════ BƯỚC 3 ══════════════════ -->
+<section class="page">
+  <div class="section-head">
+    <span class="num">3</span>
+    <h2>Chia hồ sơ cho mentor chấm điểm</h2>
+    <span class="tag">Giai đoạn 2 · PR #35</span>
+  </div>
+
+  <div class="compare avoid-break">
+    <div class="card before">
+      <h3>Hiện tại</h3>
+      <ul>
+        <li>Có chức năng chia hồ sơ cho người chấm, nhưng <strong>danh sách người chấm lọc theo đợt tuyển</strong> — nghĩa là bỏ sót toàn bộ mentor mùa cũ, đúng nhóm người tình nguyện chấm bài.</li>
+        <li>Chia <strong>không giới hạn số lượng</strong>: một người có thể nhận 40 hồ sơ và bỏ dở.</li>
+        <li>Người chấm <strong>không nhận email nào</strong> — phải tự nhớ vào web mới biết mình có bài.</li>
+        <li>Mã người chấm gửi lên từ trình duyệt được ghi thẳng vào dữ liệu, không kiểm tra lại.</li>
+        <li>Nút “cấp quyền chấm bài” có thể <strong>mở lại một tài khoản quản trị đang bị khoá</strong> nếu trùng email.</li>
+      </ul>
+    </div>
+    <div class="card after">
+      <h3>Sau khi merge</h3>
+      <ul>
+        <li>Danh sách người chấm lấy từ <strong>mentor đã xác nhận mùa 12</strong>, hiện rõ ai “đồng ý chấm”, ai “đồng ý phỏng vấn”, hạn mức bao nhiêu.</li>
+        <li>Email mời tạo tài khoản gửi bằng dịch vụ gửi thư riêng (Brevo) thay vì email mặc định của nền tảng — vốn chỉ vài email mỗi giờ, không đủ cho một đợt mời.</li>
+        <li>Chia <strong>theo lô, mặc định 10 hồ sơ/người</strong>. Ai đầy thì dừng; hồ sơ dư <strong>để lại lượt sau và báo rõ</strong> thay vì lặng lẽ bỏ.</li>
+        <li>Mỗi người chấm nhận email “bạn có N hồ sơ chờ chấm”.</li>
+        <li><span class="pill fix">Vá lỗi</span> Mã người chấm được xác thực trước khi ghi; nút cấp quyền không mở lại được tài khoản quản trị bị khoá.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="why">
+    <b>Vì sao quan trọng.</b> Mười hồ sơ là một việc người ta làm xong trong một buổi tối; bốn mươi hồ
+    sơ là một việc người ta hoãn. Còn hai lỗi được vá ở đây là lỗ hổng an ninh: chúng cho phép ghi dữ
+    liệu sai người, hoặc khôi phục quyền quản trị qua một ô email mà nhiều người sửa được.
+  </div>
+
+  <div class="seen">
+    <strong>Bạn sẽ thấy gì:</strong> <code>/reviews/reviewer-pool</code> giờ liệt kê mentor mùa 11;
+    <code>/reviews/assign-bulk</code> có thêm ô “tối đa mỗi người” và ô tick gửi email.
+  </div>
+</section>
+
+<!-- ══════════════════ BƯỚC 4 ══════════════════ -->
+<section class="page">
+  <div class="section-head">
+    <span class="num">4</span>
+    <h2>Chốt danh sách vào vòng phỏng vấn</h2>
+    <span class="tag">Giai đoạn 2 · PR #35</span>
+  </div>
+
+  <div class="compare avoid-break">
+    <div class="card before">
+      <h3>Hiện tại</h3>
+      <ul>
+        <li><strong>Không có chức năng này.</strong> Chấm xong, ban tổ chức xuất dữ liệu ra ngoài, tự sắp xếp và tự quyết lấy bao nhiêu người.</li>
+        <li>Không có khái niệm “lấy đúng bằng số suất mentor đã nhận” — vì con số đó chưa tồn tại (xem bước 2).</li>
+        <li>Không có nhóm dự phòng: có bạn rút lui thì phải mở lại file, xếp lại tay.</li>
+        <li>Không lưu lại “vì sao bạn này được chọn còn bạn kia không”.</li>
+      </ul>
+    </div>
+    <div class="card after">
+      <h3>Sau khi merge</h3>
+      <ul>
+        <li>Màn <code>/reviews/selection</code>: xếp hạng theo <strong>điểm trung bình các lượt chấm đã nộp</strong>, cắt đúng <strong>tổng số suất mentor đã xác nhận</strong>, cộng thêm <strong>10% dự phòng</strong>.</li>
+        <li><strong>Xem trước rồi mới bấm áp dụng</strong> — nhìn thấy ai trên vạch, ai dưới vạch trước khi bất kỳ trạng thái nào thay đổi.</li>
+        <li>Không bao giờ <strong>cắt ngang nhóm đồng điểm</strong>: cả nhóm cùng điểm được giữ lại, và các dòng đó được đánh dấu lý do.</li>
+        <li>Có nút <strong>đôn dự phòng</strong> khi một bạn rút lui.</li>
+        <li>Bạn <strong>dưới ngưỡng vẫn giữ nguyên trạng thái</strong> — “từ chối” là quyết định riêng của ban tổ chức, không phải hệ quả tự động của việc xếp hạng.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="why">
+    <b>Vì sao quan trọng.</b> Đây là bước dễ bị chất vấn nhất (“sao bạn A được gọi mà em thì không?”).
+    Hai quy tắc — không tách nhóm đồng điểm, và mọi so kè đều theo thứ tự công bố trước (nhiều lượt chấm
+    hơn → nộp sớm hơn) — làm cho kết quả <strong>giải thích được</strong> và tính lại hai lần vẫn ra
+    một kết quả.
+  </div>
+
+  <div class="seen">
+    <strong>Bạn sẽ thấy gì:</strong> <code>/reviews/selection</code> → chọn đợt tuyển → “Tính danh sách”
+    → bảng xếp hạng có nhóm <em>Chính thức / Dự phòng / Dưới ngưỡng</em>. Chưa bấm “Áp dụng” thì chưa có gì đổi.
+  </div>
+</section>
+
+<!-- ══════════════════ BƯỚC 5 ══════════════════ -->
+<section class="page">
+  <div class="section-head">
+    <span class="num">5</span>
+    <h2>Xếp lịch phỏng vấn và chấm phỏng vấn</h2>
+    <span class="tag">Giai đoạn 3 · PR #36</span>
+  </div>
+
+  <div class="compare avoid-break">
+    <div class="card before">
+      <h3>Hiện tại</h3>
+      <ul>
+        <li>Chỉ có nút “bắt đầu phỏng vấn” để người phỏng vấn tự nhận ứng viên <strong>trong ngày phỏng vấn</strong>.</li>
+        <li><strong>Không có chỗ lưu giờ hẹn và địa điểm</strong> — nên hệ thống không thể báo giờ cho mentor lẫn ứng viên. Việc này đang làm bằng tin nhắn và bảng tính.</li>
+        <li>Khi chấm phỏng vấn, người phỏng vấn <strong>không thấy điểm vòng hồ sơ</strong>, phải mở tab khác hoặc chấm lại từ đầu cùng 5 tiêu chí.</li>
+        <li>Hai mentor có thể cùng nhận một ứng viên mà không ai biết.</li>
+      </ul>
+    </div>
+    <div class="card after">
+      <h3>Sau khi merge</h3>
+      <ul>
+        <li><code>/interviews/schedule</code>: chọn người phỏng vấn, tích các ứng viên, đặt giờ bắt đầu và khoảng cách giữa hai ca → hệ thống <strong>chia ca liên tiếp</strong>.</li>
+        <li>Gửi <strong>một email lịch cho mentor</strong> và <strong>giờ hẹn riêng cho từng ứng viên</strong> (hai ô tick, ban tổ chức tự quyết).</li>
+        <li>Xếp lại cho cùng người = <strong>dời giờ</strong>, không tạo lượt thứ hai. Ứng viên đã có người phỏng vấn khác thì <strong>giữ nguyên và báo rõ</strong>.</li>
+        <li>Màn chấm phỏng vấn hiện <strong>điểm vòng hồ sơ ngay bên cạnh</strong> phiếu chấm.</li>
+        <li>Giờ luôn được hiểu là <strong>giờ Việt Nam</strong>, dù máy chủ đặt ở đâu.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="why">
+    <b>Vì sao quan trọng.</b> Một buổi phỏng vấn hỏng vì sai giờ là hỏng với một sinh viên thật. Chi
+    tiết “giờ Việt Nam” nghe nhỏ nhưng chính là lỗi kinh điển: ô chọn giờ gửi lên chuỗi không kèm múi
+    giờ, máy chủ chạy ở múi giờ khác sẽ hiểu thành 21:30 thay vì 14:30.
+  </div>
+
+  <div class="seen">
+    <strong>Bạn sẽ thấy gì:</strong> <code>/interviews/schedule</code> → xếp thử 2 ứng viên cách nhau
+    30 phút → mentor nhận email danh sách, ứng viên nhận email giờ hẹn. <code>/interviews</code> có
+    thêm bộ lọc <em>“Lịch của tôi”</em>.
+  </div>
+</section>
+
+<!-- ══════════════════ BƯỚC 6 ══════════════════ -->
+<section class="page">
+  <div class="section-head">
+    <span class="num">6</span>
+    <h2>Vòng 1: mentor chọn mentee ngay sau khi phỏng vấn</h2>
+    <span class="tag">Giai đoạn 3 · PR #36</span>
+  </div>
+
+  <div class="compare avoid-break">
+    <div class="card before">
+      <h3>Hiện tại</h3>
+      <ul>
+        <li>Mentor <strong>không có cách nào tự nhận mentee</strong>. Sau phỏng vấn họ nhắn cho ban tổ chức, ban tổ chức nhập tay.</li>
+        <li>Hạn mức <strong>cứng là 3 với mọi mentor</strong>, không phản ánh việc họ nhận được mấy người.</li>
+        <li>Mentor mùa 11 không hiện ra trong màn ghép cặp mùa 12 (xem bước 2), nên nhiều trường hợp không ghép được từ giao diện.</li>
+        <li>Mentor xin thêm suất → chỉ là một tin nhắn ở đâu đó, không ai theo dõi được.</li>
+      </ul>
+    </div>
+    <div class="card after">
+      <h3>Sau khi merge</h3>
+      <ul>
+        <li>Nộp điểm phỏng vấn xong, mentor bấm <strong>“Chọn làm mentee của tôi”</strong> ngay trên màn hình đó.</li>
+        <li>Trước khi bấm, mentor <strong>nhìn thấy sẵn</strong> “Đã nhận 2/3 mentee”.</li>
+        <li>Vượt hạn mức → <strong>báo đỏ kèm hướng xử lý</strong>: liên hệ ban tổ chức để được cấp thêm suất. Không có đường vòng.</li>
+        <li>Điều kiện chặt: phải là người <strong>đã nộp điểm phỏng vấn đúng hồ sơ đó</strong>, và phải là mentor đã xác nhận còn suất.</li>
+        <li>Mọi lần bấm — <strong>kể cả lần bị chặn</strong> — đều được ghi lại, thành danh sách “xin thêm suất” có sẵn nút cấp +1 cho ban tổ chức.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="why">
+    <b>Vì sao quan trọng.</b> Đây là chỗ duy nhất trong hệ thống mà một người ngoài ban tổ chức tạo được
+    cặp ghép, nên điều kiện được siết chặt và mọi thao tác đều để lại dấu vết. Đổi lại, phần lớn cặp
+    được chốt <em>ngay tại buổi phỏng vấn</em> — không còn vòng nhắn tin và nhập tay.
+  </div>
+
+  <div class="seen">
+    <strong>Bạn sẽ thấy gì:</strong> đăng nhập bằng một tài khoản mentor thử, nộp điểm phỏng vấn, rồi
+    bấm nút chọn mentee. Thử tiếp khi đã đủ hạn mức → hệ thống báo đỏ và <code>/matches/unmatched</code>
+    xuất hiện một dòng “xin thêm suất”.
+  </div>
+</section>
+
+<!-- ══════════════════ BƯỚC 7 ══════════════════ -->
+<section class="page">
+  <div class="section-head">
+    <span class="num">7</span>
+    <h2>Phần còn lại: AI đề xuất, ban tổ chức duyệt</h2>
+    <span class="tag">Giai đoạn 4 · PR #37</span>
+  </div>
+
+  <div class="compare avoid-break">
+    <div class="card before">
+      <h3>Hiện tại</h3>
+      <ul>
+        <li>Sau vòng 1, phần còn lại <strong>ghép tay hoàn toàn</strong>: vài chục mentee đối chiếu với hàng trăm mentor, đọc từng hồ sơ một.</li>
+        <li>Không có danh sách “ai chưa có cặp” và “ai còn suất” — phải tự dựng lại bằng bảng tính mỗi lần.</li>
+        <li>Không có công cụ nào gợi ý mức độ phù hợp.</li>
+      </ul>
+    </div>
+    <div class="card after">
+      <h3>Sau khi merge</h3>
+      <ul>
+        <li><code>/matches/unmatched</code>: ba danh sách sẵn sàng — mentee chưa có mentor (kèm điểm phỏng vấn), mentor còn suất, và mentor đang xin thêm suất.</li>
+        <li><code>/matches/recommendations</code>: AI chấm mức độ phù hợp của từng cặp, hệ thống ghép theo hạn mức, ban tổ chức <strong>duyệt từng cặp</strong>.</li>
+        <li>Chạy nhiều vòng (tối đa 3): mentor đã đầy sau vòng 1 không được đưa vào vòng 2.</li>
+        <li>Mỗi dòng có mentor được đề xuất, <strong>số suất còn lại của mentor đó</strong>, điểm phù hợp và một câu lý do tiếng Việt.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="safe avoid-break">
+    <h3>Ba lằn ranh của phần AI — đây là phần nên đọc kỹ nhất</h3>
+    <ul>
+      <li><strong>Không có gì nhận dạng được gửi ra ngoài.</strong> Mentee là “E001”, mentor là “M001”. Chỉ gửi tiêu chí (ngành, lĩnh vực, mục tiêu, kỹ năng muốn phát triển…). Tên, email, số điện thoại, MSSV, tên trường, tên công ty <strong>đều không gửi</strong>; phần trả lời tự do còn được lọc bỏ email/số điện thoại/link và <em>chính tên của ứng viên</em> trước khi gửi. Có test tự động kiểm tra đúng nội dung gói tin gửi đi.</li>
+      <li><strong>AI chỉ chấm điểm, không quyết ai với ai.</strong> Việc ghép do hệ thống làm, theo hạn mức mentor đã xác nhận. Nếu AI trả về mã lạ hoặc chấm mọi cặp đều 10/10, kết quả sai vẫn bị chặn.</li>
+      <li><strong>Không cặp nào tự thành cặp thật.</strong> Phải có người bấm duyệt, và lúc bấm hệ thống <em>kiểm tra lại hạn mức lần nữa</em>. Cố ý <strong>không có nút “duyệt tất cả”</strong>.</li>
+    </ul>
+  </div>
+
+  <div class="seen">
+    <strong>Bạn sẽ thấy gì:</strong> <code>/matches/recommendations</code> → “Chạy đề xuất” → bảng các
+    cặp ở trạng thái <em>Chờ duyệt</em>. Chưa bấm “Duyệt &amp; tạo cặp” thì trong hệ thống chưa có cặp nào.
+  </div>
+</section>
+
+<!-- ══════════════════ AN TOÀN ══════════════════ -->
+<section class="page">
+  <h2 class="plain">Những gì KHÔNG thay đổi (phần để yên tâm)</h2>
+
+  <table>
+    <thead>
+      <tr><th style="width:34%">Câu hỏi thường gặp</th><th>Trả lời</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="step">Dữ liệu mùa 11 có bị ảnh hưởng không?</td>
+        <td>Không. Bốn thay đổi cơ sở dữ liệu đều <strong>chỉ thêm mới</strong>: thêm bảng, thêm cột trống. Không xoá cột nào, không đổi kiểu dữ liệu nào, không sửa quy tắc kiểm tra cũ nào.</td>
+      </tr>
+      <tr>
+        <td class="step">Mùa cũ có bị áp hạn mức mới không?</td>
+        <td>Không. Mùa nào chưa chạy quy trình xác nhận thì giữ nguyên cách tính cũ (tối đa 3). Chỉ mùa có xác nhận mới dùng hạn mức riêng từng người.</td>
+      </tr>
+      <tr>
+        <td class="step">Gói phát hành đang đóng băng có bị vướng không?</td>
+        <td>Không. Các thay đổi được viết để gói đó vẫn áp được. Có test tự động đọc từng file lệnh cơ sở dữ liệu và bắt lỗi nếu ai đó lỡ tay xoá hoặc đổi cột cũ.</td>
+      </tr>
+      <tr>
+        <td class="step">Bản thử nghiệm có gửi nhầm email cho mentor thật không?</td>
+        <td>Không. Email chỉ gửi khi <strong>vừa bật cờ cấu hình, vừa đang chạy trên production</strong>. Bản xem trước và máy cá nhân chỉ ghi nhật ký “đã bỏ qua”, không gửi.</td>
+      </tr>
+      <tr>
+        <td class="step">Ai đọc được các bảng dữ liệu mới?</td>
+        <td>Chỉ máy chủ. Các bảng mới bật khoá bảo vệ, không mở quyền cho trình duyệt hay tài khoản người dùng, và mỗi lệnh cơ sở dữ liệu <strong>tự kiểm tra lại điều đó trước khi hoàn tất</strong> — sai thì tự huỷ.</td>
+      </tr>
+      <tr>
+        <td class="step">Nếu AI đề xuất sai thì sao?</td>
+        <td>Không có hậu quả trực tiếp: đề xuất chỉ là một dòng chờ duyệt. Bấm bỏ qua là xong. Hạn mức mentor vẫn được kiểm tra lại lúc duyệt.</td>
+      </tr>
+      <tr>
+        <td class="step">Có kiểm thử không?</td>
+        <td><strong>2.215 test tự động</strong> (93 tệp) đang xanh, cùng với kiểm tra kiểu dữ liệu, kiểm tra chuẩn code và dựng bản production thành công.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="plain" style="margin-top:22px">Rủi ro đã lường trước</h2>
+  <table>
+    <thead>
+      <tr><th style="width:34%">Rủi ro</th><th>Cách xử lý</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="step">Gửi 442 email mời xác nhận</td>
+        <td>Gói miễn phí của Brevo cho ~300 email/ngày, nên 442 link chia 2 ngày là xong — màn hình có nút gửi theo đợt (tối đa 50 email mỗi lần bấm) và tự nhớ ai đã nhận, nên chia nhiều đợt không sợ trùng hay sót.</td>
+      </tr>
+      <tr>
+        <td class="step">Mentor không phản hồi link xác nhận</td>
+        <td>Support team gọi điện và tick tay; đây là lý do quyền ghi xác nhận được mở cho support team (và <em>chỉ</em> quyền đó).</td>
+      </tr>
+      <tr>
+        <td class="step">Tài khoản mentor cũ chưa gắn với hồ sơ mentor</td>
+        <td>Sau khi chạy thay đổi thứ ba, bấm lại “cấp quyền chấm bài” là hệ thống tự gắn. Nếu không làm gì, hệ thống vẫn tra theo email và chỉ từ chối khi một email trùng nhiều hồ sơ.</td>
+      </tr>
+      <tr>
+        <td class="step">Một lần chạy AI mất vài phút</td>
+        <td>Mỗi lần chạy xử lý tối đa 40 mentee và đã khai báo thời gian chạy dài cho trang đó. Nhiều hơn thì duyệt xong đợt này rồi chạy tiếp.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════ CHECKLIST ══════════════════ -->
+<section class="page">
+  <h2 class="plain">Việc cần làm để đưa lên production</h2>
+
+  <ol class="checklist">
+    <li>
+      <h3>Merge theo đúng thứ tự</h3>
+      <p>
+        <strong>#35</strong> (xác nhận mentor + chấm hồ sơ theo lô + chốt danh sách phỏng vấn) →
+        <strong>#36</strong> (lịch phỏng vấn + mentor tự chọn mentee) →
+        <strong>#37</strong> (AI đề xuất ghép cặp). Ba PR xếp chồng: merge sai thứ tự sẽ thấy diff lẫn lộn.
+        Cả ba đều nhắm vào nhánh production hiện tại, không phải <code>main</code>.
+      </p>
+    </li>
+    <li>
+      <h3>Chạy 4 thay đổi cơ sở dữ liệu — staging trước</h3>
+      <p>
+        Theo thứ tự <strong>064 → 066 → 067 → 068</strong>. Chạy trên staging trước, kiểm tra, rồi mới
+        chạy trên production, <strong>có bản sao lưu trước khi chạy</strong>. Mỗi tệp tự kiểm tra điều
+        kiện đầu vào và tự huỷ nếu có gì không khớp — chạy nhầm thứ tự sẽ báo lỗi chứ không làm hỏng dữ liệu.
+      </p>
+    </li>
+    <li>
+      <h3>Đặt cấu hình gửi email (Brevo)</h3>
+      <p>
+        Tạo tài khoản Brevo, <strong>xác minh tên miền gửi (SPF + DKIM)</strong>, rồi đặt các biến: khoá
+        API, địa chỉ gửi, địa chỉ nhận thư trả lời, cờ bật gửi email, địa chỉ web chính thức, và chuỗi
+        ngẫu nhiên cho bộ đếm chống spam. Tất cả đã liệt kê sẵn trong tệp mẫu cấu hình của dự án.
+      </p>
+      <p>
+        Chọn Brevo vì gói miễn phí cho <strong>~300 thư/ngày</strong>, trong khi cả mùa cần khoảng
+        <strong>2.700 thư</strong> gửi dồn theo đợt — con số quyết định là hạn mức <em>mỗi ngày</em>, không
+        phải mỗi tháng. Hệ thống vẫn hỗ trợ nhà cung cấp thứ hai (Resend): đổi một biến cấu hình là
+        chuyển, không phải sửa code, hữu ích nếu một bên khoá tài khoản giữa mùa.
+      </p>
+    </li>
+    <li>
+      <h3>Đặt cấu hình cho phần AI (DeepSeek)</h3>
+      <p>
+        Tạo khoá API và bật cờ cho phép chạy. <strong>Chạy thử trên staging với dữ liệu giả trước</strong> —
+        phần này cố ý không giới hạn ở production, đúng để thử ở staging.
+      </p>
+    </li>
+    <li>
+      <h3>Cấp quyền vận hành mùa 12 cho tài khoản support team</h3>
+      <p>
+        Để họ tick tay được xác nhận của mentor sau khi gọi điện.
+      </p>
+    </li>
+    <li>
+      <h3>Chốt hai con số vận hành</h3>
+      <p>
+        Hạn trả lời của link xác nhận (mặc định <strong>60 ngày</strong>) và tỉ lệ nhóm dự phòng
+        (mặc định <strong>10%</strong>). Cả hai sửa được ngay trên giao diện, không cần lập trình.
+      </p>
+    </li>
+    <li>
+      <h3>Kiểm tra sau khi deploy — 6 việc, khoảng 15 phút</h3>
+      <ul>
+        <li>Nộp thử một hồ sơ mentee → có nhận được email xác nhận.</li>
+        <li>Mở một link <code>/confirm/…</code> → điền thử → trang quản trị hiện đúng.</li>
+        <li>Chia thử 10 hồ sơ cho một mentor → mentor nhận được email.</li>
+        <li>Tính thử danh sách phỏng vấn → số suất khớp với tổng hạn mức mentor.</li>
+        <li>Xếp thử một ca phỏng vấn → mentor và ứng viên đều nhận đúng giờ (giờ Việt Nam).</li>
+        <li>Chạy thử một lần đề xuất ghép cặp → có bảng chờ duyệt, chưa có cặp nào được tạo.</li>
+      </ul>
+    </li>
+  </ol>
+
+  <div class="note" style="margin-top:6px">
+    <h3>Nếu muốn thận trọng hơn</h3>
+    Có thể merge và deploy <strong>theo từng giai đoạn</strong>: #35 trước (đủ để bắt đầu hỏi mentor và
+    mở form mentee), chạy thực tế một tuần, rồi mới đến #36 và #37. Mỗi PR đứng độc lập được — phần sau
+    không làm hỏng phần trước.
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS Admin Portal · Tài liệu so sánh trước/sau, lập ngày 18/08/2026 · Kèm theo pull request #35, #36, #37
+  </footer>
+</section>
+
+</body>
+</html>

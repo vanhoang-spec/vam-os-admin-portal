@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Kế hoạch chuyển sang Netlify</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; padding-left: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 32%; }
+
+  .note, .stop {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+
+  .check { background: var(--mint); border: 1px solid #bfe2cd; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+<style>
+  .kv { font-family: Consolas, "Courier New", monospace; font-size: 9pt; }
+  .yes { color: var(--green-dark); font-weight: 700; }
+  .no  { color: var(--stop-ink); font-weight: 700; }
+  .lane { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 14px; }
+  .lanebox { border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px; }
+  .lanebox .lt { font-weight: 700; font-size: 10.5pt; margin-bottom: 4px; }
+  .lanebox ul { margin: 0; padding-left: 16px; font-size: 9.5pt; color: var(--muted); }
+  .lanebox li { margin-bottom: 3px; }
+  .lanebox.me { background: var(--mint); border-color: #bfe2cd; }
+  .badge { display: inline-block; font-size: 8pt; font-weight: 700; padding: 1px 8px; border-radius: 20px; background: var(--green); color: #fff; margin-left: 6px; vertical-align: middle; }
+  .badge.warn { background: #b45309; }
+  .badge.stop { background: var(--stop-ink); }
+  .timeline { border-left: 3px solid var(--green); padding-left: 14px; margin: 10px 0 16px; }
+  .tl { margin-bottom: 12px; page-break-inside: avoid; }
+  .tl .tlh { font-weight: 700; font-size: 10.5pt; }
+  .tl .tlb { font-size: 9.5pt; color: var(--muted); margin-top: 2px; }
+  td.mono { font-family: Consolas, "Courier New", monospace; font-size: 8.5pt; }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Kế hoạch kỹ thuật</div>
+  <h1>Chuyển web app<br />từ Vercel sang Netlify</h1>
+  <div class="sub">Kế hoạch và hướng dẫn — không cần biết lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Chuyển được, và nó gỡ đúng nút thắt hiện nay: trên Vercel gói miễn phí, chỉ commit của anh Thắng
+    mới được dựng bản mới — <strong>Netlify không có quy định đó</strong>.
+  </p>
+  <p class="lead">
+    Nhưng đây là một đợt chuyển có việc phải làm, không phải đổi cấu hình. Bốn việc, trong đó
+    <strong>hai việc là cơ chế an toàn sẽ hỏng mà không báo lỗi</strong> — đó là phần đáng đọc kỹ nhất.
+    Toàn bộ kế hoạch được dựng theo nguyên tắc <strong>chạy song song, đổi địa chỉ sau cùng</strong>,
+    nên đến phút chót vẫn quay lại được.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Việc lập trình</dt><dd>~1 ngày</dd></div>
+    <div><dt>Việc của anh</dt><dd>~45 phút, chia 3 lần</dd></div>
+    <div><dt>Chi phí</dt><dd>0 đồng (gói Free)</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ ĐƯỢC GÌ MẤT GÌ ══════════ -->
+<section class="page">
+  <h2 class="plain">Được gì, mất gì</h2>
+
+  <table>
+    <thead><tr><th style="width:36%"></th><th style="width:30%">Vercel (hôm nay)</th><th>Netlify (sau khi chuyển)</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="key">Ai deploy được</td>
+        <td><span class="no">Chỉ anh Thắng</span></td>
+        <td><span class="yes">Ai push code cũng được</span></td>
+      </tr>
+      <tr>
+        <td class="key">Nhiều người quản trị</td>
+        <td>20 USD mỗi người/tháng</td>
+        <td><span class="yes">20 USD/tháng, không giới hạn người</span></td>
+      </tr>
+      <tr><td class="key">Chạy Next.js 14, App Router</td><td>Có</td><td><span class="yes">Có</span> — hỗ trợ chính thức</td></tr>
+      <tr><td class="key">Server Actions, Route Handlers</td><td>Có</td><td><span class="yes">Có</span></td></tr>
+      <tr><td class="key">Bản xem thử cho mỗi pull request</td><td>Có</td><td><span class="yes">Có</span></td></tr>
+      <tr><td class="key">Lịch chạy tự động (nhắc thu recap)</td><td>Có sẵn</td><td><span class="no">Phải dựng lại</span></td></tr>
+      <tr><td class="key">Chặn gửi email từ bản thử</td><td>Có sẵn</td><td><span class="no">Phải sửa code</span></td></tr>
+      <tr><td class="key">Cảnh báo bản thử trỏ vào dữ liệu thật</td><td>Có sẵn</td><td><span class="no">Phải sửa code</span></td></tr>
+      <tr><td class="key">Cơ sở dữ liệu Supabase</td><td colspan="2" style="text-align:center">Không ảnh hưởng — dịch vụ riêng, chỉ nhập lại cấu hình</td></tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Vì sao Netlify chạy được app này</h3>
+    <p style="margin:0">
+      Netlify hỗ trợ chính thức Next.js từ phiên bản 13.5 trở lên — app này dùng 14.2. App Router,
+      React Server Components, Server Actions, Route Handlers, Middleware đều nằm trong danh sách hỗ
+      trợ đầy đủ. Trong danh mục thư viện của dự án <strong>không có gói nào của Vercel</strong>, nên
+      không có gì phải gỡ bỏ. Ràng buộc nằm ở bốn chỗ khác, nói ở các trang sau.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ HAI CƠ CHẾ AN TOÀN ══════════ -->
+<section class="page">
+  <h2 class="plain">Phần đáng đọc kỹ nhất: hai cơ chế an toàn hỏng im lặng</h2>
+
+  <p>
+    Hai chỗ dưới đây không có trong tài liệu của Netlify. Tôi tìm ra khi rà lại mã nguồn của chính
+    dự án này. Cả hai <strong>không báo lỗi gì cả</strong> — chỉ lặng lẽ ngừng bảo vệ.
+  </p>
+
+  <div class="stop">
+    <h3>1 · Bản xem thử sẽ gửi email thật cho mentor và mentee <span class="badge stop">Nghiêm trọng</span></h3>
+    <p style="margin:0 0 6px">
+      Hôm nay app chỉ gửi email khi chạy trên bản thật. Nó nhận biết bằng một biến do
+      <strong>Vercel</strong> tự đặt. Trên Netlify biến đó không tồn tại, code rơi vào nhánh dự phòng
+      là “có phải bản dựng production không” — <strong>mà mọi bản xem thử của Netlify cũng là bản
+      dựng production</strong>.
+    </p>
+    <p style="margin:0">
+      Hậu quả: mỗi lần tôi mở một pull request để anh xem thử, bản đó có thể gửi thư thật tới hộp thư
+      của mentor và mentee. Đây là loại lỗi chỉ phát hiện khi đã có người nhận nhầm thư.
+    </p>
+  </div>
+
+  <div class="stop">
+    <h3>2 · Băng cảnh báo “bản thử đang trỏ vào dữ liệu thật” sẽ không bao giờ hiện</h3>
+    <p style="margin:0">
+      App có một dải cảnh báo màu đỏ, hiện lên khi một bản thử nghiệm bị trỏ nhầm vào cơ sở dữ liệu
+      thật. Nó cũng dựa vào cùng biến của Vercel. Trên Netlify, dải cảnh báo đó biến mất — và người
+      thao tác sẽ tưởng mình đang ở bản thử trong khi đang sửa dữ liệu thật.
+    </p>
+  </div>
+
+  <div class="note">
+    <h3>Cách sửa, và một cái bẫy trong cách sửa</h3>
+    <p style="margin:0 0 6px">
+      Netlify <em>có</em> biến tương đương cho biết đang là bản thật hay bản xem thử. Nhưng tài liệu
+      Netlify ghi rõ các biến đó <strong>chỉ tồn tại lúc dựng, không tồn tại lúc chạy</strong> — nên
+      không thể chỉ đổi tên biến trong code là xong.
+    </p>
+    <p style="margin:0">
+      Cách đúng: khai một biến riêng của mình, đặt giá trị khác nhau cho từng loại bản dựng trong tệp
+      cấu hình <span class="kv">netlify.toml</span>, rồi sửa code đọc biến đó. Sau khi sửa, code chạy
+      đúng trên <em>cả</em> Vercel lẫn Netlify — nghĩa là nếu sau này muốn quay về, không phải sửa lại
+      lần nữa.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ HAI VIỆC CÒN LẠI ══════════ -->
+<section class="page">
+  <h2 class="plain">Hai việc còn lại</h2>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Lịch nhắc thu recap phải dựng lại</h3>
+      <p class="sub-step">
+        Lịch chạy hằng ngày (nhắc BTC thu recap ngày 15 và ngày cuối tháng) khai báo trong tệp
+        <span class="kv">vercel.json</span> — chức năng riêng của Vercel. Rời Vercel thì tệp đó
+        không còn tác dụng, và <strong>không có thông báo lỗi nào</strong>; chỉ là đến ngày 15
+        không ai nhận được thư nhắc.
+      </p>
+      <p class="sub-step">
+        Netlify có chức năng tương đương (Scheduled Functions), <strong>có ở mọi gói kể cả gói miễn
+        phí</strong>. Ba điều cần biết về nó:
+      </p>
+      <table>
+        <thead><tr><th style="width:36%">Đặc điểm</th><th>Ảnh hưởng tới ta</th></tr></thead>
+        <tbody>
+          <tr><td class="key">Chạy theo giờ UTC</td><td>Không sao — code tự quy đổi sang giờ Việt Nam rồi mới quyết định có gửi hay không</td></tr>
+          <tr><td class="key">Giới hạn 30 giây mỗi lần</td><td>Đủ — việc này chỉ gửi vài chục email</td></tr>
+          <tr><td class="key">Chỉ chạy trên bản đã publish</td><td>Đúng ý — bản xem thử không được phép gửi thư nhắc</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Hàng rào bảo mật phải kiểm chứng bằng deploy thật</h3>
+      <p class="sub-step">
+        App có một lớp chạy trước mọi trang, quyết định trang nào là công khai (mentor bấm link trong
+        email) và trang nào phải đăng nhập. Nó làm việc đó bằng cách gắn một dấu hiệu vào request.
+      </p>
+      <p class="sub-step">
+        Netlify chạy lớp này bằng công nghệ khác Vercel, và tài liệu ghi rõ
+        <strong>thứ tự xử lý có khác biệt</strong>. Không có nghĩa là hỏng — nhưng đây là hàng rào
+        giữ dữ liệu của hơn một nghìn người, nên <strong>không được suy đoán</strong>. Phải deploy
+        lên rồi mở thử từng loại trang công khai và xác nhận từng cái một.
+      </p>
+      <p class="sub-step">Năm loại trang phải thử: xác nhận tham gia mùa, hồ sơ mentee được ghép, tài liệu chương trình, đăng ký sự kiện, điểm danh sự kiện.</p>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Ba việc đầu là việc của tôi, không phải của anh</h3>
+    <p style="margin:0">
+      Việc 1, 2, 3 là sửa code — tôi làm, kèm bài kiểm thử tự động để sau này không ai vô tình gỡ ra.
+      Việc 4 là kiểm chứng, hai người cùng làm sau khi có bản thử trên Netlify.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ KẾ HOẠCH ══════════ -->
+<section class="page">
+  <h2 class="plain">Kế hoạch: chạy song song, đổi địa chỉ sau cùng</h2>
+
+  <p>
+    Nguyên tắc xuyên suốt: <strong>không tắt Vercel cho tới khi Netlify đã chạy đúng.</strong>
+    Trong suốt quá trình, web app hiện tại vẫn phục vụ bình thường; Netlify chỉ là một bản chạy
+    song song ở địa chỉ tạm. Đến phút chót mới chuyển địa chỉ sang, và nếu có gì sai thì chuyển ngược
+    lại trong vài phút.
+  </p>
+
+  <div class="timeline">
+    <div class="tl">
+      <div class="tlh">Giai đoạn 1 — Sửa code <span class="badge">tôi làm</span></div>
+      <div class="tlb">
+        Sửa hai cơ chế an toàn cho chạy được trên cả hai nền tảng. Viết lại lịch nhắc thu recap
+        bằng chức năng của Netlify. Thêm tệp cấu hình <span class="kv">netlify.toml</span>.
+        Viết bài kiểm thử. Mở một pull request để anh duyệt. Chưa đụng gì tới hệ thống đang chạy.
+      </div>
+    </div>
+    <div class="tl">
+      <div class="tlh">Giai đoạn 2 — Dựng site Netlify <span class="badge">anh làm, ~20 phút</span></div>
+      <div class="tlb">
+        Anh tạo tài khoản Netlify, nối vào kho mã nguồn, nhập các biến cấu hình. Netlify dựng bản
+        đầu tiên ở một địa chỉ tạm dạng <span class="kv">tên-site.netlify.app</span>.
+        Vercel vẫn chạy song song, chưa ai bị ảnh hưởng.
+      </div>
+    </div>
+    <div class="tl">
+      <div class="tlh">Giai đoạn 3 — Kiểm chứng <span class="badge">hai người, ~30 phút</span></div>
+      <div class="tlb">
+        Chạy hết danh sách nghiệm thu ở trang sau, trên địa chỉ tạm. Đặc biệt là năm loại trang công
+        khai và bài thử “anh push code thì có deploy không”.
+      </div>
+    </div>
+    <div class="tl">
+      <div class="tlh">Giai đoạn 4 — Đổi địa chỉ <span class="badge">anh làm, ~5 phút</span></div>
+      <div class="tlb">
+        Trỏ tên miền sang Netlify, cập nhật biến địa chỉ công khai, gửi thử một email thật.
+        Đây là lần đầu tiên người dùng thật đi qua Netlify.
+      </div>
+    </div>
+    <div class="tl">
+      <div class="tlh">Giai đoạn 5 — Giữ Vercel thêm hai tuần <span class="badge warn">đường lùi</span></div>
+      <div class="tlb">
+        Không xoá dự án Vercel ngay. Nếu có gì bất ổn, trỏ tên miền ngược lại là xong trong vài phút.
+        Hết hai tuần yên ổn thì mới dọn.
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>Thời điểm nên làm: bây giờ</h3>
+    <p style="margin:0">
+      Hôm nay app chỉ có khoảng 10 người BTC dùng — đây là lúc rủi ro thấp nhất. Sau khi mời 1.100
+      mentor và mentee vào hệ thống (giai đoạn 7 của dự án), việc chuyển sẽ diễn ra khi đang có
+      người dùng thật và khi hàng trăm email đã gửi đi đang trỏ vào địa chỉ cũ.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC CỦA ANH ══════════ -->
+<section class="page">
+  <h2 class="plain">Giai đoạn 2 — các bước cụ thể của anh</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Tạo tài khoản Netlify</h3>
+      <p class="sub-step">Vào <span class="kv">netlify.com</span> &rarr; <strong>Sign up</strong> &rarr; chọn đăng nhập bằng <strong>GitHub</strong> bằng tài khoản của anh.</p>
+      <p class="sub-step">Chọn gói <strong>Free</strong>. Không cần nhập thẻ.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Nối vào kho mã nguồn</h3>
+      <p class="sub-step">Bấm <strong>Add new site</strong> &rarr; <strong>Import an existing project</strong> &rarr; <strong>GitHub</strong>.</p>
+      <p class="sub-step">Chọn kho <span class="kv">vam-os-admin-portal</span>. GitHub sẽ hỏi cho phép Netlify truy cập — đồng ý, và chỉ cấp quyền cho đúng kho này.</p>
+      <p class="sub-step">
+        Netlify tự nhận ra đây là dự án Next.js và tự điền lệnh dựng. <strong>Không sửa gì</strong> ở
+        màn hình này.
+      </p>
+      <div class="note">
+        <h3>Nếu không thấy kho trong danh sách</h3>
+        <p style="margin:0">
+          Kho đang thuộc tài khoản anh Thắng nên anh phải được cấp quyền cài ứng dụng Netlify vào đó.
+          Nhờ anh Thắng bấm đồng ý, hoặc làm sau khi đã chuyển kho sang Organization (có tài liệu riêng).
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Nhập 21 biến cấu hình</h3>
+      <p class="sub-step">
+        Trước khi bấm dựng lần đầu: <strong>Site configuration</strong> &rarr;
+        <strong>Environment variables</strong> &rarr; nhập từng biến.
+        Lấy giá trị từ màn hình tương ứng bên Vercel (nhờ anh Thắng chụp, gửi qua trình quản lý mật khẩu).
+      </p>
+      <table>
+        <thead><tr><th style="width:52%">Nhóm</th><th>Biến</th></tr></thead>
+        <tbody>
+          <tr><td class="key">Cơ sở dữ liệu <strong>(bắt buộc)</strong></td><td class="mono">NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY</td></tr>
+          <tr><td class="key">Địa chỉ công khai <strong>(bắt buộc)</strong></td><td class="mono">VAM_OS_PUBLIC_BASE_URL</td></tr>
+          <tr><td class="key">Gửi email</td><td class="mono">VAM_OS_EMAIL_ENABLED, VAM_OS_EMAIL_PROVIDER, BREVO_API_KEY, VAM_OS_EMAIL_FROM, VAM_OS_EMAIL_REPLY_TO</td></tr>
+          <tr><td class="key">Form đăng ký công khai</td><td class="mono">VAM_OS_ENABLE_MENTOR_APPLICATION, VAM_OS_ENABLE_MENTEE_APPLICATION, VAM_OS_APPLY_TOKEN, VAM_OS_APPLICATION_PILOT_TOKEN, VAM_OS_ALLOW_TOKENLESS_APPLICATIONS, VAM_OS_RATE_LIMIT_SALT</td></tr>
+          <tr><td class="key">AI hỗ trợ ghép cặp</td><td class="mono">VAM_OS_AI_MATCHING_ENABLED, DEEPSEEK_API_KEY, DEEPSEEK_MODEL, DEEPSEEK_BASE_URL</td></tr>
+          <tr><td class="key">Thu recap và lịch nhắc</td><td class="mono">VAM_OS_RECAP_IMPORT_TOKEN, CRON_SECRET</td></tr>
+        </tbody>
+      </table>
+      <div class="stop">
+        <h3>Hai giá trị phải đặt KHÁC với Vercel trong lúc chạy song song</h3>
+        <p style="margin:0">
+          <span class="kv">VAM_OS_PUBLIC_BASE_URL</span> đặt bằng địa chỉ tạm của Netlify, không phải
+          địa chỉ thật — nếu không, email gửi ra sẽ mang link trỏ về Vercel. Và
+          <span class="kv">VAM_OS_EMAIL_ENABLED</span> để <span class="kv">false</span> cho tới khi
+          xong giai đoạn 3, để bản song song tuyệt đối không gửi thư nào ra ngoài.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Bấm dựng và chờ</h3>
+      <p class="sub-step">
+        Lần dựng đầu mất khoảng 2–3 phút. Xong, Netlify cho một địa chỉ dạng
+        <span class="kv">tên-gì-đó.netlify.app</span>. Gửi địa chỉ đó cho tôi để cùng kiểm chứng.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ NGHIỆM THU ══════════ -->
+<section class="page">
+  <h2 class="plain">Giai đoạn 3 — danh sách nghiệm thu</h2>
+
+  <p>Làm trên địa chỉ tạm của Netlify, trước khi đụng tới tên miền thật.</p>
+
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:44%">Việc thử</th><th>Kết quả đúng</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Mở địa chỉ tạm, đăng nhập bằng tài khoản BTC</td><td>Vào được, bảng vận hành có số liệu</td></tr>
+      <tr><td>2</td><td><strong>Anh</strong> sửa một chữ nhỏ, push lên nhánh chính</td><td><strong>Netlify tự dựng bản mới.</strong> Đây là thứ Vercel đang không cho</td></tr>
+      <tr><td>3</td><td>Mở link xác nhận tham gia mùa của một mentor</td><td>Hiện form, <strong>không</strong> bị đá về trang đăng nhập</td></tr>
+      <tr><td>4</td><td>Mở link hồ sơ mentee được ghép</td><td>Hiện hồ sơ, không đòi đăng nhập</td></tr>
+      <tr><td>5</td><td>Mở trang tài liệu chương trình</td><td>Hiện nội dung, không đòi đăng nhập</td></tr>
+      <tr><td>6</td><td>Mở link đăng ký sự kiện và link điểm danh</td><td>Hiện form, không đòi đăng nhập</td></tr>
+      <tr><td>7</td><td>Đăng xuất rồi gõ thẳng địa chỉ một trang quản trị</td><td>Bị đá về trang đăng nhập</td></tr>
+      <tr><td>8</td><td>Vào màn hình Functions của Netlify, tìm hàm hẹn giờ, bấm <strong>Run now</strong></td><td>Chạy xong, không lỗi; hôm không phải ngày 15 thì báo “không gửi gì”</td></tr>
+      <tr><td>9</td><td>Bật <span class="kv">VAM_OS_EMAIL_ENABLED</span>, gửi một thư về hộp thư của anh</td><td>Nhận được thư, link trong thư mở đúng địa chỉ tạm</td></tr>
+      <tr><td>10</td><td>Mở một bản xem thử (pull request) và thử gửi email từ đó</td><td><strong>Bị chặn.</strong> Đây là bài kiểm tra cơ chế an toàn số 1</td></tr>
+    </tbody>
+  </table>
+
+  <div class="stop">
+    <h3>Bài số 3 đến số 7 không được bỏ qua bài nào</h3>
+    <p style="margin:0">
+      Đây là hàng rào phân biệt trang công khai với cổng quản trị. Sai một chiều thì mentor không mở
+      được link trong email; sai chiều kia thì người ngoài nhìn thấy dữ liệu nội bộ. Phải thử đủ cả năm.
+    </p>
+  </div>
+
+  <div class="check">
+    <h3>Bài số 10 giải thích vì sao đáng làm cả đợt này</h3>
+    <p style="margin:0">
+      Nếu bài này không đạt, nghĩa là mỗi bản xem thử đều có thể gửi thư thật cho mentor và mentee.
+      Không được chuyển sang giai đoạn 4 khi bài này chưa đạt.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ SAU KHI CHUYỂN ══════════ -->
+<section class="page">
+  <h2 class="plain">Sau khi chuyển: hạn mức và theo dõi</h2>
+
+  <p>Gói Free của Netlify là <strong>hạn mức cứng</strong> — không phát sinh phí, nhưng chạm trần thì site bị tạm ngưng đến hết tháng dương lịch. Mở lại bằng cách nâng gói, mất vài giây.</p>
+
+  <table>
+    <thead><tr><th style="width:34%">Tài nguyên</th><th style="width:22%">Hạn mức/tháng</th><th>Ước tính của app này</th></tr></thead>
+    <tbody>
+      <tr><td class="key">Lượt gọi function</td><td>125.000</td><td><strong>~20.000</strong> (kể cả 1.100 mentor/mentee) — dư khoảng 6 lần</td></tr>
+      <tr><td class="key">Lượt gọi edge function</td><td>1.000.000</td><td>~60.000 — thoải mái</td></tr>
+      <tr><td class="key">Băng thông</td><td>100 GB</td><td>~4 GB — thoải mái</td></tr>
+      <tr><td class="key">Phút dựng bản</td><td><strong>300</strong></td><td><strong>Đây mới là con số cần theo dõi</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <h3>Vì sao phút dựng bản mới là chỗ đáng lo, không phải số người dùng</h3>
+    <p style="margin:0 0 6px">
+      Dựng một bản của app này mất khoảng 2 phút. 300 phút chia cho 2 là <strong>khoảng 150 lần dựng
+      mỗi tháng</strong>. Nghe nhiều, nhưng mỗi lần push code lên một nhánh đang mở pull request,
+      Netlify lại dựng một bản xem thử. Một tháng phát triển tích cực rất dễ chạm con số đó.
+    </p>
+    <p style="margin:0">
+      Chỉnh được: tắt bản xem thử cho các nhánh phụ, hoặc chỉ cho dựng bản ở những nhánh cần thiết.
+      Còn 1.100 người đăng nhập vài lần mỗi tháng thì chỉ dùng khoảng 16% hạn mức function — không
+      phải vấn đề.
+    </p>
+  </div>
+
+  <div class="check">
+    <h3>Việc cần làm ngay sau khi dựng site</h3>
+    <p style="margin:0">
+      Vào phần thông báo của Netlify, bật cảnh báo khi dùng tới <strong>75%</strong> hạn mức. Như vậy
+      anh biết trước chứ không phát hiện lúc site đã ngưng.
+    </p>
+  </div>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Nếu muốn quay lại Vercel</h3>
+  <p>
+    Trỏ tên miền ngược lại là xong, trong vài phút. Vì các sửa đổi ở giai đoạn 1 được viết để chạy
+    đúng trên <em>cả hai</em> nền tảng, code không phải sửa lại lần nào. Đó là lý do giai đoạn 5 giữ
+    Vercel thêm hai tuần thay vì xoá ngay.
+  </p>
+
+  <footer class="doc-foot">
+    VAM OS · Kế hoạch chuyển sang Netlify · 19/08/2026 ·
+    Hạn mức và tính năng lấy từ tài liệu chính thức của Netlify; số liệu ước tính đo trên chính dự án này.
+  </footer>
+</section>
+
+</body>
+
+</html>

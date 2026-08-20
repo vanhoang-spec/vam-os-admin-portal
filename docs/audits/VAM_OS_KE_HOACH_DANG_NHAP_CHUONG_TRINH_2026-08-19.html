@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Kế hoạch đăng nhập theo chương trình và mùa</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; padding-left: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 32%; }
+
+  .note, .stop {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+
+  .check { background: var(--mint); border: 1px solid #bfe2cd; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+<style>
+  .flow { margin: 6px 0 14px; }
+  .fbox {
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px;
+    background: #fff; text-align: center;
+  }
+  .fbox .ft { font-weight: 600; font-size: 10.5pt; }
+  .fbox .fs { font-size: 9pt; color: var(--muted); margin-top: 2px; }
+  .fbox.green { background: var(--mint); border-color: #bfe2cd; }
+  .fbox.dark  { background: var(--green); border-color: var(--green-dark); }
+  .fbox.dark .ft { color: #fff; }
+  .fbox.dark .fs { color: #d8ece1; }
+  .frow { display: grid; gap: 10px; }
+  .frow.c3 { grid-template-columns: repeat(3, 1fr); }
+  .frow.c2 { grid-template-columns: 2fr 1fr; }
+  .fdown { text-align: center; color: var(--green); font-size: 12pt; line-height: 1.1; margin: 5px 0; }
+
+  .screen {
+    border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    padding: 12px 14px; margin-bottom: 6px; page-break-inside: avoid;
+  }
+  .screen h4 { margin: 0 0 3px; font-size: 11pt; }
+  .screen .sdesc { font-size: 9pt; color: var(--muted); margin-bottom: 9px; }
+  .field {
+    border: 1px solid var(--line); border-radius: 5px; padding: 6px 9px;
+    font-size: 9.5pt; color: var(--muted); margin-bottom: 8px; background: #fdfdfd;
+  }
+  .flabel { font-size: 8.5pt; color: var(--muted); margin-bottom: 3px; }
+  .btnfake {
+    background: var(--green); color: #fff; border-radius: 5px; padding: 7px;
+    text-align: center; font-size: 10pt; font-weight: 600;
+  }
+  .pickrow {
+    border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px;
+    margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .pickrow .pn { font-size: 10pt; font-weight: 600; }
+  .pickrow .pm { font-size: 8.5pt; color: var(--muted); margin-top: 1px; }
+  .pickrow .pa { font-size: 9.5pt; color: var(--green); font-weight: 600; }
+  .ctxbar {
+    border: 1px solid var(--line); border-radius: 5px; padding: 6px 10px;
+    display: flex; justify-content: space-between; font-size: 9pt;
+    background: var(--mint); margin-bottom: 9px;
+  }
+  .ctxbar .cg { color: var(--green); font-weight: 600; }
+  .chip {
+    display: inline-block; font-size: 8.5pt; padding: 2px 8px; border-radius: 20px;
+    background: var(--mint); color: var(--green-dark); border: 1px solid #bfe2cd;
+    margin: 0 4px 4px 0;
+  }
+  .chip.off { background: #fff; color: var(--muted); border-color: var(--line); }
+  .warnbox {
+    border: 1px solid var(--warn-line); background: var(--warn-bg);
+    border-radius: 5px; padding: 8px 10px; font-size: 9.5pt; color: #7a5a10;
+  }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .yes { color: var(--green-dark); font-weight: 600; }
+  .no  { color: var(--stop-ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Kế hoạch phát triển</div>
+  <h1>Đăng nhập theo chương trình<br />và đúng mùa của từng trường</h1>
+  <div class="sub">Giai đoạn 7 — bản kế hoạch để duyệt trước khi lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Từ nay mọi mentor và mentee đều có tài khoản riêng. Đăng nhập chỉ bằng email và mật khẩu;
+    hệ thống tự biết người đó thuộc chương trình nào — một chương trình thì vào thẳng, nhiều
+    chương trình thì cho chọn — rồi đưa vào <strong>đúng mùa đang mở của trường đó</strong>.
+  </p>
+  <p class="lead">
+    Tài liệu này mô tả luồng, vẽ sẵn các màn hình, nói rõ những gì hệ thống <em>đã</em> có và
+    những gì <em>chưa</em> có trong dữ liệu thật, kèm một lỗi phải sửa trước khi gửi thư mời đầu
+    tiên. Đọc xong và đồng ý thì mới bắt tay viết code.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Trạng thái</dt><dd>Chờ duyệt — chưa viết dòng code nào</dd></div>
+    <div><dt>Số chương trình</dt><dd>5 trường</dd></div>
+    <div><dt>Số người cần tài khoản</dt><dd>~1.100 mentor và mentee</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ HÔM NAY ══════════ -->
+<section class="page">
+  <h2 class="plain">Hôm nay đang thế nào</h2>
+
+  <p>
+    VAM OS hiện là <strong>cổng chỉ dành cho ban tổ chức</strong>. Mentor và mentee
+    <strong>không có tài khoản</strong>. Họ chạm vào hệ thống qua các đường link gửi kèm email:
+    link xác nhận tham gia mùa, link xem hồ sơ mentee được ghép, link đọc quy tắc ứng xử và cẩm nang.
+    Mỗi link là một chuỗi ký tự dài, ai cầm được link thì mở được.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:36%">Việc</th><th>Hôm nay làm thế nào</th></tr></thead>
+    <tbody>
+      <tr><td>Mentor xác nhận tham gia mùa</td><td>Bấm link trong email, không cần đăng nhập</td></tr>
+      <tr><td>Mentor xem hồ sơ mentee được ghép</td><td>Bấm link riêng, hết hạn sau 120 ngày</td></tr>
+      <tr><td>Đọc quy tắc ứng xử, cẩm nang</td><td>Mở trang công khai theo đường dẫn cố định</td></tr>
+      <tr><td>Mentee nộp recap</td><td>Đăng bài lên group Facebook, BTC thu về</td></tr>
+      <tr><td>Xem mình đang ở mùa nào, chương trình nào</td><td><span class="no">Không có chỗ nào để xem</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:12pt;margin:18px 0 8px">Ba giới hạn khiến phải đổi</h3>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Không có chỗ nào là “nhà” của mentor</h3>
+      <p class="sub-step">
+        Mentor nhận 4–5 email mỗi mùa, mỗi email một link khác nhau. Mất email là mất đường vào.
+        Không có một trang duy nhất để mở ra và thấy: mình đang ở mùa nào, đã xác nhận chưa,
+        mentee của mình là ai.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Hệ thống chỉ biết một mùa duy nhất</h3>
+      <p class="sub-step">
+        Trong code hiện có <strong>đúng một dòng</strong> ghi “mùa hiện tại là UEHM-S11”, dùng chung
+        cho toàn bộ hệ thống. Không có khái niệm “mùa hiện tại của BK” hay “mùa hiện tại của HAM”.
+        Năm trường chạy lệch nhau nên một dòng đó không đủ.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Một người tham gia nhiều trường thì hệ thống không diễn tả được</h3>
+      <p class="sub-step">
+        Một mentor vừa dạy UEH vừa dạy BK là chuyện bình thường. Hôm nay không có bảng nào ghi
+        “người này thuộc những chương trình nào”, nên cũng không có gì để hiện ra cho họ chọn.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ LUỒNG MỚI ══════════ -->
+<section class="page">
+  <h2 class="plain">Luồng mới, từ lúc bấm đăng nhập</h2>
+
+  <div class="flow">
+    <div class="fbox"><div class="ft">Đăng nhập</div><div class="fs">chỉ email và mật khẩu — không có ô nào khác</div></div>
+    <div class="fdown">&#9660;</div>
+    <div class="fbox"><div class="ft">Hệ thống nhận diện người này là ai</div><div class="fs">khớp email đăng nhập với hồ sơ đã có trong dữ liệu</div></div>
+    <div class="fdown">&#9660;</div>
+    <div class="frow c3">
+      <div class="fbox green"><div class="ft">Mentor / mentee</div><div class="fs">theo hồ sơ tham gia</div></div>
+      <div class="fbox green"><div class="ft">BTC chương trình</div><div class="fs">theo phạm vi được cấp</div></div>
+      <div class="fbox green"><div class="ft">Super admin<br />và VAM admin</div><div class="fs">toàn hệ thống</div></div>
+    </div>
+    <div class="fdown">&#9660;</div>
+    <div class="frow c2">
+      <div class="fbox"><div class="ft">Chọn chương trình</div><div class="fs">chỉ thuộc một chương trình thì bỏ qua bước này, vào thẳng</div></div>
+      <div class="fbox"><div class="ft">Bảng báo cáo</div><div class="fs">một, nhiều hoặc tất cả</div></div>
+    </div>
+    <div class="fdown">&#9660;</div>
+    <div class="frow c2">
+      <div class="fbox dark"><div class="ft">Vào mùa đang mở của trường đó</div><div class="fs">UEH mùa 12 · BK mùa 11 · HAM mùa 7 · BAM mùa 3 · Huflit mùa 2</div></div>
+      <div class="fbox dark"><div class="ft">Xuất báo cáo</div><div class="fs">CSV hoặc PDF</div></div>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Điều quan trọng nhất của luồng này</h3>
+    <p style="margin:0">
+      <strong>Mùa đi theo chương trình, không đi theo người.</strong> Cùng một mentor, đăng nhập rồi
+      vào UEH thì thấy mùa 12; quay ra chọn BK thì thấy mùa 11. Không phải nhớ, không phải chọn mùa —
+      hệ thống biết trường nào đang ở mùa nào.
+    </p>
+  </div>
+
+  <div class="note">
+    <h3>Màn hình đăng nhập giữ nguyên tối giản</h3>
+    <p style="margin:0">
+      Đúng hai ô: email và mật khẩu. Không có ô chọn chương trình, không có ô chọn vai trò, không có
+      ô chọn mùa. Người đăng nhập không phải biết gì về cấu trúc bên trong — hệ thống tự tra.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ MÀN HÌNH 1-2 ══════════ -->
+<section class="page">
+  <h2 class="plain">Các màn hình — bản vẽ trước</h2>
+
+  <div class="screen">
+    <h4>1 · Đăng nhập</h4>
+    <div class="sdesc">Giống hệt hôm nay. Điểm cần giữ: không thêm ô nào khác.</div>
+    <div style="max-width:70%">
+      <div class="flabel">Email</div>
+      <div class="field">nguyenvana@gmail.com</div>
+      <div class="flabel">Mật khẩu</div>
+      <div class="field">••••••••</div>
+      <div class="btnfake">Đăng nhập</div>
+      <div style="font-size:8.5pt;color:var(--muted);margin-top:7px">
+        Chưa có tài khoản? Liên hệ ban tổ chức chương trình của anh/chị.
+      </div>
+    </div>
+  </div>
+
+  <div class="screen">
+    <h4>2 · Chọn chương trình</h4>
+    <div class="sdesc">Chỉ hiện khi người này thuộc <strong>nhiều hơn một</strong> chương trình. Một thì vào thẳng.</div>
+    <div style="font-size:11pt;font-weight:600;margin-bottom:2px">Chào anh Nguyễn Văn A</div>
+    <div style="font-size:9pt;color:var(--muted);margin-bottom:9px">Anh đang tham gia 2 chương trình. Chọn một để tiếp tục.</div>
+    <div class="pickrow">
+      <div><div class="pn">UEH Mentoring</div><div class="pm">Mùa 12 · đang chuẩn bị · vai trò mentor</div></div>
+      <div class="pa">Vào &rarr;</div>
+    </div>
+    <div class="pickrow" style="margin-bottom:0">
+      <div><div class="pn">BK Mentoring</div><div class="pm">Mùa 11 · đang chuẩn bị · vai trò mentor</div></div>
+      <div class="pa">Vào &rarr;</div>
+    </div>
+    <div style="font-size:8.5pt;color:var(--muted);margin-top:8px">
+      Đổi chương trình bất cứ lúc nào ở thanh trên cùng.
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ MÀN HÌNH 3-4 ══════════ -->
+<section class="page">
+  <h2 class="plain">Các màn hình — sau khi vào chương trình</h2>
+
+  <div class="screen">
+    <h4>3 · Trang chủ trong chương trình</h4>
+    <div class="sdesc">Thanh trên cùng luôn nói rõ đang đứng ở đâu. Bên trong là những thứ hệ thống <em>đã</em> có, gom về một chỗ.</div>
+    <div class="ctxbar"><span class="cg">UEH Mentoring · Mùa 12</span><span class="cg">Đổi chương trình</span></div>
+    <div style="font-size:11pt;font-weight:600">Mùa 12 đang chuẩn bị</div>
+    <div style="margin:6px 0 9px"><span class="chip">Đã xác nhận tham gia · nhận 2 mentee</span></div>
+    <div class="pickrow"><div class="pn" style="font-weight:400">Hồ sơ mentee được ghép</div><div class="pm">chưa có</div></div>
+    <div class="pickrow"><div class="pn" style="font-weight:400">Quy tắc ứng xử và cẩm nang</div><div class="pa">Mở</div></div>
+    <div class="pickrow" style="margin-bottom:0"><div class="pn" style="font-weight:400">Xác nhận tham gia mùa</div><div class="pa">Xem lại</div></div>
+  </div>
+
+  <div class="screen">
+    <h4>4 · Cùng người đó, trường khác, mùa khác</h4>
+    <div class="sdesc">Chưa có tên trong mùa đang mở thì nói thẳng, không để màn hình trống không giải thích.</div>
+    <div class="ctxbar"><span class="cg">BK Mentoring · Mùa 11</span><span class="cg">Đổi chương trình</span></div>
+    <div class="warnbox">
+      <strong>Anh chưa đăng ký mùa 11 của BK Mentoring.</strong><br />
+      Ban tổ chức sẽ gửi thư mời khi mở đăng ký. Anh vẫn xem lại được mùa 10 đã tham gia.
+    </div>
+    <div class="pickrow" style="margin-top:9px;margin-bottom:0">
+      <div class="pn" style="font-weight:400">Mùa 10 · đã kết thúc</div><div class="pa">Xem lại</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>Giai đoạn này chưa làm cổng mentor/mentee đầy đủ</h3>
+    <p style="margin:0">
+      Màn hình số 3 chỉ gom lại những trang đã tồn tại. Những thứ như “xem recap của mình”,
+      “lịch buổi gặp”, “danh bạ cộng đồng” là một giai đoạn riêng sau này — làm gộp vào đây sẽ
+      kéo dài và làm rối phần đăng nhập, vốn là phần cần chắc chắn nhất.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ MÀN BÁO CÁO ══════════ -->
+<section class="page">
+  <h2 class="plain">Màn hình cho super admin và VAM admin</h2>
+
+  <p>
+    Nhóm này <strong>không thao tác dữ liệu chương trình</strong>. Họ vào để xem và xuất báo cáo,
+    theo từng chương trình hoặc lũy kế toàn hệ thống.
+  </p>
+
+  <div class="screen">
+    <h4>5 · Ma trận xuất báo cáo</h4>
+    <div class="sdesc">Ba chiều: thời gian, chương trình, loại số liệu.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:10px">
+      <div><div class="flabel">Từ ngày</div><div class="field" style="margin:0">01/09/2025</div></div>
+      <div><div class="flabel">Đến ngày</div><div class="field" style="margin:0">31/08/2026</div></div>
+      <div><div class="flabel">Hoặc</div><div class="field" style="margin:0;color:var(--green)">Toàn bộ thời gian</div></div>
+    </div>
+
+    <div class="flabel">Chương trình</div>
+    <div style="margin-bottom:9px">
+      <span class="chip">UEH Mentoring</span><span class="chip">BK Mentoring</span><span class="chip">Hanoi Mentoring</span><span class="chip off">BAM</span><span class="chip off">Huflit Mentoring</span><span class="chip off">Tất cả</span>
+    </div>
+
+    <div class="flabel">Loại số liệu</div>
+    <div style="margin-bottom:11px">
+      <span class="chip">Số mentor</span><span class="chip">Số mentee</span><span class="chip">Lượt mentoring 1-1</span><span class="chip">Lượt cross mentoring</span><span class="chip">Training, company visit</span><span class="chip off">Lượt mentor, lượt mentee</span>
+    </div>
+
+    <table style="margin-bottom:6px">
+      <thead><tr><th>Chỉ số</th><th style="text-align:right">UEH</th><th style="text-align:right">BK</th><th style="text-align:right">HAM</th><th style="text-align:right">Tổng</th></tr></thead>
+      <tbody>
+        <tr><td>Số mentor</td><td style="text-align:right">212</td><td style="text-align:right">64</td><td style="text-align:right">88</td><td style="text-align:right"><strong>364</strong></td></tr>
+        <tr><td>Số mentee</td><td style="text-align:right">318</td><td style="text-align:right">96</td><td style="text-align:right">121</td><td style="text-align:right"><strong>535</strong></td></tr>
+        <tr><td>Lượt mentoring 1-1</td><td style="text-align:right">1.842</td><td style="text-align:right">402</td><td style="text-align:right">716</td><td style="text-align:right"><strong>2.960</strong></td></tr>
+        <tr><td>Lượt cross mentoring</td><td style="text-align:right">164</td><td style="text-align:right">21</td><td style="text-align:right">58</td><td style="text-align:right"><strong>243</strong></td></tr>
+        <tr><td>Training, company visit</td><td style="text-align:right">19</td><td style="text-align:right">6</td><td style="text-align:right">9</td><td style="text-align:right"><strong>34</strong></td></tr>
+      </tbody>
+    </table>
+    <div style="font-size:8.5pt;color:var(--muted)">Số trong bảng chỉ là ví dụ minh hoạ bố cục.</div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:38%">Số liệu</th><th>Lấy từ đâu trong hệ thống</th></tr></thead>
+    <tbody>
+      <tr><td>Số mentor / mentee (đếm người)</td><td>Danh sách thành viên chương trình + bảng cặp ghép</td></tr>
+      <tr><td>Lượt mentor / mentee (đếm theo mùa)</td><td>Danh sách thành viên theo mùa</td></tr>
+      <tr><td>Lượt mentoring 1-1</td><td>Recap loại <code>1on1_primary</code></td></tr>
+      <tr><td>Lượt cross mentoring</td><td>Recap loại <code>1on1_cross</code></td></tr>
+      <tr><td>Training, company visit</td><td>Sự kiện phân loại <code>training</code>, <code>company_tour</code> + danh sách tham dự</td></tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Tất cả số liệu này đã có sẵn trong hệ thống</h3>
+    <p style="margin:0">
+      Không phải tạo bảng dữ liệu mới. Việc cần làm là gom lại theo ba chiều đã nêu và cho xuất ra file.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ QUYẾT ĐỊNH ══════════ -->
+<section class="page">
+  <h2 class="plain">Những gì đã chốt</h2>
+
+  <table>
+    <thead><tr><th style="width:32%">Câu hỏi</th><th>Quyết định</th></tr></thead>
+    <tbody>
+      <tr><td class="key">Phạm vi đợt này</td><td>Chỉ luồng đăng nhập &rarr; chọn chương trình &rarr; vào đúng mùa. Bên trong dùng lại các trang đã có.</td></tr>
+      <tr><td class="key">Tạo tài khoản</td><td>Cả hai đường: BTC gửi thư mời, <strong>và</strong> tự đăng ký nếu email trùng với hồ sơ đã có.</td></tr>
+      <tr><td class="key">Mùa hiện tại</td><td>Lưu trong cơ sở dữ liệu. Super admin bật/đổi bằng một nút trong app, không cần lập trình viên.</td></tr>
+      <tr><td class="key">BTC và admin</td><td>Đi chung một luồng với mentor/mentee. Riêng super admin và VAM admin có thêm đường vào bảng báo cáo.</td></tr>
+      <tr><td class="key">Các link token cũ</td><td><strong>Giữ nguyên.</strong> Ai chưa kích hoạt tài khoản vẫn dùng link như cũ — không ai bị kẹt giữa mùa.</td></tr>
+      <tr><td class="key">Khớp tài khoản với hồ sơ</td><td>Email là khoá. Super admin gán hoặc tắt tư cách thành viên từng chương trình cho từng người.</td></tr>
+      <tr><td class="key">Chưa có tên trong mùa đang mở</td><td>Vẫn vào mùa mới, hiện thông báo rõ ràng, cho xem lại mùa cũ.</td></tr>
+      <tr><td class="key">Báo cáo</td><td>Dùng lại hai màn hình đã có, <strong>cộng thêm</strong> ma trận xuất báo cáo đa chiều.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Cách tổ chức dữ liệu: tách “là ai” khỏi “thuộc chương trình nào”</h3>
+
+  <div class="cols2">
+    <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+      <div style="font-weight:600;font-size:10.5pt;margin-bottom:4px">Danh tính</div>
+      <div style="font-size:9.5pt;color:var(--muted)">
+        Một tài khoản &harr; một con người. Quan hệ một-một, vĩnh viễn, không đổi.
+      </div>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+      <div style="font-weight:600;font-size:10.5pt;margin-bottom:4px">Tư cách thành viên</div>
+      <div style="font-size:9.5pt;color:var(--muted)">
+        Một con người &harr; nhiều chương trình. Mỗi dòng bật/tắt được độc lập.
+      </div>
+    </div>
+  </div>
+
+  <p style="margin-top:12px">
+    Tách như vậy thì “mentor này tham gia UEH và BK” chỉ là hai dòng thành viên trên cùng một tài khoản.
+    Super admin thêm một chương trình cho ai đó, hoặc tắt một chương trình tại một thời điểm nào đó,
+    mà không đụng gì tới tài khoản của họ. Còn <strong>mùa</strong> thì suy ra từ chương trình, không
+    lưu trong tư cách thành viên — nên khi UEH sang mùa 13, không phải sửa lại từng người.
+  </p>
+
+  <div class="stop">
+    <h3>Vì sao không gộp mentor/mentee vào bảng tài khoản của ban tổ chức</h3>
+    <p style="margin:0">
+      Gộp chung sẽ tiết kiệm được nhiều công. Nhưng khi có sự cố, kiểu hỏng của nó là
+      <strong>lộ dữ liệu</strong>: hệ thống hiện cho qua bất kỳ tài khoản nội bộ nào đang hoạt động,
+      nên một mentee lọt vào sẽ nhìn thấy khung cổng quản trị. Dùng bảng riêng thì kiểu hỏng mặc định
+      là <strong>từ chối</strong> — sai thì không vào được, chứ không phải vào được chỗ không nên vào.
+      Với dữ liệu của hơn một nghìn người, chọn cách sai-thì-đóng.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ SỰ THẬT DỮ LIỆU ══════════ -->
+<section class="page">
+  <h2 class="plain">Sự thật về dữ liệu năm chương trình</h2>
+
+  <p>
+    Đây là phần cần anh xem kỹ nhất. Kế hoạch nói năm trường, nhưng trong hệ thống thật hiện chỉ có
+    một trường có dữ liệu đầy đủ.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:26%">Chương trình</th><th style="width:37%">Đang có gì</th><th>Cần tạo</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="key">UEH Mentoring</td>
+        <td><span class="yes">Đầy đủ</span> — có chương trình, có mùa 11 và mùa 12</td>
+        <td>Chỉ cần đánh dấu mùa 12 là mùa đang mở</td>
+      </tr>
+      <tr>
+        <td class="key">BK Mentoring</td>
+        <td>Chỉ có tên chương trình, <span class="no">chưa có mùa nào</span></td>
+        <td>Tạo mùa 11</td>
+      </tr>
+      <tr>
+        <td class="key">Hanoi Mentoring</td>
+        <td>Có tên chương trình; mùa 6 <span class="no">chỉ có trên bản thử nghiệm</span>, chưa lên bản chạy thật</td>
+        <td>Tạo mùa 7</td>
+      </tr>
+      <tr>
+        <td class="key">Huflit Mentoring</td>
+        <td>Chỉ có tên chương trình, <span class="no">chưa có mùa nào</span></td>
+        <td>Tạo mùa 2</td>
+      </tr>
+      <tr>
+        <td class="key">BAM — Banking Mentoring</td>
+        <td><span class="no">Chưa tồn tại</span> ở bất kỳ đâu trong hệ thống</td>
+        <td>Tạo cả chương trình lẫn mùa 3</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="stop">
+    <h3>Danh sách “ai thuộc chương trình nào” hiện đang trống</h3>
+    <p style="margin:0 0 6px">
+      Bảng lẽ ra trả lời câu hỏi này <strong>không có dòng nào</strong> trên bản chạy thật — đây là điều
+      kiểm chứng được, chính hệ thống kiểm tra trước mỗi lần cập nhật lớn đã ghi nhận con số 0.
+    </p>
+    <p style="margin:0">
+      Nguồn tin cậy duy nhất còn lại là <strong>bảng cặp ghép mentor–mentee</strong>: từ mỗi cặp đã ghép,
+      suy ngược ra mùa, rồi ra chương trình. Sẽ viết một bước chuyển dữ liệu làm đúng việc đó, có báo cáo
+      đối chiếu số dòng trước và sau.
+    </p>
+  </div>
+
+  <div class="note">
+    <h3>Hệ quả cần biết trước</h3>
+    <p style="margin:0">
+      Trước khi bước chuyển dữ liệu chạy xong, màn chọn chương trình của bốn trường mới sẽ trống.
+      Chỉ UEH có người thật để hiện ra. Đây là giới hạn của dữ liệu, không phải của phần mềm — và nó có
+      nghĩa là <strong>nên triển khai theo từng trường, bắt đầu từ UEH</strong>.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ LỖI CHẶN ĐƯỜNG ══════════ -->
+<section class="page">
+  <h2 class="plain">Một lỗi phải sửa trước khi gửi thư mời đầu tiên</h2>
+
+  <div class="stop">
+    <h3>Trang đặt mật khẩu hiện không mở được khi chưa đăng nhập</h3>
+    <p style="margin:0 0 6px">
+      Khi ai đó bấm link đặt mật khẩu trong thư mời, họ chưa đăng nhập — đó là toàn bộ mục đích của link.
+      Nhưng hệ thống hiện chặn họ lại bằng một thẻ ghi “Cần đăng nhập” và <strong>không hiện form đặt mật khẩu</strong>.
+    </p>
+    <p style="margin:0">
+      Nghĩa là: nếu gửi thư mời hôm nay, <strong>không ai kích hoạt được tài khoản</strong>. Đây là lỗi đã tồn tại
+      từ trước, chỉ chưa lộ ra vì chưa ai dùng đường đó. Phải sửa trước, và kiểm tra bằng một thư mời thật
+      gửi vào hộp thư của chính mình.
+    </p>
+  </div>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Gửi thư mời cho hơn một nghìn người</h3>
+
+  <p>
+    Hệ thống đang có khoảng <strong>450 hồ sơ mentor</strong> và <strong>656 hồ sơ mentee</strong>.
+    Brevo gói miễn phí cho <strong>300 thư mỗi ngày</strong>.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:30%"></th><th>Con số</th></tr></thead>
+    <tbody>
+      <tr><td class="key">Số thư cần gửi</td><td>~1.100</td></tr>
+      <tr><td class="key">Giới hạn mỗi ngày</td><td>300</td></tr>
+      <tr><td class="key">Thời gian cần</td><td><strong>khoảng 4 ngày</strong></td></tr>
+      <tr><td class="key">Cách làm đề xuất</td><td>Mời theo từng chương trình, bắt đầu từ UEH — vừa khớp với việc chỉ UEH có dữ liệu đầy đủ</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <h3>Nếu muốn gửi nhanh hơn</h3>
+    <p style="margin:0">
+      Nâng gói Brevo trả phí sẽ bỏ được giới hạn ngày. Không bắt buộc — 4 ngày là chấp nhận được cho một
+      việc làm một lần đầu mùa. Quyết định này để anh cân nhắc, không ảnh hưởng tới code.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ VIỆC PHẢI LÀM ══════════ -->
+<section class="page">
+  <h2 class="plain">Danh sách việc, theo thứ tự làm</h2>
+
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:40%">Việc</th><th>Kết quả nhận được</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Sửa lỗi trang đặt mật khẩu</td><td>Bấm link trong thư mời thì mở được form</td></tr>
+      <tr><td>2</td><td>Thêm ba bảng dữ liệu mới và một cột “mùa đang mở” cho mỗi chương trình</td><td>Hệ thống diễn tả được người &harr; nhiều chương trình</td></tr>
+      <tr><td>3</td><td>Tạo chương trình BAM và bốn mùa còn thiếu</td><td>Năm trường đều có mùa đang mở</td></tr>
+      <tr><td>4</td><td>Chuyển dữ liệu từ bảng cặp ghép sang danh sách thành viên chương trình</td><td>Người thật hiện ra ở màn chọn chương trình</td></tr>
+      <tr><td>5</td><td>Viết phần nhận diện người dùng sau khi đăng nhập</td><td>Đăng nhập xong hệ thống biết đưa đi đâu</td></tr>
+      <tr><td>6</td><td>Làm màn chọn chương trình và trang chủ trong chương trình</td><td>Màn hình số 2, 3, 4 trong tài liệu này</td></tr>
+      <tr><td>7</td><td>Dựng hàng rào chặn mentor/mentee khỏi cổng quản trị</td><td>Gõ thẳng địa chỉ trang quản trị cũng không vào được</td></tr>
+      <tr><td>8</td><td>Màn quản lý cho super admin: mời tài khoản, gán/tắt chương trình, đặt mùa đang mở</td><td>Anh tự làm được, không cần nhờ lập trình viên</td></tr>
+      <tr><td>9</td><td>Ma trận xuất báo cáo cho VAM admin</td><td>Màn hình số 5</td></tr>
+      <tr><td>10</td><td>Viết bài kiểm thử, chạy toàn bộ, dựng tài liệu hướng dẫn</td><td>Sẵn sàng đưa lên bản chạy thật</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:12pt;margin:20px 0 8px">Bài kiểm thử quan trọng nhất</h3>
+  <p>
+    Trong số các bài kiểm thử, có một bài đáng nêu riêng: <strong>lấy một tài khoản mentee thử, gõ thẳng
+    địa chỉ các trang quản trị</strong> — danh sách người, danh sách cặp ghép, trang quản lý tài khoản —
+    và xác nhận tất cả đều bị chặn. Bài này chạy tự động mỗi lần sửa code, nên hàng rào không thể vô tình
+    bị gỡ ra sau này.
+  </p>
+</section>
+
+<!-- ══════════ GIỚI HẠN & KIỂM CHỨNG ══════════ -->
+<section class="page">
+  <h2 class="plain">Nói trước ba giới hạn</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Các trang vận hành của BTC vẫn ghim vào mùa cũ</h3>
+      <p class="sub-step">
+        Khoảng 30 trang dành cho ban tổ chức (bảng vận hành, báo cáo tháng, cặp ghép, sự kiện…) vẫn đọc
+        “mùa hiện tại” từ dòng cấu hình cũ. Đợt này chỉ làm cho <em>người tham gia</em> và <em>màn báo cáo</em>
+        đọc mùa theo từng chương trình. Chuyển hết 30 trang kia là một đợt riêng — làm gộp vào đây thì
+        rủi ro cao và khó kiểm chứng.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Bốn trường mới sẽ trống cho đến khi có dữ liệu</h3>
+      <p class="sub-step">
+        Đã nói ở phần trước. Phần mềm chạy đúng, nhưng không có người để hiện ra.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Tự đăng ký chỉ chạy khi email trùng khớp</h3>
+      <p class="sub-step">
+        Ai đăng ký bằng email khác với email trong hồ sơ sẽ không tự vào được — họ rơi vào danh sách chờ
+        để BTC xử lý. Hệ thống <strong>không đoán</strong> theo tên, vì đoán sai nghĩa là cho người này
+        xem dữ liệu của người khác.
+      </p>
+    </div>
+  </div>
+
+  <h2 class="plain" style="margin-top:24px">Nghiệm thu thế nào</h2>
+
+  <table>
+    <thead><tr><th style="width:6%">#</th><th>Việc thử</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Tạo một tài khoản <strong>mentor thuộc hai chương trình</strong>: đăng nhập &rarr; thấy màn chọn &rarr; vào UEH thấy mùa 12 &rarr; đổi sang BK thấy mùa 11</td></tr>
+      <tr><td>2</td><td>Tạo một tài khoản <strong>mentee thuộc một chương trình</strong>: đăng nhập &rarr; vào thẳng, không thấy màn chọn</td></tr>
+      <tr><td>3</td><td>Dùng tài khoản mentee gõ thẳng địa chỉ trang quản trị &rarr; phải bị chặn</td></tr>
+      <tr><td>4</td><td>Tài khoản VAM admin: vào bảng báo cáo, chọn 3 chương trình &rarr; thấy cột tổng; xuất CSV và PDF; thử mở trang cặp ghép &rarr; bị chặn</td></tr>
+      <tr><td>5</td><td>Gửi một thư mời thật vào hộp thư của mình, bấm link, đặt mật khẩu, đăng nhập được</td></tr>
+      <tr><td>6</td><td>Đổi mùa đang mở của UEH &rarr; kiểm tra mùa của BK không đổi theo</td></tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Thứ tự triển khai đề xuất</h3>
+    <p style="margin:0">
+      Chạy trên bản thử nghiệm trước, có sao lưu. Xong bước nghiệm thu 1–6 trên bản thử nghiệm rồi mới
+      đưa lên bản chạy thật, và mời tài khoản theo từng trường — UEH trước.
+    </p>
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS · Kế hoạch giai đoạn 7: đăng nhập theo chương trình và mùa · 19/08/2026 ·
+    Tài liệu để duyệt, chưa triển khai.
+  </footer>
+</section>
+
+</body>
+
+</html>
