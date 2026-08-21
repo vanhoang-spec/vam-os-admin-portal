@@ -1,19 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { SEASON_CONFIG } from "../lib/season-config";
 
-// ── S11 operating season guard ────────────────────────────────────────────────
+// ── S12 operating season guard ────────────────────────────────────────────────
 //
-// CURRENT_OPERATING_SEASON_CODE must remain "UEHM-S11" for the entire Batch-3
+// CURRENT_OPERATING_SEASON_CODE must remain "UEHM-S12" for the current operating
 // window. S11 data is historical reference; changing this constant would break
 // all operational queries that scope data to the current operating season.
 
-describe("SEASON_CONFIG — S11 operating season guard", () => {
-  it('CURRENT_OPERATING_SEASON_CODE is exactly "UEHM-S11"', () => {
-    expect(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE).toBe("UEHM-S11");
+describe("SEASON_CONFIG — S12 operating season guard", () => {
+  it('CURRENT_OPERATING_SEASON_CODE is exactly "UEHM-S12"', () => {
+    expect(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE).toBe("UEHM-S12");
   });
 
-  it("CURRENT_OPERATING_SEASON_CODE has not been altered from the S11 value", () => {
-    expect(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE).not.toBe("UEHM-S12");
+  it("CURRENT_OPERATING_SEASON_CODE has not been altered from the S12 value", () => {
+    expect(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE).not.toBe("UEHM-S11");
     expect(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE).not.toBe("");
     expect(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE).not.toBeNull();
   });

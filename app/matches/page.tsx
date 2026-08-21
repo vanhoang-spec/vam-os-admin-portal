@@ -4,7 +4,9 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches } from "@/lib/data";
 import { getManualMatchingCandidates, getMatchList } from "@/lib/matches";
 import { canManageMatches } from "@/lib/permissions";
-import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
+import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
+import { seasonLabel } from "@/lib/season-labels";
 import { matchStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { ManualMatchForm, MatchCancelForm } from "./matches-client";
@@ -29,11 +31,26 @@ function StatusBadge({ status }: { status: string | null }) {
 export default async function MatchesPage(props: { searchParams?: Promise<{
     batch?: string | string[];
     status?: string | string[];
+    season?: string | string[];
   }> }) {
   const searchParams = await props.searchParams;
 
-  const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
+  const [scopeContext, seasonContext] = await Promise.all([
+    getAdminScopeContext(),
+    resolveSeasonContext(searchParams?.season).catch((error: unknown) => {
+      if (error instanceof SeasonAccessDeniedError) return null;
+      throw error;
+    })
+  ]);
+  if (!seasonContext) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn chưa được cấp phạm vi truy cập cho mùa vận hành hiện tại. Liên hệ quản trị viên để được cấp quyền."
+      />
+    );
+  }
+  const scope = seasonContext.effectiveScope;
   const [adminUser, intakeBatchesRes] = await Promise.all([
     getCurrentAdminUser(),
     getIntakeBatches(scope)
@@ -67,7 +84,7 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
     <>
       <PageHeader
         title="Matching Mentor – Mentee"
-        description="Tạo và quản lý ghép cặp thủ công theo batch. Dữ liệu match từ các mùa trước vẫn hiển thị đầy đủ."
+        description={`Tạo và quản lý ghép cặp thủ công trong ${seasonLabel(seasonContext.selectedSeasonCode)}.`}
       />
       {matchListRes.error ? <ErrorBox message={matchListRes.error} /> : null}
       {intakeBatchesRes.error ? <ErrorBox message={intakeBatchesRes.error} /> : null}

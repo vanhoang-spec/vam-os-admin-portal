@@ -3,13 +3,10 @@ export const SEASON_CONFIG = {
    * The primary season the admin portal is currently operating in.
    * This drives the default views for all operations dashboards, KPI cards, and event creation.
    *
-   * IMPORTANT: Keep this as UEHM-S11 until the owner confirms that UEHM-S12 has been
-   * seeded into the `seasons` database table AND the team is ready to switch the dashboard.
-   * Switching prematurely will cause dashboards to show unfiltered or empty data.
-   *
-   * To switch to Season 12: change this value to "UEHM-S12".
+   * UEHM-S12 is the explicit operating default. Request-level season context
+   * may narrow supported operational surfaces to another authorized season.
    */
-  CURRENT_OPERATING_SEASON_CODE: "UEHM-S11",
+  CURRENT_OPERATING_SEASON_CODE: "UEHM-S12",
 
   /**
    * The season code for incoming applications.

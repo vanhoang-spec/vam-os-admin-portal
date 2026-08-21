@@ -2,9 +2,9 @@ import Link from "next/link";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, ErrorBox, InternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getDashboardData, getOperationsData, getRestrictedDashboardSummary, keyById } from "@/lib/data";
-import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { getAdminScopeContext } from "@/lib/program-scope";
 import { displayCode, displayText, formatMonthVN } from "@/lib/utils";
-import { SEASON_CONFIG } from "@/lib/season-config";
+import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import {
   selectDashboardMonth,
   currentMonthVN,
@@ -14,8 +14,6 @@ import {
   OPERATIONAL_MONTH_START,
   VALID_RECAP_STATUSES,
 } from "@/lib/dashboard-month";
-
-const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 
 function statusKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -90,7 +88,6 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
   const searchParams = await props.searchParams;
 
   const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
   if (scopeContext.scopeError) {
     return (
       <>
@@ -99,6 +96,20 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
       </>
     );
   }
+  const seasonContext = await resolveSeasonContext(searchParams?.season).catch((error: unknown) => {
+    if (error instanceof SeasonAccessDeniedError) return null;
+    throw error;
+  });
+  if (!seasonContext) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn chưa được cấp phạm vi truy cập cho mùa vận hành hiện tại. Liên hệ quản trị viên để được cấp quyền."
+      />
+    );
+  }
+  const scope = seasonContext.effectiveScope;
+  const SEASON_CODE = seasonContext.selectedSeasonCode;
   if (scopeContext.globalRole === "viewer" || scopeContext.globalRole === "reviewer") {
     const summary = await getRestrictedDashboardSummary(scope);
     return (
@@ -116,7 +127,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
   }
   const [data, opsData] = await Promise.all([
     getDashboardData(scope),
-    getOperationsData(scope)
+    getOperationsData(scope, SEASON_CODE)
   ]);
   const errors = [
     data.people.error,
