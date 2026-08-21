@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getReviewerPool } from "@/lib/data";
-import { canManageReviewers } from "@/lib/permissions";
+import { canManageReviewers, canManageUsers } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewerPoolClient } from "./reviewer-pool-client";
@@ -18,6 +18,7 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canManageReviewers(adminUser.role)) redirect("/reviews");
+  const canManageUserAccounts = canManageUsers(adminUser.role);
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
   const scopeContext = await getAdminScopeContext();
@@ -46,10 +47,16 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
       <div className="mb-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         <strong>Lưu ý Auth:</strong> Việc cấp quyền reviewer tạo hoặc kích hoạt quyền trong VAM OS.
         Nếu người này chưa từng đăng nhập, admin vẫn cần gửi invitation / reset password
-        theo quy trình Auth hiện tại (qua Supabase Dashboard hoặc trang{" "}
-        <Link href="/admin/users" className="underline hover:text-amber-900">
-          /admin/users
-        </Link>
+        theo quy trình Auth hiện tại (qua Supabase Dashboard
+        {canManageUserAccounts ? (
+          <> hoặc trang{" "}
+            <Link href="/admin/users" className="underline hover:text-amber-900">
+              /admin/users
+            </Link>
+          </>
+        ) : (
+          <> hoặc liên hệ Super Admin</>
+        )}
         ).
       </div>
 

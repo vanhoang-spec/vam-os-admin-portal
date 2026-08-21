@@ -3,6 +3,7 @@ import { Card, EmptyState, ErrorBox, ExternalLinkButton, KpiCard, PageHeader, Si
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageWorkflow } from "@/lib/auth-constants";
 import { getAdminCorrectionData, type AdminActionItem, type AdminDataIssue } from "@/lib/admin-corrections";
+import { canManageUsers } from "@/lib/permissions";
 import { displayText, formatDate } from "@/lib/utils";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { ActionItemUpdateForm, CreateIssueActionForm, EditRecapInlineForm, QuickResolveForm } from "./admin-correction-forms";
@@ -214,6 +215,7 @@ export default async function AdminCorrectionPage(props: { searchParams?: Promis
 
   const adminUser = await getCurrentAdminUser();
   const canManage = canManageWorkflow(adminUser);
+  const canManageUserAccounts = canManageUsers(adminUser?.role);
   const tab = activeTab(searchParams?.tab);
 
   if (!canManage) {
@@ -236,7 +238,9 @@ export default async function AdminCorrectionPage(props: { searchParams?: Promis
       <div className="mb-6 flex flex-wrap gap-2">
         <Link href="/admin?tab=data-issues" className={tabClass(tab === "data-issues")}>Rà soát dữ liệu</Link>
         <Link href="/admin?tab=follow-up" className={tabClass(tab === "follow-up")}>Hỗ trợ follow-up</Link>
-        <Link href="/admin/users" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Tài khoản</Link>
+        {canManageUserAccounts ? (
+          <Link href="/admin/users" className="rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Tài khoản</Link>
+        ) : null}
       </div>
 
       {tab === "data-issues" ? <DataIssuesTab issues={data.issues} /> : <FollowUpTab items={followups} />}

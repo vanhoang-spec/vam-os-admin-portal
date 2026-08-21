@@ -7,7 +7,7 @@ export function canAccessAdminUser(role?: string | null) {
 }
 
 export function canManageUsers(role?: string | null) {
-  return ["super_admin", "admin"].includes(role || "");
+  return role === "super_admin";
 }
 
 export function canEditRecap(adminUser: AdminLike) {

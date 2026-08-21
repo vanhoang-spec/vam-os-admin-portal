@@ -33,17 +33,19 @@ describe("canAccessAdminUser", () => {
   it("denies undefined", () => expect(canAccessAdminUser(undefined)).toBe(false));
 });
 
-// ── canManageUsers (super_admin and admin only) ───────────────────────────────
+// ── canManageUsers (active identity is enforced upstream; role is super only) ─
 
 describe("canManageUsers", () => {
   it("grants super_admin", () => expect(canManageUsers("super_admin")).toBe(true));
-  it("grants admin", () => expect(canManageUsers("admin")).toBe(true));
+  it("denies admin", () => expect(canManageUsers("admin")).toBe(false));
   it("denies core_team", () => expect(canManageUsers("core_team")).toBe(false));
   it("denies reviewer", () => expect(canManageUsers("reviewer")).toBe(false));
   LIMITED_ROLES.forEach((role) => {
     it(`denies ${role}`, () => expect(canManageUsers(role)).toBe(false));
   });
   it("denies null", () => expect(canManageUsers(null)).toBe(false));
+  it("denies undefined", () => expect(canManageUsers(undefined)).toBe(false));
+  it("denies unknown roles", () => expect(canManageUsers("unknown")).toBe(false));
 });
 
 // ── canEditRecap (takes AdminLike object) ─────────────────────────────────────

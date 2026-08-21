@@ -25,7 +25,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const role = adminUser?.role;
   const showReviews = roleIn(role, ["super_admin", "admin", "core_team", "reviewer"]);
   const showAdminTier = roleIn(role, ["super_admin", "admin", "core_team"]);
-  const showUserMgmt = roleIn(role, ["super_admin", "admin"]);
+  const showUserMgmt = role === "super_admin" && adminUser?.status === "active";
 
   const groups: NavGroupDef[] = [
     role === "super_admin"

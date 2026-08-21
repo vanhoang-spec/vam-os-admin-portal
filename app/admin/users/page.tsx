@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 import { listAdminAuditLogs, listManagedAdminUsers, requireSuperAdmin, type ManagedAdminUser } from "@/lib/admin-users";
 import { displayText, formatDate } from "@/lib/utils";
@@ -72,6 +71,27 @@ function safeJson(value: unknown) {
   }
 }
 
+function AccessDeniedView() {
+  return (
+    <div className="mx-auto max-w-2xl py-10">
+      <Card>
+        <h1 className="text-xl font-semibold text-vam-ink">Bạn không có quyền truy cập chức năng này</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          Chức năng Quản lý người dùng chỉ dành cho Super Admin.
+          <br />
+          Nếu bạn cần được cấp quyền, vui lòng liên hệ Super Admin.
+        </p>
+        <Link
+          href="/"
+          className="mt-5 inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vam-green focus-visible:ring-offset-2"
+        >
+          Quay về Tổng quan
+        </Link>
+      </Card>
+    </div>
+  );
+}
+
 function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedAdminUser[]; activeSuperAdminCount: number }) {
   if (!users.length) return <EmptyState message="Chưa có admin user để hiển thị." />;
   return (
@@ -130,7 +150,7 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
   const searchParams = await props.searchParams;
 
   const adminUser = await requireSuperAdmin();
-  if (!adminUser) notFound();
+  if (!adminUser) return <AccessDeniedView />;
 
   const [usersResult, auditResult, catalog] = await Promise.all([
     listManagedAdminUsers(),

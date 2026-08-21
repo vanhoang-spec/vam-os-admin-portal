@@ -96,7 +96,12 @@ describe("buildNavGroups — admin", () => {
   const hrefs = allNavHrefs(groups);
 
   it("has ≤ 8 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(8));
-  it("includes /admin/users", () => expect(hrefs).toContain("/admin/users"));
+  it("does NOT include /admin/users", () => expect(hrefs).not.toContain("/admin/users"));
+  it("retains unrelated admin routes", () => {
+    expect(hrefs).toContain("/admin");
+    expect(hrefs).toContain("/admin/renewals");
+    expect(hrefs).toContain("/admin/seasons-forms");
+  });
   it("includes /reviews and /interviews", () => {
     expect(hrefs).toContain("/reviews");
     expect(hrefs).toContain("/interviews");
@@ -226,6 +231,17 @@ describe("buildNavGroups — null user", () => {
   });
 });
 
+describe("buildNavGroups — inactive super_admin", () => {
+  const inactiveSuperAdmin = {
+    ...makeUser("super_admin"),
+    status: "inactive"
+  } as unknown as CurrentAdminUser;
+
+  it("fails closed and does NOT include /admin/users", () => {
+    expect(allNavHrefs(buildNavGroups(inactiveSuperAdmin))).not.toContain("/admin/users");
+  });
+});
+
 // ── Route coverage unchanged from Batch 1 ────────────────────────────────────
 
 describe("route coverage — no routes removed by nav grouping", () => {
@@ -280,7 +296,7 @@ describe("allNavHrefs", () => {
 //                                 /operations/monthly, /operations/intelligence,
 //                                 /recaps/create; also + /admin, /team
 //   canReview (+reviewer):       + /reviews, /interviews
-//   canManageUsers (+admin):     + /admin/users
+//   active super_admin only:     + /admin/users
 
 const BASE_ROUTE_ARR = [
   "/", "/operations", "/people", "/mentors", "/mentees",
@@ -307,7 +323,7 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   support_team: BASE_ROUTE_ARR,
   reviewer:     [...BASE_ROUTE_ARR, "/reviews", "/interviews"],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
   super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
 };
 

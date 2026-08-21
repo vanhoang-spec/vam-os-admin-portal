@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canBulkAssignReviews, canReview } from "@/lib/permissions";
+import { canBulkAssignReviews, canManageUsers, canReview } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
@@ -158,6 +158,7 @@ export default async function ReviewerGuidePage() {
   if (!canReview(adminUser.role)) redirect("/");
 
   const isAdmin = canBulkAssignReviews(adminUser.role);
+  const canManageUserAccounts = canManageUsers(adminUser.role);
 
   return (
     <>
@@ -216,11 +217,13 @@ export default async function ReviewerGuidePage() {
             <Checklist
               items={[
                 {
-                  label: (
+                  label: canManageUserAccounts ? (
                     <>
                       Vào <Link href="/admin/users" className="text-vam-green hover:underline">/admin/users</Link> → nhấn{" "}
                       <strong>Tạo admin user mới</strong>.
                     </>
+                  ) : (
+                    <>Liên hệ <strong>Super Admin</strong> để tạo tài khoản reviewer mới.</>
                   )
                 },
                 {
