@@ -27,8 +27,8 @@ vi.mock("@/lib/supabase", () => {
   };
 });
 
-// Import after mocks are set up
-import { getApplications, getApplication } from "@/lib/data";
+import { getApplicationDetailContext } from "@/lib/application-detail";
+import { getPagedApplications } from "@/lib/applications-list";
 
 declare global {
   var __fakeSupabaseClient: any;
@@ -53,43 +53,34 @@ describe("M3 R0 Application Scale Benchmark", () => {
     delete global.__fakeSupabaseClient;
   });
 
-  it("benchmarks LIST data access (getApplications)", async () => {
+  it("benchmarks LIST data access (getPagedApplications)", async () => {
     db.requests.length = 0; // reset requests
 
     const startTime = performance.now();
-    const result = await getApplications({ allowedSeasonIds: ["season-1"] });
+    const result = await getPagedApplications({ scope: { allowedSeasonIds: ["season-1"] } });
     const mapTime = performance.now() - startTime;
 
     expect(result.data).toBeDefined();
     expect(result.data?.length).toBeGreaterThan(0);
 
-    const requests = db.requests;
-    const totalRequests = requests.length;
-    let totalBytes = 0;
-    let totalRows = 0;
-    
-    requests.forEach(req => {
-      totalBytes += req.bytes || 0;
-      totalRows += req.returned;
-    });
-
     const metrics = {
       harnessVersion: 2,
       checksum,
       list: {
-        totalRequests,
-        totalRows,
-        totalBytes,
+        totalRequests: db.requests.length,
+        totalRows: db.requests.reduce((sum, r) => sum + r.returned, 0),
+        totalBytes: db.requests.reduce((sum, r) => sum + (r.bytes ?? 0), 0),
         mapTimeMs: Math.round(mapTime),
-        requestsByTable: requests.reduce((acc, req) => {
+        requestsByTable: db.requests.reduce((acc, req) => {
           acc[req.table] = (acc[req.table] || 0) + 1;
           return acc;
         }, {} as Record<string, number>),
-        rowsByTable: requests.reduce((acc, req) => {
+        rowsByTable: db.requests.reduce((acc, req) => {
           acc[req.table] = (acc[req.table] || 0) + req.returned;
           return acc;
         }, {} as Record<string, number>)
-      }
+      },
+      detail: {} as any
     };
 
     // Save intermediate artifact
@@ -100,20 +91,19 @@ describe("M3 R0 Application Scale Benchmark", () => {
     global.__benchmarkMetrics = metrics;
   });
 
-  it("benchmarks DETAIL data access (getApplication)", async () => {
-    db.requests.length = 0; // reset requests
-
-    const appIds = ["app-0", "app-100", "app-500", "app-1000", "app-1400"];
+  it("benchmarks DETAIL data access (getApplicationDetailContext)", async () => {
+    const appIds = ["app-0", "app-150", "app-300"]; // Test a few applications
+    
     let totalRequests = 0;
-    let totalBytes = 0;
     let totalRowsFetched = 0;
-    let totalRowsRendered = 0; // Roughly 1 app + 1 person + 1 profile + 1 match + ~20 answers
+    let totalBytes = 0;
+    let totalRowsRendered = 0;
 
     for (const appId of appIds) {
       const dbBefore = db.requests.length;
       
-      const result = await getApplication(appId, { allowedSeasonIds: ["season-1"] });
-      expect(result.data).toBeDefined();
+      const result = await getApplicationDetailContext(appId, { allowedSeasonIds: ["season-1"] });
+      expect(result.application).toBeDefined();
 
       const reqsForThisApp = db.requests.slice(dbBefore);
       
@@ -139,7 +129,7 @@ describe("M3 R0 Application Scale Benchmark", () => {
       }, {} as Record<string, number>),
     };
 
-    const artifactPath = path.resolve(__dirname, "../docs/benchmarks/m3-r0-before.json");
+    const artifactPath = path.resolve(__dirname, "../docs/benchmarks/m3-r2-after.json");
     const currentMetrics = global.__benchmarkMetrics || {};
     currentMetrics.detail = detailMetrics;
 

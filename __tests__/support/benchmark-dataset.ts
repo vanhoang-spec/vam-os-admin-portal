@@ -54,6 +54,8 @@ export function generateBenchmarkDataset(seed = 123456789) {
   const mentoring_recaps: any[] = [];
   const event_participations: any[] = [];
   const person_season_memberships: any[] = [];
+  const application_list_v1: any[] = [];
+  const application_facets_v1: any[] = [];
 
   // 30 admin users
   for (let i = 0; i < 30; i++) {
@@ -149,7 +151,44 @@ export function generateBenchmarkDataset(seed = 123456789) {
         answer_text: `Answer ${j} for application ${i}`
       });
     }
+
+    application_list_v1.push({
+      id: `app-${i}`,
+      person_id: personId,
+      season_id: season.id,
+      intake_batch_id: applications[i].intake_batch_id,
+      role_applied: 'mentee',
+      sbd: payload.mssv,
+      source: null,
+      acquisition_channel: payload.acquisition_channel || null,
+      submitted_at: '2026-01-01T00:00:00Z',
+      status_unified: 'submitted',
+      consent_unified: 'yes',
+      full_name: hasPersonId ? people[i].full_name : `${payload.first_name} ${payload.last_name}`,
+      email_primary: hasPersonId ? people[i].email_primary : payload.email_primary,
+      season_code: season.code,
+      intake_batch_code: batches.find(b => b.id === applications[i].intake_batch_id)?.code,
+      search_blob: `app-${i} ${payload.mssv} ${hasPersonId ? people[i].full_name : `${payload.first_name} ${payload.last_name}`} ${hasPersonId ? people[i].email_primary : payload.email_primary}`.toLowerCase(),
+      batch_season_id: applications[i].intake_batch_id || season.id
+    });
   }
+
+  // Precompute unique facets
+  const uniqueFacets = new Set<string>();
+  application_list_v1.forEach(a => {
+    const key = `${a.season_id}|${a.intake_batch_id}|${a.role_applied}|${a.status_unified}|${a.consent_unified}|${a.batch_season_id}`;
+    if (!uniqueFacets.has(key)) {
+      uniqueFacets.add(key);
+      application_facets_v1.push({
+        season_id: a.season_id,
+        intake_batch_id: a.intake_batch_id,
+        role_applied: a.role_applied,
+        status_unified: a.status_unified,
+        consent_unified: a.consent_unified,
+        batch_season_id: a.batch_season_id
+      });
+    }
+  });
 
   for (let i = 0; i < 500; i++) {
     event_participations.push({
@@ -173,7 +212,9 @@ export function generateBenchmarkDataset(seed = 123456789) {
     admin_users,
     mentoring_recaps,
     event_participations,
-    person_season_memberships
+    person_season_memberships,
+    application_list_v1,
+    application_facets_v1
   };
 
   const checksum = crypto.createHash('sha256').update(JSON.stringify(dataset)).digest('hex');

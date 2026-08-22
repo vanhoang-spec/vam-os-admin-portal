@@ -378,7 +378,7 @@ async function selectScopedBySeason<T extends Record<string, any>>(
  * reproduces a false "person not found". Next.js dynamic usage errors are
  * rethrown, matching `selectTable`/`getScopedPersonIds`.
  */
-async function getScopedIntakeBatchIds(scope?: ScopeFilter): Promise<ScopedIntakeBatchIdsResult> {
+export async function getScopedIntakeBatchIds(scope?: ScopeFilter): Promise<ScopedIntakeBatchIdsResult> {
   if (!scope) return { batchIds: null, error: null };
   if (noAllowedRows(scope)) return { batchIds: [], error: null };
   const client = await dataClient();

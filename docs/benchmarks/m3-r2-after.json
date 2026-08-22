@@ -1,0 +1,36 @@
+{
+  "harnessVersion": 2,
+  "checksum": "8a12fe89b1894534d71473f03d40479fd81b0458e0dc2550e4df3440c57b83e3",
+  "list": {
+    "totalRequests": 3,
+    "totalRows": 52,
+    "totalBytes": 23914,
+    "mapTimeMs": 3,
+    "requestsByTable": {
+      "intake_batches": 2,
+      "application_list_v1": 1
+    },
+    "rowsByTable": {
+      "intake_batches": 2,
+      "application_list_v1": 50
+    }
+  },
+  "detail": {
+    "avgRequests": 11.333333333333334,
+    "avgRowsFetched": 26.666666666666668,
+    "overFetchAmplification": 1.07,
+    "requestsByTable": {
+      "intake_batches": 8,
+      "application_list_v1": 1,
+      "applications": 3,
+      "people": 4,
+      "seasons": 3,
+      "mentee_profiles": 3,
+      "mentor_profiles": 3,
+      "matches": 3,
+      "application_answers": 3,
+      "application_reviews": 3,
+      "application_decisions": 3
+    }
+  }
+}

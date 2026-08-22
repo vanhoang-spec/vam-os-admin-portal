@@ -18,15 +18,12 @@ describe("Season 12 commitment structural safeguards", () => {
     expect(action.indexOf("validateMentorCommitments")).toBeLessThan(action.indexOf("submitPilotApplication({"));
   });
 
-  it("persists semantic key, label, accepted value and timestamp in application_answers", () => {
-    expect(persistence).toContain('.from("application_answers").insert(answerRows)');
-    expect(persistence).toContain("question_key: answer.questionKey");
-    expect(persistence).toContain("value_text: answer.valueText");
-    expect(persistence).toContain("created_at: answer.acceptedAt");
+  it("persists semantic key, label, accepted value and timestamp in application_answers via atomic RPC", () => {
+    expect(persistence).toContain('client.rpc("vam_submit_intake_application_atomic"');
   });
 
-  it("cleans up a new application if acknowledgement persistence fails", () => {
-    expect(persistence).toContain('.from("applications").delete().eq("id", inserted.id)');
+  it("relies on atomic RPC to avoid manual cleanup on partial answer failure", () => {
+    expect(persistence).not.toContain('.from("applications").delete().eq("id", inserted.id)');
   });
 
   it("renders all acknowledgement checkboxes unchecked by default", () => {

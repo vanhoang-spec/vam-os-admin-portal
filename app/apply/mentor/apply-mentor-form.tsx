@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFormState } from "react-dom";
 import { submitMentorApplicationAction } from "@/app/actions/apply";
 import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { DraftRecoveryBanner } from "../_components/draft-recovery-banner";
+import { useDraftRecovery } from "../_components/use-draft-recovery";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -178,8 +180,30 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
   const belowThreshold =
     workYears !== null && managementYears !== null && (workYears < 8 || managementYears < 3);
 
+  const formRef = useRef<HTMLFormElement>(null);
+  const draft = useDraftRecovery({ role: "mentor", formRef, submissionOk: state.ok });
+
   return (
-    <ApplicationForm action={formAction} state={state} submitLabel="Gửi đơn đăng ký mentor">
+    <>
+      <DraftRecoveryBanner
+        status={draft.status}
+        savedAt={draft.savedAt}
+        hasDraft={draft.hasDraft}
+        onRestore={draft.restore}
+        onDiscard={() => {
+          draft.discard();
+          setWorkYears(null);
+          setManagementYears(null);
+        }}
+      />
+      {/* key: discarding remounts the subtree so field-level state resets with the DOM */}
+      <ApplicationForm
+        key={draft.resetKey}
+        formRef={formRef}
+        action={formAction}
+        state={state}
+        submitLabel="Gửi đơn đăng ký mentor"
+      >
       {/*
         Pilot token relay. Rendered only while the form is in pilot state, so
         the Server Action can re-run the identical gate the page ran. The
@@ -467,6 +491,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
         </div>
       </FormSection>
 
-    </ApplicationForm>
+      </ApplicationForm>
+    </>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClearApplyDraft } from "./clear-draft";
 
 export const metadata = {
   title: "Cảm ơn đã đăng ký — VAM Mentoring"
@@ -12,6 +13,7 @@ export default async function ApplyThanksPage(props: { searchParams?: Promise<{ 
 
   return (
     <section className="rounded-lg border border-vam-line bg-white p-6 shadow-soft sm:p-10">
+      <ClearApplyDraft role={role} />
       <div className="text-center">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-vam-mint text-2xl text-vam-green">
           ✓

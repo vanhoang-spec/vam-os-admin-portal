@@ -1,8 +1,11 @@
 "use client";
 
+import { useRef } from "react";
 import { useFormState } from "react-dom";
 import { submitMenteeApplicationAction } from "@/app/actions/apply";
 import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { DraftRecoveryBanner } from "../_components/draft-recovery-banner";
+import { useDraftRecovery } from "../_components/use-draft-recovery";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -142,15 +145,30 @@ const REFERRER_OPTIONS = [
 ];
 
 export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) {
-  // Redirect on success is handled server-side via redirect() in the action.
-  // useFormState is kept only to surface error states (validation / duplicate / db).
   const [state, formAction] = useFormState<ApplyActionState, FormData>(
     submitMenteeApplicationAction,
     initialApplyActionState
   );
+  const formRef = useRef<HTMLFormElement>(null);
+  const draft = useDraftRecovery({ role: "mentee", formRef, submissionOk: state.ok });
 
   return (
-    <ApplicationForm action={formAction} state={state} submitLabel="Gửi đơn đăng ký mentee">
+    <>
+      <DraftRecoveryBanner
+        status={draft.status}
+        savedAt={draft.savedAt}
+        hasDraft={draft.hasDraft}
+        onRestore={draft.restore}
+        onDiscard={draft.discard}
+      />
+      {/* key: discarding remounts the subtree so field-level state resets with the DOM */}
+      <ApplicationForm
+        key={draft.resetKey}
+        formRef={formRef}
+        action={formAction}
+        state={state}
+        submitLabel="Gửi đơn đăng ký mentee"
+      >
       {/*
         Pilot token relay. Rendered only while the form is in pilot state, so
         the Server Action can re-run the identical gate the page ran. The
@@ -403,6 +421,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
         </div>
       </FormSection>
 
-    </ApplicationForm>
+      </ApplicationForm>
+    </>
   );
 }

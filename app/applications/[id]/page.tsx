@@ -3,17 +3,9 @@ import { ApplicationAnswerCard } from "@/components/application-answer-card";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import {
   getActiveAdminUsers,
-  getAnswersForApplication,
-  getApplication,
-  getApplicationDecisions,
-  getApplicationReviewsForApplication,
-  getMatches,
-  getMenteeProfiles,
-  getMentorProfiles,
-  getPeople,
-  getSeasons,
   keyById
 } from "@/lib/data";
+import { getApplicationDetailContext } from "@/lib/application-detail";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
@@ -91,95 +83,76 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
 
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const [application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =
-    await Promise.all([
-      getApplication(params.id, scope),
-      getPeople(scope),
-      getSeasons(scope),
-      getMenteeProfiles(scope),
-      getMentorProfiles(scope),
-      getMatches(scope),
-      getAnswersForApplication(params.id),
-      getApplicationReviewsForApplication(params.id, scope),
-      getActiveAdminUsers(),
-      getApplicationDecisions(params.id, scope)
-    ]);
+  
+  const [detailContext, reviewersResult] = await Promise.all([
+    getApplicationDetailContext(params.id, scope),
+    getActiveAdminUsers()
+  ]);
 
-  const peopleById = keyById(people.data);
-  const seasonsById = keyById(seasons.data);
-  const person = application.data?.person_id ? peopleById.get(application.data.person_id) : undefined;
-  const season = application.data?.season_id ? seasonsById.get(application.data.season_id) : undefined;
-  const menteeProfile = mentees.data.find((profile) => profile.person_id === application.data?.person_id);
-  const mentorProfile = mentors.data.find((profile) => profile.person_id === application.data?.person_id);
-  const relatedMatch = application.data?.person_id
-    ? matches.data
-        .filter((match) => match.mentee_person_id === application.data?.person_id)
-        .sort((a, b) => matchRank(a) - matchRank(b))[0]
-    : undefined;
-  const relatedMentor = relatedMatch?.mentor_person_id ? peopleById.get(relatedMatch.mentor_person_id) : undefined;
-  const sortedAnswers = answers.data
-    // Annotated: an object spread does not carry the source index signature, so
-    // without this the sorted rows lose every answer field but `original_index`.
-    .map((answer, index): JsonRecord => ({ ...answer, original_index: index }))
-    .sort((a, b) => {
-      const aOrder = questionOrder.get(String(a.question_key ?? "")) ?? Number.MAX_SAFE_INTEGER;
-      const bOrder = questionOrder.get(String(b.question_key ?? "")) ?? Number.MAX_SAFE_INTEGER;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return a.original_index - b.original_index;
-    });
-  const error =
-    application.error || people.error || seasons.error || mentees.error || mentors.error || matches.error || answers.error;
-
-  if (!application.data) {
+  if (detailContext.error || !detailContext.application) {
     return (
       <>
         <PageHeader title="Không tìm thấy hồ sơ ứng tuyển." />
-        <ErrorBox message={error} />
+        <ErrorBox message={detailContext.error || "Không tìm thấy hồ sơ hoặc không có quyền truy cập."} />
         <EmptyState message="Không tìm thấy hồ sơ ứng tuyển." />
       </>
     );
   }
 
+  const {
+    application, person, season, menteeProfile, mentorProfile, relatedMatch, relatedMentor,
+    answers, reviews, decisions
+  } = detailContext;
+
+  const sortedAnswers = answers
+    .map((answer, index): JsonRecord => ({ ...answer, original_index: index }))
+    .sort((a, b) => {
+      const aOrder = questionOrder.get(String(a.question_key ?? "")) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = questionOrder.get(String(b.question_key ?? "")) ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (a.original_index as number) - (b.original_index as number);
+    });
+
+  const error = reviewersResult.error;
+
   // Coalesced display values:
   //   Identity — application-level (S12 native form) takes precedence over person-level (S11 legacy)
   //   Status   — application.status (S12 pipeline) ?? application.final_status (S11 legacy)
   //   Consent  — application.consent_data_storage (S12) ?? application.consent_pdpa (S11)
-  const displayFullName   = application.data.full_name    ?? person?.full_name    ?? null;
-  const displayEmail      = application.data.email_primary ?? person?.email_primary ?? null;
-  const displayPhone      = application.data.phone_primary ?? person?.phone_primary ?? null;
-  const displayGender     = application.data.gender        ?? person?.gender        ?? null;
-  const displayStatus     = application.data.status        ?? application.data.final_status ?? null;
-  const displayConsentVal = application.data.consent_data_storage ?? application.data.consent_pdpa;
+  const displayFullName   = application.full_name    ?? person?.full_name    ?? null;
+  const displayEmail      = application.email_primary ?? person?.email_primary ?? null;
+  const displayPhone      = application.phone_primary ?? person?.phone_primary ?? null;
+  const displayGender     = application.gender        ?? person?.gender        ?? null;
+  const displayStatus     = application.status        ?? application.final_status ?? null;
+  const displayConsentVal = application.consent_data_storage ?? application.consent_pdpa;
   const returningMentorProfile = findReturningMentorProfile(
     {
-      person_id: application.data.person_id,
+      person_id: application.person_id,
       email_primary: displayEmail,
-      role_applied: application.data.role_applied,
-      status: application.data.status
+      role_applied: application.role_applied,
+      status: application.status
     },
-    people.data,
-    mentors.data
+    person ? [person] : [], // Dummy, only needs to check identity
+    mentorProfile ? [mentorProfile] : []
   );
   const commitmentRole =
-    application.data.role_applied === "mentor" || application.data.role_applied === "mentee"
-      ? (application.data.role_applied as ApplicationCommitmentRole)
+    application.role_applied === "mentor" || application.role_applied === "mentee"
+      ? (application.role_applied as ApplicationCommitmentRole)
       : null;
   const acknowledgementSummary = commitmentRole
-    ? summarizeAcknowledgements(commitmentRole, answers.data)
+    ? summarizeAcknowledgements(commitmentRole, answers)
     : null;
-  const mentorExperience = commitmentRole === "mentor" ? mentorExperienceFromAnswers(answers.data) : null;
+  const mentorExperience = commitmentRole === "mentor" ? mentorExperienceFromAnswers(answers) : null;
 
   // raw_payload from native S12 form — entries rendered when no legacy answers exist
   const rawPayloadEntries = ((): [string, string][] => {
-    const payload = application.data.raw_payload;
+    const payload = application.raw_payload;
     if (!payload || typeof payload !== "object") return [];
     return Object.entries(payload)
       .filter(([, v]) => v !== null && v !== undefined && v !== "")
       .map(([k, v]): [string, string] => [k, Array.isArray(v) ? (v as string[]).join(", ") : String(v)]);
   })();
 
-  const reviews: ApplicationReview[] = reviewsResult.data ?? [];
-  const decisions: ApplicationDecision[] = decisionsResult.data ?? [];
   const canAssign = canAssignReview(adminUser?.role) && canOperateAnyScope(scopeContext);
   const canMakeDecision = canDecide(adminUser?.role) && canOperateAnyScope(scopeContext);
 
@@ -200,8 +173,8 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             <ErrorBox message={`Không thể tải danh sách reviewer: ${reviewersResult.error}`} />
           )}
           <AssignReviewerForm
-            applicationId={application.data.id}
-            reviewers={reviewersResult.data}
+            applicationId={application.id}
+            adminUsers={reviewersResult.data ?? []}
           />
         </Card>
       )}
@@ -269,7 +242,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
         </h2>
         {canMakeDecision ? (
           <DecisionForm
-            applicationId={application.data.id}
+            applicationId={application.id}
             currentStatus={displayStatus}
             hasSubmittedReview={hasSubmittedReview}
             latestRecommendation={latestSubmittedReview?.recommendation}
@@ -344,17 +317,17 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             đơn ứng tuyển này. Sau khi duyệt, admin có thể bổ sung thông tin chi tiết trên trang chỉnh sửa hồ sơ.
           </p>
           <ApprovalForm
-            applicationId={application.data.id}
+            applicationId={application.id}
             currentStatus={displayStatus}
             fullName={displayFullName}
             emailPrimary={displayEmail}
             phonePrimary={displayPhone}
             gender={displayGender}
-            roleApplied={application.data.role_applied}
+            roleApplied={application.role_applied}
             seasonCode={season?.code ?? null}
-            intakeBatchId={application.data.intake_batch_id}
-            alreadyApproved={!!application.data.person_id}
-            personId={application.data.person_id}
+            intakeBatchId={application.intake_batch_id}
+            alreadyApproved={!!application.person_id}
+            personId={application.person_id}
           />
         </Card>
       )}
@@ -430,7 +403,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
         <DetailGrid
           rows={[
             ["Trạng thái hồ sơ", applicationStatusLabel(displayStatus)],
-            ["Nguồn dữ liệu", displayText(application.data.source)],
+            ["Nguồn dữ liệu", displayText(application.source)],
             ["Câu trả lời (dữ liệu cũ)", sortedAnswers.length > 0 ? sortedAnswers.length : "-"],
             ["Nội dung form đăng ký", rawPayloadEntries.length > 0 ? rawPayloadEntries.length : "-"],
             ["Mentor / Match", relatedMatch ? `${displayText(relatedMentor?.full_name)} — ${displayText(relatedMatch.status)}` : "-"]
@@ -445,16 +418,16 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           <DetailGrid
             rows={[
               ["Mùa tuyển sinh", displayText(season?.code ?? season?.name)],
-              ["Vai trò ứng tuyển", displayText(application.data.role_applied)],
-              ["Ngày nộp đơn", formatDate(application.data.submitted_at)],
-              ["Trạng thái hồ sơ", displayText(application.data.status)],
-              ["Trạng thái cũ", displayText(application.data.final_status)],
-              ["Nguồn dữ liệu", displayText(application.data.source)],
-              ["SBD (Số báo danh)", displayText(application.data.sbd)],
+              ["Vai trò ứng tuyển", displayText(application.role_applied)],
+              ["Ngày nộp đơn", formatDate(application.submitted_at)],
+              ["Trạng thái hồ sơ", displayText(application.status)],
+              ["Trạng thái cũ", displayText(application.final_status)],
+              ["Nguồn dữ liệu", displayText(application.source)],
+              ["SBD (Số báo danh)", displayText(application.sbd)],
               ["Đồng ý lưu dữ liệu", String(displayConsentVal ?? "-")],
-              ["Đồng ý PDPA (cũ)", displayText(application.data.consent_pdpa)],
-              ["Thời điểm đồng ý PDPA", formatDate(application.data.consent_pdpa_at)],
-              ["Kênh tiếp cận", displayText(application.data.acquisition_channel)]
+              ["Đồng ý PDPA (cũ)", displayText(application.consent_pdpa)],
+              ["Thời điểm đồng ý PDPA", formatDate(application.consent_pdpa_at)],
+              ["Kênh tiếp cận", displayText(application.acquisition_channel)]
             ]}
           />
           <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
