@@ -25,11 +25,18 @@ const inputClass = "mt-1 w-full rounded-md border border-vam-line bg-white px-3 
 const buttonClass = "inline-flex rounded-md bg-vam-green px-3 py-2 text-sm font-medium text-white hover:bg-vam-green/90";
 const quietButtonClass = "inline-flex rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint";
 
-export function GenerateFollowupForm({ selectedMonth }: { selectedMonth: string }) {
+export function GenerateFollowupForm({
+  selectedMonth,
+  seasonCode
+}: {
+  selectedMonth: string;
+  seasonCode: string;
+}) {
   const [state, formAction] = useFormState(generateMonthlyFollowupAction, initialState);
   return (
     <form action={formAction} className="grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3">
       <input type="hidden" name="selected_month" value={selectedMonth} />
+      <input type="hidden" name="season_code" value={seasonCode} />
       <ActionMessage state={state} />
       <div className="flex flex-wrap items-center gap-3">
         <div>
@@ -44,11 +51,20 @@ export function GenerateFollowupForm({ selectedMonth }: { selectedMonth: string 
   );
 }
 
-export function CreateActionItemForm({ owners, canManage }: { owners: WorkflowOwner[]; canManage: boolean }) {
+export function CreateActionItemForm({
+  owners,
+  canManage,
+  seasonCode
+}: {
+  owners: WorkflowOwner[];
+  canManage: boolean;
+  seasonCode: string;
+}) {
   const [state, formAction] = useFormState(createActionItemAction, initialState);
   if (!canManage) return null;
   return (
     <form action={formAction} className="grid gap-3 rounded-md border border-vam-line bg-white p-3">
+      <input type="hidden" name="season_code" value={seasonCode} />
       <ActionMessage state={state} />
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block">

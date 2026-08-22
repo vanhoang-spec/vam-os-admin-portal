@@ -6,7 +6,7 @@ import { getOperationsWorkflowData } from "@/lib/data";
 import type { WorkflowOwner, WorkflowQueueItem } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 import { currentMonthVN } from "@/lib/dashboard-month";
-import { SEASON_CONFIG } from "@/lib/season-config";
+import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { followUpStatusLabel } from "@/lib/ui-labels";
 import { TaskExportButton } from "./task-export-button";
 import { AddCommentForm, CreateActionItemForm, GenerateFollowupForm, UpdateActionItemForm } from "./workflow-forms";
@@ -212,8 +212,20 @@ export default async function OperationsTasksPage(props: { searchParams?: Promis
 
   // Task month: which month's workflow queue to view. Defaults to current VN calendar month.
   const selectedMonth = cleanMonth(searchParams?.month) ?? currentMonthVN();
+  const seasonContext = await resolveSeasonContext(searchParams?.season).catch((error: unknown) => {
+    if (error instanceof SeasonAccessDeniedError) return null;
+    throw error;
+  });
+  if (!seasonContext) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn chưa được cấp phạm vi truy cập cho mùa vận hành hiện tại. Liên hệ quản trị viên để được cấp quyền."
+      />
+    );
+  }
   const [workflow, adminUser] = await Promise.all([
-    getOperationsWorkflowData(SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE, selectedMonth),
+    getOperationsWorkflowData(seasonContext.selectedSeasonCode, selectedMonth),
     getCurrentAdminUser()
   ]);
   const canManage = canManageWorkflow(adminUser);
@@ -269,12 +281,21 @@ export default async function OperationsTasksPage(props: { searchParams?: Promis
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Tạo follow-up tự động</h2>
           <p className="mb-3 text-sm text-slate-600">Dành cho Recap Steward: chỉ tạo danh sách follow-up sau khi đã đối chiếu recap tháng hiện tại. Follow-up là tín hiệu hỗ trợ nội bộ, không phải đánh giá tiêu cực.</p>
-          {canManage ? <GenerateFollowupForm selectedMonth={selectedMonth} /> : <p className="text-sm text-slate-500">Viewer chỉ xem dữ liệu, không tạo công việc.</p>}
+          {canManage ? (
+            <GenerateFollowupForm
+              selectedMonth={selectedMonth}
+              seasonCode={seasonContext.selectedSeasonCode}
+            />
+          ) : <p className="text-sm text-slate-500">Viewer chỉ xem dữ liệu, không tạo công việc.</p>}
         </Card>
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Tạo công việc thủ công</h2>
           <p className="mb-3 text-sm text-slate-600">Dành cho Ops Lead: dùng việc thủ công cho các xử lý pilot nằm ngoài recap tự động, ví dụ xác minh owner, hẹn follow-up, hoặc ghi nhận lỗi dữ liệu.</p>
-          <CreateActionItemForm owners={data?.owners ?? []} canManage={canManage} />
+          <CreateActionItemForm
+            owners={data?.owners ?? []}
+            canManage={canManage}
+            seasonCode={seasonContext.selectedSeasonCode}
+          />
           {!canManage ? <p className="text-sm text-slate-500">Bạn đang ở chế độ chỉ xem.</p> : null}
         </Card>
       </section>

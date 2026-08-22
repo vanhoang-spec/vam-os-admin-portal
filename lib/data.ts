@@ -4,6 +4,8 @@ import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/sup
 import { currentMonthVN, isOperationalMonth } from "@/lib/dashboard-month";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import { intersectAuthorizedAndCohort } from "@/lib/season-cohort";
+import { resolveSeasonContext } from "@/lib/season-context";
 import {
   canOperateSeason,
   getAdminScopeContext,
@@ -525,15 +527,31 @@ export async function getPeople(scope?: ScopeFilter) {
   return { data, error: null };
 }
 
-export async function getMentorProfiles(scope?: ScopeFilter) {
+export async function getMentorProfiles(scope?: ScopeFilter, explicitPersonIds?: string[]) {
   const { personIds, error: scopeError } = await getScopedPersonIds(scope);
   if (scopeError) return { data: [] as MentorProfile[], error: scopeError };
-  if (personIds && personIds.length === 0) return { data: [] as MentorProfile[], error: null };
-  if (!personIds) return selectAllTable<MentorProfile>("mentor_profiles");
+  const selectedPersonIds = explicitPersonIds
+    ? intersectAuthorizedAndCohort(personIds, explicitPersonIds)
+    : personIds;
+  if (selectedPersonIds && selectedPersonIds.length === 0) return { data: [] as MentorProfile[], error: null };
+  if (!selectedPersonIds) return selectAllTable<MentorProfile>("mentor_profiles");
+
+  // An explicit list is an official season cohort. In this mode person_id is
+  // the only profile key: intake_batch_id is not cohort membership and must not
+  // union non-members back into the roster.
+  if (explicitPersonIds) {
+    const byPerson = await selectInChunks<MentorProfile>("mentor_profiles", "person_id", selectedPersonIds);
+    if (byPerson.error) {
+      logDataError("mentor_profiles.selectCohort", byPerson.error);
+      const err = byPerson.error as { message?: string };
+      return { data: [], error: `${VI_ERROR} (mentor_profiles: ${err.message ?? "Bad Request"})` };
+    }
+    return { data: byPerson.data, error: null };
+  }
   const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
   if (batchScopeError) return { data: [] as MentorProfile[], error: batchScopeError };
   const [byPerson, byBatch] = await Promise.all([
-    selectInChunks<MentorProfile>("mentor_profiles", "person_id", personIds),
+    selectInChunks<MentorProfile>("mentor_profiles", "person_id", selectedPersonIds),
     batchIds?.length
       ? selectInChunks<MentorProfile>("mentor_profiles", "intake_batch_id", batchIds)
       : Promise.resolve({ data: [] as MentorProfile[], error: null })
@@ -547,15 +565,29 @@ export async function getMentorProfiles(scope?: ScopeFilter) {
   return { data: mergeRowsById([...byPerson.data, ...byBatch.data]), error: null };
 }
 
-export async function getMenteeProfiles(scope?: ScopeFilter) {
+export async function getMenteeProfiles(scope?: ScopeFilter, explicitPersonIds?: string[]) {
   const { personIds, error: scopeError } = await getScopedPersonIds(scope);
   if (scopeError) return { data: [] as MenteeProfile[], error: scopeError };
-  if (personIds && personIds.length === 0) return { data: [] as MenteeProfile[], error: null };
-  if (!personIds) return selectAllTable<MenteeProfile>("mentee_profiles");
+  const selectedPersonIds = explicitPersonIds
+    ? intersectAuthorizedAndCohort(personIds, explicitPersonIds)
+    : personIds;
+  if (selectedPersonIds && selectedPersonIds.length === 0) return { data: [] as MenteeProfile[], error: null };
+  if (!selectedPersonIds) return selectAllTable<MenteeProfile>("mentee_profiles");
+
+  // See the mentor path above: cohort mode is intentionally person-only.
+  if (explicitPersonIds) {
+    const byPerson = await selectInChunks<MenteeProfile>("mentee_profiles", "person_id", selectedPersonIds);
+    if (byPerson.error) {
+      logDataError("mentee_profiles.selectCohort", byPerson.error);
+      const err = byPerson.error as { message?: string };
+      return { data: [], error: `${VI_ERROR} (mentee_profiles: ${err.message ?? "Bad Request"})` };
+    }
+    return { data: byPerson.data, error: null };
+  }
   const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
   if (batchScopeError) return { data: [] as MenteeProfile[], error: batchScopeError };
   const [byPerson, byBatch] = await Promise.all([
-    selectInChunks<MenteeProfile>("mentee_profiles", "person_id", personIds),
+    selectInChunks<MenteeProfile>("mentee_profiles", "person_id", selectedPersonIds),
     batchIds?.length
       ? selectInChunks<MenteeProfile>("mentee_profiles", "intake_batch_id", batchIds)
       : Promise.resolve({ data: [] as MenteeProfile[], error: null })
@@ -1023,13 +1055,13 @@ export async function getOperationalTeamAssignments(scope?: ScopeFilter) {
   return { data, error: null };
 }
 
-async function getOperationsDataFromRpc() {
+async function getOperationsDataFromRpc(seasonCode: string) {
   // This RPC uses SECURITY DEFINER and checks auth.uid() internally.
   // Must be called with the server auth client (user JWT), NOT service role (auth.uid() = NULL there).
   const client = (await getSupabaseServerClient()) ?? supabase;
   if (!client) return null;
 
-  const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE });
+  const { data, error } = await client.rpc("get_operations_dashboard_data", { p_season_code: seasonCode });
   if (error) {
     if (error.code === "PGRST202" || error.code === "42883") {
       return null;
@@ -1070,7 +1102,7 @@ async function getOperationsDataFromRpc() {
   const recaps = (payload.recaps ?? []) as MentoringRecap[];
   const events = (payload.events ?? []) as Event[];
   const eventParticipations = (payload.eventParticipations ?? []) as EventParticipation[];
-  const kpis = (payload.kpis ?? computeProgramOperationsKpis({ seasons, matches, recaps, events, eventParticipations })) as OperationsDashboardKpis;
+  const kpis = (payload.kpis ?? computeProgramOperationsKpis({ seasons, matches, recaps, events, eventParticipations, seasonCode })) as OperationsDashboardKpis;
   const { data: latestClosedMonth, error: latestClosedMonthError } = await selectTable<JsonRecord>("v_season_latest_closed_month");
   return {
     seasons: { data: seasons, error: null },
@@ -1088,8 +1120,11 @@ async function getOperationsDataFromRpc() {
 import { OPS_RECAPS_SELECT } from "./data-selects";
 export { OPS_RECAPS_SELECT };
 
-export async function getOperationsData(scope?: ScopeFilter) {
-  const rpcData = scope ? null : await getOperationsDataFromRpc();
+export async function getOperationsData(
+  scope?: ScopeFilter,
+  seasonCode = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE
+) {
+  const rpcData = scope ? null : await getOperationsDataFromRpc(seasonCode);
   if (rpcData) return rpcData;
 
   const [
@@ -1130,7 +1165,8 @@ export async function getOperationsData(scope?: ScopeFilter) {
         matches: matches.data,
         recaps: recaps.data,
         events: events.data,
-        eventParticipations: eventParticipations.data
+        eventParticipations: eventParticipations.data,
+        seasonCode
       }),
       error: seasons.error || matches.error || recaps.error || events.error || eventParticipations.error
     },
@@ -1389,8 +1425,9 @@ export type CreateActionItemInput = {
 export async function createWorkflowActionItem(input: CreateActionItemInput): Promise<QueryResult<JsonRecord | null>> {
   const client = await dataClient();
   if (!client) return envError<JsonRecord | null>(null);
+  const seasonCode = (await resolveSeasonContext(input.season_code)).selectedSeasonCode;
   const { data, error } = await client.rpc("create_action_item", {
-    p_season_code: input.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
+    p_season_code: seasonCode,
     p_action_type: input.action_type,
     p_entity_type: input.entity_type ?? null,
     p_entity_id: input.entity_id || null,
@@ -1444,8 +1481,9 @@ export async function addWorkflowActionItemComment(input: { id: string; comment_
 export async function generateMonthlyFollowupActions(input: { season_code?: string; selected_month: string }): Promise<QueryResult<JsonRecord | null>> {
   const client = await dataClient();
   if (!client) return envError<JsonRecord | null>(null);
+  const seasonCode = (await resolveSeasonContext(input.season_code)).selectedSeasonCode;
   const { data, error } = await client.rpc("generate_monthly_followup_actions", {
-    p_season_code: input.season_code ?? SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE,
+    p_season_code: seasonCode,
     p_selected_month: input.selected_month
   });
   if (error) return { data: null, error: `${VI_ERROR} (generate_monthly_followup_actions: ${error.message})` };

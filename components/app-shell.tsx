@@ -30,6 +30,8 @@ import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
 import { cn } from "@/lib/utils";
 import { buildNavGroups, isActiveRoute, type NavGroupDef } from "@/lib/nav-model";
+import { SeasonSelector } from "@/components/season-selector";
+import { isSeasonAwarePath } from "@/lib/season-labels";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   "/": Home,
@@ -424,6 +426,7 @@ export function AppShell({
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  {isSeasonAwarePath(pathname) ? <SeasonSelector /> : null}
                   <div className="hidden text-right text-xs text-slate-500 sm:block">
                     <div className="max-w-60 truncate font-medium text-vam-ink">{adminUser.email}</div>
                     <div>{roleLabel(adminUser.role)}</div>

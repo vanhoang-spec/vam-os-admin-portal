@@ -7,13 +7,12 @@ import { getOperationsData, keyById } from "@/lib/data";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { currentMonthVN, isOperationalMonth, operationalMonthRange, resolveOperationsMonth } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
-import { canOperateAnyScope, canReadSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { canOperateAnyScope, canReadSeason, getAdminScopeContext } from "@/lib/program-scope";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate, formatMonthVN } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
-import { SEASON_CONFIG } from "@/lib/season-config";
+import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 
-const SEASON_CODE = SEASON_CONFIG.CURRENT_OPERATING_SEASON_CODE;
 const OUTLIER_RECAP_LIMIT = 50;
 const VALID_ACTIVITY_STATUSES = new Set(["", "submitted", "needs_review"]);
 
@@ -123,7 +122,7 @@ function monthLabel(month: string) {
   return formatMonthVN(month);
 }
 
-export default async function OperationsPage(props: { searchParams?: Promise<{ month?: string | string[] }> }) {
+export default async function OperationsPage(props: { searchParams?: Promise<{ month?: string | string[]; season?: string | string[] }> }) {
   const searchParams = await props.searchParams;
 
   const scopeContext = await getAdminScopeContext();
@@ -139,10 +138,24 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
     );
   }
 
+  const seasonContext = await resolveSeasonContext(searchParams?.season).catch((error: unknown) => {
+    if (error instanceof SeasonAccessDeniedError) return null;
+    throw error;
+  });
+  if (!seasonContext) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn chưa được cấp phạm vi truy cập cho mùa vận hành hiện tại. Liên hệ quản trị viên để được cấp quyền."
+      />
+    );
+  }
+  const SEASON_CODE = seasonContext.selectedSeasonCode;
+
   // Not authorized for this program/season aggregate: deny explicitly. Falling
   // through would render the same "Tổng hợp toàn chương trình" header over an
   // all-zero dataset, which reads as real operational truth.
-  if (!(await canReadSeason(scopeContext, SEASON_CODE))) {
+  if (!(await canReadSeason(scopeContext, seasonContext.selectedSeasonId))) {
     return (
       <PageHeader
         title="Không có quyền truy cập"
@@ -151,9 +164,9 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
     );
   }
 
-  const scope = await getScopeFilter(scopeContext);
+  const scope = seasonContext.effectiveScope;
   const [data, adminUser] = await Promise.all([
-    getOperationsData(scope),
+    getOperationsData(scope, SEASON_CODE),
     getCurrentAdminUser()
   ]);
   const allowRecapEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);

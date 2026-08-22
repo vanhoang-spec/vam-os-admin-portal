@@ -48,7 +48,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SCOPE_RESOLUTION_ERROR } from "@/lib/program-scope";
 
-const SEASON_CODE = "UEHM-S11";
+const SEASON_CODE = "UEHM-S12";
 const UEH_SEASON = "11111111-1111-4111-8111-111111111111";
 const HAM_SEASON = "22222222-2222-4222-8222-222222222222";
 const UEH_PROGRAM = "33333333-3333-4333-8333-333333333333";
@@ -100,7 +100,7 @@ function seedRecaps() {
 
 function seed(withRecaps = true) {
   db.tables.seasons = [
-    { id: UEH_SEASON, code: SEASON_CODE, name: "UEH Mentoring Season 11", program_id: UEH_PROGRAM },
+    { id: UEH_SEASON, code: SEASON_CODE, name: "UEH Mentoring Season 12", program_id: UEH_PROGRAM },
     { id: HAM_SEASON, code: "HAM-S6", name: "HAM Season 6", program_id: HAM_PROGRAM }
   ];
   db.tables.programs = [

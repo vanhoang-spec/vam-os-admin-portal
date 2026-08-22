@@ -4,7 +4,9 @@ import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getIntakeBatches, getMatches, getMentorProfiles, getPeople, getSeasons, keyById } from "@/lib/data";
-import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
+import { getSeasonCohortPersonIds } from "@/lib/season-cohort";
+import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { Match, MentorProfile, Person } from "@/lib/types";
 import { displayOptional, displayText } from "@/lib/utils";
 import { canBrowseParticipants } from "@/lib/read-access";
@@ -50,13 +52,29 @@ function vamSeniorityDisplay(mentor: MentorProfile, mentorMatches: Match[]) {
   return { value: "-", source: "Chưa có dữ liệu" };
 }
 
-export default async function MentorsPage() {
+export default async function MentorsPage(props: { searchParams?: Promise<{ season?: string | string[] }> }) {
+  const searchParams = await props.searchParams;
   const routeUser = await getCurrentAdminUser();
   if (!routeUser || !canBrowseParticipants(routeUser.role)) redirect("/");
-  const scopeContext = await getAdminScopeContext();
-  const scope = await getScopeFilter(scopeContext);
+  const [scopeContext, seasonContext] = await Promise.all([
+    getAdminScopeContext(),
+    resolveSeasonContext(searchParams?.season).catch((error: unknown) => {
+      if (error instanceof SeasonAccessDeniedError) return null;
+      throw error;
+    })
+  ]);
+  if (!seasonContext) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn chưa được cấp phạm vi truy cập cho mùa vận hành hiện tại. Liên hệ quản trị viên để được cấp quyền."
+      />
+    );
+  }
+  const scope = seasonContext.effectiveScope;
+  const cohort = await getSeasonCohortPersonIds(seasonContext.selectedSeasonId, "mentor");
   const [mentors, people, matches, intakeBatches, seasons, adminUser] = await Promise.all([
-    getMentorProfiles(scope),
+    getMentorProfiles(scope, cohort.data),
     getPeople(scope),
     getMatches(scope),
     getIntakeBatches(scope),
@@ -122,7 +140,7 @@ export default async function MentorsPage() {
           </Link>
         </div>
       ) : null}
-      <ErrorBox message={mentors.error || people.error || matches.error || intakeBatches.error || seasons.error} />
+      <ErrorBox message={cohort.error || mentors.error || people.error || matches.error || intakeBatches.error || seasons.error} />
       <FilterableTable
         rows={rows}
         searchPlaceholder="Tìm theo tên, email, công ty, chức danh, ngành hoặc chức năng"

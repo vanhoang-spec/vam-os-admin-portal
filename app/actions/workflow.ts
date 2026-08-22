@@ -39,6 +39,7 @@ export async function createActionItemAction(_previousState: WorkflowActionState
   if (!adminUser) return { ok: false, message: "Bạn không có quyền tạo hoặc cập nhật công việc." };
 
   const result = await createWorkflowActionItem({
+    season_code: nullableText(formData, "season_code") ?? undefined,
     action_type: text(formData, "action_type") || "manual_task",
     entity_type: nullableText(formData, "entity_type"),
     entity_id: nullableText(formData, "entity_id"),
@@ -95,7 +96,10 @@ export async function generateMonthlyFollowupAction(_previousState: WorkflowActi
   if (!adminUser) return { ok: false, message: "Bạn không có quyền tạo danh sách follow-up." };
 
   const selectedMonth = text(formData, "selected_month") || "2026-04";
-  const result = await generateMonthlyFollowupActions({ selected_month: selectedMonth });
+  const result = await generateMonthlyFollowupActions({
+    season_code: text(formData, "season_code") || undefined,
+    selected_month: selectedMonth
+  });
 
   if (result.error) return { ok: false, message: result.error };
   revalidatePath("/operations");
@@ -108,4 +112,3 @@ export async function generateMonthlyFollowupAction(_previousState: WorkflowActi
     result: result.data
   };
 }
-
