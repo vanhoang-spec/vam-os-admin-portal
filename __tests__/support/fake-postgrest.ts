@@ -40,6 +40,8 @@ export type RecordedRequest = {
   to: number | null;
   limit: number | null;
   returned: number;
+  /** Estimated byte size of the serialized JSON response. */
+  bytes?: number;
 };
 
 type Filter =
@@ -50,7 +52,8 @@ type Filter =
   | { kind: "gte"; column: string; value: unknown }
   | { kind: "lt"; column: string; value: unknown }
   | { kind: "notNull"; column: string }
-  | { kind: "or"; expression: string };
+  | { kind: "ilike"; column: string; pattern: string }
+  | { kind: "or"; expression: string; options?: { foreignTable?: string } };
 
 export type FakeDb = {
   tables: Record<string, any[]>;
@@ -104,6 +107,8 @@ function splitOrExpression(expression: string) {
   return parts;
 }
 
+function escapeRegex(str: string) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 function matchesOrTerm(row: any, term: string) {
   const inMatch = term.match(/^([^.]+)\.in\.\((.*)\)$/);
   if (inMatch) {
@@ -111,7 +116,18 @@ function matchesOrTerm(row: any, term: string) {
     return values.includes(String(row[inMatch[1]]));
   }
   const eqMatch = term.match(/^([^.]+)\.eq\.(.*)$/);
-  if (eqMatch) return String(row[eqMatch[1]]) === eqMatch[2];
+  if (eqMatch) {
+    let val = eqMatch[2];
+    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+    return String(row[eqMatch[1]]) === val;
+  }
+  const ilikeMatch = term.match(/^([^.]+)\.ilike\.(.*)$/);
+  if (ilikeMatch) {
+    let val = ilikeMatch[2];
+    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+    const regex = new RegExp('^' + val.split('%').map(escapeRegex).join('.*') + '$', 'i');
+    return regex.test(String(row[ilikeMatch[1]] ?? ""));
+  }
   throw new Error(`fake-postgrest: unsupported or() term "${term}"`);
 }
 
@@ -131,6 +147,10 @@ function applyFilter(rows: any[], filter: Filter) {
       return rows.filter((row) => String(row[filter.column]) < String(filter.value));
     case "notNull":
       return rows.filter((row) => row[filter.column] !== null && row[filter.column] !== undefined);
+    case "ilike": {
+      const regex = new RegExp('^' + filter.pattern.split('%').map(escapeRegex).join('.*') + '$', 'i');
+      return rows.filter((row) => regex.test(String(row[filter.column] ?? "")));
+    }
     case "or": {
       const terms = splitOrExpression(filter.expression);
       return rows.filter((row) => terms.some((term) => matchesOrTerm(row, term)));
@@ -141,12 +161,12 @@ function applyFilter(rows: any[], filter: Filter) {
 }
 
 /** PostgreSQL ordering: ascending is NULLS LAST, descending is NULLS FIRST. */
-function compareForOrder(a: any, b: any, ascending: boolean) {
+function compareForOrder(a: any, b: any, ascending: boolean, nullsFirst: boolean = false) {
   const aNull = a === null || a === undefined;
   const bNull = b === null || b === undefined;
   if (aNull && bNull) return 0;
-  if (aNull) return ascending ? 1 : -1;
-  if (bNull) return ascending ? -1 : 1;
+  if (aNull) return nullsFirst ? -1 : 1;
+  if (bNull) return nullsFirst ? 1 : -1;
   const left = String(a);
   const right = String(b);
   if (left === right) return 0;
@@ -171,8 +191,8 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
     table: string,
     columns: string,
     filters: Filter[],
-    order: { column: string; ascending: boolean }[],
-    window: { from: number | null; to: number | null; limit: number | null }
+    order: { column: string; ascending: boolean; nullsFirst?: boolean }[],
+    window: { from: number | null; to: number | null; limit: number | null; count?: string; head?: boolean; assertNoSilentCap?: boolean }
   ) {
     const withFilter = (filter: Filter) => builder(table, columns, [...filters, filter], order, window);
 
@@ -182,7 +202,7 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
         table,
         columns,
         filters: JSON.stringify(filters),
-        order: order.map((entry) => `${entry.column}:${entry.ascending ? "asc" : "desc"}`),
+        order: order.map((entry) => `${entry.column}:${entry.ascending ? "asc" : "desc"}${entry.nullsFirst ? ".nullsfirst" : ""}`),
         from: window.from,
         to: window.to,
         limit: window.limit,
@@ -202,10 +222,12 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
       );
       for (const filter of filters) rows = applyFilter(rows, filter);
 
+      const totalCountAfterFilters = rows.length;
+
       if (order.length) {
         rows.sort((a, b) => {
           for (const entry of order) {
-            const result = compareForOrder(a[entry.column], b[entry.column], entry.ascending);
+            const result = compareForOrder(a[entry.column], b[entry.column], entry.ascending, entry.nullsFirst ?? false);
             if (result !== 0) return result;
           }
           return 0;
@@ -227,7 +249,17 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
       // The silent cap, applied last and never reported.
       const capped = rows.slice(0, db.maxRows);
       recorded.returned = capped.length;
-      return { data: capped.map((row) => projectColumns(row, columns)), error: null };
+      
+      const projected = capped.map((row) => projectColumns(row, columns));
+      recorded.bytes = Buffer.byteLength(JSON.stringify(projected), "utf8");
+
+      const response: any = { data: window.head ? null : projected, error: null };
+      if (window.count) response.count = totalCountAfterFilters;
+      
+      if (window.assertNoSilentCap && capped.length >= db.maxRows) {
+        return { data: null, error: new Error('assertNoSilentCap: Fake database row cap of ' + db.maxRows + ' was hit silently') };
+      }
+      return response;
     }
 
     const self: any = {
@@ -241,10 +273,12 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
         if (operator !== "is" || value !== null) throw new Error(`fake-postgrest: unsupported not(${operator})`);
         return withFilter({ kind: "notNull", column });
       },
-      or: (expression: string) => withFilter({ kind: "or", expression }),
-      order: (column: string, opts?: { ascending?: boolean }) =>
-        builder(table, columns, filters, [...order, { column, ascending: opts?.ascending !== false }], window),
+      ilike: (column: string, pattern: string) => withFilter({ kind: "ilike", column, pattern }),
+      or: (expression: string, options?: { foreignTable?: string }) => withFilter({ kind: "or", expression, options }),
+      order: (column: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) =>
+        builder(table, columns, filters, [...order, { column, ascending: opts?.ascending ?? true, nullsFirst: opts?.nullsFirst ?? !opts?.ascending }], window),
       limit: (limit: number) => builder(table, columns, filters, order, { ...window, limit }),
+      assertNoSilentCap: () => builder(table, columns, filters, order, { ...window, assertNoSilentCap: true }),
       range: (from: number, to: number) => builder(table, columns, filters, order, { ...window, from, to }),
       maybeSingle: () => {
         const { data, error } = run();
@@ -258,7 +292,8 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
 
   return {
     from: (table: string) => ({
-      select: (columns = "*") => builder(table, columns, [], [], { from: null, to: null, limit: null })
+      select: (columns = "*", options?: { count?: "exact" | "estimated" | "planned"; head?: boolean }) =>
+        builder(table, columns, [], [], { from: null, to: null, limit: null, count: options?.count, head: options?.head })
     }),
     rpc: (...args: any[]) =>
       Promise.resolve(options?.rpc ? options.rpc(...args) : { data: null, error: { code: "PGRST202", message: "not found" } })
