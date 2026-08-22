@@ -174,7 +174,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           )}
           <AssignReviewerForm
             applicationId={application.id}
-            adminUsers={reviewersResult.data ?? []}
+            reviewers={reviewersResult.data ?? []}
           />
         </Card>
       )}

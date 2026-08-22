@@ -71,28 +71,28 @@ export default async function ApplicationsPage(props: {
             <label className="text-sm font-medium">Trạng thái</label>
             <select name="status" defaultValue={status || ""} className="border px-2 py-1 rounded">
               <option value="">Tất cả</option>
-              {statusOptions.map(opt => <option key={opt} value={opt}>{applicationStatusLabel(opt)}</option>)}
+              {statusOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{applicationStatusLabel(opt as string)}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium">Vai trò</label>
             <select name="role" defaultValue={role || ""} className="border px-2 py-1 rounded">
               <option value="">Tất cả</option>
-              {roleOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              {roleOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{opt}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium">Mùa</label>
             <select name="season" defaultValue={season || ""} className="border px-2 py-1 rounded">
               <option value="">Tất cả</option>
-              {seasonOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              {seasonOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{opt}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium">Đợt tuyển</label>
             <select name="batch" defaultValue={batch || ""} className="border px-2 py-1 rounded">
               <option value="">Tất cả</option>
-              {batchOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              {batchOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{opt}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">

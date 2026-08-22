@@ -87,7 +87,7 @@ export async function getApplicationDetailContext(id: string, scope?: ScopeFilte
   const seasonId = result.application.season_id;
 
   // 2. Wave 2: targeted reads for person, season, profiles, match, answers, reviews, decisions
-  const wave2: Promise<any>[] = [
+  const wave2 = [
     personId ? serviceRole.from("people").select("*").eq("id", personId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     seasonId ? client.from("seasons").select("*").eq("id", seasonId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     personId ? client.from("mentee_profiles").select("*").eq("person_id", personId).maybeSingle() : Promise.resolve({ data: null, error: null }),
