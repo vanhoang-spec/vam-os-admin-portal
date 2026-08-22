@@ -1102,7 +1102,7 @@ async function getOperationsDataFromRpc(seasonCode: string) {
   const recaps = (payload.recaps ?? []) as MentoringRecap[];
   const events = (payload.events ?? []) as Event[];
   const eventParticipations = (payload.eventParticipations ?? []) as EventParticipation[];
-  const kpis = (payload.kpis ?? computeProgramOperationsKpis({ seasons, matches, recaps, events, eventParticipations })) as OperationsDashboardKpis;
+  const kpis = (payload.kpis ?? computeProgramOperationsKpis({ seasons, matches, recaps, events, eventParticipations, seasonCode })) as OperationsDashboardKpis;
   const { data: latestClosedMonth, error: latestClosedMonthError } = await selectTable<JsonRecord>("v_season_latest_closed_month");
   return {
     seasons: { data: seasons, error: null },
@@ -1165,7 +1165,8 @@ export async function getOperationsData(
         matches: matches.data,
         recaps: recaps.data,
         events: events.data,
-        eventParticipations: eventParticipations.data
+        eventParticipations: eventParticipations.data,
+        seasonCode
       }),
       error: seasons.error || matches.error || recaps.error || events.error || eventParticipations.error
     },
