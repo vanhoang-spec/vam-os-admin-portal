@@ -13,6 +13,11 @@ export type GetPagedApplicationsOptions = {
   season_code?: string;
   intake_batch?: string;
   consent?: string;
+  review_state?: "unassigned" | "assigned" | "unreviewed" | "reviewed" | "conflicted";
+  assigned_reviewers_count?: number;
+  submitted_reviews_count?: number;
+  has_conflict?: boolean;
+  review_conflict_status?: "pending" | "aligned" | "needs_admin_review";
   sortBy?: string;
   sortDirection?: "asc" | "desc";
 };
@@ -57,6 +62,20 @@ export async function getPagedApplications(options: GetPagedApplicationsOptions)
     if (options.consent === "no") query = query.or("consent_unified.eq.false,consent_unified.eq.no");
     if (options.consent === "unknown") query = query.is("consent_unified", null);
   }
+  if (options.assigned_reviewers_count !== undefined) {
+    query = query.eq("assigned_reviewers_count", options.assigned_reviewers_count);
+  }
+  if (options.submitted_reviews_count !== undefined) {
+    query = query.eq("submitted_reviews_count", options.submitted_reviews_count);
+  }
+  if (options.has_conflict !== undefined) query = query.eq("has_conflict", options.has_conflict);
+  if (options.review_conflict_status) query = query.eq("review_conflict_status", options.review_conflict_status);
+
+  if (options.review_state === "unassigned") query = query.eq("assigned_reviewers_count", 0);
+  if (options.review_state === "assigned") query = query.gt("assigned_reviewers_count", 0);
+  if (options.review_state === "unreviewed") query = query.eq("submitted_reviews_count", 0);
+  if (options.review_state === "reviewed") query = query.gt("submitted_reviews_count", 0);
+  if (options.review_state === "conflicted") query = query.eq("has_conflict", true);
 
   // Cap page size explicitly to avoid hitting PostgREST maxRows silently
   const limit = Math.min(Math.max(options.limit || 50, 1), 100);

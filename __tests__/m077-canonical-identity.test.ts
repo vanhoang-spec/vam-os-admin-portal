@@ -77,36 +77,10 @@ const baseInput = {
 
 const DUPLICATE_MSG = "Email hoặc MSSV này đã có đơn đăng ký trong đợt hiện tại. Nếu cần điều chỉnh thông tin, vui lòng liên hệ BTC.";
 
-describe("M077 Canonical Applicant Identity", () => {
+  describe("M077 Canonical Applicant Identity", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns generic duplicate message on email collision (pre-check)", async () => {
-    const { client } = mockClient({ dupEmailRow: { id: "existing-id" } });
-    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as never);
-
-    const result = await submitPilotApplication(baseInput);
-
-    expect(result).toEqual({
-      ok: false,
-      code: "duplicate",
-      message: DUPLICATE_MSG
-    });
-  });
-
-  it("returns generic duplicate message on MSSV collision (pre-check)", async () => {
-    const { client } = mockClient({ dupMssvRow: { id: "existing-id" } });
-    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as never);
-
-    const result = await submitPilotApplication(baseInput);
-
-    expect(result).toEqual({
-      ok: false,
-      code: "duplicate",
-      message: DUPLICATE_MSG
-    });
-  });
-
-  it("handles race condition where DB unique index catches the duplicate via RPC", async () => {
+  it("handles duplicate caught by DB unique index via RPC", async () => {
     const { client } = mockClient({ 
       rpcResult: { ok: false, code: "duplicate", message: DUPLICATE_MSG }
     });
@@ -121,37 +95,16 @@ describe("M077 Canonical Applicant Identity", () => {
     });
   });
 
-  it("fails open if pre-check encounters an error but RPC succeeds", async () => {
-    const { client } = mockClient({ rpcResult: { ok: true, applicationId: APPLICATION_ID } });
-    
-    // Sabotage pre-check
-    const originalFrom = client.from;
-    client.from = vi.fn((table: string) => {
-      if (table === "applications") {
-        return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                eq: () => ({
-                  limit: () => ({
-                    maybeSingle: async () => ({ data: null, error: new Error("network issue") })
-                  })
-                })
-              })
-            })
-          })
-        };
-      }
-      return originalFrom(table);
-    });
-
+  it("fails correctly if RPC encounters a non-duplicate error", async () => {
+    const { client } = mockClient({ rpcError: new Error("network issue") });
     vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as never);
 
     const result = await submitPilotApplication(baseInput);
 
     expect(result).toEqual({
-      ok: true,
-      applicationId: APPLICATION_ID
+      ok: false,
+      code: "db",
+      message: expect.stringContaining("Không thể ghi đơn ứng tuyển")
     });
   });
 

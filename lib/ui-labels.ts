@@ -135,6 +135,7 @@ export function applicationStatusLabel(value: unknown): string {
   if (key === "waitlisted") return "Danh sách chờ";
   if (key === "rejected_or_not_fit") return "Không phù hợp";
   if (key === "needs_more_review") return "Cần xem thêm";
+  if (key === "needs_admin_review") return "Cần Core Team xem xét";
   if (key === "withdrawn") return "Rút đơn";
   return fallback(value);
 }

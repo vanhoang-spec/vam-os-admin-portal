@@ -5,7 +5,7 @@
     "totalRequests": 3,
     "totalRows": 52,
     "totalBytes": 23914,
-    "mapTimeMs": 3,
+    "mapTimeMs": 7,
     "requestsByTable": {
       "intake_batches": 2,
       "application_list_v1": 1

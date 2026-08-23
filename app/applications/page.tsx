@@ -24,6 +24,7 @@ export default async function ApplicationsPage(props: {
   const season = typeof searchParams?.season === "string" ? searchParams.season : undefined;
   const batch = typeof searchParams?.batch === "string" ? searchParams.batch : undefined;
   const consent = typeof searchParams?.consent === "string" ? searchParams.consent : undefined;
+  const reviewState = typeof searchParams?.review_state === "string" ? searchParams.review_state : undefined;
 
   const [applicationsRes, facetsRes, seasonsRes, batchesRes] = await Promise.all([
     getPagedApplications({
@@ -36,6 +37,9 @@ export default async function ApplicationsPage(props: {
       season_code: season,
       intake_batch: batch,
       consent,
+      review_state: reviewState === "unassigned" || reviewState === "assigned" || reviewState === "unreviewed" || reviewState === "reviewed" || reviewState === "conflicted"
+        ? reviewState
+        : undefined,
     }),
     getApplicationFacets(scope),
     getSeasons(scope),
@@ -104,6 +108,17 @@ export default async function ApplicationsPage(props: {
               <option value="unknown">Chưa rõ</option>
             </select>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Trạng thái review</label>
+            <select name="review_state" defaultValue={reviewState || ""} className="border px-2 py-1 rounded">
+              <option value="">Tất cả</option>
+              <option value="unassigned">Chưa giao</option>
+              <option value="assigned">Đã giao</option>
+              <option value="unreviewed">Chưa có review nộp</option>
+              <option value="reviewed">Đã có review nộp</option>
+              <option value="conflicted">Có xung đột</option>
+            </select>
+          </div>
           <button type="submit" className="bg-blue-600 text-white px-4 py-1 rounded">Lọc</button>
           <Link href="/applications" className="text-gray-500 underline ml-2">Xóa lọc</Link>
         </form>
@@ -119,6 +134,7 @@ export default async function ApplicationsPage(props: {
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Vai trò</th>
               <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3">Review</th>
               <th className="px-4 py-3">Nguồn</th>
               <th className="px-4 py-3">Ngày nộp</th>
               <th className="px-4 py-3">Đồng ý lưu trữ</th>
@@ -141,6 +157,18 @@ export default async function ApplicationsPage(props: {
                     {applicationStatusLabel(row.status_unified)}
                   </span>
                 </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 rounded text-xs ${row.has_conflict ? "bg-red-100 text-red-800" : row.review_conflict_status === "aligned" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                    {row.has_conflict || row.review_conflict_status === "needs_admin_review"
+                      ? "Cần Core Team"
+                      : row.review_conflict_status === "aligned"
+                        ? "Đồng thuận"
+                        : "Đang chờ"}
+                  </span>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {row.submitted_reviews_count}/{row.assigned_reviewers_count} đã nộp
+                  </div>
+                </td>
                 <td className="px-4 py-3">{displayText(row.source)}</td>
                 <td className="px-4 py-3">{formatDate(row.submitted_at)}</td>
                 <td className="px-4 py-3">
@@ -155,7 +183,7 @@ export default async function ApplicationsPage(props: {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                   Không tìm thấy đơn ứng tuyển nào.
                 </td>
               </tr>
@@ -171,12 +199,12 @@ export default async function ApplicationsPage(props: {
           </div>
           <div className="flex gap-2">
             {page > 1 && (
-              <Link href={`?page=${page - 1}&q=${q || ""}&status=${status || ""}&role=${role || ""}&season=${season || ""}&batch=${batch || ""}&consent=${consent || ""}`} className="px-3 py-1 bg-gray-200 rounded">
+              <Link href={`?page=${page - 1}&q=${q || ""}&status=${status || ""}&role=${role || ""}&season=${season || ""}&batch=${batch || ""}&consent=${consent || ""}&review_state=${reviewState || ""}`} className="px-3 py-1 bg-gray-200 rounded">
                 Trước
               </Link>
             )}
             {page < totalPages && (
-              <Link href={`?page=${page + 1}&q=${q || ""}&status=${status || ""}&role=${role || ""}&season=${season || ""}&batch=${batch || ""}&consent=${consent || ""}`} className="px-3 py-1 bg-gray-200 rounded">
+              <Link href={`?page=${page + 1}&q=${q || ""}&status=${status || ""}&role=${role || ""}&season=${season || ""}&batch=${batch || ""}&consent=${consent || ""}&review_state=${reviewState || ""}`} className="px-3 py-1 bg-gray-200 rounded">
                 Tiếp
               </Link>
             )}

@@ -1812,7 +1812,7 @@ export async function getReviewAssignableApplications(filters: {
     "application_reviews",
     "application_id",
     appIds,
-    "application_id",
+    "application_id,reviewer_admin_user_id",
     (query) => query.eq("review_round", "profile_screening").neq("status", "cancelled")
   );
   if (reviewErr) {
@@ -1821,15 +1821,19 @@ export async function getReviewAssignableApplications(filters: {
     return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
   }
 
-  const reviewCountByAppId = new Map<string, number>();
+  const reviewersByAppId = new Map<string, Set<string>>();
   for (const row of reviewRows) {
-    const id = row.application_id as string | null;
-    if (id) reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
+    const applicationId = row.application_id as string | null;
+    const reviewerId = row.reviewer_admin_user_id as string | null;
+    if (!applicationId || !reviewerId) continue;
+    const reviewers = reviewersByAppId.get(applicationId) ?? new Set<string>();
+    reviewers.add(reviewerId);
+    reviewersByAppId.set(applicationId, reviewers);
   }
 
   const data: ReviewAssignableApplication[] = appList.map((a) => ({
     ...a,
-    existing_review_count: reviewCountByAppId.get(a.id) ?? 0
+    existing_review_count: reviewersByAppId.get(a.id)?.size ?? 0
   }));
 
   return { data, error: null };

@@ -160,7 +160,7 @@ export function generateBenchmarkDataset(seed = 123456789) {
       role_applied: 'mentee',
       sbd: payload.mssv,
       source: null,
-      acquisition_channel: payload.acquisition_channel || null,
+      acquisition_channel: (payload as any).acquisition_channel || null,
       submitted_at: '2026-01-01T00:00:00Z',
       status_unified: 'submitted',
       consent_unified: 'yes',

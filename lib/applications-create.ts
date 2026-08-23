@@ -212,47 +212,30 @@ export async function submitPilotApplication(
   const DUPLICATE_APPLICATION_MESSAGE =
     "Email hoặc MSSV này đã có đơn đăng ký trong đợt hiện tại. Nếu cần điều chỉnh thông tin, vui lòng liên hệ BTC.";
 
-  let mssv = input.role === "mentee" && input.rawPayload["mssv"] ? input.rawPayload["mssv"] : null;
-  mssv = typeof mssv === "string" && mssv.trim() !== "" ? mssv.trim().toLowerCase() : null;
-
-  // Duplicate check: pre-check fails open
-  let dupQueryEmail = client
-    .from("applications")
-    .select("id")
-    .eq("season_id", seasonRow.id)
-    .eq("role_applied", input.role)
-    .eq("email_primary", emailPrimary) // exact match since we normalize in DB, or we can use ilike
-    .limit(1)
-    .maybeSingle();
-
-  const { data: dupEmailRow, error: dupEmailErr } = await dupQueryEmail;
-  if (!dupEmailErr && dupEmailRow) {
-    return {
-      ok: false,
-      code: "duplicate",
-      message: DUPLICATE_APPLICATION_MESSAGE
-    };
-  }
-
-  if (mssv) {
-    let dupQueryMssv = client
+  if (input.role === "mentor") {
+    const { data: existing, error: existErr } = await client
       .from("applications")
       .select("id")
-      .eq("season_id", seasonRow.id)
-      .eq("role_applied", "mentee")
-      .eq("raw_payload->>mssv", mssv)
-      .limit(1)
+      .eq("intake_batch_id", batchRow.id)
+      .eq("role_applied", "mentor")
+      .eq("email_primary", emailPrimary)
       .maybeSingle();
-      
-    const { data: dupMssvRow, error: dupMssvErr } = await dupQueryMssv;
-    if (!dupMssvErr && dupMssvRow) {
-      return {
-        ok: false,
-        code: "duplicate",
-        message: DUPLICATE_APPLICATION_MESSAGE
-      };
+
+    if (existErr) {
+      log("duplicate check failed", existErr);
+      return { ok: false, code: "db", message: SAFE_ERROR };
+    }
+    if (existing) {
+      return { ok: false, code: "duplicate", message: DUPLICATE_APPLICATION_MESSAGE };
     }
   }
+
+  // Token hygiene: strictly strip application tokens before insertion
+  const sanitizedPayload = { ...input.rawPayload };
+  delete sanitizedPayload["__apply_token"];
+  delete sanitizedPayload["token"];
+
+  // Insert application and answers via atomic RPC
   const { data: rpcResult, error: rpcErr } = await client.rpc("vam_submit_intake_application_atomic", {
     p_season_id: seasonRow.id,
     p_intake_batch_id: batchRow.id,
@@ -263,7 +246,7 @@ export async function submitPilotApplication(
     p_phone_primary: phonePrimary,
     p_gender: gender,
     p_consent_data_storage: input.consentDataStorage,
-    p_raw_payload: input.rawPayload,
+    p_raw_payload: sanitizedPayload,
     p_answers: input.answers ?? null
   });
 

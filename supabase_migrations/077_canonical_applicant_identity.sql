@@ -26,42 +26,55 @@ DO $$
 DECLARE
   email_collision_count integer;
   mssv_collision_count integer;
+  v_uehm_s12_season_id uuid;
 BEGIN
+  SELECT id INTO v_uehm_s12_season_id FROM public.seasons WHERE code = 'UEHM-S12';
+
+  IF v_uehm_s12_season_id IS NULL THEN
+    RAISE NOTICE 'Season UEHM-S12 not found. Skipping canonical identity unique indexes.';
+    RETURN;
+  END IF;
+
   SELECT count(*) INTO email_collision_count
   FROM (
-    SELECT season_id, applicant_email_norm
+    SELECT applicant_email_norm
     FROM public.applications
-    WHERE role_applied = 'mentee' AND applicant_email_norm IS NOT NULL AND status IS DISTINCT FROM 'withdrawn' AND dedup_exempt_reason IS NULL
-    GROUP BY season_id, applicant_email_norm
+    WHERE season_id = v_uehm_s12_season_id AND role_applied = 'mentee' AND applicant_email_norm IS NOT NULL
+    GROUP BY applicant_email_norm
     HAVING count(*) > 1
   ) as duplicates;
 
   IF email_collision_count > 0 THEN
-    RAISE EXCEPTION 'Migration preflight failed: found % email collisions', email_collision_count;
+    RAISE EXCEPTION 'Migration preflight failed: found % email collisions for UEHM-S12 Mentees', email_collision_count;
   END IF;
 
   SELECT count(*) INTO mssv_collision_count
   FROM (
-    SELECT season_id, applicant_student_id_norm
+    SELECT applicant_student_id_norm
     FROM public.applications
-    WHERE role_applied = 'mentee' AND applicant_student_id_norm IS NOT NULL AND applicant_student_id_norm != '' AND status IS DISTINCT FROM 'withdrawn' AND dedup_exempt_reason IS NULL
-    GROUP BY season_id, applicant_student_id_norm
+    WHERE season_id = v_uehm_s12_season_id AND role_applied = 'mentee' AND applicant_student_id_norm IS NOT NULL AND applicant_student_id_norm != ''
+    GROUP BY applicant_student_id_norm
     HAVING count(*) > 1
   ) as duplicates;
 
   IF mssv_collision_count > 0 THEN
-    RAISE EXCEPTION 'Migration preflight failed: found % MSSV collisions', mssv_collision_count;
+    RAISE EXCEPTION 'Migration preflight failed: found % MSSV collisions for UEHM-S12 Mentees', mssv_collision_count;
   END IF;
+
+  -- 4. Create Indexes (Dynamic SQL required in DO block to use variable)
+  EXECUTE format('
+    CREATE UNIQUE INDEX canonical_identity_email_idx
+    ON public.applications (season_id, applicant_email_norm)
+    WHERE season_id = %L AND role_applied = ''mentee'' AND applicant_email_norm IS NOT NULL;
+  ', v_uehm_s12_season_id);
+
+  EXECUTE format('
+    CREATE UNIQUE INDEX canonical_identity_mssv_idx
+    ON public.applications (season_id, applicant_student_id_norm)
+    WHERE season_id = %L AND role_applied = ''mentee'' AND applicant_student_id_norm IS NOT NULL AND applicant_student_id_norm != '''';
+  ', v_uehm_s12_season_id);
+
 END $$;
-
--- 4. Create Indexes
-CREATE UNIQUE INDEX canonical_identity_email_idx 
-ON public.applications (season_id, applicant_email_norm)
-WHERE role_applied = 'mentee' AND applicant_email_norm IS NOT NULL AND status IS DISTINCT FROM 'withdrawn' AND dedup_exempt_reason IS NULL;
-
-CREATE UNIQUE INDEX canonical_identity_mssv_idx 
-ON public.applications (season_id, applicant_student_id_norm)
-WHERE role_applied = 'mentee' AND applicant_student_id_norm IS NOT NULL AND applicant_student_id_norm != '' AND status IS DISTINCT FROM 'withdrawn' AND dedup_exempt_reason IS NULL;
 
 -- 5. Atomic RPC
 CREATE OR REPLACE FUNCTION public.vam_submit_intake_application_atomic(
@@ -102,15 +115,15 @@ BEGIN
   ) VALUES (
     p_season_id,
     p_intake_batch_id,
-    p_role_applied::public.application_role,
-    'submitted'::public.application_status,
-    p_source::public.application_source,
+    p_role_applied::public.role_type,
+    'submitted',
+    p_source,
     p_full_name,
     p_email_primary,
     p_phone_primary,
     p_gender,
     p_consent_data_storage,
-    p_raw_payload,
+    (p_raw_payload - 'token') - '__apply_token',
     CURRENT_DATE
   ) RETURNING id INTO v_application_id;
 
@@ -122,13 +135,13 @@ BEGIN
         question_key,
         question_label,
         value_text,
-        accepted_at
+        created_at
       ) VALUES (
         v_application_id,
         v_answer->>'questionKey',
         v_answer->>'questionLabel',
         v_answer->>'valueText',
-        (v_answer->>'acceptedAt')::timestamptz
+        coalesce((v_answer->>'acceptedAt')::timestamptz, now())
       );
     END LOOP;
   END IF;

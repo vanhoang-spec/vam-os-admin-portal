@@ -27,8 +27,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
+let parsedUrl;
 try {
-  const parsedUrl = new URL(SUPABASE_URL);
+  parsedUrl = new URL(SUPABASE_URL);
   console.log(`🔌 Target Supabase Host: ${parsedUrl.hostname}`);
 } catch (e) {
   console.error("❌ ERROR: Invalid SUPABASE_URL format.");
@@ -54,21 +55,27 @@ if (confirmSeed && confirmCleanup) {
 }
 
 if (!isDryRun && !isPrintPlan) {
-  if (!targetProjectRef) {
-    console.error("❌ ERROR: Write modes require --target-project-ref <expected-ref> for safety.");
+  const hostRef = parsedUrl?.hostname?.split(".")[0];
+  if (hostRef !== STAGING_PROJECT_REF || targetProjectRef !== STAGING_PROJECT_REF) {
+    console.error("❌ ERROR: Write mode requires --target-project-ref matching the exact STAGING ref.");
     process.exit(1);
   }
-  const hostRef = parsedUrl.hostname.split(".")[0];
+
+  if (targetProjectRef === PRODUCTION_PROJECT_REF) {
+    console.error("❌ ERROR: Production project is permanently forbidden.");
+    process.exit(1);
+  }
+
+  if (!confirmStagingAuthorization) {
+    console.error("❌ ERROR: Missing --confirm-staging-authorization flag.");
+    process.exit(1);
+  }
+  if (hostRef !== targetProjectRef) {
+    console.error(`❌ ERROR: SUPABASE_URL host (${hostRef}) does not match --target-project-ref (${targetProjectRef}).`);
+    process.exit(1);
+  }
   if (hostRef === PRODUCTION_PROJECT_REF) {
     console.error("❌ ERROR: Production project is permanently forbidden for this demo seed.");
-    process.exit(1);
-  }
-  if (hostRef !== STAGING_PROJECT_REF || targetProjectRef !== STAGING_PROJECT_REF) {
-    console.error("❌ ERROR: Demo seed write modes are restricted to the confirmed staging project ref.");
-    process.exit(1);
-  }
-  if (targetProjectRef !== hostRef) {
-    console.error(`❌ ERROR: --target-project-ref '${targetProjectRef}' does not match target host '${hostRef}'.`);
     process.exit(1);
   }
   if (!confirmStagingAuthorization) {

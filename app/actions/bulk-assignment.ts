@@ -25,13 +25,19 @@ export async function bulkAssignApplicationReviewsAction(
     const statuses = formData.getAll("statuses").map((v) => String(v).trim()).filter(Boolean);
     const reviewerIds = formData.getAll("reviewer_ids").map((v) => String(v).trim()).filter(Boolean);
     const excludeAlreadyAssigned = String(formData.get("exclude_already_assigned") ?? "1") !== "0";
+    const reviewersPerApplication = Number(formData.get("reviewers_per_application") ?? 2);
     const dueAt = String(formData.get("due_at") ?? "").trim() || null;
     const assignmentNote = String(formData.get("assignment_note") ?? "").trim() || null;
 
     if (!roleApplied) return fail("Vui lòng chọn role ứng tuyển.");
     if (!statuses.length) return fail("Vui lòng chọn ít nhất một trạng thái đơn.");
     if (!reviewerIds.length) return fail("Vui lòng chọn ít nhất một reviewer.");
+    if (!Number.isInteger(reviewersPerApplication) || reviewersPerApplication < 1 || reviewersPerApplication > 2) {
+      return fail("Số reviewer mỗi hồ sơ phải từ 1 đến 2.");
+    }
 
+    // The library performs the batch audit, review inserts, and status advance
+    // through one database RPC; any failure rolls the whole assignment back.
     const result = await bulkAssignApplicationReviews({
       intakeBatchId,
       roleApplied,
@@ -39,6 +45,7 @@ export async function bulkAssignApplicationReviewsAction(
       reviewerAdminUserIds: reviewerIds,
       dueAt,
       excludeAlreadyAssigned,
+      reviewersPerApplication,
       assignmentNote,
       assignedByAdminUserId: adminUser.id
     });

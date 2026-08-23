@@ -11,7 +11,7 @@ SELECT
   a.season_id,
   a.intake_batch_id,
   a.role_applied,
-  a.sbd,
+  COALESCE(a.sbd, a.applicant_student_id_norm) AS sbd,
   a.source,
   a.acquisition_channel,
   a.submitted_at,
@@ -24,7 +24,7 @@ SELECT
   LOWER(
     COALESCE(a.full_name, p.full_name, '') || ' ' ||
     COALESCE(a.email_primary, p.email_primary, '') || ' ' ||
-    COALESCE(a.sbd, '') || ' ' ||
+    COALESCE(a.sbd, a.applicant_student_id_norm, '') || ' ' ||
     a.id || ' ' ||
     COALESCE(a.person_id, '')
   ) AS search_blob,

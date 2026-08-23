@@ -9,7 +9,7 @@ import {
   getSeasons,
   keyById
 } from "@/lib/data";
-import { canReview } from "@/lib/permissions";
+import { canReview, isReviewerOnly } from "@/lib/permissions";
 import { displayText, formatDate } from "@/lib/utils";
 import { Card, DetailGrid, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewForm } from "./review-form";
@@ -33,6 +33,18 @@ function roundLabel(round: string) {
   return round;
 }
 
+const REVIEWER_PII_RAW_PAYLOAD_FIELDS = new Set([
+  "full_name",
+  "email_primary",
+  "phone_primary",
+  "dob",
+  "gender",
+  "facebook_url",
+  "linkedin_url",
+  "address_current",
+  "applicant_student_id_norm"
+]);
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -43,10 +55,11 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canReview(adminUser.role)) redirect("/");
+  const reviewerOnly = isReviewerOnly(adminUser.role);
 
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const reviewerConstraint = adminUser.role === "reviewer" ? adminUser.id : undefined;
+  const reviewerConstraint = reviewerOnly ? adminUser.id : undefined;
   const [reviewResult, seasons] = await Promise.all([
     getApplicationReviewById(params.id, scope, reviewerConstraint),
     getSeasons(scope)
@@ -80,8 +93,8 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
 
   // Coalesced identity (same as application detail page)
   const displayFullName = app?.full_name ?? person?.full_name ?? null;
-  const displayEmail = app?.email_primary ?? person?.email_primary ?? null;
-  const displayPhone = app?.phone_primary ?? person?.phone_primary ?? null;
+  const displayEmail = reviewerOnly ? null : app?.email_primary ?? person?.email_primary ?? null;
+  const displayPhone = reviewerOnly ? null : app?.phone_primary ?? person?.phone_primary ?? null;
   const displayGender = app?.gender ?? person?.gender ?? null;
   const displayStatus = app?.status ?? app?.final_status ?? null;
 
@@ -90,6 +103,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
     const payload = app?.raw_payload;
     if (!payload || typeof payload !== "object") return [];
     return Object.entries(payload)
+      .filter(([key]) => !reviewerOnly || !REVIEWER_PII_RAW_PAYLOAD_FIELDS.has(key.toLowerCase()))
       .filter(([, v]) => v !== null && v !== undefined && v !== "")
       .map(([k, v]): [string, string] => [
         k,
@@ -99,9 +113,10 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
 
   const isSubmitted = review.status === "submitted";
 
-  // Permission guard: reviewer may only edit their own review
+  // Draft/submit RPCs enforce strict ownership for every role. Admin tiers use
+  // the separate assignment lifecycle actions instead of editing a peer's row.
   const isOwner = review.reviewer_admin_user_id === adminUser.id;
-  const canEdit = isOwner || ["super_admin", "admin", "core_team"].includes(adminUser.role);
+  const canEdit = isOwner && review.status !== "cancelled";
 
   const error = reviewResult.error ?? appResult.error ?? personResult.error ?? seasons.error;
 
@@ -145,7 +160,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
                 ["Nộp lúc", formatDate(app.submitted_at)]
               ]}
             />
-            {adminUser.role !== "reviewer" ? <div className="mt-3">
+            {!reviewerOnly ? <div className="mt-3">
               <Link
                 href={`/applications/${app.id}`}
                 className="text-sm font-medium text-vam-green hover:underline"
@@ -218,7 +233,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
             ← Quay lại Reviews
           </Link>
         )}
-        {app && adminUser.role !== "reviewer" && (
+        {app && !reviewerOnly && (
           <Link
             href={`/applications/${app.id}`}
             className="text-sm font-medium text-vam-green"

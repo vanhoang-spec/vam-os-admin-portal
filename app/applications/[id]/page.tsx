@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ApplicationAnswerCard } from "@/components/application-answer-card";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
+import { UnassignReviewButton } from "./unassign-review-button";
 import {
   getActiveAdminUsers,
   keyById
@@ -218,13 +219,16 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                       <td className="px-4 py-3 text-slate-700">
                         {displayText(review.recommendation)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 flex items-center gap-2">
                         <Link
                           href={`/reviews/${review.id}`}
                           className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
                         >
                           {review.status === "submitted" ? "Xem" : "Làm review"}
                         </Link>
+                        {canAssign && review.status !== "submitted" && review.status !== "cancelled" && (
+                          <UnassignReviewButton reviewId={review.id} applicationId={application.id} />
+                        )}
                       </td>
                     </tr>
                   ))}

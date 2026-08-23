@@ -123,10 +123,9 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
-  // Verify ownership — reviewer can only edit their own review
   const { data: existing, error: fetchErr } = await client
     .from("application_reviews")
-    .select("id,reviewer_admin_user_id,status,application_id")
+    .select("id,application_id")
     .eq("id", input.reviewId)
     .maybeSingle();
 
@@ -135,30 +134,21 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
     return { ok: false, message: SAFE_ERROR };
   }
   if (!existing) return { ok: false, message: "Không tìm thấy review." };
-  if (existing.reviewer_admin_user_id !== input.adminUserId) {
-    return { ok: false, message: "Bạn không có quyền chỉnh sửa review này." };
-  }
-  if (existing.status === "submitted") {
-    return { ok: false, message: "Review đã được submit, không thể chỉnh sửa." };
-  }
 
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
   if (!scopeAccess.ok) return scopeAccess;
 
-  const { error } = await client
-    .from("application_reviews")
-    .update({
-      status: "in_progress",
-      score_motivation: input.scoreMotivation ?? null,
-      score_goal_clarity: input.scoreGoalClarity ?? null,
-      score_commitment: input.scoreCommitment ?? null,
-      score_fit: input.scoreFit ?? null,
-      score_communication: input.scoreCommunication ?? null,
-      recommendation: input.recommendation ?? null,
-      reviewer_note: input.reviewerNote ?? null,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", input.reviewId);
+  const { error } = await client.rpc("vam081_save_application_review_draft", {
+    p_review_id: input.reviewId,
+    p_actor: input.adminUserId,
+    p_score_motivation: input.scoreMotivation ?? null,
+    p_score_goal_clarity: input.scoreGoalClarity ?? null,
+    p_score_commitment: input.scoreCommitment ?? null,
+    p_score_fit: input.scoreFit ?? null,
+    p_score_communication: input.scoreCommunication ?? null,
+    p_recommendation: input.recommendation ?? null,
+    p_reviewer_note: input.reviewerNote ?? null
+  });
 
   if (error) {
     log("update review draft failed", error);
@@ -176,10 +166,9 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
-  // Verify ownership
   const { data: existing, error: fetchErr } = await client
     .from("application_reviews")
-    .select("id,reviewer_admin_user_id,status,application_id,review_round")
+    .select("id,application_id")
     .eq("id", input.reviewId)
     .maybeSingle();
 
@@ -188,70 +177,105 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
     return { ok: false, message: SAFE_ERROR };
   }
   if (!existing) return { ok: false, message: "Không tìm thấy review." };
-  if (existing.reviewer_admin_user_id !== input.adminUserId) {
-    return { ok: false, message: "Bạn không có quyền submit review này." };
-  }
-  if (existing.status === "submitted") {
-    return { ok: false, message: "Review đã được submit rồi." };
-  }
 
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
   if (!scopeAccess.ok) return scopeAccess;
 
-  // Calculate total_score from available dimensions
-  const scores = [
-    input.scoreMotivation,
-    input.scoreGoalClarity,
-    input.scoreCommitment,
-    input.scoreFit,
-    input.scoreCommunication
-  ].filter((s): s is number => typeof s === "number" && s >= 1 && s <= 5);
-  const totalScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) : null;
-
-  const { error } = await client
-    .from("application_reviews")
-    .update({
-      status: "submitted",
-      score_motivation: input.scoreMotivation ?? null,
-      score_goal_clarity: input.scoreGoalClarity ?? null,
-      score_commitment: input.scoreCommitment ?? null,
-      score_fit: input.scoreFit ?? null,
-      score_communication: input.scoreCommunication ?? null,
-      total_score: totalScore,
-      recommendation: input.recommendation ?? null,
-      reviewer_note: input.reviewerNote ?? null,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", input.reviewId);
+  const { error } = await client.rpc("vam081_submit_application_review", {
+    p_review_id: input.reviewId,
+    p_actor: input.adminUserId,
+    p_score_motivation: input.scoreMotivation ?? null,
+    p_score_goal_clarity: input.scoreGoalClarity ?? null,
+    p_score_commitment: input.scoreCommitment ?? null,
+    p_score_fit: input.scoreFit ?? null,
+    p_score_communication: input.scoreCommunication ?? null,
+    p_recommendation: input.recommendation ?? null,
+    p_reviewer_note: input.reviewerNote ?? null
+  });
 
   if (error) {
     log("submit review update failed", error);
     return { ok: false, message: SAFE_ERROR };
   }
 
-  // Advance application.status based on review_round
-  if (existing.review_round === "profile_screening") {
-    const { error: statusErr } = await client
-      .from("applications")
-      .update({ status: "screening_completed" })
-      .eq("id", existing.application_id)
-      .in("status", ["screening_assigned", "screening_in_progress"]);
-    if (statusErr) {
-      log("update application status to screening_completed failed", statusErr);
-    }
-  } else if (existing.review_round === "interview") {
-    const { error: statusErr } = await client
-      .from("applications")
-      .update({ status: "interview_completed" })
-      .eq("id", existing.application_id)
-      .in("status", ["interview_in_progress"]);
-    if (statusErr) {
-      log("update application status to interview_completed failed", statusErr);
-    }
-  }
-
   return { ok: true, id: input.reviewId };
+}
+
+// ----------------------------------------------------------------
+// Admin assignment lifecycle
+// ----------------------------------------------------------------
+
+export type UnassignReviewInput = {
+  reviewId: string;
+  actorAdminUserId: string;
+  cancelReason: string;
+};
+
+export async function unassignApplicationReview(input: UnassignReviewInput): Promise<ReviewActionResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const { data: existing, error: fetchErr } = await client
+    .from("application_reviews")
+    .select("id,application_id")
+    .eq("id", input.reviewId)
+    .maybeSingle();
+  if (fetchErr) {
+    log("fetch review for unassign failed", fetchErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!existing) return { ok: false, message: "Không tìm thấy review." };
+
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
+  if (!scopeAccess.ok) return scopeAccess;
+
+  const { error } = await client.rpc("vam081_unassign_application_review", {
+    p_review_id: input.reviewId,
+    p_actor: input.actorAdminUserId,
+    p_cancel_reason: input.cancelReason
+  });
+  if (error) {
+    log("unassign review RPC failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  return { ok: true, id: input.reviewId };
+}
+
+export type ReassignReviewInput = UnassignReviewInput & {
+  newReviewerAdminUserId: string;
+  dueAt?: string | null;
+};
+
+export async function reassignApplicationReview(input: ReassignReviewInput): Promise<ReviewActionResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const { data: existing, error: fetchErr } = await client
+    .from("application_reviews")
+    .select("id,application_id")
+    .eq("id", input.reviewId)
+    .maybeSingle();
+  if (fetchErr) {
+    log("fetch review for reassign failed", fetchErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!existing) return { ok: false, message: "Không tìm thấy review." };
+
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
+  if (!scopeAccess.ok) return scopeAccess;
+
+  const { data, error } = await client.rpc("vam081_reassign_application_review", {
+    p_review_id: input.reviewId,
+    p_new_reviewer_admin_user_id: input.newReviewerAdminUserId,
+    p_actor: input.actorAdminUserId,
+    p_cancel_reason: input.cancelReason,
+    p_due_at: input.dueAt ?? null
+  });
+  if (error) {
+    log("reassign review RPC failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  return { ok: true, id: (data as string | null) ?? input.reviewId };
 }
 
 // ----------------------------------------------------------------
