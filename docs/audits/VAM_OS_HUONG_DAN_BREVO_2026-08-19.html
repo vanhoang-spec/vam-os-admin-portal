@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Hướng dẫn thiết lập Brevo</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; padding-left: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 32%; }
+
+  .note, .stop {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+
+  .check { background: var(--mint); border: 1px solid #bfe2cd; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Tài liệu vận hành</div>
+  <h1>Thiết lập Brevo<br />để gửi email cho mentee và mentor</h1>
+  <div class="sub">Hướng dẫn từng bước — không cần biết lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Tài liệu này đi từ con số không: tạo tài khoản Brevo, xác minh tên miền để thư không rơi vào
+    spam, lấy khoá kết nối, dán vào phần cấu hình của web app, rồi gửi thử một thư để chắc chắn
+    mọi thứ chạy.
+  </p>
+  <p class="lead">
+    Mỗi bước nói rõ <strong>bấm vào đâu</strong>, <strong>chép cái gì</strong> và
+    <strong>làm sao biết đã đúng</strong>. Nếu một bước không giống mô tả, dừng lại ở đó và hỏi —
+    đừng đoán, vì cấu hình sai ở đây làm hàng trăm lá thư âm thầm vào spam.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Thời gian cần</dt><dd>~45 phút, cộng thời gian chờ DNS</dd></div>
+    <div><dt>Cần có sẵn</dt><dd>Quyền sửa DNS của tên miền · quyền vào Vercel</dd></div>
+    <div><dt>Chi phí</dt><dd>0 đồng (gói Free, ~300 thư/ngày)</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ TỔNG QUAN ══════════ -->
+<section class="page">
+  <h2 class="plain">Trước khi bắt đầu</h2>
+
+  <p><strong>Bạn sẽ làm 5 việc, theo đúng thứ tự này:</strong></p>
+  <table>
+    <thead>
+      <tr><th style="width:8%">#</th><th style="width:40%">Việc</th><th>Kết quả nhận được</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Tạo tài khoản Brevo</td><td>Đăng nhập được vào trang quản trị Brevo</td></tr>
+      <tr><td>2</td><td>Xác minh tên miền gửi thư</td><td>3 dấu tick xanh trong mục Domains</td></tr>
+      <tr><td>3</td><td>Tạo khoá API</td><td>Một chuỗi bắt đầu bằng <code>xkeysib-</code></td></tr>
+      <tr><td>4</td><td>Dán 7 biến cấu hình vào Vercel rồi deploy lại</td><td>Web app biết cách gửi thư</td></tr>
+      <tr><td>5</td><td>Gửi thử và kiểm tra</td><td>Thư vào hộp thư chính, không phải spam</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <h3>Ba thứ cần chuẩn bị</h3>
+    <ul>
+      <li><strong>Một tên miền của chương trình</strong> (ví dụ <code>vam.edu.vn</code>) và quyền vào
+        trang quản lý DNS của nó — thường ở nơi mua tên miền: Cloudflare, GoDaddy, Namecheap, PA Việt Nam,
+        Mắt Bão… Nếu bạn không có quyền này, cần người quản trị tên miền ngồi cùng ở bước 2.</li>
+      <li><strong>Quyền vào dự án trên Vercel</strong> (nơi web app đang chạy) để thêm biến cấu hình.</li>
+      <li><strong>Một hộp thư dùng để nhận thư trả lời</strong>, ví dụ <code>mentoring@vam.edu.vn</code> —
+        đây là nơi mentee bấm "Trả lời" sẽ tới.</li>
+    </ul>
+  </div>
+
+  <div class="stop">
+    <h3>Vì sao không bỏ qua bước 2 được</h3>
+    Nếu tên miền chưa được xác minh, Gmail và Outlook không có cách nào biết thư thật sự đến từ chương
+    trình, nên phần lớn sẽ vào thư mục spam. <strong>Không ai báo lỗi cả</strong> — app vẫn ghi "đã gửi",
+    Brevo vẫn ghi "delivered", nhưng mentee không thấy thư. Đây là lỗi im lặng tốn kém nhất trong cả
+    quy trình, và bước 2 là thứ duy nhất ngăn nó.
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 1 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 1 — Tạo tài khoản Brevo</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Đăng ký</h3>
+      <p class="sub-step">Mở <code>https://www.brevo.com</code> → bấm <strong>Sign up free</strong>.</p>
+      <p class="sub-step">Dùng email công việc của chương trình, đừng dùng email cá nhân — sau này người
+        khác trong ban tổ chức còn phải vào được.</p>
+      <p class="sub-step">Brevo gửi một thư xác nhận; mở thư đó và bấm nút xác nhận.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Trả lời vài câu hỏi khởi tạo</h3>
+      <p class="sub-step">Brevo hỏi tên công ty, quy mô, mục đích sử dụng. Điền thật:
+        tên tổ chức, và mục đích là gửi <strong>email giao dịch</strong> (transactional email) —
+        tức thư gửi cho từng người theo hành động của họ, không phải thư quảng cáo hàng loạt.</p>
+      <p class="sub-step">Chọn gói <strong>Free</strong>. Không cần nhập thẻ.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Ghi lại thông tin đăng nhập vào nơi cả nhóm dùng chung</h3>
+      <p class="sub-step">Tài khoản này sẽ giữ khoá gửi thư của cả chương trình. Lưu email và mật khẩu
+        vào chỗ dùng chung của ban tổ chức (trình quản lý mật khẩu, hoặc tài liệu nội bộ có kiểm soát),
+        không để riêng trong máy một người.</p>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Làm sao biết đã xong bước 1</h3>
+    Bạn đăng nhập được vào <code>app.brevo.com</code> và nhìn thấy trang tổng quan (Dashboard).
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 2 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 2 — Xác minh tên miền gửi thư <span style="font-size:10pt;font-weight:400;color:var(--muted)">(quan trọng nhất)</span></h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Mở mục quản lý tên miền trong Brevo</h3>
+      <p class="sub-step">Bấm vào <strong>tên tài khoản ở góc trên bên phải</strong> →
+        <strong>Senders, Domains &amp; Dedicated IPs</strong> → thẻ <strong>Domains</strong>.</p>
+      <p class="sub-step">Bấm <strong>Add a domain</strong> → gõ tên miền của chương trình, ví dụ
+        <code>vam.edu.vn</code> (chỉ tên miền, không có <code>https://</code>, không có <code>www</code>).</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Brevo hiện ra một danh sách bản ghi DNS cần thêm</h3>
+      <p class="sub-step">Màn hình sẽ có khoảng 3–4 dòng, mỗi dòng gồm <strong>Loại</strong> (Type),
+        <strong>Tên</strong> (Name/Host) và <strong>Giá trị</strong> (Value). Chúng trông đại khái như sau —
+        <strong>số liệu thật của bạn sẽ khác</strong>, luôn chép từ màn hình Brevo:</p>
+      <table>
+        <thead><tr><th style="width:14%">Loại</th><th style="width:28%">Tên</th><th>Giá trị (ví dụ)</th></tr></thead>
+        <tbody>
+          <tr><td>TXT</td><td><code>@</code> (gốc tên miền)</td><td><code>brevo-code:abc123…</code></td></tr>
+          <tr><td>TXT</td><td><code>mail._domainkey</code></td><td><code>k=rsa; p=MIIBIjANBgkq…</code> (rất dài)</td></tr>
+          <tr><td>TXT</td><td><code>@</code> (gốc tên miền)</td><td><code>v=spf1 include:spf.brevo.com mx ~all</code></td></tr>
+          <tr><td>TXT</td><td><code>_dmarc</code></td><td><code>v=DMARC1; p=none; rua=mailto:…</code></td></tr>
+        </tbody>
+      </table>
+      <p class="sub-step">Ba dòng này lần lượt nói với Gmail: "tên miền này đúng là của Brevo",
+        "thư có chữ ký điện tử hợp lệ", "chỉ Brevo được gửi thay mặt tôi".</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Thêm từng dòng vào DNS của tên miền</h3>
+      <p class="sub-step">Mở trang quản lý tên miền (Cloudflare / GoDaddy / Namecheap / PA Việt Nam…) →
+        tìm mục <strong>DNS</strong> hoặc <strong>DNS Records</strong> → <strong>Add record</strong>.</p>
+      <p class="sub-step"><strong>Chép — dán, không gõ tay.</strong> Giá trị DKIM dài vài trăm ký tự;
+        gõ tay gần như chắc chắn sai một ký tự và sẽ không báo lỗi gì cả.</p>
+      <p class="sub-step">Nếu ô "Tên" của nhà cung cấp đã tự thêm sẵn tên miền phía sau, chỉ điền phần
+        đầu: <code>mail._domainkey</code> chứ không phải <code>mail._domainkey.vam.edu.vn</code>.</p>
+      <p class="sub-step">Nếu dùng Cloudflare: các bản ghi này để chế độ <strong>DNS only</strong>
+        (đám mây màu xám), không bật proxy.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Quay lại Brevo và bấm xác minh</h3>
+      <p class="sub-step">Trở về màn hình domain trong Brevo → bấm <strong>Verify</strong> hoặc
+        <strong>Authenticate</strong>.</p>
+      <p class="sub-step">DNS cần thời gian lan ra Internet: thường <strong>15–30 phút</strong>, đôi khi
+        tới <strong>24–48 giờ</strong>. Nếu chưa xanh, đợi rồi bấm lại — không cần thêm bản ghi mới.</p>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Làm sao biết đã xong bước 2</h3>
+    Trong mục Domains, tên miền của bạn có <strong>dấu tick xanh ở cả các mục xác thực</strong>
+    (domain verification, DKIM, SPF). Chừng nào còn một dấu vàng hoặc đỏ, chưa nên gửi thư thật.
+  </div>
+
+  <div class="note">
+    <h3>Muốn thử nhanh trước khi có DNS?</h3>
+    Brevo cho phép xác minh <strong>một địa chỉ gửi lẻ</strong> (Senders → Add a sender → Brevo gửi thư
+    xác nhận tới địa chỉ đó). Cách này dùng để <strong>gửi thử vài thư</strong> thì được, nhưng
+    <strong>không dùng cho đợt 442 thư</strong>: thiếu xác thực tên miền, tỉ lệ vào spam rất cao.
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 3 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 3 — Tạo khoá API</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Mở mục khoá</h3>
+      <p class="sub-step">Bấm <strong>tên tài khoản góc trên bên phải</strong> →
+        <strong>SMTP &amp; API</strong> → thẻ <strong>API keys</strong>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Tạo khoá mới</h3>
+      <p class="sub-step">Bấm <strong>Generate a new API key</strong> → đặt tên dễ hiểu, ví dụ
+        <code>VAM OS production</code> → bấm tạo.</p>
+      <p class="sub-step">Khoá hiện ra dạng <code>xkeysib-…</code> (rất dài).
+        <strong>Chép ngay và lưu vào nơi an toàn</strong> — Brevo chỉ hiện đúng một lần; đóng cửa sổ đi
+        là phải tạo khoá khác.</p>
+    </div>
+  </div>
+
+  <div class="stop">
+    <h3>Khoá này là chìa khoá gửi thư dưới tên chương trình</h3>
+    Ai có nó đều gửi được thư mạo danh chương trình. <strong>Không</strong> dán vào chat nhóm, email,
+    Google Docs công khai hay ảnh chụp màn hình. Chỉ dán vào đúng ô cấu hình của Vercel ở bước 4.
+    Nếu lỡ để lộ: quay lại màn hình này, xoá khoá cũ, tạo khoá mới, cập nhật lại Vercel.
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 4 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 4 — Dán cấu hình vào Vercel</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Mở phần biến môi trường</h3>
+      <p class="sub-step">Vào <code>vercel.com</code> → chọn dự án của web app →
+        <strong>Settings</strong> → <strong>Environment Variables</strong>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Thêm lần lượt 7 biến dưới đây</h3>
+      <p class="sub-step">Với mỗi dòng: gõ <strong>Name</strong>, dán <strong>Value</strong>, chọn môi
+        trường <strong>Production</strong>, rồi <strong>Save</strong>.</p>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>Tên biến</th><th style="width:38%">Giá trị</th><th>Ý nghĩa</th></tr></thead>
+    <tbody>
+      <tr><td class="key">VAM_OS_EMAIL_ENABLED</td><td><code>true</code></td><td>Công tắc chính. Thiếu biến này thì app không gửi thư nào.</td></tr>
+      <tr><td class="key">VAM_OS_EMAIL_PROVIDER</td><td><code>brevo</code></td><td>Chọn Brevo làm nơi gửi.</td></tr>
+      <tr><td class="key">BREVO_API_KEY</td><td><code>xkeysib-…</code></td><td>Khoá vừa tạo ở bước 3.</td></tr>
+      <tr><td class="key">VAM_OS_EMAIL_FROM</td><td><code>Ban tổ chức VAM Mentoring &lt;no-reply@vam.edu.vn&gt;</code></td><td>Tên và địa chỉ người nhận nhìn thấy. <strong>Phần sau dấu @ phải là tên miền đã xác minh ở bước 2.</strong></td></tr>
+      <tr><td class="key">VAM_OS_EMAIL_REPLY_TO</td><td><code>mentoring@vam.edu.vn</code></td><td>Nơi nhận thư khi người ta bấm "Trả lời". Nên là hộp thư có người đọc.</td></tr>
+      <tr><td class="key">VAM_OS_PUBLIC_BASE_URL</td><td><code>https://app.vam.edu.vn</code></td><td>Địa chỉ web chính thức, dùng để dựng các đường dẫn trong thư. Không có dấu <code>/</code> ở cuối.</td></tr>
+      <tr><td class="key">VAM_OS_RATE_LIMIT_SALT</td><td>một chuỗi ngẫu nhiên dài</td><td>Dùng cho bộ đếm chống spam của form công khai. Gõ đại 40–60 ký tự lẫn lộn cũng được; đặt rồi thì đừng đổi.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Deploy lại — bắt buộc</h3>
+      <p class="sub-step">Vào thẻ <strong>Deployments</strong> → bản deploy mới nhất → menu <strong>…</strong>
+        → <strong>Redeploy</strong>.</p>
+      <p class="sub-step"><strong>Biến mới chỉ có hiệu lực sau khi deploy lại.</strong> Đây là lý do
+        phổ biến nhất khiến "đã đặt biến rồi mà app vẫn báo chưa cấu hình".</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>Vì sao app không gửi thư từ bản xem trước (preview)</h3>
+    Hệ thống chỉ gửi thư khi <strong>vừa bật công tắc, vừa đang chạy trên production</strong>. Bản
+    preview và máy cá nhân sẽ ghi nhật ký "đã bỏ qua" thay vì gửi. Đây là cố ý: nó ngăn một bản thử
+    nghiệm gửi nhầm cho 442 mentor thật.
+  </div>
+</section>
+
+<!-- ══════════ BƯỚC 5 ══════════ -->
+<section class="page">
+  <h2 class="plain">Bước 5 — Gửi thử và kiểm tra</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Gửi một thư cho chính mình</h3>
+      <p class="sub-step">Cách nhẹ nhất: mở trang <strong>Xác nhận mentor</strong>
+        (<code>/mentors/season-confirmations</code>), tạo một dòng thử với email của bạn, rồi bấm gửi
+        link xác nhận cho đúng dòng đó.</p>
+      <p class="sub-step">Hoặc trong <strong>Gửi thư sau ghép cặp</strong>
+        (<code>/operations/communications</code>), đặt "Số thư mỗi lượt" = <strong>1</strong> để chỉ gửi
+        đúng một thư trước khi mở van cho cả nhóm.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Kiểm tra thư đến hộp thư chính</h3>
+      <p class="sub-step">Mở Gmail, xem thư nằm ở <strong>Hộp thư đến</strong> hay <strong>Spam</strong>.</p>
+      <p class="sub-step">Bấm dấu ba chấm ở góc thư → <strong>Show original</strong> (Hiển thị bản gốc).
+        Ở phần đầu phải thấy <strong>SPF: PASS</strong> và <strong>DKIM: PASS</strong>. Nếu có dòng nào
+        FAIL, quay lại bước 2 — DNS chưa đúng.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Đối chiếu ở phía Brevo</h3>
+      <p class="sub-step">Trong Brevo: <strong>Transactional</strong> → <strong>Logs</strong> (hoặc
+        Statistics). Thư vừa gửi phải xuất hiện với trạng thái <em>delivered</em>.</p>
+      <p class="sub-step">Nếu Brevo không có dòng nào: app chưa gọi tới Brevo — xem bảng lỗi trang sau.</p>
+    </div>
+  </div>
+
+  <div class="check">
+    <h3>Xong toàn bộ khi</h3>
+    Thư đến hộp thư chính (không phải spam), SPF và DKIM đều PASS, và thư hiện trong Logs của Brevo.
+    Lúc này mới bắt đầu gửi theo đợt thật.
+  </div>
+
+  <div class="note">
+    <h3>Hai điều cần biết về gói miễn phí</h3>
+    <ul>
+      <li><strong>~300 thư mỗi ngày.</strong> Web app gửi theo lô tối đa 50 thư mỗi lần bấm và
+        <strong>tự nhớ ai đã nhận</strong>, nên chia nhiều lượt trong ngày hoặc nhiều ngày đều an toàn —
+        không sợ gửi trùng hay bỏ sót.</li>
+      <li><strong>Gói miễn phí có thể chèn dòng chữ/logo của Brevo ở cuối thư.</strong> Hãy xem thư thử
+        để biết; nếu ban tổ chức thấy không phù hợp thì cân nhắc gói trả phí thấp nhất.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════ LỖI THƯỜNG GẶP ══════════ -->
+<section class="page">
+  <h2 class="plain">Gặp lỗi thì làm gì</h2>
+
+  <table>
+    <thead><tr><th style="width:40%">Bạn thấy</th><th>Nguyên nhân và cách sửa</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>App báo <em>"Chưa bật gửi email: VAM_OS_EMAIL_ENABLED chưa bật"</em></td>
+        <td>Chưa đặt biến, đặt sai chữ (phải đúng chữ thường <code>true</code>), hoặc <strong>chưa deploy lại</strong> sau khi thêm biến.</td>
+      </tr>
+      <tr>
+        <td>App báo <em>"BREVO_API_KEY chưa cấu hình"</em></td>
+        <td>Thiếu khoá, hoặc gõ sai tên biến (thừa dấu cách, sai chữ hoa/thường). Xoá và thêm lại cho chắc.</td>
+      </tr>
+      <tr>
+        <td>App báo <em>"VAM_OS_EMAIL_FROM không phải địa chỉ hợp lệ"</em></td>
+        <td>Viết sai dạng. Đúng: <code>Tên hiển thị &lt;dia-chi@ten-mien.vn&gt;</code> hoặc chỉ <code>dia-chi@ten-mien.vn</code>.</td>
+      </tr>
+      <tr>
+        <td>Nhật ký ghi <em>"Môi trường không phải production"</em></td>
+        <td>Đang chạy bản preview hoặc máy cá nhân. Đúng thiết kế, không phải lỗi — thử lại trên bản production.</td>
+      </tr>
+      <tr>
+        <td>Nhật ký ghi <em>Brevo HTTP 401</em></td>
+        <td>Khoá sai hoặc đã bị xoá bên Brevo. Tạo khoá mới, cập nhật Vercel, deploy lại.</td>
+      </tr>
+      <tr>
+        <td>Nhật ký ghi <em>Brevo HTTP 400 … sender</em></td>
+        <td>Địa chỉ trong <code>VAM_OS_EMAIL_FROM</code> không thuộc tên miền đã xác minh, hoặc tên miền chưa xác minh xong. Quay lại bước 2.</td>
+      </tr>
+      <tr>
+        <td>Nhật ký ghi <em>Brevo HTTP 429</em></td>
+        <td>Đã chạm hạn mức ngày. Đợi sang ngày hôm sau rồi bấm gửi tiếp — app tự bỏ qua người đã nhận.</td>
+      </tr>
+      <tr>
+        <td>Thư vào spam</td>
+        <td>Gần như luôn là DNS. Kiểm tra lại 3 dấu tick ở bước 2 và dòng SPF/DKIM trong "Show original".</td>
+      </tr>
+      <tr>
+        <td>Brevo Logs trống trơn</td>
+        <td>App chưa gọi tới Brevo. Xem lại 4 dòng đầu của bảng này theo thứ tự.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <h3>Xem lịch sử gửi ngay trong web app</h3>
+    Mọi lần gửi — kể cả những lần bị bỏ qua vì cấu hình — đều được ghi lại trong hệ thống kèm lý do.
+    Khi báo lỗi cho người kỹ thuật, chụp màn hình thông báo trong app và dòng tương ứng trong Brevo Logs
+    là đủ để tìm ra nguyên nhân.
+  </div>
+
+  <div class="stop">
+    <h3>Ba việc không nên làm</h3>
+    <ul>
+      <li>Không đổi <code>VAM_OS_RATE_LIMIT_SALT</code> sau khi đã chạy — bộ đếm chống spam sẽ reset.</li>
+      <li>Không đổi <code>VAM_OS_PUBLIC_BASE_URL</code> giữa mùa — các đường dẫn đã gửi trong thư cũ sẽ hỏng.</li>
+      <li>Không dùng lại khoá API này cho việc khác ngoài web app.</li>
+    </ul>
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS Admin Portal · Hướng dẫn thiết lập Brevo · 19/08/2026 · Đi kèm pull request #38
+  </footer>
+</section>
+
+</body>
+</html>

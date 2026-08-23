@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<title>VAM OS — Hướng dẫn thu recap từ group Facebook</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --green: #16834c; --green-dark: #0f5d36; --mint: #eaf6ef; --ink: #14352a;
+    --muted: #5b6b64; --line: #d9e3dd; --warn-bg: #fffdf5; --warn-line: #f0e2bb;
+    --stop-bg: #fdf3f2; --stop-line: #f0cfcb; --stop-ink: #9a3128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.55; color: var(--ink);
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  code {
+    font-family: Consolas, "Courier New", monospace; font-size: 9.5pt;
+    background: #f3f6f4; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1px 5px; color: var(--ink);
+  }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .avoid-break { page-break-inside: avoid; }
+
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .eyebrow {
+    font-size: 10pt; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700; margin-bottom: 14px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.15; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-top: 12px; font-weight: 400; }
+  .cover .rule { height: 4px; width: 72px; background: var(--green); margin: 26px 0; }
+  .cover .lead { font-size: 11.5pt; max-width: 155mm; }
+  .cover-meta { margin-top: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 26px; max-width: 155mm; }
+  .cover-meta div { border-top: 1px solid var(--line); padding-top: 8px; }
+  .cover-meta dt { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .cover-meta dd { margin: 3px 0 0; font-size: 10.5pt; font-weight: 600; }
+
+  h2.plain {
+    font-size: 15pt; border-bottom: 2px solid var(--green);
+    padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 20px; page-break-inside: avoid; }
+  .step .num {
+    flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--green);
+    color: #fff; font-weight: 700; font-size: 12pt;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step h3 { font-size: 12pt; margin-bottom: 6px; }
+  .sub-step { margin: 0 0 6px; padding-left: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th {
+    background: var(--mint); font-size: 8.5pt; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--green-dark); border-bottom: 1px solid #bfe2cd;
+  }
+  td.key { font-family: Consolas, "Courier New", monospace; font-size: 9pt; width: 32%; }
+
+  .note, .stop {
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+  .note h3 { font-size: 10.5pt; margin-bottom: 5px; color: #7a5a10; }
+  .stop { background: var(--stop-bg); border: 1px solid var(--stop-line); }
+  .stop h3 { font-size: 10.5pt; margin-bottom: 5px; color: var(--stop-ink); }
+
+  .check { background: var(--mint); border: 1px solid #bfe2cd; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; }
+  .check h3 { font-size: 10.5pt; color: var(--green-dark); margin-bottom: 6px; }
+
+  footer.doc-foot {
+    margin-top: 22px; border-top: 1px solid var(--line); padding-top: 8px;
+    font-size: 8.5pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ BÌA ══════════ -->
+<section class="page cover">
+  <div class="eyebrow">VAM OS · Tài liệu vận hành</div>
+  <h1>Thu recap từ group Facebook<br />về web app</h1>
+  <div class="sub">Hướng dẫn từng bước — không cần biết lập trình</div>
+  <div class="rule"></div>
+  <p class="lead">
+    Mentee đăng recap sau mỗi buổi gặp lên group Facebook. Từ nay, mỗi kỳ ban tổ chức bấm một nút
+    trong trình duyệt: tiện ích đọc các bài trong group đang mở, gửi về VAM OS, và bạn chỉ việc
+    duyệt. Mỗi bài được duyệt trở thành một recap trong hệ thống, <strong>kèm đúng đường dẫn bài
+    gốc</strong> — thứ mà mùa 11 đã mất ở 258 trong tổng số 286 recap.
+  </p>
+  <p class="lead">
+    Tài liệu này đi từ con số không: cài tiện ích, nhập mã kết nối, thao tác mỗi kỳ, và xử lý
+    những bài hệ thống không tự đoán được.
+  </p>
+
+  <div class="cover-meta">
+    <div><dt>Ngày</dt><dd>19 tháng 8, 2026</dd></div>
+    <div><dt>Cài đặt lần đầu</dt><dd>~15 phút</dd></div>
+    <div><dt>Mỗi kỳ tốn</dt><dd>~10 phút, hai lần một tháng</dd></div>
+    <div><dt>Cần có sẵn</dt><dd>Chrome · quyền vào group · mã kết nối từ super admin</dd></div>
+  </div>
+</section>
+
+<!-- ══════════ VÌ SAO ══════════ -->
+<section class="page">
+  <h2 class="plain">Vì sao lại làm theo cách này</h2>
+
+  <p>
+    Facebook đã đóng cửa API dành cho group từ lâu. Nắm quyền admin group cũng không mở ra được
+    chức năng xuất dữ liệu nào. Chỉ còn một đường duy nhất và nó là đường sạch:
+    <strong>tiện ích đọc đúng trang mà bạn đang mở, trong trình duyệt của bạn, bằng tài khoản của
+    bạn.</strong>
+  </p>
+
+  <div class="check">
+    <h3>Ba điều tuyệt đối không làm — và đã không làm</h3>
+    <ul>
+      <li>Không lưu tài khoản/mật khẩu Facebook của ai lên máy chủ.</li>
+      <li>Không có robot tự vào Facebook khi không có người ngồi đó.</li>
+      <li>Không quét hàng loạt lúc nửa đêm — đó là cách tài khoản admin bị Facebook khoá.</li>
+    </ul>
+    <p style="margin:6px 0 0">
+      Mức tự động dừng ở đúng chỗ nên dừng: <strong>một cú bấm của một con người</strong>, hai lần
+      mỗi tháng. Hệ thống chỉ nhắc bạn khi tới kỳ.
+    </p>
+  </div>
+
+  <h3 style="font-size:12pt;margin:18px 0 8px">Vì sao đường dẫn bài gốc lại quan trọng đến vậy</h3>
+  <p>
+    Khi nhập dữ liệu mùa 11, hệ thống nhận 286 recap thì 258 recap mang cùng một đường dẫn giả
+    <code>system.local/missing-url</code>. Nghĩa là suốt mùa đó, nguồn thật không phải group mà là
+    một file theo dõi; bài viết thật của mentee — thứ có nội dung, có cảm xúc, có bằng chứng — đã
+    không đi vào hệ thống. Toàn bộ phần việc này sinh ra để chuyện đó không lặp lại.
+  </p>
+
+  <h3 style="font-size:12pt;margin:18px 0 8px">Quét trùng ngày không sao cả</h3>
+  <p>
+    Hệ thống nhận diện bài theo đường dẫn của nó. Bài nào đã thu rồi thì lần sau tự bỏ qua, không
+    tạo recap trùng. Cho nên:
+  </p>
+  <ul>
+    <li>Lỡ kỳ trước? Cứ kéo ngày <em>rộng ra</em>, quét lại — phần đã có sẽ tự loại.</li>
+    <li>Không chắc đã quét chưa? Quét lại. Tệ nhất là mất 5 phút, không hỏng gì.</li>
+    <li>Hai người cùng quét một kỳ? Người sau nhận thông báo “đã thu thập trước đó”, thế thôi.</li>
+  </ul>
+</section>
+
+<!-- ══════════ CÀI ĐẶT ══════════ -->
+<section class="page">
+  <h2 class="plain">Phần 1 — Cài đặt (chỉ làm một lần)</h2>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Lấy thư mục tiện ích về máy</h3>
+      <p class="sub-step">
+        Super admin gửi bạn thư mục <code>recap-collector</code> (hoặc file nén chứa nó). Giải nén
+        ra một chỗ dễ nhớ, ví dụ <code>Tài liệu\VAM\recap-collector</code>.
+      </p>
+      <div class="stop">
+        <h3>Đừng xoá hay đổi tên thư mục này</h3>
+        <p style="margin:0">
+          Chrome không chép tiện ích vào trong nó, mà đọc thẳng từ thư mục này mỗi lần chạy. Xoá
+          thư mục là tiện ích biến mất khỏi Chrome.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Bật chế độ nhà phát triển của Chrome</h3>
+      <p class="sub-step">Mở Chrome, gõ vào thanh địa chỉ: <code>chrome://extensions</code> rồi Enter.</p>
+      <p class="sub-step">Góc trên bên phải có công tắc <strong>“Developer mode” / “Chế độ nhà phát triển”</strong> — bật lên.</p>
+      <p class="sub-step">Ba nút mới hiện ra ở góc trên bên trái.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Nạp tiện ích</h3>
+      <p class="sub-step">Bấm <strong>“Load unpacked” / “Tải tiện ích đã giải nén”</strong>.</p>
+      <p class="sub-step">Chọn đúng thư mục <code>recap-collector</code> ở bước 1 (chọn thư mục, không phải file bên trong).</p>
+      <p class="sub-step">
+        Thẻ <strong>VAM Recap Collector</strong> hiện ra trong danh sách. Bấm hình mảnh ghép trên
+        thanh Chrome, rồi bấm hình ghim để nó luôn hiện ra cho dễ bấm.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Nhập địa chỉ web app và mã kết nối</h3>
+      <p class="sub-step">Bấm biểu tượng tiện ích → chọn <strong>Cài đặt</strong> (góc phải).</p>
+      <p class="sub-step">Điền ba ô:</p>
+      <table>
+        <thead><tr><th style="width:30%">Ô</th><th>Điền gì</th></tr></thead>
+        <tbody>
+          <tr><td class="key">Địa chỉ VAM OS</td><td>Đường dẫn web app, ví dụ <code>https://vam-os.vercel.app</code> — không có dấu <code>/</code> ở cuối</td></tr>
+          <tr><td class="key">Mã kết nối</td><td>Chuỗi ký tự super admin gửi riêng cho bạn</td></tr>
+          <tr><td class="key">Mã group Facebook</td><td>Dãy số trong địa chỉ group, cách nhau bằng dấu phẩy nếu có nhiều group</td></tr>
+        </tbody>
+      </table>
+      <p class="sub-step">
+        Bấm <strong>Lưu</strong>. Chrome sẽ hỏi có cho phép tiện ích gửi dữ liệu tới địa chỉ VAM OS
+        không — chọn <strong>Cho phép</strong>. Không cho phép thì nút gửi sẽ báo lỗi.
+      </p>
+      <div class="note">
+        <h3>Mã group Facebook lấy ở đâu?</h3>
+        <p style="margin:0">
+          Mở group, nhìn thanh địa chỉ: <code>facebook.com/groups/<strong>123456789</strong>/</code>
+          — phần in đậm chính là mã. Nếu group dùng tên chữ thay vì số thì chép nguyên phần chữ đó.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="stop">
+    <h3>Mã kết nối là mật khẩu, đừng chia sẻ</h3>
+    <p style="margin:0">
+      Ai có mã này đều gửi dữ liệu vào VAM OS được. Mã nằm trong máy của bạn, không gửi qua chat
+      nhóm, không dán vào file chung. Nếu nghi bị lộ, báo super admin — đổi mã trong cấu hình là
+      mọi bản sao cũ mất tác dụng ngay lập tức.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════ MỖI KỲ ══════════ -->
+<section class="page">
+  <h2 class="plain">Phần 2 — Thao tác mỗi kỳ</h2>
+
+  <p>
+    Hệ thống gửi email nhắc vào <strong>ngày 15</strong> và <strong>ngày cuối tháng</strong>. Nhận
+    được email thì làm 4 bước sau, mất khoảng 10 phút.
+  </p>
+
+  <div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Mở group và chuyển sang “Mới nhất”</h3>
+      <p class="sub-step">
+        Mở group Facebook của chương trình như bình thường. Bấm biểu tượng tiện ích: nếu group đang
+        hiển thị theo “Phù hợp nhất”, tiện ích sẽ hiện nút
+        <strong>“Chuyển sang Mới nhất”</strong> — bấm vào đó.
+      </p>
+      <p class="sub-step">Trang tải lại theo thứ tự thời gian. Bấm lại biểu tượng tiện ích.</p>
+      <div class="note">
+        <h3>Vì sao phải đổi thứ tự?</h3>
+        <p style="margin:0">
+          Chế độ “Phù hợp nhất” do Facebook chọn hiển thị bài nào trước, và có thể giấu bớt bài ít
+          tương tác — đúng những recap ít like mà ta cần nhất.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Chọn kỳ và bấm quét</h3>
+      <p class="sub-step">
+        Tiện ích tự đề xuất kỳ đang tới (ngày 1–15 hoặc 16–cuối tháng). Hai ô ngày vẫn sửa được
+        nếu muốn lấy rộng hơn.
+      </p>
+      <p class="sub-step">Bấm <strong>“Quét bài trong kỳ”</strong>.</p>
+      <p class="sub-step">
+        Trang sẽ tự cuộn xuống, tự bấm “Xem thêm” trong từng bài để lấy trọn nội dung. Dòng chữ ở
+        dưới hiện số bài đã đọc được. <strong>Giữ nguyên cửa sổ tiện ích, đừng bấm ra ngoài</strong>
+        cho tới khi thấy “Đã quét xong”.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Gửi vào VAM OS</h3>
+      <p class="sub-step">Bấm <strong>“Gửi vào VAM OS”</strong>.</p>
+      <p class="sub-step">
+        Vài giây sau hiện thông báo dạng: <em>“Đã nhận 23 bài mới, bỏ qua 4 bài đã có. Khớp tự động
+        19, cần xem lại 4.”</em>
+      </p>
+      <p class="sub-step">
+        Nút <strong>“Tải CSV”</strong> chỉ dùng khi mạng lỗi hoặc web app đang bảo trì — tải về giữ
+        đó, gửi lại sau.
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">4</div>
+    <div class="body">
+      <h3>Duyệt trong web app</h3>
+      <p class="sub-step">
+        Mở VAM OS → <strong>Vận hành</strong> → <strong>Thu recap từ Facebook</strong>.
+      </p>
+      <p class="sub-step">
+        <strong>Chưa bài nào thành recap.</strong> Màn hình chia làm hai nhóm để bạn không phải đọc
+        hết mọi thứ:
+      </p>
+      <table>
+        <thead><tr><th style="width:30%">Nhóm</th><th>Làm gì</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="key">Khớp tự động</td>
+            <td>Hệ thống đã tìm ra mentee theo MSSV ghi trong bài. Tất cả đã tick sẵn — bỏ tick bài
+            nào không muốn, rồi bấm một nút <strong>duyệt hết</strong>.</td>
+          </tr>
+          <tr>
+            <td class="key">Cần người quyết</td>
+            <td>Bài không ghi MSSV, ghi sai, hoặc mentee chưa có cặp ghép. Chọn đúng mentee từ danh
+            sách rồi lưu; bài chuyển lên nhóm trên để duyệt. Bài không phải recap thì bấm
+            <strong>Bỏ qua</strong>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="sub-step">
+        Bài nào có nhãn <strong>“Nghi bị cắt ngắn”</strong> thì mở link bài gốc đọc lại trước khi
+        duyệt — Facebook đôi khi vẫn trả về nội dung thiếu.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ HỎI ĐÁP ══════════ -->
+<section class="page">
+  <h2 class="plain">Khi có trục trặc</h2>
+
+  <table>
+    <thead><tr><th style="width:38%">Hiện tượng</th><th>Nên làm gì</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Quét xong báo <strong>0 bài</strong> dù group rõ ràng có bài</td>
+        <td>Tải lại trang group (F5) rồi quét lại. Vẫn 0 thì báo super admin: nhiều khả năng
+        Facebook đổi cách hiển thị và cần sửa một dòng trong tiện ích.</td>
+      </tr>
+      <tr>
+        <td>Bài về nhưng <strong>nội dung trống</strong></td>
+        <td>Cùng nguyên nhân như trên. Vẫn duyệt được nếu cần, nhưng nên báo để sửa.</td>
+      </tr>
+      <tr>
+        <td><strong>“Chưa được cấp quyền gửi”</strong></td>
+        <td>Vào Cài đặt của tiện ích, bấm Lưu lại, chọn “Cho phép” khi Chrome hỏi.</td>
+      </tr>
+      <tr>
+        <td><strong>“Không có quyền”</strong> khi gửi</td>
+        <td>Mã kết nối sai hoặc đã bị đổi. Hỏi super admin xin mã mới.</td>
+      </tr>
+      <tr>
+        <td><strong>“Tất cả bài đã được thu thập trước đó”</strong></td>
+        <td>Không phải lỗi. Kỳ này đã có người quét rồi — vào màn hình duyệt xem lượt trước.</td>
+      </tr>
+      <tr>
+        <td>Rất nhiều bài rơi vào <strong>“Cần người quyết”</strong></td>
+        <td>Thường là mentee quên ghi MSSV. Nhắc lại quy ước ghi MSSV ở dòng đầu bài, kỳ sau sẽ tự
+        khớp gần hết.</td>
+      </tr>
+      <tr>
+        <td>Lỡ duyệt nhầm một bài</td>
+        <td>Recap đã tạo vẫn sửa/xoá được ở màn hình recap như mọi recap khác.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="check">
+    <h3>Mẫu bài recap giúp hệ thống khớp đúng gần như 100%</h3>
+    <p style="margin:0 0 6px">Nhắc mentee viết mấy dòng đầu theo mẫu này:</p>
+    <p style="margin:0;font-family:Consolas,'Courier New',monospace;font-size:9.5pt;line-height:1.7">
+      #UEHEM11104 #mentoring<br />
+      [RECAP BUỔI 3 - 14/03/2026]<br />
+      Mentor: Nguyễn Văn A<br />
+      Mentee: Trần Thị B<br />
+      Thời gian: 19h00 - 20h30<br />
+      Địa điểm: The Coffee House Nguyễn Huệ<br />
+      ------------<br />
+      (nội dung buổi gặp…)
+    </p>
+    <p style="margin:6px 0 0">
+      Dòng đầu là quan trọng nhất: <strong>MSSV</strong> để hệ thống biết ai viết, và
+      <strong>hashtag loại buổi</strong> (<code>#mentoring</code> hoặc
+      <code>#crossmentoring</code>). Ngày trong ngoặc vuông là ngày <em>gặp nhau</em> — hệ thống ưu
+      tiên ngày này hơn ngày đăng bài, nên viết recap trễ vài hôm vẫn ghi đúng.
+    </p>
+  </div>
+
+  <div class="note">
+    <h3>Bài không theo mẫu vẫn không bị mất</h3>
+    <p style="margin:0">
+      Hệ thống vẫn thu về, chỉ là xếp vào nhóm “Cần người quyết” để bạn chọn mentee thủ công. Thà
+      mất một cú bấm còn hơn mất một buổi gặp.
+    </p>
+  </div>
+
+  <footer class="doc-foot">
+    VAM OS · Hướng dẫn thu recap từ group Facebook · 19/08/2026 · Thắc mắc gửi super admin.
+  </footer>
+</section>
+
+</body>
+
+</html>
