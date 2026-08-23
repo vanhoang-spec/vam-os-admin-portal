@@ -129,3 +129,32 @@ export function canTriageCrossRequest(role?: string | null) {
 export function canPublishCrossSession(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can read the content calendar: the month's theme, the week's slots, what is
+ * written and what is still waiting on somebody.
+ *
+ * Wider than the write predicate on purpose. A calendar nobody outside the
+ * marketing pair can see is a calendar people ask about in chat, which is the
+ * problem this module exists to end.
+ */
+export function canViewMktPlan(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team", "viewer"].includes(role || "");
+}
+
+/**
+ * Can plan, write, edit, approve a post and record that it went out.
+ *
+ * Support team is included deliberately, and this is the owner's instruction
+ * rather than an inference: each programme's support team approves and posts to
+ * that programme's own fanpage, and decides whether the programme runs TikTok
+ * at all.
+ *
+ * It sits differently from canPublishCrossSession, which excludes them, and the
+ * difference is real: nothing in this module reaches the outside world. There
+ * is no auto-post. A post reaches `approved`, and a person opens Facebook and
+ * publishes it. What the application records is that a human did so.
+ */
+export function canManageMktPlan(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
