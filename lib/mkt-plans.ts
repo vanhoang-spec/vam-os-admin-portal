@@ -494,6 +494,19 @@ export async function generateWeekPlan(input: {
     orders
   });
 
+  // An order that has been given a slot is no longer waiting for one. Without
+  // this it stays 'new' and is fed into next week's prompt too, and the
+  // programme announces the same thing four weeks running.
+  if (written.linkedOrderIds.length) {
+    const { error: orderError } = await client
+      .from("mkt_orders")
+      .update({ status: "planned" })
+      .in("id", written.linkedOrderIds)
+      .eq("status", "new");
+
+    if (orderError) log("mark orders planned (non-fatal)", orderError);
+  }
+
   await writeLog(client, {
     spaceId,
     weekPlanId,
@@ -503,6 +516,9 @@ export async function generateWeekPlan(input: {
   });
 
   const parts = [`Đã điền ${written.filled} bài`];
+  if (written.linkedOrderIds.length) {
+    parts.push(`${written.linkedOrderIds.length} đề nghị đã được xếp vào tuần`);
+  }
   if (missing) parts.push(`${missing} ô AI chưa trả về — vui lòng viết tay`);
   if (written.preserved) parts.push(`${written.preserved} bài giữ nguyên vì đã có hình hoặc đã duyệt`);
   if (planPayload.orders_unplaced.length) {
@@ -581,7 +597,7 @@ async function writePosts(
     merged: MergedSlot[];
     orders: MktOrder[];
   }
-): Promise<{ filled: number; preserved: number }> {
+): Promise<{ filled: number; preserved: number; linkedOrderIds: string[] }> {
   const { data: existingRows } = await client
     .from("mkt_posts")
     .select("id,channel,post_date,status,asset_urls")
@@ -598,6 +614,7 @@ async function writePosts(
 
   let filled = 0;
   let preserved = 0;
+  const linkedOrderIds = new Set<string>();
 
   for (const slot of input.merged) {
     const key = `${slot.channel}:${slot.postDate}`;
@@ -613,6 +630,8 @@ async function writePosts(
     }
 
     const answer = slot.answer;
+    const orderId = resolveOrderId(answer?.order_ref, input.orders);
+
     const payload = {
       week_plan_id: input.weekPlanId,
       space_id: input.spaceId,
@@ -628,7 +647,7 @@ async function writePosts(
         : [],
       cta: text(answer?.cta, 300),
       brief: (answer?.brief as Record<string, unknown>) ?? null,
-      order_id: resolveOrderId(answer?.order_ref, input.orders),
+      order_id: orderId,
       status: answer?.content ? "content_ready" : "planned"
     };
 
@@ -642,9 +661,10 @@ async function writePosts(
     }
 
     if (answer?.content) filled++;
+    if (orderId) linkedOrderIds.add(orderId);
   }
 
-  return { filled, preserved };
+  return { filled, preserved, linkedOrderIds: Array.from(linkedOrderIds) };
 }
 
 /** The model refers to a request by the first eight characters of its id. */

@@ -481,6 +481,18 @@ export async function markPosted(input: {
     return { ok: false, message: SAFE_ERROR };
   }
 
+  // The request this post served is now answered. Closing it here means the
+  // person who asked can see it went out, rather than having to ask.
+  if (post.orderId) {
+    const { error: orderError } = await client
+      .from("mkt_orders")
+      .update({ status: "done" })
+      .eq("id", post.orderId)
+      .in("status", ["new", "planned"]);
+
+    if (orderError) log("close order (non-fatal)", orderError);
+  }
+
   await writeLog(client, {
     spaceId: post.spaceId,
     postId,
