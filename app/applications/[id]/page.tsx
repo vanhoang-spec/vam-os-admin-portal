@@ -437,7 +437,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
             <div className="text-xs font-medium uppercase text-slate-500">Link hồ sơ ứng viên</div>
             <div className="mt-1">
-              <ExternalLinkButton href={application.data.profile_url} label="Xem profile ứng viên" />
+              <ExternalLinkButton href={application.profile_url} label="Xem profile ứng viên" />
             </div>
           </div>
         </Card>
