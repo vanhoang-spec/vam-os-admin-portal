@@ -305,7 +305,7 @@ select
   a.source,
   a.acquisition_channel,
   a.submitted_at,
-  coalesce(a.status, a.final_status) as status_unified,
+  coalesce(a.status, a.final_status::text) as status_unified,
   coalesce(a.consent_data_storage, a.consent_pdpa) as consent_unified,
   coalesce(a.full_name, p.full_name) as full_name,
   coalesce(a.email_primary, p.email_primary) as email_primary,
@@ -315,8 +315,8 @@ select
     coalesce(a.full_name, p.full_name, '') || ' ' ||
     coalesce(a.email_primary, p.email_primary, '') || ' ' ||
     coalesce(a.sbd, a.applicant_student_id_norm, '') || ' ' ||
-    a.id || ' ' ||
-    coalesce(a.person_id, '')
+    a.id::text || ' ' ||
+    coalesce(a.person_id::text, '')
   ) as search_blob,
   coalesce(a.intake_batch_id, a.season_id) as batch_season_id,
   coalesce(rs.assigned_reviewers_count, 0) as assigned_reviewers_count,

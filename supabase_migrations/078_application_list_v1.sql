@@ -15,7 +15,7 @@ SELECT
   a.source,
   a.acquisition_channel,
   a.submitted_at,
-  COALESCE(a.status, a.final_status) AS status_unified,
+  COALESCE(a.status, a.final_status::text) AS status_unified,
   COALESCE(a.consent_data_storage, a.consent_pdpa) AS consent_unified,
   COALESCE(a.full_name, p.full_name) AS full_name,
   COALESCE(a.email_primary, p.email_primary) AS email_primary,
@@ -25,8 +25,8 @@ SELECT
     COALESCE(a.full_name, p.full_name, '') || ' ' ||
     COALESCE(a.email_primary, p.email_primary, '') || ' ' ||
     COALESCE(a.sbd, a.applicant_student_id_norm, '') || ' ' ||
-    a.id || ' ' ||
-    COALESCE(a.person_id, '')
+    a.id::text || ' ' ||
+    COALESCE(a.person_id::text, '')
   ) AS search_blob,
   COALESCE(a.intake_batch_id, a.season_id) AS batch_season_id
 FROM applications a
@@ -43,7 +43,7 @@ SELECT DISTINCT
   season_id,
   intake_batch_id,
   role_applied,
-  COALESCE(status, final_status) AS status_unified,
+  COALESCE(status, final_status::text) AS status_unified,
   COALESCE(consent_data_storage, consent_pdpa) AS consent_unified,
   COALESCE(intake_batch_id, season_id) AS batch_season_id
 FROM applications;
