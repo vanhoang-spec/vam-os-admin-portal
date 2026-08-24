@@ -1,6 +1,7 @@
 import "server-only";
 
 import { canReviewSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { readAllPages } from "@/lib/paged-read";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // ---------------------------------------------------------------------------
@@ -8,21 +9,20 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 //
 // Algorithm:
 //   1. Fetch eligible applications (batch + role + statuses).
-//   2. Optionally skip apps that already have an active profile_screening review.
+//   2. Optionally skip apps that already have two active profile_screening reviewers.
 //   3. Sort apps: submitted_at ASC, id ASC (deterministic).
 //   4. Fetch workload for each selected reviewer (count of existing active
 //      profile_screening reviews across all batches).
 //   5. Sort reviewers: current_workload ASC, email ASC (deterministic).
-//   6. Create a review_assignment_batches audit row.
-//   7. Round-robin assign: app[i] → reviewer[i % reviewerCount].
-//   8. Bulk-insert application_reviews rows.
-//   9. Advance application.status to screening_assigned where safe (non-fatal).
+//   6. Round-robin assign two distinct reviewers per application.
+//   7. Atomically create the audit batch, review rows, and application states.
 // ---------------------------------------------------------------------------
 
 const SAFE_ERROR = "Không thể thực hiện thao tác. Vui lòng thử lại hoặc liên hệ admin.";
 
-// Statuses that may be moved forward to screening_assigned after assignment.
-const ADVANCE_STATUSES = new Set(["submitted", "under_data_check", "ready_for_screening"]);
+const DEFAULT_REVIEWERS_PER_APPLICATION = 2;
+const MAX_REVIEWERS_PER_APPLICATION = 2;
+export const APPLICATION_ID_CHUNK_SIZE = 200;
 
 function serviceClient() {
   const client = getSupabaseServiceRoleClient();
@@ -54,6 +54,7 @@ export type BulkAssignInput = {
   reviewerAdminUserIds: string[];
   dueAt: string | null;
   excludeAlreadyAssigned: boolean;
+  reviewersPerApplication?: number;
   assignmentNote: string | null;
   assignedByAdminUserId: string;
 };
@@ -70,6 +71,119 @@ export type BulkAssignResult =
     }
   | { ok: false; message: string };
 
+export type RoundRobinApplication = {
+  id: string;
+  existingReviewerIds?: readonly string[];
+};
+
+export type RoundRobinAssignment = {
+  applicationId: string;
+  reviewerAdminUserId: string;
+};
+
+/**
+ * Build deterministic round-robin pairs while keeping reviewers independent.
+ * Existing active reviewers always count toward the target. If the selected
+ * pool cannot completely top up one application, the available assignments are
+ * retained and processing continues for the remaining applications.
+ */
+export function buildRoundRobinAssignments(
+  applications: readonly RoundRobinApplication[],
+  reviewerAdminUserIds: readonly string[],
+  reviewersPerApplication = DEFAULT_REVIEWERS_PER_APPLICATION
+): RoundRobinAssignment[] {
+  const reviewers = Array.from(new Set(reviewerAdminUserIds));
+  if (!Number.isInteger(reviewersPerApplication) || reviewersPerApplication < 1 || reviewersPerApplication > MAX_REVIEWERS_PER_APPLICATION) {
+    throw new Error("reviewersPerApplication must be an integer between 1 and 2.");
+  }
+
+  const assignments: RoundRobinAssignment[] = [];
+  let cursor = 0;
+
+  for (const application of applications) {
+    const existing = new Set((application.existingReviewerIds ?? []).filter(Boolean));
+    const assignmentsNeeded = Math.max(0, reviewersPerApplication - existing.size);
+    const selectedForApplication = new Set<string>();
+    let candidatesChecked = 0;
+
+    while (selectedForApplication.size < assignmentsNeeded && candidatesChecked < reviewers.length) {
+      const reviewerId = reviewers[cursor % reviewers.length];
+      cursor += 1;
+      candidatesChecked += 1;
+      if (existing.has(reviewerId) || selectedForApplication.has(reviewerId)) continue;
+      selectedForApplication.add(reviewerId);
+      assignments.push({ applicationId: application.id, reviewerAdminUserId: reviewerId });
+    }
+  }
+
+  return assignments;
+}
+
+function chunkValues<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+type ExistingReviewRow = {
+  id: string;
+  application_id: string | null;
+  reviewer_admin_user_id: string | null;
+};
+
+type WorkloadReviewRow = {
+  id: string;
+  reviewer_admin_user_id: string | null;
+};
+
+/** Fetches complete active profile-review rows without a 1000-row truncation. */
+export async function readExistingProfileReviews(
+  client: any,
+  applicationIds: readonly string[]
+): Promise<{ data: ExistingReviewRow[]; error: unknown | null }> {
+  const rows: ExistingReviewRow[] = [];
+  for (const idChunk of chunkValues(applicationIds, APPLICATION_ID_CHUNK_SIZE)) {
+    const result = await readAllPages<ExistingReviewRow>(
+      "application_reviews",
+      "application_id,reviewer_admin_user_id",
+      (projection) => client
+        .from("application_reviews")
+        .select(projection)
+        .eq("review_round", "profile_screening")
+        .neq("status", "cancelled")
+        .in("application_id", idChunk)
+    );
+    if (result.error) return { data: rows, error: result.error };
+    rows.push(...result.data);
+  }
+  return { data: rows, error: null };
+}
+
+/** Fetches complete workload rows for the selected reviewer pool. */
+export async function readActiveProfileReviewWorkloads(
+  client: any,
+  reviewerAdminUserIds: readonly string[]
+): Promise<{ data: WorkloadReviewRow[]; error: unknown | null }> {
+  const rows: WorkloadReviewRow[] = [];
+  for (const idChunk of chunkValues(reviewerAdminUserIds, APPLICATION_ID_CHUNK_SIZE)) {
+    const result = await readAllPages<WorkloadReviewRow>(
+      "application_reviews",
+      "reviewer_admin_user_id",
+      (projection) => client
+        .from("application_reviews")
+        .select(projection)
+        .eq("review_round", "profile_screening")
+        .neq("status", "cancelled")
+        .in("reviewer_admin_user_id", idChunk)
+    );
+    if (result.error) return { data: rows, error: result.error };
+    rows.push(...result.data);
+  }
+  return { data: rows, error: null };
+}
+
 // ---------------------------------------------------------------------------
 // Core function
 // ---------------------------------------------------------------------------
@@ -78,8 +192,13 @@ export async function bulkAssignApplicationReviews(
   input: BulkAssignInput
 ): Promise<BulkAssignResult> {
   // --- Basic validation
-  if (!input.reviewerAdminUserIds.length) {
-    return { ok: false, message: "Vui lòng chọn ít nhất một reviewer." };
+  const reviewersPerApplication = input.reviewersPerApplication ?? DEFAULT_REVIEWERS_PER_APPLICATION;
+  if (!Number.isInteger(reviewersPerApplication) || reviewersPerApplication < 1 || reviewersPerApplication > MAX_REVIEWERS_PER_APPLICATION) {
+    return { ok: false, message: "Số reviewer mỗi hồ sơ phải từ 1 đến 2." };
+  }
+  const distinctReviewerIds = Array.from(new Set(input.reviewerAdminUserIds));
+  if (distinctReviewerIds.length < reviewersPerApplication) {
+    return { ok: false, message: `Vui lòng chọn ít nhất ${reviewersPerApplication} reviewer khác nhau.` };
   }
   if (!input.statuses.length) {
     return { ok: false, message: "Vui lòng chọn ít nhất một trạng thái đơn." };
@@ -136,25 +255,37 @@ export async function bulkAssignApplicationReviews(
     return { ok: false, message: "Không có hồ sơ nào phù hợp với bộ lọc đã chọn." };
   }
 
-  // --- 2. Exclude already-assigned apps (if requested)
+  // --- 2. Load active assignments, then either exclude assigned apps or top up
   let skippedAlreadyAssigned = 0;
   let appsToAssign = allApps;
+  const appIds = allApps.map((a) => a.id);
+  const { data: existingReviews, error: existingReviewsErr } = await readExistingProfileReviews(client, appIds);
+
+  if (existingReviewsErr) {
+    log("fetch existing profile_screening reviews", existingReviewsErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  const existingReviewersByAppId = new Map<string, Set<string>>();
+  for (const row of existingReviews ?? []) {
+    const applicationId = row.application_id as string | null;
+    const reviewerId = row.reviewer_admin_user_id as string | null;
+    if (!applicationId || !reviewerId) continue;
+    const reviewers = existingReviewersByAppId.get(applicationId) ?? new Set<string>();
+    reviewers.add(reviewerId);
+    existingReviewersByAppId.set(applicationId, reviewers);
+  }
 
   if (input.excludeAlreadyAssigned) {
-    const appIds = allApps.map((a) => a.id);
-    const { data: existingReviews } = await client
-      .from("application_reviews")
-      .select("application_id")
-      .eq("review_round", "profile_screening")
-      .neq("status", "cancelled")
-      .in("application_id", appIds);
-
-    const assignedAppIds = new Set(
-      (existingReviews ?? []).map((r) => r.application_id as string).filter(Boolean)
+    appsToAssign = allApps.filter(
+      (app) => (existingReviewersByAppId.get(app.id)?.size ?? 0) === 0
     );
-    const unassigned = allApps.filter((a) => !assignedAppIds.has(a.id));
-    skippedAlreadyAssigned = allApps.length - unassigned.length;
-    appsToAssign = unassigned;
+    skippedAlreadyAssigned = allApps.length - appsToAssign.length;
+  } else {
+    appsToAssign = allApps.filter(
+      (app) => (existingReviewersByAppId.get(app.id)?.size ?? 0) < reviewersPerApplication
+    );
+    skippedAlreadyAssigned = allApps.length - appsToAssign.length;
   }
 
   if (!appsToAssign.length) {
@@ -162,21 +293,24 @@ export async function bulkAssignApplicationReviews(
       ok: false,
       message:
         skippedAlreadyAssigned > 0
-          ? `Tất cả ${skippedAlreadyAssigned} hồ sơ đã được giao reviewer. Bỏ chọn "Bỏ qua hồ sơ đã được giao" để giao lại.`
+          ? `Không còn hồ sơ nào cần giao để đạt mục tiêu ${reviewersPerApplication} reviewer.`
           : "Không có hồ sơ nào để giao sau khi lọc."
     };
   }
 
   // --- 3. Fetch current workload for each reviewer (for deterministic ordering)
-  const { data: workloadRows } = await client
-    .from("application_reviews")
-    .select("reviewer_admin_user_id")
-    .eq("review_round", "profile_screening")
-    .neq("status", "cancelled")
-    .in("reviewer_admin_user_id", input.reviewerAdminUserIds);
+  const { data: workloadRows, error: workloadErr } = await readActiveProfileReviewWorkloads(
+    client,
+    distinctReviewerIds
+  );
+
+  if (workloadErr) {
+    log("fetch reviewer workload", workloadErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
 
   const workloadByReviewer = new Map<string, number>(
-    input.reviewerAdminUserIds.map((id) => [id, 0])
+    distinctReviewerIds.map((id) => [id, 0])
   );
   for (const row of workloadRows ?? []) {
     const id = row.reviewer_admin_user_id as string | null;
@@ -187,95 +321,82 @@ export async function bulkAssignApplicationReviews(
   const { data: reviewerRows } = await client
     .from("admin_users")
     .select("id,email")
-    .in("id", input.reviewerAdminUserIds);
+    .in("id", distinctReviewerIds);
 
   const emailById = new Map<string, string>(
     (reviewerRows ?? []).map((r) => [r.id as string, (r.email as string) ?? ""])
   );
 
   // --- 4. Sort reviewers: workload ASC, email ASC
-  const sortedReviewers = [...input.reviewerAdminUserIds].sort((a, b) => {
+  const sortedReviewers = [...distinctReviewerIds].sort((a, b) => {
     const wDiff = (workloadByReviewer.get(a) ?? 0) - (workloadByReviewer.get(b) ?? 0);
     if (wDiff !== 0) return wDiff;
     return (emailById.get(a) ?? "").localeCompare(emailById.get(b) ?? "");
   });
 
-  // --- 5. Create review_assignment_batches audit row (non-fatal if missing table)
-  let batchId: string | null = null;
+  // --- 5. Build assignment pairs before creating the audit row
+  let assignmentPairs: RoundRobinAssignment[];
   try {
-    const { data: batchRow, error: batchErr } = await client
-      .from("review_assignment_batches")
-      .insert({
+    assignmentPairs = buildRoundRobinAssignments(
+      appsToAssign.map((app) => ({
+        id: app.id,
+        existingReviewerIds: Array.from(existingReviewersByAppId.get(app.id) ?? [])
+      })),
+      sortedReviewers,
+      reviewersPerApplication
+    );
+  } catch (error) {
+    log("build round-robin assignments", error);
+    return {
+      ok: false,
+      message: `Không đủ reviewer khác nhau để đạt mục tiêu ${reviewersPerApplication} reviewer độc lập.`
+    };
+  }
+
+  if (!assignmentPairs.length) {
+    return { ok: false, message: "Các hồ sơ đã có đủ reviewer; không có phân công mới để tạo." };
+  }
+
+  const assignedApplicationIds = new Set(assignmentPairs.map((pair) => pair.applicationId));
+
+  // --- 6. Persist the batch, assignments, and status changes in one DB transaction
+  const { data: batchId, error: atomicErr } = await client.rpc(
+    "vam081_bulk_assign_reviews_atomic",
+    {
+      p_batch: {
         intake_batch_id: input.intakeBatchId ?? null,
-        review_round: "profile_screening",
-        created_by: input.assignedByAdminUserId,
         due_at: input.dueAt ?? null,
-        assignment_note: input.assignmentNote ?? null,
-        application_count: appsToAssign.length,
-        reviewer_count: sortedReviewers.length
-      })
-      .select("id")
-      .maybeSingle();
-    if (batchErr) {
-      log("insert review_assignment_batches (non-fatal)", batchErr);
-    } else {
-      batchId = (batchRow as { id: string } | null)?.id ?? null;
+        assignment_note: input.assignmentNote ?? null
+      },
+      p_pairs: assignmentPairs.map((pair) => ({
+        application_id: pair.applicationId,
+        reviewer_admin_user_id: pair.reviewerAdminUserId
+      })),
+      p_actor: input.assignedByAdminUserId
     }
-  } catch {
-    // Table may not exist yet — proceed without batch tracking
-    log("review_assignment_batches insert threw (non-fatal)", "table may not exist");
-  }
-
-  // --- 6. Build review rows (round-robin by sorted reviewer index)
-  const now = new Date().toISOString();
-  const n = sortedReviewers.length;
-  const reviewRows = appsToAssign.map((app, i) => ({
-    application_id: app.id,
-    review_round: "profile_screening" as const,
-    reviewer_admin_user_id: sortedReviewers[i % n],
-    assigned_by: input.assignedByAdminUserId,
-    assigned_at: now,
-    due_at: input.dueAt ?? null,
-    status: "assigned" as const,
-    assignment_batch_id: batchId
-  }));
-
-  // --- 7. Bulk insert
-  const { error: insertErr } = await client.from("application_reviews").insert(reviewRows);
-  if (insertErr) {
-    log("bulk insert application_reviews", insertErr);
-    return { ok: false, message: `Không thể tạo review assignments: ${insertErr.message}` };
-  }
-
-  // --- 8. Advance applications.status → screening_assigned (non-fatal)
-  const advanceIds = appsToAssign
-    .filter((a) => ADVANCE_STATUSES.has(a.status))
-    .map((a) => a.id);
-
-  if (advanceIds.length > 0) {
-    const { error: updateErr } = await client
-      .from("applications")
-      .update({ status: "screening_assigned" })
-      .in("id", advanceIds);
-    if (updateErr) {
-      log("update applications.status to screening_assigned (non-fatal)", updateErr);
-    }
+  );
+  if (atomicErr || !batchId) {
+    log("atomic bulk review assignment RPC failed", atomicErr ?? "RPC returned no batch id");
+    return {
+      ok: false,
+      message: SAFE_ERROR
+    };
   }
 
   // --- Compute distribution stats
-  const perReviewerCounts = sortedReviewers.map((_, i) =>
-    reviewRows.filter((_, j) => j % n === i).length
+  const perReviewerCounts = sortedReviewers.map(
+    (reviewerId) => assignmentPairs.filter((pair) => pair.reviewerAdminUserId === reviewerId).length
   );
   const minPerReviewer = perReviewerCounts.length ? Math.min(...perReviewerCounts) : 0;
   const maxPerReviewer = perReviewerCounts.length ? Math.max(...perReviewerCounts) : 0;
 
   return {
     ok: true,
-    applicationsAssigned: appsToAssign.length,
+    applicationsAssigned: assignedApplicationIds.size,
     reviewersCount: sortedReviewers.length,
     minPerReviewer,
     maxPerReviewer,
     skippedAlreadyAssigned,
-    batchId: batchId ?? ""
+    batchId: batchId as string
   };
 }

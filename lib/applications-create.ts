@@ -209,96 +209,62 @@ export async function submitPilotApplication(
   // The role gate was evaluated at the top of this function, against the
   // database rather than an environment variable. Nothing re-checks it here.
 
-  // Duplicate check: same batch + same role + same normalised email
-  const { data: dupRow, error: dupErr } = await client
-    .from("applications")
-    .select("id")
-    .eq("intake_batch_id", batchRow.id)
-    .eq("role_applied", input.role)
-    .ilike("email_primary", emailPrimary)
-    .limit(1)
-    .maybeSingle();
-  if (dupErr) {
-    log("duplicate check failed", dupErr);
-    return { ok: false, code: "db", message: `${SAFE_ERROR} (dedup: ${dupErr.message})` };
-  }
-  if (dupRow) {
-    return {
-      ok: false,
-      code: "duplicate",
-      message:
-        "Email này đã có đơn đăng ký trong đợt hiện tại. Nếu cần điều chỉnh thông tin, vui lòng liên hệ BTC qua email."
-    };
-  }
+  const DUPLICATE_APPLICATION_MESSAGE =
+    "Email hoặc MSSV này đã có đơn đăng ký trong đợt hiện tại. Nếu cần điều chỉnh thông tin, vui lòng liên hệ BTC.";
 
-  // Insert
-  const insertPayload = {
-    season_id: seasonRow.id,
-    intake_batch_id: batchRow.id,
-    role_applied: input.role,
-    status: "submitted",
-    source: "vam_os_form",
-    full_name: fullName,
-    email_primary: emailPrimary,
-    phone_primary: phonePrimary,
-    gender,
-    consent_data_storage: input.consentDataStorage,
-    raw_payload: input.rawPayload,
-    submitted_at: new Date().toISOString().slice(0, 10)
-  };
+  if (input.role === "mentor") {
+    const { data: existing, error: existErr } = await client
+      .from("applications")
+      .select("id")
+      .eq("intake_batch_id", batchRow.id)
+      .eq("role_applied", "mentor")
+      .eq("email_primary", emailPrimary)
+      .maybeSingle();
 
-  const { data: inserted, error: insertErr } = await client
-    .from("applications")
-    .insert(insertPayload)
-    .select("id")
-    .maybeSingle();
-
-  if (insertErr) {
-    log("insert applications failed", insertErr);
-    return { ok: false, code: "db", message: `${SAFE_ERROR} (applications: ${insertErr.message})` };
-  }
-  if (!inserted) {
-    log("insert applications returned no row", { batch: input.intakeBatchCode, role: input.role });
-    return { ok: false, code: "db", message: SAFE_ERROR };
-  }
-
-  if (input.answers?.length) {
-    const answerRows = input.answers.map((answer) => ({
-      application_id: inserted.id,
-      question_key: answer.questionKey,
-      question_label: answer.questionLabel,
-      value_text: answer.valueText,
-      created_at: answer.acceptedAt ?? new Date().toISOString()
-    }));
-    const { error: answersErr } = await client.from("application_answers").insert(answerRows);
-    if (answersErr) {
-      log("insert application_answers failed", answersErr);
-      // Keep this enhancement from creating a partially auditable application.
-      // The row was created by this request and has not yet been returned as successful.
-      const { error: cleanupErr } = await client.from("applications").delete().eq("id", inserted.id);
-      if (cleanupErr) {
-        const err = cleanupErr as { code?: string; message?: string };
-        console.error("[applications-create] cleanup partial application failed", {
-          applicationId: inserted.id,
-          code: err.code,
-          message: err.message
-        });
-        // A surviving incomplete row may trigger duplicate protection on retry.
-        // Ask the applicant not to retry repeatedly; controlled repair uses the logged ID.
-        return {
-          ok: false,
-          code: "incomplete_submission",
-          message:
-            "Đơn của bạn có thể đã được ghi nhận chưa hoàn tất. Vui lòng không gửi lại nhiều lần và liên hệ Ban Tổ chức để được hỗ trợ."
-        };
-      }
-      return {
-        ok: false,
-        code: "db",
-        message: `${SAFE_ERROR} (application_answers: ${answersErr.message})`
-      };
+    if (existErr) {
+      log("duplicate check failed", existErr);
+      return { ok: false, code: "db", message: SAFE_ERROR };
+    }
+    if (existing) {
+      return { ok: false, code: "duplicate", message: DUPLICATE_APPLICATION_MESSAGE };
     }
   }
 
-  return { ok: true, applicationId: inserted.id };
+  // Token hygiene: strictly strip application tokens before insertion
+  const sanitizedPayload = { ...input.rawPayload };
+  delete sanitizedPayload["__apply_token"];
+  delete sanitizedPayload["token"];
+
+  // Insert application and answers via atomic RPC
+  const { data: rpcResult, error: rpcErr } = await client.rpc("vam_submit_intake_application_atomic", {
+    p_season_id: seasonRow.id,
+    p_intake_batch_id: batchRow.id,
+    p_role_applied: input.role,
+    p_source: "vam_os_form",
+    p_full_name: fullName,
+    p_email_primary: emailPrimary,
+    p_phone_primary: phonePrimary,
+    p_gender: gender,
+    p_consent_data_storage: input.consentDataStorage,
+    p_raw_payload: sanitizedPayload,
+    p_answers: input.answers ?? null
+  });
+
+  if (rpcErr) {
+    log("insert application atomic failed", rpcErr);
+    return { ok: false, code: "db", message: `${SAFE_ERROR} (applications: ${rpcErr.message})` };
+  }
+
+  if (!rpcResult || !rpcResult.ok) {
+    if (rpcResult?.code === 'duplicate') {
+      return {
+        ok: false,
+        code: "duplicate",
+        message: DUPLICATE_APPLICATION_MESSAGE
+      };
+    }
+    return { ok: false, code: "db", message: SAFE_ERROR };
+  }
+
+  return { ok: true, applicationId: rpcResult.applicationId };
 }

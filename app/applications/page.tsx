@@ -1,150 +1,216 @@
-import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
-import { getApplications, getIntakeBatches, getPeople, getSeasons, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { Application, Person, Season } from "@/lib/types";
-import { applicationStatusLabel } from "@/lib/ui-labels";
-import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
+import { getApplicationFacets, getPagedApplications } from "@/lib/applications-list";
+import { applicationStatusLabel } from "@/lib/ui-labels";
+import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
+import Link from "next/link";
+import { getSeasons, getIntakeBatches } from "@/lib/data";
 
-
-// ── Row type ──────────────────────────────────────────────────────────────────
-
-type Row = Application & {
-  person?: Person;
-  season?: Season;
-  // Coalesced identity — application-level fields (S12) take precedence over person-level (S11)
-  full_name?: string | null;
-  email_primary?: string | null;
-  season_code?: string | null;
-  // Unified status — application.status (S12) ?? application.final_status (S11)
-  status_unified: string | null;
-  short_application_id: string;
-  short_person_id: string;
-  sbd_display: string;
-  full_name_display: string;
-  email_primary_display: string;
-  season_code_display: string;
-  role_applied_display: string;
-  status_display: string;
-  submitted_at_display: string;
-  acquisition_channel_display: string;
-  consent_display: string;
-  consent_filter: string;
-  source_display: string;
-  /** Batch code for filter (resolved from intake_batch_id) */
-  intake_batch_code: string;
-};
-
-function consentFilter(value: unknown) {
-  const label = displayConsent(value);
-  if (label === "Có") return "yes";
-  if (label === "Không") return "no";
-  return "unknown";
-}
-
-export default async function ApplicationsPage() {
+export default async function ApplicationsPage(props: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
   const scope = await getScopeFilter(await getAdminScopeContext());
-  const [applications, people, seasons, intakeBatchesRes] = await Promise.all([
-    getApplications(scope),
-    getPeople(scope),
+
+  const page = Number(searchParams?.page) || 1;
+  const q = typeof searchParams?.q === "string" ? searchParams.q : undefined;
+  const status = typeof searchParams?.status === "string" ? searchParams.status : undefined;
+  const role = typeof searchParams?.role === "string" ? searchParams.role : undefined;
+  const season = typeof searchParams?.season === "string" ? searchParams.season : undefined;
+  const batch = typeof searchParams?.batch === "string" ? searchParams.batch : undefined;
+  const consent = typeof searchParams?.consent === "string" ? searchParams.consent : undefined;
+  const reviewState = typeof searchParams?.review_state === "string" ? searchParams.review_state : undefined;
+
+  const [applicationsRes, facetsRes, seasonsRes, batchesRes] = await Promise.all([
+    getPagedApplications({
+      scope,
+      page,
+      limit: 50,
+      q,
+      status,
+      role_applied: role,
+      season_code: season,
+      intake_batch: batch,
+      consent,
+      review_state: reviewState === "unassigned" || reviewState === "assigned" || reviewState === "unreviewed" || reviewState === "reviewed" || reviewState === "conflicted"
+        ? reviewState
+        : undefined,
+    }),
+    getApplicationFacets(scope),
     getSeasons(scope),
     getIntakeBatches(scope)
   ]);
-  const peopleById = keyById(people.data);
-  const seasonsById = keyById(seasons.data);
-  const batchById = new Map(intakeBatchesRes.data.map((b) => [b.id, b]));
 
-  const rows: Row[] = applications.data.map((application) => {
-    const person = application.person_id ? peopleById.get(application.person_id) : undefined;
-    const season = application.season_id ? seasonsById.get(application.season_id) : undefined;
-    const seasonCode = season?.code ?? season?.name ?? null;
+  const rows = applicationsRes.data;
+  const count = applicationsRes.count;
+  const totalPages = Math.ceil(count / 50);
 
-    // Identity: application-level (S12 native form) takes precedence over person-level (S11 legacy)
-    const fullName = application.full_name ?? person?.full_name ?? null;
-    const emailPrimary = application.email_primary ?? person?.email_primary ?? null;
-
-    // Status: new pipeline status (S12) takes precedence over legacy final_status (S11)
-    const statusUnified = application.status ?? application.final_status ?? null;
-
-    // Consent: new consent_data_storage (S12) takes precedence over legacy consent_pdpa (S11)
-    const consentUnified = application.consent_data_storage ?? application.consent_pdpa;
-
-    // Batch code: resolved from intake_batch_id for filter
-    const batch = application.intake_batch_id ? batchById.get(application.intake_batch_id) : undefined;
-    const intakeBatchCode = batch?.code ?? batch?.name ?? (application.intake_batch_id ? "Batch không rõ" : "Chưa gán");
-
-    return {
-      ...application,
-      person,
-      season,
-      full_name: fullName,
-      email_primary: emailPrimary,
-      season_code: seasonCode,
-      status_unified: statusUnified,
-      short_application_id: application.id.slice(0, 8),
-      short_person_id: application.person_id ? application.person_id.slice(0, 8) : "-",
-      sbd_display: displayText(application.sbd),
-      full_name_display: displayText(fullName),
-      email_primary_display: displayText(emailPrimary),
-      season_code_display: displayCode(seasonCode),
-      role_applied_display: displayText(application.role_applied),
-      status_display: applicationStatusLabel(statusUnified),
-      submitted_at_display: formatDate(application.submitted_at),
-      acquisition_channel_display: displayText(application.acquisition_channel),
-      consent_display: displayConsent(consentUnified),
-      consent_filter: consentFilter(consentUnified),
-      source_display: displayText(application.source),
-      intake_batch_code: intakeBatchCode
-    };
-  });
+  const facets = facetsRes.data || [];
+  const statusOptions = Array.from(new Set(facets.map((f) => f.status_unified).filter(Boolean)));
+  const roleOptions = Array.from(new Set(facets.map((f) => f.role_applied).filter(Boolean)));
+  
+  // Resolve season codes/batch codes for facets if needed, but we can just use the provided season and batches
+  const seasonsByCode = new Map(seasonsRes.data.map(s => [s.code || s.name, s.id]));
+  const batchesByCode = new Map(batchesRes.data.map(b => [b.code || b.name, b.id]));
+  const seasonOptions = Array.from(seasonsByCode.keys());
+  const batchOptions = Array.from(batchesByCode.keys());
 
   return (
     <>
       <PageHeader title="Ứng tuyển" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
-      <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />
-      <FilterableTable
-        rows={rows}
-        searchPlaceholder="Tìm theo tên, email, SBD hoặc mã đơn"
-        searchKeys={["full_name", "email_primary", "sbd", "id", "person_id"]}
-        filters={[
-          { key: "status_unified", label: "Trạng thái", valueKey: "status_unified" },
-          { key: "role_applied", label: "Vai trò ứng tuyển", valueKey: "role_applied" },
-          { key: "season_code", label: "Mùa", valueKey: "season_code" },
-          { key: "intake_batch", label: "Đợt tuyển", valueKey: "intake_batch_code" },
-          {
-            key: "consent",
-            label: "Đồng ý lưu trữ",
-            valueKey: "consent_filter",
-            options: [
-              { label: "Có", value: "yes" },
-              { label: "Không", value: "no" },
-              { label: "Chưa rõ", value: "unknown" }
-            ]
-          }
-        ]}
-        sortOptions={[
-          { label: "Ngày nộp mới nhất", key: "submitted_at", direction: "desc", type: "text" },
-          { label: "Tên ứng viên A-Z", key: "full_name", direction: "asc", type: "text" },
-          { label: "Trạng thái A-Z", key: "status_unified", direction: "asc", type: "text" }
-        ]}
-        columns={[
-          { key: "sbd", label: "SBD", displayKey: "sbd_display" },
-          { key: "short_application_id", label: "Mã đơn" },
-          { key: "full_name", label: "Họ tên", displayKey: "full_name_display", secondaryKey: "short_person_id", secondaryLabel: "Mã person" },
-          { key: "email_primary", label: "Email", displayKey: "email_primary_display", nowrap: true },
-          { key: "role_applied", label: "Vai trò", displayKey: "role_applied_display" },
-          { key: "status_unified", label: "Trạng thái", displayKey: "status_display", badge: true },
-          { key: "source", label: "Nguồn", displayKey: "source_display" },
-          { key: "submitted_at", label: "Ngày nộp", displayKey: "submitted_at_display" },
-          { key: "consent_display", label: "Đồng ý lưu trữ", displayKey: "consent_display", badge: true },
-          { key: "detail", label: "Chi tiết", internalHrefKey: "id", internalHrefPrefix: "/applications/", internalLabel: "Xem chi tiết" }
-        ]}
-      />
+      <ErrorBox message={applicationsRes.error || facetsRes.error} />
+      
+      <div className="mb-4 bg-white p-4 rounded shadow">
+        <form className="flex flex-wrap gap-4 items-end" method="GET">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Tìm kiếm</label>
+            <input type="text" name="q" defaultValue={q} placeholder="Tên, email, SBD..." className="border px-2 py-1 rounded" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Trạng thái</label>
+            <select name="status" defaultValue={status || ""} className="border px-2 py-1 rounded">
+              <option value="">Tất cả</option>
+              {statusOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{applicationStatusLabel(opt as string)}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Vai trò</label>
+            <select name="role" defaultValue={role || ""} className="border px-2 py-1 rounded">
+              <option value="">Tất cả</option>
+              {roleOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{opt}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Mùa</label>
+            <select name="season" defaultValue={season || ""} className="border px-2 py-1 rounded">
+              <option value="">Tất cả</option>
+              {seasonOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{opt}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Đợt tuyển</label>
+            <select name="batch" defaultValue={batch || ""} className="border px-2 py-1 rounded">
+              <option value="">Tất cả</option>
+              {batchOptions.filter(Boolean).map(opt => <option key={opt as string} value={opt as string}>{opt}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Đồng ý lưu trữ</label>
+            <select name="consent" defaultValue={consent || ""} className="border px-2 py-1 rounded">
+              <option value="">Tất cả</option>
+              <option value="yes">Có</option>
+              <option value="no">Không</option>
+              <option value="unknown">Chưa rõ</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Trạng thái review</label>
+            <select name="review_state" defaultValue={reviewState || ""} className="border px-2 py-1 rounded">
+              <option value="">Tất cả</option>
+              <option value="unassigned">Chưa giao</option>
+              <option value="assigned">Đã giao</option>
+              <option value="unreviewed">Chưa có review nộp</option>
+              <option value="reviewed">Đã có review nộp</option>
+              <option value="conflicted">Có xung đột</option>
+            </select>
+          </div>
+          <button type="submit" className="bg-blue-600 text-white px-4 py-1 rounded">Lọc</button>
+          <Link href="/applications" className="text-gray-500 underline ml-2">Xóa lọc</Link>
+        </form>
+      </div>
+
+      <div className="bg-white rounded shadow overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
+            <tr>
+              <th className="px-4 py-3">SBD</th>
+              <th className="px-4 py-3">Mã đơn</th>
+              <th className="px-4 py-3">Họ tên</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Vai trò</th>
+              <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3">Review</th>
+              <th className="px-4 py-3">Nguồn</th>
+              <th className="px-4 py-3">Ngày nộp</th>
+              <th className="px-4 py-3">Đồng ý lưu trữ</th>
+              <th className="px-4 py-3">Chi tiết</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.id} className="border-b hover:bg-gray-50">
+                <td className="px-4 py-3">{displayText(row.sbd)}</td>
+                <td className="px-4 py-3">{row.id.slice(0,8)}</td>
+                <td className="px-4 py-3">
+                  <div className="font-medium">{displayText(row.full_name)}</div>
+                  <div className="text-xs text-gray-500">{row.person_id ? row.person_id.slice(0,8) : "-"}</div>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">{displayText(row.email_primary)}</td>
+                <td className="px-4 py-3">{displayText(row.role_applied)}</td>
+                <td className="px-4 py-3">
+                  <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">
+                    {applicationStatusLabel(row.status_unified)}
+                  </span>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 rounded text-xs ${row.has_conflict ? "bg-red-100 text-red-800" : row.review_conflict_status === "aligned" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                    {row.has_conflict || row.review_conflict_status === "needs_admin_review"
+                      ? "Cần Core Team"
+                      : row.review_conflict_status === "aligned"
+                        ? "Đồng thuận"
+                        : "Đang chờ"}
+                  </span>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {row.submitted_reviews_count}/{row.assigned_reviewers_count} đã nộp
+                  </div>
+                </td>
+                <td className="px-4 py-3">{displayText(row.source)}</td>
+                <td className="px-4 py-3">{formatDate(row.submitted_at)}</td>
+                <td className="px-4 py-3">
+                  <span className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded text-xs">
+                    {displayConsent(row.consent_unified)}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <Link href={`/applications/${row.id}`} className="text-blue-600 hover:underline">Xem</Link>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                  Không tìm thấy đơn ứng tuyển nào.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center mt-4">
+          <div className="text-sm text-gray-600">
+            Hiển thị {rows.length} / {count} (Trang {page}/{totalPages})
+          </div>
+          <div className="flex gap-2">
+            {page > 1 && (
+              <Link href={`?page=${page - 1}&q=${q || ""}&status=${status || ""}&role=${role || ""}&season=${season || ""}&batch=${batch || ""}&consent=${consent || ""}&review_state=${reviewState || ""}`} className="px-3 py-1 bg-gray-200 rounded">
+                Trước
+              </Link>
+            )}
+            {page < totalPages && (
+              <Link href={`?page=${page + 1}&q=${q || ""}&status=${status || ""}&role=${role || ""}&season=${season || ""}&batch=${batch || ""}&consent=${consent || ""}&review_state=${reviewState || ""}`} className="px-3 py-1 bg-gray-200 rounded">
+                Tiếp
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

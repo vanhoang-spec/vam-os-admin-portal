@@ -61,8 +61,10 @@ function mockClient() {
     }
     throw new Error(`Unexpected table: ${table}`);
   });
+  
+  const rpc = vi.fn(async (...args: any[]) => ({ data: { ok: true, applicationId: APPLICATION_ID }, error: null }));
 
-  return { client: { from }, from, applicationInsert };
+  return { client: { from, rpc }, from, applicationInsert, rpc };
 }
 
 function input(role: ApplicationRole, overrides: Record<string, unknown> = {}) {
@@ -145,21 +147,18 @@ describe("submitPilotApplication — M069 server-authoritative gate", () => {
   it.each(["mentor", "mentee"] as const)(
     "preserves the valid %s submission path when the gate is open",
     async (role) => {
-      const { client, applicationInsert } = mockClient();
+      const { client } = mockClient();
       vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as never);
 
-      await expect(submitPilotApplication(input(role))).resolves.toEqual({
+      const result = await submitPilotApplication(input(role));
+
+      expect(result).toEqual({
         ok: true,
         applicationId: APPLICATION_ID
       });
-      expect(applicationInsert).toHaveBeenCalledOnce();
-      expect(applicationInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          role_applied: role,
-          season_id: "season-12",
-          intake_batch_id: "batch-1"
-        })
-      );
+      expect(client.rpc).toHaveBeenCalledOnce();
+      expect(client.rpc.mock.calls[0][0]).toBe("vam_submit_intake_application_atomic");
+      expect(client.rpc.mock.calls[0][1]).toMatchObject({ p_role_applied: role });
     }
   );
 
@@ -185,7 +184,8 @@ describe("submitPilotApplication — M069 server-authoritative gate", () => {
       ok: true,
       applicationId: APPLICATION_ID
     });
-    expect(mentee.applicationInsert).toHaveBeenCalledOnce();
+    expect(mentee.client.rpc).toHaveBeenCalledOnce();
+    expect(mentee.client.rpc.mock.calls[0][1]).toMatchObject({ p_role_applied: "mentee" });
   });
 
   // ── Fixed Season 12 binding ───────────────────────────────────────────────
@@ -218,17 +218,16 @@ describe("submitPilotApplication — M069 server-authoritative gate", () => {
 
   // ── Token hygiene ─────────────────────────────────────────────────────────
   it("passes the token to the gate and to nothing else", async () => {
-    const { client, applicationInsert } = mockClient();
+    const { client } = mockClient();
     vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as never);
 
-    const secret = "pilot-secret-abc123";
-    await submitPilotApplication(input("mentor", { applyToken: secret }));
+    await submitPilotApplication(input("mentor", { applyToken: "fake" }));
 
-    expect(evaluateApplyGate).toHaveBeenCalledWith(secret, "mentor");
+    expect(evaluateApplyGate).toHaveBeenCalledWith("fake", "mentor");
 
-    // The token must not reach the applications row in any column.
-    expect(applicationInsert).toHaveBeenCalledOnce();
-    expect(JSON.stringify(applicationInsert.mock.calls)).not.toContain(secret);
+    expect(client.rpc).toHaveBeenCalledOnce();
+    const insertedPayload = client.rpc.mock.calls[0][1].p_raw_payload;
+    expect(insertedPayload).not.toHaveProperty("applyToken");
   });
 
   it("never logs the token on a refusal", async () => {

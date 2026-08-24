@@ -47,11 +47,12 @@ function makeChain(result: { data?: unknown; error?: unknown } = {}): unknown {
   return chain;
 }
 
-function makeClient(fromResponses: unknown[]) {
+function makeClient(fromResponses: unknown[], rpcResponse?: unknown) {
   const fromMock = vi.fn();
   fromResponses.forEach((r) => fromMock.mockReturnValueOnce(r));
   fromMock.mockReturnValue(makeChain());
-  return { from: fromMock };
+  const rpcMock = vi.fn().mockResolvedValue(rpcResponse || { data: null, error: null });
+  return { from: fromMock, rpc: rpcMock };
 }
 
 const APP_UUID    = "00000000-0000-4000-8000-000000000020";
@@ -125,8 +126,7 @@ describe("saveApplicationReviewDraft — DB error safety", () => {
     const client = makeClient([
       makeChain({ data: existingReview() }),
       makeChain({ data: scopeApp() }),
-      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
+    ], { error: { code: "42501", message: SENSITIVE_MSG } });
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await saveApplicationReviewDraft({
@@ -155,8 +155,7 @@ describe("submitApplicationReview — DB error safety", () => {
     const client = makeClient([
       makeChain({ data: existingReview() }),
       makeChain({ data: scopeApp() }),
-      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
+    ], { error: { code: "42501", message: SENSITIVE_MSG } });
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await submitApplicationReview({

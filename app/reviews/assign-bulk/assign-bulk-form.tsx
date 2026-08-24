@@ -80,6 +80,7 @@ export function AssignBulkForm({
   // Filter state
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(DEFAULT_STATUSES));
   const [excludeAlreadyAssigned, setExcludeAlreadyAssigned] = useState(true);
+  const [reviewersPerApplication, setReviewersPerApplication] = useState(2);
 
   // Reviewer selection state
   const [selectedReviewerIds, setSelectedReviewerIds] = useState<Set<string>>(new Set());
@@ -90,8 +91,8 @@ export function AssignBulkForm({
   // Reset confirmation when selection changes
   const prevSelectionRef = useRef({ statuses: "", reviewers: "" });
   const selectionKey = useMemo(
-    () => JSON.stringify(Array.from(selectedStatuses).sort()) + "|" + JSON.stringify(Array.from(selectedReviewerIds).sort()),
-    [selectedStatuses, selectedReviewerIds]
+    () => JSON.stringify(Array.from(selectedStatuses).sort()) + "|" + JSON.stringify(Array.from(selectedReviewerIds).sort()) + `|${excludeAlreadyAssigned}|${reviewersPerApplication}`,
+    [excludeAlreadyAssigned, reviewersPerApplication, selectedStatuses, selectedReviewerIds]
   );
   useEffect(() => {
     if (prevSelectionRef.current.statuses !== selectionKey) {
@@ -113,13 +114,18 @@ export function AssignBulkForm({
 
   const filteredApps = useMemo(() => {
     const afterStatus = applications.filter((a) => selectedStatuses.has(a.status ?? ""));
-    if (!excludeAlreadyAssigned) return afterStatus;
-    return afterStatus.filter((a) => a.existing_review_count === 0);
-  }, [applications, selectedStatuses, excludeAlreadyAssigned]);
+    return afterStatus.filter((app) => excludeAlreadyAssigned
+      ? app.existing_review_count === 0
+      : app.existing_review_count < reviewersPerApplication);
+  }, [applications, excludeAlreadyAssigned, reviewersPerApplication, selectedStatuses]);
 
   const alreadyAssignedCount = useMemo(
-    () => applications.filter((a) => selectedStatuses.has(a.status ?? "") && a.existing_review_count > 0).length,
-    [applications, selectedStatuses]
+    () => applications.filter((a) => selectedStatuses.has(a.status ?? "") && (
+      excludeAlreadyAssigned
+        ? a.existing_review_count > 0
+        : a.existing_review_count >= reviewersPerApplication
+    )).length,
+    [applications, excludeAlreadyAssigned, reviewersPerApplication, selectedStatuses]
   );
 
   const selectedReviewers = useMemo(
@@ -130,7 +136,10 @@ export function AssignBulkForm({
   // Distribution preview (round-robin formula, mirrors lib/bulk-assignment.ts)
   const distribution = useMemo(() => {
     const n = selectedReviewers.length;
-    const total = filteredApps.length;
+    const total = filteredApps.reduce(
+      (sum, app) => sum + Math.max(0, reviewersPerApplication - app.existing_review_count),
+      0
+    );
     if (!n || !total) return [];
     // Sort by workload ASC, email ASC — mirrors server-side sort
     const sorted = [...selectedReviewers].sort((a, b) => {
@@ -143,7 +152,7 @@ export function AssignBulkForm({
       const extra = i < total % n ? 1 : 0;
       return { reviewer, count: base + extra };
     });
-  }, [filteredApps.length, selectedReviewers]);
+  }, [excludeAlreadyAssigned, filteredApps, reviewersPerApplication, selectedReviewers]);
 
   const minPerReviewer = distribution.length ? Math.min(...distribution.map((d) => d.count)) : 0;
   const maxPerReviewer = distribution.length ? Math.max(...distribution.map((d) => d.count)) : 0;
@@ -181,7 +190,7 @@ export function AssignBulkForm({
   // Render
   // ---------------------------------------------------------------------------
 
-  const canSubmit = filteredApps.length > 0 && selectedReviewers.length > 0 && confirmed;
+  const canSubmit = filteredApps.length > 0 && selectedReviewers.length >= reviewersPerApplication && confirmed;
 
   return (
     <form action={formAction} className="space-y-6">
@@ -189,6 +198,7 @@ export function AssignBulkForm({
       <input type="hidden" name="intake_batch_id" value={intakeBatchId} />
       <input type="hidden" name="role_applied" value={roleApplied} />
       <input type="hidden" name="exclude_already_assigned" value={excludeAlreadyAssigned ? "1" : "0"} />
+      <input type="hidden" name="reviewers_per_application" value={reviewersPerApplication} />
 
       {/* Success banner */}
       {state.ok && state.message && (
@@ -202,7 +212,7 @@ export function AssignBulkForm({
                 Phân bổ: min {state.minPerReviewer} — max {state.maxPerReviewer} / reviewer
               </li>
               {(state.skippedAlreadyAssigned ?? 0) > 0 && (
-                <li>Bỏ qua (đã giao): {state.skippedAlreadyAssigned}</li>
+                <li>Bỏ qua (đã có hoặc đã đủ reviewer): {state.skippedAlreadyAssigned}</li>
               )}
             </ul>
           )}
@@ -243,7 +253,7 @@ export function AssignBulkForm({
             onChange={(e) => setExcludeAlreadyAssigned(e.target.checked)}
             className="accent-vam-green"
           />
-          Bỏ qua hồ sơ đã có reviewer (không hủy review cũ)
+          Bỏ qua hồ sơ đã có reviewer (bỏ chọn để giao bù đến đúng mục tiêu)
         </label>
       </section>
 
@@ -363,6 +373,17 @@ export function AssignBulkForm({
         <h2 className="mb-3 text-sm font-semibold text-slate-700">D — Tuỳ chọn</h2>
         <div className="flex flex-wrap gap-4">
           <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500">Reviewer mỗi hồ sơ</label>
+            <input
+              type="number"
+              min={1}
+              max={2}
+              value={reviewersPerApplication}
+              onChange={(event) => setReviewersPerApplication(Math.min(2, Math.max(1, Number(event.target.value) || 1)))}
+              className="w-24 rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-500">Hạn nộp (tuỳ chọn)</label>
             <input
               type="datetime-local"
@@ -388,13 +409,16 @@ export function AssignBulkForm({
         <h2 className="mb-3 text-sm font-semibold text-slate-700">E — Xem trước phân bổ</h2>
         {distribution.length === 0 ? (
           <p className="text-sm text-slate-400">
-            Chọn ít nhất một reviewer và có hồ sơ phù hợp để xem phân bổ.
+            Chọn ít nhất {reviewersPerApplication} reviewer và có hồ sơ phù hợp để xem phân bổ.
           </p>
         ) : (
           <>
             <div className="mb-3 flex flex-wrap gap-3 text-sm">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
                 Tổng hồ sơ: <strong>{filteredApps.length}</strong>
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
+                Mỗi hồ sơ: <strong>{reviewersPerApplication} reviewer độc lập</strong>
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
                 Reviewer: <strong>{selectedReviewers.length}</strong>
@@ -440,15 +464,15 @@ export function AssignBulkForm({
               />
               <span>
                 Tôi đã kiểm tra phân bổ trên và xác nhận giao{" "}
-                <strong>{filteredApps.length} hồ sơ</strong> cho{" "}
-                <strong>{selectedReviewers.length} reviewer</strong>.
+                <strong>{filteredApps.length} hồ sơ</strong>, bảo đảm mỗi hồ sơ có{" "}
+                <strong>{reviewersPerApplication} reviewer độc lập</strong>, từ nhóm {selectedReviewers.length} reviewer.
               </span>
             </label>
           </>
         )}
       </section>
 
-      {/* Submit row */}
+      {/* Submit row — the server commits the batch, assignments, and statuses atomically. */}
       <div className="flex items-center gap-4 pb-8">
         <SubmitButton disabled={!canSubmit} />
         {!canSubmit && distribution.length > 0 && !confirmed && (

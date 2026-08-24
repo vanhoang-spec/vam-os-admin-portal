@@ -1,0 +1,27 @@
+{
+  "harnessVersion": 2,
+  "checksum": "a845e33ca60dc52365450e71ecd9dc65d775817e3730f914afdc9fafda58b662",
+  "list": {
+    "totalRequests": 5,
+    "totalRows": 1502,
+    "totalBytes": 1121199,
+    "mapTimeMs": 16,
+    "requestsByTable": {
+      "intake_batches": 2,
+      "applications": 3
+    },
+    "rowsByTable": {
+      "intake_batches": 2,
+      "applications": 1500
+    }
+  },
+  "detail": {
+    "avgRequests": 6,
+    "avgRowsFetched": 1503,
+    "overFetchAmplification": 60.12,
+    "requestsByTable": {
+      "applications": 20,
+      "intake_batches": 10
+    }
+  }
+}

@@ -92,7 +92,6 @@ describe("professional-boundary, safety and confidentiality commitments", () => 
     expect(menteeForm).toContain("label={entry.wording}");
     expect(action).toContain("questionLabel: entry.wording");
     expect(action).toContain('valueText: "true"');
-    expect(persistence).toContain("question_label: answer.questionLabel");
-    expect(persistence).toContain("created_at: answer.acceptedAt");
+    expect(persistence).toContain("p_answers: input.answers");
   });
 });

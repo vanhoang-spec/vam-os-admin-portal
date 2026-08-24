@@ -34,14 +34,19 @@ export function ApplicationForm({
   action,
   state,
   submitLabel,
+  formRef: externalFormRef,
   children
 }: {
   action: (formData: FormData) => void;
   state: ApplyActionState;
   submitLabel: string;
+  formRef?: React.RefObject<HTMLFormElement>;
   children: React.ReactNode;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
+  // Draft recovery needs the same node revealInvalid() already walks, so the
+  // caller may supply the ref instead of us owning it.
+  const internalFormRef = useRef<HTMLFormElement>(null);
+  const formRef = externalFormRef ?? internalFormRef;
   const [missing, setMissing] = useState<MissingField[]>([]);
 
   // Runs from the form's `invalid` capture listener, which the browser fires once
