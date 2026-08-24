@@ -5,6 +5,7 @@ import { useFormState } from "react-dom";
 import { submitMentorApplicationAction } from "@/app/actions/apply";
 import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import { DraftRecoveryBanner } from "../_components/draft-recovery-banner";
+import { MentorProfileIntro } from "../_components/mentor-profile-intro";
 import { useDraftRecovery } from "../_components/use-draft-recovery";
 import {
   ApplicationForm,
@@ -211,6 +212,9 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
         raw_payload or an answer row.
       */}
       {applyToken ? <input type="hidden" name={APPLY_TOKEN_FIELD} value={applyToken} /> : null}
+
+      {/* Content-only section. Renders no inputs and cannot affect submission. */}
+      <MentorProfileIntro />
 
       <FormSection title="1. Đồng ý & quyền riêng tư">
         <ConsentCheckbox

@@ -69,7 +69,7 @@ export function RenewalForm({
           <div><span className="font-medium">Mã mentor:</span> {display.mentorCode || "—"}</div>
           <div><span className="font-medium">Email:</span> {display.emailPrimary || "—"}</div>
           <div><span className="font-medium">SĐT:</span> {display.phonePrimary || "—"}</div>
-          <div><span className="font-medium">Mùa đầu tham gia:</span> {String(display.firstVamSeason ?? "—")}</div>
+          <div><span className="font-medium">Năm đầu tiên Anh/Chị tham gia VAM/UEH (nếu có):</span> {String(display.firstVamSeason ?? "—")}</div>
         </div>
         <p className="mt-3 text-xs text-slate-500">
           Thông tin lịch sử bên trên chỉ để tham khảo. Các trường lineage như mùa đầu tham gia và nội dung tham gia trước đây không thể chỉnh sửa qua quy trình gia hạn.
