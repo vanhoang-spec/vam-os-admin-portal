@@ -7,7 +7,7 @@ import { loadRenewalSeasonContext } from "@/lib/renewal-console";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { createLegacyMentorPreview, consumeLegacyMentorPreview } from "@/lib/legacy-mentor-preview-store";
 import { readAllPages } from "@/lib/paged-read";
-import { emailsEqual, isValidEmail, normalizeEmail } from "@/lib/identity";
+import { emailsEqual, escapeIlikePattern, isValidEmail, normalizeEmail } from "@/lib/identity";
 import {
   parseLegacyMentorCsv,
   type LegacyMentorSource,
@@ -95,16 +95,54 @@ export async function resolveLegacyMentorCandidate(
     return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "invalid_identity" };
   }
 
-  const peopleLookup = await client
-    .from("people")
-    .select("id,full_name,email_primary,phone_primary,source_sheets,data_quality_flags")
-    .ilike("email_primary", email);
+  // The `%...%` lookup exists to compensate for historical untrimmed/mixed-case
+  // stored values, but canonical emailsEqual remains the authority.
+  const IDENTITY_LOOKUP_MAX_CANDIDATES = 25;
+
+  const lookupPeople = async () => {
+    const result = await client
+      .from("people")
+      .select("id,full_name,email_primary,phone_primary,source_sheets,data_quality_flags")
+      .ilike("email_primary", `%${escapeIlikePattern(email)}%`)
+      .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+      
+    if (result.error) return { error: result.error, candidates: [] };
+    if ((result.data ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+      return { error: { message: "too many candidates" }, candidates: [] };
+    }
+    return {
+      error: null,
+      candidates: (result.data ?? []).filter((person: any) => emailsEqual(person.email_primary, email))
+    };
+  };
+
+  const peopleLookup = await lookupPeople();
   if (peopleLookup.error) {
     return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "person_lookup_failed" };
   }
-  const candidates = (peopleLookup.data ?? []).filter((person: any) => emailsEqual(person.email_primary, email));
+  const candidates = peopleLookup.candidates;
   if (candidates.length > 1) {
     return { rowNumber: row.rowNumber, ok: false, outcome: "CONFLICT", reason: "multiple_people_for_canonical_email" };
+  }
+
+  if (row.legacyMentorCode) {
+    const codeLookup = await client
+      .from("mentor_profiles")
+      .select("id,person_id,mentor_code")
+      .ilike("mentor_code", `%${escapeIlikePattern(row.legacyMentorCode)}%`)
+      .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+    if (codeLookup.error) {
+      return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "mentor_code_lookup_failed" };
+    }
+    if ((codeLookup.data ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+      return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "mentor_code_lookup_too_many_candidates" };
+    }
+    const codeOwners = (codeLookup.data ?? []).filter(
+      (profile: any) => String(profile.mentor_code ?? "").trim().toLowerCase() === row.legacyMentorCode.trim().toLowerCase()
+    );
+    if (codeOwners.some((profile: any) => String(profile.person_id) !== String(candidates[0]?.id ?? ""))) {
+      return { rowNumber: row.rowNumber, ok: false, outcome: "CONFLICT", reason: "mentor_code_owned_by_another_person" };
+    }
   }
 
   const marker = provenance(row, source, sourceSha256);
@@ -119,11 +157,23 @@ export async function resolveLegacyMentorCandidate(
       data_quality_flags: marker
     }).select("id,full_name,email_primary,phone_primary,source_sheets,data_quality_flags").maybeSingle();
     if (inserted.error || !inserted.data) {
-      return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "person_insert_failed" };
+      if ((inserted.error as { code?: string } | null)?.code !== "23505") {
+        return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "person_insert_failed" };
+      }
+      // A concurrent request may have won the canonical-email insert. Re-read
+      // through the same escaped lookup and reuse only one exact canonical
+      // identity; any ambiguity or unrelated 23505 fails closed.
+      const raceWinner = await lookupPeople();
+      if (raceWinner.error || raceWinner.candidates.length !== 1) {
+        return { rowNumber: row.rowNumber, ok: false, outcome: "CONFLICT", reason: "person_insert_race_unresolved" };
+      }
+      person = raceWinner.candidates[0] as Record<string, any>;
+    } else {
+      person = inserted.data as Record<string, any>;
+      personCreated = true;
     }
-    person = inserted.data as Record<string, any>;
-    personCreated = true;
-  } else {
+  }
+  if (!personCreated) {
     const updates: Record<string, unknown> = {
       data_quality_flags: appendProvenance(person.data_quality_flags, marker)
     };

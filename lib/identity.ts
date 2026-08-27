@@ -12,3 +12,12 @@ export function emailsEqual(left: unknown, right: unknown): boolean {
   const leftEmail = normalizeEmail(left);
   return Boolean(leftEmail) && leftEmail === normalizeEmail(right);
 }
+
+/**
+ * Escape a canonical email before passing it to PostgREST's `ilike` filter.
+ * PostgreSQL treats %, _ and backslash as pattern syntax; applicant input must
+ * never be allowed to supply that syntax.
+ */
+export function escapeIlikePattern(value: unknown): string {
+  return String(value ?? "").replace(/[\\%_*]/g, "\\$&");
+}

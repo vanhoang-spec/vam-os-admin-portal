@@ -49,6 +49,7 @@ type Filter =
   | { kind: "gt"; column: string; value: unknown }
   | { kind: "gte"; column: string; value: unknown }
   | { kind: "lt"; column: string; value: unknown }
+  | { kind: "ilike"; column: string; pattern: string }
   | { kind: "notNull"; column: string }
   | { kind: "or"; expression: string };
 
@@ -129,6 +130,8 @@ function applyFilter(rows: any[], filter: Filter) {
       return rows.filter((row) => String(row[filter.column]) >= String(filter.value));
     case "lt":
       return rows.filter((row) => String(row[filter.column]) < String(filter.value));
+    case "ilike":
+      return rows.filter((row) => postgresIlikeMatches(row[filter.column], filter.pattern));
     case "notNull":
       return rows.filter((row) => row[filter.column] !== null && row[filter.column] !== undefined);
     case "or": {
@@ -138,6 +141,27 @@ function applyFilter(rows: any[], filter: Filter) {
     default:
       return rows;
   }
+}
+
+/** A focused model of PostgreSQL ILIKE, including %, _ and backslash escapes. */
+export function postgresIlikeMatches(value: unknown, pattern: unknown): boolean {
+  const input = String(value ?? "");
+  const source = String(pattern ?? "");
+  let regex = "^";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\" && index + 1 < source.length) {
+      index += 1;
+      regex += source[index].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    } else if (char === "%" || char === "*") {
+      regex += ".*";
+    } else if (char === "_") {
+      regex += ".";
+    } else {
+      regex += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return new RegExp(`${regex}$`, "iu").test(input);
 }
 
 /** PostgreSQL ordering: ascending is NULLS LAST, descending is NULLS FIRST. */
@@ -237,6 +261,8 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
       gt: (column: string, value: unknown) => withFilter({ kind: "gt", column, value }),
       gte: (column: string, value: unknown) => withFilter({ kind: "gte", column, value }),
       lt: (column: string, value: unknown) => withFilter({ kind: "lt", column, value }),
+      ilike: (column: string, pattern: unknown) =>
+        withFilter({ kind: "ilike", column, pattern: String(pattern ?? "") }),
       not: (column: string, operator: string, value: unknown) => {
         if (operator !== "is" || value !== null) throw new Error(`fake-postgrest: unsupported not(${operator})`);
         return withFilter({ kind: "notNull", column });

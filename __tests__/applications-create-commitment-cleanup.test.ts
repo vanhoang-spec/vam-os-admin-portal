@@ -42,6 +42,7 @@ function mockClient(options: { answersError?: unknown; cleanupError?: unknown } 
       const chain: Record<string, any> = {};
       chain.select = vi.fn(() => chain);
       chain.ilike = vi.fn(() => chain);
+      chain.limit = vi.fn(() => chain);
       chain.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
       return chain;
     }

@@ -2,7 +2,7 @@ import "server-only";
 
 import { evaluateApplyGate } from "@/lib/apply-gate";
 import { S12_BINDING } from "@/lib/application-form-controls";
-import { isValidEmail, normalizeEmail } from "@/lib/identity";
+import { emailsEqual, escapeIlikePattern, isValidEmail, normalizeEmail } from "@/lib/identity";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord } from "@/lib/types";
 
@@ -139,6 +139,8 @@ export async function submitPilotApplication(
     return { ok: false, code: "validation", message: GATE_CLOSED_MESSAGE };
   }
 
+  const IDENTITY_LOOKUP_MAX_CANDIDATES = 25;
+
   const { client, error: clientError } = clientResult();
   if (!client) {
     return { ok: false, code: "config", message: clientError ?? SAFE_ERROR };
@@ -146,6 +148,7 @@ export async function submitPilotApplication(
 
   const fullName = safeText(input.fullName);
   const emailPrimary = normalizeEmail(input.emailPrimary);
+  const emailLookupPattern = `%${escapeIlikePattern(emailPrimary)}%`;
   const phonePrimary = normalisePhone(input.phonePrimary);
   const gender = safeText(input.gender);
 
@@ -209,19 +212,26 @@ export async function submitPilotApplication(
   // Duplicate check: same season + same role + same canonical email. A person
   // may apply again in a later season, but not twice for this season merely by
   // changing case/whitespace or selecting another intake batch.
-  const { data: dupRow, error: dupErr } = await client
+  // The `%...%` lookup exists to compensate for historical untrimmed/mixed-case
+  // stored values, but canonical emailsEqual remains the authority.
+  const { data: duplicateCandidates, error: dupErr } = await client
     .from("applications")
-    .select("id")
+    .select("id,email_primary")
     .eq("season_id", seasonRow.id)
     .eq("role_applied", input.role)
-    .ilike("email_primary", emailPrimary)
-    .limit(1)
-    .maybeSingle();
+    .ilike("email_primary", emailLookupPattern)
+    .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
   if (dupErr) {
     log("duplicate check failed", dupErr);
     return { ok: false, code: "db", message: `${SAFE_ERROR} (dedup: ${dupErr.message})` };
   }
-  if (dupRow) {
+  if ((duplicateCandidates ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+    log("duplicate check limit exceeded", { limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
+    return { ok: false, code: "db", message: `${SAFE_ERROR} (dedup: too many candidates)` };
+  }
+  // Escaping is necessary but not sufficient: only exact canonical equality
+  // is identity. This re-filter is the final linkage/duplicate decision.
+  if ((duplicateCandidates ?? []).some((candidate) => emailsEqual(candidate.email_primary, emailPrimary))) {
     return {
       ok: false,
       code: "duplicate",
@@ -231,17 +241,29 @@ export async function submitPilotApplication(
   }
 
   // Link an already-known canonical identity without creating a person during
-  // anonymous intake. maybeSingle fails closed if historical corruption has
-  // produced more than one person for the same canonical email.
-  const { data: existingPerson, error: personLookupErr } = await client
+  // anonymous intake. Multiple exact canonical matches fail closed if
+  // historical corruption has produced more than one person.
+  const { data: personCandidates, error: personLookupErr } = await client
     .from("people")
     .select("id,email_primary")
-    .ilike("email_primary", emailPrimary)
-    .maybeSingle();
+    .ilike("email_primary", emailLookupPattern)
+    .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
   if (personLookupErr) {
     log("person identity lookup failed", personLookupErr);
     return { ok: false, code: "db", message: `${SAFE_ERROR} (identity: ${personLookupErr.message})` };
   }
+  if ((personCandidates ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+    log("person identity lookup limit exceeded", { limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
+    return { ok: false, code: "db", message: `${SAFE_ERROR} (identity: too many candidates)` };
+  }
+  const exactPeople = (personCandidates ?? []).filter((person) =>
+    emailsEqual(person.email_primary, emailPrimary)
+  );
+  if (exactPeople.length > 1) {
+    log("person identity lookup ambiguous", { canonicalEmail: emailPrimary, matches: exactPeople.length });
+    return { ok: false, code: "db", message: `${SAFE_ERROR} (identity: ambiguous)` };
+  }
+  const existingPerson = exactPeople[0] ?? null;
 
   // Insert
   const insertPayload = {

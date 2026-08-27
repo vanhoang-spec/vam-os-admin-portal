@@ -12,7 +12,7 @@
 
 S12-M1 is implemented locally for new mentor intake, returning-mentor confirmation, and legacy mentor candidate intake. The implementation preserves the existing M071 invitation and confirmation lifecycle. Legacy CSV/manual intake creates or reuses only `people` and a minimal `mentor_profiles` row plus provenance/audit data; it does not create an application, invitation, consent, or Season 12 membership.
 
-End-to-end browser UAT for the legacy CSV path is not yet ready on a database environment because migration 072 is intentionally unapplied. Code review and automated review are ready. New-mentor and existing-renewal browser flows can be tested against a compatible isolated environment, while complete S12-M1 UAT must wait for independent review and isolated application of M072.
+End-to-end browser UAT for the legacy CSV path is not yet ready on a database environment because migration M083 is intentionally unapplied. Code review and automated review are ready. New-mentor and existing-renewal browser flows can be tested against a compatible isolated environment, while complete S12-M1 UAT must wait for independent review and isolated application of M083.
 
 ## Identity behavior
 
@@ -49,7 +49,7 @@ CSV columns are exactly:
 
 The flow is upload → parse/validate → preview → identity resolution → explicit apply. It reuses the existing CSV parser and the repository's encrypted-preview pattern. Preview statuses include `NEW_PERSON`, `EXISTING_PERSON`, `DUPLICATE_IN_FILE`, `INVALID_EMAIL`, `INVALID_ROW`, and `CONFLICT_REQUIRES_REVIEW`.
 
-Preview payloads are AES-256-GCM encrypted, actor-bound, integrity-bound, expire after ten minutes, and are consumed by delete. Migration 072 enables RLS, gives the preview table no web grants, and exposes only service-role RPC execution after checking that the actor is an active `core_team`, `admin`, or `super_admin` user.
+Preview payloads are AES-256-GCM encrypted, actor-bound, integrity-bound, expire after ten minutes, and are consumed by delete. Migration M083 enables RLS, gives the preview table no web grants, and exposes only service-role RPC execution after checking that the actor is an active `core_team`, `admin`, or `super_admin` user.
 
 CSV apply and manual entry call the same `resolveLegacyMentorCandidate` service. The resolver:
 
@@ -83,12 +83,12 @@ Source is derived from durable person provenance because the existing invite sch
 
 ## Migration
 
-Added `supabase_migrations/072_s12_m1_canonical_email_uniqueness.sql` as review-only. It is actually required for:
+Added `VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827` remediation package as review-only. This package supersedes earlier attempts that conflicted with the historical authoritative M072 (already applied) and unrelated cross-mentoring 072 on other refs. The M083 package is actually required for:
 
 1. database-enforced canonical people/application uniqueness and concurrent-insert safety; and
 2. the encrypted one-use legacy CSV preview store/RPCs.
 
-The migration was not applied anywhere. Its preflight aborts when canonical duplicate people or same-season/role applications already exist. Independent data review, SQL/security review, an isolated test apply, verifier/browser UAT, and an approved maintenance window are required before any connected application.
+The M083 package was not applied anywhere. Its preflight aborts when canonical duplicate people or same-season/role applications already exist. Independent data review, SQL/security review, an isolated test apply, verifier/browser UAT, and an approved maintenance window are required before any connected application.
 
 ## Files changed
 
@@ -125,7 +125,7 @@ Product and service code:
 - `lib/people-create.ts`
 - `lib/renewal-console.ts`
 - `lib/renewal-runtime.ts`
-- `supabase_migrations/072_s12_m1_canonical_email_uniqueness.sql`
+- `VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/`
 
 Tests:
 
@@ -154,8 +154,8 @@ The full suite emits existing intentional error-path logs and jsdom warnings for
 
 ## Unresolved issues and risks
 
-- M072 is unapplied by design. Until reviewed and applied to an isolated environment, the legacy preview RPCs are unavailable and database-level uniqueness is not enforced; application-level checks still operate but cannot eliminate every race.
-- Existing canonical conflicts must be repaired deliberately before M072 can succeed; the migration aborts rather than guessing merges.
+- M083 is unapplied by design. Until reviewed and applied to an isolated environment, the legacy preview RPCs are unavailable and database-level uniqueness is not enforced; application-level checks still operate but cannot eliminate every race.
+- Existing canonical conflicts must be repaired deliberately before M083 can succeed; the migration aborts rather than guessing merges.
 - Legacy person/profile/provenance writes and the audit insert are not one database transaction. An audit failure is reported as failure, while the idempotent candidate rows may remain and be safely reused on retry. A future trusted transactional RPC could close this residual audit atomicity gap, but was not introduced without broader schema review.
 - Invite source is inferred from person provenance, not stored per invite, because changing the invitation schema was not necessary for safe lifecycle reuse.
 - No browser UAT or connected-database verification was performed under the hard safety boundary.
@@ -163,7 +163,7 @@ The full suite emits existing intentional error-path logs and jsdom warnings for
 
 ## Review readiness
 
-The code, tests, and review-only SQL are ready for independent review. Complete browser UAT is conditional on approval and isolated application of M072, followed by conflict-preflight verification and testing of CSV preview/apply, manual candidate entry, invite creation, mentor consent/renewal submission, and Core Team confirmation. No merge, deployment, connected migration, real invitation, consent, application, or Season 12 membership was created.
+The code, tests, and review-only SQL are ready for independent review. Complete browser UAT is conditional on approval and isolated application of M083, followed by conflict-preflight verification and testing of CSV preview/apply, manual candidate entry, invite creation, mentor consent/renewal submission, and Core Team confirmation. No merge, deployment, connected migration, real invitation, consent, application, or Season 12 membership was created.
 
 S12_M1_IMPLEMENTATION_COMPLETE=YES
 IDENTITY_NORMALIZATION_PASS=YES

@@ -49,6 +49,10 @@ function clean(value: unknown, max = 500): string {
   return String(value ?? "").trim().slice(0, max);
 }
 
+function canonicalMentorCode(value: unknown): string {
+  return clean(value, 100).toLowerCase();
+}
+
 export function classifyLegacyMentorRows(
   records: string[][],
   reference: LegacyMentorReference
@@ -60,6 +64,17 @@ export function classifyLegacyMentorRows(
     peopleByEmail.set(email, [...(peopleByEmail.get(email) ?? []), person]);
   }
   const profilesByPerson = new Map(reference.profiles.map((profile) => [profile.personId, profile]));
+  const profilesByCode = new Map<string, LegacyMentorReference["profiles"]>();
+  for (const profile of reference.profiles) {
+    const code = canonicalMentorCode(profile.mentorCode);
+    if (!code) continue;
+    profilesByCode.set(code, [...(profilesByCode.get(code) ?? []), profile]);
+  }
+  const codesInFile = new Map<string, number>();
+  for (const record of records) {
+    const code = canonicalMentorCode(record[3]);
+    if (code) codesInFile.set(code, (codesInFile.get(code) ?? 0) + 1);
+  }
   const seen = new Set<string>();
 
   return records.map((record, index) => {
@@ -89,6 +104,17 @@ export function classifyLegacyMentorRows(
       if (candidates.length > 1) {
         status = "CONFLICT_REQUIRES_REVIEW";
         reason = "Nhiều person hiện có cùng canonical email; cần xử lý dữ liệu trước khi import.";
+      } else if (legacyMentorCode && (codesInFile.get(canonicalMentorCode(legacyMentorCode)) ?? 0) > 1) {
+        status = "CONFLICT_REQUIRES_REVIEW";
+        reason = "legacy_mentor_code trùng trong cùng tệp; cần xác minh chủ sở hữu mã.";
+      } else if (
+        legacyMentorCode &&
+        (profilesByCode.get(canonicalMentorCode(legacyMentorCode)) ?? []).some(
+          (profile) => profile.personId !== candidates[0]?.id
+        )
+      ) {
+        status = "CONFLICT_REQUIRES_REVIEW";
+        reason = "legacy_mentor_code đã thuộc về một person khác; không thể tự động gán lại.";
       } else if (candidates.length === 1) {
         const person = candidates[0];
         const profile = profilesByPerson.get(person.id);

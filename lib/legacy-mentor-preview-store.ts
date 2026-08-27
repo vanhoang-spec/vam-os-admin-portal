@@ -9,7 +9,7 @@ type StoredPreview = { ciphertext: string; iv: string; authTag: string };
 
 const hash = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
 const key = (id: string, actor: string, secret: string) =>
-  createHash("sha256").update(`VAM072:${id}:${actor}:${secret}`, "utf8").digest();
+  createHash("sha256").update(`VAM083:${id}:${actor}:${secret}`, "utf8").digest();
 
 function encrypt(id: string, actor: string, secret: string, csv: string): StoredPreview {
   const iv = randomBytes(12);
@@ -31,7 +31,7 @@ export async function createLegacyMentorPreview(actorId: string, csv: string, no
   const integrity = randomBytes(32).toString("base64url");
   const expiresAt = now + PREVIEW_TTL_MS;
   const encrypted = encrypt(id, actorId, integrity, csv);
-  const { error } = await client.rpc("vam072_create_legacy_mentor_preview", {
+  const { error } = await client.rpc("vam083_create_legacy_mentor_preview", {
     p_preview_id: id,
     p_actor_admin_user_id: actorId,
     p_secret_hash: hash(integrity),
@@ -51,7 +51,7 @@ export async function consumeLegacyMentorPreview(actorId: string, id: string, in
   }
   const client = getSupabaseServiceRoleClient();
   if (!client) throw new Error("LEGACY_PREVIEW_UNAVAILABLE");
-  const { data, error } = await client.rpc("vam072_consume_legacy_mentor_preview", {
+  const { data, error } = await client.rpc("vam083_consume_legacy_mentor_preview", {
     p_preview_id: id,
     p_actor_admin_user_id: actorId,
     p_secret_hash: hash(integrity)
