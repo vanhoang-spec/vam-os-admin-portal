@@ -61,8 +61,8 @@ Duplicate identity/code rows, missing/wrong prerequisites, and object-name colli
 ## Database invariants
 
 - `people_canonical_email_key`: unique `lower(btrim(email_primary))` for nonblank emails.
-- `applications_season_role_canonical_email_key`: unique season + role + canonical email.
-- `applications_season_role_person_key`: unique season + role + `person_id` when `person_id`, `season_id`, and `role_applied` are non-null. (Incomplete legacy rows with NULL season/role are exempt from this business key).
+- `applications_season_role_canonical_email_key`: unique season + role + canonical email. Canonical application email uniqueness is season-wide.
+- `applications_s12_role_person_key`: unique season + role + `person_id` scoped only to UEHM-S12. Person-based application uniqueness is an S12 policy invariant. Historical pre-S12 reapplications are preserved. M083 does NOT rewrite/delete historical application records.
 - `mentor_profiles_canonical_mentor_code_key`: unique canonical nonblank mentor code.
 
 Membership uniqueness is not added by M083. Migration 052 already created the authoritative constraint `person_season_memberships_person_season_role_key UNIQUE (person_id, season_id, role)`, and M063 serializes create-or-noop with an advisory lock before relying on that constraint. M083 preflight and verifier both prove the constraint and zero duplicate rows.

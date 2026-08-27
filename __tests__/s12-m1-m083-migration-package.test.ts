@@ -38,7 +38,8 @@ describe("S12-M1 M083 migration package", () => {
       "INDEX_NAME_COLLISION",
       "indexdef",
       "vam063_trusted_api_role",
-      "person_season_memberships_person_season_role_key"
+      "person_season_memberships_person_season_role_key",
+      "APPLICATION_PERSON_CONFLICT"
     ]) expect(sql).toContain(marker);
   });
 
@@ -52,7 +53,7 @@ describe("S12-M1 M083 migration package", () => {
     for (const index of [
       "people_canonical_email_key",
       "applications_season_role_canonical_email_key",
-      "applications_season_role_person_key",
+      "applications_s12_role_person_key",
       "mentor_profiles_canonical_mentor_code_key"
     ]) expect(sql).toContain(`create unique index ${index}`);
   });
@@ -95,7 +96,7 @@ describe("S12-M1 M083 migration package", () => {
     const apply = read("apply.sql");
     const preflight = read("preflight.sql");
     const verifier = read("verifier.sql");
-    const pattern = /where person_id is not null\s+and season_id is not null\s+and role_applied is not null/i;
+    const pattern = /where person_id is not null\s+and season_id( = v_s12_season_id| is not null)\s+and role_applied is not null/i;
     expect(apply).toMatch(pattern);
     expect(preflight).toMatch(pattern);
     expect(verifier).toMatch(pattern);

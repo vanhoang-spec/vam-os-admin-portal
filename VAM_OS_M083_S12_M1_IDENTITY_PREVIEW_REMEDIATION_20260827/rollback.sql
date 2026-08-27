@@ -23,7 +23,7 @@ set local lock_timeout = '5s';
 set local statement_timeout = '60s';
 
 drop index public.mentor_profiles_canonical_mentor_code_key;
-drop index public.applications_season_role_person_key;
+drop index public.applications_s12_role_person_key; -- Rollback removes the S12 write arbiter
 drop index public.applications_season_role_canonical_email_key;
 drop index public.people_canonical_email_key;
 commit;

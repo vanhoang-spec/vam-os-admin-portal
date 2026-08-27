@@ -32,16 +32,25 @@ begin
     raise exception 'M083 DOMAIN A ABORTED [APPLICATION_CANONICAL_EMAIL_CONFLICT]: % groups.', v_count;
   end if;
 
-  select count(*) into v_count from (
-    select 1 from public.applications 
-    where person_id is not null 
-      and season_id is not null 
-      and role_applied is not null
-    group by season_id, role_applied, person_id having count(*) > 1
-  ) d;
-  if v_count > 0 then
-    raise exception 'M083 DOMAIN A ABORTED [APPLICATION_PERSON_CONFLICT]: % groups.', v_count;
-  end if;
+  declare
+    v_s12_season_id uuid;
+  begin
+    select id into v_s12_season_id from public.seasons where code = 'UEHM-S12';
+    if not found then
+      raise exception 'M083 DOMAIN A ABORTED [MISSING_S12_SEASON]: UEHM-S12 not found in seasons.';
+    end if;
+
+    select count(*) into v_count from (
+      select 1 from public.applications 
+      where person_id is not null 
+        and season_id = v_s12_season_id 
+        and role_applied is not null
+      group by season_id, role_applied, person_id having count(*) > 1
+    ) d;
+    if v_count > 0 then
+      raise exception 'M083 DOMAIN A ABORTED [APPLICATION_PERSON_CONFLICT]: % S12 groups.', v_count;
+    end if;
+  end;
 
   select count(*) into v_count from (
     select 1 from public.mentor_profiles
@@ -58,7 +67,7 @@ begin
     and c.relname = any (array[
       'people_canonical_email_key',
       'applications_season_role_canonical_email_key',
-      'applications_season_role_person_key',
+      'applications_s12_role_person_key',
       'mentor_profiles_canonical_mentor_code_key'
     ]);
   if v_names is not null then
@@ -77,11 +86,25 @@ create unique index applications_season_role_canonical_email_key
     and role_applied is not null
     and nullif(btrim(email_primary), '') is not null;
 
-create unique index applications_season_role_person_key
-  on public.applications (season_id, role_applied, person_id)
-  where person_id is not null
-    and season_id is not null
-    and role_applied is not null;
+do $m083_domain_a_idx$
+declare
+  v_s12_season_id uuid;
+begin
+  select id into v_s12_season_id from public.seasons where code = 'UEHM-S12';
+  if not found then
+    raise exception 'M083 DOMAIN A ABORTED [MISSING_S12_SEASON]: UEHM-S12 not found in seasons.';
+  end if;
+
+  execute format(
+    'create unique index applications_s12_role_person_key
+     on public.applications (season_id, role_applied, person_id)
+     where person_id is not null
+       and role_applied is not null
+       and season_id = %L::uuid',
+    v_s12_season_id
+  );
+end
+$m083_domain_a_idx$;
 
 create unique index mentor_profiles_canonical_mentor_code_key
   on public.mentor_profiles (lower(btrim(mentor_code)))
@@ -93,9 +116,9 @@ declare
 begin
   select string_agg(expected.name, ', ' order by expected.name) into v_bad
   from (values
-    ('people_canonical_email_key', 'people', 'lower(btrim(email_primary))'),
-    ('applications_season_role_canonical_email_key', 'applications', 'lower(btrim(email_primary))'),
-    ('applications_season_role_person_key', 'applications', 'person_id'),
+    ('people_canonical_email_key', 'people', 'lower(btrim('),
+    ('applications_season_role_canonical_email_key', 'applications', 'lower(btrim('),
+    ('applications_s12_role_person_key', 'applications', 'person_id'),
     ('mentor_profiles_canonical_mentor_code_key', 'mentor_profiles', 'lower(btrim(mentor_code))')
   ) as expected(name, table_name, required_fragment)
   left join pg_class idx on idx.relname = expected.name

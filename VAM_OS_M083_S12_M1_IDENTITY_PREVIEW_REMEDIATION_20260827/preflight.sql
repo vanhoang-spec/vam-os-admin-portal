@@ -115,16 +115,25 @@ begin
     raise exception 'M083 PREFLIGHT REFUSED [APPLICATION_CANONICAL_EMAIL_CONFLICT]: % conflicting groups.', v_count;
   end if;
 
-  select count(*) into v_count from (
-    select 1 from public.applications 
-    where person_id is not null
-      and season_id is not null
-      and role_applied is not null
-    group by season_id, role_applied, person_id having count(*) > 1
-  ) d;
-  if v_count > 0 then
-    raise exception 'M083 PREFLIGHT REFUSED [APPLICATION_PERSON_CONFLICT]: % conflicting groups.', v_count;
-  end if;
+  declare
+    v_s12_season_id uuid;
+  begin
+    select id into v_s12_season_id from public.seasons where code = 'UEHM-S12';
+    if not found then
+      raise exception 'M083 PREFLIGHT REFUSED [MISSING_S12_SEASON]: UEHM-S12 not found in seasons.';
+    end if;
+
+    select count(*) into v_count from (
+      select 1 from public.applications 
+      where person_id is not null
+        and season_id = v_s12_season_id
+        and role_applied is not null
+      group by season_id, role_applied, person_id having count(*) > 1
+    ) d;
+    if v_count > 0 then
+      raise exception 'M083 PREFLIGHT REFUSED [APPLICATION_PERSON_CONFLICT]: % S12 conflicting groups.', v_count;
+    end if;
+  end;
 
   select count(*) into v_count from (
     select 1 from public.person_season_memberships
@@ -150,7 +159,7 @@ begin
     and c.relname = any (array[
       'people_canonical_email_key',
       'applications_season_role_canonical_email_key',
-      'applications_season_role_person_key',
+      'applications_s12_role_person_key',
       'mentor_profiles_canonical_mentor_code_key'
     ]);
   if v_detail is not null then

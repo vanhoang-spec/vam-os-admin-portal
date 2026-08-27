@@ -10,7 +10,7 @@ where schemaname = 'public'
   and indexname = any (array[
     'people_canonical_email_key',
     'applications_season_role_canonical_email_key',
-    'applications_season_role_person_key',
+    'applications_s12_role_person_key',
     'mentor_profiles_canonical_mentor_code_key'
   ])
 order by indexname;
@@ -24,27 +24,33 @@ begin
     raise exception 'M083 VERIFY FAILED [PREVIEW_TABLE_MISSING].';
   end if;
 
-  select string_agg(expected.name, ', ' order by expected.name) into v_bad
-  from (values
-    ('people_canonical_email_key', 'people', 'lower(btrim(email_primary))', 'NULLIF(btrim(email_primary)'),
-    ('applications_season_role_canonical_email_key', 'applications', 'season_id, role_applied, lower(btrim(email_primary))', 'NULLIF(btrim(email_primary)'),
-    ('applications_season_role_person_key', 'applications', 'season_id, role_applied, person_id', 'season_id IS NOT NULL'),
-    ('mentor_profiles_canonical_mentor_code_key', 'mentor_profiles', 'lower(btrim(mentor_code))', 'NULLIF(btrim(mentor_code)')
-  ) as expected(name, table_name, key_fragment, predicate_fragment)
-  left join pg_class idx on idx.relname = expected.name
-  left join pg_namespace idx_ns on idx_ns.oid = idx.relnamespace and idx_ns.nspname = 'public'
-  left join pg_index i on i.indexrelid = idx.oid
-  left join pg_class tbl on tbl.oid = i.indrelid
-  left join pg_namespace tbl_ns on tbl_ns.oid = tbl.relnamespace
-  where idx_ns.oid is null
-     or not i.indisunique
-     or tbl_ns.nspname <> 'public'
-     or tbl.relname <> expected.table_name
-     or position(expected.key_fragment in pg_get_indexdef(idx.oid)) = 0
-     or position(expected.predicate_fragment in pg_get_indexdef(idx.oid)) = 0;
-  if v_bad is not null then
-    raise exception 'M083 VERIFY FAILED [INDEX_DEFINITION]: %.', v_bad;
-  end if;
+  declare
+    v_s12_season_id uuid;
+  begin
+    select id into v_s12_season_id from public.seasons where code = 'UEHM-S12';
+    if not found then raise exception 'M083 VERIFY FAILED [MISSING_S12_SEASON]'; end if;
+
+    select string_agg(expected.name, ', ' order by expected.name) into v_bad
+    from (values
+      ('people_canonical_email_key', 'people', 'lower(btrim(', 'NULLIF(btrim('),
+      ('applications_season_role_canonical_email_key', 'applications', 'lower(btrim(', 'NULLIF(btrim('),
+      ('applications_s12_role_person_key', 'applications', 'person_id', 'season_id = ''' || v_s12_season_id::text || ''''),
+      ('mentor_profiles_canonical_mentor_code_key', 'mentor_profiles', 'lower(btrim(mentor_code))', 'NULLIF(btrim(mentor_code)')
+    ) as expected(name, table_name, key_fragment, predicate_fragment)
+    left join pg_class idx on idx.relname = expected.name
+    left join pg_namespace idx_ns on idx_ns.oid = idx.relnamespace and idx_ns.nspname = 'public'
+    left join pg_index i on i.indexrelid = idx.oid
+    left join pg_class tbl on tbl.oid = i.indrelid
+    left join pg_namespace tbl_ns on tbl_ns.oid = tbl.relnamespace
+    where idx_ns.oid is null
+       or not i.indisunique
+       or tbl_ns.nspname <> 'public'
+       or tbl.relname <> expected.table_name
+       or position(expected.key_fragment in pg_get_indexdef(idx.oid)) = 0
+       or position(expected.predicate_fragment in pg_get_indexdef(idx.oid)) = 0;
+    if v_bad is not null then
+      raise exception 'M083 VERIFY FAILED [INDEX_DEFINITION]: %.', v_bad;
+    end if;
 
   select count(*) into v_count from (
     select 1 from public.people
@@ -64,11 +70,12 @@ begin
   select count(*) into v_count from (
     select 1 from public.applications
     where person_id is not null
-      and season_id is not null
+      and season_id = v_s12_season_id
       and role_applied is not null
     group by season_id, role_applied, person_id having count(*) > 1
   ) d;
-  if v_count <> 0 then raise exception 'M083 VERIFY FAILED [APPLICATION_PERSON_DUPLICATES]: %.', v_count; end if;
+  if v_count <> 0 then raise exception 'M083 VERIFY FAILED [APPLICATION_S12_PERSON_DUPLICATES]: %.', v_count; end if;
+  end;
 
   select count(*) into v_count from (
     select 1 from public.mentor_profiles
