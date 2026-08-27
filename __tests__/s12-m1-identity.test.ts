@@ -32,7 +32,7 @@ describe("S12-M1 canonical email identity", () => {
     expect(apply).toContain("lower(btrim(email_primary))");
     expect(apply).toContain("people_canonical_email_key");
     expect(apply).toContain("applications_season_role_canonical_email_key");
-    expect(apply).toContain("applications_season_role_person_key");
+    expect(apply).toContain("applications_s12_role_person_key");
     expect(apply).toContain("M083 DOMAIN A ABORTED [PEOPLE_CANONICAL_EMAIL_CONFLICT]");
     expect(apply).toContain("M083 DOMAIN A ABORTED [APPLICATION_PERSON_CONFLICT]");
   });
