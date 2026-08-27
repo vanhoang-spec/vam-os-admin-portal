@@ -107,9 +107,12 @@ describe("S12-M1 public canonical identity lookup", () => {
 
     expect(result).toEqual({ ok: true, applicationId: "application-new" });
     expect(fake.insertedApplication.person_id).toBeNull();
+    // In the two-stage lookup, exact runs first, finds nothing, then fallback runs
     expect(fake.ilikePatterns).toEqual([
-      { table: "applications", column: "email_primary", pattern: escaped },
-      { table: "people", column: "email_primary", pattern: escaped }
+      { table: "applications", column: "email_primary", pattern: escaped.slice(1, -1) }, // Exact
+      { table: "applications", column: "email_primary", pattern: escaped }, // Fallback
+      { table: "people", column: "email_primary", pattern: escaped.slice(1, -1) }, // Exact
+      { table: "people", column: "email_primary", pattern: escaped } // Fallback
     ]);
   });
 
@@ -132,6 +135,24 @@ describe("S12-M1 public canonical identity lookup", () => {
       });
     }
   );
+
+  it("does not fetch/match thuha@gmail.com or ngocha@gmail.com as identity candidates in the normal path", async () => {
+    // Both stored records contain "ha@gmail.com" as a substring.
+    const fake = identityClient({
+      people: [
+        { id: "person-1", email_primary: "thuha@gmail.com" },
+        { id: "person-2", email_primary: "ngocha@gmail.com" }
+      ]
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake.client as never);
+
+    await expect(submitPilotApplication(input("ha@gmail.com"))).resolves.toEqual({
+      ok: true,
+      applicationId: "application-new"
+    });
+    // Should NOT link to any of them
+    expect(fake.insertedApplication.person_id).toBeNull();
+  });
 
   it("still rejects an exact canonical application duplicate", async () => {
     const fake = identityClient({

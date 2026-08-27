@@ -100,12 +100,23 @@ export async function resolveLegacyMentorCandidate(
   const IDENTITY_LOOKUP_MAX_CANDIDATES = 25;
 
   const lookupPeople = async () => {
-    const result = await client
+    const exactLookupPattern = escapeIlikePattern(email);
+    const fallbackLookupPattern = `%${exactLookupPattern}%`;
+
+    let result = await client
       .from("people")
       .select("id,full_name,email_primary,phone_primary,source_sheets,data_quality_flags")
-      .ilike("email_primary", `%${escapeIlikePattern(email)}%`)
+      .ilike("email_primary", exactLookupPattern)
       .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
-      
+
+    if (!result.error && (result.data ?? []).length === 0) {
+      result = await client
+        .from("people")
+        .select("id,full_name,email_primary,phone_primary,source_sheets,data_quality_flags")
+        .ilike("email_primary", fallbackLookupPattern)
+        .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+    }
+
     if (result.error) return { error: result.error, candidates: [] };
     if ((result.data ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
       return { error: { message: "too many candidates" }, candidates: [] };
@@ -126,11 +137,23 @@ export async function resolveLegacyMentorCandidate(
   }
 
   if (row.legacyMentorCode) {
-    const codeLookup = await client
+    const exactCodePattern = escapeIlikePattern(row.legacyMentorCode);
+    const fallbackCodePattern = `%${exactCodePattern}%`;
+
+    let codeLookup = await client
       .from("mentor_profiles")
       .select("id,person_id,mentor_code")
-      .ilike("mentor_code", `%${escapeIlikePattern(row.legacyMentorCode)}%`)
+      .ilike("mentor_code", exactCodePattern)
       .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+
+    if (!codeLookup.error && (codeLookup.data ?? []).length === 0) {
+      codeLookup = await client
+        .from("mentor_profiles")
+        .select("id,person_id,mentor_code")
+        .ilike("mentor_code", fallbackCodePattern)
+        .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+    }
+
     if (codeLookup.error) {
       return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "mentor_code_lookup_failed" };
     }
@@ -138,7 +161,7 @@ export async function resolveLegacyMentorCandidate(
       return { rowNumber: row.rowNumber, ok: false, outcome: "FAILED", reason: "mentor_code_lookup_too_many_candidates" };
     }
     const codeOwners = (codeLookup.data ?? []).filter(
-      (profile: any) => String(profile.mentor_code ?? "").trim().toLowerCase() === row.legacyMentorCode.trim().toLowerCase()
+      (profile: any) => String(profile.mentor_code ?? "").trim().toLowerCase() === row.legacyMentorCode!.trim().toLowerCase()
     );
     if (codeOwners.some((profile: any) => String(profile.person_id) !== String(candidates[0]?.id ?? ""))) {
       return { rowNumber: row.rowNumber, ok: false, outcome: "CONFLICT", reason: "mentor_code_owned_by_another_person" };

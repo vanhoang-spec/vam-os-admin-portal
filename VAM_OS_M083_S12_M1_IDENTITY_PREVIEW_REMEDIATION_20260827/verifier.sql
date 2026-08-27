@@ -62,7 +62,10 @@ begin
   if v_count <> 0 then raise exception 'M083 VERIFY FAILED [APPLICATION_EMAIL_DUPLICATES]: %.', v_count; end if;
 
   select count(*) into v_count from (
-    select 1 from public.applications where person_id is not null
+    select 1 from public.applications
+    where person_id is not null
+      and season_id is not null
+      and role_applied is not null
     group by season_id, role_applied, person_id having count(*) > 1
   ) d;
   if v_count <> 0 then raise exception 'M083 VERIFY FAILED [APPLICATION_PERSON_DUPLICATES]: %.', v_count; end if;

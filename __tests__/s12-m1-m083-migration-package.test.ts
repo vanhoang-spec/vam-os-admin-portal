@@ -90,4 +90,14 @@ describe("S12-M1 M083 migration package", () => {
       expect(actualHash).toBe(hash);
     }
   });
+
+  it("proves legacy rows with NULL season_id or role_applied do NOT cause a false verifier failure", () => {
+    const apply = read("apply.sql");
+    const preflight = read("preflight.sql");
+    const verifier = read("verifier.sql");
+    const pattern = /where person_id is not null\s+and season_id is not null\s+and role_applied is not null/i;
+    expect(apply).toMatch(pattern);
+    expect(preflight).toMatch(pattern);
+    expect(verifier).toMatch(pattern);
+  });
 });

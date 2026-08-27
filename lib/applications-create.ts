@@ -148,7 +148,8 @@ export async function submitPilotApplication(
 
   const fullName = safeText(input.fullName);
   const emailPrimary = normalizeEmail(input.emailPrimary);
-  const emailLookupPattern = `%${escapeIlikePattern(emailPrimary)}%`;
+  const exactLookupPattern = escapeIlikePattern(emailPrimary);
+  const fallbackLookupPattern = `%${exactLookupPattern}%`;
   const phonePrimary = normalisePhone(input.phonePrimary);
   const gender = safeText(input.gender);
 
@@ -214,13 +215,29 @@ export async function submitPilotApplication(
   // changing case/whitespace or selecting another intake batch.
   // The `%...%` lookup exists to compensate for historical untrimmed/mixed-case
   // stored values, but canonical emailsEqual remains the authority.
-  const { data: duplicateCandidates, error: dupErr } = await client
+  // The `%...%` fallback exists to compensate for historical untrimmed/mixed-case
+  // stored values, but canonical emailsEqual remains the authority. We try exact first
+  // to avoid short emails matching many unrelated rows and overflowing the limit.
+  let { data: duplicateCandidates, error: dupErr } = await client
     .from("applications")
     .select("id,email_primary")
     .eq("season_id", seasonRow.id)
     .eq("role_applied", input.role)
-    .ilike("email_primary", emailLookupPattern)
+    .ilike("email_primary", exactLookupPattern)
     .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+
+  if (!dupErr && (duplicateCandidates ?? []).length === 0) {
+    const fallback = await client
+      .from("applications")
+      .select("id,email_primary")
+      .eq("season_id", seasonRow.id)
+      .eq("role_applied", input.role)
+      .ilike("email_primary", fallbackLookupPattern)
+      .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+    duplicateCandidates = fallback.data;
+    dupErr = fallback.error;
+  }
+
   if (dupErr) {
     log("duplicate check failed", dupErr);
     return { ok: false, code: "db", message: `${SAFE_ERROR} (dedup: ${dupErr.message})` };
@@ -243,11 +260,22 @@ export async function submitPilotApplication(
   // Link an already-known canonical identity without creating a person during
   // anonymous intake. Multiple exact canonical matches fail closed if
   // historical corruption has produced more than one person.
-  const { data: personCandidates, error: personLookupErr } = await client
+  let { data: personCandidates, error: personLookupErr } = await client
     .from("people")
     .select("id,email_primary")
-    .ilike("email_primary", emailLookupPattern)
+    .ilike("email_primary", exactLookupPattern)
     .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+
+  if (!personLookupErr && (personCandidates ?? []).length === 0) {
+    const fallback = await client
+      .from("people")
+      .select("id,email_primary")
+      .ilike("email_primary", fallbackLookupPattern)
+      .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+    personCandidates = fallback.data;
+    personLookupErr = fallback.error;
+  }
+
   if (personLookupErr) {
     log("person identity lookup failed", personLookupErr);
     return { ok: false, code: "db", message: `${SAFE_ERROR} (identity: ${personLookupErr.message})` };
