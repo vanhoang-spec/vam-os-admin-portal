@@ -14,6 +14,7 @@ import {
   CONFIRMATION_PHRASES,
   requiredCheckboxAcknowledgements
 } from "@/lib/application-commitments";
+import { RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD } from "@/lib/renewal-types";
 
 const IDS = {
   invite: "00000000-0000-4000-8000-000000000001",
@@ -62,6 +63,7 @@ function invite(token: string): RenewalInviteRow {
 function acceptedForm() {
   const form = new FormData();
   form.set("participation_confirmed", "yes");
+  form.set(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD, "yes");
   form.set("consent_data_storage", "yes");
   form.set("company_current", "Acme");
   form.set("title_current", "Director");
@@ -69,7 +71,9 @@ function acceptedForm() {
   form.set("industry_primary", "Education");
   form.set("years_of_experience", "11-15");
   form.set("mentor_total_work_years", "12");
+  form.set("mentor_people_management_years", "5");
   form.set("mentoring_capacity_total", "1");
+  form.set("mentoring_topics", "Phát triển nghề nghiệp và chiến lược");
   form.set("university", "UEH");
   form.set("programs_willing_to_join", "UEHM");
   for (const entry of requiredCheckboxAcknowledgements("mentor")) form.set(entry.key, "true");
@@ -168,13 +172,16 @@ describe("P0 public renewal submission boundary", () => {
       p_token_hash: tokenHash,
       p_raw_payload: {
         participation_confirmed: true,
+        profile_review_confirmed: true,
         company_current: "Acme",
         title_current: "Director",
         function_primary: "Strategy",
         industry_primary: "Education",
         years_of_experience: "11-15",
-        mentor_total_work_years: "12",
+        mentor_total_work_years: 12,
+        mentor_people_management_years: 5,
         mentoring_capacity_total: 1,
+        mentoring_topics: "Phát triển nghề nghiệp và chiến lược",
         university: "UEH",
         programs_willing_to_join: ["UEHM"],
         commitments: expectedCommitments(),

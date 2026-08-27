@@ -16,6 +16,14 @@ export type RenewalMenteeCapacity = (typeof RENEWAL_MENTEE_CAPACITY_CHOICES)[num
 
 export const RENEWAL_MENTEE_CAPACITY_DEFAULT: RenewalMenteeCapacity = 1;
 
+/** A deliberately generous human-career ceiling used by both the UI and server gate. */
+export const RENEWAL_MAX_EXPERIENCE_YEARS = 80;
+
+export const RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD = "profile_review_confirmed";
+
+export const RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT =
+  "Tôi xác nhận đã kiểm tra và cập nhật các thông tin nghề nghiệp ở trên theo tình trạng hiện tại của tôi cho Season 12.";
+
 export function isRenewalMenteeCapacity(value: unknown): value is RenewalMenteeCapacity {
   return (RENEWAL_MENTEE_CAPACITY_CHOICES as readonly number[]).includes(value as number);
 }

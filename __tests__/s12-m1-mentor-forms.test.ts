@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { enforceOtherDetails, MENTOR_OTHER_DETAIL_RULES } from "@/lib/application-form-validation";
 import { MENTOR_PROGRAM_OPTIONS, MENTOR_SUPPORT_CONTACTS, MENTOR_UNIVERSITY_OPTIONS } from "@/lib/mentor-intake-content";
 import { validateRenewalAcceptance } from "@/lib/renewal-runtime";
+import { RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD } from "@/lib/renewal-types";
 import { ACTIVE_READING_KEYS, CONFIRMATION_PHRASES, requiredCheckboxAcknowledgements } from "@/lib/application-commitments";
 
 function renewalForm(overrides: Record<string, string | null> = {}) {
@@ -13,12 +14,15 @@ function renewalForm(overrides: Record<string, string | null> = {}) {
     company_current: "Acme",
     title_current: "Director",
     mentor_total_work_years: "12",
+    mentor_people_management_years: "5",
     years_of_experience: "11-15",
     industry_primary: "education",
     function_primary: "strategy",
     mentoring_capacity_total: "2",
+    mentoring_topics: "Career strategy and leadership",
     university: "UEH",
     programs_willing_to_join: "UEHM",
+    [RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD]: "yes",
     [ACTIVE_READING_KEYS.mentor]: CONFIRMATION_PHRASES.mentor,
     ...overrides
   })) {

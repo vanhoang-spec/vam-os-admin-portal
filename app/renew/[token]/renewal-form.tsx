@@ -11,8 +11,11 @@ import {
   requiredCheckboxAcknowledgements
 } from "@/lib/application-commitments";
 import {
+  RENEWAL_MAX_EXPERIENCE_YEARS,
   RENEWAL_MENTEE_CAPACITY_CHOICES,
-  RENEWAL_MENTEE_CAPACITY_DEFAULT
+  RENEWAL_MENTEE_CAPACITY_DEFAULT,
+  RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
+  RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT
 } from "@/lib/renewal-types";
 import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS } from "@/lib/mentor-intake-content";
 import { MentorProfileIntro } from "@/app/apply/_components/mentor-profile-intro";
@@ -20,6 +23,10 @@ import { MentorSupportContacts } from "@/app/apply/_components/mentor-support-co
 
 function fieldClass() {
   return "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink focus:border-vam-green focus:outline-none focus:ring-2 focus:ring-vam-mint";
+}
+
+function RequiredIndicator() {
+  return <span className="text-red-700"> — Bắt buộc</span>;
 }
 
 function Feedback({ ok, message }: { ok: boolean; message: string }) {
@@ -88,40 +95,47 @@ export function RenewalForm({
           <p className="mt-1 text-sm text-slate-600">
             Vui lòng kiểm tra và xác nhận lại các thông tin có thể thay đổi theo mùa. Các trường bắt buộc phải hợp lệ cho lần xác nhận Season 12 này.
           </p>
+          <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+            Các giá trị đã có trong hồ sơ được điền sẵn bên dưới. Nếu thông tin vẫn đúng, anh/chị chỉ cần kiểm tra và giữ nguyên; không cần nhập lại.
+          </p>
         </div>
 
         <label className="flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm">
           <input className="mt-0.5" type="checkbox" name="participation_confirmed" value="yes" required />
-          <span>Tôi xác nhận tiếp tục tham gia với vai trò mentor trong Season 12.</span>
+          <span>Tôi xác nhận tiếp tục tham gia với vai trò mentor trong Season 12.<RequiredIndicator /></span>
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-medium text-vam-ink">
-            Công ty hiện tại
+            Công ty / Tổ chức hiện tại<RequiredIndicator />
             <input className={fieldClass()} name="company_current" defaultValue={display.companyCurrent ?? ""} required />
           </label>
           <label className="text-sm font-medium text-vam-ink">
-            Chức danh hiện tại
+            Chức danh / Vị trí hiện tại<RequiredIndicator />
             <input className={fieldClass()} name="title_current" defaultValue={display.titleCurrent ?? ""} required />
           </label>
           <label className="text-sm font-medium text-vam-ink">
-            Lĩnh vực chuyên môn
+            Chức năng chuyên môn / Functional expertise<RequiredIndicator />
             <input className={fieldClass()} name="function_primary" defaultValue={display.functionArea ?? ""} required />
           </label>
           <label className="text-sm font-medium text-vam-ink">
-            Ngành
+            Ngành nghề / Lĩnh vực<RequiredIndicator />
             <input className={fieldClass()} name="industry_primary" defaultValue={display.industry ?? ""} required />
           </label>
           <label className="text-sm font-medium text-vam-ink">
-            Số năm kinh nghiệm chính xác
-            <input className={fieldClass()} type="number" min="0" step="1" name="mentor_total_work_years" defaultValue={display.yearsExperienceMin ?? ""} required />
+            Tổng số năm kinh nghiệm làm việc<RequiredIndicator />
+            <input className={fieldClass()} type="number" min="0" max={RENEWAL_MAX_EXPERIENCE_YEARS} step="1" name="mentor_total_work_years" defaultValue={display.yearsExperienceMin ?? ""} required />
           </label>
           <label className="text-sm font-medium text-vam-ink">
-            Nhóm kinh nghiệm
+            Tổng số năm kinh nghiệm quản lý con người / đội ngũ<RequiredIndicator />
+            <input className={fieldClass()} type="number" min="0" max={RENEWAL_MAX_EXPERIENCE_YEARS} step="1" name="mentor_people_management_years" required />
+          </label>
+          <label className="text-sm font-medium text-vam-ink sm:col-span-2">
+            Nhóm kinh nghiệm làm việc<RequiredIndicator />
             <input className={fieldClass()} name="years_of_experience" defaultValue={display.yearsExperienceText ?? ""} required />
           </label>
           <fieldset className="sm:col-span-2">
-            <legend className="text-sm font-medium text-vam-ink mb-2">Số mentee có thể đồng hành tối đa trong mùa này</legend>
+            <legend className="text-sm font-medium text-vam-ink mb-2">Số mentee có thể nhận trong Season 12<RequiredIndicator /></legend>
             <div className="flex gap-4">
               {RENEWAL_MENTEE_CAPACITY_CHOICES.map((num) => (
                 <label key={num} className="flex items-center gap-2 text-sm text-vam-ink">
@@ -141,7 +155,20 @@ export function RenewalForm({
             ) : null}
           </fieldset>
           <label className="text-sm font-medium text-vam-ink sm:col-span-2">
-            Anh/chị tốt nghiệp trường đại học nào?
+            Chủ đề / lĩnh vực mentor có thể hỗ trợ<RequiredIndicator />
+            <textarea
+              className={fieldClass()}
+              name="mentoring_topics"
+              rows={4}
+              maxLength={2000}
+              required
+            />
+            <span className="mt-1 block text-xs font-normal text-slate-500">
+              Nêu các chủ đề cụ thể anh/chị có thể đồng hành trong Season 12. Nội dung này được lưu cùng hồ sơ gia hạn hiện tại.
+            </span>
+          </label>
+          <label className="text-sm font-medium text-vam-ink sm:col-span-2">
+            Anh/chị tốt nghiệp trường đại học nào?<RequiredIndicator />
             <select className={fieldClass()} name="university" required value={university} onChange={(event) => setUniversity(event.target.value)}>
               <option value="">Chọn trường đại học…</option>
               {MENTOR_UNIVERSITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -154,7 +181,7 @@ export function RenewalForm({
             </label>
           ) : null}
           <fieldset className="sm:col-span-2">
-            <legend className="mb-2 text-sm font-medium text-vam-ink">Chương trình anh/chị sẵn sàng tham gia</legend>
+            <legend className="mb-2 text-sm font-medium text-vam-ink">Chương trình anh/chị sẵn sàng tham gia trong mùa hiện tại<RequiredIndicator /></legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {MENTOR_PROGRAM_OPTIONS.map((option) => (
                 <label key={option.value} className="flex items-start gap-2 rounded-md border border-vam-line bg-slate-50 p-3 text-sm">
@@ -215,7 +242,18 @@ export function RenewalForm({
 
         <label className="flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm">
           <input className="mt-0.5" type="checkbox" name="consent_data_storage" value="yes" required />
-          <span>Tôi đồng ý để VAM lưu trữ và sử dụng dữ liệu này cho hoạt động Season 12.</span>
+          <span><strong>Quyền riêng tư:</strong> Tôi đồng ý để VAM lưu trữ và sử dụng dữ liệu này cho hoạt động Season 12.<RequiredIndicator /></span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-md border-2 border-vam-green bg-vam-mint/40 p-4 text-sm">
+          <input
+            className="mt-0.5"
+            type="checkbox"
+            name={RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD}
+            value="yes"
+            required
+          />
+          <span><strong>Xác nhận rà soát hồ sơ — Bắt buộc:</strong> {RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT}</span>
         </label>
 
         <Feedback ok={acceptState.ok} message={acceptState.message} />

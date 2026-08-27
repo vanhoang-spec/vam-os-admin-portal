@@ -25,7 +25,9 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { MENTOR_PROGRAM_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   isRenewalMenteeCapacity,
+  RENEWAL_MAX_EXPERIENCE_YEARS,
   RENEWAL_MENTEE_CAPACITY_CHOICES,
+  RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
   type RenewalAdminActionState,
   type RenewalConfirmationIntent,
   type RenewalMentorProfile,
@@ -104,6 +106,8 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
 
   const payload: Record<string, unknown> = {
     participation_confirmed: formData.get("participation_confirmed") === "yes",
+    [RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD]:
+      formData.get(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD) === "yes",
     commitments,
     commitments_completed: commitmentsCompleted,
     core_team_note: nonBlank(formData, "core_team_note"),
@@ -119,14 +123,22 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
     "industry_primary",
     "years_of_experience",
     "mentor_total_work_years",
-    "mentoring_capacity_total"
+    "mentor_people_management_years",
+    "mentoring_capacity_total",
+    "mentoring_topics"
   ]) {
     const value = nonBlank(formData, key);
     if (value === undefined) continue;
     // Number("") is 0 and Number("abc") is NaN; nonBlank has already removed
-    // the empty case, and the acceptance gate refuses anything that is not one
-    // of the offered choices, so no unvalidated number reaches M071.
-    payload[key] = key === "mentoring_capacity_total" ? Number(value) : value;
+    // the empty case, and the acceptance gate bounds every numeric value before
+    // anything reaches M071.
+    payload[key] = [
+      "mentor_total_work_years",
+      "mentor_people_management_years",
+      "mentoring_capacity_total"
+    ].includes(key)
+      ? Number(value)
+      : value;
   }
 
   for (const [key, value] of Object.entries(payload)) {
@@ -281,6 +293,12 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
   if (payload.participation_confirmed !== true) {
     return { ok: false, message: "Vui lòng xác nhận tiếp tục đồng hành trong Season 12." };
   }
+  if (payload[RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD] !== true) {
+    return {
+      ok: false,
+      message: "Vui lòng xác nhận đã kiểm tra thông tin nghề nghiệp hiện tại cho Season 12."
+    };
+  }
   if (formData.get("consent_data_storage") !== "yes") {
     return { ok: false, message: "Vui lòng đồng ý lưu trữ dữ liệu để gửi xác nhận gia hạn." };
   }
@@ -296,16 +314,37 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
     ["company_current", "công ty hiện tại"],
     ["title_current", "chức danh hiện tại"],
     ["mentor_total_work_years", "số năm kinh nghiệm"],
+    ["mentor_people_management_years", "số năm kinh nghiệm quản lý con người/đội ngũ"],
     ["industry_primary", "ngành nghề chính"],
-    ["function_primary", "chức năng/chuyên môn chính"]
+    ["function_primary", "chức năng/chuyên môn chính"],
+    ["years_of_experience", "nhóm kinh nghiệm làm việc"],
+    ["mentoring_topics", "chủ đề/lĩnh vực có thể hỗ trợ mentee"]
   ] as const;
   const missingSeasonField = requiredSeasonFields.find(([key]) => !String(payload[key] ?? "").trim());
   if (missingSeasonField) {
     return { ok: false, message: `Vui lòng xác nhận ${missingSeasonField[1]} cho Season 12.` };
   }
   const workYears = Number(payload.mentor_total_work_years);
-  if (!Number.isInteger(workYears) || workYears < 0) {
-    return { ok: false, message: "Số năm kinh nghiệm phải là số nguyên không âm." };
+  if (!Number.isInteger(workYears) || workYears < 0 || workYears > RENEWAL_MAX_EXPERIENCE_YEARS) {
+    return {
+      ok: false,
+      message: `Số năm kinh nghiệm phải là số nguyên từ 0 đến ${RENEWAL_MAX_EXPERIENCE_YEARS}.`
+    };
+  }
+  const managementYears = Number(payload.mentor_people_management_years);
+  if (
+    !Number.isInteger(managementYears) ||
+    managementYears < 0 ||
+    managementYears > RENEWAL_MAX_EXPERIENCE_YEARS ||
+    managementYears > workYears
+  ) {
+    return {
+      ok: false,
+      message: `Số năm kinh nghiệm quản lý phải là số nguyên từ 0 đến ${workYears}.`
+    };
+  }
+  if (String(payload.mentoring_topics).length > 2000) {
+    return { ok: false, message: "Chủ đề mentoring không được vượt quá 2.000 ký tự." };
   }
   const university = String(payload.university ?? "");
   if (!["UEH", "OTHER"].includes(university)) {

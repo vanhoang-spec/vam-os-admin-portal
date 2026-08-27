@@ -9,6 +9,10 @@ import {
   acknowledgementsForRole,
   requiredCheckboxAcknowledgements
 } from "@/lib/application-commitments";
+import {
+  RENEWAL_MENTEE_CAPACITY_CHOICES,
+  RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD
+} from "@/lib/renewal-types";
 import { loadRenewalConsoleData } from "@/lib/renewal-console";
 import { buildRenewalProfileDiff, buildRenewalProfileRefresh } from "@/lib/renewal-profile-safety";
 import { hashRenewalInviteToken, mintRenewalInviteToken } from "@/lib/renewal-invite-token";
@@ -19,7 +23,6 @@ import {
   submitRenewalDeclined,
   validateRenewalAcceptance
 } from "@/lib/renewal-runtime";
-import { RENEWAL_MENTEE_CAPACITY_CHOICES } from "@/lib/renewal-types";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 const IDS = {
@@ -71,6 +74,7 @@ function declineClient(rpcImpl?: any) {
 function acceptedForm(overrides: Record<string, string> = {}) {
   const form = new FormData();
   form.set("participation_confirmed", "yes");
+  form.set(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD, "yes");
   form.set("consent_data_storage", "yes");
   form.set("company_current", "Acme");
   form.set("title_current", "Director");
@@ -78,7 +82,9 @@ function acceptedForm(overrides: Record<string, string> = {}) {
   form.set("industry_primary", "Education");
   form.set("years_of_experience", "11-15");
   form.set("mentor_total_work_years", "12");
+  form.set("mentor_people_management_years", "5");
   form.set("mentoring_capacity_total", "1");
+  form.set("mentoring_topics", "Phát triển nghề nghiệp và chiến lược");
   form.set("university", "UEH");
   form.set("programs_willing_to_join", "UEHM");
   for (const entry of requiredCheckboxAcknowledgements("mentor")) form.set(entry.key, "true");
@@ -401,6 +407,9 @@ describe("M073 operational evidence never becomes a mentor profile field", () =>
       "commitments_completed",
       "core_team_note",
       "decline_feedback",
+      "mentor_people_management_years",
+      "mentoring_topics",
+      RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
       ACTIVE_READING_KEYS.mentor
     ]) {
       expect(`${forbidden}:${forbidden in refresh}`).toBe(`${forbidden}:false`);
