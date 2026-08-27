@@ -44,7 +44,7 @@ function SubHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function MentorProfileIntro() {
+export function MentorProfileIntro({ includeApplicationProcess = true }: { includeApplicationProcess?: boolean }) {
   return (
     <section className="rounded-lg border border-vam-line bg-white p-5 shadow-soft sm:p-6">
       <h2 className="text-base font-semibold text-vam-ink sm:text-lg">
@@ -101,7 +101,7 @@ export function MentorProfileIntro() {
       </div>
 
       {/* Quy trình trở thành Mentor chính thức */}
-      <div className="mt-5">
+      {includeApplicationProcess ? <div className="mt-5">
         <SubHeading>Quy trình trở thành Mentor chính thức</SubHeading>
         <p className="mt-2 text-sm leading-6 text-slate-600">
           👉 Để trở thành Mentor chính thức của chương trình, Anh/Chị sẽ đi qua 03 bước sau:
@@ -131,13 +131,13 @@ export function MentorProfileIntro() {
             </li>
           ))}
         </ol>
-      </div>
+      </div> : null}
 
       {/* Closing */}
-      <p className="mt-4 border-t border-vam-line pt-4 text-sm leading-6 text-slate-600">
+      {includeApplicationProcess ? <p className="mt-4 border-t border-vam-line pt-4 text-sm leading-6 text-slate-600">
         Sau khi hoàn tất 03 bước trên, Anh/Chị sẽ được chính thức xác nhận là Mentor của chương
         trình và sẵn sàng bước vào hành trình đồng hành cùng các Mentee.
-      </p>
+      </p> : null}
     </section>
   );
 }

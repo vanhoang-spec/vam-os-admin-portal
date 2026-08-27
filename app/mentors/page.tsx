@@ -143,8 +143,8 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
       <ErrorBox message={cohort.error || mentors.error || people.error || matches.error || intakeBatches.error || seasons.error} />
       <FilterableTable
         rows={rows}
-        searchPlaceholder="Tìm theo tên, email, công ty, chức danh, ngành hoặc chức năng"
-        searchKeys={["full_name", "email_primary", "company_current", "title_current", "industry", "function_area"]}
+        searchPlaceholder="Tìm theo tên, mã mentor, email, công ty, chức danh, ngành hoặc chức năng"
+        searchKeys={["full_name", "mentor_code", "email_primary", "company_current", "title_current", "industry", "function_area"]}
         filters={[
           { key: "industry", label: "Ngành", valueKey: "industry_display" },
           { key: "function_area", label: "Chức năng", valueKey: "function_area_display" },

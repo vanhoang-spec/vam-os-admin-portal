@@ -59,6 +59,13 @@ function mockClient() {
         insert: applicationInsert
       };
     }
+    if (table === "people") {
+      const chain: Record<string, any> = {};
+      chain.select = vi.fn(() => chain);
+      chain.ilike = vi.fn(() => chain);
+      chain.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
+      return chain;
+    }
     throw new Error(`Unexpected table: ${table}`);
   });
 

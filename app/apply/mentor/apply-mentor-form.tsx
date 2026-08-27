@@ -5,6 +5,8 @@ import { useFormState } from "react-dom";
 import { submitMentorApplicationAction } from "@/app/actions/apply";
 import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import { MentorProfileIntro } from "../_components/mentor-profile-intro";
+import { MentorSupportContacts } from "../_components/mentor-support-contacts";
+import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -139,15 +141,6 @@ const LANGUAGE_OPTIONS = [
   { value: "en", label: "English" }
 ];
 
-const PROGRAM_OPTIONS = [
-  { value: "UEHM", label: "UEH Mentoring (ĐH Kinh tế TP.HCM)" },
-  { value: "HAM", label: "Hanoi Alumni Mentoring" },
-  { value: "BK", label: "BK Mentoring (Đại học Bách Khoa TP.HCM)" },
-  { value: "HUFLIT", label: "HUFLIT Mentoring (ĐH Ngoại ngữ - Tin học TP.HCM)" },
-  { value: "HUB", label: "HUB Mentoring (ĐH Ngân hàng TP.HCM)" },
-  { value: "DUE", label: "DUE Mentoring (Đại học Kinh tế Đà Nẵng)" }
-];
-
 const ACTIVITY_OPTIONS = [
   { value: "training_sharing", label: "Training / chia sẻ chuyên đề" },
   { value: "cross_mentoring", label: "Cross mentoring" },
@@ -163,6 +156,7 @@ const REFERRER_OPTIONS = [
   { value: "friend", label: "Bạn bè" },
   { value: "social_media", label: "Mạng xã hội" },
   { value: "website", label: "Website chương trình" },
+  { value: "ueh_alumni", label: "UEH Alumni" },
   { value: "alumni_referral", label: "Cựu mentor giới thiệu" },
   { value: "other", label: "Khác" }
 ];
@@ -270,6 +264,13 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
           options={HIGHEST_DEGREE_OPTIONS}
           otherInput={{ name: "highest_degree_other", label: "Vui lòng ghi rõ" }}
         />
+        <SelectField
+          name="university"
+          label="Anh/chị tốt nghiệp trường đại học nào?"
+          required
+          options={[...MENTOR_UNIVERSITY_OPTIONS]}
+          otherInput={{ name: "university_other", label: "Tên trường đại học" }}
+        />
       </FormSection>
 
       <FormSection title="5. Kinh nghiệm mentoring & sẵn sàng">
@@ -342,7 +343,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
           name="programs_willing_to_join"
           label="Chương trình anh/chị sẵn sàng tham gia (chọn 1 hoặc nhiều)"
           required
-          options={PROGRAM_OPTIONS}
+          options={[...MENTOR_PROGRAM_OPTIONS]}
           defaultSelected={["UEHM"]}
         />
         <CheckboxGroupField
@@ -470,6 +471,8 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
           />
         </div>
       </FormSection>
+
+      <MentorSupportContacts />
 
     </ApplicationForm>
   );

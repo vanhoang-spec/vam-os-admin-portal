@@ -1,5 +1,7 @@
 import "server-only";
 
+import { emailsEqual, normalizeEmail } from "@/lib/identity";
+
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { JsonRecord, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
@@ -196,7 +198,7 @@ async function findPersonByEmail(
     return { ok: false };
   }
   const person = (data as Person) ?? null;
-  if (person && person.email_primary?.trim().toLowerCase() !== email) {
+  if (person && !emailsEqual(person.email_primary, email)) {
     log("findPersonByEmail returned a non-exact candidate", { code: "IDENTITY_MISMATCH" });
     return { ok: false };
   }
@@ -380,7 +382,7 @@ export async function approveApplication(
   let person: Person | null = null;
   let personCreated = false;
 
-  const emailNorm = input.emailPrimary?.trim().toLowerCase() ?? null;
+  const emailNorm = input.emailPrimary ? normalizeEmail(input.emailPrimary) : null;
 
   // An existing application linkage is authoritative. For an unlinked
   // application, email lookup must resolve zero or one row; maybeSingle fails

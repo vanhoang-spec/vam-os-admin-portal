@@ -54,6 +54,7 @@ export const MENTOR_OTHER_DETAIL_RULES: readonly OtherDetailRule[] = [
   { parentKey: "industry_primary", detailKey: "industry_primary_other", fieldLabel: "Ngành nghề chính" },
   { parentKey: "function_primary", detailKey: "function_primary_other", fieldLabel: "Chức năng / chuyên môn chính" },
   { parentKey: "highest_degree", detailKey: "highest_degree_other", fieldLabel: "Bằng cấp cao nhất" },
+  { parentKey: "university", detailKey: "university_other", fieldLabel: "Trường đại học", triggerValue: "OTHER" },
   {
     parentKey: "activities_willing_to_support",
     detailKey: "activities_willing_to_support_other",

@@ -63,7 +63,8 @@ describe("S12 UAT — every applicable Other detail is enforced server-side", ()
     "highest_degree",
     "activities_willing_to_support",
     "referrer_or_source",
-    "secondary_industries_functions"
+    "secondary_industries_functions",
+    "university"
   ];
   const REQUIRED_MENTEE_PARENTS = [
     "gender",
@@ -213,8 +214,8 @@ describe("S12 UAT — program selection and recruitment binding stay separate", 
   });
 
   it("lists exactly the active programs and no FTU", () => {
-    const source = read(MENTOR_FORM);
-    const block = source.slice(source.indexOf("const PROGRAM_OPTIONS"));
+    const source = read("lib/mentor-intake-content.ts");
+    const block = source.slice(source.indexOf("MENTOR_PROGRAM_OPTIONS"));
     const options = block.slice(0, block.indexOf("];"));
     for (const code of ["UEHM", "HAM", "BK", "HUFLIT", "HUB", "DUE"]) {
       expect(options).toContain(`value: "${code}"`);

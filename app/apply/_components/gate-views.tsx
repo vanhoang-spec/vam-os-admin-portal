@@ -27,7 +27,7 @@ export function ClosedFormView({ reason }: { reason?: string }) {
 export function PilotModeBanner() {
   return (
     <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-      <strong>Chế độ pilot:</strong> form này chỉ mở cho danh sách được BTC mời. Vui lòng
+      <strong>Form theo lời mời:</strong> form này chỉ mở cho danh sách được BTC mời. Vui lòng
       không chia sẻ đường link.
     </div>
   );

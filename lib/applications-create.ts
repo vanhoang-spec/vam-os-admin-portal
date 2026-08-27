@@ -2,6 +2,7 @@ import "server-only";
 
 import { evaluateApplyGate } from "@/lib/apply-gate";
 import { S12_BINDING } from "@/lib/application-form-controls";
+import { isValidEmail, normalizeEmail } from "@/lib/identity";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord } from "@/lib/types";
 
@@ -86,10 +87,6 @@ function clientResult() {
   return { client, error: null } as const;
 }
 
-function normaliseEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
 function normalisePhone(value: string) {
   return value.replace(/\s+/g, "").trim();
 }
@@ -104,8 +101,8 @@ function safeText(value: string | null | undefined) {
  *
  * Behavior:
  *   - Resolves season + intake_batch by code.
- *   - Blocks duplicates: same intake_batch + same role_applied + same
- *     normalised email returns code='duplicate'.
+ *   - Blocks duplicates: same season + same role_applied + same canonical
+ *     email returns code='duplicate'.
  *   - Writes `applications` and optional `application_answers`. Does NOT touch
  *     people, profiles, matches, or review/decision tables.
  *   - Uses service-role client so RLS does not block the anonymous form.
@@ -148,14 +145,14 @@ export async function submitPilotApplication(
   }
 
   const fullName = safeText(input.fullName);
-  const emailPrimary = normaliseEmail(input.emailPrimary);
+  const emailPrimary = normalizeEmail(input.emailPrimary);
   const phonePrimary = normalisePhone(input.phonePrimary);
   const gender = safeText(input.gender);
 
   if (!fullName) {
     return { ok: false, code: "validation", message: "Họ tên không được để trống." };
   }
-  if (!emailPrimary || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPrimary)) {
+  if (!isValidEmail(emailPrimary)) {
     return { ok: false, code: "validation", message: "Email không hợp lệ." };
   }
   if (!phonePrimary) {
@@ -209,11 +206,13 @@ export async function submitPilotApplication(
   // The role gate was evaluated at the top of this function, against the
   // database rather than an environment variable. Nothing re-checks it here.
 
-  // Duplicate check: same batch + same role + same normalised email
+  // Duplicate check: same season + same role + same canonical email. A person
+  // may apply again in a later season, but not twice for this season merely by
+  // changing case/whitespace or selecting another intake batch.
   const { data: dupRow, error: dupErr } = await client
     .from("applications")
     .select("id")
-    .eq("intake_batch_id", batchRow.id)
+    .eq("season_id", seasonRow.id)
     .eq("role_applied", input.role)
     .ilike("email_primary", emailPrimary)
     .limit(1)
@@ -231,8 +230,22 @@ export async function submitPilotApplication(
     };
   }
 
+  // Link an already-known canonical identity without creating a person during
+  // anonymous intake. maybeSingle fails closed if historical corruption has
+  // produced more than one person for the same canonical email.
+  const { data: existingPerson, error: personLookupErr } = await client
+    .from("people")
+    .select("id,email_primary")
+    .ilike("email_primary", emailPrimary)
+    .maybeSingle();
+  if (personLookupErr) {
+    log("person identity lookup failed", personLookupErr);
+    return { ok: false, code: "db", message: `${SAFE_ERROR} (identity: ${personLookupErr.message})` };
+  }
+
   // Insert
   const insertPayload = {
+    person_id: existingPerson?.id ?? null,
     season_id: seasonRow.id,
     intake_batch_id: batchRow.id,
     role_applied: input.role,
@@ -254,6 +267,13 @@ export async function submitPilotApplication(
     .maybeSingle();
 
   if (insertErr) {
+    if ((insertErr as { code?: string }).code === "23505") {
+      return {
+        ok: false,
+        code: "duplicate",
+        message: "Email này đã có đơn đăng ký cho Season 12. Nếu cần điều chỉnh thông tin, vui lòng liên hệ BTC."
+      };
+    }
     log("insert applications failed", insertErr);
     return { ok: false, code: "db", message: `${SAFE_ERROR} (applications: ${insertErr.message})` };
   }

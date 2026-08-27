@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getScopedPersonIds } from "@/lib/data";
 import { isValidUuid } from "@/lib/events";
+import { normalizeEmail } from "@/lib/identity";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter, getAllowedProgramIds, type AdminScopeContext, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord, MenteeProfile, MentorProfile, Person } from "@/lib/types";
@@ -104,7 +105,7 @@ function clean(value: unknown) {
 }
 
 function cleanEmail(value: unknown) {
-  const text = String(value ?? "").trim().toLowerCase();
+  const text = normalizeEmail(value);
   return text || null;
 }
 

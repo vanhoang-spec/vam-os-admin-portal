@@ -38,6 +38,13 @@ function mockClient(options: { answersError?: unknown; cleanupError?: unknown } 
     if (table === "application_answers") {
       return { insert: vi.fn(async () => ({ error: options.answersError ?? null })) };
     }
+    if (table === "people") {
+      const chain: Record<string, any> = {};
+      chain.select = vi.fn(() => chain);
+      chain.ilike = vi.fn(() => chain);
+      chain.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
+      return chain;
+    }
     if (table === "applications") {
       return {
         select: vi.fn(() => {

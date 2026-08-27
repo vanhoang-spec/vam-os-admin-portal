@@ -72,7 +72,15 @@ function acceptedForm(overrides: Record<string, string> = {}) {
   const form = new FormData();
   form.set("participation_confirmed", "yes");
   form.set("consent_data_storage", "yes");
+  form.set("company_current", "Acme");
+  form.set("title_current", "Director");
+  form.set("function_primary", "Strategy");
+  form.set("industry_primary", "Education");
+  form.set("years_of_experience", "11-15");
+  form.set("mentor_total_work_years", "12");
   form.set("mentoring_capacity_total", "1");
+  form.set("university", "UEH");
+  form.set("programs_willing_to_join", "UEHM");
   for (const entry of requiredCheckboxAcknowledgements("mentor")) form.set(entry.key, "true");
   form.set(ACTIVE_READING_KEYS.mentor, CONFIRMATION_PHRASES.mentor);
   for (const [key, value] of Object.entries(overrides)) {

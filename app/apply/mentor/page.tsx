@@ -4,7 +4,7 @@ import { ApplyMentorForm } from "./apply-mentor-form";
 
 export const metadata = {
   title: "Đăng ký mentor — VAM Mentoring Season 12",
-  description: "Đơn đăng ký pilot dành cho mentor mùa 12."
+  description: "Đơn đăng ký dành cho mentor mùa 12."
 };
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,7 @@ export default async function ApplyMentorPage(props: { searchParams?: Promise<{ 
       {gate.state === "pilot" ? <PilotModeBanner /> : null}
       <header className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-vam-green">
-          Vietnam Alumni Mentoring · Season 12 · Batch 1 (Pilot)
+          Vietnam Alumni Mentoring · Season 12
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-vam-ink sm:text-3xl">
           Đơn đăng ký mentor

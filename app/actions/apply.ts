@@ -168,6 +168,8 @@ export async function submitMentorApplicationAction(
       secondary_industries_functions_other: formText(formData, "secondary_industries_functions_other") || null,
       highest_degree: formText(formData, "highest_degree") || null,
       highest_degree_other: formText(formData, "highest_degree_other") || null,
+      university: formText(formData, "university"),
+      university_other: formText(formData, "university_other") || null,
       // Section 5 — mentoring readiness
       prior_vam_involvement: formText(formData, "prior_vam_involvement") || null,
       first_vam_season: formText(formData, "first_vam_season") || null,
@@ -207,6 +209,7 @@ export async function submitMentorApplicationAction(
       years_of_experience: rawPayload.years_of_experience,
       industry_primary: rawPayload.industry_primary,
       function_primary: rawPayload.function_primary,
+      university: rawPayload.university,
       motivation_text: rawPayload.motivation_text,
       can_attend_orientation: rawPayload.can_attend_orientation,
       open_to_intro_call: rawPayload.open_to_intro_call,

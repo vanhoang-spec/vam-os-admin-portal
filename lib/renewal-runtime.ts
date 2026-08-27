@@ -22,6 +22,7 @@ import {
   type RenewalProfileDiffEntry
 } from "@/lib/renewal-profile-safety";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { MENTOR_PROGRAM_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   isRenewalMenteeCapacity,
   RENEWAL_MENTEE_CAPACITY_CHOICES,
@@ -77,6 +78,10 @@ function nonBlank(formData: FormData, key: string) {
   return value || undefined;
 }
 
+function selectedValues(formData: FormData, key: string): string[] {
+  return formData.getAll(key).map((value) => String(value).trim()).filter(Boolean);
+}
+
 /**
  * P0 submission envelope supplied to M071. Identity and binding fields are
  * intentionally impossible to add here; M071 obtains them from the invite.
@@ -101,7 +106,10 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
     participation_confirmed: formData.get("participation_confirmed") === "yes",
     commitments,
     commitments_completed: commitmentsCompleted,
-    core_team_note: nonBlank(formData, "core_team_note")
+    core_team_note: nonBlank(formData, "core_team_note"),
+    university: nonBlank(formData, "university"),
+    university_other: nonBlank(formData, "university_other"),
+    programs_willing_to_join: selectedValues(formData, "programs_willing_to_join")
   };
 
   for (const key of [
@@ -282,6 +290,37 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
       ok: false,
       message: `Vui lòng chọn số mentee có thể đồng hành: ${RENEWAL_MENTEE_CAPACITY_CHOICES.join(", ")}.`
     };
+  }
+
+  const requiredSeasonFields = [
+    ["company_current", "công ty hiện tại"],
+    ["title_current", "chức danh hiện tại"],
+    ["mentor_total_work_years", "số năm kinh nghiệm"],
+    ["industry_primary", "ngành nghề chính"],
+    ["function_primary", "chức năng/chuyên môn chính"]
+  ] as const;
+  const missingSeasonField = requiredSeasonFields.find(([key]) => !String(payload[key] ?? "").trim());
+  if (missingSeasonField) {
+    return { ok: false, message: `Vui lòng xác nhận ${missingSeasonField[1]} cho Season 12.` };
+  }
+  const workYears = Number(payload.mentor_total_work_years);
+  if (!Number.isInteger(workYears) || workYears < 0) {
+    return { ok: false, message: "Số năm kinh nghiệm phải là số nguyên không âm." };
+  }
+  const university = String(payload.university ?? "");
+  if (!["UEH", "OTHER"].includes(university)) {
+    return { ok: false, message: "Vui lòng chọn trường đại học đã tốt nghiệp." };
+  }
+  if (university === "OTHER" && !String(payload.university_other ?? "").trim()) {
+    return { ok: false, message: "Vui lòng nhập tên trường đại học." };
+  }
+  if (university !== "OTHER") delete payload.university_other;
+  const allowedPrograms = new Set(MENTOR_PROGRAM_OPTIONS.map((option) => option.value));
+  const programs = Array.isArray(payload.programs_willing_to_join)
+    ? payload.programs_willing_to_join.map(String)
+    : [];
+  if (!programs.length || programs.some((program) => !allowedPrograms.has(program))) {
+    return { ok: false, message: "Vui lòng chọn ít nhất một chương trình sẵn sàng tham gia." };
   }
 
   const missing = requiredCheckboxAcknowledgements("mentor").find(
