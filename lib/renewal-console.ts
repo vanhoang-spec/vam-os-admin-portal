@@ -4,6 +4,7 @@ import { readAllPages } from "@/lib/paged-read";
 import { buildRenewalProfileDiff, buildRenewalProfileRefresh, type RenewalProfileDiffEntry } from "@/lib/renewal-profile-safety";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { invitationSourceFromProvenance, type LegacyMentorSource } from "@/lib/legacy-mentor-import";
 
 type Row = Record<string, any>;
 
@@ -59,6 +60,8 @@ export type RenewalConsoleRow = {
   personId: string;
   personName: string;
   personEmail: string | null;
+  mentorCode: string | null;
+  inviteSource: "s11_renewal" | LegacyMentorSource;
   seasonCode: string;
   inviteState: "live" | "expired" | "revoked" | "accepted" | "declined";
   expiresAt: string;
@@ -130,7 +133,7 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
   if (!season) return { season: null, mentors: [], invites: [], error: "Không tìm thấy Season 12 canonical." };
 
   const [people, profiles, invites, applications, memberships] = await Promise.all([
-    readAllPages<Row>("people", "id,full_name,email_primary", (columns) => client.from("people").select(columns)),
+    readAllPages<Row>("people", "id,full_name,email_primary,data_quality_flags", (columns) => client.from("people").select(columns)),
     readAllPages<Row>("mentor_profiles", "id,person_id,mentor_code,company_current,title_current,years_experience_min,years_experience_text,capacity_target,industry,function_area,first_vam_season", (columns) => client.from("mentor_profiles").select(columns)),
     readAllPages<Row>("person_season_invites", "id,person_id,program_id,season_id,role,created_at,expires_at,revoked_at,submitted_at,outcome,application_id,decline_feedback", (columns) => client.from("person_season_invites").select(columns).eq("season_id", season.id).eq("role", "mentor")),
     readAllPages<Row>("applications", "id,person_id,season_id,status,source,raw_payload", (columns) => client.from("applications").select(columns).eq("season_id", season.id).eq("source", "s12_mentor_renewal")),
@@ -221,6 +224,8 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
         personId,
         personName: String(person?.full_name ?? "Không xác định"),
         personEmail: person?.email_primary ? String(person.email_primary) : null,
+        mentorCode: profile.mentor_code ? String(profile.mentor_code) : null,
+        inviteSource: invitationSourceFromProvenance(person?.data_quality_flags),
         seasonCode: season.code,
         inviteState: state,
         expiresAt: String(invite.expires_at),

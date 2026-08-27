@@ -138,16 +138,24 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
       .map((file) => file.slice(repoRoot.length + 1).replace(/\\/g, "/"));
     // An upload only matters to the sharp advisory if its bytes can be handed
     // back out under an image content type, or fed to a decoder. This one is
-    // neither: it is admin-only, decoded as UTF-8 text and parsed as CSV.
-    expect(fileInputs).toEqual(["app/admin/users/import/import-client.tsx"]);
+    // neither: both are admin-only, decoded as UTF-8 text and parsed as CSV.
+    expect(fileInputs).toEqual([
+      "app/admin/renewals/legacy/legacy-client.tsx",
+      "app/admin/users/import/import-client.tsx"
+    ]);
 
     const client = readFileSync(join(repoRoot, "app/admin/users/import/import-client.tsx"), "utf8");
+    const legacyClient = readFileSync(join(repoRoot, "app/admin/renewals/legacy/legacy-client.tsx"), "utf8");
     expect(client).toContain('accept=".csv,text/csv"');
+    expect(legacyClient).toContain('accept=".csv,text/csv"');
 
     const action = readFileSync(join(repoRoot, "app/admin/users/import/actions.ts"), "utf8");
+    const legacyAction = readFileSync(join(repoRoot, "app/admin/renewals/legacy/actions.ts"), "utf8");
     expect(action).toMatch(/await file\.text\(\)/);
+    expect(legacyAction).toMatch(/await file\.text\(\)/);
     // No raw-byte handle is ever taken, which is what a decoder would need.
     expect(action).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|Buffer\.from\(/);
+    expect(legacyAction).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|Buffer\.from\(/);
   });
 });
 

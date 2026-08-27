@@ -7,6 +7,8 @@ import { displayText, formatDate } from "@/lib/utils";
 import type { RenewalConsoleRow } from "@/lib/renewal-console";
 import { CreateRenewalInviteForm, RenewalInviteActions as RenewalInviteControls } from "./renewal-controls";
 import { BatchRenewalInviteForm } from "./mentor-batch-form";
+import Link from "next/link";
+import { matchesMentorQuery } from "@/lib/renewal-search";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,7 +31,18 @@ const FIELD_LABEL: Record<string, string> = {
   capacity_target: "Số mentee có thể đồng hành"
 };
 
-export default async function AdminRenewalsPage() {
+type RenewalSearchParams = {
+  q?: string | string[];
+  status?: string | string[];
+  source?: string | string[];
+};
+
+function param(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+export default async function AdminRenewalsPage(props: { searchParams?: Promise<RenewalSearchParams> }) {
+  const searchParams = await props.searchParams;
   const context = await getAdminScopeContext();
   const admin = context.adminUser ?? (await getCurrentAdminUser());
   if (!admin || !canAccessAdminUser(admin.role)) {
@@ -52,11 +65,27 @@ export default async function AdminRenewalsPage() {
 
   const attention = data.invites.filter((row) => row.needsAttention);
   const pending = data.invites.filter((row) => row.inviteState === "accepted" && !String(row.applicationStatus ?? "").startsWith("approved_as_"));
+  const query = param(searchParams?.q).trim();
+  const statusFilter = param(searchParams?.status);
+  const sourceFilter = param(searchParams?.source);
+  const visibleInvites = data.invites.filter((row) => {
+    if (!matchesMentorQuery({ fullName: row.personName, mentorCode: row.mentorCode, email: row.personEmail }, query)) return false;
+    if (sourceFilter && row.inviteSource !== sourceFilter) return false;
+    if (!statusFilter) return true;
+    if (statusFilter === "awaiting_confirmation") {
+      return row.inviteState === "accepted" && !String(row.applicationStatus ?? "").startsWith("approved_as_");
+    }
+    return row.inviteState === statusFilter;
+  });
 
   return (
     <div className="grid gap-6">
       <PageHeader title="Gia hạn mentor — Season 12" description="Tạo link cá nhân, theo dõi phản hồi, đối chiếu thay đổi hồ sơ và hoàn tất lifecycle." />
       <ErrorBox message={data.error} />
+
+      <Link href="/admin/renewals/legacy" className="w-fit rounded-md border border-vam-green bg-white px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
+        Import / thêm legacy mentor
+      </Link>
 
       {attention.length ? (
         <div className="rounded-lg border-2 border-red-300 bg-red-50 p-4 text-red-900">
@@ -77,8 +106,34 @@ export default async function AdminRenewalsPage() {
 
       <section className="grid gap-4">
         <h2 className="text-lg font-semibold text-vam-ink">Danh sách invite</h2>
-        {!data.invites.length ? <p className="rounded-lg border border-dashed border-vam-line bg-white p-6 text-center text-sm text-slate-500">Chưa có invite gia hạn S12.</p> : null}
-        {data.invites.map((row) => (
+        <form method="get" className="grid gap-3 rounded-lg border border-vam-line bg-white p-4 sm:grid-cols-[minmax(240px,1fr)_220px_220px_auto] sm:items-end">
+          <label className="text-sm font-medium text-vam-ink">Tìm mentor
+            <input name="q" type="search" defaultValue={query} placeholder="Tên, mã mentor hoặc email" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2" />
+          </label>
+          <label className="text-sm font-medium text-vam-ink">Trạng thái
+            <select name="status" defaultValue={statusFilter} className="mt-1 w-full rounded-md border border-vam-line px-3 py-2">
+              <option value="">Tất cả</option>
+              <option value="live">Đang hiệu lực</option>
+              <option value="awaiting_confirmation">Đã gửi — chờ xác nhận</option>
+              <option value="accepted">Đồng ý</option>
+              <option value="declined">Từ chối</option>
+              <option value="revoked">Đã thu hồi</option>
+              <option value="expired">Hết hạn</option>
+            </select>
+          </label>
+          <label className="text-sm font-medium text-vam-ink">Nguồn
+            <select name="source" defaultValue={sourceFilter} className="mt-1 w-full rounded-md border border-vam-line px-3 py-2">
+              <option value="">Tất cả</option>
+              <option value="s11_renewal">S11 renewal</option>
+              <option value="legacy_coreteam_import">Legacy CSV import</option>
+              <option value="legacy_manual_entry">Legacy manual entry</option>
+            </select>
+          </label>
+          <div className="flex gap-2"><button className="rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white" type="submit">Lọc</button><Link href="/admin/renewals" className="rounded-md border border-vam-line px-4 py-2 text-sm">Xóa lọc</Link></div>
+        </form>
+        <p className="text-sm text-slate-600">Hiển thị {visibleInvites.length}/{data.invites.length} invitation.</p>
+        {!visibleInvites.length ? <p className="rounded-lg border border-dashed border-vam-line bg-white p-6 text-center text-sm text-slate-500">Không có invitation phù hợp.</p> : null}
+        {visibleInvites.map((row) => (
           <article key={row.id} className={`rounded-lg border bg-white p-5 shadow-soft ${row.needsAttention ? "border-red-300" : "border-vam-line"}`}>
             <div className="grid gap-4 xl:grid-cols-[1fr_auto]">
               <div>
@@ -89,6 +144,8 @@ export default async function AdminRenewalsPage() {
                 </div>
                 <div className="mt-2 grid gap-1 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
                   <div>Email: {displayText(row.personEmail)}</div>
+                  <div>Mã mentor: {displayText(row.mentorCode)}</div>
+                  <div>Nguồn: {row.inviteSource === "s11_renewal" ? "S11 renewal" : row.inviteSource === "legacy_coreteam_import" ? "Legacy CSV import" : "Legacy manual entry"}</div>
                   <div>Season: {row.seasonCode}</div>
                   <div>Tạo: {formatDate(row.createdAt)}</div>
                   <div>Hết hạn: {formatDate(row.expiresAt)}</div>

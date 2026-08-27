@@ -39,7 +39,7 @@ export type AccountImportParseResult = {
   errors: string[];
 };
 
-function parseCsvRecords(input: string): { records: string[][]; error?: string } {
+export function parseCsvRecords(input: string): { records: string[][]; error?: string } {
   const records: string[][] = [];
   let record: string[] = [];
   let field = "";
