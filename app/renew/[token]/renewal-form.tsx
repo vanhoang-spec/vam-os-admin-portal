@@ -17,7 +17,7 @@ import {
   RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
   RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT
 } from "@/lib/renewal-types";
-import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS } from "@/lib/mentor-intake-content";
+import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import { MentorProfileIntro } from "@/app/apply/_components/mentor-profile-intro";
 import { MentorSupportContacts } from "@/app/apply/_components/mentor-support-contacts";
 
@@ -59,6 +59,15 @@ export function RenewalForm({
     return mapping.get(display.functionArea) || "";
   });
   const unmappedFunction = display.functionArea && !functionPrimary ? display.functionArea : null;
+
+  const [industryPrimary, setIndustryPrimary] = useState(() => {
+    if (!display.industry) return "";
+    const canonicalValues = new Set(MENTOR_INDUSTRY_OPTIONS.map((o) => o.value));
+    if (canonicalValues.has(display.industry)) return display.industry;
+    const mapping = new Map(MENTOR_INDUSTRY_OPTIONS.map((o) => [o.label, o.value]));
+    return mapping.get(display.industry) || "";
+  });
+  const unmappedIndustry = display.industry && !industryPrimary ? display.industry : null;
   const [acceptState, acceptAction] = useFormState(
     acceptRenewalAction.bind(null, token),
     initialRenewalPublicActionState
@@ -122,9 +131,38 @@ export function RenewalForm({
             Chức danh / Vị trí hiện tại<RequiredIndicator />
             <input className={fieldClass()} name="title_current" defaultValue={display.titleCurrent ?? ""} required />
           </label>
+          <label className="text-sm font-medium text-vam-ink">
+            Số năm kinh nghiệm<RequiredIndicator />
+            <select className={fieldClass()} name="mentor_total_work_years" required defaultValue={display.yearsExperienceMin ?? ""}>
+              <option value="">-- Chọn --</option>
+              {Array.from({ length: RENEWAL_MAX_EXPERIENCE_YEARS + 1 }, (_, i) => (
+                <option key={i} value={i}>{i} năm</option>
+              ))}
+            </select>
+          </label>
           <div className="flex flex-col">
             <label className="text-sm font-medium text-vam-ink mb-1">
-              Chức năng chuyên môn / Functional expertise<RequiredIndicator />
+              Ngành nghề chính (chọn 1)<RequiredIndicator />
+            </label>
+            {unmappedIndustry ? (
+              <p className="mb-2 text-xs text-slate-500">Thông tin hiện tại: {unmappedIndustry}</p>
+            ) : null}
+            <select className={fieldClass()} name="industry_primary" required value={industryPrimary} onChange={(e) => setIndustryPrimary(e.target.value)}>
+              <option value="">Chọn ngành nghề...</option>
+              {MENTOR_INDUSTRY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          {industryPrimary === "other" ? (
+            <label className="text-sm font-medium text-vam-ink mt-2">
+              Vui lòng ghi rõ ngành nghề<RequiredIndicator />
+              <input className={fieldClass()} name="industry_primary_other" required />
+            </label>
+          ) : null}
+          <div className="flex flex-col">
+            <label className="text-sm font-medium text-vam-ink mb-1">
+              Chức năng / chuyên môn chính (chọn 1)<RequiredIndicator />
             </label>
             {unmappedFunction ? (
               <p className="mb-2 text-xs text-slate-500">Thông tin hiện tại: {unmappedFunction}</p>
@@ -143,20 +181,8 @@ export function RenewalForm({
             </label>
           ) : null}
           <label className="text-sm font-medium text-vam-ink">
-            Ngành nghề / Lĩnh vực<RequiredIndicator />
-            <input className={fieldClass()} name="industry_primary" defaultValue={display.industry ?? ""} required />
-          </label>
-          <label className="text-sm font-medium text-vam-ink">
-            Tổng số năm kinh nghiệm làm việc<RequiredIndicator />
-            <input className={fieldClass()} type="number" min="0" max={RENEWAL_MAX_EXPERIENCE_YEARS} step="1" name="mentor_total_work_years" defaultValue={display.yearsExperienceMin ?? ""} required />
-          </label>
-          <label className="text-sm font-medium text-vam-ink">
             Tổng số năm kinh nghiệm quản lý con người / đội ngũ<RequiredIndicator />
             <input className={fieldClass()} type="number" min="0" max={RENEWAL_MAX_EXPERIENCE_YEARS} step="1" name="mentor_people_management_years" required />
-          </label>
-          <label className="text-sm font-medium text-vam-ink sm:col-span-2">
-            Nhóm kinh nghiệm làm việc<RequiredIndicator />
-            <input className={fieldClass()} name="years_of_experience" defaultValue={display.yearsExperienceText ?? ""} required />
           </label>
           <fieldset className="sm:col-span-2">
             <legend className="text-sm font-medium text-vam-ink mb-2">Số mentee có thể nhận trong Season 12<RequiredIndicator /></legend>

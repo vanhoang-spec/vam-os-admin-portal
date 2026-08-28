@@ -6,7 +6,7 @@ import { submitMentorApplicationAction } from "@/app/actions/apply";
 import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import { MentorProfileIntro } from "../_components/mentor-profile-intro";
 import { MentorSupportContacts } from "../_components/mentor-support-contacts";
-import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS } from "@/lib/mentor-intake-content";
+import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -53,21 +53,7 @@ const YEARS_EXPERIENCE_OPTIONS = [
   { value: "16+", label: "16+ năm" }
 ];
 
-const INDUSTRY_OPTIONS = [
-  { value: "fmcg", label: "FMCG / Bán lẻ" },
-  { value: "tech", label: "Công nghệ / Phần mềm" },
-  { value: "finance_banking", label: "Tài chính / Ngân hàng" },
-  { value: "consulting", label: "Tư vấn / Chiến lược" },
-  { value: "manufacturing", label: "Sản xuất / Công nghiệp" },
-  { value: "education", label: "Giáo dục / Đào tạo" },
-  { value: "healthcare", label: "Y tế / Dược / Chăm sóc sức khoẻ" },
-  { value: "media_creative", label: "Truyền thông / Sáng tạo" },
-  { value: "logistics", label: "Logistics / Vận chuyển" },
-  { value: "real_estate", label: "Bất động sản / Xây dựng" },
-  { value: "energy_environment", label: "Năng lượng / Môi trường" },
-  { value: "public_nonprofit", label: "Khu vực công / Phi lợi nhuận" },
-  { value: "other", label: "Khác" }
-];
+
 
 
 const HIGHEST_DEGREE_OPTIONS = [
@@ -222,7 +208,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
           name="industry_primary"
           label="Ngành nghề chính (chọn 1)"
           required
-          options={INDUSTRY_OPTIONS}
+          options={[...MENTOR_INDUSTRY_OPTIONS]}
           otherInput={{ name: "industry_primary_other", label: "Vui lòng ghi rõ" }}
         />
         <SelectField
@@ -235,7 +221,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
         <CheckboxGroupField
           name="secondary_industries_functions"
           label="Ngành / chức năng phụ (nếu có, chọn tối đa 3)"
-          options={[...INDUSTRY_OPTIONS, ...MENTOR_FUNCTION_OPTIONS]}
+          options={[...MENTOR_INDUSTRY_OPTIONS, ...MENTOR_FUNCTION_OPTIONS]}
           helpText="Chỉ chọn nếu có thêm chuyên môn phụ — không bắt buộc."
           maxSelections={3}
           otherInput={{
@@ -267,7 +253,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
         <TextField
           name="first_vam_season"
           label="Năm đầu tiên anh/chị tham gia các chương trình trong Vietnam Alumni Mentoring (nếu có)"
-          placeholder="VD: S10"
+          placeholder="VD: 2025"
         />
         <SelectField
           name="sme_mentoring_experience"

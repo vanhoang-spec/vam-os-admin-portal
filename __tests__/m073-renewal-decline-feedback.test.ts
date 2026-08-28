@@ -79,8 +79,7 @@ function acceptedForm(overrides: Record<string, string> = {}) {
   form.set("company_current", "Acme");
   form.set("title_current", "Director");
   form.set("function_primary", "strategy_consulting");
-  form.set("industry_primary", "Education");
-  form.set("years_of_experience", "11-15");
+  form.set("industry_primary", "education");
   form.set("mentor_total_work_years", "12");
   form.set("mentor_people_management_years", "5");
   form.set("mentoring_capacity_total", "1");

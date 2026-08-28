@@ -25,8 +25,7 @@ function acceptedForm(overrides: Record<string, string> = {}) {
   form.set("company_current", "Acme");
   form.set("title_current", "Director");
   form.set("function_primary", "strategy_consulting");
-  form.set("industry_primary", "Education");
-  form.set("years_of_experience", "11-15");
+  form.set("industry_primary", "education");
   form.set("mentor_total_work_years", "12");
   form.set("mentor_people_management_years", "5");
   form.set("mentoring_capacity_total", "2");
@@ -59,7 +58,6 @@ describe("Season 12 renewal current-profile requirements", () => {
       "title_current",
       "industry_primary",
       "function_primary",
-      "years_of_experience",
       "mentor_total_work_years",
       "mentor_people_management_years",
       "mentoring_capacity_total",
@@ -82,7 +80,6 @@ describe("Season 12 renewal current-profile requirements", () => {
     ["title_current", "\t"],
     ["industry_primary", "   "],
     ["function_primary", "\n"],
-    ["years_of_experience", "   "],
     ["mentor_total_work_years", "   "],
     ["mentor_people_management_years", "   "],
     ["mentoring_capacity_total", "   "]
@@ -131,6 +128,47 @@ describe("Season 12 renewal current-profile requirements", () => {
     if (result.ok) expect(result.payload).not.toHaveProperty("function_primary_other");
   });
 
+  it("accepts a canonical mentor industry value", () => {
+    const result = validateRenewalAcceptance(acceptedForm({ industry_primary: "tech" }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.industry_primary).toBe("tech");
+  });
+
+  it("rejects a forged free-text mentor industry value", () => {
+    expect(validateRenewalAcceptance(acceptedForm({ industry_primary: "Blockchain AI" }))).toEqual({
+      ok: false,
+      message: "Vui lòng chọn ngành nghề chính hợp lệ."
+    });
+  });
+
+  it("rejects Other with a blank or whitespace-only industry detail", () => {
+    expect(validateRenewalAcceptance(acceptedForm({
+      industry_primary: "other",
+      industry_primary_other: "   \t "
+    }))).toEqual({
+      ok: false,
+      message: "Vui lòng ghi rõ ngành nghề chính khác."
+    });
+  });
+
+  it("accepts Other with a valid industry detail and trims it", () => {
+    const result = validateRenewalAcceptance(acceptedForm({
+      industry_primary: "other",
+      industry_primary_other: "  Web3  "
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.industry_primary_other).toBe("Web3");
+  });
+
+  it("removes forged Other detail when a non-Other industry is selected", () => {
+    const result = validateRenewalAcceptance(acceptedForm({
+      industry_primary: "tech",
+      industry_primary_other: "misleading stale detail"
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload).not.toHaveProperty("industry_primary_other");
+  });
+
   it.each(["__DELETE__", "   "])("keeps mentoring topics optional (%s)", (mentoringTopics) => {
     const result = validateRenewalAcceptance(acceptedForm({ mentoring_topics: mentoringTopics }));
     expect(result.ok).toBe(true);
@@ -174,7 +212,7 @@ describe("Season 12 renewal current-profile requirements", () => {
       company_current: "Acme",
       title_current: "Director",
       function_area: "strategy_consulting",
-      industry: "Education",
+      industry: "education",
       years_experience_text: "11-15",
       years_experience_min: 12,
       capacity_target: 2

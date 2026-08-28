@@ -4,6 +4,22 @@ export const MENTOR_UNIVERSITY_OPTIONS = Object.freeze([
   { value: "OTHER", label: "Các trường đại học khác" }
 ]);
 
+export const MENTOR_INDUSTRY_OPTIONS = Object.freeze([
+  { value: "fmcg", label: "FMCG / Bán lẻ" },
+  { value: "tech", label: "Công nghệ / Phần mềm" },
+  { value: "finance_banking", label: "Tài chính / Ngân hàng" },
+  { value: "consulting", label: "Tư vấn / Chiến lược" },
+  { value: "manufacturing", label: "Sản xuất / Công nghiệp" },
+  { value: "education", label: "Giáo dục / Đào tạo" },
+  { value: "healthcare", label: "Y tế / Dược / Chăm sóc sức khoẻ" },
+  { value: "media_creative", label: "Truyền thông / Sáng tạo" },
+  { value: "logistics", label: "Logistics / Vận chuyển" },
+  { value: "real_estate", label: "Bất động sản / Xây dựng" },
+  { value: "energy_environment", label: "Năng lượng / Môi trường" },
+  { value: "public_nonprofit", label: "Khu vực công / Phi lợi nhuận" },
+  { value: "other", label: "Khác" }
+]);
+
 export const MENTOR_PROGRAM_OPTIONS = Object.freeze([
   { value: "UEHM", label: "UEH Mentoring (ĐH Kinh tế TP.HCM)" },
   { value: "HAM", label: "Hanoi Alumni Mentoring" },

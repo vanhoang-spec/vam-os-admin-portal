@@ -22,7 +22,7 @@ import {
   type RenewalProfileDiffEntry
 } from "@/lib/renewal-profile-safety";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { MENTOR_FUNCTION_OPTIONS, MENTOR_PROGRAM_OPTIONS } from "@/lib/mentor-intake-content";
+import { MENTOR_FUNCTION_OPTIONS, MENTOR_PROGRAM_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   isRenewalMenteeCapacity,
   RENEWAL_MAX_EXPERIENCE_YEARS,
@@ -122,7 +122,7 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
     "function_primary",
     "function_primary_other",
     "industry_primary",
-    "years_of_experience",
+    "industry_primary_other",
     "mentor_total_work_years",
     "mentor_people_management_years",
     "mentoring_capacity_total",
@@ -317,8 +317,7 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
     ["mentor_total_work_years", "số năm kinh nghiệm"],
     ["mentor_people_management_years", "số năm kinh nghiệm quản lý con người/đội ngũ"],
     ["industry_primary", "ngành nghề chính"],
-    ["function_primary", "chức năng/chuyên môn chính"],
-    ["years_of_experience", "nhóm kinh nghiệm làm việc"]
+    ["function_primary", "chức năng/chuyên môn chính"]
   ] as const;
   const missingSeasonField = requiredSeasonFields.find(([key]) => !String(payload[key] ?? "").trim());
   if (missingSeasonField) {
@@ -337,6 +336,20 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
     payload.function_primary_other = functionPrimaryOther;
   } else {
     delete payload.function_primary_other;
+  }
+  const allowedIndustries = new Set(MENTOR_INDUSTRY_OPTIONS.map((option) => option.value));
+  const industryPrimary = String(payload.industry_primary);
+  if (!allowedIndustries.has(industryPrimary)) {
+    return { ok: false, message: "Vui lòng chọn ngành nghề chính hợp lệ." };
+  }
+  if (industryPrimary === "other") {
+    const industryPrimaryOther = String(payload.industry_primary_other ?? "").trim();
+    if (!industryPrimaryOther) {
+      return { ok: false, message: "Vui lòng ghi rõ ngành nghề chính khác." };
+    }
+    payload.industry_primary_other = industryPrimaryOther;
+  } else {
+    delete payload.industry_primary_other;
   }
   const workYears = Number(payload.mentor_total_work_years);
   if (!Number.isInteger(workYears) || workYears < 0 || workYears > RENEWAL_MAX_EXPERIENCE_YEARS) {
