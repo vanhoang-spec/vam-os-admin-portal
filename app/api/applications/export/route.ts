@@ -1,19 +1,19 @@
 import { NextRequest } from "next/server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canBrowseApplications } from "@/lib/read-access";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getApplications, getAllApplicationReviews, getIntakeBatches } from "@/lib/data";
 import { ApplicationReview, Application } from "@/lib/types";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 // Security: Prefix spreadsheet formulas
 function escapeCSV(val: string | number | boolean | null | undefined): string {
   if (val === null || val === undefined) return "";
   let str = String(val);
-  if (/^[=+\-@]/.test(str)) {
+  if (str.startsWith("=") || str.startsWith("+") || str.startsWith("-") || str.startsWith("@")) {
     str = "'" + str;
   }
-  if (str.includes('"') || str.includes(',') || str.includes('\n')) {
-    str = '"' + str.replace(/"/g, '""') + '"';
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+    return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
 }
@@ -40,12 +40,9 @@ function aggregateReviews(reviews: ApplicationReview[]) {
 export async function GET(request: NextRequest) {
   const adminUser = await getCurrentAdminUser();
   
-  if (!adminUser || !canBrowseApplications(adminUser.role)) {
-    // Check specific roles as requested
-    const allowed = ["super_admin", "admin", "core_team"];
-    if (!adminUser || !allowed.includes(adminUser.role)) {
-      return new Response("Unauthorized", { status: 403 });
-    }
+  const allowed = ["super_admin", "admin", "core_team"];
+  if (!adminUser || !allowed.includes(adminUser.role)) {
+    return new Response("Unauthorized", { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -67,7 +64,34 @@ export async function GET(request: NextRequest) {
     return new Response("Failed to load applications", { status: 500 });
   }
   
+  const allReviewsResult = await getAllApplicationReviews(scope);
+  if (allReviewsResult.error) {
+    return new Response("Failed to load reviews", { status: 500 });
+  }
+  
+  const batchesResult = await getIntakeBatches(scope);
+  if (batchesResult.error) {
+    return new Response("Failed to load batches", { status: 500 });
+  }
+
   let apps = appsResult.data;
+  const allReviews = allReviewsResult.data;
+  const batches = batchesResult.data;
+  const getBatchName = (id: string | null) => {
+    return batches.find(b => b.id === id)?.code || id || "";
+  };
+
+  const supabase = getSupabaseServerClient();
+  const { data: seasons } = await supabase.from("seasons").select("id, code");
+  const seasonMap = new Map(seasons?.map(s => [s.id, s.code]));
+
+  const reviewerIds = Array.from(new Set(allReviews.map(r => r.reviewer_admin_user_id).filter(Boolean)));
+  const { data: adminUsers } = await supabase
+    .from("admin_users")
+    .select("id, full_name, email")
+    .in("id", reviewerIds);
+  const reviewerMap = new Map(adminUsers?.map(u => [u.id, u]));
+
   if (roleFilter !== "all") {
     apps = apps.filter(a => a.role_applied === roleFilter);
   }
@@ -78,16 +102,6 @@ export async function GET(request: NextRequest) {
     apps = apps.filter(a => a.status === statusFilter);
   }
 
-  const reviewsResult = await getAllApplicationReviews(scope);
-  const allReviews = reviewsResult.data || [];
-
-  const batchesResult = await getIntakeBatches(scope);
-  const batches = batchesResult.data || [];
-  const getBatchName = (id: string | null) => {
-    return batches.find(b => b.id === id)?.code || id || "";
-  };
-
-  // Construct CSV using UTF-8 BOM
   const BOM = "\uFEFF";
   let csv = BOM;
 
@@ -104,8 +118,7 @@ export async function GET(request: NextRequest) {
       "Season", "Batch", "Role", "Application ID", "Applicant Name", "Email", "MSSV",
       "Application Status", "Final Decision",
       "Profile Review Submitted Count", "Profile Review Average Score", "Profile Review Recommendation(s)",
-      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)",
-      "Final Decision At"
+      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)"
     ];
     csv += headers.map(escapeCSV).join(",") + "\n";
 
@@ -120,7 +133,7 @@ export async function GET(request: NextRequest) {
       const mssv = (app.raw_payload as any)?.mssv || "";
 
       const row = [
-        app.season_id || "", // Season not strictly populated on Application, fallback empty or could get from season context
+        seasonMap.get(app.season_id) || app.season_id || "",
         getBatchName(app.intake_batch_id),
         app.role_applied,
         app.id,
@@ -134,8 +147,7 @@ export async function GET(request: NextRequest) {
         profileAgg.recommendations,
         interviewAgg.count,
         interviewAgg.avg,
-        interviewAgg.recommendations,
-        "" // Final Decision At
+        interviewAgg.recommendations
       ];
       csv += row.map(escapeCSV).join(",") + "\n";
     }
@@ -153,13 +165,14 @@ export async function GET(request: NextRequest) {
       for (const review of appReviews) {
         // Expose CANCELLED explicitly to avoid distortion confusion
         const statusLabel = review.status === "cancelled" ? "CANCELLED" : review.status;
+        const reviewer = reviewerMap.get(review.reviewer_admin_user_id);
         const row = [
           app.full_name,
           app.role_applied,
           app.id,
           review.review_round,
-          review.reviewer_admin_user_id, // ID since email isn't joined yet
-          "", // Reviewer Email (not joined)
+          reviewer?.full_name || review.reviewer_admin_user_id,
+          reviewer?.email || "",
           statusLabel,
           review.assigned_at,
           review.due_at,
@@ -178,7 +191,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const seasonCode = "S12"; // Using S12 fallback for export filenames
+  const uniqueSeasons = Array.from(new Set(apps.map(a => seasonMap.get(a.season_id) || a.season_id).filter(Boolean)));
+  const seasonCode = uniqueSeasons.length === 1 ? uniqueSeasons[0] : (uniqueSeasons.length > 1 ? "MULTI_SEASON" : "ALL");
   
   if (format === "xlsx") {
     // Construct XLSX
@@ -189,8 +203,7 @@ export async function GET(request: NextRequest) {
       "Season", "Batch", "Role", "Application ID", "Applicant Name", "Email", "MSSV",
       "Application Status", "Final Decision",
       "Profile Review Submitted Count", "Profile Review Average Score", "Profile Review Recommendation(s)",
-      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)",
-      "Final Decision At"
+      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)"
     ].map(h => ({ value: h, fontWeight: "bold" as const }));
     
     const summaryData: any[][] = [summaryHeaders];
@@ -204,7 +217,7 @@ export async function GET(request: NextRequest) {
       const mssv = (app.raw_payload as any)?.mssv || "";
 
       summaryData.push([
-        { type: String, value: safeExcelValue(app.season_id || "") },
+        { type: String, value: safeExcelValue(seasonMap.get(app.season_id) || app.season_id || "") },
         { type: String, value: safeExcelValue(getBatchName(app.intake_batch_id)) },
         { type: String, value: safeExcelValue(app.role_applied) },
         { type: String, value: safeExcelValue(app.id) },
@@ -218,8 +231,7 @@ export async function GET(request: NextRequest) {
         { type: String, value: safeExcelValue(profileAgg.recommendations) },
         { type: Number, value: interviewAgg.count },
         { type: String, value: interviewAgg.avg },
-        { type: String, value: safeExcelValue(interviewAgg.recommendations) },
-        { type: String, value: "" } // Final Decision At
+        { type: String, value: safeExcelValue(interviewAgg.recommendations) }
       ]);
     }
 
@@ -236,13 +248,14 @@ export async function GET(request: NextRequest) {
       const appReviews = allReviews.filter(r => r.application_id === app.id);
       for (const review of appReviews) {
         const statusLabel = review.status === "cancelled" ? "CANCELLED" : review.status;
+        const reviewer = reviewerMap.get(review.reviewer_admin_user_id);
         detailData.push([
           { type: String, value: safeExcelValue(app.full_name) },
           { type: String, value: safeExcelValue(app.role_applied) },
           { type: String, value: safeExcelValue(app.id) },
           { type: String, value: safeExcelValue(review.review_round) },
-          { type: String, value: safeExcelValue(review.reviewer_admin_user_id) },
-          { type: String, value: "" }, // Reviewer Email (not joined yet)
+          { type: String, value: safeExcelValue(reviewer?.full_name || review.reviewer_admin_user_id) },
+          { type: String, value: safeExcelValue(reviewer?.email || "") },
           { type: String, value: safeExcelValue(statusLabel) },
           { type: String, value: safeExcelValue(review.assigned_at) },
           { type: String, value: safeExcelValue(review.due_at) },
