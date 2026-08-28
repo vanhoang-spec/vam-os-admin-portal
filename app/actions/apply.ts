@@ -184,6 +184,7 @@ export async function submitMentorApplicationAction(
       preferred_mentee_persona: formText(formData, "preferred_mentee_persona") || null,
       preferred_language: formArray(formData, "preferred_language"),
       programs_willing_to_join: formArray(formData, "programs_willing_to_join"),
+      mentoring_topics: formText(formData, "mentoring_topics") || null,
       activities_willing_to_support: formArray(formData, "activities_willing_to_support"),
       activities_willing_to_support_other: formText(formData, "activities_willing_to_support_other") || null,
       // Section 7 — attachments

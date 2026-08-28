@@ -24,7 +24,7 @@ function acceptedForm(overrides: Record<string, string> = {}) {
   form.set("consent_data_storage", "yes");
   form.set("company_current", "Acme");
   form.set("title_current", "Director");
-  form.set("function_primary", "Strategy");
+  form.set("function_primary", "strategy_consulting");
   form.set("industry_primary", "Education");
   form.set("years_of_experience", "11-15");
   form.set("mentor_total_work_years", "12");
@@ -90,6 +90,53 @@ describe("Season 12 renewal current-profile requirements", () => {
     expect(validateRenewalAcceptance(acceptedForm({ [field]: value })).ok).toBe(false);
   });
 
+  it("accepts a canonical mentor function value", () => {
+    const result = validateRenewalAcceptance(acceptedForm({ function_primary: "product" }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.function_primary).toBe("product");
+  });
+
+  it("rejects a forged free-text mentor function value", () => {
+    expect(validateRenewalAcceptance(acceptedForm({ function_primary: "Chief Happiness Officer" }))).toEqual({
+      ok: false,
+      message: "Vui lòng chọn chức năng/chuyên môn chính hợp lệ."
+    });
+  });
+
+  it("rejects Other with a blank or whitespace-only function detail", () => {
+    expect(validateRenewalAcceptance(acceptedForm({
+      function_primary: "other",
+      function_primary_other: "   \t "
+    }))).toEqual({
+      ok: false,
+      message: "Vui lòng ghi rõ chức năng/chuyên môn chính khác."
+    });
+  });
+
+  it("accepts Other with a valid function detail and trims it", () => {
+    const result = validateRenewalAcceptance(acceptedForm({
+      function_primary: "other",
+      function_primary_other: "  Sustainability  "
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.function_primary_other).toBe("Sustainability");
+  });
+
+  it("removes forged Other detail when a non-Other function is selected", () => {
+    const result = validateRenewalAcceptance(acceptedForm({
+      function_primary: "operations",
+      function_primary_other: "misleading stale detail"
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload).not.toHaveProperty("function_primary_other");
+  });
+
+  it.each(["__DELETE__", "   "])("keeps mentoring topics optional (%s)", (mentoringTopics) => {
+    const result = validateRenewalAcceptance(acceptedForm({ mentoring_topics: mentoringTopics }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload).not.toHaveProperty("mentoring_topics");
+  });
+
   it("refuses an unchecked final profile-review confirmation independently of consent", () => {
     const form = acceptedForm({ [RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD]: "__DELETE__" });
     expect(form.get("consent_data_storage")).toBe("yes");
@@ -126,7 +173,7 @@ describe("Season 12 renewal current-profile requirements", () => {
     expect(buildRenewalProfileDiff({
       company_current: "Acme",
       title_current: "Director",
-      function_area: "Strategy",
+      function_area: "strategy_consulting",
       industry: "Education",
       years_experience_text: "11-15",
       years_experience_min: 12,

@@ -17,7 +17,7 @@ function renewalForm(overrides: Record<string, string | null> = {}) {
     mentor_people_management_years: "5",
     years_of_experience: "11-15",
     industry_primary: "education",
-    function_primary: "strategy",
+    function_primary: "strategy_consulting",
     mentoring_capacity_total: "2",
     mentoring_topics: "Career strategy and leadership",
     university: "UEH",

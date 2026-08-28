@@ -22,7 +22,7 @@ import {
   type RenewalProfileDiffEntry
 } from "@/lib/renewal-profile-safety";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { MENTOR_PROGRAM_OPTIONS } from "@/lib/mentor-intake-content";
+import { MENTOR_FUNCTION_OPTIONS, MENTOR_PROGRAM_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   isRenewalMenteeCapacity,
   RENEWAL_MAX_EXPERIENCE_YEARS,
@@ -323,6 +323,20 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
   const missingSeasonField = requiredSeasonFields.find(([key]) => !String(payload[key] ?? "").trim());
   if (missingSeasonField) {
     return { ok: false, message: `Vui lòng xác nhận ${missingSeasonField[1]} cho Season 12.` };
+  }
+  const allowedFunctions = new Set(MENTOR_FUNCTION_OPTIONS.map((option) => option.value));
+  const functionPrimary = String(payload.function_primary);
+  if (!allowedFunctions.has(functionPrimary)) {
+    return { ok: false, message: "Vui lòng chọn chức năng/chuyên môn chính hợp lệ." };
+  }
+  if (functionPrimary === "other") {
+    const functionPrimaryOther = String(payload.function_primary_other ?? "").trim();
+    if (!functionPrimaryOther) {
+      return { ok: false, message: "Vui lòng ghi rõ chức năng/chuyên môn chính khác." };
+    }
+    payload.function_primary_other = functionPrimaryOther;
+  } else {
+    delete payload.function_primary_other;
   }
   const workYears = Number(payload.mentor_total_work_years);
   if (!Number.isInteger(workYears) || workYears < 0 || workYears > RENEWAL_MAX_EXPERIENCE_YEARS) {

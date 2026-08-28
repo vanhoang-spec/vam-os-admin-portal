@@ -67,7 +67,7 @@ function acceptedForm() {
   form.set("consent_data_storage", "yes");
   form.set("company_current", "Acme");
   form.set("title_current", "Director");
-  form.set("function_primary", "Strategy");
+  form.set("function_primary", "strategy_consulting");
   form.set("industry_primary", "Education");
   form.set("years_of_experience", "11-15");
   form.set("mentor_total_work_years", "12");
@@ -175,7 +175,7 @@ describe("P0 public renewal submission boundary", () => {
         profile_review_confirmed: true,
         company_current: "Acme",
         title_current: "Director",
-        function_primary: "Strategy",
+        function_primary: "strategy_consulting",
         industry_primary: "Education",
         years_of_experience: "11-15",
         mentor_total_work_years: 12,
