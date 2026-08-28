@@ -91,11 +91,21 @@ export async function GET(request: NextRequest) {
   const BOM = "\uFEFF";
   let csv = BOM;
 
+  const getFinalDecision = (status: string | null) => {
+    if (!status) return "Pending";
+    if (status === "approved_as_mentor" || status === "approved_as_mentee") return "Accepted";
+    if (status === "rejected_or_not_fit") return "Rejected";
+    if (status === "withdrawn") return "Withdrawn";
+    return "Pending";
+  };
+
   if (exportType === "summary") {
     const headers = [
-      "Mã hồ sơ", "Đợt tuyển", "Vai trò", "Họ tên", "Email", "MSSV", "Trạng thái", "Vòng hiện tại",
-      "SL duyệt hồ sơ", "Điểm TB duyệt hồ sơ", "Đề xuất duyệt hồ sơ",
-      "SL phỏng vấn", "Điểm TB phỏng vấn", "Đề xuất phỏng vấn"
+      "Season", "Batch", "Role", "Application ID", "Applicant Name", "Email", "MSSV",
+      "Application Status", "Final Decision",
+      "Profile Review Submitted Count", "Profile Review Average Score", "Profile Review Recommendation(s)",
+      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)",
+      "Final Decision At"
     ];
     csv += headers.map(escapeCSV).join(",") + "\n";
 
@@ -110,44 +120,47 @@ export async function GET(request: NextRequest) {
       const mssv = (app.raw_payload as any)?.mssv || "";
 
       const row = [
-        app.id,
+        app.season_id || "", // Season not strictly populated on Application, fallback empty or could get from season context
         getBatchName(app.intake_batch_id),
         app.role_applied,
+        app.id,
         app.full_name,
         app.email_primary,
         mssv,
         app.status,
-        "", // current_round (derived or left blank if not explicit)
+        getFinalDecision(app.status),
         profileAgg.count,
         profileAgg.avg,
         profileAgg.recommendations,
         interviewAgg.count,
         interviewAgg.avg,
-        interviewAgg.recommendations
+        interviewAgg.recommendations,
+        "" // Final Decision At
       ];
       csv += row.map(escapeCSV).join(",") + "\n";
     }
   } else if (exportType === "detail") {
     const headers = [
-      "Mã hồ sơ", "Họ tên", "Vai trò", "Đợt tuyển", "Mã chấm", "Vòng chấm",
-      "Email giám khảo", "Trạng thái phân công", "Ngày phân công", "Hạn chót",
-      "Động lực", "Mục tiêu", "Cam kết", "Mức độ phù hợp", "Giao tiếp",
-      "Tổng điểm", "Đề xuất", "Ghi chú giám khảo", "Ngày nộp"
+      "Applicant", "Role", "Application ID", "Round",
+      "Reviewer Name", "Reviewer Email", "Assignment Status", "Assigned At", "Due At",
+      "Motivation", "Objective", "Commitment", "Fit", "Communication",
+      "Total Score", "Recommendation", "Reviewer Note", "Submitted At"
     ];
     csv += headers.map(escapeCSV).join(",") + "\n";
 
     for (const app of apps) {
       const appReviews = allReviews.filter(r => r.application_id === app.id);
       for (const review of appReviews) {
+        // Expose CANCELLED explicitly to avoid distortion confusion
+        const statusLabel = review.status === "cancelled" ? "CANCELLED" : review.status;
         const row = [
-          app.id,
           app.full_name,
           app.role_applied,
-          getBatchName(app.intake_batch_id),
-          review.id,
+          app.id,
           review.review_round,
           review.reviewer_admin_user_id, // ID since email isn't joined yet
-          review.status,
+          "", // Reviewer Email (not joined)
+          statusLabel,
           review.assigned_at,
           review.due_at,
           review.score_motivation,
@@ -173,12 +186,14 @@ export async function GET(request: NextRequest) {
     
     // Sheet 1: Ket_qua_tuyen
     const summaryHeaders = [
-      "Mã hồ sơ", "Đợt tuyển", "Vai trò", "Họ tên", "Email", "MSSV", "Trạng thái", "Vòng hiện tại",
-      "SL duyệt hồ sơ", "Điểm TB duyệt hồ sơ", "Đề xuất duyệt hồ sơ",
-      "SL phỏng vấn", "Điểm TB phỏng vấn", "Đề xuất phỏng vấn"
-    ].map(h => ({ value: h, fontWeight: "bold" }));
+      "Season", "Batch", "Role", "Application ID", "Applicant Name", "Email", "MSSV",
+      "Application Status", "Final Decision",
+      "Profile Review Submitted Count", "Profile Review Average Score", "Profile Review Recommendation(s)",
+      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)",
+      "Final Decision At"
+    ].map(h => ({ value: h, fontWeight: "bold" as const }));
     
-    const summaryData = [summaryHeaders];
+    const summaryData: any[][] = [summaryHeaders];
     for (const app of apps) {
       const appReviews = allReviews.filter(r => r.application_id === app.id);
       const profileReviews = appReviews.filter(r => r.review_round === "profile_screening");
@@ -189,44 +204,46 @@ export async function GET(request: NextRequest) {
       const mssv = (app.raw_payload as any)?.mssv || "";
 
       summaryData.push([
-        { type: String, value: safeExcelValue(app.id) },
+        { type: String, value: safeExcelValue(app.season_id || "") },
         { type: String, value: safeExcelValue(getBatchName(app.intake_batch_id)) },
         { type: String, value: safeExcelValue(app.role_applied) },
+        { type: String, value: safeExcelValue(app.id) },
         { type: String, value: safeExcelValue(app.full_name) },
         { type: String, value: safeExcelValue(app.email_primary) },
         { type: String, value: safeExcelValue(mssv) },
         { type: String, value: safeExcelValue(app.status) },
-        { type: String, value: null }, // current_round
+        { type: String, value: safeExcelValue(getFinalDecision(app.status)) },
         { type: Number, value: profileAgg.count },
         { type: String, value: profileAgg.avg },
         { type: String, value: safeExcelValue(profileAgg.recommendations) },
         { type: Number, value: interviewAgg.count },
         { type: String, value: interviewAgg.avg },
-        { type: String, value: safeExcelValue(interviewAgg.recommendations) }
+        { type: String, value: safeExcelValue(interviewAgg.recommendations) },
+        { type: String, value: "" } // Final Decision At
       ]);
     }
 
     // Sheet 2: Chi_tiet_cham
     const detailHeaders = [
-      "Mã hồ sơ", "Họ tên", "Vai trò", "Đợt tuyển", "Mã chấm", "Vòng chấm",
-      "Email giám khảo", "Trạng thái phân công", "Ngày phân công", "Hạn chót",
-      "Động lực", "Mục tiêu", "Cam kết", "Mức độ phù hợp", "Giao tiếp",
-      "Tổng điểm", "Đề xuất", "Ghi chú giám khảo", "Ngày nộp"
-    ].map(h => ({ value: h, fontWeight: "bold" }));
+      "Applicant", "Role", "Application ID", "Round",
+      "Reviewer Name", "Reviewer Email", "Assignment Status", "Assigned At", "Due At",
+      "Motivation", "Objective", "Commitment", "Fit", "Communication",
+      "Total Score", "Recommendation", "Reviewer Note", "Submitted At"
+    ].map(h => ({ value: h, fontWeight: "bold" as const }));
     
-    const detailData = [detailHeaders];
+    const detailData: any[][] = [detailHeaders];
     for (const app of apps) {
       const appReviews = allReviews.filter(r => r.application_id === app.id);
       for (const review of appReviews) {
+        const statusLabel = review.status === "cancelled" ? "CANCELLED" : review.status;
         detailData.push([
-          { type: String, value: safeExcelValue(app.id) },
           { type: String, value: safeExcelValue(app.full_name) },
           { type: String, value: safeExcelValue(app.role_applied) },
-          { type: String, value: safeExcelValue(getBatchName(app.intake_batch_id)) },
-          { type: String, value: safeExcelValue(review.id) },
+          { type: String, value: safeExcelValue(app.id) },
           { type: String, value: safeExcelValue(review.review_round) },
           { type: String, value: safeExcelValue(review.reviewer_admin_user_id) },
-          { type: String, value: safeExcelValue(review.status) },
+          { type: String, value: "" }, // Reviewer Email (not joined yet)
+          { type: String, value: safeExcelValue(statusLabel) },
           { type: String, value: safeExcelValue(review.assigned_at) },
           { type: String, value: safeExcelValue(review.due_at) },
           { type: Number, value: review.score_motivation ?? null },
@@ -249,13 +266,16 @@ export async function GET(request: NextRequest) {
       { name: "Chi_tiet_cham", data: detailData }
     ];
 
-    const buffer = await writeXlsxFile(sheets).toBuffer();
+    const buffer = await writeXlsxFile(sheets, {
+      fontFamily: "Arial",
+      fontSize: 10
+    });
     
-    const filename = `UEHM-${seasonCode}_${batchFilter}_${roleFilter}_Tat-ca_${new Date().toISOString().split("T")[0]}.xlsx`;
-    return new Response(buffer, {
+    return new Response(buffer as unknown as BodyInit, {
+      status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${filename}"`
+        "Content-Disposition": `attachment; filename="vam_os_export_${seasonCode}_${exportType}_${Date.now()}.xlsx"`
       }
     });
   }
