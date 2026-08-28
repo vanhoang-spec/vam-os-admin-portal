@@ -53,6 +53,31 @@ export default async function ExportPage() {
               </a>
             </div>
           </div>
+
+          <div className="border p-4 rounded-md">
+            <h3 className="font-medium mb-2">Tổng hợp Excel (XLSX)</h3>
+            <p className="text-sm text-slate-500 mb-4">File Excel gồm 2 sheet: Kết quả tuyển & Chi tiết chấm.</p>
+            <div className="flex gap-4">
+              <a
+                href="/api/applications/export?format=xlsx&role=mentee"
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+              >
+                Tải Mentee Excel
+              </a>
+              <a
+                href="/api/applications/export?format=xlsx&role=mentor"
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+              >
+                Tải Mentor Excel
+              </a>
+              <a
+                href="/api/applications/export?format=xlsx&role=all"
+                className="px-4 py-2 bg-green-700 text-white rounded hover:bg-green-800 text-sm font-medium"
+              >
+                Tải Tất cả Excel
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
