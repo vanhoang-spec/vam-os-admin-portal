@@ -112,14 +112,12 @@ export function AssignInterviewForm({
   const filteredApps = useMemo(() => {
     const afterStatus = candidates.filter((a) => selectedStatuses.has(a.status ?? ""));
     if (!excludeAlreadyAssigned) return afterStatus;
-    // For interviews, we consider already assigned if they have at least one reviewer
-    // Wait, the prompt says "Do NOT block multiple DIFFERENT reviewers interviewing the same candidate".
-    // "Exclude already assigned" means if they have >= 1 reviewer.
-    return afterStatus.filter((a) => (a.reviewers?.length ?? 0) === 0);
+    // Exclude if they have an active interview review
+    return afterStatus.filter((a) => !a.has_active_interview_review);
   }, [candidates, selectedStatuses, excludeAlreadyAssigned]);
 
   const alreadyAssignedCount = useMemo(
-    () => candidates.filter((a) => selectedStatuses.has(a.status ?? "") && (a.reviewers?.length ?? 0) > 0).length,
+    () => candidates.filter((a) => selectedStatuses.has(a.status ?? "") && a.has_active_interview_review).length,
     [candidates, selectedStatuses]
   );
 
@@ -289,9 +287,9 @@ export function AssignInterviewForm({
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-slate-500">
-                      {(app.reviewers?.length ?? 0) > 0 ? (
+                      {app.has_active_interview_review ? (
                         <span className="text-amber-600">
-                          {app.reviewers?.map(r => r.reviewer_name || r.reviewer_email).join(", ")}
+                          {app.interview_reviewer_admin_user_id || "Đã phân công"}
                         </span>
                       ) : (
                         <span className="text-slate-300">—</span>
