@@ -216,7 +216,7 @@ describe("S12 UAT — program selection and recruitment binding stay separate", 
   it("lists exactly the active programs and no FTU", () => {
     const source = read("lib/mentor-intake-content.ts");
     const block = source.slice(source.indexOf("MENTOR_PROGRAM_OPTIONS"));
-    const options = block.slice(0, block.indexOf("];"));
+    const options = block.slice(0, block.indexOf("]);"));
     for (const code of ["UEHM", "HAM", "BK", "HUFLIT", "HUB", "DUE"]) {
       expect(options).toContain(`value: "${code}"`);
     }

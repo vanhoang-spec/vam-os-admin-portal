@@ -17,7 +17,7 @@ import {
   RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
   RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT
 } from "@/lib/renewal-types";
-import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS } from "@/lib/mentor-intake-content";
+import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS } from "@/lib/mentor-intake-content";
 import { MentorProfileIntro } from "@/app/apply/_components/mentor-profile-intro";
 import { MentorSupportContacts } from "@/app/apply/_components/mentor-support-contacts";
 
@@ -51,6 +51,14 @@ export function RenewalForm({
   display: RenewalPublicDisplayDto;
 }) {
   const [university, setUniversity] = useState("");
+  const [functionPrimary, setFunctionPrimary] = useState(() => {
+    if (!display.functionArea) return "";
+    const canonicalValues = new Set(MENTOR_FUNCTION_OPTIONS.map((o) => o.value));
+    if (canonicalValues.has(display.functionArea)) return display.functionArea;
+    const mapping = new Map(MENTOR_FUNCTION_OPTIONS.map((o) => [o.label, o.value]));
+    return mapping.get(display.functionArea) || "";
+  });
+  const unmappedFunction = display.functionArea && !functionPrimary ? display.functionArea : null;
   const [acceptState, acceptAction] = useFormState(
     acceptRenewalAction.bind(null, token),
     initialRenewalPublicActionState
@@ -114,10 +122,26 @@ export function RenewalForm({
             Chức danh / Vị trí hiện tại<RequiredIndicator />
             <input className={fieldClass()} name="title_current" defaultValue={display.titleCurrent ?? ""} required />
           </label>
-          <label className="text-sm font-medium text-vam-ink">
-            Chức năng chuyên môn / Functional expertise<RequiredIndicator />
-            <input className={fieldClass()} name="function_primary" defaultValue={display.functionArea ?? ""} required />
-          </label>
+          <div className="flex flex-col">
+            <label className="text-sm font-medium text-vam-ink mb-1">
+              Chức năng chuyên môn / Functional expertise<RequiredIndicator />
+            </label>
+            {unmappedFunction ? (
+              <p className="mb-2 text-xs text-slate-500">Thông tin hiện tại: {unmappedFunction}</p>
+            ) : null}
+            <select className={fieldClass()} name="function_primary" required value={functionPrimary} onChange={(e) => setFunctionPrimary(e.target.value)}>
+              <option value="">Chọn chức năng...</option>
+              {MENTOR_FUNCTION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          {functionPrimary === "other" ? (
+            <label className="text-sm font-medium text-vam-ink mt-2">
+              Vui lòng ghi rõ chức năng / chuyên môn<RequiredIndicator />
+              <input className={fieldClass()} name="function_primary_other" required />
+            </label>
+          ) : null}
           <label className="text-sm font-medium text-vam-ink">
             Ngành nghề / Lĩnh vực<RequiredIndicator />
             <input className={fieldClass()} name="industry_primary" defaultValue={display.industry ?? ""} required />
@@ -155,16 +179,15 @@ export function RenewalForm({
             ) : null}
           </fieldset>
           <label className="text-sm font-medium text-vam-ink sm:col-span-2">
-            Chủ đề / lĩnh vực mentor có thể hỗ trợ<RequiredIndicator />
+            Chủ đề / lĩnh vực mentor có thể hỗ trợ
             <textarea
               className={fieldClass()}
               name="mentoring_topics"
               rows={4}
               maxLength={2000}
-              required
             />
             <span className="mt-1 block text-xs font-normal text-slate-500">
-              Nêu các chủ đề cụ thể anh/chị có thể đồng hành trong Season 12. Nội dung này được lưu cùng hồ sơ gia hạn hiện tại.
+              Không bắt buộc. Anh/chị có thể chia sẻ các chủ đề hoặc hình thức hỗ trợ thêm, ví dụ: training/chia sẻ chuyên đề, career sharing, company visit, kết nối cơ hội thực tập, hoặc các lĩnh vực chuyên môn khác.
             </span>
           </label>
           <label className="text-sm font-medium text-vam-ink sm:col-span-2">

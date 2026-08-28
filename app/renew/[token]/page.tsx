@@ -20,7 +20,7 @@ export default async function RenewalPage({ params }: { params: Promise<{ token:
     <main className="min-h-screen bg-slate-50 px-4 py-10">
       <div className="mx-auto max-w-3xl">
         <header className="mb-6">
-          <p className="text-sm font-semibold uppercase tracking-wide text-vam-green">Vietnam Alumni Mentoring</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-vam-green">Vietnam Alumni Mentoring - UEH Mentoring Season 12</p>
           <h1 className="mt-2 text-3xl font-semibold text-vam-ink">Gia hạn Mentor — Season 12</h1>
           <p className="mt-2 text-sm text-slate-600">Quy trình xác nhận ngắn dành cho mentor đã đồng hành cùng VAM.</p>
         </header>

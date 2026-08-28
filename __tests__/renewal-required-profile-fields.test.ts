@@ -85,8 +85,7 @@ describe("Season 12 renewal current-profile requirements", () => {
     ["years_of_experience", "   "],
     ["mentor_total_work_years", "   "],
     ["mentor_people_management_years", "   "],
-    ["mentoring_capacity_total", "   "],
-    ["mentoring_topics", "  \n  "]
+    ["mentoring_capacity_total", "   "]
   ])("refuses blank required field %s", (field, value) => {
     expect(validateRenewalAcceptance(acceptedForm({ [field]: value })).ok).toBe(false);
   });
@@ -146,7 +145,6 @@ describe("Season 12 renewal current-profile requirements", () => {
     });
     const refresh = buildRenewalProfileRefresh(payload) as Record<string, unknown>;
     expect(refresh).not.toHaveProperty("mentor_people_management_years");
-    expect(refresh).not.toHaveProperty("mentoring_topics");
     expect(refresh).not.toHaveProperty(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD);
   });
 

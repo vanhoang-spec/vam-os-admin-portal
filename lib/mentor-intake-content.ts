@@ -13,6 +13,22 @@ export const MENTOR_PROGRAM_OPTIONS = Object.freeze([
   { value: "DUE", label: "DUE Mentoring (Đại học Kinh tế Đà Nẵng)" }
 ]);
 
+export const MENTOR_FUNCTION_OPTIONS = Object.freeze([
+  { value: "marketing", label: "Marketing / Brand" },
+  { value: "sales_bd", label: "Sales / Business Development" },
+  { value: "finance_accounting", label: "Tài chính / Kế toán" },
+  { value: "hr_people", label: "Nhân sự / People" },
+  { value: "operations", label: "Vận hành / Operations" },
+  { value: "tech_engineering", label: "Tech / Engineering" },
+  { value: "data_analytics", label: "Data / Analytics" },
+  { value: "product", label: "Product Management" },
+  { value: "strategy_consulting", label: "Strategy / Consulting" },
+  { value: "supply_chain", label: "Supply Chain / Logistics" },
+  { value: "legal_compliance", label: "Pháp lý / Compliance" },
+  { value: "general_management", label: "Quản trị tổng hợp" },
+  { value: "other", label: "Khác" }
+]);
+
 export const MENTOR_SUPPORT_CONTACTS = Object.freeze([
   {
     name: "Như Liễu",

@@ -6,7 +6,7 @@ import { submitMentorApplicationAction } from "@/app/actions/apply";
 import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
 import { MentorProfileIntro } from "../_components/mentor-profile-intro";
 import { MentorSupportContacts } from "../_components/mentor-support-contacts";
-import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS } from "@/lib/mentor-intake-content";
+import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -69,21 +69,6 @@ const INDUSTRY_OPTIONS = [
   { value: "other", label: "Khác" }
 ];
 
-const FUNCTION_OPTIONS = [
-  { value: "marketing", label: "Marketing / Brand" },
-  { value: "sales_bd", label: "Sales / Business Development" },
-  { value: "finance_accounting", label: "Tài chính / Kế toán" },
-  { value: "hr_people", label: "Nhân sự / People" },
-  { value: "operations", label: "Vận hành / Operations" },
-  { value: "tech_engineering", label: "Tech / Engineering" },
-  { value: "data_analytics", label: "Data / Analytics" },
-  { value: "product", label: "Product Management" },
-  { value: "strategy_consulting", label: "Strategy / Consulting" },
-  { value: "supply_chain", label: "Supply Chain / Logistics" },
-  { value: "legal_compliance", label: "Pháp lý / Compliance" },
-  { value: "general_management", label: "Quản trị tổng hợp" },
-  { value: "other", label: "Khác" }
-];
 
 const HIGHEST_DEGREE_OPTIONS = [
   { value: "bachelor", label: "Cử nhân" },
@@ -244,13 +229,13 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
           name="function_primary"
           label="Chức năng / chuyên môn chính (chọn 1)"
           required
-          options={FUNCTION_OPTIONS}
+          options={[...MENTOR_FUNCTION_OPTIONS]}
           otherInput={{ name: "function_primary_other", label: "Vui lòng ghi rõ" }}
         />
         <CheckboxGroupField
           name="secondary_industries_functions"
           label="Ngành / chức năng phụ (nếu có, chọn tối đa 3)"
-          options={[...INDUSTRY_OPTIONS, ...FUNCTION_OPTIONS]}
+          options={[...INDUSTRY_OPTIONS, ...MENTOR_FUNCTION_OPTIONS]}
           helpText="Chỉ chọn nếu có thêm chuyên môn phụ — không bắt buộc."
           maxSelections={3}
           otherInput={{
@@ -269,7 +254,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
           label="Anh/chị tốt nghiệp trường đại học nào?"
           required
           options={[...MENTOR_UNIVERSITY_OPTIONS]}
-          otherInput={{ name: "university_other", label: "Tên trường đại học" }}
+          otherInput={{ name: "university_other", label: "Tên trường đại học", triggerValue: "OTHER" }}
         />
       </FormSection>
 
@@ -281,7 +266,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
         />
         <TextField
           name="first_vam_season"
-          label="Mùa VAM đầu tiên anh/chị tham gia (nếu có)"
+          label="Năm đầu tiên anh/chị tham gia các chương trình trong Vietnam Alumni Mentoring (nếu có)"
           placeholder="VD: S10"
         />
         <SelectField
@@ -351,6 +336,12 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
           label="Ngoài mentoring 1:1, anh/chị có thể hỗ trợ hoạt động nào?"
           options={ACTIVITY_OPTIONS}
           otherInput={{ name: "activities_willing_to_support_other", label: "Vui lòng ghi rõ" }}
+        />
+        <TextAreaField
+          name="mentoring_topics"
+          label="Chủ đề / lĩnh vực mentor có thể hỗ trợ thêm"
+          rows={3}
+          helpText="Không bắt buộc. Anh/chị có thể chia sẻ các chủ đề hoặc hình thức hỗ trợ thêm, ví dụ: training/chia sẻ chuyên đề, career sharing, company visit, kết nối cơ hội thực tập, hoặc các lĩnh vực chuyên môn khác."
         />
       </FormSection>
 

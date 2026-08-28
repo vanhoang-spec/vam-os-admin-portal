@@ -120,6 +120,7 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
     "company_current",
     "title_current",
     "function_primary",
+    "function_primary_other",
     "industry_primary",
     "years_of_experience",
     "mentor_total_work_years",
@@ -317,8 +318,7 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
     ["mentor_people_management_years", "số năm kinh nghiệm quản lý con người/đội ngũ"],
     ["industry_primary", "ngành nghề chính"],
     ["function_primary", "chức năng/chuyên môn chính"],
-    ["years_of_experience", "nhóm kinh nghiệm làm việc"],
-    ["mentoring_topics", "chủ đề/lĩnh vực có thể hỗ trợ mentee"]
+    ["years_of_experience", "nhóm kinh nghiệm làm việc"]
   ] as const;
   const missingSeasonField = requiredSeasonFields.find(([key]) => !String(payload[key] ?? "").trim());
   if (missingSeasonField) {
