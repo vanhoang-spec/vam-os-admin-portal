@@ -30,7 +30,7 @@ const SAFE_ERROR =
   "Không thể thực hiện thao tác. Vui lòng thử lại hoặc liên hệ admin.";
 
 /** Statuses that allow a new self-claim to be created. */
-const INTERVIEW_ELIGIBLE_STATUSES = new Set([
+export const INTERVIEW_ELIGIBLE_STATUSES: ReadonlySet<string> = new Set([
   "invited_to_interview",
   "interview_scheduled",
   "interview_in_progress"

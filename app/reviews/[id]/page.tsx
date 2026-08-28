@@ -11,6 +11,7 @@ import {
   keyById
 } from "@/lib/data";
 import { canReview } from "@/lib/permissions";
+import { isEditableReviewStatus } from "@/lib/review-status";
 import { displayText, formatDate } from "@/lib/utils";
 import { Card, DetailGrid, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewForm } from "./review-form";
@@ -104,7 +105,9 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
 
   // Permission guard: reviewer may only edit their own review
   const isOwner = review.reviewer_admin_user_id === adminUser.id;
-  const canEdit = isOwner || ["super_admin", "admin", "core_team"].includes(adminUser.role);
+  const canEdit =
+    isEditableReviewStatus(review.status) &&
+    (isOwner || ["super_admin", "admin", "core_team"].includes(adminUser.role));
 
   const error = reviewResult.error ?? appResult.error ?? personResult.error ?? seasons.error;
 
@@ -213,11 +216,11 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
 
       {adminUser.role !== "reviewer" && canEdit && !isSubmitted && review.status !== "cancelled" && (
         <Card className="mb-4">
-          <ReviewOperations 
-            reviewId={review.id} 
-            isSubmitted={isSubmitted} 
-            isCancelled={review.status === "cancelled"} 
-            reviewers={reviewersResult.data} 
+          <ReviewOperations
+            reviewId={review.id}
+            isSubmitted={isSubmitted}
+            isCancelled={review.status === "cancelled"}
+            reviewers={reviewersResult.data}
           />
         </Card>
       )}

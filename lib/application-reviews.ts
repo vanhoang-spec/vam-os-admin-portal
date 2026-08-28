@@ -1,6 +1,11 @@
 import "server-only";
 
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/interview-claim";
+import { canAssignReview, canReview } from "@/lib/permissions";
 import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { EDITABLE_REVIEW_STATUSES, isEditableReviewStatus } from "@/lib/review-status";
+import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // All writes use service-role to bypass RLS.
@@ -29,7 +34,7 @@ function log(scope: string, error: unknown) {
 async function canWriteReviewWorkflowForApplication(client: any, applicationId: string) {
   const { data: application, error } = await client
     .from("applications")
-    .select("id,season_id")
+    .select("id,season_id,status")
     .eq("id", applicationId)
     .maybeSingle();
   if (error) {
@@ -40,6 +45,42 @@ async function canWriteReviewWorkflowForApplication(client: any, applicationId: 
   const ctx = await getAdminScopeContext();
   if (!(await canReviewSeason(ctx, application.season_id as string | null))) {
     return { ok: false as const, message: "Ban khong co quyen review trong mua cua don nay." };
+  }
+  return { ok: true as const, application };
+}
+
+async function requireMutationActor(
+  expectedAdminUserId: string,
+  permission: "review" | "assign"
+) {
+  const actor = await getCurrentAdminUser();
+  if (!actor?.id || actor.id !== expectedAdminUserId) {
+    return { ok: false as const, message: "Bạn chưa đăng nhập hoặc phiên làm việc không hợp lệ." };
+  }
+  const permitted = permission === "review" ? canReview(actor.role) : canAssignReview(actor.role);
+  if (!permitted) {
+    return { ok: false as const, message: "Bạn không có quyền thực hiện thao tác review này." };
+  }
+  return { ok: true as const, actor };
+}
+
+async function conditionallyCancelReview(client: any, reviewId: string) {
+  const { data, error } = await client
+    .from("application_reviews")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("id", reviewId)
+    .in("status", [...EDITABLE_REVIEW_STATUSES])
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    log("cancel review failed", error);
+    return { ok: false as const, message: SAFE_ERROR };
+  }
+  if (!data) {
+    return {
+      ok: false as const,
+      message: "Review đã thay đổi trạng thái và không còn có thể huỷ hoặc đổi người."
+    };
   }
   return { ok: true as const };
 }
@@ -63,27 +104,45 @@ export type AssignReviewInput = {
 export async function assignApplicationReview(input: AssignReviewInput): Promise<ReviewActionResult> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const actorAccess = await requireMutationActor(input.assignedByAdminUserId, "assign");
+  if (!actorAccess.ok) return actorAccess;
+  if (input.reviewRound !== "profile_screening" && input.reviewRound !== "interview") {
+    return { ok: false, message: "Vòng review không hợp lệ." };
+  }
+
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, input.applicationId);
   if (!scopeAccess.ok) return scopeAccess;
+  if (
+    input.reviewRound === "interview" &&
+    !INTERVIEW_ELIGIBLE_STATUSES.has(String(scopeAccess.application.status ?? ""))
+  ) {
+    return { ok: false, message: "Đơn ứng tuyển chưa ở trạng thái đủ điều kiện phỏng vấn." };
+  }
 
-  if (input.reviewRound === "interview") {
-    // 1 active/submitted assignment per candidate per interviewer per round
-    const { data: existing, error: dupErr } = await client
-      .from("application_reviews")
-      .select("id")
-      .eq("application_id", input.applicationId)
-      .eq("review_round", "interview")
-      .eq("reviewer_admin_user_id", input.reviewerAdminUserId)
-      .neq("status", "cancelled")
-      .limit(1);
+  const reviewerValidation = await validateReviewEligibleReviewers(client, [input.reviewerAdminUserId]);
+  if (!reviewerValidation.ok) {
+    if (reviewerValidation.error) log("validate target reviewer failed", reviewerValidation.error);
+    return { ok: false, message: reviewerValidation.message };
+  }
 
-    if (dupErr) {
-      log("check duplicate interview assignment failed", dupErr);
-      return { ok: false, message: SAFE_ERROR };
-    }
-    if (existing && existing.length > 0) {
-      return { ok: false, message: "Reviewer này đã được giao phỏng vấn ứng viên này rồi." };
-    }
+  // Sequential duplicate guard for every round. Durable concurrent protection
+  // still requires a database uniqueness constraint (documented in handoff).
+  const { data: existing, error: dupErr } = await client
+    .from("application_reviews")
+    .select("id")
+    .eq("application_id", input.applicationId)
+    .eq("review_round", input.reviewRound)
+    .eq("reviewer_admin_user_id", input.reviewerAdminUserId)
+    .neq("status", "cancelled")
+    .limit(1);
+
+  if (dupErr) {
+    log("check duplicate review assignment failed", dupErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (existing && existing.length > 0) {
+    return { ok: false, message: "Reviewer này đã được giao ứng viên này trong cùng vòng review." };
   }
 
   const { data, error } = await client
@@ -143,6 +202,9 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
+  const actorAccess = await requireMutationActor(input.adminUserId, "review");
+  if (!actorAccess.ok) return actorAccess;
+
   // Verify ownership — reviewer can only edit their own review
   const { data: existing, error: fetchErr } = await client
     .from("application_reviews")
@@ -158,14 +220,14 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
   if (existing.reviewer_admin_user_id !== input.adminUserId) {
     return { ok: false, message: "Bạn không có quyền chỉnh sửa review này." };
   }
-  if (existing.status === "submitted") {
-    return { ok: false, message: "Review đã được submit, không thể chỉnh sửa." };
+  if (!isEditableReviewStatus(existing.status)) {
+    return { ok: false, message: "Review không còn ở trạng thái cho phép chỉnh sửa." };
   }
 
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
   if (!scopeAccess.ok) return scopeAccess;
 
-  const { error } = await client
+  const { data: updated, error } = await client
     .from("application_reviews")
     .update({
       status: "in_progress",
@@ -178,11 +240,18 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
       reviewer_note: input.reviewerNote ?? null,
       updated_at: new Date().toISOString()
     })
-    .eq("id", input.reviewId);
+    .eq("id", input.reviewId)
+    .eq("reviewer_admin_user_id", input.adminUserId)
+    .in("status", [...EDITABLE_REVIEW_STATUSES])
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     log("update review draft failed", error);
     return { ok: false, message: SAFE_ERROR };
+  }
+  if (!updated) {
+    return { ok: false, message: "Review đã thay đổi trạng thái; bản nháp không được lưu." };
   }
 
   return { ok: true, id: input.reviewId };
@@ -195,6 +264,9 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
 export async function submitApplicationReview(input: ReviewScoreInput): Promise<ReviewActionResult> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const actorAccess = await requireMutationActor(input.adminUserId, "review");
+  if (!actorAccess.ok) return actorAccess;
 
   // Verify ownership
   const { data: existing, error: fetchErr } = await client
@@ -211,8 +283,8 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
   if (existing.reviewer_admin_user_id !== input.adminUserId) {
     return { ok: false, message: "Bạn không có quyền submit review này." };
   }
-  if (existing.status === "submitted") {
-    return { ok: false, message: "Review đã được submit rồi." };
+  if (!isEditableReviewStatus(existing.status)) {
+    return { ok: false, message: "Review không còn ở trạng thái cho phép submit." };
   }
 
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
@@ -228,7 +300,7 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
   ].filter((s): s is number => typeof s === "number" && s >= 1 && s <= 5);
   const totalScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) : null;
 
-  const { error } = await client
+  const { data: updated, error } = await client
     .from("application_reviews")
     .update({
       status: "submitted",
@@ -243,11 +315,18 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
       submitted_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
-    .eq("id", input.reviewId);
+    .eq("id", input.reviewId)
+    .eq("reviewer_admin_user_id", input.adminUserId)
+    .in("status", [...EDITABLE_REVIEW_STATUSES])
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     log("submit review update failed", error);
     return { ok: false, message: SAFE_ERROR };
+  }
+  if (!updated) {
+    return { ok: false, message: "Review đã thay đổi trạng thái; thao tác submit bị từ chối." };
   }
 
   // Advance application.status based on review_round
@@ -329,6 +408,9 @@ export async function cancelApplicationReview(input: {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
+  const actorAccess = await requireMutationActor(input.adminUserId, "assign");
+  if (!actorAccess.ok) return actorAccess;
+
   const { data: existing, error: fetchErr } = await client
     .from("application_reviews")
     .select("id,status,application_id")
@@ -340,26 +422,16 @@ export async function cancelApplicationReview(input: {
     return { ok: false, message: SAFE_ERROR };
   }
   if (!existing) return { ok: false, message: "Không tìm thấy review." };
-  
-  if (existing.status === "submitted") {
-    return { ok: false, message: "Không thể hủy review đã nộp." };
+
+  if (!isEditableReviewStatus(existing.status)) {
+    return { ok: false, message: "Review không còn ở trạng thái cho phép huỷ." };
   }
 
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
   if (!scopeAccess.ok) return scopeAccess;
 
-  const { error } = await client
-    .from("application_reviews")
-    .update({ 
-      status: "cancelled",
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", input.reviewId);
-
-  if (error) {
-    log("cancel review failed", error);
-    return { ok: false, message: SAFE_ERROR };
-  }
+  const cancellation = await conditionallyCancelReview(client, input.reviewId);
+  if (!cancellation.ok) return cancellation;
 
   return { ok: true, id: input.reviewId };
 }
@@ -372,9 +444,12 @@ export async function reassignApplicationReview(input: {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
+  const actorAccess = await requireMutationActor(input.adminUserId, "assign");
+  if (!actorAccess.ok) return actorAccess;
+
   const { data: existing, error: fetchErr } = await client
     .from("application_reviews")
-    .select("id,status,application_id,review_round,due_at")
+    .select("id,status,application_id,review_round,reviewer_admin_user_id,due_at,updated_at")
     .eq("id", input.reviewId)
     .maybeSingle();
 
@@ -383,24 +458,89 @@ export async function reassignApplicationReview(input: {
     return { ok: false, message: SAFE_ERROR };
   }
   if (!existing) return { ok: false, message: "Không tìm thấy review." };
-  
-  if (existing.status === "submitted") {
-    return { ok: false, message: "Không thể đổi người cho review đã nộp." };
+
+  const reviewerValidation = await validateReviewEligibleReviewers(client, [input.newReviewerAdminUserId]);
+  if (!reviewerValidation.ok) {
+    if (reviewerValidation.error) log("validate reassignment target failed", reviewerValidation.error);
+    return { ok: false, message: reviewerValidation.message };
   }
 
-  // 1. Cancel old review
-  const cancelResult = await cancelApplicationReview({
-    reviewId: input.reviewId,
-    adminUserId: input.adminUserId
-  });
-  if (!cancelResult.ok) return cancelResult;
+  if (existing.reviewer_admin_user_id === input.newReviewerAdminUserId) {
+    return { ok: false, message: "Người review mới phải khác người review hiện tại." };
+  }
+  if (!isEditableReviewStatus(existing.status)) {
+    return { ok: false, message: "Review không còn ở trạng thái cho phép đổi người." };
+  }
 
-  // 2. Assign new review
-  return await assignApplicationReview({
-    applicationId: existing.application_id as string,
-    reviewerAdminUserId: input.newReviewerAdminUserId,
-    assignedByAdminUserId: input.adminUserId,
-    reviewRound: existing.review_round as "profile_screening" | "interview",
-    dueAt: (existing.due_at as string | null) ?? null
-  });
+  const scopeAccess = await canWriteReviewWorkflowForApplication(
+    client,
+    existing.application_id as string
+  );
+  if (!scopeAccess.ok) return scopeAccess;
+  const reviewRound = existing.review_round as "profile_screening" | "interview";
+  if (reviewRound !== "profile_screening" && reviewRound !== "interview") {
+    return { ok: false, message: "Vòng review hiện tại không hợp lệ." };
+  }
+  if (
+    reviewRound === "interview" &&
+    !INTERVIEW_ELIGIBLE_STATUSES.has(String(scopeAccess.application.status ?? ""))
+  ) {
+    return { ok: false, message: "Đơn ứng tuyển không còn đủ điều kiện giao phỏng vấn." };
+  }
+
+  const { data: duplicate, error: duplicateError } = await client
+    .from("application_reviews")
+    .select("id")
+    .eq("application_id", existing.application_id)
+    .eq("review_round", reviewRound)
+    .eq("reviewer_admin_user_id", input.newReviewerAdminUserId)
+    .neq("status", "cancelled")
+    .limit(1);
+  if (duplicateError) {
+    log("check reassignment duplicate failed", duplicateError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (duplicate && duplicate.length > 0) {
+    return { ok: false, message: "Người review mới đã có assignment cho ứng viên này." };
+  }
+
+  const cancellation = await conditionallyCancelReview(client, input.reviewId);
+  if (!cancellation.ok) return cancellation;
+
+  const { data: replacement, error: insertError } = await client
+    .from("application_reviews")
+    .insert({
+      application_id: existing.application_id,
+      reviewer_admin_user_id: input.newReviewerAdminUserId,
+      assigned_by: input.adminUserId,
+      review_round: reviewRound,
+      due_at: (existing.due_at as string | null) ?? null,
+      status: "assigned"
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (insertError) log("insert reassigned application review failed", insertError);
+  if (insertError || !replacement) {
+    const { data: restored, error: restoreError } = await client
+      .from("application_reviews")
+      .update({
+        status: existing.status,
+        updated_at: existing.updated_at ?? null
+      })
+      .eq("id", input.reviewId)
+      .eq("status", "cancelled")
+      .select("id")
+      .maybeSingle();
+    if (restoreError || !restored) {
+      log("reassignment compensation failed", restoreError ?? "no row restored");
+      return {
+        ok: false,
+        message: "Đổi người review thất bại và assignment cũ không thể tự động khôi phục. Vui lòng kiểm tra ngay."
+      };
+    }
+    return { ok: false, message: "Không thể tạo assignment mới; assignment cũ đã được khôi phục." };
+  }
+
+  return { ok: true, id: replacement.id as string };
 }

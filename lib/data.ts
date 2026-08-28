@@ -6,6 +6,7 @@ import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { intersectAuthorizedAndCohort } from "@/lib/season-cohort";
 import { resolveSeasonContext } from "@/lib/season-context";
+import { REVIEW_ELIGIBLE_ROLES } from "@/lib/reviewer-eligibility";
 import {
   canOperateSeason,
   getAdminScopeContext,
@@ -1850,7 +1851,7 @@ export async function getReviewEligibleReviewers(): Promise<QueryResult<ReviewEl
     client
       .from("admin_users")
       .select("id,email,full_name,role")
-      .in("role", ["super_admin", "admin", "core_team", "reviewer"])
+      .in("role", [...REVIEW_ELIGIBLE_ROLES])
       .eq("status", "active")
       .order("full_name", { ascending: true })
   );

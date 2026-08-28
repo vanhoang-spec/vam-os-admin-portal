@@ -26,7 +26,10 @@ export async function bulkAssignApplicationReviewsAction(
     const reviewerIds = formData.getAll("reviewer_ids").map((v) => String(v).trim()).filter(Boolean);
     const excludeAlreadyAssigned = String(formData.get("exclude_already_assigned") ?? "1") !== "0";
     const reviewRoundRaw = String(formData.get("review_round") ?? "profile_screening").trim();
-    const reviewRound = reviewRoundRaw === "interview" ? "interview" : "profile_screening";
+    if (reviewRoundRaw !== "profile_screening" && reviewRoundRaw !== "interview") {
+      return fail("Vòng review không hợp lệ.");
+    }
+    const reviewRound = reviewRoundRaw;
     const dueAt = String(formData.get("due_at") ?? "").trim() || null;
     const assignmentNote = String(formData.get("assignment_note") ?? "").trim() || null;
 
