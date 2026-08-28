@@ -63,7 +63,7 @@ export function ReviewOperations({
       <form action={cancelAction} className="rounded-md border border-red-200 bg-white p-4">
         <h3 className="mb-2 text-sm font-semibold text-red-700">Huỷ Review</h3>
         <p className="mb-4 text-xs text-red-600/80">
-          Huỷ giao review này. Không xoá dữ liệu nhưng sẽ đổi trạng thái thành "Đã huỷ".
+          Huỷ giao review này. Không xoá dữ liệu nhưng sẽ đổi trạng thái thành &quot;Đã huỷ&quot;.
         </p>
         {cancelState.message && (
           <div className={`mb-3 text-sm ${cancelState.ok ? "text-green-600" : "text-red-600"}`}>
