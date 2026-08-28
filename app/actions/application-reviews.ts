@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
   assignApplicationReview,
+  cancelApplicationReview,
+  reassignApplicationReview,
   saveApplicationReviewDraft,
   submitApplicationReview,
   updateApplicationStatus
@@ -167,7 +169,75 @@ export async function updateApplicationStatusAction(
   }
 }
 
+// ----------------------------------------------------------------
+// Cancel Review (admin / core_team only)
+// ----------------------------------------------------------------
+
+export async function cancelApplicationReviewAction(
+  _prev: ReviewActionState,
+  formData: FormData
+): Promise<ReviewActionState> {
+  try {
+    const adminUser = await getCurrentAdminUser();
+    if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
+    if (!canAssignReview(adminUser.role)) return fail("Bạn không có quyền huỷ review.");
+
+    const reviewId = String(formData.get("review_id") ?? "").trim();
+    if (!reviewId) return fail("Thiếu review_id.");
+
+    const result = await cancelApplicationReview({
+      reviewId,
+      adminUserId: adminUser.id
+    });
+
+    if (!result.ok) return fail(result.message);
+
+    revalidatePath(`/reviews/${reviewId}`);
+    revalidatePath("/reviews");
+    return { ok: true, message: "Đã huỷ review thành công." };
+  } catch (err) {
+    console.error("[cancelApplicationReviewAction]", err);
+    return fail("Lỗi hệ thống. Vui lòng thử lại.");
+  }
+}
+
+// ----------------------------------------------------------------
+// Reassign Review (admin / core_team only)
+// ----------------------------------------------------------------
+
+export async function reassignApplicationReviewAction(
+  _prev: ReviewActionState,
+  formData: FormData
+): Promise<ReviewActionState> {
+  try {
+    const adminUser = await getCurrentAdminUser();
+    if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
+    if (!canAssignReview(adminUser.role)) return fail("Bạn không có quyền đổi người review.");
+
+    const reviewId = String(formData.get("review_id") ?? "").trim();
+    const newReviewerAdminUserId = String(formData.get("new_reviewer_admin_user_id") ?? "").trim();
+    if (!reviewId) return fail("Thiếu review_id.");
+    if (!newReviewerAdminUserId) return fail("Vui lòng chọn người review mới.");
+
+    const result = await reassignApplicationReview({
+      reviewId,
+      newReviewerAdminUserId,
+      adminUserId: adminUser.id
+    });
+
+    if (!result.ok) return fail(result.message);
+
+    revalidatePath(`/reviews/${reviewId}`);
+    revalidatePath("/reviews");
+    return { ok: true, message: "Đã đổi người review thành công.", reviewId: result.id };
+  } catch (err) {
+    console.error("[reassignApplicationReviewAction]", err);
+    return fail("Lỗi hệ thống. Vui lòng thử lại.");
+  }
+}
+
 // Helpers
+
 
 function parseScore(value: FormDataEntryValue | null): number | null {
   if (value === null || value === "") return null;

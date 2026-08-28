@@ -25,6 +25,8 @@ export async function bulkAssignApplicationReviewsAction(
     const statuses = formData.getAll("statuses").map((v) => String(v).trim()).filter(Boolean);
     const reviewerIds = formData.getAll("reviewer_ids").map((v) => String(v).trim()).filter(Boolean);
     const excludeAlreadyAssigned = String(formData.get("exclude_already_assigned") ?? "1") !== "0";
+    const reviewRoundRaw = String(formData.get("review_round") ?? "profile_screening").trim();
+    const reviewRound = reviewRoundRaw === "interview" ? "interview" : "profile_screening";
     const dueAt = String(formData.get("due_at") ?? "").trim() || null;
     const assignmentNote = String(formData.get("assignment_note") ?? "").trim() || null;
 
@@ -37,6 +39,7 @@ export async function bulkAssignApplicationReviewsAction(
       roleApplied,
       statuses,
       reviewerAdminUserIds: reviewerIds,
+      reviewRound,
       dueAt,
       excludeAlreadyAssigned,
       assignmentNote,

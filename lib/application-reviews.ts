@@ -66,6 +66,26 @@ export async function assignApplicationReview(input: AssignReviewInput): Promise
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, input.applicationId);
   if (!scopeAccess.ok) return scopeAccess;
 
+  if (input.reviewRound === "interview") {
+    // 1 active/submitted assignment per candidate per interviewer per round
+    const { data: existing, error: dupErr } = await client
+      .from("application_reviews")
+      .select("id")
+      .eq("application_id", input.applicationId)
+      .eq("review_round", "interview")
+      .eq("reviewer_admin_user_id", input.reviewerAdminUserId)
+      .neq("status", "cancelled")
+      .limit(1);
+
+    if (dupErr) {
+      log("check duplicate interview assignment failed", dupErr);
+      return { ok: false, message: SAFE_ERROR };
+    }
+    if (existing && existing.length > 0) {
+      return { ok: false, message: "Reviewer này đã được giao phỏng vấn ứng viên này rồi." };
+    }
+  }
+
   const { data, error } = await client
     .from("application_reviews")
     .insert({
@@ -296,4 +316,91 @@ export async function updateApplicationStatus(input: UpdateApplicationStatusInpu
   }
 
   return { ok: true, id: input.applicationId };
+}
+
+// ----------------------------------------------------------------
+// Cancel / Reassign Review
+// ----------------------------------------------------------------
+
+export async function cancelApplicationReview(input: {
+  reviewId: string;
+  adminUserId: string;
+}): Promise<ReviewActionResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const { data: existing, error: fetchErr } = await client
+    .from("application_reviews")
+    .select("id,status,application_id")
+    .eq("id", input.reviewId)
+    .maybeSingle();
+
+  if (fetchErr) {
+    log("fetch review for cancel failed", fetchErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!existing) return { ok: false, message: "Không tìm thấy review." };
+  
+  if (existing.status === "submitted") {
+    return { ok: false, message: "Không thể hủy review đã nộp." };
+  }
+
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
+  if (!scopeAccess.ok) return scopeAccess;
+
+  const { error } = await client
+    .from("application_reviews")
+    .update({ 
+      status: "cancelled",
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", input.reviewId);
+
+  if (error) {
+    log("cancel review failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  return { ok: true, id: input.reviewId };
+}
+
+export async function reassignApplicationReview(input: {
+  reviewId: string;
+  newReviewerAdminUserId: string;
+  adminUserId: string;
+}): Promise<ReviewActionResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const { data: existing, error: fetchErr } = await client
+    .from("application_reviews")
+    .select("id,status,application_id,review_round,due_at")
+    .eq("id", input.reviewId)
+    .maybeSingle();
+
+  if (fetchErr) {
+    log("fetch review for reassign failed", fetchErr);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!existing) return { ok: false, message: "Không tìm thấy review." };
+  
+  if (existing.status === "submitted") {
+    return { ok: false, message: "Không thể đổi người cho review đã nộp." };
+  }
+
+  // 1. Cancel old review
+  const cancelResult = await cancelApplicationReview({
+    reviewId: input.reviewId,
+    adminUserId: input.adminUserId
+  });
+  if (!cancelResult.ok) return cancelResult;
+
+  // 2. Assign new review
+  return await assignApplicationReview({
+    applicationId: existing.application_id as string,
+    reviewerAdminUserId: input.newReviewerAdminUserId,
+    assignedByAdminUserId: input.adminUserId,
+    reviewRound: existing.review_round as "profile_screening" | "interview",
+    dueAt: (existing.due_at as string | null) ?? null
+  });
 }

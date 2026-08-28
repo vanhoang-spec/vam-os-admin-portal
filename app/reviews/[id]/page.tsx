@@ -7,12 +7,14 @@ import {
   getApplicationReviewById,
   getPerson,
   getSeasons,
+  getReviewEligibleReviewers,
   keyById
 } from "@/lib/data";
 import { canReview } from "@/lib/permissions";
 import { displayText, formatDate } from "@/lib/utils";
 import { Card, DetailGrid, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewForm } from "./review-form";
+import { ReviewOperations } from "./review-operations";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,9 +49,10 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const reviewerConstraint = adminUser.role === "reviewer" ? adminUser.id : undefined;
-  const [reviewResult, seasons] = await Promise.all([
+  const [reviewResult, seasons, reviewersResult] = await Promise.all([
     getApplicationReviewById(params.id, scope, reviewerConstraint),
-    getSeasons(scope)
+    getSeasons(scope),
+    adminUser.role !== "reviewer" ? getReviewEligibleReviewers() : Promise.resolve({ data: [], error: null })
   ]);
 
   const review = reviewResult.data;
@@ -207,6 +210,17 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
           </div>
         )}
       </Card>
+
+      {adminUser.role !== "reviewer" && canEdit && !isSubmitted && review.status !== "cancelled" && (
+        <Card className="mb-4">
+          <ReviewOperations 
+            reviewId={review.id} 
+            isSubmitted={isSubmitted} 
+            isCancelled={review.status === "cancelled"} 
+            reviewers={reviewersResult.data} 
+          />
+        </Card>
+      )}
 
       <div className="flex gap-4">
         {review.review_round === "interview" ? (
