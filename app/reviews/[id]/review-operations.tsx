@@ -1,9 +1,9 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { 
-  cancelApplicationReviewAction, 
-  reassignApplicationReviewAction 
+import {
+  cancelApplicationReviewAction,
+  reassignApplicationReviewAction
 } from "@/app/actions/application-reviews";
 import { initialReviewActionState } from "@/lib/review-action-types";
 import type { ReviewEligibleReviewer } from "@/lib/types";

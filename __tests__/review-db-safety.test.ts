@@ -11,6 +11,7 @@
 import { vi, describe, it, expect, beforeEach, type Mock } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() }));
 vi.mock("@/lib/program-scope", () => ({
   getAdminScopeContext: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("@/lib/program-scope", () => ({
 }));
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getAdminScopeContext, canReviewSeason } from "@/lib/program-scope";
 import {
   assignApplicationReview,
@@ -80,6 +82,7 @@ function existingReview(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  (getCurrentAdminUser as Mock).mockResolvedValue({ id: ADMIN_ID, role: "admin" });
   (getAdminScopeContext as Mock).mockResolvedValue({ isSuperAdmin: true, seasons: [], programs: [] });
   (canReviewSeason as Mock).mockResolvedValue(true);
 });
@@ -90,9 +93,13 @@ describe("assignApplicationReview — DB error safety", () => {
   it("insert failure: raw DB message is not returned to caller", async () => {
     // Call sequence:
     // 1. from("applications") → scopeApp (canWriteReviewWorkflowForApplication)
-    // 2. from("application_reviews").insert → error
+    // 2. from("admin_users") → eligible target reviewer
+    // 3. from("application_reviews") → no duplicate
+    // 4. from("application_reviews").insert → error
     const client = makeClient([
       makeChain({ data: scopeApp() }),
+      makeChain({ data: [{ id: "reviewer-1", role: "reviewer", status: "active" }] }),
+      makeChain({ data: [] }),
       makeChain({ data: null, error: { code: "42501", message: SENSITIVE_MSG } }),
     ]);
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
