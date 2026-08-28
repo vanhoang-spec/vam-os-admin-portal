@@ -1,11 +1,16 @@
 import { PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canBrowseApplications } from "@/lib/read-access";
+import { canExportApplicationResults } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 
 export default async function ExportPage() {
   const adminUser = await getCurrentAdminUser();
-  if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
+  // Same helper the API route authorizes with. The page used to gate on
+  // `canBrowseApplications`, which includes support_team — so support_team saw
+  // a page whose every button came back 403.
+  if (!adminUser || !canExportApplicationResults(adminUser.role)) {
+    redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
+  }
 
   return (
     <div className="space-y-6">

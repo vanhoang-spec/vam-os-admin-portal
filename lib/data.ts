@@ -1709,6 +1709,60 @@ export async function getActiveAdminUsers(): Promise<QueryResult<AdminUserPublic
   return { data, error: null };
 }
 
+/**
+ * Resolves staff identities for a set of `admin_users.id` values.
+ *
+ * WHY THIS IS A DATA-LAYER FUNCTION AND NOT AN INLINE ROUTE QUERY
+ * --------------------------------------------------------------
+ * Production release S12/T2 removed SELECT on `public.admin_users` from both
+ * `anon` and `authenticated` (RLS enabled, zero policies — see
+ * `lib/middleware-admin-lookup.ts` for the measured evidence). A route holding
+ * only the caller's session token therefore CANNOT read another admin's row:
+ * the request is refused, and a caller that ignores the error sees the same
+ * empty result as "this reviewer does not exist". The export used to render
+ * that empty result as the reviewer's name by falling back to the raw
+ * `reviewer_admin_user_id` UUID. Service-role is the only client that can
+ * answer this question, so the lookup lives here.
+ *
+ * `status` is deliberately NOT filtered. A reviewer who scored an application
+ * in an earlier round and has since been suspended or deactivated is still the
+ * historical author of that score, and the export must name them. Filtering to
+ * `active` would silently turn historical reviewers into unknowns.
+ *
+ * Chunked and paged like every other IN-list read here: the caller passes one
+ * id per distinct reviewer across the whole intake, which has no enforced
+ * ceiling, and a bare `.in()` would be capped at `db-max-rows` in silence.
+ *
+ * Fails closed. A query failure returns a typed error and NO rows; callers must
+ * check `error` before rendering, because "identity unknown" and "identity
+ * lookup broke" must not produce the same output file.
+ */
+export async function getAdminUsersByIds(ids: Array<string | null | undefined>): Promise<QueryResult<AdminUserPublic[]>> {
+  const wanted = uniqueStrings(ids);
+  if (!wanted.length) return { data: [], error: null };
+
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return serviceRoleRequiredError<AdminUserPublic[]>([]);
+
+  const rows: AdminUserPublic[] = [];
+  for (const chunk of chunkValues(wanted)) {
+    if (!chunk.length) continue;
+    const { data, error } = await readAllPages<AdminUserPublic & JsonRecord>(
+      "admin_users",
+      "id,email,full_name,role",
+      (projection) => client.from("admin_users").select(projection).in("id", chunk)
+    );
+    if (error) {
+      logDataError("admin_users.getAdminUsersByIds", error);
+      const err = error as { message?: string };
+      return { data: [] as AdminUserPublic[], error: `${VI_ERROR} (admin_users: ${err.message ?? "Bad Request"})` };
+    }
+    rows.push(...data);
+  }
+
+  return { data: rows, error: null };
+}
+
 /** All admin decisions recorded against an application, newest first. */
 export async function getApplicationDecisions(
   applicationId: string,

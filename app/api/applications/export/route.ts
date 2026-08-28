@@ -1,11 +1,56 @@
 import { NextRequest } from "next/server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { getApplications, getAllApplicationReviews, getIntakeBatches } from "@/lib/data";
-import { ApplicationReview, Application } from "@/lib/types";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { canExportApplicationResults } from "@/lib/permissions";
+import { getAdminScopeContext, getScopeFilter, type ScopeFilter } from "@/lib/program-scope";
+import {
+  getAdminUsersByIds,
+  getAllApplicationReviews,
+  getApplications,
+  getIntakeBatches,
+  getSeasons
+} from "@/lib/data";
+import type { AdminUserPublic, Application, ApplicationReview, IntakeBatch, Season } from "@/lib/types";
 
-// Security: Prefix spreadsheet formulas
+/**
+ * Full recruitment-results export.
+ *
+ * FAIL-CLOSED CONTRACT
+ * --------------------
+ * The file this route emits is used to notify real applicants. Every required
+ * source — applications, reviews, intake batches, seasons, reviewer identity —
+ * is checked for an error BEFORE any row is written, and any failure returns a
+ * non-200 with no file. A legitimately empty dataset is fine; a failed query
+ * rendered as an empty (or partially resolved) file is not, because the two are
+ * indistinguishable once the file has left the system.
+ *
+ * NO RAW SUPABASE CLIENT HERE
+ * ---------------------------
+ * This route deliberately holds no PostgREST client of its own. It previously
+ * called `getSupabaseServerClient()` without awaiting it — that helper is async
+ * since Next 15 — and then called `.from()` on the Promise, which throws for
+ * every authorized request. Awaiting it would not have been enough either: the
+ * cookie-scoped client authenticates as `authenticated`, and S12/T2 removed
+ * SELECT on `admin_users` from that role entirely (see
+ * `lib/middleware-admin-lookup.ts`). Both reads now go through server-side,
+ * service-role data-layer functions that page, chunk and fail closed —
+ * `getSeasons` and `getAdminUsersByIds`.
+ */
+
+const EXPORT_TYPES = new Set(["summary", "detail"]);
+const EXPORT_FORMATS = new Set(["csv", "xlsx"]);
+const ROLE_FILTERS = new Set(["all", "mentor", "mentee"]);
+
+/**
+ * Shown in place of a reviewer whose `admin_users` row no longer exists. A
+ * missing historical row is NOT a query failure — that path returns non-200
+ * before any row is written. This is a staff record hard-deleted after scoring,
+ * and the reviewer UUID must never be printed as if it were a person's name.
+ */
+const MISSING_REVIEWER_LABEL = "Reviewer không còn trong hệ thống";
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Security: prefix spreadsheet formulas so a cell is never evaluated on open.
 function escapeCSV(val: string | number | boolean | null | undefined): string {
   if (val === null || val === undefined) return "";
   let str = String(val);
@@ -18,30 +63,70 @@ function escapeCSV(val: string | number | boolean | null | undefined): string {
   return str;
 }
 
-// Same prefix logic for XLSX to avoid formula injection
+// Same prefix logic for XLSX to avoid formula injection.
 function safeExcelValue(val: string | number | boolean | null | undefined) {
   if (val === null || val === undefined) return null;
-  let str = String(val);
+  const str = String(val);
   if (/^[=+\-@]/.test(str)) {
     return "'" + str;
   }
-  return typeof val === 'number' ? val : str;
+  return typeof val === "number" ? val : str;
 }
 
 function aggregateReviews(reviews: ApplicationReview[]) {
-  const submitted = reviews.filter(r => r.status === "submitted");
+  const submitted = reviews.filter((r) => r.status === "submitted");
   const count = submitted.length;
   const score = submitted.reduce((acc, r) => acc + (r.total_score || 0), 0);
   const avg = count > 0 ? (score / count).toFixed(2) : "";
-  const recommendations = submitted.map(r => r.recommendation).filter(Boolean).join("; ");
+  const recommendations = submitted.map((r) => r.recommendation).filter(Boolean).join("; ");
   return { count, avg, recommendations };
 }
 
+function getFinalDecision(status: string | null) {
+  if (!status) return "Pending";
+  if (status === "approved_as_mentor" || status === "approved_as_mentee") return "Accepted";
+  if (status === "rejected_or_not_fit") return "Rejected";
+  if (status === "withdrawn") return "Withdrawn";
+  return "Pending";
+}
+
+/**
+ * One filename component. A UUID is never a useful context label and leaks an
+ * internal identifier into a file that gets emailed around, so a component that
+ * resolves to one is replaced by its fallback rather than printed.
+ */
+function sanitizeFilenamePart(value: string | null | undefined, fallback: string) {
+  const raw = String(value ?? "").trim();
+  if (!raw || UUID_PATTERN.test(raw)) return fallback;
+  const cleaned = raw
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+  return cleaned || fallback;
+}
+
+function clean(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+const SUMMARY_HEADERS = [
+  "Season", "Batch", "Role", "Application ID", "Applicant Name", "Email", "MSSV",
+  "Application Status", "Final Decision",
+  "Profile Review Submitted Count", "Profile Review Average Score", "Profile Review Recommendation(s)",
+  "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)"
+];
+
+const DETAIL_HEADERS = [
+  "Applicant", "Role", "Application ID", "Round",
+  "Reviewer Name", "Reviewer Email", "Assignment Status", "Assigned At", "Due At",
+  "Motivation", "Objective", "Commitment", "Fit", "Communication",
+  "Total Score", "Recommendation", "Reviewer Note", "Submitted At"
+];
+
 export async function GET(request: NextRequest) {
   const adminUser = await getCurrentAdminUser();
-  
-  const allowed = ["super_admin", "admin", "core_team"];
-  if (!adminUser || !allowed.includes(adminUser.role)) {
+  if (!adminUser || !canExportApplicationResults(adminUser.role)) {
     return new Response("Unauthorized", { status: 403 });
   }
 
@@ -50,129 +135,201 @@ export async function GET(request: NextRequest) {
   const format = searchParams.get("format") || "csv";
   const roleFilter = searchParams.get("role") || "all";
   const batchFilter = searchParams.get("batch") || "all";
+  const seasonFilter = searchParams.get("season") || "all";
   const statusFilter = searchParams.get("status") || "all";
 
-  // Enforce explicit operational scope
+  // An unrecognised selector is rejected rather than ignored: silently falling
+  // back to "all" would WIDEN what a narrowing parameter was asked to do.
+  if (!EXPORT_TYPES.has(exportType) || !EXPORT_FORMATS.has(format) || !ROLE_FILTERS.has(roleFilter)) {
+    return new Response("Invalid export parameters", { status: 400 });
+  }
+
+  // Enforce explicit operational scope.
   const scopeContext = await getAdminScopeContext();
   if (scopeContext.scopeError) {
     return new Response(scopeContext.scopeError, { status: 403 });
   }
   const scope = await getScopeFilter(scopeContext);
 
-  const appsResult = await getApplications(scope);
-  if (appsResult.error) {
-    return new Response("Failed to load applications", { status: 500 });
+  // A non-super user with no resolved grant has no export authority at all.
+  // This is NOT the same condition as "the export came back empty", and it must
+  // not be answered with a 200 and an empty file: an unauthorized Core Team
+  // member would read that as "there is no data", which is a different — and
+  // false — statement about the season.
+  if (!scopeContext.isSuperAdmin && !hasAnyScope(scope)) {
+    return new Response("Không có phạm vi dữ liệu nào được cấp cho tài khoản này.", { status: 403 });
   }
-  
-  const allReviewsResult = await getAllApplicationReviews(scope);
-  if (allReviewsResult.error) {
-    return new Response("Failed to load reviews", { status: 500 });
+
+  // ── Canonical season metadata. Scoped, and fails closed. ──────────────────
+  const seasonsResult = await getSeasons(scope);
+  if (seasonsResult.error) {
+    return new Response("Failed to load seasons", { status: 500 });
   }
-  
+  const seasons = seasonsResult.data as Season[];
+  const seasonCodeById = new Map<string, string>();
+  for (const season of seasons) {
+    const id = clean(season.id);
+    const code = clean(season.code);
+    // A season row with no code cannot label a column. Registering the id here
+    // would put a UUID in the visible "Season" cell, which is the exact
+    // fail-open this loader exists to prevent — leave it unresolved instead.
+    if (id && code) seasonCodeById.set(id, code);
+  }
+
   const batchesResult = await getIntakeBatches(scope);
   if (batchesResult.error) {
     return new Response("Failed to load batches", { status: 500 });
   }
-
-  let apps = appsResult.data;
-  const allReviews = allReviewsResult.data;
-  const batches = batchesResult.data;
-  const getBatchName = (id: string | null) => {
-    return batches.find(b => b.id === id)?.code || id || "";
-  };
-
-  const supabase = getSupabaseServerClient();
-  const { data: seasons } = await supabase.from("seasons").select("id, code");
-  const seasonMap = new Map(seasons?.map(s => [s.id, s.code]));
-
-  const reviewerIds = Array.from(new Set(allReviews.map(r => r.reviewer_admin_user_id).filter(Boolean)));
-  const { data: adminUsers } = await supabase
-    .from("admin_users")
-    .select("id, full_name, email")
-    .in("id", reviewerIds);
-  const reviewerMap = new Map(adminUsers?.map(u => [u.id, u]));
-
-  if (roleFilter !== "all") {
-    apps = apps.filter(a => a.role_applied === roleFilter);
+  const batches = batchesResult.data as IntakeBatch[];
+  const batchById = new Map<string, IntakeBatch>();
+  for (const batch of batches) {
+    const id = clean(batch.id);
+    if (id) batchById.set(id, batch);
   }
+
+  // ── Narrowing selectors, validated against the RESOLVED scope. ────────────
+  // `seasons` and `batches` above are already the scoped catalogs, so "not
+  // present" means "not granted to you" as much as it means "does not exist".
+  // Both are answered with 403; neither may quietly become an unfiltered export.
+  let requestedSeason: Season | null = null;
+  if (seasonFilter !== "all") {
+    requestedSeason = seasons.find((season) => season.id === seasonFilter || season.code === seasonFilter) ?? null;
+    if (!requestedSeason) {
+      return new Response("Season nằm ngoài phạm vi được cấp.", { status: 403 });
+    }
+  }
+
+  let requestedBatch: IntakeBatch | null = null;
   if (batchFilter !== "all") {
-    apps = apps.filter(a => a.intake_batch_id === batchFilter);
+    requestedBatch = batches.find((batch) => batch.id === batchFilter || batch.code === batchFilter) ?? null;
+    if (!requestedBatch) {
+      return new Response("Đợt tuyển nằm ngoài phạm vi được cấp.", { status: 403 });
+    }
+  }
+
+  const appsResult = await getApplications(scope);
+  if (appsResult.error) {
+    return new Response("Failed to load applications", { status: 500 });
+  }
+
+  const allReviewsResult = await getAllApplicationReviews(scope);
+  if (allReviewsResult.error) {
+    return new Response("Failed to load reviews", { status: 500 });
+  }
+  const allReviews = allReviewsResult.data;
+
+  let apps = appsResult.data as Application[];
+  if (roleFilter !== "all") {
+    apps = apps.filter((a) => a.role_applied === roleFilter);
+  }
+  if (requestedBatch) {
+    const batchId = requestedBatch.id;
+    apps = apps.filter((a) => a.intake_batch_id === batchId);
+  }
+  if (requestedSeason) {
+    const seasonId = requestedSeason.id;
+    apps = apps.filter((a) => a.season_id === seasonId);
   }
   if (statusFilter !== "all") {
-    apps = apps.filter(a => a.status === statusFilter);
+    apps = apps.filter((a) => a.status === statusFilter);
   }
 
-  const BOM = "\uFEFF";
-  let csv = BOM;
+  const appIds = new Set(apps.map((app) => app.id));
+  const exportedReviews = allReviews.filter((review) => appIds.has(String(review.application_id)));
 
-  const getFinalDecision = (status: string | null) => {
-    if (!status) return "Pending";
-    if (status === "approved_as_mentor" || status === "approved_as_mentee") return "Accepted";
-    if (status === "rejected_or_not_fit") return "Rejected";
-    if (status === "withdrawn") return "Withdrawn";
-    return "Pending";
+  // Grouped once. A per-application `.filter()` over the whole review set is
+  // O(applications x reviews), which on a full season (thousands of each) is
+  // tens of millions of comparisons per download.
+  const reviewsByApp = new Map<string, ApplicationReview[]>();
+  for (const review of exportedReviews) {
+    const key = String(review.application_id);
+    const bucket = reviewsByApp.get(key);
+    if (bucket) bucket.push(review);
+    else reviewsByApp.set(key, [review]);
+  }
+
+  // ── Season label per exported row. Unresolvable => the whole export fails. ─
+  // An application whose season cannot be named canonically would otherwise be
+  // published with a UUID (or a blank) in the Season column, and a recipient
+  // cannot tell that apart from a real label.
+  const seasonLabelByAppId = new Map<string, string>();
+  for (const app of apps) {
+    const direct = clean(app.season_id);
+    const viaBatch = clean(batchById.get(clean(app.intake_batch_id) ?? "")?.season_id);
+    const code = (direct && seasonCodeById.get(direct)) || (viaBatch && seasonCodeById.get(viaBatch)) || null;
+    if (!code) {
+      return new Response("Failed to resolve season metadata for exported applications", { status: 500 });
+    }
+    seasonLabelByAppId.set(app.id, code);
+  }
+
+  const getBatchLabel = (id: string | null) => clean(batchById.get(clean(id) ?? "")?.code) ?? "";
+
+  // ── Reviewer identity. Server-side, service-role, bulk, chunked. ──────────
+  const needsReviewerIdentity = format === "xlsx" || exportType === "detail";
+  const reviewerById = new Map<string, AdminUserPublic>();
+  if (needsReviewerIdentity) {
+    const reviewerIds = exportedReviews.map((review) => clean(review.reviewer_admin_user_id));
+    const reviewersResult = await getAdminUsersByIds(reviewerIds);
+    if (reviewersResult.error) {
+      return new Response("Failed to load reviewer identities", { status: 500 });
+    }
+    for (const reviewer of reviewersResult.data) {
+      if (reviewer?.id) reviewerById.set(String(reviewer.id), reviewer);
+    }
+  }
+
+  const reviewerName = (review: ApplicationReview) => {
+    const id = clean(review.reviewer_admin_user_id);
+    const reviewer = id ? reviewerById.get(id) : undefined;
+    return clean(reviewer?.full_name) ?? clean(reviewer?.email) ?? MISSING_REVIEWER_LABEL;
+  };
+  const reviewerEmail = (review: ApplicationReview) => {
+    const id = clean(review.reviewer_admin_user_id);
+    return clean(id ? reviewerById.get(id)?.email : null) ?? "";
   };
 
-  if (exportType === "summary") {
-    const headers = [
-      "Season", "Batch", "Role", "Application ID", "Applicant Name", "Email", "MSSV",
-      "Application Status", "Final Decision",
-      "Profile Review Submitted Count", "Profile Review Average Score", "Profile Review Recommendation(s)",
-      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)"
+  type Cell = string | number | null | undefined;
+
+  const summaryRow = (app: Application): Cell[] => {
+    const appReviews = reviewsByApp.get(app.id) ?? [];
+    const profileAgg = aggregateReviews(appReviews.filter((r) => r.review_round === "profile_screening"));
+    const interviewAgg = aggregateReviews(appReviews.filter((r) => r.review_round === "interview"));
+    // Only MSSV is lifted out of `raw_payload`; the payload itself is never
+    // exported (privacy contract).
+    const mssv = (app.raw_payload as Record<string, unknown> | null)?.mssv;
+    return [
+      seasonLabelByAppId.get(app.id) ?? "",
+      getBatchLabel(app.intake_batch_id),
+      app.role_applied,
+      app.id,
+      app.full_name,
+      app.email_primary,
+      mssv === null || mssv === undefined ? "" : String(mssv),
+      app.status,
+      getFinalDecision(app.status),
+      profileAgg.count,
+      profileAgg.avg,
+      profileAgg.recommendations,
+      interviewAgg.count,
+      interviewAgg.avg,
+      interviewAgg.recommendations
     ];
-    csv += headers.map(escapeCSV).join(",") + "\n";
+  };
 
+  const detailRows = (): Cell[][] => {
+    const rows: Cell[][] = [];
     for (const app of apps) {
-      const appReviews = allReviews.filter(r => r.application_id === app.id);
-      const profileReviews = appReviews.filter(r => r.review_round === "profile_screening");
-      const interviewReviews = appReviews.filter(r => r.review_round === "interview");
-
-      const profileAgg = aggregateReviews(profileReviews);
-      const interviewAgg = aggregateReviews(interviewReviews);
-
-      const mssv = (app.raw_payload as any)?.mssv || "";
-
-      const row = [
-        seasonMap.get(app.season_id) || app.season_id || "",
-        getBatchName(app.intake_batch_id),
-        app.role_applied,
-        app.id,
-        app.full_name,
-        app.email_primary,
-        mssv,
-        app.status,
-        getFinalDecision(app.status),
-        profileAgg.count,
-        profileAgg.avg,
-        profileAgg.recommendations,
-        interviewAgg.count,
-        interviewAgg.avg,
-        interviewAgg.recommendations
-      ];
-      csv += row.map(escapeCSV).join(",") + "\n";
-    }
-  } else if (exportType === "detail") {
-    const headers = [
-      "Applicant", "Role", "Application ID", "Round",
-      "Reviewer Name", "Reviewer Email", "Assignment Status", "Assigned At", "Due At",
-      "Motivation", "Objective", "Commitment", "Fit", "Communication",
-      "Total Score", "Recommendation", "Reviewer Note", "Submitted At"
-    ];
-    csv += headers.map(escapeCSV).join(",") + "\n";
-
-    for (const app of apps) {
-      const appReviews = allReviews.filter(r => r.application_id === app.id);
-      for (const review of appReviews) {
-        // Expose CANCELLED explicitly to avoid distortion confusion
+      for (const review of reviewsByApp.get(app.id) ?? []) {
+        // Expose CANCELLED explicitly to avoid distortion confusion.
         const statusLabel = review.status === "cancelled" ? "CANCELLED" : review.status;
-        const reviewer = reviewerMap.get(review.reviewer_admin_user_id);
-        const row = [
+        rows.push([
           app.full_name,
           app.role_applied,
           app.id,
           review.review_round,
-          reviewer?.full_name || review.reviewer_admin_user_id,
-          reviewer?.email || "",
+          reviewerName(review),
+          reviewerEmail(review),
           statusLabel,
           review.assigned_at,
           review.due_at,
@@ -185,122 +342,132 @@ export async function GET(request: NextRequest) {
           review.recommendation,
           review.reviewer_note,
           review.submitted_at
-        ];
-        csv += row.map(escapeCSV).join(",") + "\n";
-      }
-    }
-  }
-
-  const uniqueSeasons = Array.from(new Set(apps.map(a => seasonMap.get(a.season_id) || a.season_id).filter(Boolean)));
-  const seasonCode = uniqueSeasons.length === 1 ? uniqueSeasons[0] : (uniqueSeasons.length > 1 ? "MULTI_SEASON" : "ALL");
-  
-  if (format === "xlsx") {
-    // Construct XLSX
-    const writeXlsxFile = (await import('write-excel-file/node')).default;
-    
-    // Sheet 1: Ket_qua_tuyen
-    const summaryHeaders = [
-      "Season", "Batch", "Role", "Application ID", "Applicant Name", "Email", "MSSV",
-      "Application Status", "Final Decision",
-      "Profile Review Submitted Count", "Profile Review Average Score", "Profile Review Recommendation(s)",
-      "Interview Submitted Count", "Interview Average Score", "Interview Recommendation(s)"
-    ].map(h => ({ value: h, fontWeight: "bold" as const }));
-    
-    const summaryData: any[][] = [summaryHeaders];
-    for (const app of apps) {
-      const appReviews = allReviews.filter(r => r.application_id === app.id);
-      const profileReviews = appReviews.filter(r => r.review_round === "profile_screening");
-      const interviewReviews = appReviews.filter(r => r.review_round === "interview");
-
-      const profileAgg = aggregateReviews(profileReviews);
-      const interviewAgg = aggregateReviews(interviewReviews);
-      const mssv = (app.raw_payload as any)?.mssv || "";
-
-      summaryData.push([
-        { type: String, value: safeExcelValue(seasonMap.get(app.season_id) || app.season_id || "") },
-        { type: String, value: safeExcelValue(getBatchName(app.intake_batch_id)) },
-        { type: String, value: safeExcelValue(app.role_applied) },
-        { type: String, value: safeExcelValue(app.id) },
-        { type: String, value: safeExcelValue(app.full_name) },
-        { type: String, value: safeExcelValue(app.email_primary) },
-        { type: String, value: safeExcelValue(mssv) },
-        { type: String, value: safeExcelValue(app.status) },
-        { type: String, value: safeExcelValue(getFinalDecision(app.status)) },
-        { type: Number, value: profileAgg.count },
-        { type: String, value: profileAgg.avg },
-        { type: String, value: safeExcelValue(profileAgg.recommendations) },
-        { type: Number, value: interviewAgg.count },
-        { type: String, value: interviewAgg.avg },
-        { type: String, value: safeExcelValue(interviewAgg.recommendations) }
-      ]);
-    }
-
-    // Sheet 2: Chi_tiet_cham
-    const detailHeaders = [
-      "Applicant", "Role", "Application ID", "Round",
-      "Reviewer Name", "Reviewer Email", "Assignment Status", "Assigned At", "Due At",
-      "Motivation", "Objective", "Commitment", "Fit", "Communication",
-      "Total Score", "Recommendation", "Reviewer Note", "Submitted At"
-    ].map(h => ({ value: h, fontWeight: "bold" as const }));
-    
-    const detailData: any[][] = [detailHeaders];
-    for (const app of apps) {
-      const appReviews = allReviews.filter(r => r.application_id === app.id);
-      for (const review of appReviews) {
-        const statusLabel = review.status === "cancelled" ? "CANCELLED" : review.status;
-        const reviewer = reviewerMap.get(review.reviewer_admin_user_id);
-        detailData.push([
-          { type: String, value: safeExcelValue(app.full_name) },
-          { type: String, value: safeExcelValue(app.role_applied) },
-          { type: String, value: safeExcelValue(app.id) },
-          { type: String, value: safeExcelValue(review.review_round) },
-          { type: String, value: safeExcelValue(reviewer?.full_name || review.reviewer_admin_user_id) },
-          { type: String, value: safeExcelValue(reviewer?.email || "") },
-          { type: String, value: safeExcelValue(statusLabel) },
-          { type: String, value: safeExcelValue(review.assigned_at) },
-          { type: String, value: safeExcelValue(review.due_at) },
-          { type: Number, value: review.score_motivation ?? null },
-          { type: Number, value: review.score_goal_clarity ?? null },
-          { type: Number, value: review.score_commitment ?? null },
-          { type: Number, value: review.score_fit ?? null },
-          { type: Number, value: review.score_communication ?? null },
-          { type: Number, value: review.total_score ?? null },
-          { type: String, value: safeExcelValue(review.recommendation) },
-          { type: String, value: safeExcelValue(review.reviewer_note) },
-          { type: String, value: safeExcelValue(review.submitted_at) }
         ]);
       }
     }
-    
-    // Ensure detailData has at least a header, write-excel-file crashes on empty sheets sometimes, but we have headers so it's fine.
-    
-    const sheets = [
-      { name: "Ket_qua_tuyen", data: summaryData },
-      { name: "Chi_tiet_cham", data: detailData }
-    ];
+    return rows;
+  };
 
-    const buffer = await writeXlsxFile(sheets, {
-      fontFamily: "Arial",
-      fontSize: 10
-    });
-    
-    return new Response(buffer as unknown as BodyInit, {
+  // ── Filename context, derived from what was actually resolved. ────────────
+  const exportedSeasonCodes = Array.from(new Set(Array.from(seasonLabelByAppId.values())));
+  const seasonPart = requestedSeason
+    ? sanitizeFilenamePart(requestedSeason.code, "SEASON")
+    : exportedSeasonCodes.length === 1
+      ? sanitizeFilenamePart(exportedSeasonCodes[0], "SEASON")
+      : exportedSeasonCodes.length > 1
+        ? "MULTI-SEASON"
+        : "ALL";
+  const batchPart = requestedBatch ? sanitizeFilenamePart(requestedBatch.code ?? requestedBatch.name, "BATCH") : "ALL";
+  const rolePart = roleFilter === "all" ? "ALL" : sanitizeFilenamePart(roleFilter, "ALL");
+  const typePart = format === "xlsx" ? "tong-hop" : exportType === "summary" ? "ket-qua-tuyen" : "chi-tiet-cham";
+  const datePart = new Date().toISOString().split("T")[0];
+  const filenameStem = `${seasonPart}_${batchPart}_${rolePart}_${typePart}_${datePart}`;
+
+  if (format === "xlsx") {
+    // The real write-excel-file@4 Node API: a multi-sheet call takes
+    // `{ sheet, data }` (NOT `name`) and returns a handle, not bytes. The bytes
+    // come from `await result.toBuffer()`; handing the handle straight to
+    // `Response` stringifies it to "[object Object]" and produces a download no
+    // spreadsheet program can open.
+    const writeXlsxFile = (await import("write-excel-file/node")).default;
+
+    const summaryData: unknown[][] = [SUMMARY_HEADERS.map((h) => ({ value: h, fontWeight: "bold" as const }))];
+    for (const app of apps) {
+      const row = summaryRow(app);
+      summaryData.push([
+        { type: String, value: safeExcelValue(row[0] as string) },
+        { type: String, value: safeExcelValue(row[1] as string) },
+        { type: String, value: safeExcelValue(row[2] as string) },
+        { type: String, value: safeExcelValue(row[3] as string) },
+        { type: String, value: safeExcelValue(row[4] as string) },
+        { type: String, value: safeExcelValue(row[5] as string) },
+        // MSSV stays a String cell: "0012345678" typed as Number loses its
+        // leading zeros the moment Excel opens the file.
+        { type: String, value: safeExcelValue(row[6] as string) },
+        { type: String, value: safeExcelValue(row[7] as string) },
+        { type: String, value: safeExcelValue(row[8] as string) },
+        { type: Number, value: row[9] as number },
+        { type: String, value: safeExcelValue(row[10] as string) },
+        { type: String, value: safeExcelValue(row[11] as string) },
+        { type: Number, value: row[12] as number },
+        { type: String, value: safeExcelValue(row[13] as string) },
+        { type: String, value: safeExcelValue(row[14] as string) }
+      ]);
+    }
+
+    const detailData: unknown[][] = [DETAIL_HEADERS.map((h) => ({ value: h, fontWeight: "bold" as const }))];
+    for (const row of detailRows()) {
+      detailData.push([
+        { type: String, value: safeExcelValue(row[0] as string) },
+        { type: String, value: safeExcelValue(row[1] as string) },
+        { type: String, value: safeExcelValue(row[2] as string) },
+        { type: String, value: safeExcelValue(row[3] as string) },
+        { type: String, value: safeExcelValue(row[4] as string) },
+        { type: String, value: safeExcelValue(row[5] as string) },
+        { type: String, value: safeExcelValue(row[6] as string) },
+        { type: String, value: safeExcelValue(row[7] as string) },
+        { type: String, value: safeExcelValue(row[8] as string) },
+        { type: Number, value: (row[9] as number) ?? null },
+        { type: Number, value: (row[10] as number) ?? null },
+        { type: Number, value: (row[11] as number) ?? null },
+        { type: Number, value: (row[12] as number) ?? null },
+        { type: Number, value: (row[13] as number) ?? null },
+        { type: Number, value: (row[14] as number) ?? null },
+        { type: String, value: safeExcelValue(row[15] as string) },
+        { type: String, value: safeExcelValue(row[16] as string) },
+        { type: String, value: safeExcelValue(row[17] as string) }
+      ]);
+    }
+
+    // `writeXlsxFile` returns the handle synchronously; only `toBuffer` is async.
+    const workbook = writeXlsxFile(
+      [
+        { sheet: "Ket_qua_tuyen", data: summaryData as never },
+        { sheet: "Chi_tiet_cham", data: detailData as never }
+      ],
+      { fontFamily: "Arial", fontSize: 10 }
+    );
+    const buffer = await workbook.toBuffer();
+
+    return new Response(new Uint8Array(buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="vam_os_export_${seasonCode}_${exportType}_${Date.now()}.xlsx"`
+        "Content-Disposition": `attachment; filename="${filenameStem}.xlsx"`
       }
     });
   }
 
-  // Fallback to CSV
-  const filename = `UEHM-${seasonCode}_${batchFilter}_${roleFilter}_${exportType === "summary" ? "ket-qua-tuyen" : "chi-tiet-cham"}_${new Date().toISOString().split("T")[0]}.csv`;
+  const BOM = "﻿";
+  let csv = BOM;
+  if (exportType === "summary") {
+    csv += SUMMARY_HEADERS.map(escapeCSV).join(",") + "\n";
+    for (const app of apps) {
+      csv += summaryRow(app).map(escapeCSV).join(",") + "\n";
+    }
+  } else {
+    csv += DETAIL_HEADERS.map(escapeCSV).join(",") + "\n";
+    for (const row of detailRows()) {
+      csv += row.map(escapeCSV).join(",") + "\n";
+    }
+  }
 
   return new Response(csv, {
+    status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`
+      "Content-Disposition": `attachment; filename="${filenameStem}.csv"`
     }
   });
 }
 
+/**
+ * True when the resolved filter actually grants something. `getScopeFilter`
+ * returns `undefined` for a super admin (no restriction) and a pair of ID lists
+ * for everyone else; two empty lists mean "no rows anywhere", which is an
+ * authorization answer, not a data answer.
+ */
+function hasAnyScope(scope: ScopeFilter | undefined) {
+  if (!scope) return false;
+  return Boolean(scope.allowedProgramIds?.length || scope.allowedSeasonIds?.length);
+}

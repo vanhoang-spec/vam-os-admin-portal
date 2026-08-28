@@ -102,3 +102,29 @@ export function canToggleApplicationForm(role?: string | null) {
 export function canViewApplicationFormControls(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can download the full recruitment-results export (`/applications/export` and
+ * `GET /api/applications/export`).
+ *
+ * Deliberately NOT `canBrowseApplications`. That helper is the read-access
+ * gate for the operations browse screens and intentionally includes
+ * `support_team`; the export is a different act. It emits one file containing
+ * every applicant's name, email, MSSV, final decision and every reviewer's
+ * scores and free-text notes for the whole season — an offline artefact that
+ * leaves the audited system and is used to notify real applicants. Browsing a
+ * single record under RLS is not evidence of authority to carry the whole
+ * dataset out of the building.
+ *
+ * The API route, the export page, and any navigation exposing it MUST all call
+ * THIS helper. The previous defect was exactly this drift: the page authorized
+ * with `canBrowseApplications` while the route authorized with its own inline
+ * allowlist, so `support_team` saw a page whose every button returned 403.
+ *
+ * This is only the global-role half of the check. The caller must ALSO prove
+ * operational scope — a scoped admin or core_team member with no season grant
+ * must not be able to export a season they were never granted.
+ */
+export function canExportApplicationResults(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}
