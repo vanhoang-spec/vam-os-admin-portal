@@ -52,6 +52,7 @@ export type BulkAssignInput = {
   /** Application statuses to include (must be subset of screeable set). */
   statuses: string[];
   reviewerAdminUserIds: string[];
+  reviewRound?: "profile_screening" | "interview";
   dueAt: string | null;
   excludeAlreadyAssigned: boolean;
   assignmentNote: string | null;
@@ -140,12 +141,14 @@ export async function bulkAssignApplicationReviews(
   let skippedAlreadyAssigned = 0;
   let appsToAssign = allApps;
 
+  const reviewRound = input.reviewRound ?? "profile_screening";
+
   if (input.excludeAlreadyAssigned) {
     const appIds = allApps.map((a) => a.id);
     const { data: existingReviews } = await client
       .from("application_reviews")
       .select("application_id")
-      .eq("review_round", "profile_screening")
+      .eq("review_round", reviewRound)
       .neq("status", "cancelled")
       .in("application_id", appIds);
 
@@ -171,7 +174,7 @@ export async function bulkAssignApplicationReviews(
   const { data: workloadRows } = await client
     .from("application_reviews")
     .select("reviewer_admin_user_id")
-    .eq("review_round", "profile_screening")
+    .eq("review_round", reviewRound)
     .neq("status", "cancelled")
     .in("reviewer_admin_user_id", input.reviewerAdminUserIds);
 
@@ -207,7 +210,7 @@ export async function bulkAssignApplicationReviews(
       .from("review_assignment_batches")
       .insert({
         intake_batch_id: input.intakeBatchId ?? null,
-        review_round: "profile_screening",
+        review_round: reviewRound,
         created_by: input.assignedByAdminUserId,
         due_at: input.dueAt ?? null,
         assignment_note: input.assignmentNote ?? null,
@@ -229,9 +232,9 @@ export async function bulkAssignApplicationReviews(
   // --- 6. Build review rows (round-robin by sorted reviewer index)
   const now = new Date().toISOString();
   const n = sortedReviewers.length;
-  const reviewRows = appsToAssign.map((app, i) => ({
+  let reviewRows = appsToAssign.map((app, i) => ({
     application_id: app.id,
-    review_round: "profile_screening" as const,
+    review_round: reviewRound,
     reviewer_admin_user_id: sortedReviewers[i % n],
     assigned_by: input.assignedByAdminUserId,
     assigned_at: now,
@@ -240,6 +243,24 @@ export async function bulkAssignApplicationReviews(
     assignment_batch_id: batchId
   }));
 
+  // Ensure we don't assign the same reviewer to the same candidate twice in the same round
+  const { data: existingAllReviews } = await client
+    .from("application_reviews")
+    .select("application_id, reviewer_admin_user_id")
+    .eq("review_round", reviewRound)
+    .neq("status", "cancelled")
+    .in("application_id", appsToAssign.map(a => a.id))
+    .in("reviewer_admin_user_id", sortedReviewers);
+
+  if (existingAllReviews && existingAllReviews.length > 0) {
+    const existingSet = new Set(existingAllReviews.map(r => `${r.application_id}-${r.reviewer_admin_user_id}`));
+    reviewRows = reviewRows.filter(r => !existingSet.has(`${r.application_id}-${r.reviewer_admin_user_id}`));
+  }
+
+  if (reviewRows.length === 0) {
+    return { ok: false, message: "Tất cả các ứng viên đã được giao cho những người phỏng vấn này rồi." };
+  }
+
   // --- 7. Bulk insert
   const { error: insertErr } = await client.from("application_reviews").insert(reviewRows);
   if (insertErr) {
@@ -247,18 +268,19 @@ export async function bulkAssignApplicationReviews(
     return { ok: false, message: `Không thể tạo review assignments: ${insertErr.message}` };
   }
 
-  // --- 8. Advance applications.status → screening_assigned (non-fatal)
+  // --- 8. Advance applications.status -> screening_assigned / interview_in_progress
   const advanceIds = appsToAssign
-    .filter((a) => ADVANCE_STATUSES.has(a.status))
+    .filter((a) => ADVANCE_STATUSES.has(a.status) || (reviewRound === "interview" && ["invited_to_interview", "interview_scheduled"].includes(a.status)))
     .map((a) => a.id);
 
   if (advanceIds.length > 0) {
+    const targetStatus = reviewRound === "interview" ? "interview_in_progress" : "screening_assigned";
     const { error: updateErr } = await client
       .from("applications")
-      .update({ status: "screening_assigned" })
+      .update({ status: targetStatus })
       .in("id", advanceIds);
     if (updateErr) {
-      log("update applications.status to screening_assigned (non-fatal)", updateErr);
+      log(`update applications.status to ${targetStatus} (non-fatal)`, updateErr);
     }
   }
 
