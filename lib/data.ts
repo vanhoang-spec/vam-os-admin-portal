@@ -2481,11 +2481,14 @@ export async function getInterviewCandidates(filters?: {
   return { data, error: null };
 }
 
-export async function getMentorReviewQueue(
-  scope: ScopeFilter | undefined,
-  page: number,
-  pageSize: number
-): Promise<{ data: Application[]; count: number; error: string | null }> {
+export async function getS12ApplicationReviewQueue(options: {
+  scope: ScopeFilter | undefined;
+  role: "mentor" | "mentee";
+  page: number;
+  pageSize: number;
+  search?: string;
+}): Promise<{ data: Application[]; count: number; error: string | null }> {
+  const { scope, role, page, pageSize, search } = options;
   const client = await dataClient("applications");
   if (!client) return { data: [], count: 0, error: SERVICE_ROLE_REQUIRED };
 
@@ -2504,20 +2507,43 @@ export async function getMentorReviewQueue(
   const projection = "id, person_id, season_id, intake_batch_id, full_name, email_primary, role_applied, status, final_status, sbd, submitted_at, consent_data_storage, consent_pdpa, source";
 
   let query = client.from("applications").select(projection, { count: "exact" })
-    .eq("role_applied", "mentor")
+    .eq("role_applied", role)
     .eq("status", "submitted")
     .eq("season_id", s12SeasonId)
     .order("submitted_at", { ascending: false })
     .order("id", { ascending: false }); // deterministic tie-breaker
+
+  if (search) {
+    const trimmed = search.trim();
+    // Safely check if it's a UUID before sanitization strips hyphens (though we don't strip hyphens here).
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+    
+    // Sanitize search string for safe PostgREST embedding.
+    // Commas, parentheses, and quotes are reserved in PostgREST filter syntax.
+    // Percent and underscore are SQL wildcards which we strip to prevent arbitrary wildcard searches.
+    const sanitized = trimmed.replace(/[,()"'%_]/g, " ").replace(/\s+/g, " ").trim();
+    
+    if (sanitized || isUUID) {
+      const searchFilter = [];
+      if (sanitized) {
+        searchFilter.push(`full_name.ilike.%${sanitized}%`);
+        searchFilter.push(`email_primary.ilike.%${sanitized}%`);
+        searchFilter.push(`sbd.ilike.%${sanitized}%`);
+      }
+      if (isUUID) {
+        searchFilter.push(`id.eq.${trimmed}`); // Use exact raw trimmed for UUID
+      }
+      if (searchFilter.length > 0) {
+        query = query.or(searchFilter.join(","));
+      }
+    }
+  }
 
   if (scope) {
     if (noAllowedRows(scope)) return { data: [], count: 0, error: null };
     const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
     if (batchScopeError) return { data: [], count: 0, error: batchScopeError };
 
-    // Check if s12SeasonId is in scope's allowed seasons, or if any of the user's allowed batches belong to it.
-    // The query already has .eq("season_id", s12SeasonId) so we just append the scope OR condition as before,
-    // which limits to rows the user is authorized to see (season OR batch).
     const filters: string[] = [];
     if (scope.allowedSeasonIds?.length) filters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
     if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
@@ -2534,9 +2560,83 @@ export async function getMentorReviewQueue(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    logDataError("applications.getMentorReviewQueue", error);
+    logDataError("applications.getS12ApplicationReviewQueue", error);
     return { data: [], count: 0, error: `${VI_ERROR} (applications: ${error.message})` };
   }
 
   return { data: data as Application[], count: count ?? 0, error: null };
+}
+
+export async function classifyS12Mentors(
+  applications: Pick<Application, "id" | "person_id" | "email_primary">[]
+): Promise<Map<string, "Mentor cũ quay lại" | "Mentor mới" | "Chưa xác định">> {
+  const result = new Map<string, "Mentor cũ quay lại" | "Mentor mới" | "Chưa xác định">();
+  if (!applications || applications.length === 0) return result;
+
+  const client = await dataClient("people");
+  if (!client) return result;
+
+  const appIdsWithPerson = applications.filter((a) => a.person_id).map((a) => a.person_id as string);
+  const nullPersonEmails = applications
+    .filter((a) => !a.person_id && a.email_primary)
+    .map((a) => String(a.email_primary).trim().toLowerCase());
+
+  let people: Pick<Person, "id" | "email_primary">[] = [];
+  if (nullPersonEmails.length > 0) {
+    const { data: pData } = await client
+      .from("people")
+      .select("id, email_primary")
+      .in("email_primary", nullPersonEmails);
+    if (pData) people = pData;
+  }
+
+  // Gather all person_ids we care about
+  const allPersonIds = new Set<string>(appIdsWithPerson);
+  for (const p of people) {
+    if (p.id) allPersonIds.add(p.id);
+  }
+
+  let profiles: Pick<MentorProfile, "person_id" | "source_application_id">[] = [];
+  if (allPersonIds.size > 0) {
+    const { data: profData } = await client
+      .from("mentor_profiles")
+      .select("person_id, source_application_id")
+      .in("person_id", Array.from(allPersonIds));
+    if (profData) profiles = profData;
+  }
+
+  for (const app of applications) {
+    let resolvedPersonIds: string[] = [];
+    if (app.person_id) {
+      resolvedPersonIds.push(app.person_id);
+    } else if (app.email_primary) {
+      const email = String(app.email_primary).trim().toLowerCase();
+      const matchedPeople = people.filter((p) => String(p.email_primary).trim().toLowerCase() === email);
+      if (matchedPeople.length > 1) {
+        result.set(app.id, "Chưa xác định");
+        continue;
+      } else if (matchedPeople.length === 1) {
+        resolvedPersonIds.push(matchedPeople[0].id);
+      }
+    }
+
+    if (resolvedPersonIds.length === 0) {
+      result.set(app.id, "Mentor mới");
+      continue;
+    }
+
+    const personId = resolvedPersonIds[0];
+    const personProfiles = profiles.filter((p) => p.person_id === personId);
+    
+    // Check if there is any profile NOT created by this exact application
+    const priorProfiles = personProfiles.filter((p) => p.source_application_id !== app.id);
+    
+    if (priorProfiles.length > 0) {
+      result.set(app.id, "Mentor cũ quay lại");
+    } else {
+      result.set(app.id, "Mentor mới");
+    }
+  }
+
+  return result;
 }

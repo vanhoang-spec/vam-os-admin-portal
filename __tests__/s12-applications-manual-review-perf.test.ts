@@ -55,15 +55,15 @@ describe("S12 Applications Manual Review Performance - Real Source Gates", () =>
 
   it("queue query includes role_applied = mentor and status = submitted", () => {
     const source = read(DATA_LIB);
-    const queueHelper = source.slice(source.indexOf("export async function getMentorReviewQueue"));
+    const queueHelper = source.slice(source.indexOf("export async function getS12ApplicationReviewQueue"));
 
-    expect(queueHelper).toContain('.eq("role_applied", "mentor")');
+    expect(queueHelper).toContain('.eq("role_applied", role)');
     expect(queueHelper).toContain('.eq("status", "submitted")');
   });
 
   it("queue query pins canonical current application season", () => {
     const source = read(DATA_LIB);
-    const queueHelper = source.slice(source.indexOf("export async function getMentorReviewQueue"));
+    const queueHelper = source.slice(source.indexOf("export async function getS12ApplicationReviewQueue"));
 
     expect(queueHelper).toContain("SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE");
     expect(queueHelper).toContain('.eq("season_id", s12SeasonId)');
@@ -71,7 +71,7 @@ describe("S12 Applications Manual Review Performance - Real Source Gates", () =>
 
   it("queue query uses deterministic submitted_at + id ordering", () => {
     const source = read(DATA_LIB);
-    const queueHelper = source.slice(source.indexOf("export async function getMentorReviewQueue"));
+    const queueHelper = source.slice(source.indexOf("export async function getS12ApplicationReviewQueue"));
 
     expect(queueHelper).toContain('.order("submitted_at", { ascending: false })');
     expect(queueHelper).toContain('.order("id", { ascending: false })');
@@ -79,7 +79,7 @@ describe("S12 Applications Manual Review Performance - Real Source Gates", () =>
 
   it("queue query uses bounded `.range(...)`", () => {
     const source = read(DATA_LIB);
-    const queueHelper = source.slice(source.indexOf("export async function getMentorReviewQueue"));
+    const queueHelper = source.slice(source.indexOf("export async function getS12ApplicationReviewQueue"));
 
     expect(queueHelper).toContain(".range(from, to)");
   });
