@@ -2,22 +2,24 @@ import Link from "next/link";
 import { ApplicationAnswerCard } from "@/components/application-answer-card";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import {
-  getActiveAdminUsers,
-  getAnswersForApplication,
   getApplication,
+  getAnswersForApplication,
   getApplicationDecisions,
   getApplicationReviewsForApplication,
-  getMatches,
-  getMenteeProfiles,
-  getMentorProfiles,
+  getActiveAdminUsers,
   getPeople,
   getSeasons,
+  getMatchesForPerson,
+  getPersonByAuthorizedApplicationPersonId,
+  getMentorProfileByAuthorizedApplicationPersonId,
+  getMenteeProfileByAuthorizedApplicationPersonId,
+  getMentorReviewQueue,
   keyById
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import type { ApplicationDecision, ApplicationReview, JsonRecord, Match } from "@/lib/types";
+import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person } from "@/lib/types";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { canBrowseApplications } from "@/lib/read-access";
@@ -31,7 +33,6 @@ import {
 import { AssignReviewerForm } from "./assign-reviewer-form";
 import { DecisionForm } from "./decision-form";
 import { ApprovalForm } from "./approval-form";
-import { getMentorReviewQueue } from "@/lib/data";
 
 const QUESTION_ORDER = [
   "consent_marketing_email",
@@ -107,38 +108,34 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
     ]);
 
   const personId = application.data?.person_id;
-  const personIds = personId ? [personId] : [];
+  const roleApplied = application.data?.role_applied;
 
-  const [people, mentees, mentors, matches] = await Promise.all([
-    personId ? getPeople(scope, personIds) : Promise.resolve({ data: [], error: null }),
-    personId ? getMenteeProfiles(scope, personIds) : Promise.resolve({ data: [], error: null }),
-    personId ? getMentorProfiles(scope, personIds) : Promise.resolve({ data: [], error: null }),
-    // matches is still scoped by season, but we'll filter it in memory later if we can't restrict it easily by person_id.
-    // wait, Matches can be huge. Let's look at getMatches. It doesn't take personIds. We'll filter it post-fetch, 
-    // but the Prompt says: "do not fetch global mentee profile population... all Matches just to display one application".
-    personId ? getMatches(scope) : Promise.resolve({ data: [], error: null })
+  const [personRes, menteesRes, mentorsRes, matchesRes] = await Promise.all([
+    personId ? getPersonByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
+    personId && roleApplied === "mentee" ? getMenteeProfileByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
+    personId && roleApplied === "mentor" ? getMentorProfileByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
+    personId ? getMatchesForPerson(personId, scope) : Promise.resolve({ data: [], error: null })
   ]);
 
-  const peopleById = keyById(people.data);
+  const person = personRes.data;
+  const menteeProfile = menteesRes.data;
+  const mentorProfile = mentorsRes.data;
   const seasonsById = keyById(seasons.data);
-  const person = application.data?.person_id ? peopleById.get(application.data.person_id) : undefined;
   const season = application.data?.season_id ? seasonsById.get(application.data.season_id) : undefined;
-  const menteeProfile = mentees.data.find((profile) => profile.person_id === application.data?.person_id);
-  const mentorProfile = mentors.data.find((profile) => profile.person_id === application.data?.person_id);
   
-  // Actually, we can fetch related matches by personId. But since getMatches(scope) doesn't accept person_id...
   const relatedMatch = application.data?.person_id
-    ? matches.data
-        .filter((match) => match.mentee_person_id === application.data?.person_id || match.mentor_person_id === application.data?.person_id)
+    ? matchesRes.data
         .sort((a, b) => matchRank(a) - matchRank(b))[0]
     : undefined;
     
-  // If we have a related match, we might need to fetch the OTHER person in the match if they aren't loaded yet.
-  let relatedMentor = relatedMatch?.mentor_person_id ? peopleById.get(relatedMatch.mentor_person_id) : undefined;
-  if (relatedMatch?.mentor_person_id && !relatedMentor) {
+  // If we have a related match, we might need to fetch the OTHER person in the match to display their name.
+  // We can't use getPersonByAuthorizedApplicationPersonId because that person isn't the applicant.
+  // We can use getPeople(scope, [relatedMatch.mentor_person_id]) for the match partner, which is safe for 1 ID.
+  let relatedMentor: Person | undefined = undefined;
+  if (relatedMatch?.mentor_person_id) {
      const matchPersonFetch = await getPeople(scope, [relatedMatch.mentor_person_id]);
      if (matchPersonFetch.data.length > 0) {
-       relatedMentor = matchPersonFetch.data[0];
+       relatedMentor = matchPersonFetch.data[0] as Person;
      }
   }
 
@@ -153,7 +150,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       return a.original_index - b.original_index;
     });
   const error =
-    application.error || people.error || seasons.error || mentees.error || mentors.error || matches.error || answers.error;
+    application.error || personRes.error || seasons.error || menteesRes.error || mentorsRes.error || matchesRes.error || answers.error;
 
   if (!application.data) {
     return (
@@ -182,8 +179,8 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       role_applied: application.data.role_applied,
       status: application.data.status
     },
-    people.data,
-    mentors.data
+    person ? [person] : [],
+    mentorProfile ? [mentorProfile] : []
   );
   const commitmentRole =
     application.data.role_applied === "mentor" || application.data.role_applied === "mentee"

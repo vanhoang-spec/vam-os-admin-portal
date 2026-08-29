@@ -18,33 +18,16 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
   const pageSize = 25;
 
   const queue = await getMentorReviewQueue(scope, page, pageSize);
-  
-  const personIds = queue.data.map((app: any) => app.person_id).filter(Boolean) as string[];
-  const seasonIds = queue.data.map((app: any) => app.season_id).filter(Boolean) as string[];
-  
-  const [people, seasons, intakeBatchesRes] = await Promise.all([
-    personIds.length > 0 ? getPeople(scope, personIds) : Promise.resolve({ data: [], error: null }),
-    getSeasons(scope),
-    getIntakeBatches(scope)
-  ]);
-  
-  const peopleById = keyById(people.data);
-  const seasonsById = keyById(seasons.data);
-  const batchById = new Map(intakeBatchesRes.data.map((b: any) => [b.id, b]));
-
   const totalPages = Math.max(1, Math.ceil(queue.count / pageSize));
 
   const rows = queue.data.map((application: any) => {
-    const person = application.person_id ? peopleById.get(application.person_id) : undefined;
-    const season = application.season_id ? seasonsById.get(application.season_id) : undefined;
-    const seasonCode = season?.code ?? season?.name ?? null;
-
-    const fullName = application.full_name ?? person?.full_name ?? null;
-    const emailPrimary = application.email_primary ?? person?.email_primary ?? null;
+    // Rely exclusively on the S12 native payload bound to the application record itself.
+    // Removes the need for globally scanning People or Season context per row.
+    const fullName = application.full_name ?? null;
+    const emailPrimary = application.email_primary ?? null;
+    // application.status is the S12 native status field
     const statusUnified = application.status ?? application.final_status ?? null;
     const consentUnified = application.consent_data_storage ?? application.consent_pdpa;
-    const batch = application.intake_batch_id ? batchById.get(application.intake_batch_id) : undefined;
-    const intakeBatchCode = batch?.code ?? batch?.name ?? (application.intake_batch_id ? "Batch không rõ" : "Chưa gán");
 
     return {
       id: application.id,
@@ -60,7 +43,7 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
     };
   });
 
-  const error = queue.error || people.error || seasons.error || intakeBatchesRes.error;
+  const error = queue.error;
 
   return (
     <>
