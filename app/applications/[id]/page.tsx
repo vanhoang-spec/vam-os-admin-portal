@@ -13,7 +13,7 @@ import {
   getMentorProfileByAuthorizedApplicationPersonId,
   getMenteeProfileByAuthorizedApplicationPersonId,
   getPersonByAuthorizedMatchPartnerId,
-  getMentorReviewQueue,
+  getS12ApplicationReviewQueue,
   keyById
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
@@ -88,8 +88,13 @@ function roundLabel(round: string) {
 export default async function ApplicationDetailPage(props: { params: Promise<{ id: string }>; searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const params = await props.params;
   const searchParams = await props.searchParams;
-  const queueType = searchParams.queue === "mentor-review" ? "mentor-review" : null;
+  const queueType = searchParams.queue === "mentor-review" ? "mentor-review" : (searchParams.queue === "mentee-review" ? "mentee-review" : null);
   const queuePage = parseInt(searchParams.page as string || "1", 10) || 1;
+  const q = searchParams.q as string || "";
+  const queryParams = new URLSearchParams();
+  if (q) queryParams.set("q", q);
+  const baseQueryStr = queryParams.toString();
+  const queryStrWithAmp = baseQueryStr ? `&${baseQueryStr}` : "";
 
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
@@ -216,14 +221,17 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   let computedPrevPage: number = queuePage;
   let computedNextPage: number = queuePage;
 
-  if (queueType === "mentor-review") {
-    const queue = await getMentorReviewQueue(scope, queuePage, 25);
+  if (queueType === "mentor-review" || queueType === "mentee-review") {
+    const roleToFetch = queueType === "mentor-review" ? "mentor" : "mentee";
+    const queueOptions = { scope, role: roleToFetch as "mentor"|"mentee", page: queuePage, pageSize: 25, search: q };
+    
+    const queue = await getS12ApplicationReviewQueue(queueOptions);
     const currentAppId = application.data.id;
     const currentIndex = queue.data.findIndex((app: any) => app.id === currentAppId);
     if (currentIndex > 0) {
       prevAppId = queue.data[currentIndex - 1].id;
     } else if (currentIndex === 0 && queuePage > 1) {
-      const prevQueue = await getMentorReviewQueue(scope, queuePage - 1, 25);
+      const prevQueue = await getS12ApplicationReviewQueue({ ...queueOptions, page: queuePage - 1 });
       if (prevQueue.data.length > 0) {
         prevAppId = prevQueue.data[prevQueue.data.length - 1].id;
         computedPrevPage = queuePage - 1;
@@ -233,7 +241,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
     if (currentIndex >= 0 && currentIndex < queue.data.length - 1) {
       nextAppId = queue.data[currentIndex + 1].id;
     } else if (currentIndex === queue.data.length - 1) {
-      const nextQueue = await getMentorReviewQueue(scope, queuePage + 1, 25);
+      const nextQueue = await getS12ApplicationReviewQueue({ ...queueOptions, page: queuePage + 1 });
       if (nextQueue.data.length > 0) {
         nextAppId = nextQueue.data[0].id;
         computedNextPage = queuePage + 1;
@@ -245,19 +253,25 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
     <>
       <div className="flex items-center justify-between mb-2">
         <PageHeader title="Chi tiết ứng tuyển" description={displayText(displayFullName, "Ứng viên chưa rõ")} />
-        {queueType === "mentor-review" && (
+        {(queueType === "mentor-review" || queueType === "mentee-review") && (
           <div className="flex gap-2">
             <Link
-              href={prevAppId ? `/applications/${prevAppId}?queue=mentor-review&page=${computedPrevPage}` : "#"}
-              className={`rounded-md border border-vam-line px-3 py-1.5 text-sm font-medium ${prevAppId ? "bg-white hover:bg-slate-50 text-vam-ink" : "bg-slate-100 text-slate-400 pointer-events-none"}`}
+              href={prevAppId ? `/applications/${prevAppId}?queue=${queueType}&page=${computedPrevPage}${queryStrWithAmp}` : "#"}
+              className={`inline-flex rounded-md border border-vam-line px-3 py-1 text-sm ${prevAppId ? "hover:bg-slate-50 text-vam-ink" : "opacity-50 pointer-events-none text-slate-400"}`}
             >
-              &larr; Trước
+              Trước
             </Link>
             <Link
-              href={nextAppId ? `/applications/${nextAppId}?queue=mentor-review&page=${computedNextPage}` : "#"}
-              className={`rounded-md border border-vam-line px-3 py-1.5 text-sm font-medium ${nextAppId ? "bg-white hover:bg-slate-50 text-vam-ink" : "bg-slate-100 text-slate-400 pointer-events-none"}`}
+              href={nextAppId ? `/applications/${nextAppId}?queue=${queueType}&page=${computedNextPage}${queryStrWithAmp}` : "#"}
+              className={`inline-flex rounded-md border border-vam-line px-3 py-1 text-sm ${nextAppId ? "hover:bg-slate-50 text-vam-ink" : "opacity-50 pointer-events-none text-slate-400"}`}
             >
-              Tiếp &rarr;
+              Tiếp
+            </Link>
+            <Link
+              href={`/applications/${queueType}?page=${queuePage}${queryStrWithAmp}`}
+              className="inline-flex rounded-md border border-vam-line px-3 py-1 text-sm hover:bg-slate-50 text-vam-ink"
+            >
+              Quay lại Hàng đợi
             </Link>
           </div>
         )}
