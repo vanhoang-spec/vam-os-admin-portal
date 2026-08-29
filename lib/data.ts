@@ -513,12 +513,15 @@ async function countTable(table: string, filter?: (query: any) => any): Promise<
   return { data: count ?? 0, error: null };
 }
 
-export async function getPeople(scope?: ScopeFilter) {
+export async function getPeople(scope?: ScopeFilter, explicitPersonIds?: string[]) {
   const { personIds, error: scopeError } = await getScopedPersonIds(scope);
   if (scopeError) return { data: [] as Person[], error: scopeError };
-  if (personIds && personIds.length === 0) return { data: [] as Person[], error: null };
-  if (!personIds) return selectAllTable<Person>("people");
-  const { data, error } = await selectInChunks<Person>("people", "id", personIds);
+  const selectedPersonIds = explicitPersonIds
+    ? (personIds ? intersectAuthorizedAndCohort(personIds, explicitPersonIds) : explicitPersonIds)
+    : personIds;
+  if (selectedPersonIds && selectedPersonIds.length === 0) return { data: [] as Person[], error: null };
+  if (!selectedPersonIds) return selectAllTable<Person>("people");
+  const { data, error } = await selectInChunks<Person>("people", "id", selectedPersonIds);
   if (error) {
     logDataError("people.selectScopedByPerson", error);
     const err = error as { message?: string };
@@ -601,6 +604,34 @@ export async function getMenteeProfiles(scope?: ScopeFilter, explicitPersonIds?:
   return { data: mergeRowsById([...byPerson.data, ...byBatch.data]), error: null };
 }
 
+// Security invariant:
+// These direct bypass helpers MUST ONLY be called after the exact application is authorized via getApplication(id, scope).
+// Once authorized, the application's person_id is a trusted relationship that has passed the scope check.
+// Do NOT invoke getScopedPersonIds to avoid expensive global reads.
+export async function getPersonByAuthorizedApplicationPersonId(personId: string) {
+  const client = await dataClient("people");
+  if (!client) return { data: null, error: SERVICE_ROLE_REQUIRED };
+  const { data, error } = await client.from("people").select("*").eq("id", personId).maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (people: ${error.message})` };
+  return { data: data as Person | null, error: null };
+}
+
+export async function getMentorProfileByAuthorizedApplicationPersonId(personId: string) {
+  const client = await dataClient("mentor_profiles");
+  if (!client) return { data: null, error: SERVICE_ROLE_REQUIRED };
+  const { data, error } = await client.from("mentor_profiles").select("*").eq("person_id", personId).maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (mentor_profiles: ${error.message})` };
+  return { data: data as MentorProfile | null, error: null };
+}
+
+export async function getMenteeProfileByAuthorizedApplicationPersonId(personId: string) {
+  const client = await dataClient("mentee_profiles");
+  if (!client) return { data: null, error: SERVICE_ROLE_REQUIRED };
+  const { data, error } = await client.from("mentee_profiles").select("*").eq("person_id", personId).maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (mentee_profiles: ${error.message})` };
+  return { data: data as MenteeProfile | null, error: null };
+}
+
 export async function getApplications(scope?: ScopeFilter) {
   if (!scope) return selectAllTable<Application>("applications");
   if (noAllowedRows(scope)) return { data: [] as Application[], error: null };
@@ -629,6 +660,33 @@ export async function getApplications(scope?: ScopeFilter) {
 
 export async function getMatches(scope?: ScopeFilter) {
   return selectScopedBySeason<Match>("matches", "*", scope);
+}
+
+export async function getMatchesForPerson(personId: string, seasonId: string) {
+  const client = await dataClient("matches");
+  if (!client) return { data: [], error: SERVICE_ROLE_REQUIRED };
+
+  let query = client.from("matches").select("*").or(`mentor_person_id.eq.${personId},mentee_person_id.eq.${personId}`);
+
+  if (seasonId) {
+    query = query.eq("season_id", seasonId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    logDataError("matches.getMatchesForPerson", error);
+    return { data: [], error: `${VI_ERROR} (matches: ${error.message})` };
+  }
+
+  return { data: data as Match[], error: null };
+}
+
+export async function getPersonByAuthorizedMatchPartnerId(personId: string) {
+  const client = await dataClient("people");
+  if (!client) return { data: null, error: SERVICE_ROLE_REQUIRED };
+  const { data, error } = await client.from("people").select("*").eq("id", personId).maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (people: ${error.message})` };
+  return { data: data as Person | null, error: null };
 }
 
 export async function getEvents(scope?: ScopeFilter) {
@@ -782,8 +840,19 @@ export async function getApplication(id: string, scope?: ScopeFilter) {
   const { data, error } = await client.from("applications").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (applications: ${error.message})` };
   if (scope && data) {
-    const allowedApps = await getApplications(scope);
-    if (!allowedApps.data.some((row) => row.id === id)) return { data: null, error: null };
+    if (noAllowedRows(scope)) return { data: null, error: null };
+    let isAllowed = false;
+    if (scope.allowedSeasonIds?.length && data.season_id && scope.allowedSeasonIds.includes(data.season_id)) {
+      isAllowed = true;
+    }
+    if (!isAllowed) {
+      const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+      if (batchScopeError) return { data: null, error: batchScopeError };
+      if (batchIds?.length && data.intake_batch_id && batchIds.includes(data.intake_batch_id)) {
+        isAllowed = true;
+      }
+    }
+    if (!isAllowed) return { data: null, error: null };
   }
   return { data: data as Application | null, error: null };
 }
@@ -2410,4 +2479,64 @@ export async function getInterviewCandidates(filters?: {
   });
 
   return { data, error: null };
+}
+
+export async function getMentorReviewQueue(
+  scope: ScopeFilter | undefined,
+  page: number,
+  pageSize: number
+): Promise<{ data: Application[]; count: number; error: string | null }> {
+  const client = await dataClient("applications");
+  if (!client) return { data: [], count: 0, error: SERVICE_ROLE_REQUIRED };
+
+  // Resolve current S12 season UUID
+  const { data: targetSeason, error: seasonError } = await client
+    .from("seasons")
+    .select("id, code")
+    .eq("code", SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE)
+    .maybeSingle();
+
+  if (seasonError) return { data: [], count: 0, error: `${VI_ERROR} (seasons: ${seasonError.message})` };
+  if (!targetSeason) return { data: [], count: 0, error: "Missing S12 season configuration" };
+  const s12SeasonId = targetSeason.id;
+
+  // Bounded projection containing only required fields for list rendering & detail links
+  const projection = "id, person_id, season_id, intake_batch_id, full_name, email_primary, role_applied, status, final_status, sbd, submitted_at, consent_data_storage, consent_pdpa, source";
+
+  let query = client.from("applications").select(projection, { count: "exact" })
+    .eq("role_applied", "mentor")
+    .eq("status", "submitted")
+    .eq("season_id", s12SeasonId)
+    .order("submitted_at", { ascending: false })
+    .order("id", { ascending: false }); // deterministic tie-breaker
+
+  if (scope) {
+    if (noAllowedRows(scope)) return { data: [], count: 0, error: null };
+    const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+    if (batchScopeError) return { data: [], count: 0, error: batchScopeError };
+
+    // Check if s12SeasonId is in scope's allowed seasons, or if any of the user's allowed batches belong to it.
+    // The query already has .eq("season_id", s12SeasonId) so we just append the scope OR condition as before,
+    // which limits to rows the user is authorized to see (season OR batch).
+    const filters: string[] = [];
+    if (scope.allowedSeasonIds?.length) filters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
+    if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
+    
+    if (filters.length > 0) {
+      query = query.or(filters.join(","));
+    } else {
+      return { data: [], count: 0, error: null };
+    }
+  }
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) {
+    logDataError("applications.getMentorReviewQueue", error);
+    return { data: [], count: 0, error: `${VI_ERROR} (applications: ${error.message})` };
+  }
+
+  return { data: data as Application[], count: count ?? 0, error: null };
 }

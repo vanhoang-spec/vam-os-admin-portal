@@ -2,22 +2,24 @@ import Link from "next/link";
 import { ApplicationAnswerCard } from "@/components/application-answer-card";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import {
-  getActiveAdminUsers,
-  getAnswersForApplication,
   getApplication,
+  getAnswersForApplication,
   getApplicationDecisions,
   getApplicationReviewsForApplication,
-  getMatches,
-  getMenteeProfiles,
-  getMentorProfiles,
-  getPeople,
+  getActiveAdminUsers,
   getSeasons,
+  getMatchesForPerson,
+  getPersonByAuthorizedApplicationPersonId,
+  getMentorProfileByAuthorizedApplicationPersonId,
+  getMenteeProfileByAuthorizedApplicationPersonId,
+  getPersonByAuthorizedMatchPartnerId,
+  getMentorReviewQueue,
   keyById
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import type { ApplicationDecision, ApplicationReview, JsonRecord, Match } from "@/lib/types";
+import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person } from "@/lib/types";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { canBrowseApplications } from "@/lib/read-access";
@@ -83,40 +85,62 @@ function roundLabel(round: string) {
   return round;
 }
 
-export default async function ApplicationDetailPage(props: { params: Promise<{ id: string }> }) {
+export default async function ApplicationDetailPage(props: { params: Promise<{ id: string }>; searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const params = await props.params;
+  const searchParams = await props.searchParams;
+  const queueType = searchParams.queue === "mentor-review" ? "mentor-review" : null;
+  const queuePage = parseInt(searchParams.page as string || "1", 10) || 1;
 
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
 
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const [application, people, seasons, mentees, mentors, matches, answers, reviewsResult, reviewersResult, decisionsResult] =
+  
+  const [application, seasons, answers, reviewsResult, reviewersResult, decisionsResult] =
     await Promise.all([
       getApplication(params.id, scope),
-      getPeople(scope),
       getSeasons(scope),
-      getMenteeProfiles(scope),
-      getMentorProfiles(scope),
-      getMatches(scope),
       getAnswersForApplication(params.id),
       getApplicationReviewsForApplication(params.id, scope),
       getActiveAdminUsers(),
       getApplicationDecisions(params.id, scope)
     ]);
 
-  const peopleById = keyById(people.data);
+  const personId = application.data?.person_id;
+  const roleApplied = application.data?.role_applied;
+
+  const [personRes, menteesRes, mentorsRes, matchesRes] = await Promise.all([
+    personId ? getPersonByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
+    personId && roleApplied === "mentee" ? getMenteeProfileByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
+    personId && roleApplied === "mentor" ? getMentorProfileByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
+    personId && application.data?.season_id ? getMatchesForPerson(personId, application.data.season_id) : Promise.resolve({ data: [], error: null })
+  ]);
+
+  const person = personRes.data;
+  const menteeProfile = menteesRes.data;
+  const mentorProfile = mentorsRes.data;
   const seasonsById = keyById(seasons.data);
-  const person = application.data?.person_id ? peopleById.get(application.data.person_id) : undefined;
   const season = application.data?.season_id ? seasonsById.get(application.data.season_id) : undefined;
-  const menteeProfile = mentees.data.find((profile) => profile.person_id === application.data?.person_id);
-  const mentorProfile = mentors.data.find((profile) => profile.person_id === application.data?.person_id);
+  
   const relatedMatch = application.data?.person_id
-    ? matches.data
-        .filter((match) => match.mentee_person_id === application.data?.person_id)
+    ? matchesRes.data
         .sort((a, b) => matchRank(a) - matchRank(b))[0]
     : undefined;
-  const relatedMentor = relatedMatch?.mentor_person_id ? peopleById.get(relatedMatch.mentor_person_id) : undefined;
+    
+  // If we have a related match, we might need to fetch the OTHER person in the match to display their name.
+  // We can't use getPersonByAuthorizedApplicationPersonId because that person isn't the applicant.
+  // We can use getPersonByAuthorizedMatchPartnerId for the match partner, which is safe for 1 ID.
+  let relatedMentor: Person | undefined = undefined;
+  if (relatedMatch?.mentor_person_id && relatedMatch.mentor_person_id !== personId) {
+     const matchPersonFetch = await getPersonByAuthorizedMatchPartnerId(relatedMatch.mentor_person_id);
+     if (matchPersonFetch.data) {
+       relatedMentor = matchPersonFetch.data;
+     }
+  } else if (relatedMatch?.mentor_person_id === personId) {
+     relatedMentor = person ?? undefined;
+  }
+
   const sortedAnswers = answers.data
     // Annotated: an object spread does not carry the source index signature, so
     // without this the sorted rows lose every answer field but `original_index`.
@@ -128,7 +152,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       return a.original_index - b.original_index;
     });
   const error =
-    application.error || people.error || seasons.error || mentees.error || mentors.error || matches.error || answers.error;
+    application.error || personRes.error || seasons.error || menteesRes.error || mentorsRes.error || matchesRes.error || answers.error;
 
   if (!application.data) {
     return (
@@ -157,8 +181,8 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       role_applied: application.data.role_applied,
       status: application.data.status
     },
-    people.data,
-    mentors.data
+    person ? [person] : [],
+    mentorProfile ? [mentorProfile] : []
   );
   const commitmentRole =
     application.data.role_applied === "mentor" || application.data.role_applied === "mentee"
@@ -187,9 +211,57 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const latestSubmittedReview = reviews.find((r) => r.status === "submitted");
   const hasSubmittedReview = !!latestSubmittedReview;
 
+  let prevAppId: string | null = null;
+  let nextAppId: string | null = null;
+  let computedPrevPage: number = queuePage;
+  let computedNextPage: number = queuePage;
+
+  if (queueType === "mentor-review") {
+    const queue = await getMentorReviewQueue(scope, queuePage, 25);
+    const currentAppId = application.data.id;
+    const currentIndex = queue.data.findIndex((app: any) => app.id === currentAppId);
+    if (currentIndex > 0) {
+      prevAppId = queue.data[currentIndex - 1].id;
+    } else if (currentIndex === 0 && queuePage > 1) {
+      const prevQueue = await getMentorReviewQueue(scope, queuePage - 1, 25);
+      if (prevQueue.data.length > 0) {
+        prevAppId = prevQueue.data[prevQueue.data.length - 1].id;
+        computedPrevPage = queuePage - 1;
+      }
+    }
+
+    if (currentIndex >= 0 && currentIndex < queue.data.length - 1) {
+      nextAppId = queue.data[currentIndex + 1].id;
+    } else if (currentIndex === queue.data.length - 1) {
+      const nextQueue = await getMentorReviewQueue(scope, queuePage + 1, 25);
+      if (nextQueue.data.length > 0) {
+        nextAppId = nextQueue.data[0].id;
+        computedNextPage = queuePage + 1;
+      }
+    }
+  }
+
   return (
     <>
-      <PageHeader title="Chi tiết ứng tuyển" description={displayText(displayFullName, "Ứng viên chưa rõ")} />
+      <div className="flex items-center justify-between mb-2">
+        <PageHeader title="Chi tiết ứng tuyển" description={displayText(displayFullName, "Ứng viên chưa rõ")} />
+        {queueType === "mentor-review" && (
+          <div className="flex gap-2">
+            <Link
+              href={prevAppId ? `/applications/${prevAppId}?queue=mentor-review&page=${computedPrevPage}` : "#"}
+              className={`rounded-md border border-vam-line px-3 py-1.5 text-sm font-medium ${prevAppId ? "bg-white hover:bg-slate-50 text-vam-ink" : "bg-slate-100 text-slate-400 pointer-events-none"}`}
+            >
+              &larr; Trước
+            </Link>
+            <Link
+              href={nextAppId ? `/applications/${nextAppId}?queue=mentor-review&page=${computedNextPage}` : "#"}
+              className={`rounded-md border border-vam-line px-3 py-1.5 text-sm font-medium ${nextAppId ? "bg-white hover:bg-slate-50 text-vam-ink" : "bg-slate-100 text-slate-400 pointer-events-none"}`}
+            >
+              Tiếp &rarr;
+            </Link>
+          </div>
+        )}
+      </div>
       <ErrorBox message={error} />
 
       {/* ── Assign reviewer (admin / core_team only) ─────────────────────────── */}
@@ -557,7 +629,13 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       </div>
 
       <div className="mt-4 flex gap-4">
-        <Link href="/applications" className="text-sm font-medium text-vam-green">Quay lại Applications</Link>
+        {queueType === "mentor-review" ? (
+          <Link href={`/applications/mentor-review?page=${queuePage}`} className="text-sm font-medium text-vam-green">
+            Quay lại Hàng đợi duyệt
+          </Link>
+        ) : (
+          <Link href="/applications" className="text-sm font-medium text-vam-green">Quay lại Applications</Link>
+        )}
         {person?.id ? <Link href={`/people/${person.id}`} className="text-sm font-medium text-vam-green">Xem hồ sơ người này</Link> : null}
       </div>
     </>

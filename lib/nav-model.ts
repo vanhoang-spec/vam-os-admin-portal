@@ -65,7 +65,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
           key: "applications",
           label: "Ứng tuyển",
           items: [
-            { href: "/applications", label: "Ứng tuyển" },
+            { href: "/applications/mentor-review", label: "Duyệt Mentor S12" },
+            { href: "/applications", label: "Ứng tuyển (Tất cả)" },
             { href: "/reviews", label: "Đánh giá" },
             { href: "/interviews", label: "Phỏng vấn" },
           ],
