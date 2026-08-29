@@ -9,6 +9,7 @@ import {
   buildApplicationExportData,
   flattenRawPayload,
   guardSpreadsheetFormula,
+  INTERNAL_RAW_PAYLOAD_SEGMENTS,
   type ApplicationExportData
 } from "@/lib/application-export";
 import { applicationExportPdf } from "@/lib/application-export-pdf";
@@ -71,7 +72,7 @@ const exportData = buildApplicationExportData({
 });
 
 describe("S12 targeted application export data", () => {
-  it("builds an allow-listed Mentor export with S12 payload and legacy answers", () => {
+  it("builds a minimized Mentor export without internal application fields", () => {
     expect(exportData.applicantName).toBe("Nguyễn Ánh");
     expect(exportData.role).toBe("Mentor");
     expect(exportData.season).toBe("S12");
@@ -114,6 +115,85 @@ describe("S12 targeted application export data", () => {
       { key: "groups[2].name", value: "two" }
     ]);
   });
+
+  it("omits exact normalized internal path segments without filtering applicant values", () => {
+    const rows = flattenRawPayload({
+      motivation_text: "Tôi từng làm admin và biết cách bảo vệ token cho người dùng.",
+      internal_notes: "private-top-level",
+      nested: {
+        score: 99,
+        scoreBreakdown: { fit: 10 },
+        reviewed_by: "reviewer@example.com",
+        apiKey: "secret-key",
+        safe_answer: "Nội dung hợp lệ"
+      },
+      groups: [{ decision: "accept", applicant_note: "Giữ lại" }]
+    });
+    expect(rows).toEqual([
+      { key: "groups[1].applicant_note", value: "Giữ lại" },
+      { key: "motivation_text", value: "Tôi từng làm admin và biết cách bảo vệ token cho người dùng." },
+      { key: "nested.safe_answer", value: "Nội dung hợp lệ" }
+    ]);
+    expect(JSON.stringify(rows)).not.toContain("private-top-level");
+    expect(JSON.stringify(rows)).not.toContain("reviewer@example.com");
+    expect(JSON.stringify(rows)).not.toContain("secret-key");
+  });
+
+  it("exports only applicant-submitted content from the renewal wrapper", () => {
+    const data = buildApplicationExportData({
+      application: {
+        ...application,
+        source: "s12_mentor_renewal",
+        raw_payload: {
+          source: "s12_mentor_renewal",
+          renewal_invite_id: "invite-secret-id",
+          renewal_submitted_at: "2026-08-17T00:00:00.000Z",
+          renewal: {
+            company_current: "Công ty mới",
+            motivation_text: "Tiếp tục đồng hành cùng cộng đồng"
+          }
+        }
+      } as any,
+      answers: [],
+      person: null,
+      mentorProfile: null,
+      menteeProfile: null,
+      season: { id: "season-12", code: "S12", name: "Season 12", program_id: "uehm" }
+    });
+    const rawFields = data.fields.filter((field) => field.section === "Nội dung form S12");
+    expect(rawFields).toEqual([
+      { section: "Nội dung form S12", label: "Công ty hiện tại", value: "Công ty mới" },
+      { section: "Nội dung form S12", label: "Động lực tham gia", value: "Tiếp tục đồng hành cùng cộng đồng" }
+    ]);
+    expect(JSON.stringify(rawFields)).not.toContain("invite-secret-id");
+    expect(JSON.stringify(rawFields)).not.toContain("renewal_submitted_at");
+    expect(JSON.stringify(rawFields)).not.toContain("s12_mentor_renewal");
+  });
+
+  it("keeps the future-writer internal metadata contract enforced centrally", () => {
+    const requiredInternalSegments = [
+      "admin",
+      "api_key",
+      "credential",
+      "decision",
+      "internal_notes",
+      "password",
+      "reviewed_by",
+      "reviewer",
+      "scope",
+      "score",
+      "score_breakdown",
+      "secret",
+      "token",
+      "token_hash"
+    ];
+    expect(Array.from(INTERNAL_RAW_PAYLOAD_SEGMENTS).sort()).toEqual(requiredInternalSegments);
+    const futureWriterPayload = Object.fromEntries(
+      requiredInternalSegments.map((segment) => [segment, `blocked:${segment}`])
+    );
+    futureWriterPayload.applicant_answer = "preserved";
+    expect(flattenRawPayload(futureWriterPayload)).toEqual([{ key: "applicant_answer", value: "preserved" }]);
+  });
 });
 
 describe("S12 application CSV", () => {
@@ -127,13 +207,36 @@ describe("S12 application CSV", () => {
     expect(csv).toContain('"Muốn đóng góp, học hỏi\nvà kết nối."');
   });
 
-  it.each(["=1+1", "+SUM(A1:A2)", "-2+3", "@cmd"])("guards spreadsheet formula input %s", (dangerous) => {
+  it.each([
+    "=1+1",
+    "+SUM(A1:A2)",
+    "-2+3",
+    "@cmd",
+    " =1+1",
+    "\t=1+1",
+    "\r=1+1",
+    "\n=1+1",
+    "\u00a0=1+1",
+    "\t+1+1"
+  ])("guards spreadsheet formula input %j", (dangerous) => {
     expect(guardSpreadsheetFormula(dangerous)).toBe(`'${dangerous}`);
     const data: ApplicationExportData = {
       ...exportData,
       fields: [{ section: "Câu trả lời ứng tuyển", label: "Kiểm tra", value: dangerous }]
     };
     expect(applicationExportCsv(data)).toContain(`"'${dangerous.replace(/"/g, '""')}"`);
+  });
+
+  it.each(["\t", "1-2", "Nguyễn Ánh"])("leaves safe input %j unchanged", (safe) => {
+    expect(guardSpreadsheetFormula(safe)).toBe(safe);
+  });
+
+  it("guards the label column before composing its section label", () => {
+    const data: ApplicationExportData = {
+      ...exportData,
+      fields: [{ section: "Câu trả lời ứng tuyển", label: "\t=1+1", value: "An toàn" }]
+    };
+    expect(applicationExportCsv(data)).toContain('"Câu trả lời ứng tuyển — \'\t=1+1","An toàn"');
   });
 
   it("uses deterministic non-PII filenames", () => {
@@ -224,6 +327,42 @@ describe("S12 application export authorization", () => {
     expect(events.some((event) => /answers|person|mentor|mentee|season/.test(event))).toBe(false);
   });
 
+  it("fails closed on a scope resolution error before application or PII reads", async () => {
+    const events: string[] = [];
+    const deps = accessDependencies(events);
+    deps.getAdminScopeContext = async () => {
+      events.push("scope-context-error");
+      return {
+        adminUser: admin(),
+        authUserId: "auth-1",
+        globalRole: "core_team",
+        isSuperAdmin: false,
+        programScopes: [],
+        scopeError: "driver scope lookup failure"
+      };
+    };
+    const result = await loadAuthorizedApplicationExport("app-private", deps);
+    expect(result).toEqual({ ok: false, status: 503, message: "Không xác minh được phạm vi truy cập." });
+    expect(events).toEqual(["auth", "scope-context-error"]);
+    expect(events.some((event) => /scope-filter|application|answers|person|mentor|mentee|season/.test(event))).toBe(false);
+  });
+
+  it("returns a generic 500 when the targeted answers read fails", async () => {
+    const events: string[] = [];
+    const deps = accessDependencies(events);
+    deps.getAnswersForApplication = async (id) => {
+      events.push(`answers:${id}`);
+      return {
+        data: [],
+        error: "password authentication failed for applicant-private@example.com"
+      };
+    };
+    const result = await loadAuthorizedApplicationExport("app-123", deps);
+    expect(result).toEqual({ ok: false, status: 500, message: "Không thể tải đầy đủ dữ liệu hồ sơ." });
+    expect(JSON.stringify(result)).not.toContain("password authentication failed");
+    expect(JSON.stringify(result)).not.toContain("applicant-private@example.com");
+  });
+
   it("allows the exact scoped application and only then reads its related records", async () => {
     const events: string[] = [];
     const result = await loadAuthorizedApplicationExport("app-123", accessDependencies(events));
@@ -288,9 +427,9 @@ describe("S12 export source regressions", () => {
 });
 
 describe("S12 export route responses", () => {
-  function mockRouteAccess() {
+  function mockRouteAccess(result: unknown = { ok: true, data: exportData }) {
     vi.doMock("@/lib/application-export-access", () => ({
-      loadAuthorizedApplicationExport: async () => ({ ok: true, data: exportData }),
+      loadAuthorizedApplicationExport: async () => result,
       privateExportHeaders: (contentType?: string, filename?: string) => {
         const headers = new Headers({
           "Cache-Control": "private, no-store",
@@ -334,4 +473,26 @@ describe("S12 export route responses", () => {
     expect(body.byteLength).toBeGreaterThan(5_000);
     vi.doUnmock("@/lib/application-export-access");
   }, 20_000);
+
+  it.each(["csv", "pdf"] as const)("returns a generic secured 404 from the %s deny path", async (format) => {
+    vi.resetModules();
+    mockRouteAccess({ ok: false, status: 404, message: "Không tìm thấy hồ sơ ứng tuyển." });
+    const route = format === "csv"
+      ? await import("@/app/applications/[id]/export/csv/route")
+      : await import("@/app/applications/[id]/export/pdf/route");
+    const response = await route.GET(
+      new Request(`http://localhost/applications/app-private/export/${format}`),
+      { params: Promise.resolve({ id: "app-private" }) }
+    );
+    const body = await response.text();
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("content-disposition")).toBeNull();
+    expect(body).toBe("Không tìm thấy hồ sơ ứng tuyển.");
+    expect(body).not.toContain("app-private");
+    expect(body).not.toContain("Nguyễn Ánh");
+    expect(body).not.toContain("anh@example.com");
+    vi.doUnmock("@/lib/application-export-access");
+  });
 });

@@ -100,6 +100,43 @@ const RAW_PAYLOAD_LABELS: Record<string, string> = {
 
 const SECTION_ORDER = ["Thông tin ứng viên", "Thông tin ứng tuyển", "Hồ sơ Mentor", "Hồ sơ Mentee", "Nội dung form S12", "Câu trả lời ứng tuyển"];
 
+/**
+ * Defense-in-depth for future raw_payload writers. Applicant fields remain
+ * forward-compatible, but exact normalized path segments reserved for
+ * internal, authorization, scoring, or secret metadata never become exports.
+ */
+export const INTERNAL_RAW_PAYLOAD_SEGMENTS = new Set([
+  "internal_notes",
+  "score",
+  "score_breakdown",
+  "reviewer",
+  "reviewed_by",
+  "decision",
+  "admin",
+  "token",
+  "token_hash",
+  "secret",
+  "password",
+  "credential",
+  "api_key",
+  "scope"
+]);
+
+function normalizePathSegment(segment: string) {
+  return segment
+    .normalize("NFKC")
+    .replace(/\[\d+\]/g, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+export function isInternalRawPayloadSegment(segment: string) {
+  return INTERNAL_RAW_PAYLOAD_SEGMENTS.has(normalizePathSegment(segment));
+}
+
 function text(value: unknown): string {
   if (value === true) return "Có";
   if (value === false) return "Không";
@@ -160,6 +197,7 @@ export function flattenRawPayload(payload: Record<string, unknown> | null): Arra
     if (typeof value === "object") {
       Object.keys(value as Record<string, unknown>)
         .sort((a, b) => a.localeCompare(b, "vi"))
+        .filter((key) => !isInternalRawPayloadSegment(key))
         .forEach((key) => visit((value as Record<string, unknown>)[key], path ? `${path}.${key}` : key));
       return;
     }
@@ -168,8 +206,16 @@ export function flattenRawPayload(payload: Record<string, unknown> | null): Arra
 
   Object.keys(payload)
     .sort((a, b) => a.localeCompare(b, "vi"))
+    .filter((key) => !isInternalRawPayloadSegment(key))
     .forEach((key) => visit(payload[key], key));
   return rows;
+}
+
+function applicantRawPayload(application: Application) {
+  if (application.source !== "s12_mentor_renewal") return application.raw_payload;
+  const renewal = application.raw_payload?.renewal;
+  if (!renewal || typeof renewal !== "object" || Array.isArray(renewal)) return null;
+  return renewal as Record<string, unknown>;
 }
 
 function addField(fields: ApplicationExportField[], section: string, label: string, value: unknown) {
@@ -222,7 +268,7 @@ export function buildApplicationExportData(source: ApplicationExportSource): App
     addField(fields, "Hồ sơ Mentee", "Mã số sinh viên", menteeProfile.mssv);
   }
 
-  for (const row of flattenRawPayload(application.raw_payload)) {
+  for (const row of flattenRawPayload(applicantRawPayload(application))) {
     addField(fields, "Nội dung form S12", humanizeKey(row.key), row.value);
   }
 
@@ -247,8 +293,12 @@ export function buildApplicationExportData(source: ApplicationExportSource): App
   };
 }
 
+const FORMULA_TRIGGER = /^[=+\-@]/;
+const LEADING_SPACING_OR_CONTROL = /^[\s\u00a0\ufeff\u2000-\u200b\x00-\x1f\x7f-\x9f]+/;
+
 export function guardSpreadsheetFormula(value: string) {
-  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+  const effectiveValue = value.replace(LEADING_SPACING_OR_CONTROL, "");
+  return FORMULA_TRIGGER.test(value) || FORMULA_TRIGGER.test(effectiveValue) ? `'${value}` : value;
 }
 
 function csvCell(value: string) {
@@ -258,7 +308,10 @@ function csvCell(value: string) {
 export function applicationExportCsv(data: ApplicationExportData) {
   const rows = [
     ["Field", "Value"],
-    ...data.fields.map((field) => [`${field.section} — ${field.label}`, field.value])
+    ...data.fields.map((field) => [
+      `${field.section} — ${guardSpreadsheetFormula(field.label)}`,
+      guardSpreadsheetFormula(field.value)
+    ])
   ];
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }
