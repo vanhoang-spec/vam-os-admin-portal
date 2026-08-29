@@ -662,16 +662,14 @@ export async function getMatches(scope?: ScopeFilter) {
   return selectScopedBySeason<Match>("matches", "*", scope);
 }
 
-export async function getMatchesForPerson(personId: string, scope?: ScopeFilter) {
+export async function getMatchesForPerson(personId: string, seasonId: string) {
   const client = await dataClient("matches");
   if (!client) return { data: [], error: SERVICE_ROLE_REQUIRED };
 
-  if (scope && noAllowedRows(scope)) return { data: [], error: null };
-
   let query = client.from("matches").select("*").or(`mentor_person_id.eq.${personId},mentee_person_id.eq.${personId}`);
 
-  if (scope?.allowedSeasonIds && scope.allowedSeasonIds.length > 0) {
-    query = query.in("season_id", scope.allowedSeasonIds);
+  if (seasonId) {
+    query = query.eq("season_id", seasonId);
   }
 
   const { data, error } = await query;
@@ -681,6 +679,14 @@ export async function getMatchesForPerson(personId: string, scope?: ScopeFilter)
   }
 
   return { data: data as Match[], error: null };
+}
+
+export async function getPersonByAuthorizedMatchPartnerId(personId: string) {
+  const client = await dataClient("people");
+  if (!client) return { data: null, error: SERVICE_ROLE_REQUIRED };
+  const { data, error } = await client.from("people").select("*").eq("id", personId).maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (people: ${error.message})` };
+  return { data: data as Person | null, error: null };
 }
 
 export async function getEvents(scope?: ScopeFilter) {
@@ -2484,8 +2490,13 @@ export async function getMentorReviewQueue(
   if (!client) return { data: [], count: 0, error: SERVICE_ROLE_REQUIRED };
 
   // Resolve current S12 season UUID
-  const { data: seasons } = await client.from("seasons").select("id, code");
-  const targetSeason = seasons?.find(s => s.code === SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE);
+  const { data: targetSeason, error: seasonError } = await client
+    .from("seasons")
+    .select("id, code")
+    .eq("code", SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE)
+    .maybeSingle();
+
+  if (seasonError) return { data: [], count: 0, error: `${VI_ERROR} (seasons: ${seasonError.message})` };
   if (!targetSeason) return { data: [], count: 0, error: "Missing S12 season configuration" };
   const s12SeasonId = targetSeason.id;
 

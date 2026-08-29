@@ -7,12 +7,12 @@ import {
   getApplicationDecisions,
   getApplicationReviewsForApplication,
   getActiveAdminUsers,
-  getPeople,
   getSeasons,
   getMatchesForPerson,
   getPersonByAuthorizedApplicationPersonId,
   getMentorProfileByAuthorizedApplicationPersonId,
   getMenteeProfileByAuthorizedApplicationPersonId,
+  getPersonByAuthorizedMatchPartnerId,
   getMentorReviewQueue,
   keyById
 } from "@/lib/data";
@@ -114,7 +114,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
     personId ? getPersonByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
     personId && roleApplied === "mentee" ? getMenteeProfileByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
     personId && roleApplied === "mentor" ? getMentorProfileByAuthorizedApplicationPersonId(personId) : Promise.resolve({ data: null, error: null }),
-    personId ? getMatchesForPerson(personId, scope) : Promise.resolve({ data: [], error: null })
+    personId && application.data?.season_id ? getMatchesForPerson(personId, application.data.season_id) : Promise.resolve({ data: [], error: null })
   ]);
 
   const person = personRes.data;
@@ -130,13 +130,15 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
     
   // If we have a related match, we might need to fetch the OTHER person in the match to display their name.
   // We can't use getPersonByAuthorizedApplicationPersonId because that person isn't the applicant.
-  // We can use getPeople(scope, [relatedMatch.mentor_person_id]) for the match partner, which is safe for 1 ID.
+  // We can use getPersonByAuthorizedMatchPartnerId for the match partner, which is safe for 1 ID.
   let relatedMentor: Person | undefined = undefined;
-  if (relatedMatch?.mentor_person_id) {
-     const matchPersonFetch = await getPeople(scope, [relatedMatch.mentor_person_id]);
-     if (matchPersonFetch.data.length > 0) {
-       relatedMentor = matchPersonFetch.data[0] as Person;
+  if (relatedMatch?.mentor_person_id && relatedMatch.mentor_person_id !== personId) {
+     const matchPersonFetch = await getPersonByAuthorizedMatchPartnerId(relatedMatch.mentor_person_id);
+     if (matchPersonFetch.data) {
+       relatedMentor = matchPersonFetch.data;
      }
+  } else if (relatedMatch?.mentor_person_id === personId) {
+     relatedMentor = person ?? undefined;
   }
 
   const sortedAnswers = answers.data

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ErrorBox, PageHeader } from "@/components/ui";
-import { getIntakeBatches, getPeople, getSeasons, keyById, getMentorReviewQueue } from "@/lib/data";
+import { getMentorReviewQueue } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { applicationStatusLabel } from "@/lib/ui-labels";
-import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
+import { displayConsent, displayText, formatDate } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
