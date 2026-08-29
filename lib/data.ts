@@ -4,6 +4,7 @@ import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/sup
 import { currentMonthVN, isOperationalMonth } from "@/lib/dashboard-month";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import { evaluateMentorClassifications } from "@/lib/classification";
 import { intersectAuthorizedAndCohort } from "@/lib/season-cohort";
 import { resolveSeasonContext } from "@/lib/season-context";
 import {
@@ -2582,11 +2583,13 @@ export async function classifyS12Mentors(
     .map((a) => String(a.email_primary).trim().toLowerCase());
 
   let people: Pick<Person, "id" | "email_primary">[] = [];
+  let peopleQueryFailed = false;
   if (nullPersonEmails.length > 0) {
-    const { data: pData } = await client
+    const { data: pData, error: pError } = await client
       .from("people")
       .select("id, email_primary")
       .in("email_primary", nullPersonEmails);
+    if (pError) peopleQueryFailed = true;
     if (pData) people = pData;
   }
 
@@ -2597,46 +2600,15 @@ export async function classifyS12Mentors(
   }
 
   let profiles: Pick<MentorProfile, "person_id" | "source_application_id">[] = [];
+  let profilesQueryFailed = false;
   if (allPersonIds.size > 0) {
-    const { data: profData } = await client
+    const { data: profData, error: profError } = await client
       .from("mentor_profiles")
       .select("person_id, source_application_id")
       .in("person_id", Array.from(allPersonIds));
+    if (profError) profilesQueryFailed = true;
     if (profData) profiles = profData;
   }
 
-  for (const app of applications) {
-    let resolvedPersonIds: string[] = [];
-    if (app.person_id) {
-      resolvedPersonIds.push(app.person_id);
-    } else if (app.email_primary) {
-      const email = String(app.email_primary).trim().toLowerCase();
-      const matchedPeople = people.filter((p) => String(p.email_primary).trim().toLowerCase() === email);
-      if (matchedPeople.length > 1) {
-        result.set(app.id, "Chưa xác định");
-        continue;
-      } else if (matchedPeople.length === 1) {
-        resolvedPersonIds.push(matchedPeople[0].id);
-      }
-    }
-
-    if (resolvedPersonIds.length === 0) {
-      result.set(app.id, "Mentor mới");
-      continue;
-    }
-
-    const personId = resolvedPersonIds[0];
-    const personProfiles = profiles.filter((p) => p.person_id === personId);
-    
-    // Check if there is any profile NOT created by this exact application
-    const priorProfiles = personProfiles.filter((p) => p.source_application_id !== app.id);
-    
-    if (priorProfiles.length > 0) {
-      result.set(app.id, "Mentor cũ quay lại");
-    } else {
-      result.set(app.id, "Mentor mới");
-    }
-  }
-
-  return result;
+  return evaluateMentorClassifications(applications, people, profiles, peopleQueryFailed, profilesQueryFailed);
 }

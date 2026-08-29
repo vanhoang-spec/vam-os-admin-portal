@@ -65,7 +65,7 @@ export default async function MenteeReviewQueuePage(props: { searchParams: Promi
             type="text"
             name="q"
             defaultValue={q}
-            placeholder="Tìm theo tên, email, sbd..."
+            placeholder="Tìm theo tên, email hoặc SBD"
             className="border border-slate-300 rounded px-3 py-1.5 text-sm w-full md:w-64"
           />
           <button type="submit" className="bg-vam-ink text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-slate-800">
