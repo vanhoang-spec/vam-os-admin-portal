@@ -513,12 +513,15 @@ async function countTable(table: string, filter?: (query: any) => any): Promise<
   return { data: count ?? 0, error: null };
 }
 
-export async function getPeople(scope?: ScopeFilter) {
+export async function getPeople(scope?: ScopeFilter, explicitPersonIds?: string[]) {
   const { personIds, error: scopeError } = await getScopedPersonIds(scope);
   if (scopeError) return { data: [] as Person[], error: scopeError };
-  if (personIds && personIds.length === 0) return { data: [] as Person[], error: null };
-  if (!personIds) return selectAllTable<Person>("people");
-  const { data, error } = await selectInChunks<Person>("people", "id", personIds);
+  const selectedPersonIds = explicitPersonIds
+    ? (personIds ? intersectAuthorizedAndCohort(personIds, explicitPersonIds) : explicitPersonIds)
+    : personIds;
+  if (selectedPersonIds && selectedPersonIds.length === 0) return { data: [] as Person[], error: null };
+  if (!selectedPersonIds) return selectAllTable<Person>("people");
+  const { data, error } = await selectInChunks<Person>("people", "id", selectedPersonIds);
   if (error) {
     logDataError("people.selectScopedByPerson", error);
     const err = error as { message?: string };
@@ -782,8 +785,19 @@ export async function getApplication(id: string, scope?: ScopeFilter) {
   const { data, error } = await client.from("applications").select("*").eq("id", id).maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (applications: ${error.message})` };
   if (scope && data) {
-    const allowedApps = await getApplications(scope);
-    if (!allowedApps.data.some((row) => row.id === id)) return { data: null, error: null };
+    if (noAllowedRows(scope)) return { data: null, error: null };
+    let isAllowed = false;
+    if (scope.allowedSeasonIds?.length && data.season_id && scope.allowedSeasonIds.includes(data.season_id)) {
+      isAllowed = true;
+    }
+    if (!isAllowed) {
+      const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+      if (batchScopeError) return { data: null, error: batchScopeError };
+      if (batchIds?.length && data.intake_batch_id && batchIds.includes(data.intake_batch_id)) {
+        isAllowed = true;
+      }
+    }
+    if (!isAllowed) return { data: null, error: null };
   }
   return { data: data as Application | null, error: null };
 }
@@ -2410,4 +2424,45 @@ export async function getInterviewCandidates(filters?: {
   });
 
   return { data, error: null };
+}
+
+export async function getMentorReviewQueue(
+  scope: ScopeFilter | undefined,
+  page: number,
+  pageSize: number
+): Promise<{ data: Application[]; count: number; error: string | null }> {
+  const client = await dataClient("applications");
+  if (!client) return { data: [], count: 0, error: SERVICE_ROLE_REQUIRED };
+
+  let query = client.from("applications").select("*", { count: "exact" })
+    .eq("role_applied", "mentor")
+    .eq("status", "submitted")
+    .order("submitted_at", { ascending: false });
+
+  if (scope) {
+    if (noAllowedRows(scope)) return { data: [], count: 0, error: null };
+    const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+    if (batchScopeError) return { data: [], count: 0, error: batchScopeError };
+    
+    const filters: string[] = [];
+    if (scope.allowedSeasonIds?.length) filters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
+    if (batchIds?.length) filters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
+    
+    if (filters.length > 0) {
+      query = query.or(filters.join(","));
+    } else {
+      return { data: [], count: 0, error: null };
+    }
+  }
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) {
+    logDataError("applications.getMentorReviewQueue", error);
+    return { data: [], count: 0, error: `${VI_ERROR} (applications: ${error.message})` };
+  }
+
+  return { data: data as Application[], count: count ?? 0, error: null };
 }
