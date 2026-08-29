@@ -633,6 +633,18 @@ export async function getMenteeProfileByAuthorizedApplicationPersonId(personId: 
   return { data: data as MenteeProfile | null, error: null };
 }
 
+export async function getSeasonByAuthorizedApplicationSeasonId(seasonId: string) {
+  const client = await dataClient("seasons");
+  if (!client) return { data: null, error: SERVICE_ROLE_REQUIRED };
+  const { data, error } = await client
+    .from("seasons")
+    .select("id,code,name,program_id")
+    .eq("id", seasonId)
+    .maybeSingle();
+  if (error) return { data: null, error: `${VI_ERROR} (seasons: ${error.message})` };
+  return { data: data as Season | null, error: null };
+}
+
 export async function getApplications(scope?: ScopeFilter) {
   if (!scope) return selectAllTable<Application>("applications");
   if (noAllowedRows(scope)) return { data: [] as Application[], error: null };
