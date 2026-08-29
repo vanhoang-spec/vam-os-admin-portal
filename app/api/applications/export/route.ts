@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canExportApplicationResults } from "@/lib/permissions";
-import { getAdminScopeContext, getScopeFilter, type ScopeFilter } from "@/lib/program-scope";
+import { getAdminScopeContext, getScopeFilterResult, type ScopeFilter } from "@/lib/program-scope";
 import {
   getAdminUsersByIds,
   getAllApplicationReviews,
@@ -149,7 +149,15 @@ export async function GET(request: NextRequest) {
   if (scopeContext.scopeError) {
     return new Response(scopeContext.scopeError, { status: 403 });
   }
-  const scope = await getScopeFilter(scopeContext);
+  // The scope CATALOG read is checked before the scope itself is judged. A
+  // program-level grant survives a failed catalog read with its program id
+  // intact but no resolvable seasons, so the filter below looks granted while
+  // every season-filtered loader under it returns nothing. Emitting that as a
+  // 200 header-only file states "no applicants" on the strength of an outage.
+  const { scope, error: scopeCatalogError } = await getScopeFilterResult(scopeContext);
+  if (scopeCatalogError) {
+    return new Response(scopeCatalogError, { status: 500 });
+  }
 
   // A non-super user with no resolved grant has no export authority at all.
   // This is NOT the same condition as "the export came back empty", and it must
@@ -249,14 +257,39 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Season label per exported row. Unresolvable => the whole export fails. ─
-  // An application whose season cannot be named canonically would otherwise be
-  // published with a UUID (or a blank) in the Season column, and a recipient
-  // cannot tell that apart from a real label.
+  //
+  // `applications.season_id` is the canonical season of an application. The
+  // batch is a fallback for rows that genuinely have none — never a second
+  // opinion about rows that do.
+  //
+  //   A. season_id populated  -> it must resolve in the AUTHORIZED season
+  //      catalog. It is never re-labelled from its batch: an application
+  //      carrying an unknown or out-of-scope season alongside an authorized
+  //      batch would otherwise be exported under the batch's season, which
+  //      both mislabels the row and carries an out-of-scope record into an
+  //      in-scope file.
+  //   B. season_id null       -> the batch may supply it, provided the batch
+  //      resolves and ITS season resolves canonically.
+  //   C. both present         -> they must agree. A disagreement is a
+  //      data-integrity fault, and picking either side silently invents an
+  //      answer, so the export fails instead.
+  //
+  // Any row that cannot obtain a canonical season CODE fails the whole export;
+  // a UUID or a blank in that column is indistinguishable from a real label.
   const seasonLabelByAppId = new Map<string, string>();
   for (const app of apps) {
-    const direct = clean(app.season_id);
-    const viaBatch = clean(batchById.get(clean(app.intake_batch_id) ?? "")?.season_id);
-    const code = (direct && seasonCodeById.get(direct)) || (viaBatch && seasonCodeById.get(viaBatch)) || null;
+    const appSeasonId = clean(app.season_id);
+    const batch = batchById.get(clean(app.intake_batch_id) ?? "");
+    const batchSeasonId = clean(batch?.season_id);
+
+    let code: string | null = null;
+    if (appSeasonId) {
+      code = seasonCodeById.get(appSeasonId) ?? null;
+      if (batch && batchSeasonId !== appSeasonId) code = null;
+    } else if (batchSeasonId) {
+      code = seasonCodeById.get(batchSeasonId) ?? null;
+    }
+
     if (!code) {
       return new Response("Failed to resolve season metadata for exported applications", { status: 500 });
     }

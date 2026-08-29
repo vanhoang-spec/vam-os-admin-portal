@@ -85,10 +85,31 @@ function isUuidLike(value: string | null | undefined) {
  * derived from them. `readBounded` asserts that bound: if either relation ever
  * grows past it the read fails instead of silently returning a partial catalog,
  * which would quietly shrink every admin's resolved scope.
+ *
+ * The read result now carries `error`. It used to be swallowed, and the empty
+ * catalog it left behind was indistinguishable from a real one. For a
+ * PROGRAM-level grant that difference is load-bearing: `programId` survives
+ * into `allowedProgramIds` straight off the grant row, but `allowedSeasonIds`
+ * is derived by matching seasons to the program and collapses to `[]`. The
+ * resolved scope then looks populated to a caller checking "is anything
+ * granted", while every season-filtered loader beneath it returns zero rows —
+ * a header-only export that reads as "no applicants" but is an outage.
+ *
+ * The catalog rows are still returned alongside the error so that
+ * `getScopeFilter` keeps its exact previous behaviour for callers that have no
+ * way to act on the error. Only callers that ask for the error get it.
  */
-async function loadSeasonsAndPrograms() {
+type ScopeCatalog = { seasons: JsonRecord[]; programs: JsonRecord[]; error: string | null };
+
+export const SCOPE_CATALOG_ERROR =
+  "Không đọc được danh mục chương trình/mùa để xác định phạm vi truy cập. Đây là lỗi hệ thống, không phải dữ liệu trống. Vui lòng thử lại hoặc liên hệ quản trị viên.";
+
+async function loadSeasonsAndPrograms(): Promise<ScopeCatalog> {
   const client = getSupabaseServiceRoleClient();
-  if (!client) return { seasons: [] as JsonRecord[], programs: [] as JsonRecord[] };
+  if (!client) {
+    console.error("[program-scope] service-role client unavailable; cannot read season/program catalog");
+    return { seasons: [], programs: [], error: SCOPE_CATALOG_ERROR };
+  }
   const [seasonsRes, programsRes] = await Promise.all([
     readBounded<JsonRecord>("seasons", client.from("seasons").select("id,code,name,program_id")),
     readBounded<JsonRecord>("programs", client.from("programs").select("id,code,name"))
@@ -98,9 +119,9 @@ async function loadSeasonsAndPrograms() {
       seasons: (seasonsRes.error as { message?: string } | null)?.message,
       programs: (programsRes.error as { message?: string } | null)?.message
     });
-    return { seasons: [] as JsonRecord[], programs: [] as JsonRecord[] };
+    return { seasons: [], programs: [], error: SCOPE_CATALOG_ERROR };
   }
-  return { seasons: seasonsRes.data, programs: programsRes.data };
+  return { seasons: seasonsRes.data, programs: programsRes.data, error: null };
 }
 
 export const getAdminScopeContext = cache(async (): Promise<AdminScopeContext> => {
@@ -181,7 +202,10 @@ export const getAdminScopeContext = cache(async (): Promise<AdminScopeContext> =
 });
 
 export async function getAllowedProgramIds(ctx: AdminScopeContext): Promise<string[]> {
-  const { seasons, programs } = await loadSeasonsAndPrograms();
+  return resolveAllowedProgramIds(ctx, await loadSeasonsAndPrograms());
+}
+
+function resolveAllowedProgramIds(ctx: AdminScopeContext, { seasons, programs }: ScopeCatalog): string[] {
   if (ctx.isSuperAdmin) return unique(programs.flatMap((row) => [String(row.id ?? ""), clean(row.code)]));
 
   const programCodesById = new Map(programs.map((row) => [String(row.id ?? ""), clean(row.code)]));
@@ -215,7 +239,10 @@ export async function getAllowedProgramIds(ctx: AdminScopeContext): Promise<stri
 }
 
 export async function getAllowedSeasonIds(ctx: AdminScopeContext): Promise<string[]> {
-  const { seasons, programs } = await loadSeasonsAndPrograms();
+  return resolveAllowedSeasonIds(ctx, await loadSeasonsAndPrograms());
+}
+
+function resolveAllowedSeasonIds(ctx: AdminScopeContext, { seasons, programs }: ScopeCatalog): string[] {
   if (ctx.isSuperAdmin) return seasons.map((row) => String(row.id)).filter(Boolean);
 
   const programIdsByKey = new Map<string, string>();
@@ -254,12 +281,38 @@ export async function getAllowedSeasonIds(ctx: AdminScopeContext): Promise<strin
  * read route, while this filter answers which program/season rows are visible.
  */
 export async function getScopeFilter(ctx: AdminScopeContext): Promise<ScopeFilter | undefined> {
-  if (ctx.isSuperAdmin) return undefined;
-  const [allowedProgramIds, allowedSeasonIds] = await Promise.all([
-    getAllowedProgramIds(ctx),
-    getAllowedSeasonIds(ctx)
-  ]);
-  return { allowedProgramIds, allowedSeasonIds };
+  return (await getScopeFilterResult(ctx)).scope;
+}
+
+/**
+ * The same resolution, plus whether the catalog it was derived from could
+ * actually be read.
+ *
+ * `scope` is byte-for-byte what `getScopeFilter` has always returned, INCLUDING
+ * on failure. That is deliberate: on a catalog failure the degraded filter is
+ * narrower than the truth, and every existing caller already treats it as the
+ * authoritative restriction. Returning `undefined` there instead would mean "no
+ * restriction" and would fail OPEN across every scoped page. So the degraded
+ * filter stays, and the error rides alongside it for the callers that can act
+ * on it.
+ *
+ * Use this — not `getScopeFilter` — wherever an empty result is published as a
+ * statement of fact about the season (the recruitment-results export is the
+ * case in hand). Such a caller must return non-200 rather than emit a file that
+ * says "no applicants" when the truth is "the catalog could not be read".
+ */
+export type ScopeFilterResult = { scope: ScopeFilter | undefined; error: string | null };
+
+export async function getScopeFilterResult(ctx: AdminScopeContext): Promise<ScopeFilterResult> {
+  if (ctx.isSuperAdmin) return { scope: undefined, error: null };
+  const catalog = await loadSeasonsAndPrograms();
+  return {
+    scope: {
+      allowedProgramIds: resolveAllowedProgramIds(ctx, catalog),
+      allowedSeasonIds: resolveAllowedSeasonIds(ctx, catalog)
+    },
+    error: catalog.error
+  };
 }
 
 export function canAccessProgram(ctx: AdminScopeContext, programId: string | null | undefined) {

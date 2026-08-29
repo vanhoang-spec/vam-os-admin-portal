@@ -33,12 +33,16 @@ vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleEnvStatus: vi.fn(() => ({ envName: "SUPABASE_SERVICE_ROLE_KEY", loaded: true, usesPublicPrefix: false, sameAsAnonKey: false }))
 }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
-vi.mock("@/lib/program-scope", () => ({ getAdminScopeContext: vi.fn(), getScopeFilter: vi.fn() }));
+vi.mock("@/lib/program-scope", () => ({
+  getAdminScopeContext: vi.fn(),
+  getScopeFilter: vi.fn(),
+  getScopeFilterResult: vi.fn()
+}));
 
 import { GET } from "@/app/api/applications/export/route";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { getAdminScopeContext, getScopeFilter, getScopeFilterResult } from "@/lib/program-scope";
 import { getAdminUsersByIds, getAllApplicationReviews, getApplications } from "@/lib/data";
 import { SELECT_PAGE_SIZE } from "@/lib/paged-read";
 import { createFakeDb, fakeClient, requestsFor } from "./support/fake-postgrest";
@@ -90,6 +94,7 @@ beforeEach(() => {
     scopeError: null
   } as never);
   vi.mocked(getScopeFilter).mockResolvedValue(SCOPE as never);
+  vi.mocked(getScopeFilterResult).mockResolvedValue({ scope: SCOPE, error: null } as never);
 });
 
 function call(query = "") {

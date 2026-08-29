@@ -27,7 +27,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
-vi.mock("@/lib/program-scope", () => ({ getAdminScopeContext: vi.fn(), getScopeFilter: vi.fn() }));
+vi.mock("@/lib/program-scope", () => ({
+  getAdminScopeContext: vi.fn(),
+  getScopeFilter: vi.fn(),
+  getScopeFilterResult: vi.fn()
+}));
 vi.mock("@/lib/data", () => ({
   getApplications: vi.fn(),
   getAllApplicationReviews: vi.fn(),
@@ -45,7 +49,7 @@ vi.mock("@/components/ui", () => ({ PageHeader: () => null }));
 import { GET } from "@/app/api/applications/export/route";
 import ExportPage from "@/app/applications/export/page";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { getAdminScopeContext, getScopeFilter, getScopeFilterResult } from "@/lib/program-scope";
 import {
   getAdminUsersByIds,
   getAllApplicationReviews,
@@ -143,7 +147,10 @@ function seed(fixture: Fixture = {}) {
   } as never);
 }
 
-function setAuth(role: string | null, options: { scope?: unknown; scopeError?: string | null } = {}) {
+function setAuth(
+  role: string | null,
+  options: { scope?: unknown; scopeError?: string | null; catalogError?: string | null } = {}
+) {
   vi.mocked(getCurrentAdminUser).mockResolvedValue(
     role ? ({ id: "actor-1", email: "actor@example.com", full_name: "Actor", role, status: "active", auth_user_id: "auth-1" } as never) : null
   );
@@ -158,6 +165,12 @@ function setAuth(role: string | null, options: { scope?: unknown; scopeError?: s
     scopeError: options.scopeError ?? null
   } as never);
   vi.mocked(getScopeFilter).mockResolvedValue(scope as never);
+  // The catalog error rides alongside the (possibly degraded) filter, exactly
+  // as `getScopeFilterResult` returns it in production.
+  vi.mocked(getScopeFilterResult).mockResolvedValue({
+    scope,
+    error: options.catalogError ?? null
+  } as never);
 }
 
 function call(query = "") {
@@ -353,6 +366,103 @@ describe("season metadata", () => {
     seed({ apps: [application({ season_id: OTHER_SEASON_ID, intake_batch_id: null })] });
     const res = await call();
     expect(res.status).toBe(500);
+  });
+
+  it("returns non-200 when the scope catalog could not be resolved, even though a scope was granted", async () => {
+    // S1 at the route boundary: the degraded filter still names a program, so
+    // `hasAnyScope` is satisfied and every loader beneath returns nothing. The
+    // 200 header-only file this used to produce reads as "no applicants".
+    setAuth("admin", { catalogError: "catalog read failed" });
+    seed({ apps: [] });
+    const res = await call();
+    expect(res.status).toBe(500);
+  });
+
+  describe("canonical season resolution", () => {
+    // applications.season_id is canonical. The batch is a fallback for rows
+    // that have none — never a second opinion about rows that do.
+    it("S3 accepts a populated season that resolves, with a matching batch", async () => {
+      setAuth("admin");
+      seed({ apps: [application({ season_id: SEASON_ID, intake_batch_id: BATCH_ID })] });
+      const { rows } = parseCsvTable((await csvOf("")).text);
+      expect(rows[0][0]).toBe(SEASON_CODE);
+    });
+
+    it("accepts a populated season with no intake batch at all", async () => {
+      setAuth("admin");
+      seed({ apps: [application({ season_id: SEASON_ID, intake_batch_id: null })] });
+      const { rows } = parseCsvTable((await csvOf("")).text);
+      expect(rows[0][0]).toBe(SEASON_CODE);
+      expect(rows[0][1]).toBe("");
+    });
+
+    it("S4 falls back to the batch season only when the application has none", async () => {
+      setAuth("admin");
+      seed({ apps: [application({ season_id: null, intake_batch_id: BATCH_ID })] });
+      const { rows } = parseCsvTable((await csvOf("")).text);
+      expect(rows[0][0]).toBe(SEASON_CODE);
+    });
+
+    it("S5 fails closed on an unknown populated season, even beside an authorized batch", async () => {
+      setAuth("admin");
+      seed({
+        apps: [application({ season_id: "00000000-0000-4000-8000-000000000000", intake_batch_id: BATCH_ID })]
+      });
+      const res = await call();
+      expect(res.status).toBe(500);
+      // The batch's season must not have been borrowed to label the row.
+      expect(await res.text()).not.toContain(SEASON_CODE);
+    });
+
+    it("S6 fails closed on an out-of-scope populated season rather than relabelling it from the batch", async () => {
+      setAuth("admin");
+      seed({
+        // OTHER_SEASON_ID is a real season the caller was not granted, so it is
+        // absent from the scoped catalog. Relabelling it as UEHM-S12 would
+        // carry an out-of-scope applicant into an in-scope file.
+        apps: [application({ season_id: OTHER_SEASON_ID, intake_batch_id: BATCH_ID })]
+      });
+      const res = await call();
+      expect(res.status).toBe(500);
+      expect(await res.text()).not.toContain(SEASON_CODE);
+    });
+
+    it("S7 fails closed when the application and its batch disagree about the season", async () => {
+      setAuth("admin");
+      seed({
+        apps: [application({ season_id: SEASON_ID, intake_batch_id: OTHER_BATCH_ID })],
+        // Both seasons resolve, so neither side is "unresolvable" — the fault
+        // is the disagreement, and picking a side would invent an answer.
+        seasons: [...SEASONS, { id: OTHER_SEASON_ID, code: "UEHM-S11", name: "S11", program_id: "prog-1" }],
+        batches: [...BATCHES, { id: OTHER_BATCH_ID, season_id: OTHER_SEASON_ID, code: "B0", name: "Đợt 0", is_active: false }]
+      });
+      const res = await call();
+      expect(res.status).toBe(500);
+    });
+
+    it("S8 fails closed when a null-season application's batch season does not resolve", async () => {
+      setAuth("admin");
+      seed({
+        apps: [application({ season_id: null, intake_batch_id: OTHER_BATCH_ID })],
+        batches: [...BATCHES, { id: OTHER_BATCH_ID, season_id: OTHER_SEASON_ID, code: "B0", name: "Đợt 0", is_active: false }]
+      });
+      const res = await call();
+      expect(res.status).toBe(500);
+    });
+
+    it("fails closed when a null-season application names a batch that did not resolve", async () => {
+      setAuth("admin");
+      seed({ apps: [application({ season_id: null, intake_batch_id: OTHER_BATCH_ID })] });
+      const res = await call();
+      expect(res.status).toBe(500);
+    });
+
+    it("fails closed when neither the application nor a batch names a season", async () => {
+      setAuth("admin");
+      seed({ apps: [application({ season_id: null, intake_batch_id: null })] });
+      const res = await call();
+      expect(res.status).toBe(500);
+    });
   });
 
   it("fails closed rather than labelling a season row that has no code", async () => {
