@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData } from "@/lib/data";
 import { currentMonthVN, operationalMonthRange, VALID_RECAP_STATUSES } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import { canBrowseOperations } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
@@ -49,9 +51,25 @@ type EventRow = Event & {
 export default async function MonthlyOperationsPage(props: { searchParams?: Promise<{ month?: string | string[] }> }) {
   const searchParams = await props.searchParams;
 
+  // H2 fix: role gate before any scope check or protected data load, mirroring
+  // the /operations pattern — getAdminScopeContext/getScopeFilter are *scope*
+  // checks (true for any granted scope level, including "review") and must
+  // never be the only gate on this route, or a reviewer with a season review
+  // grant can reach it.
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser) redirect("/login");
+  if (!canBrowseOperations(adminUser.role)) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn không có quyền truy cập trang vận hành này."
+      />
+    );
+  }
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const [data, adminUser] = await Promise.all([getOperationsData(scope), getCurrentAdminUser()]);
+  const data = await getOperationsData(scope);
   const allowEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
   const errors = [
     data.seasons.error,

@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches } from "@/lib/data";
 import { getManualMatchingCandidates, getMatchList } from "@/lib/matches";
-import { canManageMatches } from "@/lib/permissions";
+import { canBrowseOperations, canManageMatches } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { seasonLabel } from "@/lib/season-labels";
@@ -35,6 +36,24 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
   }> }) {
   const searchParams = await props.searchParams;
 
+  // H2 fix: role gate before any scope check or protected match data load.
+  // getAdminScopeContext/resolveSeasonContext are *scope* checks (true for
+  // any granted scope level, including "review") and must never be the only
+  // gate on this route, or a reviewer with a season review grant can reach
+  // the match list by direct URL — as the previous `viewerSafe = role ===
+  // "viewer"` denylist allowed, since it treated reviewer as more privileged
+  // than viewer and handed it the unredacted mentor/mentee projection.
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser) redirect("/login");
+  if (!canBrowseOperations(adminUser.role)) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn không có quyền truy cập trang matching này."
+      />
+    );
+  }
+
   const [scopeContext, seasonContext] = await Promise.all([
     getAdminScopeContext(),
     resolveSeasonContext(searchParams?.season).catch((error: unknown) => {
@@ -51,13 +70,10 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
     );
   }
   const scope = seasonContext.effectiveScope;
-  const [adminUser, intakeBatchesRes] = await Promise.all([
-    getCurrentAdminUser(),
-    getIntakeBatches(scope)
-  ]);
-  const matchAudienceRole = adminUser?.role ?? "viewer";
-  const viewerSafe = matchAudienceRole === "viewer";
-  const allowManage = canManageMatches(adminUser?.role) && canOperateAnyScope(scopeContext);
+  const intakeBatchesRes = await getIntakeBatches(scope);
+  const matchAudienceRole = adminUser.role;
+  const viewerSafe = !canBrowseOperations(matchAudienceRole);
+  const allowManage = canManageMatches(adminUser.role) && canOperateAnyScope(scopeContext);
 
   const batchFilter = selectedParam(searchParams?.batch).trim();
   const rawStatus = selectedParam(searchParams?.status).trim();

@@ -2,7 +2,7 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { readAllPages, type PagedTable } from "@/lib/paged-read";
-import { canManageMatches } from "@/lib/permissions";
+import { canBrowseOperations, canManageMatches } from "@/lib/permissions";
 import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
@@ -244,7 +244,12 @@ export async function getMatchList(filters?: {
     }
   }
 
-  const viewerSafe = filters?.audienceRole === "viewer";
+  // H2 fix: was `audienceRole === "viewer"` — a denylist that caught only the
+  // literal "viewer" role, so reviewer (and any other non-operations role)
+  // fell through to the unredacted projection below. Inverted to an allowlist
+  // via canBrowseOperations so any role outside the operations set (reviewer,
+  // viewer, null, or an unrecognized value) is redacted by default.
+  const viewerSafe = !canBrowseOperations(filters?.audienceRole);
   const matchProjection = viewerSafe
     ? "id,season_id,status,match_type,match_source_raw,matched_at"
     : "id,season_id,mentor_person_id,mentee_person_id,status,match_type," +

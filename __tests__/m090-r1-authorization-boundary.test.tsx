@@ -55,14 +55,22 @@ vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServerClient: vi.fn()
 }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/app/matches/matches-client", () => ({
+  ManualMatchForm: () => <div />,
+  MatchCancelForm: () => <div />
+}));
 
 import OperationsPage from "@/app/operations/page";
 import OperationsTasksPage from "@/app/operations/tasks/page";
+import MonthlyOperationsPage from "@/app/operations/monthly/page";
 import MatchDetailPage from "@/app/matches/[id]/page";
+import MatchesPage from "@/app/matches/page";
 import ReviewDetailPage from "@/app/reviews/[id]/page";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { getApplicationReviewById } from "@/lib/data";
+import { getMatchList } from "@/lib/matches";
 import { canBrowseOperations } from "@/lib/permissions";
 import { allNavHrefs, buildNavGroups } from "@/lib/nav-model";
 
@@ -267,6 +275,126 @@ describe("E. core_team + valid S12 scope: positive controls still allowed", () =
 
     expect(container.textContent).not.toContain("Không có quyền truy cập");
     expect(container.textContent).toContain("Chi tiết match");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H2 completion — /operations/monthly and /matches direct-URL gaps
+// ---------------------------------------------------------------------------
+describe("A2. reviewer + valid S12 review grant: /operations/monthly DENIED", () => {
+  it("renders the denial screen before any scope check or protected data load", async () => {
+    signIn("reviewer", "auth-reviewer");
+    grant("auth-reviewer", { season_id: UEH_SEASON, role: "review" });
+
+    const ui = await MonthlyOperationsPage({ searchParams: Promise.resolve({ month: MONTH }) });
+    const { container } = render(<>{ui}</>);
+
+    expect(container.textContent).toContain("Không có quyền truy cập");
+    expect(container.textContent).not.toContain("Báo cáo hoạt động tháng");
+    expect(container.textContent).not.toContain("Tổng quan tháng");
+    // Gate runs before getAdminScopeContext/getScopeFilter/getOperationsData —
+    // no table read of any kind should have happened.
+    expect(db.requests.length).toBe(0);
+  });
+});
+
+describe("B2. core_team: /operations/monthly allowed", () => {
+  it("core_team reaches the monthly operations report", async () => {
+    signIn("core_team", "auth-core");
+    grant("auth-core", { program_id: UEH_PROGRAM, role: "operations" });
+
+    const ui = await MonthlyOperationsPage({ searchParams: Promise.resolve({ month: MONTH }) });
+    const { container } = render(<>{ui}</>);
+
+    expect(container.textContent).not.toContain("Không có quyền truy cập");
+    expect(container.textContent).toContain("Báo cáo hoạt động tháng");
+    expect(db.requests.length).toBeGreaterThan(0);
+  });
+});
+
+describe("C2. reviewer: /matches DENIED by direct URL", () => {
+  it("renders the denial screen and never selects any match projection", async () => {
+    signIn("reviewer", "auth-reviewer");
+    grant("auth-reviewer", { season_id: UEH_SEASON, role: "review" });
+    db.tables.people = [{ id: "mentor-1", full_name: "Mentor Secret", email_primary: "mentor-secret@example.test" }];
+    db.tables.matches = [{
+      id: "match-1", season_id: UEH_SEASON, status: "active",
+      mentor_person_id: "mentor-1", mentee_person_id: "mentee-1", matched_at: "2026-07-01"
+    }];
+
+    const ui = await MatchesPage({ searchParams: Promise.resolve({}) });
+    const { container } = render(<>{ui}</>);
+
+    expect(container.textContent).toContain("Không có quyền truy cập");
+    expect(container.textContent).not.toContain("Danh sách matching");
+    expect(container.textContent).not.toContain("Mentor Secret");
+    expect(container.textContent).not.toContain("mentor-secret@example.test");
+    // Gate runs before getAdminScopeContext/resolveSeasonContext/getIntakeBatches/
+    // getMatchList — no table read of any kind should have happened.
+    expect(db.requests.length).toBe(0);
+  });
+});
+
+describe("D2. core_team: /matches allowed", () => {
+  it("core_team reaches the match list with the unredacted projection", async () => {
+    signIn("core_team", "auth-core");
+    grant("auth-core", { program_id: UEH_PROGRAM, role: "operations" });
+    db.tables.people = [
+      { id: "mentor-1", full_name: "Mentor Visible", email_primary: "mentor-visible@example.test" },
+      { id: "mentee-1", full_name: "Mentee Visible", email_primary: "mentee-visible@example.test" }
+    ];
+    db.tables.matches = [{
+      id: "match-1", season_id: UEH_SEASON, status: "active",
+      mentor_person_id: "mentor-1", mentee_person_id: "mentee-1", matched_at: "2026-07-01"
+    }];
+
+    const ui = await MatchesPage({ searchParams: Promise.resolve({}) });
+    const { container } = render(<>{ui}</>);
+
+    expect(container.textContent).not.toContain("Không có quyền truy cập");
+    expect(container.textContent).toContain("Mentor Visible");
+    expect(container.textContent).toContain("Mentee Visible");
+    expect(container.textContent).not.toContain("Ẩn với Viewer");
+  });
+});
+
+describe("E2. regression/fail-safe: privileged matches projection is allowlisted, not denylisted", () => {
+  it("reviewer, viewer, null and an unrecognized role all get the redacted projection", async () => {
+    db.tables.matches = [{
+      id: "match-1", season_id: "season-1", status: "active",
+      mentor_person_id: "mentor-1", mentee_person_id: "mentee-1",
+      match_type: "primary", match_source_raw: "manual", matched_at: "2026-01-01", notes: "PRIVATE NOTE"
+    }];
+    db.tables.people = [
+      { id: "mentor-1", full_name: "Mentor Secret", email_primary: "mentor-secret@example.test" },
+      { id: "mentee-1", full_name: "Mentee Secret", email_primary: "mentee-secret@example.test" }
+    ];
+
+    for (const role of ["reviewer", "viewer", null, undefined, "bogus_role"]) {
+      const result = await getMatchList({ scope: { allowedSeasonIds: ["season-1"] }, audienceRole: role as any });
+      expect(result.data[0]).not.toHaveProperty("mentor_person_id");
+      expect(result.data[0]).not.toHaveProperty("notes");
+      const raw = JSON.stringify(result.data);
+      expect(raw).not.toContain("Mentor Secret");
+      expect(raw).not.toContain("mentor-secret@example.test");
+    }
+  });
+
+  it("regression guard: support_team, core_team, admin, super_admin keep the unredacted projection", async () => {
+    db.tables.matches = [{
+      id: "match-1", season_id: "season-1", status: "active",
+      mentor_person_id: "mentor-1", mentee_person_id: "mentee-1",
+      match_type: "primary", match_source_raw: "manual", matched_at: "2026-01-01"
+    }];
+    db.tables.people = [
+      { id: "mentor-1", full_name: "Mentor Visible", email_primary: "mentor-visible@example.test" },
+      { id: "mentee-1", full_name: "Mentee Visible", email_primary: "mentee-visible@example.test" }
+    ];
+
+    for (const role of ["support_team", "core_team", "admin", "super_admin"]) {
+      const result = await getMatchList({ scope: { allowedSeasonIds: ["season-1"] }, audienceRole: role });
+      expect(result.data[0]).toMatchObject({ mentor_name: "Mentor Visible", mentee_name: "Mentee Visible" });
+    }
   });
 });
 
