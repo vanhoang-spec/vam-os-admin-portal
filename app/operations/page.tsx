@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, KpiCard, PageHeader, ProgressiveTable, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
@@ -7,6 +8,7 @@ import { getOperationsData, keyById } from "@/lib/data";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { currentMonthVN, isOperationalMonth, operationalMonthRange, resolveOperationsMonth } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import { canBrowseOperations } from "@/lib/permissions";
 import { canOperateAnyScope, canReadSeason, getAdminScopeContext } from "@/lib/program-scope";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate, formatMonthVN } from "@/lib/utils";
@@ -125,6 +127,21 @@ function monthLabel(month: string) {
 export default async function OperationsPage(props: { searchParams?: Promise<{ month?: string | string[]; season?: string | string[] }> }) {
   const searchParams = await props.searchParams;
 
+  // H2 fix: role gate before any scope check or protected data load.
+  // canReadSeason below is a *scope* check (true for any granted scope
+  // level, including "review") — it must never be the only gate on this
+  // route, or a reviewer with a season review grant can reach it.
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser) redirect("/login");
+  if (!canBrowseOperations(adminUser.role)) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn không có quyền truy cập trang vận hành này."
+      />
+    );
+  }
+
   const scopeContext = await getAdminScopeContext();
 
   // Scope could not be evaluated. Rendering the dashboard here would filter every
@@ -165,10 +182,7 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
   }
 
   const scope = seasonContext.effectiveScope;
-  const [data, adminUser] = await Promise.all([
-    getOperationsData(scope, SEASON_CODE),
-    getCurrentAdminUser()
-  ]);
+  const data = await getOperationsData(scope, SEASON_CODE);
   const allowRecapEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
 
   // Sources the KPI figures are computed from. If any failed, the aggregate is

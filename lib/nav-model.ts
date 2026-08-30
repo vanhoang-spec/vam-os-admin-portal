@@ -1,4 +1,5 @@
 import type { CurrentAdminUser } from "@/lib/auth-constants";
+import { canBrowseOperations } from "@/lib/permissions";
 
 export type NavItemDef = { href: string; label: string };
 
@@ -26,8 +27,14 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const showReviews = roleIn(role, ["super_admin", "admin", "core_team", "reviewer"]);
   const showAdminTier = roleIn(role, ["super_admin", "admin", "core_team"]);
   const showUserMgmt = role === "super_admin" && adminUser?.status === "active";
+  // H2 fix: the operations/matches nav entries used to fall back to a plain
+  // link (operations) or render unconditionally (matches) for every role
+  // that wasn't admin-tier, which included reviewer. Both must follow the
+  // same canBrowseOperations allowlist as the page-level H2 gate, or nav
+  // visibility and route access disagree.
+  const showOperations = canBrowseOperations(role);
 
-  const groups: NavGroupDef[] = [
+  const groups: (NavGroupDef | null)[] = [
     role === "super_admin"
       ? {
           key: "dashboard",
@@ -50,7 +57,9 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/recaps/create", label: "Tạo báo cáo" },
           ],
         }
-      : { key: "operations", label: "Vận hành", href: "/operations" },
+      : showOperations
+        ? { key: "operations", label: "Vận hành", href: "/operations" }
+        : null,
     {
       key: "community",
       label: "Cộng đồng VAM",
@@ -73,7 +82,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
           ],
         }
       : { key: "applications", label: "Ứng tuyển", href: "/applications" },
-    { key: "matches", label: "Ghép cặp", href: "/matches" },
+    showOperations ? { key: "matches", label: "Ghép cặp", href: "/matches" } : null,
     { key: "events", label: "Sự kiện", href: "/events" },
     { key: "data", label: "Rà soát dữ liệu", href: "/data-issues" },
   ];
@@ -95,7 +104,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
     });
   }
 
-  return groups;
+  return groups.filter((g): g is NavGroupDef => g !== null);
 }
 
 export function allNavHrefs(groups: NavGroupDef[]): string[] {

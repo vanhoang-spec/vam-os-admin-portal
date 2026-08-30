@@ -102,3 +102,20 @@ export function canToggleApplicationForm(role?: string | null) {
 export function canViewApplicationFormControls(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can browse general admin-tier operational surfaces: /operations,
+ * /operations/tasks, /matches/[id].
+ *
+ * H2 fix: these routes previously gated only on season *scope* (e.g.
+ * canReadSeason, which is true for any scope level including "review"),
+ * never on global role. A reviewer holding a valid season review grant
+ * could therefore reach operational dashboards and match detail pages
+ * that have nothing to do with reviewing applications. reviewer is
+ * deliberately excluded here even though it is included in canReview —
+ * this predicate answers a different question (general operations
+ * browsing) than review-workflow access.
+ */
+export function canBrowseOperations(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}

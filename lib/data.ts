@@ -1748,7 +1748,14 @@ export async function getApplicationReviewById(
     .from("application_reviews")
     .select("*")
     .eq("id", id);
-  if (reviewerAdminUserId) query = query.eq("reviewer_admin_user_id", reviewerAdminUserId);
+  // H3 fix: a reviewer's own identity constraint must also exclude
+  // cancelled assignments — otherwise a cancelled/reassigned reviewer can
+  // still open their old review URL by ID. Submitted reviews are
+  // unaffected (status 'submitted' !== 'cancelled'), so read-only access
+  // to the reviewer's own review history is preserved.
+  if (reviewerAdminUserId) {
+    query = query.eq("reviewer_admin_user_id", reviewerAdminUserId).neq("status", "cancelled");
+  }
   const { data, error } = await query.maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (application_reviews: ${error.message})` };
   if (scope && data?.application_id) {

@@ -21,6 +21,11 @@ const ROUTES_BASE = [
   "/matches", "/events", "/data-issues",
 ];
 
+// H2 fix: canBrowseOperations gates both /operations and /matches nav
+// visibility now (super_admin/admin/core_team/support_team only). viewer,
+// reviewer and an unauthenticated (null) user no longer see either link.
+const ROUTES_BASE_NO_OPS_MATCHES = ROUTES_BASE.filter((r) => r !== "/operations" && r !== "/matches");
+
 // ── isActiveRoute ─────────────────────────────────────────────────────────────
 
 describe("isActiveRoute", () => {
@@ -155,8 +160,16 @@ describe("buildNavGroups — reviewer", () => {
     expect(hrefs).toContain("/interviews");
   });
 
-  it("includes all base routes", () => {
-    ROUTES_BASE.forEach((r) => expect(hrefs).toContain(r));
+  it("includes all base routes except /operations and /matches", () => {
+    ROUTES_BASE_NO_OPS_MATCHES.forEach((r) => expect(hrefs).toContain(r));
+  });
+
+  // H2: a reviewer's season "review" grant is not canBrowseOperations —
+  // these routes previously leaked to any reviewer regardless of scope.
+  it("does NOT include /operations or /matches (H2)", () => {
+    expect(hrefs).not.toContain("/operations");
+    expect(hrefs).not.toContain("/matches");
+    expect(groups.find((g) => g.key === "operations")).toBeUndefined();
   });
 });
 
@@ -174,8 +187,8 @@ describe("buildNavGroups — viewer", () => {
     );
   });
 
-  it("includes all base routes", () => {
-    ROUTES_BASE.forEach((r) => expect(hrefs).toContain(r));
+  it("includes all base routes except /operations and /matches", () => {
+    ROUTES_BASE_NO_OPS_MATCHES.forEach((r) => expect(hrefs).toContain(r));
   });
 
   it("applications is a standalone link (no sub-items)", () => {
@@ -184,10 +197,13 @@ describe("buildNavGroups — viewer", () => {
     expect(apps!.items).toBeUndefined();
   });
 
-  it("operations is a standalone link (no sub-items) for viewer", () => {
-    const ops = groups.find((g) => g.key === "operations");
-    expect(ops!.href).toBe("/operations");
-    expect(ops!.items).toBeUndefined();
+  // H2: viewer is not in canBrowseOperations, so the operations nav entry
+  // (previously a standalone fallback link shown to every non-admin-tier
+  // role) and the /matches link are both omitted entirely now.
+  it("has no operations group and no /matches link (H2)", () => {
+    expect(groups.find((g) => g.key === "operations")).toBeUndefined();
+    expect(hrefs).not.toContain("/operations");
+    expect(hrefs).not.toContain("/matches");
   });
 });
 
@@ -221,13 +237,13 @@ describe("buildNavGroups — null user", () => {
   });
 
   it("returns no gated routes", () => {
-    ["/reviews", "/interviews", "/admin", "/team", "/admin/users"].forEach((r) =>
+    ["/reviews", "/interviews", "/admin", "/team", "/admin/users", "/operations", "/matches"].forEach((r) =>
       expect(hrefs).not.toContain(r)
     );
   });
 
-  it("includes base routes", () => {
-    ROUTES_BASE.forEach((r) => expect(hrefs).toContain(r));
+  it("includes base routes except /operations and /matches", () => {
+    ROUTES_BASE_NO_OPS_MATCHES.forEach((r) => expect(hrefs).toContain(r));
   });
 });
 
@@ -286,12 +302,20 @@ describe("allNavHrefs", () => {
 //
 // Batch-3 additions: admin-tier roles (core_team, admin, super_admin) get
 // operations sub-nav items (tasks, monthly, intelligence, recaps/create) via
-// the Vận hành accordion group. Viewer/support_team/reviewer still see the
-// standalone /operations link.
+// the Vận hành accordion group.
+//
+// M090 R1 / H2: /operations and /matches are gated by canBrowseOperations
+// (super_admin, admin, core_team, support_team). viewer and reviewer no
+// longer see either link — a reviewer's season "review" scope grant is not
+// a general-operations role, and viewer never had any operations access to
+// begin with.
 //
 // Source of truth: lib/nav-model.ts buildNavGroups()
-//   navItems (all roles):        /, /operations, /people, /mentors, /mentees,
-//                                 /applications, /matches, /events, /data-issues
+//   navItems (all roles):        /, /people, /mentors, /mentees,
+//                                 /applications, /events, /data-issues
+//   canBrowseOperations:         + /operations, /matches (support_team gets
+//                                 the plain links; admin-tier gets the
+//                                 accordion below)
 //   showAdminTier (+core):       /operations → accordion; adds /operations/tasks,
 //                                 /operations/monthly, /operations/intelligence,
 //                                 /recaps/create; also + /admin, /team
@@ -302,6 +326,11 @@ const BASE_ROUTE_ARR = [
   "/", "/operations", "/people", "/mentors", "/mentees",
   "/applications", "/matches", "/events", "/data-issues",
 ];
+
+// H2 fix: /operations and /matches are gated by canBrowseOperations
+// (super_admin/admin/core_team/support_team). viewer and reviewer no
+// longer receive either link.
+const BASE_ROUTE_ARR_NO_OPS_MATCHES = BASE_ROUTE_ARR.filter((r) => r !== "/operations" && r !== "/matches");
 
 const SUPER_ADMIN_BASE_ROUTES = ["/portfolio", ...BASE_ROUTE_ARR];
 
@@ -320,9 +349,12 @@ const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", 
 const REVIEW_QUEUE_ROUTES = ["/applications/mentor-review", "/applications/mentee-review"];
 
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
-  viewer:       BASE_ROUTE_ARR,
+  // H2: support_team is in canBrowseOperations, so it keeps the full base
+  // set including /operations and /matches. viewer and reviewer are not,
+  // so they drop both.
+  viewer:       BASE_ROUTE_ARR_NO_OPS_MATCHES,
   support_team: BASE_ROUTE_ARR,
-  reviewer:     [...BASE_ROUTE_ARR, ...REVIEW_QUEUE_ROUTES, "/reviews", "/interviews"],
+  reviewer:     [...BASE_ROUTE_ARR_NO_OPS_MATCHES, ...REVIEW_QUEUE_ROUTES, "/reviews", "/interviews"],
   core_team:    [...BASE_ROUTE_ARR, ...REVIEW_QUEUE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
   admin:        [...BASE_ROUTE_ARR, ...REVIEW_QUEUE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
   super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...REVIEW_QUEUE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
