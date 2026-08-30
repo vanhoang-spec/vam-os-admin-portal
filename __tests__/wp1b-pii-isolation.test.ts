@@ -194,9 +194,7 @@ describe("WP1-B read scope contract", () => {
     expect(raw).not.toContain("PRIVATE");
     expect(raw).not.toContain("other-review-secret");
     expect(raw).not.toContain("reviewer-b-secret");
-    expect(result.data[0].has_active_interview_review).toBe(true);
-    expect(result.data[0]).not.toHaveProperty("email_primary");
-    expect(result.data[0]).not.toHaveProperty("phone_primary");
+    expect(result.data).toEqual([]);
     expect(db.requests.filter((request) => request.table === "applications").every((request) =>
       !request.columns.includes("email_primary") && !request.columns.includes("phone_primary") && !request.columns.includes("raw_payload")
     )).toBe(true);

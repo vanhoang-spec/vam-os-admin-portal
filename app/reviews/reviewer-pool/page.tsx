@@ -28,6 +28,9 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
     getIntakeBatches(scope),
     getReviewerPool({ intakeBatchId, scope })
   ]);
+  const seasonId = intakeBatchId
+    ? String(intakeBatches.data.find((batch) => batch.id === intakeBatchId)?.season_id ?? "") || null
+    : null;
 
   return (
     <>
@@ -81,7 +84,7 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
               defaultValue={intakeBatchId ?? ""}
               className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
             >
-              <option value="">Tất cả đợt</option>
+              <option value="">-- Chọn đợt để cấp quyền --</option>
               {intakeBatches.data.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name ?? b.code ?? b.id}
@@ -107,7 +110,7 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
       </Card>
 
       {/* Pool table */}
-      <ReviewerPoolClient rows={pool.data ?? []} />
+      <ReviewerPoolClient rows={pool.data ?? []} seasonId={seasonId} />
     </>
   );
 }

@@ -26,17 +26,19 @@ export type ReviewerEligibilityResult =
  */
 export async function validateReviewEligibleReviewers(
   client: any,
-  reviewerIds: readonly string[]
+  reviewerIds: readonly string[],
+  seasonId: string,
+  reviewRound: "profile_screening" | "interview"
 ): Promise<ReviewerEligibilityResult> {
   const uniqueIds = Array.from(
     new Set(reviewerIds.map((id) => String(id).trim()).filter(Boolean))
   );
   if (!uniqueIds.length) return { ok: false, message: "Vui lòng chọn ít nhất một reviewer." };
 
-  const { data, error } = await client
-    .from("admin_users")
-    .select("id,email,full_name,role,status")
-    .in("id", uniqueIds);
+  const { data, error } = await client.rpc("vam084_list_recruitment_participants", {
+    p_season_id: seasonId,
+    p_review_stage: reviewRound
+  });
   if (error) {
     return {
       ok: false,
@@ -49,7 +51,7 @@ export async function validateReviewEligibleReviewers(
   const byId = new Map(rows.map((row) => [String(row.id), row]));
   const allEligible = uniqueIds.every((id) => {
     const row = byId.get(id);
-    return row?.status === "active" && REVIEW_ELIGIBLE_ROLE_SET.has(String(row.role ?? ""));
+    return Boolean(row) && REVIEW_ELIGIBLE_ROLE_SET.has(String(row?.role ?? ""));
   });
   if (!allEligible) {
     return {

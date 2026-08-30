@@ -183,11 +183,13 @@ export async function cancelApplicationReviewAction(
     if (!canAssignReview(adminUser.role)) return fail("Bạn không có quyền huỷ review.");
 
     const reviewId = String(formData.get("review_id") ?? "").trim();
+    const reason = String(formData.get("reason") ?? "").trim();
     if (!reviewId) return fail("Thiếu review_id.");
 
     const result = await cancelApplicationReview({
       reviewId,
-      adminUserId: adminUser.id
+      adminUserId: adminUser.id,
+      reason
     });
 
     if (!result.ok) return fail(result.message);
@@ -216,13 +218,15 @@ export async function reassignApplicationReviewAction(
 
     const reviewId = String(formData.get("review_id") ?? "").trim();
     const newReviewerAdminUserId = String(formData.get("new_reviewer_admin_user_id") ?? "").trim();
+    const reason = String(formData.get("reason") ?? "").trim();
     if (!reviewId) return fail("Thiếu review_id.");
     if (!newReviewerAdminUserId) return fail("Vui lòng chọn người review mới.");
 
     const result = await reassignApplicationReview({
       reviewId,
       newReviewerAdminUserId,
-      adminUserId: adminUser.id
+      adminUserId: adminUser.id,
+      reason
     });
 
     if (!result.ok) return fail(result.message);

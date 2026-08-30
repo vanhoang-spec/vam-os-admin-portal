@@ -3,7 +3,7 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/interview-claim";
 import { canBulkAssignReviews } from "@/lib/permissions";
-import { canReviewSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -114,16 +114,6 @@ export async function bulkAssignApplicationReviews(
     return { ok: false, message: "Bạn không có quyền thực hiện thao tác giao review." };
   }
 
-  const reviewerValidation = await validateReviewEligibleReviewers(
-    client,
-    input.reviewerAdminUserIds
-  );
-  if (!reviewerValidation.ok) {
-    if (reviewerValidation.error) log("validate bulk reviewers", reviewerValidation.error);
-    return { ok: false, message: reviewerValidation.message };
-  }
-  const reviewerIds = reviewerValidation.reviewers.map((reviewer) => reviewer.id);
-
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
 
@@ -146,7 +136,7 @@ export async function bulkAssignApplicationReviews(
       log("fetch intake batch", batchErr);
       return { ok: false, message: SAFE_ERROR };
     }
-    if (!batch || !(await canReviewSeason(scopeContext, batch.season_id as string | null))) {
+    if (!batch || !(await canOperateSeason(scopeContext, batch.season_id as string | null))) {
       return { ok: false, message: "Ban khong co quyen review trong batch nay." };
     }
     appQuery = appQuery.eq("intake_batch_id", input.intakeBatchId);
@@ -163,12 +153,27 @@ export async function bulkAssignApplicationReviews(
 
   const allFetchedApps = (rawApps ?? []) as { id: string; submitted_at: string | null; status: string; season_id: string | null }[];
   const allowedAppChecks = await Promise.all(
-    allFetchedApps.map(async (app) => ((await canReviewSeason(scopeContext, app.season_id)) ? app : null))
+    allFetchedApps.map(async (app) => ((await canOperateSeason(scopeContext, app.season_id)) ? app : null))
   );
   const allApps = allowedAppChecks.filter((app): app is { id: string; submitted_at: string | null; status: string; season_id: string | null } => Boolean(app));
   if (!allApps.length) {
     return { ok: false, message: "Không có hồ sơ nào phù hợp với bộ lọc đã chọn." };
   }
+  const seasonIds = Array.from(new Set(allApps.map((app) => app.season_id).filter(Boolean))) as string[];
+  if (seasonIds.length !== 1) {
+    return { ok: false, message: "Mỗi lần phân công chỉ được chứa hồ sơ của một mùa." };
+  }
+  const reviewerValidation = await validateReviewEligibleReviewers(
+    client,
+    input.reviewerAdminUserIds,
+    seasonIds[0],
+    reviewRound
+  );
+  if (!reviewerValidation.ok) {
+    if (reviewerValidation.error) log("validate bulk reviewers", reviewerValidation.error);
+    return { ok: false, message: reviewerValidation.message };
+  }
+  const reviewerIds = reviewerValidation.reviewers.map((reviewer) => reviewer.id);
 
   // --- 2. Exclude already-assigned apps (if requested)
   let skippedAlreadyAssigned = 0;

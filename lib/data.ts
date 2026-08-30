@@ -1911,19 +1911,17 @@ export async function getReviewAssignableApplications(filters: {
  * current active profile_screening workload count.
  * Uses service-role client because admin_users RLS restricts row visibility.
  */
-export async function getReviewEligibleReviewers(): Promise<QueryResult<ReviewEligibleReviewer[]>> {
+export async function getReviewEligibleReviewers(
+  seasonId: string,
+  reviewRound: "profile_screening" | "interview"
+): Promise<QueryResult<ReviewEligibleReviewer[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewEligibleReviewer[]>([]);
 
   // Class B: staff accounts.
-  const { data: adminRows, error: adminErr } = await readBounded<JsonRecord>(
-    "admin_users",
-    client
-      .from("admin_users")
-      .select("id,email,full_name,role")
-      .in("role", [...REVIEW_ELIGIBLE_ROLES])
-      .eq("status", "active")
-      .order("full_name", { ascending: true })
+  const { data: adminRows, error: adminErr } = await client.rpc(
+    "vam084_list_recruitment_participants",
+    { p_season_id: seasonId, p_review_stage: reviewRound }
   );
 
   if (adminErr) {
@@ -1949,7 +1947,7 @@ export async function getReviewEligibleReviewers(): Promise<QueryResult<ReviewEl
     "reviewer_admin_user_id",
     reviewerIds,
     "reviewer_admin_user_id",
-    (query) => query.eq("review_round", "profile_screening").neq("status", "cancelled")
+    (query) => query.eq("review_round", reviewRound).neq("status", "cancelled")
   );
   if (workloadErr) {
     logDataError("getReviewEligibleReviewers.workload", workloadErr);
@@ -2302,7 +2300,8 @@ const INTERVIEW_POOL_STATUSES = [
   "invited_to_interview",
   "interview_scheduled",
   "interview_in_progress",
-  "interview_completed"
+  "interview_completed",
+  "ready_for_final_decision"
 ] as const;
 
 /**
@@ -2460,7 +2459,10 @@ export async function getInterviewCandidates(filters?: {
   }
   const contactByAppId = new Map(ownedContacts.data.map((row) => [String(row.id), row]));
 
-  const data: InterviewCandidateRow[] = appList.map((a) => {
+  const visibleApps = reviewerQueue
+    ? appList.filter((application) => ownedReviewByAppId.has(application.id))
+    : appList;
+  const data: InterviewCandidateRow[] = visibleApps.map((a) => {
     const activeReview = reviewByAppId.get(a.id) ?? null;
     const ownedReview = ownedReviewByAppId.get(a.id) ?? null;
     const review = reviewerQueue ? ownedReview : activeReview;

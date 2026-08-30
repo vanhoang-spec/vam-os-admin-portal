@@ -20,20 +20,23 @@ type StatusFilter =
   | "invited_to_interview"
   | "interview_scheduled"
   | "interview_in_progress"
-  | "interview_completed";
+  | "interview_completed"
+  | "ready_for_final_decision";
 
 const STATUS_LABELS: Record<string, string> = {
   invited_to_interview: "Đã mời PV",
   interview_scheduled: "Đã lên lịch",
   interview_in_progress: "Đang PV",
-  interview_completed: "Đã hoàn thành"
+  interview_completed: "Đã hoàn thành",
+  ready_for_final_decision: "Sẵn sàng quyết định"
 };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
   invited_to_interview: "border-blue-200 bg-blue-50 text-blue-700",
   interview_scheduled: "border-purple-200 bg-purple-50 text-purple-700",
   interview_in_progress: "border-amber-200 bg-amber-50 text-amber-700",
-  interview_completed: "border-green-200 bg-green-50 text-green-700"
+  interview_completed: "border-green-200 bg-green-50 text-green-700",
+  ready_for_final_decision: "border-emerald-200 bg-emerald-50 text-emerald-700"
 };
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
@@ -158,7 +161,8 @@ export function InterviewsClient({
     invited_to_interview: rows.filter((r) => r.status === "invited_to_interview").length,
     interview_scheduled: rows.filter((r) => r.status === "interview_scheduled").length,
     interview_in_progress: rows.filter((r) => r.status === "interview_in_progress").length,
-    interview_completed: rows.filter((r) => r.status === "interview_completed").length
+    interview_completed: rows.filter((r) => r.status === "interview_completed").length,
+    ready_for_final_decision: rows.filter((r) => r.status === "ready_for_final_decision").length
   };
 
   const filterPills: { value: StatusFilter; label: string; activeClass: string; inactiveClass: string }[] = [
@@ -191,6 +195,12 @@ export function InterviewsClient({
       label: `Đã hoàn thành (${counts.interview_completed})`,
       activeClass: "border-green-600 bg-green-600 text-white",
       inactiveClass: "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+    },
+    {
+      value: "ready_for_final_decision",
+      label: `Sẵn sàng quyết định (${counts.ready_for_final_decision})`,
+      activeClass: "border-emerald-600 bg-emerald-600 text-white",
+      inactiveClass: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
     }
   ];
 

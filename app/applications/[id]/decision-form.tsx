@@ -22,16 +22,8 @@ const DECISION_OPTIONS: { value: string; label: string }[] = [
   { value: "needs_more_review",   label: "Cần review thêm" },
   { value: "withdrawn",           label: "Ứng viên rút đơn" },
   { value: "interview_scheduled", label: "Đã đặt lịch phỏng vấn" },
-  { value: "interview_completed", label: "Đã phỏng vấn xong" }
+  { value: "interview_passed", label: "Qua vòng phỏng vấn" }
 ];
-
-// Decisions that advance to a positive outcome — warn if no submitted review
-const POSITIVE_DECISIONS = new Set([
-  "screening_passed",
-  "invited_to_interview",
-  "interview_scheduled",
-  "interview_completed"
-]);
 
 // ---------------------------------------------------------------------------
 // Submit button
@@ -126,8 +118,8 @@ export function DecisionForm({
       {/* Warning when advancing without a submitted review */}
       {showNoReviewWarning && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-          Chưa có review nào được nộp cho đơn này. Bạn vẫn có thể đặt trạng thái
-          nhưng nên có review trước khi chọn screening_passed hoặc invited_to_interview.
+          Chưa có review nào được nộp cho đơn này. Các quyết định cần review sẽ
+          bị hệ thống từ chối cho đến khi đạt số lượng tối thiểu của mùa và vòng.
         </div>
       )}
 

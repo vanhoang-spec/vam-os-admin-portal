@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { assignApplicationReviewAction } from "@/app/actions/application-reviews";
 import { initialReviewActionState } from "@/lib/review-action-types";
@@ -20,15 +21,19 @@ function SubmitButton() {
 
 export function AssignReviewerForm({
   applicationId,
-  reviewers
+  profileReviewers,
+  interviewers
 }: {
   applicationId: string;
-  reviewers: AdminUserPublic[];
+  profileReviewers: AdminUserPublic[];
+  interviewers: AdminUserPublic[];
 }) {
   const [state, action] = useFormState(
     assignApplicationReviewAction,
     initialReviewActionState
   );
+  const [round, setRound] = useState<"profile_screening" | "interview">("profile_screening");
+  const reviewers = round === "profile_screening" ? profileReviewers : interviewers;
 
   return (
     <form action={action} className="space-y-3">
@@ -74,6 +79,8 @@ export function AssignReviewerForm({
           <select
             name="review_round"
             required
+            value={round}
+            onChange={(event) => setRound(event.target.value as "profile_screening" | "interview")}
             className="mt-1 w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink focus:outline-none focus:ring-1 focus:ring-vam-green"
           >
             <option value="profile_screening">Hồ sơ (Profile Screening)</option>

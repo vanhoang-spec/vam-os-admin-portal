@@ -60,7 +60,7 @@ const FILTER_OPTIONS: { value: FilterOption; label: string }[] = [
 // Per-row enable button (isolated useFormState)
 // ---------------------------------------------------------------------------
 
-function EnableButtonInner({ disabled }: { disabled: boolean }) {
+function EnableButtonInner({ disabled, label }: { disabled: boolean; label: string }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -68,17 +68,21 @@ function EnableButtonInner({ disabled }: { disabled: boolean }) {
       disabled={pending || disabled}
       className="inline-flex min-w-[7rem] justify-center rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint disabled:cursor-not-allowed disabled:opacity-50"
     >
-      {pending ? "Đang xử lý…" : "Cấp quyền reviewer"}
+      {pending ? "Đang xử lý…" : label}
     </button>
   );
 }
 
 function EnableReviewerButton({
   personId,
-  accountStatus
+  accountStatus,
+  seasonId,
+  participationRole
 }: {
   personId: string;
   accountStatus: AccountStatus;
+  seasonId: string | null;
+  participationRole: "reviewer" | "interviewer";
 }) {
   const router = useRouter();
   const [state, formAction] = useFormState<EnableReviewerActionState, FormData>(
@@ -96,17 +100,8 @@ function EnableReviewerButton({
   }, [router, state.ok, state.message]);
 
   // Derive button label + disabled state from current account status
-  const alreadyDone = accountStatus === "reviewer_active";
-  const higherRole = accountStatus === "higher_active";
-  const isDisabled = alreadyDone || higherRole;
-
-  const buttonLabel = alreadyDone
-    ? "Đã là reviewer"
-    : higherRole
-    ? "Quyền cao hơn"
-    : accountStatus === "reviewer_inactive" || accountStatus === "higher_inactive"
-    ? "Kích hoạt lại"
-    : "Cấp quyền reviewer";
+  const isDisabled = !seasonId;
+  const buttonLabel = participationRole === "reviewer" ? "Cấp Reviewer" : "Cấp Interviewer";
 
   return (
     <div className="flex flex-col gap-1">
@@ -120,16 +115,12 @@ function EnableReviewerButton({
         </p>
       ) : null}
 
-      {isDisabled ? (
-        <span className="inline-flex min-w-[7rem] justify-center rounded-md border border-slate-100 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-400">
-          {buttonLabel}
-        </span>
-      ) : (
-        <form action={formAction}>
+      <form action={formAction}>
           <input type="hidden" name="person_id" value={personId} />
-          <EnableButtonInner disabled={false} />
-        </form>
-      )}
+          <input type="hidden" name="season_id" value={seasonId ?? ""} />
+          <input type="hidden" name="participation_role" value={participationRole} />
+          <EnableButtonInner disabled={isDisabled} label={buttonLabel} />
+      </form>
     </div>
   );
 }
@@ -138,7 +129,7 @@ function EnableReviewerButton({
 // Main client component
 // ---------------------------------------------------------------------------
 
-export function ReviewerPoolClient({ rows }: { rows: ReviewerPoolRow[] }) {
+export function ReviewerPoolClient({ rows, seasonId }: { rows: ReviewerPoolRow[]; seasonId: string | null }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterOption>("all");
 
@@ -256,10 +247,10 @@ export function ReviewerPoolClient({ rows }: { rows: ReviewerPoolRow[] }) {
                     </td>
                     <td className="px-4 py-3">
                       {row.person_id ? (
-                        <EnableReviewerButton
-                          personId={row.person_id}
-                          accountStatus={bucket}
-                        />
+                        <div className="flex flex-col gap-2">
+                          <EnableReviewerButton personId={row.person_id} accountStatus={bucket} seasonId={seasonId} participationRole="reviewer" />
+                          <EnableReviewerButton personId={row.person_id} accountStatus={bucket} seasonId={seasonId} participationRole="interviewer" />
+                        </div>
                       ) : (
                         <span className="text-xs text-slate-300">Thiếu person_id</span>
                       )}

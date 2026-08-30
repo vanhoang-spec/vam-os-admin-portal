@@ -24,3 +24,17 @@ export const DESTRUCTIVE_DECISION_STATUSES = new Set([
   "rejected_or_not_fit",
   "withdrawn"
 ]);
+
+export const ALLOWED_DECISION_STATUSES = Object.freeze([
+  "under_data_check",
+  "screening_passed",
+  "invited_to_interview",
+  "interview_scheduled",
+  "interview_passed",
+  "waitlisted",
+  "rejected_or_not_fit",
+  "needs_more_review",
+  "withdrawn"
+] as const);
+
+export type AllowedDecisionStatus = (typeof ALLOWED_DECISION_STATUSES)[number];

@@ -139,6 +139,7 @@ export default async function ReviewsPage() {
           >
             Danh sách reviewer
           </Link>
+          <Link href="/reviews/settings" className="inline-flex items-center rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cấu hình số review</Link>
           <Link
             href="/reviews/guide"
             className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"

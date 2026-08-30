@@ -10,9 +10,15 @@ export async function enableMentorAsReviewerAction(
 ): Promise<EnableReviewerActionState> {
   try {
     const personId = String(formData.get("person_id") ?? "").trim();
+    const seasonId = String(formData.get("season_id") ?? "").trim();
+    const participationRole = String(formData.get("participation_role") ?? "").trim();
     if (!personId) return { ok: false, message: "Thiếu person_id." };
+    if (!seasonId) return { ok: false, message: "Vui lòng chọn batch có mùa." };
+    if (participationRole !== "reviewer" && participationRole !== "interviewer") {
+      return { ok: false, message: "Vai trò tham gia không hợp lệ." };
+    }
 
-    const result = await enableMentorAsReviewer({ personId });
+    const result = await enableMentorAsReviewer({ personId, seasonId, participationRole });
 
     if (result.ok) {
       revalidatePath("/reviews/reviewer-pool");

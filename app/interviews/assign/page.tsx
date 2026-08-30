@@ -93,9 +93,12 @@ export default async function AssignInterviewPage(props: { searchParams: Promise
   }
 
   // Load application pool and reviewer list in parallel
+  const seasonId = intakeBatches.data.find((batch) => batch.id === intakeBatchId)?.season_id;
   const [candidatesResult, reviewersResult] = await Promise.all([
     getInterviewCandidates({ intakeBatchId, roleApplied, scope, actorRole: adminUser.role }),
-    getReviewEligibleReviewers()
+    seasonId
+      ? getReviewEligibleReviewers(String(seasonId), "interview")
+      : Promise.resolve({ data: [], error: "Batch chưa gắn mùa." })
   ]);
 
   const batchName =

@@ -71,6 +71,7 @@ export function ReviewOperations({
           </div>
         )}
         <input type="hidden" name="review_id" value={reviewId} />
+        <input required minLength={3} name="reason" placeholder="Lý do huỷ" className="mb-3 block w-full rounded-md border border-vam-line px-3 py-2 text-sm" />
         <CancelButton />
       </form>
 
@@ -86,6 +87,7 @@ export function ReviewOperations({
           </div>
         )}
         <input type="hidden" name="review_id" value={reviewId} />
+        <input required minLength={3} name="reason" placeholder="Lý do đổi người" className="block w-full rounded-md border border-vam-line px-3 py-2 text-sm" />
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-1 flex-col gap-1 min-w-[200px]">
             <label className="text-xs font-medium text-slate-500">Người review mới</label>

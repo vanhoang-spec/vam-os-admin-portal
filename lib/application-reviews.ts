@@ -3,7 +3,7 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/interview-claim";
 import { canAssignReview, canReview } from "@/lib/permissions";
-import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { canOperateSeason, canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { EDITABLE_REVIEW_STATUSES, isEditableReviewStatus } from "@/lib/review-status";
 import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -43,7 +43,8 @@ async function canWriteReviewWorkflowForApplication(client: any, applicationId: 
   }
   if (!application) return { ok: false as const, message: "KhĂ´ng tĂ¬m tháº¥y Ä‘Æ¡n á»©ng tuyá»ƒn." };
   const ctx = await getAdminScopeContext();
-  if (!(await canReviewSeason(ctx, application.season_id as string | null))) {
+  if (!(await canReviewSeason(ctx, application.season_id as string | null)) &&
+      !(await canOperateSeason(ctx, application.season_id as string | null))) {
     return { ok: false as const, message: "Ban khong co quyen review trong mua cua don nay." };
   }
   return { ok: true as const, application };
@@ -120,7 +121,12 @@ export async function assignApplicationReview(input: AssignReviewInput): Promise
     return { ok: false, message: "Đơn ứng tuyển chưa ở trạng thái đủ điều kiện phỏng vấn." };
   }
 
-  const reviewerValidation = await validateReviewEligibleReviewers(client, [input.reviewerAdminUserId]);
+  const reviewerValidation = await validateReviewEligibleReviewers(
+    client,
+    [input.reviewerAdminUserId],
+    String(scopeAccess.application.season_id),
+    input.reviewRound
+  );
   if (!reviewerValidation.ok) {
     if (reviewerValidation.error) log("validate target reviewer failed", reviewerValidation.error);
     return { ok: false, message: reviewerValidation.message };
@@ -290,36 +296,17 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
   if (!scopeAccess.ok) return scopeAccess;
 
-  // Calculate total_score from available dimensions
-  const scores = [
-    input.scoreMotivation,
-    input.scoreGoalClarity,
-    input.scoreCommitment,
-    input.scoreFit,
-    input.scoreCommunication
-  ].filter((s): s is number => typeof s === "number" && s >= 1 && s <= 5);
-  const totalScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) : null;
-
-  const { data: updated, error } = await client
-    .from("application_reviews")
-    .update({
-      status: "submitted",
-      score_motivation: input.scoreMotivation ?? null,
-      score_goal_clarity: input.scoreGoalClarity ?? null,
-      score_commitment: input.scoreCommitment ?? null,
-      score_fit: input.scoreFit ?? null,
-      score_communication: input.scoreCommunication ?? null,
-      total_score: totalScore,
-      recommendation: input.recommendation ?? null,
-      reviewer_note: input.reviewerNote ?? null,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", input.reviewId)
-    .eq("reviewer_admin_user_id", input.adminUserId)
-    .in("status", [...EDITABLE_REVIEW_STATUSES])
-    .select("id")
-    .maybeSingle();
+  const { data: updated, error } = await client.rpc("vam084_submit_application_review", {
+    p_review_id: input.reviewId,
+    p_actor: input.adminUserId,
+    p_score_motivation: input.scoreMotivation ?? null,
+    p_score_goal_clarity: input.scoreGoalClarity ?? null,
+    p_score_commitment: input.scoreCommitment ?? null,
+    p_score_fit: input.scoreFit ?? null,
+    p_score_communication: input.scoreCommunication ?? null,
+    p_recommendation: input.recommendation ?? null,
+    p_reviewer_note: input.reviewerNote ?? null
+  });
 
   if (error) {
     log("submit review update failed", error);
@@ -327,27 +314,6 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
   }
   if (!updated) {
     return { ok: false, message: "Review đã thay đổi trạng thái; thao tác submit bị từ chối." };
-  }
-
-  // Advance application.status based on review_round
-  if (existing.review_round === "profile_screening") {
-    const { error: statusErr } = await client
-      .from("applications")
-      .update({ status: "screening_completed" })
-      .eq("id", existing.application_id)
-      .in("status", ["screening_assigned", "screening_in_progress"]);
-    if (statusErr) {
-      log("update application status to screening_completed failed", statusErr);
-    }
-  } else if (existing.review_round === "interview") {
-    const { error: statusErr } = await client
-      .from("applications")
-      .update({ status: "interview_completed" })
-      .eq("id", existing.application_id)
-      .in("status", ["interview_in_progress"]);
-    if (statusErr) {
-      log("update application status to interview_completed failed", statusErr);
-    }
   }
 
   return { ok: true, id: input.reviewId };
@@ -404,6 +370,7 @@ export async function updateApplicationStatus(input: UpdateApplicationStatusInpu
 export async function cancelApplicationReview(input: {
   reviewId: string;
   adminUserId: string;
+  reason?: string;
 }): Promise<ReviewActionResult> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
@@ -411,35 +378,25 @@ export async function cancelApplicationReview(input: {
   const actorAccess = await requireMutationActor(input.adminUserId, "assign");
   if (!actorAccess.ok) return actorAccess;
 
-  const { data: existing, error: fetchErr } = await client
-    .from("application_reviews")
-    .select("id,status,application_id")
-    .eq("id", input.reviewId)
-    .maybeSingle();
-
-  if (fetchErr) {
-    log("fetch review for cancel failed", fetchErr);
+  const reason = input.reason?.trim() || "Operational cancellation";
+  const { data, error } = await client.rpc("vam084_change_review_assignment", {
+    p_review_id: input.reviewId,
+    p_actor: input.adminUserId,
+    p_reason: reason,
+    p_new_reviewer: null
+  });
+  if (error || !data) {
+    log("atomic cancel review failed", error);
     return { ok: false, message: SAFE_ERROR };
   }
-  if (!existing) return { ok: false, message: "Không tìm thấy review." };
-
-  if (!isEditableReviewStatus(existing.status)) {
-    return { ok: false, message: "Review không còn ở trạng thái cho phép huỷ." };
-  }
-
-  const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
-  if (!scopeAccess.ok) return scopeAccess;
-
-  const cancellation = await conditionallyCancelReview(client, input.reviewId);
-  if (!cancellation.ok) return cancellation;
-
-  return { ok: true, id: input.reviewId };
+  return { ok: true, id: String(data) };
 }
 
 export async function reassignApplicationReview(input: {
   reviewId: string;
   newReviewerAdminUserId: string;
   adminUserId: string;
+  reason?: string;
 }): Promise<ReviewActionResult> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
@@ -447,100 +404,16 @@ export async function reassignApplicationReview(input: {
   const actorAccess = await requireMutationActor(input.adminUserId, "assign");
   if (!actorAccess.ok) return actorAccess;
 
-  const { data: existing, error: fetchErr } = await client
-    .from("application_reviews")
-    .select("id,status,application_id,review_round,reviewer_admin_user_id,due_at,updated_at")
-    .eq("id", input.reviewId)
-    .maybeSingle();
-
-  if (fetchErr) {
-    log("fetch review for reassign failed", fetchErr);
+  const reason = input.reason?.trim() || "Operational reassignment";
+  const { data, error } = await client.rpc("vam084_change_review_assignment", {
+    p_review_id: input.reviewId,
+    p_actor: input.adminUserId,
+    p_reason: reason,
+    p_new_reviewer: input.newReviewerAdminUserId
+  });
+  if (error || !data) {
+    log("atomic reassign review failed", error);
     return { ok: false, message: SAFE_ERROR };
   }
-  if (!existing) return { ok: false, message: "Không tìm thấy review." };
-
-  const reviewerValidation = await validateReviewEligibleReviewers(client, [input.newReviewerAdminUserId]);
-  if (!reviewerValidation.ok) {
-    if (reviewerValidation.error) log("validate reassignment target failed", reviewerValidation.error);
-    return { ok: false, message: reviewerValidation.message };
-  }
-
-  if (existing.reviewer_admin_user_id === input.newReviewerAdminUserId) {
-    return { ok: false, message: "Người review mới phải khác người review hiện tại." };
-  }
-  if (!isEditableReviewStatus(existing.status)) {
-    return { ok: false, message: "Review không còn ở trạng thái cho phép đổi người." };
-  }
-
-  const scopeAccess = await canWriteReviewWorkflowForApplication(
-    client,
-    existing.application_id as string
-  );
-  if (!scopeAccess.ok) return scopeAccess;
-  const reviewRound = existing.review_round as "profile_screening" | "interview";
-  if (reviewRound !== "profile_screening" && reviewRound !== "interview") {
-    return { ok: false, message: "Vòng review hiện tại không hợp lệ." };
-  }
-  if (
-    reviewRound === "interview" &&
-    !INTERVIEW_ELIGIBLE_STATUSES.has(String(scopeAccess.application.status ?? ""))
-  ) {
-    return { ok: false, message: "Đơn ứng tuyển không còn đủ điều kiện giao phỏng vấn." };
-  }
-
-  const { data: duplicate, error: duplicateError } = await client
-    .from("application_reviews")
-    .select("id")
-    .eq("application_id", existing.application_id)
-    .eq("review_round", reviewRound)
-    .eq("reviewer_admin_user_id", input.newReviewerAdminUserId)
-    .neq("status", "cancelled")
-    .limit(1);
-  if (duplicateError) {
-    log("check reassignment duplicate failed", duplicateError);
-    return { ok: false, message: SAFE_ERROR };
-  }
-  if (duplicate && duplicate.length > 0) {
-    return { ok: false, message: "Người review mới đã có assignment cho ứng viên này." };
-  }
-
-  const cancellation = await conditionallyCancelReview(client, input.reviewId);
-  if (!cancellation.ok) return cancellation;
-
-  const { data: replacement, error: insertError } = await client
-    .from("application_reviews")
-    .insert({
-      application_id: existing.application_id,
-      reviewer_admin_user_id: input.newReviewerAdminUserId,
-      assigned_by: input.adminUserId,
-      review_round: reviewRound,
-      due_at: (existing.due_at as string | null) ?? null,
-      status: "assigned"
-    })
-    .select("id")
-    .maybeSingle();
-
-  if (insertError) log("insert reassigned application review failed", insertError);
-  if (insertError || !replacement) {
-    const { data: restored, error: restoreError } = await client
-      .from("application_reviews")
-      .update({
-        status: existing.status,
-        updated_at: existing.updated_at ?? null
-      })
-      .eq("id", input.reviewId)
-      .eq("status", "cancelled")
-      .select("id")
-      .maybeSingle();
-    if (restoreError || !restored) {
-      log("reassignment compensation failed", restoreError ?? "no row restored");
-      return {
-        ok: false,
-        message: "Đổi người review thất bại và assignment cũ không thể tự động khôi phục. Vui lòng kiểm tra ngay."
-      };
-    }
-    return { ok: false, message: "Không thể tạo assignment mới; assignment cũ đã được khôi phục." };
-  }
-
-  return { ok: true, id: replacement.id as string };
+  return { ok: true, id: String(data) };
 }

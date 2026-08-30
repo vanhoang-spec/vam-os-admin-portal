@@ -50,10 +50,9 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const reviewerConstraint = adminUser.role === "reviewer" ? adminUser.id : undefined;
-  const [reviewResult, seasons, reviewersResult] = await Promise.all([
+  const [reviewResult, seasons] = await Promise.all([
     getApplicationReviewById(params.id, scope, reviewerConstraint),
-    getSeasons(scope),
-    adminUser.role !== "reviewer" ? getReviewEligibleReviewers() : Promise.resolve({ data: [], error: null })
+    getSeasons(scope)
   ]);
 
   const review = reviewResult.data;
@@ -76,6 +75,12 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   // Fetch application for this review
   const appResult = await getApplication(review.application_id, scope);
   const app = appResult.data;
+  const reviewersResult = adminUser.role !== "reviewer" && app?.season_id
+    ? await getReviewEligibleReviewers(
+        app.season_id,
+        review.review_round as "profile_screening" | "interview"
+      )
+    : { data: [], error: null };
   const personResult = app?.person_id ? await getPerson(app.person_id, scope) : { data: null, error: null };
 
   const seasonsById = keyById(seasons.data);

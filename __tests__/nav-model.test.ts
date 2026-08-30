@@ -317,14 +317,15 @@ const OPS_ADMIN_ROUTES = [
 // CHANGE a form's state is gated separately by canToggleApplicationForm plus
 // season scope, not by nav visibility.
 const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team"];
+const REVIEW_QUEUE_ROUTES = ["/applications/mentor-review", "/applications/mentee-review"];
 
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       BASE_ROUTE_ARR,
   support_team: BASE_ROUTE_ARR,
-  reviewer:     [...BASE_ROUTE_ARR, "/reviews", "/interviews"],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
+  reviewer:     [...BASE_ROUTE_ARR, ...REVIEW_QUEUE_ROUTES, "/reviews", "/interviews"],
+  core_team:    [...BASE_ROUTE_ARR, ...REVIEW_QUEUE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...REVIEW_QUEUE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...REVIEW_QUEUE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
 };
 
 function sortedRoutes(arr: string[]) {

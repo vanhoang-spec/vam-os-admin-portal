@@ -16,11 +16,12 @@ vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() 
 vi.mock("@/lib/program-scope", () => ({
   getAdminScopeContext: vi.fn(),
   canReviewSeason: vi.fn(),
+  canOperateSeason: vi.fn(),
 }));
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { getAdminScopeContext, canReviewSeason } from "@/lib/program-scope";
+import { getAdminScopeContext, canReviewSeason, canOperateSeason } from "@/lib/program-scope";
 import {
   assignApplicationReview,
   saveApplicationReviewDraft,
@@ -49,11 +50,11 @@ function makeChain(result: { data?: unknown; error?: unknown } = {}): unknown {
   return chain;
 }
 
-function makeClient(fromResponses: unknown[]) {
+function makeClient(fromResponses: unknown[], rpc?: (name: string) => Promise<unknown>) {
   const fromMock = vi.fn();
   fromResponses.forEach((r) => fromMock.mockReturnValueOnce(r));
   fromMock.mockReturnValue(makeChain());
-  return { from: fromMock };
+  return { from: fromMock, rpc: rpc ?? vi.fn().mockResolvedValue({ data: null, error: null }) };
 }
 
 const APP_UUID    = "00000000-0000-4000-8000-000000000020";
@@ -85,6 +86,7 @@ beforeEach(() => {
   (getCurrentAdminUser as Mock).mockResolvedValue({ id: ADMIN_ID, role: "admin" });
   (getAdminScopeContext as Mock).mockResolvedValue({ isSuperAdmin: true, seasons: [], programs: [] });
   (canReviewSeason as Mock).mockResolvedValue(true);
+  (canOperateSeason as Mock).mockResolvedValue(true);
 });
 
 // ── assignApplicationReview — DB error safety ─────────────────────────────────
@@ -98,10 +100,9 @@ describe("assignApplicationReview — DB error safety", () => {
     // 4. from("application_reviews").insert → error
     const client = makeClient([
       makeChain({ data: scopeApp() }),
-      makeChain({ data: [{ id: "reviewer-1", role: "reviewer", status: "active" }] }),
       makeChain({ data: [] }),
       makeChain({ data: null, error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
+    ], vi.fn().mockResolvedValue({ data: [{ id: "reviewer-1", role: "reviewer" }], error: null }));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await assignApplicationReview({
@@ -162,8 +163,7 @@ describe("submitApplicationReview — DB error safety", () => {
     const client = makeClient([
       makeChain({ data: existingReview() }),
       makeChain({ data: scopeApp() }),
-      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
+    ], vi.fn().mockResolvedValue({ data: null, error: { code: "42501", message: SENSITIVE_MSG } }));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await submitApplicationReview({
