@@ -49,7 +49,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
 
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const reviewerConstraint = adminUser.role === "reviewer" ? adminUser.id : undefined;
+  const reviewerConstraint = adminUser.role === "reviewer" ? adminUser.id : null;
   const [reviewResult, seasons] = await Promise.all([
     getApplicationReviewById(params.id, scope, reviewerConstraint),
     getSeasons(scope)

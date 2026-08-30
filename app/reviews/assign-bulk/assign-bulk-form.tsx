@@ -18,7 +18,8 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "submitted", label: "Đã nộp (submitted)" },
   { value: "under_data_check", label: "Đang kiểm tra (under_data_check)" },
   { value: "ready_for_screening", label: "Sẵn sàng review (ready_for_screening)" },
-  { value: "screening_assigned", label: "Đã giao reviewer (screening_assigned)" }
+  { value: "screening_assigned", label: "Đã giao reviewer (screening_assigned)" },
+  { value: "needs_more_review", label: "Cần review thêm (needs_more_review)" }
 ];
 
 function statusBadge(status: string | null) {

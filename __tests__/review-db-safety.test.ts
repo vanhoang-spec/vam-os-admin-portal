@@ -26,7 +26,6 @@ import {
   assignApplicationReview,
   saveApplicationReviewDraft,
   submitApplicationReview,
-  updateApplicationStatus,
 } from "@/lib/application-reviews";
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
@@ -170,33 +169,6 @@ describe("submitApplicationReview — DB error safety", () => {
       reviewId: REVIEW_UUID,
       adminUserId: ADMIN_ID,
       recommendation: "approve",
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).not.toContain(SENSITIVE_MSG);
-      expect(result.message).not.toContain("INTERNAL");
-      expect(result.message.length).toBeGreaterThan(0);
-    }
-  });
-});
-
-// ── updateApplicationStatus — DB error safety ─────────────────────────────────
-
-describe("updateApplicationStatus — DB error safety", () => {
-  it("update failure: raw DB message is not returned to caller", async () => {
-    // Call sequence:
-    // 1. from("applications").select → scopeApp (canWriteReviewWorkflowForApplication)
-    // 2. from("applications").update → error (direct await)
-    const client = makeClient([
-      makeChain({ data: scopeApp() }),
-      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
-    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
-
-    const result = await updateApplicationStatus({
-      applicationId: APP_UUID,
-      newStatus: "under_review",
     });
 
     expect(result.ok).toBe(false);

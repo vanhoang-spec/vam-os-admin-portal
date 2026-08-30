@@ -33,7 +33,8 @@ const SAFE_ERROR =
 export const INTERVIEW_ELIGIBLE_STATUSES: ReadonlySet<string> = new Set([
   "invited_to_interview",
   "interview_scheduled",
-  "interview_in_progress"
+  "interview_in_progress",
+  "needs_more_review"
 ]);
 
 function log(scope: string, error: unknown) {

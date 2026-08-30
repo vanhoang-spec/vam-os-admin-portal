@@ -69,3 +69,32 @@ export async function enableMentorAsReviewer(input: {
   const label = input.participationRole === "reviewer" ? "Reviewer hồ sơ" : "Interviewer";
   return { ok: true, message: `Đã cấp quyền ${label} cho đúng mùa.`, adminUserId: String(data), authInvited: invited };
 }
+
+export async function revokeMentorRecruitmentParticipation(input: {
+  personId: string;
+  seasonId: string;
+  participationRole: "reviewer" | "interviewer";
+}): Promise<EnableReviewerResult> {
+  const actor = await getCurrentAdminUser();
+  if (!actor?.id) return { ok: false, message: "Bạn chưa đăng nhập." };
+  if (!canManageReviewers(actor.role)) {
+    return { ok: false, message: "Bạn không có quyền quản lý reviewer/interviewer." };
+  }
+  if (!(await canOperateSeason(await getAdminScopeContext(), input.seasonId))) {
+    return { ok: false, message: "Bạn không có quyền vận hành mùa này." };
+  }
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+  const { data, error } = await client.rpc("vam084_revoke_recruitment_participation", {
+    p_actor: actor.id,
+    p_person_id: input.personId,
+    p_season_id: input.seasonId,
+    p_participation_role: input.participationRole
+  });
+  if (error || !data) {
+    console.error("[enable-reviewer] atomic revoke failed", error);
+    return { ok: false, message: "Không thể thu hồi quyền tham gia tuyển sinh. Vui lòng thử lại hoặc liên hệ admin." };
+  }
+  const label = input.participationRole === "reviewer" ? "Reviewer hồ sơ" : "Interviewer";
+  return { ok: true, message: `Đã thu hồi quyền ${label} trong đúng mùa.`, adminUserId: String(data) };
+}

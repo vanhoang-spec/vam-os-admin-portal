@@ -37,7 +37,7 @@ describe("M090 database boundary", () => {
 
   it("moves completed interview requirements to final-decision readiness", () => {
     expect(migration).toContain("when v_submitted >= v_required then 'ready_for_final_decision'");
-    expect(migration).toContain("v_app.status = 'ready_for_final_decision'");
+    expect(migration).toContain("v_app.status in ('ready_for_final_decision','needs_more_review')");
   });
 
   it("uses the same lifecycle predicate for individual and bulk decisions", () => {
@@ -45,6 +45,30 @@ describe("M090 database boundary", () => {
     expect(read("lib/application-decisions.ts")).toContain('client.rpc("vam084_apply_application_decisions"');
     expect(read("app/actions/application-decisions.ts")).toContain("recordApplicationDecision");
     expect(read("app/actions/bulk-application-decisions.ts")).toContain("applyApplicationDecisions");
+  });
+
+  it("finalizes official recruitment approval through a locked lifecycle RPC", () => {
+    const approval = read("lib/application-approvals.ts");
+    expect(migration).toContain("create or replace function public.vam090_finalize_recruitment_approval");
+    expect(migration).toContain("from public.vam084_application_decision_eligibility(p_application_id, p_new_status)");
+    expect(migration).toContain("set status = p_new_status, person_id = p_person_id");
+    expect(approval).toContain('client.rpc(\n      "vam090_finalize_recruitment_approval"');
+    expect(read("app/applications/[id]/page.tsx")).toContain('displayStatus === "interview_passed"');
+  });
+
+  it("keeps real-volume bulk assignment and lifecycle recomputation in one transaction", () => {
+    const bulk = read("lib/bulk-assignment.ts");
+    expect(migration).toContain("create or replace function public.vam090_bulk_assign_application_reviews");
+    expect(migration).toContain("pg_advisory_xact_lock");
+    expect(migration).toContain("perform public.vam084_recompute_application_review_status(v_application_id, p_review_round)");
+    expect(bulk).toContain('client.rpc("vam090_bulk_assign_application_reviews"');
+    expect(bulk).not.toContain('.from("application_reviews").insert');
+  });
+
+  it("wires exact-season participation revocation into the operator flow", () => {
+    expect(read("lib/enable-reviewer.ts")).toContain('client.rpc("vam084_revoke_recruitment_participation"');
+    expect(read("app/actions/enable-reviewer.ts")).toContain('operation === "revoke"');
+    expect(read("app/reviews/reviewer-pool/reviewer-pool-client.tsx")).toContain("Thu hồi");
   });
 
   it("reports mixed bulk results without allowing an ineligible write", () => {

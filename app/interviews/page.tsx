@@ -35,8 +35,7 @@ export default async function InterviewsPage(props: { searchParams: Promise<{ in
           intakeBatchId,
           roleApplied,
           scope,
-          actorRole: adminUser.role,
-          actorAdminUserId: adminUser.id
+          actor: { role: adminUser.role, adminUserId: adminUser.id }
         })
       : Promise.resolve({ data: [] as Awaited<ReturnType<typeof getInterviewCandidates>>["data"], error: null })
   ]);

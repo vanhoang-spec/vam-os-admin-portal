@@ -7,8 +7,7 @@ import {
   cancelApplicationReview,
   reassignApplicationReview,
   saveApplicationReviewDraft,
-  submitApplicationReview,
-  updateApplicationStatus
+  submitApplicationReview
 } from "@/lib/application-reviews";
 import { canAssignReview, canReview } from "@/lib/permissions";
 import type { ReviewActionState } from "@/lib/review-action-types";
@@ -135,36 +134,6 @@ export async function submitApplicationReviewAction(
     return { ok: true, message: "Review đã được submit thành công." };
   } catch (err) {
     console.error("[submitApplicationReviewAction]", err);
-    return fail("Lỗi hệ thống. Vui lòng thử lại.");
-  }
-}
-
-// ----------------------------------------------------------------
-// Admin: update application status directly
-// ----------------------------------------------------------------
-
-export async function updateApplicationStatusAction(
-  _prev: ReviewActionState,
-  formData: FormData
-): Promise<ReviewActionState> {
-  try {
-    const adminUser = await getCurrentAdminUser();
-    if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
-    if (!canAssignReview(adminUser.role)) return fail("Bạn không có quyền thay đổi trạng thái đơn.");
-
-    const applicationId = String(formData.get("application_id") ?? "").trim();
-    const newStatus = String(formData.get("new_status") ?? "").trim();
-    if (!applicationId) return fail("Thiếu application_id.");
-    if (!newStatus) return fail("Thiếu trạng thái mới.");
-
-    const result = await updateApplicationStatus({ applicationId, newStatus });
-    if (!result.ok) return fail(result.message);
-
-    revalidatePath(`/applications/${applicationId}`);
-    revalidatePath("/admin/applications");
-    return { ok: true, message: `Đã cập nhật trạng thái: ${newStatus}` };
-  } catch (err) {
-    console.error("[updateApplicationStatusAction]", err);
     return fail("Lỗi hệ thống. Vui lòng thử lại.");
   }
 }

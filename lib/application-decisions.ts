@@ -47,10 +47,13 @@ export type DecisionResult =
 
 const REASON_MESSAGES: Record<string, string> = {
   scope_denied: "Bạn không có quyền vận hành mùa của đơn này.",
+  expected_status_missing: "Thiếu trạng thái dự kiến. Vui lòng tải lại trước khi quyết định.",
   stale_status: "Trạng thái đơn đã thay đổi. Vui lòng tải lại trước khi quyết định.",
   stage_requirement_missing: "Chưa cấu hình số review tối thiểu cho mùa tuyển sinh.",
   profile_review_minimum_not_met: "Đơn chưa đủ số review hồ sơ tối thiểu.",
   interview_review_minimum_not_met: "Đơn chưa đủ số đánh giá phỏng vấn tối thiểu.",
+  application_role_mismatch: "Vai trò duyệt không khớp với vai trò ứng tuyển.",
+  additional_review_not_submitted: "Review bổ sung được yêu cầu nhưng chưa được hoàn tất.",
   invalid_transition: "Trạng thái hiện tại không cho phép quyết định này.",
   terminal_status: "Đơn đã ở trạng thái kết thúc.",
   unsupported_decision: "Quyết định không được hỗ trợ."
@@ -74,6 +77,9 @@ export async function applyApplicationDecisions(input: ApplyDecisionsInput): Pro
   if (rows.length !== input.applicationIds.length) return { ok: false, message: SAFE_ERROR };
   const applied = rows.filter((row) => row.applied).length;
   const failedRows = rows.filter((row) => !row.applied);
+  const failureSummary = Array.from(
+    failedRows.reduce((counts, row) => counts.set(row.reason, (counts.get(row.reason) ?? 0) + 1), new Map<string, number>())
+  ).map(([reason, count]) => `${REASON_MESSAGES[reason] ?? reason}: ${count}`).join("; ");
   if (!applied) {
     const reason = failedRows[0]?.reason;
     return { ok: false, message: REASON_MESSAGES[reason] ?? SAFE_ERROR };
@@ -84,7 +90,7 @@ export async function applyApplicationDecisions(input: ApplyDecisionsInput): Pro
     applied,
     failed: failedRows.length,
     message: failedRows.length
-      ? `Đã cập nhật ${applied} đơn; ${failedRows.length} đơn bị chặn bởi lifecycle/scope.`
+      ? `Đã cập nhật ${applied} đơn; ${failedRows.length} đơn bị chặn. ${failureSummary}`
       : `Đã cập nhật ${applied} đơn.`
   };
 }

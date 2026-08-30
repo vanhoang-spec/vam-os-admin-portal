@@ -424,7 +424,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       </Card>
 
       {/* ── Final approval (admin / core-team only) ───────────────────────────── */}
-      {canMakeDecision && (
+      {canMakeDecision && displayStatus === "interview_passed" && (
         <Card className="mb-4 border-vam-green/30">
           <div className="mb-3">
             <h2 className="text-base font-semibold text-vam-ink">

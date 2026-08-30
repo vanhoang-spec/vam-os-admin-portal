@@ -17,7 +17,8 @@ const DEFAULT_STATUSES = new Set(["invited_to_interview", "interview_scheduled"]
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "invited_to_interview", label: "Đã mời phỏng vấn (invited_to_interview)" },
   { value: "interview_scheduled", label: "Đã lên lịch (interview_scheduled)" },
-  { value: "interview_in_progress", label: "Đang phỏng vấn (interview_in_progress)" }
+  { value: "interview_in_progress", label: "Đang phỏng vấn (interview_in_progress)" },
+  { value: "needs_more_review", label: "Cần phỏng vấn/review thêm" }
 ];
 
 function statusBadge(status: string | null) {

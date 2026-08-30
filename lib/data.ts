@@ -1739,8 +1739,8 @@ export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<Que
 
 export async function getApplicationReviewById(
   id: string,
-  scope?: ScopeFilter,
-  reviewerAdminUserId?: string
+  scope: ScopeFilter | undefined,
+  reviewerAdminUserId: string | null
 ): Promise<QueryResult<ApplicationReview | null>> {
   const client = await dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview | null>(null);
@@ -2301,7 +2301,8 @@ const INTERVIEW_POOL_STATUSES = [
   "interview_scheduled",
   "interview_in_progress",
   "interview_completed",
-  "ready_for_final_decision"
+  "ready_for_final_decision",
+  "needs_more_review"
 ] as const;
 
 /**
@@ -2320,8 +2321,7 @@ export async function getInterviewCandidates(filters?: {
   roleApplied?: string | null;
   includeCompleted?: boolean;
   scope?: ScopeFilter;
-  actorRole?: string | null;
-  actorAdminUserId?: string | null;
+  actor: { role: string | null; adminUserId: string };
 }): Promise<QueryResult<InterviewCandidateRow[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<InterviewCandidateRow[]>([]);
@@ -2355,7 +2355,7 @@ export async function getInterviewCandidates(filters?: {
   const byStatusAndBatch = narrow;
   narrow = (query) => byStatusAndBatch(query).eq("role_applied", roleApplied);
 
-  const reviewerQueue = filters?.actorRole === "reviewer";
+  const reviewerQueue = filters?.actor.role === "reviewer";
   const applicationProjection = reviewerQueue
     ? "id,full_name,status,intake_batch_id,role_applied,sbd,submitted_at"
     : "id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at";
@@ -2429,15 +2429,15 @@ export async function getInterviewCandidates(filters?: {
   // unowned queue query above never selects contact or private application
   // data, so those fields cannot accidentally cross the server/client boundary.
   const ownedReviewByAppId = new Map<string, { id: string; status: string; reviewer_admin_user_id: string | null }>();
-  if (reviewerQueue && filters?.actorAdminUserId) {
+  if (reviewerQueue) {
     for (const row of orderedReviews) {
-      if (row.reviewer_admin_user_id !== filters.actorAdminUserId) continue;
+      if (row.reviewer_admin_user_id !== filters?.actor.adminUserId) continue;
       const appId = String(row.application_id);
       if (!ownedReviewByAppId.has(appId)) {
         ownedReviewByAppId.set(appId, {
           id: String(row.id),
           status: String(row.status ?? ""),
-          reviewer_admin_user_id: filters.actorAdminUserId
+          reviewer_admin_user_id: filters.actor.adminUserId
         });
       }
     }

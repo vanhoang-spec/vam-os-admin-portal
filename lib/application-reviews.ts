@@ -65,27 +65,6 @@ async function requireMutationActor(
   return { ok: true as const, actor };
 }
 
-async function conditionallyCancelReview(client: any, reviewId: string) {
-  const { data, error } = await client
-    .from("application_reviews")
-    .update({ status: "cancelled", updated_at: new Date().toISOString() })
-    .eq("id", reviewId)
-    .in("status", [...EDITABLE_REVIEW_STATUSES])
-    .select("id")
-    .maybeSingle();
-  if (error) {
-    log("cancel review failed", error);
-    return { ok: false as const, message: SAFE_ERROR };
-  }
-  if (!data) {
-    return {
-      ok: false as const,
-      message: "Review đã thay đổi trạng thái và không còn có thể huỷ hoặc đổi người."
-    };
-  }
-  return { ok: true as const };
-}
-
 export type ReviewActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string };
@@ -317,50 +296,6 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
   }
 
   return { ok: true, id: input.reviewId };
-}
-
-// ----------------------------------------------------------------
-// Admin: directly update application status
-// ----------------------------------------------------------------
-
-const ALLOWED_ADMIN_STATUS_TRANSITIONS = new Set([
-  "ready_for_screening",
-  "screening_passed",
-  "invited_to_meeting",
-  "invited_to_orientation",
-  "invited_to_interview",
-  "waitlisted",
-  "rejected_or_not_fit",
-  "withdrawn"
-]);
-
-export type UpdateApplicationStatusInput = {
-  applicationId: string;
-  newStatus: string;
-};
-
-export async function updateApplicationStatus(input: UpdateApplicationStatusInput): Promise<ReviewActionResult> {
-  const client = serviceClient();
-  if (!client) return { ok: false, message: SAFE_ERROR };
-
-  if (!ALLOWED_ADMIN_STATUS_TRANSITIONS.has(input.newStatus)) {
-    return { ok: false, message: `Trạng thái không hợp lệ: ${input.newStatus}` };
-  }
-
-  const scopeAccess = await canWriteReviewWorkflowForApplication(client, input.applicationId);
-  if (!scopeAccess.ok) return scopeAccess;
-
-  const { error } = await client
-    .from("applications")
-    .update({ status: input.newStatus })
-    .eq("id", input.applicationId);
-
-  if (error) {
-    log("update application status failed", error);
-    return { ok: false, message: SAFE_ERROR };
-  }
-
-  return { ok: true, id: input.applicationId };
 }
 
 // ----------------------------------------------------------------
