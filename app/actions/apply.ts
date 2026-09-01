@@ -391,6 +391,7 @@ export async function submitMenteeApplicationAction(
       why_uem_text: formText(formData, "why_uem_text") || null,
       mentoring_plan_text: formText(formData, "mentoring_plan_text") || null,
       if_not_effective_text: formText(formData, "if_not_effective_text") || null,
+      profile_or_cv_url: formText(formData, "profile_or_cv_url") || null,
       commitment_understanding: formBoolean(formData, "commitment_understanding"),
       // Section 8 — readiness & source
       available_for_interview: formArray(formData, "available_for_interview"),
@@ -415,8 +416,21 @@ export async function submitMenteeApplicationAction(
       one_year_vision_text: rawPayload.one_year_vision_text,
       mentoring_goals_text: rawPayload.mentoring_goals_text,
       top_3_questions_for_mentor: rawPayload.top_3_questions_for_mentor,
+      current_difficulty_text: rawPayload.current_difficulty_text,
+      why_uem_text: rawPayload.why_uem_text,
+      mentoring_plan_text: rawPayload.mentoring_plan_text,
+      if_not_effective_text: rawPayload.if_not_effective_text,
       available_for_kickoff: rawPayload.available_for_kickoff
     };
+    const narrativeRequirements = [
+      { key: "one_year_vision_text", label: "Phiên bản tốt nhất của bạn sau 1 năm", minLength: 100 },
+      { key: "mentoring_goals_text", label: "Mục tiêu cụ thể qua mentoring", minLength: 100 },
+      { key: "top_3_questions_for_mentor", label: "3 câu hỏi cụ thể bạn muốn hỏi Mentor", minLength: 50 },
+      { key: "current_difficulty_text", label: "Khó khăn cụ thể bạn đang cần Mentor hỗ trợ", minLength: 100 },
+      { key: "why_uem_text", label: "Vì sao bạn chọn UEH Mentoring?", minLength: 100 },
+      { key: "mentoring_plan_text", label: "Kế hoạch của bạn để tận dụng mentoring", minLength: 100 },
+      { key: "if_not_effective_text", label: "Nếu mentoring không hiệu quả như mong đợi, bạn sẽ làm gì?", minLength: 100 }
+    ] as const;
     const interviewOk = (rawPayload.available_for_interview as string[]).length > 0;
     const emailNotifOk = (rawPayload.email_notification_consent as string[]).length > 0;
     const softSkillValidation = validateMaxThreeWithOther({
@@ -431,6 +445,16 @@ export async function submitMenteeApplicationAction(
       return {
         ok: false,
         message: `Thiếu trường bắt buộc: ${missingField[0]}.`
+      };
+    }
+    const tooShortNarrative = narrativeRequirements.find(({ key, minLength }) =>
+      String(rawPayload[key] ?? "").trim().length < minLength
+    );
+    if (tooShortNarrative) {
+      return {
+        ok: false,
+        message: `${tooShortNarrative.label} cần tối thiểu ${tooShortNarrative.minLength} ký tự.`,
+        fieldErrors: [{ name: tooShortNarrative.key, label: tooShortNarrative.label }]
       };
     }
     if (!interviewOk) {
