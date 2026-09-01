@@ -253,8 +253,23 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
     <>
       <div className="flex items-center justify-between mb-2">
         <PageHeader title="Chi tiết ứng tuyển" description={displayText(displayFullName, "Ứng viên chưa rõ")} />
-        {(queueType === "mentor-review" || queueType === "mentee-review") && (
-          <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <a
+            href={`/applications/${application.data.id}/export/csv`}
+            download
+            className="inline-flex rounded-md border border-vam-line px-3 py-1 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Tải CSV
+          </a>
+          <a
+            href={`/applications/${application.data.id}/export/pdf`}
+            download
+            className="inline-flex rounded-md border border-vam-line px-3 py-1 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Tải PDF
+          </a>
+          {(queueType === "mentor-review" || queueType === "mentee-review") && (
+            <>
             <Link
               href={prevAppId ? `/applications/${prevAppId}?queue=${queueType}&page=${computedPrevPage}${queryStrWithAmp}` : "#"}
               className={`inline-flex rounded-md border border-vam-line px-3 py-1 text-sm ${prevAppId ? "hover:bg-slate-50 text-vam-ink" : "opacity-50 pointer-events-none text-slate-400"}`}
@@ -273,8 +288,9 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             >
               Quay lại Hàng đợi
             </Link>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
       <ErrorBox message={error} />
 
