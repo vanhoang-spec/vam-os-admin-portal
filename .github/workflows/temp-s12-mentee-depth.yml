@@ -27,7 +27,7 @@ jobs:
         run: npm ci
 
       - name: Apply bounded patch
-        run: python scripts/temp_s12_mentee_depth_patch.py
+        run: python scripts/temp_s12_mentee_depth_patch_v2.py
 
       - name: Focused tests
         run: npm test -- __tests__/s12-mentee-application-depth.test.ts __tests__/uat-s12-server-validation.test.ts __tests__/application-form-ux.test.tsx
@@ -46,6 +46,6 @@ jobs:
           git config user.name "VAM OS Automation"
           git config user.email "automation@users.noreply.github.com"
           git add app/apply/mentee/apply-mentee-form.tsx app/actions/apply.ts __tests__/s12-mentee-application-depth.test.ts
-          git rm .github/workflows/temp-s12-mentee-depth.yml scripts/temp_s12_mentee_depth_patch.py
+          git rm .github/workflows/temp-s12-mentee-depth.yml scripts/temp_s12_mentee_depth_patch.py scripts/temp_s12_mentee_depth_patch_v2.py
           git commit -m "Improve S12 mentee application depth"
           git push origin HEAD:s12-mentee-application-depth
