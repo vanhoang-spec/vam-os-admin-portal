@@ -276,7 +276,10 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
         <TextAreaField
           name="current_difficulty_text"
           label="Khó khăn cụ thể bạn đang cần mentor hỗ trợ"
-          rows={3}
+          required
+          minLength={100}
+          rows={4}
+          helpText="Tối thiểu ~100 ký tự. Nêu tình huống cụ thể, điều bạn đã thử và điều bạn mong Mentor hỗ trợ."
         />
         <CheckboxGroupField
           name="target_soft_skills"
@@ -311,17 +314,33 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
         <TextAreaField
           name="why_uem_text"
           label="Vì sao bạn chọn UEH Mentoring?"
+          required
+          minLength={100}
           rows={4}
+          helpText="Tối thiểu ~100 ký tự. Chia sẻ điều bạn thực sự kỳ vọng ở hành trình mentoring này."
         />
         <TextAreaField
           name="mentoring_plan_text"
           label="Kế hoạch của bạn để tận dụng mentoring"
-          rows={3}
+          required
+          minLength={100}
+          rows={4}
+          helpText="Tối thiểu ~100 ký tự. Nêu cách bạn sẽ chuẩn bị, hành động và theo dõi tiến bộ giữa các buổi mentoring."
         />
         <TextAreaField
           name="if_not_effective_text"
           label="Nếu mentoring không hiệu quả như mong đợi, bạn sẽ làm gì?"
-          rows={3}
+          required
+          minLength={100}
+          rows={4}
+          helpText="Tối thiểu ~100 ký tự. Hãy mô tả cách bạn sẽ chủ động xử lý trước khi nghĩ đến việc dừng mentoring."
+        />
+        <TextField
+          name="profile_or_cv_url"
+          label="CV / LinkedIn / portfolio / profile (không bắt buộc)"
+          type="url"
+          placeholder="https://..."
+          helpText="Không bắt buộc — khuyến khích nếu bạn muốn BTC và Mentor hiểu thêm về trải nghiệm, hoạt động hoặc dự án của bạn."
         />
         <ConsentCheckbox
           name="commitment_understanding"
