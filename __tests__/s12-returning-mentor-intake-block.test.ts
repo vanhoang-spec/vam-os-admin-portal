@@ -1,48 +1,4 @@
-from pathlib import Path
-
-SOURCE = Path("lib/applications-create.ts")
-text = SOURCE.read_text(encoding="utf-8")
-
-old = '''  const existingPerson = exactPeople[0] ?? null;
-
-  // Insert
-'''
-new = '''  const existingPerson = exactPeople[0] ?? null;
-
-  // P0 — Returning Mentors must use the controlled S12 renewal flow rather
-  // than creating a new public Mentor application. A people row alone is not
-  // enough proof: former mentees/supporters/contacts may already exist in
-  // `people`, so we only block when that canonical person has a mentor profile.
-  if (input.role === "mentor" && existingPerson) {
-    const { data: mentorHistory, error: mentorHistoryErr } = await client
-      .from("mentor_profiles")
-      .select("id")
-      .eq("person_id", existingPerson.id)
-      .limit(1);
-
-    if (mentorHistoryErr) {
-      log("returning mentor lookup failed", mentorHistoryErr);
-      return { ok: false, code: "db", message: SAFE_ERROR };
-    }
-
-    if ((mentorHistory ?? []).length > 0) {
-      return {
-        ok: false,
-        code: "validation",
-        message:
-          "Hồ sơ này cần được xử lý qua luồng xác nhận/gia hạn Mentor Season 12. Vui lòng sử dụng đường dẫn do BTC gửi hoặc liên hệ BTC nếu chưa nhận được."
-      };
-    }
-  }
-
-  // Insert
-'''
-
-if text.count(old) != 1:
-    raise SystemExit(f"applications-create.ts anchor drifted: expected 1 match, found {text.count(old)}")
-SOURCE.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-Path("__tests__/s12-returning-mentor-intake-block.test.ts").write_text(r'''import { readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const SOURCE = readFileSync("lib/applications-create.ts", "utf8");
@@ -83,4 +39,3 @@ describe("S12 returning Mentor public-intake P0", () => {
     expect(duplicateCheck).toBeLessThan(blockStart);
   });
 });
-''', encoding="utf-8")
