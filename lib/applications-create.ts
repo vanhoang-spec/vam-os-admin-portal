@@ -293,6 +293,32 @@ export async function submitPilotApplication(
   }
   const existingPerson = exactPeople[0] ?? null;
 
+  // P0 — Returning Mentors must use the controlled S12 renewal flow rather
+  // than creating a new public Mentor application. A people row alone is not
+  // enough proof: former mentees/supporters/contacts may already exist in
+  // `people`, so we only block when that canonical person has a mentor profile.
+  if (input.role === "mentor" && existingPerson) {
+    const { data: mentorHistory, error: mentorHistoryErr } = await client
+      .from("mentor_profiles")
+      .select("id")
+      .eq("person_id", existingPerson.id)
+      .limit(1);
+
+    if (mentorHistoryErr) {
+      log("returning mentor lookup failed", mentorHistoryErr);
+      return { ok: false, code: "db", message: SAFE_ERROR };
+    }
+
+    if ((mentorHistory ?? []).length > 0) {
+      return {
+        ok: false,
+        code: "validation",
+        message:
+          "Hồ sơ này cần được xử lý qua luồng xác nhận/gia hạn Mentor Season 12. Vui lòng sử dụng đường dẫn do BTC gửi hoặc liên hệ BTC nếu chưa nhận được."
+      };
+    }
+  }
+
   // Insert
   const insertPayload = {
     person_id: existingPerson?.id ?? null,
