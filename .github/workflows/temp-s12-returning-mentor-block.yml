@@ -1,0 +1,54 @@
+name: TEMP S12 Returning Mentor Intake Block
+
+on:
+  push:
+    branches: [s12-block-returning-mentor-new-form]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Apply bounded P0 patch
+        run: python scripts/temp_s12_returning_mentor_block.py
+
+      - name: Focused P0 tests
+        run: npm test -- __tests__/s12-returning-mentor-intake-block.test.ts __tests__/returning-mentor-detection.test.ts __tests__/s12-m1-public-identity-ilike.test.ts __tests__/m070-renewal-invite-foundation.test.ts __tests__/applications-create-commitment-cleanup.test.ts
+
+      - name: Repository suite excluding proven pre-existing nav baseline
+        run: npm test -- --exclude __tests__/nav-model.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Diff sanity
+        run: git diff --check
+
+      - name: Commit clean candidate and remove temporary worker
+        run: |
+          git config user.name "ThangNguyen-bot"
+          git config user.email "ThangNguyen@redsquarevietnam.com"
+          git add lib/applications-create.ts __tests__/s12-returning-mentor-intake-block.test.ts
+          git rm .github/workflows/temp-s12-returning-mentor-block.yml scripts/temp_s12_returning_mentor_block.py
+          git commit -m "Block returning Mentors from S12 new-Mentor intake"
+          git push origin HEAD:s12-block-returning-mentor-new-form
