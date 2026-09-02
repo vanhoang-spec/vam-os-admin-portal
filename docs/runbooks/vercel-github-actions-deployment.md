@@ -8,16 +8,16 @@ Do not merge the deployment pull request until all three repository or `producti
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
 
-The Vercel token must be dedicated to CI and stored only in GitHub Actions secrets. Never commit it or send it in chat.
+The Vercel token must be dedicated to CI, limited to the `vam-os-admin-portal` project, and stored only in GitHub Actions secrets. Never commit it or send it in chat.
 
 ## Production flow
 
 1. A reviewed change reaches `main`.
-2. GitHub Actions installs dependencies and runs `npm run typecheck` and `npm test`.
+2. GitHub Actions installs dependencies and runs `npm run typecheck` and `npm test` without access to the Vercel token.
 3. The workflow pulls the Vercel Production configuration.
 4. Vercel CLI builds once and deploys the prebuilt artifact to Production.
 
-`vercel.json` disables the native Vercel Git deployment so the same commit cannot deploy twice.
+`vercel.json` disables only the native Vercel Git deployment for `main`, preventing duplicate Production releases while preserving native Preview deployments for other branches.
 
 ## Manual release
 
