@@ -1,0 +1,4 @@
+# Production deployment controls require review by the repository owner.
+/.github/CODEOWNERS @ThangNguyen-bot
+/.github/workflows/vercel-production.yml @ThangNguyen-bot
+/vercel.json @ThangNguyen-bot
