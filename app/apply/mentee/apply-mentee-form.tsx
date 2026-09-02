@@ -3,6 +3,7 @@
 import { useFormState } from "react-dom";
 import { submitMenteeApplicationAction } from "@/app/actions/apply";
 import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { MenteeSupportContacts } from "../_components/mentee-support-contacts";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -421,6 +422,8 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           />
         </div>
       </FormSection>
+
+      <MenteeSupportContacts />
 
     </ApplicationForm>
   );
