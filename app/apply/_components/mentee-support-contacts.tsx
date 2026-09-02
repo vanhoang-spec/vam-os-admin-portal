@@ -26,7 +26,7 @@ export function MenteeSupportContacts() {
               {" — "}
               <a
                 className="text-vam-green underline"
-                href={`tel:${contact.phone.replace(/\\D/g, "")}`}
+                href={`tel:${contact.phone}`}
               >
                 {contact.phone}
               </a>
