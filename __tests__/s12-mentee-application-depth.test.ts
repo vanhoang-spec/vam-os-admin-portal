@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const FORM = readFileSync("app/apply/mentee/apply-mentee-form.tsx", "utf8");
 const ACTION = readFileSync("app/actions/apply.ts", "utf8");
+const SUPPORT_CONTACTS = readFileSync("app/apply/_components/mentee-support-contacts.tsx", "utf8");
 
 function fieldBlock(source: string, name: string, radius = 450) {
   const marker = `name="${name}"`;
@@ -49,5 +50,17 @@ describe("S12 mentee application depth contract", () => {
     expect(block).toContain('type="url"');
     expect(ACTION).toContain('profile_or_cv_url: formText(formData, "profile_or_cv_url") || null');
     expect(ACTION.match(/profile_or_cv_url/g)?.length).toBe(2);
+  });
+});
+
+
+describe("S12 mentee support contacts", () => {
+  it("renders the approved Support Team contacts at the end of the form", () => {
+    expect(FORM).toContain("<MenteeSupportContacts />");
+    expect(SUPPORT_CONTACTS).toContain("Trần Mỹ Anh");
+    expect(SUPPORT_CONTACTS).toContain("0394983679");
+    expect(SUPPORT_CONTACTS).toContain("Bùi Trần Hoàng Vy");
+    expect(SUPPORT_CONTACTS).toContain("0936359670");
+    expect(SUPPORT_CONTACTS.match(/Support Team UEH Mentoring/g)).toHaveLength(2);
   });
 });
