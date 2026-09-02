@@ -18,7 +18,7 @@ jobs:
     name: Test, build, and deploy
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production
+    environment: Production
 
     steps:
       - name: Check out repository
