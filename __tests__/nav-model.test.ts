@@ -295,7 +295,8 @@ describe("allNavHrefs", () => {
 //   showAdminTier (+core):       /operations → accordion; adds /operations/tasks,
 //                                 /operations/monthly, /operations/intelligence,
 //                                 /recaps/create; also + /admin, /team
-//   canReview (+reviewer):       + /reviews, /interviews
+//   canReview (+reviewer):       + /applications/mentor-review,
+//                                 /applications/mentee-review, /reviews, /interviews
 //   active super_admin only:     + /admin/users
 
 const BASE_ROUTE_ARR = [
@@ -318,13 +319,20 @@ const OPS_ADMIN_ROUTES = [
 // season scope, not by nav visibility.
 const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team"];
 
+const REVIEW_ROUTES = [
+  "/applications/mentor-review",
+  "/applications/mentee-review",
+  "/reviews",
+  "/interviews",
+];
+
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       BASE_ROUTE_ARR,
   support_team: BASE_ROUTE_ARR,
-  reviewer:     [...BASE_ROUTE_ARR, "/reviews", "/interviews"],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", ...ADMIN_TIER_ROUTES, "/admin/users"],
+  reviewer:     [...BASE_ROUTE_ARR, ...REVIEW_ROUTES],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users"],
 };
 
 function sortedRoutes(arr: string[]) {
