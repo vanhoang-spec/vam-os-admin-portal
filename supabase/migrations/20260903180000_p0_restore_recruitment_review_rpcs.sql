@@ -40,6 +40,8 @@
 --     required by 3 of these functions, so it is created here.
 --   * recruitment_assignment_events also does NOT exist on Production and is
 --     written by vam084_change_review_assignment, so it is created here too.
+--   * the two UEHM-S12 stage-requirement rows are seeded, because the
+--     eligibility gate refuses every approval when they are absent.
 --
 -- SAFETY
 --   Additive and idempotent: CREATE TABLE IF NOT EXISTS + CREATE OR REPLACE
@@ -129,6 +131,50 @@ alter table public.recruitment_assignment_events force row level security;
 revoke all on table public.recruitment_assignment_events from public;
 revoke all on table public.recruitment_assignment_events from anon, authenticated;
 grant all on table public.recruitment_assignment_events to service_role;
+
+-- --------------------------------------------------------------------------
+-- 1c. Stage-requirement configuration for the current season.
+--
+--     vam084_application_decision_eligibility refuses every official approval
+--     with reason 'stage_requirement_missing' when the season has no row here,
+--     so creating the table empty would leave the restored family installed but
+--     unusable. Staging currently holds exactly these two rows, and they are the
+--     values the recruitment flow has been UAT'd against:
+--         UEHM-S12 / profile_screening / 1
+--         UEHM-S12 / interview         / 1
+--
+--     Season id is resolved by code, never hard-coded. seasons.code carries a
+--     unique index on both databases, so the lookup is deterministic; the guard
+--     below still fails loudly rather than seeding the wrong season if that ever
+--     stops being true.
+--
+--     ON CONFLICT DO NOTHING, keyed on the table's real uniqueness contract
+--     (its primary key, season_id + review_stage): this guarantees the rows
+--     EXIST without overwriting a value an operator has since tuned, and it
+--     touches no other season or stage. Re-running the migration is a no-op.
+-- --------------------------------------------------------------------------
+do $$
+declare
+  v_season_id uuid;
+  v_matches integer;
+begin
+  select count(*) into v_matches from public.seasons where code = 'UEHM-S12';
+  if v_matches <> 1 then
+    raise exception
+      'P0 restore aborted: expected exactly one public.seasons row with code UEHM-S12, found %. '
+      'Resolve the season catalog before applying this migration.', v_matches;
+  end if;
+
+  select id into v_season_id from public.seasons where code = 'UEHM-S12';
+
+  insert into public.recruitment_stage_requirements
+    (season_id, review_stage, minimum_submitted_reviews)
+  values
+    (v_season_id, 'profile_screening', 1),
+    (v_season_id, 'interview', 1)
+  on conflict (season_id, review_stage) do nothing;
+end
+$$;
 
 -- --------------------------------------------------------------------------
 -- 2. The 13 required functions, verbatim from Staging.
