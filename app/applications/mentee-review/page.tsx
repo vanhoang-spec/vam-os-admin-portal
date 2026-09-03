@@ -6,13 +6,19 @@ import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayConsent, displayText, formatDate } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
+import { canDecide } from "@/lib/permissions";
 import { redirect } from "next/navigation";
+import { bulkS12ScreeningAction } from "@/app/actions/s12-screening-bulk";
+import { BulkScreeningRowCheckbox, BulkScreeningToolbar } from "@/app/applications/_components/bulk-screening-controls";
 
-export default async function MenteeReviewQueuePage(props: { searchParams: Promise<{ page?: string; q?: string }> }) {
+export default async function MenteeReviewQueuePage(props: {
+  searchParams: Promise<{ page?: string; q?: string; bulk_result?: string; bulk_ok?: string }>;
+}) {
   const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
   const scope = await getScopeFilter(await getAdminScopeContext());
+  const canBulkDecide = canDecide(adminUser.role);
 
   const page = Math.max(1, parseInt(searchParams.page || "1", 10) || 1);
   const q = searchParams.q || "";
@@ -39,6 +45,7 @@ export default async function MenteeReviewQueuePage(props: { searchParams: Promi
       sbd: displayText(application.sbd),
       full_name: displayText(fullName),
       email_primary: displayText(emailPrimary),
+      status_raw: String(statusUnified ?? ""),
       status_display: applicationStatusLabel(statusUnified),
       submitted_at_display: formatDate(application.submitted_at),
       consent_display: displayConsent(consentUnified),
@@ -58,7 +65,13 @@ export default async function MenteeReviewQueuePage(props: { searchParams: Promi
     <>
       <PageHeader title="Duyệt Mentee S12 (Hàng đợi)" description="Danh sách đơn ứng tuyển Mentee S12 đang chờ xử lý." />
       <ErrorBox message={error} />
-      
+
+      {searchParams.bulk_result && (
+        <div className={`mb-4 rounded-md border px-4 py-3 text-sm ${searchParams.bulk_ok === "1" ? "border-green-200 bg-green-50 text-green-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+          {searchParams.bulk_result}
+        </div>
+      )}
+
       <div className="mb-4 bg-white p-4 rounded shadow flex flex-col md:flex-row gap-4 justify-between items-center">
         <form method="GET" action="/applications/mentee-review" className="flex w-full md:w-auto gap-2">
           <input
@@ -74,11 +87,21 @@ export default async function MenteeReviewQueuePage(props: { searchParams: Promi
         </form>
       </div>
 
+      <form action={bulkS12ScreeningAction}>
+        <input type="hidden" name="queue_role" value="mentee" />
+        <input type="hidden" name="return_q" value={q} />
+        <input type="hidden" name="return_page" value={page} />
+
+        {canBulkDecide && rows.length > 0 && (
+          <BulkScreeningToolbar key={`mentee:${page}:${q}`} role="mentee" />
+        )}
+
       <div className="mb-4 bg-white rounded shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-left divide-y divide-vam-line">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
               <tr>
+                {canBulkDecide && <th className="px-3 py-3 font-semibold">Chọn</th>}
                 <th className="px-4 py-3 font-semibold">SBD</th>
                 <th className="px-4 py-3 font-semibold">Mã đơn</th>
                 <th className="px-4 py-3 font-semibold">Họ tên</th>
@@ -91,6 +114,15 @@ export default async function MenteeReviewQueuePage(props: { searchParams: Promi
             <tbody className="divide-y divide-vam-line">
               {rows.map((row: any) => (
                 <tr key={row.id} className="hover:bg-slate-50">
+                  {canBulkDecide && (
+                    <td className="px-3 py-3">
+                      <BulkScreeningRowCheckbox
+                        role="mentee"
+                        applicationId={row.id}
+                        expectedStatus={row.status_raw}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-slate-700">{row.sbd}</td>
                   <td className="px-4 py-3 text-slate-500 font-mono text-xs">{row.short_application_id}</td>
                   <td className="px-4 py-3 font-medium text-vam-ink">{row.full_name}</td>
@@ -113,7 +145,7 @@ export default async function MenteeReviewQueuePage(props: { searchParams: Promi
               ))}
               {queue.data.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={canBulkDecide ? 8 : 7} className="px-4 py-8 text-center text-slate-500">
                     Không tìm thấy đơn nào.
                   </td>
                 </tr>
@@ -122,6 +154,7 @@ export default async function MenteeReviewQueuePage(props: { searchParams: Promi
           </table>
         </div>
       </div>
+      </form>
 
       <div className="flex items-center justify-between text-sm text-slate-600 mt-4">
         <Link

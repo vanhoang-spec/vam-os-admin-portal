@@ -8,8 +8,8 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { canDecide } from "@/lib/permissions";
 import { redirect } from "next/navigation";
-import { bulkMentorReviewDecisionAction } from "@/app/actions/mentor-review-bulk";
-import { MentorBulkDecisionButtons, SelectAllMentorRows } from "./bulk-controls";
+import { bulkS12ScreeningAction } from "@/app/actions/s12-screening-bulk";
+import { BulkScreeningRowCheckbox, BulkScreeningToolbar } from "@/app/applications/_components/bulk-screening-controls";
 
 type MentorTypeFilter = "all" | "new" | "returning" | "unknown";
 
@@ -162,26 +162,14 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
         </form>
       </div>
 
-      <form action={bulkMentorReviewDecisionAction}>
+      <form action={bulkS12ScreeningAction}>
+        <input type="hidden" name="queue_role" value="mentor" />
         <input type="hidden" name="return_q" value={q} />
         <input type="hidden" name="return_mentor_type" value={mentorType} />
         <input type="hidden" name="return_page" value={page} />
 
         {canBulkDecide && rows.length > 0 && (
-          <div className="mb-3 flex flex-col gap-3 rounded-md border border-vam-line bg-white p-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-4">
-              <SelectAllMentorRows />
-              <label className="text-xs text-slate-600">
-                Ghi chú chung
-                <input
-                  name="decision_note"
-                  placeholder="Không bắt buộc"
-                  className="ml-2 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-            </div>
-            <MentorBulkDecisionButtons />
-          </div>
+          <BulkScreeningToolbar key={`mentor:${page}:${mentorType}:${q}`} role="mentor" />
         )}
 
         <div className="mb-4 overflow-hidden rounded bg-white shadow">
@@ -210,14 +198,11 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
                     <tr key={row.id} className="hover:bg-slate-50">
                       {canBulkDecide && (
                         <td className="px-3 py-3">
-                          <input
-                            type="checkbox"
-                            name="application_id"
-                            value={row.id}
-                            data-mentor-bulk="1"
-                            className="h-4 w-4 rounded border-slate-300"
+                          <BulkScreeningRowCheckbox
+                            role="mentor"
+                            applicationId={row.id}
+                            expectedStatus={row.status_raw}
                           />
-                          <input type="hidden" name={`expected_status_${row.id}`} value={row.status_raw} />
                         </td>
                       )}
                       <td className="px-4 py-3">
