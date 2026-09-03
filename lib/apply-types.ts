@@ -7,12 +7,34 @@
  * async functions.
  */
 
+/**
+ * Refusals the form explains with its own guidance rather than a generic
+ * failure banner. Mirrors `ApplicationSubmissionReason`; kept here because this
+ * module is the one both the "use client" forms and the "use server" action can
+ * import.
+ */
+export type ApplyErrorKind = "returning_mentor";
+
 export type ApplyActionState = {
   ok: boolean;
   message: string | null;
   applicationId?: string;
   fieldErrors?: Array<{ name: string; label: string }>;
+  errorKind?: ApplyErrorKind;
 };
+
+/**
+ * Season 12 renewal is reachable only through a per-Mentor token
+ * (`/renew/[token]`). There is no safe generic public renewal URL to link to,
+ * so the call to action names the channel instead of inventing a link.
+ */
+export const RETURNING_MENTOR_GUIDANCE = {
+  heading: "Bạn đã có hồ sơ Mentor trong hệ thống",
+  body:
+    "Email bạn dùng để nộp đơn đã gắn với một hồ sơ Mentor của các mùa trước. Vì vậy đơn này không được gửi qua biểu mẫu Mentor mới. Việc tiếp tục đồng hành ở Mùa 12 được xử lý qua luồng xác nhận/gia hạn Mentor dành riêng cho bạn.",
+  cta:
+    "Vui lòng sử dụng đường link xác nhận Mùa 12 được Core Team gửi riêng hoặc liên hệ Core Team để nhận lại link."
+} as const;
 
 export const initialApplyActionState: ApplyActionState = {
   ok: false,

@@ -115,7 +115,14 @@ function resultToState(result: ApplicationSubmissionResult): ApplyActionState {
       applicationId: result.applicationId
     };
   }
-  return { ok: false, message: result.message };
+  return {
+    ok: false,
+    message: result.message,
+    // Carried so the form can render the returning-Mentor guidance next to the
+    // submit button instead of a generic failure banner at the top of a page
+    // the applicant has already scrolled past.
+    ...(result.reason ? { errorKind: result.reason } : {})
+  };
 }
 
 /**

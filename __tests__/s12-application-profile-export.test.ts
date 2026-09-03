@@ -78,7 +78,10 @@ describe("S12 targeted application export data", () => {
     expect(exportData.season).toBe("S12");
     expect(exportData.fields).toEqual(expect.arrayContaining([
       expect.objectContaining({ section: "Nội dung form S12", label: "Động lực tham gia", value: "Muốn đóng góp, học hỏi\nvà kết nối." }),
-      expect.objectContaining({ section: "Câu trả lời ứng tuyển", label: "Mục tiêu cũ (legacy_goal)", value: "Dẫn dắt đội ngũ" }),
+      // The canonical configured label now stands alone. The internal key is
+      // appended only to disambiguate two fields that would otherwise claim to
+      // be the same question.
+      expect.objectContaining({ section: "Câu trả lời ứng tuyển", label: "Mục tiêu cũ", value: "Dẫn dắt đội ngũ" }),
       expect.objectContaining({ section: "Hồ sơ Mentor", label: "Mã Mentor", value: "MT-001" })
     ]));
     expect(JSON.stringify(exportData)).not.toContain("must_not_export");
@@ -200,7 +203,7 @@ describe("S12 application CSV", () => {
   it("uses a UTF-8 BOM and preserves Vietnamese, commas, quotes, and multiline values", () => {
     const csv = applicationExportCsv(exportData);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
-    expect(csv).toContain('"Field","Value"');
+    expect(csv).toContain('"Phần","Mục / Câu hỏi","Nội dung"');
     expect(csv).toContain("Nguyễn Ánh");
     expect(csv).toContain('"Bạn bè, đồng nghiệp"');
     expect(csv).toContain('"Cô ấy nói ""xin chào"""');
@@ -231,12 +234,12 @@ describe("S12 application CSV", () => {
     expect(guardSpreadsheetFormula(safe)).toBe(safe);
   });
 
-  it("guards the label column before composing its section label", () => {
+  it("guards every column, including the section and label columns", () => {
     const data: ApplicationExportData = {
       ...exportData,
       fields: [{ section: "Câu trả lời ứng tuyển", label: "\t=1+1", value: "An toàn" }]
     };
-    expect(applicationExportCsv(data)).toContain('"Câu trả lời ứng tuyển — \'\t=1+1","An toàn"');
+    expect(applicationExportCsv(data)).toContain('"Câu trả lời ứng tuyển","\'\t=1+1","An toàn"');
   });
 
   it("uses deterministic non-PII filenames", () => {

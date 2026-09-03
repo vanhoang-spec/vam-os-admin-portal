@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ApplySubmitButton } from "./submit-button";
-import type { ApplyActionState } from "@/lib/apply-types";
+import { RETURNING_MENTOR_GUIDANCE, type ApplyActionState } from "@/lib/apply-types";
 
 const inputClass =
   "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none placeholder:text-slate-400 focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -124,10 +124,61 @@ export function ApplicationForm({
           </ul>
         </div>
       ) : null}
+      <SubmitAreaAlert state={state} />
       <div className="flex justify-end pt-2">
         <ApplySubmitButton idleLabel={submitLabel} />
       </div>
     </form>
+  );
+}
+
+/**
+ * Server-side refusals are re-stated here, immediately above the submit button.
+ *
+ * The banner at the top of the form is out of view for anyone who has just
+ * pressed submit at the bottom of a long intake form — Owner UAT reported
+ * applicants concluding nothing had happened. This block sits where they are
+ * already looking, announces itself to assistive technology, takes focus, and
+ * scrolls itself into view. Its meaning is carried by the heading text, not by
+ * colour alone.
+ */
+function SubmitAreaAlert({ state }: { state: ApplyActionState }) {
+  const alertRef = useRef<HTMLDivElement>(null);
+  const returningMentor = state.errorKind === "returning_mentor";
+
+  useEffect(() => {
+    // A field-level error already scrolls to and focuses the offending control.
+    // Taking focus here as well would fight it.
+    if (state.ok || !state.message || state.fieldErrors?.length) return;
+    const node = alertRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.focus({ preventScroll: true });
+  }, [state]);
+
+  if (state.ok || !state.message) return null;
+
+  return (
+    <div
+      ref={alertRef}
+      role="alert"
+      tabIndex={-1}
+      data-testid="submit-area-alert"
+      data-error-kind={state.errorKind ?? "generic"}
+      className="rounded-md border-2 border-red-400 bg-red-50 p-4 text-sm text-red-900"
+    >
+      <p className="text-base font-semibold">
+        {returningMentor ? RETURNING_MENTOR_GUIDANCE.heading : "Không gửi được đơn"}
+      </p>
+      <p className="mt-2 leading-6">
+        {returningMentor ? RETURNING_MENTOR_GUIDANCE.body : state.message}
+      </p>
+      {returningMentor ? (
+        <p className="mt-3 rounded-md border border-red-300 bg-white p-3 font-medium leading-6">
+          {RETURNING_MENTOR_GUIDANCE.cta}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

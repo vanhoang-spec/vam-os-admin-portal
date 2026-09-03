@@ -7,19 +7,50 @@ import type { ApplicationExportData, ApplicationExportField } from "@/lib/applic
 
 const SECTION_ORDER = ["Thông tin ứng viên", "Thông tin ứng tuyển", "Hồ sơ Mentor", "Hồ sơ Mentee", "Nội dung form S12", "Câu trả lời ứng tuyển"];
 
+/**
+ * A long answer must be allowed to flow across pages, but a short one splitting
+ * its label onto the previous page is just noise. Anything that comfortably
+ * fits a page is therefore kept whole.
+ */
+const UNBREAKABLE_VALUE_LIMIT = 900;
+
 function pdfField(field: ApplicationExportField): Content {
   return {
     stack: [
       { text: field.label, bold: true, color: "#334155", fontSize: 9 },
-      { text: field.value, margin: [0, 2, 0, 0], fontSize: 10, lineHeight: 1.25 }
+      { text: field.value, margin: [0, 3, 0, 0], fontSize: 10, lineHeight: 1.3 }
     ],
-    margin: [0, 0, 0, 8],
-    unbreakable: false
+    margin: [0, 0, 0, 10],
+    unbreakable: field.value.length <= UNBREAKABLE_VALUE_LIMIT
   };
 }
 
-export async function applicationExportPdf(data: ApplicationExportData): Promise<Buffer> {
-  (pdfMake as unknown as { vfs: Record<string, string> }).vfs = pdfFonts as unknown as Record<string, string>;
+function sectionHeading(section: string): Content {
+  return {
+    text: section.toUpperCase(),
+    style: "section"
+  };
+}
+
+/**
+ * The heading travels with the first field of its section in one unbreakable
+ * block, so a section title can never be left stranded at the bottom of a page
+ * with its content overleaf.
+ */
+function pdfSection(section: string, fields: ApplicationExportField[]): Content[] {
+  const [first, ...rest] = fields;
+  const opener: Content =
+    first.value.length <= UNBREAKABLE_VALUE_LIMIT
+      ? { stack: [sectionHeading(section), pdfField(first)], unbreakable: true }
+      : { stack: [sectionHeading(section), pdfField(first)] };
+  return [opener, ...rest.map(pdfField)];
+}
+
+/**
+ * Exported so the page-break structure can be asserted directly rather than
+ * inferred from a rendered binary.
+ */
+export function buildApplicationPdfContent(data: ApplicationExportData): Content[] {
   const content: Content[] = [
     { text: "VAM / UEH MENTORING SEASON 12", style: "brand" },
     { text: "HỒ SƠ ỨNG TUYỂN", style: "title" },
@@ -29,10 +60,17 @@ export async function applicationExportPdf(data: ApplicationExportData): Promise
 
   for (const section of SECTION_ORDER) {
     const sectionFields = data.fields.filter((field) => field.section === section);
+    // An empty section is skipped outright, so no heading is ever printed over
+    // nothing and no page is spent on one.
     if (!sectionFields.length) continue;
-    content.push({ text: section.toUpperCase(), style: "section" });
-    content.push(...sectionFields.map(pdfField));
+    content.push(...pdfSection(section, sectionFields));
   }
+  return content;
+}
+
+export async function applicationExportPdf(data: ApplicationExportData): Promise<Buffer> {
+  (pdfMake as unknown as { vfs: Record<string, string> }).vfs = pdfFonts as unknown as Record<string, string>;
+  const content = buildApplicationPdfContent(data);
 
   const document: TDocumentDefinitions = {
     pageSize: "A4",
@@ -54,7 +92,7 @@ export async function applicationExportPdf(data: ApplicationExportData): Promise
         fontSize: 11,
         bold: true,
         color: "#167c4b",
-        margin: [0, 10, 0, 10],
+        margin: [0, 16, 0, 10],
         decoration: "underline",
         decorationColor: "#bbf7d0"
       }

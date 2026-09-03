@@ -297,6 +297,11 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           )}
         </div>
       </div>
+      <p className="mb-3 text-xs leading-5 text-slate-500">
+        Hai tệp trên được tạo sẵn trên máy chủ và tải xuống trực tiếp. Không cần dùng lệnh in của
+        trình duyệt, nên tệp PDF không kèm URL, đầu trang hay chân trang của trình duyệt. Nội dung
+        trong PDF là văn bản nên có thể bôi đen, tìm kiếm và sao chép.
+      </p>
       <ErrorBox message={error} />
 
       {/* ── Assign reviewer (admin / core_team only) ─────────────────────────── */}

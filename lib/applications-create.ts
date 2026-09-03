@@ -33,9 +33,21 @@ export type ApplicationSubmissionInput = {
   }>;
 };
 
+/**
+ * A machine-readable tag for refusals the applicant-facing form must explain
+ * differently. It never widens what the server discloses: it is set only on a
+ * refusal the caller's own submission already produced.
+ */
+export type ApplicationSubmissionReason = "returning_mentor";
+
 export type ApplicationSubmissionResult =
   | { ok: true; applicationId: string }
-  | { ok: false; code: "config" | "duplicate" | "season_missing" | "batch_missing" | "validation" | "db" | "incomplete_submission"; message: string };
+  | {
+      ok: false;
+      code: "config" | "duplicate" | "season_missing" | "batch_missing" | "validation" | "db" | "incomplete_submission";
+      message: string;
+      reason?: ApplicationSubmissionReason;
+    };
 
 const SAFE_ERROR =
   "Không thể ghi đơn ứng tuyển. Vui lòng thử lại sau hoặc liên hệ ban tổ chức nếu vấn đề tiếp diễn.";
@@ -313,6 +325,7 @@ export async function submitPilotApplication(
       return {
         ok: false,
         code: "validation",
+        reason: "returning_mentor",
         message:
           "Hồ sơ này cần được xử lý qua luồng xác nhận/gia hạn Mentor Season 12. Vui lòng sử dụng đường dẫn do BTC gửi hoặc liên hệ BTC nếu chưa nhận được."
       };
