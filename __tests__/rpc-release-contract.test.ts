@@ -106,8 +106,13 @@ describe("Production RPC release contract", () => {
   it("covers the M084/M090 family that this incident introduced", () => {
     const family = Array.from(requiredRpcs).filter((rpc) => /^vam09[0-9]_|^vam084_/.test(rpc));
     expect(family.length).toBeGreaterThanOrEqual(11);
-    const pending = new Set(PENDING_PRODUCTION_MIGRATION_RPCS);
-    expect(family.filter((rpc) => !pending.has(rpc))).toEqual([]);
+    // Accounted for as provided (once the corrective migration is applied) or
+    // as pending (before it is). What must never happen is the family being
+    // absent from the contract, or parked in the pre-existing-gap bucket.
+    const accountedFor = new Set(
+      PRODUCTION_PROVIDED_RPCS.concat(PENDING_PRODUCTION_MIGRATION_RPCS)
+    );
+    expect(family.filter((rpc) => !accountedFor.has(rpc))).toEqual([]);
   });
 
   it("requires every indirect .rpc() call site to enumerate its names", () => {

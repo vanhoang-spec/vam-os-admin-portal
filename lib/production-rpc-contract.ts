@@ -25,6 +25,13 @@
 /**
  * Verified present in the Production catalog (project qkkroesfiazsejkzflcd) by
  * read-only pg_proc inspection on 2026-09-03.
+ *
+ * The vam084_ and vam090_ recruitment family was ABSENT until migration
+ * 20260903180000 was applied to Production on 2026-09-03; the post-apply
+ * verification pack confirmed 13/13 present with service_role-only execute.
+ * Migration 20260903193000 later replaced vam084_list_recruitment_participants
+ * in place — same name, arguments and return contract, so the declared set is
+ * unchanged by it.
  */
 export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   "get_founder_intelligence_dashboard",
@@ -43,19 +50,7 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   "vam071_submit_renewal_accepted",
   "vam071_submit_renewal_declined",
   "vam083_consume_legacy_mentor_preview",
-  "vam083_create_legacy_mentor_preview"
-];
-
-/**
- * Absent from Production, but defined by a corrective migration that is present
- * in supabase/migrations and awaiting owner approval to apply.
- *
- * The contract test asserts each of these is genuinely defined by a migration
- * file, so this list cannot quietly become a wish list.
- *
- * Migration: 20260903180000_p0_restore_recruitment_review_rpcs.sql
- */
-export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  "vam083_create_legacy_mentor_preview",
   "vam084_application_decision_eligibility",
   "vam084_apply_application_decisions",
   "vam084_change_review_assignment",
@@ -69,6 +64,21 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam084_upsert_stage_requirement",
   "vam090_bulk_assign_application_reviews",
   "vam090_finalize_recruitment_approval"
+];
+
+/**
+ * Absent from Production, but defined by a corrective migration that is present
+ * in supabase/migrations and awaiting owner approval to apply.
+ *
+ * The contract test asserts each of these is genuinely defined by a migration
+ * file, so this list cannot quietly become a wish list.
+ *
+ * Migration: 20260903180000_p0_restore_recruitment_review_rpcs.sql
+ */
+export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Empty: the P0 corrective migration has been applied to Production and
+  // its functions moved to PRODUCTION_PROVIDED_RPCS above. A future RPC that
+  // ships ahead of its Production apply belongs here.
 ];
 
 /**
