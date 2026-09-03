@@ -17,7 +17,8 @@ import {
   INDIRECT_RPC_CALL_SITES,
   KNOWN_MISSING_PREEXISTING_RPCS,
   PENDING_PRODUCTION_MIGRATION_RPCS,
-  PRODUCTION_PROVIDED_RPCS
+  PRODUCTION_PROVIDED_RPCS,
+  STAGING_VERIFIED_RPCS
 } from "@/lib/production-rpc-contract";
 
 const SOURCE_ROOTS = ["lib", "app", "components"];
@@ -148,5 +149,69 @@ describe("Production RPC release contract", () => {
     for (const rpc of PENDING_PRODUCTION_MIGRATION_RPCS.concat(KNOWN_MISSING_PREEXISTING_RPCS)) {
       expect(provided.has(rpc), `${rpc} is known absent from Production but listed as provided`).toBe(false);
     }
+  });
+});
+
+/**
+ * M092 Bulk Official Approval ships in application code while Production does
+ * not yet have its migration. That is the precise shape of the e197e8c
+ * incident, so the classification is asserted explicitly rather than left to
+ * the generic bucket rules above.
+ */
+describe("M092 is classified Production-pending, not Production-present", () => {
+  const M092 = "vam092_bulk_official_approve_applications";
+  const M093 = "vam093_returning_mentor_collision";
+
+  it("is genuinely required by application code (not a stale declaration)", () => {
+    expect(requiredRpcs.has(M092)).toBe(true);
+    const callers = directCalls.filter((c) => c.rpc === M092).map((c) => c.file);
+    expect(callers).toContain("lib/bulk-official-approval.ts");
+  });
+
+  it("is declared pending, and is NOT claimed as provided by Production", () => {
+    expect(PENDING_PRODUCTION_MIGRATION_RPCS).toContain(M092);
+    expect(
+      PRODUCTION_PROVIDED_RPCS,
+      "M092 has not been applied to Production (qkkroesfiazsejkzflcd); listing it as provided would repeat the e197e8c failure"
+    ).not.toContain(M092);
+  });
+
+  it("is not laundered through the pre-existing-gap bucket", () => {
+    // M092 is a NEW dependency introduced by this release, not pre-existing
+    // breakage, so the acknowledgement bucket must not absorb it.
+    expect(KNOWN_MISSING_PREEXISTING_RPCS).not.toContain(M092);
+  });
+
+  it("is backed by the migration that actually defines it", () => {
+    const sql = readFileSync(
+      "supabase/migrations/20260831120000_s12_m092_bulk_official_approval.sql",
+      "utf8"
+    );
+    expect(sql.toLowerCase()).toContain(`create or replace function public.${M092}(`);
+  });
+
+  it("records Staging presence without ever implying Production presence", () => {
+    expect(STAGING_VERIFIED_RPCS).toContain(M092);
+    // The whole point: Staging-verified is not a Production claim.
+    for (const rpc of STAGING_VERIFIED_RPCS) {
+      expect(
+        PRODUCTION_PROVIDED_RPCS,
+        `${rpc} is Staging-verified only; it must not appear as Production-provided`
+      ).not.toContain(rpc);
+    }
+  });
+
+  it("treats M093 as a SQL/transitive dependency, not a direct application RPC", () => {
+    // Application code never calls vam093 directly — it runs inside vam092 —
+    // so it must not be declared as an application RPC dependency.
+    expect(requiredRpcs.has(M093)).toBe(false);
+    expect(DECLARED_RPCS).not.toContain(M093);
+    // But it must still exist in version control, or Staging's real vam092
+    // contract could not be reproduced on Production later.
+    const sql = readFileSync(
+      "supabase/migrations/20260901090000_s12_m093_pre_uat_hardening.sql",
+      "utf8"
+    );
+    expect(sql.toLowerCase()).toContain(`create or replace function public.${M093}(`);
   });
 });

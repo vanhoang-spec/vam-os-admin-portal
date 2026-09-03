@@ -73,12 +73,46 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  * The contract test asserts each of these is genuinely defined by a migration
  * file, so this list cannot quietly become a wish list.
  *
- * Migration: 20260903180000_p0_restore_recruitment_review_rpcs.sql
+ * This is the ONLY honest bucket for an RPC that ships in application code
+ * ahead of its Production apply. Moving a name out of here and into
+ * PRODUCTION_PROVIDED_RPCS is a claim about the Production catalog and needs
+ * read-only catalog evidence recorded against it — never a green build.
+ *
+ * Migrations: 20260903180000_p0_restore_recruitment_review_rpcs.sql (applied)
+ *             20260831120000_s12_m092_bulk_official_approval.sql (NOT applied to Production)
+ *             20260901090000_s12_m093_pre_uat_hardening.sql (NOT applied to Production)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
-  // Empty: the P0 corrective migration has been applied to Production and
-  // its functions moved to PRODUCTION_PROVIDED_RPCS above. A future RPC that
-  // ships ahead of its Production apply belongs here.
+  // M092 Bulk Official Approval. Present and exercised on Staging
+  // (ljfneyuvpxrmejpxsmpz); ABSENT from Production (qkkroesfiazsejkzflcd).
+  // The application calls it directly from lib/bulk-official-approval.ts, so
+  // the route /applications/bulk-approval cannot work on Production until
+  // 20260831120000 and 20260901090000 are applied there. Declared pending so
+  // the guard stays green for unrelated work while refusing to let anyone
+  // claim M092 exists on Production. See STAGING_VERIFIED_RPCS below.
+  "vam092_bulk_official_approve_applications"
+];
+
+/**
+ * Verified present in the STAGING catalog (project ljfneyuvpxrmejpxsmpz) by
+ * read-only inspection. Staging runs ahead of Production by design during UAT,
+ * so this is deliberately NOT part of DECLARED_RPCS — Staging presence is
+ * never evidence that Production provides a function.
+ *
+ * Its only job is to let the contract express the two-environment state
+ * "STAGING_PRESENT + PRODUCTION_PENDING" instead of silently collapsing the
+ * two, which is how the M084/M090 gap went unnoticed until it broke
+ * Production. A name here that is also in PENDING_PRODUCTION_MIGRATION_RPCS is
+ * exactly a Production release candidate awaiting its migration apply.
+ */
+export const STAGING_VERIFIED_RPCS: readonly string[] = [
+  // M092 base contract, redefined in place (same uuid[],uuid signature) by the
+  // M093 pre-UAT hardening migration; Staging therefore runs M092+M093.
+  "vam092_bulk_official_approve_applications",
+  // M093 returning-mentor collision guard. NOT a direct application RPC — it
+  // is called only from inside vam092_bulk_official_approve_applications, so
+  // it is a SQL/transitive dependency and correctly absent from DECLARED_RPCS.
+  "vam093_returning_mentor_collision"
 ];
 
 /**
