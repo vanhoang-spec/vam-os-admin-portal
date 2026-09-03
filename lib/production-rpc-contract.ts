@@ -63,7 +63,14 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   "vam084_submit_application_review",
   "vam084_upsert_stage_requirement",
   "vam090_bulk_assign_application_reviews",
-  "vam090_finalize_recruitment_approval"
+  "vam090_finalize_recruitment_approval",
+  // M092 Bulk Official Approval. Applied to Production 2026-09-04 by migration
+  // 20260904070000_m092_bulk_official_approval_production. Post-apply catalog
+  // verification confirmed the identity signature (uuid[], uuid), SECURITY
+  // INVOKER with search_path='', and a service_role-only execute ACL
+  // (postgres=X | service_role=X, no PUBLIC/anon/authenticated) — with
+  // pg_get_functiondef md5 1707a71e... matching the Staging catalog exactly.
+  "vam092_bulk_official_approve_applications"
 ];
 
 /**
@@ -83,27 +90,26 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260901090000_s12_m093_pre_uat_hardening.sql (NOT applied to Production)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
-  // M092 Bulk Official Approval. Present and exercised on Staging
-  // (ljfneyuvpxrmejpxsmpz); ABSENT from Production (qkkroesfiazsejkzflcd).
-  // The application calls it directly from lib/bulk-official-approval.ts, so
-  // the route /applications/bulk-approval cannot work on Production until
-  // 20260831120000 and 20260901090000 are applied there. Declared pending so
-  // the guard stays green for unrelated work while refusing to let anyone
-  // claim M092 exists on Production. See STAGING_VERIFIED_RPCS below.
-  "vam092_bulk_official_approve_applications"
+  // Empty: M092 shipped here while it was Production-pending and moved to
+  // PRODUCTION_PROVIDED_RPCS above once migration 20260904070000 was actually
+  // applied and verified against the Production catalog on 2026-09-04. A
+  // future RPC that ships ahead of its Production apply belongs here.
 ];
 
 /**
  * Verified present in the STAGING catalog (project ljfneyuvpxrmejpxsmpz) by
- * read-only inspection. Staging runs ahead of Production by design during UAT,
- * so this is deliberately NOT part of DECLARED_RPCS — Staging presence is
- * never evidence that Production provides a function.
+ * read-only inspection. Staging runs ahead of Production by design during UAT.
  *
- * Its only job is to let the contract express the two-environment state
- * "STAGING_PRESENT + PRODUCTION_PENDING" instead of silently collapsing the
- * two, which is how the M084/M090 gap went unnoticed until it broke
- * Production. A name here that is also in PENDING_PRODUCTION_MIGRATION_RPCS is
- * exactly a Production release candidate awaiting its migration apply.
+ * This list is a catalog record, NOT a declaration: membership here never
+ * satisfies the guard and is never evidence that Production provides a
+ * function. A name that application code calls must still earn its place in
+ * one of the three real buckets above. That separation is what lets the
+ * contract express "STAGING_PRESENT + PRODUCTION_PENDING" during a release
+ * instead of silently collapsing the two — which is how the M084/M090 gap went
+ * unnoticed until it broke Production.
+ *
+ * Both entries below are now present on Production too (migration
+ * 20260904070000), so the M092 release gap is closed.
  */
 export const STAGING_VERIFIED_RPCS: readonly string[] = [
   // M092 base contract, redefined in place (same uuid[],uuid signature) by the
