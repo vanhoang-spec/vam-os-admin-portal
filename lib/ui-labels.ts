@@ -129,6 +129,7 @@ export function applicationStatusLabel(value: unknown): string {
   if (key === "interview_scheduled") return "Đã lên lịch phỏng vấn";
   if (key === "interview_in_progress") return "Đang phỏng vấn";
   if (key === "interview_completed") return "Hoàn tất phỏng vấn";
+  if (key === "ready_for_final_decision") return "Sẵn sàng ra quyết định cuối";
   if (key === "interview_passed") return "Qua vòng phỏng vấn";
   if (key === "approved_as_mentor") return "Đã duyệt — Mentor";
   if (key === "approved_as_mentee") return "Đã duyệt — Mentee";

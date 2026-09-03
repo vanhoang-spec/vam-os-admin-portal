@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, EmptyState, ErrorBox, FilterBar, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageWorkflow } from "@/lib/auth-constants";
+import { canBrowseOperations } from "@/lib/permissions";
 import { getOperationsWorkflowData } from "@/lib/data";
 import type { WorkflowOwner, WorkflowQueueItem } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
@@ -210,6 +212,21 @@ function WorkflowTable({
 export default async function OperationsTasksPage(props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
 
+  // H2 fix: role gate before any scope check or protected data load. This
+  // route previously had no global-role check at all — only season scope
+  // via resolveSeasonContext — so a reviewer with a season review grant
+  // could reach the full operations task queue.
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser) redirect("/login");
+  if (!canBrowseOperations(adminUser.role)) {
+    return (
+      <PageHeader
+        title="Không có quyền truy cập"
+        description="Bạn không có quyền truy cập trang việc cần xử lý này."
+      />
+    );
+  }
+
   // Task month: which month's workflow queue to view. Defaults to current VN calendar month.
   const selectedMonth = cleanMonth(searchParams?.month) ?? currentMonthVN();
   const seasonContext = await resolveSeasonContext(searchParams?.season).catch((error: unknown) => {
@@ -224,10 +241,7 @@ export default async function OperationsTasksPage(props: { searchParams?: Promis
       />
     );
   }
-  const [workflow, adminUser] = await Promise.all([
-    getOperationsWorkflowData(seasonContext.selectedSeasonCode, selectedMonth),
-    getCurrentAdminUser()
-  ]);
+  const workflow = await getOperationsWorkflowData(seasonContext.selectedSeasonCode, selectedMonth);
   const canManage = canManageWorkflow(adminUser);
   const filters = {
     status: single(searchParams?.status),

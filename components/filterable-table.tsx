@@ -159,6 +159,18 @@ export function FilterableTable<T>({
             </select>
           </label>
         ) : null}
+        {(query || Object.values(filterValues).some(Boolean)) && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setFilterValues(Object.fromEntries(filters.map((filter) => [filter.key, filter.defaultValue ?? ""])));
+            }}
+            className="h-10 rounded-md border border-vam-line bg-white px-3 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            Xoá bộ lọc
+          </button>
+        )}
       </FilterBar>
       <div className="mb-3 text-sm text-slate-500">
         Hiển thị {pageRows.length} / {sortedRows.length} dòng

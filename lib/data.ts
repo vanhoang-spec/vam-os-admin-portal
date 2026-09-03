@@ -7,6 +7,7 @@ import { SEASON_CONFIG } from "@/lib/season-config";
 import { evaluateMentorClassifications } from "@/lib/classification";
 import { intersectAuthorizedAndCohort } from "@/lib/season-cohort";
 import { resolveSeasonContext } from "@/lib/season-context";
+import { REVIEW_ELIGIBLE_ROLES } from "@/lib/reviewer-eligibility";
 import {
   canOperateSeason,
   getAdminScopeContext,
@@ -1750,8 +1751,8 @@ export async function getAllApplicationReviews(scope?: ScopeFilter): Promise<Que
 
 export async function getApplicationReviewById(
   id: string,
-  scope?: ScopeFilter,
-  reviewerAdminUserId?: string
+  scope: ScopeFilter | undefined,
+  reviewerAdminUserId: string | null
 ): Promise<QueryResult<ApplicationReview | null>> {
   const client = await dataClient("application_reviews");
   if (!client) return serviceRoleRequiredError<ApplicationReview | null>(null);
@@ -1759,7 +1760,14 @@ export async function getApplicationReviewById(
     .from("application_reviews")
     .select("*")
     .eq("id", id);
-  if (reviewerAdminUserId) query = query.eq("reviewer_admin_user_id", reviewerAdminUserId);
+  // H3 fix: a reviewer's own identity constraint must also exclude
+  // cancelled assignments — otherwise a cancelled/reassigned reviewer can
+  // still open their old review URL by ID. Submitted reviews are
+  // unaffected (status 'submitted' !== 'cancelled'), so read-only access
+  // to the reviewer's own review history is preserved.
+  if (reviewerAdminUserId) {
+    query = query.eq("reviewer_admin_user_id", reviewerAdminUserId).neq("status", "cancelled");
+  }
   const { data, error } = await query.maybeSingle();
   if (error) return { data: null, error: `${VI_ERROR} (application_reviews: ${error.message})` };
   if (scope && data?.application_id) {
@@ -1922,19 +1930,17 @@ export async function getReviewAssignableApplications(filters: {
  * current active profile_screening workload count.
  * Uses service-role client because admin_users RLS restricts row visibility.
  */
-export async function getReviewEligibleReviewers(): Promise<QueryResult<ReviewEligibleReviewer[]>> {
+export async function getReviewEligibleReviewers(
+  seasonId: string,
+  reviewRound: "profile_screening" | "interview"
+): Promise<QueryResult<ReviewEligibleReviewer[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewEligibleReviewer[]>([]);
 
   // Class B: staff accounts.
-  const { data: adminRows, error: adminErr } = await readBounded<JsonRecord>(
-    "admin_users",
-    client
-      .from("admin_users")
-      .select("id,email,full_name,role")
-      .in("role", ["super_admin", "admin", "core_team", "reviewer"])
-      .eq("status", "active")
-      .order("full_name", { ascending: true })
+  const { data: adminRows, error: adminErr } = await client.rpc(
+    "vam084_list_recruitment_participants",
+    { p_season_id: seasonId, p_review_stage: reviewRound }
   );
 
   if (adminErr) {
@@ -1960,7 +1966,7 @@ export async function getReviewEligibleReviewers(): Promise<QueryResult<ReviewEl
     "reviewer_admin_user_id",
     reviewerIds,
     "reviewer_admin_user_id",
-    (query) => query.eq("review_round", "profile_screening").neq("status", "cancelled")
+    (query) => query.eq("review_round", reviewRound).neq("status", "cancelled")
   );
   if (workloadErr) {
     logDataError("getReviewEligibleReviewers.workload", workloadErr);
@@ -2313,7 +2319,9 @@ const INTERVIEW_POOL_STATUSES = [
   "invited_to_interview",
   "interview_scheduled",
   "interview_in_progress",
-  "interview_completed"
+  "interview_completed",
+  "ready_for_final_decision",
+  "needs_more_review"
 ] as const;
 
 /**
@@ -2332,8 +2340,7 @@ export async function getInterviewCandidates(filters?: {
   roleApplied?: string | null;
   includeCompleted?: boolean;
   scope?: ScopeFilter;
-  actorRole?: string | null;
-  actorAdminUserId?: string | null;
+  actor: { role: string | null; adminUserId: string };
 }): Promise<QueryResult<InterviewCandidateRow[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<InterviewCandidateRow[]>([]);
@@ -2367,7 +2374,7 @@ export async function getInterviewCandidates(filters?: {
   const byStatusAndBatch = narrow;
   narrow = (query) => byStatusAndBatch(query).eq("role_applied", roleApplied);
 
-  const reviewerQueue = filters?.actorRole === "reviewer";
+  const reviewerQueue = filters?.actor.role === "reviewer";
   const applicationProjection = reviewerQueue
     ? "id,full_name,status,intake_batch_id,role_applied,sbd,submitted_at"
     : "id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at";
@@ -2441,15 +2448,15 @@ export async function getInterviewCandidates(filters?: {
   // unowned queue query above never selects contact or private application
   // data, so those fields cannot accidentally cross the server/client boundary.
   const ownedReviewByAppId = new Map<string, { id: string; status: string; reviewer_admin_user_id: string | null }>();
-  if (reviewerQueue && filters?.actorAdminUserId) {
+  if (reviewerQueue) {
     for (const row of orderedReviews) {
-      if (row.reviewer_admin_user_id !== filters.actorAdminUserId) continue;
+      if (row.reviewer_admin_user_id !== filters?.actor.adminUserId) continue;
       const appId = String(row.application_id);
       if (!ownedReviewByAppId.has(appId)) {
         ownedReviewByAppId.set(appId, {
           id: String(row.id),
           status: String(row.status ?? ""),
-          reviewer_admin_user_id: filters.actorAdminUserId
+          reviewer_admin_user_id: filters.actor.adminUserId
         });
       }
     }
@@ -2471,7 +2478,10 @@ export async function getInterviewCandidates(filters?: {
   }
   const contactByAppId = new Map(ownedContacts.data.map((row) => [String(row.id), row]));
 
-  const data: InterviewCandidateRow[] = appList.map((a) => {
+  const visibleApps = reviewerQueue
+    ? appList.filter((application) => ownedReviewByAppId.has(application.id))
+    : appList;
+  const data: InterviewCandidateRow[] = visibleApps.map((a) => {
     const activeReview = reviewByAppId.get(a.id) ?? null;
     const ownedReview = ownedReviewByAppId.get(a.id) ?? null;
     const review = reviewerQueue ? ownedReview : activeReview;

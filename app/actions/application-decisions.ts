@@ -5,20 +5,9 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { recordApplicationDecision } from "@/lib/application-decisions";
 import { canDecide } from "@/lib/permissions";
 import type { DecisionActionState } from "@/lib/decision-action-types";
+import { ALLOWED_DECISION_STATUSES } from "@/lib/decision-action-types";
 
-// Statuses an admin/core-team can set via the decision workflow.
-// Kept in sync with the CHECK constraint in migration 041.
-const ALLOWED_DECISION_STATUSES = new Set([
-  "screening_passed",
-  "invited_to_interview",
-  "waitlisted",
-  "rejected_or_not_fit",
-  "under_data_check",
-  "needs_more_review",
-  "withdrawn",
-  "interview_scheduled",
-  "interview_completed"
-]);
+const allowedDecisionStatuses = new Set<string>(ALLOWED_DECISION_STATUSES);
 
 function fail(message: string): DecisionActionState {
   return { ok: false, message };
@@ -40,7 +29,7 @@ export async function updateApplicationDecisionAction(
 
     if (!applicationId) return fail("Thiếu application_id.");
     if (!newStatus) return fail("Vui lòng chọn quyết định.");
-    if (!ALLOWED_DECISION_STATUSES.has(newStatus)) {
+    if (!allowedDecisionStatuses.has(newStatus)) {
       return fail(`Quyết định không hợp lệ: ${newStatus}`);
     }
 

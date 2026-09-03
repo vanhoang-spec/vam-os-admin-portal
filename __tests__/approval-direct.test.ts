@@ -63,13 +63,27 @@ function baseInput(overrides: Partial<ApproveApplicationInput> = {}): ApproveApp
 
 function makeClient(
   fromResponses: unknown[],
-  applicationSource: Record<string, unknown> = { person_id: null, raw_payload: {} }
+  applicationSource: Record<string, unknown> = {}
 ) {
   const fromMock = vi.fn();
-  fromMock.mockReturnValueOnce(makeChain({ data: applicationSource }));
+  fromMock.mockReturnValueOnce(makeChain({ data: {
+    person_id: null,
+    season_id: "season-s12",
+    role_applied: "mentor",
+    status: "interview_passed",
+    raw_payload: {},
+    source: "native_application",
+    renewal_invites: [],
+    ...applicationSource
+  } }));
   fromResponses.forEach((r) => fromMock.mockReturnValueOnce(r));
   fromMock.mockReturnValue(makeChain()); // fallback for audit inserts
-  return { from: fromMock };
+  const rpc = vi.fn().mockImplementation((name: string) => Promise.resolve(
+    name === "vam084_application_decision_eligibility"
+      ? { data: [{ eligible: true, reason: "eligible" }], error: null }
+      : { data: true, error: null }
+  ));
+  return { from: fromMock, rpc };
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -215,7 +229,7 @@ describe("approveApplication — profile reuse (app-layer idempotency)", () => {
       makeChain({ data: existingPerson }),
       makeChain({ data: existingProfile }), // mentee profile exists
       makeChain({ data: null, error: null }),
-    ]);
+    ], { role_applied: "mentee" });
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await approveApplication(baseInput({ targetRole: "mentee" }));
@@ -253,15 +267,10 @@ describe("approveApplication — profile reuse (app-layer idempotency)", () => {
     const profileMutationChain = makeChain() as Record<string, unknown>;
     profileMutationChain.update = profileUpdateSpy;
     profileMutationChain.insert = profileInsertSpy;
-    const applicationUpdateSpy = vi.fn().mockReturnValue(makeChain({ data: null, error: null }));
-    const applicationMutationChain = makeChain() as Record<string, unknown>;
-    applicationMutationChain.update = applicationUpdateSpy;
-
     const client = makeClient([
       makeChain({ data: existingPerson }),
       makeChain({ data: existingProfile }),
-      profileMutationChain,
-      applicationMutationChain
+      profileMutationChain
     ], {
       person_id: null,
       raw_payload: {
@@ -303,10 +312,11 @@ describe("approveApplication — profile reuse (app-layer idempotency)", () => {
     expect(refresh).not.toHaveProperty("source_application_id");
     expect(refresh).not.toHaveProperty("first_vam_season");
     expect(profileInsertSpy).not.toHaveBeenCalled();
-    expect(applicationUpdateSpy).toHaveBeenCalledWith({
-      status: "approved_as_mentor",
-      person_id: PERSON_UUID
-    });
+    expect(client.rpc).toHaveBeenCalledWith("vam090_finalize_recruitment_approval", expect.objectContaining({
+      p_new_status: "approved_as_mentor",
+      p_person_id: PERSON_UUID,
+      p_expected_status: "interview_passed"
+    }));
     expect((client.from as ReturnType<typeof vi.fn>).mock.calls.map(([table]) => table))
       .not.toContain("person_season_memberships");
   });
@@ -407,6 +417,11 @@ describe("approveApplication — non-transactional partial failure", () => {
       makeChain({ data: newProfile }), // profile created
       makeChain({ data: null, error: updateError }), // application UPDATE FAILS
     ]);
+    client.rpc.mockImplementation((name: string) => Promise.resolve(
+      name === "vam084_application_decision_eligibility"
+        ? { data: [{ eligible: true, reason: "eligible" }], error: null }
+        : { data: null, error: updateError }
+    ));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await approveApplication(baseInput());
@@ -414,7 +429,7 @@ describe("approveApplication — non-transactional partial failure", () => {
     // Person and profile were written; application status was NOT updated.
     // The function returns ok:false because the status update failed.
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toMatch(/cập nhật|trạng thái|đơn/i);
+    if (!result.ok) expect(result.message).toMatch(/hoàn tất|cập nhật|trạng thái|đơn/i);
   });
 });
 
@@ -427,7 +442,15 @@ describe("approveApplication — gender normalization", () => {
     const insertSpy = vi.fn().mockReturnValue(makeChain({ data: { id: PERSON_UUID, full_name: "Test" } }));
     const mockFrom = vi.fn().mockImplementation((table: string) => {
       if (table === "applications") {
-        return makeChain({ data: { person_id: null, raw_payload: {} } });
+        return makeChain({ data: {
+          person_id: null,
+          season_id: "season-s12",
+          role_applied: "mentor",
+          status: "interview_passed",
+          raw_payload: {},
+          source: "native_application",
+          renewal_invites: []
+        } });
       }
       if (table === "people") {
         const chain: Record<string, unknown> = {};
@@ -441,7 +464,12 @@ describe("approveApplication — gender normalization", () => {
       }
       return makeChain({ data: null });
     });
-    (getSupabaseServiceRoleClient as Mock).mockReturnValue({ from: mockFrom });
+    const rpc = vi.fn().mockImplementation((name: string) => Promise.resolve(
+      name === "vam084_application_decision_eligibility"
+        ? { data: [{ eligible: true, reason: "eligible" }], error: null }
+        : { data: true, error: null }
+    ));
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue({ from: mockFrom, rpc });
 
     await approveApplication(baseInput({ fullName: "Test", gender: "prefer_not_say" }));
 
@@ -557,6 +585,11 @@ describe("approveApplication — approval retry safety (non-transactional mitiga
       makeChain({ data: createdProfile }),    // mentor_profiles.insert → CREATED
       makeChain({ data: null, error: updateError }), // applications.update → FAILS
     ]);
+    clientCall1.rpc.mockImplementation((name: string) => Promise.resolve(
+      name === "vam084_application_decision_eligibility"
+        ? { data: [{ eligible: true, reason: "eligible" }], error: null }
+        : { data: null, error: updateError }
+    ));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(clientCall1);
 
     const result1 = await approveApplication(baseInput());

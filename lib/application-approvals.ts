@@ -70,6 +70,7 @@ type ApprovalApplicationSource = {
   person_id: string | null;
   season_id: string | null;
   role_applied: string | null;
+  status: string | null;
   raw_payload: Record<string, unknown> | null;
   source?: string | null;
   renewal_invites?: Array<{
@@ -272,7 +273,7 @@ export async function approveApplication(
   const { data: applicationSourceData, error: applicationSourceError } = await client
     .from("applications")
     .select(
-      "person_id,season_id,role_applied,raw_payload,source,renewal_invites:person_season_invites!person_season_invites_application_id_fkey(id,person_id,season_id,role)"
+      "person_id,season_id,role_applied,status,raw_payload,source,renewal_invites:person_season_invites!person_season_invites_application_id_fkey(id,person_id,season_id,role)"
     )
     .eq("id", input.applicationId)
     .maybeSingle();
@@ -281,6 +282,8 @@ export async function approveApplication(
     return { ok: false, message: "Không thể tải đơn ứng tuyển. " + SAFE_ERROR };
   }
   const applicationSource = applicationSourceData as ApprovalApplicationSource;
+  const newStatus =
+    input.targetRole === "mentor" ? "approved_as_mentor" : "approved_as_mentee";
 
   // P0-RT-10/11 — renewal approval is impossible until M071 has durably
   // recorded the admin's profile confirmation AND the exact invite-bound
@@ -373,6 +376,28 @@ export async function approveApplication(
     }
   }
 
+  if (!isRenewal) {
+    const expectedRole = input.targetRole;
+    if (String(applicationSource.role_applied ?? "").trim().toLowerCase() !== expectedRole) {
+      return {
+        ok: false,
+        message: "Vai trò duyệt không khớp với vai trò ứng tuyển. Không có thay đổi nào được thực hiện."
+      };
+    }
+    const { data: gateRows, error: gateError } = await client.rpc(
+      "vam084_application_decision_eligibility",
+      { p_application_id: input.applicationId, p_new_status: newStatus }
+    );
+    const gate = Array.isArray(gateRows) ? gateRows[0] : gateRows;
+    if (gateError || !(gate as { eligible?: boolean } | null)?.eligible) {
+      log("recruitment approval lifecycle preflight rejected", gateError ?? gate);
+      return {
+        ok: false,
+        message: "Đơn chưa đủ điều kiện vòng đời để duyệt thành viên. Không có thay đổi nào được thực hiện."
+      };
+    }
+  }
+
   const mentorProfileRefresh = buildMentorProfileRefresh(applicationSource.raw_payload);
 
   // ------------------------------------------------------------------
@@ -429,9 +454,6 @@ export async function approveApplication(
 
   let profileId: string;
   let profileCreated = false;
-  const newStatus =
-    input.targetRole === "mentor" ? "approved_as_mentor" : "approved_as_mentee";
-
   if (input.targetRole === "mentor") {
     const profileLookup = await findMentorProfileByPersonId(client, person.id);
     if (!profileLookup.ok) {
@@ -507,38 +529,49 @@ export async function approveApplication(
   // 3. Update application: status + person_id link
   // ------------------------------------------------------------------
 
-  const { error: appErr } = await client
-    .from("applications")
-    .update({
-      status: newStatus,
-      person_id: person.id
-    })
-    .eq("id", input.applicationId);
+  const decisionNote =
+    `Approved as ${input.targetRole}. person_id=${person.id} profile_id=${profileId} ` +
+    `person_created=${personCreated} profile_created=${profileCreated}`;
 
-  if (appErr) {
-    log("update application status/person_id failed", appErr);
-    return {
-      ok: false,
-      message: "Không thể cập nhật trạng thái đơn. " + SAFE_ERROR
-    };
-  }
+  if (isRenewal) {
+    const { data: updatedApplication, error: appErr } = await client
+      .from("applications")
+      .update({ status: newStatus, person_id: person.id })
+      .eq("id", input.applicationId)
+      .eq("status", applicationSource.status)
+      .select("id")
+      .maybeSingle();
+    if (appErr || !updatedApplication) {
+      log("update renewal application status/person_id failed", appErr);
+      return { ok: false, message: "Không thể cập nhật trạng thái đơn. " + SAFE_ERROR };
+    }
 
-  // ------------------------------------------------------------------
-  // 4. Audit row in application_decisions (non-fatal)
-  // ------------------------------------------------------------------
-
-  const { error: auditErr } = await client.from("application_decisions").insert({
-    application_id: input.applicationId,
-    decided_by: input.approvedByAdminUserId,
-    decided_by_name: input.approvedByName,
-    decision: newStatus,
-    previous_status: input.previousStatus,
-    new_status: newStatus,
-    decision_note: `Approved as ${input.targetRole}. person_id=${person.id} profile_id=${profileId} person_created=${personCreated} profile_created=${profileCreated}`
-  });
-
-  if (auditErr) {
-    log("insert application_decisions audit row failed (non-fatal)", auditErr);
+    const { error: auditErr } = await client.from("application_decisions").insert({
+      application_id: input.applicationId,
+      decided_by: input.approvedByAdminUserId,
+      decided_by_name: input.approvedByName,
+      decision: newStatus,
+      previous_status: applicationSource.status,
+      new_status: newStatus,
+      decision_note: decisionNote
+    });
+    if (auditErr) log("insert renewal application decision audit failed", auditErr);
+  } else {
+    const { data: finalized, error: finalizeError } = await client.rpc(
+      "vam090_finalize_recruitment_approval",
+      {
+        p_application_id: input.applicationId,
+        p_new_status: newStatus,
+        p_actor: input.approvedByAdminUserId,
+        p_person_id: person.id,
+        p_expected_status: applicationSource.status,
+        p_decision_note: decisionNote
+      }
+    );
+    if (finalizeError || finalized !== true) {
+      log("atomic recruitment approval finalization failed", finalizeError);
+      return { ok: false, message: "Không thể hoàn tất duyệt thành viên. " + SAFE_ERROR };
+    }
   }
 
   // ------------------------------------------------------------------

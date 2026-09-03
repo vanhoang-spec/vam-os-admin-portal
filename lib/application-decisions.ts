@@ -1,6 +1,5 @@
 import "server-only";
 
-import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // All writes use service-role to bypass RLS.
@@ -34,70 +33,76 @@ export type RecordDecisionInput = {
   decisionNote: string | null;
 };
 
+export type ApplyDecisionsInput = {
+  applicationIds: string[];
+  decidedByAdminUserId: string;
+  newStatus: string;
+  decisionNote: string | null;
+  expectedStatuses: Record<string, string>;
+};
+
 export type DecisionResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; applied: number; failed: number; message?: string }
   | { ok: false; message: string };
 
-/**
- * Atomically (best-effort):
- *   1. Updates applications.status to newStatus.
- *   2. Inserts an audit row into application_decisions.
- *
- * If the status update fails, returns an error — nothing is written.
- * If the audit insert fails, logs the error but still returns ok=true
- * because the status change already committed and is the primary effect.
- */
+const REASON_MESSAGES: Record<string, string> = {
+  scope_denied: "Bạn không có quyền vận hành mùa của đơn này.",
+  expected_status_missing: "Thiếu trạng thái dự kiến. Vui lòng tải lại trước khi quyết định.",
+  stale_status: "Trạng thái đơn đã thay đổi. Vui lòng tải lại trước khi quyết định.",
+  stage_requirement_missing: "Chưa cấu hình số review tối thiểu cho mùa tuyển sinh.",
+  profile_review_minimum_not_met: "Đơn chưa đủ số review hồ sơ tối thiểu.",
+  interview_review_minimum_not_met: "Đơn chưa đủ số đánh giá phỏng vấn tối thiểu.",
+  application_role_mismatch: "Vai trò duyệt không khớp với vai trò ứng tuyển.",
+  additional_review_not_submitted: "Review bổ sung được yêu cầu nhưng chưa được hoàn tất.",
+  invalid_transition: "Trạng thái hiện tại không cho phép quyết định này.",
+  terminal_status: "Đơn đã ở trạng thái kết thúc.",
+  unsupported_decision: "Quyết định không được hỗ trợ."
+};
+
+export async function applyApplicationDecisions(input: ApplyDecisionsInput): Promise<DecisionResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+  const { data, error } = await client.rpc("vam084_apply_application_decisions", {
+    p_application_ids: input.applicationIds,
+    p_new_status: input.newStatus,
+    p_actor: input.decidedByAdminUserId,
+    p_decision_note: input.decisionNote,
+    p_expected_statuses: input.expectedStatuses
+  });
+  if (error) {
+    log("atomic application decision failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const rows = (data ?? []) as Array<{ application_id: string; applied: boolean; reason: string }>;
+  if (rows.length !== input.applicationIds.length) return { ok: false, message: SAFE_ERROR };
+  const applied = rows.filter((row) => row.applied).length;
+  const failedRows = rows.filter((row) => !row.applied);
+  const failureSummary = Array.from(
+    failedRows.reduce((counts, row) => counts.set(row.reason, (counts.get(row.reason) ?? 0) + 1), new Map<string, number>())
+  ).map(([reason, count]) => `${REASON_MESSAGES[reason] ?? reason}: ${count}`).join("; ");
+  if (!applied) {
+    const reason = failedRows[0]?.reason;
+    return { ok: false, message: REASON_MESSAGES[reason] ?? SAFE_ERROR };
+  }
+  return {
+    ok: true,
+    id: rows.find((row) => row.applied)?.application_id ?? input.applicationIds[0],
+    applied,
+    failed: failedRows.length,
+    message: failedRows.length
+      ? `Đã cập nhật ${applied} đơn; ${failedRows.length} đơn bị chặn. ${failureSummary}`
+      : `Đã cập nhật ${applied} đơn.`
+  };
+}
+
 export async function recordApplicationDecision(
   input: RecordDecisionInput
 ): Promise<DecisionResult> {
-  const client = serviceClient();
-  if (!client) return { ok: false, message: SAFE_ERROR };
-
-  const { data: application, error: appErr } = await client
-    .from("applications")
-    .select("id,season_id")
-    .eq("id", input.applicationId)
-    .maybeSingle();
-  if (appErr) {
-    log("load application for decision scope failed", appErr);
-    return { ok: false, message: SAFE_ERROR };
-  }
-  if (!application) return { ok: false, message: "KhĂ´ng tĂ¬m tháº¥y Ä‘Æ¡n á»©ng tuyá»ƒn." };
-
-  const ctx = await getAdminScopeContext();
-  if (!(await canReviewSeason(ctx, application.season_id as string | null))) {
-    return { ok: false, message: "Ban khong co quyen review trong mua cua don nay." };
-  }
-
-  // 1. Update application status
-  const { error: statusErr } = await client
-    .from("applications")
-    .update({ status: input.newStatus })
-    .eq("id", input.applicationId);
-
-  if (statusErr) {
-    log("update application status failed", statusErr);
-    return { ok: false, message: `${SAFE_ERROR} (${statusErr.message})` };
-  }
-
-  // 2. Insert audit row (non-fatal — status change has already committed)
-  const { data, error: auditErr } = await client
-    .from("application_decisions")
-    .insert({
-      application_id: input.applicationId,
-      decided_by: input.decidedByAdminUserId,
-      decided_by_name: input.decidedByName,
-      decision: input.newStatus,
-      previous_status: input.previousStatus,
-      new_status: input.newStatus,
-      decision_note: input.decisionNote
-    })
-    .select("id")
-    .maybeSingle();
-
-  if (auditErr) {
-    log("insert application_decisions failed (non-fatal, status already updated)", auditErr);
-  }
-
-  return { ok: true, id: data?.id ?? input.applicationId };
+  return applyApplicationDecisions({
+    applicationIds: [input.applicationId],
+    decidedByAdminUserId: input.decidedByAdminUserId,
+    newStatus: input.newStatus,
+    decisionNote: input.decisionNote,
+    expectedStatuses: { [input.applicationId]: input.previousStatus ?? "" }
+  });
 }

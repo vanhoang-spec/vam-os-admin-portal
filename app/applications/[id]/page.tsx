@@ -6,7 +6,7 @@ import {
   getAnswersForApplication,
   getApplicationDecisions,
   getApplicationReviewsForApplication,
-  getActiveAdminUsers,
+  getReviewEligibleReviewers,
   getSeasons,
   getMatchesForPerson,
   getPersonByAuthorizedApplicationPersonId,
@@ -102,15 +102,20 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   
-  const [application, seasons, answers, reviewsResult, reviewersResult, decisionsResult] =
+  const [application, seasons, answers, reviewsResult, decisionsResult] =
     await Promise.all([
       getApplication(params.id, scope),
       getSeasons(scope),
       getAnswersForApplication(params.id),
       getApplicationReviewsForApplication(params.id, scope),
-      getActiveAdminUsers(),
       getApplicationDecisions(params.id, scope)
     ]);
+  const [profileReviewersResult, interviewersResult] = application.data?.season_id
+    ? await Promise.all([
+        getReviewEligibleReviewers(application.data.season_id, "profile_screening"),
+        getReviewEligibleReviewers(application.data.season_id, "interview")
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }];
 
   const personId = application.data?.person_id;
   const roleApplied = application.data?.role_applied;
@@ -298,12 +303,13 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       {canAssign && (
         <Card className="mb-4">
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Giao Review</h2>
-          {reviewersResult.error && (
-            <ErrorBox message={`Không thể tải danh sách reviewer: ${reviewersResult.error}`} />
+          {(profileReviewersResult.error || interviewersResult.error) && (
+            <ErrorBox message={`Không thể tải danh sách người tham gia: ${profileReviewersResult.error || interviewersResult.error}`} />
           )}
           <AssignReviewerForm
             applicationId={application.data.id}
-            reviewers={reviewersResult.data}
+            profileReviewers={profileReviewersResult.data}
+            interviewers={interviewersResult.data}
           />
         </Card>
       )}
@@ -434,7 +440,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       </Card>
 
       {/* ── Final approval (admin / core-team only) ───────────────────────────── */}
-      {canMakeDecision && (
+      {canMakeDecision && displayStatus === "interview_passed" && (
         <Card className="mb-4 border-vam-green/30">
           <div className="mb-3">
             <h2 className="text-base font-semibold text-vam-ink">

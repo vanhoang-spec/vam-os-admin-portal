@@ -76,7 +76,7 @@ describe("WP1-B reviewer row isolation", () => {
   });
 
   it.each(["admin", "super_admin"])("preserves %s oversight when no owner constraint is supplied", async () => {
-    expect((await getApplicationReviewById("review-b")).data?.reviewer_note).toBe("PRIVATE_B");
+    expect((await getApplicationReviewById("review-b", undefined, null)).data?.reviewer_note).toBe("PRIVATE_B");
   });
 });
 
@@ -185,8 +185,7 @@ describe("WP1-B read scope contract", () => {
       intakeBatchId: "batch-1",
       roleApplied: "mentee",
       scope,
-      actorRole: "reviewer",
-      actorAdminUserId: "reviewer-a"
+      actor: { role: "reviewer", adminUserId: "reviewer-a" }
     });
     const raw = JSON.stringify(result.data);
     expect(raw).not.toContain("candidate-secret@example.test");
@@ -194,9 +193,7 @@ describe("WP1-B read scope contract", () => {
     expect(raw).not.toContain("PRIVATE");
     expect(raw).not.toContain("other-review-secret");
     expect(raw).not.toContain("reviewer-b-secret");
-    expect(result.data[0].has_active_interview_review).toBe(true);
-    expect(result.data[0]).not.toHaveProperty("email_primary");
-    expect(result.data[0]).not.toHaveProperty("phone_primary");
+    expect(result.data).toEqual([]);
     expect(db.requests.filter((request) => request.table === "applications").every((request) =>
       !request.columns.includes("email_primary") && !request.columns.includes("phone_primary") && !request.columns.includes("raw_payload")
     )).toBe(true);
@@ -223,8 +220,7 @@ describe("WP1-B read scope contract", () => {
     }];
     const result = await getInterviewCandidates({
       intakeBatchId: "batch-1",
-      actorRole: "reviewer",
-      actorAdminUserId: "reviewer-a"
+      actor: { role: "reviewer", adminUserId: "reviewer-a" }
     });
     expect(result.data[0]).toMatchObject({
       interview_review_id: "owned-review",
@@ -247,8 +243,7 @@ describe("WP1-B read scope contract", () => {
     db.tables.application_reviews = [];
     const result = await getInterviewCandidates({
       intakeBatchId: "batch-1",
-      actorRole: "admin",
-      actorAdminUserId: "admin-a"
+      actor: { role: "admin", adminUserId: "admin-a" }
     });
     expect(result.data[0]).toMatchObject({
       email_primary: "candidate@example.test",

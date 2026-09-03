@@ -68,7 +68,14 @@ function clientFor(
     calls.push(table);
     if (table === "applications") {
       applicationsCalls += 1;
-      return chain(applicationsCalls === 1 ? { data: application } : {}, writes);
+      return chain(applicationsCalls === 1
+        ? { data: {
+            season_id: SEASON,
+            role_applied: "mentor",
+            status: "interview_passed",
+            ...application
+          } }
+        : { data: { id: APP } }, writes);
     }
     if (table === "admin_audit_log" && calls.filter((name) => name === "admin_audit_log").length === 1) {
       return chain({ data: options.confirmations ?? [], error: options.confirmationError ?? null }, writes);
@@ -86,6 +93,11 @@ function clientFor(
     if (table === "mentor_profiles") return chain({ data: { id: PROFILE, person_id: PERSON, mentor_code: "M01" } }, writes);
     return chain({}, writes);
   });
+  rpc.mockImplementation((name: string) => Promise.resolve(
+    name === "vam084_application_decision_eligibility"
+      ? { data: [{ eligible: true, reason: "eligible" }], error: null }
+      : { data: true, error: null }
+  ));
   return { client: { from, rpc }, from, rpc, writes, get membershipQuery() { return membershipQuery; } };
 }
 

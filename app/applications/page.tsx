@@ -8,6 +8,8 @@ import { displayCode, displayConsent, displayText, formatDate } from "@/lib/util
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { canDecide } from "@/lib/permissions";
 
 
 // ── Row type ──────────────────────────────────────────────────────────────────
@@ -106,6 +108,7 @@ export default async function ApplicationsPage() {
   return (
     <>
       <PageHeader title="Ứng tuyển" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
+      {canDecide(adminUser.role) && <div className="mb-4"><Link href="/applications/bulk-decision" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white">Bulk Final Decision</Link></div>}
       <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />
       <FilterableTable
         rows={rows}

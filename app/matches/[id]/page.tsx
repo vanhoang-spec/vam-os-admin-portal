@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader } from "@/components/ui";
 import { getMatch, getSeasons, keyById } from "@/lib/data";
 import { getMatchRelatedDisplayData } from "@/lib/matches";
+import { canBrowseOperations } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
@@ -10,9 +11,13 @@ import { redirect } from "next/navigation";
 export default async function MatchDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
+  // H2 fix: previously excluded only "viewer" by name (a denylist), so any
+  // other non-admin-tier role — including reviewer — fell through to full
+  // access. Replaced with the shared canBrowseOperations allowlist, before
+  // any protected data load.
   const adminUser = await getCurrentAdminUser();
   if (!adminUser) redirect("/login");
-  if (adminUser?.role === "viewer") redirect("/matches");
+  if (!canBrowseOperations(adminUser.role)) redirect("/matches");
 
   const scope = await getScopeFilter(await getAdminScopeContext());
   const [match, seasons] = await Promise.all([

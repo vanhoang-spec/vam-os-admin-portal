@@ -11,19 +11,21 @@
 import { vi, describe, it, expect, beforeEach, type Mock } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() }));
 vi.mock("@/lib/program-scope", () => ({
   getAdminScopeContext: vi.fn(),
   canReviewSeason: vi.fn(),
+  canOperateSeason: vi.fn(),
 }));
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { getAdminScopeContext, canReviewSeason } from "@/lib/program-scope";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { getAdminScopeContext, canReviewSeason, canOperateSeason } from "@/lib/program-scope";
 import {
   assignApplicationReview,
   saveApplicationReviewDraft,
   submitApplicationReview,
-  updateApplicationStatus,
 } from "@/lib/application-reviews";
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
@@ -47,11 +49,11 @@ function makeChain(result: { data?: unknown; error?: unknown } = {}): unknown {
   return chain;
 }
 
-function makeClient(fromResponses: unknown[]) {
+function makeClient(fromResponses: unknown[], rpc?: (name: string) => Promise<unknown>) {
   const fromMock = vi.fn();
   fromResponses.forEach((r) => fromMock.mockReturnValueOnce(r));
   fromMock.mockReturnValue(makeChain());
-  return { from: fromMock };
+  return { from: fromMock, rpc: rpc ?? vi.fn().mockResolvedValue({ data: null, error: null }) };
 }
 
 const APP_UUID    = "00000000-0000-4000-8000-000000000020";
@@ -80,8 +82,10 @@ function existingReview(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  (getCurrentAdminUser as Mock).mockResolvedValue({ id: ADMIN_ID, role: "admin" });
   (getAdminScopeContext as Mock).mockResolvedValue({ isSuperAdmin: true, seasons: [], programs: [] });
   (canReviewSeason as Mock).mockResolvedValue(true);
+  (canOperateSeason as Mock).mockResolvedValue(true);
 });
 
 // ── assignApplicationReview — DB error safety ─────────────────────────────────
@@ -90,11 +94,14 @@ describe("assignApplicationReview — DB error safety", () => {
   it("insert failure: raw DB message is not returned to caller", async () => {
     // Call sequence:
     // 1. from("applications") → scopeApp (canWriteReviewWorkflowForApplication)
-    // 2. from("application_reviews").insert → error
+    // 2. from("admin_users") → eligible target reviewer
+    // 3. from("application_reviews") → no duplicate
+    // 4. from("application_reviews").insert → error
     const client = makeClient([
       makeChain({ data: scopeApp() }),
+      makeChain({ data: [] }),
       makeChain({ data: null, error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
+    ], vi.fn().mockResolvedValue({ data: [{ id: "reviewer-1", role: "reviewer" }], error: null }));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await assignApplicationReview({
@@ -155,41 +162,13 @@ describe("submitApplicationReview — DB error safety", () => {
     const client = makeClient([
       makeChain({ data: existingReview() }),
       makeChain({ data: scopeApp() }),
-      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
+    ], vi.fn().mockResolvedValue({ data: null, error: { code: "42501", message: SENSITIVE_MSG } }));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await submitApplicationReview({
       reviewId: REVIEW_UUID,
       adminUserId: ADMIN_ID,
       recommendation: "approve",
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).not.toContain(SENSITIVE_MSG);
-      expect(result.message).not.toContain("INTERNAL");
-      expect(result.message.length).toBeGreaterThan(0);
-    }
-  });
-});
-
-// ── updateApplicationStatus — DB error safety ─────────────────────────────────
-
-describe("updateApplicationStatus — DB error safety", () => {
-  it("update failure: raw DB message is not returned to caller", async () => {
-    // Call sequence:
-    // 1. from("applications").select → scopeApp (canWriteReviewWorkflowForApplication)
-    // 2. from("applications").update → error (direct await)
-    const client = makeClient([
-      makeChain({ data: scopeApp() }),
-      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
-    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
-
-    const result = await updateApplicationStatus({
-      applicationId: APP_UUID,
-      newStatus: "under_review",
     });
 
     expect(result.ok).toBe(false);

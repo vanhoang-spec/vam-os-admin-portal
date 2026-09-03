@@ -30,10 +30,11 @@ const SAFE_ERROR =
   "Không thể thực hiện thao tác. Vui lòng thử lại hoặc liên hệ admin.";
 
 /** Statuses that allow a new self-claim to be created. */
-const INTERVIEW_ELIGIBLE_STATUSES = new Set([
+export const INTERVIEW_ELIGIBLE_STATUSES: ReadonlySet<string> = new Set([
   "invited_to_interview",
   "interview_scheduled",
-  "interview_in_progress"
+  "interview_in_progress",
+  "needs_more_review"
 ]);
 
 function log(scope: string, error: unknown) {
@@ -93,6 +94,13 @@ export async function claimInterviewReview(input: {
   if (!(await canReviewSeason(scopeContext, app.season_id as string | null))) {
     return { ok: false, message: "Ban khong co quyen review trong mua cua don nay." };
   }
+  const { data: participant, error: participantError } = await client.rpc(
+    "vam084_participant_for_stage",
+    { p_admin_user_id: actor.id, p_season_id: app.season_id, p_review_stage: "interview" }
+  );
+  if (participantError || participant !== true) {
+    return { ok: false, message: "Bạn không phải interviewer được cấp quyền cho mùa này." };
+  }
 
   const appStatus = String(app.status ?? "").trim();
   if (!INTERVIEW_ELIGIBLE_STATUSES.has(appStatus)) {
@@ -125,82 +133,10 @@ export async function claimInterviewReview(input: {
     };
   }
 
-  // --- Check if another reviewer already has an active (in_progress) claim
-  const { data: otherClaims, error: otherErr } = await client
-    .from("application_reviews")
-    .select("id,reviewer_admin_user_id,status")
-    .eq("application_id", appId)
-    .eq("review_round", "interview")
-    .in("status", ["assigned", "in_progress"])
-    .neq("reviewer_admin_user_id", actor.id)
-    .limit(1);
-
-  if (otherErr) {
-    // Non-fatal: log and proceed with claim
-    log("check other active claims (non-fatal)", otherErr);
-  }
-
-  const otherReview = (otherClaims ?? [])[0] ?? null;
-  if (otherReview) {
-    const otherReviewerId = otherReview.reviewer_admin_user_id as string | null;
-    let who = "một interviewer khác";
-    if (otherReviewerId) {
-      const { data: otherUser } = await client
-        .from("admin_users")
-        .select("full_name,email")
-        .eq("id", otherReviewerId)
-        .maybeSingle();
-      who =
-        (otherUser as { full_name?: string | null; email?: string | null } | null)?.full_name ??
-        (otherUser as { full_name?: string | null; email?: string | null } | null)?.email ??
-        who;
-    }
-    return {
-      ok: false,
-      message: `Ứng viên này đang được phỏng vấn bởi ${who}.`,
-      alreadyClaimed: true
-    };
-  }
-
-  // --- Create new interview review row
-  const now = new Date().toISOString();
-  const { data: newReview, error: insertErr } = await client
-    .from("application_reviews")
-    .insert({
-      application_id: appId,
-      review_round: "interview",
-      reviewer_admin_user_id: actor.id,
-      assigned_by: actor.id,
-      assigned_at: now,
-      status: "in_progress",
-      claimed_at: now,
-      claim_source: "self_claim"
-    })
-    .select("id")
-    .maybeSingle();
-
-  if (insertErr) {
-    log("insert interview review", insertErr);
-    return { ok: false, message: `Không thể tạo interview review: ${insertErr.message}` };
-  }
-  if (!newReview?.id) {
-    return { ok: false, message: SAFE_ERROR };
-  }
-
-  // --- Advance application status to interview_in_progress (non-fatal)
-  const { error: statusErr } = await client
-    .from("applications")
-    .update({ status: "interview_in_progress" })
-    .eq("id", appId)
-    .in("status", ["invited_to_interview", "interview_scheduled"]);
-
-  if (statusErr) {
-    log("advance status to interview_in_progress (non-fatal)", statusErr);
-  }
-
+  // S12 uses explicit Core Team assignment. A participant role alone never
+  // grants access to another applicant or creates a self-claimed assignment.
   return {
-    ok: true,
-    message: "Đã bắt đầu phỏng vấn.",
-    reviewId: String(newReview.id)
+    ok: false,
+    message: "Bạn chưa được phân công phỏng vấn ứng viên này."
   };
 }

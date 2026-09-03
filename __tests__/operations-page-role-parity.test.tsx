@@ -181,7 +181,7 @@ beforeEach(() => {
 });
 
 describe("1-2. one aggregate truth across roles", () => {
-  it("Super Admin, scoped Admin and scoped Reviewer render identical KPI cards", async () => {
+  it("Super Admin and scoped Admin render identical KPI cards", async () => {
     signIn("super_admin", "auth-super");
     const superAdmin = readKpis((await renderOperations()).container);
 
@@ -190,20 +190,27 @@ describe("1-2. one aggregate truth across roles", () => {
     grant("auth-admin", { program_id: UEH_PROGRAM, role: "operations" });
     const admin = readKpis((await renderOperations()).container);
 
-    db.tables.admin_scope_access = [];
-    signIn("reviewer", "auth-reviewer");
-    grant("auth-reviewer", { season_id: UEH_SEASON, role: "review" });
-    const reviewer = readKpis((await renderOperations()).container);
-
     expect(Object.keys(superAdmin).length).toBeGreaterThan(5);
     expect(admin).toEqual(superAdmin);
-    expect(reviewer).toEqual(superAdmin);
 
     // The values the scoped path used to lose entirely.
     expect(superAdmin["Số recap trong tháng"]).toBe("18");
     expect(superAdmin["Mentee active"]).toBe("15");
     expect(superAdmin["Mentor active"]).toBe("3");
     expect(superAdmin["Mentor chưa có recap"]).toBe("435");
+  });
+
+  // H2: a season "review" scope grant is not a global role. Before the H2
+  // fix this page gated only on canReadSeason (true for ANY scope level,
+  // "review" included), so a reviewer with this exact grant used to render
+  // full KPI parity with Super Admin. See m090-r1-authorization-boundary
+  // for the full reviewer-denial behavioral suite.
+  it("a Reviewer with a valid season review grant is denied, not given KPI parity", async () => {
+    signIn("reviewer", "auth-reviewer");
+    grant("auth-reviewer", { season_id: UEH_SEASON, role: "review" });
+    const { container } = await renderOperations();
+    expect(container.textContent).toContain("Không có quyền truy cập");
+    expect(container.textContent).not.toContain("Số recap trong tháng");
   });
 
   it("a scoped Admin sees no other program's rows in the aggregate", async () => {

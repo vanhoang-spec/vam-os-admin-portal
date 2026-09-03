@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { enableMentorAsReviewer } from "@/lib/enable-reviewer";
+import {
+  enableMentorAsReviewer,
+  revokeMentorRecruitmentParticipation
+} from "@/lib/enable-reviewer";
 import type { EnableReviewerActionState } from "@/lib/enable-reviewer-action-types";
 
 export async function enableMentorAsReviewerAction(
@@ -10,9 +13,21 @@ export async function enableMentorAsReviewerAction(
 ): Promise<EnableReviewerActionState> {
   try {
     const personId = String(formData.get("person_id") ?? "").trim();
+    const seasonId = String(formData.get("season_id") ?? "").trim();
+    const participationRole = String(formData.get("participation_role") ?? "").trim();
+    const operation = String(formData.get("operation") ?? "grant").trim();
     if (!personId) return { ok: false, message: "Thiếu person_id." };
+    if (!seasonId) return { ok: false, message: "Vui lòng chọn batch có mùa." };
+    if (participationRole !== "reviewer" && participationRole !== "interviewer") {
+      return { ok: false, message: "Vai trò tham gia không hợp lệ." };
+    }
 
-    const result = await enableMentorAsReviewer({ personId });
+    if (operation !== "grant" && operation !== "revoke") {
+      return { ok: false, message: "Thao tác quyền tham gia không hợp lệ." };
+    }
+    const result = operation === "revoke"
+      ? await revokeMentorRecruitmentParticipation({ personId, seasonId, participationRole })
+      : await enableMentorAsReviewer({ personId, seasonId, participationRole });
 
     if (result.ok) {
       revalidatePath("/reviews/reviewer-pool");
