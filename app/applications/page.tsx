@@ -9,7 +9,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { canAssignReview, canDecide } from "@/lib/permissions";
+import { canAssignReview } from "@/lib/permissions";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 
@@ -114,32 +114,20 @@ export default async function ApplicationsPage() {
   return (
     <>
       <PageHeader title="Ứng tuyển" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
-      {(canDecide(adminUser.role) || (canAssignReview(adminUser.role) && exportSeasonId)) && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {canDecide(adminUser.role) && (
-            <Link href="/applications/bulk-decision" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white">Bulk Final Decision</Link>
-          )}
-          {/* Scoped to the current operating season so the export matches what
-              this screen is about, rather than silently spanning every season
-              the caller can read. Role/stage narrowing is done on the export
-              URL itself; the two route files under app/api/exports document
-              the full parameter contract. */}
-          {canAssignReview(adminUser.role) && exportSeasonId && (
-            <>
-              <a
-                href={`/api/exports/recruitment-results?season_id=${exportSeasonId}`}
-                className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
-              >
-                Xuất kết quả tuyển
-              </a>
-              <a
-                href={`/api/exports/review-scores?season_id=${exportSeasonId}`}
-                className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
-              >
-                Xuất điểm review
-              </a>
-            </>
-          )}
+      {/* M090 shipped a "Bulk Final Decision" entry point here. It is a broad
+          multi-transition mutation surface that is NOT part of the current
+          Production baseline, has had no Owner mutation UAT, and is easily
+          confused with M092 Bulk Official Approval. The entry point is hidden
+          for this slice; /applications/bulk-decision and its action are left
+          intact and directly reachable for later controlled UAT. */}
+      {canAssignReview(adminUser.role) && exportSeasonId && (
+        <div className="mb-4">
+          <Link
+            href="/applications/exports"
+            className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Xuất kết quả tuyển / điểm review
+          </Link>
         </div>
       )}
       <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />

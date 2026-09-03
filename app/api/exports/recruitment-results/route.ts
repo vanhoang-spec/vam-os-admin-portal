@@ -7,11 +7,14 @@ import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import {
   APPLICATION_STATUSES,
   DECISION_OUTCOMES,
+  OPERATIONAL_GROUPS,
   ROLE_VALUES,
   STAGE_VALUES,
+  classifyOperational,
   classifyOutcome,
   currentStage,
   deriveDecisions,
+  matchesOperationalGroup,
   parseEnum,
   parseEnumList,
   parseUuid
@@ -35,6 +38,13 @@ export const dynamic = "force-dynamic";
  *   screening_decision   passed|rejected|waitlisted|needs_more_review|pending
  *   interview_decision   (same domain)                         derived
  *   final_decision       (same domain)                         derived
+ *   operational_group    passed_screening|passed_interview|approved|
+ *                        rejected|needs_more_review             derived
+ *
+ * The *_decision parameters filter on AUDIT evidence only. operational_group
+ * filters on current-state classification, which also counts applications
+ * whose audit trail is missing. They are separate questions and are answered
+ * by separate columns; neither overwrites the other.
  *
  * At least one of `intake_batch_id` / `season_id` is required. An unscoped
  * export would dump every applicant's PII across every season the caller can
@@ -71,6 +81,8 @@ export async function GET(request: Request) {
   if (!interviewParam.ok) return new NextResponse(interviewParam.message, { status: 400 });
   const finalParam = parseEnum(searchParams, "final_decision", DECISION_OUTCOMES);
   if (!finalParam.ok) return new NextResponse(finalParam.message, { status: 400 });
+  const groupParam = parseEnum(searchParams, "operational_group", OPERATIONAL_GROUPS);
+  if (!groupParam.ok) return new NextResponse(groupParam.message, { status: 400 });
 
   const intakeBatchId = batchParam.value;
   const seasonId = seasonParam.value;
@@ -219,18 +231,27 @@ export async function GET(request: Request) {
     "Thời điểm phỏng vấn",
     "Kết quả cuối cùng",
     "Thời điểm quyết định cuối",
+    "Đã qua vòng hồ sơ (hiện tại)",
+    "Đã qua vòng phỏng vấn (hiện tại)",
+    "Đã duyệt chính thức",
+    "Cơ sở phân loại",
     "Thời điểm nộp"
   ];
+
+  const yesNo = (value: boolean) => (value ? "có" : "không");
 
   const body: unknown[][] = [];
   for (const app of applications ?? []) {
     const derived = deriveDecisions(decisionsByApplication.get(String(app.id)) ?? []);
     const stage = currentStage(app.status, derived);
 
+    const operational = classifyOperational(app.status, derived);
+
     if (stageParam.value && stage !== stageParam.value) continue;
     if (screeningParam.value && classifyOutcome(derived.screening) !== screeningParam.value) continue;
     if (interviewParam.value && classifyOutcome(derived.interview) !== interviewParam.value) continue;
     if (finalParam.value && classifyOutcome(derived.final) !== finalParam.value) continue;
+    if (groupParam.value && !matchesOperationalGroup(groupParam.value, operational)) continue;
 
     body.push([
       app.id,
@@ -248,6 +269,10 @@ export async function GET(request: Request) {
       derived.interview?.at ?? "",
       derived.final?.status ?? "",
       derived.final?.at ?? "",
+      yesNo(operational.passedScreening),
+      yesNo(operational.passedInterview),
+      yesNo(operational.officiallyApproved),
+      operational.basis,
       app.submitted_at
     ]);
   }

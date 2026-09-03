@@ -239,6 +239,153 @@ export function parseEnumList<T extends string>(
   return { ok: true, value: Array.from(new Set(values)) };
 }
 
+// ── Current-state operational classification ─────────────────────────────────
+//
+// The audit fields above are exact evidence, but Owner UAT on real Staging data
+// showed the trail is incomplete for older/UAT flows: of 16 finally-approved
+// applications, 11 had no screening decision row and all 16 had no interview
+// decision row. So `screening_decision=passed` answers "who has an audit row
+// proving they passed screening", NOT "who operationally passed screening".
+// Those are different questions and Core Team needs both.
+//
+// The operational answer is derived ONLY where the canonical lifecycle PROVES
+// the state is unreachable otherwise. Two facts in the deployed model carry
+// that proof (supabase/migrations/20260830070430, sections 4 and 8):
+//
+//   1. vam084_recompute_application_review_status guards its two branches on
+//      DISJOINT status sets. The interview branch only ever fires when the
+//      application already holds one of
+//      {invited_to_interview, interview_scheduled, interview_in_progress,
+//       interview_completed, ready_for_final_decision, needs_more_review}.
+//      Nothing else can produce ready_for_final_decision or
+//      interview_in_progress.
+//   2. vam084_application_decision_eligibility gates invited_to_interview on
+//      status = 'screening_passed' AND the profile-review minimum, and gates
+//      interview_passed / approved_as_* behind the interview minimum.
+//
+// Therefore every interview-set status except needs_more_review is reachable
+// only by having passed screening first. needs_more_review is deliberately
+// excluded: it is the one status that appears in BOTH recompute guards, so it
+// proves nothing on its own.
+//
+// invited_to_meeting and invited_to_orientation are also excluded. They exist
+// in applications_status_check and have display labels, but no code path, RPC
+// or transition in this repository ever sets them — the state machine does not
+// prove how they are reached, so nothing is inferred from them.
+
+/** Statuses unreachable without screening having been passed. */
+export const PROVES_SCREENING_PASSED: ReadonlySet<string> = new Set([
+  "screening_passed",
+  "invited_to_interview",
+  "interview_scheduled",
+  "interview_in_progress",
+  "interview_completed",
+  "ready_for_final_decision",
+  "interview_passed",
+  "approved_as_mentor",
+  "approved_as_mentee"
+]);
+
+/**
+ * Statuses unreachable without the interview having been passed.
+ * ready_for_final_decision is NOT here: it means the interview reviews are in,
+ * not that the pass decision was made.
+ */
+export const PROVES_INTERVIEW_PASSED: ReadonlySet<string> = new Set([
+  "interview_passed",
+  "approved_as_mentor",
+  "approved_as_mentee"
+]);
+
+export const PROVES_OFFICIAL_APPROVAL: ReadonlySet<string> = new Set([
+  "approved_as_mentor",
+  "approved_as_mentee"
+]);
+
+const REJECTED_STATUSES: ReadonlySet<string> = new Set(["rejected_or_not_fit", "withdrawn"]);
+
+/** How the operational columns on a row were evidenced. */
+export type EvidenceBasis = "" | "audit" | "current_status" | "audit+current_status";
+
+export type OperationalClassification = {
+  passedScreening: boolean;
+  passedInterview: boolean;
+  officiallyApproved: boolean;
+  rejected: boolean;
+  needsMoreReview: boolean;
+  basis: EvidenceBasis;
+};
+
+/**
+ * Current-state operational grouping. Never mutates or backfills the audit
+ * fields — the two live side by side in the export so a blank audit column and
+ * a positive operational column together tell Core Team exactly what is known
+ * and how.
+ */
+export function classifyOperational(status: unknown, derived: DerivedDecisions): OperationalClassification {
+  const value = String(status ?? "").trim();
+
+  const statusScreening = PROVES_SCREENING_PASSED.has(value);
+  const statusInterview = PROVES_INTERVIEW_PASSED.has(value);
+  const statusApproved = PROVES_OFFICIAL_APPROVAL.has(value);
+  const rejected = REJECTED_STATUSES.has(value);
+  const needsMoreReview = value === "needs_more_review";
+
+  const auditScreening = derived.screening?.status === "screening_passed";
+  const auditInterview = derived.interview?.status === "interview_passed";
+  const auditApproved = Boolean(derived.final && PROVES_OFFICIAL_APPROVAL.has(derived.final.status));
+  const auditRejected =
+    classifyOutcome(derived.screening) === "rejected" ||
+    classifyOutcome(derived.interview) === "rejected" ||
+    classifyOutcome(derived.final) === "rejected";
+
+  const auditSupport = auditScreening || auditInterview || auditApproved || auditRejected;
+  const statusSupport = statusScreening || statusInterview || statusApproved || rejected || needsMoreReview;
+
+  const basis: EvidenceBasis =
+    auditSupport && statusSupport
+      ? "audit+current_status"
+      : auditSupport
+        ? "audit"
+        : statusSupport
+          ? "current_status"
+          : "";
+
+  return {
+    passedScreening: statusScreening || auditScreening,
+    passedInterview: statusInterview || auditInterview,
+    officiallyApproved: statusApproved || auditApproved,
+    rejected: rejected || auditRejected,
+    needsMoreReview,
+    basis
+  };
+}
+
+/** Operational grouping offered to Core Team in the export UI. */
+export const OPERATIONAL_GROUPS = [
+  "passed_screening",
+  "passed_interview",
+  "approved",
+  "rejected",
+  "needs_more_review"
+] as const;
+export type OperationalGroup = (typeof OPERATIONAL_GROUPS)[number];
+
+export function matchesOperationalGroup(group: OperationalGroup, classification: OperationalClassification): boolean {
+  switch (group) {
+    case "passed_screening":
+      return classification.passedScreening;
+    case "passed_interview":
+      return classification.passedInterview;
+    case "approved":
+      return classification.officiallyApproved;
+    case "rejected":
+      return classification.rejected;
+    case "needs_more_review":
+      return classification.needsMoreReview;
+  }
+}
+
 /** Per-stage outcome filter domain. */
 export const DECISION_OUTCOMES = ["passed", "rejected", "waitlisted", "needs_more_review", "pending"] as const;
 export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
