@@ -148,6 +148,7 @@ export const PAGE_ORDER = {
   action_items: { strategy: "keyset", key: "id" },
   admin_users: { strategy: "keyset", key: "id" },
   application_answers: { strategy: "keyset", key: "id" },
+  application_decisions: { strategy: "keyset", key: "id" },
   application_reviews: { strategy: "keyset", key: "id" },
   applications: { strategy: "keyset", key: "id" },
   event_links: { strategy: "keyset", key: "id" },

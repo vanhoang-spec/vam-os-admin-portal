@@ -54,8 +54,11 @@ data_imports/ham/ham_identity_duplicate_names.csv
 data_imports/**/_*.txt
 data_imports/**/_*.log
 
-# Exports — binary team guides and generated documents (not source code)
-exports/
+# Exports — binary team guides and generated documents (not source code).
+# Anchored to the repo root on purpose: an unanchored "exports/" also matches
+# app/api/exports/, a real source directory, and silently hid its route.ts
+# files from `git status` and from the commit.
+/exports/
 # HAM raw local workbooks / source exports
 data_imports/ham/*.xlsx
 data_imports/ham/*.xls

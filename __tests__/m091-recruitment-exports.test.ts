@@ -42,8 +42,32 @@ function application(over: Record<string, unknown> = {}) {
     intake_batch_id: BATCH,
     status: "submitted",
     submitted_at: "2026-08-01T00:00:00Z",
-    application_decisions: [],
     ...over
+  };
+}
+
+/**
+ * A decision row as PostgREST returns it for the aliased `!inner` embed: the
+ * parent is nested under the alias the embed was requested as, which is also
+ * what the batch/season/role/status filters resolve against.
+ */
+function decision(over: Record<string, unknown> = {}) {
+  const parent = (over.application as Record<string, unknown>) ?? {
+    id: uuid(1),
+    season_id: SEASON,
+    intake_batch_id: BATCH,
+    role_applied: "mentor",
+    status: "submitted"
+  };
+  return {
+    id: uuid(1),
+    application_id: parent.id,
+    decision: null,
+    new_status: "screening_passed",
+    previous_status: "screening_completed",
+    created_at: "2026-08-02T00:00:00Z",
+    ...over,
+    application: parent
   };
 }
 
@@ -86,6 +110,7 @@ beforeEach(() => {
   ];
   db.tables.applications = [];
   db.tables.application_reviews = [];
+  db.tables.application_decisions = [];
 });
 
 function req(path: string, query: string) {
@@ -116,6 +141,44 @@ describe("export routes — authorization", () => {
     vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "v", role: "viewer" } as never);
     const res = await handler(req("/x", `season_id=${SEASON}`));
     expect(res.status).toBe(403);
+  });
+
+  // A pure `reviewer` holds canReview (they score applications) but NOT
+  // canAssignReview. Both exports carry candidate PII — name and email on the
+  // results file, and candidate name/email alongside every reviewer's scores
+  // and notes on the scores file — so a reviewer must never be able to
+  // download either, in any season, however they were granted review scope.
+  it.each([
+    ["results", resultsGet],
+    ["scores", scoresGet]
+  ])("%s denies a pure reviewer role the candidate PII download", async (_name, handler) => {
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "rev", role: "reviewer" } as never);
+    const res = await handler(req("/x", `season_id=${SEASON}`));
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe("Forbidden");
+  });
+
+  it.each([
+    ["results", resultsGet],
+    ["scores", scoresGet]
+  ])("%s denies a reviewer even with full season scope granted", async (_name, handler) => {
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "rev", role: "reviewer" } as never);
+    vi.mocked(canOperateSeason).mockResolvedValue(true as never);
+    db.tables.applications = [application()];
+    db.tables.application_reviews = [review()];
+    const res = await handler(req("/x", `intake_batch_id=${BATCH}`));
+    expect(res.status).toBe(403);
+  });
+
+  it.each([
+    ["results", resultsGet],
+    ["scores", scoresGet]
+  ])("%s admits the admin tiers that hold canAssignReview", async (_name, handler) => {
+    for (const role of ["super_admin", "admin", "core_team"]) {
+      vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: role, role } as never);
+      const res = await handler(req("/x", `season_id=${SEASON}`));
+      expect(res.status).toBe(200);
+    }
   });
 
   it.each([
@@ -183,16 +246,12 @@ describe("filter contract — invalid values fail closed", () => {
 
 describe("recruitment results — per-stage decision derivation", () => {
   it("distinguishes screening, interview and final outcomes instead of one pass concept", async () => {
-    db.tables.applications = [
-      application({
-        id: uuid(1),
-        status: "approved_as_mentor",
-        application_decisions: [
-          { new_status: "screening_passed", previous_status: "screening_completed", created_at: "2026-08-02T00:00:00Z" },
-          { new_status: "interview_passed", previous_status: "ready_for_final_decision", created_at: "2026-08-04T00:00:00Z" },
-          { new_status: "approved_as_mentor", previous_status: "interview_passed", created_at: "2026-08-05T00:00:00Z" }
-        ]
-      })
+    const parent = { id: uuid(1), season_id: SEASON, intake_batch_id: BATCH, role_applied: "mentor", status: "approved_as_mentor" };
+    db.tables.applications = [application({ id: uuid(1), status: "approved_as_mentor" })];
+    db.tables.application_decisions = [
+      decision({ id: uuid(1), application: parent, new_status: "screening_passed", created_at: "2026-08-02T00:00:00Z" }),
+      decision({ id: uuid(2), application: parent, new_status: "interview_passed", created_at: "2026-08-04T00:00:00Z" }),
+      decision({ id: uuid(3), application: parent, new_status: "approved_as_mentor", created_at: "2026-08-05T00:00:00Z" })
     ];
     const res = await resultsGet(req("/x", `season_id=${SEASON}`));
     const rows = parseCsv(await res.text());
@@ -206,24 +265,18 @@ describe("recruitment results — per-stage decision derivation", () => {
   });
 
   it("attributes an ambiguous rejection to the stage it actually happened in", async () => {
+    const p1 = { id: uuid(1), season_id: SEASON, intake_batch_id: BATCH, role_applied: "mentor", status: "rejected_or_not_fit" };
+    const p2 = { id: uuid(2), season_id: SEASON, intake_batch_id: BATCH, role_applied: "mentor", status: "rejected_or_not_fit" };
     db.tables.applications = [
       // Rejected during screening — never reached the interview stage.
-      application({
-        id: uuid(1),
-        status: "rejected_or_not_fit",
-        application_decisions: [
-          { new_status: "rejected_or_not_fit", previous_status: "screening_completed", created_at: "2026-08-02T00:00:00Z" }
-        ]
-      }),
+      application({ id: uuid(1), status: "rejected_or_not_fit" }),
       // Same terminal status, but rejected after passing screening.
-      application({
-        id: uuid(2),
-        status: "rejected_or_not_fit",
-        application_decisions: [
-          { new_status: "screening_passed", previous_status: "screening_completed", created_at: "2026-08-02T00:00:00Z" },
-          { new_status: "rejected_or_not_fit", previous_status: "interview_completed", created_at: "2026-08-06T00:00:00Z" }
-        ]
-      })
+      application({ id: uuid(2), status: "rejected_or_not_fit" })
+    ];
+    db.tables.application_decisions = [
+      decision({ id: uuid(1), application: p1, new_status: "rejected_or_not_fit", created_at: "2026-08-02T00:00:00Z" }),
+      decision({ id: uuid(2), application: p2, new_status: "screening_passed", created_at: "2026-08-02T00:00:00Z" }),
+      decision({ id: uuid(3), application: p2, new_status: "rejected_or_not_fit", created_at: "2026-08-06T00:00:00Z" })
     ];
     const res = await resultsGet(req("/x", `season_id=${SEASON}`));
     const [, first, second] = parseCsv(await res.text());
@@ -234,7 +287,7 @@ describe("recruitment results — per-stage decision derivation", () => {
   });
 
   it("leaves decision columns empty rather than inventing an outcome with no audit row", async () => {
-    db.tables.applications = [application({ status: "screening_passed", application_decisions: [] })];
+    db.tables.applications = [application({ status: "screening_passed" })];
     const res = await resultsGet(req("/x", `season_id=${SEASON}`));
     const [, row] = parseCsv(await res.text());
     expect(row[6]).toBe("screening_passed");
@@ -244,15 +297,12 @@ describe("recruitment results — per-stage decision derivation", () => {
   });
 
   it("filters by derived per-stage outcome", async () => {
-    db.tables.applications = [
-      application({
-        id: uuid(1),
-        application_decisions: [{ new_status: "screening_passed", created_at: "2026-08-02T00:00:00Z" }]
-      }),
-      application({
-        id: uuid(2),
-        application_decisions: [{ new_status: "rejected_or_not_fit", created_at: "2026-08-02T00:00:00Z" }]
-      })
+    const q1 = { id: uuid(1), season_id: SEASON, intake_batch_id: BATCH, role_applied: "mentor", status: "submitted" };
+    const q2 = { id: uuid(2), season_id: SEASON, intake_batch_id: BATCH, role_applied: "mentor", status: "submitted" };
+    db.tables.applications = [application({ id: uuid(1) }), application({ id: uuid(2) })];
+    db.tables.application_decisions = [
+      decision({ id: uuid(1), application: q1, new_status: "screening_passed", created_at: "2026-08-02T00:00:00Z" }),
+      decision({ id: uuid(2), application: q2, new_status: "rejected_or_not_fit", created_at: "2026-08-02T00:00:00Z" })
     ];
     const passed = parseCsv(await (await resultsGet(req("/x", `season_id=${SEASON}&screening_decision=passed`))).text());
     expect(passed).toHaveLength(2);
@@ -377,6 +427,68 @@ describe("exports page to exhaustion", () => {
     );
     const rows = parseCsv(await (await resultsGet(req("/x", `season_id=${SEASON}`))).text());
     expect(rows).toHaveLength(2501);
+  });
+
+  it("reads every application_decisions row beyond the cap, not just the first page", async () => {
+    // One application carrying a decision history far longer than the
+    // PostgREST cap. As a nested embed this history had no cursor of its own
+    // and would be silently truncated; as its own keyset-paged read the final
+    // decision is still reached, which is the only reason the export can
+    // report the correct final outcome.
+    const parent = {
+      id: uuid(1),
+      season_id: SEASON,
+      intake_batch_id: BATCH,
+      role_applied: "mentor",
+      status: "approved_as_mentor"
+    };
+    db.tables.applications = [application({ id: uuid(1), status: "approved_as_mentor" })];
+    db.tables.application_decisions = [
+      decision({ id: uuid(1), application: parent, new_status: "screening_passed", created_at: "2026-08-01T00:00:00Z" }),
+      // 2500 intervening needs_more_review cycles.
+      ...Array.from({ length: 2500 }, (_, i) =>
+        decision({
+          id: uuid(i + 2),
+          application: parent,
+          new_status: "needs_more_review",
+          created_at: `2026-08-02T00:00:${String(i % 60).padStart(2, "0")}Z`
+        })
+      ),
+      decision({ id: uuid(2600), application: parent, new_status: "interview_passed", created_at: "2026-09-01T00:00:00Z" }),
+      decision({ id: uuid(2601), application: parent, new_status: "approved_as_mentor", created_at: "2026-09-02T00:00:00Z" })
+    ];
+
+    const rows = parseCsv(await (await resultsGet(req("/x", `season_id=${SEASON}`))).text());
+    const pages = requestsFor(db, "application_decisions");
+    expect(pages.length).toBeGreaterThan(1);
+    expect(pages.reduce((sum, page) => sum + page.returned, 0)).toBe(2503);
+    // Outcomes from the far end of the history survived.
+    expect(rows[1][11]).toBe("interview_passed");
+    expect(rows[1][13]).toBe("approved_as_mentor");
+  });
+
+  it("re-applies the decision-read scope on every decisions page", async () => {
+    const inScope = { id: uuid(1), season_id: SEASON, intake_batch_id: BATCH, role_applied: "mentor", status: "submitted" };
+    const outOfScope = { id: uuid(2), season_id: OTHER_SEASON, intake_batch_id: OTHER_BATCH, role_applied: "mentee", status: "submitted" };
+    db.tables.applications = [application({ id: uuid(1) })];
+    db.tables.application_decisions = [
+      ...Array.from({ length: 1400 }, (_, i) =>
+        decision({ id: uuid(i + 1), application: inScope, new_status: "needs_more_review", created_at: "2026-08-02T00:00:00Z" })
+      ),
+      ...Array.from({ length: 1400 }, (_, i) =>
+        decision({ id: uuid(i + 2000), application: outOfScope, new_status: "screening_passed", created_at: "2026-08-02T00:00:00Z" })
+      )
+    ];
+
+    await resultsGet(req("/x", `intake_batch_id=${BATCH}&role_applied=mentor`));
+    const pages = requestsFor(db, "application_decisions");
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages) {
+      expect(page.filters).toContain("application.intake_batch_id");
+      expect(page.filters).toContain("application.role_applied");
+    }
+    // No out-of-scope decision was ever returned, on any page.
+    expect(pages.reduce((sum, page) => sum + page.returned, 0)).toBe(1400);
   });
 
   it("returns every review row beyond the cap", async () => {
