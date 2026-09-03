@@ -42,6 +42,9 @@
 --     written by vam084_change_review_assignment, so it is created here too.
 --   * the two UEHM-S12 stage-requirement rows are seeded, because the
 --     eligibility gate refuses every approval when they are absent.
+--   * a partial unique index on admin_scope_access is added, because
+--     vam084_grant_recruitment_participation's ON CONFLICT has no matching
+--     index on Production (see section 1d).
 --
 -- SAFETY
 --   Additive and idempotent: CREATE TABLE IF NOT EXISTS + CREATE OR REPLACE
@@ -131,6 +134,35 @@ alter table public.recruitment_assignment_events force row level security;
 revoke all on table public.recruitment_assignment_events from public;
 revoke all on table public.recruitment_assignment_events from anon, authenticated;
 grant all on table public.recruitment_assignment_events to service_role;
+
+-- --------------------------------------------------------------------------
+-- 1d. Partial unique index required by vam084_grant_recruitment_participation.
+--
+--     That function upserts the operator's scope row with:
+--       on conflict (user_id, (coalesce(program_id,'')), (coalesce(season_id,'')), role)
+--         where (status = 'active') do nothing
+--     PostgreSQL resolves ON CONFLICT against a matching unique index. Staging
+--     has one (admin_scope_access_unique_active_scope_idx); PRODUCTION DOES NOT.
+--     Production instead carries admin_scope_access_active_scope_key on
+--     (user_id, program_id, season_id) NULLS NOT DISTINCT WHERE status='active'
+--     — different columns, so it cannot serve this ON CONFLICT.
+--
+--     Without this index the function installs cleanly and then fails at call
+--     time with "there is no unique or exclusion constraint matching the ON
+--     CONFLICT specification". That is exactly what the schema-only rehearsal
+--     against a Production clone reproduced.
+--
+--     Safe to add: this index keys on (user, program, season, ROLE) among
+--     active rows, which is strictly WEAKER than the uniqueness Production
+--     already enforces on (user, program, season) among active rows. Anything
+--     satisfying the existing index satisfies this one, so the build cannot
+--     fail on existing data — confirmed read-only against Production
+--     (17 active rows, 0 violating groups). The existing index is left in place.
+-- --------------------------------------------------------------------------
+create unique index if not exists admin_scope_access_unique_active_scope_idx
+  on public.admin_scope_access using btree
+  (user_id, coalesce(program_id, ''::text), coalesce(season_id, ''::text), role)
+  where (status = 'active'::text);
 
 -- --------------------------------------------------------------------------
 -- 1c. Stage-requirement configuration for the current season.
@@ -1246,6 +1278,9 @@ $function$;
 -- --------------------------------------------------------------------------
 -- 3. Execute ACL — service_role only, matching Staging exactly.
 --    These are trusted RPCs: anon/authenticated must never execute them.
+--    Argument lists here are IDENTITY arguments (names + types, no DEFAULT
+--    clauses): REVOKE/GRANT ON FUNCTION rejects a default in the signature,
+--    even though CREATE FUNCTION requires it.
 -- --------------------------------------------------------------------------
 revoke all on function public.vam084_operator_for_season(p_actor uuid, p_season_id uuid) from public;
 revoke all on function public.vam084_operator_for_season(p_actor uuid, p_season_id uuid) from anon, authenticated;
@@ -1265,24 +1300,24 @@ grant execute on function public.vam084_application_decision_eligibility(p_appli
 revoke all on function public.vam084_recompute_application_review_status(p_application_id uuid, p_review_stage text) from public;
 revoke all on function public.vam084_recompute_application_review_status(p_application_id uuid, p_review_stage text) from anon, authenticated;
 grant execute on function public.vam084_recompute_application_review_status(p_application_id uuid, p_review_stage text) to service_role;
-revoke all on function public.vam084_submit_application_review(p_review_id uuid, p_actor uuid, p_score_motivation integer DEFAULT NULL::integer, p_score_goal_clarity integer DEFAULT NULL::integer, p_score_commitment integer DEFAULT NULL::integer, p_score_fit integer DEFAULT NULL::integer, p_score_communication integer DEFAULT NULL::integer, p_recommendation text DEFAULT NULL::text, p_reviewer_note text DEFAULT NULL::text) from public;
-revoke all on function public.vam084_submit_application_review(p_review_id uuid, p_actor uuid, p_score_motivation integer DEFAULT NULL::integer, p_score_goal_clarity integer DEFAULT NULL::integer, p_score_commitment integer DEFAULT NULL::integer, p_score_fit integer DEFAULT NULL::integer, p_score_communication integer DEFAULT NULL::integer, p_recommendation text DEFAULT NULL::text, p_reviewer_note text DEFAULT NULL::text) from anon, authenticated;
-grant execute on function public.vam084_submit_application_review(p_review_id uuid, p_actor uuid, p_score_motivation integer DEFAULT NULL::integer, p_score_goal_clarity integer DEFAULT NULL::integer, p_score_commitment integer DEFAULT NULL::integer, p_score_fit integer DEFAULT NULL::integer, p_score_communication integer DEFAULT NULL::integer, p_recommendation text DEFAULT NULL::text, p_reviewer_note text DEFAULT NULL::text) to service_role;
-revoke all on function public.vam084_change_review_assignment(p_review_id uuid, p_actor uuid, p_reason text, p_new_reviewer uuid DEFAULT NULL::uuid) from public;
-revoke all on function public.vam084_change_review_assignment(p_review_id uuid, p_actor uuid, p_reason text, p_new_reviewer uuid DEFAULT NULL::uuid) from anon, authenticated;
-grant execute on function public.vam084_change_review_assignment(p_review_id uuid, p_actor uuid, p_reason text, p_new_reviewer uuid DEFAULT NULL::uuid) to service_role;
-revoke all on function public.vam084_apply_application_decisions(p_application_ids uuid[], p_new_status text, p_actor uuid, p_decision_note text DEFAULT NULL::text, p_expected_statuses jsonb DEFAULT '{}'::jsonb) from public;
-revoke all on function public.vam084_apply_application_decisions(p_application_ids uuid[], p_new_status text, p_actor uuid, p_decision_note text DEFAULT NULL::text, p_expected_statuses jsonb DEFAULT '{}'::jsonb) from anon, authenticated;
-grant execute on function public.vam084_apply_application_decisions(p_application_ids uuid[], p_new_status text, p_actor uuid, p_decision_note text DEFAULT NULL::text, p_expected_statuses jsonb DEFAULT '{}'::jsonb) to service_role;
+revoke all on function public.vam084_submit_application_review(p_review_id uuid, p_actor uuid, p_score_motivation integer, p_score_goal_clarity integer, p_score_commitment integer, p_score_fit integer, p_score_communication integer, p_recommendation text, p_reviewer_note text) from public;
+revoke all on function public.vam084_submit_application_review(p_review_id uuid, p_actor uuid, p_score_motivation integer, p_score_goal_clarity integer, p_score_commitment integer, p_score_fit integer, p_score_communication integer, p_recommendation text, p_reviewer_note text) from anon, authenticated;
+grant execute on function public.vam084_submit_application_review(p_review_id uuid, p_actor uuid, p_score_motivation integer, p_score_goal_clarity integer, p_score_commitment integer, p_score_fit integer, p_score_communication integer, p_recommendation text, p_reviewer_note text) to service_role;
+revoke all on function public.vam084_change_review_assignment(p_review_id uuid, p_actor uuid, p_reason text, p_new_reviewer uuid) from public;
+revoke all on function public.vam084_change_review_assignment(p_review_id uuid, p_actor uuid, p_reason text, p_new_reviewer uuid) from anon, authenticated;
+grant execute on function public.vam084_change_review_assignment(p_review_id uuid, p_actor uuid, p_reason text, p_new_reviewer uuid) to service_role;
+revoke all on function public.vam084_apply_application_decisions(p_application_ids uuid[], p_new_status text, p_actor uuid, p_decision_note text, p_expected_statuses jsonb) from public;
+revoke all on function public.vam084_apply_application_decisions(p_application_ids uuid[], p_new_status text, p_actor uuid, p_decision_note text, p_expected_statuses jsonb) from anon, authenticated;
+grant execute on function public.vam084_apply_application_decisions(p_application_ids uuid[], p_new_status text, p_actor uuid, p_decision_note text, p_expected_statuses jsonb) to service_role;
 revoke all on function public.vam084_grant_recruitment_participation(p_actor uuid, p_person_id uuid, p_season_id uuid, p_participation_role text, p_auth_user_id uuid, p_email text) from public;
 revoke all on function public.vam084_grant_recruitment_participation(p_actor uuid, p_person_id uuid, p_season_id uuid, p_participation_role text, p_auth_user_id uuid, p_email text) from anon, authenticated;
 grant execute on function public.vam084_grant_recruitment_participation(p_actor uuid, p_person_id uuid, p_season_id uuid, p_participation_role text, p_auth_user_id uuid, p_email text) to service_role;
 revoke all on function public.vam084_revoke_recruitment_participation(p_actor uuid, p_person_id uuid, p_season_id uuid, p_participation_role text) from public;
 revoke all on function public.vam084_revoke_recruitment_participation(p_actor uuid, p_person_id uuid, p_season_id uuid, p_participation_role text) from anon, authenticated;
 grant execute on function public.vam084_revoke_recruitment_participation(p_actor uuid, p_person_id uuid, p_season_id uuid, p_participation_role text) to service_role;
-revoke all on function public.vam090_bulk_assign_application_reviews(p_intake_batch_id uuid, p_role_applied text, p_statuses text[], p_reviewer_ids uuid[], p_review_round text, p_due_at timestamp with time zone, p_exclude_already_assigned boolean, p_assignment_note text, p_actor uuid, p_limit integer DEFAULT NULL::integer) from public;
-revoke all on function public.vam090_bulk_assign_application_reviews(p_intake_batch_id uuid, p_role_applied text, p_statuses text[], p_reviewer_ids uuid[], p_review_round text, p_due_at timestamp with time zone, p_exclude_already_assigned boolean, p_assignment_note text, p_actor uuid, p_limit integer DEFAULT NULL::integer) from anon, authenticated;
-grant execute on function public.vam090_bulk_assign_application_reviews(p_intake_batch_id uuid, p_role_applied text, p_statuses text[], p_reviewer_ids uuid[], p_review_round text, p_due_at timestamp with time zone, p_exclude_already_assigned boolean, p_assignment_note text, p_actor uuid, p_limit integer DEFAULT NULL::integer) to service_role;
-revoke all on function public.vam090_finalize_recruitment_approval(p_application_id uuid, p_new_status text, p_actor uuid, p_person_id uuid, p_expected_status text, p_decision_note text DEFAULT NULL::text) from public;
-revoke all on function public.vam090_finalize_recruitment_approval(p_application_id uuid, p_new_status text, p_actor uuid, p_person_id uuid, p_expected_status text, p_decision_note text DEFAULT NULL::text) from anon, authenticated;
-grant execute on function public.vam090_finalize_recruitment_approval(p_application_id uuid, p_new_status text, p_actor uuid, p_person_id uuid, p_expected_status text, p_decision_note text DEFAULT NULL::text) to service_role;
+revoke all on function public.vam090_bulk_assign_application_reviews(p_intake_batch_id uuid, p_role_applied text, p_statuses text[], p_reviewer_ids uuid[], p_review_round text, p_due_at timestamp with time zone, p_exclude_already_assigned boolean, p_assignment_note text, p_actor uuid, p_limit integer) from public;
+revoke all on function public.vam090_bulk_assign_application_reviews(p_intake_batch_id uuid, p_role_applied text, p_statuses text[], p_reviewer_ids uuid[], p_review_round text, p_due_at timestamp with time zone, p_exclude_already_assigned boolean, p_assignment_note text, p_actor uuid, p_limit integer) from anon, authenticated;
+grant execute on function public.vam090_bulk_assign_application_reviews(p_intake_batch_id uuid, p_role_applied text, p_statuses text[], p_reviewer_ids uuid[], p_review_round text, p_due_at timestamp with time zone, p_exclude_already_assigned boolean, p_assignment_note text, p_actor uuid, p_limit integer) to service_role;
+revoke all on function public.vam090_finalize_recruitment_approval(p_application_id uuid, p_new_status text, p_actor uuid, p_person_id uuid, p_expected_status text, p_decision_note text) from public;
+revoke all on function public.vam090_finalize_recruitment_approval(p_application_id uuid, p_new_status text, p_actor uuid, p_person_id uuid, p_expected_status text, p_decision_note text) from anon, authenticated;
+grant execute on function public.vam090_finalize_recruitment_approval(p_application_id uuid, p_new_status text, p_actor uuid, p_person_id uuid, p_expected_status text, p_decision_note text) to service_role;
