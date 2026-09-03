@@ -9,7 +9,8 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { canDecide } from "@/lib/permissions";
+import { canAssignReview, canDecide } from "@/lib/permissions";
+import { SEASON_CONFIG } from "@/lib/season-config";
 
 
 // ── Row type ──────────────────────────────────────────────────────────────────
@@ -59,6 +60,11 @@ export default async function ApplicationsPage() {
   ]);
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
+  // Only offered when the current operating season is one this caller is
+  // actually scoped to — `seasons` is already scope-filtered, so an admin
+  // without it simply gets no export button rather than a 403 download.
+  const exportSeasonId =
+    seasons.data.find((season) => season.code === SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE)?.id ?? null;
   const batchById = new Map(intakeBatchesRes.data.map((b) => [b.id, b]));
 
   const rows: Row[] = applications.data.map((application) => {
@@ -108,7 +114,34 @@ export default async function ApplicationsPage() {
   return (
     <>
       <PageHeader title="Ứng tuyển" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
-      {canDecide(adminUser.role) && <div className="mb-4"><Link href="/applications/bulk-decision" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white">Bulk Final Decision</Link></div>}
+      {(canDecide(adminUser.role) || (canAssignReview(adminUser.role) && exportSeasonId)) && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {canDecide(adminUser.role) && (
+            <Link href="/applications/bulk-decision" className="inline-flex rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white">Bulk Final Decision</Link>
+          )}
+          {/* Scoped to the current operating season so the export matches what
+              this screen is about, rather than silently spanning every season
+              the caller can read. Role/stage narrowing is done on the export
+              URL itself; the two route files under app/api/exports document
+              the full parameter contract. */}
+          {canAssignReview(adminUser.role) && exportSeasonId && (
+            <>
+              <a
+                href={`/api/exports/recruitment-results?season_id=${exportSeasonId}`}
+                className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+              >
+                Xuất kết quả tuyển
+              </a>
+              <a
+                href={`/api/exports/review-scores?season_id=${exportSeasonId}`}
+                className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+              >
+                Xuất điểm review
+              </a>
+            </>
+          )}
+        </div>
+      )}
       <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />
       <FilterableTable
         rows={rows}

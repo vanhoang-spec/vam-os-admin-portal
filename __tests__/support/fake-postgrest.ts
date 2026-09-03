@@ -116,24 +116,43 @@ function matchesOrTerm(row: any, term: string) {
   throw new Error(`fake-postgrest: unsupported or() term "${term}"`);
 }
 
+/**
+ * Resolves a filter column against a row, following a dotted path through
+ * embedded resources (e.g. `application.intake_batch_id`) the same way
+ * PostgREST resolves a filter on an embedded/aliased relation. A plain
+ * column with no dot is a direct property lookup, unchanged.
+ */
+function resolveFilterPath(row: any, path: string): unknown {
+  if (!path.includes(".")) return row[path];
+  let current: any = row;
+  for (const segment of path.split(".")) {
+    if (current === null || current === undefined) return undefined;
+    current = current[segment];
+  }
+  return current;
+}
+
 function applyFilter(rows: any[], filter: Filter) {
   switch (filter.kind) {
     case "in":
-      return rows.filter((row) => filter.values.includes(row[filter.column]));
+      return rows.filter((row) => filter.values.includes(resolveFilterPath(row, filter.column)));
     case "eq":
-      return rows.filter((row) => row[filter.column] === filter.value);
+      return rows.filter((row) => resolveFilterPath(row, filter.column) === filter.value);
     case "neq":
-      return rows.filter((row) => row[filter.column] !== filter.value);
+      return rows.filter((row) => resolveFilterPath(row, filter.column) !== filter.value);
     case "gt":
-      return rows.filter((row) => String(row[filter.column]) > String(filter.value));
+      return rows.filter((row) => String(resolveFilterPath(row, filter.column)) > String(filter.value));
     case "gte":
-      return rows.filter((row) => String(row[filter.column]) >= String(filter.value));
+      return rows.filter((row) => String(resolveFilterPath(row, filter.column)) >= String(filter.value));
     case "lt":
-      return rows.filter((row) => String(row[filter.column]) < String(filter.value));
+      return rows.filter((row) => String(resolveFilterPath(row, filter.column)) < String(filter.value));
     case "ilike":
-      return rows.filter((row) => postgresIlikeMatches(row[filter.column], filter.pattern));
+      return rows.filter((row) => postgresIlikeMatches(resolveFilterPath(row, filter.column), filter.pattern));
     case "notNull":
-      return rows.filter((row) => row[filter.column] !== null && row[filter.column] !== undefined);
+      return rows.filter((row) => {
+        const value = resolveFilterPath(row, filter.column);
+        return value !== null && value !== undefined;
+      });
     case "or": {
       const terms = splitOrExpression(filter.expression);
       return rows.filter((row) => terms.some((term) => matchesOrTerm(row, term)));
@@ -177,13 +196,53 @@ function compareForOrder(a: any, b: any, ascending: boolean) {
   return (left < right ? -1 : 1) * (ascending ? 1 : -1);
 }
 
-function projectColumns(row: any, columns: string) {
+/** Splits a PostgREST select() projection on top-level commas only (respects nested embed parens). */
+function splitSelectColumns(columns: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of columns) {
+    if (char === "(") depth += 1;
+    if (char === ")") depth -= 1;
+    if (char === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) parts.push(current);
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+/**
+ * Matches one embedded-resource token: `alias:table!fk(nested,cols)`,
+ * `table!fk(nested,cols)`, or plain `table(nested,cols)`. Group 1 is the key
+ * the embed is exposed under in the row/output (the alias if given, else the
+ * table name) — fixtures store an embed as a plain nested object/array under
+ * that same key, mirroring how the real PostgREST response shapes it.
+ */
+const EMBED_TOKEN = /^([a-zA-Z0-9_]+)(?::[^(]+)?\s*\(([\s\S]*)\)$/;
+
+function projectColumns(row: any, columns: string): Record<string, unknown> {
   const projection = String(columns ?? "*").trim();
   if (!projection || projection === "*") return { ...row };
-  const wanted = projection.split(",").map((column) => column.trim()).filter(Boolean);
   const out: Record<string, unknown> = {};
-  for (const column of wanted) {
-    if (Object.prototype.hasOwnProperty.call(row, column)) out[column] = row[column];
+  for (const token of splitSelectColumns(projection)) {
+    const embed = token.match(EMBED_TOKEN);
+    if (embed) {
+      const [, key, nestedColumns] = embed;
+      if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+      const value = row[key];
+      out[key] =
+        value === null || value === undefined
+          ? value
+          : Array.isArray(value)
+            ? value.map((item) => projectColumns(item, nestedColumns))
+            : projectColumns(value, nestedColumns);
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(row, token)) out[token] = row[token];
   }
   return out;
 }
