@@ -134,9 +134,21 @@ c8c as (
 ),
 -- 8d. The eligibility gate is a pure read, and 'stage_requirement_missing' is
 --     exactly the answer the seed exists to prevent.
+--
+--     Scoped to applications in UEHM-S12. That scoping is load-bearing, not a
+--     convenience: the seed deliberately configures only the current season, so
+--     applications in earlier seasons (Production holds 888 in UEHM-S11) still
+--     answer 'stage_requirement_missing' — correctly, since no requirement is
+--     configured for them and they are not approved through this flow. An
+--     unscoped sample reports a false FAIL on Production purely by drawing
+--     older rows.
 c8d as (
   select count(*) as n
-  from (select id from public.applications limit 25) a
+  from (
+    select a.id from public.applications a
+    join public.seasons s on s.id = a.season_id and s.code = 'UEHM-S12'
+    limit 25
+  ) a
   cross join lateral public.vam084_application_decision_eligibility(a.id, 'approved_as_mentor') g
   where g.reason = 'stage_requirement_missing'
 )
@@ -186,7 +198,7 @@ select * from (
   union all
   select 12, '8d. eligibility_gate_requirement_configured',
          case when n = 0 then 'PASS' else 'FAIL' end,
-         n::text || ' of 25 sampled applications still answer stage_requirement_missing' from c8d
+         n::text || ' of up to 25 sampled UEHM-S12 applications still answer stage_requirement_missing' from c8d
   union all
   select 13, '9. mutation_semantics', 'MANUAL',
          'submit_application_review, change_review_assignment, apply_application_decisions, '
