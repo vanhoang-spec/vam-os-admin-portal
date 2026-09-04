@@ -3,7 +3,7 @@ import { ErrorBox, PageHeader } from "@/components/ui";
 import { getApplications, getIntakeBatches, getPeople, getSeasons, keyById, getAllApplicationReviews, getActiveAdminUsers } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Application, Person, Season, ApplicationReview } from "@/lib/types";
-import { applicationStatusLabel } from "@/lib/ui-labels";
+import { applicationSourceLabel, applicationStatusLabel, staffDisplayLabel } from "@/lib/ui-labels";
 import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
@@ -103,12 +103,12 @@ export default async function ApplicationsPage() {
       .filter((r) => r.review_round === "profile_screening" && r.status !== "cancelled")
       .map((r) => r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null)
       .filter(Boolean)
-      .map((u) => u!.full_name || u!.email);
+      .map((u) => staffDisplayLabel({ adminFullName: u!.full_name, email: u!.email, role: u!.role }));
     const interviewers = appReviews
       .filter((r) => r.review_round === "interview" && r.status !== "cancelled")
       .map((r) => r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null)
       .filter(Boolean)
-      .map((u) => u!.full_name || u!.email);
+      .map((u) => staffDisplayLabel({ adminFullName: u!.full_name, email: u!.email, role: u!.role }));
 
     return {
       ...application,
@@ -130,12 +130,21 @@ export default async function ApplicationsPage() {
       acquisition_channel_display: displayText(application.acquisition_channel),
       consent_display: displayConsent(consentUnified),
       consent_filter: consentFilter(consentUnified),
-      source_display: displayText(application.source),
+      source_display: application.source ? applicationSourceLabel(application.source) : displayText(application.source),
       intake_batch_code: intakeBatchCode,
       profile_reviewer_display: profileReviewers.length > 0 ? profileReviewers.join(", ") : "-",
       interviewer_display: interviewers.length > 0 ? interviewers.join(", ") : "-"
     };
   });
+
+  // Distinct raw statuses present, labelled for display. Derived from the rows
+  // rather than hard-coded so a status the pipeline stops using disappears from
+  // the filter instead of lingering as a dead option.
+  const statusFilterOptions = Array.from(
+    new Set(rows.map((row) => String(row.status_unified ?? "")).filter(Boolean))
+  )
+    .map((value) => ({ value, label: applicationStatusLabel(value) }))
+    .sort((a, b) => a.label.localeCompare(b.label, "vi"));
 
   return (
     <>
@@ -174,7 +183,15 @@ export default async function ApplicationsPage() {
         searchPlaceholder="Tìm theo tên, email, SBD hoặc mã đơn"
         searchKeys={["full_name", "email_primary", "sbd", "id", "person_id"]}
         filters={[
-          { key: "status_unified", label: "Trạng thái", valueKey: "status_unified" },
+          {
+            key: "status_unified",
+            label: "Trạng thái",
+            valueKey: "status_unified",
+            // Display is localized; the VALUE stays the raw DB enum, so the
+            // filter still matches what the column holds and any bookmarked
+            // query string keeps working.
+            options: statusFilterOptions
+          },
           { key: "role_applied", label: "Vai trò ứng tuyển", valueKey: "role_applied" },
           { key: "season_code", label: "Mùa", valueKey: "season_code" },
           { key: "intake_batch", label: "Đợt tuyển", valueKey: "intake_batch_code" },
@@ -202,8 +219,8 @@ export default async function ApplicationsPage() {
           { key: "role_applied", label: "Vai trò", displayKey: "role_applied_display" },
           { key: "status_unified", label: "Trạng thái", displayKey: "status_display", badge: true },
           ...(canAssign ? [
-            { key: "profile_reviewer", label: "Review hồ sơ", displayKey: "profile_reviewer_display" },
-            { key: "interviewer", label: "Phỏng vấn", displayKey: "interviewer_display" }
+            { key: "profile_reviewer", label: "Người đánh giá hồ sơ", displayKey: "profile_reviewer_display" },
+            { key: "interviewer", label: "Người phỏng vấn", displayKey: "interviewer_display" }
           ] : []),
           { key: "source", label: "Nguồn", displayKey: "source_display" },
           { key: "submitted_at", label: "Ngày nộp", displayKey: "submitted_at_display" },

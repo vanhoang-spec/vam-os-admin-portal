@@ -223,3 +223,111 @@ export const ACCEPTED_VAM_TERMS = [
   "Matching",
   "Recap",
 ] as const;
+
+// ── Staff account roles ───────────────────────────────────────────────────────
+/**
+ * Display label for admin_users.role.
+ *
+ * DB values are unchanged: reviewer | core_team | admin | super_admin |
+ * viewer | support_team. Operators were reading raw enum strings such as
+ * "core_team" next to a mailbox address; these are the terms the programme
+ * actually uses.
+ */
+export function adminRoleLabel(value: unknown): string {
+  const key = normalize(value);
+  if (key === "core_team") return "Ban Điều hành";
+  if (key === "admin") return "Quản trị viên";
+  if (key === "super_admin") return "Quản trị viên cấp cao";
+  if (key === "reviewer") return "Người đánh giá hồ sơ";
+  if (key === "support_team") return "Ban Hỗ trợ";
+  if (key === "viewer") return "Người xem";
+  return fallback(value);
+}
+
+// ── Application source ────────────────────────────────────────────────────────
+/**
+ * Display label for applications.known_source.
+ *
+ * DB values are unchanged: vam_os_form | s12_mentor_renewal.
+ */
+export function applicationSourceLabel(value: unknown): string {
+  const key = normalize(value);
+  if (key === "vam_os_form") return "Form VAM OS";
+  if (key === "s12_mentor_renewal") return "Gia hạn Mentor Mùa 12";
+  return fallback(value);
+}
+
+// ── Review round ──────────────────────────────────────────────────────────────
+/** Display label for application_reviews.review_round. DB values unchanged. */
+export function reviewRoundLabel(value: unknown): string {
+  const key = normalize(value);
+  if (key === "profile_screening") return "Đánh giá hồ sơ";
+  if (key === "interview") return "Phỏng vấn";
+  return fallback(value);
+}
+
+// ── Recruitment staff naming ──────────────────────────────────────────────────
+/**
+ * The name an operator should see for a staff account.
+ *
+ * Precedence is people.full_name → admin_users.full_name → email. An email
+ * address is a last resort, never the primary label: the Reviewer Pool and the
+ * assignee dropdowns were showing "dangminhloan@yahoo.com (core_team)" for a
+ * person whose real name the system already held.
+ *
+ * Mirrors the same coalesce in vam084_list_recruitment_participants, so a name
+ * rendered from a pool row and one rendered from the dropdown agree.
+ */
+export function staffDisplayName(input: {
+  peopleFullName?: string | null;
+  adminFullName?: string | null;
+  email?: string | null;
+}): string {
+  const people = String(input.peopleFullName ?? "").trim();
+  if (people) return people;
+  const admin = String(input.adminFullName ?? "").trim();
+  if (admin) return admin;
+  return String(input.email ?? "").trim();
+}
+
+/**
+ * `Tên — Vai trò`, or just the name when the role is unknown.
+ *
+ * Example: "Đặng Phạm Minh Loan — Ban Điều hành".
+ */
+export function staffDisplayLabel(input: {
+  peopleFullName?: string | null;
+  adminFullName?: string | null;
+  email?: string | null;
+  role?: string | null;
+}): string {
+  const name = staffDisplayName(input);
+  const role = String(input.role ?? "").trim();
+  if (!role) return name;
+  return `${name} — ${adminRoleLabel(role)}`;
+}
+
+// ── Intrinsic recruitment eligibility (mirrors the DB policy) ─────────────────
+/**
+ * Roles that are intrinsically authorised to review profiles AND to interview
+ * for the target season, per the Owner decision encoded in migration
+ * 20260904143000. They must never be offered a "Cấp Reviewer" / "Cấp
+ * Interviewer" button, because their rights do not come from a participation
+ * grant and cannot be revoked by removing one.
+ */
+export const PRIVILEGED_RECRUITMENT_ROLES: ReadonlySet<string> = new Set([
+  "core_team",
+  "admin",
+  "super_admin"
+]);
+
+/** Whether an account holds recruitment rights by virtue of its role alone. */
+export function hasIntrinsicRecruitmentRights(input: {
+  role?: string | null;
+  status?: string | null;
+}): boolean {
+  return (
+    String(input.status ?? "").trim().toLowerCase() === "active" &&
+    PRIVILEGED_RECRUITMENT_ROLES.has(String(input.role ?? "").trim())
+  );
+}

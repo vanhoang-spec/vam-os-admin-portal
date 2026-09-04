@@ -9,6 +9,7 @@ import {
   type EnableReviewerActionState
 } from "@/lib/enable-reviewer-action-types";
 import type { ReviewerPoolRow } from "@/lib/types";
+import { adminRoleLabel, hasIntrinsicRecruitmentRights } from "@/lib/ui-labels";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,10 +31,10 @@ function getAccountStatus(row: ReviewerPoolRow): AccountStatus {
 
 const STATUS_LABELS: Record<AccountStatus, string> = {
   no_account: "Chưa có tài khoản",
-  reviewer_active: "Reviewer (active)",
-  reviewer_inactive: "Reviewer (inactive)",
-  higher_active: "Admin / Core team",
-  higher_inactive: "Admin (tạm khóa)",
+  reviewer_active: "Người đánh giá hồ sơ (đang hoạt động)",
+  reviewer_inactive: "Người đánh giá hồ sơ (tạm khóa)",
+  higher_active: "Ban Điều hành / Quản trị viên",
+  higher_inactive: "Quản trị viên (tạm khóa)",
   other: "Khác"
 };
 
@@ -51,10 +52,36 @@ type FilterOption = "all" | AccountStatus;
 const FILTER_OPTIONS: { value: FilterOption; label: string }[] = [
   { value: "all", label: "Tất cả" },
   { value: "no_account", label: "Chưa có tài khoản" },
-  { value: "reviewer_active", label: "Reviewer active" },
-  { value: "reviewer_inactive", label: "Reviewer inactive" },
-  { value: "higher_active", label: "Admin / Core team" }
+  { value: "reviewer_active", label: "Người đánh giá hồ sơ (đang hoạt động)" },
+  { value: "reviewer_inactive", label: "Người đánh giá hồ sơ (tạm khóa)" },
+  { value: "higher_active", label: "Ban Điều hành / Quản trị viên" }
 ];
+
+/**
+ * Rights an account holds by virtue of its role, stated rather than offered.
+ *
+ * An active Ban Điều hành / Quản trị viên account is intrinsically authorised
+ * to screen profiles and to interview for the target season, so there is
+ * nothing to grant and nothing a participation revoke could take away. The
+ * previous screen showed "Cấp Interviewer" here, which failed with a database
+ * constraint error for every such account.
+ */
+function IntrinsicRightsBadges({ role }: { role: string | null }) {
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="intrinsic-rights">
+      <span className="inline-flex w-fit items-center rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800">
+        Đánh giá hồ sơ: Có quyền theo vai trò
+      </span>
+      <span className="inline-flex w-fit items-center rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800">
+        Phỏng vấn: Có quyền theo vai trò
+      </span>
+      <span className="text-[11px] leading-4 text-slate-500">
+        Theo vai trò {adminRoleLabel(role)} và phạm vi mùa hiện tại. Hệ thống áp dụng tự động, không
+        cần thao tác thủ công.
+      </span>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Per-row enable button (isolated useFormState)
@@ -245,6 +272,14 @@ export function ReviewerPoolClient({
             <tbody className="divide-y divide-vam-line bg-white">
               {filtered.map((row) => {
                 const bucket = getAccountStatus(row);
+                // Rights that come from a privileged ROLE are not a
+                // participation grant and must not be revocable by removing
+                // one. Showing "Thu hồi" next to them invites an operator to
+                // try, fail, and lose confidence in the screen.
+                const intrinsic = hasIntrinsicRecruitmentRights({
+                  role: row.admin_user_role,
+                  status: row.admin_user_status
+                });
                 return (
                   <tr key={row.person_id ?? row.mentor_profile_id ?? row.email_primary ?? row.admin_user_id} className="hover:bg-vam-mint/30">
                     <td className="px-4 py-3 font-medium text-vam-ink">
@@ -262,7 +297,9 @@ export function ReviewerPoolClient({
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {row.person_id ? (
+                      {intrinsic ? (
+                        <IntrinsicRightsBadges role={row.admin_user_role} />
+                      ) : row.person_id ? (
                         <div className="flex flex-col gap-2">
                           <EnableReviewerButton personId={row.person_id} accountStatus={bucket} seasonId={seasonId} participationRole="reviewer" active={Boolean(row.admin_user_id && activeReviewerSet.has(row.admin_user_id))} />
                           <EnableReviewerButton personId={row.person_id} accountStatus={bucket} seasonId={seasonId} participationRole="interviewer" active={Boolean(row.admin_user_id && activeInterviewerSet.has(row.admin_user_id))} />

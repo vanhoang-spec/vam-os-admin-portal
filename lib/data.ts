@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { readAllPages, readBounded, SELECT_PAGE_SIZE, type PagedTable } from "@/lib/paged-read";
+import { staffDisplayName } from "@/lib/ui-labels";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { currentMonthVN, isOperationalMonth } from "@/lib/dashboard-month";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
@@ -2273,7 +2274,7 @@ export async function getReviewerPool(filters?: {
       narrow(client.from("mentor_profiles").select(projection))
     ),
     // Class B: staff accounts.
-    readBounded<JsonRecord>("admin_users", client.from("admin_users").select("id,email,role,status,auth_user_id"))
+    readBounded<JsonRecord>("admin_users", client.from("admin_users").select("id,email,full_name,role,status,auth_user_id"))
   ]);
 
   if (mentorRes.error) {
@@ -2375,10 +2376,15 @@ export async function getReviewerPool(filters?: {
       const person = mentor.person_id ? peopleById.get(mentor.person_id) : undefined;
       const email = String(person?.email_primary ?? "").trim().toLowerCase();
       const adminUser = email ? adminByEmail.get(email) : undefined;
+      const displayName = staffDisplayName({
+        peopleFullName: person?.full_name,
+        adminFullName: (adminUser as JsonRecord | undefined)?.full_name as string | undefined,
+        email: person?.email_primary
+      });
       return {
         mentor_profile_id: mentor.id,
         person_id: mentor.person_id,
-        full_name: person?.full_name ?? null,
+        full_name: displayName || null,
         email_primary: person?.email_primary ?? null,
         mentor_code: mentor.mentor_code,
         intake_batch_id: mentor.intake_batch_id,
@@ -2406,7 +2412,12 @@ export async function getReviewerPool(filters?: {
     rows.push({
       mentor_profile_id: null,
       person_id: personId,
-      full_name: person?.full_name ?? null,
+      full_name:
+        staffDisplayName({
+          peopleFullName: person?.full_name,
+          adminFullName: (adminUser as JsonRecord).full_name as string | undefined,
+          email: person?.email_primary ?? (adminUser as JsonRecord).email as string | undefined
+        }) || null,
       email_primary: person?.email_primary ?? null,
       mentor_code: null,
       intake_batch_id: null,

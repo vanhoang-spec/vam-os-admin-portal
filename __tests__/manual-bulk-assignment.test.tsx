@@ -261,7 +261,10 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
   it("INTERVIEW_EMPTY_STATE: shows link to reviewer pool if no interviewers", () => {
     render(<AssignBulkForm {...defaultProps} reviewers={[]} reviewRound="interview" />);
     
-    expect(screen.getByText("Chưa có Interviewer cho mùa này.")).toBeDefined();
-    expect(screen.getByText("Vào Danh sách Reviewer để cấp quyền.")).toBeDefined();
+    // Vocabulary is the Vietnamese one the Owner asked for; the empty-state
+    // contract (a statement plus a route to fix it) is unchanged.
+    expect(screen.getByText("Chưa có Người phỏng vấn cho mùa này.")).toBeDefined();
+    const link = screen.getByText("Mở Danh sách nhân sự tuyển sinh để cấp quyền.");
+    expect(link.closest("a")?.getAttribute("href")).toBe("/reviews/reviewer-pool");
   });
 });

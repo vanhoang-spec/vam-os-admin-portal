@@ -7,6 +7,7 @@ import { bulkAssignApplicationReviewsAction } from "@/app/actions/bulk-assignmen
 import { initialBulkAssignmentActionState, INTERVIEW_ELIGIBLE_STATUSES, PROFILE_ASSIGNMENT_STATUSES } from "@/lib/bulk-assignment-action-types";
 import type { IntakeBatch, ReviewAssignableApplication, ReviewEligibleReviewer, Season } from "@/lib/types";
 import { ErrorBox } from "@/components/ui";
+import { applicationStatusLabel, staffDisplayLabel } from "@/lib/ui-labels";
 
 
 
@@ -108,7 +109,7 @@ export function AssignBulkForm({
 
   const selectedReviewerName = useMemo(() => {
     const r = reviewers.find(r => r.id === selectedReviewerId);
-    return r ? (r.full_name || r.email) : "";
+    return r ? staffDisplayLabel({ adminFullName: r.full_name, email: r.email, role: r.role }) : "";
   }, [reviewers, selectedReviewerId]);
 
   // The set actually submitted. Checkboxes are UI only: a checkbox for a row
@@ -147,10 +148,10 @@ export function AssignBulkForm({
         </h3>
         {reviewers.length === 0 ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            <p>Chưa có {reviewRound === "interview" ? "Interviewer" : "Reviewer"} cho mùa này.</p>
+            <p>Chưa có {reviewRound === "interview" ? "Người phỏng vấn" : "Người đánh giá hồ sơ"} cho mùa này.</p>
             <p className="mt-1">
               <Link href="/reviews/reviewer-pool" className="font-medium underline hover:text-amber-900">
-                Vào Danh sách Reviewer để cấp quyền.
+                Mở Danh sách nhân sự tuyển sinh để cấp quyền.
               </Link>
             </p>
           </div>
@@ -166,7 +167,7 @@ export function AssignBulkForm({
               <option value="">-- Chọn người phụ trách --</option>
               {reviewers.map(r => (
                 <option key={r.id} value={r.id}>
-                  {r.full_name ? `${r.full_name} (${r.email})` : r.email}
+                  {staffDisplayLabel({ adminFullName: r.full_name, email: r.email, role: r.role })}
                 </option>
               ))}
             </select>
@@ -238,7 +239,7 @@ export function AssignBulkForm({
                       </td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge(a.status)}`}>
-                          {a.status}
+                          {applicationStatusLabel(a.status)}
                         </span>
                       </td>
                       <td className="px-4 py-2 text-slate-600">

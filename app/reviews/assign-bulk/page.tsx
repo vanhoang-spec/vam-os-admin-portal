@@ -90,7 +90,7 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
                 defaultValue={reviewRound}
                 className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
               >
-                <option value="profile_screening">Review hồ sơ</option>
+                <option value="profile_screening">Đánh giá hồ sơ</option>
                 <option value="interview">Phỏng vấn</option>
               </select>
             </div>
@@ -125,8 +125,8 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
   return (
     <>
       <PageHeader
-        title={reviewRound === "interview" ? "Chia ứng viên phỏng vấn" : "Chia hồ sơ cho reviewer"}
-        description={`Batch: ${batchName} · Role: ${roleApplied} · Vòng: ${reviewRound === "interview" ? "Phỏng vấn" : "Review hồ sơ"}`}
+        title={reviewRound === "interview" ? "Giao ứng viên phỏng vấn" : "Giao hồ sơ đánh giá"}
+        description={`Đợt tuyển: ${batchName} · Vai trò: ${roleApplied} · Vòng: ${reviewRound === "interview" ? "Phỏng vấn" : "Đánh giá hồ sơ"}`}
       />
 
       {/* Nav breadcrumb back to step 1 */}

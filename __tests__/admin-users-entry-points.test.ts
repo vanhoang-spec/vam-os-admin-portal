@@ -65,7 +65,7 @@ const entryPointPages = [
   {
     name: "/reviews/reviewer-pool",
     render: () => ReviewerPoolPage({ searchParams: Promise.resolve({}) }),
-    unrelatedMarkers: ["Danh sách Reviewer", "Reviewer pool client remains available", "Lưu ý Auth:", "Supabase Dashboard"]
+    unrelatedMarkers: ["Danh sách nhân sự tuyển sinh", "Reviewer pool client remains available", "Lưu ý Auth:", "Supabase Dashboard"]
   },
   {
     name: "/reviews/guide",

@@ -41,8 +41,8 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
   return (
     <>
       <PageHeader
-        title="Danh sách Reviewer"
-        description="Danh sách mentor có email trong hệ thống. Admin có thể cấp quyền reviewer để họ tham gia review hồ sơ."
+        title="Danh sách nhân sự tuyển sinh"
+        description="Ban Điều hành và Quản trị viên đang hoạt động có quyền đánh giá hồ sơ và phỏng vấn theo vai trò, không cần cấp thủ công. Chỉ người đánh giá/phỏng vấn độc lập bên ngoài mới cần cấp quyền."
       />
 
       {/* Back nav */}
