@@ -160,6 +160,7 @@ export type ReviewAssignableApplication = {
   submitted_at: string | null;
   intake_batch_id: string | null;
   existing_review_count: number;
+  existing_reviewer_id?: string | null;
 };
 
 /**

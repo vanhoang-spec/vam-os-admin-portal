@@ -1845,6 +1845,7 @@ export function groupCount(rows: JsonRecord[], key: string) {
 export async function getReviewAssignableApplications(filters: {
   intakeBatchId?: string | null;
   roleApplied?: string | null;
+  reviewRound?: "profile_screening" | "interview";
   scope?: ScopeFilter;
 }): Promise<QueryResult<ReviewAssignableApplication[]>> {
   const client = getSupabaseServiceRoleClient();
@@ -1895,15 +1896,14 @@ export async function getReviewAssignableApplications(filters: {
     // Restores the `.order("submitted_at").order("id")` the paged read replaces.
     .sort((a, b) => String(a.submitted_at ?? "").localeCompare(String(b.submitted_at ?? "")) || String(a.id).localeCompare(String(b.id)));
 
-  if (!appList.length) return { data: [], error: null };
-
   const appIds = appList.map((a) => a.id);
+  const reviewRound = filters.reviewRound ?? "profile_screening";
   const { data: reviewRows, error: reviewErr } = await selectInChunks<JsonRecord>(
     "application_reviews",
-    "application_id",
+    "application_id,reviewer_admin_user_id",
     appIds,
     "application_id",
-    (query) => query.eq("review_round", "profile_screening").neq("status", "cancelled")
+    (query) => query.eq("review_round", reviewRound).neq("status", "cancelled")
   );
   if (reviewErr) {
     logDataError("getReviewAssignableApplications.reviews", reviewErr);
@@ -1912,14 +1912,20 @@ export async function getReviewAssignableApplications(filters: {
   }
 
   const reviewCountByAppId = new Map<string, number>();
+  const reviewerIdByAppId = new Map<string, string>();
   for (const row of reviewRows) {
     const id = row.application_id as string | null;
-    if (id) reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
+    const revId = row.reviewer_admin_user_id as string | null;
+    if (id) {
+      reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
+      if (revId) reviewerIdByAppId.set(id, revId);
+    }
   }
 
   const data: ReviewAssignableApplication[] = appList.map((a) => ({
     ...a,
-    existing_review_count: reviewCountByAppId.get(a.id) ?? 0
+    existing_review_count: reviewCountByAppId.get(a.id) ?? 0,
+    existing_reviewer_id: reviewerIdByAppId.get(a.id) ?? null
   }));
 
   return { data, error: null };

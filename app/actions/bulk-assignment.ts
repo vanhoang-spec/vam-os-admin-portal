@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { bulkAssignApplicationReviews } from "@/lib/bulk-assignment";
+import { assignSelectedApplicationReviews } from "@/lib/bulk-assignment";
 import { canBulkAssignReviews } from "@/lib/permissions";
 import type { BulkAssignmentActionState } from "@/lib/bulk-assignment-action-types";
 
@@ -20,11 +20,8 @@ export async function bulkAssignApplicationReviewsAction(
     if (!canBulkAssignReviews(adminUser.role)) return fail("Bạn không có quyền thực hiện thao tác này.");
 
     // Parse form fields
-    const intakeBatchId = String(formData.get("intake_batch_id") ?? "").trim() || null;
-    const roleApplied = String(formData.get("role_applied") ?? "").trim();
-    const statuses = formData.getAll("statuses").map((v) => String(v).trim()).filter(Boolean);
-    const reviewerIds = formData.getAll("reviewer_ids").map((v) => String(v).trim()).filter(Boolean);
-    const excludeAlreadyAssigned = String(formData.get("exclude_already_assigned") ?? "1") !== "0";
+    const applicationIds = formData.getAll("application_ids").map((v) => String(v).trim()).filter(Boolean);
+    const reviewerId = String(formData.get("reviewer_id") ?? "").trim();
     const reviewRoundRaw = String(formData.get("review_round") ?? "profile_screening").trim();
     if (reviewRoundRaw !== "profile_screening" && reviewRoundRaw !== "interview") {
       return fail("Vòng review không hợp lệ.");
@@ -33,18 +30,14 @@ export async function bulkAssignApplicationReviewsAction(
     const dueAt = String(formData.get("due_at") ?? "").trim() || null;
     const assignmentNote = String(formData.get("assignment_note") ?? "").trim() || null;
 
-    if (!roleApplied) return fail("Vui lòng chọn role ứng tuyển.");
-    if (!statuses.length) return fail("Vui lòng chọn ít nhất một trạng thái đơn.");
-    if (!reviewerIds.length) return fail("Vui lòng chọn ít nhất một reviewer.");
+    if (!applicationIds.length) return fail("Vui lòng chọn ít nhất một hồ sơ.");
+    if (!reviewerId) return fail("Vui lòng chọn người phụ trách.");
 
-    const result = await bulkAssignApplicationReviews({
-      intakeBatchId,
-      roleApplied,
-      statuses,
-      reviewerAdminUserIds: reviewerIds,
+    const result = await assignSelectedApplicationReviews({
+      applicationIds,
+      reviewerAdminUserId: reviewerId,
       reviewRound,
       dueAt,
-      excludeAlreadyAssigned,
       assignmentNote,
       assignedByAdminUserId: adminUser.id
     });
@@ -58,12 +51,9 @@ export async function bulkAssignApplicationReviewsAction(
 
     return {
       ok: true,
-      message: `Đã giao thành công ${result.applicationsAssigned} hồ sơ cho ${result.reviewersCount} reviewer.`,
+      message: `Đã giao thành công ${result.applicationsAssigned} hồ sơ.`,
       applicationsAssigned: result.applicationsAssigned,
-      reviewersCount: result.reviewersCount,
-      minPerReviewer: result.minPerReviewer,
-      maxPerReviewer: result.maxPerReviewer,
-      skippedAlreadyAssigned: result.skippedAlreadyAssigned,
+      reviewerId: result.reviewerId,
       batchId: result.batchId
     };
   } catch (err) {

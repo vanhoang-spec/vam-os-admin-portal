@@ -16,7 +16,7 @@ import { AssignBulkForm } from "./assign-bulk-form";
 // Page: /reviews/assign-bulk
 // ---------------------------------------------------------------------------
 
-export default async function AssignBulkPage(props: { searchParams: Promise<{ intake_batch_id?: string; role_applied?: string }> }) {
+export default async function AssignBulkPage(props: { searchParams: Promise<{ intake_batch_id?: string; role_applied?: string; review_round?: string }> }) {
   const searchParams = await props.searchParams;
 
   const adminUser = await getCurrentAdminUser();
@@ -25,6 +25,8 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
   const roleApplied = searchParams.role_applied?.trim() || null;
+  const reviewRoundRaw = searchParams.review_round?.trim() || "profile_screening";
+  const reviewRound = reviewRoundRaw === "interview" ? "interview" : "profile_screening";
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
 
@@ -81,6 +83,17 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
                 <option value="mentee">Mentee</option>
               </select>
             </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-500">Vòng phân công</label>
+              <select
+                name="review_round"
+                defaultValue={reviewRound}
+                className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
+              >
+                <option value="profile_screening">Review hồ sơ</option>
+                <option value="interview">Phỏng vấn</option>
+              </select>
+            </div>
             <div className="flex items-end">
               <button
                 type="submit"
@@ -100,7 +113,7 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
   const [appsResult, reviewersResult] = await Promise.all([
     getReviewAssignableApplications({ intakeBatchId, roleApplied, scope }),
     seasonId
-      ? getReviewEligibleReviewers(String(seasonId), "profile_screening")
+      ? getReviewEligibleReviewers(String(seasonId), reviewRound)
       : Promise.resolve({ data: [], error: "Batch chưa gắn mùa." })
   ]);
 
@@ -112,8 +125,8 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
   return (
     <>
       <PageHeader
-        title="Chia hồ sơ cho reviewer"
-        description={`Batch: ${batchName} · Role: ${roleApplied}`}
+        title={reviewRound === "interview" ? "Chia ứng viên phỏng vấn" : "Chia hồ sơ cho reviewer"}
+        description={`Batch: ${batchName} · Role: ${roleApplied} · Vòng: ${reviewRound === "interview" ? "Phỏng vấn" : "Review hồ sơ"}`}
       />
 
       {/* Nav breadcrumb back to step 1 */}
@@ -133,6 +146,7 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
         reviewers={reviewersResult.data}
         intakeBatchId={intakeBatchId}
         roleApplied={roleApplied}
+        reviewRound={reviewRound}
         intakeBatches={intakeBatches.data}
         seasons={seasons.data}
         adminUserId={adminUser.id}

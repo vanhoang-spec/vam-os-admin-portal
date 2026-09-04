@@ -63,6 +63,24 @@ type BulkAssignmentRpcRow = {
   skipped_already_assigned: number;
 };
 
+export type AssignSelectedInput = {
+  applicationIds: string[];
+  reviewerAdminUserId: string;
+  reviewRound?: "profile_screening" | "interview";
+  dueAt: string | null;
+  assignmentNote: string | null;
+  assignedByAdminUserId: string;
+};
+
+export type AssignSelectedResult =
+  | {
+      ok: true;
+      applicationsAssigned: number;
+      reviewerId: string;
+      batchId: string;
+    }
+  | { ok: false; message: string };
+
 export async function bulkAssignApplicationReviews(
   input: BulkAssignInput
 ): Promise<BulkAssignResult> {
@@ -136,6 +154,53 @@ export async function bulkAssignApplicationReviews(
     minPerReviewer: row.min_per_reviewer,
     maxPerReviewer: row.max_per_reviewer,
     skippedAlreadyAssigned: row.skipped_already_assigned,
+    batchId: row.batch_id
+  };
+}
+
+export async function assignSelectedApplicationReviews(
+  input: AssignSelectedInput
+): Promise<AssignSelectedResult> {
+  const reviewRound = input.reviewRound ?? "profile_screening";
+  const applicationIds = Array.from(new Set(input.applicationIds.filter(Boolean)));
+
+  if (!applicationIds.length) {
+    return { ok: false, message: "Vui lòng chọn ít nhất một hồ sơ." };
+  }
+  if (!input.reviewerAdminUserId) {
+    return { ok: false, message: "Vui lòng chọn người phụ trách." };
+  }
+
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+  const actor = await getCurrentAdminUser();
+  if (!actor?.id || actor.id !== input.assignedByAdminUserId || !canBulkAssignReviews(actor.role)) {
+    return { ok: false, message: "Bạn không có quyền thực hiện thao tác giao review." };
+  }
+
+  // The RPC will handle verifying that the target batch's season is authorized for the actor.
+
+  const { data, error } = await client.rpc("vam094_assign_selected_application_reviews", {
+    p_application_ids: applicationIds,
+    p_reviewer_id: input.reviewerAdminUserId,
+    p_review_round: reviewRound,
+    p_due_at: input.dueAt,
+    p_assignment_note: input.assignmentNote,
+    p_actor: input.assignedByAdminUserId
+  });
+  if (error) {
+    log("atomic selected assignment failed", error);
+    return { ok: false, message: error.message ?? SAFE_ERROR };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as { batch_id: string; applications_assigned: number; reviewer_id: string } | null;
+  if (!row?.batch_id || !Number.isInteger(row.applications_assigned) || row.applications_assigned < 1) {
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  return {
+    ok: true,
+    applicationsAssigned: row.applications_assigned,
+    reviewerId: row.reviewer_id,
     batchId: row.batch_id
   };
 }

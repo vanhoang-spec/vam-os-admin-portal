@@ -94,6 +94,7 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   // PRODUCTION_PROVIDED_RPCS above once migration 20260904070000 was actually
   // applied and verified against the Production catalog on 2026-09-04. A
   // future RPC that ships ahead of its Production apply belongs here.
+  "vam094_assign_selected_application_reviews"
 ];
 
 /**

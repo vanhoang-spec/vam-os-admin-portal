@@ -11,6 +11,7 @@ export type BulkAssignmentActionState = {
   message: string | null;
   applicationsAssigned?: number;
   reviewersCount?: number;
+  reviewerId?: string;
   minPerReviewer?: number;
   maxPerReviewer?: number;
   skippedAlreadyAssigned?: number;
