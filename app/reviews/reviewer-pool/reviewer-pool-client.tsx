@@ -246,7 +246,7 @@ export function ReviewerPoolClient({
               {filtered.map((row) => {
                 const bucket = getAccountStatus(row);
                 return (
-                  <tr key={row.person_id ?? row.email_primary ?? Math.random()} className="hover:bg-vam-mint/30">
+                  <tr key={row.person_id ?? row.mentor_profile_id ?? row.email_primary ?? row.admin_user_id} className="hover:bg-vam-mint/30">
                     <td className="px-4 py-3 font-medium text-vam-ink">
                       {row.full_name ?? <span className="text-slate-400">(Chưa có tên)</span>}
                     </td>

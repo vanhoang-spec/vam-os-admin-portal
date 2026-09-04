@@ -2300,10 +2300,15 @@ export async function getReviewerPool(filters?: {
   );
 
   const eligibleAdminRoles = new Set(["core_team", "admin", "super_admin", "reviewer"]);
+  // Active-account policy: only an ACTIVE staff account may be surfaced as a
+  // grantable Reviewer/Interviewer candidate. An inactive (suspended) account
+  // must never be offered for a recruitment-participation grant.
+  const isEligibleAdmin = (a: JsonRecord) =>
+    eligibleAdminRoles.has(String(a.role)) && String(a.status ?? "").trim().toLowerCase() === "active";
   const eligibleAdminEmails = Array.from(
     new Set(
       adminRes.data
-        .filter((a) => eligibleAdminRoles.has(String(a.role)))
+        .filter(isEligibleAdmin)
         .map((a) => String((a as any).email ?? "").trim().toLowerCase())
         .filter(Boolean)
     )
@@ -2337,13 +2342,13 @@ export async function getReviewerPool(filters?: {
 
   const allPeopleRows = [...peopleByIdRes.data, ...peopleByEmailRes.data];
 
-  const peopleById = new Map();
+  const peopleById = new Map<string, { id: string; full_name: string | null; email_primary: string | null }>();
   const peopleByEmailPrimary = new Map<string, string>(); // normalized email -> person_id
 
   for (const p of allPeopleRows) {
     const id = p.id as string;
     const email = String((p as any).email_primary ?? "").trim().toLowerCase();
-    peopleById.set(id, p);
+    peopleById.set(id, p as unknown as { id: string; full_name: string | null; email_primary: string | null });
     if (email) peopleByEmailPrimary.set(email, id);
   }
 
@@ -2382,7 +2387,7 @@ export async function getReviewerPool(filters?: {
   // Append eligible admin_users who resolve to a people row by email
   // but were not already included via mentor_profiles.
   for (const adminUser of adminRes.data) {
-    if (!eligibleAdminRoles.has(String(adminUser.role))) continue;
+    if (!isEligibleAdmin(adminUser)) continue;
     
     const email = String((adminUser as any).email ?? "").trim().toLowerCase();
     if (!email) continue;

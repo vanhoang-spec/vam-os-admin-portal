@@ -28,6 +28,12 @@ scripts/*.js
 .env.vercel
 .env.vercel.prod
 .env.preview
+.env.staging
+.env.production
+# Catch-all: never commit a real env file. Committed templates are re-included below.
+.env.*
+!.env.local.example
+!.env*.example
 tsconfig.tsbuildinfo
 
 # ── Sensitive local data artifacts — do not commit PII/import workbooks/exports ──

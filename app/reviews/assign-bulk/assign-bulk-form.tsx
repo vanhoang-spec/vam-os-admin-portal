@@ -95,7 +95,11 @@ export function AssignBulkForm({
 
   const selectAll = () => {
     const ids = filteredApps.filter(a => a.existing_review_count === 0).map(a => a.id);
-    setSelectedAppIds(new Set(ids));
+    setSelectedAppIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
   };
 
   const deselectAll = () => {
@@ -107,7 +111,18 @@ export function AssignBulkForm({
     return r ? (r.full_name || r.email) : "";
   }, [reviewers, selectedReviewerId]);
 
-  const canSubmit = selectedAppIds.size > 0 && !!selectedReviewerId;
+  // The set actually submitted. Checkboxes are UI only: a checkbox for a row
+  // hidden by the search filter is unmounted, and an unmounted input is never
+  // serialised into FormData. Submitting straight from the checkboxes would
+  // therefore silently assign fewer applications than the operator selected.
+  // Hidden inputs rendered from this set keep the submitted payload equal to
+  // the confirmed selection regardless of the current search query.
+  const submittableIds = useMemo(() => {
+    const assignable = new Set(validApps.filter((a) => a.existing_review_count === 0).map((a) => a.id));
+    return Array.from(selectedAppIds).filter((id) => assignable.has(id));
+  }, [validApps, selectedAppIds]);
+
+  const canSubmit = submittableIds.length > 0 && !!selectedReviewerId;
   const submitLabel = reviewRound === "interview" ? "Xác nhận giao phỏng vấn" : "Xác nhận giao hồ sơ";
 
   return (
@@ -115,6 +130,9 @@ export function AssignBulkForm({
       <input type="hidden" name="intake_batch_id" value={intakeBatchId} />
       <input type="hidden" name="role_applied" value={roleApplied} />
       <input type="hidden" name="review_round" value={reviewRound} />
+      {submittableIds.map((id) => (
+        <input key={id} type="hidden" name="application_ids" value={id} />
+      ))}
       
       {state.ok && state.message && (
         <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
@@ -207,8 +225,7 @@ export function AssignBulkForm({
                       <td className="px-4 py-2">
                         <input
                           type="checkbox"
-                          name="application_ids"
-                          value={a.id}
+                          aria-label={`Chọn ${a.full_name || a.id}`}
                           checked={selectedAppIds.has(a.id)}
                           onChange={() => toggleApp(a.id)}
                           disabled={isAssigned}
@@ -245,7 +262,7 @@ export function AssignBulkForm({
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 flex flex-col items-center justify-center gap-4">
         <p className="text-sm font-medium text-slate-700">
-          Bạn sắp giao <span className="font-bold text-vam-green">{selectedAppIds.size}</span> {reviewRound === "interview" ? "ứng viên phỏng vấn" : "hồ sơ"} cho <span className="font-bold text-slate-900">{selectedReviewerName || "..."}</span>.
+          Bạn sắp giao <span className="font-bold text-vam-green">{submittableIds.length}</span> {reviewRound === "interview" ? "ứng viên phỏng vấn" : "hồ sơ"} cho <span className="font-bold text-slate-900">{selectedReviewerName || "..."}</span>.
         </p>
         <SubmitButton disabled={!canSubmit} label={submitLabel} />
       </div>

@@ -7,19 +7,43 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 const SAFE_ERROR = "Không thể cấp quyền tham gia tuyển sinh. Vui lòng thử lại hoặc liên hệ admin.";
 
+/**
+ * Hard cap on Auth pages walked while looking for an existing account.
+ * GoTrue caps `perPage` server-side (commonly 50) regardless of what we ask
+ * for, so we must never infer "no more users" from a short page — only an
+ * EMPTY page ends the walk.
+ */
+const AUTH_PAGE_LIMIT = 200;
+
+class AuthLookupIncomplete extends Error {
+  constructor() {
+    super("Auth user directory exceeded the safe pagination limit");
+    this.name = "AuthLookupIncomplete";
+  }
+}
+
+/**
+ * Returns the Auth user for `email`, or null when the directory was walked to
+ * completion and no such user exists.
+ *
+ * Throws AuthLookupIncomplete if the page cap is reached while pages are still
+ * non-empty. That distinction matters: returning null in that case would make
+ * the caller invite an account that may already exist, creating a duplicate
+ * identity. We fail closed instead.
+ */
 async function findAuthUserByEmail(client: any, email: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  for (let page = 1; page <= 50; page++) {
-    // Note: Supabase GoTrue API caps perPage at 50 internally regardless of the request.
+  for (let page = 1; page <= AUTH_PAGE_LIMIT; page++) {
     const { data, error } = await client.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw error;
     const users = (data?.users ?? []) as Array<{ id: string; email?: string }>;
-    if (users.length === 0) break;
-    
+    // Only an empty page proves the directory is exhausted.
+    if (users.length === 0) return null;
+
     const found = users.find(user => String(user.email ?? "").trim().toLowerCase() === normalizedEmail);
     if (found) return found;
   }
-  return null;
+  throw new AuthLookupIncomplete();
 }
 
 export type EnableReviewerResult = {
@@ -48,7 +72,14 @@ export async function enableMentorAsReviewer(input: {
   const email = String(person.email_primary ?? "").trim().toLowerCase();
   if (!email.includes("@")) return { ok: false, message: "Người này chưa có email hợp lệ." };
 
-  let authUser = await findAuthUserByEmail(client, email);
+  let authUser: { id: string; email?: string } | null;
+  try {
+    authUser = await findAuthUserByEmail(client, email);
+  } catch (lookupError) {
+    // Never fall through to an invite on an inconclusive lookup.
+    console.error("[enable-reviewer] auth lookup failed", lookupError);
+    return { ok: false, message: SAFE_ERROR };
+  }
   let invited = false;
   if (!authUser) {
     const { data, error } = await (client as any).auth.admin.inviteUserByEmail(email);
