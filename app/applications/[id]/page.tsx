@@ -355,7 +355,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       {/* ── Review history ─────────────────────────────────────────────────────── */}
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">
-          Lịch sử Review{reviews.length > 0 ? ` (${reviews.length})` : ""}
+          Lịch sử đánh giá{reviews.length > 0 ? ` (${reviews.length})` : ""}
         </h2>
         {reviews.length === 0 ? (
           <EmptyState message="Chưa có review nào cho đơn này." />
@@ -401,7 +401,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                           href={`/reviews/${review.id}`}
                           className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
                         >
-                          {review.status === "submitted" ? "Xem" : "Làm review"}
+                          {review.status === "submitted" ? "Xem" : "Thực hiện đánh giá"}
                         </Link>
                       </td>
                     </tr>

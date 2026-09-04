@@ -164,7 +164,9 @@ export function AssignBulkForm({
               className="w-full rounded-md border border-vam-line px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
               required
             >
-              <option value="">-- Chọn người phụ trách --</option>
+              <option value="">
+                {reviewRound === "interview" ? "-- Chọn người phỏng vấn --" : "-- Chọn người đánh giá hồ sơ --"}
+              </option>
               {reviewers.map(r => (
                 <option key={r.id} value={r.id}>
                   {staffDisplayLabel({ adminFullName: r.full_name, email: r.email, role: r.role })}

@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { assignApplicationReviewAction, cancelApplicationReviewAction } from "@/app/actions/application-reviews";
 import { initialReviewActionState } from "@/lib/review-action-types";
 import type { AdminUserPublic, ApplicationReview } from "@/lib/types";
+import { staffDisplayLabel } from "@/lib/ui-labels";
 
 function SubmitButton({ label, pendingLabel, variant = "primary" }: { label: string; pendingLabel: string; variant?: "primary" | "danger" | "secondary" }) {
   const { pending } = useFormStatus();
@@ -108,10 +109,10 @@ function AssignNewForm({
             required
             className="w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink focus:outline-none focus:ring-1 focus:ring-vam-green"
           >
-            <option value="">-- Chọn reviewer --</option>
+            <option value="">-- Chọn người phụ trách --</option>
             {reviewers.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.full_name ?? r.email} ({r.role})
+                {staffDisplayLabel({ adminFullName: r.full_name, email: r.email, role: r.role })}
               </option>
             ))}
           </select>
@@ -150,13 +151,13 @@ export function AssignmentControls({
       <div>
         {activeProfileReview ? (
           <ActiveAssignmentCard 
-            title="Hồ sơ (Profile Screening)" 
+            title="Đánh giá hồ sơ" 
             review={activeProfileReview} 
             reviewers={profileReviewers} 
           />
         ) : (
           <AssignNewForm 
-            title="Hồ sơ (Profile Screening)" 
+            title="Đánh giá hồ sơ" 
             applicationId={applicationId} 
             reviewers={profileReviewers} 
             round="profile_screening" 
@@ -167,13 +168,13 @@ export function AssignmentControls({
       <div>
         {activeInterviewReview ? (
           <ActiveAssignmentCard 
-            title="Phỏng vấn (Interview)" 
+            title="Phỏng vấn" 
             review={activeInterviewReview} 
             reviewers={interviewers} 
           />
         ) : (
           <AssignNewForm 
-            title="Phỏng vấn (Interview)" 
+            title="Phỏng vấn" 
             applicationId={applicationId} 
             reviewers={interviewers} 
             round="interview" 

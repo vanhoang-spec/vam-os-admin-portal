@@ -31,9 +31,9 @@ function getAccountStatus(row: ReviewerPoolRow): AccountStatus {
 
 const STATUS_LABELS: Record<AccountStatus, string> = {
   no_account: "Chưa có tài khoản",
-  reviewer_active: "Người đánh giá hồ sơ (đang hoạt động)",
-  reviewer_inactive: "Người đánh giá hồ sơ (tạm khóa)",
-  higher_active: "Ban Điều hành / Quản trị viên",
+  reviewer_active: "Đang có quyền đánh giá",
+  reviewer_inactive: "Đã thu hồi quyền đánh giá",
+  higher_active: "Quản trị / Ban Điều hành",
   higher_inactive: "Quản trị viên (tạm khóa)",
   other: "Khác"
 };
@@ -52,34 +52,87 @@ type FilterOption = "all" | AccountStatus;
 const FILTER_OPTIONS: { value: FilterOption; label: string }[] = [
   { value: "all", label: "Tất cả" },
   { value: "no_account", label: "Chưa có tài khoản" },
-  { value: "reviewer_active", label: "Người đánh giá hồ sơ (đang hoạt động)" },
-  { value: "reviewer_inactive", label: "Người đánh giá hồ sơ (tạm khóa)" },
-  { value: "higher_active", label: "Ban Điều hành / Quản trị viên" }
+  { value: "reviewer_active", label: "Đang có quyền đánh giá" },
+  { value: "reviewer_inactive", label: "Đã thu hồi quyền đánh giá" },
+  { value: "higher_active", label: "Quản trị / Ban Điều hành" }
 ];
 
 /**
- * Rights an account holds by virtue of its role, stated rather than offered.
+ * What a privileged account may actually do this season, stated rather than
+ * offered.
  *
- * An active Ban Điều hành / Quản trị viên account is intrinsically authorised
- * to screen profiles and to interview for the target season, so there is
- * nothing to grant and nothing a participation revoke could take away. The
- * previous screen showed "Cấp Interviewer" here, which failed with a database
- * constraint error for every such account.
+ * The right is ROLE-derived, so there is nothing to grant and nothing a
+ * participation revoke could take away — but it is not unconditional. The
+ * canonical policy also requires an ACTIVE scope for the TARGET season, and
+ * `profileEligible` / `interviewEligible` come from the same source the
+ * assignment dropdowns read. Claiming "Có quyền theo vai trò" from role and
+ * status alone is what let this screen disagree with the Interview dropdown
+ * for the same person on the same batch.
+ *
+ * A privileged account with no target-season eligibility is most often simply
+ * OUT OF SCOPE for this batch — a Super Admin sees accounts across programmes,
+ * and a HAM Core Team member is correctly not a UEHM-S12 recruitment
+ * participant. Visibility is not eligibility. Such a row is labelled as out of
+ * scope and offered nothing: no badge, no participation grant, and no scope is
+ * manufactured for it.
  */
-function IntrinsicRightsBadges({ role }: { role: string | null }) {
+function IntrinsicRightsBadges({
+  role,
+  seasonSelected,
+  profileEligible,
+  interviewEligible
+}: {
+  role: string | null;
+  seasonSelected: boolean;
+  profileEligible: boolean;
+  interviewEligible: boolean;
+}) {
+  if (!seasonSelected) {
+    return (
+      <span className="text-xs text-slate-500" data-testid="intrinsic-rights-unknown">
+        Chọn đợt tuyển để xem quyền theo mùa.
+      </span>
+    );
+  }
+
+  if (!profileEligible && !interviewEligible) {
+    return (
+      <div className="flex flex-col gap-1" data-testid="intrinsic-rights-none">
+        <span className="inline-flex w-fit items-center rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+          Không thuộc phạm vi đợt tuyển này
+        </span>
+        <span className="text-[11px] leading-4 text-slate-500">
+          Tài khoản {adminRoleLabel(role)} của chương trình khác, hiển thị vì bạn có quyền xem toàn
+          hệ thống. Không tham gia tuyển sinh của đợt này.
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1.5" data-testid="intrinsic-rights">
-      <span className="inline-flex w-fit items-center rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800">
-        Đánh giá hồ sơ: Có quyền theo vai trò
-      </span>
-      <span className="inline-flex w-fit items-center rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800">
-        Phỏng vấn: Có quyền theo vai trò
-      </span>
+      <RightBadge label="Đánh giá hồ sơ" granted={profileEligible} />
+      <RightBadge label="Phỏng vấn" granted={interviewEligible} />
       <span className="text-[11px] leading-4 text-slate-500">
         Theo vai trò {adminRoleLabel(role)} và phạm vi mùa hiện tại. Hệ thống áp dụng tự động, không
         cần thao tác thủ công.
       </span>
     </div>
+  );
+}
+
+function RightBadge({ label, granted }: { label: string; granted: boolean }) {
+  return (
+    <span
+      data-testid={granted ? "right-granted" : "right-missing"}
+      className={
+        granted
+          ? "inline-flex w-fit items-center rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800"
+          : "inline-flex w-fit items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-500"
+      }
+    >
+      {label}: {granted ? "Có quyền theo vai trò" : "Không thuộc phạm vi đợt tuyển này"}
+    </span>
   );
 }
 
@@ -130,8 +183,10 @@ function EnableReviewerButton({
 
   // Derive button label + disabled state from current account status
   const isDisabled = !seasonId;
-  const roleLabel = participationRole === "reviewer" ? "Reviewer" : "Interviewer";
-  const buttonLabel = active ? `Thu hồi ${roleLabel}` : `Cấp ${roleLabel}`;
+  // "quyền đánh giá" / "quyền phỏng vấn" — the participation being granted,
+  // not the English role noun.
+  const rightLabel = participationRole === "reviewer" ? "quyền đánh giá" : "quyền phỏng vấn";
+  const buttonLabel = active ? `Thu hồi ${rightLabel}` : `Cấp ${rightLabel}`;
 
   return (
     <div className="flex flex-col gap-1">
@@ -223,14 +278,14 @@ export function ReviewerPoolClient({
           onClick={() => setStatusFilter("reviewer_active")}
           className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${statusFilter === "reviewer_active" ? "border-green-600 bg-green-600 text-white" : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"}`}
         >
-          Reviewer active ({stats.reviewer_active})
+          Đang có quyền đánh giá ({stats.reviewer_active})
         </button>
         <button
           type="button"
           onClick={() => setStatusFilter("reviewer_inactive")}
           className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${statusFilter === "reviewer_inactive" ? "border-amber-600 bg-amber-600 text-white" : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
         >
-          Reviewer inactive ({stats.reviewer_inactive})
+          Đã thu hồi quyền đánh giá ({stats.reviewer_inactive})
         </button>
         <button
           type="button"
@@ -264,7 +319,7 @@ export function ReviewerPoolClient({
               <tr>
                 <th className="px-4 py-3">Tên</th>
                 <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Mentor code</th>
+                <th className="px-4 py-3">Mã Mentor</th>
                 <th className="px-4 py-3">Tài khoản hiện tại</th>
                 <th className="px-4 py-3">Thao tác</th>
               </tr>
@@ -272,14 +327,24 @@ export function ReviewerPoolClient({
             <tbody className="divide-y divide-vam-line bg-white">
               {filtered.map((row) => {
                 const bucket = getAccountStatus(row);
-                // Rights that come from a privileged ROLE are not a
-                // participation grant and must not be revocable by removing
-                // one. Showing "Thu hồi" next to them invites an operator to
-                // try, fail, and lose confidence in the screen.
-                const intrinsic = hasIntrinsicRecruitmentRights({
+                // Whether this account's authority is ROLE-derived decides
+                // which control model applies: a privileged account's rights
+                // are not a participation grant, so offering "Thu hồi" invites
+                // an operator to try, fail, and lose confidence in the screen.
+                const roleDerived = hasIntrinsicRecruitmentRights({
                   role: row.admin_user_role,
                   status: row.admin_user_status
                 });
+                // ...but whether the right currently HOLDS for this season is
+                // never decided here. Both answers come from the same canonical
+                // source the dropdowns use (vam084_recruitment_eligible_admins,
+                // via getReviewEligibleReviewers). Deriving the badge from
+                // role/status alone is what let the pool claim "Có quyền theo
+                // vai trò" for an account the Interview dropdown did not list —
+                // a privileged account with no ACTIVE scope for the target
+                // season is eligible for neither round.
+                const canonicalProfile = Boolean(row.admin_user_id && activeReviewerSet.has(row.admin_user_id));
+                const canonicalInterview = Boolean(row.admin_user_id && activeInterviewerSet.has(row.admin_user_id));
                 return (
                   <tr key={row.person_id ?? row.mentor_profile_id ?? row.email_primary ?? row.admin_user_id} className="hover:bg-vam-mint/30">
                     <td className="px-4 py-3 font-medium text-vam-ink">
@@ -297,8 +362,13 @@ export function ReviewerPoolClient({
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {intrinsic ? (
-                        <IntrinsicRightsBadges role={row.admin_user_role} />
+                      {roleDerived ? (
+                        <IntrinsicRightsBadges
+                          role={row.admin_user_role}
+                          seasonSelected={Boolean(seasonId)}
+                          profileEligible={canonicalProfile}
+                          interviewEligible={canonicalInterview}
+                        />
                       ) : row.person_id ? (
                         <div className="flex flex-col gap-2">
                           <EnableReviewerButton personId={row.person_id} accountStatus={bucket} seasonId={seasonId} participationRole="reviewer" active={Boolean(row.admin_user_id && activeReviewerSet.has(row.admin_user_id))} />

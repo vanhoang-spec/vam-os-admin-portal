@@ -48,7 +48,7 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
       {/* Back nav */}
       <div className="mb-4">
         <Link href="/reviews" className="text-sm text-vam-green hover:underline">
-          ← Quay lại Reviews
+          ← Quay lại Đánh giá
         </Link>
       </div>
 
