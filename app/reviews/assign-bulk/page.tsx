@@ -111,7 +111,7 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
   // Load application pool and reviewer list in parallel
   const seasonId = intakeBatches.data.find((batch) => batch.id === intakeBatchId)?.season_id;
   const [appsResult, reviewersResult] = await Promise.all([
-    getReviewAssignableApplications({ intakeBatchId, roleApplied, scope }),
+    getReviewAssignableApplications({ intakeBatchId, roleApplied, reviewRound, scope }),
     seasonId
       ? getReviewEligibleReviewers(String(seasonId), reviewRound)
       : Promise.resolve({ data: [], error: "Batch chưa gắn mùa." })

@@ -1898,12 +1898,14 @@ export async function getReviewAssignableApplications(filters: {
 
   const appIds = appList.map((a) => a.id);
   const reviewRound = filters.reviewRound ?? "profile_screening";
+  
+  // Fetch ALL reviews for these applications to evaluate needs_more_review provenance
+  // and active assignments for the target round.
   const { data: reviewRows, error: reviewErr } = await selectInChunks<JsonRecord>(
     "application_reviews",
-    "application_id,reviewer_admin_user_id",
+    "application_id,reviewer_admin_user_id,status,review_round",
     appIds,
-    "application_id",
-    (query) => query.eq("review_round", reviewRound).neq("status", "cancelled")
+    "application_id"
   );
   if (reviewErr) {
     logDataError("getReviewAssignableApplications.reviews", reviewErr);
@@ -1913,16 +1915,47 @@ export async function getReviewAssignableApplications(filters: {
 
   const reviewCountByAppId = new Map<string, number>();
   const reviewerIdByAppId = new Map<string, string>();
+  const hasAnyInterviewByAppId = new Set<string>();
+
   for (const row of reviewRows) {
     const id = row.application_id as string | null;
     const revId = row.reviewer_admin_user_id as string | null;
+    const round = row.review_round as string | null;
+    const status = row.status as string | null;
+    
     if (id) {
-      reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
-      if (revId) reviewerIdByAppId.set(id, revId);
+      // Any interview row (even cancelled) counts for needs_more_review provenance
+      if (round === "interview") {
+        hasAnyInterviewByAppId.add(id);
+      }
+      
+      // Active assignments for the TARGET round disable the checkbox
+      if (round === reviewRound && status !== "cancelled") {
+        reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
+        if (revId) reviewerIdByAppId.set(id, revId);
+      }
     }
   }
 
-  const data: ReviewAssignableApplication[] = appList.map((a) => ({
+  const profileStatuses = new Set(['submitted','under_data_check','ready_for_screening','screening_assigned']);
+  const interviewStatuses = new Set(['invited_to_interview','interview_scheduled','interview_in_progress']);
+
+  const validApps = appList.filter((a) => {
+    const status = a.status as string | null;
+    if (!status) return false;
+
+    if (reviewRound === "profile_screening") {
+      if (profileStatuses.has(status)) return true;
+      if (status === "needs_more_review" && !hasAnyInterviewByAppId.has(a.id)) return true;
+      return false;
+    } else {
+      if (interviewStatuses.has(status)) return true;
+      if (status === "needs_more_review" && hasAnyInterviewByAppId.has(a.id)) return true;
+      return false;
+    }
+  });
+
+  const data: ReviewAssignableApplication[] = validApps.map((a) => ({
     ...a,
     existing_review_count: reviewCountByAppId.get(a.id) ?? 0,
     existing_reviewer_id: reviewerIdByAppId.get(a.id) ?? null
