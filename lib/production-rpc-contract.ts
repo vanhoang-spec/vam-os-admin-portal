@@ -54,6 +54,20 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   "vam084_application_decision_eligibility",
   "vam084_apply_application_decisions",
   "vam084_change_review_assignment",
+  // VERSION-SENSITIVE. The shipped Production body unconditionally inserted a
+  // role='review' admin_scope_access row guarded by an ON CONFLICT whose target
+  // included `role`, while Production also enforces a role-AGNOSTIC unique
+  // index on (user_id, program_id, season_id) among active rows. Any account
+  // already holding an active 'operations' or 'full_access' scope for the
+  // season therefore failed the grant with
+  //   23505 duplicate key value violates unique constraint
+  //         "admin_scope_access_active_scope_key"
+  // Observed on Production 2026-09-04: Super Admin (no scope row) succeeded and
+  // six Core Team / Admin accounts failed.
+  // Migration 20260904140000_grant_participation_scope_reuse.sql makes the
+  // function reuse a qualifying scope instead of stacking a second one. NOT yet
+  // applied to Staging or Production. Presence is unaffected — same name, same
+  // signature — so this stays in the provided bucket; verify the deployed BODY.
   "vam084_grant_recruitment_participation",
   "vam084_list_recruitment_participants",
   "vam084_operator_for_season",
