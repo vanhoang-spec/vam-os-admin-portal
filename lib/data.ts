@@ -1901,11 +1901,16 @@ export async function getReviewAssignableApplications(filters: {
   
   // Fetch ALL reviews for these applications to evaluate needs_more_review provenance
   // and active assignments for the target round.
+  // Argument order is (table, filterColumn, values, projection). Swapping the
+  // last two silently projects only `application_id`, so `status` and
+  // `review_round` come back undefined, every application reports
+  // existing_review_count = 0, and the UI offers rows the database has already
+  // assigned. __tests__/manual-bulk-assignment-data.test.ts pins this.
   const { data: reviewRows, error: reviewErr } = await selectInChunks<JsonRecord>(
     "application_reviews",
-    "application_id,reviewer_admin_user_id,status,review_round",
+    "application_id",
     appIds,
-    "application_id"
+    "application_id,reviewer_admin_user_id,status,review_round"
   );
   if (reviewErr) {
     logDataError("getReviewAssignableApplications.reviews", reviewErr);
