@@ -1,19 +1,14 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/interview-claim";
+import { INTERVIEW_ELIGIBLE_STATUSES, PROFILE_ASSIGNMENT_STATUSES } from "@/lib/bulk-assignment-action-types";
 import { canBulkAssignReviews } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 const SAFE_ERROR = "Không thể thực hiện thao tác. Vui lòng thử lại hoặc liên hệ admin.";
 
-const PROFILE_ASSIGNMENT_STATUSES = new Set([
-  "submitted",
-  "under_data_check",
-  "ready_for_screening",
-  "screening_assigned"
-]);
+
 
 function serviceClient() {
   const client = getSupabaseServiceRoleClient();

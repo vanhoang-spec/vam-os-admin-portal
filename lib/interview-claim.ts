@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/bulk-assignment-action-types";
 import { canSelfClaimInterview } from "@/lib/permissions";
 import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -29,13 +30,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 const SAFE_ERROR =
   "Không thể thực hiện thao tác. Vui lòng thử lại hoặc liên hệ admin.";
 
-/** Statuses that allow a new self-claim to be created. */
-export const INTERVIEW_ELIGIBLE_STATUSES: ReadonlySet<string> = new Set([
-  "invited_to_interview",
-  "interview_scheduled",
-  "interview_in_progress",
-  "needs_more_review"
-]);
+
 
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string };

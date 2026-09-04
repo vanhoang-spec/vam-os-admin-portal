@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/interview-claim";
+import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/bulk-assignment-action-types";
 import { canAssignReview, canReview } from "@/lib/permissions";
 import { canOperateSeason, canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { EDITABLE_REVIEW_STATUSES, isEditableReviewStatus } from "@/lib/review-status";

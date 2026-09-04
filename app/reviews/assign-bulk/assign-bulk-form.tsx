@@ -4,18 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import Link from "next/link";
 import { bulkAssignApplicationReviewsAction } from "@/app/actions/bulk-assignment";
-import { initialBulkAssignmentActionState } from "@/lib/bulk-assignment-action-types";
-import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/interview-claim";
+import { initialBulkAssignmentActionState, INTERVIEW_ELIGIBLE_STATUSES, PROFILE_ASSIGNMENT_STATUSES } from "@/lib/bulk-assignment-action-types";
 import type { IntakeBatch, ReviewAssignableApplication, ReviewEligibleReviewer, Season } from "@/lib/types";
 import { ErrorBox } from "@/components/ui";
 
-const PROFILE_ASSIGNMENT_STATUSES = new Set([
-  "submitted",
-  "under_data_check",
-  "ready_for_screening",
-  "screening_assigned",
-  "needs_more_review"
-]);
+
 
 function statusBadge(status: string | null) {
   if (!status) return "bg-slate-50 text-slate-500";
