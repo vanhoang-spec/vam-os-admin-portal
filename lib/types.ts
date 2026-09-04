@@ -222,7 +222,7 @@ export type IntakeBatch = JsonRecord & {
  * Joined in JS: mentor_profiles → people (person_id) → admin_users (email).
  */
 export type ReviewerPoolRow = {
-  mentor_profile_id: string;
+  mentor_profile_id: string | null;
   person_id: string | null;
   full_name: string | null;
   email_primary: string | null;

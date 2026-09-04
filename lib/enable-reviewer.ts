@@ -8,12 +8,16 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 const SAFE_ERROR = "Không thể cấp quyền tham gia tuyển sinh. Vui lòng thử lại hoặc liên hệ admin.";
 
 async function findAuthUserByEmail(client: any, email: string) {
-  for (let page = 1; page <= 20; page++) {
+  const normalizedEmail = email.trim().toLowerCase();
+  for (let page = 1; page <= 50; page++) {
+    // Note: Supabase GoTrue API caps perPage at 50 internally regardless of the request.
     const { data, error } = await client.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw error;
     const users = (data?.users ?? []) as Array<{ id: string; email?: string }>;
-    const found = users.find(user => String(user.email ?? "").trim().toLowerCase() === email);
-    if (found || users.length < 1000) return found ?? null;
+    if (users.length === 0) break;
+    
+    const found = users.find(user => String(user.email ?? "").trim().toLowerCase() === normalizedEmail);
+    if (found) return found;
   }
   return null;
 }

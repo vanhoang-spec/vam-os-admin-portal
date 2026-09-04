@@ -226,16 +226,16 @@ export function ReviewerPoolClient({
       {/* Table */}
       {filtered.length === 0 ? (
         <div className="rounded-md border border-dashed border-vam-line px-4 py-8 text-center text-sm text-slate-400">
-          {rows.length === 0
-            ? "Không có mentor nào có email trong hệ thống."
-            : "Không có mentor nào khớp bộ lọc."}
+            {rows.length === 0
+              ? "Không có tài khoản nào có email trong hệ thống."
+              : "Không có tài khoản nào khớp bộ lọc."}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-vam-line">
           <table className="min-w-full divide-y divide-vam-line text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Tên mentor</th>
+                <th className="px-4 py-3">Tên</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Mentor code</th>
                 <th className="px-4 py-3">Tài khoản hiện tại</th>
@@ -246,7 +246,7 @@ export function ReviewerPoolClient({
               {filtered.map((row) => {
                 const bucket = getAccountStatus(row);
                 return (
-                  <tr key={row.mentor_profile_id} className="hover:bg-vam-mint/30">
+                  <tr key={row.person_id ?? row.email_primary ?? Math.random()} className="hover:bg-vam-mint/30">
                     <td className="px-4 py-3 font-medium text-vam-ink">
                       {row.full_name ?? <span className="text-slate-400">(Chưa có tên)</span>}
                     </td>
@@ -277,7 +277,7 @@ export function ReviewerPoolClient({
             </tbody>
           </table>
           <p className="px-4 py-2 text-xs text-slate-400">
-            Hiển thị {filtered.length} / {rows.length} mentor có email
+            Hiển thị {filtered.length} / {rows.length} tài khoản có email
           </p>
         </div>
       )}

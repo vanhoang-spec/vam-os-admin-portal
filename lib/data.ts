@@ -2299,24 +2299,54 @@ export async function getReviewerPool(filters?: {
     new Set(mentors.map((m) => m.person_id).filter((id): id is string => Boolean(id)))
   );
 
-  const { data: peopleRows, error: peopleErr } = await selectInChunks<JsonRecord>(
-    "people",
-    "id",
-    personIds,
-    "id,full_name,email_primary"
+  const eligibleAdminRoles = new Set(["core_team", "admin", "super_admin", "reviewer"]);
+  const eligibleAdminEmails = Array.from(
+    new Set(
+      adminRes.data
+        .filter((a) => eligibleAdminRoles.has(String(a.role)))
+        .map((a) => String((a as any).email ?? "").trim().toLowerCase())
+        .filter(Boolean)
+    )
   );
-  if (peopleErr) {
-    logDataError("getReviewerPool.people", peopleErr);
-    const err = peopleErr as { message?: string };
+
+  const [peopleByIdRes, peopleByEmailRes] = await Promise.all([
+    selectInChunks<JsonRecord>(
+      "people",
+      "id",
+      personIds,
+      "id,full_name,email_primary"
+    ),
+    selectInChunks<JsonRecord>(
+      "people",
+      "email_primary",
+      eligibleAdminEmails,
+      "id,full_name,email_primary"
+    )
+  ]);
+
+  if (peopleByIdRes.error) {
+    logDataError("getReviewerPool.people_by_id", peopleByIdRes.error);
+    const err = peopleByIdRes.error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (people: ${err.message ?? "Bad Request"})` };
+  }
+  if (peopleByEmailRes.error) {
+    logDataError("getReviewerPool.people_by_email", peopleByEmailRes.error);
+    const err = peopleByEmailRes.error as { message?: string };
     return { data: [], error: `${VI_ERROR} (people: ${err.message ?? "Bad Request"})` };
   }
 
-  const peopleById = new Map(
-    peopleRows.map((p) => [
-      p.id as string,
-      p as unknown as { id: string; full_name: string | null; email_primary: string | null }
-    ])
-  );
+  const allPeopleRows = [...peopleByIdRes.data, ...peopleByEmailRes.data];
+
+  const peopleById = new Map();
+  const peopleByEmailPrimary = new Map<string, string>(); // normalized email -> person_id
+
+  for (const p of allPeopleRows) {
+    const id = p.id as string;
+    const email = String((p as any).email_primary ?? "").trim().toLowerCase();
+    peopleById.set(id, p);
+    if (email) peopleByEmailPrimary.set(email, id);
+  }
+
 
   // --- Build email → admin_user map from Query 3
   const adminByEmail = new Map(
@@ -2327,8 +2357,11 @@ export async function getReviewerPool(filters?: {
   );
 
   // --- Join and return
+  const processedPersonIds = new Set<string>();
+
   const rows: ReviewerPoolRow[] = mentors
     .map((mentor) => {
+      if (mentor.person_id) processedPersonIds.add(mentor.person_id);
       const person = mentor.person_id ? peopleById.get(mentor.person_id) : undefined;
       const email = String(person?.email_primary ?? "").trim().toLowerCase();
       const adminUser = email ? adminByEmail.get(email) : undefined;
@@ -2345,6 +2378,33 @@ export async function getReviewerPool(filters?: {
       };
     })
     .filter((row) => Boolean(row.email_primary));
+
+  // Append eligible admin_users who resolve to a people row by email
+  // but were not already included via mentor_profiles.
+  for (const adminUser of adminRes.data) {
+    if (!eligibleAdminRoles.has(String(adminUser.role))) continue;
+    
+    const email = String((adminUser as any).email ?? "").trim().toLowerCase();
+    if (!email) continue;
+    
+    const personId = peopleByEmailPrimary.get(email);
+    if (!personId || processedPersonIds.has(personId)) continue;
+    
+    processedPersonIds.add(personId);
+    const person = peopleById.get(personId);
+    
+    rows.push({
+      mentor_profile_id: null,
+      person_id: personId,
+      full_name: person?.full_name ?? null,
+      email_primary: person?.email_primary ?? null,
+      mentor_code: null,
+      intake_batch_id: null,
+      admin_user_id: adminUser.id as string,
+      admin_user_role: adminUser.role as string,
+      admin_user_status: adminUser.status as string
+    });
+  }
 
   return { data: rows, error: null };
 }
