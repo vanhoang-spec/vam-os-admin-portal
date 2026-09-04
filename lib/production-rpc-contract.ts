@@ -57,6 +57,21 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   "vam084_grant_recruitment_participation",
   "vam084_list_recruitment_participants",
   "vam084_operator_for_season",
+  // VERSION-SENSITIVE. Migration 20260903193000 moved the profile-screening
+  // half of vam084_list_recruitment_participants onto the Owner's
+  // admin-account policy without touching this predicate, leaving the read
+  // side and the write side of one policy disagreeing: the dropdown offers a
+  // reviewer the database then refuses with
+  //   P0001 Target assignee is not an active participant for this season and stage
+  // Migration 20260904100000_profile_screening_reviewer_eligibility_helper.sql
+  // re-syncs it (profile screening only; interview semantics unchanged) and is
+  // present in main.
+  //
+  // Staging ran the PRE-parity version on 2026-09-04 and failed every
+  // profile-screening assignment — the migration was in git but had never been
+  // applied to that database. Presence in this bucket is therefore NOT enough
+  // for this function: verify the deployed BODY, not just the name. Production
+  // apply status for 20260904100000 is unverified.
   "vam084_participant_for_stage",
   "vam084_recompute_application_review_status",
   "vam084_revoke_recruitment_participation",
