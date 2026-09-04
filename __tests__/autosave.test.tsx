@@ -697,6 +697,35 @@ describe("15. the real success path", () => {
     routerMock.replace.mockReset();
   });
 
+  test("4b. React Strict Mode re-runs the effect; success still happens once", async () => {
+    // The plain-rerender case above does NOT exercise the idempotency latch:
+    // React skips an effect whose dependencies are unchanged, so it passes even
+    // with the latch deleted. Strict Mode is the case the latch exists for — it
+    // deliberately unmounts and remounts effects, running the success body a
+    // second time against the same confirmed application.
+    vi.mocked(submitPilotApplication).mockResolvedValue({ ok: true, applicationId: "app-strict" } as never);
+    const successState = await runAction(validMenteeForm());
+    vi.mocked(useFormState).mockImplementation(() => [successState, vi.fn()] as never);
+    saveDraft(MENTEE_KEY, { full_name: "Submitted" });
+
+    render(
+      <React.StrictMode>
+        <ApplyMenteeForm applyToken={APPLY_TOKEN_VALUE} />
+      </React.StrictMode>
+    );
+
+    await waitFor(() => expect(routerMock.replace).toHaveBeenCalled());
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(MENTEE_KEY)).toBeNull();
+
+    // A draft begun after the confirmed submission belongs to a NEW attempt and
+    // must survive any repeat run of the success effect.
+    saveDraft(MENTEE_KEY, { full_name: "Written After Success" });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(MENTEE_KEY)).not.toBeNull();
+  });
+
   test("4. re-rendering the same success state clears and navigates exactly once", async () => {
     vi.mocked(submitPilotApplication).mockResolvedValue({ ok: true, applicationId: "app-once" } as never);
     const successState = await runAction(validMenteeForm());

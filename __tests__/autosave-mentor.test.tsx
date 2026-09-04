@@ -546,6 +546,35 @@ describe("J–N. confirmed success clears the mentor draft", () => {
     expect(storedRaw(MENTOR_KEY)).toBeNull();
   });
 
+  test("M-strict. React Strict Mode re-runs the effect; success still happens once", async () => {
+    // The plain rerender above does NOT exercise the idempotency latch: React
+    // skips an effect whose dependencies are unchanged, so `router.replace`
+    // would be called once even with the latch deleted. Strict Mode is the
+    // case the latch actually exists for — it deliberately unmounts and
+    // remounts effects, running the success body a second time against the
+    // same confirmed application. Without the latch that navigates twice and
+    // destroys a draft started after the submission.
+    saveDraft(MENTOR_KEY, { full_name: "Submitted" });
+    setFormState({ ok: true, message: "ok", applicationId: "mentor-strict" });
+
+    render(
+      <React.StrictMode>
+        <ApplyMentorForm applyToken={APPLY_TOKEN_VALUE} />
+      </React.StrictMode>
+    );
+
+    await waitFor(() => expect(routerMock.replace).toHaveBeenCalled());
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    expect(storedRaw(MENTOR_KEY)).toBeNull();
+
+    // A draft begun after the confirmed submission belongs to a NEW attempt and
+    // must survive any repeat run of the success effect.
+    saveDraft(MENTOR_KEY, { full_name: "Written After Success" });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+    expect(storedRaw(MENTOR_KEY)).not.toBeNull();
+  });
+
   test("L. visiting the thank-you URL alone does not clear a draft", async () => {
     // No confirmed success state: the applicant simply navigated to the
     // success URL, or came back to the form afterwards. A draft must survive,
