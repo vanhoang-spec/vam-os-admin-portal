@@ -9,7 +9,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { canAssignReview } from "@/lib/permissions";
+import { canAssignReview, canDecide } from "@/lib/permissions";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 
@@ -146,16 +146,28 @@ export default async function ApplicationsPage() {
           confused with M092 Bulk Official Approval. The entry point is hidden
           for this slice; /applications/bulk-decision and its action are left
           intact and directly reachable for later controlled UAT. */}
-      {canAssignReview(adminUser.role) && exportSeasonId && (
-        <div className="mb-4">
+      <div className="mb-4 flex flex-wrap gap-2">
+        {canAssignReview(adminUser.role) && exportSeasonId && (
           <Link
             href="/applications/exports"
             className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
           >
             Xuất kết quả tuyển / điểm review
           </Link>
-        </div>
-      )}
+        )}
+        {/* M092. Same authority as the official-approval action itself
+            (canDecide), so the entry point never appears to a role that could
+            not use it. This is the only new entry point added here; the hidden
+            bulk-decision one stays hidden. */}
+        {canDecide(adminUser.role) && (
+          <Link
+            href="/applications/bulk-approval"
+            className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Duyệt chính thức hàng loạt
+          </Link>
+        )}
+      </div>
       <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />
       <FilterableTable
         rows={rows}
