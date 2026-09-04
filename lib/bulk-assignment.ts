@@ -190,7 +190,7 @@ export async function assignSelectedApplicationReviews(
   });
   if (error) {
     log("atomic selected assignment failed", error);
-    return { ok: false, message: error.message ?? SAFE_ERROR };
+    return { ok: false, message: SAFE_ERROR };
   }
   const row = (Array.isArray(data) ? data[0] : data) as { batch_id: string; applications_assigned: number; reviewer_id: string } | null;
   if (!row?.batch_id || !Number.isInteger(row.applications_assigned) || row.applications_assigned < 1) {

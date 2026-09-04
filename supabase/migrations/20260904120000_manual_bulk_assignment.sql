@@ -21,13 +21,10 @@ declare
   v_intake_batch_id uuid;
   v_batch_id uuid;
   v_app_id uuid;
-  v_application_count integer;
-  v_profile_statuses constant text[] := array[
-    'submitted','under_data_check','ready_for_screening','screening_assigned','needs_more_review'
-  ];
-  v_interview_statuses constant text[] := array[
-    'invited_to_interview','interview_scheduled','interview_in_progress','needs_more_review'
-  ];
+  v_found_count integer;
+  v_batch_count integer;
+  v_season_count integer;
+  v_role_count integer;
 begin
   if current_user <> 'service_role' then raise exception 'Trusted server context required'; end if;
   if p_review_round not in ('profile_screening','interview') then raise exception 'Invalid review round'; end if;
@@ -38,13 +35,16 @@ begin
   end if;
 
   -- Validate uniform batch, season, and role
-  select count(distinct a.intake_batch_id), count(distinct b.season_id), count(distinct lower(coalesce(a.role_applied::text, '')))
-  into v_application_count, v_application_count, v_application_count
+  select count(a.id), count(distinct a.intake_batch_id), count(distinct b.season_id), count(distinct lower(coalesce(a.role_applied::text, '')))
+  into v_found_count, v_batch_count, v_season_count, v_role_count
   from public.applications a
   join public.intake_batches b on b.id = a.intake_batch_id
   where a.id = any(p_application_ids);
 
-  if v_application_count <> 1 then
+  if v_found_count <> cardinality(p_application_ids) then
+    raise exception 'One or more application IDs do not exist';
+  end if;
+  if v_batch_count <> 1 or v_season_count <> 1 or v_role_count <> 1 then
     raise exception 'All selected applications must belong to exactly one intake batch and have the same role_applied';
   end if;
 
@@ -66,22 +66,29 @@ begin
 
   perform pg_advisory_xact_lock(hashtextextended(v_intake_batch_id::text || ':' || p_review_round, 0));
 
-  -- Lock and validate applications
-  if (
-    select count(*)
+  -- Validate applications status semantics
+  if exists (
+    select 1
     from public.applications a
     where a.id = any(p_application_ids)
-      and (
-        (p_review_round = 'profile_screening' and not a.status = any(v_profile_statuses))
-        or (p_review_round = 'interview' and not a.status = any(v_interview_statuses))
+      and not (
+        (p_review_round = 'profile_screening' and (
+          a.status in ('submitted','under_data_check','ready_for_screening','screening_assigned')
+          or (a.status = 'needs_more_review' and not exists (
+            select 1 from public.application_reviews ar 
+            where ar.application_id = a.id and ar.review_round = 'interview' and ar.status <> 'cancelled'
+          ))
+        ))
+        or (p_review_round = 'interview' and (
+          a.status in ('invited_to_interview','interview_scheduled','interview_in_progress')
+          or (a.status = 'needs_more_review' and exists (
+            select 1 from public.application_reviews ar 
+            where ar.application_id = a.id and ar.review_round = 'interview' and ar.status <> 'cancelled'
+          ))
+        ))
       )
-  ) > 0 then
+  ) then
     raise exception 'One or more selected applications have an invalid status for this review round';
-  end if;
-
-  -- Verify existence of all applications
-  if (select count(*) from public.applications where id = any(p_application_ids)) <> cardinality(p_application_ids) then
-    raise exception 'One or more application IDs do not exist';
   end if;
 
   -- Check for existing assignments
@@ -103,18 +110,20 @@ begin
 
   insert into public.review_assignment_batches (
     intake_batch_id,
-    assigned_by_admin_user_id,
     review_round,
-    reviewer_count,
+    created_by,
+    due_at,
+    assignment_note,
     application_count,
-    note
+    reviewer_count
   ) values (
     v_intake_batch_id,
-    p_actor,
     p_review_round,
-    1,
+    p_actor,
+    p_due_at,
+    nullif(btrim(p_assignment_note), ''),
     cardinality(p_application_ids),
-    p_assignment_note
+    1
   ) returning id into v_batch_id;
 
   foreach v_app_id in array p_application_ids loop
