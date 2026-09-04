@@ -21,6 +21,7 @@ import {
 } from "@/lib/recruitment-export";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { applicationStatusLabel } from "@/lib/ui-labels";
+import { getActiveAdminUsers } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -215,6 +216,26 @@ export async function GET(request: Request) {
     else decisionsByApplication.set(key, [row]);
   }
 
+  const appIds = (applications ?? []).map(a => String(a.id));
+  const allReviews: any[] = [];
+  const chunkSize = 500;
+  for (let i = 0; i < appIds.length; i += chunkSize) {
+    const chunk = appIds.slice(i, i + chunkSize);
+    const { data: chunkReviews } = await client.from("application_reviews").select("*").in("application_id", chunk);
+    if (chunkReviews) allReviews.push(...chunkReviews);
+  }
+  const adminUsersRes = await getActiveAdminUsers();
+  const adminUserMap = new Map((adminUsersRes.data ?? []).map((u) => [u.id, u]));
+
+  const reviewsByAppId = new Map<string, any[]>();
+  for (const review of allReviews) {
+    const key = String(review.application_id ?? "");
+    if (!key) continue;
+    const bucket = reviewsByAppId.get(key);
+    if (bucket) bucket.push(review);
+    else reviewsByAppId.set(key, [review]);
+  }
+
   const headers = [
     "Mã đơn",
     "SBD",
@@ -231,6 +252,10 @@ export async function GET(request: Request) {
     "Thời điểm phỏng vấn",
     "Kết quả cuối cùng",
     "Thời điểm quyết định cuối",
+    "Người review hồ sơ",
+    "Email người review hồ sơ",
+    "Người phỏng vấn",
+    "Email người phỏng vấn",
     "Đã qua vòng hồ sơ (hiện tại)",
     "Đã qua vòng phỏng vấn (hiện tại)",
     "Đã duyệt chính thức",
@@ -253,6 +278,18 @@ export async function GET(request: Request) {
     if (finalParam.value && classifyOutcome(derived.final) !== finalParam.value) continue;
     if (groupParam.value && !matchesOperationalGroup(groupParam.value, operational)) continue;
 
+    const appReviews = reviewsByAppId.get(String(app.id)) ?? [];
+    
+    const profileReviewers = appReviews
+      .filter((r) => r.review_round === "profile_screening" && r.status !== "cancelled")
+      .map((r) => r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null)
+      .filter(Boolean);
+      
+    const interviewers = appReviews
+      .filter((r) => r.review_round === "interview" && r.status !== "cancelled")
+      .map((r) => r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null)
+      .filter(Boolean);
+
     body.push([
       app.id,
       app.sbd,
@@ -269,6 +306,10 @@ export async function GET(request: Request) {
       derived.interview?.at ?? "",
       derived.final?.status ?? "",
       derived.final?.at ?? "",
+      profileReviewers.map(u => u!.full_name || u!.email).join(", ") || "-",
+      profileReviewers.map(u => u!.email).join(", ") || "-",
+      interviewers.map(u => u!.full_name || u!.email).join(", ") || "-",
+      interviewers.map(u => u!.email).join(", ") || "-",
       yesNo(operational.passedScreening),
       yesNo(operational.passedInterview),
       yesNo(operational.officiallyApproved),

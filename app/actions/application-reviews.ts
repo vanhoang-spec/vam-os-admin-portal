@@ -152,6 +152,7 @@ export async function cancelApplicationReviewAction(
     if (!canAssignReview(adminUser.role)) return fail("Bạn không có quyền huỷ review.");
 
     const reviewId = String(formData.get("review_id") ?? "").trim();
+    const applicationId = String(formData.get("application_id") ?? "").trim();
     const reason = String(formData.get("reason") ?? "").trim();
     if (!reviewId) return fail("Thiếu review_id.");
 
@@ -165,6 +166,10 @@ export async function cancelApplicationReviewAction(
 
     revalidatePath(`/reviews/${reviewId}`);
     revalidatePath("/reviews");
+    if (applicationId) {
+      revalidatePath(`/applications/${applicationId}`);
+      revalidatePath("/applications");
+    }
     return { ok: true, message: "Đã huỷ review thành công." };
   } catch (err) {
     console.error("[cancelApplicationReviewAction]", err);
@@ -186,6 +191,7 @@ export async function reassignApplicationReviewAction(
     if (!canAssignReview(adminUser.role)) return fail("Bạn không có quyền đổi người review.");
 
     const reviewId = String(formData.get("review_id") ?? "").trim();
+    const applicationId = String(formData.get("application_id") ?? "").trim();
     const newReviewerAdminUserId = String(formData.get("new_reviewer_admin_user_id") ?? "").trim();
     const reason = String(formData.get("reason") ?? "").trim();
     if (!reviewId) return fail("Thiếu review_id.");
@@ -202,6 +208,10 @@ export async function reassignApplicationReviewAction(
 
     revalidatePath(`/reviews/${reviewId}`);
     revalidatePath("/reviews");
+    if (applicationId) {
+      revalidatePath(`/applications/${applicationId}`);
+      revalidatePath("/applications");
+    }
     return { ok: true, message: "Đã đổi người review thành công.", reviewId: result.id };
   } catch (err) {
     console.error("[reassignApplicationReviewAction]", err);

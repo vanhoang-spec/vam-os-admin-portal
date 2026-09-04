@@ -1,15 +1,15 @@
 import { FilterableTable } from "@/components/filterable-table";
 import { ErrorBox, PageHeader } from "@/components/ui";
-import { getApplications, getIntakeBatches, getPeople, getSeasons, keyById } from "@/lib/data";
+import { getApplications, getIntakeBatches, getPeople, getSeasons, keyById, getAllApplicationReviews, getActiveAdminUsers } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { Application, Person, Season } from "@/lib/types";
+import { Application, Person, Season, ApplicationReview } from "@/lib/types";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayCode, displayConsent, displayText, formatDate } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { canAssignReview, canDecide } from "@/lib/permissions";
+import { canAssignReview } from "@/lib/permissions";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 
@@ -39,6 +39,8 @@ type Row = Application & {
   source_display: string;
   /** Batch code for filter (resolved from intake_batch_id) */
   intake_batch_code: string;
+  profile_reviewer_display?: string;
+  interviewer_display?: string;
 };
 
 function consentFilter(value: unknown) {
@@ -52,11 +54,14 @@ export default async function ApplicationsPage() {
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
   const scope = await getScopeFilter(await getAdminScopeContext());
-  const [applications, people, seasons, intakeBatchesRes] = await Promise.all([
+  const canAssign = canAssignReview(adminUser.role);
+  const [applications, people, seasons, intakeBatchesRes, allReviewsRes, adminUsersRes] = await Promise.all([
     getApplications(scope),
     getPeople(scope),
     getSeasons(scope),
-    getIntakeBatches(scope)
+    getIntakeBatches(scope),
+    canAssign ? getAllApplicationReviews(scope) : Promise.resolve({ data: [] as ApplicationReview[], error: null }),
+    canAssign ? getActiveAdminUsers() : Promise.resolve({ data: [], error: null })
   ]);
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
@@ -66,6 +71,13 @@ export default async function ApplicationsPage() {
   const exportSeasonId =
     seasons.data.find((season) => season.code === SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE)?.id ?? null;
   const batchById = new Map(intakeBatchesRes.data.map((b) => [b.id, b]));
+
+  const adminUserMap = new Map(adminUsersRes.data.map((u) => [u.id, u]));
+  const reviewsByAppId = new Map<string, ApplicationReview[]>();
+  for (const review of allReviewsRes.data) {
+    if (!reviewsByAppId.has(review.application_id)) reviewsByAppId.set(review.application_id, []);
+    reviewsByAppId.get(review.application_id)!.push(review);
+  }
 
   const rows: Row[] = applications.data.map((application) => {
     const person = application.person_id ? peopleById.get(application.person_id) : undefined;
@@ -85,6 +97,18 @@ export default async function ApplicationsPage() {
     // Batch code: resolved from intake_batch_id for filter
     const batch = application.intake_batch_id ? batchById.get(application.intake_batch_id) : undefined;
     const intakeBatchCode = batch?.code ?? batch?.name ?? (application.intake_batch_id ? "Batch không rõ" : "Chưa gán");
+
+    const appReviews = reviewsByAppId.get(application.id) || [];
+    const profileReviewers = appReviews
+      .filter((r) => r.review_round === "profile_screening" && r.status !== "cancelled")
+      .map((r) => r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null)
+      .filter(Boolean)
+      .map((u) => u!.full_name || u!.email);
+    const interviewers = appReviews
+      .filter((r) => r.review_round === "interview" && r.status !== "cancelled")
+      .map((r) => r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null)
+      .filter(Boolean)
+      .map((u) => u!.full_name || u!.email);
 
     return {
       ...application,
@@ -107,7 +131,9 @@ export default async function ApplicationsPage() {
       consent_display: displayConsent(consentUnified),
       consent_filter: consentFilter(consentUnified),
       source_display: displayText(application.source),
-      intake_batch_code: intakeBatchCode
+      intake_batch_code: intakeBatchCode,
+      profile_reviewer_display: profileReviewers.length > 0 ? profileReviewers.join(", ") : "-",
+      interviewer_display: interviewers.length > 0 ? interviewers.join(", ") : "-"
     };
   });
 
@@ -120,28 +146,16 @@ export default async function ApplicationsPage() {
           confused with M092 Bulk Official Approval. The entry point is hidden
           for this slice; /applications/bulk-decision and its action are left
           intact and directly reachable for later controlled UAT. */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {canAssignReview(adminUser.role) && exportSeasonId && (
+      {canAssignReview(adminUser.role) && exportSeasonId && (
+        <div className="mb-4">
           <Link
             href="/applications/exports"
             className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
           >
             Xuất kết quả tuyển / điểm review
           </Link>
-        )}
-        {/* M092. Same authority as the official-approval action itself
-            (canDecide), so the entry point never appears to a role that could
-            not use it. This is the only new entry point added here; the hidden
-            bulk-decision one stays hidden. */}
-        {canDecide(adminUser.role) && (
-          <Link
-            href="/applications/bulk-approval"
-            className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
-          >
-            Duyệt chính thức hàng loạt
-          </Link>
-        )}
-      </div>
+        </div>
+      )}
       <ErrorBox message={applications.error || people.error || seasons.error || intakeBatchesRes.error} />
       <FilterableTable
         rows={rows}
@@ -175,6 +189,10 @@ export default async function ApplicationsPage() {
           { key: "email_primary", label: "Email", displayKey: "email_primary_display", nowrap: true },
           { key: "role_applied", label: "Vai trò", displayKey: "role_applied_display" },
           { key: "status_unified", label: "Trạng thái", displayKey: "status_display", badge: true },
+          ...(canAssign ? [
+            { key: "profile_reviewer", label: "Review hồ sơ", displayKey: "profile_reviewer_display" },
+            { key: "interviewer", label: "Phỏng vấn", displayKey: "interviewer_display" }
+          ] : []),
           { key: "source", label: "Nguồn", displayKey: "source_display" },
           { key: "submitted_at", label: "Ngày nộp", displayKey: "submitted_at_display" },
           { key: "consent_display", label: "Đồng ý lưu trữ", displayKey: "consent_display", badge: true },

@@ -14,7 +14,8 @@ import {
   getMenteeProfileByAuthorizedApplicationPersonId,
   getPersonByAuthorizedMatchPartnerId,
   getS12ApplicationReviewQueue,
-  keyById
+  keyById,
+  getActiveAdminUsers
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
@@ -30,7 +31,7 @@ import {
   summarizeAcknowledgements,
   type ApplicationCommitmentRole
 } from "@/lib/application-commitments";
-import { AssignReviewerForm } from "./assign-reviewer-form";
+import { AssignmentControls } from "./assign-reviewer-form";
 import { DecisionForm } from "./decision-form";
 import { ApprovalForm } from "./approval-form";
 
@@ -102,13 +103,14 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   
-  const [application, seasons, answers, reviewsResult, decisionsResult] =
+  const [application, seasons, answers, reviewsResult, decisionsResult, adminUsersRes] =
     await Promise.all([
       getApplication(params.id, scope),
       getSeasons(scope),
       getAnswersForApplication(params.id),
       getApplicationReviewsForApplication(params.id, scope),
-      getApplicationDecisions(params.id, scope)
+      getApplicationDecisions(params.id, scope),
+      getActiveAdminUsers()
     ]);
   const [profileReviewersResult, interviewersResult] = application.data?.season_id
     ? await Promise.all([
@@ -213,6 +215,25 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   })();
 
   const reviews: ApplicationReview[] = reviewsResult.data ?? [];
+  const adminUsers = adminUsersRes.data ?? [];
+  const adminUserMap = new Map(adminUsers.map((u) => [u.id, u]));
+
+  const assignedProfileReviewers = reviews
+    .filter((r) => r.review_round === "profile_screening" && r.status !== "cancelled")
+    .map((r) => {
+      const user = r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null;
+      const identity = user ? (user.full_name || user.email) : "Không xác định";
+      return `${identity} (${reviewStatusLabel(r.status)})`;
+    });
+
+  const assignedInterviewers = reviews
+    .filter((r) => r.review_round === "interview" && r.status !== "cancelled")
+    .map((r) => {
+      const user = r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null;
+      const identity = user ? (user.full_name || user.email) : "Không xác định";
+      return `${identity} (${reviewStatusLabel(r.status)})`;
+    });
+
   const decisions: ApplicationDecision[] = decisionsResult.data ?? [];
   const canAssign = canAssignReview(adminUser?.role) && canOperateAnyScope(scopeContext);
   const canMakeDecision = canDecide(adminUser?.role) && canOperateAnyScope(scopeContext);
@@ -311,10 +332,22 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           {(profileReviewersResult.error || interviewersResult.error) && (
             <ErrorBox message={`Không thể tải danh sách người tham gia: ${profileReviewersResult.error || interviewersResult.error}`} />
           )}
-          <AssignReviewerForm
+          <AssignmentControls
             applicationId={application.data.id}
             profileReviewers={profileReviewersResult.data}
             interviewers={interviewersResult.data}
+            activeProfileReview={(() => {
+              const r = reviews.find((rv) => rv.review_round === "profile_screening" && rv.status !== "cancelled");
+              if (!r) return undefined;
+              const u = r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null;
+              return { ...r, reviewer_name: u ? (u.full_name || u.email) : "Không xác định" };
+            })()}
+            activeInterviewReview={(() => {
+              const r = reviews.find((rv) => rv.review_round === "interview" && rv.status !== "cancelled");
+              if (!r) return undefined;
+              const u = r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null;
+              return { ...r, reviewer_name: u ? (u.full_name || u.email) : "Không xác định" };
+            })()}
           />
         </Card>
       )}
@@ -333,6 +366,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                   <tr>
                     <th className="px-4 py-3">Vòng</th>
+                    <th className="px-4 py-3">Người phụ trách</th>
                     <th className="px-4 py-3">Trạng thái</th>
                     <th className="px-4 py-3">Hạn nộp</th>
                     <th className="px-4 py-3">Điểm tổng</th>
@@ -341,9 +375,13 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-vam-line">
-                  {reviews.map((review) => (
+                  {reviews.map((review) => {
+                    const user = review.reviewer_admin_user_id ? adminUserMap.get(review.reviewer_admin_user_id) : null;
+                    const identity = user ? (user.full_name || user.email) : "-";
+                    return (
                     <tr key={review.id} className="hover:bg-vam-mint/40">
                       <td className="px-4 py-3 text-slate-700">{roundLabel(review.review_round)}</td>
+                      <td className="px-4 py-3 text-slate-700">{identity}</td>
                       <td className="px-4 py-3">
                         <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
                           {reviewStatusLabel(review.status)}
@@ -367,7 +405,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                         </Link>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -480,7 +518,9 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             ["Họ tên", displayText(displayFullName)],
             ["Email", displayText(displayEmail)],
             ["Số điện thoại", displayText(displayPhone)],
-            ["Giới tính", displayText(displayGender)]
+            ["Giới tính", displayText(displayGender)],
+            ["Người review hồ sơ", assignedProfileReviewers.length > 0 ? assignedProfileReviewers.join(", ") : "-"],
+            ["Người phỏng vấn", assignedInterviewers.length > 0 ? assignedInterviewers.join(", ") : "-"]
           ]}
         />
       </Card>
