@@ -65,10 +65,17 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   // Observed on Production 2026-09-04: Super Admin (no scope row) succeeded and
   // six Core Team / Admin accounts failed.
   // Migration 20260904140000_grant_participation_scope_reuse.sql makes the
-  // function reuse a qualifying scope instead of stacking a second one. NOT yet
-  // applied to Staging or Production. Presence is unaffected — same name, same
-  // signature — so this stays in the provided bucket; verify the deployed BODY.
+  // function reuse a qualifying scope instead of stacking a second one.
+  // APPLIED AND VERIFIED on Production (qkkroesfiazsejkzflcd) on 2026-09-04,
+  // after Staging. Presence was never the question for this function — the
+  // deployed BODY is, so a future change here must be verified the same way.
   "vam084_grant_recruitment_participation",
+  // Rewritten by 20260904143000 as a derivation of the canonical eligibility
+  // function (applied and verified on Production 2026-09-04). Its published
+  // RETURNS TABLE shape is unchanged, so no application change was required.
+  // The canonical helper vam084_recruitment_eligible_admins is deliberately
+  // absent from every bucket: no application code calls it, it is a SQL-level
+  // dependency of the two functions above, exactly like vam093.
   "vam084_list_recruitment_participants",
   "vam084_operator_for_season",
   // VERSION-SENSITIVE. Migration 20260903193000 moved the profile-screening
@@ -84,8 +91,13 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   // Staging ran the PRE-parity version on 2026-09-04 and failed every
   // profile-screening assignment — the migration was in git but had never been
   // applied to that database. Presence in this bucket is therefore NOT enough
-  // for this function: verify the deployed BODY, not just the name. Production
-  // apply status for 20260904100000 is unverified.
+  // for this function: verify the deployed BODY, not just the name.
+  //
+  // SUPERSEDED. Migration 20260904143000_privileged_recruitment_automatic_
+  // eligibility.sql rewrites this predicate as a thin derivation of the
+  // canonical vam084_recruitment_eligible_admins, so the list and the predicate
+  // can no longer hold different policies. Applied and verified on Production
+  // on 2026-09-04, which also closes the 20260904100000 parity question there.
   "vam084_participant_for_stage",
   "vam084_recompute_application_review_status",
   "vam084_revoke_recruitment_participation",
