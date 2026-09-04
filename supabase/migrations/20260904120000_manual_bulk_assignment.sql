@@ -76,14 +76,14 @@ begin
           a.status in ('submitted','under_data_check','ready_for_screening','screening_assigned')
           or (a.status = 'needs_more_review' and not exists (
             select 1 from public.application_reviews ar 
-            where ar.application_id = a.id and ar.review_round = 'interview' and ar.status <> 'cancelled'
+            where ar.application_id = a.id and ar.review_round = 'interview'
           ))
         ))
         or (p_review_round = 'interview' and (
           a.status in ('invited_to_interview','interview_scheduled','interview_in_progress')
           or (a.status = 'needs_more_review' and exists (
             select 1 from public.application_reviews ar 
-            where ar.application_id = a.id and ar.review_round = 'interview' and ar.status <> 'cancelled'
+            where ar.application_id = a.id and ar.review_round = 'interview'
           ))
         ))
       )
