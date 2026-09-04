@@ -2,7 +2,10 @@
 
 import { useFormState } from "react-dom";
 import { submitMenteeApplicationAction } from "@/app/actions/apply";
-import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { APPLY_TOKEN_FIELD, MENTEE_APPLY_SUCCESS_PATH, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { AutosaveContext, AutosaveRegistryContext } from "../_components/form-primitives";
+import { useApplyAutosave } from "../_components/use-apply-autosave";
+import { ApplyDraftNotice } from "../_components/draft-notice";
 import { MenteeSupportContacts } from "../_components/mentee-support-contacts";
 import {
   ApplicationForm,
@@ -143,15 +146,39 @@ const REFERRER_OPTIONS = [
 ];
 
 export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) {
-  // Redirect on success is handled server-side via redirect() in the action.
-  // useFormState is kept only to surface error states (validation / duplicate / db).
+  // The action no longer redirects. It returns a state carrying
+  // `applicationId` on a confirmed create, which is the only signal that
+  // clears the local draft — see use-apply-autosave.ts.
   const [state, formAction] = useFormState<ApplyActionState, FormData>(
     submitMenteeApplicationAction,
     initialApplyActionState
   );
 
+  const autosave = useApplyAutosave({
+    role: "mentee",
+    state,
+    successPath: MENTEE_APPLY_SUCCESS_PATH
+  });
+
+  if (!autosave.isMounted) {
+    return <div className="flex h-96 items-center justify-center text-slate-500">Đang tải form...</div>;
+  }
+
   return (
-    <ApplicationForm action={formAction} state={state} submitLabel="Gửi đơn đăng ký mentee">
+    <AutosaveContext.Provider value={autosave.draftData}>
+      <AutosaveRegistryContext.Provider value={autosave.registry}>
+        <ApplicationForm
+          key={autosave.formKey}
+          action={formAction}
+          state={state}
+          submitLabel="Gửi đơn đăng ký mentee"
+          onChangeCapture={autosave.handleFormChange}
+        >
+          <ApplyDraftNotice
+            restored={autosave.restored}
+            ttlDays={autosave.ttlDays}
+            onClear={autosave.handleClearDraft}
+          />
       {/*
         Pilot token relay. Rendered only while the form is in pilot state, so
         the Server Action can re-run the identical gate the page ran. The
@@ -425,6 +452,8 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
 
       <MenteeSupportContacts />
 
-    </ApplicationForm>
+        </ApplicationForm>
+      </AutosaveRegistryContext.Provider>
+    </AutosaveContext.Provider>
   );
 }

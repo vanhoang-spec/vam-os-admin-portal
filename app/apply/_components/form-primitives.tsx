@@ -1,9 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
 import { ApplySubmitButton } from "./submit-button";
 import { RETURNING_MENTOR_GUIDANCE, type ApplyActionState } from "@/lib/apply-types";
+import { draftChecked, draftList, draftText, type AutosaveData } from "@/lib/autosave";
+
+/** The draft being restored into this render, or null when there is none. */
+export const AutosaveContext = createContext<AutosaveData | null>(null);
+
+/**
+ * The autosave ALLOWLIST, published by the primitives themselves.
+ *
+ * Snapshotting the whole `FormData` would persist every hidden input the form
+ * happens to render — including the `__apply_token` pilot relay — to the
+ * applicant's browser. Excluding known-bad names would fix that one field and
+ * leave the next one exposed.
+ *
+ * Instead each primitive that renders a USER-EDITABLE control registers its
+ * name here while it is mounted, and the form reads only registered names out
+ * of the `FormData`. A hidden or internal input is not rendered by a
+ * primitive, so it never registers, so it cannot be stored — no denylist
+ * required, and a field added later is excluded by default rather than by
+ * remembering.
+ *
+ * `multiple` marks a control that can contribute several values under one name
+ * (a checkbox group). It is what lets the snapshot store a single ticked box
+ * as a one-element ARRAY rather than a bare string.
+ */
+export type AutosaveFieldRegistry = {
+  register: (name: string, options?: { multiple?: boolean }) => () => void;
+};
+
+export const AutosaveRegistryContext = createContext<AutosaveFieldRegistry | null>(null);
+
+/** Registers `name` as autosave-safe for as long as the control is mounted. */
+export function useAutosaveSafeField(name: string, options?: { multiple?: boolean }) {
+  const registry = useContext(AutosaveRegistryContext);
+  const multiple = options?.multiple ?? false;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(name, { multiple });
+  }, [registry, name, multiple]);
+}
 
 const inputClass =
   "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none placeholder:text-slate-400 focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -34,11 +73,13 @@ export function ApplicationForm({
   action,
   state,
   submitLabel,
+  onChangeCapture,
   children
 }: {
   action: (formData: FormData) => void;
   state: ApplyActionState;
   submitLabel: string;
+  onChangeCapture?: React.FormEventHandler<HTMLFormElement>;
   children: React.ReactNode;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -105,6 +146,7 @@ export function ApplicationForm({
       action={action}
       className="grid gap-6"
       onInvalidCapture={revealInvalid}
+      onChangeCapture={onChangeCapture}
       onSubmit={(event) => {
         setMissing([]);
       }}
@@ -225,6 +267,37 @@ function Label({
   );
 }
 
+/**
+ * The free-text companion that appears when an applicant picks "Khác / Other".
+ *
+ * Its own component for two reasons. It has to call a hook to register itself
+ * with autosave, and it is rendered CONDITIONALLY — a hook cannot live behind
+ * an `if` in the parent. It also had no `defaultValue`, so an applicant who
+ * chose "Khác" and typed the detail got the option back on restore but lost
+ * the text, which is the half that cannot be re-derived.
+ *
+ * It unmounts when the applicant selects something else, so its value leaves
+ * the `FormData` and the next snapshot drops it. That is what keeps a stale
+ * companion from riding along with a changed parent answer.
+ */
+function OtherCompanionInput({ name, label }: { name: string; label: string }) {
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  return (
+    <div className="mt-3" data-field-name={name} data-field-label={label}>
+      <Label htmlFor={name} required>{label}</Label>
+      <input
+        id={name}
+        name={name}
+        defaultValue={draftText(draft?.[name])}
+        required
+        aria-required="true"
+        className={inputClass}
+      />
+    </div>
+  );
+}
+
 export function TextField({
   name,
   label,
@@ -242,6 +315,9 @@ export function TextField({
   helpText?: string;
   defaultValue?: string;
 }) {
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
   const helpId = helpText ? `${name}-help` : undefined;
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
@@ -255,7 +331,7 @@ export function TextField({
         required={required}
         aria-required={required || undefined}
         placeholder={placeholder}
-        defaultValue={defaultValue ?? ""}
+        defaultValue={resolvedValue}
         aria-describedby={helpId}
         className={inputClass}
       />
@@ -279,6 +355,9 @@ export function PhoneField({
   helpText?: string;
   defaultValue?: string;
 }) {
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
   const helpId = helpText ? `${name}-help` : undefined;
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
@@ -300,7 +379,7 @@ export function PhoneField({
         required={required}
         aria-required={required || undefined}
         placeholder={placeholder}
-        defaultValue={defaultValue ?? ""}
+        defaultValue={resolvedValue}
         aria-describedby={helpId}
         className={inputClass}
       />
@@ -316,7 +395,8 @@ export function NumberField({
   required,
   min,
   helpText,
-  onChange
+  onChange,
+  defaultValue
 }: {
   name: string;
   label: string;
@@ -324,7 +404,11 @@ export function NumberField({
   min?: number;
   helpText?: string;
   onChange?: React.ChangeEventHandler<HTMLInputElement>;
+  defaultValue?: string;
 }) {
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
   const helpId = helpText ? `${name}-help` : undefined;
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
@@ -336,6 +420,7 @@ export function NumberField({
         name={name}
         type="number"
         inputMode="decimal"
+        defaultValue={resolvedValue}
         min={min}
         step="any"
         required={required}
@@ -356,7 +441,8 @@ export function TextAreaField({
   placeholder,
   rows = 4,
   minLength,
-  helpText
+  helpText,
+  defaultValue
 }: {
   name: string;
   label: string;
@@ -365,7 +451,11 @@ export function TextAreaField({
   rows?: number;
   minLength?: number;
   helpText?: string;
+  defaultValue?: string;
 }) {
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
       <Label htmlFor={name} required={required} helpText={helpText}>
@@ -374,6 +464,7 @@ export function TextAreaField({
       <textarea
         id={name}
         name={name}
+        defaultValue={resolvedValue}
         required={required}
         aria-required={required || undefined}
         rows={rows}
@@ -393,7 +484,8 @@ export function SelectField({
   options,
   helpText,
   placeholderOption = "-- Chọn --",
-  otherInput
+  otherInput,
+  defaultValue
 }: {
   name: string;
   label: string;
@@ -402,8 +494,12 @@ export function SelectField({
   helpText?: string;
   placeholderOption?: string;
   otherInput?: { name: string; label: string; triggerValue?: string };
+  defaultValue?: string;
 }) {
-  const [selectedValue, setSelectedValue] = useState("");
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const [selectedValue, setSelectedValue] = useState(resolvedValue);
   const showOther = otherInput && selectedValue === (otherInput.triggerValue ?? "other");
 
   return (
@@ -411,7 +507,7 @@ export function SelectField({
       <Label htmlFor={name} required={required} helpText={helpText}>
         {label}
       </Label>
-      <select id={name} name={name} required={required} aria-required={required || undefined} defaultValue="" className={inputClass} onChange={(e) => setSelectedValue(e.target.value)}>
+      <select id={name} name={name} required={required} aria-required={required || undefined} defaultValue={resolvedValue} className={inputClass} onChange={(e) => setSelectedValue(e.target.value)}>
         <option value="" disabled={required}>
           {placeholderOption}
         </option>
@@ -421,12 +517,7 @@ export function SelectField({
           </option>
         ))}
       </select>
-      {showOther ? (
-        <div className="mt-3" data-field-name={otherInput.name} data-field-label={otherInput.label}>
-          <Label htmlFor={otherInput.name} required>{otherInput.label}</Label>
-          <input id={otherInput.name} name={otherInput.name} required aria-required="true" className={inputClass} />
-        </div>
-      ) : null}
+      {showOther ? <OtherCompanionInput name={otherInput.name} label={otherInput.label} /> : null}
       <InlineRequiredError />
     </div>
   );
@@ -451,7 +542,16 @@ export function CheckboxGroupField({
   otherInput?: { name: string; label: string };
   defaultSelected?: string[];
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set(defaultSelected || []));
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name, { multiple: true });
+  // `draftList` is load-bearing, not defensive tidiness: a group with exactly
+  // one box ticked round-trips through `FormData` as a bare STRING, and
+  // `new Set("communication")` is a set of thirteen single characters. That is
+  // how a single-selection draft came back with the wrong boxes ticked, a
+  // nonsense "n/3 selected" counter, and an "Other" companion that never
+  // appeared.
+  const resolvedSelected = defaultSelected ?? draftList(draft?.[name]);
+  const [selected, setSelected] = useState<Set<string>>(new Set(resolvedSelected));
   const [limitError, setLimitError] = useState(false);
   const otherSelected = selected.has("other");
   return (
@@ -476,7 +576,7 @@ export function CheckboxGroupField({
               type="checkbox"
               name={name}
               value={o.value}
-              defaultChecked={defaultSelected?.includes(o.value)}
+              defaultChecked={resolvedSelected.includes(o.value)}
               required={required && selected.size === 0 && index === 0}
               aria-required={required || undefined}
               onChange={(event) => {
@@ -501,12 +601,7 @@ export function CheckboxGroupField({
         ))}
       </div>
       {limitError ? <p className="mt-2 text-sm font-medium text-red-700" role="alert">Bạn chỉ có thể chọn tối đa {maxSelections} lựa chọn.</p> : null}
-      {otherInput && otherSelected ? (
-        <div className="mt-3" data-field-name={otherInput.name} data-field-label={otherInput.label}>
-          <Label htmlFor={otherInput.name} required>{otherInput.label}</Label>
-          <input id={otherInput.name} name={otherInput.name} required aria-required="true" className={inputClass} />
-        </div>
-      ) : null}
+      {otherInput && otherSelected ? <OtherCompanionInput name={otherInput.name} label={otherInput.label} /> : null}
       <InlineRequiredError />
     </fieldset>
   );
@@ -518,7 +613,8 @@ export function RadioGroupField({
   required,
   options,
   helpText,
-  otherInput
+  otherInput,
+  defaultValue
 }: {
   name: string;
   label: string;
@@ -526,8 +622,12 @@ export function RadioGroupField({
   options: Array<{ value: string; label: string }>;
   helpText?: string;
   otherInput?: { name: string; label: string; triggerValue?: string };
+  defaultValue?: string;
 }) {
-  const [selectedValue, setSelectedValue] = useState("");
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const [selectedValue, setSelectedValue] = useState(resolvedValue);
   const showOther = otherInput && selectedValue === (otherInput.triggerValue ?? "other");
 
   return (
@@ -546,6 +646,7 @@ export function RadioGroupField({
               type="radio"
               name={name}
               value={o.value}
+              defaultChecked={resolvedValue === o.value}
               required={required}
               onChange={(e) => setSelectedValue(e.target.value)}
               className="mt-0.5 h-4 w-4 border-vam-line text-vam-green focus:ring-vam-mint"
@@ -554,12 +655,7 @@ export function RadioGroupField({
           </label>
         ))}
       </div>
-      {showOther ? (
-        <div className="mt-3" data-field-name={otherInput.name} data-field-label={otherInput.label}>
-          <Label htmlFor={otherInput.name} required>{otherInput.label}</Label>
-          <input id={otherInput.name} name={otherInput.name} required aria-required="true" className={inputClass} />
-        </div>
-      ) : null}
+      {showOther ? <OtherCompanionInput name={otherInput.name} label={otherInput.label} /> : null}
       <InlineRequiredError />
     </fieldset>
   );
@@ -576,13 +672,18 @@ export function ConsentCheckbox({
   required?: boolean;
   defaultChecked?: boolean;
 }) {
+  const draft = useContext(AutosaveContext);
+  useAutosaveSafeField(name);
+  // Unticked boxes are absent from the draft entirely, so "no entry" restores
+  // as unchecked without a special case.
+  const resolvedChecked = defaultChecked ?? draftChecked(draft?.[name]);
   return (
     <label data-field-name={name} data-field-label={label} className="group flex cursor-pointer items-start gap-2 rounded-md border border-vam-line bg-slate-50 px-3 py-3 text-sm data-[invalid=true]:border-red-400 data-[invalid=true]:bg-red-50">
       <input
         type="checkbox"
         name={name}
         value="true"
-        defaultChecked={defaultChecked}
+        defaultChecked={resolvedChecked}
         required={required}
         aria-required={required || undefined}
         className="mt-0.5 h-4 w-4 rounded border-vam-line text-vam-green focus:ring-vam-mint"

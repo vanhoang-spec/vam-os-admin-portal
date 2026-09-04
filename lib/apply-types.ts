@@ -51,3 +51,14 @@ export const initialApplyActionState: ApplyActionState = {
  * it is never swept into raw_payload or an answer row.
  */
 export const APPLY_TOKEN_FIELD = "__apply_token";
+
+/**
+ * Where a confirmed submission goes next, per role.
+ *
+ * Shared rather than written twice because both actions now RETURN success
+ * instead of redirecting, and the client performs the navigation. The server
+ * and client halves must agree on the destination, and the applicant must land
+ * in exactly the same place the server redirect used to take them.
+ */
+export const MENTEE_APPLY_SUCCESS_PATH = "/apply/thanks?role=mentee";
+export const MENTOR_APPLY_SUCCESS_PATH = "/apply/thanks?role=mentor";

@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { useFormState } from "react-dom";
 import { submitMentorApplicationAction } from "@/app/actions/apply";
-import { APPLY_TOKEN_FIELD, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { APPLY_TOKEN_FIELD, MENTOR_APPLY_SUCCESS_PATH, initialApplyActionState, type ApplyActionState } from "@/lib/apply-types";
+import { AutosaveContext, AutosaveRegistryContext } from "../_components/form-primitives";
+import { useApplyAutosave } from "../_components/use-apply-autosave";
+import { ApplyDraftNotice } from "../_components/draft-notice";
+import { draftText } from "@/lib/autosave";
 import { MentorProfileIntro } from "../_components/mentor-profile-intro";
 import { MentorSupportContacts } from "../_components/mentor-support-contacts";
 import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
@@ -133,19 +137,87 @@ const REFERRER_OPTIONS = [
 ];
 
 export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) {
-  // Redirect on success is handled server-side via redirect() in the action.
-  // useFormState is kept only to surface error states (validation / duplicate / db).
+  // The action no longer redirects. It returns a state carrying
+  // `applicationId` on a confirmed create, which is the only signal that
+  // clears the local draft — see use-apply-autosave.ts.
   const [state, formAction] = useFormState<ApplyActionState, FormData>(
     submitMentorApplicationAction,
     initialApplyActionState
   );
-  const [workYears, setWorkYears] = useState<number | null>(null);
-  const [managementYears, setManagementYears] = useState<number | null>(null);
+
+  const autosave = useApplyAutosave({
+    role: "mentor",
+    state,
+    successPath: MENTOR_APPLY_SUCCESS_PATH
+  });
+
+  if (!autosave.isMounted) {
+    return <div className="flex h-96 items-center justify-center text-slate-500">Đang tải form...</div>;
+  }
+
+  return (
+    <MentorFormBody
+      autosave={autosave}
+      state={state}
+      formAction={formAction}
+      applyToken={applyToken}
+    />
+  );
+}
+
+/**
+ * Split out so the eligibility-threshold state can be SEEDED from the restored
+ * draft.
+ *
+ * `workYears` / `managementYears` are only updated by `onChange`, so a
+ * restored draft would refill the number inputs while the threshold warning
+ * stayed hidden until the applicant retyped — the mentor eligibility guidance
+ * would silently disappear across a reload. Seeding `useState` requires the
+ * draft to exist at first render, and the draft is loaded in an effect, so the
+ * body must mount only after the parent has it. That is exactly what the
+ * `isMounted` guard above provides, and `key={autosave.formKey}` remounts this
+ * subtree when the draft is loaded or explicitly cleared.
+ */
+function MentorFormBody({
+  autosave,
+  state,
+  formAction,
+  applyToken
+}: {
+  autosave: ReturnType<typeof useApplyAutosave>;
+  state: ApplyActionState;
+  formAction: (formData: FormData) => void;
+  applyToken?: string | null;
+}) {
+  const draft = autosave.draftData;
+  const seededNumber = (name: string) => {
+    const raw = draftText(draft?.[name]);
+    if (raw === "") return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const [workYears, setWorkYears] = useState<number | null>(() => seededNumber("mentor_total_work_years"));
+  const [managementYears, setManagementYears] = useState<number | null>(() =>
+    seededNumber("mentor_people_management_years")
+  );
   const belowThreshold =
     workYears !== null && managementYears !== null && (workYears < 8 || managementYears < 3);
 
   return (
-    <ApplicationForm action={formAction} state={state} submitLabel="Gửi đơn đăng ký mentor">
+    <AutosaveContext.Provider value={autosave.draftData}>
+      <AutosaveRegistryContext.Provider value={autosave.registry}>
+        <ApplicationForm
+          key={autosave.formKey}
+          action={formAction}
+          state={state}
+          submitLabel="Gửi đơn đăng ký mentor"
+          onChangeCapture={autosave.handleFormChange}
+        >
+          <ApplyDraftNotice
+            restored={autosave.restored}
+            ttlDays={autosave.ttlDays}
+            onClear={autosave.handleClearDraft}
+          />
       {/*
         Pilot token relay. Rendered only while the form is in pilot state, so
         the Server Action can re-run the identical gate the page ran. The
@@ -451,6 +523,8 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
 
       <MentorSupportContacts />
 
-    </ApplicationForm>
+        </ApplicationForm>
+      </AutosaveRegistryContext.Provider>
+    </AutosaveContext.Provider>
   );
 }

@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { evaluateApplyGate } from "@/lib/apply-gate";
 import {
   submitPilotApplication,
@@ -323,18 +322,29 @@ export async function submitMentorApplicationAction(
       answers
     });
 
-    // On failure return the error state immediately.
-    // On success fall through — redirect() must be called outside try/catch
-    // because it throws NEXT_REDIRECT internally, which the catch block
-    // would otherwise swallow and convert into a generic error state.
+    // Both outcomes return a state; neither navigates from the server.
     if (!result.ok) return resultToState(result);
     revalidatePath("/admin/applications");
+
+    // Returns confirmed success instead of redirecting from here.
+    //
+    // `redirect()` throws NEXT_REDIRECT from inside the action, so the client
+    // never observes the success — it observes a navigation. Both public forms
+    // keep a local autosave draft in the applicant's browser, and after a
+    // server-side redirect there is no point at which the client can be told
+    // the write actually happened, so a successfully submitted application
+    // would leave its draft behind for seven days on what is often a shared
+    // machine.
+    //
+    // The state below carries `applicationId`, which exists only once the row
+    // is written, so the client can distinguish a confirmed create from every
+    // failure shape and clear the exact draft BEFORE navigating itself. Every
+    // failure path above still returns a state and never navigates, which is
+    // what keeps a rejected submission's answers intact.
+    return resultToState(result);
   } catch (err) {
     return fail("submitMentorApplicationAction", err);
   }
-
-  // Reached only when result.ok === true.
-  redirect("/apply/thanks?role=mentor");
 }
 
 /**
@@ -527,9 +537,24 @@ export async function submitMenteeApplicationAction(
 
     if (!result.ok) return resultToState(result);
     revalidatePath("/admin/applications");
+
+    // Returns confirmed success instead of redirecting from here.
+    //
+    // `redirect()` throws NEXT_REDIRECT from inside the action, so the client
+    // never observes the success — it observes a navigation. Both public forms
+    // keep a local autosave draft in the applicant's browser, and after a
+    // server-side redirect there is no point at which the client can be told
+    // the write actually happened, so a successfully submitted application
+    // would leave its draft behind for seven days on what is often a shared
+    // machine.
+    //
+    // The state below carries `applicationId`, which exists only once the row
+    // is written, so the client can distinguish a confirmed create from every
+    // failure shape and clear the exact draft BEFORE navigating itself. Every
+    // failure path above still returns a state and never navigates, which is
+    // what keeps a rejected submission's answers intact.
+    return resultToState(result);
   } catch (err) {
     return fail("submitMenteeApplicationAction", err);
   }
-
-  redirect("/apply/thanks?role=mentee");
 }
