@@ -85,7 +85,14 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   // INVOKER with search_path='', and a service_role-only execute ACL
   // (postgres=X | service_role=X, no PUBLIC/anon/authenticated) — with
   // pg_get_functiondef md5 1707a71e... matching the Staging catalog exactly.
-  "vam092_bulk_official_approve_applications"
+  "vam092_bulk_official_approve_applications",
+  // VAM094 manual selected bulk assignment. Applied to Production
+  // (qkkroesfiazsejkzflcd) by migration 20260904120000_manual_bulk_assignment
+  // and verified by the release owner on 2026-09-04: identity signature
+  // (uuid[], uuid, text, timestamptz, text, uuid), SECURITY INVOKER
+  // (security_definer=false) with search_path='', and a service_role-only
+  // execute ACL (postgres + service_role, no PUBLIC/anon/authenticated).
+  "vam094_assign_selected_application_reviews"
 ];
 
 /**
@@ -105,11 +112,12 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260901090000_s12_m093_pre_uat_hardening.sql (NOT applied to Production)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
-  // Empty: M092 shipped here while it was Production-pending and moved to
-  // PRODUCTION_PROVIDED_RPCS above once migration 20260904070000 was actually
-  // applied and verified against the Production catalog on 2026-09-04. A
-  // future RPC that ships ahead of its Production apply belongs here.
-  "vam094_assign_selected_application_reviews"
+  // Empty. M092 and then VAM094 each passed through this bucket while they were
+  // Production-pending, and each moved to PRODUCTION_PROVIDED_RPCS above only
+  // once its migration was actually applied and verified against the Production
+  // catalog (M092 on 2026-09-04 by 20260904070000; VAM094 on 2026-09-04 by
+  // 20260904120000). A future RPC that ships ahead of its Production apply
+  // belongs here.
 ];
 
 /**
