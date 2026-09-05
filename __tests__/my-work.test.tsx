@@ -123,8 +123,18 @@ describe("1. a user cannot see another user's assignment", () => {
   test("a blank assignee id yields an empty inbox rather than everything", () => {
     // The guard that matters if a caller ever loses the current user: failing
     // OPEN here would show one account every assignment in scope.
+    //
+    // The row with a BLANK assignee is the load-bearing half. Every other row
+    // is already rejected by the per-row identity check, so a suite without
+    // this row passes even with the empty-id guard deleted — and the one shape
+    // that would then slip through is a canonical row whose assignee column is
+    // an empty string being matched by an empty current user.
     const items = buildMyWorkItems({
-      reviews: [review(), review({ id: "rev-b", reviewer_admin_user_id: USER_B })],
+      reviews: [
+        review(),
+        review({ id: "rev-b", reviewer_admin_user_id: USER_B }),
+        review({ id: "rev-blank", reviewer_admin_user_id: "" })
+      ],
       applications: apps(APP_MENTEE),
       assigneeAdminUserId: "",
       now: NOW
