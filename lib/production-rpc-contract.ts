@@ -138,12 +138,19 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260901090000_s12_m093_pre_uat_hardening.sql (NOT applied to Production)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
-  // Empty. M092 and then VAM094 each passed through this bucket while they were
+  // M092 and then VAM094 each passed through this bucket while they were
   // Production-pending, and each moved to PRODUCTION_PROVIDED_RPCS above only
   // once its migration was actually applied and verified against the Production
   // catalog (M092 on 2026-09-04 by 20260904070000; VAM094 on 2026-09-04 by
-  // 20260904120000). A future RPC that ships ahead of its Production apply
-  // belongs here.
+  // 20260904120000).
+  //
+  // Defined by 20260905090000_s12_interview_self_claim_atomic.sql, which has
+  // NOT been applied to Production or Staging. /interviews self-claim therefore
+  // stays inert until it is applied: the action surfaces its safe failure
+  // message rather than falling back to an app-layer insert, because the whole
+  // point of this RPC is that the claim decision must be serialized inside the
+  // database. Move this name up only with read-only catalog evidence.
+  "vam095_claim_interview_review"
 ];
 
 /**

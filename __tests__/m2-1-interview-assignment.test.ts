@@ -22,8 +22,15 @@ describe("M2.1 interview workflow compatibility after M090", () => {
   });
 
   it("does not restore the unsafe self-claim insert path", () => {
+    // S12 interview day is walk-up, so self-claim is back — but the reason this
+    // assertion exists is unchanged: the claim must never be an app-layer
+    // select-then-insert, which two interviewers pressing the button at the
+    // same instant can both win. The decision now lives in one advisory-locked
+    // RPC, so this file performs no application_reviews write of its own.
     const source = readFileSync("lib/interview-claim.ts", "utf8");
-    expect(source).toContain("Bạn chưa được phân công phỏng vấn ứng viên này");
+    expect(source).toContain("vam095_claim_interview_review");
     expect(source).not.toContain("claim_source: \"self_claim\"");
+    expect(source).not.toMatch(/from\("application_reviews"\)/);
+    expect(source).not.toMatch(/\.insert\(/);
   });
 });

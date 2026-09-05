@@ -76,10 +76,16 @@ describe("M090 database boundary", () => {
     expect(migration).toMatch(/if not coalesce\(v_gate\.eligible, false\)[\s\S]*continue;[\s\S]*update public\.applications/);
   });
 
-  it("removes unassigned self-claim and filters reviewer queue to owned rows", () => {
+  it("keeps self-claim out of the app layer and filters reviewer queue to owned rows", () => {
+    // M090 removed self-claim outright because the version it removed decided
+    // the claim with a select-then-insert in this file. S12 interview day is
+    // walk-up and needs the workflow back, so the claim returns — but the
+    // property M090 was defending does not move: no application_reviews write
+    // happens here. The decision is one advisory-locked RPC.
     const claim = read("lib/interview-claim.ts");
-    expect(claim).toContain("Bạn chưa được phân công phỏng vấn ứng viên này");
+    expect(claim).toContain("vam095_claim_interview_review");
     expect(claim).not.toContain('.insert({\n      application_id: appId');
+    expect(claim).not.toMatch(/from\("application_reviews"\)/);
     expect(read("lib/data.ts")).toContain("appList.filter((application) => ownedReviewByAppId.has(application.id))");
   });
 });

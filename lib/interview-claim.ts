@@ -7,30 +7,41 @@ import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // ---------------------------------------------------------------------------
-// Phase 044B — Interview self-claim
+// S12 interview day — bounded self-claim
 //
-// Behavior:
-//   1. Permission check — reviewer / core_team / admin / super_admin only.
-//   2. Load application, validate status is interview-eligible.
-//   3. If current user already has an active (non-cancelled) interview review
-//      for this application → return existing review ID (idempotent).
-//   4. If ANOTHER reviewer already has an active in-progress review → return
-//      a conflict message with the other reviewer's name/email.
-//   5. Insert new application_reviews row:
-//        review_round = 'interview'
-//        reviewer_admin_user_id = current actor
-//        assigned_by             = current actor
-//        status                  = 'in_progress'
-//        claimed_at              = now()
-//        claim_source            = 'self_claim'
-//   6. Advance applications.status to 'interview_in_progress' (non-fatal)
-//      if current status is invited_to_interview or interview_scheduled.
+// Interview day for mentee recruitment is walk-up, not scheduled. A candidate
+// arrives, gives their name, and whichever eligible interviewer is free
+// searches for them and claims them at that moment. Core Team does not
+// pre-assign every candidate.
+//
+// The exception is a candidate deliberately reserved for a named interviewer.
+// Core Team assigns those in advance, and the reservation is expressed by the
+// existence of that interviewer's interview review — so "someone already holds
+// an active interview review" is precisely the signal that the candidate is
+// spoken for, whether that review arrived by Core Team assignment or by an
+// earlier self-claim.
+//
+// Behaviour:
+//   1. Permission — reviewer / core_team / admin / super_admin only.
+//   2. Season scope — the actor must be able to review the candidate's season,
+//      and must be an interview participant in that exact season.
+//   3. Lifecycle — the application must be interview-eligible.
+//   4. Claim — decided atomically by vam095_claim_interview_review:
+//        actor already holds one   -> resume it (idempotent)
+//        another interviewer holds -> refused, candidate is reserved
+//        nobody holds one          -> created for the actor
+//   5. Status — advanced by vam084_recompute_application_review_status inside
+//      the same transaction as the insert.
+//
+// The claim decision is NOT made in this file. A read here followed by an
+// insert would let two interviewers who press the button at the same instant
+// both observe "no review" and both win; the existing unique index is keyed by
+// reviewer and does not forbid that. See the migration header for why the
+// boundary is an advisory lock in the RPC rather than a stricter index.
 // ---------------------------------------------------------------------------
 
 const SAFE_ERROR =
   "Không thể thực hiện thao tác. Vui lòng thử lại hoặc liên hệ admin.";
-
-
 
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string };
@@ -39,6 +50,14 @@ function log(scope: string, error: unknown) {
     message: err?.message ?? String(error),
     hint: err?.hint
   });
+}
+
+/** Names the holder, falling back to their email only when no name is set. */
+function describeHolder(fullName: unknown, email: unknown): string {
+  const name = String(fullName ?? "").trim();
+  if (name) return name;
+  const mail = String(email ?? "").trim();
+  return mail || "một interviewer khác";
 }
 
 // ---------------------------------------------------------------------------
@@ -51,6 +70,15 @@ export type ClaimInterviewResult = {
   reviewId?: string;
   /** true when another reviewer already holds an active claim. */
   alreadyClaimed?: boolean;
+};
+
+type ClaimRpcRow = {
+  outcome_status?: unknown;
+  review_id?: unknown;
+  holder_admin_user_id?: unknown;
+  holder_full_name?: unknown;
+  holder_email?: unknown;
+  application_status?: unknown;
 };
 
 // ---------------------------------------------------------------------------
@@ -105,33 +133,56 @@ export async function claimInterviewReview(input: {
     };
   }
 
-  // --- Check if current user already has an active interview review
-  const { data: myExisting, error: myErr } = await client
-    .from("application_reviews")
-    .select("id,status")
-    .eq("application_id", appId)
-    .eq("review_round", "interview")
-    .eq("reviewer_admin_user_id", actor.id)
-    .neq("status", "cancelled")
-    .maybeSingle();
+  // --- Atomic claim.
+  //
+  // Every check above is a fast pre-flight that produces a specific Vietnamese
+  // message for the interviewer. None of them is the guard: the RPC re-proves
+  // season participation and lifecycle eligibility itself, under the same lock
+  // that decides the claim, so a request that slips past this file — or races a
+  // status change between the read above and the write — is still refused.
+  const { data: claimRows, error: claimError } = await client.rpc(
+    "vam095_claim_interview_review",
+    { p_application_id: appId, p_actor: actor.id }
+  );
 
-  if (myErr) {
-    log("check existing review for current user", myErr);
+  if (claimError) {
+    log("claim interview review", claimError);
     return { ok: false, message: SAFE_ERROR };
   }
-  if (myExisting) {
-    // Idempotent — return existing review
+
+  const row = (Array.isArray(claimRows) ? claimRows[0] : claimRows) as ClaimRpcRow | null;
+  const outcome = String(row?.outcome_status ?? "").trim();
+  const reviewId = String(row?.review_id ?? "").trim();
+
+  if (outcome === "already_claimed") {
+    // Reserved candidate. No parallel review is created — this is how Core
+    // Team keeps a specific candidate for a specific interviewer.
     return {
-      ok: true,
-      message: "Bạn đã có interview review cho ứng viên này.",
-      reviewId: String(myExisting.id)
+      ok: false,
+      alreadyClaimed: true,
+      message: `Ứng viên này đã được phân công cho ${describeHolder(
+        row?.holder_full_name,
+        row?.holder_email
+      )}. Vui lòng liên hệ Core Team nếu cần đổi người phỏng vấn.`
     };
   }
 
-  // S12 uses explicit Core Team assignment. A participant role alone never
-  // grants access to another applicant or creates a self-claimed assignment.
-  return {
-    ok: false,
-    message: "Bạn chưa được phân công phỏng vấn ứng viên này."
-  };
+  if (outcome === "existing") {
+    return {
+      ok: true,
+      message: "Bạn đã có interview review cho ứng viên này.",
+      reviewId: reviewId || undefined
+    };
+  }
+
+  if (outcome === "claimed" && reviewId) {
+    return {
+      ok: true,
+      message: "Đã nhận phỏng vấn ứng viên này. Bạn có thể bắt đầu chấm điểm.",
+      reviewId
+    };
+  }
+
+  log("claim interview review returned an unrecognised outcome", { code: outcome });
+  return { ok: false, message: SAFE_ERROR };
 }

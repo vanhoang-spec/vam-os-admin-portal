@@ -103,8 +103,22 @@ function ClaimInterviewButton({
     );
   }
 
-  const buttonLabel =
-    row.has_active_interview_review && !myReviewId ? "Bắt đầu (song song)" : "Bắt đầu phỏng vấn";
+  // Someone else already holds this candidate. That is exactly how Core Team
+  // reserves a candidate for a named interviewer, so there is no parallel claim
+  // to offer: the old "Bắt đầu (song song)" button promised one and the server
+  // now refuses it. Show the reservation instead of a button that cannot win.
+  if (row.has_active_interview_review) {
+    return (
+      <span
+        className="inline-flex min-w-[9rem] cursor-not-allowed justify-center rounded-md border border-vam-line bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500"
+        title="Ứng viên này đã được phân công cho một interviewer khác."
+      >
+        Đã có người phỏng vấn
+      </span>
+    );
+  }
+
+  const buttonLabel = "Bắt đầu phỏng vấn";
 
   return (
     <div className="flex flex-col gap-1.5">
