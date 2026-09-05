@@ -203,16 +203,124 @@ function dedupeProfilesByPerson(rows: JsonRecord[]): JsonRecord[] {
   return Array.from(byPerson.values());
 }
 
+// ── Season participation ─────────────────────────────────────────────────────
+//
+// Being matchable in a season is a question about PARTICIPATION, and an
+// approved application is only one of the ways a person comes to participate.
+// Reading approval alone was wrong in both directions on UEHM-S12:
+//
+//   * Phạm Thanh Thuý holds `approved_as_mentee` in S12 and a mentee profile,
+//     but her S12 membership is `withdrawn`. She left, and the pool kept
+//     offering her, because a withdrawal is recorded on the membership and
+//     nothing ever goes back to amend the application row.
+//
+//   * Several people carry an ACTIVE S12 mentee membership and a mentee
+//     profile, having continued or transferred in from S11, and hold no S12
+//     application at all. They are unambiguously in the season, and the pool
+//     could not see them.
+//
+// So participation is: an active exact-season role membership, OR an approved
+// exact-season application — and an explicit "not participating" membership is
+// authoritative over the application either way.
+//
+// `person_season_memberships` is UNIQUE on (person_id, season_id, role), so one
+// person contributes at most one row per role and there is nothing to dedupe or
+// tie-break: the row either grants, blocks, or does neither.
+
+/** Membership statuses that make someone a participant in their own right. */
+const PARTICIPATING_MEMBERSHIP_STATUS = "active";
+
 /**
- * Independently re-checks that a person holds an approved application of the
- * required kind in this season, on the mutation path.
+ * Membership statuses that remove a person from the pool even when an approved
+ * application still says otherwise.
+ *
+ * Each of these is reached only through a deliberate `vam063_*` operator action
+ * carrying a mandatory reason, which is what makes them safe to treat as
+ * authoritative — they are statements about this season, not stale data.
+ *
+ * Deliberately NOT blocking:
+ *   `invited`    — written by the account CSV import (062) BEFORE approval, and
+ *                  no path flips it to `active`. Blocking on it would drop
+ *                  approved applicants who happen to have been imported first.
+ *   `completed` /
+ *   `graduated`  — end-of-season outcomes. No operator action produces them
+ *                  during recruitment, so blocking on them would add reach
+ *                  without any evidence behind it.
+ * Neither grants participation either; for those people the application is
+ * still the deciding route, exactly as it is today.
+ */
+const NON_PARTICIPATING_MEMBERSHIP_STATUSES = new Set([
+  "withdrawn",
+  "opted_out",
+  "cancelled",
+  "paused"
+]);
+
+const MENTOR_MEMBERSHIP_ROLE = "mentor";
+const MENTEE_MEMBERSHIP_ROLE = "mentee";
+
+type ParticipationSets = {
+  activeMentors: Set<string>;
+  activeMentees: Set<string>;
+  blockedMentors: Set<string>;
+  blockedMentees: Set<string>;
+};
+
+function emptyParticipation(): ParticipationSets {
+  return {
+    activeMentors: new Set(),
+    activeMentees: new Set(),
+    blockedMentors: new Set(),
+    blockedMentees: new Set()
+  };
+}
+
+/** Folds membership rows into the grant/block sets. Rows are already season-scoped. */
+function foldMemberships(rows: JsonRecord[]): ParticipationSets {
+  const sets = emptyParticipation();
+  for (const row of rows) {
+    const personId = clean(row.person_id);
+    if (!personId) continue;
+    const role = String(row.role ?? "").trim().toLowerCase();
+    const status = String(row.status ?? "").trim().toLowerCase();
+
+    const grant = role === MENTOR_MEMBERSHIP_ROLE ? sets.activeMentors : sets.activeMentees;
+    const block = role === MENTOR_MEMBERSHIP_ROLE ? sets.blockedMentors : sets.blockedMentees;
+    // A membership in some other role — interviewer, coreteam — says nothing
+    // about being matchable as a mentor or mentee, in either direction.
+    if (role !== MENTOR_MEMBERSHIP_ROLE && role !== MENTEE_MEMBERSHIP_ROLE) continue;
+
+    if (status === PARTICIPATING_MEMBERSHIP_STATUS) grant.add(personId);
+    else if (NON_PARTICIPATING_MEMBERSHIP_STATUSES.has(status)) block.add(personId);
+  }
+  return sets;
+}
+
+/** Applies the participation rule to one role's candidate ids. */
+function participatingPersonIds(
+  approved: readonly string[],
+  active: Set<string>,
+  blocked: Set<string>
+): string[] {
+  const out = new Set<string>();
+  approved.forEach((id) => out.add(id));
+  active.forEach((id) => out.add(id));
+  blocked.forEach((id) => out.delete(id));
+  return Array.from(out).sort();
+}
+
+/**
+ * Independently re-checks, on the mutation path, that a person actually
+ * participates in this season in the required role.
  *
  * The candidate list already filters on this, but a list filter is a
  * convenience, not a guard: `createManualMatch` receives two profile ids from a
  * form post and nothing stops a crafted request naming a profile that was never
- * offered. This read is what makes the approval rule real.
+ * offered. This read is what makes the participation rule real — and it has to
+ * apply the SAME rule as the list, or an operator could be shown one answer and
+ * the write could enforce another.
  */
-async function loadSeasonApprovals(
+async function loadSeasonParticipation(
   client: any,
   seasonId: string,
   personIds: string[]
@@ -220,30 +328,52 @@ async function loadSeasonApprovals(
   const ids = uniqueStrings(personIds);
   if (!ids.length) return { ok: true, mentors: new Set(), mentees: new Set() };
 
-  const { data, error } = await client
-    .from("applications")
-    .select("id,person_id,status")
-    .eq("season_id", seasonId)
-    .in("person_id", ids)
-    .in("status", [APPROVED_MENTOR_STATUS, APPROVED_MENTEE_STATUS]);
+  const [approvalsRes, membershipsRes] = await Promise.all([
+    client
+      .from("applications")
+      .select("id,person_id,status")
+      .eq("season_id", seasonId)
+      .in("person_id", ids)
+      .in("status", [APPROVED_MENTOR_STATUS, APPROVED_MENTEE_STATUS]),
+    client
+      .from("person_season_memberships")
+      .select("id,person_id,role,status")
+      .eq("season_id", seasonId)
+      .in("person_id", ids)
+  ]);
 
-  // Fail closed. A read failure here must never be read as "no approval found
-  // and therefore proceed", nor as "assume approved".
-  if (error) {
-    log("season approval lookup failed", error);
+  // Fail closed, on BOTH reads. A membership read that failed must never be
+  // read as "no withdrawal found and therefore proceed" — that is precisely the
+  // case this guard exists to catch.
+  if (approvalsRes.error) {
+    log("season approval lookup failed", approvalsRes.error);
+    return { ok: false };
+  }
+  if (membershipsRes.error) {
+    log("season membership lookup failed", membershipsRes.error);
     return { ok: false };
   }
 
-  const mentors = new Set<string>();
-  const mentees = new Set<string>();
-  for (const row of (data ?? []) as JsonRecord[]) {
+  const approvedMentors = new Set<string>();
+  const approvedMentees = new Set<string>();
+  for (const row of (approvalsRes.data ?? []) as JsonRecord[]) {
     const personId = clean(row.person_id);
     if (!personId) continue;
     const status = String(row.status ?? "");
-    if (status === APPROVED_MENTOR_STATUS) mentors.add(personId);
-    if (status === APPROVED_MENTEE_STATUS) mentees.add(personId);
+    if (status === APPROVED_MENTOR_STATUS) approvedMentors.add(personId);
+    if (status === APPROVED_MENTEE_STATUS) approvedMentees.add(personId);
   }
-  return { ok: true, mentors, mentees };
+
+  const sets = foldMemberships((membershipsRes.data ?? []) as JsonRecord[]);
+  return {
+    ok: true,
+    mentors: new Set(
+      participatingPersonIds(Array.from(approvedMentors), sets.activeMentors, sets.blockedMentors)
+    ),
+    mentees: new Set(
+      participatingPersonIds(Array.from(approvedMentees), sets.activeMentees, sets.blockedMentees)
+    )
+  };
 }
 
 function profileKey(personId: string | null | undefined, batchId: string | null | undefined) {
@@ -501,7 +631,7 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
   const selectedSeasonId = (selectedBatch as JsonRecord | null)?.season_id as string | null;
   if (!selectedSeasonId) return { ok: true, error: null, mentors: [], mentees: [] };
 
-  // ── Eligibility comes from APPROVAL, not from a profile's batch id ────────
+  // ── Eligibility comes from SEASON PARTICIPATION, not a profile's batch id ──
   //
   // The pool used to be `mentor_profiles WHERE intake_batch_id = <batch>`. That
   // is not the approved list, and on UEHM-S12 it was catastrophically wrong in
@@ -515,36 +645,71 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
   // without repointing its `intake_batch_id`, so a returning participant keeps
   // a profile addressed to an older batch forever.
   //
-  // The authority is therefore an APPROVED APPLICATION IN THE SELECTED SEASON.
-  // The batch stays the operator's UI context and the season it resolves to is
-  // what scopes this read.
-  const approvedApps = await readAllPages<JsonRecord>(
-    "applications",
-    "id,person_id,status",
-    (projection) =>
-      client
-        .from("applications")
-        .select(projection)
-        .eq("season_id", selectedSeasonId)
-        .in("status", [APPROVED_MENTOR_STATUS, APPROVED_MENTEE_STATUS])
-  );
+  // The first authority is therefore an APPROVED APPLICATION IN THE SELECTED
+  // SEASON. The batch stays the operator's UI context and the season it
+  // resolves to is what scopes this read.
+  //
+  // The second is the person's EXACT-SEASON ROLE MEMBERSHIP, read alongside it.
+  // A membership admits a continuing or transferred participant who never filed
+  // a new application, and an explicitly non-participating membership removes
+  // someone the application row still calls approved. See the participation
+  // helpers above for why each status lands where it does.
+  const [approvedApps, seasonMemberships] = await Promise.all([
+    readAllPages<JsonRecord>(
+      "applications",
+      "id,person_id,status",
+      (projection) =>
+        client
+          .from("applications")
+          .select(projection)
+          .eq("season_id", selectedSeasonId)
+          .in("status", [APPROVED_MENTOR_STATUS, APPROVED_MENTEE_STATUS])
+    ),
+    readAllPages<JsonRecord>(
+      "person_season_memberships",
+      "id,person_id,role,status",
+      (projection) =>
+        client
+          .from("person_season_memberships")
+          .select(projection)
+          .eq("season_id", selectedSeasonId)
+          .in("role", [MENTOR_MEMBERSHIP_ROLE, MENTEE_MEMBERSHIP_ROLE])
+    )
+  ]);
   if (approvedApps.error) {
     log("approved applications fetch failed", approvedApps.error);
     return { ...empty, ok: false, error: SAFE_ERROR };
   }
+  // Fail closed. Falling back to "approvals only" on a membership read failure
+  // would silently re-offer every withdrawn participant.
+  if (seasonMemberships.error) {
+    log("season memberships fetch failed", seasonMemberships.error);
+    return { ...empty, ok: false, error: SAFE_ERROR };
+  }
 
-  // Sorted so a person holding more than one approved application resolves the
-  // same way on every load rather than following arrival order.
-  const approvedMentorPersonIds = uniqueStrings(
-    approvedApps.data
-      .filter((row) => String(row.status ?? "") === APPROVED_MENTOR_STATUS)
-      .map((row) => clean(row.person_id))
-  ).sort();
-  const approvedMenteePersonIds = uniqueStrings(
-    approvedApps.data
-      .filter((row) => String(row.status ?? "") === APPROVED_MENTEE_STATUS)
-      .map((row) => clean(row.person_id))
-  ).sort();
+  const participation = foldMemberships(seasonMemberships.data);
+
+  // Sorted so a person holding more than one approved application — or arriving
+  // by both routes — resolves the same way on every load rather than following
+  // arrival order.
+  const approvedMentorPersonIds = participatingPersonIds(
+    uniqueStrings(
+      approvedApps.data
+        .filter((row) => String(row.status ?? "") === APPROVED_MENTOR_STATUS)
+        .map((row) => clean(row.person_id))
+    ),
+    participation.activeMentors,
+    participation.blockedMentors
+  );
+  const approvedMenteePersonIds = participatingPersonIds(
+    uniqueStrings(
+      approvedApps.data
+        .filter((row) => String(row.status ?? "") === APPROVED_MENTEE_STATUS)
+        .map((row) => clean(row.person_id))
+    ),
+    participation.activeMentees,
+    participation.blockedMentees
+  );
 
   const [mentorProfileRows, menteeProfileRows, activeMatchesRes] = await Promise.all([
     approvedMentorPersonIds.length
@@ -765,26 +930,36 @@ export async function createManualMatch(input: {
     return { ok: false, message: "Ban khong co quyen tao match trong mua nay." };
   }
 
-  // Rule: both people must hold an approved application IN THIS SEASON.
+  // Rule: both people must PARTICIPATE IN THIS SEASON in the required role —
+  // by active exact-season membership or by approved exact-season application,
+  // and never while an explicit non-participating membership says they are out.
   //
   // Checked here rather than trusted from the form, so a request naming a
-  // profile the candidate list never offered — an unapproved applicant, or
-  // someone approved only in an earlier season — is refused at the write.
+  // profile the candidate list never offered — an unapproved applicant, someone
+  // approved only in an earlier season, or a withdrawn participant whose
+  // application row still reads `approved_as_mentee` — is refused at the write.
+  // Same helper as the list, so what the operator is shown and what the write
+  // enforces cannot drift apart.
   if (!seasonId) {
     return { ok: false, message: "Batch chưa gắn mùa nên không thể xác minh phê duyệt." };
   }
-  const approvals = await loadSeasonApprovals(client, String(seasonId), [mentorPersonId, menteePersonId]);
-  if (!approvals.ok) return { ok: false, message: SAFE_ERROR };
-  if (!approvals.mentors.has(mentorPersonId)) {
+  const participation = await loadSeasonParticipation(client, String(seasonId), [
+    mentorPersonId,
+    menteePersonId
+  ]);
+  if (!participation.ok) return { ok: false, message: SAFE_ERROR };
+  if (!participation.mentors.has(mentorPersonId)) {
     return {
       ok: false,
-      message: "Mentor này chưa được duyệt chính thức trong mùa của batch đã chọn."
+      message:
+        "Mentor này không tham gia mùa của batch đã chọn (chưa được duyệt, hoặc membership đã dừng)."
     };
   }
-  if (!approvals.mentees.has(menteePersonId)) {
+  if (!participation.mentees.has(menteePersonId)) {
     return {
       ok: false,
-      message: "Mentee này chưa được duyệt chính thức trong mùa của batch đã chọn."
+      message:
+        "Mentee này không tham gia mùa của batch đã chọn (chưa được duyệt, hoặc membership đã dừng)."
     };
   }
 
