@@ -34,7 +34,9 @@
  * carries a phone number is one copy-paste away from becoming that endpoint.
  */
 
+import { acknowledgementRegistry } from "@/lib/application-commitments";
 import { flattenRawPayload, humanizeKey, isInternalRawPayloadSegment } from "@/lib/application-export";
+import { RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD } from "@/lib/renewal-types";
 import type { Application, JsonRecord, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 export type QuickViewRole = "mentor" | "mentee";
@@ -82,17 +84,52 @@ export const QUICK_VIEW_EXCLUDED_KEYS: ReadonlySet<string> = new Set([
   "gender_other",
   "preferred_name",
   "profile_picture_url",
-  // Consent / acknowledgement boilerplate
+  // Consent and policy acceptance that is NOT a registry acknowledgement.
+  // The registry entries themselves are handled by `isAcknowledgementSegment`
+  // below and are deliberately not restated here.
   "consent_data_storage",
   "consent_marketing_email",
   "commitment_understanding",
+  // The renewal form's own commitment envelope: `commitments` is an OBJECT of
+  // acknowledgement keys, so it is excluded as a whole SUBTREE (see the
+  // segment-wise check below) rather than as a leaf.
   "commitments",
+  "commitments_completed",
+  "participation_confirmed",
+  RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
   // Scheduling logistics, not matching fit
   "available_for_interview",
   "available_for_kickoff",
   "can_attend_orientation",
   "open_to_intro_call"
 ]);
+
+/**
+ * Every programme acknowledgement, taken from the canonical registry.
+ *
+ * `acknowledgementRegistry` rather than `acknowledgementsForRole`, deliberately:
+ * that helper filters to application-stage entries for ONE role, and the drawer
+ * needs to hide all of them regardless of role or collection stage — a
+ * post-approval conduct acknowledgement is exactly as useless for matching as a
+ * form-stage one. Taking the whole registry also means an acknowledgement added
+ * to a future season disappears from the drawer on the day it is defined, with
+ * no edit here. Restating the key list would be a second policy allowlist, and
+ * the copy nobody updates is the one that silently starts leaking.
+ */
+const ACKNOWLEDGEMENT_KEYS: readonly string[] = acknowledgementRegistry.map((entry) => entry.key);
+
+/**
+ * True for an acknowledgement key, including the derived forms the renewal
+ * payload writes alongside it.
+ *
+ * The renewal stores `MENTOR_ACTIVE_READING_V1_matched` (a boolean) and
+ * `MENTOR_ACTIVE_READING_V1_text` (the typed confirmation phrase itself), so an
+ * exact-match test would let the whole phrase through under a slightly
+ * different key. Prefix matching catches both without enumerating suffixes.
+ */
+export function isAcknowledgementSegment(segment: string): boolean {
+  return ACKNOWLEDGEMENT_KEYS.some((key) => segment === key || segment.startsWith(`${key}_`));
+}
 
 /**
  * A contact-shaped key that slipped past the explicit list above still cannot
@@ -104,14 +141,28 @@ const CONTACT_KEY_FRAGMENTS = ["email", "phone", "zalo", "facebook", "telegram",
 export function isQuickViewExcludedKey(key: unknown): boolean {
   const raw = String(key ?? "").trim();
   if (!raw) return true;
-  const leaf = raw.split(".").pop() ?? raw;
-  const bare = leaf.replace(/\[\d+\]$/, "");
-  if (QUICK_VIEW_EXCLUDED_KEYS.has(bare)) return true;
-  if (isInternalRawPayloadSegment(bare)) return true;
-  const normalized = bare.toLowerCase();
-  // `social_contact` and friends. A URL to a CV is deliberately NOT caught —
-  // that is background material, and it is on the priority list below.
-  return CONTACT_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment));
+
+  // EVERY segment is tested, not just the leaf.
+  //
+  // `flattenRawPayload` walks nested objects into dotted paths, so the renewal
+  // form's `commitments: { MENTOR_ELIGIBILITY_V1: true, ... }` arrives as
+  // `commitments.MENTOR_ELIGIBILITY_V1`. A leaf-only test would look at
+  // `MENTOR_ELIGIBILITY_V1` and never at `commitments`, which is how the whole
+  // acknowledgement block — including the typed confirmation phrase — reached
+  // the drawer before this. Excluding a parent segment now removes its entire
+  // subtree, which is what "hide the commitments block" has to mean.
+  for (const segment of raw.split(".")) {
+    const bare = segment.replace(/\[\d+\]$/, "");
+    if (!bare) continue;
+    if (QUICK_VIEW_EXCLUDED_KEYS.has(bare)) return true;
+    if (isAcknowledgementSegment(bare)) return true;
+    if (isInternalRawPayloadSegment(bare)) return true;
+    // `social_contact` and friends. A URL to a CV is deliberately NOT caught —
+    // that is background material, and it is on the priority list below.
+    const normalized = bare.toLowerCase();
+    if (CONTACT_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment))) return true;
+  }
+  return false;
 }
 
 /**
