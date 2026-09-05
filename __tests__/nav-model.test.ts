@@ -165,8 +165,20 @@ describe("buildNavGroups — reviewer", () => {
     expect(hrefs).toContain("/interviews");
   });
 
-  it("includes all base routes except /operations and /matches", () => {
-    ROUTES_BASE_NO_OPS_MATCHES.forEach((r) => expect(hrefs).toContain(r));
+  // S12 helper boundary: a standalone recruitment reviewer is offered only the
+  // surfaces they can actually use. Every browse route below already refused a
+  // reviewer at the page — nav simply had not caught up, so a helper invited to
+  // score mentee applications was shown six links that bounced them back.
+  it("is offered only its own recruitment surfaces", () => {
+    expect(sortedRoutes(hrefs)).toEqual(sortedRoutes(["/", "/my-work", "/reviews", "/interviews"]));
+  });
+
+  it("is NOT offered browse routes its pages refuse", () => {
+    [
+      "/people", "/mentors", "/mentees",
+      "/applications", "/applications/mentor-review", "/applications/mentee-review",
+      "/events", "/data-issues"
+    ].forEach((r) => expect(hrefs).not.toContain(r));
   });
 
   // H2: a reviewer's season "review" grant is not canBrowseOperations —
@@ -192,14 +204,15 @@ describe("buildNavGroups — viewer", () => {
     );
   });
 
-  it("includes all base routes except /operations and /matches", () => {
-    ROUTES_BASE_NO_OPS_MATCHES.forEach((r) => expect(hrefs).toContain(r));
+  // viewer is excluded from every lib/read-access predicate, so the same trim
+  // that fixed the reviewer's dead links removes viewer's too. No access
+  // changes — every one of these routes already redirected a viewer.
+  it("is offered only the dashboard", () => {
+    expect(sortedRoutes(hrefs)).toEqual(["/"]);
   });
 
-  it("applications is a standalone link (no sub-items)", () => {
-    const apps = groups.find((g) => g.key === "applications");
-    expect(apps!.href).toBe("/applications");
-    expect(apps!.items).toBeUndefined();
+  it("has no applications group at all", () => {
+    expect(groups.find((g) => g.key === "applications")).toBeUndefined();
   });
 
   // H2: viewer is not in canBrowseOperations, so the operations nav entry
@@ -247,8 +260,8 @@ describe("buildNavGroups — null user", () => {
     );
   });
 
-  it("includes base routes except /operations and /matches", () => {
-    ROUTES_BASE_NO_OPS_MATCHES.forEach((r) => expect(hrefs).toContain(r));
+  it("is offered only the dashboard", () => {
+    expect(sortedRoutes(hrefs)).toEqual(["/"]);
   });
 });
 
@@ -271,13 +284,25 @@ describe("route coverage — no routes removed by nav grouping", () => {
     ROUTES_ALL.forEach((r) => expect(hrefs).toContain(r));
   });
 
-  it("community group exposes /people, /mentors, /mentees for all roles", () => {
-    const roles: CurrentAdminUser["role"][] = ["super_admin", "admin", "core_team", "reviewer", "viewer", "support_team"];
+  // The community group now follows lib/read-access, the same policy its three
+  // pages enforce. Roles that may browse still see all three; roles whose pages
+  // would redirect them are no longer offered the link.
+  it("community group exposes /people, /mentors, /mentees for every role that may browse them", () => {
+    const roles: CurrentAdminUser["role"][] = ["super_admin", "admin", "core_team", "support_team"];
     roles.forEach((role) => {
       const hrefs = allNavHrefs(buildNavGroups(makeUser(role)));
       expect(hrefs).toContain("/people");
       expect(hrefs).toContain("/mentors");
       expect(hrefs).toContain("/mentees");
+    });
+  });
+
+  it("hides the community group from roles whose pages refuse them", () => {
+    (["reviewer", "viewer"] as CurrentAdminUser["role"][]).forEach((role) => {
+      const hrefs = allNavHrefs(buildNavGroups(makeUser(role)));
+      expect(hrefs).not.toContain("/people");
+      expect(hrefs).not.toContain("/mentors");
+      expect(hrefs).not.toContain("/mentees");
     });
   });
 });
@@ -364,15 +389,19 @@ const REVIEW_ROUTES = [
   "/interviews",
 ];
 
+// S12 helper boundary: the browse routes in the base set are now gated on the
+// SAME predicates their pages enforce (lib/read-access for the community and
+// application directories, canBrowseOperations for /events and /data-issues).
+// support_team satisfies all of them and its set is unchanged. viewer and
+// reviewer satisfy none, so both keep only what they can actually open —
+// reviewer plus its recruitment surfaces. No route's access changed; only what
+// the nav offers.
+const HELPER_REVIEW_ROUTES = ["/my-work", "/reviews", "/interviews"];
+
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
-  // H2: support_team is in canBrowseOperations, so it keeps the full base
-  // set including /operations and /matches. viewer and reviewer are not,
-  // so they drop both.
-  viewer:       BASE_ROUTE_ARR_NO_OPS_MATCHES,
+  viewer:       ["/"],
   support_team: BASE_ROUTE_ARR,
-  // H2: reviewer drops /operations and /matches; the Production review
-  // queue routes (REVIEW_ROUTES) are unchanged and remain canonical.
-  reviewer:     [...BASE_ROUTE_ARR_NO_OPS_MATCHES, ...REVIEW_ROUTES],
+  reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
   admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
   super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users"],

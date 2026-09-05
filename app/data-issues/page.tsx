@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { canBrowseOperations } from "@/lib/permissions";
 import { getApplications, getMatches, getMenteeProfiles, getMentorProfiles, getPeople, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Application, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
@@ -101,15 +103,31 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
   const searchParams = await props.searchParams;
 
   const selectedIssue = isIssueKey(searchParams?.issue) ? searchParams.issue : null;
+
+  // Role gate BEFORE any protected read.
+  //
+  // This screen loads the community directory, every application, both profile
+  // tables and every match for the caller's scope, and prints names, emails and
+  // phone numbers. It previously had no role check at all — `getCurrentAdminUser`
+  // sat inside the same Promise.all as those reads and was used only to decide
+  // whether to show edit controls, so a standalone recruitment reviewer holding a
+  // season "review" grant reached the whole page.
+  //
+  // Same predicate and same position as the H2 fix on /operations and /matches:
+  // a season scope grant is not authority to browse operations. support_team is
+  // inside canBrowseOperations and keeps the access it already had.
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser) redirect("/login");
+  if (!canBrowseOperations(adminUser.role)) redirect("/");
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const [people, applications, mentees, mentors, matches, adminUser] = await Promise.all([
+  const [people, applications, mentees, mentors, matches] = await Promise.all([
     getPeople(scope),
     getApplications(scope),
     getMenteeProfiles(scope),
     getMentorProfiles(scope),
-    getMatches(scope),
-    getCurrentAdminUser()
+    getMatches(scope)
   ]);
   const allowEdit = canEditRecaps(adminUser);
   const peopleById = keyById(people.data);

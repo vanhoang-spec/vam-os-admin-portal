@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
+import { canBrowseOperations } from "@/lib/permissions";
 import { getIntakeBatches } from "@/lib/data";
 import { EVENT_TYPE_OPTIONS, getEventListData, isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import type { EventListData } from "@/lib/events";
@@ -86,12 +88,27 @@ export default async function EventsPage(props: { searchParams?: Promise<{
   }> }) {
   const searchParams = await props.searchParams;
 
+  // Role gate BEFORE any protected read.
+  //
+  // Every other route in the events subtree already refuses a standalone
+  // reviewer through `canEditRecaps` before it loads anything. This index was
+  // the one that did not: `getCurrentAdminUser` sat inside the Promise.all below
+  // and was used only for the edit-controls flag, so the event list — with its
+  // registration and attendance counts — was reachable by any reviewer holding a
+  // season grant.
+  //
+  // canBrowseOperations rather than canEditRecaps deliberately: this is a
+  // browsing gate, and support_team must keep the read access it already has
+  // here, exactly as it does on /operations.
+  const adminUser = await getCurrentAdminUser();
+  if (!adminUser) redirect("/login");
+  if (!canBrowseOperations(adminUser.role)) redirect("/");
+
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
-  const [data, intakeBatchesRes, adminUser] = await Promise.all([
+  const [data, intakeBatchesRes] = await Promise.all([
     getEventListData(scope),
-    getIntakeBatches(scope),
-    getCurrentAdminUser()
+    getIntakeBatches(scope)
   ]);
   const allowEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
 

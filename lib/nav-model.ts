@@ -1,5 +1,10 @@
-import type { CurrentAdminUser } from "@/lib/auth-constants";
+import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import { canBrowseOperations } from "@/lib/permissions";
+import {
+  canBrowseApplications,
+  canBrowseParticipants,
+  canBrowsePeople
+} from "@/lib/read-access";
 
 export type NavItemDef = { href: string; label: string };
 
@@ -34,6 +39,28 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   // visibility and route access disagree.
   const showOperations = canBrowseOperations(role);
 
+  // Nav must offer only what the route will actually serve.
+  //
+  // These four mirror the page-level guards exactly — lib/read-access.ts for the
+  // community, participant and application directories, canBrowseOperations for
+  // the events index and the data-quality screen. All of those routes already
+  // refuse a standalone recruitment reviewer; the nav simply had not caught up,
+  // so a helper invited to score mentee applications was shown six links that
+  // bounced them straight back.
+  //
+  // This changes what is OFFERED, never what is permitted: every predicate here
+  // is the same one its page enforces, so nav and route can no longer disagree.
+  //
+  // The read-access predicates take a definite AdminRole, while nav is built for
+  // a possibly-null user. An absent role is not a role that may browse anything,
+  // so it resolves to false here rather than widening those signatures.
+  const readAccess = (check: (value: AdminRole) => boolean) => (role ? check(role) : false);
+
+  const showCommunity = readAccess(canBrowsePeople) || readAccess(canBrowseParticipants);
+  const showApplicationOps = readAccess(canBrowseApplications);
+  const showEvents = canBrowseOperations(role);
+  const showDataIssues = canBrowseOperations(role);
+
   const groups: (NavGroupDef | null)[] = [
     // "Công việc của tôi" sits at the very top, above Tổng quan, for everyone
     // who can hold a recruitment assignment. The requirement is that assigned
@@ -65,31 +92,43 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
       : showOperations
         ? { key: "operations", label: "Vận hành", href: "/operations" }
         : null,
-    {
-      key: "community",
-      label: "Cộng đồng VAM",
-      items: [
-        { href: "/people", label: "Cộng đồng VAM" },
-        { href: "/mentors", label: "Mentor" },
-        { href: "/mentees", label: "Mentee" },
-      ],
-    },
+    showCommunity
+      ? {
+          key: "community",
+          label: "Cộng đồng VAM",
+          items: [
+            { href: "/people", label: "Cộng đồng VAM" },
+            { href: "/mentors", label: "Mentor" },
+            { href: "/mentees", label: "Mentee" },
+          ],
+        }
+      : null,
+    // A recruitment helper gets only their own work surfaces here. The three
+    // directory-style entries are gated on canBrowseApplications, which is the
+    // predicate /applications and both S12 review lists already enforce, so a
+    // reviewer sees "Đánh giá" and "Phỏng vấn" and nothing that would bounce.
     showReviews
       ? {
           key: "applications",
           label: "Ứng tuyển",
           items: [
-            { href: "/applications/mentor-review", label: "Duyệt Mentor S12" },
-            { href: "/applications/mentee-review", label: "Duyệt Mentee S12" },
-            { href: "/applications", label: "Ứng tuyển (Tất cả)" },
+            ...(showApplicationOps
+              ? [
+                  { href: "/applications/mentor-review", label: "Duyệt Mentor S12" },
+                  { href: "/applications/mentee-review", label: "Duyệt Mentee S12" },
+                  { href: "/applications", label: "Ứng tuyển (Tất cả)" },
+                ]
+              : []),
             { href: "/reviews", label: "Đánh giá" },
             { href: "/interviews", label: "Phỏng vấn" },
           ],
         }
-      : { key: "applications", label: "Ứng tuyển", href: "/applications" },
+      : showApplicationOps
+        ? { key: "applications", label: "Ứng tuyển", href: "/applications" }
+        : null,
     showOperations ? { key: "matches", label: "Ghép cặp", href: "/matches" } : null,
-    { key: "events", label: "Sự kiện", href: "/events" },
-    { key: "data", label: "Rà soát dữ liệu", href: "/data-issues" },
+    showEvents ? { key: "events", label: "Sự kiện", href: "/events" } : null,
+    showDataIssues ? { key: "data", label: "Rà soát dữ liệu", href: "/data-issues" } : null,
   ];
 
   if (showAdminTier) {
