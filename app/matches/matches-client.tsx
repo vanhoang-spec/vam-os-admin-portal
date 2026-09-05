@@ -4,10 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useFormState } from "react-dom";
 import { cancelMatchAction, createManualMatchAction } from "@/app/actions/matches";
+import { loadMatchingQuickViewAction } from "@/app/actions/matching-quick-view";
 import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import type { MatchActionState } from "@/lib/match-action-types";
 import { filterMentees, filterMentors } from "@/lib/match-search";
+import type { QuickViewPayload } from "@/lib/matching-quick-view-core";
 import type { MenteeCandidate, MentorCandidate } from "@/lib/matches";
+import { QuickViewDrawer } from "./quick-view-drawer";
 
 const initialState: MatchActionState = { ok: false, message: null };
 
@@ -69,6 +72,52 @@ export function ManualMatchForm({
 
   const selectedMentor = mentors.find((m) => m.profile_id === selectedMentorId) ?? null;
   const selectedMentee = mentees.find((m) => m.profile_id === selectedMenteeId) ?? null;
+
+  // Quick-view drawer state. Deliberately separate from every selection above:
+  // opening or closing it touches nothing the form depends on, so search text,
+  // both selections and the note survive by construction rather than by care.
+  const [quickView, setQuickView] = useState<{
+    role: "mentor" | "mentee";
+    title: string;
+  } | null>(null);
+  const [quickViewPayload, setQuickViewPayload] = useState<QuickViewPayload | null>(null);
+  const [quickViewLoading, setQuickViewLoading] = useState(false);
+  const [quickViewError, setQuickViewError] = useState<string | null>(null);
+
+  const openQuickView = async (role: "mentor" | "mentee") => {
+    const candidate = role === "mentor" ? selectedMentor : selectedMentee;
+    const personId = candidate?.person_id ?? null;
+    const title = candidate?.full_name ?? candidate?.email_primary ?? "Hồ sơ";
+    // Only one drawer at a time: opening the other role replaces this one.
+    setQuickView({ role, title });
+    setQuickViewPayload(null);
+    setQuickViewError(null);
+
+    if (!personId) {
+      setQuickViewError("Hồ sơ này chưa gắn person_id nên không thể xem chi tiết.");
+      return;
+    }
+
+    setQuickViewLoading(true);
+    try {
+      // Loaded here, on demand, for ONE person — never preloaded for the pool.
+      const result = await loadMatchingQuickViewAction({ personId, role, intakeBatchId });
+      if (result.ok) setQuickViewPayload(result.data);
+      else setQuickViewError(result.message);
+    } catch {
+      setQuickViewError("Không thể tải hồ sơ. Vui lòng thử lại.");
+    } finally {
+      setQuickViewLoading(false);
+    }
+  };
+
+  const closeQuickView = () => {
+    // Clears only drawer state. Selections and search are untouched.
+    setQuickView(null);
+    setQuickViewPayload(null);
+    setQuickViewError(null);
+    setQuickViewLoading(false);
+  };
 
   // Refresh page on success so counts update
   useEffect(() => {
@@ -144,15 +193,26 @@ export function ManualMatchForm({
               <div className="font-medium text-vam-ink">{selectedMentor.full_name ?? "—"}</div>
               <div>{selectedMentor.email_primary}</div>
               {selectedMentor.company_current ? <div>{selectedMentor.title_current} @ {selectedMentor.company_current}</div> : null}
-              <div className="mt-1">
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${loadBar(selectedMentor.active_match_count, selectedMentor.effective_capacity).cls}`}>
                   Mentee hiện tại: {loadBar(selectedMentor.active_match_count, selectedMentor.effective_capacity).label}
                 </span>
+                {/* type="button" is load-bearing: this sits inside the create
+                    form and a default submit would try to create the match. */}
+                <button
+                  type="button"
+                  onClick={() => void openQuickView("mentor")}
+                  className="rounded-md border border-vam-line bg-white px-2 py-0.5 text-[11px] font-medium text-vam-green hover:bg-vam-mint"
+                >
+                  Xem hồ sơ
+                </button>
               </div>
             </div>
           ) : (
+            // Was "Mentor đang FULL (X/Y khả dụng)", which read as though every
+            // mentor were full while actually reporting how many were free.
             <p className="mt-1 text-[11px] text-slate-500">
-              Mentor đang FULL ({availableMentors.length}/{mentors.length} khả dụng)
+              Mentor khả dụng: {availableMentors.length}/{mentors.length}
             </p>
           )}
         </div>
@@ -196,12 +256,19 @@ export function ManualMatchForm({
               <div className="font-medium text-vam-ink">{selectedMentee.full_name ?? "—"}</div>
               <div>{selectedMentee.email_primary}</div>
               {selectedMentee.school_code ? <div>{selectedMentee.major} — {selectedMentee.school_code}</div> : null}
-              <div className="mt-1">
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 {selectedMentee.has_active_match ? (
                   <span className="rounded bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Đã có mentor</span>
                 ) : (
                   <span className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">Chưa có mentor</span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => void openQuickView("mentee")}
+                  className="rounded-md border border-vam-line bg-white px-2 py-0.5 text-[11px] font-medium text-vam-green hover:bg-vam-mint"
+                >
+                  Xem hồ sơ
+                </button>
               </div>
             </div>
           ) : (
@@ -232,6 +299,17 @@ export function ManualMatchForm({
           <span className="text-xs text-red-600">Mentee này đã có mentor active.</span>
         ) : null}
       </div>
+
+      {/* Rendered inside the form but positioned fixed, so the drawer overlays
+          the page without unmounting a single field. Nothing here submits. */}
+      <QuickViewDrawer
+        open={quickView !== null}
+        title={quickView?.title ?? ""}
+        loading={quickViewLoading}
+        error={quickViewError}
+        payload={quickViewPayload}
+        onClose={closeQuickView}
+      />
     </form>
   );
 }
