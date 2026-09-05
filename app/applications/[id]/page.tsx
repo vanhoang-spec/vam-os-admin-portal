@@ -24,6 +24,8 @@ import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person 
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { canBrowseApplications } from "@/lib/read-access";
+import { getStageRequirements, type StageRequirement } from "@/lib/recruitment-stage-requirements";
+import { buildReviewGateState } from "@/lib/review-gate-ux";
 import { findReturningMentorProfile } from "@/lib/returning-mentor";
 import { redirect } from "next/navigation";
 import {
@@ -112,12 +114,27 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       getApplicationDecisions(params.id, scope),
       getActiveAdminUsers()
     ]);
-  const [profileReviewersResult, interviewersResult] = application.data?.season_id
+  const [profileReviewersResult, interviewersResult, stageRequirementsResult] = application.data?.season_id
     ? await Promise.all([
         getReviewEligibleReviewers(application.data.season_id, "profile_screening"),
-        getReviewEligibleReviewers(application.data.season_id, "interview")
+        getReviewEligibleReviewers(application.data.season_id, "interview"),
+        getStageRequirements([application.data.season_id])
       ])
-    : [{ data: [], error: null }, { data: [], error: null }];
+    : [
+        { data: [], error: null },
+        { data: [], error: null },
+        { data: [] as StageRequirement[], error: null }
+      ];
+
+  // Minimum submitted reviews per stage, as configured for the season. The
+  // database is still the authority; these numbers only let the UI say
+  // "đã nộp N/M" instead of a bare "chưa đủ review".
+  const requiredProfileReviews =
+    stageRequirementsResult.data.find((r) => r.review_stage === "profile_screening")
+      ?.minimum_submitted_reviews ?? 1;
+  const requiredInterviewReviews =
+    stageRequirementsResult.data.find((r) => r.review_stage === "interview")
+      ?.minimum_submitted_reviews ?? 1;
 
   const personId = application.data?.person_id;
   const roleApplied = application.data?.role_applied;
@@ -240,7 +257,26 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
 
   // Latest submitted review (for the decision form context)
   const latestSubmittedReview = reviews.find((r) => r.status === "submitted");
-  const hasSubmittedReview = !!latestSubmittedReview;
+
+  // Per-stage mirror of the database minimum-review gate. Read-only: this only
+  // explains the gate to the operator, it never relaxes it.
+  const reviewerNameById = new Map(
+    adminUsers.map((u) => [u.id, u.full_name || u.email] as const)
+  );
+  const profileGate = buildReviewGateState({
+    stage: "profile",
+    reviews,
+    requiredCount: requiredProfileReviews,
+    actorAdminUserId: adminUser?.id ?? null,
+    reviewerNameById
+  });
+  const interviewGate = buildReviewGateState({
+    stage: "interview",
+    reviews,
+    requiredCount: requiredInterviewReviews,
+    actorAdminUserId: adminUser?.id ?? null,
+    reviewerNameById
+  });
 
   let prevAppId: string | null = null;
   let nextAppId: string | null = null;
@@ -327,7 +363,8 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
 
       {/* ── Assign reviewer (admin / core_team only) ─────────────────────────── */}
       {canAssign && (
-        <Card className="mb-4">
+        // Anchor target for the decision form's "Giao review hồ sơ" CTA.
+        <Card className="mb-4" id="assign-review-card">
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Giao Review</h2>
           {(profileReviewersResult.error || interviewersResult.error) && (
             <ErrorBox message={`Không thể tải danh sách người tham gia: ${profileReviewersResult.error || interviewersResult.error}`} />
@@ -422,7 +459,9 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           <DecisionForm
             applicationId={application.data.id}
             currentStatus={displayStatus}
-            hasSubmittedReview={hasSubmittedReview}
+            profileGate={profileGate}
+            interviewGate={interviewGate}
+            canAssignReview={canAssign}
             latestRecommendation={latestSubmittedReview?.recommendation}
             latestTotalScore={latestSubmittedReview?.total_score}
           />
