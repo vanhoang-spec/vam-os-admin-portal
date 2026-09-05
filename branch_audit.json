@@ -1,0 +1,688 @@
+[
+  {
+    "Name": "origin/add-claude-md",
+    "Head": "18f0497a4a61fd73ef2a779cc9ce69b87115051a",
+    "Ahead": "1",
+    "Behind": "174",
+    "Merged": false
+  },
+  {
+    "Name": "origin/artifact0-claude-workspace-handoff",
+    "Head": "193054faedc5b91ae4eefaa3540b7b244309f9f5",
+    "Ahead": "1",
+    "Behind": "168",
+    "Merged": false
+  },
+  {
+    "Name": "origin/auth-admin-users-policy-evidence-probe",
+    "Head": "322973573b83855771968b002ffc70cbe8e7ab4b",
+    "Ahead": "0",
+    "Behind": "175",
+    "Merged": true
+  },
+  {
+    "Name": "origin/auth-business-table-rls-evidence-probe",
+    "Head": "1dfd369bac7e43a633ac4e91966fc2cdeb03575b",
+    "Ahead": "0",
+    "Behind": "173",
+    "Merged": true
+  },
+  {
+    "Name": "origin/auth-emergency-admin-rls-staging-package",
+    "Head": "a6900f940c928efcfbe74b1f379c2f60b5c7e5ab",
+    "Ahead": "0",
+    "Behind": "182",
+    "Merged": true
+  },
+  {
+    "Name": "origin/auth-emergency-admin-rls-staging-preflight-v2",
+    "Head": "3589e7b574ca82ccd3f3b491d9f73c99140f259e",
+    "Ahead": "0",
+    "Behind": "180",
+    "Merged": true
+  },
+  {
+    "Name": "origin/auth-rls-and-person-linkage-safety-design",
+    "Head": "1b0e40ed82b36dded6df72e6e161345657690ed0",
+    "Ahead": "0",
+    "Behind": "188",
+    "Merged": true
+  },
+  {
+    "Name": "origin/auth-rls-production-readonly-result",
+    "Head": "39c1d14e8bd1ff54106cb2c28dc2157a2fb7b7f2",
+    "Ahead": "0",
+    "Behind": "184",
+    "Merged": true
+  },
+  {
+    "Name": "origin/auth-rls-readonly-verification-v2",
+    "Head": "b8e20ce9c3f4c3feea0622fbd2c02b72c0959e5a",
+    "Ahead": "0",
+    "Behind": "186",
+    "Merged": true
+  },
+  {
+    "Name": "origin/auth-user-management-readonly-audit",
+    "Head": "2adefd17efd307f6913fdfd393e7a172fff66241",
+    "Ahead": "0",
+    "Behind": "190",
+    "Merged": true
+  },
+  {
+    "Name": "origin/baseline-gaps-offline-analysis",
+    "Head": "59313602022835327e9ccd46f2c71fdb2ec0c5e2",
+    "Ahead": "0",
+    "Behind": "224",
+    "Merged": true
+  },
+  {
+    "Name": "origin/baseline-gaps-owner-execution-readiness",
+    "Head": "5a5cf731e617dba9c67e588c28ddcfbccbe9b6b9",
+    "Ahead": "0",
+    "Behind": "226",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-1-preview-20260720-fa42fa1",
+    "Head": "fa42fa1c58ef383429d6ecde599e3cd0a9921609",
+    "Ahead": "0",
+    "Behind": "270",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-2-accessibility-nav",
+    "Head": "343179ffe01696c44a35a7e21e71dfdcec6dcb75",
+    "Ahead": "0",
+    "Behind": "269",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-3-s12-launch-safety",
+    "Head": "6704a0700a4a631e8aba70581999063695e2d3df",
+    "Ahead": "0",
+    "Behind": "266",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-4-s12-operational-readiness",
+    "Head": "0f1c1c5bb1f0c00af3ffab839353ef23315474f9",
+    "Ahead": "0",
+    "Behind": "257",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-5a-1-program-access-foundation",
+    "Head": "224167ec24a7fb2c5983f3a659fb3eacd6264aaa",
+    "Ahead": "0",
+    "Behind": "253",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-5a-2-portfolio-dashboard",
+    "Head": "111a9169170973cd9447027572527aaaadd67832",
+    "Ahead": "0",
+    "Behind": "252",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-5a-3-role-kpi-consistency",
+    "Head": "fd87dccd4735efc1101f6471713b0780975f0a89",
+    "Ahead": "0",
+    "Behind": "249",
+    "Merged": true
+  },
+  {
+    "Name": "origin/batch-5b-1a-recruitment-campaign-domain",
+    "Head": "0f1680c5f5ad137fe672803f513337ddc316aba6",
+    "Ahead": "0",
+    "Behind": "247",
+    "Merged": true
+  },
+  {
+    "Name": "origin/chore/vercel-github-actions-deploy",
+    "Head": "95e53e121e3915052845040b197790a838678a68",
+    "Ahead": "8",
+    "Behind": "40",
+    "Merged": false
+  },
+  {
+    "Name": "origin/docs-huong-dan-btc",
+    "Head": "99a51dd41163dc8d6f4f769e690efbd86a6afe4f",
+    "Ahead": "1",
+    "Behind": "174",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-application-profile-export",
+    "Head": "30a7902a808cf5ba3a70d91045459638ad6b96c8",
+    "Ahead": "2",
+    "Behind": "45",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-apply-autosave",
+    "Head": "7982afd36cf5dfc9ba367d91a9864a65bb6ade7f",
+    "Ahead": "1",
+    "Behind": "9",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-core-ops-readiness",
+    "Head": "96d81dcfbb720976d69189165913a7a825220c84",
+    "Ahead": "8",
+    "Behind": "60",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-m091-ops-completion",
+    "Head": "20b9b9459de5a8079776cdaa888372c073af271a",
+    "Ahead": "11",
+    "Behind": "44",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-m092-bulk-official-approval",
+    "Head": "185e28a8ad6933ca0cfbe0a8a1f2529b77425511",
+    "Ahead": "18",
+    "Behind": "44",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-m1-mentor-intake-identity",
+    "Head": "8b867c4b78f860eb91547583c1f8fdb9a2ad45f0",
+    "Ahead": "0",
+    "Behind": "52",
+    "Merged": true
+  },
+  {
+    "Name": "origin/feat/s12-m2-1-interview-assignment-20260828",
+    "Head": "27c607a427ec7d5302a493d47923990b8dc84d4c",
+    "Ahead": "3",
+    "Behind": "47",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-mentee-autosave-final-20260829",
+    "Head": "a3a3f855a2a2b9cb63ed85a74a844cac03e7d953",
+    "Ahead": "12",
+    "Behind": "47",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-mentee-support-contacts-20260902",
+    "Head": "e085e4f27b038450daa407498e87c9867b490db6",
+    "Ahead": "4",
+    "Behind": "40",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-my-work-v1",
+    "Head": "3e4445b9a734793188bc825b6d9f0f3e6763d866",
+    "Ahead": "0",
+    "Behind": "0",
+    "Merged": true
+  },
+  {
+    "Name": "origin/feat/s12-privileged-recruitment-eligibility",
+    "Head": "08fe7f7b08f27c7b4f95ff7b162e8c97a89f4d01",
+    "Ahead": "0",
+    "Behind": "5",
+    "Merged": true
+  },
+  {
+    "Name": "origin/feat/s12-r4-results-export-20260828",
+    "Head": "0bf1f53e5887807463ac0e416cffbb38d2c04073",
+    "Ahead": "6",
+    "Behind": "47",
+    "Merged": false
+  },
+  {
+    "Name": "origin/feat/s12-season-context-prod",
+    "Head": "bc8f93b0e059f2a6ed6862da9401a36019106fb8",
+    "Ahead": "0",
+    "Behind": "61",
+    "Merged": true
+  },
+  {
+    "Name": "origin/feature/manual-bulk-assign",
+    "Head": "3f0b6fa363c1ae04d2c18c251b1dcef685daf2ce",
+    "Ahead": "0",
+    "Behind": "9",
+    "Merged": true
+  },
+  {
+    "Name": "origin/feature/s12-visibility-clean",
+    "Head": "785064a33294b6d896006f5ca5c32733627b2609",
+    "Ahead": "8",
+    "Behind": "23",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/emergency-admin-rls-is-admin-role-conditional",
+    "Head": "a07c0aa68b0e882d11bc8d858c49d56b614fa7e1",
+    "Ahead": "0",
+    "Behind": "177",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/p0-production-recruitment-rpc-restore",
+    "Head": "c98fecbb5a77a5a8e010739e800419c73c2139e9",
+    "Ahead": "0",
+    "Behind": "23",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/s12-admin-users-access-ux",
+    "Head": "8982fcebbf3ad346515c695e253e73c315a25e39",
+    "Ahead": "2",
+    "Behind": "174",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-admin-users-prod-baseline",
+    "Head": "7ef0449e4412148e1814c9460fdf7a760f3ae071",
+    "Ahead": "0",
+    "Behind": "63",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/s12-application-review-ux-completion",
+    "Head": "29d6f96add2e944e94dae3698a0ec42ae826e696",
+    "Ahead": "2",
+    "Behind": "46",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-applications-manual-review-perf",
+    "Head": "0ff904a073c239861e729568ef35c91b0342fbf8",
+    "Ahead": "3",
+    "Behind": "47",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-form-polish-20260828",
+    "Head": "52dfb32a20e3bf20f93573e9a996fef6c6b00e73",
+    "Ahead": "0",
+    "Behind": "49",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/s12-form-polish-r2-20260828",
+    "Head": "8ed92d2fd3f14e164d36b8e067db5a818dc1b05f",
+    "Ahead": "0",
+    "Behind": "48",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/s12-grant-participation-scope-reuse",
+    "Head": "c0016068d1e9a36d62b81f60553b8b5877a50cea",
+    "Ahead": "0",
+    "Behind": "8",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/s12-m090-r1-safe-authorization",
+    "Head": "8d3b406ade3b02fc01825f5eeeda73bbc03d9155",
+    "Ahead": "8",
+    "Behind": "44",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-m093-pre-uat-hardening",
+    "Head": "11bd8d1ac75119edd39be58e214e03f5ffaf2b8b",
+    "Ahead": "20",
+    "Behind": "44",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-m094-applications-runtime",
+    "Head": "656ea55074b07ae600ad3201fcb08566b3bad2e0",
+    "Ahead": "21",
+    "Behind": "44",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-mentee-form-positioning",
+    "Head": "9e96333e4aa5e3d10f1035a1c5bd50911d901b2c",
+    "Ahead": "1",
+    "Behind": "45",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-r4-export-codex-remediation-20260829",
+    "Head": "e5da0d96785194c32142d15c1b54771b9694544f",
+    "Ahead": "9",
+    "Behind": "47",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/s12-renewal-career-polish-20260828",
+    "Head": "3315dd465edc0cfdd5a389bad49716b689c27e55",
+    "Ahead": "0",
+    "Behind": "47",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/s12-renewal-required-profile-fields",
+    "Head": "0354fedbba3bc44cfb0df240207ddaf78ed09a5c",
+    "Ahead": "0",
+    "Behind": "50",
+    "Merged": true
+  },
+  {
+    "Name": "origin/fix/vercel-ci-full-history-and-nav-tests",
+    "Head": "9f7f781e728686d9a3e0d1ba2ee269f4c6f0d68a",
+    "Ahead": "2",
+    "Behind": "38",
+    "Merged": false
+  },
+  {
+    "Name": "origin/fix/vercel-cli-team-token",
+    "Head": "e20788641bb2cf97d29ff717e6556229fd985c3e",
+    "Ahead": "1",
+    "Behind": "37",
+    "Merged": false
+  },
+  {
+    "Name": "origin/ham-s6-production-backup-result",
+    "Head": "a5aa11faeef825368da423e82957990fdf2bb1be",
+    "Ahead": "0",
+    "Behind": "197",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-exact-import-manifest",
+    "Head": "5c243a6979135bb8bf8650160499591e955f8da9",
+    "Ahead": "0",
+    "Behind": "194",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-final-execution-review",
+    "Head": "65a5c545ff398b42570ac433d5d22edee12a8e4d",
+    "Ahead": "0",
+    "Behind": "192",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-import-final-schema-alignment",
+    "Head": "03ef4321f7e33c78060ba72e411b9b2fbe13ed34",
+    "Ahead": "0",
+    "Behind": "201",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-import-safety",
+    "Head": "212a1a085f7be6a533751981846e6a085cc2f58f",
+    "Ahead": "0",
+    "Behind": "211",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-import-schema-alignment",
+    "Head": "2080d3259e91c1796da51df41e05afb924acd541",
+    "Ahead": "0",
+    "Behind": "206",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-linkage-audit",
+    "Head": "dcb4837f0d201a4162e7f50cb7416970eee9bdd5",
+    "Ahead": "0",
+    "Behind": "217",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-preflight-result",
+    "Head": "6c9a49372d1ba2bf0712bb3372f9f80173b9f1ca",
+    "Ahead": "0",
+    "Behind": "209",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-preflight-v2-result",
+    "Head": "804f2f841760f89cc63e079a42759bf149b40bf7",
+    "Ahead": "0",
+    "Behind": "204",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ham-s6-production-preflight-v3-result",
+    "Head": "65718f5004fca8a203e4352b91382209b2f5626c",
+    "Ahead": "0",
+    "Behind": "199",
+    "Merged": true
+  },
+  {
+    "Name": "origin/hotfix/s12-mentor-intro-copy",
+    "Head": "657a65f87b366cef4f827e39ce812934db13246d",
+    "Ahead": "0",
+    "Behind": "59",
+    "Merged": true
+  },
+  {
+    "Name": "origin/main",
+    "Head": "3e4445b9a734793188bc825b6d9f0f3e6763d866",
+    "Ahead": "0",
+    "Behind": "0",
+    "Merged": true
+  },
+  {
+    "Name": "origin/migration-061-preauth-review",
+    "Head": "b469b383a91668921d658e7933212a14ca71539c",
+    "Ahead": "0",
+    "Behind": "245",
+    "Merged": true
+  },
+  {
+    "Name": "origin/migration-061-schema-verification-package",
+    "Head": "017f5be0f239288567bd9127c3d7fa64795e90b8",
+    "Ahead": "0",
+    "Behind": "243",
+    "Merged": true
+  },
+  {
+    "Name": "origin/migration-062-v3-membership-lifecycle",
+    "Head": "0657be303c676f307ba33585d59d35936d9e2ab9",
+    "Ahead": "0",
+    "Behind": "120",
+    "Merged": true
+  },
+  {
+    "Name": "origin/ops/s12-interview-lifecycle-reconciliation-20260904",
+    "Head": "54acf0075fcd89fd3ff087e15e15caf7bf7002c1",
+    "Ahead": "1",
+    "Behind": "21",
+    "Merged": false
+  },
+  {
+    "Name": "origin/phase-5-multiprogram-operations-audit",
+    "Head": "458452fef624a86aebf86b0c2e385df7cf833abd",
+    "Ahead": "0",
+    "Behind": "255",
+    "Merged": true
+  },
+  {
+    "Name": "origin/portfolio-kpi-reconciliation",
+    "Head": "d64b6526999c3001828413b3af0d49ee4751769b",
+    "Ahead": "0",
+    "Behind": "219",
+    "Merged": true
+  },
+  {
+    "Name": "origin/portfolio-season-linkage-verification",
+    "Head": "e7b670eb7116bcceb0a982b7f43f34e823280881",
+    "Ahead": "0",
+    "Behind": "216",
+    "Merged": true
+  },
+  {
+    "Name": "origin/preview-environment-and-auth-readiness",
+    "Head": "fc8c718371a695788502f3a85b058799346f2f59",
+    "Ahead": "0",
+    "Behind": "230",
+    "Merged": true
+  },
+  {
+    "Name": "origin/preview-environment-owner-verification",
+    "Head": "2466ded7b429199b92989fb09530accfad96884c",
+    "Ahead": "0",
+    "Behind": "228",
+    "Merged": true
+  },
+  {
+    "Name": "origin/release/production-baseline-20260821",
+    "Head": "7ef0449e4412148e1814c9460fdf7a760f3ae071",
+    "Ahead": "0",
+    "Behind": "63",
+    "Merged": true
+  },
+  {
+    "Name": "origin/release/s12-application-export-prod-20260901",
+    "Head": "30a7902a808cf5ba3a70d91045459638ad6b96c8",
+    "Ahead": "2",
+    "Behind": "45",
+    "Merged": false
+  },
+  {
+    "Name": "origin/release/s12-mentor-filter-bulk-prod-20260901",
+    "Head": "a8b1ce0c488777d6ea93b6a05b65cb602b85fd1e",
+    "Ahead": "4",
+    "Behind": "43",
+    "Merged": false
+  },
+  {
+    "Name": "origin/review/s12-apply-autosave-20260905",
+    "Head": "2abdb6897490c9ca94d0f7a06d9a58793532cf44",
+    "Ahead": "0",
+    "Behind": "3",
+    "Merged": true
+  },
+  {
+    "Name": "origin/s12-block-returning-mentor-new-form",
+    "Head": "a88a0293f188c64a889ec8249cdfe44906ac60dd",
+    "Ahead": "3",
+    "Behind": "41",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-mentee-application-depth",
+    "Head": "2d9d35f3d587d3f886f097bdc1c0fb49cf0cdacc",
+    "Ahead": "9",
+    "Behind": "42",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase1-mentor-confirmation",
+    "Head": "efa89e9d5dedce0d90f766c272857e7465f1cea0",
+    "Ahead": "13",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase3-interviews",
+    "Head": "e257e68f432e0633e9925977ce32d05b6f81e3ef",
+    "Ahead": "17",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase4-ai-matching",
+    "Head": "373887e431a587646f0719759e4dcd7debbdc8dc",
+    "Ahead": "22",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase5-post-match-comms",
+    "Head": "f850fd93926916603dfe8d5379bea32eeb55046b",
+    "Ahead": "28",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase6-recap-collection",
+    "Head": "4581a43f563be6b3510cd641b38680f07126eaea",
+    "Ahead": "30",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase7-participant-login",
+    "Head": "a60c47ea8cc0c57460b276d7744d0ad7d371da79",
+    "Ahead": "36",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase8-cross-mentoring",
+    "Head": "128391c7f95b9784386b6c5bb24598253b3270a5",
+    "Ahead": "40",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/s12-phase9-mkt-plan",
+    "Head": "927f379a1292511b29fb077ebb39d8f9a4412043",
+    "Ahead": "44",
+    "Behind": "120",
+    "Merged": false
+  },
+  {
+    "Name": "origin/staging",
+    "Head": "27c607a427ec7d5302a493d47923990b8dc84d4c",
+    "Ahead": "3",
+    "Behind": "47",
+    "Merged": false
+  },
+  {
+    "Name": "origin/staging-baseline-final-design-and-security-decisions",
+    "Head": "811fe66e46c776a64538417f62266c4f7ce73acf",
+    "Ahead": "0",
+    "Behind": "221",
+    "Merged": true
+  },
+  {
+    "Name": "origin/staging-baseline-manual-remediation",
+    "Head": "1f93defa8419992fac9b10d78e658fce9aa12634",
+    "Ahead": "0",
+    "Behind": "235",
+    "Merged": true
+  },
+  {
+    "Name": "origin/staging-baseline-readiness-audit",
+    "Head": "f7241cd4e0e1786d51eecf8fba9f93d8d871931e",
+    "Ahead": "0",
+    "Behind": "237",
+    "Merged": true
+  },
+  {
+    "Name": "origin/support-uat-and-coreteam-demo-readiness",
+    "Head": "1892e75e07785f6e5b55fdc45447c2cc08900f78",
+    "Ahead": "0",
+    "Behind": "233",
+    "Merged": true
+  },
+  {
+    "Name": "origin/uat/s12-m092-resume-20260903",
+    "Head": "d2a8dbb75af358d30af4ebe46465f21ce5e8035c",
+    "Ahead": "0",
+    "Behind": "21",
+    "Merged": true
+  },
+  {
+    "Name": "origin/uat/s12-ops-current-20260903",
+    "Head": "e197e8c29bbfaa8f466b4936d45b7717a59aa1d8",
+    "Ahead": "0",
+    "Behind": "30",
+    "Merged": true
+  },
+  {
+    "Name": "origin/uat/s12-recruitment-e2e-20260829",
+    "Head": "a3a3f855a2a2b9cb63ed85a74a844cac03e7d953",
+    "Ahead": "12",
+    "Behind": "47",
+    "Merged": false
+  }
+]

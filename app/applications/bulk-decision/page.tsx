@@ -13,6 +13,8 @@ import {
   resolveSourceStatus
 } from "./decision-options";
 
+import { getReviewsForApplications } from "@/lib/data";
+
 /** Rows shown per batch. The server action enforces the same ceiling. */
 const MAX_ROWS = 500;
 
@@ -35,13 +37,37 @@ export default async function BulkDecisionPage(props: {
     (!intakeBatchId || app.intake_batch_id === intakeBatchId) &&
     (!roleApplied || app.role_applied === roleApplied)
   );
-  const rows = filtered.slice(0, MAX_ROWS).map(app => ({
+  
+  const selectedApps = filtered.slice(0, MAX_ROWS);
+  const reviewsResult = await getReviewsForApplications(selectedApps.map(a => a.id));
+  
+  // Inject reviewer names
+  const { getSupabaseServerClient } = await import("@/lib/supabase-server");
+  const client = getSupabaseServerClient();
+  const { data: adminUsers } = client ? await client.from("admin_users").select("id, full_name, email") : { data: [] };
+  const adminMap = new Map(adminUsers?.map((u: any) => [u.id, u.full_name || u.email]) || []);
+
+  const reviewsByApp = new Map<string, any[]>();
+  if (reviewsResult.data) {
+    for (const review of reviewsResult.data) {
+      const rName = adminMap.get(review.reviewer_admin_user_id || "") || "Reviewer";
+      const enhancedReview = { ...review, reviewer_name: rName };
+      if (!reviewsByApp.has(review.application_id)) {
+        reviewsByApp.set(review.application_id, []);
+      }
+      reviewsByApp.get(review.application_id)!.push(enhancedReview);
+    }
+  }
+
+  const rows = selectedApps.map(app => ({
     id: app.id,
     fullName: String(app.full_name ?? app.email_primary ?? app.id),
     role: String(app.role_applied ?? "-"),
     status: String(app.status ?? ""),
-    statusLabel: applicationStatusLabel(app.status)
+    statusLabel: applicationStatusLabel(app.status),
+    reviews: reviewsByApp.get(app.id) ?? []
   }));
+  
   const isFiltered = Boolean(intakeBatchId || roleApplied);
   return <><PageHeader title="Quyết định sau phỏng vấn" description="Ra quyết định cuối hàng loạt cho các đơn đã hoàn tất đánh giá phỏng vấn, có kiểm tra vòng đời tại database." />
     <div className="mb-4"><Link href="/applications" className="text-sm text-vam-green hover:underline">← Quay lại danh sách</Link></div>
@@ -49,7 +75,10 @@ export default async function BulkDecisionPage(props: {
     <Card className="mb-4"><form method="GET" className="flex flex-wrap items-end gap-3">
       <label className="text-sm">Đợt tuyển<select name="intake_batch_id" defaultValue={intakeBatchId} className="mt-1 block rounded-md border border-vam-line px-3 py-2"><option value="">Tất cả</option>{batches.data.map(batch => <option key={batch.id} value={batch.id}>{batch.name ?? batch.code ?? batch.id}</option>)}</select></label>
       <label className="text-sm">Vai trò<select name="role_applied" defaultValue={roleApplied} className="mt-1 block rounded-md border border-vam-line px-3 py-2"><option value="">Tất cả</option><option value="mentor">Mentor</option><option value="mentee">Mentee</option></select></label>
-      <label className="text-sm">Trạng thái nguồn<select name="status" defaultValue={status} className="mt-1 block rounded-md border border-vam-line px-3 py-2">{BULK_FINAL_DECISION_SOURCE_STATUSES.map(value => <option key={value} value={value}>{applicationStatusLabel(value)}</option>)}</select></label>
+      <label className="text-sm">Trạng thái hồ sơ
+        <span className="mt-1 block rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-slate-500">{applicationStatusLabel(BULK_FINAL_DECISION_SOURCE_STATUS)}</span>
+        <input type="hidden" name="status" value={status} />
+      </label>
       <button className="rounded-md border border-vam-line px-4 py-2 text-sm">Lọc</button>
     </form></Card>
     <p className="mb-3 text-xs text-slate-500">

@@ -1,0 +1,2389 @@
+2abdb68 test(apply): prove the success-effect idempotency latch under Strict Mode
+M	__tests__/autosave-mentor.test.tsx
+M	__tests__/autosave.test.tsx
+b7834ae wip(apply): mentee autosave forward-port + mentor parity
+A	__tests__/autosave-mentor.test.tsx
+A	__tests__/autosave.test.tsx
+M	app/actions/apply.ts
+A	app/apply/_components/draft-notice.tsx
+M	app/apply/_components/form-primitives.tsx
+A	app/apply/_components/use-apply-autosave.ts
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	lib/apply-types.ts
+A	lib/autosave.ts
+08fe7f7 chore(ops): record the verified Production apply of both vam084 migrations
+M	lib/production-rpc-contract.ts
+18f943d fix(ops): derive Reviewer Pool rights from canonical eligibility, not role
+M	__tests__/privileged-recruitment-ui.test.tsx
+M	app/applications/[id]/assign-reviewer-form.tsx
+M	app/applications/[id]/page.tsx
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+fa61338 feat(ops): privileged staff are intrinsically eligible; one canonical policy
+M	__tests__/admin-users-entry-points.test.ts
+M	__tests__/manual-bulk-assignment.test.tsx
+A	__tests__/privileged-recruitment-ui.test.tsx
+M	__tests__/vam084-stage-eligibility-parity.test.ts
+M	app/applications/page.tsx
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	app/reviews/assign-bulk/page.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+M	lib/data.ts
+M	lib/ui-labels.ts
+A	supabase/migrations/20260904143000_privileged_recruitment_automatic_eligibility.sql
+c001606 fix(ops): reuse an existing qualifying season scope when granting participation
+A	__tests__/vam084-grant-scope-reuse.test.ts
+M	lib/production-rpc-contract.ts
+A	supabase/migrations/20260904140000_grant_participation_scope_reuse.sql
+7982afd wip(apply): mentee autosave forward-port + mentor parity
+A	__tests__/autosave-mentor.test.tsx
+A	__tests__/autosave.test.tsx
+M	app/actions/apply.ts
+A	app/apply/_components/draft-notice.tsx
+M	app/apply/_components/form-primitives.tsx
+A	app/apply/_components/use-apply-autosave.ts
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	lib/apply-types.ts
+A	lib/autosave.ts
+3f0b6fa chore(ops): record VAM094 as Production-provided after verified apply
+M	lib/production-rpc-contract.ts
+a4a4ef4 fix(ops): restore reviews projection in assignable-applications read
+M	__tests__/manual-bulk-assignment-data.test.ts
+M	lib/data.ts
+7ea70ae test(ops): guard vam084 stage-eligibility parity; document catalog drift risk
+A	__tests__/vam084-stage-eligibility-parity.test.ts
+M	lib/production-rpc-contract.ts
+b1cca76 fix(ops): close manual bulk assignment hardening defects with real tests
+M	.gitignore
+M	__tests__/enable-reviewer-auth.test.ts
+M	__tests__/manual-bulk-assignment-rpc.test.ts
+M	__tests__/manual-bulk-assignment.test.tsx
+M	__tests__/reviewer-pool-data.test.ts
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+M	lib/data.ts
+M	lib/enable-reviewer.ts
+4ed3389 fix(ops): expand reviewer pool to core team and fix auth pagination
+A	__tests__/enable-reviewer-auth.test.ts
+A	__tests__/reviewer-pool-data.test.ts
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+M	lib/data.ts
+M	lib/enable-reviewer.ts
+M	lib/types.ts
+c12c3bf fix(ops): resolve Next.js server-only import in client component
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	lib/application-reviews.ts
+M	lib/bulk-assignment-action-types.ts
+M	lib/bulk-assignment.ts
+M	lib/interview-claim.ts
+d707c44 fix(ops): finalize manual bulk db parity and cleanup
+D	app/applications/page.tsx.bak
+D	check_prod.mjs
+M	supabase/migrations/20260904120000_manual_bulk_assignment.sql
+6ab4b0a fix(ops): align manual bulk round eligibility
+A	__tests__/manual-bulk-assignment-data.test.ts
+A	app/applications/page.tsx.bak
+M	app/reviews/assign-bulk/page.tsx
+A	check_prod.mjs
+M	lib/data.ts
+4896056 fix(ops): harden selected bulk assignment contract
+A	__tests__/manual-bulk-assignment-rpc.test.ts
+M	lib/bulk-assignment.ts
+M	supabase/migrations/20260904120000_manual_bulk_assignment.sql
+732c392 feat(ops): manual selected bulk review and interview assignment
+A	__tests__/manual-bulk-assignment.test.tsx
+M	app/actions/bulk-assignment.ts
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	app/reviews/assign-bulk/page.tsx
+M	lib/bulk-assignment-action-types.ts
+M	lib/bulk-assignment.ts
+M	lib/data.ts
+M	lib/production-rpc-contract.ts
+M	lib/types.ts
+A	supabase/migrations/20260904120000_manual_bulk_assignment.sql
+f36819c fix(ops): restore M092 bulk approval button on main
+M	app/applications/page.tsx
+c66d837 feat(ops): assignment visibility and helper migration
+M	app/actions/application-reviews.ts
+M	app/api/exports/recruitment-results/route.ts
+M	app/applications/[id]/assign-reviewer-form.tsx
+M	app/applications/[id]/page.tsx
+M	app/applications/page.tsx
+A	supabase/migrations/20260904100000_profile_screening_reviewer_eligibility_helper.sql
+785064a refactor(s12-visibility): remove direct reassign UI, simplify to cancel-then-assign
+M	app/applications/[id]/assign-reviewer-form.tsx
+8e518cf fix(s12-visibility): sync vam084_participant_for_stage profile_screening policy
+A	supabase/migrations/20260904100000_profile_screening_reviewer_eligibility_helper.sql
+3afc9dc fix(s12-visibility): final consistency patch for assignment detail UX
+M	app/actions/application-reviews.ts
+M	app/applications/[id]/assign-reviewer-form.tsx
+63ffb92 fix(s12-visibility): UX completion for assignment details
+M	app/applications/[id]/assign-reviewer-form.tsx
+M	app/applications/[id]/page.tsx
+3b95606 fix(s12-visibility): add assignee identity to review history table
+M	app/applications/[id]/page.tsx
+4c2b358 fix(s12-auth): use correct production schema for admin_scope_access
+M	__tests__/s12-auth-bootstrap.test.ts
+M	scripts/s12-auth-bootstrap.ts
+a8e765e fix(s12-auth): secure bootstrap preflight and idempotent logic
+M	Bootstrap-CoreTeam.ps1
+A	__tests__/s12-auth-bootstrap.test.ts
+M	scripts/s12-auth-bootstrap.ts
+b7bc6e9 feat(s12): assignment visibility & core team auth readiness
+A	Bootstrap-CoreTeam.ps1
+M	app/api/exports/recruitment-results/route.ts
+M	app/applications/[id]/page.tsx
+M	app/applications/page.tsx
+A	scripts/s12-auth-bootstrap.ts
+54acf00 ops(s12): read-only detector for stale interview-stage applications
+A	scripts/s12-interview-lifecycle-reconciliation.sql
+d2a8dbb feat(m092): minimal Production backend package for bulk official approval
+M	__tests__/rpc-release-contract.test.ts
+M	lib/production-rpc-contract.ts
+A	supabase/migrations/20260904070000_m092_bulk_official_approval_production.sql
+2fdb299 feat(m092): forward-port bulk official approval onto the post-P0 baseline
+A	__tests__/bulk-approval-form.test.tsx
+A	__tests__/bulk-official-approval-action.test.ts
+A	__tests__/bulk-official-approval-direct.test.ts
+A	__tests__/m092-forward-port-contract.test.tsx
+M	__tests__/rpc-release-contract.test.ts
+A	app/actions/bulk-official-approval.ts
+A	app/applications/bulk-approval/bulk-approval-form.tsx
+A	app/applications/bulk-approval/page.tsx
+M	app/applications/page.tsx
+A	lib/bulk-official-approval-types.ts
+A	lib/bulk-official-approval.ts
+M	lib/production-rpc-contract.ts
+A	supabase/migrations/20260831120000_s12_m092_bulk_official_approval.sql
+A	supabase/migrations/20260901090000_s12_m093_pre_uat_hardening.sql
+c98fecb fix(p0.1): make profile-screening reviewer eligibility an admin-account policy
+A	__tests__/p01-profile-screening-reviewer-eligibility.test.ts
+M	__tests__/rpc-release-contract.test.ts
+M	lib/production-rpc-contract.ts
+A	supabase/migrations/20260903193000_profile_screening_reviewer_eligibility.sql
+4c08557 test(p0): scope the eligibility-gate check to the configured season
+M	scripts/p0-verify-recruitment-rpc-restore.sql
+23079d6 test(p0): release guard for undeclared database RPC dependencies
+A	__tests__/rpc-release-contract.test.ts
+A	lib/production-rpc-contract.ts
+b9e44b3 fix(p0): two defects found by the Production-schema rehearsal
+M	supabase/migrations/20260903180000_p0_restore_recruitment_review_rpcs.sql
+6af33b3 test(p0): read-only verification pack for the restore migration
+A	scripts/p0-verify-recruitment-rpc-restore.sql
+55ddf0f fix(p0): seed UEHM-S12 stage requirements in the corrective migration
+M	supabase/migrations/20260903180000_p0_restore_recruitment_review_rpcs.sql
+093e702 fix(p0): candidate migration to restore recruitment/review RPCs on Production
+A	supabase/migrations/20260903180000_p0_restore_recruitment_review_rpcs.sql
+e197e8c fix(s12): improve application exports and returning mentor guidance
+M	__tests__/s12-application-profile-export.test.ts
+A	__tests__/s12-export-quality.test.ts
+A	__tests__/s12-returning-mentor-error-ux.test.tsx
+M	app/actions/apply.ts
+M	app/applications/[id]/page.tsx
+M	app/apply/_components/form-primitives.tsx
+M	lib/application-export-pdf.ts
+M	lib/application-export.ts
+M	lib/applications-create.ts
+M	lib/apply-types.ts
+a9dda80 feat(s12): add bounded mentee bulk screening and safe selection state
+A	__tests__/s12-bulk-screening.test.tsx
+M	__tests__/s12-mentor-review-filter-bulk.test.ts
+D	app/actions/mentor-review-bulk.ts
+A	app/actions/s12-screening-bulk.ts
+A	app/applications/_components/bulk-screening-controls.tsx
+M	app/applications/mentee-review/page.tsx
+D	app/applications/mentor-review/bulk-controls.tsx
+M	app/applications/mentor-review/page.tsx
+A	lib/bulk-screening.ts
+7432b12 feat(s12): add operational export filters and evidence-safe results
+A	__tests__/s12-export-operational-ux.test.tsx
+M	app/api/exports/recruitment-results/route.ts
+A	app/applications/exports/export-panels.tsx
+A	app/applications/exports/page.tsx
+M	app/applications/page.tsx
+M	lib/recruitment-export.ts
+A	lib/review-reviewer-options.ts
+8175a87 fix(s12): page application_decisions to exhaustion and commit the export routes
+M	.gitignore
+M	__tests__/m091-recruitment-exports.test.ts
+A	app/api/exports/recruitment-results/route.ts
+A	app/api/exports/review-scores/route.ts
+M	lib/paged-read.ts
+2fa72bb feat(s12): integrate filtered recruitment and review exports
+A	__tests__/m091-recruitment-exports.test.ts
+M	__tests__/support/fake-postgrest.ts
+M	app/applications/page.tsx
+A	lib/csv-export.ts
+A	lib/recruitment-export.ts
+051f247 feat(s12): integrate reviewer and review foundations onto current production baseline
+M	__tests__/approval-direct.test.ts
+A	__tests__/m090-application-decisions.test.ts
+A	__tests__/m090-r1-authorization-boundary.test.tsx
+A	__tests__/m090-recruitment-operational-remediation.test.ts
+A	__tests__/m2-1-interview-assignment.test.ts
+A	__tests__/m2-1-review-ui.test.tsx
+M	__tests__/nav-model.test.ts
+M	__tests__/operations-page-role-parity.test.tsx
+M	__tests__/renewal-approval-guard.test.ts
+M	__tests__/review-db-safety.test.ts
+A	__tests__/support/mutation-postgrest.ts
+M	__tests__/wp1b-pii-isolation.test.ts
+M	app/actions/application-decisions.ts
+M	app/actions/application-reviews.ts
+A	app/actions/bulk-application-decisions.ts
+M	app/actions/bulk-assignment.ts
+M	app/actions/enable-reviewer.ts
+A	app/actions/recruitment-stage-requirements.ts
+M	app/applications/[id]/assign-reviewer-form.tsx
+M	app/applications/[id]/decision-form.tsx
+M	app/applications/[id]/page.tsx
+A	app/applications/bulk-decision/bulk-decision-form.tsx
+A	app/applications/bulk-decision/page.tsx
+M	app/applications/page.tsx
+A	app/interviews/assign/assign-interview-form.tsx
+A	app/interviews/assign/page.tsx
+M	app/interviews/interviews-client.tsx
+M	app/interviews/page.tsx
+M	app/matches/[id]/page.tsx
+M	app/matches/page.tsx
+M	app/operations/monthly/page.tsx
+M	app/operations/page.tsx
+M	app/operations/tasks/page.tsx
+M	app/reviews/[id]/page.tsx
+A	app/reviews/[id]/review-operations.tsx
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	app/reviews/assign-bulk/page.tsx
+M	app/reviews/page.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+A	app/reviews/settings/page.tsx
+A	app/reviews/settings/requirement-form.tsx
+M	components/filterable-table.tsx
+A	docs/s12-recruitment-remediation/00_SCOPE_AND_DECISIONS.md
+A	docs/s12-recruitment-remediation/01_FEEDBACK_2026-08-30.md
+A	docs/s12-recruitment-remediation/02_EXECUTION_PLAN.md
+A	docs/s12-recruitment-remediation/03_PERFORMANCE_BASELINE.md
+A	docs/s12-recruitment-remediation/04_SECURITY_AND_LIFECYCLE_GATES.md
+A	docs/s12-recruitment-remediation/05_UAT_MATRIX.md
+A	docs/s12-recruitment-remediation/06_PRODUCTION_RELEASE_LOG.md
+A	docs/s12-recruitment-remediation/agent-reports/CLAUDE_AUTH_RLS_TRANSACTION_REVIEW.md
+A	docs/s12-recruitment-remediation/agent-reports/CODEX_CHECKPOINT_1_RECONCILIATION.md
+A	docs/s12-recruitment-remediation/agent-reports/README.md
+A	docs/s12-recruitment-remediation/releases/README.md
+M	lib/application-approvals.ts
+M	lib/application-decisions.ts
+M	lib/application-reviews.ts
+M	lib/bulk-assignment.ts
+M	lib/data.ts
+M	lib/decision-action-types.ts
+M	lib/enable-reviewer.ts
+M	lib/interview-claim.ts
+M	lib/matches.ts
+M	lib/nav-model.ts
+M	lib/permissions.ts
+A	lib/recruitment-stage-requirements.ts
+A	lib/review-status.ts
+A	lib/reviewer-eligibility.ts
+M	lib/ui-labels.ts
+A	supabase/migrations/20260830070430_s12_recruitment_operational_remediation.sql
+5e1653b fix: use Vercel CLI with team-token support
+M	.github/workflows/vercel-production.yml
+e207886 fix: use Vercel CLI with team-token support
+M	.github/workflows/vercel-production.yml
+df69614 Fix Production CI baseline tests (#58)
+M	.github/workflows/vercel-production.yml
+M	__tests__/nav-model.test.ts
+9f7f781 Align navigation expectations with review queues
+M	__tests__/nav-model.test.ts
+f820a9c Fetch full Git history for baseline tests
+M	.github/workflows/vercel-production.yml
+6951eed Add gated Vercel deployment through GitHub Actions (#56)
+A	.github/CODEOWNERS
+A	.github/workflows/vercel-production.yml
+A	docs/runbooks/vercel-github-actions-deployment.md
+A	vercel.json
+95e53e1 Match Production environment name
+M	.github/workflows/vercel-production.yml
+9b1fbff Document preview-safe Vercel cutover
+M	docs/runbooks/vercel-github-actions-deployment.md
+dfa8419 Limit deploy secrets to Vercel steps
+M	.github/workflows/vercel-production.yml
+1e74401 Preserve Vercel preview deployments
+M	vercel.json
+47bf040 Add Support Team contacts to S12 mentee form (#57)
+M	__tests__/s12-mentee-application-depth.test.ts
+A	app/apply/_components/mentee-support-contacts.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+e085e4f Use direct tel links for normalized contact numbers
+M	app/apply/_components/mentee-support-contacts.tsx
+069b03e Test S12 mentee support contacts
+M	__tests__/s12-mentee-application-depth.test.ts
+47ce802 Render support contacts at end of mentee form
+M	app/apply/mentee/apply-mentee-form.tsx
+af37bc4 Add S12 mentee support contacts
+A	app/apply/_components/mentee-support-contacts.tsx
+c7d0867 Document the Vercel deployment cutover
+A	docs/runbooks/vercel-github-actions-deployment.md
+39c67cd Hand Vercel deployments to GitHub Actions
+A	vercel.json
+252cf42 Add ownership for deployment controls
+A	.github/CODEOWNERS
+dae3adc Add gated Vercel production deployment workflow
+A	.github/workflows/vercel-production.yml
+5fc6ada Block returning Mentors from S12 new-Mentor intake
+A	__tests__/s12-returning-mentor-intake-block.test.ts
+M	lib/applications-create.ts
+a88a029 Block returning Mentors from S12 new-Mentor intake
+D	.github/workflows/temp-s12-returning-mentor-block.yml
+R052	scripts/temp_s12_returning_mentor_block.py	__tests__/s12-returning-mentor-intake-block.test.ts
+M	lib/applications-create.ts
+7c507ba chore: run returning mentor P0 gates
+A	.github/workflows/temp-s12-returning-mentor-block.yml
+b5fea9d chore: add bounded returning mentor intake worker
+A	scripts/temp_s12_returning_mentor_block.py
+a0c2d05 Improve S12 mentee application depth
+A	__tests__/s12-mentee-application-depth.test.ts
+M	app/actions/apply.ts
+M	app/apply/mentee/apply-mentee-form.tsx
+2d9d35f Improve S12 mentee application depth
+D	.github/workflows/temp-s12-mentee-depth.yml
+A	__tests__/s12-mentee-application-depth.test.ts
+M	app/actions/apply.ts
+M	app/apply/mentee/apply-mentee-form.tsx
+D	scripts/temp_s12_mentee_depth_patch.py
+D	scripts/temp_s12_mentee_depth_patch_v2.py
+efec8b7 chore: gate against known main nav-test baseline
+M	.github/workflows/temp-s12-mentee-depth.yml
+b4c4227 chore: use parse-safe focused test correction
+M	.github/workflows/temp-s12-mentee-depth.yml
+432084a chore: tighten optional profile field test boundary
+M	.github/workflows/temp-s12-mentee-depth.yml
+0fbd7c9 chore: rerun bounded mentee remediation with corrected matcher
+M	.github/workflows/temp-s12-mentee-depth.yml
+424f945 chore: correct exact matcher indentation
+A	scripts/temp_s12_mentee_depth_patch_v2.py
+8f76694 chore: simplify bounded mentee remediation worker
+M	.github/workflows/temp-s12-mentee-depth.yml
+0a9d148 chore: add bounded mentee form patch worker
+A	scripts/temp_s12_mentee_depth_patch.py
+e2ec741 chore: run bounded S12 mentee form remediation
+A	.github/workflows/temp-s12-mentee-depth.yml
+c546128 feat: add S12 Mentor type filter and bounded bulk review
+A	__tests__/s12-mentor-review-filter-bulk.test.ts
+A	app/actions/mentor-review-bulk.ts
+A	app/applications/mentor-review/bulk-controls.tsx
+M	app/applications/mentor-review/page.tsx
+a8b1ce0 test: guard mentor filter and bounded bulk review
+A	__tests__/s12-mentor-review-filter-bulk.test.ts
+1fccdf0 feat: filter mentor type and bulk review queue
+M	app/applications/mentor-review/page.tsx
+8156077 feat: add mentor bulk selection controls
+A	app/applications/mentor-review/bulk-controls.tsx
+1c137fd feat: add bounded mentor review bulk action
+A	app/actions/mentor-review-bulk.ts
+a49041f feat: release S12 application CSV and PDF export
+A	__tests__/s12-application-profile-export.test.ts
+A	app/applications/[id]/export/csv/route.ts
+A	app/applications/[id]/export/pdf/route.ts
+M	app/applications/[id]/page.tsx
+A	lib/application-export-access.ts
+A	lib/application-export-pdf.ts
+A	lib/application-export.ts
+M	lib/data.ts
+M	package-lock.json
+M	package.json
+656ea55 fix(m094): unblock applications runtime UAT
+A	__tests__/m094-applications-runtime.test.tsx
+M	app/applications/page.tsx
+M	components/filterable-table.tsx
+11bd8d1 fix(m093.1): close final pre-UAT approval and export blockers
+M	__tests__/approval-action.test.ts
+A	__tests__/m093-1-export-fail-closed.test.ts
+M	app/actions/application-approvals.ts
+M	app/api/exports/application/route.ts
+M	app/api/exports/application/selected/route.ts
+M	app/applications/[id]/approval-form.tsx
+M	lib/bulk-official-approval.ts
+044adf9 fix(m093): harden returning mentor flow and review assignment
+M	__tests__/approval-direct.test.ts
+A	__tests__/m093-apply-rate-limit.test.ts
+A	__tests__/m093-approval-collision-guard.test.ts
+A	__tests__/m093-pre-uat-hardening-migration.test.ts
+A	__tests__/m093-renewal-diagnostics.test.ts
+A	__tests__/m093-returning-mentor-collision.test.ts
+M	__tests__/renewal-approval-guard.test.ts
+M	app/actions/apply.ts
+M	app/apply/_components/form-primitives.tsx
+M	app/e2e-harness/page.tsx
+A	e2e/m093-apply-mentor-value-preservation.spec.ts
+M	lib/application-approvals.ts
+M	lib/applications-create.ts
+A	lib/apply-rate-limit.ts
+A	lib/mentor-renewal-collision.ts
+M	lib/renewal-runtime.ts
+A	supabase/migrations/20260901090000_s12_m093_pre_uat_hardening.sql
+185e28a fix(m092.2): make people.gender write type-agnostic for real Staging
+M	__tests__/m092-bulk-official-approval-migration.test.ts
+M	supabase/migrations/20260831120000_s12_m092_bulk_official_approval.sql
+701a631 fix(m092): close enum and profile-concurrency blockers
+M	__tests__/bulk-official-approval-direct.test.ts
+M	__tests__/m092-bulk-official-approval-migration.test.ts
+M	lib/bulk-official-approval.ts
+M	supabase/migrations/20260831120000_s12_m092_bulk_official_approval.sql
+0d72438 feat(m092): bulk official approval â€” dedicated trusted RPC + UI
+A	__tests__/bulk-approval-form.test.tsx
+A	__tests__/bulk-official-approval-action.test.ts
+A	__tests__/bulk-official-approval-direct.test.ts
+A	__tests__/m092-bulk-official-approval-migration.test.ts
+A	app/actions/bulk-official-approval.ts
+A	app/applications/bulk-approval/bulk-approval-form.tsx
+A	app/applications/bulk-approval/page.tsx
+M	app/applications/page.tsx
+A	app/e2e-harness/hydration-marker.tsx
+M	app/e2e-harness/page.tsx
+M	e2e/m091-3-decision-retry.spec.ts
+A	e2e/m092-bulk-official-approval.spec.ts
+A	lib/bulk-official-approval-types.ts
+A	lib/bulk-official-approval.ts
+M	playwright.config.ts
+A	supabase/migrations/20260831120000_s12_m092_bulk_official_approval.sql
+32c62e4 fix(m091.3): preserve failed decision state for safe retry
+M	app/applications/[id]/decision-form.tsx
+M	app/applications/bulk-decision/bulk-decision-form.tsx
+M	app/e2e-harness/page.tsx
+A	e2e/m091-3-decision-retry.spec.ts
+ef2b73b fix(m091.2): harden mentor filtering and deterministic UAT flows
+A	__tests__/m091-2-action-ux-hardening.test.tsx
+A	__tests__/m091-2-mentor-classification-scale.test.ts
+M	__tests__/s12-application-review-ux.test.ts
+M	app/applications/[id]/decision-form.tsx
+M	app/login/login-form.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	components/action-feedback.tsx
+M	lib/data.ts
+76284ca fix(m091.1): route.ts cannot export arbitrary named constants
+M	app/api/exports/application/selected/route.ts
+43ffc9f feat(m091.1): basic ops - single/selected CSV export, print/PDF view, mentor-type filter
+A	__tests__/m091-1-application-export.test.ts
+A	__tests__/m091-1-application-print.test.tsx
+A	__tests__/m091-1-mentor-review-page-nav.test.tsx
+A	__tests__/m091-1-mentor-type-filter.test.ts
+M	__tests__/support/fake-postgrest.ts
+A	app/api/exports/application/route.ts
+A	app/api/exports/application/selected/route.ts
+M	app/applications/[id]/page.tsx
+A	app/applications/[id]/print/page.tsx
+A	app/applications/[id]/print/print-button.tsx
+M	app/applications/mentor-review/page.tsx
+M	app/applications/page.tsx
+M	components/app-shell.tsx
+M	components/filterable-table.tsx
+A	components/mentor-type-select.tsx
+M	components/search-form.tsx
+A	lib/application-answers.ts
+A	lib/application-export.ts
+M	lib/data.ts
+20b9b94 fix(m091): page both recruitment export routes to exhaustion (Codex blocker)
+M	__tests__/m091-export-routes.test.ts
+M	__tests__/support/fake-postgrest.ts
+M	app/api/exports/recruitment-results/route.ts
+M	app/api/exports/review-scores/route.ts
+e9623ac fix(m091): close Claude1 review findings (M1-M3, L1-L4)
+A	__tests__/m091-bulk-limit-migration.test.ts
+M	__tests__/m091-decision-modal.test.tsx
+M	__tests__/m091-export-routes.test.ts
+A	__tests__/m091-preview-ordering.test.ts
+M	app/actions/bulk-assignment.ts
+M	app/api/exports/recruitment-results/route.ts
+M	app/api/exports/review-scores/route.ts
+M	app/interviews/assign/assign-interview-form.tsx
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	components/action-feedback.tsx
+M	lib/bulk-assignment-action-types.ts
+M	lib/bulk-assignment.ts
+M	lib/csv-export.ts
+M	lib/data.ts
+M	supabase/migrations/20260830221000_s12_m091_ops_bulk_limit.sql
+027446e feat(m091): ops completion - bulk-N limit, exports, decision modal close, search/nav UX
+M	.gitignore
+A	__tests__/m091-decision-modal.test.tsx
+A	__tests__/m091-export-routes.test.ts
+M	app/actions/bulk-assignment.ts
+A	app/api/exports/recruitment-results/route.ts
+A	app/api/exports/review-scores/route.ts
+M	app/applications/[id]/decision-form.tsx
+M	app/applications/[id]/page.tsx
+M	app/applications/mentee-review/page.tsx
+M	app/applications/mentor-review/page.tsx
+M	app/applications/page.tsx
+M	app/e2e-harness/page.tsx
+M	app/interviews/assign/assign-interview-form.tsx
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	components/action-feedback.tsx
+A	components/loading-link.tsx
+A	components/search-form.tsx
+M	e2e/admin-actions-ux.spec.ts
+M	lib/bulk-assignment.ts
+A	lib/csv-export.ts
+A	supabase/migrations/20260830221000_s12_m091_ops_bulk_limit.sql
+8d3b406 fix(m090-r1): close H2 gaps on /operations/monthly and /matches direct URLs
+M	__tests__/m090-r1-authorization-boundary.test.tsx
+M	app/matches/page.tsx
+M	app/operations/monthly/page.tsx
+M	lib/matches.ts
+5edd9ef fix(m090-r1): close H2 operations/matches role gap and H3 cancelled-reviewer URL leak
+D	__tests__/m090-perf-and-auth-boundary.test.ts
+A	__tests__/m090-r1-authorization-boundary.test.tsx
+M	__tests__/nav-model.test.ts
+M	__tests__/operations-page-role-parity.test.tsx
+M	app/matches/[id]/page.tsx
+M	app/operations/page.tsx
+M	app/operations/tasks/page.tsx
+M	lib/data.ts
+M	lib/nav-model.ts
+M	lib/permissions.ts
+D	supabase/migrations/20260830150000_s12_recruitment_performance_indexes.sql
+3be4b5d fix(sec-01): make policy-inventory check E a non-blocking diagnostic
+M	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/README.md
+M	supabase_migrations/074_sec01_application_data_grant_hardening.sql
+0bd1ee6 fix(sec-01): correct M090 preflight object names and repair README corruption
+M	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/README.md
+M	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/preflight.sql
+df6d2f7 security(sec-01): harden application data grants [H1/L4]
+A	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/README.md
+A	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/postflight.sql
+A	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/preflight.sql
+A	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/rollback.sql
+A	VAM_OS_SEC01_APPLICATION_DATA_GRANTS_20260830/staging_validation.sql
+A	supabase_migrations/074_sec01_application_data_grant_hardening.sql
+186614f feat(m090-a): add performance index migration for Supabase Advisor candidates
+A	__tests__/m090-perf-and-auth-boundary.test.ts
+A	supabase/migrations/20260830150000_s12_recruitment_performance_indexes.sql
+37b1511 feat(m090): implement recruitment operational remediation - authorization, lifecycle, performance indexes
+M	__tests__/approval-direct.test.ts
+M	__tests__/m090-recruitment-operational-remediation.test.ts
+M	__tests__/renewal-approval-guard.test.ts
+M	__tests__/review-db-safety.test.ts
+M	__tests__/wp1b-pii-isolation.test.ts
+M	app/actions/application-reviews.ts
+M	app/actions/enable-reviewer.ts
+M	app/applications/[id]/page.tsx
+M	app/applications/bulk-decision/page.tsx
+M	app/interviews/assign/assign-interview-form.tsx
+M	app/interviews/assign/page.tsx
+M	app/interviews/page.tsx
+M	app/reviews/[id]/page.tsx
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+M	components/filterable-table.tsx
+M	lib/application-approvals.ts
+M	lib/application-decisions.ts
+M	lib/application-reviews.ts
+M	lib/bulk-assignment.ts
+M	lib/data.ts
+M	lib/enable-reviewer.ts
+M	lib/interview-claim.ts
+M	supabase/migrations/20260830070430_s12_recruitment_operational_remediation.sql
+0256c2e WIP M090 checkpoint before staging validation
+A	__tests__/m090-application-decisions.test.ts
+A	__tests__/m090-recruitment-operational-remediation.test.ts
+M	__tests__/m2-1-interview-assignment.test.ts
+M	__tests__/nav-model.test.ts
+M	__tests__/review-db-safety.test.ts
+M	__tests__/wp1b-pii-isolation.test.ts
+M	app/actions/application-decisions.ts
+M	app/actions/application-reviews.ts
+A	app/actions/bulk-application-decisions.ts
+M	app/actions/enable-reviewer.ts
+A	app/actions/recruitment-stage-requirements.ts
+M	app/applications/[id]/assign-reviewer-form.tsx
+M	app/applications/[id]/decision-form.tsx
+M	app/applications/[id]/page.tsx
+A	app/applications/bulk-decision/bulk-decision-form.tsx
+A	app/applications/bulk-decision/page.tsx
+M	app/applications/page.tsx
+M	app/interviews/assign/page.tsx
+M	app/interviews/interviews-client.tsx
+M	app/reviews/[id]/page.tsx
+M	app/reviews/[id]/review-operations.tsx
+M	app/reviews/assign-bulk/page.tsx
+M	app/reviews/page.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+A	app/reviews/settings/page.tsx
+A	app/reviews/settings/requirement-form.tsx
+A	docs/s12-recruitment-remediation/00_SCOPE_AND_DECISIONS.md
+A	docs/s12-recruitment-remediation/01_FEEDBACK_2026-08-30.md
+A	docs/s12-recruitment-remediation/02_EXECUTION_PLAN.md
+A	docs/s12-recruitment-remediation/03_PERFORMANCE_BASELINE.md
+A	docs/s12-recruitment-remediation/04_SECURITY_AND_LIFECYCLE_GATES.md
+A	docs/s12-recruitment-remediation/05_UAT_MATRIX.md
+A	docs/s12-recruitment-remediation/06_PRODUCTION_RELEASE_LOG.md
+A	docs/s12-recruitment-remediation/agent-reports/CLAUDE_AUTH_RLS_TRANSACTION_REVIEW.md
+A	docs/s12-recruitment-remediation/agent-reports/CODEX_CHECKPOINT_1_RECONCILIATION.md
+A	docs/s12-recruitment-remediation/agent-reports/README.md
+A	docs/s12-recruitment-remediation/releases/README.md
+M	lib/application-decisions.ts
+M	lib/application-reviews.ts
+M	lib/bulk-assignment.ts
+M	lib/data.ts
+M	lib/decision-action-types.ts
+M	lib/enable-reviewer.ts
+M	lib/interview-claim.ts
+A	lib/recruitment-stage-requirements.ts
+M	lib/reviewer-eligibility.ts
+M	lib/ui-labels.ts
+A	supabase/migrations/20260830070430_s12_recruitment_operational_remediation.sql
+eb892e5 fix(m2.1): harden interview assignment workflow
+M	__tests__/m2-1-interview-assignment.test.ts
+A	__tests__/m2-1-review-ui.test.tsx
+M	__tests__/review-db-safety.test.ts
+A	__tests__/support/mutation-postgrest.ts
+M	app/actions/bulk-assignment.ts
+M	app/reviews/[id]/page.tsx
+M	app/reviews/[id]/review-operations.tsx
+M	lib/application-reviews.ts
+M	lib/bulk-assignment.ts
+M	lib/data.ts
+M	lib/interview-claim.ts
+A	lib/review-status.ts
+A	lib/reviewer-eligibility.ts
+fc22603 test(m2.1): add 21 tests for interview assignments and review operations
+A	__tests__/m2-1-interview-assignment.test.ts
+M	app/interviews/assign/assign-interview-form.tsx
+M	app/reviews/[id]/review-operations.tsx
+7c0eb18 feat(m2.1): implement interview assignment and review operations
+M	app/actions/application-reviews.ts
+M	app/actions/bulk-assignment.ts
+A	app/interviews/assign/assign-interview-form.tsx
+A	app/interviews/assign/page.tsx
+M	app/reviews/[id]/page.tsx
+A	app/reviews/[id]/review-operations.tsx
+M	lib/application-reviews.ts
+M	lib/bulk-assignment.ts
+927f379 docs: transfer production only, and keep a way into staging
+A	docs/CHUYEN_SUPABASE_PRODUCTION.md
+0244e67 fix(apply): update S12 mentee form positioning
+M	app/apply/mentee/page.tsx
+9e96333 fix(apply): update S12 mentee form positioning
+M	app/apply/mentee/page.tsx
+30a7902 fix(applications): harden profile exports
+M	__tests__/s12-application-profile-export.test.ts
+M	lib/application-export.ts
+b963bc2 feat(applications): add CSV and PDF profile export
+A	__tests__/s12-application-profile-export.test.ts
+A	app/applications/[id]/export/csv/route.ts
+A	app/applications/[id]/export/pdf/route.ts
+M	app/applications/[id]/page.tsx
+A	lib/application-export-access.ts
+A	lib/application-export-pdf.ts
+A	lib/application-export.ts
+M	lib/data.ts
+M	package-lock.json
+M	package.json
+8f7ffaa feat: complete S12 application review UX
+A	__tests__/s12-application-review-ux.test.ts
+M	__tests__/s12-applications-manual-review-perf.test.ts
+M	app/applications/[id]/page.tsx
+A	app/applications/mentee-review/page.tsx
+M	app/applications/mentor-review/page.tsx
+A	lib/classification.ts
+M	lib/data.ts
+M	lib/nav-model.ts
+29d6f96 fix(applications): fail closed mentor classification
+M	__tests__/s12-application-review-ux.test.ts
+M	app/applications/mentee-review/page.tsx
+M	app/applications/mentor-review/page.tsx
+A	lib/classification.ts
+M	lib/data.ts
+2a4a96c feat: complete S12 application review UX (search, classify, mentee queue)
+A	__tests__/s12-application-review-ux.test.ts
+M	__tests__/s12-applications-manual-review-perf.test.ts
+M	app/applications/[id]/page.tsx
+A	app/applications/mentee-review/page.tsx
+M	app/applications/mentor-review/page.tsx
+M	lib/data.ts
+M	lib/nav-model.ts
+507256f fix(applications): speed up S12 mentor manual review
+A	__tests__/s12-applications-manual-review-perf.test.ts
+M	app/applications/[id]/page.tsx
+A	app/applications/mentor-review/page.tsx
+A	docs/S12_APPLICATIONS_MANUAL_REVIEW_PERF_CORRECTION_FINAL.md
+A	docs/S12_APPLICATIONS_MANUAL_REVIEW_PERF_REPORT.md
+M	lib/data.ts
+M	lib/nav-model.ts
+0ff904a fix(applications): close final S12 review perf gaps
+M	__tests__/s12-applications-manual-review-perf.test.ts
+M	app/applications/[id]/page.tsx
+M	app/applications/mentor-review/page.tsx
+M	lib/data.ts
+b04fc08 fix(applications): complete targeted S12 review reads
+A	__tests__/s12-applications-manual-review-perf.test.ts
+M	app/applications/[id]/page.tsx
+M	app/applications/mentor-review/page.tsx
+A	docs/S12_APPLICATIONS_MANUAL_REVIEW_PERF_CORRECTION_FINAL.md
+M	lib/data.ts
+0a0ff43 fix(applications): S12 mentor manual review performance hotfix
+M	app/applications/[id]/page.tsx
+A	app/applications/mentor-review/page.tsx
+A	docs/S12_APPLICATIONS_MANUAL_REVIEW_PERF_REPORT.md
+M	lib/data.ts
+M	lib/nav-model.ts
+a3a3f85 fix(autosave): clear the mentee draft on confirmed server success, then navigate
+M	__tests__/autosave.test.tsx
+M	app/actions/apply.ts
+D	app/apply/_components/clear-application-draft.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/thanks/page.tsx
+M	e2e/mentee-autosave.spec.ts
+M	lib/apply-types.ts
+M	lib/autosave.ts
+1694f70 fix(autosave): allowlist the draft, clear on the real success path, repair restoration
+M	__tests__/autosave.test.tsx
+A	app/apply/_components/clear-application-draft.tsx
+M	app/apply/_components/form-primitives.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/thanks/page.tsx
+M	app/e2e-harness/page.tsx
+A	e2e/mentee-autosave.spec.ts
+M	lib/autosave.ts
+8646e17 feat: mentee autosave (7 day TTL)
+A	__tests__/autosave.test.tsx
+M	app/apply/_components/form-primitives.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+A	lib/autosave.ts
+e5da0d9 fix(r4-export): fail closed on scope catalog failure and pin season to the application
+A	__tests__/r4-export-scope.test.ts
+M	__tests__/r4-export.test.ts
+M	__tests__/r4-pagination.test.ts
+M	app/api/applications/export/route.ts
+M	lib/program-scope.ts
+a289958 fix(r4-export): repair authorized export execution, real XLSX, fail-closed sources
+M	__tests__/r4-export.test.ts
+M	__tests__/r4-pagination.test.ts
+A	__tests__/support/ooxml-reader.ts
+A	__tests__/support/rfc4180.ts
+M	app/api/applications/export/route.ts
+M	app/applications/export/page.tsx
+M	lib/data.ts
+M	lib/permissions.ts
+D	scratch/generate_test_xlsx.js
+D	scratch/verify_xlsx.py
+4afa3e7 fix(r4-export): apply targeted remediations for formula injection, quoting, pagination, and auth
+M	__tests__/r4-export.test.ts
+A	__tests__/r4-pagination.test.ts
+M	app/api/applications/export/route.ts
+A	scratch/generate_test_xlsx.js
+A	scratch/verify_xlsx.py
+0bf1f53 fix(export): finalize r4 export logic, final decisions and security
+A	__tests__/r4-export.test.ts
+M	app/api/applications/export/route.ts
+18ba3ed feat(export): Support XLSX with write-excel-file
+M	app/api/applications/export/route.ts
+M	app/applications/export/page.tsx
+M	package-lock.json
+M	package.json
+8c4cd7d feat(apply): applicant autosave hook and integration
+M	app/apply/_components/form-primitives.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+A	app/apply/use-autosave.ts
+5204202 test(benchmarks): add concurrency load test harness skeleton
+A	scripts/load-test.ts
+2b50e30 feat(reviews): add review queue filters and export link
+M	app/reviews/page.tsx
+bdde8f7 feat(export): R4 export API and UI
+A	app/api/applications/export/route.ts
+A	app/applications/export/page.tsx
+27c607a fix(m2.1): harden interview assignment workflow
+M	__tests__/m2-1-interview-assignment.test.ts
+A	__tests__/m2-1-review-ui.test.tsx
+M	__tests__/review-db-safety.test.ts
+A	__tests__/support/mutation-postgrest.ts
+M	app/actions/bulk-assignment.ts
+M	app/reviews/[id]/page.tsx
+M	app/reviews/[id]/review-operations.tsx
+M	lib/application-reviews.ts
+M	lib/bulk-assignment.ts
+M	lib/data.ts
+M	lib/interview-claim.ts
+A	lib/review-status.ts
+A	lib/reviewer-eligibility.ts
+c5adc16 test(m2.1): add 21 tests for interview assignments and review operations
+A	__tests__/m2-1-interview-assignment.test.ts
+M	app/interviews/assign/assign-interview-form.tsx
+M	app/reviews/[id]/review-operations.tsx
+61521e7 feat(m2.1): implement interview assignment and review operations
+M	app/actions/application-reviews.ts
+M	app/actions/bulk-assignment.ts
+A	app/interviews/assign/assign-interview-form.tsx
+A	app/interviews/assign/page.tsx
+M	app/reviews/[id]/page.tsx
+A	app/reviews/[id]/review-operations.tsx
+M	lib/application-reviews.ts
+M	lib/bulk-assignment.ts
+3315dd4 feat: S12 renewal mentor form UX polish
+M	__tests__/m073-renewal-decline-feedback.test.ts
+M	__tests__/renewal-required-profile-fields.test.ts
+M	__tests__/renewal-runtime-p0.test.ts
+M	app/apply/mentor/apply-mentor-form.tsx
+M	app/renew/[token]/renewal-form.tsx
+M	lib/mentor-intake-content.ts
+M	lib/renewal-runtime.ts
+8ed92d2 fix(forms): persist mentor topics and enforce renewal function
+M	__tests__/m073-renewal-decline-feedback.test.ts
+M	__tests__/renewal-required-profile-fields.test.ts
+M	__tests__/renewal-runtime-p0.test.ts
+A	__tests__/s12-form-polish-r2-hotfix.test.ts
+M	__tests__/s12-m1-mentor-forms.test.ts
+M	app/actions/apply.ts
+M	lib/renewal-runtime.ts
+52dfb32 fix: S12 form polish
+M	__tests__/renewal-required-profile-fields.test.ts
+M	__tests__/uat-s12-server-validation.test.ts
+M	app/apply/mentor/apply-mentor-form.tsx
+M	app/apply/mentor/page.tsx
+M	app/renew/[token]/page.tsx
+M	app/renew/[token]/renewal-form.tsx
+M	lib/mentor-intake-content.ts
+M	lib/renewal-runtime.ts
+0354fed feat(renewal): require current S12 profile review
+M	__tests__/m073-renewal-decline-feedback.test.ts
+A	__tests__/renewal-required-profile-fields.test.ts
+M	__tests__/renewal-runtime-p0.test.ts
+M	__tests__/s12-m1-mentor-forms.test.ts
+M	app/renew/[token]/renewal-form.tsx
+M	lib/renewal-runtime.ts
+M	lib/renewal-types.ts
+59dbfa4 test(s12): align identity assertion with M083 R2
+M	__tests__/s12-m1-identity.test.ts
+8b867c4 fix(m083): scope application person uniqueness to S12
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/README.md
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/SHA256SUMS.txt
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/apply.sql
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/preflight.sql
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/rollback.sql
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/verifier.sql
+M	__tests__/s12-m1-m083-migration-package.test.ts
+b3932b7 fix(identity): final two-medium remediation (M-1, M-2)
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/SHA256SUMS.txt
+M	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/verifier.sql
+M	__tests__/s12-m1-m083-migration-package.test.ts
+M	__tests__/s12-m1-public-identity-ilike.test.ts
+M	lib/applications-create.ts
+M	lib/legacy-mentor-service.ts
+0a649bc S12-M1 Identity Preview Remediation Finalization
+A	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/README.md
+A	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/SHA256SUMS.txt
+A	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/apply.sql
+A	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/preflight.sql
+A	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/rollback.sql
+A	VAM_OS_M083_S12_M1_IDENTITY_PREVIEW_REMEDIATION_20260827/verifier.sql
+M	__tests__/applications-create-commitment-cleanup.test.ts
+M	__tests__/apply-action-server-gate.test.ts
+M	__tests__/s12-m1-identity.test.ts
+M	__tests__/s12-m1-legacy-import.test.ts
+A	__tests__/s12-m1-m083-migration-package.test.ts
+A	__tests__/s12-m1-public-identity-ilike.test.ts
+M	__tests__/support/fake-postgrest.ts
+A	docs/CHAY_MIGRATION_072_073.md
+A	docs/S12_M1_HIGH_RISK_REMEDIATION_REPORT.md
+M	docs/S12_M1_IMPLEMENTATION_REPORT.md
+M	lib/applications-create.ts
+M	lib/identity.ts
+M	lib/legacy-mentor-import.ts
+M	lib/legacy-mentor-preview-store.ts
+M	lib/legacy-mentor-service.ts
+D	supabase_migrations/072_s12_m1_canonical_email_uniqueness.sql
+5ab7958 Document S12 M1 implementation and review evidence
+A	docs/S12_M1_BASELINE.md
+A	docs/S12_M1_IMPLEMENTATION_REPORT.md
+f8f62fc Add legacy mentor intake and renewal operations
+M	__tests__/image-optimizer-attack-surface.test.ts
+A	__tests__/s12-m1-admin-ux.test.ts
+A	__tests__/s12-m1-legacy-import.test.ts
+A	app/admin/renewals/legacy/actions.ts
+A	app/admin/renewals/legacy/legacy-client.tsx
+A	app/admin/renewals/legacy/page.tsx
+A	app/admin/renewals/legacy/state.ts
+A	app/admin/renewals/legacy/template/route.ts
+M	app/admin/renewals/page.tsx
+M	lib/account-import.ts
+A	lib/legacy-mentor-import.ts
+A	lib/legacy-mentor-preview-store.ts
+A	lib/legacy-mentor-service.ts
+M	lib/renewal-console.ts
+A	supabase_migrations/072_s12_m1_canonical_email_uniqueness.sql
+3111d03 Implement S12 mentor identity and intake updates
+M	__tests__/applications-create-commitment-cleanup.test.ts
+M	__tests__/apply-action-server-gate.test.ts
+M	__tests__/m073-renewal-decline-feedback.test.ts
+M	__tests__/renewal-runtime-p0.test.ts
+A	__tests__/s12-m1-identity.test.ts
+A	__tests__/s12-m1-mentor-forms.test.ts
+M	__tests__/uat-s12-server-validation.test.ts
+M	app/actions/apply.ts
+M	app/apply/_components/gate-views.tsx
+M	app/apply/_components/mentor-profile-intro.tsx
+A	app/apply/_components/mentor-support-contacts.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	app/apply/mentor/page.tsx
+M	app/mentors/page.tsx
+M	app/renew/[token]/renewal-form.tsx
+M	lib/application-approvals.ts
+M	lib/application-form-validation.ts
+M	lib/applications-create.ts
+M	lib/identity.ts
+A	lib/mentor-intake-content.ts
+M	lib/people-create.ts
+M	lib/renewal-runtime.ts
+8fb6578 Merge pull request #46 from ThangNguyen-bot/hotfix/s12-mentor-intro-copy
+657a65f Add approved Mentor application intro
+A	app/apply/_components/mentor-profile-intro.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+96d81dc feat(apply): mentor eligibility intro, and clearer renewal lineage label
+A	app/apply/_components/mentor-profile-intro.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	app/renew/[token]/renewal-form.tsx
+2160e5e fix(applications): read profile_url from the application row
+A	__tests__/m3-application-detail-row-shape.test.ts
+M	app/applications/[id]/page.tsx
+bb05cff fix: make M3 application views type-safe
+A	__tests__/m3-view-type-safety.test.ts
+M	supabase_migrations/078_application_list_v1.sql
+M	supabase_migrations/079_application_review_states.sql
+M	supabase_migrations/082_r3_final_gate_remediation.sql
+b39c671 chore: remove one-off temporary patch helper
+D	patch_fake_postgrest.js
+cac266a S12 Core Operations Readiness (M3)
+D	CLAUDE_PROMPT_R0_BENCHMARK.md
+D	CLAUDE_PROMPT_R1A.md
+D	CLAUDE_PROMPT_R1B.md
+D	CLAUDE_PROMPT_R2.md
+D	CLAUDE_R0_REVIEW.md
+D	CLAUDE_R1A_PLAN.md
+D	CLAUDE_R1B_PLAN.md
+D	CLAUDE_R2_PLAN.md
+M	__tests__/m077-canonical-identity.test.ts
+A	__tests__/m077-rpc-transaction.test.ts
+A	__tests__/r3-bulk-assignment.test.ts
+A	__tests__/r3-review-finality.test.ts
+M	__tests__/review-db-safety.test.ts
+M	__tests__/support/benchmark-dataset.ts
+M	app/actions/application-reviews.ts
+M	app/actions/bulk-assignment.ts
+M	app/applications/[id]/page.tsx
+A	app/applications/[id]/unassign-review-button.tsx
+M	app/applications/page.tsx
+M	app/reviews/[id]/page.tsx
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	docs/benchmarks/m3-r2-after.json
+M	lib/application-reviews.ts
+M	lib/applications-create.ts
+M	lib/applications-list.ts
+M	lib/bulk-assignment.ts
+M	lib/data.ts
+M	lib/types-r2.ts
+M	lib/ui-labels.ts
+M	package-lock.json
+M	package.json
+M	scripts/seed_demo_s12_data.mjs
+M	supabase_migrations/077_canonical_applicant_identity.sql
+M	supabase_migrations/078_application_list_v1.sql
+A	supabase_migrations/079_application_review_states.sql
+A	supabase_migrations/080_r3_fixes.sql
+A	supabase_migrations/081_r3_atomic_review_workflow.sql
+A	supabase_migrations/082_r3_final_gate_remediation.sql
+b21c38c docs(mkt): merge notes, written for whoever decides
+A	docs/MKT_PLAN_GHI_CHU_MERGE.md
+8036c36 fix(mkt): a request that got a slot stops being an open request
+M	lib/mkt-plans.ts
+M	lib/mkt-posts.ts
+d54132e feat(mkt): a month's theme becomes a week of slots, and a post somebody publishes
+M	.env.local.example
+A	__tests__/migration-074-mkt-plan.test.ts
+A	__tests__/mkt-core.test.ts
+A	__tests__/mkt-prompt-core.test.ts
+M	__tests__/nav-model.test.ts
+A	app/actions/mkt.ts
+A	app/operations/mkt/[spaceId]/cau-hinh/page.tsx
+A	app/operations/mkt/[spaceId]/cho-duyet/page.tsx
+A	app/operations/mkt/[spaceId]/config-client.tsx
+A	app/operations/mkt/[spaceId]/layout.tsx
+A	app/operations/mkt/[spaceId]/mkt-ui.tsx
+A	app/operations/mkt/[spaceId]/month-client.tsx
+A	app/operations/mkt/[spaceId]/page.tsx
+A	app/operations/mkt/[spaceId]/thang/page.tsx
+A	app/operations/mkt/[spaceId]/week-client.tsx
+A	app/operations/mkt/page.tsx
+A	lib/mkt-action-types.ts
+A	lib/mkt-ai.ts
+A	lib/mkt-core.ts
+A	lib/mkt-plans.ts
+A	lib/mkt-posts.ts
+A	lib/mkt-prompt-core.ts
+A	lib/mkt-spaces.ts
+M	lib/nav-model.ts
+M	lib/permissions.ts
+A	supabase_migrations/074_mkt_plan.sql
+2e142a0 fix(applications): wave2 typescript inference
+M	app/applications/[id]/page.tsx
+M	app/applications/page.tsx
+M	lib/application-detail.ts
+1f8d21b feat(applications): M3 R2 implementation - bounded queries
+A	CLAUDE_PROMPT_R0_BENCHMARK.md
+A	CLAUDE_PROMPT_R1A.md
+A	CLAUDE_PROMPT_R1B.md
+A	CLAUDE_PROMPT_R2.md
+A	CLAUDE_R0_REVIEW.md
+A	CLAUDE_R1A_PLAN.md
+A	CLAUDE_R1B_PLAN.md
+A	CLAUDE_R2_PLAN.md
+M	__tests__/application-commitments-structural.test.ts
+M	__tests__/application-conduct-commitments.test.ts
+D	__tests__/applications-create-commitment-cleanup.test.ts
+M	__tests__/apply-action-server-gate.test.ts
+A	__tests__/apply-draft-model.test.ts
+A	__tests__/apply-draft-recovery.test.tsx
+A	__tests__/m077-canonical-identity.test.ts
+M	__tests__/m3-application-scale.bench.test.ts
+M	__tests__/support/benchmark-dataset.ts
+M	app/applications/[id]/page.tsx
+M	app/applications/page.tsx
+A	app/apply/_components/draft-recovery-banner.tsx
+M	app/apply/_components/form-primitives.tsx
+A	app/apply/_components/use-draft-recovery.ts
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+A	app/apply/thanks/clear-draft.tsx
+M	app/apply/thanks/page.tsx
+A	docs/benchmarks/m3-r2-after.json
+A	lib/application-detail.ts
+M	lib/applications-create.ts
+A	lib/applications-list.ts
+A	lib/apply-draft.ts
+M	lib/data.ts
+A	lib/types-r2.ts
+A	patch_fake_postgrest.js
+A	scripts/benchmark-application-scale.mts
+A	scripts/benchmark-lib.mjs
+A	supabase_migrations/077_canonical_applicant_identity.sql
+A	supabase_migrations/078_application_list_v1.sql
+77126d9 chore(test): regenerate M3 R0 benchmark baseline on harness v2
+A	__tests__/m3-application-scale.bench.test.ts
+A	__tests__/support/benchmark-dataset.ts
+M	__tests__/support/fake-postgrest.ts
+A	docs/benchmarks/m3-r0-before.json
+9277123 Merge PR #43: S12 Global Season Context
+bc8f93b fix: pass seasonCode to operations KPI computation
+M	lib/data.ts
+79d2c8e Implement S12 global season context
+M	__tests__/operations-page-role-parity.test.tsx
+A	__tests__/season-cohort-semantics.test.ts
+M	__tests__/season-config.test.ts
+A	__tests__/season-constant-flip-regression.test.ts
+A	__tests__/season-context-authorization.test.ts
+A	__tests__/season-context-resolution.test.ts
+A	__tests__/season-labels.test.ts
+A	__tests__/season-scope-composition.test.ts
+A	app/actions/season-context.ts
+M	app/actions/workflow.ts
+M	app/matches/page.tsx
+M	app/mentees/page.tsx
+M	app/mentors/page.tsx
+M	app/operations/page.tsx
+M	app/operations/tasks/page.tsx
+M	app/operations/tasks/workflow-forms.tsx
+M	app/page.tsx
+M	components/app-shell.tsx
+A	components/season-selector.tsx
+M	lib/data.ts
+A	lib/season-cohort.ts
+M	lib/season-config.ts
+A	lib/season-context.ts
+A	lib/season-labels.ts
+7ef0449 fix(admin): restrict user management to super admins
+A	__tests__/admin-users-access.test.ts
+A	__tests__/admin-users-entry-points.test.ts
+M	__tests__/nav-model.test.ts
+M	__tests__/permissions.test.ts
+M	app/admin/page.tsx
+M	app/admin/users/page.tsx
+M	app/reviews/guide/page.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	lib/nav-model.ts
+M	lib/permissions.ts
+8982fce fix(admin): align user management visibility
+A	__tests__/admin-users-entry-points.test.ts
+M	__tests__/permissions.test.ts
+M	app/admin/page.tsx
+M	app/reviews/guide/page.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	lib/permissions.ts
+68ede91 fix(admin): show friendly denial for user management
+A	__tests__/admin-users-access.test.ts
+M	__tests__/nav-model.test.ts
+M	app/admin/users/page.tsx
+M	lib/nav-model.ts
+99a51dd docs: put the guides written for the owner on main, where they can be found
+A	docs/CHAY_MIGRATION_072_073.md
+A	docs/CROSS_MENTORING_HUONG_DAN_BTC.md
+A	docs/HUONG_DAN.md
+A	docs/audits/VAM_OS_HUONG_DAN_BREVO_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_BREVO_2026-08-19.pdf
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_GITHUB_VERCEL_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_GITHUB_VERCEL_2026-08-19.pdf
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_SUPABASE_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_SUPABASE_2026-08-19.pdf
+A	docs/audits/VAM_OS_HUONG_DAN_DEEPSEEK_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_DEEPSEEK_2026-08-19.pdf
+A	docs/audits/VAM_OS_HUONG_DAN_TEN_MIEN_RIENG_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_TEN_MIEN_RIENG_2026-08-19.pdf
+A	docs/audits/VAM_OS_HUONG_DAN_THU_RECAP_FACEBOOK_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_THU_RECAP_FACEBOOK_2026-08-19.pdf
+A	docs/audits/VAM_OS_KE_HOACH_CHUYEN_NETLIFY_2026-08-19.html
+A	docs/audits/VAM_OS_KE_HOACH_CHUYEN_NETLIFY_2026-08-19.pdf
+A	docs/audits/VAM_OS_KE_HOACH_DANG_NHAP_CHUONG_TRINH_2026-08-19.html
+A	docs/audits/VAM_OS_KE_HOACH_DANG_NHAP_CHUONG_TRINH_2026-08-19.pdf
+A	docs/audits/VAM_OS_S12_TRUOC_VA_SAU_2026-08-18.html
+A	docs/audits/VAM_OS_S12_TRUOC_VA_SAU_2026-08-18.pdf
+128391c docs: how to run migrations 072 and 073, for the person holding the Supabase account
+A	docs/CHAY_MIGRATION_072_073.md
+587da00 docs(cross-mentoring): the run-through for organisers, step by step
+A	docs/CROSS_MENTORING_HUONG_DAN_BTC.md
+2c09dd7 feat(cross-mentoring): a mentee's wish becomes a session, with the mentors asked once
+A	__tests__/cross-attendance-core.test.ts
+A	__tests__/cross-post-core.test.ts
+M	__tests__/nav-model.test.ts
+M	__tests__/permissions.test.ts
+A	app/actions/cross.ts
+A	app/cross/[token]/actions.ts
+A	app/cross/[token]/invitation-form.tsx
+A	app/cross/[token]/page.tsx
+A	app/ct/[programCode]/cross/cross-client.tsx
+A	app/ct/[programCode]/cross/page.tsx
+M	app/ct/[programCode]/page.tsx
+M	app/layout.tsx
+A	app/operations/cross/[id]/cross-detail-client.tsx
+A	app/operations/cross/[id]/page.tsx
+A	app/operations/cross/page.tsx
+M	lib/application-approvals.ts
+A	lib/cross-action-types.ts
+A	lib/cross-attendance-core.ts
+A	lib/cross-attendance.ts
+A	lib/cross-invitations.ts
+A	lib/cross-post-core.ts
+A	lib/cross-post.ts
+A	lib/cross-requests.ts
+M	lib/email-core.ts
+M	lib/email.ts
+M	lib/event-constants.ts
+A	lib/mentor-cross-fields.ts
+M	lib/nav-model.ts
+A	lib/participant-event-registration.ts
+M	lib/permissions.ts
+M	middleware.ts
+b5ecd7a feat(cross): the record a cross-mentoring session travels through
+A	__tests__/cross-fields-core.test.ts
+A	__tests__/cross-mentoring-core.test.ts
+A	__tests__/migration-072-cross-mentoring.test.ts
+A	lib/cross-fields-core.ts
+A	lib/cross-mentoring-core.ts
+A	supabase_migrations/072_cross_mentoring.sql
+A	supabase_migrations/073_cross_mentoring_event_type.sql
+161449e feat(renewals): confirm batches explicitly and surface declined mentors
+M	__tests__/m075-renewal-batch-picker.test.tsx
+A	__tests__/m076-renewal-individual-reinvite.test.tsx
+M	app/admin/renewals/mentor-batch-form.tsx
+M	lib/renewal-console.ts
+9e2ba2a fix(renewals): stop the batch picker turning a bad state into a route crash
+M	__tests__/m075-renewal-batch-picker.test.tsx
+M	app/admin/renewals/mentor-batch-form.tsx
+a60c47e feat(auth): mentors and mentees sign in, and land in their own programme's season
+A	__tests__/cross-program-report-core.test.ts
+M	__tests__/login-server-action.test.ts
+A	__tests__/migration-071-participant-accounts.test.ts
+M	__tests__/nav-model.test.ts
+A	__tests__/participant-access-boundary.test.ts
+A	__tests__/participant-auth-core.test.ts
+A	__tests__/participant-identity.test.ts
+A	app/actions/participants.ts
+A	app/admin/participants/page.tsx
+A	app/admin/participants/participants-client.tsx
+A	app/bao-cao/page.tsx
+A	app/bao-cao/report-client.tsx
+A	app/chon-chuong-trinh/page.tsx
+A	app/ct/[programCode]/page.tsx
+A	app/ct/page.tsx
+M	app/layout.tsx
+M	app/login/actions.ts
+M	components/app-shell.tsx
+A	components/participant-shell.tsx
+A	docs/audits/sql/VAM_OS_071_PROGRAMS_AND_SEASONS_SEED.sql
+A	docs/audits/sql/VAM_OS_071_PROGRAM_MEMBERSHIP_BACKFILL.sql
+M	lib/auth-constants.ts
+A	lib/cross-program-report-core.ts
+A	lib/cross-program-report.ts
+A	lib/current-season.ts
+M	lib/email-core.ts
+M	lib/email.ts
+M	lib/nav-model.ts
+A	lib/participant-action-types.ts
+A	lib/participant-admin.ts
+A	lib/participant-auth-core.ts
+A	lib/participant-auth.ts
+A	lib/participant-home.ts
+A	lib/participant-invites.ts
+A	lib/participant-programs.ts
+M	middleware.ts
+A	supabase_migrations/071_participant_accounts_and_program_membership.sql
+70249dc docs: the plan for moving off Vercel to Netlify
+A	docs/audits/VAM_OS_KE_HOACH_CHUYEN_NETLIFY_2026-08-19.html
+A	docs/audits/VAM_OS_KE_HOACH_CHUYEN_NETLIFY_2026-08-19.pdf
+6a1adf4 docs: putting the app on the owner's own domain, without leaving Vercel
+A	docs/audits/VAM_OS_HUONG_DAN_TEN_MIEN_RIENG_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_TEN_MIEN_RIENG_2026-08-19.pdf
+d4b9d61 docs: co-ownership on GitHub and Vercel, and why one of them is free
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_GITHUB_VERCEL_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_GITHUB_VERCEL_2026-08-19.pdf
+162333a docs: moving the Supabase projects to the owner's account, for a non-technical reader
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_SUPABASE_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_CHUYEN_SUPABASE_2026-08-19.pdf
+b096608 docs: the plan for participant login, drawn before any of it is built
+A	docs/audits/VAM_OS_KE_HOACH_DANG_NHAP_CHUONG_TRINH_2026-08-19.html
+A	docs/audits/VAM_OS_KE_HOACH_DANG_NHAP_CHUONG_TRINH_2026-08-19.pdf
+ef51117 feat(renewals): searchable mentor picker and safe batch invite creation
+A	__tests__/m075-renewal-batch-invite.test.ts
+A	__tests__/m075-renewal-batch-picker.test.tsx
+A	__tests__/m075-renewal-mentor-search.test.ts
+M	app/actions/renewals.ts
+A	app/admin/renewals/mentor-batch-form.tsx
+M	app/admin/renewals/page.tsx
+M	app/admin/renewals/renewal-controls.tsx
+A	lib/renewal-batch.ts
+M	lib/renewal-console.ts
+A	lib/renewal-search.ts
+M	lib/renewal-types.ts
+4581a43 docs: how to collect recaps from the group, for a non-technical reader
+A	docs/audits/VAM_OS_HUONG_DAN_THU_RECAP_FACEBOOK_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_THU_RECAP_FACEBOOK_2026-08-19.pdf
+f0d9f4a feat(recap): collect recaps from the Facebook group, and approve them one by one
+M	.env.local.example
+M	__tests__/final-release-hardening.test.ts
+A	__tests__/migration-070-recap-import.test.ts
+M	__tests__/nav-model.test.ts
+A	__tests__/recap-import-core.test.ts
+A	__tests__/recap-import-routes.test.ts
+A	__tests__/recap-import.test.ts
+A	app/actions/recap-import.ts
+A	app/api/cron/recap-reminder/route.ts
+A	app/api/recap-import/route.ts
+A	app/operations/recap-import/page.tsx
+A	app/operations/recap-import/recap-import-client.tsx
+M	lib/apply-abuse-core.ts
+M	lib/email-core.ts
+M	lib/email.ts
+A	lib/machine-auth.ts
+M	lib/nav-model.ts
+A	lib/recap-import-action-types.ts
+A	lib/recap-import-core.ts
+A	lib/recap-import.ts
+M	middleware.ts
+A	supabase_migrations/070_recap_import.sql
+A	tools/recap-collector/README.md
+A	tools/recap-collector/collector.js
+A	tools/recap-collector/manifest.json
+A	tools/recap-collector/options.html
+A	tools/recap-collector/options.js
+A	tools/recap-collector/popup.css
+A	tools/recap-collector/popup.html
+A	tools/recap-collector/popup.js
+A	vercel.json
+b9b6c45 fix(renewal): dispatch admin confirm as a plain FormData server action
+A	__tests__/m074-admin-confirm-dispatch.test.ts
+M	__tests__/renewal-actions-authorization.test.ts
+M	app/actions/renewals.ts
+M	app/admin/renewals/page.tsx
+M	app/admin/renewals/renewal-controls.tsx
+M	app/renew/[token]/renewal-form.tsx
+4750a88 refactor: use application-commitments category for UI grouping instead of hardcoded keys
+M	app/renew/[token]/renewal-form.tsx
+M	lib/application-commitments.ts
+2da83ef fix(renewal): restore visual heading and add consent tests
+M	__tests__/renewal-runtime-p0.test.ts
+M	app/renew/[token]/renewal-form.tsx
+4255f31 feat(renewal): close S12 decline-feedback and commitment-enforcement gaps (M073)
+M	.gitignore
+A	VAM_OS_M073_S12_RENEWAL_DECLINE_FEEDBACK_20260819/README.md
+A	VAM_OS_M073_S12_RENEWAL_DECLINE_FEEDBACK_20260819/SHA256SUMS.txt
+A	VAM_OS_M073_S12_RENEWAL_DECLINE_FEEDBACK_20260819/apply.sql
+A	VAM_OS_M073_S12_RENEWAL_DECLINE_FEEDBACK_20260819/preflight.sql
+A	VAM_OS_M073_S12_RENEWAL_DECLINE_FEEDBACK_20260819/rollback.sql
+A	VAM_OS_M073_S12_RENEWAL_DECLINE_FEEDBACK_20260819/state_evidence.sql
+A	VAM_OS_M073_S12_RENEWAL_DECLINE_FEEDBACK_20260819/verifier.sql
+A	__tests__/m073-renewal-decline-feedback.test.ts
+M	__tests__/renewal-commitments.test.ts
+M	__tests__/renewal-runtime-p0.test.ts
+M	app/renew/[token]/renewal-form.tsx
+M	lib/application-commitments.ts
+M	lib/renewal-console.ts
+M	lib/renewal-runtime.ts
+M	lib/renewal-types.ts
+f850fd9 docs: setup guides for the two outside services, for a non-technical reader
+A	docs/audits/VAM_OS_HUONG_DAN_BREVO_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_BREVO_2026-08-19.pdf
+A	docs/audits/VAM_OS_HUONG_DAN_DEEPSEEK_2026-08-19.html
+A	docs/audits/VAM_OS_HUONG_DAN_DEEPSEEK_2026-08-19.pdf
+2eae810 feat: renewal commitments and feedback
+A	__tests__/renewal-commitments.test.ts
+M	__tests__/renewal-runtime-p0.test.ts
+M	app/actions/renewals.ts
+M	app/admin/renewals/page.tsx
+M	app/renew/[token]/renewal-form.tsx
+M	lib/renewal-console.ts
+M	lib/renewal-runtime.ts
+471ce01 feat(comms): send through Brevo, and make the provider a setting
+M	.env.local.example
+M	__tests__/email-core.test.ts
+A	__tests__/email-delivery.test.ts
+M	docs/audits/VAM_OS_S12_TRUOC_VA_SAU_2026-08-18.html
+M	docs/audits/VAM_OS_S12_TRUOC_VA_SAU_2026-08-18.pdf
+M	lib/email-core.ts
+M	lib/email.ts
+M	package-lock.json
+M	package.json
+98cc88d feat(comms): send the four letters, in the order the season happens
+A	__tests__/mentee-dossier.test.ts
+A	__tests__/post-match-emails.test.ts
+A	app/actions/post-match-emails.ts
+A	app/mentee-dossier/[token]/page.tsx
+A	app/operations/communications/communications-client.tsx
+A	app/operations/communications/page.tsx
+M	lib/email-core.ts
+M	lib/email.ts
+A	lib/mentee-dossier.ts
+A	lib/post-match-email-action-types.ts
+A	lib/post-match-emails.ts
+14e553c feat(comms): draft, edit and approve the letters before anyone sends them
+A	__tests__/email-templates-core.test.ts
+A	app/actions/email-templates.ts
+A	app/operations/email-templates/page.tsx
+A	app/operations/email-templates/templates-client.tsx
+M	lib/ai-matching.ts
+A	lib/ai-provider.ts
+A	lib/email-template-action-types.ts
+A	lib/email-templates-core.ts
+A	lib/email-templates.ts
+6b2e26a feat(comms): the code of conduct and the tips, written in the app
+A	__tests__/program-documents-core.test.ts
+A	app/actions/program-documents.ts
+A	app/documents/[slug]/page.tsx
+M	app/layout.tsx
+A	app/operations/documents/documents-client.tsx
+A	app/operations/documents/page.tsx
+M	app/operations/page.tsx
+M	lib/permissions.ts
+A	lib/program-documents-action-types.ts
+A	lib/program-documents-core.ts
+A	lib/program-documents.ts
+M	lib/ui-labels.ts
+M	middleware.ts
+e6a4d5b feat(comms): schema for what the season sends after the matching
+A	__tests__/migration-069-post-match-communications.test.ts
+A	supabase_migrations/069_post_match_communications.sql
+373887e docs: before/after comparison of the Season 12 flow, for the merge decision
+A	docs/audits/VAM_OS_S12_TRUOC_VA_SAU_2026-08-18.html
+A	docs/audits/VAM_OS_S12_TRUOC_VA_SAU_2026-08-18.pdf
+34b2638 feat(matches): the approval screen for proposed pairs
+M	app/matches/page.tsx
+A	app/matches/recommendations/page.tsx
+A	app/matches/recommendations/recommendations-client.tsx
+M	app/matches/unmatched/page.tsx
+59b7c11 feat(matches): run the proposal against DeepSeek and store it as pending
+M	.env.local.example
+A	__tests__/ai-matching.test.ts
+A	app/actions/ai-matching.ts
+A	lib/ai-matching-action-types.ts
+A	lib/ai-matching.ts
+f631e1a feat(matches): anonymise the matching pool, and keep the assignment in code
+A	__tests__/ai-matching-core.test.ts
+A	lib/ai-matching-core.ts
+8d4c824 feat(matches): store assisted-matching proposals, never the matches themselves
+M	__tests__/migration-067-interview-scheduling.test.ts
+A	__tests__/migration-068-match-recommendations.test.ts
+A	supabase_migrations/068_match_recommendations.sql
+e257e68 feat(matches): show what is left after the mentors have chosen
+A	__tests__/matching-gaps.test.ts
+M	app/actions/mentor-confirmations.ts
+M	app/matches/page.tsx
+A	app/matches/unmatched/page.tsx
+A	app/matches/unmatched/unmatched-client.tsx
+A	lib/matching-gaps.ts
+9ae0299 feat(interviews): show the form score, and let the mentor take the mentee
+A	__tests__/mentor-selection.test.ts
+A	app/actions/mentor-selection.ts
+M	app/reviews/[id]/page.tsx
+A	app/reviews/[id]/screening-summary.tsx
+A	app/reviews/[id]/select-mentee-panel.tsx
+M	lib/enable-reviewer.ts
+A	lib/mentor-selection-action-types.ts
+A	lib/mentor-selection.ts
+c6b2c30 feat(interviews): book the interviews and tell both sides
+A	__tests__/interview-scheduling-core.test.ts
+A	__tests__/interview-scheduling.test.ts
+A	app/actions/interview-scheduling.ts
+M	app/interviews/interviews-client.tsx
+M	app/interviews/page.tsx
+A	app/interviews/schedule/page.tsx
+A	app/interviews/schedule/schedule-client.tsx
+M	lib/data.ts
+A	lib/interview-scheduling-action-types.ts
+A	lib/interview-scheduling-core.ts
+A	lib/interview-scheduling.ts
+M	lib/types.ts
+17a6d0e feat(interviews): record when and where an interview happens
+A	__tests__/migration-067-interview-scheduling.test.ts
+M	lib/email-core.ts
+M	lib/email.ts
+A	supabase_migrations/067_interview_scheduling.sql
+3de8004 fix(renewals): relax UUID constraint to accept UUIDv7 and v8 in payloads
+M	.gitignore
+M	__tests__/renewal-actions-authorization.test.ts
+M	app/actions/renewals.ts
+efa89e9 feat(reviews): add the interview-selection screen and its apply path
+A	__tests__/selection-runs.test.ts
+A	app/actions/selection.ts
+M	app/reviews/page.tsx
+A	app/reviews/selection/page.tsx
+A	app/reviews/selection/selection-client.tsx
+A	lib/selection-action-types.ts
+A	lib/selection.ts
+f94e0d8 feat(reviews): add migration 066 and the ranking that sizes the interview list
+A	__tests__/migration-066-selection-runs.test.ts
+A	__tests__/selection-core.test.ts
+A	lib/selection-core.ts
+A	supabase_migrations/066_selection_runs.sql
+a1f0ab7 feat(reviews): hand out applications in batches of ten and tell the reviewer
+A	__tests__/bulk-assignment-batches.test.ts
+M	app/actions/bulk-assignment.ts
+M	app/reviews/assign-bulk/assign-bulk-form.tsx
+M	lib/bulk-assignment-action-types.ts
+M	lib/bulk-assignment.ts
+669dadf feat(reviews): source the reviewer pool from season confirmations, invite by Resend
+M	app/reviews/reviewer-pool/page.tsx
+M	app/reviews/reviewer-pool/reviewer-pool-client.tsx
+M	lib/email-core.ts
+M	lib/email.ts
+M	lib/enable-reviewer.ts
+M	lib/mentor-confirmations.ts
+961e73f fix(mentors): default an unstated mentee capacity to one, not to pending
+M	__tests__/approval-direct.test.ts
+M	lib/application-approvals.ts
+9051055 test(apply): cover the public-intake wiring end to end
+A	__tests__/apply-action-hardening.test.ts
+c8e1a18 feat(apply): re-check the gate in the action, add anti-abuse, confirm by email
+A	__tests__/apply-abuse-core.test.ts
+M	app/actions/apply.ts
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentee/page.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	app/apply/mentor/page.tsx
+M	app/apply/thanks/page.tsx
+M	lib/applications-create.ts
+A	lib/apply-abuse-core.ts
+A	lib/apply-abuse.ts
+45188f8 feat(matching): pair mentors by their confirmed capacity, not a fixed three
+M	__tests__/match-direct.test.ts
+M	__tests__/matching-workflow.test.ts
+M	app/matches/matches-client.tsx
+M	app/matches/page.tsx
+M	lib/application-approvals.ts
+M	lib/matches.ts
+43598af feat(mentors): add the season-confirmation roster and fix CSV export for Excel
+M	app/mentors/page.tsx
+A	app/mentors/season-confirmations/page.tsx
+A	app/mentors/season-confirmations/season-confirmations-client.tsx
+M	app/operations/intelligence/export-buttons.tsx
+46319dd feat(confirm): add the public mentor confirmation page at /confirm/<token>
+M	__tests__/migration-059-final-prerequisites.test.ts
+M	__tests__/migration-059-secure-application-bootstrap.test.ts
+A	app/confirm/[token]/actions.ts
+A	app/confirm/[token]/confirm-form.tsx
+A	app/confirm/[token]/page.tsx
+M	app/layout.tsx
+M	middleware.ts
+804bb0d feat(mentors): record season participation and per-mentor mentee capacity
+A	__tests__/mentor-confirmations-core.test.ts
+A	__tests__/mentor-confirmations.test.ts
+M	__tests__/permissions.test.ts
+A	app/actions/mentor-confirmations.ts
+A	lib/mentor-confirmation-action-types.ts
+A	lib/mentor-confirmations-core.ts
+A	lib/mentor-confirmations.ts
+M	lib/permissions.ts
+8d02c67 feat(email): add Resend outbound email with a double send-gate, plus migration 064
+M	.env.local.example
+M	CLAUDE.md
+A	__tests__/email-core.test.ts
+A	__tests__/migration-064-mentor-season-confirmations.test.ts
+A	lib/email-core.ts
+A	lib/email.ts
+M	package-lock.json
+M	package.json
+A	supabase_migrations/064_mentor_season_confirmations.sql
+f84360c docs: add CLAUDE.md project guide for Claude Code
+A	CLAUDE.md
+803289f fix(renewal): close independent review blockers
+M	__tests__/approval-action.test.ts
+A	__tests__/renewal-actions-authorization.test.ts
+M	__tests__/renewal-approval-guard.test.ts
+M	__tests__/renewal-runtime-p0.test.ts
+M	app/actions/application-approvals.ts
+M	app/renew/[token]/page.tsx
+M	app/renew/[token]/renewal-form.tsx
+M	lib/application-approvals.ts
+M	lib/renewal-runtime.ts
+M	lib/renewal-types.ts
+74cec85 Implement S12 mentor renewal runtime and UI
+M	__tests__/m070-renewal-invite-foundation.test.ts
+M	__tests__/nav-model.test.ts
+A	__tests__/renewal-approval-guard.test.ts
+A	__tests__/renewal-runtime-p0.test.ts
+A	app/actions/renewals.ts
+A	app/admin/renewals/page.tsx
+A	app/admin/renewals/renewal-controls.tsx
+M	app/layout.tsx
+A	app/renew/[token]/page.tsx
+A	app/renew/[token]/renewal-form.tsx
+A	docs/UEHM_S12_RENEWAL_P0_BROWSER_UAT.md
+M	lib/application-approvals.ts
+M	lib/nav-model.ts
+M	lib/paged-read.ts
+A	lib/renewal-console.ts
+A	lib/renewal-runtime.ts
+A	lib/renewal-types.ts
+M	middleware.ts
+99a5c37 fix(renewal): close M071 operational review gaps
+M	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/README.md
+M	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/SHA256SUMS.txt
+M	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/apply.sql
+M	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/preflight.sql
+M	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/verifier.sql
+M	__tests__/m071-renewal-trusted-runtime.test.ts
+M	supabase_migrations/071_renewal_trusted_runtime.sql
+fdc17da feat(renewal): add trusted S12 renewal runtime foundation
+A	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/README.md
+A	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/SHA256SUMS.txt
+A	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/apply.sql
+A	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/preflight.sql
+A	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/rollback.sql
+A	VAM_OS_M071_S12_RENEWAL_TRUSTED_RUNTIME_20260817/verifier.sql
+A	__tests__/m071-renewal-trusted-runtime.test.ts
+A	supabase_migrations/071_renewal_trusted_runtime.sql
+b9171a1 fix(renewal): cast M070 verifier catalog char values
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/README.md
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/SHA256SUMS.txt
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/preflight.sql
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/verifier.sql
+M	__tests__/m070-renewal-invite-foundation.test.ts
+f45b395 fix(renewal): cast the M070 preflight BLOCK 2 array concatenation
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/README.md
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/SHA256SUMS.txt
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/preflight.sql
+M	__tests__/m070-renewal-invite-foundation.test.ts
+38cf6a6 fix(renewal): make M070 owner SQL editor compatible
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/README.md
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/SHA256SUMS.txt
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/preflight.sql
+M	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/verifier.sql
+M	__tests__/m070-renewal-invite-foundation.test.ts
+d494119 feat(renewal): add secure S12 mentor invite foundation
+A	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/README.md
+A	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/SHA256SUMS.txt
+A	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/apply.sql
+A	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/preflight.sql
+A	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/rollback.sql
+A	VAM_OS_M070_S12_RENEWAL_INVITE_FOUNDATION_20260817/verifier.sql
+A	__tests__/m070-renewal-invite-foundation.test.ts
+A	__tests__/renewal-invite-token-gate.test.ts
+A	__tests__/renewal-profile-safety.test.ts
+A	lib/renewal-invite-token.ts
+A	lib/renewal-profile-safety.ts
+A	supabase_migrations/070_person_season_invites.sql
+5c7852e fix(applications): refresh returning mentor profile on approval
+M	__tests__/approval-direct.test.ts
+A	__tests__/returning-mentor-detection.test.ts
+M	app/applications/[id]/page.tsx
+M	lib/application-approvals.ts
+A	lib/returning-mentor.ts
+M	lib/types.ts
+18f0497 docs: add CLAUDE.md project guide for Claude Code
+A	CLAUDE.md
+9ea52ae feat(scope): prepare wp1a2 production convergence
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/README.md
+A	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/apply.sql
+A	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/rollback.sql
+A	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/verifier.sql
+M	__tests__/wp1a-preflight-read-only.test.ts
+A	__tests__/wp1a2-apply-package.test.ts
+M	__tests__/wp1a2-staff-scope-manifest.test.ts
+6613bdf fix(scope): repurpose synthetic account as demo viewer
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/README.md
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/preflight_v2.sql
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/staff_scope_manifest_v2.json
+M	__tests__/wp1a2-staff-scope-manifest.test.ts
+b8ce88a fix(scope): correct wp1a2 owner inventory manifest
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/README.md
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/preflight_v2.sql
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/staff_scope_manifest_v2.json
+M	__tests__/wp1a2-staff-scope-manifest.test.ts
+b5c3bb2 chore(scope): reconcile s12 staff scope manifest
+M	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/README.md
+A	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/preflight_v2.sql
+A	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/staff_scope_manifest_v2.json
+M	__tests__/wp1a-preflight-read-only.test.ts
+A	__tests__/wp1a2-staff-scope-manifest.test.ts
+ee0a448 fix(scope): fail closed and prepare canonical grant preflight
+A	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/README.md
+A	VAM_OS_WP1A_CANONICAL_SCOPE_20260816/preflight.sql
+A	__tests__/wp1a-canonical-scope.test.ts
+A	__tests__/wp1a-preflight-read-only.test.ts
+M	lib/admin-users.ts
+M	lib/program-context-core.ts
+M	lib/program-context-options.ts
+M	lib/program-scope.ts
+f8bdfaf fix(rbac): preserve scoped reads and close residual PII leaks
+A	__tests__/wp1b-dashboard-scope-error.test.tsx
+M	__tests__/wp1b-pii-isolation.test.ts
+M	app/applications/[id]/page.tsx
+M	app/applications/page.tsx
+M	app/interviews/interviews-client.tsx
+M	app/interviews/page.tsx
+M	app/matches/[id]/page.tsx
+M	app/matches/page.tsx
+M	app/mentees/page.tsx
+M	app/mentors/page.tsx
+M	app/page.tsx
+M	app/people/[id]/page.tsx
+M	app/people/page.tsx
+M	app/reviews/[id]/page.tsx
+M	app/reviews/page.tsx
+M	app/team/page.tsx
+M	lib/data.ts
+M	lib/matches.ts
+M	lib/program-scope.ts
+M	lib/types.ts
+43c4b27 fix(rbac): isolate reviewer and viewer reads
+A	__tests__/wp1b-pii-isolation.test.ts
+M	app/applications/[id]/page.tsx
+M	app/applications/page.tsx
+M	app/mentees/page.tsx
+M	app/mentors/page.tsx
+M	app/page.tsx
+M	app/people/[id]/page.tsx
+M	app/people/page.tsx
+M	app/reviews/[id]/page.tsx
+M	app/reviews/page.tsx
+M	app/team/page.tsx
+M	lib/data.ts
+M	lib/program-scope.ts
+A	lib/read-access.ts
+0c8360d fix(lifecycle): enforce active S12 program
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+A	__tests__/membership-s12-program-activity-mapping.test.tsx
+M	__tests__/season-lineage.test.ts
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+M	lib/season-lineage.ts
+5f912ee fix(lifecycle): resolve S12 lineage by logical identity
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+A	__tests__/season-lineage.test.ts
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	lib/season-lineage.ts
+7fdbd82 fix(lifecycle): encode legacy S11 continuation lineage
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+A	lib/season-lineage.ts
+bb4f3fd fix(lifecycle): type season ownership and harden regression proof
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+M	lib/types.ts
+c527641 fix(lifecycle): resolve continuation by season identity
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+M	lib/data.ts
+aad68e8 fix(lifecycle): resolve S12 continuation by stable program identity
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+c7429b7 debug(lifecycle): expose preview continuation truth table
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+6c56393 test(lifecycle): harden continuation normalization coverage
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+530f34d fix(lifecycle): normalize continuation role and status
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+dde7216 fix(membership): restrict S12 continuation to participant roles
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+2565988 fix(membership): gate S12 continuation by S11 lifecycle status
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+7fb7150 fix(membership): scope S12 transition controls correctly
+M	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+7a469ac feat(membership): clarify S12 lifecycle transition UX
+A	__tests__/membership-s11-s12-transition-ux.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+4857453 fix(auth): land all users on overview after login
+M	__tests__/auth-safety.test.ts
+M	__tests__/login-server-action.test.ts
+M	lib/auth-error-messages.ts
+44e37ad fix(m069): scope unapplied guard to migration-owned objects
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/README.md
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/SHA256SUMS.txt
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/apply.sql
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/preflight.sql
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/rollback.sql
+A	__tests__/m069-r4-migration-owned-guard.test.ts
+A	__tests__/m069-r4-unapplied-guard-live.test.ts
+M	__tests__/support/m069-canonical-definitions.ts
+A	__tests__/support/pg-client.d.ts
+2bceff9 fix(m069): seal verifier definitions and audit schema contract
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/README.md
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/SHA256SUMS.txt
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/apply.sql
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/preflight.sql
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/verifier.sql
+M	__tests__/migration-069-application-intake-control.test.ts
+A	__tests__/support/m069-canonical-definitions.ts
+2dff389 fix(m069): harden production baseline and post-apply proofs
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/README.md
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/SHA256SUMS.txt
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/apply.sql
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/preflight.sql
+M	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/verifier.sql
+M	__tests__/migration-069-application-intake-control.test.ts
+A	__tests__/support/m069-audit-vocabulary.ts
+M	supabase_migrations/069_application_form_controls.sql
+a5c82dd feat(apply): put Season 12 intake state in the database, behind one gate
+A	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/README.md
+A	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/SHA256SUMS.txt
+A	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/apply.sql
+A	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/preflight.sql
+A	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/rollback.sql
+A	VAM_OS_M069_S12_APPLICATION_INTAKE_CONTROL_20260812/verifier.sql
+M	__tests__/application-commitments-structural.test.ts
+M	__tests__/applications-create-commitment-cleanup.test.ts
+M	__tests__/apply-action-server-gate.test.ts
+M	__tests__/apply-gate.test.ts
+A	__tests__/m069-application-form-controls.test.ts
+A	__tests__/m069-toggle-authorization.test.ts
+M	__tests__/migration-059-final-prerequisites.test.ts
+M	__tests__/migration-059-secure-application-bootstrap.test.ts
+A	__tests__/migration-069-application-intake-control.test.ts
+M	__tests__/nav-model.test.ts
+M	__tests__/season-config.test.ts
+A	app/actions/application-form-controls.ts
+M	app/actions/apply.ts
+A	app/admin/seasons-forms/audit-table.tsx
+A	app/admin/seasons-forms/form-control-card.tsx
+A	app/admin/seasons-forms/page.tsx
+M	app/apply/_components/gate-views.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentee/page.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	app/apply/mentor/page.tsx
+A	lib/application-form-audit.ts
+A	lib/application-form-control-types.ts
+A	lib/application-form-controls.ts
+M	lib/applications-create.ts
+M	lib/apply-gate.ts
+M	lib/apply-types.ts
+M	lib/nav-model.ts
+M	lib/permissions.ts
+M	lib/season-config.ts
+M	middleware.ts
+A	supabase_migrations/069_application_form_controls.sql
+74c8ce3 fix(security): drop unsupported overrides and prove the sharp path unreachable
+M	__tests__/apply-gate.test.ts
+A	__tests__/harness-state-isolation.test.ts
+A	__tests__/image-optimizer-attack-surface.test.ts
+M	__tests__/middleware-trusted-admin-lookup.test.ts
+A	__tests__/support/process-state.ts
+M	package-lock.json
+M	package.json
+M	vitest.config.ts
+b8269f7 chore(deps): upgrade Next.js 14.2.35 -> 15.5.23 to close the last HIGH advisory
+M	__tests__/authorization-observability.test.tsx
+M	__tests__/context-route-runtime.test.ts
+M	__tests__/migration-059-final-prerequisites.test.ts
+M	__tests__/operations-page-role-parity.test.tsx
+M	__tests__/operations-scoped-aggregate-parity.test.ts
+M	__tests__/paged-read-contract.test.ts
+M	__tests__/scoped-intake-batch-error-semantics.test.ts
+M	__tests__/scoped-person-visibility-error-semantics.test.ts
+M	__tests__/scoped-person-visibility.test.ts
+M	app/admin/page.tsx
+M	app/admin/users/page.tsx
+M	app/applications/[id]/page.tsx
+M	app/apply/mentee/page.tsx
+M	app/apply/mentor/page.tsx
+M	app/apply/thanks/page.tsx
+M	app/checkin/[token]/page.tsx
+M	app/data-issues/page.tsx
+M	app/events/[id]/attendance/page.tsx
+M	app/events/[id]/edit/page.tsx
+M	app/events/[id]/page.tsx
+M	app/events/[id]/registrations/[regId]/page.tsx
+M	app/events/page.tsx
+M	app/interviews/page.tsx
+M	app/layout.tsx
+M	app/login/page.tsx
+M	app/matches/[id]/page.tsx
+M	app/matches/page.tsx
+M	app/mentees/[id]/edit/page.tsx
+M	app/mentors/[id]/edit/page.tsx
+M	app/operations/monthly/page.tsx
+M	app/operations/page.tsx
+M	app/operations/tasks/page.tsx
+M	app/page.tsx
+M	app/people/[id]/page.tsx
+M	app/portfolio/page.tsx
+M	app/programs/[programCode]/page.tsx
+M	app/recaps/[id]/edit/page.tsx
+M	app/register/[token]/page.tsx
+M	app/reviews/[id]/page.tsx
+M	app/reviews/assign-bulk/page.tsx
+M	app/reviews/progress/page.tsx
+M	app/reviews/reviewer-pool/page.tsx
+M	app/team/page.tsx
+M	lib/admin-auth.ts
+M	lib/data.ts
+M	lib/supabase-server.ts
+M	next-env.d.ts
+M	package-lock.json
+M	package.json
+43f2c63 fix(events): page every unbounded event read and pin the transitive CVEs
+M	__tests__/event-lifecycle.test.ts
+A	__tests__/events-pagination-contract.test.ts
+A	docs/OPERATIONS_ROLE_DATA_FIX_R3_NOTE.md
+M	lib/events.ts
+M	lib/paged-read.ts
+M	package-lock.json
+M	package.json
+60b3456 fix(operations): give every multi-row read a provable pagination contract
+A	__tests__/operations-page-role-parity.test.tsx
+M	__tests__/operations-scoped-aggregate-parity.test.ts
+A	__tests__/paged-read-contract.test.ts
+M	__tests__/portfolio.test.ts
+M	__tests__/scoped-intake-batch-error-semantics.test.ts
+M	__tests__/scoped-person-visibility-error-semantics.test.ts
+M	__tests__/scoped-person-visibility.test.ts
+A	__tests__/support/fake-postgrest.ts
+M	app/applications/[id]/page.tsx
+M	app/operations/page.tsx
+M	docs/OPERATIONS_DASHBOARD_QA.md
+M	docs/audits/sql/VAM_OS_PROD_OPERATIONS_ROLE_DATA_DIVERGENCE_READONLY_PROBE.sql
+M	lib/data.ts
+M	lib/events.ts
+M	lib/matches.ts
+M	lib/operations-kpis.ts
+A	lib/paged-read.ts
+M	lib/portfolio.ts
+M	lib/program-scope.ts
+6ac7586 fix(operations): page the scoped read so every role sees one aggregate truth
+M	__tests__/authorization-observability.test.tsx
+M	__tests__/membership-lifecycle-actions.test.ts
+A	__tests__/operations-scoped-aggregate-parity.test.ts
+M	__tests__/scoped-intake-batch-error-semantics.test.ts
+M	__tests__/scoped-person-visibility-error-semantics.test.ts
+M	__tests__/scoped-person-visibility.test.ts
+M	app/operations/page.tsx
+A	docs/audits/sql/VAM_OS_PROD_OPERATIONS_ROLE_DATA_DIVERGENCE_READONLY_PROBE.sql
+M	lib/data.ts
+M	lib/program-scope.ts
+8401d95 fix(auth): resolve active admin via trusted server lookup after S12/T2
+A	__tests__/middleware-trusted-admin-lookup.test.ts
+A	lib/middleware-admin-lookup.ts
+M	middleware.ts
+4bf1fea fix(prod-s12): finalize policy remediation R4 locks
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/README.md
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/SHA256SUMS.txt
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/VALIDATION.md
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/apply.sql
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/validation/run_r4_validation.ps1
+ea2a05f fix(prod-s12): pin policy remediation to owner baseline R3
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/README.md
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/SHA256SUMS.txt
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/VALIDATION.md
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/apply.sql
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/preflight.sql
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/validation/VAM_OS_PROD_S12_POLICY_REMEDIATION_LIVE_BASELINE_20260811.json
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/validation/generate_owner_fixture.ps1
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/validation/prod_live_baseline_reproduction.sql
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/verifier.sql
+8c0b0cd fix(prod-s12): correct policy removal remediation R2
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/README.md
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/SHA256SUMS.txt
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/VALIDATION.md
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/apply.sql
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/preflight.sql
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/validation/prod_live_baseline_reproduction.sql
+M	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/verifier.sql
+5a36aef feat(prod-s12): drop the four inert historical RLS policies, pre-package
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/README.md
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/SHA256SUMS.txt
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/VALIDATION.md
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/apply.sql
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/preflight.sql
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/validation/prod_live_baseline_reproduction.sql
+A	VAM_OS_PROD_S12_POLICY_REMOVAL_REMEDIATION_20260811/verifier.sql
+e6a373e fix(prod-s12): assert baselines by identity, not count; make apply self-contained
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/README.md
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/SHA256SUMS.txt
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/VALIDATION.md
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/apply.sql
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/preflight.sql
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/verifier.sql
+2058264 fix(prod-s12): make the audit column seal an automatic preflight refusal
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/README.md
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/SHA256SUMS.txt
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/VALIDATION.md
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/apply.sql
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/preflight.sql
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/validation/prod_live_baseline_reproduction.sql
+M	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/verifier.sql
+91a24df fix(prod-s12): restore admin_audit_log.action_type NOT NULL contract
+A	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/README.md
+A	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/SHA256SUMS.txt
+A	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/VALIDATION.md
+A	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/apply.sql
+A	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/preflight.sql
+A	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/validation/prod_live_baseline_reproduction.sql
+A	VAM_OS_PROD_S12_AUDIT_NOT_NULL_REMEDIATION_20260811/verifier.sql
+a0da3dc fix(applications): enforce role-specific server submission gates
+M	__tests__/applications-create-commitment-cleanup.test.ts
+A	__tests__/apply-action-server-gate.test.ts
+M	lib/applications-create.ts
+19d8cb4 @ fix: resolve final Season 12 UAT blockers
+A	__tests__/uat-s12-error-ux-and-phone.test.tsx
+A	__tests__/uat-s12-server-validation.test.ts
+M	app/actions/apply.ts
+M	app/apply/_components/form-primitives.tsx
+M	lib/application-form-validation.ts
+7fe159f Fix UAT issues before production
+M	__tests__/auth-safety.test.ts
+M	__tests__/login-server-action.test.ts
+M	app/actions/apply.ts
+M	app/apply/_components/form-primitives.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	lib/auth-error-messages.ts
+5a255ee feat: finalize Season 12 mentor and mentee application forms
+M	__tests__/application-commitments.test.ts
+A	__tests__/application-conduct-commitments.test.ts
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	lib/application-commitments.ts
+aa3156b fix: address final Season 12 form UAT feedback
+M	__tests__/application-commitments-structural.test.ts
+M	__tests__/application-commitments.test.ts
+A	__tests__/application-form-ux.test.tsx
+A	__tests__/application-form-validation.test.ts
+M	app/actions/apply.ts
+M	app/applications/[id]/page.tsx
+M	app/apply/_components/form-primitives.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	lib/application-commitments.ts
+A	lib/application-form-validation.ts
+M	lib/apply-types.ts
+fa7ddad Remediate Season 12 form review findings
+M	__tests__/application-commitments-structural.test.ts
+M	__tests__/application-commitments.test.ts
+A	__tests__/applications-create-commitment-cleanup.test.ts
+M	app/apply/_components/form-primitives.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+M	lib/application-commitments.ts
+M	lib/applications-create.ts
+f9ff4e2 Add Season 12 application commitments
+A	__tests__/application-commitments-structural.test.ts
+A	__tests__/application-commitments.test.ts
+M	app/actions/apply.ts
+M	app/applications/[id]/page.tsx
+M	app/apply/_components/form-primitives.tsx
+M	app/apply/mentee/apply-mentee-form.tsx
+M	app/apply/mentor/apply-mentor-form.tsx
+A	lib/application-commitments.ts
+M	lib/applications-create.ts
+0657be3 test: make production RC clean-checkout reproducible
+A	__tests__/fixtures/migration-062-staging-policy-catalog.json
+M	__tests__/migration-062-verifier-catalog-rendering-fix.test.ts
+40d436b release: freeze UEH Season 12 production candidate
+A	.gitattributes
+M	.gitignore
+A	VAM_OS_PROD_S12_RELEASE_20260809/CLEANUP_14_TEST_APPLICATIONS_PLAN.md
+A	VAM_OS_PROD_S12_RELEASE_20260809/PROBE_C_TRUSTED_CONTEXT_RUNBOOK.md
+A	VAM_OS_PROD_S12_RELEASE_20260809/RC_FREEZE_PLAN.md
+A	VAM_OS_PROD_S12_RELEASE_20260809/README.md
+A	VAM_OS_PROD_S12_RELEASE_20260809/RECOVERY.md
+A	VAM_OS_PROD_S12_RELEASE_20260809/SHA256SUMS.txt
+A	VAM_OS_PROD_S12_RELEASE_20260809/VALIDATION.md
+A	VAM_OS_PROD_S12_RELEASE_20260809/apply/T1_audit_action_type_compat.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/apply/T2_security_rls_grant_minimum.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/apply/T3_membership_lifecycle_objects.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/apply/T4_enable_lifecycle_execution.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/manifest.json
+A	VAM_OS_PROD_S12_RELEASE_20260809/preflight.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/rollback/R1_drop_audit_vocabulary.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/rollback/R2_restore_security_baseline.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/rollback/R3_drop_lifecycle_objects.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/rollback/R4_revoke_lifecycle_execution.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/tests.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/validation/prod_baseline_reproduction.sql
+A	VAM_OS_PROD_S12_RELEASE_20260809/verifier.sql
+A	__tests__/membership-add-role-no-default-selection.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+24556ad feat(apply): add explicit tokenless UAT gate
+A	__tests__/apply-gate.test.ts
+M	lib/apply-gate.ts
+dbdc9de feat(ux): add pending feedback for admin actions
+M	__tests__/authorization-observability.test.tsx
+M	__tests__/final-release-hardening.test.ts
+M	__tests__/membership-intake-batch-identity.test.tsx
+M	app/admin/users/import/import-client.tsx
+A	app/e2e-harness/page.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+M	components/app-shell.tsx
+A	components/submit-button.tsx
+A	e2e/admin-actions-ux.spec.ts
+M	middleware.ts
+M	playwright.config.ts
+14e9307 fix(server-actions): restore runtime export contracts
+M	__tests__/membership-lifecycle-actions.test.ts
+A	__tests__/use-server-export-contract.test.ts
+A	__tests__/use-server-scanner.ts
+M	app/actions/membership-lifecycle.ts
+M	app/admin/users/import/actions.ts
+M	app/admin/users/import/import-client.tsx
+A	app/admin/users/import/import-state.ts
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	lib/membership-lifecycle.ts
+9eedbe6 test(admin): expose scoped authorization markers for UAT
+A	__tests__/authorization-observability.test.tsx
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+M	lib/program-scope.ts
+4ad4c10 fix(security): Fail closed when Supabase client initialization fails
+M	__tests__/scoped-intake-batch-error-semantics.test.ts
+M	lib/data.ts
+d4195be Fail closed when the intake-batch scope query fails
+A	__tests__/scoped-intake-batch-error-semantics.test.ts
+M	lib/data.ts
+9662729 Distinguish scoped-visibility query failure from person not found
+A	__tests__/scoped-person-visibility-error-semantics.test.ts
+M	__tests__/scoped-person-visibility.test.ts
+M	app/people/[id]/page.tsx
+M	lib/data.ts
+M	lib/people-create.ts
+09cad6c Remediate CRM scoped-person visibility defect by including person_season_memberships
+A	__tests__/scoped-person-visibility.test.ts
+M	lib/data.ts
+b8e8baa fix(uat): expose membership intake batch identity
+A	__tests__/membership-intake-batch-identity.test.tsx
+A	__tests__/support/server-only.ts
+M	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+M	lib/lifecycle-crm.ts
+M	vitest.config.ts
+2aa2b23 fix(uat): align staging preflight with live schema semantics
+M	__tests__/uat-preflight-catalog-casts.test.ts
+A	__tests__/uat-preflight-remediation.test.ts
+M	scripts/uat-fixture-staging-preflight.sql
+1043be7 fix(uat): align staging preflight with live schema semantics
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY_675bb380123860ac11a11b603c8ecdcac4e76a0f.sql
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f/generate-verifier.ps1
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f/generation-record.md
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f/static-review.md
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f/verifier-manifest.json
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2.sql
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/generate-verifier-r2.ps1
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/generation-record.md
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/independent-static-review.md
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/live-execution-result.json
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/post-failure-readonly-catalog-evidence.json
+A	.tmp_675bb380123860ac11a11b603c8ecdcac4e76a0f_r2/verifier-manifest.json
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY_c64bf4753455a184fb8af9281120e3fdfe804067.sql
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067/generate-verifier-r4.mjs
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067/independent-static-review.md
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067/verifier-manifest.json
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_m063_r7/VAM_OS_MEMBERSHIP_LIFECYCLE_APPLY_c64bf4753455a184fb8af9281120e3fdfe804067_r7.sql
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_m063_r7/VAM_OS_MEMBERSHIP_LIFECYCLE_POST_APPLY_VERIFY_c64bf4753455a184fb8af9281120e3fdfe804067_r7.sql
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_m063_r7/generate-m063-r7.mjs
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_m063_r7/independent-static-review.md
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_m063_r7/m063-manifest.json
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_m063_r7/static-review-m063-r7.mjs
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_r5/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY_c64bf4753455a184fb8af9281120e3fdfe804067_r5.sql
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_r5/generate-verifier-r5.mjs
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_r5/independent-static-review.md
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_r5/static-review-r5.mjs
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_r5/verifier-manifest.json
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_readiness_r6/VAM_OS_MEMBERSHIP_LIFECYCLE_READINESS_c64bf4753455a184fb8af9281120e3fdfe804067_r6.sql
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_readiness_r6/generate-readiness-r6.mjs
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_readiness_r6/independent-static-review.md
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_readiness_r6/readiness-manifest.json
+A	.tmp_c64bf4753455a184fb8af9281120e3fdfe804067_readiness_r6/static-review-readiness-r6.mjs
+A	.tmp_db81a8dce8a9021d21a128bb3d5997d6f5971d0e_final_r8/VAM_OS_FINAL_062_063_POST_APPLY_PREFLIGHT_db81a8dce8a9021d21a128bb3d5997d6f5971d0e_r8.sql
+A	.tmp_db81a8dce8a9021d21a128bb3d5997d6f5971d0e_final_r8/final-manifest.json
+A	.tmp_db81a8dce8a9021d21a128bb3d5997d6f5971d0e_final_r8/generate-final-r8.mjs
+A	.tmp_db81a8dce8a9021d21a128bb3d5997d6f5971d0e_final_r8/independent-static-review.md
+A	.tmp_db81a8dce8a9021d21a128bb3d5997d6f5971d0e_final_r8/static-review-final-r8.mjs
+A	.tmp_r3/062_review_only_account_admin_rls_foundation_r3.sql
+A	.tmp_r3/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY_r3.sql
+A	.tmp_r3/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT_r3.sql
+A	.tmp_r3/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK_r3.sql
+M	__tests__/uat-preflight-catalog-casts.test.ts
+A	__tests__/uat-preflight-remediation.test.ts
+M	scripts/uat-fixture-staging-preflight.sql
+944d1b9 fix(uat): cast catalog fields in staging preflight
+M	__tests__/scripts-uat-fixtures.test.ts
+A	__tests__/uat-preflight-catalog-casts.test.ts
+M	scripts/uat-fixture-staging-preflight.sql
+0063522 fix(uat): separate lifecycle runs and preserve auth rollback integrity
+M	__tests__/scripts-uat-fixtures.test.ts
+M	scripts/cleanup-uat-fixtures.mjs
+M	scripts/create-uat-fixtures.mjs
+M	scripts/uat-fixture-common.mjs
+A	scripts/uat-fixture-staging-preflight.sql
+e75c3f2 fix(uat): make fixture cleanup and recovery re-provisionable
+M	__tests__/scripts-uat-fixtures.test.ts
+M	scripts/cleanup-uat-fixtures.mjs
+M	scripts/create-uat-fixtures.mjs
+A	scripts/uat-fixture-common.mjs
+0b1000d fix(uat): enforce exact identity marker verification for fixtures
+M	__tests__/scripts-uat-fixtures.test.ts
+M	scripts/cleanup-uat-fixtures.mjs
+M	scripts/create-uat-fixtures.mjs
+c7dd1d3 fix(uat): make synthetic fixture provisioning fail closed
+A	__tests__/scripts-uat-fixtures.test.ts
+A	scripts/cleanup-uat-fixtures.mjs
+A	scripts/create-uat-fixtures.mjs
+fa2cab3 fix(auth): restore native login pending state and harden regression tests
+M	.gitignore
+D	__tests__/login-form.test.tsx
+M	__tests__/login-server-action.test.ts
+M	app/login/login-form.tsx
+A	e2e/login.spec.ts
+M	lib/admin-auth.ts
+M	package-lock.json
+M	package.json
+A	playwright.config.ts
+98fd63a chore(test): remove login test trailing whitespace
+M	__tests__/login-server-action.test.ts
+6093f63 fix(auth): fail closed on legacy admin identity linking
+M	__tests__/login-form.test.tsx
+A	__tests__/login-server-action.test.ts
+M	app/login/actions.ts
+M	app/login/login-form.tsx
+M	lib/admin-auth.ts
+fa7f958 fix(ux): correct native form submission and pending state in login
+A	__tests__/login-form.test.tsx
+M	app/login/login-form.tsx
+M	package-lock.json
+M	package.json
+M	vitest.config.ts
+b63feb5 fix(db): repair migration 059 verifier syntax
+M	__tests__/migration-059-owner-execution-packets.test.ts
+M	__tests__/migration-059-secure-application-bootstrap.test.ts
+M	docs/audits/sql/VAM_OS_MIGRATION_059_OWNER_POST_APPLY_VERIFY_EXEC.sql
+M	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POST_APPLY_VERIFY.sql
+8836518 fix(db): finalize secure application bootstrap prerequisites
+A	__tests__/migration-059-final-prerequisites.test.ts
+M	__tests__/migration-059-owner-execution-packets.test.ts
+M	__tests__/migration-059-prerequisite-diagnostic.test.ts
+M	__tests__/migration-059-review-gap-remediation.test.ts
+M	__tests__/migration-059-secure-application-bootstrap.test.ts
+M	docs/audits/sql/VAM_OS_MIGRATION_059_OWNER_POST_APPLY_VERIFY_EXEC.sql
+M	docs/audits/sql/VAM_OS_MIGRATION_059_OWNER_PREFLIGHT_EXEC.sql
+M	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_PREFLIGHT.sql
+M	lib/data.ts
+M	supabase_migrations/059_staging_application_workflow_bootstrap.sql
+0d23937 chore(db): add migration 059 prerequisite diagnostic
+A	__tests__/migration-059-prerequisite-diagnostic.test.ts
+A	docs/audits/sql/VAM_OS_MIGRATION_059_PREREQUISITE_DIAGNOSTIC_EXEC.sql
+6244fba fix(db): add immutable migration 059 execution packets
+A	__tests__/migration-059-owner-execution-packets.test.ts
+A	docs/audits/sql/VAM_OS_MIGRATION_059_OWNER_POST_APPLY_VERIFY_EXEC.sql
+A	docs/audits/sql/VAM_OS_MIGRATION_059_OWNER_PREFLIGHT_EXEC.sql
+M	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POST_APPLY_VERIFY.sql
+91e8e86 fix(db): close migration 059 review gaps
+A	__tests__/migration-059-review-gap-remediation.test.ts
+M	__tests__/migration-059-secure-application-bootstrap.test.ts
+M	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POSTGREST_SECURITY_PROBE.sql
+M	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_PREFLIGHT.sql
+A	scripts/application-bootstrap-postgrest-probe.d.mts
+M	scripts/application-bootstrap-postgrest-probe.mjs
+6470980 fix(db): secure staging application bootstrap
+A	__tests__/migration-059-secure-application-bootstrap.test.ts
+A	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POSTGREST_SECURITY_PROBE.sql
+A	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_POST_APPLY_VERIFY.sql
+A	docs/audits/sql/design_only/VAM_OS_MIGRATION_059_PREFLIGHT.sql
+A	scripts/application-bootstrap-postgrest-probe.mjs
+M	supabase_migrations/059_staging_application_workflow_bootstrap.sql
+b61c904 fix(app): align season catalog query with staging schema
+A	__tests__/context-route-runtime.test.ts
+M	__tests__/portfolio-reconciliation.test.ts
+M	__tests__/portfolio.test.ts
+M	__tests__/program-context-isolation.test.ts
+A	__tests__/program-context-staging-runtime.test.ts
+M	app/admin/users/page.tsx
+M	app/portfolio/page.tsx
+M	app/programs/[programCode]/page.tsx
+M	lib/portfolio-core.ts
+M	lib/portfolio.ts
+M	lib/program-context-core.ts
+M	lib/program-context.ts
+91a4efe fix(admin): preserve explicit scope during auth sync
+A	__tests__/admin-auth-sync-scope.test.ts
+M	lib/admin-users.ts
+e6263d1 fix(admin): require explicit validated scope on update
+A	__tests__/admin-user-scope-validation.test.ts
+M	lib/admin-users.ts
+03571de fix(admin): make staff provisioning outcomes explicit
+A	__tests__/staff-provisioning-ux.test.ts
+M	app/admin/users/actions.ts
+M	app/admin/users/page.tsx
+M	app/admin/users/user-management-forms.tsx
+M	lib/admin-users.ts
+dde953a fix(app): restore portfolio context and simplify login
+A	__tests__/final-release-hardening.test.ts
+A	app/admin/users/layout.tsx
+M	app/admin/users/page.tsx
+M	app/admin/users/user-management-forms.tsx
+M	app/login/actions.ts
+M	app/portfolio/page.tsx
+D	app/unlock/actions.ts
+D	app/unlock/page.tsx
+M	components/app-shell.tsx
+M	components/program-switcher.tsx
+M	lib/admin-auth.ts
+D	lib/password-gate.ts
+M	lib/program-context.ts
+M	middleware.ts
+a5a915d fix(admin): harden staff account provisioning journal
+A	__tests__/manual-staff-provisioning-integration.test.ts
+A	__tests__/manual-staff-provisioning.test.ts
+M	lib/admin-users.ts
+A	lib/manual-staff-provisioning.ts
+1616ad6 feat(admin): expose membership lifecycle controls
+A	__tests__/membership-lifecycle-actions.test.ts
+A	__tests__/membership-lifecycle-ui-model.test.ts
+A	app/actions/membership-lifecycle.ts
+A	app/people/[id]/membership-lifecycle-controls.tsx
+M	app/people/[id]/page.tsx
+A	lib/membership-lifecycle.ts
+db81a8d test(db): add final 062 063 post-apply preflight
+A	__tests__/final-062-063-post-apply-preflight.test.ts
+A	docs/audits/sql/design_only/VAM_OS_FINAL_062_063_POST_APPLY_PREFLIGHT.sql
+c64bf47 fix(db): reconcile migration 062 verifier assertions
+M	__tests__/account-remediation.test.ts
+M	__tests__/migration-062-post-apply-verifier-identifier-types.test.ts
+A	__tests__/migration-062-verifier-catalog-rendering-fix.test.ts
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+675bb38 fix(db): cast verifier metadata identifiers to text
+A	__tests__/migration-062-post-apply-verifier-identifier-types.test.ts
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+ac93c75 test(db): update rollback guard regression baselines
+M	__tests__/migration-062-pg-index-null-distinct-fix.test.ts
+M	__tests__/migration-062-policy-role-array-type-fix.test.ts
+eea4423 fix(db): normalize legacy constraint definition guard
+M	__tests__/account-remediation.test.ts
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql
+05ad4a5 fix(db): correct pg_index null-distinct catalog column
+M	__tests__/account-remediation.test.ts
+A	__tests__/migration-062-pg-index-null-distinct-fix.test.ts
+M	__tests__/migration-062-policy-role-array-type-fix.test.ts
+M	__tests__/migration-062-staging-policy-remediation.test.ts
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql
+M	docs/audits/sql/design_only/VAM_OS_MEMBERSHIP_LIFECYCLE_PREFLIGHT.sql
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql
+M	supabase_migrations/063_review_only_membership_lifecycle_operations.sql
+1569ba8 fix(db): normalize migration policy role arrays
+A	__tests__/migration-062-policy-role-array-type-fix.test.ts
+M	__tests__/migration-062-staging-policy-remediation.test.ts
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql
+5d80c53 fix(db): reconcile staging policy and preflight expectations
+M	__tests__/account-remediation.test.ts
+A	__tests__/migration-062-staging-policy-remediation.test.ts
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql
+M	docs/audits/sql/design_only/VAM_OS_MEMBERSHIP_LIFECYCLE_PREFLIGHT.sql
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql
+6644e99 fix(db): close concurrent scope and role idempotency gaps
+M	__tests__/account-remediation.test.ts
+M	docs/audits/VAM_OS_MIGRATION_062_V3_063_OWNER_DECISIONS_2026-08-02.md
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql
+M	supabase_migrations/063_review_only_membership_lifecycle_operations.sql
+5de0f50 docs(db): record staging evidence and owner decisions
+A	docs/audits/VAM_OS_MIGRATION_062_V3_063_OWNER_DECISIONS_2026-08-02.md
+8277fed test(db): cover account import and membership lifecycle contracts
+A	__tests__/membership-lifecycle-063.test.ts
+14bbe8f feat(db): add review-only membership lifecycle migration 063
+A	docs/audits/sql/design_only/VAM_OS_MEMBERSHIP_LIFECYCLE_POST_APPLY_VERIFY.sql
+A	docs/audits/sql/design_only/VAM_OS_MEMBERSHIP_LIFECYCLE_PREFLIGHT.sql
+A	docs/audits/sql/design_only/VAM_OS_MEMBERSHIP_LIFECYCLE_ROLLBACK.sql
+A	supabase_migrations/063_review_only_membership_lifecycle_operations.sql
+1169196 fix(db): remediate migration 062 guards and account import safety
+M	__tests__/account-remediation.test.ts
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql
+81cc0b0 chore(db): import owner-reviewed migration 062 snapshot
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql
+193054f docs(vam-v5): hand off Artifact 0 diagnostics and schema evidence
+A	docs/audits/VAM_OS_ACCOUNT_ADMIN_V5_SPEC.json
+A	docs/audits/VAM_OS_V5_SCHEMA_AUTHORITY_DECISION_PACK_2026-08-01.md
+A	docs/audits/evidence/VAM_OS_V5_STAGING_SCHEMA_EVIDENCE_2026-08-01.json
+A	docs/audits/sql/design_only/VAM_OS_V5_METADATA_EVIDENCE_CAPTURE.sql
+A	scripts/vam_v5_metadata_capture_wrapper.sh
+A	scripts/vam_v5_metadata_evidence_sanitizer.mjs
+A	scripts/vam_v5_minimal_staging_diagnostic.sh
+A	scripts/vam_v5_postgres_tls_probe.mjs
+A	scripts/vam_v5_psql_diagnostic_classifier.mjs
+611ff72 Complete V4 account RLS safety remediation
+A	__tests__/account-auth-ownership.test.ts
+M	__tests__/account-remediation.test.ts
+M	docs/audits/VAM_OS_ACCOUNT_ADMIN_CSV_RLS_REVIEW_PACKAGE_2026-08-01.md
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_DIRECT_API_ISOLATION_TESTS.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_POST_APPLY_VERIFY.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_PREFLIGHT.sql
+M	docs/audits/sql/design_only/VAM_OS_ACCOUNT_ADMIN_RLS_ROLLBACK.sql
+A	lib/account-auth-ownership.ts
+M	lib/account-import-server.ts
+M	lib/account-mutation-orchestrator.ts
+M	lib/admin-users.ts
+M	scripts/account-rls-isolation-harness.mjs
+M	supabase_migrations/062_review_only_account_admin_rls_foundation.sql

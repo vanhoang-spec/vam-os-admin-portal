@@ -8,10 +8,52 @@ import {
   DESTRUCTIVE_DECISION_STATUSES,
   initialDecisionActionState
 } from "@/lib/decision-action-types";
-import { applicationStatusLabel } from "@/lib/ui-labels";
+import { applicationStatusLabel, reviewRoundLabel } from "@/lib/ui-labels";
 import { BULK_FINAL_DECISION_STATUSES } from "./decision-options";
 
-type Row = { id: string; fullName: string; role: string; status: string; statusLabel: string };
+type Row = { id: string; fullName: string; role: string; status: string; statusLabel: string; reviews: any[] };
+
+function ExpandableReviewEvidence({ reviews }: { reviews: any[] }) {
+  if (!reviews || reviews.length === 0) return <span className="text-slate-500 italic">Chưa có đánh giá</span>;
+
+  const submitted = reviews.filter(r => r.status === "submitted");
+  if (submitted.length === 0) return <span className="text-slate-500 italic">Chưa có đánh giá hoàn tất</span>;
+
+  return (
+    <details className="group">
+      <summary className="cursor-pointer text-vam-green hover:underline font-medium">
+        Xem đánh giá ({submitted.length})
+      </summary>
+      <div className="mt-2 space-y-3 rounded-md border border-vam-line bg-white p-3">
+        {submitted.map(r => (
+          <div key={r.id} className="border-b border-vam-line pb-3 last:border-0 last:pb-0">
+            <p className="font-medium text-vam-ink text-xs uppercase tracking-wide mb-1">
+              {reviewRoundLabel(r.review_round)} — {r.reviewer_name}
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+              <span className="text-slate-500">Tổng điểm: <strong className="text-vam-ink">{r.total_score ?? "-"}</strong></span>
+              <span className="text-slate-500">Gợi ý: <strong className="text-vam-ink">{r.recommendation ?? "-"}</strong></span>
+              {r.score_motivation != null && <span className="text-slate-500">Động lực: <strong className="text-vam-ink">{r.score_motivation}</strong></span>}
+              {r.score_goal_clarity != null && <span className="text-slate-500">Mục tiêu: <strong className="text-vam-ink">{r.score_goal_clarity}</strong></span>}
+              {r.score_commitment != null && <span className="text-slate-500">Cam kết: <strong className="text-vam-ink">{r.score_commitment}</strong></span>}
+              {r.score_fit != null && <span className="text-slate-500">Độ phù hợp: <strong className="text-vam-ink">{r.score_fit}</strong></span>}
+              {r.score_communication != null && <span className="text-slate-500">Giao tiếp: <strong className="text-vam-ink">{r.score_communication}</strong></span>}
+            </div>
+            {r.reviewer_note && (
+              <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded border border-slate-100">
+                <span className="font-medium block mb-1">Ghi chú:</span>
+                <span className="whitespace-pre-wrap">{r.reviewer_note}</span>
+              </div>
+            )}
+            <div className="text-[10px] text-slate-400 mt-1">
+              Gửi lúc: {r.submitted_at ? new Date(r.submitted_at).toLocaleString('vi-VN') : "-"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
 
 /** Same ceiling the server action enforces. */
 const MAX_ROWS = 500;
@@ -89,9 +131,9 @@ export function BulkDecisionForm({ rows, isFiltered = false }: { rows: Row[]; is
     </div>
     <p className="text-sm font-medium text-vam-ink">Đã chọn: {selectedCount}/{Math.min(rows.length, MAX_ROWS)}</p>
     <div className="max-h-[34rem] overflow-auto rounded-md border border-vam-line">
-      <table className="min-w-full text-sm"><thead className="sticky top-0 bg-slate-50"><tr><th className="px-3 py-2 text-left">Chọn</th><th className="px-3 py-2 text-left">Ứng viên</th><th className="px-3 py-2 text-left">Vai trò</th><th className="px-3 py-2 text-left">Trạng thái</th></tr></thead>
-      <tbody>{rows.map(row => <tr key={row.id} className="border-t border-vam-line">
-        <td className="px-3 py-2">
+      <table className="min-w-full text-sm"><thead className="sticky top-0 bg-slate-50 z-10 shadow-sm"><tr><th className="px-3 py-2 text-left">Chọn</th><th className="px-3 py-2 text-left">Ứng viên</th><th className="px-3 py-2 text-left">Vai trò</th><th className="px-3 py-2 text-left">Trạng thái</th><th className="px-3 py-2 text-left">Dữ liệu đánh giá</th></tr></thead>
+      <tbody>{rows.map(row => <tr key={row.id} className="border-t border-vam-line align-top">
+        <td className="px-3 py-2 pt-3">
           <input
             type="checkbox"
             name="application_id"
@@ -102,7 +144,10 @@ export function BulkDecisionForm({ rows, isFiltered = false }: { rows: Row[]; is
           />
           <input type="hidden" name={`expected_status_${row.id}`} value={row.status} />
         </td>
-        <td className="px-3 py-2">{row.fullName}</td><td className="px-3 py-2">{row.role}</td><td className="px-3 py-2">{row.statusLabel}</td>
+        <td className="px-3 py-2 pt-3">{row.fullName}</td>
+        <td className="px-3 py-2 pt-3">{row.role}</td>
+        <td className="px-3 py-2 pt-3">{row.statusLabel}</td>
+        <td className="px-3 py-2 pt-3"><ExpandableReviewEvidence reviews={row.reviews} /></td>
       </tr>)}</tbody></table>
     </div>
     <p className="text-xs text-slate-500">Mỗi đơn được khóa và kiểm tra lại tại database. Đơn đủ điều kiện được cập nhật; đơn sai scope, đã đổi trạng thái, hoặc chưa đủ review bị chặn và được báo trong kết quả.</p>

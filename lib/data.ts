@@ -1684,6 +1684,35 @@ export async function getApplicationReviewsForApplication(applicationId: string,
 }
 
 /**
+ * Reviews for a batch of applications.
+ * Class C chunked read to prevent IN-list or row-cap exhaustion on large batches.
+ */
+export async function getReviewsForApplications(
+  applicationIds: string[]
+): Promise<QueryResult<ApplicationReview[]>> {
+  const client = await dataClient("application_reviews");
+  if (!client) return serviceRoleRequiredError<ApplicationReview[]>([]);
+  if (!applicationIds || applicationIds.length === 0) return { data: [], error: null };
+
+  const allReviews: ApplicationReview[] = [];
+  for (let i = 0; i < applicationIds.length; i += IN_FILTER_CHUNK_SIZE) {
+    const chunk = applicationIds.slice(i, i + IN_FILTER_CHUNK_SIZE);
+    const { data, error } = await readAllPages<ApplicationReview>(
+      "application_reviews",
+      { strategy: "keyset", keyField: "id" },
+      client.from("application_reviews").select("*").in("application_id", chunk)
+    );
+    if (error) {
+      logDataError("application_reviews.forApplications", error);
+      const err = error as { message?: string };
+      return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+    }
+    allReviews.push(...data);
+  }
+  return { data: allReviews, error: null };
+}
+
+/**
  * Reviews assigned to a specific admin user — used for reviewer's /reviews page.
  *
  * Class C. The scoped branch filters by every application in scope, which is
