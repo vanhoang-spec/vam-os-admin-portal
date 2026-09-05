@@ -13,8 +13,8 @@
  *   * renewal and returning-Mentor rows keep their distinct outcomes;
  *   * the mutating submit is locked against double submission;
  *   * retry re-selects only unresolved rows and cannot duplicate work;
- *   * the entry point is gated by the same authority as the action, and the
- *     Slice 2A hidden bulk-decision entry point is not resurrected.
+ *   * the entry point is gated by the same authority as the action, and stays
+ *     a separate surface from the post-interview bulk decision screen.
  */
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -297,12 +297,24 @@ describe("M092 — entry point respects the current information architecture", (
     expect(APPLICATIONS_PAGE).toContain("canDecide(adminUser.role)");
   });
 
-  it("does not resurrect the Slice 2A hidden bulk-decision entry point", () => {
+  it("keeps official approval free of any cross-link to the bulk-decision screen", () => {
+    // The historical M092 page linked to /applications/bulk-decision. That
+    // link is still not ported: the two surfaces are reached independently
+    // from /applications, so this page cannot become a back door into a
+    // different bulk mutation.
     const executable = (src: string) =>
       src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "").replace(/^\s*\/\/.*$/gm, "");
-    expect(executable(APPLICATIONS_PAGE)).not.toContain('href="/applications/bulk-decision"');
     expect(executable(BULK_PAGE)).not.toContain('href="/applications/bulk-decision"');
     expect(APPLICATIONS_PAGE).toContain('href="/applications/exports"');
+  });
+
+  it("stays a separate entry point from the post-interview decision screen", () => {
+    // Both are canDecide-gated and both live in the applications action row,
+    // so each must keep its own href and its own unambiguous Vietnamese label.
+    expect(APPLICATIONS_PAGE).toContain("Duyệt chính thức hàng loạt");
+    expect(APPLICATIONS_PAGE).toContain("Quyết định sau phỏng vấn");
+    expect(APPLICATIONS_PAGE).toContain('href="/applications/bulk-approval"');
+    expect(APPLICATIONS_PAGE).toContain('href="/applications/bulk-decision"');
   });
 
   it("keeps the Slice 2C export entry point and its guard untouched", () => {

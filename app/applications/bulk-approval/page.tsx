@@ -57,10 +57,11 @@ export default async function BulkApprovalPage(props: {
         title="Duyệt Chính Thức Hàng Loạt"
         description="Duyệt hàng loạt ứng viên đủ điều kiện thành mentor/mentee chính thức — tạo/liên kết hồ sơ người và profile qua một RPC đáng tin cậy riêng, có kiểm tra atomic từng dòng."
       />
-      {/* Slice 2A deliberately hid the "Bulk Final Decision" entry point
-          (/applications/bulk-decision) pending its own Owner mutation UAT. The
-          historical M092 page linked to it from here; that link is NOT ported,
-          so this page cannot become a back door to it. */}
+      {/* The historical M092 page linked to the bulk final-decision screen
+          (/applications/bulk-decision) from here. That link is still NOT
+          ported: both surfaces are reached independently from /applications,
+          so this page cannot become a back door into a different bulk
+          mutation. */}
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <Link href="/applications" className="text-vam-green hover:underline">
           ← Quay lại danh sách

@@ -149,12 +149,6 @@ export default async function ApplicationsPage() {
   return (
     <>
       <PageHeader title="Ứng tuyển" description="Đơn ứng tuyển mentor/mentee và trạng thái xử lý." />
-      {/* M090 shipped a "Bulk Final Decision" entry point here. It is a broad
-          multi-transition mutation surface that is NOT part of the current
-          Production baseline, has had no Owner mutation UAT, and is easily
-          confused with M092 Bulk Official Approval. The entry point is hidden
-          for this slice; /applications/bulk-decision and its action are left
-          intact and directly reachable for later controlled UAT. */}
       <div className="mb-4 flex flex-wrap gap-2">
         {canAssignReview(adminUser.role) && exportSeasonId && (
           <Link
@@ -166,14 +160,28 @@ export default async function ApplicationsPage() {
         )}
         {/* M092. Same authority as the official-approval action itself
             (canDecide), so the entry point never appears to a role that could
-            not use it. This is the only new entry point added here; the hidden
-            bulk-decision one stays hidden. */}
+            not use it. */}
         {canDecide(adminUser.role) && (
           <Link
             href="/applications/bulk-approval"
             className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
           >
             Duyệt chính thức hàng loạt
+          </Link>
+        )}
+        {/* S12 post-interview final ruling. M090 shipped this as an unbounded
+            "Bulk Final Decision" surface and Slice 2A hid it; it is restored
+            here only after the screen itself was narrowed to applications in
+            ready_for_final_decision and to the four post-interview rulings, so
+            it can no longer be confused with M092 official approval above.
+            Gated on canDecide — the same authority the route and the server
+            action require — so reviewer/support_team/viewer never see it. */}
+        {canDecide(adminUser.role) && (
+          <Link
+            href="/applications/bulk-decision"
+            className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Quyết định sau phỏng vấn
           </Link>
         )}
       </div>

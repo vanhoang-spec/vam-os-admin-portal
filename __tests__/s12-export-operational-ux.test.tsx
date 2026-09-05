@@ -390,12 +390,18 @@ describe("applications page entry points", () => {
   const PAGE = readFileSync("app/applications/page.tsx", "utf8");
   const EXPORTS_PAGE = readFileSync("app/applications/exports/page.tsx", "utf8");
 
-  it("no longer surfaces the Bulk Final Decision entry point", () => {
+  // Slice 2A hid the M090 "Bulk Final Decision" entry point because that
+  // screen could set any status on any application. The S12 remediation
+  // narrowed the screen to post-interview rulings on ready_for_final_decision
+  // candidates and restored the entry point under the same canDecide gate —
+  // see __tests__/s12-bulk-final-decision.test.tsx for its behaviour.
+  it("surfaces the post-interview decision entry point in Vietnamese, not as 'Bulk Final Decision'", () => {
+    expect(PAGE).toContain('href="/applications/bulk-decision"');
+    expect(PAGE).toContain("Quyết định sau phỏng vấn");
     expect(PAGE).not.toContain("Bulk Final Decision</");
-    expect(PAGE).not.toContain('href="/applications/bulk-decision"');
   });
 
-  it("keeps the bulk-decision route and action intact for later controlled UAT", () => {
+  it("keeps the bulk-decision route and action intact", () => {
     expect(readFileSync("app/applications/bulk-decision/page.tsx", "utf8").length).toBeGreaterThan(0);
     expect(readFileSync("app/actions/bulk-application-decisions.ts", "utf8")).toContain("applyApplicationDecisions");
   });
