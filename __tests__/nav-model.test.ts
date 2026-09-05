@@ -60,8 +60,13 @@ describe("buildNavGroups — super_admin", () => {
   const groups = buildNavGroups(makeUser("super_admin"));
   const hrefs = allNavHrefs(groups);
 
-  it("has ≤ 8 top-level groups", () => {
-    expect(groups.length).toBeLessThanOrEqual(8);
+  // The cap moved from 8 to 9 when "Công việc của tôi" was added as a
+  // top-level entry. It is deliberately top-level: the requirement is that an
+  // operator sees their assigned work immediately after login, which a link
+  // nested inside "Ứng tuyển" does not achieve. The cap still exists to stop
+  // the sidebar growing without a decision.
+  it("has ≤ 9 top-level groups", () => {
+    expect(groups.length).toBeLessThanOrEqual(9);
   });
 
   it("contains all 14 routes", () => {
@@ -100,7 +105,7 @@ describe("buildNavGroups — admin", () => {
   const groups = buildNavGroups(makeUser("admin"));
   const hrefs = allNavHrefs(groups);
 
-  it("has ≤ 8 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(8));
+  it("has ≤ 9 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(9));
   it("does NOT include /admin/users", () => expect(hrefs).not.toContain("/admin/users"));
   it("retains unrelated admin routes", () => {
     expect(hrefs).toContain("/admin");
@@ -119,7 +124,7 @@ describe("buildNavGroups — core_team", () => {
   const groups = buildNavGroups(makeUser("core_team"));
   const hrefs = allNavHrefs(groups);
 
-  it("has ≤ 8 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(8));
+  it("has ≤ 9 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(9));
 
   it("does NOT include /admin/users", () => expect(hrefs).not.toContain("/admin/users"));
 
@@ -143,7 +148,7 @@ describe("buildNavGroups — reviewer", () => {
   const groups = buildNavGroups(makeUser("reviewer"));
   const hrefs = allNavHrefs(groups);
 
-  it("has ≤ 8 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(8));
+  it("has ≤ 9 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(9));
 
   it("does NOT include admin group", () => {
     expect(groups.find((g) => g.key === "admin")).toBeUndefined();
@@ -179,7 +184,7 @@ describe("buildNavGroups — viewer", () => {
   const groups = buildNavGroups(makeUser("viewer"));
   const hrefs = allNavHrefs(groups);
 
-  it("has ≤ 8 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(8));
+  it("has ≤ 9 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(9));
 
   it("does NOT include review, interview, or admin routes", () => {
     ["/reviews", "/interviews", "/admin", "/team", "/admin/users"].forEach((r) =>
@@ -213,7 +218,7 @@ describe("buildNavGroups — support_team", () => {
   const groups = buildNavGroups(makeUser("support_team"));
   const hrefs = allNavHrefs(groups);
 
-  it("has ≤ 8 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(8));
+  it("has ≤ 9 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(9));
 
   it("does NOT include review or admin routes", () => {
     ["/reviews", "/interviews", "/admin", "/team", "/admin/users"].forEach((r) =>
@@ -349,6 +354,10 @@ const OPS_ADMIN_ROUTES = [
 const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team"];
 
 const REVIEW_ROUTES = [
+  // My Work rides the same `showReviews` gate as the rest of this set: it is
+  // the personal view of the assignments those screens hand out, so any role
+  // that can hold one sees it and no other role does.
+  "/my-work",
   "/applications/mentor-review",
   "/applications/mentee-review",
   "/reviews",
