@@ -557,6 +557,10 @@ export async function approveApplication(
     });
     if (auditErr) log("insert renewal application decision audit failed", auditErr);
   } else {
+    // Non-renewal: vam090_finalize_recruitment_approval atomically sets
+    // application status+person_id, writes the application_decisions audit row,
+    // and (after migration 20260905000000) creates/updates the
+    // person_season_memberships row in one savepoint.
     const { data: finalized, error: finalizeError } = await client.rpc(
       "vam090_finalize_recruitment_approval",
       {
