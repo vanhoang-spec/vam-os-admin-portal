@@ -43,7 +43,7 @@ export default async function BulkDecisionPage(props: {
   
   // Inject reviewer names
   const { getSupabaseServerClient } = await import("@/lib/supabase-server");
-  const client = getSupabaseServerClient();
+  const client = await getSupabaseServerClient();
   const { data: adminUsers } = client ? await client.from("admin_users").select("id, full_name, email") : { data: [] };
   const adminMap = new Map(adminUsers?.map((u: any) => [u.id, u.full_name || u.email]) || []);
 

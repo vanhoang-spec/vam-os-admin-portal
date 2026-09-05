@@ -43,6 +43,7 @@ vi.mock("@/lib/program-scope", () => ({
 vi.mock("@/lib/data", () => ({
   getApplications: vi.fn(),
   getIntakeBatches: vi.fn(async () => ({ data: [], error: null })),
+  getReviewsForApplications: vi.fn(async () => ({ data: [], error: null })),
   getPeople: vi.fn(async () => ({ data: [], error: null })),
   getSeasons: vi.fn(async () => ({ data: [], error: null })),
   getAllApplicationReviews: vi.fn(async () => ({ data: [], error: null })),
@@ -106,8 +107,9 @@ function row(n: number, status = READY) {
     id: appId(n),
     fullName: `Ứng viên ${n}`,
     role: "mentor",
-    status,
-    statusLabel: "Sẵn sàng ra quyết định cuối"
+    status: BULK_FINAL_DECISION_SOURCE_STATUS,
+    statusLabel: "Sẵn sàng ra quyết định cuối",
+    reviews: []
   };
 }
 
@@ -238,12 +240,12 @@ describe("/applications/bulk-decision opens on ready_for_final_decision only", (
     (getApplications as Mock).mockResolvedValue({ data: MIXED, error: null });
     const { container } = render(await BulkDecisionPage({ searchParams: Promise.resolve({}) }));
 
-    const statusControl = container.querySelector('[name="status"]')!;
-    expect(statusControl.tagName).toBe("SELECT");
-    const values = Array.from(statusControl.querySelectorAll("option")).map((o) => o.getAttribute("value"));
-    expect(values).toEqual([READY]);
+    const statusControl = container.querySelector('[name="status"]') as HTMLInputElement;
+    expect(statusControl.tagName).toBe("INPUT");
+    expect(statusControl.type).toBe("hidden");
+    expect(statusControl.value).toBe(READY);
     // No blank "all statuses" escape hatch on this screen.
-    expect(values).not.toContain("");
+    expect(statusControl.value).not.toBe("");
   });
 
   it("keeps the intake batch and role filters", async () => {

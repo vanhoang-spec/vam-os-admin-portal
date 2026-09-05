@@ -1699,8 +1699,8 @@ export async function getReviewsForApplications(
     const chunk = applicationIds.slice(i, i + IN_FILTER_CHUNK_SIZE);
     const { data, error } = await readAllPages<ApplicationReview>(
       "application_reviews",
-      { strategy: "keyset", keyField: "id" },
-      client.from("application_reviews").select("*").in("application_id", chunk)
+      "*",
+      (projection) => client.from("application_reviews").select(projection).in("application_id", chunk)
     );
     if (error) {
       logDataError("application_reviews.forApplications", error);
