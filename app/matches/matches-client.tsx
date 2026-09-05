@@ -10,14 +10,24 @@ import { filterMentees, filterMentors } from "@/lib/match-search";
 import type { MenteeCandidate, MentorCandidate } from "@/lib/matches";
 
 const initialState: MatchActionState = { ok: false, message: null };
-const MAX_LOAD = 3;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function loadBar(count: number) {
-  if (count === 0) return { label: `0/${MAX_LOAD}`, cls: "text-green-700 bg-green-100" };
-  if (count < MAX_LOAD) return { label: `${count}/${MAX_LOAD}`, cls: "text-amber-700 bg-amber-100" };
-  return { label: `${count}/${MAX_LOAD} — FULL`, cls: "text-red-700 bg-red-100" };
+/**
+ * The load bar reads the mentor's OWN capacity, which the server sends on every
+ * candidate as `effective_capacity`. There is deliberately no local constant to
+ * fall back on: a default here could disagree with the one the mutation
+ * enforces, and showing "1/3" for a mentor the server refuses at 1 is worse than
+ * showing nothing at all.
+ */
+function loadBar(count: number, capacity: number) {
+  if (count === 0) return { label: `0/${capacity}`, cls: "text-green-700 bg-green-100" };
+  if (count < capacity) return { label: `${count}/${capacity}`, cls: "text-amber-700 bg-amber-100" };
+  return { label: `${count}/${capacity} — FULL`, cls: "text-red-700 bg-red-100" };
+}
+
+function isMentorFull(mentor: Pick<MentorCandidate, "active_match_count" | "effective_capacity">) {
+  return mentor.active_match_count >= mentor.effective_capacity;
 }
 
 // ── Submit buttons ────────────────────────────────────────────────────────────
@@ -71,7 +81,7 @@ export function ManualMatchForm({
     }
   }, [state.ok, router]);
 
-  const availableMentors = mentors.filter((m) => m.active_match_count < MAX_LOAD);
+  const availableMentors = mentors.filter((m) => !isMentorFull(m));
   const availableMentees = mentees.filter((m) => !m.has_active_match);
 
   const visibleMentors = filterMentors(mentors, mentorSearch);
@@ -118,8 +128,8 @@ export function ManualMatchForm({
           >
             <option value="">-- Chọn Mentor {mentorSearch ? `(${visibleMentors.length} kết quả)` : ""} --</option>
             {visibleMentors.map((m) => {
-              const lb = loadBar(m.active_match_count);
-              const isFull = m.active_match_count >= MAX_LOAD;
+              const lb = loadBar(m.active_match_count, m.effective_capacity);
+              const isFull = isMentorFull(m);
               return (
                 <option key={m.profile_id} value={m.profile_id} disabled={isFull}>
                   {`[${lb.label}] ${m.full_name ?? m.email_primary ?? m.profile_id}`}
@@ -135,8 +145,8 @@ export function ManualMatchForm({
               <div>{selectedMentor.email_primary}</div>
               {selectedMentor.company_current ? <div>{selectedMentor.title_current} @ {selectedMentor.company_current}</div> : null}
               <div className="mt-1">
-                <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${loadBar(selectedMentor.active_match_count).cls}`}>
-                  Mentee hiện tại: {loadBar(selectedMentor.active_match_count).label}
+                <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${loadBar(selectedMentor.active_match_count, selectedMentor.effective_capacity).cls}`}>
+                  Mentee hiện tại: {loadBar(selectedMentor.active_match_count, selectedMentor.effective_capacity).label}
                 </span>
               </div>
             </div>
@@ -216,8 +226,8 @@ export function ManualMatchForm({
         <CreateSubmit />
         {!selectedMentorId || !selectedMenteeId ? (
           <span className="text-xs text-slate-500">Chọn cả mentor và mentee để tạo match.</span>
-        ) : selectedMentor && selectedMentor.active_match_count >= MAX_LOAD ? (
-          <span className="text-xs text-red-600">Mentor này đã đạt giới hạn {MAX_LOAD} mentee.</span>
+        ) : selectedMentor && isMentorFull(selectedMentor) ? (
+          <span className="text-xs text-red-600">Mentor này đã đạt giới hạn {selectedMentor.effective_capacity} mentee.</span>
         ) : selectedMentee?.has_active_match ? (
           <span className="text-xs text-red-600">Mentee này đã có mentor active.</span>
         ) : null}

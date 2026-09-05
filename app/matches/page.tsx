@@ -199,7 +199,11 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
               <div className="space-y-1.5">
                 {candidatesRes.mentors.map((m) => {
                   const count = m.active_match_count;
-                  const pct = Math.round((count / 3) * 100);
+                  // Each mentor's bar is scaled to their OWN declared capacity,
+                  // the same number the mutation enforces — not to a fixed 3.
+                  const capacity = m.effective_capacity;
+                  const isFull = count >= capacity;
+                  const pct = Math.min(100, Math.round((count / capacity) * 100));
                   return (
                     <div key={m.profile_id} className="flex items-center gap-2 text-xs">
                       <div className="w-32 truncate font-medium text-vam-ink" title={m.full_name ?? ""}>
@@ -207,12 +211,12 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                       </div>
                       <div className="flex-1 overflow-hidden rounded-full bg-slate-100" style={{ height: 6 }}>
                         <div
-                          className={`h-full rounded-full ${count >= 3 ? "bg-red-400" : count >= 2 ? "bg-amber-400" : "bg-green-400"}`}
+                          className={`h-full rounded-full ${isFull ? "bg-red-400" : count > 0 ? "bg-amber-400" : "bg-green-400"}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <div className={`w-12 text-right font-semibold ${count >= 3 ? "text-red-600" : count > 0 ? "text-amber-600" : "text-green-600"}`}>
-                        {count}/3
+                      <div className={`w-12 text-right font-semibold ${isFull ? "text-red-600" : count > 0 ? "text-amber-600" : "text-green-600"}`}>
+                        {count}/{capacity}
                       </div>
                     </div>
                   );

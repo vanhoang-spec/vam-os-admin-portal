@@ -54,9 +54,25 @@ const MATCH_UUID  = "00000000-0000-4000-8000-000000000005";
 const SEASON_UUID = "00000000-0000-4000-8000-000000000006";
 const PERSON_UUID = "00000000-0000-4000-8000-000000000007";
 
+// No `capacity_target` on this fixture, so the mentor falls back to the default
+// of 3 and the capacity expectations below keep their original meaning.
 const MENTOR_PROFILE = { id: MENTOR_UUID, person_id: PERSON_UUID, mentor_code: "M01", intake_batch_id: BATCH_UUID };
 const MENTEE_PROFILE = { id: MENTEE_UUID, person_id: "per-mentee", mentee_code: "E01", intake_batch_id: BATCH_UUID };
 const BATCH = { id: BATCH_UUID, season_id: SEASON_UUID };
+
+/**
+ * Both people hold an approved application in the batch's season.
+ *
+ * `createManualMatch` now re-reads approval before it applies the duplicate and
+ * capacity rules, so every sequence that expects to reach those rules must
+ * supply this step. The dedicated approval-gate cases live in
+ * `s12-matching-pool-safety.test.ts`; here it is only the precondition that lets
+ * the guards under test run at all.
+ */
+const APPROVALS = [
+  { id: "app-mentor", person_id: PERSON_UUID, status: "approved_as_mentor" },
+  { id: "app-mentee", person_id: "per-mentee", status: "approved_as_mentee" }
+];
 
 function makeClient(fromResponses: unknown[]) {
   const fromMock = vi.fn();
@@ -110,6 +126,7 @@ describe("createManualMatch — mentor capacity guard", () => {
       makeChain({ data: MENTOR_PROFILE }), // mentor_profiles
       makeChain({ data: MENTEE_PROFILE }), // mentee_profiles
       makeChain({ data: BATCH }),           // intake_batches
+      makeChain({ data: APPROVALS }),      // applications — season approval gate
       makeChain({ data: null }),            // matches — mentee check (no active match)
       makeChain({ count: 3 }),              // matches — mentor count = 3 (AT LIMIT)
     ]);
@@ -132,6 +149,7 @@ describe("createManualMatch — mentor capacity guard", () => {
       makeChain({ data: MENTOR_PROFILE }),           // mentor_profiles
       makeChain({ data: MENTEE_PROFILE }),           // mentee_profiles
       makeChain({ data: BATCH }),                    // intake_batches
+      makeChain({ data: APPROVALS }),      // applications — season approval gate
       makeChain({ data: null }),                     // matches — mentee check
       makeChain({ count: 2 }),                       // matches — mentor count = 2 (OK)
       makeChain({ data: { id: newMatchId } }),       // matches insert
@@ -157,6 +175,7 @@ describe("createManualMatch — mentee active match guard", () => {
       makeChain({ data: MENTOR_PROFILE }), // mentor_profiles
       makeChain({ data: MENTEE_PROFILE }), // mentee_profiles
       makeChain({ data: BATCH }),           // intake_batches
+      makeChain({ data: APPROVALS }),      // applications — season approval gate
       makeChain({ data: { id: VALID_UUID } }), // matches — mentee check → FOUND (has active)
     ]);
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
@@ -181,6 +200,7 @@ describe("createManualMatch — duplicate pair constraint (23505)", () => {
       makeChain({ data: MENTOR_PROFILE }),
       makeChain({ data: MENTEE_PROFILE }),
       makeChain({ data: BATCH }),
+      makeChain({ data: APPROVALS }),      // applications — season approval gate
       makeChain({ data: null }),           // mentee check — no active
       makeChain({ count: 0 }),             // mentor count — available
       makeChain({ data: null, error: constraintError }), // INSERT → 23505
@@ -429,6 +449,7 @@ describe("createManualMatch — DB error safety", () => {
       makeChain({ data: MENTOR_PROFILE }),                                  // (1) mentor_profiles
       makeChain({ data: MENTEE_PROFILE }),                                  // (2) mentee_profiles
       makeChain({ data: BATCH }),                                           // (3) intake_batches
+      makeChain({ data: APPROVALS }),      // applications — season approval gate
       makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),     // (4) mentee match check FAILS
     ]);
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);

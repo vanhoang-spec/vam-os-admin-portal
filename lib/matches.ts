@@ -10,7 +10,37 @@ import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const SAFE_ERROR = "Không thể thực hiện tác vụ. Vui lòng kiểm tra cấu hình Supabase và server logs.";
-const MAX_MENTOR_ACTIVE_MATCHES = 3;
+
+/**
+ * Fallback mentor capacity, used only when the mentor's own
+ * `mentor_profiles.capacity_target` is absent or not a positive integer.
+ *
+ * This was previously the cap for EVERY mentor. On UEHM-S12 that is wrong for
+ * most of them: of 142 approved mentors, 65 declared a capacity of 1 and 57
+ * declared 2. Applying 3 to all of them let an operator assign three mentees to
+ * a mentor who agreed to one. `capacity_target` is written at approval time by
+ * vam092 from the applicant's own answer, so the number the mentor gave is
+ * already in the database — it was simply never read here.
+ */
+const DEFAULT_MENTOR_CAPACITY = 3;
+
+/** Application statuses that make a person eligible to be matched. */
+const APPROVED_MENTOR_STATUS = "approved_as_mentor";
+const APPROVED_MENTEE_STATUS = "approved_as_mentee";
+
+/**
+ * The capacity to enforce for one mentor.
+ *
+ * Exported because the mutation guard, the candidate list and the load bar must
+ * all agree: a UI that shows `1/2` while the mutation enforces 3 is worse than
+ * either rule on its own, because the operator cannot tell which one is real.
+ */
+export function effectiveMentorCapacity(capacityTarget: unknown): number {
+  const value = typeof capacityTarget === "number" ? capacityTarget : Number(capacityTarget);
+  if (!Number.isFinite(value)) return DEFAULT_MENTOR_CAPACITY;
+  if (!Number.isInteger(value) || value < 1) return DEFAULT_MENTOR_CAPACITY;
+  return value;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,6 +59,8 @@ export type MentorCandidate = {
   company_current: string | null;
   title_current: string | null;
   active_match_count: number;
+  /** The mentor's own declared capacity, or the fallback. Never null. */
+  effective_capacity: number;
 };
 
 export type MenteeCandidate = {
@@ -147,6 +179,71 @@ async function selectRowsByColumn(client: any, table: PagedTable, columns: strin
     rows.push(...data);
   }
   return rows;
+}
+
+/**
+ * One profile row per person, chosen deterministically.
+ *
+ * A person can legitimately hold more than one profile row (a legacy import
+ * alongside a season profile, for instance). The matching screen must offer
+ * exactly one option per person, and it must be the SAME option on every load —
+ * otherwise the profile id an operator submits depends on the order PostgREST
+ * happened to return rows in. Lowest `id` wins; rows without a `person_id`
+ * cannot be matched at all and are dropped here rather than downstream.
+ */
+function dedupeProfilesByPerson(rows: JsonRecord[]): JsonRecord[] {
+  const byPerson = new Map<string, JsonRecord>();
+  for (const row of rows) {
+    const personId = clean(row.person_id);
+    const profileId = clean(row.id);
+    if (!personId || !profileId) continue;
+    const existing = byPerson.get(personId);
+    if (!existing || profileId < String(existing.id)) byPerson.set(personId, row);
+  }
+  return Array.from(byPerson.values());
+}
+
+/**
+ * Independently re-checks that a person holds an approved application of the
+ * required kind in this season, on the mutation path.
+ *
+ * The candidate list already filters on this, but a list filter is a
+ * convenience, not a guard: `createManualMatch` receives two profile ids from a
+ * form post and nothing stops a crafted request naming a profile that was never
+ * offered. This read is what makes the approval rule real.
+ */
+async function loadSeasonApprovals(
+  client: any,
+  seasonId: string,
+  personIds: string[]
+): Promise<{ ok: true; mentors: Set<string>; mentees: Set<string> } | { ok: false }> {
+  const ids = uniqueStrings(personIds);
+  if (!ids.length) return { ok: true, mentors: new Set(), mentees: new Set() };
+
+  const { data, error } = await client
+    .from("applications")
+    .select("id,person_id,status")
+    .eq("season_id", seasonId)
+    .in("person_id", ids)
+    .in("status", [APPROVED_MENTOR_STATUS, APPROVED_MENTEE_STATUS]);
+
+  // Fail closed. A read failure here must never be read as "no approval found
+  // and therefore proceed", nor as "assume approved".
+  if (error) {
+    log("season approval lookup failed", error);
+    return { ok: false };
+  }
+
+  const mentors = new Set<string>();
+  const mentees = new Set<string>();
+  for (const row of (data ?? []) as JsonRecord[]) {
+    const personId = clean(row.person_id);
+    if (!personId) continue;
+    const status = String(row.status ?? "");
+    if (status === APPROVED_MENTOR_STATUS) mentors.add(personId);
+    if (status === APPROVED_MENTEE_STATUS) mentees.add(personId);
+  }
+  return { ok: true, mentors, mentees };
 }
 
 function profileKey(personId: string | null | undefined, batchId: string | null | undefined) {
@@ -404,15 +501,70 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
   const selectedSeasonId = (selectedBatch as JsonRecord | null)?.season_id as string | null;
   if (!selectedSeasonId) return { ok: true, error: null, mentors: [], mentees: [] };
 
-  const [mentorProfilesRes, menteeProfilesRes, activeMatchesRes] = await Promise.all([
-    client
-      .from("mentor_profiles")
-      .select("id,person_id,mentor_code,company_current,title_current")
-      .eq("intake_batch_id", intakeBatchId),
-    client
-      .from("mentee_profiles")
-      .select("id,person_id,mentee_code,school_code,major")
-      .eq("intake_batch_id", intakeBatchId),
+  // ── Eligibility comes from APPROVAL, not from a profile's batch id ────────
+  //
+  // The pool used to be `mentor_profiles WHERE intake_batch_id = <batch>`. That
+  // is not the approved list, and on UEHM-S12 it was catastrophically wrong in
+  // both directions at once: of 142 approved mentors, ZERO were visible through
+  // the B1 batch filter, while one unapproved profile that happened to carry
+  // the batch id WAS offered for matching.
+  //
+  // Both failures have the same cause — a profile is participant data, not an
+  // eligibility record. 130 of the 142 are renewal mentors whose application
+  // carries no intake_batch_id at all, and vam092 reuses an existing profile
+  // without repointing its `intake_batch_id`, so a returning participant keeps
+  // a profile addressed to an older batch forever.
+  //
+  // The authority is therefore an APPROVED APPLICATION IN THE SELECTED SEASON.
+  // The batch stays the operator's UI context and the season it resolves to is
+  // what scopes this read.
+  const approvedApps = await readAllPages<JsonRecord>(
+    "applications",
+    "id,person_id,status",
+    (projection) =>
+      client
+        .from("applications")
+        .select(projection)
+        .eq("season_id", selectedSeasonId)
+        .in("status", [APPROVED_MENTOR_STATUS, APPROVED_MENTEE_STATUS])
+  );
+  if (approvedApps.error) {
+    log("approved applications fetch failed", approvedApps.error);
+    return { ...empty, ok: false, error: SAFE_ERROR };
+  }
+
+  // Sorted so a person holding more than one approved application resolves the
+  // same way on every load rather than following arrival order.
+  const approvedMentorPersonIds = uniqueStrings(
+    approvedApps.data
+      .filter((row) => String(row.status ?? "") === APPROVED_MENTOR_STATUS)
+      .map((row) => clean(row.person_id))
+  ).sort();
+  const approvedMenteePersonIds = uniqueStrings(
+    approvedApps.data
+      .filter((row) => String(row.status ?? "") === APPROVED_MENTEE_STATUS)
+      .map((row) => clean(row.person_id))
+  ).sort();
+
+  const [mentorProfileRows, menteeProfileRows, activeMatchesRes] = await Promise.all([
+    approvedMentorPersonIds.length
+      ? selectRowsByColumn(
+          client,
+          "mentor_profiles",
+          "id,person_id,mentor_code,company_current,title_current,capacity_target",
+          "person_id",
+          approvedMentorPersonIds
+        )
+      : Promise.resolve([] as JsonRecord[]),
+    approvedMenteePersonIds.length
+      ? selectRowsByColumn(
+          client,
+          "mentee_profiles",
+          "id,person_id,mentee_code,school_code,major",
+          "person_id",
+          approvedMenteePersonIds
+        )
+      : Promise.resolve([] as JsonRecord[]),
     client
       .from("matches")
       .select("mentor_person_id,mentee_person_id")
@@ -420,18 +572,16 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
       .eq("status", "active")
   ]);
 
-  if (mentorProfilesRes.error) {
-    log("mentor_profiles fetch failed", mentorProfilesRes.error);
-    return { ...empty, ok: false, error: SAFE_ERROR };
-  }
-  if (menteeProfilesRes.error) {
-    log("mentee_profiles fetch failed", menteeProfilesRes.error);
-    return { ...empty, ok: false, error: SAFE_ERROR };
-  }
   if (activeMatchesRes.error) {
     log("active matches fetch failed", activeMatchesRes.error);
     return { ...empty, ok: false, error: SAFE_ERROR };
   }
+
+  // One row per approved person. A person with several profiles yields the
+  // lowest profile id, so the option the operator picks does not change between
+  // page loads.
+  const mentorProfilesData = dedupeProfilesByPerson(mentorProfileRows);
+  const menteeProfilesData = dedupeProfilesByPerson(menteeProfileRows);
 
   const activeMatches = (activeMatchesRes.data ?? []) as Array<{ mentor_person_id: string | null; mentee_person_id: string | null }>;
 
@@ -450,11 +600,11 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
 
   // Resolve person_ids to names/emails
   const allPersonIds = new Set<string>();
-  for (const mp of mentorProfilesRes.data ?? []) {
-    if ((mp as JsonRecord).person_id) allPersonIds.add((mp as JsonRecord).person_id as string);
+  for (const mp of mentorProfilesData) {
+    if (mp.person_id) allPersonIds.add(mp.person_id as string);
   }
-  for (const mp of menteeProfilesRes.data ?? []) {
-    if ((mp as JsonRecord).person_id) allPersonIds.add((mp as JsonRecord).person_id as string);
+  for (const mp of menteeProfilesData) {
+    if (mp.person_id) allPersonIds.add(mp.person_id as string);
   }
 
   const peopleRows = allPersonIds.size > 0
@@ -463,7 +613,7 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
 
   const peopleById = new Map(peopleRows.map((p: JsonRecord) => [p.id as string, p]));
 
-  const mentors: MentorCandidate[] = (mentorProfilesRes.data ?? []).map((mp: JsonRecord) => {
+  const mentors: MentorCandidate[] = mentorProfilesData.map((mp: JsonRecord) => {
     const person = mp.person_id ? peopleById.get(mp.person_id as string) : undefined;
     const personId = (mp.person_id as string | null) ?? null;
     const count = personId ? (mentorMatchCountByPersonId.get(personId) ?? 0) : 0;
@@ -475,11 +625,12 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
       mentor_code: (mp.mentor_code as string | null) ?? null,
       company_current: (mp.company_current as string | null) ?? null,
       title_current: (mp.title_current as string | null) ?? null,
-      active_match_count: count
+      active_match_count: count,
+      effective_capacity: effectiveMentorCapacity(mp.capacity_target)
     };
   }).sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "vi"));
 
-  const mentees: MenteeCandidate[] = (menteeProfilesRes.data ?? []).map((mp: JsonRecord) => {
+  const mentees: MenteeCandidate[] = menteeProfilesData.map((mp: JsonRecord) => {
     const person = mp.person_id ? peopleById.get(mp.person_id as string) : undefined;
     return {
       profile_id: mp.id as string,
@@ -561,7 +712,7 @@ export async function createManualMatch(input: {
   // Load mentor profile + person
   const { data: mentorProfile, error: mpErr } = await client
     .from("mentor_profiles")
-    .select("id,person_id,mentor_code,intake_batch_id")
+    .select("id,person_id,mentor_code,intake_batch_id,capacity_target")
     .eq("id", mentorProfileId)
     .maybeSingle();
   if (mpErr || !mentorProfile) {
@@ -583,18 +734,19 @@ export async function createManualMatch(input: {
   const mp = mentorProfile as JsonRecord;
   const mpe = menteeProfile as JsonRecord;
 
-  // Verify batch membership (both profiles must belong to this batch)
-  if (mp.intake_batch_id && mp.intake_batch_id !== intakeBatchId) {
-    return { ok: false, message: "Mentor không thuộc batch đã chọn." };
-  }
-  if (mpe.intake_batch_id && mpe.intake_batch_id !== intakeBatchId) {
-    return { ok: false, message: "Mentee không thuộc batch đã chọn." };
-  }
-
+  // Batch membership is NOT an eligibility rule and is no longer checked here.
+  //
+  // It used to reject any profile whose `intake_batch_id` differed from the
+  // selected batch, which excluded exactly the people S12 needs to match: a
+  // renewal mentor's reused profile still points at an older batch (or at no
+  // batch at all), so the check refused 130 of 142 approved mentors while
+  // admitting an unapproved profile that happened to carry the right batch id.
+  // Approval in the batch's SEASON, verified below, is both stricter and
+  // correct. The selected batch remains the operational context.
   const mentorPersonId = (mp.person_id as string | null) ?? null;
   const menteePersonId = (mpe.person_id as string | null) ?? null;
   if (!mentorPersonId || !menteePersonId) {
-    return { ok: false, message: "Há»“ sÆ¡ mentor/mentee thiáº¿u person_id nĂªn khĂ´ng thá»ƒ táº¡o match." };
+    return { ok: false, message: "Hồ sơ mentor/mentee thiếu person_id nên không thể tạo match." };
   }
 
   // Resolve season_id from batch
@@ -611,6 +763,29 @@ export async function createManualMatch(input: {
   const allowedSeasonIds = await getAllowedSeasonIds(ctx);
   if (!canAccessSeason(ctx, seasonId as string | null, allowedSeasonIds)) {
     return { ok: false, message: "Ban khong co quyen tao match trong mua nay." };
+  }
+
+  // Rule: both people must hold an approved application IN THIS SEASON.
+  //
+  // Checked here rather than trusted from the form, so a request naming a
+  // profile the candidate list never offered — an unapproved applicant, or
+  // someone approved only in an earlier season — is refused at the write.
+  if (!seasonId) {
+    return { ok: false, message: "Batch chưa gắn mùa nên không thể xác minh phê duyệt." };
+  }
+  const approvals = await loadSeasonApprovals(client, String(seasonId), [mentorPersonId, menteePersonId]);
+  if (!approvals.ok) return { ok: false, message: SAFE_ERROR };
+  if (!approvals.mentors.has(mentorPersonId)) {
+    return {
+      ok: false,
+      message: "Mentor này chưa được duyệt chính thức trong mùa của batch đã chọn."
+    };
+  }
+  if (!approvals.mentees.has(menteePersonId)) {
+    return {
+      ok: false,
+      message: "Mentee này chưa được duyệt chính thức trong mùa của batch đã chọn."
+    };
   }
 
   // Rule: mentee can have at most one active match
@@ -630,7 +805,10 @@ export async function createManualMatch(input: {
     return { ok: false, message: "Mentee này đã có mentor đang active. Hủy match cũ trước khi tạo match mới." };
   }
 
-  // Rule: mentor can have at most 3 active mentees
+  // Rule: a mentor takes at most the number of mentees THEY declared.
+  // Same helper the candidate list and the load bar use, so the number the
+  // operator sees is the number enforced here.
+  const mentorCapacity = effectiveMentorCapacity(mp.capacity_target);
   const { count: mentorActiveCount, error: mentorCountErr } = await client
     .from("matches")
     .select("id", { count: "exact", head: true })
@@ -641,10 +819,10 @@ export async function createManualMatch(input: {
     log("count mentor active matches failed", mentorCountErr);
     return { ok: false, message: SAFE_ERROR };
   }
-  if ((mentorActiveCount ?? 0) >= MAX_MENTOR_ACTIVE_MATCHES) {
+  if ((mentorActiveCount ?? 0) >= mentorCapacity) {
     return {
       ok: false,
-      message: `Mentor này đã có ${mentorActiveCount}/${MAX_MENTOR_ACTIVE_MATCHES} mentee. Không thể thêm mentee mới.`
+      message: `Mentor này đã có ${mentorActiveCount}/${mentorCapacity} mentee. Không thể thêm mentee mới.`
     };
   }
 
