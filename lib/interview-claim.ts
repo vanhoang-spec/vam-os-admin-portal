@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/bulk-assignment-action-types";
+import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
 import { canSelfClaimInterview } from "@/lib/permissions";
 import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -98,7 +98,21 @@ export async function claimInterviewReview(input: {
   }
 
   const appStatus = String(app.status ?? "").trim();
-  if (!INTERVIEW_ELIGIBLE_STATUSES.has(appStatus)) {
+  const { data: interviewProvenance, error: provenanceError } = await client
+    .from("application_reviews")
+    .select("id")
+    .eq("application_id", appId)
+    .eq("review_round", "interview")
+    .limit(1);
+  if (provenanceError) {
+    log("load interview provenance", provenanceError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!isApplicationReviewAssignable({
+    status: appStatus,
+    reviewRound: "interview",
+    hasAnyInterviewReview: Boolean(interviewProvenance?.length)
+  })) {
     return {
       ok: false,
       message: `Đơn này chưa được mời phỏng vấn (trạng thái hiện tại: ${appStatus || "chưa xác định"}).`

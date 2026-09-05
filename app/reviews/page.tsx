@@ -10,6 +10,7 @@ import { canBulkAssignReviews, canReview, isReviewerOnly } from "@/lib/permissio
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationReview } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
+import { isApplicationRecruitmentOperational } from "@/lib/application-review-assignability";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
@@ -85,7 +86,11 @@ export default async function ReviewsPage() {
       .map((r) => [r.data!.id, r.data!])
   );
 
-  const tableRows = reviews.map((review) => {
+  const operationalReviews = reviews.filter((review) => {
+    const app = appMap.get(review.application_id);
+    return app && isApplicationRecruitmentOperational(app.status ?? app.final_status);
+  });
+  const tableRows = operationalReviews.map((review) => {
     const app = appMap.get(review.application_id);
     const applicantName =
       app?.full_name ?? app?.person_id ?? review.application_id;
@@ -93,9 +98,9 @@ export default async function ReviewsPage() {
   });
 
   // Summary counts
-  const assignedCount = reviews.filter((r) => r.status === "assigned").length;
-  const inProgressCount = reviews.filter((r) => r.status === "in_progress").length;
-  const submittedCount = reviews.filter((r) => r.status === "submitted").length;
+  const assignedCount = operationalReviews.filter((r) => r.status === "assigned").length;
+  const inProgressCount = operationalReviews.filter((r) => r.status === "in_progress").length;
+  const submittedCount = operationalReviews.filter((r) => r.status === "submitted").length;
 
   return (
     <>

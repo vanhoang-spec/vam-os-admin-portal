@@ -1,7 +1,11 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { INTERVIEW_ELIGIBLE_STATUSES, PROFILE_ASSIGNMENT_STATUSES } from "@/lib/bulk-assignment-action-types";
+import {
+  INTERVIEW_ELIGIBLE_STATUSES,
+  PROFILE_ASSIGNMENT_STATUSES,
+  WITHDRAWN_APPLICATION_REVIEW_MESSAGE
+} from "@/lib/application-review-assignability";
 import { canBulkAssignReviews } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -185,7 +189,12 @@ export async function assignSelectedApplicationReviews(
   });
   if (error) {
     log("atomic selected assignment failed", error);
-    return { ok: false, message: SAFE_ERROR };
+    return {
+      ok: false,
+      message: String(error.message ?? "").includes("APPLICATION_WITHDRAWN")
+        ? WITHDRAWN_APPLICATION_REVIEW_MESSAGE
+        : SAFE_ERROR
+    };
   }
   const row = (Array.isArray(data) ? data[0] : data) as { batch_id: string; applications_assigned: number; reviewer_id: string } | null;
   if (!row?.batch_id || !Number.isInteger(row.applications_assigned) || row.applications_assigned < 1) {

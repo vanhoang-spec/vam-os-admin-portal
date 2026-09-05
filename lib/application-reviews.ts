@@ -1,10 +1,10 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { INTERVIEW_ELIGIBLE_STATUSES } from "@/lib/bulk-assignment-action-types";
+import { WITHDRAWN_APPLICATION_REVIEW_MESSAGE } from "@/lib/application-review-assignability";
 import { canAssignReview, canReview } from "@/lib/permissions";
 import { canOperateSeason, canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
-import { EDITABLE_REVIEW_STATUSES, isEditableReviewStatus } from "@/lib/review-status";
+import { isEditableReviewStatus } from "@/lib/review-status";
 import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -31,6 +31,13 @@ function log(scope: string, error: unknown) {
   });
 }
 
+function mutationErrorMessage(error: unknown): string {
+  const message = String((error as { message?: string } | null)?.message ?? "");
+  return message.includes("APPLICATION_WITHDRAWN")
+    ? WITHDRAWN_APPLICATION_REVIEW_MESSAGE
+    : SAFE_ERROR;
+}
+
 async function canWriteReviewWorkflowForApplication(client: any, applicationId: string) {
   const { data: application, error } = await client
     .from("applications")
@@ -41,11 +48,11 @@ async function canWriteReviewWorkflowForApplication(client: any, applicationId: 
     log("load application for review scope failed", error);
     return { ok: false as const, message: SAFE_ERROR };
   }
-  if (!application) return { ok: false as const, message: "KhĂ´ng tĂ¬m tháº¥y Ä‘Æ¡n á»©ng tuyá»ƒn." };
+  if (!application) return { ok: false as const, message: "Không tìm thấy đơn ứng tuyển." };
   const ctx = await getAdminScopeContext();
   if (!(await canReviewSeason(ctx, application.season_id as string | null)) &&
       !(await canOperateSeason(ctx, application.season_id as string | null))) {
-    return { ok: false as const, message: "Ban khong co quyen review trong mua cua don nay." };
+    return { ok: false as const, message: "Bạn không có quyền review trong mùa của đơn này." };
   }
   return { ok: true as const, application };
 }
@@ -93,11 +100,25 @@ export async function assignApplicationReview(input: AssignReviewInput): Promise
 
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, input.applicationId);
   if (!scopeAccess.ok) return scopeAccess;
-  if (
-    input.reviewRound === "interview" &&
-    !INTERVIEW_ELIGIBLE_STATUSES.has(String(scopeAccess.application.status ?? ""))
-  ) {
-    return { ok: false, message: "Đơn ứng tuyển chưa ở trạng thái đủ điều kiện phỏng vấn." };
+
+  const { data: eligibilityData, error: eligibilityError } = await client.rpc(
+    "vam095_application_review_assignability",
+    { p_application_id: input.applicationId, p_review_round: input.reviewRound }
+  );
+  if (eligibilityError) {
+    log("check application assignment eligibility failed", eligibilityError);
+    return { ok: false, message: mutationErrorMessage(eligibilityError) };
+  }
+  const eligibility = (Array.isArray(eligibilityData) ? eligibilityData[0] : eligibilityData) as
+    | { assignable: boolean; reason: string }
+    | null;
+  if (!eligibility?.assignable) {
+    return {
+      ok: false,
+      message: eligibility?.reason === "application_withdrawn"
+        ? WITHDRAWN_APPLICATION_REVIEW_MESSAGE
+        : "Đơn ứng tuyển chưa ở trạng thái phù hợp để phân công vòng đánh giá này."
+    };
   }
 
   const reviewerValidation = await validateReviewEligibleReviewers(
@@ -111,60 +132,22 @@ export async function assignApplicationReview(input: AssignReviewInput): Promise
     return { ok: false, message: reviewerValidation.message };
   }
 
-  // Sequential duplicate guard for every round. Durable concurrent protection
-  // still requires a database uniqueness constraint (documented in handoff).
-  const { data: existing, error: dupErr } = await client
-    .from("application_reviews")
-    .select("id")
-    .eq("application_id", input.applicationId)
-    .eq("review_round", input.reviewRound)
-    .eq("reviewer_admin_user_id", input.reviewerAdminUserId)
-    .neq("status", "cancelled")
-    .limit(1);
-
-  if (dupErr) {
-    log("check duplicate review assignment failed", dupErr);
-    return { ok: false, message: SAFE_ERROR };
-  }
-  if (existing && existing.length > 0) {
-    return { ok: false, message: "Reviewer này đã được giao ứng viên này trong cùng vòng review." };
-  }
-
-  const { data, error } = await client
-    .from("application_reviews")
-    .insert({
-      application_id: input.applicationId,
-      reviewer_admin_user_id: input.reviewerAdminUserId,
-      assigned_by: input.assignedByAdminUserId,
-      review_round: input.reviewRound,
-      due_at: input.dueAt ?? null,
-      status: "assigned"
-    })
-    .select("id")
-    .maybeSingle();
+  const { data, error } = await client.rpc("vam095_assign_application_review", {
+    p_application_id: input.applicationId,
+    p_reviewer_id: input.reviewerAdminUserId,
+    p_review_round: input.reviewRound,
+    p_due_at: input.dueAt ?? null,
+    p_actor: input.assignedByAdminUserId
+  });
 
   if (error) {
-    log("insert application_reviews failed", error);
-    return { ok: false, message: SAFE_ERROR };
+    log("atomic application review assignment failed", error);
+    return { ok: false, message: mutationErrorMessage(error) };
   }
   if (!data) {
     return { ok: false, message: SAFE_ERROR };
   }
-
-  // Advance application status to screening_assigned (only if currently submitted/ready)
-  if (input.reviewRound === "profile_screening") {
-    const { error: statusErr } = await client
-      .from("applications")
-      .update({ status: "screening_assigned" })
-      .eq("id", input.applicationId)
-      .in("status", ["submitted", "under_data_check", "ready_for_screening"]);
-    if (statusErr) {
-      // Non-fatal: log and continue; review row was already created
-      log("update application status to screening_assigned failed", statusErr);
-    }
-  }
-
-  return { ok: true, id: data.id as string };
+  return { ok: true, id: String(data) };
 }
 
 // ----------------------------------------------------------------
@@ -212,28 +195,21 @@ export async function saveApplicationReviewDraft(input: ReviewScoreInput): Promi
   const scopeAccess = await canWriteReviewWorkflowForApplication(client, existing.application_id as string);
   if (!scopeAccess.ok) return scopeAccess;
 
-  const { data: updated, error } = await client
-    .from("application_reviews")
-    .update({
-      status: "in_progress",
-      score_motivation: input.scoreMotivation ?? null,
-      score_goal_clarity: input.scoreGoalClarity ?? null,
-      score_commitment: input.scoreCommitment ?? null,
-      score_fit: input.scoreFit ?? null,
-      score_communication: input.scoreCommunication ?? null,
-      recommendation: input.recommendation ?? null,
-      reviewer_note: input.reviewerNote ?? null,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", input.reviewId)
-    .eq("reviewer_admin_user_id", input.adminUserId)
-    .in("status", [...EDITABLE_REVIEW_STATUSES])
-    .select("id")
-    .maybeSingle();
+  const { data: updated, error } = await client.rpc("vam095_save_application_review_draft", {
+    p_review_id: input.reviewId,
+    p_actor: input.adminUserId,
+    p_score_motivation: input.scoreMotivation ?? null,
+    p_score_goal_clarity: input.scoreGoalClarity ?? null,
+    p_score_commitment: input.scoreCommitment ?? null,
+    p_score_fit: input.scoreFit ?? null,
+    p_score_communication: input.scoreCommunication ?? null,
+    p_recommendation: input.recommendation ?? null,
+    p_reviewer_note: input.reviewerNote ?? null
+  });
 
   if (error) {
     log("update review draft failed", error);
-    return { ok: false, message: SAFE_ERROR };
+    return { ok: false, message: mutationErrorMessage(error) };
   }
   if (!updated) {
     return { ok: false, message: "Review đã thay đổi trạng thái; bản nháp không được lưu." };
@@ -289,7 +265,7 @@ export async function submitApplicationReview(input: ReviewScoreInput): Promise<
 
   if (error) {
     log("submit review update failed", error);
-    return { ok: false, message: SAFE_ERROR };
+    return { ok: false, message: mutationErrorMessage(error) };
   }
   if (!updated) {
     return { ok: false, message: "Review đã thay đổi trạng thái; thao tác submit bị từ chối." };
@@ -348,7 +324,7 @@ export async function reassignApplicationReview(input: {
   });
   if (error || !data) {
     log("atomic reassign review failed", error);
-    return { ok: false, message: SAFE_ERROR };
+    return { ok: false, message: mutationErrorMessage(error) };
   }
   return { ok: true, id: String(data) };
 }

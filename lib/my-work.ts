@@ -36,6 +36,7 @@
  * `Date.now()` — `now` is always passed in, so overdue and due-soon are
  * testable at an exact instant rather than "whatever the clock said".
  */
+import { isApplicationRecruitmentOperational } from "@/lib/application-review-assignability";
 
 /** Canonical review rounds that surface as My Work items in v1. */
 export const MY_WORK_PROFILE_ROUND = "profile_screening";
@@ -76,6 +77,7 @@ export type MyWorkSourceApplication = {
   id: string;
   full_name?: string | null;
   role_applied?: string | null;
+  status?: string | null;
 };
 
 export type MyWorkItem = {
@@ -222,6 +224,7 @@ export function buildMyWorkItems(input: {
     if (!kind) continue;
 
     const app = applications.get(review.application_id);
+    if (!app || !isApplicationRecruitmentOperational(app.status)) continue;
     const name = String(app?.full_name ?? "").trim();
 
     items.push({

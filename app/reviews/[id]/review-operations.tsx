@@ -36,13 +36,17 @@ function ReassignButton() {
 
 export function ReviewOperations({
   reviewId,
+  applicationId,
   isSubmitted,
   isCancelled,
+  allowReassign,
   reviewers
 }: {
   reviewId: string;
+  applicationId: string;
   isSubmitted: boolean;
   isCancelled: boolean;
+  allowReassign: boolean;
   reviewers: ReviewEligibleReviewer[];
 }) {
   const [cancelState, cancelAction] = useFormState(
@@ -71,12 +75,13 @@ export function ReviewOperations({
           </div>
         )}
         <input type="hidden" name="review_id" value={reviewId} />
+        <input type="hidden" name="application_id" value={applicationId} />
         <input required minLength={3} name="reason" placeholder="Lý do huỷ" className="mb-3 block w-full rounded-md border border-vam-line px-3 py-2 text-sm" />
         <CancelButton />
       </form>
 
-      {/* Reassign section */}
-      <form action={reassignAction} className="rounded-md border border-vam-line bg-white p-4">
+      {/* Reassign creates operational work and is never offered on a terminal parent. */}
+      {allowReassign ? <form action={reassignAction} className="rounded-md border border-vam-line bg-white p-4">
         <h3 className="mb-2 text-sm font-semibold text-slate-700">Đổi Người Review</h3>
         <p className="mb-4 text-xs text-slate-500">
           Huỷ review hiện tại và tạo review mới giao cho người bạn chọn.
@@ -87,6 +92,7 @@ export function ReviewOperations({
           </div>
         )}
         <input type="hidden" name="review_id" value={reviewId} />
+        <input type="hidden" name="application_id" value={applicationId} />
         <input required minLength={3} name="reason" placeholder="Lý do đổi người" className="block w-full rounded-md border border-vam-line px-3 py-2 text-sm" />
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-1 flex-col gap-1 min-w-[200px]">
@@ -106,7 +112,7 @@ export function ReviewOperations({
           </div>
           <ReassignButton />
         </div>
-      </form>
+      </form> : null}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { evaluateMentorClassifications } from "@/lib/classification";
 import { intersectAuthorizedAndCohort } from "@/lib/season-cohort";
 import { resolveSeasonContext } from "@/lib/season-context";
 import { REVIEW_ELIGIBLE_ROLES } from "@/lib/reviewer-eligibility";
+import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
 import {
   canOperateSeason,
   getAdminScopeContext,
@@ -1943,22 +1944,12 @@ export async function getReviewAssignableApplications(filters: {
     }
   }
 
-  const profileStatuses = new Set(['submitted','under_data_check','ready_for_screening','screening_assigned']);
-  const interviewStatuses = new Set(['invited_to_interview','interview_scheduled','interview_in_progress']);
-
   const validApps = appList.filter((a) => {
-    const status = a.status as string | null;
-    if (!status) return false;
-
-    if (reviewRound === "profile_screening") {
-      if (profileStatuses.has(status)) return true;
-      if (status === "needs_more_review" && !hasAnyInterviewByAppId.has(a.id)) return true;
-      return false;
-    } else {
-      if (interviewStatuses.has(status)) return true;
-      if (status === "needs_more_review" && hasAnyInterviewByAppId.has(a.id)) return true;
-      return false;
-    }
+    return isApplicationReviewAssignable({
+      status: a.status,
+      reviewRound,
+      hasAnyInterviewReview: hasAnyInterviewByAppId.has(a.id)
+    });
   });
 
   const data: ReviewAssignableApplication[] = validApps.map((a) => ({

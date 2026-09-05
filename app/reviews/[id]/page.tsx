@@ -10,7 +10,7 @@ import {
   getReviewEligibleReviewers,
   keyById
 } from "@/lib/data";
-import { canReview } from "@/lib/permissions";
+import { canAssignReview, canReview } from "@/lib/permissions";
 import { isEditableReviewStatus } from "@/lib/review-status";
 import { displayText, formatDate } from "@/lib/utils";
 import { Card, DetailGrid, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
@@ -93,6 +93,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   const displayPhone = app?.phone_primary ?? person?.phone_primary ?? null;
   const displayGender = app?.gender ?? person?.gender ?? null;
   const displayStatus = app?.status ?? app?.final_status ?? null;
+  const applicationWithdrawn = displayStatus === "withdrawn";
 
   // raw_payload entries
   const rawPayloadEntries = ((): [string, string][] => {
@@ -111,8 +112,11 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   // Permission guard: reviewer may only edit their own review
   const isOwner = review.reviewer_admin_user_id === adminUser.id;
   const canEdit =
+    !applicationWithdrawn &&
     isEditableReviewStatus(review.status) &&
     (isOwner || ["super_admin", "admin", "core_team"].includes(adminUser.role));
+  const canManageAssignment =
+    canAssignReview(adminUser.role) && isEditableReviewStatus(review.status);
 
   const error = reviewResult.error ?? appResult.error ?? personResult.error ?? seasons.error;
 
@@ -123,6 +127,13 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
         description={`${roundLabel(review.review_round)} • ${reviewStatusLabel(review.status)}`}
       />
       <ErrorBox message={error} />
+
+      {applicationWithdrawn ? (
+        <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <p className="font-semibold">Hồ sơ đã rút khỏi quy trình tuyển</p>
+          <p className="mt-1">Review này chỉ còn để xem lịch sử và không thể tiếp tục hoặc nộp.</p>
+        </div>
+      ) : null}
 
       {/* Review meta */}
       <Card className="mb-4">
@@ -214,17 +225,21 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
           />
         ) : (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            Bạn không có quyền chỉnh sửa review này.
+            {applicationWithdrawn
+              ? "Hồ sơ đã rút khỏi quy trình tuyển; review ở chế độ chỉ đọc."
+              : "Bạn không có quyền chỉnh sửa review này."}
           </div>
         )}
       </Card>
 
-      {adminUser.role !== "reviewer" && canEdit && !isSubmitted && review.status !== "cancelled" && (
+      {canManageAssignment && !isSubmitted && review.status !== "cancelled" && (
         <Card className="mb-4">
           <ReviewOperations
             reviewId={review.id}
+            applicationId={review.application_id}
             isSubmitted={isSubmitted}
             isCancelled={review.status === "cancelled"}
+            allowReassign={!applicationWithdrawn}
             reviewers={reviewersResult.data}
           />
         </Card>

@@ -23,17 +23,9 @@ export const initialBulkAssignmentActionState: BulkAssignmentActionState = {
   message: null
 };
 
-export const INTERVIEW_ELIGIBLE_STATUSES: ReadonlySet<string> = new Set([
-  "invited_to_interview",
-  "interview_scheduled",
-  "interview_in_progress",
-  "needs_more_review"
-]);
-
-export const PROFILE_ASSIGNMENT_STATUSES: ReadonlySet<string> = new Set([
-  "submitted",
-  "under_data_check",
-  "ready_for_screening",
-  "screening_assigned",
-  "needs_more_review"
-]);
+// Compatibility re-export. The lifecycle rule itself lives in one domain
+// module shared by individual assignment, bulk assignment and queue reads.
+export {
+  INTERVIEW_ELIGIBLE_STATUSES,
+  PROFILE_ASSIGNMENT_STATUSES
+} from "@/lib/application-review-assignability";

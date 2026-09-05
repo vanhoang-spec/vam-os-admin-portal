@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { recordApplicationDecision } from "@/lib/application-decisions";
+import { recordApplicationDecision, restoreWithdrawnApplication } from "@/lib/application-decisions";
 import { canDecide } from "@/lib/permissions";
 import type { DecisionActionState } from "@/lib/decision-action-types";
 import { ALLOWED_DECISION_STATUSES } from "@/lib/decision-action-types";
@@ -49,9 +49,45 @@ export async function updateApplicationDecisionAction(
 
     revalidatePath(`/applications/${applicationId}`);
     revalidatePath("/applications");
+    revalidatePath("/reviews");
+    revalidatePath("/my-work");
+    revalidatePath("/interviews");
     return { ok: true, message: "Đã ghi nhận quyết định thành công." };
   } catch (err) {
     console.error("[updateApplicationDecisionAction]", err);
+    return fail("Lỗi hệ thống. Vui lòng thử lại.");
+  }
+}
+
+export async function restoreWithdrawnApplicationAction(
+  _prev: DecisionActionState,
+  formData: FormData
+): Promise<DecisionActionState> {
+  try {
+    const adminUser = await getCurrentAdminUser();
+    if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
+    if (!canDecide(adminUser.role)) return fail("Bạn không có quyền khôi phục hồ sơ.");
+
+    const applicationId = String(formData.get("application_id") ?? "").trim();
+    const reason = String(formData.get("restore_reason") ?? "").trim();
+    if (!applicationId) return fail("Thiếu application_id.");
+    if (reason.length < 3) return fail("Vui lòng nhập lý do nội bộ để khôi phục hồ sơ.");
+
+    const result = await restoreWithdrawnApplication({
+      applicationId,
+      actorAdminUserId: adminUser.id,
+      reason
+    });
+    if (!result.ok) return fail(result.message);
+
+    revalidatePath(`/applications/${applicationId}`);
+    revalidatePath("/applications");
+    revalidatePath("/reviews");
+    revalidatePath("/my-work");
+    revalidatePath("/interviews");
+    return { ok: true, message: `Đã khôi phục hồ sơ về trạng thái ${result.restoredStatus}.` };
+  } catch (err) {
+    console.error("[restoreWithdrawnApplicationAction]", err);
     return fail("Lỗi hệ thống. Vui lòng thử lại.");
   }
 }

@@ -24,9 +24,11 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getAdminScopeContext, canReviewSeason, canOperateSeason } from "@/lib/program-scope";
 import {
   assignApplicationReview,
+  cancelApplicationReview,
   saveApplicationReviewDraft,
   submitApplicationReview,
 } from "@/lib/application-reviews";
+import { buildMyWorkItems } from "@/lib/my-work";
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
@@ -49,7 +51,10 @@ function makeChain(result: { data?: unknown; error?: unknown } = {}): unknown {
   return chain;
 }
 
-function makeClient(fromResponses: unknown[], rpc?: (name: string) => Promise<unknown>) {
+function makeClient(
+  fromResponses: unknown[],
+  rpc?: (name: string, params?: Record<string, unknown>) => Promise<unknown>
+) {
   const fromMock = vi.fn();
   fromResponses.forEach((r) => fromMock.mockReturnValueOnce(r));
   fromMock.mockReturnValue(makeChain());
@@ -91,17 +96,57 @@ beforeEach(() => {
 // ── assignApplicationReview — DB error safety ─────────────────────────────────
 
 describe("assignApplicationReview — DB error safety", () => {
+  it("rejects a crafted withdrawn assignment before the assignment RPC", async () => {
+    const rpc = vi.fn(async (name: string) => {
+      if (name === "vam095_application_review_assignability") {
+        return {
+          data: [{ assignable: false, reason: "application_withdrawn" }],
+          error: null,
+        };
+      }
+      throw new Error(`unexpected RPC ${name}`);
+    });
+    const client = makeClient([
+      makeChain({ data: { ...scopeApp(), status: "withdrawn" } }),
+    ], rpc);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await assignApplicationReview({
+      applicationId: APP_UUID,
+      reviewerAdminUserId: "reviewer-1",
+      assignedByAdminUserId: ADMIN_ID,
+      reviewRound: "profile_screening",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Hồ sơ đã rút khỏi quy trình tuyển và không thể được phân công đánh giá.",
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalledWith("vam095_assign_application_review", expect.anything());
+  });
+
   it("insert failure: raw DB message is not returned to caller", async () => {
     // Call sequence:
     // 1. from("applications") → scopeApp (canWriteReviewWorkflowForApplication)
-    // 2. from("admin_users") → eligible target reviewer
-    // 3. from("application_reviews") → no duplicate
-    // 4. from("application_reviews").insert → error
+    // 2. canonical assignability RPC → eligible
+    // 3. participant-list RPC → eligible target reviewer
+    // 4. atomic assignment RPC → error
+    const rpc = vi.fn(async (name: string) => {
+      if (name === "vam095_application_review_assignability") {
+        return { data: [{ assignable: true, reason: "assignable" }], error: null };
+      }
+      if (name === "vam084_list_recruitment_participants") {
+        return { data: [{ id: "reviewer-1", role: "reviewer" }], error: null };
+      }
+      if (name === "vam095_assign_application_review") {
+        return { data: null, error: { code: "42501", message: SENSITIVE_MSG } };
+      }
+      throw new Error(`unexpected RPC ${name}`);
+    });
     const client = makeClient([
       makeChain({ data: scopeApp() }),
-      makeChain({ data: [] }),
-      makeChain({ data: null, error: { code: "42501", message: SENSITIVE_MSG } }),
-    ], vi.fn().mockResolvedValue({ data: [{ id: "reviewer-1", role: "reviewer" }], error: null }));
+    ], rpc);
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await assignApplicationReview({
@@ -118,6 +163,7 @@ describe("assignApplicationReview — DB error safety", () => {
       expect(result.message).not.toContain("permission denied");
       expect(result.message.length).toBeGreaterThan(0);
     }
+    expect(rpc).toHaveBeenCalledWith("vam095_assign_application_review", expect.anything());
   });
 });
 
@@ -128,12 +174,14 @@ describe("saveApplicationReviewDraft — DB error safety", () => {
     // Call sequence:
     // 1. from("application_reviews").select → existing review (ownership check)
     // 2. from("applications").select → scopeApp (canWriteReviewWorkflowForApplication)
-    // 3. from("application_reviews").update → error (direct await)
+    // 3. atomic draft-save RPC → error
     const client = makeClient([
       makeChain({ data: existingReview() }),
       makeChain({ data: scopeApp() }),
-      makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),
-    ]);
+    ], vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: SENSITIVE_MSG },
+    }));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await saveApplicationReviewDraft({
@@ -154,6 +202,29 @@ describe("saveApplicationReviewDraft — DB error safety", () => {
 // ── submitApplicationReview — DB error safety ─────────────────────────────────
 
 describe("submitApplicationReview — DB error safety", () => {
+  it("maps a stale submit rejected after withdrawal to the terminal message", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "APPLICATION_WITHDRAWN" },
+    });
+    const client = makeClient([
+      makeChain({ data: existingReview() }),
+      makeChain({ data: { ...scopeApp(), status: "withdrawn" } }),
+    ], rpc);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+
+    const result = await submitApplicationReview({
+      reviewId: REVIEW_UUID,
+      adminUserId: ADMIN_ID,
+      recommendation: "reject",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Hồ sơ đã rút khỏi quy trình tuyển và không thể được phân công đánh giá.",
+    });
+  });
+
   it("update failure: raw DB message is not returned to caller", async () => {
     // Call sequence:
     // 1. from("application_reviews").select → existing review (ownership + status check)
@@ -177,5 +248,54 @@ describe("submitApplicationReview — DB error safety", () => {
       expect(result.message).not.toContain("INTERNAL");
       expect(result.message.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("terminal cancellation correction", () => {
+  it("cancels synthetic active work on withdrawn, audits it, keeps withdrawn, and clears My Work", async () => {
+    const state = {
+      application: { id: APP_UUID, status: "withdrawn", full_name: "Synthetic Applicant" },
+      review: {
+        ...existingReview(),
+        review_round: "profile_screening",
+        status: "assigned",
+        due_at: null,
+      },
+      events: [] as Array<Record<string, unknown>>,
+    };
+    const rpc = vi.fn(async (name: string, params?: Record<string, unknown>) => {
+      expect(name).toBe("vam084_change_review_assignment");
+      expect(params?.p_new_reviewer).toBeNull();
+      expect(params?.p_actor).toBe(ADMIN_ID);
+      state.review.status = "cancelled";
+      state.events.push({
+        event_type: "cancelled",
+        previous_review_id: REVIEW_UUID,
+        actor_admin_user_id: ADMIN_ID,
+      });
+      return { data: REVIEW_UUID, error: null };
+    });
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(makeClient([], rpc));
+
+    const result = await cancelApplicationReview({
+      reviewId: REVIEW_UUID,
+      adminUserId: ADMIN_ID,
+      reason: "Clean legacy assignment on withdrawn application",
+    });
+
+    expect(result).toEqual({ ok: true, id: REVIEW_UUID });
+    expect(state.application.status).toBe("withdrawn");
+    expect(state.review.status).toBe("cancelled");
+    expect(state.events).toEqual([expect.objectContaining({
+      event_type: "cancelled",
+      previous_review_id: REVIEW_UUID,
+      actor_admin_user_id: ADMIN_ID,
+    })]);
+    expect(buildMyWorkItems({
+      reviews: [state.review],
+      applications: new Map([[APP_UUID, state.application]]),
+      assigneeAdminUserId: ADMIN_ID,
+      now: new Date("2026-09-05T00:00:00Z"),
+    })).toEqual([]);
   });
 });

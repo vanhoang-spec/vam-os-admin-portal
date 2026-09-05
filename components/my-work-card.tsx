@@ -39,7 +39,12 @@ export async function MyWorkCard({ scope }: { scope?: ScopeFilter }) {
   const applications = new Map<string, MyWorkSourceApplication>();
   for (const app of applicationsResult.data) {
     if (neededIds.has(app.id)) {
-      applications.set(app.id, { id: app.id, full_name: app.full_name, role_applied: app.role_applied });
+      applications.set(app.id, {
+        id: app.id,
+        full_name: app.full_name,
+        role_applied: app.role_applied,
+        status: app.status
+      });
     }
   }
 

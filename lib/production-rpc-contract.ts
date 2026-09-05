@@ -136,14 +136,16 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  * Migrations: 20260903180000_p0_restore_recruitment_review_rpcs.sql (applied)
  *             20260831120000_s12_m092_bulk_official_approval.sql (NOT applied to Production)
  *             20260901090000_s12_m093_pre_uat_hardening.sql (NOT applied to Production)
+ *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
-  // Empty. M092 and then VAM094 each passed through this bucket while they were
-  // Production-pending, and each moved to PRODUCTION_PROVIDED_RPCS above only
-  // once its migration was actually applied and verified against the Production
-  // catalog (M092 on 2026-09-04 by 20260904070000; VAM094 on 2026-09-04 by
-  // 20260904120000). A future RPC that ships ahead of its Production apply
-  // belongs here.
+  // VAM095 P1 withdrawn-application quarantine. These remain explicitly
+  // Production-pending until the owner applies 20260905140900 and records
+  // read-only catalog verification; this candidate does not apply it.
+  "vam095_application_review_assignability",
+  "vam095_assign_application_review",
+  "vam095_restore_withdrawn_application",
+  "vam095_save_application_review_draft"
 ];
 
 /**

@@ -133,18 +133,31 @@ function AssignNewForm({
   );
 }
 
+function NotAssignableNotice({ title }: { title: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+      <span className="font-medium text-slate-700">{title}:</span>{" "}
+      trạng thái hiện tại chưa cho phép tạo phân công mới.
+    </div>
+  );
+}
+
 export function AssignmentControls({
   applicationId,
   profileReviewers,
   interviewers,
   activeProfileReview,
-  activeInterviewReview
+  activeInterviewReview,
+  profileAssignable,
+  interviewAssignable
 }: {
   applicationId: string;
   profileReviewers: AdminUserPublic[];
   interviewers: AdminUserPublic[];
   activeProfileReview?: ApplicationReview & { reviewer_name: string };
   activeInterviewReview?: ApplicationReview & { reviewer_name: string };
+  profileAssignable: boolean;
+  interviewAssignable: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -155,13 +168,15 @@ export function AssignmentControls({
             review={activeProfileReview} 
             reviewers={profileReviewers} 
           />
-        ) : (
+        ) : profileAssignable ? (
           <AssignNewForm 
             title="Đánh giá hồ sơ" 
             applicationId={applicationId} 
             reviewers={profileReviewers} 
             round="profile_screening" 
           />
+        ) : (
+          <NotAssignableNotice title="Đánh giá hồ sơ" />
         )}
       </div>
 
@@ -172,13 +187,15 @@ export function AssignmentControls({
             review={activeInterviewReview} 
             reviewers={interviewers} 
           />
-        ) : (
+        ) : interviewAssignable ? (
           <AssignNewForm 
             title="Phỏng vấn" 
             applicationId={applicationId} 
             reviewers={interviewers} 
             round="interview" 
           />
+        ) : (
+          <NotAssignableNotice title="Phỏng vấn" />
         )}
       </div>
     </div>

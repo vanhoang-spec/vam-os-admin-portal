@@ -34,6 +34,9 @@ import {
 import { AssignmentControls } from "./assign-reviewer-form";
 import { DecisionForm } from "./decision-form";
 import { ApprovalForm } from "./approval-form";
+import { RestoreWithdrawnForm } from "./restore-withdrawn-form";
+import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
+import { isEditableReviewStatus } from "@/lib/review-status";
 
 const QUESTION_ORDER = [
   "consent_marketing_email",
@@ -237,6 +240,20 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const decisions: ApplicationDecision[] = decisionsResult.data ?? [];
   const canAssign = canAssignReview(adminUser?.role) && canOperateAnyScope(scopeContext);
   const canMakeDecision = canDecide(adminUser?.role) && canOperateAnyScope(scopeContext);
+  const isWithdrawn = displayStatus === "withdrawn";
+  const latestWithdrawal = decisions.find((decision) => decision.new_status === "withdrawn") ?? null;
+  const correctionNeededReviews = reviews.filter((review) => isEditableReviewStatus(review.status));
+  const hasAnyInterviewReview = reviews.some((review) => review.review_round === "interview");
+  const profileAssignable = isApplicationReviewAssignable({
+    status: displayStatus,
+    reviewRound: "profile_screening",
+    hasAnyInterviewReview
+  });
+  const interviewAssignable = isApplicationReviewAssignable({
+    status: displayStatus,
+    reviewRound: "interview",
+    hasAnyInterviewReview
+  });
 
   // Latest submitted review (for the decision form context)
   const latestSubmittedReview = reviews.find((r) => r.status === "submitted");
@@ -325,8 +342,48 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       </p>
       <ErrorBox message={error} />
 
+      {isWithdrawn ? (
+        <Card className="mb-4 border-red-300 bg-red-50">
+          <h2 data-testid="withdrawn-terminal-banner" className="text-base font-semibold text-red-900">
+            Hồ sơ đã rút khỏi quy trình tuyển
+          </h2>
+          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs font-medium uppercase text-red-700">Thời gian</dt>
+              <dd className="mt-1 text-red-950">
+                {latestWithdrawal?.created_at ? formatDate(latestWithdrawal.created_at) : "Không xác định"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-red-700">Người thực hiện</dt>
+              <dd className="mt-1 text-red-950">{displayText(latestWithdrawal?.decided_by_name)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-red-700">Lý do / ghi chú</dt>
+              <dd className="mt-1 whitespace-pre-wrap text-red-950">
+                {displayText(latestWithdrawal?.decision_note)}
+              </dd>
+            </div>
+          </dl>
+          {correctionNeededReviews.length > 0 ? (
+            <div className="mt-4 rounded-md border border-red-300 bg-white px-3 py-2 text-sm text-red-800">
+              <p className="font-semibold">Cần huỷ phân công</p>
+              <p className="mt-1">
+                Phát hiện {correctionNeededReviews.length} phân công chưa kết thúc từ dữ liệu cũ. Không được tiếp tục review;
+                Core Team/Admin cần huỷ các phân công này có audit.
+              </p>
+            </div>
+          ) : null}
+          {canMakeDecision ? (
+            <RestoreWithdrawnForm applicationId={application.data.id} />
+          ) : (
+            <p className="mt-4 text-sm text-red-800">Chỉ Core Team/Admin mới có thể khôi phục hồ sơ.</p>
+          )}
+        </Card>
+      ) : null}
+
       {/* ── Assign reviewer (admin / core_team only) ─────────────────────────── */}
-      {canAssign && (
+      {canAssign && !isWithdrawn && (
         <Card className="mb-4">
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Giao Review</h2>
           {(profileReviewersResult.error || interviewersResult.error) && (
@@ -348,6 +405,8 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
               const u = r.reviewer_admin_user_id ? adminUserMap.get(r.reviewer_admin_user_id) : null;
               return { ...r, reviewer_name: u ? (u.full_name || u.email) : "Không xác định" };
             })()}
+            profileAssignable={profileAssignable}
+            interviewAssignable={interviewAssignable}
           />
         </Card>
       )}
@@ -385,6 +444,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                       <td className="px-4 py-3">
                         <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
                           {reviewStatusLabel(review.status)}
+                          {isWithdrawn && isEditableReviewStatus(review.status) ? " · Cần huỷ phân công" : ""}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
@@ -401,7 +461,11 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                           href={`/reviews/${review.id}`}
                           className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
                         >
-                          {review.status === "submitted" ? "Xem" : "Thực hiện đánh giá"}
+                          {isWithdrawn && isEditableReviewStatus(review.status)
+                            ? "Huỷ phân công"
+                            : review.status === "submitted" || isWithdrawn
+                              ? "Xem"
+                              : "Thực hiện đánh giá"}
                         </Link>
                       </td>
                     </tr>
@@ -414,7 +478,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       </Card>
 
       {/* ── Admin/core-team decision ──────────────────────────────────────────── */}
-      <Card className="mb-4">
+      {!isWithdrawn && <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">
           Quyết định của Admin / Core team
         </h2>
@@ -431,7 +495,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             Chỉ admin / core team mới có thể ra quyết định cho đơn này.
           </p>
         )}
-      </Card>
+      </Card>}
 
       {/* ── Decision history ──────────────────────────────────────────────────── */}
       <Card className="mb-4">

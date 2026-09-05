@@ -63,7 +63,8 @@ export default async function MyWorkPage() {
       applications.set(app.id, {
         id: app.id,
         full_name: app.full_name,
-        role_applied: app.role_applied
+        role_applied: app.role_applied,
+        status: app.status
       });
     }
   }

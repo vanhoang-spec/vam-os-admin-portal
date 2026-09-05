@@ -82,8 +82,8 @@ function apps(...entries: MyWorkSourceApplication[]) {
   return new Map(entries.map((entry) => [entry.id, entry]));
 }
 
-const APP_MENTEE: MyWorkSourceApplication = { id: "app-1", full_name: "Nguyễn Văn A", role_applied: "mentee" };
-const APP_MENTOR: MyWorkSourceApplication = { id: "app-2", full_name: "Trần Thị B", role_applied: "mentor" };
+const APP_MENTEE: MyWorkSourceApplication = { id: "app-1", full_name: "Nguyễn Văn A", role_applied: "mentee", status: "screening_assigned" };
+const APP_MENTOR: MyWorkSourceApplication = { id: "app-2", full_name: "Trần Thị B", role_applied: "mentor", status: "interview_in_progress" };
 
 function build(reviews: MyWorkSourceReview[], assignee = USER_A, now = NOW) {
   return buildMyWorkItems({
@@ -214,6 +214,17 @@ describe("4. a cancelled assignment is not actionable", () => {
       review({ id: "rev-dead", status: "cancelled" })
     ]);
     expect(items.map((item) => item.reviewId)).toEqual(["rev-live"]);
+  });
+
+  test("an active legacy review for a withdrawn application is quarantined", () => {
+    const withdrawn = { ...APP_MENTEE, status: "withdrawn" };
+    const items = buildMyWorkItems({
+      reviews: [review({ id: "rev-withdrawn", status: "in_progress" })],
+      applications: apps(withdrawn),
+      assigneeAdminUserId: USER_A,
+      now: NOW
+    });
+    expect(items).toEqual([]);
   });
 
   test("cancelling the canonical row is what removes it — nothing else changes", () => {
@@ -386,9 +397,7 @@ describe("8. program/season scoping is preserved", () => {
       assigneeAdminUserId: USER_A,
       now: NOW
     });
-    expect(items).toHaveLength(1);
-    expect(items[0].applicantName).toBeNull();
-    expect(items[0].applicantRole).toBeNull();
+    expect(items).toHaveLength(0);
   });
 
   test("a scope resolution failure does not fall back to an unscoped read", async () => {

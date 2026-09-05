@@ -118,6 +118,7 @@ describe("getReviewAssignableApplications (Data layer round semantics)", () => {
       { id: "app1", status: "submitted" },
       { id: "app2", status: "invited_to_interview" },
       { id: "app3", status: "screening_assigned" },
+      { id: "app4", status: "withdrawn" },
     ];
     
     const { data, error } = await getReviewAssignableApplications({ reviewRound: "profile_screening" });
@@ -126,6 +127,7 @@ describe("getReviewAssignableApplications (Data layer round semantics)", () => {
     expect(ids).toContain("app1");
     expect(ids).toContain("app3");
     expect(ids).not.toContain("app2"); // Wrong round status
+    expect(ids).not.toContain("app4"); // Terminal application
   });
 
   it("filters interview strictly by interview statuses", async () => {
@@ -133,6 +135,7 @@ describe("getReviewAssignableApplications (Data layer round semantics)", () => {
       { id: "app1", status: "submitted" },
       { id: "app2", status: "invited_to_interview" },
       { id: "app3", status: "interview_in_progress" },
+      { id: "app4", status: "withdrawn" },
     ];
     
     const { data, error } = await getReviewAssignableApplications({ reviewRound: "interview" });
@@ -141,6 +144,7 @@ describe("getReviewAssignableApplications (Data layer round semantics)", () => {
     expect(ids).toContain("app2");
     expect(ids).toContain("app3");
     expect(ids).not.toContain("app1");
+    expect(ids).not.toContain("app4");
   });
 
   it("preserves M093 needs_more_review exact provenance", async () => {

@@ -45,6 +45,10 @@ export type DecisionResult =
   | { ok: true; id: string; applied: number; failed: number; message?: string }
   | { ok: false; message: string };
 
+export type RestoreWithdrawnResult =
+  | { ok: true; applicationId: string; restoredStatus: string }
+  | { ok: false; message: string };
+
 const REASON_MESSAGES: Record<string, string> = {
   scope_denied: "Bạn không có quyền vận hành mùa của đơn này.",
   expected_status_missing: "Thiếu trạng thái dự kiến. Vui lòng tải lại trước khi quyết định.",
@@ -105,4 +109,41 @@ export async function recordApplicationDecision(
     decisionNote: input.decisionNote,
     expectedStatuses: { [input.applicationId]: input.previousStatus ?? "" }
   });
+}
+
+export async function restoreWithdrawnApplication(input: {
+  applicationId: string;
+  actorAdminUserId: string;
+  reason: string;
+}): Promise<RestoreWithdrawnResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const { data, error } = await client.rpc("vam095_restore_withdrawn_application", {
+    p_application_id: input.applicationId,
+    p_actor: input.actorAdminUserId,
+    p_reason: input.reason
+  });
+  if (error) {
+    log("restore withdrawn application failed", error);
+    const message = String(error.message ?? "");
+    if (message.includes("provenance")) {
+      return {
+        ok: false,
+        message: "Không xác định được trạng thái trước khi rút hồ sơ. Cần xử lý thủ công có kiểm soát."
+      };
+    }
+    if (message.includes("Only a withdrawn application")) {
+      return { ok: false, message: "Hồ sơ không còn ở trạng thái đã rút. Vui lòng tải lại trang." };
+    }
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { application_id: string; new_status: string; decision_id: string }
+    | null;
+  if (!row?.application_id || !row.new_status || !row.decision_id) {
+    return { ok: false, message: SAFE_ERROR };
+  }
+  return { ok: true, applicationId: row.application_id, restoredStatus: row.new_status };
 }

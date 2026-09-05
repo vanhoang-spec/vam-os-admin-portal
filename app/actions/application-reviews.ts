@@ -166,6 +166,7 @@ export async function cancelApplicationReviewAction(
 
     revalidatePath(`/reviews/${reviewId}`);
     revalidatePath("/reviews");
+    revalidatePath("/my-work");
     if (applicationId) {
       revalidatePath(`/applications/${applicationId}`);
       revalidatePath("/applications");
