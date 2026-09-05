@@ -2496,8 +2496,8 @@ export async function getInterviewCandidates(filters?: {
 
   const reviewerQueue = filters?.actor.role === "reviewer";
   const applicationProjection = reviewerQueue
-    ? "id,full_name,status,intake_batch_id,role_applied,sbd,submitted_at"
-    : "id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at";
+    ? "id,full_name,status,intake_batch_id,role_applied,sbd,submitted_at,season_id"
+    : "id,full_name,email_primary,phone_primary,status,intake_batch_id,role_applied,sbd,submitted_at,season_id";
   const { data: appRows, error: appsErr } = await readAllPages<JsonRecord>(
     "applications",
     applicationProjection,
@@ -2519,6 +2519,7 @@ export async function getInterviewCandidates(filters?: {
     role_applied: string | null;
     sbd: string | null;
     submitted_at: string | null;
+    season_id: string | null;
   }[])
     // Restores the `.order("submitted_at").order("id")` the paged read replaces.
     .sort((a, b) => String(a.submitted_at ?? "").localeCompare(String(b.submitted_at ?? "")) || String(a.id).localeCompare(String(b.id)));
@@ -2598,8 +2599,32 @@ export async function getInterviewCandidates(filters?: {
   }
   const contactByAppId = new Map(ownedContacts.data.map((row) => [String(row.id), row]));
 
+  const isInterviewerForSeason = new Map<string, boolean>();
+  if (reviewerQueue) {
+    const uniqueSeasons = Array.from(new Set(appList.map(a => a.season_id as string).filter(Boolean)));
+    for (const sid of uniqueSeasons) {
+      const { data: participant } = await client.rpc(
+        "vam084_participant_for_stage",
+        { p_admin_user_id: filters.actor.adminUserId, p_season_id: sid, p_review_stage: "interview" }
+      );
+      isInterviewerForSeason.set(sid, participant === true);
+    }
+  }
+
   const visibleApps = reviewerQueue
-    ? appList.filter((application) => ownedReviewByAppId.has(application.id))
+    ? appList.filter((application) => {
+        const appId = application.id;
+        const sid = application.season_id as string;
+        const isOwned = ownedReviewByAppId.has(appId);
+        const hasActiveReview = reviewByAppId.has(appId);
+        
+        if (isOwned) return true; // always see owned
+        
+        // Unassigned candidates are visible if the actor is an interviewer for that season
+        if (!hasActiveReview && isInterviewerForSeason.get(sid)) return true;
+        
+        return false;
+      })
     : appList;
   const data: InterviewCandidateRow[] = visibleApps.map((a) => {
     const activeReview = reviewByAppId.get(a.id) ?? null;
