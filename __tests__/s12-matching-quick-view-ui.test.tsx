@@ -297,3 +297,206 @@ describe("the drawer is read-only", () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Stale-response concurrency
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Two quick-view loads can be in flight at once and can resolve in either
+ * order. The failure these guard against is not a crash — it is the drawer
+ * showing one person's answers under another person's name, on the screen whose
+ * whole job is deciding who to pair. Server actions cannot be cancelled, so the
+ * stale response still arrives; it must simply be ignored.
+ */
+const MENTEE_PAYLOAD = {
+  role: "mentee" as const,
+  fullName: "Le Mentee One",
+  summary: [{ label: "Trường", value: "UEH" }],
+  answers: [{ key: "mentoring_goals_text", label: "Mục tiêu mentoring", value: "Định hướng" }],
+  empty: false
+};
+
+/** A promise plus the handles to settle it whenever the test chooses. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("stale quick-view responses are ignored", () => {
+  it("A · a slow Mentor response never overwrites the Mentee opened after it", async () => {
+    const mentorRequest = deferred<unknown>();
+    const menteeRequest = deferred<unknown>();
+    loadQuickView
+      .mockReturnValueOnce(mentorRequest.promise)
+      .mockReturnValueOnce(menteeRequest.promise);
+
+    renderForm();
+    makeSelections();
+
+    // 1. Mentor A opened — request A pending.
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    await screen.findByText("Đang tải hồ sơ…");
+
+    // 2. Mentee B opened — request B pending, A now stale.
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[1]);
+
+    // 3. B resolves first and is shown.
+    menteeRequest.resolve({ ok: true, data: MENTEE_PAYLOAD });
+    await screen.findByText("Mục tiêu mentoring");
+
+    // 4. A resolves late. It must change nothing.
+    mentorRequest.resolve({ ok: true, data: PAYLOAD });
+    await waitFor(() => expect(loadQuickView).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByText("Mục tiêu mentoring")).toBeTruthy();
+    expect(screen.queryByText("Chủ đề mentoring")).toBeNull();
+    expect(screen.queryByText("Career pivot")).toBeNull();
+    // The header still names B, and now so does the body.
+    expect(screen.getByRole("dialog").getAttribute("aria-label")).toBe("Le Mentee One");
+  });
+
+  it("A · the late response also does not resurrect the loading state", async () => {
+    const mentorRequest = deferred<unknown>();
+    const menteeRequest = deferred<unknown>();
+    loadQuickView
+      .mockReturnValueOnce(mentorRequest.promise)
+      .mockReturnValueOnce(menteeRequest.promise);
+
+    renderForm();
+    makeSelections();
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    await screen.findByText("Đang tải hồ sơ…");
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[1]);
+
+    // The stale one settles BEFORE the current one. An unguarded `finally`
+    // would clear the current request's spinner here and leave a blank drawer.
+    mentorRequest.resolve({ ok: true, data: PAYLOAD });
+    await waitFor(() => expect(screen.getByText("Đang tải hồ sơ…")).toBeTruthy());
+    expect(screen.queryByText("Chủ đề mentoring")).toBeNull();
+
+    menteeRequest.resolve({ ok: true, data: MENTEE_PAYLOAD });
+    await screen.findByText("Mục tiêu mentoring");
+  });
+
+  it("B · a stale FAILURE does not replace the newer content", async () => {
+    const mentorRequest = deferred<unknown>();
+    const menteeRequest = deferred<unknown>();
+    loadQuickView
+      .mockReturnValueOnce(mentorRequest.promise)
+      .mockReturnValueOnce(menteeRequest.promise);
+
+    renderForm();
+    makeSelections();
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    await screen.findByText("Đang tải hồ sơ…");
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[1]);
+
+    menteeRequest.resolve({ ok: true, data: MENTEE_PAYLOAD });
+    await screen.findByText("Mục tiêu mentoring");
+
+    // The abandoned request fails. That is not an error about what is on screen.
+    mentorRequest.resolve({ ok: false, message: "Không thể tải hồ sơ." });
+    await waitFor(() => expect(loadQuickView).toHaveBeenCalledTimes(2));
+
+    expect(screen.queryByText("Không thể tải hồ sơ.")).toBeNull();
+    expect(screen.getByText("Mục tiêu mentoring")).toBeTruthy();
+  });
+
+  it("B · a stale THROWN error is ignored too", async () => {
+    const mentorRequest = deferred<unknown>();
+    const menteeRequest = deferred<unknown>();
+    loadQuickView
+      .mockReturnValueOnce(mentorRequest.promise)
+      .mockReturnValueOnce(menteeRequest.promise);
+
+    renderForm();
+    makeSelections();
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    await screen.findByText("Đang tải hồ sơ…");
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[1]);
+
+    menteeRequest.resolve({ ok: true, data: MENTEE_PAYLOAD });
+    await screen.findByText("Mục tiêu mentoring");
+
+    mentorRequest.reject(new Error("network"));
+    await waitFor(() => expect(loadQuickView).toHaveBeenCalledTimes(2));
+
+    expect(screen.queryByText(/Không thể tải hồ sơ/)).toBeNull();
+    expect(screen.getByText("Mục tiêu mentoring")).toBeTruthy();
+  });
+
+  it("C · closing before the response arrives leaves the drawer closed", async () => {
+    const pending = deferred<unknown>();
+    loadQuickView.mockReturnValueOnce(pending.promise);
+
+    renderForm();
+    makeSelections();
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    await screen.findByText("Đang tải hồ sơ…");
+
+    fireEvent.click(screen.getByRole("button", { name: "Đóng" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    pending.resolve({ ok: true, data: PAYLOAD });
+    await waitFor(() => expect(loadQuickView).toHaveBeenCalledTimes(1));
+
+    // Neither the drawer nor its content comes back.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText("Chủ đề mentoring")).toBeNull();
+    expect(screen.queryByText("Đang tải hồ sơ…")).toBeNull();
+    // And the operator's decision is still intact.
+    expect((screen.getByLabelText("Chọn Mentor") as HTMLSelectElement).value).toBe("mp-1");
+    expect((screen.getByLabelText("Chọn Mentee") as HTMLSelectElement).value).toBe("ep-1");
+  });
+
+  it("C · a failure arriving after close does not reopen the drawer either", async () => {
+    const pending = deferred<unknown>();
+    loadQuickView.mockReturnValueOnce(pending.promise);
+
+    renderForm();
+    makeSelections();
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    await screen.findByText("Đang tải hồ sơ…");
+    fireEvent.click(screen.getByRole("button", { name: "Đóng" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    pending.reject(new Error("network"));
+    await waitFor(() => expect(loadQuickView).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/Không thể tải hồ sơ/)).toBeNull();
+  });
+
+  it("reopening the same profile after a stale request still shows fresh content", async () => {
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    loadQuickView.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    renderForm();
+    makeSelections();
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    await screen.findByText("Đang tải hồ sơ…");
+
+    fireEvent.click(screen.getByRole("button", { name: "Đóng" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // Reopen, then settle the CURRENT request first and the abandoned one
+    // after. That order is what exposes the bug: without invalidation on close,
+    // the request from before the close would land last and win.
+    fireEvent.click(screen.getAllByRole("button", { name: "Xem hồ sơ" })[0]);
+    second.resolve({ ok: true, data: PAYLOAD });
+    await screen.findByText("Chủ đề mentoring");
+
+    first.resolve({ ok: true, data: MENTEE_PAYLOAD });
+    await waitFor(() => expect(loadQuickView).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByText("Chủ đề mentoring")).toBeTruthy();
+    expect(screen.queryByText("Mục tiêu mentoring")).toBeNull();
+  });
+});

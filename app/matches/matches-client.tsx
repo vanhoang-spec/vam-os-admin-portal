@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormState } from "react-dom";
 import { cancelMatchAction, createManualMatchAction } from "@/app/actions/matches";
 import { loadMatchingQuickViewAction } from "@/app/actions/matching-quick-view";
@@ -84,10 +84,33 @@ export function ManualMatchForm({
   const [quickViewLoading, setQuickViewLoading] = useState(false);
   const [quickViewError, setQuickViewError] = useState<string | null>(null);
 
+  /**
+   * Which request the drawer is currently showing.
+   *
+   * Two loads can be in flight at once — open Mentor A, change your mind, open
+   * Mentee B — and they can resolve in either order. Without this, A resolving
+   * after B would overwrite B's payload while the header still said B: the
+   * operator would read one person's answers under another person's name and
+   * have no way to tell. On a screen whose entire job is deciding who to pair,
+   * that is the worst possible failure, so every write below is gated on the
+   * request still being the current one.
+   *
+   * A ref, not state: it must be readable synchronously by a callback that
+   * closed over an earlier render, and bumping it must never itself re-render.
+   * Server actions cannot be cancelled, so the stale response still arrives —
+   * it is simply ignored.
+   */
+  const quickViewRequestRef = useRef(0);
+
   const openQuickView = async (role: "mentor" | "mentee") => {
     const candidate = role === "mentor" ? selectedMentor : selectedMentee;
     const personId = candidate?.person_id ?? null;
     const title = candidate?.full_name ?? candidate?.email_primary ?? "Hồ sơ";
+
+    // Claim a generation FIRST. Everything already in flight is stale from here.
+    const generation = ++quickViewRequestRef.current;
+    const isCurrent = () => quickViewRequestRef.current === generation;
+
     // Only one drawer at a time: opening the other role replaces this one.
     setQuickView({ role, title });
     setQuickViewPayload(null);
@@ -95,6 +118,7 @@ export function ManualMatchForm({
 
     if (!personId) {
       setQuickViewError("Hồ sơ này chưa gắn person_id nên không thể xem chi tiết.");
+      setQuickViewLoading(false);
       return;
     }
 
@@ -102,16 +126,27 @@ export function ManualMatchForm({
     try {
       // Loaded here, on demand, for ONE person — never preloaded for the pool.
       const result = await loadMatchingQuickViewAction({ personId, role, intakeBatchId });
+      if (!isCurrent()) return;
       if (result.ok) setQuickViewPayload(result.data);
       else setQuickViewError(result.message);
     } catch {
+      // A stale failure must not replace newer content either: an error from the
+      // request the operator abandoned is not an error about the one they are
+      // looking at.
+      if (!isCurrent()) return;
       setQuickViewError("Không thể tải hồ sơ. Vui lòng thử lại.");
     } finally {
-      setQuickViewLoading(false);
+      // Guarded too. An unguarded `finally` would clear the CURRENT request's
+      // loading state when an older one settled, leaving a permanently blank
+      // drawer with no spinner and no error.
+      if (isCurrent()) setQuickViewLoading(false);
     }
   };
 
   const closeQuickView = () => {
+    // Bumping the generation invalidates anything in flight, so a response that
+    // arrives after the drawer is closed cannot reopen or repopulate it.
+    quickViewRequestRef.current += 1;
     // Clears only drawer state. Selections and search are untouched.
     setQuickView(null);
     setQuickViewPayload(null);
