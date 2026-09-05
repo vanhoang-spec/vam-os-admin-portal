@@ -35,6 +35,11 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const showOperations = canBrowseOperations(role);
 
   const groups: (NavGroupDef | null)[] = [
+    // "Công việc của tôi" sits at the very top, above Tổng quan, for everyone
+    // who can hold a recruitment assignment. The requirement is that assigned
+    // work is obvious immediately after login, and a link buried inside
+    // "Ứng tuyển" is exactly the manual hunt this screen replaces.
+    showReviews ? { key: "my-work", label: "Công việc của tôi", href: "/my-work" } : null,
     role === "super_admin"
       ? {
           key: "dashboard",

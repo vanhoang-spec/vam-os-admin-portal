@@ -5,6 +5,7 @@ import { getDashboardData, getOperationsData, getRestrictedDashboardSummary, key
 import { getAdminScopeContext } from "@/lib/program-scope";
 import { displayCode, displayText, formatMonthVN } from "@/lib/utils";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
+import { MyWorkCard } from "@/components/my-work-card";
 import {
   selectDashboardMonth,
   currentMonthVN,
@@ -115,6 +116,12 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
     return (
       <>
         <PageHeader title="Tổng quan" description="Tổng quan trạng thái vận hành trong phạm vi được cấp." />
+        {/*
+          Reviewer-tier accounts land here, and their assignments are the only
+          thing on this page they can actually act on, so the personal inbox is
+          rendered ABOVE the read-only KPIs rather than below them.
+        */}
+        <MyWorkCard scope={scope} />
         <ErrorBox message={summary.error} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Mùa trong phạm vi" value={summary.seasonCount} />
@@ -357,6 +364,12 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
   return (
     <>
       <PageHeader title="Tổng quan" description={`Tổng quan vận hành VAM OS. Season đang theo dõi: ${SEASON_CODE}.`} />
+      {/*
+        Core Team / Admin keep their full dashboard exactly as it was; this
+        only adds their own assignments above it, and renders nothing at all
+        when they have none.
+      */}
+      <MyWorkCard scope={scope} />
       {errors.length ? <ErrorBox message="Không tải được một phần dữ liệu dashboard. Các chỉ số liên quan có thể đang hiển thị 0 hoặc thiếu dữ liệu." /> : null}
       {errors.map((error) => (
         <ErrorBox key={error} message={error} />

@@ -44,6 +44,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "/mentors": UserRoundCheck,
   "/mentees": UserRoundSearch,
   "/applications": ClipboardList,
+  "/my-work": ClipboardList,
   "/reviews": ClipboardCheck,
   "/interviews": Mic,
   "/matches": Handshake,
