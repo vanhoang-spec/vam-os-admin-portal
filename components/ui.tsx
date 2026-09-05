@@ -11,8 +11,8 @@ export function PageHeader({ title, description }: { title: string; description?
   );
 }
 
-export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <section className={cn("rounded-lg border border-vam-line bg-white p-4 shadow-soft", className)}>{children}</section>;
+export function Card({ children, className, id }: { children: React.ReactNode; className?: string; id?: string }) {
+  return <section id={id} className={cn("rounded-lg border border-vam-line bg-white p-4 shadow-soft", className)}>{children}</section>;
 }
 
 export function KpiCard({

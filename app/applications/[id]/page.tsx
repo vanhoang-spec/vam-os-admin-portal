@@ -24,6 +24,8 @@ import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person 
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { canBrowseApplications } from "@/lib/read-access";
+import { getStageRequirements, type StageRequirement } from "@/lib/recruitment-stage-requirements";
+import { buildScreeningDecisionState } from "@/lib/screening-decision";
 import { findReturningMentorProfile } from "@/lib/returning-mentor";
 import { redirect } from "next/navigation";
 import {
@@ -33,6 +35,7 @@ import {
 } from "@/lib/application-commitments";
 import { AssignmentControls } from "./assign-reviewer-form";
 import { DecisionForm } from "./decision-form";
+import { ScreeningDecisionPanel } from "./screening-decision-panel";
 import { ApprovalForm } from "./approval-form";
 import { RestoreWithdrawnForm } from "./restore-withdrawn-form";
 import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
@@ -115,12 +118,23 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       getApplicationDecisions(params.id, scope),
       getActiveAdminUsers()
     ]);
-  const [profileReviewersResult, interviewersResult] = application.data?.season_id
+  const [profileReviewersResult, interviewersResult, stageRequirementsResult] = application.data?.season_id
     ? await Promise.all([
         getReviewEligibleReviewers(application.data.season_id, "profile_screening"),
-        getReviewEligibleReviewers(application.data.season_id, "interview")
+        getReviewEligibleReviewers(application.data.season_id, "interview"),
+        getStageRequirements([application.data.season_id])
       ])
-    : [{ data: [], error: null }, { data: [], error: null }];
+    : [
+        { data: [], error: null },
+        { data: [], error: null },
+        { data: [] as StageRequirement[], error: null }
+      ];
+
+  // The season's configured minimum. The database remains the arbiter; this
+  // only lets the decision panel say "đã nộp N/M" instead of a bare refusal.
+  const requiredProfileReviews =
+    stageRequirementsResult.data.find((r) => r.review_stage === "profile_screening")
+      ?.minimum_submitted_reviews ?? 1;
 
   const personId = application.data?.person_id;
   const roleApplied = application.data?.role_applied;
@@ -259,6 +273,19 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const latestSubmittedReview = reviews.find((r) => r.status === "submitted");
   const hasSubmittedReview = !!latestSubmittedReview;
 
+  // Profile-round decision state. Reuses the reviews and admin users this page
+  // already loaded — no extra query, no N+1.
+  const reviewerNameById = new Map(
+    adminUsers.map((u) => [u.id, u.full_name || u.email] as const)
+  );
+  const screeningState = buildScreeningDecisionState({
+    applicationStatus: displayStatus,
+    reviews,
+    requiredCount: requiredProfileReviews,
+    actorAdminUserId: adminUser?.id ?? null,
+    reviewerNameById
+  });
+
   let prevAppId: string | null = null;
   let nextAppId: string | null = null;
   let computedPrevPage: number = queuePage;
@@ -383,8 +410,11 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       ) : null}
 
       {/* ── Assign reviewer (admin / core_team only) ─────────────────────────── */}
+      {/* Withdrawn quarantine: no assignment surface on a terminal application.
+          The id is the anchor target for the screening panel's
+          "Giao review hồ sơ" CTA, which only renders while operational. */}
       {canAssign && !isWithdrawn && (
-        <Card className="mb-4">
+        <Card className="mb-4" id="assign-review-card">
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Giao Review</h2>
           {(profileReviewersResult.error || interviewersResult.error) && (
             <ErrorBox message={`Không thể tải danh sách người tham gia: ${profileReviewersResult.error || interviewersResult.error}`} />
@@ -483,6 +513,16 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           Quyết định của Admin / Core team
         </h2>
         {canMakeDecision ? (
+          screeningState.inProfileStage ? (
+            // One Core Team action closes the profile round: invite, reject, or
+            // ask for more. "Qua vòng hồ sơ" is no longer a separate step.
+            <ScreeningDecisionPanel
+              applicationId={application.data.id}
+              currentStatus={displayStatus}
+              state={screeningState}
+              canAssignReview={canAssign}
+            />
+          ) : (
           <DecisionForm
             applicationId={application.data.id}
             currentStatus={displayStatus}
@@ -490,6 +530,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             latestRecommendation={latestSubmittedReview?.recommendation}
             latestTotalScore={latestSubmittedReview?.total_score}
           />
+          )
         ) : (
           <p className="text-sm text-slate-500">
             Chỉ admin / core team mới có thể ra quyết định cho đơn này.

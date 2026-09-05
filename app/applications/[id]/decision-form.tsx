@@ -13,8 +13,12 @@ import {
 // Options — values must exactly match migration 041 allowed statuses
 // ---------------------------------------------------------------------------
 
+// `screening_passed` is deliberately absent. It was never a judgement Core Team
+// made separately from "Mời phỏng vấn", and the profile round is now closed by
+// ScreeningDecisionPanel in one action. The status remains legal in the
+// database and a legal source for the invite, so records already holding it
+// still move forward — nothing needs to CREATE it any more.
 const DECISION_OPTIONS: { value: string; label: string }[] = [
-  { value: "screening_passed",    label: "Qua vòng hồ sơ — Hồ sơ đạt" },
   { value: "invited_to_interview", label: "Mời phỏng vấn" },
   { value: "waitlisted",          label: "Đưa vào danh sách chờ" },
   { value: "rejected_or_not_fit", label: "Không phù hợp / từ chối" },

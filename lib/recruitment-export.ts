@@ -152,6 +152,17 @@ export function deriveDecisions(rows: readonly DecisionRow[]): DerivedDecisions 
       stage = "interview";
       continue;
     }
+    // S12 closes the profile round with ONE decision, so the row that records
+    // it is `invited_to_interview` rather than `screening_passed`. Read the
+    // first such row as the screening outcome — it is issued only when the
+    // profile-review minimum is met, which is exactly what the screening
+    // outcome asserts. Guarded on `out.screening` being empty so a two-step
+    // history keeps reporting its explicit `screening_passed` row instead.
+    if (row.status === "invited_to_interview" && !out.screening) {
+      out.screening = { status: row.status, at: row.at };
+      stage = "interview";
+      continue;
+    }
     if (row.status === "interview_passed") {
       out.interview = { status: row.status, at: row.at };
       stage = "final";
@@ -331,7 +342,9 @@ export function classifyOperational(status: unknown, derived: DerivedDecisions):
   const rejected = REJECTED_STATUSES.has(value);
   const needsMoreReview = value === "needs_more_review";
 
-  const auditScreening = derived.screening?.status === "screening_passed";
+  const auditScreening =
+    derived.screening?.status === "screening_passed" ||
+    derived.screening?.status === "invited_to_interview";
   const auditInterview = derived.interview?.status === "interview_passed";
   const auditApproved = Boolean(derived.final && PROVES_OFFICIAL_APPROVAL.has(derived.final.status));
   const auditRejected =
