@@ -313,12 +313,13 @@ export async function submitPilotApplication(
 
   // Phone Identity Guard: Prevents submitting a new application with a phone number
   // already used by another email for the same role.
+  const phoneSuffix = phonePrimary.length > 9 ? phonePrimary.slice(-9) : phonePrimary;
   const { data: phoneApps, error: phoneErr } = await client
     .from("applications")
-    .select("id,email_primary")
+    .select("id,email_primary,phone_primary")
     .eq("role_applied", input.role)
-    .eq("phone_primary", phonePrimary)
-    .limit(1);
+    .ilike("phone_primary", `%${escapeIlikePattern(phoneSuffix)}%`)
+    .limit(10);
 
   if (phoneErr) {
     log("phone identity lookup failed", phoneErr);
@@ -326,7 +327,12 @@ export async function submitPilotApplication(
   }
 
   if (phoneApps && phoneApps.length > 0) {
-    if (!emailsEqual(phoneApps[0].email_primary, emailPrimary)) {
+    const hasSameRolePhoneMatch = phoneApps.some(app => 
+      normalisePhone(app.phone_primary ?? "") === phonePrimary && 
+      !emailsEqual(app.email_primary, emailPrimary)
+    );
+
+    if (hasSameRolePhoneMatch) {
       return {
         ok: false,
         code: "validation",
@@ -363,22 +369,102 @@ export async function submitPilotApplication(
       // MENTOR GUARD: Current/Recent Mentee applying as Mentor
       const { data: recentMenteeHistory, error: recentMenteeErr } = await client
         .from("person_season_memberships")
-        .select("id")
+        .select("id,season_id,status,start_date")
         .eq("person_id", existingPerson.id)
-        .eq("season_id", seasonRow.id)
-        .eq("role", "mentee")
-        .limit(1);
+        .eq("role", "mentee");
 
       if (recentMenteeErr) {
         log("recent mentee lookup failed", recentMenteeErr);
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
-      if ((recentMenteeHistory ?? []).length > 0) {
+      const activeMenteeHistory = (recentMenteeHistory ?? []).filter(m => 
+        ["active", "completed", "graduated"].includes(m.status)
+      );
+
+      const isCurrentS12Mentee = activeMenteeHistory.some(
+        (m) => m.season_id === seasonRow.id
+      );
+
+      const { data: legacyMentee, error: legacyMenteeErr } = await client
+        .from("mentee_profiles")
+        .select("id")
+        .eq("person_id", existingPerson.id)
+        .limit(1);
+
+      if (legacyMenteeErr) {
+        log("legacy mentee profile lookup failed", legacyMenteeErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      const { data: legacyMatch, error: legacyMatchErr } = await client
+        .from("matches")
+        .select("id")
+        .eq("mentee_person_id", existingPerson.id)
+        .limit(1);
+
+      if (legacyMatchErr) {
+        log("legacy match lookup failed", legacyMatchErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      const { data: legacyApproved, error: legacyApprovedErr } = await client
+        .from("applications")
+        .select("id,season_id")
+        .eq("person_id", existingPerson.id)
+        .eq("role_applied", "mentee")
+        .eq("status", "approved_as_mentee");
+
+      if (legacyApprovedErr) {
+        log("legacy approved applications lookup failed", legacyApprovedErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      const s12ApprovedApp = (legacyApproved ?? []).some(a => a.season_id === seasonRow.id);
+
+      if (isCurrentS12Mentee || s12ApprovedApp) {
         return {
           ok: false,
           code: "validation",
           message: "Hồ sơ của bạn hiện đang là Mentee của đợt này. Để ứng tuyển Mentor, vui lòng liên hệ Core Team UEH Mentoring để được hướng dẫn."
+        };
+      }
+
+      let needsIdentityReview = false;
+      const hasLegacyProof = 
+        activeMenteeHistory.length > 0 ||
+        (legacyMentee ?? []).length > 0 || 
+        (legacyMatch ?? []).length > 0 ||
+        (legacyApproved ?? []).length > 0;
+
+      if (activeMenteeHistory.length > 0) {
+        const FIVE_YEARS_MS = 5 * 365.25 * 24 * 60 * 60 * 1000;
+        const targetDate = Date.now();
+
+        for (const m of activeMenteeHistory) {
+          if (m.season_id === seasonRow.id) continue;
+          if (m.start_date) {
+            const elapsed = targetDate - new Date(m.start_date).getTime();
+            if (elapsed < FIVE_YEARS_MS) {
+              needsIdentityReview = true;
+              break;
+            }
+          } else {
+            needsIdentityReview = true;
+            break;
+          }
+        }
+      }
+
+      if (!needsIdentityReview && hasLegacyProof && activeMenteeHistory.length === 0) {
+        needsIdentityReview = true;
+      }
+
+      if (needsIdentityReview) {
+        return {
+          ok: false,
+          code: "validation",
+          message: "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ."
         };
       }
 
@@ -397,13 +483,39 @@ export async function submitPilotApplication(
 
       const { data: anyMenteeMemberships, error: anyMenteeMembershipsErr } = await client
         .from("person_season_memberships")
-        .select("role")
+        .select("id,status")
         .eq("person_id", existingPerson.id)
-        .eq("role", "mentee")
-        .limit(1);
+        .eq("role", "mentee");
 
       if (anyMenteeMembershipsErr) {
         log("mentee membership lookup failed", anyMenteeMembershipsErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      const activeAnyMenteeMemberships = (anyMenteeMemberships ?? []).filter(m => 
+        ["active", "completed", "graduated"].includes(m.status)
+      );
+
+      const { data: anyMatches, error: anyMatchesErr } = await client
+        .from("matches")
+        .select("id")
+        .eq("mentee_person_id", existingPerson.id)
+        .limit(1);
+
+      if (anyMatchesErr) {
+        log("mentee match lookup failed", anyMatchesErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      const { data: anyApproved, error: anyApprovedErr } = await client
+        .from("applications")
+        .select("id,season_id")
+        .eq("person_id", existingPerson.id)
+        .eq("role_applied", "mentee")
+        .eq("status", "approved_as_mentee");
+
+      if (anyApprovedErr) {
+        log("mentee approved applications lookup failed", anyApprovedErr);
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
@@ -422,16 +534,29 @@ export async function submitPilotApplication(
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
-      if (
+      const hasHardParticipation = 
         (menteeHistory ?? []).length > 0 || 
-        (anyMenteeMemberships ?? []).length > 0 || 
-        (s12Memberships ?? []).length > 0
-      ) {
+        activeAnyMenteeMemberships.length > 0 || 
+        (anyMatches ?? []).length > 0 ||
+        (s12Memberships ?? []).length > 0;
+
+      const s12ApprovedApp = (anyApproved ?? []).some(a => a.season_id === seasonRow.id);
+      
+      if (hasHardParticipation || s12ApprovedApp) {
         return {
           ok: false,
           code: "validation",
           message:
             "Hồ sơ của bạn đã có trên hệ thống VAM OS. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ nếu bạn cần cập nhật thông tin hoặc cho rằng đây là nhầm lẫn."
+        };
+      }
+
+      if ((anyApproved ?? []).length > 0) {
+        // Prior-season approved application ONLY -> identity_review
+        return {
+          ok: false,
+          code: "validation",
+          message: "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ."
         };
       }
     }

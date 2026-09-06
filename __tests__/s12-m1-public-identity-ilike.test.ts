@@ -112,7 +112,8 @@ describe("S12-M1 public canonical identity lookup", () => {
       { table: "applications", column: "email_primary", pattern: escaped.slice(1, -1) }, // Exact
       { table: "applications", column: "email_primary", pattern: escaped }, // Fallback
       { table: "people", column: "email_primary", pattern: escaped.slice(1, -1) }, // Exact
-      { table: "people", column: "email_primary", pattern: escaped } // Fallback
+      { table: "people", column: "email_primary", pattern: escaped }, // Fallback
+      { table: "applications", column: "phone_primary", pattern: "%900000000%" }
     ]);
   });
 
