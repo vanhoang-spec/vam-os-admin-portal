@@ -20,7 +20,7 @@ import {
   parseUuid
 } from "@/lib/recruitment-export";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { applicationStatusLabel } from "@/lib/ui-labels";
+import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
 import { getActiveAdminUsers } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -260,7 +260,8 @@ export async function GET(request: Request) {
     "Đã qua vòng phỏng vấn (hiện tại)",
     "Đã duyệt chính thức",
     "Cơ sở phân loại",
-    "Thời điểm nộp"
+    "Thời điểm nộp",
+    "Biết đến chương trình qua"
   ];
 
   const yesNo = (value: boolean) => (value ? "có" : "không");
@@ -314,7 +315,8 @@ export async function GET(request: Request) {
       yesNo(operational.passedInterview),
       yesNo(operational.officiallyApproved),
       operational.basis,
-      app.submitted_at
+      app.submitted_at,
+      applicationAcquisitionChannelLabel(app.raw_payload, app.acquisition_channel)
     ]);
   }
 

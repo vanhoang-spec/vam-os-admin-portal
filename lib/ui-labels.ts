@@ -38,6 +38,23 @@ function fallback(value: unknown): string {
  * DB values (must remain unchanged): submitted | needs_review | invalid |
  * duplicate | deleted | excluded
  */
+export function applicationAcquisitionChannelLabel(rawPayload: Record<string, unknown> | null, acquisitionChannel: string | null): string {
+  if (rawPayload?.referrer_or_source) {
+    const val = String(rawPayload.referrer_or_source);
+    if (val === "friend") return "Bạn bè";
+    if (val === "social_media") return "Mạng xã hội";
+    if (val === "website") return "Website chương trình";
+    if (val === "ueh_alumni") return "UEH Alumni";
+    if (val === "alumni_referral") return "Cựu mentor giới thiệu";
+    if (val === "other") {
+      const other = rawPayload.referrer_or_source_other ? String(rawPayload.referrer_or_source_other) : "Khác";
+      return `Khác (${other})`;
+    }
+    return fallback(val);
+  }
+  return acquisitionChannel ? fallback(acquisitionChannel) : "—";
+}
+
 export function recapStatusLabel(value: unknown): string {
   const key = normalize(value);
   if (key === "submitted") return "Đã ghi nhận";

@@ -115,7 +115,7 @@ describe("Slice 2C — boolean and checkbox correctness", () => {
   it("uses the missing marker only for a null or empty canonical column", () => {
     const fields = build(null).fields;
     expect(find(fields, "Liên kết hồ sơ ứng viên")[0].value).toBe(MISSING);
-    expect(find(fields, "Kênh tiếp cận")[0].value).toBe(MISSING);
+    expect(find(fields, "Biết đến chương trình qua")[0].value).toBe(MISSING);
     // Marker must not collide with the spreadsheet-formula guard.
     expect(applicationExportCsv(build(null))).not.toContain(`"'${MISSING}"`);
   });

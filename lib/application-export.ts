@@ -1,5 +1,5 @@
 import { APPLICATION_ACKNOWLEDGEMENTS } from "@/lib/application-commitments";
-import { applicationStatusLabel } from "@/lib/ui-labels";
+import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
 import type { Application, JsonRecord, MenteeProfile, MentorProfile, Person, Season } from "@/lib/types";
 
 export type ApplicationExportField = {
@@ -328,7 +328,7 @@ export function buildApplicationExportData(source: ApplicationExportSource): App
   addField(fields, "Thông tin ứng tuyển", "Trạng thái hồ sơ", applicationStatusLabel(status));
   addField(fields, "Thông tin ứng tuyển", "Nguồn đơn ứng tuyển", application.source);
   addField(fields, "Thông tin ứng tuyển", "Đồng ý lưu trữ dữ liệu", consent);
-  addField(fields, "Thông tin ứng tuyển", "Kênh tiếp cận", application.acquisition_channel);
+  addField(fields, "Thông tin ứng tuyển", "Biết đến chương trình qua", applicationAcquisitionChannelLabel(application.raw_payload, application.acquisition_channel));
   addField(fields, "Thông tin ứng tuyển", "Liên kết hồ sơ ứng viên", application.profile_url);
 
   if (mentorProfile) {
