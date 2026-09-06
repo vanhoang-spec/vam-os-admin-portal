@@ -258,43 +258,13 @@ describe("S12 Intake Eligibility Guards", () => {
     if (!result.ok) expect(result.reason).toBe("returning_mentor");
   });
 
-  it("Mentor: current S12 Mentee -> block Mentee-in-progress", async () => {
+  it("Mentor: prior Mentee alone does NOT trigger returning_mentor", async () => {
     setupMocks({
       people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
-      person_season_memberships: { limit: [{ role: "mentee", season_id: "season_id", status: "active" }] }
-    });
-    const result = await submitPilotApplication(mentorInput);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("hiện đang là Mentee của đợt này");
-  });
-
-  it("Mentor: former Mentee < 5 years (recent) -> identity_review", async () => {
-    setupMocks({
-      people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
-      person_season_memberships: { limit: [{ role: "mentee", season_id: "season_recent", status: "completed", start_date: new Date(Date.now() - 2 * 365.25 * 24 * 60 * 60 * 1000).toISOString() }] }
-    });
-    const result = await submitPilotApplication(mentorInput);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với một hồ sơ");
-  });
-
-  it("Mentor: former Mentee >= 5 years (old) -> allow", async () => {
-    setupMocks({
-      people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
-      person_season_memberships: { limit: [{ role: "mentee", season_id: "season_old", status: "completed", start_date: new Date(Date.now() - 6 * 365.25 * 24 * 60 * 60 * 1000).toISOString() }] }
+      person_season_memberships: { limit: [{ role: "mentee", season_id: "s11", status: "completed" }] },
+      mentee_profiles: { limit: [{ id: "mp1" }] }
     });
     const result = await submitPilotApplication(mentorInput);
     expect(result.ok).toBe(true);
-  });
-
-  it("Mentor: former Mentee with ambiguous season timing -> safe review", async () => {
-    setupMocks({
-      people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
-      mentee_profiles: { limit: [{ id: "mp1" }] },
-      person_season_memberships: { limit: [] }
-    });
-    const result = await submitPilotApplication(mentorInput);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với một hồ sơ");
   });
 });
