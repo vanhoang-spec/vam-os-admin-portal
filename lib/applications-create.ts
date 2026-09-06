@@ -305,30 +305,94 @@ export async function submitPilotApplication(
   }
   const existingPerson = exactPeople[0] ?? null;
 
-  // P0 — Returning Mentors must use the controlled S12 renewal flow rather
-  // than creating a new public Mentor application. A people row alone is not
-  // enough proof: former mentees/supporters/contacts may already exist in
-  // `people`, so we only block when that canonical person has a mentor profile.
-  if (input.role === "mentor" && existingPerson) {
-    const { data: mentorHistory, error: mentorHistoryErr } = await client
-      .from("mentor_profiles")
-      .select("id")
-      .eq("person_id", existingPerson.id)
-      .limit(1);
+  // Phone Identity Guard: Prevents submitting a new application with a phone number
+  // already used by another email for the same role.
+  const { data: phoneApps, error: phoneErr } = await client
+    .from("applications")
+    .select("id,email_primary")
+    .eq("role_applied", input.role)
+    .eq("phone_primary", phonePrimary)
+    .limit(1);
 
-    if (mentorHistoryErr) {
-      log("returning mentor lookup failed", mentorHistoryErr);
-      return { ok: false, code: "db", message: SAFE_ERROR };
-    }
+  if (phoneErr) {
+    log("phone identity lookup failed", phoneErr);
+    return { ok: false, code: "db", message: SAFE_ERROR };
+  }
 
-    if ((mentorHistory ?? []).length > 0) {
+  if (phoneApps && phoneApps.length > 0) {
+    if (!emailsEqual(phoneApps[0].email_primary, emailPrimary)) {
       return {
         ok: false,
         code: "validation",
-        reason: "returning_mentor",
-        message:
-          "Hồ sơ này cần được xử lý qua luồng xác nhận/gia hạn Mentor Season 12. Vui lòng sử dụng đường dẫn do BTC gửi hoặc liên hệ BTC nếu chưa nhận được."
+        message: "Hồ sơ của bạn đã có trên hệ thống VAM OS. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ nếu bạn cần cập nhật thông tin hoặc cho rằng đây là nhầm lẫn."
       };
+    }
+  }
+
+  if (existingPerson) {
+    if (input.role === "mentor") {
+      // P0 — Returning Mentors must use the controlled S12 renewal flow rather
+      // than creating a new public Mentor application. A people row alone is not
+      // enough proof: former mentees/supporters/contacts may already exist in
+      // `people`, so we only block when that canonical person has a mentor profile.
+      const { data: mentorHistory, error: mentorHistoryErr } = await client
+        .from("mentor_profiles")
+        .select("id")
+        .eq("person_id", existingPerson.id)
+        .limit(1);
+
+      if (mentorHistoryErr) {
+        log("returning mentor lookup failed", mentorHistoryErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      if ((mentorHistory ?? []).length > 0) {
+        return {
+          ok: false,
+          code: "validation",
+          reason: "returning_mentor",
+          message:
+            "Hồ sơ này cần được xử lý qua luồng xác nhận/gia hạn Mentor Season 12. Vui lòng sử dụng đường dẫn do BTC gửi hoặc liên hệ BTC nếu chưa nhận được."
+        };
+      }
+    } else if (input.role === "mentee") {
+      // MENTEE INTAKE GUARDS:
+      // - proven prior-season Mentee participant -> block
+      // - withdrawn application alone is not participation proof, but mentee_profiles means participation.
+      const { data: menteeHistory, error: menteeHistoryErr } = await client
+        .from("mentee_profiles")
+        .select("id")
+        .eq("person_id", existingPerson.id)
+        .limit(1);
+
+      if (menteeHistoryErr) {
+        log("returning mentee lookup failed", menteeHistoryErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      // - current S12 Mentee -> block
+      // - Supporters already transferred/approved into S12 should not submit again
+      const { data: s12Memberships, error: s12MembershipsErr } = await client
+        .from("person_season_memberships")
+        .select("role")
+        .eq("person_id", existingPerson.id)
+        .eq("season_id", seasonRow.id)
+        .in("role", ["mentee", "supporter"])
+        .limit(1);
+
+      if (s12MembershipsErr) {
+        log("mentee s12 membership lookup failed", s12MembershipsErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      if ((menteeHistory ?? []).length > 0 || (s12Memberships ?? []).length > 0) {
+        return {
+          ok: false,
+          code: "validation",
+          message:
+            "Hồ sơ của bạn đã có trên hệ thống VAM OS. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ nếu bạn cần cập nhật thông tin hoặc cho rằng đây là nhầm lẫn."
+        };
+      }
     }
   }
 
