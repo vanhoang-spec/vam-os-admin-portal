@@ -5,7 +5,11 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { recordApplicationDecision, restoreWithdrawnApplication } from "@/lib/application-decisions";
 import { canDecide } from "@/lib/permissions";
 import type { DecisionActionState } from "@/lib/decision-action-types";
-import { ALLOWED_DECISION_STATUSES } from "@/lib/decision-action-types";
+import {
+  ALLOWED_DECISION_STATUSES,
+  RETIRED_FORWARD_DECISION_MESSAGE,
+  RETIRED_FORWARD_DECISION_STATUSES
+} from "@/lib/decision-action-types";
 
 const allowedDecisionStatuses = new Set<string>(ALLOWED_DECISION_STATUSES);
 
@@ -31,6 +35,11 @@ export async function updateApplicationDecisionAction(
     if (!newStatus) return fail("Vui lòng chọn quyết định.");
     if (!allowedDecisionStatuses.has(newStatus)) {
       return fail(`Quyết định không hợp lệ: ${newStatus}`);
+    }
+    // The same backdoor as the bulk route: no control offers this any more, and
+    // a crafted request must not be the one exception.
+    if (RETIRED_FORWARD_DECISION_STATUSES.has(newStatus)) {
+      return fail(RETIRED_FORWARD_DECISION_MESSAGE);
     }
 
     const decidedByName =

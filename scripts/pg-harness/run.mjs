@@ -125,20 +125,67 @@ async function main() {
   mkdirSync(dataRoot, { recursive: true });
   const dataDir = mkdtempSync(join(dataRoot, "vam-pg-")).split("\\").join("/");
   let server = null;
+  let serverExited = null;
+  let stopped = false;
+  let removed = false;
 
-  const cleanup = () => {
-    try {
-      if (server && !server.killed) server.kill("SIGKILL");
-    } catch {
-      /* the cluster is disposable; a failed stop must not mask a test failure */
+  /**
+   * Shuts the cluster down and removes the directory THIS RUN created.
+   *
+   * It removes `dataDir` and nothing else — never a glob over the parent — so a
+   * directory left by an earlier run, or by anything else, is not this run's to
+   * delete. Everything is awaited: a Windows file handle outlives the process
+   * that held it by a few hundred milliseconds, so removing immediately after
+   * kill() is what left directories behind before.
+   */
+  async function cleanup() {
+    // 1. Ask the server to stop, then 2. wait for the process to actually go.
+    if (server && !server.killed) {
+      try {
+        // `fast` shutdown: disconnect clients and exit, without the checkpoint
+        // wait a `smart` shutdown would sit through.
+        run(bin(binDir, "pg_ctl"), ["-D", dataDir, "-m", "fast", "stop"], { timeout: 30_000 });
+      } catch {
+        try {
+          server.kill("SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
     }
-    try {
-      rmSync(dataDir, { recursive: true, force: true });
-    } catch {
-      /* a Windows file handle can outlive the process; the directory is
-         disposable either way */
+    if (serverExited) {
+      await Promise.race([
+        serverExited,
+        new Promise((resolve) => setTimeout(resolve, 30_000))
+      ]);
     }
-  };
+    stopped = !server || server.exitCode !== null || server.killed;
+
+    // 3. Drop our references so nothing of ours still holds a handle.
+    if (server) {
+      server.stderr?.removeAllListeners();
+      server.removeAllListeners();
+      server.unref?.();
+    }
+
+    // 4/5. Remove, retrying briefly while Windows releases file handles.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        rmSync(dataDir, { recursive: true, force: true });
+      } catch {
+        /* retried below */
+      }
+      if (!existsSync(dataDir)) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    // 6. Verify.
+    removed = !existsSync(dataDir);
+    console.log("");
+    console.log(`TEMP_DIR_CREATED=${dataDir}`);
+    console.log(`POSTGRES_STOPPED=${stopped ? "YES" : "NO"}`);
+    console.log(`TEMP_DIR_REMOVED=${removed ? "YES" : "NO"}`);
+  }
 
   try {
     console.log(`Creating disposable cluster in ${dataDir} on port ${port}…`);
@@ -148,6 +195,8 @@ async function main() {
     // stdio pipes open after the server is up, so a synchronous `-w` wait never
     // returns. Bound to 127.0.0.1 only.
     console.log("Starting server…");
+    // Resolved when the server process has genuinely exited, so cleanup can
+    // wait for it rather than assuming kill() is synchronous.
     server = spawn(
       bin(binDir, "postgres"),
       ["-D", dataDir, "-p", String(port), "-h", "127.0.0.1", "-c", "fsync=off", "-c", "full_page_writes=off"],
@@ -157,8 +206,11 @@ async function main() {
     server.stderr.on("data", (chunk) => {
       serverStderr += String(chunk);
     });
-    server.on("exit", () => {
-      server.killed = true;
+    serverExited = new Promise((resolve) => {
+      server.on("exit", () => {
+        server.killed = true;
+        resolve();
+      });
     });
 
     const connection = {
@@ -227,7 +279,16 @@ ${error.message}`);
     // Test connections run AS service_role.
     await runCases(Client, { ...connection, user: "service_role" });
   } finally {
-    cleanup();
+    // finally-style, so the directory goes after success, after an assertion
+    // failure, and after a thrown exception alike.
+    await cleanup();
+  }
+
+  // 7. A run that cannot clean up after itself is a failed run.
+  if (!removed) {
+    console.log("PG_HARNESS=FAIL");
+    console.error(`cleanup failed: ${dataDir} still exists`);
+    process.exit(1);
   }
 
   console.log("");

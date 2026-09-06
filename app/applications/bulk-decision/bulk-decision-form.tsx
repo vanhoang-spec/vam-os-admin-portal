@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import { bulkApplicationDecisionAction } from "@/app/actions/bulk-application-decisions";
 import { initialDecisionActionState } from "@/lib/decision-action-types";
@@ -19,7 +20,10 @@ export function BulkDecisionForm({ rows }: { rows: Row[] }) {
       <label className="text-sm">Quyết định
         <select required name="new_status" className="mt-1 block w-full rounded-md border border-vam-line px-3 py-2">
           <option value="">-- Chọn --</option>
-          <option value="screening_passed">Qua vòng hồ sơ</option>
+          {/* "Qua vòng hồ sơ" is gone: S12 closes the profile round in one
+              decision, and this generic surface exists for the interview and
+              final-decision transitions. The server refuses it too — see
+              RETIRED_FORWARD_DECISION_STATUSES. */}
           <option value="invited_to_interview">Mời phỏng vấn</option>
           <option value="interview_scheduled">Đã đặt lịch phỏng vấn</option>
           <option value="interview_passed">Qua vòng phỏng vấn</option>
@@ -39,6 +43,7 @@ export function BulkDecisionForm({ rows }: { rows: Row[] }) {
         <td className="px-3 py-2">{row.fullName}</td><td className="px-3 py-2">{row.role}</td><td className="px-3 py-2">{row.status}</td>
       </tr>)}</tbody></table>
     </div>
+    <p className="text-xs text-slate-500">Để mời phỏng vấn hàng loạt sau vòng hồ sơ, dùng màn hình <Link href="/applications/bulk-invite-interview" className="text-vam-green underline">Mời phỏng vấn hàng loạt</Link>, nơi danh sách đã lọc sẵn theo đúng điều kiện review.</p>
     <p className="text-xs text-slate-500">Mỗi đơn được khóa và kiểm tra lại tại database. Đơn đủ điều kiện được cập nhật; đơn sai scope, đã đổi trạng thái, hoặc chưa đủ review bị chặn và được báo trong kết quả.</p>
     <Submit />
   </form>;
