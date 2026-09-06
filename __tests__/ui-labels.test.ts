@@ -6,12 +6,40 @@ import {
   matchStatusLabel,
   applicationStatusLabel,
   meetingTypeLabel,
+  applicationAcquisitionChannelLabel,
   NAV_LABELS,
   FORBIDDEN_UI_TERMS,
   ACCEPTED_VAM_TERMS
 } from "../lib/ui-labels";
 
 describe("UI Labels - Domain Mappings", () => {
+  it("maps application acquisition channel correctly", () => {
+    // Known mapped values
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "friend" }, null)).toBe("Bạn bè");
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "social_media" }, null)).toBe("Mạng xã hội");
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "website" }, null)).toBe("Website chương trình");
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "ueh_alumni" }, null)).toBe("UEH Alumni");
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "alumni_referral" }, null)).toBe("Cựu mentor giới thiệu");
+
+    // "other" category
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "other", referrer_or_source_other: "Giới thiệu từ workshop" }, null)).toBe("Khác (Giới thiệu từ workshop)");
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "other", referrer_or_source_other: "" }, null)).toBe("Khác");
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "other" }, null)).toBe("Khác");
+
+    // raw source absent, fallback to legacy
+    expect(applicationAcquisitionChannelLabel({}, "legacy_channel_fallback")).toBe("legacy_channel_fallback");
+    expect(applicationAcquisitionChannelLabel(null, "some_legacy_channel")).toBe("some_legacy_channel");
+
+    // fallback when neither exists
+    expect(applicationAcquisitionChannelLabel({}, null)).toBe("—");
+    expect(applicationAcquisitionChannelLabel(null, null)).toBe("—");
+    expect(applicationAcquisitionChannelLabel(null, "")).toBe("—");
+
+    // unexpected enum values -> fallback to acquisition channel if present, else safe raw value
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "unexpected_raw" }, "some_legacy")).toBe("some_legacy");
+    expect(applicationAcquisitionChannelLabel({ referrer_or_source: "unexpected_raw" }, null)).toBe("unexpected_raw");
+  });
+
   it("maps recap status correctly", () => {
     expect(recapStatusLabel("submitted")).toBe("Đã ghi nhận");
     expect(recapStatusLabel("needs_review")).toBe("Cần kiểm tra");
