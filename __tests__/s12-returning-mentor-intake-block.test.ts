@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const SOURCE = readFileSync("lib/applications-create.ts", "utf8");
-const blockStart = SOURCE.indexOf('if (input.role === "mentor" && existingPerson)');
+const blockStart = SOURCE.indexOf('if (input.role === "mentor") {');
 const insertStart = SOURCE.indexOf("// Insert", blockStart);
 const block = SOURCE.slice(blockStart, insertStart);
 

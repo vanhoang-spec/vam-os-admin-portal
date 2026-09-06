@@ -143,8 +143,8 @@ describe("Slice 2C — the refusal reason travels from the backend rule to the f
   const CREATE = readFileSync("lib/applications-create.ts", "utf8");
   const ACTION = readFileSync("app/actions/apply.ts", "utf8");
   const block = CREATE.slice(
-    CREATE.indexOf('if (input.role === "mentor" && existingPerson)'),
-    CREATE.indexOf("// Insert", CREATE.indexOf('if (input.role === "mentor" && existingPerson)'))
+    CREATE.indexOf('if (input.role === "mentor") {'),
+    CREATE.indexOf("// Insert", CREATE.indexOf('if (input.role === "mentor") {'))
   );
 
   it("keeps the backend block refusing the submission, and only tags it", () => {
