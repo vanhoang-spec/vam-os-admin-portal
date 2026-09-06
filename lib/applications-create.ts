@@ -100,7 +100,13 @@ function clientResult() {
 }
 
 function normalisePhone(value: string) {
-  return value.replace(/\s+/g, "").trim();
+  let phone = value.replace(/\s+/g, "").trim();
+  if (phone.startsWith("+84")) {
+    phone = "0" + phone.slice(3);
+  } else if (phone.startsWith("84") && phone.length === 11) {
+    phone = "0" + phone.slice(2);
+  }
+  return phone;
 }
 
 function safeText(value: string | null | undefined) {
@@ -324,7 +330,7 @@ export async function submitPilotApplication(
       return {
         ok: false,
         code: "validation",
-        message: "Hồ sơ của bạn đã có trên hệ thống VAM OS. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ nếu bạn cần cập nhật thông tin hoặc cho rằng đây là nhầm lẫn."
+        message: "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ."
       };
     }
   }
@@ -332,9 +338,7 @@ export async function submitPilotApplication(
   if (existingPerson) {
     if (input.role === "mentor") {
       // P0 — Returning Mentors must use the controlled S12 renewal flow rather
-      // than creating a new public Mentor application. A people row alone is not
-      // enough proof: former mentees/supporters/contacts may already exist in
-      // `people`, so we only block when that canonical person has a mentor profile.
+      // than creating a new public Mentor application.
       const { data: mentorHistory, error: mentorHistoryErr } = await client
         .from("mentor_profiles")
         .select("id")
@@ -355,10 +359,31 @@ export async function submitPilotApplication(
             "Hồ sơ này cần được xử lý qua luồng xác nhận/gia hạn Mentor Season 12. Vui lòng sử dụng đường dẫn do BTC gửi hoặc liên hệ BTC nếu chưa nhận được."
         };
       }
+      
+      // MENTOR GUARD: Current/Recent Mentee applying as Mentor
+      const { data: recentMenteeHistory, error: recentMenteeErr } = await client
+        .from("person_season_memberships")
+        .select("id")
+        .eq("person_id", existingPerson.id)
+        .eq("season_id", seasonRow.id)
+        .eq("role", "mentee")
+        .limit(1);
+
+      if (recentMenteeErr) {
+        log("recent mentee lookup failed", recentMenteeErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      if ((recentMenteeHistory ?? []).length > 0) {
+        return {
+          ok: false,
+          code: "validation",
+          message: "Hồ sơ của bạn hiện đang là Mentee của đợt này. Để ứng tuyển Mentor, vui lòng liên hệ Core Team UEH Mentoring để được hướng dẫn."
+        };
+      }
+
     } else if (input.role === "mentee") {
       // MENTEE INTAKE GUARDS:
-      // - proven prior-season Mentee participant -> block
-      // - withdrawn application alone is not participation proof, but mentee_profiles means participation.
       const { data: menteeHistory, error: menteeHistoryErr } = await client
         .from("mentee_profiles")
         .select("id")
@@ -367,6 +392,18 @@ export async function submitPilotApplication(
 
       if (menteeHistoryErr) {
         log("returning mentee lookup failed", menteeHistoryErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      const { data: anyMenteeMemberships, error: anyMenteeMembershipsErr } = await client
+        .from("person_season_memberships")
+        .select("role")
+        .eq("person_id", existingPerson.id)
+        .eq("role", "mentee")
+        .limit(1);
+
+      if (anyMenteeMembershipsErr) {
+        log("mentee membership lookup failed", anyMenteeMembershipsErr);
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
@@ -385,7 +422,11 @@ export async function submitPilotApplication(
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
-      if ((menteeHistory ?? []).length > 0 || (s12Memberships ?? []).length > 0) {
+      if (
+        (menteeHistory ?? []).length > 0 || 
+        (anyMenteeMemberships ?? []).length > 0 || 
+        (s12Memberships ?? []).length > 0
+      ) {
         return {
           ok: false,
           code: "validation",
