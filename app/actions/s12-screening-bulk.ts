@@ -36,7 +36,11 @@ import {
  *   * partial failures are reported, never hidden.
  */
 
-const ALLOWED_BULK_STATUSES = new Set(["screening_passed", "needs_more_review", "rejected_or_not_fit"]);
+// `screening_passed` is deliberately absent: S12 closes the profile round with
+// one decision, and the interview invite is taken at
+// /applications/bulk-invite-interview. Removing it from the allowlist means a
+// cached page or a crafted request cannot revive the retired workflow.
+const ALLOWED_BULK_STATUSES = new Set(["needs_more_review", "rejected_or_not_fit"]);
 
 // A "use server" module may export only async functions, so the role list,
 // the batch cap and the queue paths live in lib/bulk-screening.ts.

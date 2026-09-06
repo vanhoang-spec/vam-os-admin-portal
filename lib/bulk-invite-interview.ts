@@ -4,12 +4,23 @@
  * Plain module (no "use server", no "server-only") so the page and its client
  * form read one definition rather than two that happen to agree.
  *
- * NOTHING HERE IS A GATE. `vam084_apply_application_decisions` re-derives
- * eligibility per application under a row lock, including the profile-review
- * minimum and the expected-status check. This module only decides which rows
- * are worth SHOWING an operator, so the list is not full of applications the
- * server would refuse.
+ * ELIGIBILITY IS NOT DECIDED HERE. It delegates to
+ * `evaluateDirectInterviewInvite`, the single canonical mirror of the
+ * `invited_to_interview` branch of `vam084_application_decision_eligibility`,
+ * which the individual decision panel also answers from. A second hand-written
+ * allowlist here was the drift Codex found: it omitted profile-stage
+ * `needs_more_review` entirely, so an application the individual command would
+ * accept was invisible in bulk.
+ *
+ * And this is still only about what an operator is SHOWN.
+ * `vam084_apply_application_decisions` re-derives eligibility per application
+ * under a row lock, with the expected-status check, on every write.
  */
+
+import {
+  evaluateDirectInterviewInvite,
+  type DirectInviteEvaluation
+} from "@/lib/direct-interview-eligibility";
 
 export const BULK_INVITE_TARGET_STATUS = "invited_to_interview";
 
@@ -24,37 +35,34 @@ export const BULK_INVITE_TARGET_STATUS = "invited_to_interview";
  */
 export const BULK_INVITE_MAX = 100;
 
-/**
- * Statuses a profile round actually ends in, and from which the database now
- * accepts a direct interview invite.
- *
- * Mirrors the `invited_to_interview` branch of
- * vam084_application_decision_eligibility. `screening_passed` is included so
- * records left there by the old two-step flow are not stranded.
- *
- * `needs_more_review` is deliberately ABSENT from the bulk list. The database
- * will accept it when its provenance rule is satisfied, but "cần xem thêm" is a
- * judgement someone made about one applicant, and sweeping such rows into a
- * bulk invite would quietly overturn it. Those go one at a time on the
- * application detail page.
- */
-export const BULK_INVITE_SOURCE_STATUSES: ReadonlySet<string> = new Set([
-  "screening_completed",
-  "needs_admin_review",
-  "screening_passed"
-]);
-
 export type BulkInviteCandidate = {
   status: unknown;
-  submittedProfileReviews: number;
+  submittedProfileReviewers: number;
+  requiredProfileReviews: number | null;
+  submittedInterviewReviewers: number;
+  latestNeedsMoreReviewAt: string | null;
+  latestProfileSubmissionAt: string | null;
 };
 
-/** Whether a row is worth offering. Never a substitute for the server gate. */
-export function isBulkInviteCandidate(
-  input: BulkInviteCandidate,
-  requiredProfileReviews: number
-): boolean {
-  const status = String(input.status ?? "").trim();
-  if (!BULK_INVITE_SOURCE_STATUSES.has(status)) return false;
-  return input.submittedProfileReviews >= requiredProfileReviews;
+/**
+ * Whether a row is worth offering, by the same rules the server applies.
+ *
+ * Profile-stage `needs_more_review` IS offered when its provenance is
+ * satisfied — a newer submitted profile review and no submitted interview
+ * review. That is exactly what the database permits, and withholding it here
+ * would leave Core Team unable to clear remediated applications in bulk.
+ */
+export function evaluateBulkInviteCandidate(input: BulkInviteCandidate): DirectInviteEvaluation {
+  return evaluateDirectInterviewInvite({
+    applicationStatus: input.status,
+    submittedProfileReviewers: input.submittedProfileReviewers,
+    requiredProfileReviews: input.requiredProfileReviews,
+    submittedInterviewReviewers: input.submittedInterviewReviewers,
+    latestNeedsMoreReviewAt: input.latestNeedsMoreReviewAt,
+    latestProfileSubmissionAt: input.latestProfileSubmissionAt
+  });
+}
+
+export function isBulkInviteCandidate(input: BulkInviteCandidate): boolean {
+  return evaluateBulkInviteCandidate(input).eligible;
 }

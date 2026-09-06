@@ -34,13 +34,20 @@ describe("S12 mentor review filter + bounded bulk operations", () => {
     expect(PAGE).toContain("Vui lòng nhập thêm từ khóa tìm kiếm");
   });
 
-  it("limits bulk writes to the current page and three recruitment actions", () => {
+  it("limits bulk writes to the current page and the remaining recruitment actions", () => {
     expect(ACTION).toContain("applicationIds.length > BULK_SCREENING_MAX");
     expect(LIMITS).toContain("BULK_SCREENING_MAX = 25");
-    expect(ACTION).toContain('"screening_passed"');
     expect(ACTION).toContain('"needs_more_review"');
     expect(ACTION).toContain('"rejected_or_not_fit"');
     expect(ACTION).not.toContain('"withdrawn"');
+    // S12 closes the profile round with one decision; the interview invite now
+    // lives at /applications/bulk-invite-interview and `screening_passed` is no
+    // longer a Core Team forward action anywhere.
+    const allowlist = ACTION.slice(
+      ACTION.indexOf("const ALLOWED_BULK_STATUSES"),
+      ACTION.indexOf(";", ACTION.indexOf("const ALLOWED_BULK_STATUSES"))
+    );
+    expect(allowlist).not.toContain('"screening_passed"');
   });
 
   it("re-checks permission, scoped object, applied role, and expected status before each write", () => {

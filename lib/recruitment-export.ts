@@ -153,12 +153,26 @@ export function deriveDecisions(rows: readonly DecisionRow[]): DerivedDecisions 
       continue;
     }
     // S12 closes the profile round with ONE decision, so the row that records
-    // it is `invited_to_interview` rather than `screening_passed`. Read the
-    // first such row as the screening outcome — it is issued only when the
-    // profile-review minimum is met, which is exactly what the screening
-    // outcome asserts. Guarded on `out.screening` being empty so a two-step
-    // history keeps reporting its explicit `screening_passed` row instead.
-    if (row.status === "invited_to_interview" && !out.screening) {
+    // it is `invited_to_interview` rather than `screening_passed`. An invite
+    // issued while the application is STILL IN THE SCREENING STAGE is the
+    // screening outcome: the server transition that wrote it enforces the
+    // profile-review minimum, which is exactly what "screening passed" asserts.
+    //
+    // Keyed on the stage in progress, not on `out.screening` being empty, and
+    // that distinction is the whole point:
+    //
+    //   * needs_more_review does not advance the stage, so a remediation
+    //     followed by a valid invite is still read as passed. Guarding on
+    //     "no screening outcome yet" would freeze the superseded
+    //     needs_more_review and lose the real outcome.
+    //   * an explicit screening_passed row DOES advance the stage, so a
+    //     two-step history keeps its own row and its own timestamp; the invite
+    //     that follows is plain progression.
+    //   * a later contradictory decision is attributed to whatever stage was
+    //     in progress when it happened, so nothing here can overwrite one.
+    //
+    // The timestamp is the decision row's own. Nothing is invented.
+    if (row.status === "invited_to_interview" && stage === "screening") {
       out.screening = { status: row.status, at: row.at };
       stage = "interview";
       continue;
@@ -342,9 +356,9 @@ export function classifyOperational(status: unknown, derived: DerivedDecisions):
   const rejected = REJECTED_STATUSES.has(value);
   const needsMoreReview = value === "needs_more_review";
 
-  const auditScreening =
-    derived.screening?.status === "screening_passed" ||
-    derived.screening?.status === "invited_to_interview";
+  // Derived from the one classifier, so the audit column and the
+  // `screening_decision=passed` filter can never disagree.
+  const auditScreening = classifyOutcome(derived.screening) === "passed";
   const auditInterview = derived.interview?.status === "interview_passed";
   const auditApproved = Boolean(derived.final && PROVES_OFFICIAL_APPROVAL.has(derived.final.status));
   const auditRejected =
@@ -407,7 +421,19 @@ export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 export function classifyOutcome(decision: StageDecision): DecisionOutcome {
   if (!decision) return "pending";
   const status = decision.status;
-  if (status === "screening_passed" || status === "interview_passed" || FINAL_APPROVALS.has(status)) return "passed";
+  // `invited_to_interview` appears as a stage outcome only where deriveDecisions
+  // recorded it as the screening result — an invite issued from the screening
+  // stage, which the server only permits once the profile-review minimum is met.
+  // It therefore answers `screening_decision=passed` exactly as an explicit
+  // screening_passed row does.
+  if (
+    status === "screening_passed" ||
+    status === "invited_to_interview" ||
+    status === "interview_passed" ||
+    FINAL_APPROVALS.has(status)
+  ) {
+    return "passed";
+  }
   if (status === "rejected_or_not_fit" || status === "withdrawn") return "rejected";
   if (status === "waitlisted") return "waitlisted";
   if (status === "needs_more_review") return "needs_more_review";

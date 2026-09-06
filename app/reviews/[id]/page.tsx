@@ -109,12 +109,19 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
 
   const isSubmitted = review.status === "submitted";
 
-  // Permission guard: reviewer may only edit their own review
+  // Permission guard: a review is edited ONLY by the person it was assigned to.
+  //
+  // This used to admit super_admin / admin / core_team as well, which rendered
+  // an editable form for an operator the server always refuses:
+  // vam084_submit_application_review and vam095_save_application_review_draft
+  // both require `v_review.reviewer_admin_user_id = p_actor`, and
+  // lib/application-reviews.ts checks the same thing before either is called.
+  // The form could therefore never succeed — it only invited Core Team to lose
+  // work. Correction stays available through cancel and reassign below, which
+  // is where those roles genuinely have authority.
   const isOwner = review.reviewer_admin_user_id === adminUser.id;
   const canEdit =
-    !applicationWithdrawn &&
-    isEditableReviewStatus(review.status) &&
-    (isOwner || ["super_admin", "admin", "core_team"].includes(adminUser.role));
+    !applicationWithdrawn && isEditableReviewStatus(review.status) && isOwner;
   const canManageAssignment =
     canAssignReview(adminUser.role) && isEditableReviewStatus(review.status);
 
@@ -227,7 +234,9 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
           <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
             {applicationWithdrawn
               ? "Hồ sơ đã rút khỏi quy trình tuyển; review ở chế độ chỉ đọc."
-              : "Bạn không có quyền chỉnh sửa review này."}
+              : isEditableReviewStatus(review.status) && !isOwner
+                ? "Đánh giá này thuộc về reviewer khác. Bạn có thể huỷ hoặc chuyển phân công, nhưng không chỉnh sửa hay nộp thay."
+                : "Bạn không có quyền chỉnh sửa review này."}
           </div>
         )}
       </Card>

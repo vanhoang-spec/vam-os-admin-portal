@@ -126,7 +126,7 @@ describe("one generic screening implementation", () => {
 // ── Mentor path ─────────────────────────────────────────────────────────────
 
 describe("mentor bulk screening through the generic action", () => {
-  it.each(["screening_passed", "needs_more_review", "rejected_or_not_fit"])(
+  it.each(["needs_more_review", "rejected_or_not_fit"])(
     "applies %s to mentor applications",
     async (status) => {
       mockedGetApplication.mockResolvedValue(application("mentor"));
@@ -144,7 +144,7 @@ describe("mentor bulk screening through the generic action", () => {
 
   it("rejects a Mentee application submitted through the Mentor queue", async () => {
     mockedGetApplication.mockResolvedValue(application("mentee"));
-    const url = await runAction(formFor("mentor", [appId(1)], "screening_passed"));
+    const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("không phải hồ sơ Mentor");
     expect(url).toContain("bulk_ok=0");
@@ -153,7 +153,7 @@ describe("mentor bulk screening through the generic action", () => {
   it("preserves the Mentor queue return context", async () => {
     mockedGetApplication.mockResolvedValue(application("mentor"));
     const url = await runAction(
-      formFor("mentor", [appId(1)], "screening_passed", { page: "3", q: "an", mentorType: "returning" })
+      formFor("mentor", [appId(1)], "needs_more_review", { page: "3", q: "an", mentorType: "returning" })
     );
     expect(url).toContain("page=3");
     expect(url).toContain("q=an");
@@ -164,7 +164,7 @@ describe("mentor bulk screening through the generic action", () => {
 // ── Mentee path ─────────────────────────────────────────────────────────────
 
 describe("mentee bulk screening through the generic action", () => {
-  it.each(["screening_passed", "needs_more_review", "rejected_or_not_fit"])(
+  it.each(["needs_more_review", "rejected_or_not_fit"])(
     "applies %s to mentee applications",
     async (status) => {
       mockedGetApplication.mockResolvedValue(application("mentee"));
@@ -177,7 +177,7 @@ describe("mentee bulk screening through the generic action", () => {
 
   it("rejects a Mentor application submitted through the Mentee queue", async () => {
     mockedGetApplication.mockResolvedValue(application("mentor"));
-    const url = await runAction(formFor("mentee", [appId(1)], "screening_passed"));
+    const url = await runAction(formFor("mentee", [appId(1)], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("không phải hồ sơ Mentee");
   });
@@ -185,7 +185,7 @@ describe("mentee bulk screening through the generic action", () => {
   it("never carries the Mentor-only filter onto the Mentee return URL", async () => {
     mockedGetApplication.mockResolvedValue(application("mentee"));
     const url = await runAction(
-      formFor("mentee", [appId(1)], "screening_passed", { mentorType: "returning", page: "2" })
+      formFor("mentee", [appId(1)], "needs_more_review", { mentorType: "returning", page: "2" })
     );
     expect(url).toContain("/applications/mentee-review");
     expect(url).not.toContain("mentor_type");
@@ -199,7 +199,7 @@ describe("bulk screening safety contract", () => {
   it.each(["mentor", "mentee"])("caps %s submissions at 25", async (role) => {
     mockedGetApplication.mockResolvedValue(application(role));
     const ids = Array.from({ length: BULK_SCREENING_MAX + 1 }, (_, i) => appId(i + 1));
-    const url = await runAction(formFor(role, ids, "screening_passed"));
+    const url = await runAction(formFor(role, ids, "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("1 đến 25");
   });
@@ -207,27 +207,27 @@ describe("bulk screening safety contract", () => {
   it.each(["mentor", "mentee"])("accepts exactly 25 for %s", async (role) => {
     mockedGetApplication.mockResolvedValue(application(role));
     const ids = Array.from({ length: BULK_SCREENING_MAX }, (_, i) => appId(i + 1));
-    await runAction(formFor(role, ids, "screening_passed"));
+    await runAction(formFor(role, ids, "needs_more_review"));
     expect(mockedRecord).toHaveBeenCalledTimes(BULK_SCREENING_MAX);
   });
 
   it("rejects an empty selection", async () => {
-    const url = await runAction(formFor("mentor", [], "screening_passed"));
+    const url = await runAction(formFor("mentor", [], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("1 đến 25");
   });
 
   it("skips a row whose status moved since the page rendered", async () => {
-    mockedGetApplication.mockResolvedValue(application("mentor", "screening_passed"));
-    const url = await runAction(formFor("mentor", [appId(1)], "screening_passed", { expected: "submitted" }));
+    mockedGetApplication.mockResolvedValue(application("mentor", "needs_more_review"));
+    const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review", { expected: "submitted" }));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("trạng thái đã thay đổi");
   });
 
   it("skips a row that has left the pending queue", async () => {
-    mockedGetApplication.mockResolvedValue(application("mentor", "needs_more_review"));
+    mockedGetApplication.mockResolvedValue(application("mentor", "invited_to_interview"));
     const url = await runAction(
-      formFor("mentor", [appId(1)], "screening_passed", { expected: "needs_more_review" })
+      formFor("mentor", [appId(1)], "needs_more_review", { expected: "invited_to_interview" })
     );
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("không còn ở hàng đợi chờ xử lý");
@@ -235,7 +235,7 @@ describe("bulk screening safety contract", () => {
 
   it("skips a row outside the caller's scope", async () => {
     mockedGetApplication.mockResolvedValue({ data: null, error: "scope" } as never);
-    const url = await runAction(formFor("mentor", [appId(1)], "screening_passed"));
+    const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("ngoài phạm vi");
   });
@@ -244,7 +244,7 @@ describe("bulk screening safety contract", () => {
     mockedGetApplication
       .mockResolvedValueOnce(application("mentor"))
       .mockResolvedValueOnce(application("mentee"));
-    const url = await runAction(formFor("mentor", [appId(1), appId(2)], "screening_passed"));
+    const url = await runAction(formFor("mentor", [appId(1), appId(2)], "needs_more_review"));
     const decoded = resultMessage(url);
     expect(decoded).toContain("Đã cập nhật 1 hồ sơ");
     expect(decoded).toContain("1 hồ sơ bị chặn");
@@ -254,7 +254,7 @@ describe("bulk screening safety contract", () => {
   it("surfaces the atomic decision path's own error message", async () => {
     mockedGetApplication.mockResolvedValue(application("mentor"));
     mockedRecord.mockResolvedValue({ ok: false, message: "Đơn chưa đủ số review hồ sơ tối thiểu." } as never);
-    const url = await runAction(formFor("mentor", [appId(1)], "screening_passed"));
+    const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
     expect(resultMessage(url)).toContain("Đơn chưa đủ số review hồ sơ tối thiểu.");
   });
 
@@ -269,7 +269,7 @@ describe("bulk screening safety contract", () => {
   );
 
   it("refuses an unrecognised queue role", async () => {
-    const url = await runAction(formFor("reviewer", [appId(1)], "screening_passed"));
+    const url = await runAction(formFor("reviewer", [appId(1)], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("Hàng đợi duyệt không hợp lệ.");
   });
@@ -280,7 +280,7 @@ describe("bulk screening safety contract", () => {
 describe("bulk screening authorization follows canDecide", () => {
   it.each(["reviewer", "viewer", "support_team"])("denies %s", async (role) => {
     vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "u", role } as never);
-    const url = await runAction(formFor("mentor", [appId(1)], "screening_passed"));
+    const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("Bạn không có quyền duyệt hàng loạt.");
   });
@@ -288,20 +288,20 @@ describe("bulk screening authorization follows canDecide", () => {
   it.each(["core_team", "admin", "super_admin"])("allows %s", async (role) => {
     vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "u", role } as never);
     mockedGetApplication.mockResolvedValue(application("mentor"));
-    await runAction(formFor("mentor", [appId(1)], "screening_passed"));
+    await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
     expect(mockedRecord).toHaveBeenCalledTimes(1);
   });
 
   it("denies an unauthenticated caller", async () => {
     vi.mocked(getCurrentAdminUser).mockResolvedValue(null as never);
-    const url = await runAction(formFor("mentor", [appId(1)], "screening_passed"));
+    const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("Bạn không có quyền");
   });
 
   it("applies the caller's season scope to every row read", async () => {
     mockedGetApplication.mockResolvedValue(application("mentor"));
-    await runAction(formFor("mentor", [appId(1), appId(2)], "screening_passed"));
+    await runAction(formFor("mentor", [appId(1), appId(2)], "needs_more_review"));
     for (const call of mockedGetApplication.mock.calls) {
       expect(call[1]).toEqual({ scope: "s" });
     }
@@ -448,7 +448,7 @@ describe("bulk selection UX", () => {
   it("keeps submission disabled until something is selected", async () => {
     const user = userEvent.setup();
     renderQueue("mentee", ids);
-    const pass = screen.getByRole("button", { name: "Qua vòng hồ sơ" }) as HTMLButtonElement;
+    const pass = screen.getByRole("button", { name: "Cần review thêm" }) as HTMLButtonElement;
     expect(pass.disabled).toBe(true);
     await user.click(screen.getByTestId("bulk-select-all"));
     expect(pass.disabled).toBe(false);
@@ -460,7 +460,7 @@ describe("bulk selection UX", () => {
     await user.click(screen.getByTestId("bulk-select-all"));
     expect(screen.getByTestId("bulk-selected-count").textContent).toBe("Đã chọn 26 hồ sơ");
     expect(screen.getByTestId("bulk-over-limit").textContent).toContain("Tối đa 25");
-    for (const name of ["Qua vòng hồ sơ", "Cần review thêm", "Không phù hợp"]) {
+    for (const name of ["Cần review thêm", "Không phù hợp"]) {
       expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
     }
   });

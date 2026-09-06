@@ -1801,6 +1801,39 @@ export async function getActiveAdminUsers(): Promise<QueryResult<AdminUserPublic
 }
 
 /** All admin decisions recorded against an application, newest first. */
+/**
+ * Newest `needs_more_review` decision per application, for a bounded id set.
+ *
+ * One `.in()` read rather than a query per application: the bulk invite list
+ * needs this to apply the same provenance rule the database applies, and an
+ * N+1 there would be a page that never loads.
+ */
+export async function getLatestNeedsMoreReviewByApplication(
+  applicationIds: string[]
+): Promise<QueryResult<Map<string, string>>> {
+  const empty = new Map<string, string>();
+  if (!applicationIds.length) return { data: empty, error: null };
+  const client = await dataClient("application_decisions");
+  if (!client) return serviceRoleRequiredError<Map<string, string>>(empty);
+  const { data, error } = await client
+    .from("application_decisions")
+    .select("application_id,new_status,created_at")
+    .in("application_id", applicationIds)
+    .eq("new_status", "needs_more_review");
+  if (error) {
+    logDataError("application_decisions.latestNeedsMoreReview", error);
+    return { data: empty, error: VI_ERROR };
+  }
+  const latest = new Map<string, string>();
+  for (const row of (data ?? []) as Array<Record<string, any>>) {
+    const key = String(row.application_id);
+    const at = String(row.created_at ?? "");
+    const current = latest.get(key);
+    if (!current || at > current) latest.set(key, at);
+  }
+  return { data: latest, error: null };
+}
+
 export async function getApplicationDecisions(
   applicationId: string,
   scope?: ScopeFilter

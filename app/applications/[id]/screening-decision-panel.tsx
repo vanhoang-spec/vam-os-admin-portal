@@ -5,11 +5,15 @@ import { useFormState, useFormStatus } from "react-dom";
 import { updateApplicationDecisionAction } from "@/app/actions/application-decisions";
 import { ConfirmActionDialog } from "@/components/action-feedback";
 import { initialDecisionActionState } from "@/lib/decision-action-types";
+import { DIRECT_INVITE_REASON_MESSAGE } from "@/lib/direct-interview-eligibility";
 import {
   ASSIGNMENT_STATE_LABEL,
   BLOCKED_CHOICE_SUFFIX,
   SCREENING_DECISION_CHOICES,
+  allScreeningChoicesBlocked,
   isScreeningChoiceBlocked,
+  primaryBlockedReason,
+  screeningChoiceEvaluation,
   type ScreeningDecisionState
 } from "@/lib/screening-decision";
 
@@ -18,10 +22,11 @@ import {
  *
  * Core Team used to record "Qua vòng hồ sơ" and then "Mời phỏng vấn" for a
  * single judgement. This surface offers the three decisions that actually carry
- * judgement — invite, reject, ask for more — and nothing else. "Qua vòng hồ sơ"
- * is gone as a human choice; it is not a decision anyone was making.
+ * judgement — invite, ask for more, reject — and nothing else.
  *
- * The review gate is enforced in the database. Everything here explains it.
+ * Every enabled/disabled state below comes from the database's own eligibility
+ * function, carried in `state.eligibility`. This component never decides what
+ * the server would allow; it only says so.
  */
 
 const ASSIGN_ANCHOR = "#assign-review-card";
@@ -29,13 +34,13 @@ const ASSIGN_ANCHOR = "#assign-review-card";
 const CTA_CLASS =
   "inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50";
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({ label, disabled }: { label: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
-      className="inline-flex h-9 items-center gap-2 rounded-md bg-vam-green px-4 text-sm font-medium text-white hover:bg-vam-ink disabled:opacity-50"
+      disabled={pending || disabled}
+      className="inline-flex h-9 items-center gap-2 rounded-md bg-vam-green px-4 text-sm font-medium text-white hover:bg-vam-ink disabled:cursor-not-allowed disabled:opacity-50"
     >
       {pending ? "Đang lưu…" : label}
     </button>
@@ -106,78 +111,87 @@ function EvidencePanel({ state }: { state: ScreeningDecisionState }) {
 }
 
 // ---------------------------------------------------------------------------
-// Gate guidance — shown only while the invite would be refused
+// Guidance — shown while the server would refuse the decision Core Team wants
 // ---------------------------------------------------------------------------
 
-function GateGuidance({
+function Guidance({
   state,
   canAssign
 }: {
   state: ScreeningDecisionState;
   canAssign: boolean;
 }) {
+  const reason = primaryBlockedReason(state);
+  const unknown = reason === "eligibility_unknown";
+  const showAssignCta = !state.myOpenReviewId && !state.otherActiveReviews.length;
+
   return (
     <div
       role="status"
       aria-live="polite"
       data-testid="screening-gate"
-      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800"
+      className={`rounded-md border px-3 py-3 text-sm ${
+        unknown
+          ? "border-red-300 bg-red-50 text-red-900"
+          : "border-amber-200 bg-amber-50 text-amber-800"
+      }`}
     >
-      <p className="font-medium">Chưa đủ review hồ sơ để quyết định.</p>
-      <p className="mt-1 text-amber-700">
-        Đã nộp {state.submittedCount}/{state.requiredCount} đánh giá hồ sơ. Đánh giá đang
-        mở hoặc mới lưu nháp không được tính — chỉ đánh giá đã nộp mới tính.
+      <p className="font-medium">
+        {unknown ? "Không xác định được điều kiện quyết định." : "Chưa đủ review hồ sơ để quyết định."}
       </p>
+      <p className="mt-1">{DIRECT_INVITE_REASON_MESSAGE[reason]}</p>
 
-      <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-amber-700">
-        <div>
-          <dt className="inline font-medium">Trạng thái phân công: </dt>
-          <dd className="inline">{ASSIGNMENT_STATE_LABEL[state.assignmentState]}</dd>
-        </div>
-        {state.activeReview ? (
-          <div>
-            <dt className="inline font-medium">Người phụ trách: </dt>
-            <dd className="inline">{state.activeReview.reviewerName ?? "Không xác định"}</dd>
-          </div>
-        ) : null}
-      </dl>
+      {!unknown ? (
+        <>
+          <p className="mt-1 text-amber-700">
+            Đã nộp {state.submittedCount}/{state.requiredCount ?? "?"} đánh giá hồ sơ. Đánh giá
+            đang mở hoặc mới lưu nháp không được tính — chỉ đánh giá đã nộp mới tính.
+          </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {state.cta === "assign" &&
-          (canAssign ? (
-            <a href={ASSIGN_ANCHOR} className={CTA_CLASS}>
-              Giao review hồ sơ ↑
-            </a>
-          ) : (
-            <span className="text-xs text-amber-700">
-              Giao review hồ sơ: liên hệ admin / core team để phân công.
-            </span>
-          ))}
+          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-amber-700">
+            <div>
+              <dt className="inline font-medium">Trạng thái phân công: </dt>
+              <dd className="inline">{ASSIGNMENT_STATE_LABEL[state.assignmentState]}</dd>
+            </div>
+          </dl>
 
-        {state.cta === "open_mine" && state.myOpenReviewId ? (
-          <a href={`/reviews/${state.myOpenReviewId}`} className={CTA_CLASS}>
-            Mở đánh giá của tôi →
-          </a>
-        ) : null}
+          {state.otherActiveReviews.length ? (
+            <ul data-testid="screening-other-reviewers" className="mt-2 grid gap-1 text-xs text-amber-700">
+              {state.otherActiveReviews.map((row) => (
+                <li key={row.id}>
+                  Đang do <strong className="font-medium">{row.reviewerName}</strong> phụ trách (
+                  {row.statusLabel}). Bạn không chỉnh sửa đánh giá của người khác.
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
-        {state.cta === "await_other" ? (
-          <>
-            <span className="text-xs text-amber-700">
-              Đánh giá đang do{" "}
-              <strong className="font-medium">
-                {state.otherReviewerName ?? "Không xác định"}
-              </strong>{" "}
-              phụ trách ({ASSIGNMENT_STATE_LABEL[state.assignmentState]}). Bạn không chỉnh
-              sửa đánh giá của người khác.
-            </span>
-            {canAssign ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {state.myOpenReviewId ? (
+              <a href={`/reviews/${state.myOpenReviewId}`} className={CTA_CLASS}>
+                Mở đánh giá của tôi →
+              </a>
+            ) : null}
+
+            {showAssignCta &&
+              (canAssign ? (
+                <a href={ASSIGN_ANCHOR} className={CTA_CLASS}>
+                  Giao review hồ sơ ↑
+                </a>
+              ) : (
+                <span className="text-xs text-amber-700">
+                  Giao review hồ sơ: liên hệ admin / core team để phân công.
+                </span>
+              ))}
+
+            {!showAssignCta && !state.myOpenReviewId && canAssign ? (
               <a href={ASSIGN_ANCHOR} className={CTA_CLASS}>
                 Chỉnh sửa phân công ↑
               </a>
             ) : null}
-          </>
-        ) : null}
-      </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -207,6 +221,7 @@ export function ScreeningDecisionPanel({
 
   const choice = SCREENING_DECISION_CHOICES.find((c) => c.value === selected);
   const isDestructive = Boolean(choice?.destructive);
+  const nothingAvailable = allScreeningChoicesBlocked(state);
 
   return (
     <div className="space-y-4">
@@ -224,7 +239,7 @@ export function ScreeningDecisionPanel({
 
       <EvidencePanel state={state} />
 
-      {!state.met ? <GateGuidance state={state} canAssign={canAssignReview} /> : null}
+      {nothingAvailable ? <Guidance state={state} canAssign={canAssignReview} /> : null}
 
       <form action={action} className="space-y-3">
         <input type="hidden" name="application_id" value={applicationId} />
@@ -247,12 +262,13 @@ export function ScreeningDecisionPanel({
             </option>
             {SCREENING_DECISION_CHOICES.map((option) => {
               const blocked = isScreeningChoiceBlocked(option.value, state);
+              const evaluation = screeningChoiceEvaluation(option.value, state);
               return (
                 <option
                   key={option.value}
                   value={option.value}
                   disabled={blocked}
-                  title={blocked ? "Chưa đủ số đánh giá hồ sơ đã nộp." : undefined}
+                  title={blocked ? DIRECT_INVITE_REASON_MESSAGE[evaluation.reason] : undefined}
                 >
                   {blocked ? `${option.label}${BLOCKED_CHOICE_SUFFIX}` : option.label}
                 </option>
@@ -287,7 +303,7 @@ export function ScreeningDecisionPanel({
             confirmClassName="bg-red-600 text-white hover:bg-red-700"
           />
         ) : (
-          <SubmitButton label="Ghi nhận quyết định" />
+          <SubmitButton label="Ghi nhận quyết định" disabled={nothingAvailable} />
         )}
       </form>
     </div>

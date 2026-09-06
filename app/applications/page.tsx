@@ -168,6 +168,17 @@ export default async function ApplicationsPage() {
             (canDecide), so the entry point never appears to a role that could
             not use it. This is the only new entry point added here; the hidden
             bulk-decision one stays hidden. */}
+        {/* S12 throughput: the profile round now closes with ONE Core Team
+            decision, and this is where that decision is taken in bulk. Same
+            authority as the action itself (canDecide). */}
+        {canDecide(adminUser.role) && (
+          <Link
+            href="/applications/bulk-invite-interview"
+            className="inline-flex rounded-md border border-vam-green bg-vam-mint px-4 py-2 text-sm font-medium text-vam-green hover:bg-white"
+          >
+            Mời phỏng vấn hàng loạt
+          </Link>
+        )}
         {canDecide(adminUser.role) && (
           <Link
             href="/applications/bulk-approval"

@@ -9,23 +9,27 @@
  *   decision at this stage:
  *
  *     Mời phỏng vấn   → invited_to_interview
- *     Không phù hợp   → rejected_or_not_fit
  *     Cần xem thêm    → needs_more_review
+ *     Không phù hợp   → rejected_or_not_fit
  *
  *   `screening_passed` is no longer offered as a human choice. It remains a
  *   legal application status and a legal source for the invite, so records
  *   already sitting there are unaffected.
  *
- * WHAT DID NOT CHANGE
- *   The gate. `vam084_application_decision_eligibility` still refuses
- *   `invited_to_interview` below the season's minimum submitted profile
- *   reviews. Everything in this module mirrors that gate so the operator can
- *   see it; nothing here enforces it. The database is the arbiter.
+ * WHAT ENFORCES WHAT
+ *   Nothing in this module is a gate. Every eligibility answer it carries was
+ *   produced by `vam084_application_decision_eligibility` — the same function
+ *   the write path consults — and is passed in. This module arranges those
+ *   answers for the operator; it never derives one.
  *
- *   Mirrored precisely: only `status = 'submitted'` rows count, and the count is
- *   of DISTINCT reviewers, exactly as the RPC's
- *   `count(distinct ar.reviewer_admin_user_id) filter (where ... 'submitted')`.
+ *   That is deliberate. All three decisions are review-gated by the database:
+ *   `rejected_or_not_fit` and `needs_more_review` sit behind the same
+ *   `v_profile_submitted >= v_profile_required` check as the invite. Telling an
+ *   operator that "Không phù hợp" needs no reviews would be a lie the server
+ *   then refuses.
  */
+
+import type { DirectInviteEvaluation, DirectInviteReason } from "@/lib/direct-interview-eligibility";
 
 export const PROFILE_REVIEW_ROUND = "profile_screening";
 
@@ -53,31 +57,15 @@ export const PROFILE_DECISION_STATUSES: ReadonlySet<string> = new Set([
 
 /** The three choices Core Team is offered at this stage, in operator order. */
 export const SCREENING_DECISION_CHOICES = Object.freeze([
-  {
-    value: "invited_to_interview",
-    label: "Mời phỏng vấn",
-    /** Requires the profile-review minimum. The others do not. */
-    requiresProfileReview: true,
-    destructive: false
-  },
-  {
-    value: "needs_more_review",
-    label: "Cần xem thêm",
-    requiresProfileReview: false,
-    destructive: false
-  },
-  {
-    value: "rejected_or_not_fit",
-    label: "Không phù hợp",
-    requiresProfileReview: false,
-    destructive: true
-  }
+  { value: "invited_to_interview", label: "Mời phỏng vấn", destructive: false },
+  { value: "needs_more_review", label: "Cần xem thêm", destructive: false },
+  { value: "rejected_or_not_fit", label: "Không phù hợp", destructive: true }
 ] as const);
 
 export type ScreeningDecisionValue = (typeof SCREENING_DECISION_CHOICES)[number]["value"];
 
 /** Suffix on a choice the database would refuse right now. */
-export const BLOCKED_CHOICE_SUFFIX = " — chưa đủ đánh giá";
+export const BLOCKED_CHOICE_SUFFIX = " — chưa đủ điều kiện";
 
 export type ScreeningReviewInput = {
   id: string;
@@ -111,9 +99,6 @@ export const ASSIGNMENT_STATE_LABEL: Record<ScreeningAssignmentState, string> = 
   submitted: "Đã nộp"
 };
 
-/** What the operator can usefully do next about review coverage. */
-export type ScreeningCta = "none" | "assign" | "open_mine" | "await_other";
-
 /** One submitted review, shown as evidence. Never averaged across reviewers. */
 export type ScreeningEvidence = {
   reviewId: string;
@@ -126,25 +111,39 @@ export type ScreeningEvidence = {
   submittedAt: string | null;
 };
 
+/** An open review belonging to somebody who is not the current actor. */
+export type OtherActiveReview = {
+  id: string;
+  status: string;
+  statusLabel: string;
+  reviewerName: string;
+};
+
 export type ScreeningDecisionState = {
   /** True while this application is still a profile-round decision. */
   inProfileStage: boolean;
   submittedCount: number;
-  requiredCount: number;
-  /** True when the database would accept "Mời phỏng vấn" on review grounds. */
-  met: boolean;
+  /** `null` when the season requirement could not be read. */
+  requiredCount: number | null;
   assignmentState: ScreeningAssignmentState;
-  activeReview: {
-    id: string;
-    status: string;
-    reviewerName: string | null;
-    ownedByActor: boolean;
-  } | null;
+  /**
+   * The CURRENT ACTOR's own open review, if they hold one.
+   *
+   * Found by searching every profile review for one this actor owns, not by
+   * inspecting whichever open review happens to sort first. With two reviewers
+   * on an application, taking the first row would hide the actor's own work
+   * behind somebody else's.
+   */
   myOpenReviewId: string | null;
-  otherReviewerName: string | null;
-  cta: ScreeningCta;
+  /** Every OTHER open review, read-only. Never linked for editing. */
+  otherActiveReviews: OtherActiveReview[];
   /** One entry per submitted review, newest first. Never aggregated. */
   evidence: ScreeningEvidence[];
+  /**
+   * The database's answer for each decision, keyed by status. Produced by
+   * `vam084_application_decision_eligibility`, never derived here.
+   */
+  eligibility: Record<string, DirectInviteEvaluation>;
 };
 
 const RECOMMENDATION_LABEL: Record<string, string> = {
@@ -161,6 +160,19 @@ export function recommendationLabel(value: unknown): string {
   return RECOMMENDATION_LABEL[key] ?? key;
 }
 
+const REVIEW_STATUS_LABEL: Record<string, string> = {
+  assigned: "Chưa bắt đầu",
+  in_progress: "Đang làm",
+  returned_for_clarification: "Cần làm rõ",
+  submitted: "Đã nộp",
+  cancelled: "Đã huỷ"
+};
+
+export function reviewStatusLabel(status: unknown): string {
+  const key = String(status ?? "").trim();
+  return REVIEW_STATUS_LABEL[key] ?? key;
+}
+
 const COMPONENT_FIELDS: Array<{ key: keyof ScreeningReviewInput; label: string }> = [
   { key: "score_motivation", label: "Động lực" },
   { key: "score_goal_clarity", label: "Mục tiêu" },
@@ -173,12 +185,17 @@ function isActive(status: string): boolean {
   return status !== "cancelled" && status !== "submitted";
 }
 
+const UNKNOWN: DirectInviteEvaluation = { eligible: false, reason: "eligibility_unknown" };
+
 export function buildScreeningDecisionState(input: {
   applicationStatus: string | null;
   reviews: readonly ScreeningReviewInput[];
-  requiredCount: number;
+  /** `null` when the season requirement could not be read. */
+  requiredCount: number | null;
   actorAdminUserId: string | null;
   reviewerNameById?: ReadonlyMap<string, string>;
+  /** Server answers per candidate status. A missing entry is treated as unknown. */
+  eligibility?: Record<string, DirectInviteEvaluation>;
 }): ScreeningDecisionState {
   const status = String(input.applicationStatus ?? "").trim();
   const rows = input.reviews.filter((r) => r.review_round === PROFILE_REVIEW_ROUND);
@@ -190,36 +207,37 @@ export function buildScreeningDecisionState(input: {
     }
   }
   const submittedCount = submittedReviewerIds.size;
-  const met = submittedCount >= input.requiredCount;
 
-  const activeRow = rows.find((r) => isActive(r.status)) ?? null;
-  const activeReview = activeRow
-    ? {
-        id: activeRow.id,
-        status: activeRow.status,
-        reviewerName:
-          (activeRow.reviewer_admin_user_id
-            ? input.reviewerNameById?.get(activeRow.reviewer_admin_user_id)
-            : null) ?? null,
-        ownedByActor:
-          !!input.actorAdminUserId &&
-          activeRow.reviewer_admin_user_id === input.actorAdminUserId
-      }
+  const activeRows = rows.filter((r) => isActive(r.status));
+
+  // The actor's OWN open review, wherever it sits in the array.
+  const mine = input.actorAdminUserId
+    ? activeRows.find((r) => r.reviewer_admin_user_id === input.actorAdminUserId) ?? null
     : null;
 
-  let assignmentState: ScreeningAssignmentState;
-  if (submittedCount > 0) assignmentState = "submitted";
-  else if (activeRow) assignmentState = activeRow.status === "assigned" ? "assigned" : "in_progress";
-  // A cancelled row is not "chưa giao". The operator needs to know a review
-  // existed and was withdrawn, or the page reads as if nothing ever happened.
-  else if (rows.some((r) => r.status === "cancelled")) assignmentState = "cancelled";
-  else assignmentState = "unassigned";
+  const otherActiveReviews: OtherActiveReview[] = activeRows
+    .filter((r) => r.id !== mine?.id)
+    .map((r) => ({
+      id: r.id,
+      status: r.status,
+      statusLabel: reviewStatusLabel(r.status),
+      reviewerName:
+        (r.reviewer_admin_user_id ? input.reviewerNameById?.get(r.reviewer_admin_user_id) : null) ??
+        "Không xác định"
+    }));
 
-  let cta: ScreeningCta;
-  if (met) cta = "none";
-  else if (!activeReview) cta = "assign";
-  else if (activeReview.ownedByActor) cta = "open_mine";
-  else cta = "await_other";
+  let assignmentState: ScreeningAssignmentState;
+  if (submittedCount > 0) {
+    assignmentState = "submitted";
+  } else if (activeRows.length) {
+    assignmentState = activeRows.every((r) => r.status === "assigned") ? "assigned" : "in_progress";
+  } else if (rows.some((r) => r.status === "cancelled")) {
+    // A cancelled row is not "chưa giao". The operator needs to know a review
+    // existed and was withdrawn, or the page reads as if nothing ever happened.
+    assignmentState = "cancelled";
+  } else {
+    assignmentState = "unassigned";
+  }
 
   const evidence: ScreeningEvidence[] = rows
     .filter((r) => r.status === "submitted")
@@ -240,34 +258,51 @@ export function buildScreeningDecisionState(input: {
     }))
     .sort((a, b) => String(b.submittedAt ?? "").localeCompare(String(a.submittedAt ?? "")));
 
+  const eligibility: Record<string, DirectInviteEvaluation> = {};
+  for (const choice of SCREENING_DECISION_CHOICES) {
+    eligibility[choice.value] = input.eligibility?.[choice.value] ?? UNKNOWN;
+  }
+
   return {
     inProfileStage: PROFILE_DECISION_STATUSES.has(status),
     submittedCount,
     requiredCount: input.requiredCount,
-    met,
     assignmentState,
-    activeReview,
-    myOpenReviewId: cta === "open_mine" ? activeReview!.id : null,
-    otherReviewerName: cta === "await_other" ? activeReview!.reviewerName : null,
-    cta,
-    evidence
+    myOpenReviewId: mine?.id ?? null,
+    otherActiveReviews,
+    evidence,
+    eligibility
   };
 }
 
-/**
- * Whether a choice would be refused by the database right now.
- *
- * Only the invite is review-gated at this stage: `rejected_or_not_fit` and
- * `needs_more_review` are already reachable from screening_completed /
- * needs_admin_review / screening_passed under their own branch of the
- * eligibility function, and this must not add a restriction the database does
- * not have.
- */
+/** The database's answer for one choice. Unknown answers are refusals. */
+export function screeningChoiceEvaluation(
+  value: string,
+  state: Pick<ScreeningDecisionState, "eligibility">
+): DirectInviteEvaluation {
+  return state.eligibility[value] ?? UNKNOWN;
+}
+
 export function isScreeningChoiceBlocked(
   value: string,
-  state: Pick<ScreeningDecisionState, "met">
+  state: Pick<ScreeningDecisionState, "eligibility">
 ): boolean {
-  const choice = SCREENING_DECISION_CHOICES.find((c) => c.value === value);
-  if (!choice) return false;
-  return choice.requiresProfileReview && !state.met;
+  return !screeningChoiceEvaluation(value, state).eligible;
+}
+
+/** True when no decision at all is currently available. */
+export function allScreeningChoicesBlocked(
+  state: Pick<ScreeningDecisionState, "eligibility">
+): boolean {
+  return SCREENING_DECISION_CHOICES.every((choice) => isScreeningChoiceBlocked(choice.value, state));
+}
+
+/**
+ * The single reason to lead with when nothing is available.
+ * Prefers the invite's reason: it is the decision Core Team came here to make.
+ */
+export function primaryBlockedReason(
+  state: Pick<ScreeningDecisionState, "eligibility">
+): DirectInviteReason {
+  return screeningChoiceEvaluation("invited_to_interview", state).reason;
 }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import type { DirectInviteEvaluation, DirectInviteReason } from "@/lib/direct-interview-eligibility";
 
 // All writes use service-role to bypass RLS.
 
@@ -41,9 +42,23 @@ export type ApplyDecisionsInput = {
   expectedStatuses: Record<string, string>;
 };
 
+/** One application's outcome, straight from the RPC. Never collapsed away. */
+export type DecisionRowResult = {
+  applicationId: string;
+  applied: boolean;
+  reason: string;
+  /** Operator-facing text for `reason`. */
+  message: string;
+};
+
 export type DecisionResult =
-  | { ok: true; id: string; applied: number; failed: number; message?: string }
-  | { ok: false; message: string };
+  | { ok: true; id: string; applied: number; failed: number; message?: string; rows?: DecisionRowResult[] }
+  | { ok: false; message: string; rows?: DecisionRowResult[] };
+
+/** Vietnamese text for an RPC refusal reason, for row-level reporting. */
+export function decisionReasonMessage(reason: string): string {
+  return REASON_MESSAGES[reason] ?? reason;
+}
 
 export type RestoreWithdrawnResult =
   | { ok: true; applicationId: string; restoredStatus: string }
@@ -79,6 +94,14 @@ export async function applyApplicationDecisions(input: ApplyDecisionsInput): Pro
   }
   const rows = (data ?? []) as Array<{ application_id: string; applied: boolean; reason: string }>;
   if (rows.length !== input.applicationIds.length) return { ok: false, message: SAFE_ERROR };
+  // Carried through per application. An operator asked to stand behind 100
+  // names needs to know WHICH one was blocked and why, not a count.
+  const rowResults: DecisionRowResult[] = rows.map((row) => ({
+    applicationId: String(row.application_id),
+    applied: row.applied,
+    reason: String(row.reason ?? ""),
+    message: row.applied ? "Đã mời phỏng vấn." : decisionReasonMessage(String(row.reason ?? ""))
+  }));
   const applied = rows.filter((row) => row.applied).length;
   const failedRows = rows.filter((row) => !row.applied);
   const failureSummary = Array.from(
@@ -86,7 +109,7 @@ export async function applyApplicationDecisions(input: ApplyDecisionsInput): Pro
   ).map(([reason, count]) => `${REASON_MESSAGES[reason] ?? reason}: ${count}`).join("; ");
   if (!applied) {
     const reason = failedRows[0]?.reason;
-    return { ok: false, message: REASON_MESSAGES[reason] ?? SAFE_ERROR };
+    return { ok: false, message: REASON_MESSAGES[reason] ?? SAFE_ERROR, rows: rowResults };
   }
   return {
     ok: true,
@@ -95,7 +118,8 @@ export async function applyApplicationDecisions(input: ApplyDecisionsInput): Pro
     failed: failedRows.length,
     message: failedRows.length
       ? `Đã cập nhật ${applied} đơn; ${failedRows.length} đơn bị chặn. ${failureSummary}`
-      : `Đã cập nhật ${applied} đơn.`
+      : `Đã cập nhật ${applied} đơn.`,
+    rows: rowResults
   };
 }
 
@@ -146,4 +170,57 @@ export async function restoreWithdrawnApplication(input: {
     return { ok: false, message: SAFE_ERROR };
   }
   return { ok: true, applicationId: row.application_id, restoredStatus: row.new_status };
+}
+
+
+/**
+ * Asks the DATABASE whether a decision is currently allowed.
+ *
+ * `vam084_application_decision_eligibility` is the same function
+ * `vam084_apply_application_decisions` consults before it writes, so this is the
+ * authoritative answer rather than a re-implementation of it. The decision panel
+ * uses it so the control an operator sees and the transition the server would
+ * perform can never disagree.
+ *
+ * FAIL CLOSED. An unreadable answer is reported as `eligibility_unknown`, never
+ * as permission — the panel then renders the decision as unavailable and says
+ * why, instead of offering a control that will be refused.
+ */
+export async function getApplicationDecisionEligibility(
+  applicationId: string,
+  newStatus: string,
+  client = getSupabaseServiceRoleClient()
+): Promise<DirectInviteEvaluation> {
+  if (!client) return { eligible: false, reason: "eligibility_unknown" };
+  const { data, error } = await client.rpc("vam084_application_decision_eligibility", {
+    p_application_id: applicationId,
+    p_new_status: newStatus
+  });
+  if (error) {
+    log("decision eligibility read failed", error);
+    return { eligible: false, reason: "eligibility_unknown" };
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { eligible?: unknown; reason?: unknown }
+    | null;
+  if (!row || typeof row.eligible !== "boolean") {
+    return { eligible: false, reason: "eligibility_unknown" };
+  }
+  const reason = String(row.reason ?? "");
+  const known: DirectInviteReason[] = [
+    "eligible",
+    "profile_review_minimum_not_met",
+    "additional_review_not_submitted",
+    "invalid_transition"
+  ];
+  return {
+    eligible: row.eligible,
+    // An unrecognised reason is still a refusal; it just cannot be explained
+    // more precisely than "unknown".
+    reason: known.includes(reason as DirectInviteReason)
+      ? (reason as DirectInviteReason)
+      : row.eligible
+        ? "eligible"
+        : "eligibility_unknown"
+  };
 }

@@ -25,7 +25,12 @@ import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { canBrowseApplications } from "@/lib/read-access";
 import { getStageRequirements, type StageRequirement } from "@/lib/recruitment-stage-requirements";
-import { buildScreeningDecisionState } from "@/lib/screening-decision";
+import {
+  PROFILE_DECISION_STATUSES,
+  SCREENING_DECISION_CHOICES,
+  buildScreeningDecisionState
+} from "@/lib/screening-decision";
+import { getApplicationDecisionEligibility } from "@/lib/application-decisions";
 import { findReturningMentorProfile } from "@/lib/returning-mentor";
 import { redirect } from "next/navigation";
 import {
@@ -130,11 +135,13 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
         { data: [] as StageRequirement[], error: null }
       ];
 
-  // The season's configured minimum. The database remains the arbiter; this
-  // only lets the decision panel say "đã nộp N/M" instead of a bare refusal.
-  const requiredProfileReviews =
-    stageRequirementsResult.data.find((r) => r.review_stage === "profile_screening")
-      ?.minimum_submitted_reviews ?? 1;
+  // The season's configured minimum, for display only. NULL when it could not
+  // be read — the panel then refuses rather than assuming a minimum of 1 and
+  // showing controls the server would reject.
+  const requiredProfileReviews = stageRequirementsResult.error
+    ? null
+    : stageRequirementsResult.data.find((r) => r.review_stage === "profile_screening")
+        ?.minimum_submitted_reviews ?? null;
 
   const personId = application.data?.person_id;
   const roleApplied = application.data?.role_applied;
@@ -278,12 +285,32 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const reviewerNameById = new Map(
     adminUsers.map((u) => [u.id, u.full_name || u.email] as const)
   );
+  const inProfileStage =
+    !isWithdrawn && PROFILE_DECISION_STATUSES.has(String(displayStatus ?? "").trim());
+
+  // Eligibility is ASKED OF THE DATABASE, one call per offered decision, and
+  // only for an application still in the profile round. This is the same
+  // function the write path consults, so the control an operator sees and the
+  // transition the server would perform cannot disagree. A failed read comes
+  // back as `eligibility_unknown`, which renders as unavailable.
+  const screeningEligibility = inProfileStage
+    ? Object.fromEntries(
+        await Promise.all(
+          SCREENING_DECISION_CHOICES.map(async (choice) => [
+            choice.value,
+            await getApplicationDecisionEligibility(application.data!.id, choice.value)
+          ] as const)
+        )
+      )
+    : {};
+
   const screeningState = buildScreeningDecisionState({
     applicationStatus: displayStatus,
     reviews,
     requiredCount: requiredProfileReviews,
     actorAdminUserId: adminUser?.id ?? null,
-    reviewerNameById
+    reviewerNameById,
+    eligibility: screeningEligibility
   });
 
   let prevAppId: string | null = null;
@@ -487,16 +514,44 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                         {displayText(review.recommendation)}
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/reviews/${review.id}`}
-                          className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
-                        >
-                          {isWithdrawn && isEditableReviewStatus(review.status)
-                            ? "Huỷ phân công"
-                            : review.status === "submitted" || isWithdrawn
-                              ? "Xem"
-                              : "Thực hiện đánh giá"}
-                        </Link>
+                        {(() => {
+                          // An unfinished review belongs to exactly one person.
+                          // Offering "Thực hiện đánh giá" on somebody else's row
+                          // walked Core Team into an editor the server always
+                          // refuses; the row is read-only for everyone but its
+                          // owner. Cancel and reassign stay on the assignment
+                          // surface, where they are authorized.
+                          const isOpen = isEditableReviewStatus(review.status);
+                          const isMine = review.reviewer_admin_user_id === adminUser?.id;
+                          if (isWithdrawn && isOpen) {
+                            return (
+                              <Link
+                                href={`/reviews/${review.id}`}
+                                className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                              >
+                                Huỷ phân công
+                              </Link>
+                            );
+                          }
+                          if (isOpen && !isMine) {
+                            return (
+                              <span
+                                data-testid="review-owned-by-other"
+                                className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2.5 py-1 text-xs text-slate-500"
+                              >
+                                {identity} đang thực hiện
+                              </span>
+                            );
+                          }
+                          return (
+                            <Link
+                              href={`/reviews/${review.id}`}
+                              className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                            >
+                              {isOpen ? "Mở đánh giá của tôi" : "Xem"}
+                            </Link>
+                          );
+                        })()}
                       </td>
                     </tr>
                   )})}

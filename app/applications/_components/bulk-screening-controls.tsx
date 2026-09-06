@@ -133,15 +133,12 @@ function BulkScreeningButtons({ disabled }: { disabled: boolean }) {
   const base = "rounded-md px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50";
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="submit"
-        name="new_status"
-        value="screening_passed"
-        disabled={disabled}
-        className={`${base} bg-vam-green text-white hover:opacity-90`}
-      >
-        Qua vòng hồ sơ
-      </button>
+      {/* "Qua vòng hồ sơ" was removed as a Core Team forward action for S12.
+          It was never a judgement separate from "Mời phỏng vấn", and leaving
+          both would give Core Team two workflows for one decision. The status
+          itself stays legal in the database, in the audit trail and in the
+          export filters; nothing needs to CREATE it any more, and the bulk
+          invite lives at /applications/bulk-invite-interview. */}
       <button
         type="submit"
         name="new_status"
