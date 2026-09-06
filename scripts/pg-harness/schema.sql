@@ -47,7 +47,17 @@ create table applications (
   intake_batch_id uuid references intake_batches(id),
   role_applied text,
   status text,
-  submitted_at timestamptz default now()
+  submitted_at timestamptz default now(),
+  constraint applications_status_check check (
+    status is null or status in (
+      'submitted', 'under_data_check', 'ready_for_screening',
+      'screening_assigned', 'screening_in_progress', 'screening_completed',
+      'screening_passed', 'invited_to_meeting', 'invited_to_orientation',
+      'invited_to_interview', 'interview_scheduled', 'interview_completed',
+      'interview_passed', 'approved_as_mentor', 'approved_as_mentee',
+      'waitlisted', 'rejected_or_not_fit', 'needs_more_review', 'withdrawn'
+    )
+  )
 );
 
 create table application_reviews (

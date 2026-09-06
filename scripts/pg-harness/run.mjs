@@ -30,6 +30,37 @@ const require = createRequire(import.meta.url);
 
 const ROOT = process.cwd();
 const HARNESS = join(ROOT, "scripts", "pg-harness");
+const PREREQUISITE = join(
+  ROOT,
+  "supabase",
+  "migrations",
+  "20260905140800_s12_application_status_constraint_prerequisite.sql"
+);
+
+const STATUS_19 = [
+  "approved_as_mentee",
+  "approved_as_mentor",
+  "interview_completed",
+  "interview_passed",
+  "interview_scheduled",
+  "invited_to_interview",
+  "invited_to_meeting",
+  "invited_to_orientation",
+  "needs_more_review",
+  "ready_for_screening",
+  "rejected_or_not_fit",
+  "screening_assigned",
+  "screening_completed",
+  "screening_in_progress",
+  "screening_passed",
+  "submitted",
+  "under_data_check",
+  "waitlisted",
+  "withdrawn"
+];
+
+const STATUS_20 = [...STATUS_19, "interview_in_progress"].sort();
+const STATUS_22 = [...STATUS_20, "needs_admin_review", "ready_for_final_decision"].sort();
 
 const CANDIDATE_BIN_DIRS = [
   process.env.PG_BIN,
@@ -244,30 +275,33 @@ ${serverStderr}`);
     // superuser role keeps a disposable cluster free of grant plumbing that has
     // nothing to do with the behaviour being tested.
     await client.query("create role service_role superuser login");
+    await client.query("create role anon nologin");
+    await client.query("create role authenticated nologin");
 
     console.log("Loading synthetic schema…");
     await client.query(readFileSync(join(HARNESS, "schema.sql"), "utf8"));
 
-    console.log("Loading migrations in filename order…");
-    const migrations = [
-      "supabase/migrations/20260903180000_p0_restore_recruitment_review_rpcs.sql",
+    await runPrerequisiteCases(client);
+
+    console.log("Loading the Production-like baseline RPCs…");
+    const baseline = "supabase/migrations/20260903180000_p0_restore_recruitment_review_rpcs.sql";
+    const baselineSql = readFileSync(join(ROOT, baseline), "utf8");
+    const baselineBlocks = extractFunctions(baselineSql).filter((block) => !isOverridden(block));
+    if (!baselineBlocks.length) throw new Error(`no function bodies found in ${baseline}`);
+    for (const block of baselineBlocks) {
+      await client.query(block);
+    }
+    console.log(`  loaded ${baselineBlocks.length} function(s) from ${baseline.split("/").pop()}`);
+
+    console.log("Applying dependent migrations in exact filename order…");
+    const dependentMigrations = [
       "supabase/migrations/20260905140900_s12_withdrawn_application_quarantine_restore.sql",
       "supabase/migrations/20260906090000_s12_direct_interview_invite.sql"
     ];
-    for (const relative of migrations) {
+    for (const relative of dependentMigrations) {
       const sql = readFileSync(join(ROOT, relative), "utf8");
-      const blocks = extractFunctions(sql).filter((block) => !isOverridden(block));
-      if (!blocks.length) throw new Error(`no function bodies found in ${relative}`);
-      for (const block of blocks) {
-        try {
-          await client.query(block);
-        } catch (error) {
-          const name = block.slice(0, 120).replace(/\s+/g, " ");
-          throw new Error(`loading ${relative} :: ${name}
-${error.message}`);
-        }
-      }
-      console.log(`  loaded ${blocks.length} function(s) from ${relative.split("/").pop()}`);
+      await client.query(sql);
+      console.log(`  applied ${relative.split("/").pop()}`);
     }
 
     console.log("Applying harness authorization overrides…");
@@ -354,6 +388,140 @@ function extractFunctions(sql) {
   }
   // Restore source order so a function exists before anything that calls it.
   return blocks.sort((a, b) => sql.indexOf(a) - sql.indexOf(b));
+}
+
+function statusConstraintSql(statuses, { notValid = false } = {}) {
+  const literals = statuses.map((status) => `'${status.replaceAll("'", "''")}'`).join(", ");
+  return `alter table public.applications
+    add constraint applications_status_check
+    check (status is null or status in (${literals}))${notValid ? " not valid" : ""}`;
+}
+
+async function replaceStatusConstraint(client, statuses, options) {
+  await client.query("alter table public.applications drop constraint if exists applications_status_check");
+  await client.query(statusConstraintSql(statuses, options));
+}
+
+async function effectiveStatusSet(client) {
+  const { rows } = await client.query(`
+    select array_agg(status order by status) as statuses
+    from (
+      select distinct captures[1] as status
+      from pg_constraint c
+      cross join lateral regexp_matches(
+        pg_get_constraintdef(c.oid, true),
+        '''([^'']+)''',
+        'g'
+      ) as matches(captures)
+      where c.conrelid = 'public.applications'::regclass
+        and c.conname = 'applications_status_check'
+    ) values_from_check
+  `);
+  return rows[0]?.statuses ?? [];
+}
+
+async function applicationSnapshot(client) {
+  const { rows } = await client.query(`
+    select count(*)::integer as row_count,
+           md5(coalesce(string_agg(to_jsonb(a)::text, '|' order by a.id), '')) as content_hash
+    from public.applications a
+  `);
+  return rows[0];
+}
+
+async function expectMigrationRefusal(client, expectedMessage) {
+  let refused = false;
+  try {
+    await client.query(readFileSync(PREREQUISITE, "utf8"));
+  } catch (error) {
+    refused = String(error.message).includes(expectedMessage);
+    await client.query("rollback").catch(() => {});
+  }
+  if (!refused) throw new Error(`migration did not fail with ${expectedMessage}`);
+}
+
+async function runPrerequisiteCases(client) {
+  const prerequisiteSql = readFileSync(PREREQUISITE, "utf8");
+
+  console.log("\nApplication status prerequisite:");
+
+  await check("P1. exact Production-like 19-value predecessor -> canonical 22", async () => {
+    await client.query(`
+      insert into applications (id, status) values
+        ('00000000-0000-4000-8000-000000000001', 'submitted'),
+        ('00000000-0000-4000-8000-000000000002', 'interview_completed'),
+        ('00000000-0000-4000-8000-000000000003', 'withdrawn')
+    `);
+    const before = await applicationSnapshot(client);
+    await client.query(prerequisiteSql);
+    expectEqual(await effectiveStatusSet(client), STATUS_22, "19 -> 22 status set");
+    expectEqual(await applicationSnapshot(client), before, "existing application rows");
+  });
+
+  await check("P2. exact fresh-replay 20-value predecessor -> canonical 22", async () => {
+    await replaceStatusConstraint(client, STATUS_20);
+    await client.query(prerequisiteSql);
+    expectEqual(await effectiveStatusSet(client), STATUS_22, "20 -> 22 status set");
+  });
+
+  await check("P3. exact canonical 22-value predecessor is an idempotent no-op", async () => {
+    const before = await client.query(`
+      select c.oid::text as oid, pg_get_constraintdef(c.oid, true) as definition
+      from pg_constraint c
+      where c.conrelid = 'public.applications'::regclass
+        and c.conname = 'applications_status_check'
+    `);
+    const rowsBefore = await applicationSnapshot(client);
+    await client.query(prerequisiteSql);
+    const after = await client.query(`
+      select c.oid::text as oid, pg_get_constraintdef(c.oid, true) as definition
+      from pg_constraint c
+      where c.conrelid = 'public.applications'::regclass
+        and c.conname = 'applications_status_check'
+    `);
+    expectEqual(after.rows, before.rows, "canonical constraint identity and definition");
+    expectEqual(await applicationSnapshot(client), rowsBefore, "canonical no-op rows");
+  });
+
+  await check("P4. unexpected constraint fails closed", async () => {
+    await replaceStatusConstraint(client, [...STATUS_22, "unexpected_constraint_value"].sort());
+    try {
+      await expectMigrationRefusal(client, "unexpected applications.status set");
+    } finally {
+      await replaceStatusConstraint(client, STATUS_22);
+    }
+  });
+
+  await check("P5. unexpected application status fails closed", async () => {
+    await client.query("alter table applications drop constraint applications_status_check");
+    await client.query(
+      "insert into applications (id, status) values ('00000000-0000-4000-8000-000000000004', 'unexpected_data_value')"
+    );
+    await client.query(statusConstraintSql(STATUS_22, { notValid: true }));
+    try {
+      await expectMigrationRefusal(client, "contains non-canonical status values");
+    } finally {
+      await client.query("delete from applications where id = '00000000-0000-4000-8000-000000000004'");
+      await replaceStatusConstraint(client, STATUS_22);
+    }
+  });
+
+  await check("P6. every canonical status is accepted and a random status is rejected", async () => {
+    for (let index = 0; index < STATUS_22.length; index += 1) {
+      const id = `10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+      await client.query("insert into applications (id, status) values ($1, $2)", [id, STATUS_22[index]]);
+    }
+    let rejected = false;
+    try {
+      await client.query(
+        "insert into applications (id, status) values ('10000000-0000-4000-8000-999999999999', 'definitely_not_a_status')"
+      );
+    } catch (error) {
+      rejected = error.code === "23514";
+    }
+    if (!rejected) throw new Error("random invalid application status was accepted");
+    await client.query("delete from applications where id::text like '10000000-0000-4000-8000-%'");
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -667,6 +835,54 @@ async function runCases(Client, connection) {
     expectEqual(decisions.rows[0].n, 1, "decision audit row");
   });
 
+  await check("18c. audited restore returns a withdrawn application to its exact prior status", async () => {
+    const app = await newApplication(client, "needs_admin_review");
+    const withdrawn = await decide(client, app, "withdrawn", "needs_admin_review");
+    expectEqual(withdrawn.applied, true, "withdrawal applied");
+    const { rows } = await client.query(
+      "select * from vam095_restore_withdrawn_application($1,$2,'harness correction')",
+      [app, IDS.coreTeam]
+    );
+    expectEqual(
+      [rows[0].previous_status, rows[0].new_status, await statusOf(client, app)],
+      ["withdrawn", "needs_admin_review", "needs_admin_review"],
+      "restored status"
+    );
+  });
+
+  await check("18d. interview recomputation creates interview_in_progress", async () => {
+    const app = await newApplication(client, "invited_to_interview");
+    await addReview(client, app, {
+      status: "in_progress",
+      reviewer: IDS.reviewerA,
+      round: "interview"
+    });
+    const { rows } = await client.query(
+      "select vam084_recompute_application_review_status($1,'interview') as status",
+      [app]
+    );
+    expectEqual([rows[0].status, await statusOf(client, app)], ["interview_in_progress", "interview_in_progress"], "recomputed status");
+  });
+
+  await check("18e. interview recomputation creates ready_for_final_decision", async () => {
+    const app = await newApplication(client, "interview_in_progress");
+    await addReview(client, app, {
+      status: "submitted",
+      reviewer: IDS.reviewerA,
+      round: "interview",
+      submittedAt: "2026-09-01T00:00:00Z"
+    });
+    const { rows } = await client.query(
+      "select vam084_recompute_application_review_status($1,'interview') as status",
+      [app]
+    );
+    expectEqual(
+      [rows[0].status, await statusOf(client, app)],
+      ["ready_for_final_decision", "ready_for_final_decision"],
+      "recomputed status"
+    );
+  });
+
   await check("19. stale submit on a withdrawn parent is refused", async () => {
     const app = await newApplication(client, "screening_assigned");
     const review = await addReview(client, app, { status: "in_progress", reviewer: IDS.reviewerA });
@@ -785,6 +1001,19 @@ async function runCases(Client, connection) {
     } finally {
       await a.end().catch(() => {});
       await b.end().catch(() => {});
+    }
+  });
+
+  await check("22. prerequisite remains idempotent after both dependent migrations", async () => {
+    const verify = new Client(connection);
+    await verify.connect();
+    try {
+      const before = await applicationSnapshot(verify);
+      await verify.query(readFileSync(PREREQUISITE, "utf8"));
+      expectEqual(await effectiveStatusSet(verify), STATUS_22, "post-dependent canonical set");
+      expectEqual(await applicationSnapshot(verify), before, "post-dependent application rows");
+    } finally {
+      await verify.end().catch(() => {});
     }
   });
 }
