@@ -16,7 +16,7 @@ describe("S12 returning Mentor public-intake P0", () => {
   });
 
   it("does not treat a people row alone as returning-Mentor proof", () => {
-    expect(block).toContain('if ((mentorHistory ?? []).length > 0)');
+    expect(block).toContain('if ((mentorProfiles ?? []).length > 0 || (mentorMemberships ?? []).length > 0)');
     expect(block).not.toContain('if (existingPerson) {\n      return');
   });
 
@@ -27,8 +27,8 @@ describe("S12 returning Mentor public-intake P0", () => {
   });
 
   it("fails closed when Mentor-history lookup cannot be trusted", () => {
-    expect(block).toContain('if (mentorHistoryErr)');
-    expect(block).toContain('log("returning mentor lookup failed", mentorHistoryErr)');
+    expect(block).toContain('if (profileErr || membershipErr)');
+    expect(block).toContain('log("returning mentor lookup failed", profileErr || membershipErr)');
     expect(block).toContain('code: "db"');
     expect(block).toContain("message: SAFE_ERROR");
   });
