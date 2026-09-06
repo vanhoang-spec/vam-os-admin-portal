@@ -192,10 +192,30 @@ export default async function ReviewProgressPage(props: { searchParams: Promise<
                 {rows.map((row, idx) => (
                   <tr key={row.reviewer_admin_user_id ?? `__unassigned__${idx}`} className="hover:bg-vam-mint/40">
                     <td className="px-4 py-3 font-medium text-vam-ink">
-                      {row.reviewer_name ?? <span className="text-slate-400">(Chưa gán)</span>}
+                      {!row.reviewer_admin_user_id ? (
+                        <span className="text-slate-400">(Chưa gán)</span>
+                      ) : (
+                        <Link
+                          href={`/reviews?reviewer=${row.reviewer_admin_user_id}&round=${reviewRound}`}
+                          className="hover:underline hover:text-vam-primary"
+                        >
+                          {row.reviewer_name ?? row.reviewer_email ?? "Reviewer"}
+                        </Link>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-500">{row.reviewer_email ?? "—"}</td>
-                    <td className="px-4 py-3 text-right">{row.assigned_count}</td>
+                    <td className="px-4 py-3 text-right">
+                      {!row.reviewer_admin_user_id ? (
+                        row.assigned_count
+                      ) : (
+                        <Link
+                          href={`/reviews?reviewer=${row.reviewer_admin_user_id}&round=${reviewRound}`}
+                          className="hover:underline hover:text-vam-primary font-medium"
+                        >
+                          {row.assigned_count}
+                        </Link>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right font-semibold text-green-700">
                       {row.submitted_count}
                     </td>

@@ -4,7 +4,8 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
   getAllApplicationReviews,
   getApplication,
-  getMyApplicationReviews
+  getMyApplicationReviews,
+  getReviewAssignmentProgress
 } from "@/lib/data";
 import { canBulkAssignReviews, canReview, isReviewerOnly } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
@@ -60,7 +61,10 @@ function isDueSoon(dueAt: string | null | undefined, status: string): boolean {
 // Page
 // ---------------------------------------------------------------------------
 
-export default async function ReviewsPage() {
+export default async function ReviewsPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canReview(adminUser.role)) redirect("/");
@@ -73,7 +77,21 @@ export default async function ReviewsPage() {
     ? await getMyApplicationReviews(adminUser.id, scope)
     : await getAllApplicationReviews(scope);
 
-  const reviews = result.data;
+  let reviews = result.data;
+
+  const filterRound = typeof searchParams?.round === "string" ? searchParams.round : null;
+  const filterReviewer = typeof searchParams?.reviewer === "string" ? searchParams.reviewer : null;
+
+  if (filterRound) {
+    reviews = reviews.filter((r) => r.review_round === filterRound);
+  }
+  if (!reviewerOnly && filterReviewer) {
+    if (filterReviewer === "__unassigned__") {
+      reviews = reviews.filter((r) => !r.reviewer_admin_user_id);
+    } else {
+      reviews = reviews.filter((r) => r.reviewer_admin_user_id === filterReviewer);
+    }
+  }
 
   // Fetch a lightweight application summary for each review so we can show
   // the applicant name and application link in the table. We deduplicate by
@@ -86,26 +104,34 @@ export default async function ReviewsPage() {
       .map((r) => [r.data!.id, r.data!])
   );
 
-  const operationalReviews = reviews.filter((review) => {
-    const app = appMap.get(review.application_id);
-    return app && isApplicationRecruitmentOperational(app.status ?? app.final_status);
-  });
-  const tableRows = operationalReviews.map((review) => {
+  // Fetch reviewers for filter
+  const reviewersLookup = !reviewerOnly ? await getReviewAssignmentProgress({ reviewRound: filterRound, scope }) : null;
+
+  const tableRows = reviews.map((review) => {
     const app = appMap.get(review.application_id);
     const applicantName =
       app?.full_name ?? app?.person_id ?? review.application_id;
-    return { ...review, applicant_name: applicantName };
+    const isOperational = app ? isApplicationRecruitmentOperational(app.status ?? app.final_status) : false;
+    return { ...review, applicant_name: applicantName, isOperational };
   });
 
   // Summary counts
-  const assignedCount = operationalReviews.filter((r) => r.status === "assigned").length;
-  const inProgressCount = operationalReviews.filter((r) => r.status === "in_progress").length;
-  const submittedCount = operationalReviews.filter((r) => r.status === "submitted").length;
+  const assignedCount = reviews.filter((r) => r.status === "assigned").length;
+  const inProgressCount = reviews.filter((r) => r.status === "in_progress").length;
+  const submittedCount = reviews.filter((r) => r.status === "submitted").length;
+
+  const pageTitle = reviewerOnly
+    ? "Reviews của tôi"
+    : filterRound === "interview"
+    ? "Phân công Phỏng vấn"
+    : filterRound === "profile_screening"
+    ? "Phân công Chấm hồ sơ"
+    : "Tất cả Reviews";
 
   return (
     <>
       <PageHeader
-        title={reviewerOnly ? "Reviews của tôi" : "Tất cả Reviews"}
+        title={pageTitle}
         description={
           reviewerOnly
             ? "Danh sách các đơn được giao cho bạn cần review."
@@ -124,6 +150,45 @@ export default async function ReviewsPage() {
       </div>
 
       {/* Admin action bar */}
+      {!reviewerOnly && (
+        <form method="GET" className="mb-5 flex flex-wrap items-end gap-3 rounded-md border border-vam-line bg-slate-50 p-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="round" className="text-sm font-medium text-slate-700">Vòng</label>
+            <select
+              name="round"
+              id="round"
+              defaultValue={filterRound || "profile_screening"}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            >
+              <option value="profile_screening">Hồ sơ</option>
+              <option value="interview">Phỏng vấn</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="reviewer" className="text-sm font-medium text-slate-700">
+              {filterRound === "interview" ? "Người phỏng vấn" : "Reviewer"}
+            </label>
+            <select
+              name="reviewer"
+              id="reviewer"
+              defaultValue={filterReviewer || ""}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            >
+              <option value="">(Tất cả)</option>
+              <option value="__unassigned__">(Chưa gán)</option>
+              {reviewersLookup?.data?.filter((r) => r.reviewer_admin_user_id).map((r) => (
+                <option key={r.reviewer_admin_user_id!} value={r.reviewer_admin_user_id!}>
+                  {r.reviewer_name ?? r.reviewer_email ?? "Reviewer"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="submit" className="rounded-md bg-vam-green px-4 py-1.5 text-sm font-medium text-white hover:bg-vam-green/90">
+            Lọc
+          </button>
+        </form>
+      )}
+
       {canBulkAssign && (
         <div className="mb-5 flex flex-wrap gap-3">
           <Link
@@ -206,11 +271,18 @@ export default async function ReviewsPage() {
                         {roundLabel(row.review_round)}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
-                        >
-                          {reviewStatusLabel(row.status)}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
+                          >
+                            {reviewStatusLabel(row.status)}
+                          </span>
+                          {!row.isOperational && (
+                            <span className="inline-flex rounded-md border border-slate-200 bg-slate-100 text-slate-500 px-2 py-0.5 text-xs font-medium">
+                              Hồ sơ đã rút
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         <div className="flex flex-col gap-1">
@@ -236,12 +308,16 @@ export default async function ReviewsPage() {
                         {displayText(row.recommendation)}
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/reviews/${row.id}`}
-                          className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
-                        >
-                          {row.status === "submitted" ? "Xem" : "Làm review"}
-                        </Link>
+                        {row.isOperational || row.status === "submitted" ? (
+                          <Link
+                            href={`/reviews/${row.id}`}
+                            className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                          >
+                            {row.status === "submitted" ? "Xem" : "Làm review"}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Không khả dụng</span>
+                        )}
                       </td>
                     </tr>
                   );

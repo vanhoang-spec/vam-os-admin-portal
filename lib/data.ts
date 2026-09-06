@@ -2188,6 +2188,44 @@ export async function getReviewAssignmentProgress(filters: {
     adminRows.map((r) => [r.id as string, (r.email as string | null) ?? null])
   );
 
+  const missingNameEmails = adminRows
+    .filter((r) => !r.full_name && r.email)
+    .map((r) => String(r.email).trim().toLowerCase())
+    .filter(Boolean);
+
+  if (missingNameEmails.length > 0) {
+    const { data: peopleRows, error: peopleErr } = await selectInChunks<JsonRecord>(
+      "people",
+      "email_primary",
+      Array.from(new Set(missingNameEmails)),
+      "full_name,email_primary"
+    );
+    
+    if (!peopleErr && peopleRows && peopleRows.length > 0) {
+      const personByEmail = new Map<string, string[]>();
+      for (const p of peopleRows) {
+        const e = String(p.email_primary ?? "").trim().toLowerCase();
+        if (!e) continue;
+        const n = String(p.full_name ?? "").trim();
+        if (n) {
+          if (!personByEmail.has(e)) personByEmail.set(e, []);
+          personByEmail.get(e)!.push(n);
+        }
+      }
+
+      for (const admin of adminRows) {
+        if (!admin.full_name && admin.email) {
+          const e = String(admin.email).trim().toLowerCase();
+          const names = personByEmail.get(e);
+          // exact normalized email, ambiguous match -> skip
+          if (names && names.length === 1) {
+            nameById.set(admin.id as string, names[0]);
+          }
+        }
+      }
+    }
+  }
+
   // Aggregate counts per reviewer
   type Stats = {
     assigned_count: number;
