@@ -44,6 +44,9 @@ function identityClient(seed: Seed = {}) {
         max = value;
         return chain;
       },
+      order(column: string) {
+        return chain;
+      },
       async maybeSingle() {
         const result = run();
         return { data: result.data[0] ?? null, error: result.data.length > 1 ? { code: "PGRST116" } : null };

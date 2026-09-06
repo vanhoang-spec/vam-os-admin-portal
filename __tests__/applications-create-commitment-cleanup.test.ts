@@ -43,6 +43,7 @@ function mockClient(options: { answersError?: unknown; cleanupError?: unknown } 
       chain.select = vi.fn(() => chain);
       chain.ilike = vi.fn(() => chain);
       chain.limit = vi.fn(() => chain);
+      chain.order = vi.fn(() => chain);
       chain.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
       return chain;
     }
@@ -52,6 +53,7 @@ function mockClient(options: { answersError?: unknown; cleanupError?: unknown } 
           const duplicateChain: Record<string, any> = {};
           duplicateChain.eq = vi.fn(() => duplicateChain);
           duplicateChain.ilike = vi.fn(() => duplicateChain);
+          duplicateChain.order = vi.fn(() => duplicateChain);
           duplicateChain.limit = vi.fn(() => duplicateChain);
           duplicateChain.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
           return duplicateChain;

@@ -53,6 +53,7 @@ function mockClient() {
           chain.eq = vi.fn(() => chain);
           chain.ilike = vi.fn(() => chain);
           chain.limit = vi.fn(() => chain);
+          chain.order = vi.fn(() => chain);
           chain.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
           return chain;
         }),
@@ -64,6 +65,7 @@ function mockClient() {
       chain.select = vi.fn(() => chain);
       chain.ilike = vi.fn(() => chain);
       chain.limit = vi.fn(() => chain);
+      chain.order = vi.fn(() => chain);
       chain.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
       return chain;
     }

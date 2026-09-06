@@ -88,18 +88,40 @@ describe("S12 Intake Eligibility Guards", () => {
       } else if (table === "intake_batches") {
         tbChain.maybeSingle = vi.fn().mockResolvedValue({ data: { id: "batch_id" }, error: null });
       } if (table === "applications") {
-        const resolveData = () => {
-          appLimitCall++;
-          if (appLimitCall === 1) return { data: overrides.applications?.dupEmail || [], error: null };
-          if (appLimitCall === 2) return { data: overrides.applications?.dupEmailFallback || [], error: null };
-          if (appLimitCall === 3) return { data: overrides.applications?.phone || overrides.applications?.limit || [], error: overrides.applications?.error || null };
-          if (appLimitCall === 4) return { data: overrides.applications?.approvedMentee || [], error: null };
-          return { data: [], error: null };
-        };
-        tbChain.limit = vi.fn().mockImplementation(() => Promise.resolve(resolveData()));
-        tbChain.maybeSingle = vi.fn().mockResolvedValue({ data: { id: "inserted_app_id" }, error: null });
-        tbChain.order = vi.fn().mockReturnThis();
-        tbChain.then = (resolve: any) => Promise.resolve(resolveData()).then(resolve);
+        if (overrides.applications?.seed) {
+          const filters: Array<(r: any) => boolean> = [];
+          let maxLimit = Number.POSITIVE_INFINITY;
+          tbChain.eq = vi.fn().mockImplementation((col: string, val: any) => { filters.push((r: any) => r[col] === val); return tbChain; });
+          tbChain.ilike = vi.fn().mockImplementation((col: string, val: string) => {
+            const pattern = val.replace(/%/g, '.*');
+            const regex = new RegExp(`^${pattern}$`, 'i');
+            filters.push((r: any) => regex.test(r[col] || ""));
+            return tbChain;
+          });
+          tbChain.order = vi.fn().mockReturnThis();
+          tbChain.limit = vi.fn().mockImplementation((limit: number) => { maxLimit = limit; return tbChain; });
+          tbChain.maybeSingle = vi.fn().mockResolvedValue({ data: { id: "inserted_app_id" }, error: null });
+          tbChain.then = (resolve: any) => {
+            if (overrides.applications.error) return Promise.resolve({ data: null, error: overrides.applications.error }).then(resolve);
+            const data = overrides.applications.seed
+              .filter((r: any) => filters.every(f => f(r)))
+              .slice(0, maxLimit);
+            return Promise.resolve({ data, error: null }).then(resolve);
+          };
+        } else {
+          const resolveData = () => {
+            appLimitCall++;
+            if (appLimitCall === 1) return { data: overrides.applications?.dupEmail || [], error: null };
+            if (appLimitCall === 2) return { data: overrides.applications?.dupEmailFallback || [], error: null };
+            if (appLimitCall === 3) return { data: overrides.applications?.phone || overrides.applications?.limit || [], error: overrides.applications?.error || null };
+            if (appLimitCall === 4) return { data: overrides.applications?.approvedMentee || [], error: null };
+            return { data: [], error: null };
+          };
+          tbChain.limit = vi.fn().mockImplementation(() => Promise.resolve(resolveData()));
+          tbChain.maybeSingle = vi.fn().mockResolvedValue({ data: { id: "inserted_app_id" }, error: null });
+          tbChain.order = vi.fn().mockReturnThis();
+          tbChain.then = (resolve: any) => Promise.resolve(resolveData()).then(resolve);
+        }
       } else if (table === "people") {
         tbChain.limit = vi.fn().mockImplementation(() => Promise.resolve({ data: overrides.people?.limit || [], error: null }));
       } else if (table === "mentor_profiles") {
@@ -223,14 +245,16 @@ describe("S12 Intake Eligibility Guards", () => {
     if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với một hồ sơ");
   });
 
-  it("Phone: changed email + cross-role historical phone -> ignore & allow", async () => {
-    // Cross-role shouldn't return in the same-role phone check anyway
-    setupMocks({
-      applications: { phone: [] }
+  describe("cross-role same phone -> allowed", () => {
+      it("allows submission without blocking on phone identity", async () => {
+        const decoyMentee = { id: 1, email_primary: "mentee@example.com", phone_primary: "0901234567", role_applied: "mentee" };
+        setupMocks({
+          applications: { seed: [decoyMentee] }
+        });
+        const result = await submitPilotApplication(mentorInput);
+        expect(result.ok).toBe(true);
+      });
     });
-    const result = await submitPilotApplication(baseInput);
-    expect(result.ok).toBe(true);
-  });
 
   it("Phone: +84 variants resolve correctly", async () => {
     setupMocks({
@@ -353,10 +377,14 @@ describe("S12 Intake Eligibility Guards", () => {
     });
 
   it("candidate match within bounded window -> identity_review", async () => {
-    const apps = Array(10).fill(null).map((_, i) => ({ email_primary: `other${i}@example.com`, phone_primary: `090000000${i}`, role_applied: "mentor" }));
-    apps[5] = { email_primary: "diff@example.com", phone_primary: phone, role_applied: "mentor" };
+    const matchingApps = Array(10).fill(null).map((_, i) => ({
+      id: i,
+      email_primary: `other${i}@example.com`,
+      phone_primary: `0901234567`,
+      role_applied: "mentor"
+    }));
     setupMocks({
-      applications: { limit: apps }
+      applications: { seed: matchingApps }
     });
     const result = await submitPilotApplication(mentorInput);
     expect(result.ok).toBe(false);
@@ -364,9 +392,17 @@ describe("S12 Intake Eligibility Guards", () => {
   });
 
   it("candidate set MAX+1 -> fail closed", async () => {
-    const apps = Array(11).fill(null).map((_, i) => ({ email_primary: `other${i}@example.com`, phone_primary: `090000000${i}`, role_applied: "mentor" }));
+    const matchingApps = Array(11).fill(null).map((_, i) => ({
+      id: i,
+      email_primary: `other${i}@example.com`,
+      phone_primary: `0901234567`,
+      role_applied: "mentor"
+    }));
+    const decoyWrongRole = { id: 100, email_primary: "decoy1@example.com", phone_primary: `0901234567`, role_applied: "mentee" };
+    const decoyWrongPhone = { id: 101, email_primary: "decoy2@example.com", phone_primary: `0909999999`, role_applied: "mentor" };
+
     setupMocks({
-      applications: { limit: apps }
+      applications: { seed: [...matchingApps, decoyWrongRole, decoyWrongPhone] }
     });
     const result = await submitPilotApplication(mentorInput);
     expect(result.ok).toBe(false);

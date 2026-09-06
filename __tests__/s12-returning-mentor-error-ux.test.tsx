@@ -149,12 +149,12 @@ describe("Slice 2C — the refusal reason travels from the backend rule to the f
 
   it("keeps the backend block refusing the submission, and only tags it", () => {
     expect(block).toContain('.from("mentor_profiles")');
-    expect(block).toContain('if ((mentorHistory ?? []).length > 0)');
+    expect(block).toContain('if ((mentorProfiles ?? []).length > 0 || (mentorMemberships ?? []).length > 0)');
     expect(block).toContain('code: "validation"');
     expect(block).toContain('reason: "returning_mentor"');
     expect(block).toContain("xác nhận/gia hạn Mentor Season 12");
     // Still fails closed when the history lookup cannot be trusted.
-    expect(block).toContain("if (mentorHistoryErr)");
+    expect(block).toContain("if (profileErr || membershipErr)");
     expect(block).toContain('code: "db"');
   });
 
