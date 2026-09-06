@@ -313,22 +313,29 @@ export async function submitPilotApplication(
 
   // Phone Identity Guard: Prevents submitting a new application with a phone number
   // already used by another email for the same role.
+  const PHONE_IDENTITY_MAX_CANDIDATES = 10;
   const phoneSuffix = phonePrimary.length > 9 ? phonePrimary.slice(-9) : phonePrimary;
   const { data: phoneApps, error: phoneErr } = await client
     .from("applications")
     .select("id,email_primary,phone_primary")
     .eq("role_applied", input.role)
     .ilike("phone_primary", `%${escapeIlikePattern(phoneSuffix)}%`)
-    .limit(10);
+    .order("id")
+    .limit(PHONE_IDENTITY_MAX_CANDIDATES + 1);
 
   if (phoneErr) {
     log("phone identity lookup failed", phoneErr);
     return { ok: false, code: "db", message: SAFE_ERROR };
   }
 
+  if (phoneApps && phoneApps.length > PHONE_IDENTITY_MAX_CANDIDATES) {
+    log("phone identity lookup exceeded window", { phonePrimary });
+    return { ok: false, code: "db", message: SAFE_ERROR };
+  }
+
   if (phoneApps && phoneApps.length > 0) {
-    const hasSameRolePhoneMatch = phoneApps.some(app => 
-      normalisePhone(app.phone_primary ?? "") === phonePrimary && 
+    const hasSameRolePhoneMatch = phoneApps.some(app =>
+      normalisePhone(app.phone_primary ?? "") === phonePrimary &&
       !emailsEqual(app.email_primary, emailPrimary)
     );
 
@@ -345,18 +352,20 @@ export async function submitPilotApplication(
     if (input.role === "mentor") {
       // P0 — Returning Mentors must use the controlled S12 renewal flow rather
       // than creating a new public Mentor application.
-      const { data: mentorHistory, error: mentorHistoryErr } = await client
-        .from("mentor_profiles")
-        .select("id")
-        .eq("person_id", existingPerson.id)
-        .limit(1);
+      const [
+        { data: mentorProfiles, error: profileErr },
+        { data: mentorMemberships, error: membershipErr }
+      ] = await Promise.all([
+        client.from("mentor_profiles").select("id").eq("person_id", existingPerson.id).limit(1),
+        client.from("person_season_memberships").select("id").eq("person_id", existingPerson.id).eq("role", "mentor").limit(1)
+      ]);
 
-      if (mentorHistoryErr) {
-        log("returning mentor lookup failed", mentorHistoryErr);
+      if (profileErr || membershipErr) {
+        log("returning mentor lookup failed", profileErr || membershipErr);
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
-      if ((mentorHistory ?? []).length > 0) {
+      if ((mentorProfiles ?? []).length > 0 || (mentorMemberships ?? []).length > 0) {
         return {
           ok: false,
           code: "validation",
@@ -365,7 +374,7 @@ export async function submitPilotApplication(
             "Hồ sơ này cần được xử lý qua luồng xác nhận/gia hạn Mentor Season 12. Vui lòng sử dụng đường dẫn do BTC gửi hoặc liên hệ BTC nếu chưa nhận được."
         };
       }
-      
+
 
     } else if (input.role === "mentee") {
       // MENTEE INTAKE GUARDS:
@@ -391,7 +400,7 @@ export async function submitPilotApplication(
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
-      const activeAnyMenteeMemberships = (anyMenteeMemberships ?? []).filter(m => 
+      const activeAnyMenteeMemberships = (anyMenteeMemberships ?? []).filter(m =>
         ["active", "completed", "graduated"].includes(m.status)
       );
 
@@ -433,14 +442,14 @@ export async function submitPilotApplication(
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
 
-      const hasHardParticipation = 
-        (menteeHistory ?? []).length > 0 || 
-        activeAnyMenteeMemberships.length > 0 || 
+      const hasHardParticipation =
+        (menteeHistory ?? []).length > 0 ||
+        activeAnyMenteeMemberships.length > 0 ||
         (anyMatches ?? []).length > 0 ||
         (s12Memberships ?? []).length > 0;
 
       const s12ApprovedApp = (anyApproved ?? []).some(a => a.season_id === seasonRow.id);
-      
+
       if (hasHardParticipation || s12ApprovedApp) {
         return {
           ok: false,

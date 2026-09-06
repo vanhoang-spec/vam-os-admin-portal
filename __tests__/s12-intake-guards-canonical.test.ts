@@ -123,7 +123,7 @@ describe("S12 Intake Eligibility Guards", () => {
   }
 
   // --- MENTEE MATRIX ---
-  
+
   it("Mentee: brand new -> allow", async () => {
     setupMocks();
     const result = await submitPilotApplication(baseInput);
@@ -258,7 +258,30 @@ describe("S12 Intake Eligibility Guards", () => {
     if (!result.ok) expect(result.reason).toBe("returning_mentor");
   });
 
-  it("Mentor: prior Mentee alone does NOT trigger returning_mentor", async () => {
+  it("Mentor: active S12 Mentor membership only, no profile -> BLOCK", async () => {
+    setupMocks({
+      people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
+      person_season_memberships: { limit: [{ role: "mentor", season_id: "s12", status: "active" }] }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("returning_mentor");
+
+    const dbWrites = mockDbState.history.filter((h) => h.method === "insert");
+    expect(dbWrites).toHaveLength(0); // refusal -> zero writes
+  });
+
+  it("Mentor: historical Mentor membership only -> BLOCK", async () => {
+    setupMocks({
+      people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
+      person_season_memberships: { limit: [{ role: "mentor", season_id: "s11", status: "completed" }] }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("returning_mentor");
+  });
+
+  it("Mentor: prior Mentee membership only -> ALLOW Mentor application", async () => {
     setupMocks({
       people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
       person_season_memberships: { limit: [{ role: "mentee", season_id: "s11", status: "completed" }] },
@@ -266,5 +289,85 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(mentorInput);
     expect(result.ok).toBe(true);
+  });
+
+  it("Mentor: membership lookup DB error -> fail closed", async () => {
+    setupMocks({
+      people: { limit: [{ id: "p1", email_primary: "test@example.com" }] },
+      person_season_memberships: { error: new Error("DB crash") }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("db");
+  });
+});
+
+describe("Phone Identity Guard", () => {
+  const mentorInput = mockSubmissionInput("mentor");
+  const phone = mentorInput.answers["phone_primary"];
+
+  it("same-role exact normalized phone -> identity_review", async () => {
+    setupMocks({
+      applications: { limit: [{ email_primary: "diff@example.com", phone_primary: phone, role_applied: "mentor" }] }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+  });
+
+  it("+84 / 0 normalization -> identity_review", async () => {
+    setupMocks({
+      applications: { limit: [{ email_primary: "diff@example.com", phone_primary: phone.replace(/^0/, "+84"), role_applied: "mentor" }] }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+  });
+
+  it("changed email same role -> identity_review", async () => {
+    setupMocks({
+      applications: { limit: [{ email_primary: "diff@example.com", phone_primary: phone, role_applied: "mentor" }] }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+  });
+
+  it("cross-role same phone -> not blocked by phone", async () => {
+    setupMocks({
+      applications: { limit: [{ email_primary: "diff@example.com", phone_primary: phone, role_applied: "mentee" }] } // Mock only returns the cross-role app, but the query filters by role="mentor", so mock should technically not return it if filtering is simulated, but setupMocks just returns limit anyway. Wait, actually setupMocks limit logic might just return what we pass. If it returns cross-role, the logic should ignore it because it checks hasSameRolePhoneMatch. BUT the actual query has .eq("role_applied", input.role). Since setupMocks just returns data, it will simulate it. We should make sure the app returned doesn't trigger the block.
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(true);
+  });
+
+  it("candidate match within bounded window -> identity_review", async () => {
+    const apps = Array(10).fill(null).map((_, i) => ({ email_primary: `other${i}@example.com`, phone_primary: `090000000${i}`, role_applied: "mentor" }));
+    apps[5] = { email_primary: "diff@example.com", phone_primary: phone, role_applied: "mentor" };
+    setupMocks({
+      applications: { limit: apps }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+  });
+
+  it("candidate set MAX+1 -> fail closed", async () => {
+    const apps = Array(11).fill(null).map((_, i) => ({ email_primary: `other${i}@example.com`, phone_primary: `090000000${i}`, role_applied: "mentor" }));
+    setupMocks({
+      applications: { limit: apps }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("db");
+  });
+
+  it("DB error -> fail closed", async () => {
+    setupMocks({
+      applications: { error: new Error("DB Crash") }
+    });
+    const result = await submitPilotApplication(mentorInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("db");
   });
 });
