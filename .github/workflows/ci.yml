@@ -43,6 +43,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow clone. Six test files read
+          # historical versions of migration SQL with `git show <commit>:<path>`
+          # to prove a released packet was never edited after the fact. Under a
+          # depth-1 clone those commits do not exist and git exits 128, which
+          # reads as a test failure rather than a missing checkout. The deploy
+          # workflow already does this for the same reason.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
