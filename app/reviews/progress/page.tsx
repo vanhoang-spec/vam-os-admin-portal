@@ -4,7 +4,8 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getReviewAssignmentProgress, getSeasons } from "@/lib/data";
 import { canAssignReview } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { formatDate } from "@/lib/utils";
+import { formatDate, displayText } from "@/lib/utils";
+import { parseReviewOversightFilters, buildOversightQueryString } from "@/lib/review-oversight";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
@@ -21,22 +22,24 @@ function pct(n: number, total: number) {
   return `${Math.round((n / total) * 100)}%`;
 }
 
-export default async function ReviewProgressPage(props: { searchParams: Promise<{ intake_batch_id?: string; review_round?: string }> }) {
+export default async function ReviewProgressPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
 
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canAssignReview(adminUser.role)) redirect("/reviews");
 
-  const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
-  const reviewRound = searchParams.review_round?.trim() || "profile_screening";
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
+
+  const filters = parseReviewOversightFilters(searchParams);
+  // Default progress to profile_screening if not specified
+  if (!filters.reviewRound) filters.reviewRound = "profile_screening";
 
   const [intakeBatches, seasons, progressResult] = await Promise.all([
     getIntakeBatches(scope),
     getSeasons(scope),
-    getReviewAssignmentProgress({ intakeBatchId, reviewRound, scope })
+    getReviewAssignmentProgress(filters, scope)
   ]);
 
   const rows = progressResult.data;
@@ -54,8 +57,8 @@ export default async function ReviewProgressPage(props: { searchParams: Promise<
   );
 
   const batchName =
-    intakeBatches.data.find((b) => b.id === intakeBatchId)?.name ??
-    intakeBatches.data.find((b) => b.id === intakeBatchId)?.code ??
+    intakeBatches.data.find((b) => b.id === filters.intakeBatchId)?.name ??
+    intakeBatches.data.find((b) => b.id === filters.intakeBatchId)?.code ??
     null;
 
   return (
@@ -74,16 +77,31 @@ export default async function ReviewProgressPage(props: { searchParams: Promise<
         </Link>
       </div>
 
-      <ErrorBox message={intakeBatches.error || progressResult.error} />
+      <ErrorBox message={intakeBatches.error || progressResult.error || seasons.error} />
 
       {/* Filter bar */}
       <Card className="mb-6">
         <form method="GET" className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500">Mùa</label>
+            <select
+              name="season_id"
+              defaultValue={filters.seasonId ?? ""}
+              className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
+            >
+              <option value="">Tất cả</option>
+              {seasons.data.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name ?? s.code}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-500">Đợt tuyển</label>
             <select
               name="intake_batch_id"
-              defaultValue={intakeBatchId ?? ""}
+              defaultValue={filters.intakeBatchId ?? ""}
               className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
             >
               <option value="">Tất cả đợt</option>
@@ -98,7 +116,7 @@ export default async function ReviewProgressPage(props: { searchParams: Promise<
             <label className="text-xs font-medium text-slate-500">Vòng review</label>
             <select
               name="review_round"
-              defaultValue={reviewRound}
+              defaultValue={filters.reviewRound}
               className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
             >
               {ROUND_OPTIONS.map((opt) => (
@@ -117,7 +135,7 @@ export default async function ReviewProgressPage(props: { searchParams: Promise<
         </form>
 
         {/* Active filter pills */}
-        {(intakeBatchId || reviewRound !== "profile_screening") && (
+        {(filters.seasonId || filters.intakeBatchId || filters.reviewRound !== "profile_screening") && (
           <div className="mt-3 flex flex-wrap gap-2">
             {batchName && (
               <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600">
@@ -125,7 +143,7 @@ export default async function ReviewProgressPage(props: { searchParams: Promise<
               </span>
             )}
             <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600">
-              Vòng: {ROUND_OPTIONS.find((o) => o.value === reviewRound)?.label ?? reviewRound}
+              Vòng: {ROUND_OPTIONS.find((o) => o.value === filters.reviewRound)?.label ?? filters.reviewRound}
             </span>
             <Link
               href="/reviews/progress"
@@ -189,37 +207,44 @@ export default async function ReviewProgressPage(props: { searchParams: Promise<
                 </tr>
               </thead>
               <tbody className="divide-y divide-vam-line">
-                {rows.map((row, idx) => (
-                  <tr key={row.reviewer_admin_user_id ?? `__unassigned__${idx}`} className="hover:bg-vam-mint/40">
-                    <td className="px-4 py-3 font-medium text-vam-ink">
-                      {row.reviewer_name ?? <span className="text-slate-400">(Chưa gán)</span>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{row.reviewer_email ?? "—"}</td>
-                    <td className="px-4 py-3 text-right">{row.assigned_count}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-green-700">
-                      {row.submitted_count}
-                    </td>
-                    <td className="px-4 py-3 text-right text-amber-600">{row.in_progress_count}</td>
-                    <td className="px-4 py-3 text-right text-slate-500">{row.pending_count}</td>
-                    <td className="px-4 py-3 text-right text-slate-400">{row.cancelled_count}</td>
-                    <td className="px-4 py-3 text-right">
-                      <span
-                        className={
-                          row.submitted_count === row.assigned_count && row.assigned_count > 0
-                            ? "font-semibold text-green-700"
-                            : "text-slate-600"
-                        }
-                      >
-                        {pct(row.submitted_count, row.assigned_count)}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                      {row.latest_submitted_at ? formatDate(row.latest_submitted_at) : "—"}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row, idx) => {
+                  const reviewerFilterQs = buildOversightQueryString({
+                    ...filters,
+                    reviewerId: row.reviewer_admin_user_id || "unassigned"
+                  });
+                  return (
+                    <tr key={row.reviewer_admin_user_id ?? `__unassigned__${idx}`} className="hover:bg-vam-mint/40">
+                      <td className="px-4 py-3 font-medium text-vam-ink">
+                        <Link href={`/reviews${reviewerFilterQs}`} className="hover:text-vam-green hover:underline">
+                          {row.reviewer_name ?? <span className="text-slate-400">(Chưa gán)</span>}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{row.reviewer_email ?? "—"}</td>
+                      <td className="px-4 py-3 text-right">{row.assigned_count}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-green-700">
+                        {row.submitted_count}
+                      </td>
+                      <td className="px-4 py-3 text-right text-amber-600">{row.in_progress_count}</td>
+                      <td className="px-4 py-3 text-right text-slate-500">{row.pending_count}</td>
+                      <td className="px-4 py-3 text-right text-slate-400">{row.cancelled_count}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span
+                          className={
+                            row.submitted_count === row.assigned_count && row.assigned_count > 0
+                              ? "font-semibold text-green-700"
+                              : "text-slate-600"
+                          }
+                        >
+                          {pct(row.submitted_count, row.assigned_count)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                        {row.latest_submitted_at ? formatDate(row.latest_submitted_at) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
-              {/* Totals footer */}
               <tfoot className="bg-slate-50 text-xs font-semibold text-slate-600">
                 <tr>
                   <td className="px-4 py-3" colSpan={2}>Tổng cộng</td>

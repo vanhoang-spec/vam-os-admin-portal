@@ -9,7 +9,7 @@ import { evaluateMentorClassifications } from "@/lib/classification";
 import { intersectAuthorizedAndCohort } from "@/lib/season-cohort";
 import { resolveSeasonContext } from "@/lib/season-context";
 import { REVIEW_ELIGIBLE_ROLES } from "@/lib/reviewer-eligibility";
-import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
+import { isApplicationReviewAssignable, RECRUITMENT_OPERATIONAL_STATUSES } from "@/lib/application-review-assignability";
 import {
   canOperateSeason,
   getAdminScopeContext,
@@ -48,6 +48,7 @@ import type {
   ReviewProgressRow,
   Season
 } from "@/lib/types";
+import type { ReviewOversightFilters } from "@/lib/review-oversight";
 
 export type QueryResult<T> = { data: T; error: string | null };
 
@@ -2103,6 +2104,167 @@ export async function getReviewAssignmentBatches(): Promise<QueryResult<ReviewAs
  *   submitted_count — status = 'submitted'
  *   cancelled_count — status = 'cancelled'
  */
+
+// ---------------------------------------------------------------------------
+// INTERVIEW OPS SLICE 1: OVERSIGHT FOUNDATION
+// ---------------------------------------------------------------------------
+
+export type ReviewOversightRow = {
+  id: string;
+  application_id: string;
+  reviewer_admin_user_id: string | null;
+  review_round: string;
+  status: string;
+  due_at: string | null;
+  submitted_at: string | null;
+  total_score: number | null;
+  recommendation: string | null;
+  application: {
+    id: string;
+    full_name: string | null;
+    person_id: string | null;
+    season_id: string | null;
+    intake_batch_id: string | null;
+    role_applied: string | null;
+    status: string | null;
+    final_status: string | null;
+  } | null;
+  reviewer: {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+  } | null;
+};
+
+export type PaginatedOversightResult = {
+  rows: ReviewOversightRow[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export async function getReviewOversightQueue(
+  filters: ReviewOversightFilters,
+  scope?: ScopeFilter,
+  reviewerOnlyActorId?: string
+): Promise<QueryResult<PaginatedOversightResult>> {
+  const client = getSupabaseServiceRoleClient();
+  const PAGE_SIZE = 50;
+  if (!client) {
+    return envError<PaginatedOversightResult>({ rows: [], totalCount: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 0 });
+  }
+
+  let query = client.from("application_reviews").select(`
+    id,
+    application_id,
+    reviewer_admin_user_id,
+    review_round,
+    status,
+    due_at,
+    submitted_at,
+    total_score,
+    recommendation,
+    application:applications!inner(
+      id,
+      full_name,
+      person_id,
+      season_id,
+      intake_batch_id,
+      role_applied,
+      status,
+      final_status
+    ),
+    reviewer:admin_users(
+      id,
+      full_name,
+      email
+    )
+  `, { count: "exact" });
+
+  if (scope) {
+    if (scope.allowedSeasonIds?.length === 0 && scope.allowedProgramIds?.length === 0) {
+       return { data: { rows: [], totalCount: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 0 }, error: null };
+    }
+    const { batchIds, error: batchScopeError } = await getScopedIntakeBatchIds(scope);
+    if (batchScopeError) return { data: { rows: [], totalCount: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 0 }, error: batchScopeError };
+    
+    const scopeFilters: string[] = [];
+    if (scope.allowedSeasonIds?.length) {
+      scopeFilters.push(`season_id.in.(${scope.allowedSeasonIds.join(",")})`);
+    }
+    if (batchIds?.length) {
+      scopeFilters.push(`intake_batch_id.in.(${batchIds.join(",")})`);
+    }
+    if (!scopeFilters.length) {
+       return { data: { rows: [], totalCount: 0, page: 1, pageSize: PAGE_SIZE, totalPages: 0 }, error: null };
+    }
+    const or = scopeFilters.join(",");
+    query = query.or(or, { foreignTable: "applications" });
+  }
+
+  const isReviewerOnly = Boolean(reviewerOnlyActorId);
+  const scopeMode = isReviewerOnly ? "operational" : filters.scopeMode;
+
+  if (scopeMode === "operational") {
+    query = query.in("application.status", Array.from(RECRUITMENT_OPERATIONAL_STATUSES));
+    query = query.neq("status", "cancelled");
+  }
+
+  if (filters.seasonId) {
+    query = query.eq("application.season_id", filters.seasonId);
+  }
+  if (filters.intakeBatchId) {
+    query = query.eq("application.intake_batch_id", filters.intakeBatchId);
+  }
+  if (filters.roleApplied) {
+    query = query.eq("application.role_applied", filters.roleApplied);
+  }
+  if (filters.reviewRound) {
+    query = query.eq("review_round", filters.reviewRound);
+  }
+  if (filters.reviewStatus) {
+    query = query.eq("status", filters.reviewStatus);
+  }
+  
+  if (isReviewerOnly) {
+    query = query.eq("reviewer_admin_user_id", reviewerOnlyActorId!);
+  } else if (filters.reviewerId) {
+    if (filters.reviewerId === "unassigned") {
+      query = query.is("reviewer_admin_user_id", null);
+    } else {
+      query = query.eq("reviewer_admin_user_id", filters.reviewerId);
+    }
+  }
+
+  // Ensure deterministic sort for pagination
+  query = query.order("due_at", { ascending: true, nullsFirst: false }).order("id", { ascending: true });
+
+  const start = (filters.page - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE - 1;
+  query = query.range(start, end);
+
+  const { data, count, error } = await query;
+
+  if (error) {
+    logDataError("application_reviews.getReviewOversightQueue", error);
+    const err = error as { message?: string };
+    return { data: { rows: [], totalCount: 0, page: filters.page, pageSize: PAGE_SIZE, totalPages: 0 }, error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
+
+  const totalCount = count ?? 0;
+  return {
+    data: {
+      rows: data as ReviewOversightRow[],
+      totalCount,
+      page: filters.page,
+      pageSize: PAGE_SIZE,
+      totalPages: Math.ceil(totalCount / PAGE_SIZE)
+    },
+    error: null
+  };
+}
+
 export async function getReviewAssignmentProgress(filters: {
   intakeBatchId?: string | null;
   reviewRound?: string | null;

@@ -200,7 +200,6 @@ describe("withdrawn application UX contract", () => {
 
   it("filters terminal parents out of the operational reviews queue", () => {
     expect(reviewQueue).toContain("isApplicationRecruitmentOperational");
-    expect(reviewQueue).toContain("const operationalReviews = reviews.filter");
-    expect(reviewQueue).toContain("tableRows = operationalReviews.map");
+    expect(reviewQueue).toContain("getActionabilityState");
   });
 });

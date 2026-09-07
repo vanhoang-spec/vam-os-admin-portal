@@ -6,8 +6,10 @@ const mocks = vi.hoisted(() => ({
   getCurrentAdminUser: vi.fn(),
   getAdminScopeContext: vi.fn(),
   getScopeFilter: vi.fn(),
-  getAllApplicationReviews: vi.fn(),
-  getApplication: vi.fn(),
+  getReviewOversightQueue: vi.fn(),
+  getIntakeBatches: vi.fn(),
+  getSeasons: vi.fn(),
+  getActiveAdminUsers: vi.fn()
 }));
 
 vi.mock("server-only", () => ({}));
@@ -18,8 +20,10 @@ vi.mock("@/lib/program-scope", () => ({
   getScopeFilter: mocks.getScopeFilter
 }));
 vi.mock("@/lib/data", () => ({
-  getAllApplicationReviews: mocks.getAllApplicationReviews,
-  getApplication: mocks.getApplication
+  getReviewOversightQueue: mocks.getReviewOversightQueue,
+  getIntakeBatches: mocks.getIntakeBatches,
+  getSeasons: mocks.getSeasons,
+  getActiveAdminUsers: mocks.getActiveAdminUsers
 }));
 
 import ReviewsPage from "@/app/reviews/page";
@@ -34,6 +38,11 @@ const baseReview = {
   submitted_at: null,
   total_score: null,
   recommendation: null,
+  application: {
+    id: "app-1",
+    full_name: "Candidate One",
+    status: "interview_in_progress",
+  }
 };
 
 beforeEach(() => {
@@ -41,20 +50,15 @@ beforeEach(() => {
   mocks.getCurrentAdminUser.mockResolvedValue({ id: "admin-1", role: "admin" });
   mocks.getAdminScopeContext.mockResolvedValue({ isSuperAdmin: true });
   mocks.getScopeFilter.mockResolvedValue(undefined);
-  mocks.getAllApplicationReviews.mockResolvedValue({ data: [baseReview], error: null });
-  mocks.getApplication.mockResolvedValue({
-    data: {
-      id: "app-1",
-      full_name: "Candidate One",
-      status: "interview_in_progress",
-    },
-    error: null
-  });
+  mocks.getReviewOversightQueue.mockResolvedValue({ data: { rows: [baseReview], totalCount: 1, page: 1, totalPages: 1 }, error: null });
+  mocks.getIntakeBatches.mockResolvedValue({ data: [], error: null });
+  mocks.getSeasons.mockResolvedValue({ data: [], error: null });
+  mocks.getActiveAdminUsers.mockResolvedValue({ data: [], error: null });
 });
 
 describe("M2.1 cancelled review in queue", () => {
   it("renders a read-only historical row for admin oversight", async () => {
-    const html = renderToStaticMarkup(await ReviewsPage());
+    const html = renderToStaticMarkup(await ReviewsPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain("Candidate One");
     expect(html).toContain("Đã huỷ");
     expect(html).toContain("Xem");

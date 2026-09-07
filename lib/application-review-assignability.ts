@@ -39,7 +39,7 @@ export const INTERVIEW_ELIGIBLE_STATUSES: ReadonlySet<string> = new Set([
 export const WITHDRAWN_APPLICATION_REVIEW_MESSAGE =
   "Hồ sơ đã rút khỏi quy trình tuyển và không thể được phân công đánh giá.";
 
-const RECRUITMENT_OPERATIONAL_STATUSES = new Set<string>([
+export const RECRUITMENT_OPERATIONAL_STATUSES = new Set<string>([
   "submitted",
   "under_data_check",
   "ready_for_screening",
