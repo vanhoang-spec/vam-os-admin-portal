@@ -27,13 +27,14 @@ function shiftMonth(month: string, delta: number): string {
   return date.toISOString().slice(0, 7);
 }
 
-export default async function MktMonthPage({
-  params,
-  searchParams
-}: {
-  params: { spaceId: string };
-  searchParams?: { month?: string };
-}) {
+export default async function MktMonthPage(
+  props: {
+    params: Promise<{ spaceId: string }>;
+    searchParams?: Promise<{ month?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (!canViewMktPlan(adminUser?.role)) notFound();
 

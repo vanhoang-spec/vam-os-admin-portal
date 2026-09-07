@@ -38,7 +38,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function MenteeDossierPage({ params }: { params: { token: string } }) {
+export default async function MenteeDossierPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const view = await getDossierByToken(params.token);
 
   if (view.state !== "ready") {

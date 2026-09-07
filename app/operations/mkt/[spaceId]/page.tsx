@@ -33,13 +33,14 @@ function summarise(text: unknown): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
-export default async function MktWeekPage({
-  params,
-  searchParams
-}: {
-  params: { spaceId: string };
-  searchParams?: { week?: string };
-}) {
+export default async function MktWeekPage(
+  props: {
+    params: Promise<{ spaceId: string }>;
+    searchParams?: Promise<{ week?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (!canViewMktPlan(adminUser?.role)) notFound();
 

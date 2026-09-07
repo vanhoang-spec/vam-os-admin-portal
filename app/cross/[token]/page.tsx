@@ -48,11 +48,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function CrossInvitationPage({
-  params
-}: {
-  params: { token: string };
-}) {
+export default async function CrossInvitationPage(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   const view = await getInvitationByToken(params.token);
 
   if (view.state === "not_found") {

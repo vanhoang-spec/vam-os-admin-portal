@@ -16,7 +16,8 @@ import { isValidUuid } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { EditMentorForm } from "./edit-mentor-form";
 
-export default async function EditMentorPage({ params }: { params: { id: string } }) {
+export default async function EditMentorPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const adminUser = scopeContext.adminUser ?? (await getCurrentAdminUser());

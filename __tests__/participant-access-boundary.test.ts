@@ -132,7 +132,8 @@ describe("middleware enforces it, not the pages", () => {
 
 describe("the layout strips the staff shell for a participant", () => {
   it("renders bare only when the route is a participant route AND there is no admin row", () => {
-    expect(layout).toContain('headers().get("x-vam-participant-route") && !adminUser');
+    // Next 15 made headers() async; the guard is the same one, awaited.
+    expect(layout).toContain('(await headers()).get("x-vam-participant-route") && !adminUser');
   });
 
   it("still calls getCurrentAdminUser without swallowing its throw", () => {

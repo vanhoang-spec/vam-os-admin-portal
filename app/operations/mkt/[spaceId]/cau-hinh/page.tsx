@@ -18,7 +18,8 @@ import { BrandPanel, ChannelPanel, type ChannelView } from "../config-client";
  */
 export const dynamic = "force-dynamic";
 
-export default async function MktConfigPage({ params }: { params: { spaceId: string } }) {
+export default async function MktConfigPage(props: { params: Promise<{ spaceId: string }> }) {
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (!canViewMktPlan(adminUser?.role)) notFound();
 

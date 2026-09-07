@@ -126,7 +126,10 @@ function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedA
   );
 }
 
-export default async function AdminUsersPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+export default async function AdminUsersPage(
+  props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await requireSuperAdmin();
   if (!adminUser) notFound();
 

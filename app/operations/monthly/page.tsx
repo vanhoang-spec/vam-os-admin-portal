@@ -46,7 +46,8 @@ type EventRow = Event & {
   total: number;
 };
 
-export default async function MonthlyOperationsPage({ searchParams }: { searchParams?: { month?: string | string[] } }) {
+export default async function MonthlyOperationsPage(props: { searchParams?: Promise<{ month?: string | string[] }> }) {
+  const searchParams = await props.searchParams;
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const [data, adminUser] = await Promise.all([getOperationsData(scope), getCurrentAdminUser()]);

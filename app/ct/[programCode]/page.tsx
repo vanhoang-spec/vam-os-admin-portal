@@ -24,11 +24,12 @@ import { ROUTES } from "@/lib/participant-auth-core";
  */
 export const dynamic = "force-dynamic";
 
-export default async function ParticipantProgramPage({
-  params
-}: {
-  params: { programCode: string };
-}) {
+export default async function ParticipantProgramPage(
+  props: {
+    params: Promise<{ programCode: string }>;
+  }
+) {
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (adminUser) redirect(`/programs/${encodeURIComponent(params.programCode)}`);
 

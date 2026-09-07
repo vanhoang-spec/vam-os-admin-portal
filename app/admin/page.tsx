@@ -209,7 +209,10 @@ function RecentRecapCorrection({ recaps }: { recaps: Array<any> }) {
   );
 }
 
-export default async function AdminCorrectionPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+export default async function AdminCorrectionPage(
+  props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   const canManage = canManageWorkflow(adminUser);
   const tab = activeTab(searchParams?.tab);

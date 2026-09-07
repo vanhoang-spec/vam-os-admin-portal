@@ -24,13 +24,18 @@ const TABS = [
   { href: "/cau-hinh", label: "Cấu hình" }
 ];
 
-export default async function MktSpaceLayout({
-  children,
-  params
-}: {
-  children: React.ReactNode;
-  params: { spaceId: string };
-}) {
+export default async function MktSpaceLayout(
+  props: {
+    children: React.ReactNode;
+    params: Promise<{ spaceId: string }>;
+  }
+) {
+  const params = await props.params;
+
+  const {
+    children
+  } = props;
+
   const adminUser = await getCurrentAdminUser();
   if (!canViewMktPlan(adminUser?.role)) notFound();
 

@@ -24,11 +24,12 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function ParticipantsAdminPage({
-  searchParams
-}: {
-  searchParams?: { q?: string | string[] };
-}) {
+export default async function ParticipantsAdminPage(
+  props: {
+    searchParams?: Promise<{ q?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   // Not-found rather than a refusal: the same treatment /admin/users gives, so
   // the existence of the screen is not confirmed to somebody without the role.

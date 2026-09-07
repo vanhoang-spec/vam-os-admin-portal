@@ -62,13 +62,13 @@ import AdminUsersPage from "@/app/admin/users/page";
 
 describe("context routes with staging-shaped catalog data", () => {
   it("/portfolio returns its page tree instead of reaching the runtime boundary", async () => {
-    const page = await PortfolioPage({ searchParams: { program: "UEHM", season: "UEHM-S12" } });
+    const page = await PortfolioPage({ searchParams: Promise.resolve({ program: "UEHM", season: "UEHM-S12" }) });
     expect(page).toBeTruthy();
     expect(page.type).toBeDefined();
   });
 
   it("/admin/users returns its page tree with the selected UEHM-S12 context", async () => {
-    const page = await AdminUsersPage({ searchParams: { program: "UEHM", season: "UEHM-S12" } });
+    const page = await AdminUsersPage({ searchParams: Promise.resolve({ program: "UEHM", season: "UEHM-S12" }) });
     expect(page).toBeTruthy();
     expect(page.type).toBeDefined();
   });

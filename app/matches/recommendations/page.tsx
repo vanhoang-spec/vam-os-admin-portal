@@ -30,15 +30,16 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function RecommendationsPage({
-  searchParams
-}: {
-  searchParams?: {
-    season_id?: string | string[];
-    intake_batch_id?: string | string[];
-    run?: string | string[];
-  };
-}) {
+export default async function RecommendationsPage(
+  props: {
+    searchParams?: Promise<{
+      season_id?: string | string[];
+      intake_batch_id?: string | string[];
+      run?: string | string[];
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canManageMatches(adminUser.role)) redirect("/matches");

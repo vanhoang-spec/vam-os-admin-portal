@@ -31,11 +31,12 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function CommunicationsPage({
-  searchParams
-}: {
-  searchParams?: { season_id?: string | string[] };
-}) {
+export default async function CommunicationsPage(
+  props: {
+    searchParams?: Promise<{ season_id?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canManageProgramDocuments(adminUser.role)) redirect("/operations");

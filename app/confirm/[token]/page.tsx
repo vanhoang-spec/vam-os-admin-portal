@@ -85,7 +85,8 @@ function LockedView({ status, maxMentees }: { status: string; maxMentees: number
   );
 }
 
-export default async function MentorConfirmPage({ params }: { params: { token: string } }) {
+export default async function MentorConfirmPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const view = await getPublicConfirmationByToken(params.token);
 
   if (view.state === "not_found") {

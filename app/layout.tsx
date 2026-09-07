@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const publicRoute = headers().get("x-vam-public-route");
+  const publicRoute = (await headers()).get("x-vam-public-route");
   if (
     publicRoute === "register" ||
     publicRoute === "checkin" ||
@@ -48,7 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // The header is set by middleware from the pathname, so it cannot be spoofed;
   // the decision to strip the shell still rests on the admin lookup, not on the
   // header alone.
-  if (headers().get("x-vam-participant-route") && !adminUser) {
+  if ((await headers()).get("x-vam-participant-route") && !adminUser) {
     return (
       <html lang="vi">
         <body><PreviewEnvironmentBanner />{children}</body>

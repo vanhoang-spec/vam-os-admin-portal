@@ -45,11 +45,12 @@ const LIVE_STATUSES = new Set([
   "published"
 ]);
 
-export default async function ParticipantCrossPage({
-  params
-}: {
-  params: { programCode: string };
-}) {
+export default async function ParticipantCrossPage(
+  props: {
+    params: Promise<{ programCode: string }>;
+  }
+) {
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (adminUser) redirect("/operations/cross");
 

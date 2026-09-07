@@ -21,11 +21,12 @@ function pct(n: number, total: number) {
   return `${Math.round((n / total) * 100)}%`;
 }
 
-export default async function ReviewProgressPage({
-  searchParams
-}: {
-  searchParams: { intake_batch_id?: string; review_round?: string };
-}) {
+export default async function ReviewProgressPage(
+  props: {
+    searchParams: Promise<{ intake_batch_id?: string; review_round?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canAssignReview(adminUser.role)) redirect("/reviews");

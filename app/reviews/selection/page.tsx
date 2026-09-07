@@ -23,11 +23,12 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function SelectionPage({
-  searchParams
-}: {
-  searchParams?: { intake_batch_id?: string | string[]; role?: string | string[] };
-}) {
+export default async function SelectionPage(
+  props: {
+    searchParams?: Promise<{ intake_batch_id?: string | string[]; role?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canDecide(adminUser.role)) redirect("/reviews");

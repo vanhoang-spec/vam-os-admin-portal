@@ -29,7 +29,8 @@ function summarise(brief: unknown): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
-export default async function MktApprovalPage({ params }: { params: { spaceId: string } }) {
+export default async function MktApprovalPage(props: { params: Promise<{ spaceId: string }> }) {
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (!canViewMktPlan(adminUser?.role)) notFound();
 

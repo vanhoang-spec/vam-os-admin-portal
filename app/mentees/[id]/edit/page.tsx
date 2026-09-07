@@ -7,7 +7,8 @@ import { isValidUuid } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { EditMenteeForm } from "./edit-mentee-form";
 
-export default async function EditMenteePage({ params }: { params: { id: string } }) {
+export default async function EditMenteePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const adminUser = scopeContext.adminUser ?? (await getCurrentAdminUser());

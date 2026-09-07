@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { headers, type UnsafeUnwrappedHeaders } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card, ErrorBox, KpiCard, PageHeader } from "@/components/ui";
@@ -20,7 +20,7 @@ import { SeasonConfirmationsClient } from "./season-confirmations-client";
 export const dynamic = "force-dynamic";
 
 function getRequestOrigin() {
-  const h = headers();
+  const h = (headers() as unknown as UnsafeUnwrappedHeaders);
   const host = h.get("x-forwarded-host") ?? h.get("host");
   if (!host) return "";
   const proto = h.get("x-forwarded-proto") ?? "https";
@@ -32,11 +32,12 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function SeasonConfirmationsPage({
-  searchParams
-}: {
-  searchParams?: { season?: string | string[]; source?: string | string[] };
-}) {
+export default async function SeasonConfirmationsPage(
+  props: {
+    searchParams?: Promise<{ season?: string | string[]; source?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canRecordMentorConfirmation(adminUser.role)) redirect("/mentors");

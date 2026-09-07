@@ -16,11 +16,12 @@ import { AssignBulkForm } from "./assign-bulk-form";
 // Page: /reviews/assign-bulk
 // ---------------------------------------------------------------------------
 
-export default async function AssignBulkPage({
-  searchParams
-}: {
-  searchParams: { intake_batch_id?: string; role_applied?: string };
-}) {
+export default async function AssignBulkPage(
+  props: {
+    searchParams: Promise<{ intake_batch_id?: string; role_applied?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canBulkAssignReviews(adminUser.role)) redirect("/reviews");
