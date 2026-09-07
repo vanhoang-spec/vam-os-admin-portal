@@ -7,6 +7,13 @@ export const metadata = {
   description: "Đơn đăng ký mentee UEH Mentoring Season 12."
 };
 
+/**
+ * Server Action nộp đơn gửi thư xác nhận ngay trong luồng, và lời gọi tới nhà
+ * cung cấp email có thể treo tới 20 giây trước khi bị cắt. Trần mặc định của
+ * Vercel ngắn hơn thế, nên đơn đã lưu xong vẫn có thể bị báo là hỏng.
+ */
+export const maxDuration = 60;
+
 export const dynamic = "force-dynamic";
 
 export default async function ApplyMenteePage(props: { searchParams?: Promise<{ token?: string | string[] }> }) {

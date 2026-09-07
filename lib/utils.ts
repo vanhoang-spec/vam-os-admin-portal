@@ -66,6 +66,24 @@ export function formatDate(value: unknown) {
   return new Intl.DateTimeFormat("vi-VN").format(date);
 }
 
+/**
+ * Ngày kèm giờ, theo giờ Việt Nam.
+ *
+ * Sổ ghi thư đi cần phút chứ không chỉ ngày: người vận hành đọc nó để biết một
+ * thư đi trước hay sau một thao tác khác trong cùng buổi. Múi giờ được ấn định
+ * để mọi người đọc ra cùng một con số bất kể máy đặt ở đâu.
+ */
+export function formatDateTime(value: unknown) {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Asia/Ho_Chi_Minh"
+  }).format(date);
+}
+
 export function includesQuery(values: unknown[], query: string) {
   const q = query.trim().toLowerCase();
   if (!q) return true;

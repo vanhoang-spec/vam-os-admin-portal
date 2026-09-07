@@ -86,6 +86,9 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/operations/tasks", label: "Nhiệm vụ & phân công" },
             { href: "/operations/monthly", label: "Báo cáo tháng" },
             { href: "/operations/intelligence", label: "Phân tích mùa" },
+            // canViewOutboundEmails phủ đúng ba vai trò của showAdminTier, nên
+            // nav và route không thể lệch nhau.
+            { href: "/operations/emails", label: "Email đã gửi" },
             { href: "/recaps/create", label: "Tạo báo cáo" },
           ],
         }

@@ -87,7 +87,7 @@ describe("buildNavGroups — super_admin", () => {
     expect(subHrefs).toContain("/applications");
   });
 
-  it("operations group is an accordion with all 5 sub-items for super_admin", () => {
+  it("operations group is an accordion with all 6 sub-items for super_admin", () => {
     const ops = groups.find((g) => g.key === "operations");
     expect(ops!.items).toBeDefined();
     const opHrefs = ops!.items?.map((i) => i.href) ?? [];
@@ -95,6 +95,7 @@ describe("buildNavGroups — super_admin", () => {
     expect(opHrefs).toContain("/operations/tasks");
     expect(opHrefs).toContain("/operations/monthly");
     expect(opHrefs).toContain("/operations/intelligence");
+    expect(opHrefs).toContain("/operations/emails");
     expect(opHrefs).toContain("/recaps/create");
   });
 });
@@ -369,6 +370,9 @@ const OPS_ADMIN_ROUTES = [
   "/operations/tasks",
   "/operations/monthly",
   "/operations/intelligence",
+  // Sổ thư đi. canViewOutboundEmails phủ đúng ba vai trò của admin tier, nên
+  // nó thuộc cùng nhóm này chứ không phải một cổng riêng.
+  "/operations/emails",
   "/recaps/create",
 ];
 

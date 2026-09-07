@@ -119,3 +119,26 @@ export function canViewApplicationFormControls(role?: string | null) {
 export function canBrowseOperations(role?: string | null) {
   return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
 }
+
+/** Can read the outbound email log without being able to send anything. */
+export function canViewOutboundEmails(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}
+
+/**
+ * Can send the confirmation-email backfill to applicants who applied before the
+ * email layer existed.
+ *
+ * As narrow as `canToggleApplicationForm`, and for the same reason: pressing
+ * this writes to people outside the system. A mistake here is not a wrong row
+ * that can be corrected — it is mail already in somebody's inbox, and a second
+ * press is a second letter to the same applicant. core_team is excluded on the
+ * same argument used there: nothing it already holds is an outward-facing
+ * publication event, so nothing maps to this.
+ *
+ * This is only the global-role half. The caller must ALSO prove season scope
+ * via `canOperateSeason`.
+ */
+export function canRunConfirmationBackfill(role?: string | null) {
+  return ["super_admin", "admin"].includes(role || "");
+}

@@ -8,7 +8,9 @@ import {
   type ApplicationSubmissionResult
 } from "@/lib/applications-create";
 import { APPLY_TOKEN_FIELD, type ApplyActionState } from "@/lib/apply-types";
+import { sendApplicationConfirmation } from "@/lib/email";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import { seasonLabel } from "@/lib/season-labels";
 import {
   acknowledgementsForRole,
   validateMenteeCommitments,
@@ -85,6 +87,40 @@ function fail(scope: string, err: unknown): ApplyActionState {
     message:
       "Lỗi hệ thống khi gửi đơn. Vui lòng thử lại sau ít phút hoặc liên hệ BTC."
   };
+}
+
+/**
+ * Nhãn mùa như người nộp đơn đọc được, chứ không phải mã nội bộ: thư sẽ viết
+ * "cho UEH Mentoring Mùa 12" thay vì "cho UEHM-S12". Builder nội suy nhãn này
+ * nguyên văn vào cả tiêu đề lẫn thân thư.
+ */
+const APPLICATION_SEASON_LABEL = `UEH Mentoring ${seasonLabel(SEASON_CODE)}`;
+
+/**
+ * Báo đã nhận đơn qua email.
+ *
+ * Không bao giờ được phép gây lỗi cho người nộp: đơn đã nằm trong database rồi,
+ * và không ai được nghe rằng đơn của mình hỏng chỉ vì nhà cung cấp email không
+ * trả lời. Mọi kết quả gửi đều đã được ghi vào outbound_emails, kể cả lượt bị
+ * cấu hình chặn, nên BTC vẫn tra lại được ở /operations/emails.
+ */
+async function acknowledgeSubmission(input: {
+  applicationId: string;
+  role: ApplicationRole;
+  fullName: string;
+  emailPrimary: string;
+}) {
+  try {
+    await sendApplicationConfirmation({
+      toEmail: input.emailPrimary,
+      applicantName: input.fullName,
+      role: input.role,
+      seasonLabel: APPLICATION_SEASON_LABEL,
+      applicationId: input.applicationId
+    });
+  } catch (err) {
+    console.error("[apply] confirmation email failed (non-fatal)", err);
+  }
 }
 
 /**
@@ -324,6 +360,14 @@ export async function submitMentorApplicationAction(
 
     // Both outcomes return a state; neither navigates from the server.
     if (!result.ok) return resultToState(result);
+
+    await acknowledgeSubmission({
+      applicationId: result.applicationId,
+      role: "mentor",
+      fullName,
+      emailPrimary
+    });
+
     revalidatePath("/admin/applications");
 
     // Returns confirmed success instead of redirecting from here.
@@ -536,6 +580,14 @@ export async function submitMenteeApplicationAction(
     });
 
     if (!result.ok) return resultToState(result);
+
+    await acknowledgeSubmission({
+      applicationId: result.applicationId,
+      role: "mentee",
+      fullName,
+      emailPrimary
+    });
+
     revalidatePath("/admin/applications");
 
     // Returns confirmed success instead of redirecting from here.
