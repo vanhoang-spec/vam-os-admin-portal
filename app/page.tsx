@@ -86,7 +86,10 @@ function countByLabel(rows: Array<Record<string, unknown>>, key: string, fallbac
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, "vi"));
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+export default async function DashboardPage(
+  props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }
+) {
+  const searchParams = await props.searchParams;
   const scope = await getScopeFilter(await getAdminScopeContext());
   const [data, opsData] = await Promise.all([
     getDashboardData(scope),
@@ -142,7 +145,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
   const monthsWithData = new Set(validOperationalRecaps.map((recap) => recap.meeting_month).filter((month): month is string => Boolean(month)));
   const availableMonths = seasonMonths.filter((month) => monthsWithData.has(month)).sort((a, b) => b.localeCompare(a));
   const latestNonFutureMonth = availableMonths.find((month) => month <= nowMonthVN);
-  
+
   const opsSeason = opsData.seasons.data.find((row) => row.code === SEASON_CODE);
   const seasonLatestClosedMonth = opsData.latestClosedMonth?.data?.find((row: any) => row.season_id === (season?.id || opsSeason?.id));
   const officialClosedMonth = typeof seasonLatestClosedMonth?.latest_closed_month === "string" ? seasonLatestClosedMonth.latest_closed_month : null;
@@ -174,14 +177,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
   // Replicate Operations follow-up logic exactly
   const closedMonth = officialClosedMonth ?? (opsSelectedMonth >= nowMonthVN ? addMonths(nowMonthVN, -1) : opsSelectedMonth);
   const closedPreviousMonth = officialPreviousClosedMonth ?? addMonths(closedMonth, -1);
-  
+
   const opsValidRecaps = opsData.recaps.data.filter((recap) => isValidRecapActivity(recap.status));
   const closedRecaps = opsValidRecaps.filter((recap) => recap.meeting_month === closedMonth);
   const closedPreviousRecaps = opsValidRecaps.filter((recap) => recap.meeting_month === closedPreviousMonth);
-  
+
   const opsActiveMatches = opsData.matches.data.filter((m) => isActive(m.status) && m.mentor_person_id && m.mentee_person_id);
   const opsActiveMenteeIds = new Set(opsActiveMatches.map((m) => m.mentee_person_id).filter(Boolean));
-  
+
   const closedMenteeIds = new Set(closedRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
   const closedPreviousMenteeIds = new Set(closedPreviousRecaps.map((recap) => recap.mentee_person_id).filter(Boolean));
 
@@ -197,7 +200,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: R
   const activeClosedMonthCount = Array.from(opsActiveMenteeIds).filter((id) => closedMenteeIds.has(id)).length;
   const missingClosedMonthCount = Array.from(opsActiveMenteeIds).filter((id) => !closedMenteeIds.has(id)).length;
   const homeFollowUpKpi = Array.from(opsActiveMenteeIds).filter((id) => !closedMenteeIds.has(id) && !closedPreviousMenteeIds.has(id)).length;
-  
+
   const menteeHealthData = [
     { name: "Mentee active tháng đã đóng", value: activeClosedMonthCount },
     { name: "Chưa có recap tháng gần nhất", value: missingClosedMonthCount },

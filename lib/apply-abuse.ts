@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { headers } from "next/headers";
+import { headers, type UnsafeUnwrappedHeaders } from "next/headers";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import {
   checkHoneypot,
@@ -40,7 +40,7 @@ function hashIp(ip: string): string | null {
 
 function currentIpHash(): string | null {
   try {
-    const h = headers();
+    const h = (headers() as unknown as UnsafeUnwrappedHeaders);
     const ip = extractClientIp({
       forwardedFor: h.get("x-forwarded-for"),
       realIp: h.get("x-real-ip")

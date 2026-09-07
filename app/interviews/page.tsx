@@ -16,11 +16,12 @@ import { InterviewsClient } from "./interviews-client";
 // "Bắt đầu phỏng vấn" to create (or resume) an interview review row.
 // ---------------------------------------------------------------------------
 
-export default async function InterviewsPage({
-  searchParams
-}: {
-  searchParams: { intake_batch_id?: string; role_applied?: string };
-}) {
+export default async function InterviewsPage(
+  props: {
+    searchParams: Promise<{ intake_batch_id?: string; role_applied?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canSelfClaimInterview(adminUser.role)) redirect("/");

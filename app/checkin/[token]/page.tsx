@@ -36,13 +36,14 @@ function CheckinResult({
   );
 }
 
-export default async function PublicEventCheckinPage({
-  params,
-  searchParams
-}: {
-  params: { token: string };
-  searchParams?: { status?: string | string[] };
-}) {
+export default async function PublicEventCheckinPage(
+  props: {
+    params: Promise<{ token: string }>;
+    searchParams?: Promise<{ status?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const data = await getPublicCheckinData(params.token);
   const eventName = displayText(data.event?.event_name, "Sự kiện");
   const status = selectedParam(searchParams?.status);

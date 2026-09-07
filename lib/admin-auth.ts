@@ -35,7 +35,7 @@ function authClient(accessToken?: string) {
 }
 
 export async function getCurrentSupabaseAuthUser(): Promise<User | null> {
-  const accessToken = cookies().get(AUTH_ACCESS_COOKIE)?.value;
+  const accessToken = (await cookies()).get(AUTH_ACCESS_COOKIE)?.value;
   if (!accessToken) return null;
 
   const client = authClient(accessToken);
@@ -245,20 +245,20 @@ export async function getCurrentAdminUser(): Promise<CurrentAdminUser | null> {
 }
 
 export async function clearAuthCookies() {
-  cookies().delete(AUTH_ACCESS_COOKIE);
-  cookies().delete(AUTH_REFRESH_COOKIE);
+  (await cookies()).delete(AUTH_ACCESS_COOKIE);
+  (await cookies()).delete(AUTH_REFRESH_COOKIE);
 }
 
 export async function setAuthCookies(accessToken: string, refreshToken: string, maxAge: number) {
   const secure = process.env.NODE_ENV === "production";
-  cookies().set(AUTH_ACCESS_COOKIE, accessToken, {
+  (await cookies()).set(AUTH_ACCESS_COOKIE, accessToken, {
     httpOnly: true,
     sameSite: "lax",
     secure,
     path: "/",
     maxAge
   });
-  cookies().set(AUTH_REFRESH_COOKIE, refreshToken, {
+  (await cookies()).set(AUTH_REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
     sameSite: "lax",
     secure,

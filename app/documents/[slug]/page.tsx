@@ -44,7 +44,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default async function ProgramDocumentPage({ params }: { params: { slug: string } }) {
+export default async function ProgramDocumentPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const view = await getPublicDocumentBySlug(params.slug);
 
   if (view.state !== "ready") {

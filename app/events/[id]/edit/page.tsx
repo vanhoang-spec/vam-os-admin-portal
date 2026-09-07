@@ -8,7 +8,8 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import { EventForm } from "../../event-form";
 import { CancelEventButton } from "./cancel-event-button";
 
-export default async function EditEventPage({ params }: { params: { id: string } }) {
+export default async function EditEventPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const adminUser = await getCurrentAdminUser();

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { cookies } from "next/headers";
+import { cookies, type UnsafeUnwrappedCookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import { AUTH_ACCESS_COOKIE } from "@/lib/auth-constants";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
@@ -16,7 +16,7 @@ export function getSupabaseServerClient() {
 
   let accessToken: string | undefined;
   try {
-    accessToken = cookies().get(AUTH_ACCESS_COOKIE)?.value;
+    accessToken = (cookies() as unknown as UnsafeUnwrappedCookies).get(AUTH_ACCESS_COOKIE)?.value;
   } catch {
     accessToken = undefined;
   }

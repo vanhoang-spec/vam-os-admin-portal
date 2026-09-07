@@ -41,6 +41,9 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   // the session is not — that stays with canPublishCrossSession.
   const showCross = roleIn(role, ["super_admin", "admin", "core_team", "support_team"]);
 
+  // The content calendar has the same audience as cross-mentoring triage, and
+  // for the same reason: each programme's support team runs its own fanpage.
+
   const groups: NavGroupDef[] = [
     role === "super_admin"
       ? {
@@ -64,6 +67,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/operations/monthly", label: "Báo cáo tháng" },
             { href: "/operations/intelligence", label: "Phân tích mùa" },
             { href: "/operations/cross", label: "Cross-mentoring" },
+            { href: "/operations/mkt", label: "Kế hoạch nội dung" },
             { href: "/recaps/create", label: "Tạo báo cáo" },
             { href: "/operations/recap-import", label: "Thu recap từ Facebook" },
           ],
@@ -74,7 +78,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             label: "Vận hành",
             items: [
               { href: "/operations", label: "Tổng quan vận hành" },
-              { href: "/operations/cross", label: "Cross-mentoring" }
+              { href: "/operations/cross", label: "Cross-mentoring" },
+              { href: "/operations/mkt", label: "Kế hoạch nội dung" }
             ]
           }
         : { key: "operations", label: "Vận hành", href: "/operations" },

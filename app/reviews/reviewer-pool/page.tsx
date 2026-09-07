@@ -28,11 +28,12 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function ReviewerPoolPage({
-  searchParams
-}: {
-  searchParams: { intake_batch_id?: string; season?: string; agreed?: string };
-}) {
+export default async function ReviewerPoolPage(
+  props: {
+    searchParams: Promise<{ intake_batch_id?: string; season?: string; agreed?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canManageReviewers(adminUser.role)) redirect("/reviews");

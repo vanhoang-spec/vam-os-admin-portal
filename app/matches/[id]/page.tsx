@@ -5,7 +5,8 @@ import { getMatchRelatedDisplayData } from "@/lib/matches";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
 
-export default async function MatchDetailPage({ params }: { params: { id: string } }) {
+export default async function MatchDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const scope = await getScopeFilter(await getAdminScopeContext());
   const [match, seasons] = await Promise.all([
     getMatch(params.id, scope),

@@ -30,11 +30,12 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function CrossProgramReportPage({
-  searchParams
-}: {
-  searchParams?: { program?: string | string[]; metric?: string | string[]; from?: string | string[]; to?: string | string[] };
-}) {
+export default async function CrossProgramReportPage(
+  props: {
+    searchParams?: Promise<{ program?: string | string[]; metric?: string | string[]; from?: string | string[]; to?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   // Not-found rather than a refusal, so the screen's existence is not confirmed
   // to a role that may not use it.

@@ -43,11 +43,12 @@ function roundLabel(round: string) {
 // Page
 // ---------------------------------------------------------------------------
 
-export default async function ReviewDetailPage({
-  params
-}: {
-  params: { id: string };
-}) {
+export default async function ReviewDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canReview(adminUser.role)) redirect("/");

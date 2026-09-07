@@ -4,11 +4,12 @@ export const metadata = {
   title: "Cảm ơn đã đăng ký — VAM Mentoring"
 };
 
-export default function ApplyThanksPage({
-  searchParams
-}: {
-  searchParams?: { role?: string };
-}) {
+export default async function ApplyThanksPage(
+  props: {
+    searchParams?: Promise<{ role?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const role = searchParams?.role === "mentor" ? "mentor" : "mentee";
   const roleLabel = role === "mentor" ? "mentor" : "mentee";
 

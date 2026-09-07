@@ -46,11 +46,12 @@ function waitingDays(createdAt: string): number | null {
   return Math.floor((Date.now() - created.getTime()) / 86_400_000);
 }
 
-export default async function OperationsCrossPage({
-  searchParams
-}: {
-  searchParams?: { status?: string };
-}) {
+export default async function OperationsCrossPage(
+  props: {
+    searchParams?: Promise<{ status?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
 
   // Not-found rather than a refusal: a role that cannot triage has no reason to

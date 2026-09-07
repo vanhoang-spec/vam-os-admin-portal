@@ -51,11 +51,12 @@ function toLocalInput(value: string | null): string | null {
   return parts.replace(" ", "T").slice(0, 16);
 }
 
-export default async function CrossRequestDetailPage({
-  params
-}: {
-  params: { id: string };
-}) {
+export default async function CrossRequestDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+  }
+) {
+  const params = await props.params;
   const adminUser = await getCurrentAdminUser();
   if (!canTriageCrossRequest(adminUser?.role)) notFound();
 

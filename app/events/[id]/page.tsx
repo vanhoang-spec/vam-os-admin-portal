@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { headers, type UnsafeUnwrappedHeaders } from "next/headers";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
@@ -10,7 +10,7 @@ import { displayText, formatDate } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 
 function getRequestOrigin() {
-  const h = headers();
+  const h = (headers() as unknown as UnsafeUnwrappedHeaders);
   const host = h.get("x-forwarded-host") ?? h.get("host");
   if (!host) return "";
   const proto = h.get("x-forwarded-proto") ?? "https";
@@ -47,7 +47,8 @@ function registrationStatusLabel(value: unknown) {
   return { label: displayText(status), color: "bg-slate-100 text-slate-700" };
 }
 
-export default async function EventDetailPage({ params }: { params: { id: string } }) {
+export default async function EventDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const adminUser = await getCurrentAdminUser();

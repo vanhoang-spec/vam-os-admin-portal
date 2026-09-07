@@ -25,11 +25,12 @@ function param(value: string | string[] | undefined) {
   return value ?? "";
 }
 
-export default async function RecapImportPage({
-  searchParams
-}: {
-  searchParams?: { batch_id?: string | string[] };
-}) {
+export default async function RecapImportPage(
+  props: {
+    searchParams?: Promise<{ batch_id?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canEditRecaps(adminUser)) redirect("/operations");

@@ -207,7 +207,10 @@ function WorkflowTable({
   );
 }
 
-export default async function OperationsTasksPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+export default async function OperationsTasksPage(
+  props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }
+) {
+  const searchParams = await props.searchParams;
   // Task month: which month's workflow queue to view. Defaults to current VN calendar month.
   const selectedMonth = cleanMonth(searchParams?.month) ?? currentMonthVN();
   const [workflow, adminUser] = await Promise.all([
