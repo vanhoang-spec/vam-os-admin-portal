@@ -126,9 +126,9 @@ const TRAINING_TOPIC_OPTIONS = [
 ];
 
 const INTERVIEW_WINDOW_OPTIONS = [
-  { value: "week_1", label: "Tuần 1 (BTC sẽ thông báo lịch chính thức)" },
-  { value: "week_2", label: "Tuần 2" },
-  { value: "both_weeks", label: "Cả hai tuần đều được" }
+  { value: "week_1", label: "Đợt 1: 03–04/10" },
+  { value: "week_2", label: "Đợt 2: 10–11/10" },
+  { value: "both_weeks", label: "Cả hai đợt đều được" }
 ];
 
 const KICKOFF_OPTIONS = [
@@ -380,7 +380,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
       <FormSection title="8. Sẵn sàng tham gia">
         <CheckboxGroupField
           name="available_for_interview"
-          label="Bạn sẵn sàng phỏng vấn 30 phút (nếu được mời) trong khoảng nào?"
+          label="Bạn sẵn sàng phỏng vấn 30 phút (nếu được mời) trong đợt nào?"
           required
           options={INTERVIEW_WINDOW_OPTIONS}
         />
