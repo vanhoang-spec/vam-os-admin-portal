@@ -382,7 +382,7 @@ describe("recruitment results — source fields projection", () => {
     // Assert CSV header contains exactly one "Biết đến chương trình qua"
     const channelCols = header.filter(col => col === "Biết đến chương trình qua");
     expect(channelCols).toHaveLength(1);
-    
+
     const channelIndex = header.indexOf("Biết đến chương trình qua");
 
     // Case A: friend -> Bạn bè
