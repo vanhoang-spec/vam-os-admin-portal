@@ -11,6 +11,14 @@ import { resolveSeasonContext } from "@/lib/season-context";
 import { REVIEW_ELIGIBLE_ROLES } from "@/lib/reviewer-eligibility";
 import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
 import {
+  isCurrentWorkloadStatus,
+  isOversightOperationalParent,
+  OVERSIGHT_OPERATIONAL_STATUSES,
+  REVIEW_OVERSIGHT_PAGE_SIZE,
+  reviewOversightBucket,
+  type ReviewOversightFilters
+} from "@/lib/review-oversight";
+import {
   canOperateSeason,
   getAdminScopeContext,
   getScopeFilter,
@@ -2083,6 +2091,383 @@ export async function getReviewAssignmentBatches(): Promise<QueryResult<ReviewAs
       String((b as JsonRecord).created_at ?? "").localeCompare(String((a as JsonRecord).created_at ?? "")) ||
       String(b.id).localeCompare(String(a.id))
   );
+  return { data: rows, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// INTERVIEW OPS — Slice 1 oversight reads
+//
+// ONE predicate builder feeds BOTH oversight surfaces. /reviews pages rows out
+// of it; /reviews/progress aggregates the same population. That is the whole
+// reason a progress count and the list behind it can be reconciled at all — two
+// hand-written predicates drifted apart before, and would again.
+//
+// The read is a single joined PostgREST query. It replaces the previous
+// pattern on /reviews, which paged the entire scoped `applications` table and
+// then issued one `getApplication` per review row.
+// ---------------------------------------------------------------------------
+
+/**
+ * Explicit projection for the oversight list. No `select("*")`.
+ *
+ * Every field here is consumed by `app/reviews/page.tsx` or by the filter and
+ * state logic. `__tests__/interview-ops-slice1-oversight.test.ts` runs against a
+ * fake that honours this projection literally — a field consumed but not
+ * selected reads as `undefined` and fails the suite.
+ *
+ * The reviewer embed names its foreign key explicitly:
+ * `application_reviews` references `admin_users` twice
+ * (`reviewer_admin_user_id` and `assigned_by`), so an unqualified embed is
+ * ambiguous. Identity comes from the ASSIGNEE side, never from `assigned_by`.
+ */
+export const REVIEW_OVERSIGHT_LIST_SELECT =
+  "id,application_id,reviewer_admin_user_id,review_round,status,due_at,submitted_at,total_score,recommendation," +
+  "application:applications!inner(id,full_name,person_id,season_id,intake_batch_id,role_applied,status,final_status)," +
+  "reviewer:admin_users!application_reviews_reviewer_admin_user_id_fkey(id,full_name,email)";
+
+/** Narrower projection for aggregation: only what a count or an identity needs. */
+export const REVIEW_OVERSIGHT_AGGREGATE_SELECT =
+  "id,application_id,reviewer_admin_user_id,review_round,status,submitted_at," +
+  "application:applications!inner(id,status)," +
+  "reviewer:admin_users!application_reviews_reviewer_admin_user_id_fkey(id,full_name,email)";
+
+export type ReviewOversightApplication = {
+  id: string;
+  full_name: string | null;
+  person_id: string | null;
+  season_id: string | null;
+  intake_batch_id: string | null;
+  role_applied: string | null;
+  status: string | null;
+  final_status: string | null;
+};
+
+export type ReviewOversightReviewer = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
+export type ReviewOversightRow = {
+  id: string;
+  application_id: string;
+  reviewer_admin_user_id: string | null;
+  review_round: string;
+  status: string;
+  due_at: string | null;
+  submitted_at: string | null;
+  total_score: number | null;
+  recommendation: string | null;
+  application: ReviewOversightApplication | null;
+  reviewer: ReviewOversightReviewer | null;
+};
+
+export type ReviewOversightPage = {
+  rows: ReviewOversightRow[];
+  /** The FULL filtered population, never the length of the current page. */
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export type ReviewOversightReviewerStats = {
+  reviewer_admin_user_id: string | null;
+  reviewer_full_name: string | null;
+  reviewer_email: string | null;
+  /** Parent operational AND status <> cancelled. Cancelled is never in here. */
+  current_total: number;
+  submitted_count: number;
+  in_progress_count: number;
+  pending_count: number;
+  returned_count: number;
+  /** History-only metric, reported separately from workload. */
+  cancelled_count: number;
+  latest_submitted_at: string | null;
+};
+
+/**
+ * WHO the caller is, resolved before any query runs.
+ *
+ * `reviewer` is not a weaker variant of `oversight` that later gets filtered —
+ * it changes the QUERY. A reviewer-only account is pinned to its own
+ * `reviewer_admin_user_id` and to the operational population inside the
+ * predicate builder, so no combination of URL parameters can widen the read.
+ * The oversight path reads with the service-role client, which bypasses RLS;
+ * this actor type, not RLS, is what confines a reviewer.
+ */
+export type ReviewOversightActor =
+  | { kind: "oversight"; adminUserId: string }
+  | { kind: "reviewer"; adminUserId: string };
+
+/**
+ * Resolves the caller's season/batch grant into an embedded-column constraint.
+ *
+ * Returns `null` for an unscoped (super admin) caller, and `{ empty: true }`
+ * when the grant admits no rows at all, which must short-circuit to an empty
+ * result rather than an unfiltered read.
+ */
+async function resolveOversightScopeConstraint(
+  scope?: ScopeFilter
+): Promise<
+  | { empty: true; error: string | null }
+  | { empty: false; column: string | null; values: string[]; error: string | null }
+> {
+  if (!scope) return { empty: false, column: null, values: [], error: null };
+  if (noAllowedRows(scope)) return { empty: true, error: null };
+
+  if (scope.allowedSeasonIds?.length) {
+    return { empty: false, column: "application.season_id", values: scope.allowedSeasonIds, error: null };
+  }
+
+  // A program-scoped grant carries no season list, so the batch list resolved
+  // from that grant is the narrowest available authorisation key.
+  const { batchIds, error } = await getScopedIntakeBatchIds(scope);
+  if (error) return { empty: true, error };
+  if (!batchIds?.length) return { empty: true, error: null };
+  return { empty: false, column: "application.intake_batch_id", values: batchIds, error: null };
+}
+
+/**
+ * THE shared predicate builder. Both oversight reads pass through here.
+ *
+ * Order matters only for readability; PostgREST ANDs every clause. The actor
+ * constraint is applied BEFORE any URL-derived reviewer filter so the widening
+ * case is structurally impossible rather than merely unreachable.
+ */
+function applyReviewOversightPredicates(
+  query: any,
+  input: {
+    filters: ReviewOversightFilters;
+    actor: ReviewOversightActor;
+    scopeConstraint: { column: string | null; values: string[] };
+  }
+) {
+  const { filters, actor, scopeConstraint } = input;
+
+  if (scopeConstraint.column) {
+    query = query.in(scopeConstraint.column, scopeConstraint.values);
+  }
+
+  // A reviewer-only account never sees history, whatever `scope=` says.
+  const scopeMode = actor.kind === "reviewer" ? "operational" : filters.scopeMode;
+  if (scopeMode === "operational") {
+    query = query.in("application.status", OVERSIGHT_OPERATIONAL_STATUSES as string[]);
+    query = query.neq("status", "cancelled");
+  }
+
+  // Ownership. The actor wins; `reviewer=` from the URL is only ever read for
+  // an account that already holds oversight authority.
+  if (actor.kind === "reviewer") {
+    query = query.eq("reviewer_admin_user_id", actor.adminUserId);
+  } else if (filters.reviewerId) {
+    query = query.eq("reviewer_admin_user_id", filters.reviewerId);
+  }
+
+  if (filters.seasonId) query = query.eq("application.season_id", filters.seasonId);
+  if (filters.intakeBatchId) query = query.eq("application.intake_batch_id", filters.intakeBatchId);
+  if (filters.roleApplied) query = query.eq("application.role_applied", filters.roleApplied);
+  if (filters.reviewRound) query = query.eq("review_round", filters.reviewRound);
+  if (filters.reviewStatus) query = query.eq("status", filters.reviewStatus);
+
+  return query;
+}
+
+function emptyOversightPage(page: number): ReviewOversightPage {
+  return { rows: [], totalCount: 0, page, pageSize: REVIEW_OVERSIGHT_PAGE_SIZE, totalPages: 0 };
+}
+
+/**
+ * One page of the oversight list plus the FULL filtered total.
+ *
+ * `count: "exact"` is what makes the reconciliation invariant checkable: the
+ * number a progress cell shows is compared against `totalCount`, not against
+ * the 50 rows that happen to be on screen.
+ */
+export async function getReviewOversightQueue(input: {
+  filters: ReviewOversightFilters;
+  actor: ReviewOversightActor;
+  scope?: ScopeFilter;
+}): Promise<QueryResult<ReviewOversightPage>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<ReviewOversightPage>(emptyOversightPage(input.filters.page));
+
+  const scopeConstraint = await resolveOversightScopeConstraint(input.scope);
+  if (scopeConstraint.empty) {
+    return { data: emptyOversightPage(input.filters.page), error: scopeConstraint.error };
+  }
+
+  const runPage = async (page: number) => {
+    let query = client
+      .from("application_reviews")
+      .select(REVIEW_OVERSIGHT_LIST_SELECT, { count: "exact" });
+    query = applyReviewOversightPredicates(query, {
+      filters: input.filters,
+      actor: input.actor,
+      scopeConstraint
+    });
+    const from = (page - 1) * REVIEW_OVERSIGHT_PAGE_SIZE;
+    return query
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true })
+      .range(from, from + REVIEW_OVERSIGHT_PAGE_SIZE - 1);
+  };
+
+  let { data, count, error } = await runPage(input.filters.page);
+  if (error) {
+    logDataError("application_reviews.oversightQueue", error);
+    const err = error as { message?: string };
+    return {
+      data: emptyOversightPage(input.filters.page),
+      error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})`
+    };
+  }
+
+  const totalCount = count ?? 0;
+  const totalPages = totalCount ? Math.ceil(totalCount / REVIEW_OVERSIGHT_PAGE_SIZE) : 0;
+
+  // An out-of-range page is clamped to the last real one rather than rendering
+  // an empty table that looks like "no results for these filters".
+  let page = input.filters.page;
+  if (totalPages > 0 && page > totalPages) {
+    page = totalPages;
+    const clamped = await runPage(page);
+    if (clamped.error) {
+      logDataError("application_reviews.oversightQueue.clamp", clamped.error);
+      const err = clamped.error as { message?: string };
+      return {
+        data: { ...emptyOversightPage(page), totalCount, totalPages },
+        error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})`
+      };
+    }
+    data = clamped.data;
+  }
+
+  return {
+    data: {
+      rows: (data ?? []) as unknown as ReviewOversightRow[],
+      totalCount,
+      page,
+      pageSize: REVIEW_OVERSIGHT_PAGE_SIZE,
+      totalPages
+    },
+    error: null
+  };
+}
+
+/**
+ * Per-reviewer aggregation over the SAME population the list pages.
+ *
+ * It reads the history population (`scope=all`, no reviewer and no status
+ * filter) exactly once and buckets in JS, applying the operational rule with
+ * the same status list the SQL filter uses. So:
+ *
+ *   current_total  reconciles with /reviews at scope=operational
+ *   submitted/in_progress/pending/returned reconcile with the same plus
+ *                  `review_status=`
+ *   cancelled_count reconciles with scope=all plus `review_status=cancelled`
+ *
+ * Paged to exhaustion — a progress figure must describe the whole filtered
+ * population, never the first PostgREST page of it.
+ */
+export async function getReviewOversightAggregate(input: {
+  filters: ReviewOversightFilters;
+  actor: ReviewOversightActor;
+  scope?: ScopeFilter;
+}): Promise<QueryResult<ReviewOversightReviewerStats[]>> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return envError<ReviewOversightReviewerStats[]>([]);
+
+  const scopeConstraint = await resolveOversightScopeConstraint(input.scope);
+  if (scopeConstraint.empty) return { data: [], error: scopeConstraint.error };
+
+  // The aggregate always reads the full history population; the operational
+  // split is derived per row so both halves come from one read.
+  const aggregateFilters: ReviewOversightFilters = {
+    ...input.filters,
+    reviewerId: null,
+    reviewStatus: null,
+    scopeMode: "all",
+    page: 1
+  };
+
+  const { data, error } = await readAllPages<JsonRecord>(
+    "application_reviews",
+    REVIEW_OVERSIGHT_AGGREGATE_SELECT,
+    (projection) =>
+      applyReviewOversightPredicates(
+        client.from("application_reviews").select(projection),
+        { filters: aggregateFilters, actor: input.actor, scopeConstraint }
+      )
+  );
+  if (error) {
+    logDataError("application_reviews.oversightAggregate", error);
+    const err = error as { message?: string };
+    return { data: [], error: `${VI_ERROR} (application_reviews: ${err.message ?? "Bad Request"})` };
+  }
+
+  const statsById = new Map<string, ReviewOversightReviewerStats>();
+  const UNASSIGNED = "__unassigned__";
+
+  for (const row of data) {
+    const reviewerId = (row.reviewer_admin_user_id as string | null) ?? null;
+    const key = reviewerId ?? UNASSIGNED;
+    const reviewer = (row.reviewer ?? null) as ReviewOversightReviewer | null;
+
+    let stats = statsById.get(key);
+    if (!stats) {
+      stats = {
+        reviewer_admin_user_id: reviewerId,
+        reviewer_full_name: reviewer?.full_name ?? null,
+        reviewer_email: reviewer?.email ?? null,
+        current_total: 0,
+        submitted_count: 0,
+        in_progress_count: 0,
+        pending_count: 0,
+        returned_count: 0,
+        cancelled_count: 0,
+        latest_submitted_at: null
+      };
+      statsById.set(key, stats);
+    }
+
+    const application = (row.application ?? null) as { status?: string | null } | null;
+    const status = String(row.status ?? "");
+    const bucket = reviewOversightBucket(status);
+
+    if (bucket === "cancelled") {
+      stats.cancelled_count += 1;
+      continue;
+    }
+
+    // Terminal-parent rows are history, not workload. They are reachable in the
+    // list at scope=all; they are not part of anybody's current total.
+    if (!isOversightOperationalParent(application?.status) || !isCurrentWorkloadStatus(status)) {
+      continue;
+    }
+
+    stats.current_total += 1;
+    if (bucket === "submitted") {
+      stats.submitted_count += 1;
+      const submittedAt = (row.submitted_at as string | null) ?? null;
+      if (submittedAt && (!stats.latest_submitted_at || submittedAt > stats.latest_submitted_at)) {
+        stats.latest_submitted_at = submittedAt;
+      }
+    } else if (bucket === "in_progress") {
+      stats.in_progress_count += 1;
+    } else if (bucket === "pending") {
+      stats.pending_count += 1;
+    } else if (bucket === "returned") {
+      stats.returned_count += 1;
+    }
+  }
+
+  const rows = Array.from(statsById.values()).sort((a, b) => {
+    const left = a.reviewer_full_name ?? a.reviewer_email ?? "";
+    const right = b.reviewer_full_name ?? b.reviewer_email ?? "";
+    return left.localeCompare(right, "vi") || String(a.reviewer_admin_user_id ?? "").localeCompare(String(b.reviewer_admin_user_id ?? ""));
+  });
+
   return { data: rows, error: null };
 }
 

@@ -2,19 +2,32 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
-  getAllApplicationReviews,
-  getApplication,
-  getMyApplicationReviews
+  getIntakeBatches,
+  getReviewOversightAggregate,
+  getReviewOversightQueue,
+  getSeasons,
+  type ReviewOversightActor,
+  type ReviewOversightRow
 } from "@/lib/data";
-import { canBulkAssignReviews, canReview, isReviewerOnly } from "@/lib/permissions";
+import { canAssignReview, canBulkAssignReviews, canReview, isReviewerOnly } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import type { ApplicationReview } from "@/lib/types";
+import {
+  buildReviewOversightHref,
+  parseReviewOversightFilters,
+  REVIEW_OVERSIGHT_PAGE_SIZE,
+  REVIEW_OVERSIGHT_ROLES,
+  REVIEW_OVERSIGHT_ROUNDS,
+  REVIEW_OVERSIGHT_STATUSES,
+  reviewerIdentityLabel,
+  reviewOversightActionability,
+  type ReviewOversightFilters,
+  type ReviewOversightSearchParams
+} from "@/lib/review-oversight";
 import { displayText, formatDate } from "@/lib/utils";
-import { isApplicationRecruitmentOperational } from "@/lib/application-review-assignability";
-import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
+import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Labels
 // ---------------------------------------------------------------------------
 
 function reviewStatusLabel(status: string) {
@@ -30,6 +43,12 @@ function roundLabel(round: string) {
   if (round === "profile_screening") return "Hồ sơ";
   if (round === "interview") return "Phỏng vấn";
   return round;
+}
+
+function roleLabel(role: string) {
+  if (role === "mentor") return "Mentor";
+  if (role === "mentee") return "Mentee";
+  return role;
 }
 
 function statusBadgeClass(status: string) {
@@ -56,51 +75,107 @@ function isDueSoon(dueAt: string | null | undefined, status: string): boolean {
   return due.getTime() <= msTomorrow;
 }
 
+const SELECT_CLASS =
+  "rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green";
+
+/**
+ * A hidden input keeps a filter attached across a GET form submit.
+ * `page` is deliberately NOT carried — changing a filter returns to page 1.
+ */
+function HiddenFilter({ name, value }: { name: string; value: string | null }) {
+  return value ? <input type="hidden" name={name} value={value} /> : null;
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
-export default async function ReviewsPage() {
+/**
+ * TẤT CẢ REVIEWS — the Interview Ops oversight list.
+ *
+ * Reads one joined, filtered, server-paged query through
+ * `getReviewOversightQueue`. The previous implementation paged the entire
+ * scoped `applications` table and then issued one `getApplication` per review
+ * row; both are gone.
+ *
+ * WHOSE ROWS: decided by the actor passed to the query, never by the URL. A
+ * reviewer-only account is pinned to its own assignments and to the operational
+ * population inside the predicate builder, so `?reviewer=<someone-else>` and
+ * `?scope=all` cannot widen the read. The oversight read uses the service-role
+ * client — RLS is not the boundary here, this actor is.
+ */
+export default async function ReviewsPage(props: {
+  searchParams?: Promise<ReviewOversightSearchParams>;
+}) {
+  const searchParams = (await props.searchParams) ?? {};
+
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
   if (!canReview(adminUser.role)) redirect("/");
 
   const reviewerOnly = isReviewerOnly(adminUser.role);
+  const canOversee = canAssignReview(adminUser.role);
   const canBulkAssign = canBulkAssignReviews(adminUser.role);
-  const scope = await getScopeFilter(await getAdminScopeContext());
 
-  const result = reviewerOnly
-    ? await getMyApplicationReviews(adminUser.id, scope)
-    : await getAllApplicationReviews(scope);
+  // /reviews defaults to EVERY round; the round is a filter, not a mode.
+  const filters = parseReviewOversightFilters(searchParams, { defaultReviewRound: null });
+  const actor: ReviewOversightActor = reviewerOnly
+    ? { kind: "reviewer", adminUserId: adminUser.id }
+    : { kind: "oversight", adminUserId: adminUser.id };
 
-  const reviews = result.data;
+  const scopeContext = await getAdminScopeContext();
+  if (scopeContext.scopeError) {
+    return (
+      <>
+        <PageHeader title="Tất cả Reviews" description="Không thể xác minh phạm vi dữ liệu." />
+        <ErrorBox message={scopeContext.scopeError} />
+      </>
+    );
+  }
+  const scope = await getScopeFilter(scopeContext);
 
-  // Fetch a lightweight application summary for each review so we can show
-  // the applicant name and application link in the table. We deduplicate by
-  // application_id to avoid redundant requests.
-  const uniqueAppIds = Array.from(new Set(reviews.map((r) => r.application_id)));
-  const appResults = await Promise.all(uniqueAppIds.map((id) => getApplication(id, scope)));
-  const appMap = new Map(
-    appResults
-      .filter((r) => r.data)
-      .map((r) => [r.data!.id, r.data!])
-  );
+  const [queueResult, seasons, intakeBatches, aggregateResult] = await Promise.all([
+    getReviewOversightQueue({ filters, actor, scope }),
+    getSeasons(scope),
+    getIntakeBatches(scope),
+    // Reviewer options come from the assignments that EXIST in the current
+    // filter context, so an inactive or removed account that still holds
+    // history stays selectable. `getActiveAdminUsers` would hide exactly those.
+    canOversee
+      ? getReviewOversightAggregate({ filters, actor, scope })
+      : Promise.resolve({ data: [], error: null })
+  ]);
 
-  const operationalReviews = reviews.filter((review) => {
-    const app = appMap.get(review.application_id);
-    return app && isApplicationRecruitmentOperational(app.status ?? app.final_status);
-  });
-  const tableRows = operationalReviews.map((review) => {
-    const app = appMap.get(review.application_id);
-    const applicantName =
-      app?.full_name ?? app?.person_id ?? review.application_id;
-    return { ...review, applicant_name: applicantName };
-  });
+  const queue = queueResult.data;
+  const rows = queue.rows;
 
-  // Summary counts
-  const assignedCount = operationalReviews.filter((r) => r.status === "assigned").length;
-  const inProgressCount = operationalReviews.filter((r) => r.status === "in_progress").length;
-  const submittedCount = operationalReviews.filter((r) => r.status === "submitted").length;
+  const reviewerOptions = aggregateResult.data
+    .filter((stats) => stats.reviewer_admin_user_id)
+    .map((stats) => ({
+      id: stats.reviewer_admin_user_id as string,
+      label: reviewerIdentityLabel(
+        stats.reviewer_admin_user_id,
+        stats.reviewer_full_name,
+        stats.reviewer_email
+      )
+    }));
+  // A reviewer selected under a wider filter must stay selectable after the
+  // filter narrows, or the control would silently clear itself.
+  if (filters.reviewerId && !reviewerOptions.some((option) => option.id === filters.reviewerId)) {
+    const fromRows = rows.find((row) => row.reviewer_admin_user_id === filters.reviewerId);
+    reviewerOptions.unshift({
+      id: filters.reviewerId,
+      label: reviewerIdentityLabel(
+        filters.reviewerId,
+        fromRows?.reviewer?.full_name ?? null,
+        fromRows?.reviewer?.email ?? null
+      )
+    });
+  }
+
+  const firstRowNumber = queue.totalCount ? (queue.page - 1) * REVIEW_OVERSIGHT_PAGE_SIZE + 1 : 0;
+  const lastRowNumber = firstRowNumber ? firstRowNumber + rows.length - 1 : 0;
+  const historyMode = !reviewerOnly && filters.scopeMode === "all";
 
   return (
     <>
@@ -133,7 +208,11 @@ export default async function ReviewsPage() {
             Chia hồ sơ review
           </Link>
           <Link
-            href="/reviews/progress"
+            href={buildReviewOversightHref("/reviews/progress", filters, {
+              reviewerId: null,
+              reviewStatus: null,
+              page: 1
+            })}
             className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-vam-green hover:bg-vam-mint"
           >
             Tiến độ review
@@ -144,7 +223,12 @@ export default async function ReviewsPage() {
           >
             Danh sách reviewer
           </Link>
-          <Link href="/reviews/settings" className="inline-flex items-center rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cấu hình số review</Link>
+          <Link
+            href="/reviews/settings"
+            className="inline-flex items-center rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Cấu hình số review
+          </Link>
           <Link
             href="/reviews/guide"
             className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -154,24 +238,182 @@ export default async function ReviewsPage() {
         </div>
       )}
 
-      <ErrorBox message={result.error} />
+      <ErrorBox message={queueResult.error ?? aggregateResult.error} />
 
-      {/* Summary pills */}
-      <div className="mb-4 flex flex-wrap gap-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-          Chưa bắt đầu: <strong>{assignedCount}</strong>
+      {/* Filter bar */}
+      <Card className="mb-5">
+        <form method="GET" className="flex flex-wrap items-end gap-3" data-testid="review-filters">
+          {canOversee ? (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-500" htmlFor="filter-season">
+                Mùa
+              </label>
+              <select
+                id="filter-season"
+                name="season_id"
+                defaultValue={filters.seasonId ?? ""}
+                className={SELECT_CLASS}
+              >
+                <option value="">Tất cả mùa</option>
+                {seasons.data.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name ?? season.code ?? season.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500" htmlFor="filter-batch">
+              Đợt tuyển
+            </label>
+            <select
+              id="filter-batch"
+              name="intake_batch_id"
+              defaultValue={filters.intakeBatchId ?? ""}
+              className={SELECT_CLASS}
+            >
+              <option value="">Tất cả đợt</option>
+              {intakeBatches.data.map((batch) => (
+                <option key={batch.id} value={batch.id}>
+                  {batch.name ?? batch.code ?? batch.id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500" htmlFor="filter-role">
+              Vai trò ứng tuyển
+            </label>
+            <select
+              id="filter-role"
+              name="role_applied"
+              defaultValue={filters.roleApplied ?? ""}
+              className={SELECT_CLASS}
+            >
+              <option value="">Tất cả vai trò</option>
+              {REVIEW_OVERSIGHT_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {roleLabel(role)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500" htmlFor="filter-round">
+              Vòng review
+            </label>
+            <select
+              id="filter-round"
+              name="review_round"
+              defaultValue={filters.reviewRound ?? ""}
+              className={SELECT_CLASS}
+            >
+              <option value="">Tất cả vòng</option>
+              {REVIEW_OVERSIGHT_ROUNDS.map((round) => (
+                <option key={round} value={round}>
+                  {roundLabel(round)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {canOversee ? (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-500" htmlFor="filter-reviewer">
+                Reviewer / Interviewer
+              </label>
+              <select
+                id="filter-reviewer"
+                name="reviewer"
+                defaultValue={filters.reviewerId ?? ""}
+                className={SELECT_CLASS}
+              >
+                <option value="">Tất cả reviewer</option>
+                {reviewerOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500" htmlFor="filter-status">
+              Trạng thái review
+            </label>
+            <select
+              id="filter-status"
+              name="review_status"
+              defaultValue={filters.reviewStatus ?? ""}
+              className={SELECT_CLASS}
+            >
+              <option value="">Tất cả trạng thái</option>
+              {REVIEW_OVERSIGHT_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {reviewStatusLabel(status)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {canOversee ? (
+            <label className="flex items-center gap-2 pb-1.5 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                name="scope"
+                value="all"
+                defaultChecked={filters.scopeMode === "all"}
+                data-testid="history-toggle"
+              />
+              Hiện cả lịch sử
+            </label>
+          ) : null}
+
+          <button
+            type="submit"
+            className="rounded-md bg-vam-green px-4 py-1.5 text-sm font-medium text-white hover:bg-vam-green/90"
+          >
+            Lọc
+          </button>
+          <Link href="/reviews" className="pb-1.5 text-xs text-slate-400 underline hover:text-slate-600">
+            Xóa bộ lọc
+          </Link>
+        </form>
+
+        {historyMode ? (
+          <p
+            data-testid="history-notice"
+            className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+          >
+            Đang hiển thị cả lịch sử: phân công đã huỷ và hồ sơ đã kết thúc quy trình đều xuất hiện
+            và chỉ để xem lại.
+          </p>
+        ) : null}
+      </Card>
+
+      {/* Filtered total — the FULL population, not this page. */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <span
+          data-testid="oversight-total"
+          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600"
+        >
+          Tổng theo bộ lọc: <strong>{queue.totalCount}</strong>
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
-          Đang làm: <strong>{inProgressCount}</strong>
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1 text-sm font-medium text-green-700">
-          Đã nộp: <strong>{submittedCount}</strong>
-        </span>
+        {queue.totalCount > 0 ? (
+          <span className="text-xs text-slate-500">
+            Đang xem {firstRowNumber}–{lastRowNumber} · Trang {queue.page}/{Math.max(queue.totalPages, 1)}
+          </span>
+        ) : null}
       </div>
 
       <Card>
-        {tableRows.length === 0 ? (
-          <EmptyState message="Chưa có review nào được giao." />
+        {rows.length === 0 ? (
+          <EmptyState message="Không có review nào khớp bộ lọc hiện tại." />
         ) : (
           <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
             <div className="overflow-x-auto">
@@ -179,6 +421,7 @@ export default async function ReviewsPage() {
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                   <tr>
                     <th className="px-4 py-3">Ứng viên</th>
+                    <th className="px-4 py-3">Reviewer / Interviewer</th>
                     <th className="px-4 py-3">Vòng</th>
                     <th className="px-4 py-3">Trạng thái</th>
                     <th className="px-4 py-3">Hạn nộp</th>
@@ -189,68 +432,123 @@ export default async function ReviewsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-vam-line">
-                  {tableRows.map((row) => {
-                    const overdue = isOverdue(row.due_at, row.status);
-                    const dueSoon = !overdue && isDueSoon(row.due_at, row.status);
+                  {rows.map((row: ReviewOversightRow) => {
+                    const application = row.application;
+                    const parentStatus = application?.status ?? application?.final_status ?? null;
+                    const actionability = reviewOversightActionability({
+                      reviewStatus: row.status,
+                      parentStatus: application?.status ?? null
+                    });
+                    const overdue = actionability.actionable && isOverdue(row.due_at, row.status);
+                    const dueSoon =
+                      actionability.actionable && !overdue && isDueSoon(row.due_at, row.status);
+                    const applicantName =
+                      application?.full_name ?? application?.person_id ?? row.application_id;
+
                     return (
-                    <tr key={row.id} className={`hover:bg-vam-mint/40 ${overdue ? "bg-red-50/60" : ""}`}>
-                      <td className="px-4 py-3 font-medium text-vam-ink">
-                        <Link
-                          href={reviewerOnly ? `/reviews/${row.id}` : `/applications/${row.application_id}`}
-                          className="hover:text-vam-green hover:underline"
-                        >
-                          {displayText(row.applicant_name)}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {roundLabel(row.review_round)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
-                        >
-                          {reviewStatusLabel(row.status)}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        <div className="flex flex-col gap-1">
-                          <span>{row.due_at ? formatDate(row.due_at) : "-"}</span>
-                          {overdue ? (
-                            <span className="inline-flex w-fit rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                              Quá hạn
-                            </span>
-                          ) : dueSoon ? (
-                            <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                              Sắp đến hạn
+                      <tr
+                        key={row.id}
+                        className={`hover:bg-vam-mint/40 ${overdue ? "bg-red-50/60" : ""}`}
+                      >
+                        <td className="px-4 py-3 font-medium text-vam-ink">
+                          <Link
+                            href={
+                              reviewerOnly ? `/reviews/${row.id}` : `/applications/${row.application_id}`
+                            }
+                            className="hover:text-vam-green hover:underline"
+                          >
+                            {displayText(applicantName)}
+                          </Link>
+                          {actionability.readOnlyReason === "terminal_parent" ? (
+                            <span className="mt-1 block text-[11px] font-normal text-slate-500">
+                              Hồ sơ đã kết thúc quy trình ({displayText(parentStatus)})
                             </span>
                           ) : null}
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {row.submitted_at ? formatDate(row.submitted_at) : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {row.total_score !== null ? row.total_score : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {displayText(row.recommendation)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/reviews/${row.id}`}
-                          className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
-                        >
-                          {row.status === "submitted" || row.status === "cancelled" ? "Xem" : "Làm review"}
-                        </Link>
-                      </td>
-                    </tr>
-                  );
+                        </td>
+                        <td className="px-4 py-3 text-slate-700" data-testid="reviewer-cell">
+                          {reviewerIdentityLabel(
+                            row.reviewer_admin_user_id,
+                            row.reviewer?.full_name,
+                            row.reviewer?.email
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{roundLabel(row.review_round)}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
+                          >
+                            {reviewStatusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          <div className="flex flex-col gap-1">
+                            <span>{row.due_at ? formatDate(row.due_at) : "-"}</span>
+                            {overdue ? (
+                              <span className="inline-flex w-fit rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                                Quá hạn
+                              </span>
+                            ) : dueSoon ? (
+                              <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                                Sắp đến hạn
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {row.submitted_at ? formatDate(row.submitted_at) : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {row.total_score !== null ? row.total_score : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{displayText(row.recommendation)}</td>
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/reviews/${row.id}`}
+                            className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                          >
+                            {actionability.actionable ? "Làm review" : "Xem"}
+                          </Link>
+                        </td>
+                      </tr>
+                    );
                   })}
                 </tbody>
               </table>
             </div>
           </div>
         )}
+
+        {queue.totalPages > 1 ? (
+          <nav
+            aria-label="Phân trang"
+            data-testid="oversight-pagination"
+            className="mt-4 flex items-center justify-between gap-3 text-sm"
+          >
+            {queue.page > 1 ? (
+              <Link
+                href={buildReviewOversightHref("/reviews", filters, { page: queue.page - 1 })}
+                className="rounded-md border border-vam-line px-3 py-1.5 font-medium text-vam-green hover:bg-vam-mint"
+              >
+                ← Trang trước
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span className="text-xs text-slate-500">
+              Trang {queue.page}/{queue.totalPages}
+            </span>
+            {queue.page < queue.totalPages ? (
+              <Link
+                href={buildReviewOversightHref("/reviews", filters, { page: queue.page + 1 })}
+                className="rounded-md border border-vam-line px-3 py-1.5 font-medium text-vam-green hover:bg-vam-mint"
+              >
+                Trang sau →
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
+        ) : null}
       </Card>
     </>
   );

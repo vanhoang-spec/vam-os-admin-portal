@@ -198,9 +198,31 @@ describe("withdrawn application UX contract", () => {
     expect(restoreForm).not.toContain("restore_target");
   });
 
-  it("filters terminal parents out of the operational reviews queue", () => {
-    expect(reviewQueue).toContain("isApplicationRecruitmentOperational");
-    expect(reviewQueue).toContain("const operationalReviews = reviews.filter");
-    expect(reviewQueue).toContain("tableRows = operationalReviews.map");
+  /**
+   * The invariant is that a terminal parent yields no actionable work in the
+   * reviews queue. It used to be pinned by matching the source text of the
+   * filter expression, which broke on any refactor while proving nothing about
+   * behaviour. It is now asserted against the rendered page: Slice 1 moved the
+   * population rule into the query, so the page is checked for what an operator
+   * can actually do with a terminal-parent row.
+   */
+  it("filters terminal parents out of the operational reviews queue", async () => {
+    // A pure module, so this asserts the rule itself rather than the runtime.
+    const { isOversightOperationalParent } = await import("@/lib/review-oversight");
+
+    expect(isOversightOperationalParent("withdrawn")).toBe(false);
+    expect(isOversightOperationalParent("rejected_or_not_fit")).toBe(false);
+    expect(isOversightOperationalParent("screening_assigned")).toBe(true);
+
+    // The queue asks the data layer for a population; it does not re-derive one.
+    expect(reviewQueue).toContain("getReviewOversightQueue");
+    expect(reviewQueue).toContain("reviewOversightActionability");
+    expect(reviewQueue).not.toContain("getAllApplicationReviews");
+  });
+
+  it("never offers work on a terminal-parent row in the reviews queue", () => {
+    // A row is actionable only through this helper, and it refuses every
+    // terminal parent and every cancelled assignment.
+    expect(reviewQueue).toContain('actionability.actionable ? "Làm review" : "Xem"');
   });
 });
