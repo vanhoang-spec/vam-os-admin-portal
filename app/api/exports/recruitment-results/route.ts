@@ -159,7 +159,9 @@ export async function GET(request: Request) {
       season_id,
       intake_batch_id,
       status,
-      submitted_at
+      submitted_at,
+      raw_payload,
+      acquisition_channel
     `,
     (columns) => applicationScope(client.from("applications").select(columns))
   );

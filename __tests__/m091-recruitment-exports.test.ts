@@ -362,6 +362,49 @@ describe("recruitment results — filtering and isolation", () => {
   });
 });
 
+// ── Results: source fields projection ────────────────────────────────────────
+
+describe("recruitment results — source fields projection", () => {
+  it("exports exact source field permutations and preserves alignment", async () => {
+    db.tables.applications = [
+      application({ id: uuid(1), raw_payload: { referrer_or_source: "friend" }, acquisition_channel: null }),
+      application({ id: uuid(2), raw_payload: { referrer_or_source: "other", referrer_or_source_other: "Workshop" }, acquisition_channel: null }),
+      application({ id: uuid(3), raw_payload: null, acquisition_channel: "legacy_channel" }),
+      application({ id: uuid(4), raw_payload: null, acquisition_channel: null })
+    ];
+
+    const res = await resultsGet(req("/x", `season_id=${SEASON}`));
+    expect(res.status).toBe(200);
+
+    const rows = parseCsv(await res.text());
+    const header = rows[0];
+
+    // Assert CSV header contains exactly one "Biết đến chương trình qua"
+    const channelCols = header.filter(col => col === "Biết đến chương trình qua");
+    expect(channelCols).toHaveLength(1);
+    
+    const channelIndex = header.indexOf("Biết đến chương trình qua");
+
+    // Case A: friend -> Bạn bè
+    expect(rows[1][channelIndex]).toBe("Bạn bè");
+    expect(rows[1].length).toBe(header.length);
+
+    // Case B: other + detail -> Khác (Workshop)
+    expect(rows[2][channelIndex]).toBe("Khác (Workshop)");
+    expect(rows[2].length).toBe(header.length);
+
+    // Case C: legacy-only -> legacy_channel
+    expect(rows[3][channelIndex]).toBe("legacy_channel");
+    expect(rows[3].length).toBe(header.length);
+
+    // Case D: both absent -> canonical missing marker (—)
+    expect(rows[4][channelIndex]).toBe("—");
+    expect(rows[4].length).toBe(header.length);
+  });
+});
+
+// ── Paged read tests end ────────────────────────────────────────────────────────
+
 // ── Scores: filtering ────────────────────────────────────────────────────────
 
 describe("review scores — filtering", () => {
