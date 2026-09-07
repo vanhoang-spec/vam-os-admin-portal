@@ -7,6 +7,10 @@ import {
   buildInterviewScheduleEmail,
   buildMentorConfirmationLinkEmail,
   textToHtmlEmail,
+  buildCrossInviteEmail,
+  buildCrossNotSelectedEmail,
+  buildCrossScheduledEmail,
+  buildCrossSelectedEmail,
   buildParticipantInviteEmail,
   buildRecapPeriodReminderEmail,
   buildReviewBatchAssignedEmail,
@@ -615,5 +619,123 @@ export async function sendParticipantInvite(input: {
     "participant_invite",
     { ...built, to: input.toEmail },
     input.personId ? { table: "people", id: input.personId } : null
+  );
+}
+
+/**
+ * Ask one mentor whether they can take a cross-mentoring session.
+ *
+ * The link is ours, so it goes through the same base-URL check the other app
+ * links use: a token in a letter that points at somebody else's host is a
+ * credential handed to a stranger.
+ */
+export async function sendCrossInvite(input: {
+  toEmail: string;
+  mentorName: string;
+  fieldLabel: string;
+  topic?: string | null;
+  seasonLabel: string;
+  respondUrl: string;
+  deadlineLabel?: string | null;
+  invitationId: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base || !isSafeAppLink(input.respondUrl, base)) {
+    return { ok: false, skipped: false, reason: "Đường dẫn trả lời không hợp lệ." };
+  }
+
+  const built = buildCrossInviteEmail({
+    mentorName: input.mentorName,
+    fieldLabel: input.fieldLabel,
+    topic: input.topic ?? null,
+    seasonLabel: input.seasonLabel,
+    respondUrl: input.respondUrl,
+    deadlineLabel: input.deadlineLabel ?? null
+  });
+
+  return deliver(
+    "cross_invite",
+    { ...built, to: input.toEmail },
+    { table: "cross_invitations", id: input.invitationId }
+  );
+}
+
+/** Tell a mentor the session is theirs. */
+export async function sendCrossSelected(input: {
+  toEmail: string;
+  mentorName: string;
+  fieldLabel: string;
+  seasonLabel: string;
+  timeLabel?: string | null;
+  location?: string | null;
+  invitationId: string;
+}): Promise<SendEmailResult> {
+  const built = buildCrossSelectedEmail({
+    mentorName: input.mentorName,
+    fieldLabel: input.fieldLabel,
+    seasonLabel: input.seasonLabel,
+    timeLabel: input.timeLabel ?? null,
+    location: input.location ?? null
+  });
+
+  return deliver(
+    "cross_selected",
+    { ...built, to: input.toEmail },
+    { table: "cross_invitations", id: input.invitationId }
+  );
+}
+
+/** Tell a mentor the session went to somebody else. */
+export async function sendCrossNotSelected(input: {
+  toEmail: string;
+  mentorName: string;
+  fieldLabel: string;
+  seasonLabel: string;
+  invitationId: string;
+}): Promise<SendEmailResult> {
+  const built = buildCrossNotSelectedEmail({
+    mentorName: input.mentorName,
+    fieldLabel: input.fieldLabel,
+    seasonLabel: input.seasonLabel
+  });
+
+  return deliver(
+    "cross_not_selected",
+    { ...built, to: input.toEmail },
+    { table: "cross_invitations", id: input.invitationId }
+  );
+}
+
+/** Tell the mentee their wish became a session. */
+export async function sendCrossScheduled(input: {
+  toEmail: string;
+  menteeName: string;
+  fieldLabel: string;
+  timeLabel?: string | null;
+  location?: string | null;
+  registerUrl?: string | null;
+  requestId: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+
+  // A registration link is optional here — the session may be scheduled before
+  // the link is minted — but an unsafe one is dropped rather than sent.
+  const registerUrl =
+    input.registerUrl && base && isSafeAppLink(input.registerUrl, base) ? input.registerUrl : null;
+
+  const built = buildCrossScheduledEmail({
+    menteeName: input.menteeName,
+    fieldLabel: input.fieldLabel,
+    timeLabel: input.timeLabel ?? null,
+    location: input.location ?? null,
+    registerUrl
+  });
+
+  return deliver(
+    "cross_scheduled",
+    { ...built, to: input.toEmail },
+    { table: "cross_requests", id: input.requestId }
   );
 }

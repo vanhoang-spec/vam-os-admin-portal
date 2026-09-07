@@ -102,3 +102,30 @@ export function canRecordMentorConfirmation(role?: string | null) {
 export function canManageProgramDocuments(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Can triage a mentee's cross-mentoring wish: approve or reject it, run the
+ * invitation sweep, and choose which mentor takes the session.
+ *
+ * Support team is included, and that is a deliberate widening of the one write
+ * capability they have had until now. The reasoning is the same as the one
+ * beside canRecordMentorConfirmation: this is coordination — reading a request,
+ * deciding it is sensible, chasing the mentors who replied. What it is not is
+ * the moment anything reaches the public, which is the next predicate.
+ */
+export function canTriageCrossRequest(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
+ * Can fix the time and place, create the event, and approve the post that
+ * announces it.
+ *
+ * Core team and above, for the same reason canManageProgramDocuments excludes
+ * support team: this step creates a publicly registerable event and sends two
+ * letters that tell mentors they were or were not chosen. Neither is a
+ * phone-call task, and neither can be taken back.
+ */
+export function canPublishCrossSession(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

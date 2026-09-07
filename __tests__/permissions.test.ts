@@ -12,6 +12,8 @@ import {
   canSelfClaimInterview,
   canManageMatches,
   canRecordMentorConfirmation,
+  canTriageCrossRequest,
+  canPublishCrossSession,
 } from "../lib/permissions";
 
 // ── Role sets ─────────────────────────────────────────────────────────────────
@@ -212,5 +214,69 @@ describe("role set consistency", () => {
     });
     expect(canReview("reviewer")).toBe(true);
     expect(canAssignReview("reviewer")).toBe(false);
+  });
+});
+
+// ── Cross-mentoring (migration 072) ───────────────────────────────────────────
+//
+// Two predicates, not one, and the split is the point.
+//
+// The owner asked for support team to handle cross-mentoring requests. Taken as
+// a single permission that would have handed them the button that creates a
+// public event and sends two irreversible letters — well past the line this
+// codebase draws for that role elsewhere (canManageProgramDocuments excludes
+// them for exactly this reason). So: triage yes, publish no.
+
+describe("cross-mentoring permissions", () => {
+  const ALL_ROLES = [
+    "super_admin",
+    "admin",
+    "core_team",
+    "reviewer",
+    "support_team",
+    "viewer",
+    "vam_admin",
+  ] as const;
+
+  it("lets support team triage — the owner's explicit instruction", () => {
+    expect(canTriageCrossRequest("support_team")).toBe(true);
+  });
+
+  it("does NOT let support team publish a session", () => {
+    expect(canPublishCrossSession("support_team")).toBe(false);
+  });
+
+  it("lets the admin tier do both", () => {
+    ADMIN_TIER.forEach((role) => {
+      expect(canTriageCrossRequest(role)).toBe(true);
+      expect(canPublishCrossSession(role)).toBe(true);
+    });
+  });
+
+  it("refuses reviewer, viewer and the reporting account outright", () => {
+    ["reviewer", "viewer", "vam_admin"].forEach((role) => {
+      expect(canTriageCrossRequest(role)).toBe(false);
+      expect(canPublishCrossSession(role)).toBe(false);
+    });
+  });
+
+  it("refuses an unknown role, an empty string and undefined", () => {
+    [undefined, "", "  ", "root", "administrator", "mentor"].forEach((role) => {
+      expect(canTriageCrossRequest(role as never)).toBe(false);
+      expect(canPublishCrossSession(role as never)).toBe(false);
+    });
+  });
+
+  it("makes publish a strict subset of triage — nobody may publish who may not triage", () => {
+    ALL_ROLES.forEach((role) => {
+      if (canPublishCrossSession(role)) expect(canTriageCrossRequest(role)).toBe(true);
+    });
+  });
+
+  it("differs on exactly one role, so the split stays deliberate", () => {
+    const differing = ALL_ROLES.filter(
+      (role) => canTriageCrossRequest(role) !== canPublishCrossSession(role)
+    );
+    expect(differing).toEqual(["support_team"]);
   });
 });

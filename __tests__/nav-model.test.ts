@@ -308,11 +308,16 @@ const OPS_ADMIN_ROUTES = [
   // Migration 070: reviewing what the Chrome collector brought back from the
   // group. Admin-tier only, because approving an item writes a recap.
   "/operations/recap-import",
+  // Migration 072: the cross-mentoring queue. Not admin-tier-only — support
+  // team reaches it too, via their own branch below.
+  "/operations/cross",
 ];
 
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       BASE_ROUTE_ARR,
-  support_team: BASE_ROUTE_ARR,
+  // The one operations screen support team is given, matching the one
+  // operations predicate that admits them.
+  support_team: [...BASE_ROUTE_ARR, "/operations/cross"],
   reviewer:     [...BASE_ROUTE_ARR, "/reviews", "/interviews"],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team"],
   admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, "/reviews", "/interviews", "/admin", "/team", "/admin/users"],

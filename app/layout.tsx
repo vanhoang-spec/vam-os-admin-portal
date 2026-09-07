@@ -16,6 +16,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     publicRoute === "register" ||
     publicRoute === "checkin" ||
     publicRoute === "confirm" ||
+    publicRoute === "cross" ||
     publicRoute === "documents" ||
     publicRoute === "mentee-dossier"
   ) {

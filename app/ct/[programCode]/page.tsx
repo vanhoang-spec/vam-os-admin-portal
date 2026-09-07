@@ -58,6 +58,22 @@ export default async function ParticipantProgramPage({
           <PairCard view={view} />
           {view.role === "mentor" ? <MentorCards view={view} /> : null}
           <DocumentCards view={view} />
+          <Row
+            label="Cross-mentoring"
+            value={
+              <Link
+                className="font-medium text-vam-green hover:underline"
+                href={`/ct/${encodeURIComponent(params.programCode)}/cross`}
+              >
+                Mở
+              </Link>
+            }
+            hint={
+              view.role === "mentor"
+                ? "Chọn lĩnh vực anh/chị nhận chia sẻ, và xem các buổi đang mở."
+                : "Đề xuất được gặp một mentor ngoài cặp của bạn, và đăng ký các buổi đang mở."
+            }
+          />
         </div>
       ) : null}
 

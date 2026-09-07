@@ -172,6 +172,7 @@ async function resolveSession(
 export async function middleware(request: NextRequest) {
   // Routes a visitor reaches without a Supabase session: public event
   // registration, public check-in, the mentor season-confirmation link, the
+  // cross-mentoring invitation link, the
   // program documents, and a mentor's expiring link to their mentee's
   // application. Each is flagged with `x-vam-public-route`
   // so `app/layout.tsx` renders it without the admin shell. The value is
@@ -187,7 +188,9 @@ export async function middleware(request: NextRequest) {
       ? "checkin"
       : request.nextUrl.pathname.startsWith("/confirm/")
         ? "confirm"
-        : null;
+        : request.nextUrl.pathname.startsWith("/cross/")
+          ? "cross"
+          : null;
 
   if (publicRoute) {
     const requestHeaders = new Headers(request.headers);
