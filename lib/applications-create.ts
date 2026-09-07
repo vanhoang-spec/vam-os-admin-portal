@@ -61,6 +61,19 @@ const SAFE_ERROR =
 const GATE_CLOSED_MESSAGE =
   "Đơn đăng ký cho vai trò này hiện chưa được mở. Vui lòng chờ thông báo chính thức.";
 
+/**
+ * The two applicant-facing refusals for an intake the system already knows
+ * about. Both are deliberately generic: which of email / phone / student id
+ * matched, whose record it matched and which season it came from are all
+ * operational detail an anonymous caller has no business probing. That
+ * classification goes to the server log instead.
+ */
+const EXISTING_PROFILE_MESSAGE =
+  "Hồ sơ của bạn đã có trên hệ thống VAM OS. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ nếu bạn cần cập nhật thông tin hoặc cho rằng đây là nhầm lẫn.";
+
+const IDENTITY_REVIEW_MESSAGE =
+  "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ.";
+
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string; details?: string };
   console.error("[applications-create]", scope, {
@@ -107,6 +120,42 @@ function normalisePhone(value: string) {
     phone = "0" + phone.slice(2);
   }
   return phone;
+}
+
+/**
+ * Canonical student-id comparison. Deliberately narrow: the same whitespace
+ * deletion `normalisePhone` already performs, plus case folding for the
+ * alphanumeric codes some faculties issue. Nothing else is stripped — a
+ * punctuation character inside a student id is data, not noise, and fuzzy
+ * matching here would refuse innocent applicants for a digit they share.
+ */
+function normaliseStudentId(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, "").trim().toUpperCase();
+}
+
+function studentIdsEqual(left: unknown, right: unknown) {
+  const canonical = normaliseStudentId(left);
+  return Boolean(canonical) && canonical === normaliseStudentId(right);
+}
+
+/**
+ * An ILIKE pattern that is a SAFE SUPERSET of every raw spelling the canonical
+ * comparison treats as equal to `canonical`.
+ *
+ * Both `normalisePhone` and `normaliseStudentId` delete whitespace, so
+ * " 0345 466 453 " and "0345466453" are the SAME phone under the contract —
+ * but an ILIKE of `%345466453%` never sees the stored row, and the Season 11
+ * Mentee who re-applied in Season 12 walked straight through that gap. Placing
+ * `%` between each literal character makes the pattern tolerant of any
+ * separator the canonical form drops, so the database can only ever NARROW the
+ * candidate window. The decision itself is always the canonical re-filter in
+ * JS below, never the pattern.
+ *
+ * Every character is escaped first, so applicant input can never become ILIKE
+ * syntax — the same rule the email lookups follow.
+ */
+function subsequenceIlikePattern(canonical: string) {
+  return `%${canonical.split("").map((char) => escapeIlikePattern(char)).join("%")}%`;
 }
 
 function safeText(value: string | null | undefined) {
@@ -315,11 +364,16 @@ export async function submitPilotApplication(
   // already used by another email for the same role.
   const PHONE_IDENTITY_MAX_CANDIDATES = 10;
   const phoneSuffix = phonePrimary.length > 9 ? phonePrimary.slice(-9) : phonePrimary;
+  // The subscriber suffix is what survives every prefix form `normalisePhone`
+  // accepts (0…, +84…, 84…), and the subsequence pattern additionally survives
+  // the whitespace it deletes. A `%<suffix>%` pattern did not, and silently hid
+  // stored rows such as " 0345 466 453 " from this guard.
+  const phoneCandidatePattern = subsequenceIlikePattern(phoneSuffix);
   const { data: phoneApps, error: phoneErr } = await client
     .from("applications")
     .select("id,email_primary,phone_primary")
     .eq("role_applied", input.role)
-    .ilike("phone_primary", `%${escapeIlikePattern(phoneSuffix)}%`)
+    .ilike("phone_primary", phoneCandidatePattern)
     .order("id")
     .limit(PHONE_IDENTITY_MAX_CANDIDATES + 1);
 
@@ -343,7 +397,7 @@ export async function submitPilotApplication(
       return {
         ok: false,
         code: "validation",
-        message: "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ."
+        message: IDENTITY_REVIEW_MESSAGE
       };
     }
   }
@@ -454,8 +508,7 @@ export async function submitPilotApplication(
         return {
           ok: false,
           code: "validation",
-          message:
-            "Hồ sơ của bạn đã có trên hệ thống VAM OS. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ nếu bạn cần cập nhật thông tin hoặc cho rằng đây là nhầm lẫn."
+          message: EXISTING_PROFILE_MESSAGE
         };
       }
 
@@ -464,8 +517,199 @@ export async function submitPilotApplication(
         return {
           ok: false,
           code: "validation",
-          message: "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ."
+          message: IDENTITY_REVIEW_MESSAGE
         };
+      }
+    }
+  }
+
+  // ── P1-A — MENTEE 1-OF-3 ELIGIBILITY GUARD ───────────────────────────────
+  //
+  // Owner policy, locked after the Season 12 incident: for PUBLIC Mentee
+  // intake, ANY ONE of EMAIL or PHONE or MSSV that proves the applicant is an
+  // existing or prior Mentee refuses the application. One of three suffices —
+  // the signals do NOT have to converge on a single person first.
+  //
+  // EMAIL is already handled above, by the canonical `people` lookup and the
+  // same-season duplicate check. What follows adds the other two keys, because
+  // the incident showed both were reachable around the email path: a Season 11
+  // Mentee re-applied for Season 12 with a NEW email, and her canonical
+  // identity is backfilled `people` -> `mentee_profiles` ->
+  // `person_season_memberships` data with NO historical application row behind
+  // it. The email lookup found nobody, the applications phone lookup had
+  // nothing to bridge to her person, every participation guard above sits
+  // inside `if (existingPerson)` and was skipped, and the row was inserted with
+  // `person_id = NULL`.
+  //
+  // This is an ELIGIBILITY gate and nothing more. It reads; it never links,
+  // merges, repairs or writes identity. Where the evidence is ambiguous it
+  // refuses rather than guessing — a controlled false refusal Core Team can
+  // resolve by hand is the cheaper error here, and a false negative is what put
+  // an ineligible application into Production.
+  //
+  // Mentee-scoped on purpose. Existing Mentor policy is unchanged: a former
+  // Mentee may still apply as a Mentor, and a returning Mentor still routes to
+  // renewal through the guard above.
+  if (input.role === "mentee") {
+    const submittedStudentId = normaliseStudentId(input.rawPayload?.mssv);
+
+    // ── KEY 3 — MSSV ───────────────────────────────────────────────────────
+    // A canonical `mentee_profiles` row IS proof that this student id belongs
+    // to a known Mentee, so it blocks on its own. There is no need to resolve
+    // `people` first, and deliberately no attempt to: the profile is the
+    // evidence.
+    if (submittedStudentId) {
+      const studentIdPattern = subsequenceIlikePattern(submittedStudentId);
+
+      // `mssv` is canonical everywhere. `mssv_raw` carries the pre-backfill
+      // spelling and exists ONLY in Production — elsewhere PostgREST answers
+      // 42703 (undefined column). That one schema condition degrades to "no
+      // historical raw value in this environment"; every other failure still
+      // fails closed, because a lookup that could not run has cleared nobody.
+      for (const column of ["mssv", "mssv_raw"] as const) {
+        const { data: profileRows, error: profileErr } = await client
+          .from("mentee_profiles")
+          .select(`id,${column}`)
+          .ilike(column, studentIdPattern)
+          .order("id")
+          .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+
+        if (profileErr) {
+          if (column === "mssv_raw" && (profileErr as { code?: string }).code === "42703") continue;
+          log("mentee student id lookup failed", profileErr);
+          return { ok: false, code: "db", message: SAFE_ERROR };
+        }
+        if ((profileRows ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+          log("mentee student id lookup limit exceeded", { column, limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
+          return { ok: false, code: "db", message: SAFE_ERROR };
+        }
+        // The pattern only narrowed the window; canonical equality decides.
+        if (
+          (profileRows ?? []).some((row) =>
+            studentIdsEqual((row as Record<string, unknown> | null)?.[column], submittedStudentId)
+          )
+        ) {
+          log("mentee intake refused on canonical student id", { column });
+          return { ok: false, code: "validation", message: EXISTING_PROFILE_MESSAGE };
+        }
+      }
+
+      // Same-season duplicate on MSSV. Without this, changing only the email
+      // while keeping the student id walks past same-season protection.
+      const { data: studentIdDupRows, error: studentIdDupErr } = await client
+        .from("applications")
+        .select("id,raw_payload")
+        .eq("season_id", seasonRow.id)
+        .eq("role_applied", "mentee")
+        .ilike("raw_payload->>mssv", studentIdPattern)
+        .order("id")
+        .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+
+      if (studentIdDupErr) {
+        log("mentee student id duplicate check failed", studentIdDupErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+      if ((studentIdDupRows ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+        log("mentee student id duplicate check limit exceeded", { limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+      if ((studentIdDupRows ?? []).some((row) => studentIdsEqual(row?.raw_payload?.mssv, submittedStudentId))) {
+        // Duplicate semantics, generic wording: the applicant is not told which
+        // of their identifiers collided.
+        return { ok: false, code: "duplicate", message: IDENTITY_REVIEW_MESSAGE };
+      }
+    }
+
+    // ── KEY 2 — PHONE ──────────────────────────────────────────────────────
+    // `people` is the canonical identity table and it carries the phone, so it
+    // is asked directly rather than through whatever applications happen to
+    // exist. `phone_raw` is Production-only and deliberately not projected.
+    const { data: phonePeopleRows, error: phonePeopleErr } = await client
+      .from("people")
+      .select("id,phone_primary")
+      .ilike("phone_primary", phoneCandidatePattern)
+      .order("id")
+      .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+
+    if (phonePeopleErr) {
+      log("canonical phone candidate lookup failed", phonePeopleErr);
+      return { ok: false, code: "db", message: SAFE_ERROR };
+    }
+    if ((phonePeopleRows ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+      // Never silently truncate a safety window: the row that proves prior
+      // participation could be the one past the cut.
+      log("canonical phone candidate lookup limit exceeded", { limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
+      return { ok: false, code: "db", message: SAFE_ERROR };
+    }
+
+    const phonePersonIds = Array.from(
+      new Set(
+        (phonePeopleRows ?? [])
+          .filter((person) => normalisePhone(String(person?.phone_primary ?? "")) === phonePrimary)
+          .map((person) => person.id as string)
+      )
+    );
+
+    // Several canonical people on one handset is not a reason to let the
+    // submission through: every one of them is checked for Mentee history, and
+    // none of them is written onto the application.
+    if (phonePersonIds.length > 0) {
+      const [menteeProfiles, menteeMemberships, seasonMemberships, menteeMatches, approvedMenteeApps] =
+        await Promise.all([
+          client.from("mentee_profiles").select("id").in("person_id", phonePersonIds).limit(1),
+          client
+            .from("person_season_memberships")
+            .select("id,status")
+            .in("person_id", phonePersonIds)
+            .eq("role", "mentee"),
+          client
+            .from("person_season_memberships")
+            .select("role")
+            .in("person_id", phonePersonIds)
+            .eq("season_id", seasonRow.id)
+            .in("role", ["mentee", "supporter"])
+            .limit(1),
+          client.from("matches").select("id").in("mentee_person_id", phonePersonIds).limit(1),
+          client
+            .from("applications")
+            .select("id,season_id")
+            .in("person_id", phonePersonIds)
+            .eq("role_applied", "mentee")
+            .eq("status", "approved_as_mentee")
+        ]);
+
+      const evidenceErr =
+        menteeProfiles.error ||
+        menteeMemberships.error ||
+        seasonMemberships.error ||
+        menteeMatches.error ||
+        approvedMenteeApps.error;
+      if (evidenceErr) {
+        log("phone-resolved mentee evidence lookup failed", evidenceErr);
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+
+      // The same proof paths the email branch above already accepts, so the
+      // phone key is exactly as strong as the email key and no stronger.
+      const hasHardParticipation =
+        (menteeProfiles.data ?? []).length > 0 ||
+        (menteeMemberships.data ?? []).some((membership: { status: string }) =>
+          ["active", "completed", "graduated"].includes(membership.status)
+        ) ||
+        (seasonMemberships.data ?? []).length > 0 ||
+        (menteeMatches.data ?? []).length > 0 ||
+        (approvedMenteeApps.data ?? []).some(
+          (application: { season_id: string }) => application.season_id === seasonRow.id
+        );
+
+      if (hasHardParticipation) {
+        log("mentee intake refused on canonical phone", { candidates: phonePersonIds.length });
+        return { ok: false, code: "validation", message: EXISTING_PROFILE_MESSAGE };
+      }
+
+      if ((approvedMenteeApps.data ?? []).length > 0) {
+        // Prior-season approved application ONLY -> identity_review
+        return { ok: false, code: "validation", message: IDENTITY_REVIEW_MESSAGE };
       }
     }
   }

@@ -53,12 +53,28 @@ type Filter =
   | { kind: "notNull"; column: string }
   | { kind: "or"; expression: string };
 
+/**
+ * One write the code under test actually issued. Safety guards are only worth
+ * anything if the refusal happens BEFORE the row exists, so a test has to be
+ * able to assert "zero inserts", not merely "the call returned ok:false".
+ */
+export type RecordedWrite = {
+  table: string;
+  kind: "insert" | "delete";
+  /** Rows handed to `insert()`, normalised to an array. Empty for a delete. */
+  rows: any[];
+  /** Serialised predicate set for a delete. */
+  filters: string;
+};
+
 export type FakeDb = {
   tables: Record<string, any[]>;
   errors: Record<string, any>;
   maxRows: number;
   unstableUnorderedReads: boolean;
   requests: RecordedRequest[];
+  /** Every insert/delete issued, in order. */
+  writes: RecordedWrite[];
   /**
    * Per-request failure injection, for the cases a whole-table error cannot
    * express: page 1 succeeds and page 2 fails, or chunk 3 fails after chunks 1
@@ -76,10 +92,12 @@ export function createFakeDb(init?: Partial<Pick<FakeDb, "maxRows" | "unstableUn
     maxRows: init?.maxRows ?? DEFAULT_MAX_ROWS,
     unstableUnorderedReads: init?.unstableUnorderedReads ?? true,
     requests: [],
+    writes: [],
     reset() {
       for (const key of Object.keys(db.tables)) delete db.tables[key];
       for (const key of Object.keys(db.errors)) delete db.errors[key];
       db.requests.length = 0;
+      db.writes.length = 0;
       db.injectError = undefined;
     }
   };
@@ -123,6 +141,20 @@ function matchesOrTerm(row: any, term: string) {
  * column with no dot is a direct property lookup, unchanged.
  */
 function resolveFilterPath(row: any, path: string): unknown {
+  // PostgREST JSON traversal: `raw_payload->>mssv` reads the key out of the
+  // JSON column and yields TEXT (`->>`) or JSON (`->`). A filter on a JSON key
+  // must actually reach into the column here, or a fixture would satisfy a
+  // predicate the database would have evaluated against nothing.
+  if (path.includes("->")) {
+    const [column, ...keys] = path.split(/->>?/);
+    let current: any = row[column.trim()];
+    for (const key of keys) {
+      if (current === null || current === undefined) return undefined;
+      current = current[key.trim()];
+    }
+    if (current === null || current === undefined) return current;
+    return path.includes("->>") ? String(current) : current;
+  }
   if (!path.includes(".")) return row[path];
   let current: any = row;
   for (const segment of path.split(".")) {
@@ -341,9 +373,72 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
     return self;
   }
 
+  /**
+   * `insert()` is both awaitable on its own (`await client.from(t).insert(rows)`)
+   * and chainable into `.select(cols).maybeSingle()`, because the intake path
+   * uses both shapes. Inserted rows land in `db.tables` so a later read sees
+   * them, and are recorded in `db.writes` either way — including when the
+   * insert itself is made to fail via `db.errors["insert:<table>"]`, since a
+   * guard that lets the request reach the database has already failed open.
+   */
+  function inserter(table: string, payload: any) {
+    const rows = Array.isArray(payload) ? payload : [payload];
+    db.writes.push({ table, kind: "insert", rows, filters: "[]" });
+    const error = db.errors[`insert:${table}`] ?? null;
+    if (!error) {
+      const stored = (db.tables[table] ??= []);
+      rows.forEach((row, index) => {
+        stored.push(row && row.id === undefined ? { ...row, id: `${table}-inserted-${db.writes.length}-${index}` } : row);
+      });
+    }
+    const returned = () => {
+      if (error) return { data: null, error };
+      const inserted = (db.tables[table] ?? []).slice(-rows.length);
+      return { data: inserted, error: null };
+    };
+    const self: any = {
+      select: (columns = "*") => ({
+        maybeSingle: () => {
+          const { data, error: err } = returned();
+          if (err) return Promise.resolve({ data: null, error: err });
+          const first = (data as any[])[0] ?? null;
+          return Promise.resolve({ data: first ? projectColumns(first, columns) : null, error: null });
+        },
+        then: (resolve: any, reject?: any) => {
+          const { data, error: err } = returned();
+          return Promise.resolve(
+            err ? { data: null, error: err } : { data: (data as any[]).map((row) => projectColumns(row, columns)), error: null }
+          ).then(resolve, reject);
+        }
+      }),
+      then: (resolve: any, reject?: any) => Promise.resolve(returned()).then(resolve, reject)
+    };
+    return self;
+  }
+
+  function deleter(table: string, filters: Filter[]): any {
+    const run = () => {
+      db.writes.push({ table, kind: "delete", rows: [], filters: JSON.stringify(filters) });
+      const error = db.errors[`delete:${table}`] ?? null;
+      if (error) return { data: null, error };
+      const rows = db.tables[table] ?? [];
+      let doomed = rows.slice();
+      for (const filter of filters) doomed = applyFilter(doomed, filter);
+      db.tables[table] = rows.filter((row) => !doomed.includes(row));
+      return { data: null, error: null };
+    };
+    return {
+      eq: (column: string, value: unknown) => deleter(table, [...filters, { kind: "eq", column, value }]),
+      in: (column: string, values: unknown[]) => deleter(table, [...filters, { kind: "in", column, values }]),
+      then: (resolve: any, reject?: any) => Promise.resolve(run()).then(resolve, reject)
+    };
+  }
+
   return {
     from: (table: string) => ({
-      select: (columns = "*") => builder(table, columns, [], [], { from: null, to: null, limit: null })
+      select: (columns = "*") => builder(table, columns, [], [], { from: null, to: null, limit: null }),
+      insert: (payload: any) => inserter(table, payload),
+      delete: () => deleter(table, [])
     }),
     rpc: (...args: any[]) =>
       Promise.resolve(options?.rpc ? options.rpc(...args) : { data: null, error: { code: "PGRST202", message: "not found" } })
@@ -353,4 +448,9 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
 /** Requests recorded for one table, in issue order. */
 export function requestsFor(db: FakeDb, table: string) {
   return db.requests.filter((request) => request.table === table);
+}
+
+/** Inserts recorded for one table, in issue order. */
+export function insertsFor(db: FakeDb, table: string) {
+  return db.writes.filter((write) => write.kind === "insert" && write.table === table);
 }

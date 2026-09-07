@@ -116,7 +116,12 @@ describe("S12-M1 public canonical identity lookup", () => {
       { table: "applications", column: "email_primary", pattern: escaped }, // Fallback
       { table: "people", column: "email_primary", pattern: escaped.slice(1, -1) }, // Exact
       { table: "people", column: "email_primary", pattern: escaped }, // Fallback
-      { table: "applications", column: "phone_primary", pattern: "%900000000%" }
+      // The phone candidate window is a `%`-between-digits SUBSEQUENCE pattern
+      // since the P1-A 3-key guard: `normalisePhone` deletes whitespace, so a
+      // stored " 0900 000 000 " is the SAME phone and a `%900000000%` window
+      // silently hid it. Each character still goes through `escapeIlikePattern`,
+      // so applicant phone input cannot become ILIKE syntax either.
+      { table: "applications", column: "phone_primary", pattern: "%9%0%0%0%0%0%0%0%0%" }
     ]);
   });
 
