@@ -240,7 +240,7 @@ export default async function ReviewsPage() {
                           href={`/reviews/${row.id}`}
                           className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
                         >
-                          {row.status === "submitted" ? "Xem" : "Làm review"}
+                          {row.status === "submitted" || row.status === "cancelled" ? "Xem" : "Làm review"}
                         </Link>
                       </td>
                     </tr>
