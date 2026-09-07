@@ -21,7 +21,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAssignReview, canDecide } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person } from "@/lib/types";
-import { applicationStatusLabel } from "@/lib/ui-labels";
+import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { canBrowseApplications } from "@/lib/read-access";
 import { getStageRequirements, type StageRequirement } from "@/lib/recruitment-stage-requirements";
@@ -767,7 +767,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
               ["Đồng ý lưu dữ liệu", String(displayConsentVal ?? "-")],
               ["Đồng ý PDPA (cũ)", displayText(application.data.consent_pdpa)],
               ["Thời điểm đồng ý PDPA", formatDate(application.data.consent_pdpa_at)],
-              ["Kênh tiếp cận", displayText(application.data.acquisition_channel)]
+              ["Biết đến chương trình qua", applicationAcquisitionChannelLabel(application.data.raw_payload, application.data.acquisition_channel)]
             ]}
           />
           <div className="mt-3 rounded-md border border-vam-line bg-slate-50 px-3 py-2">
