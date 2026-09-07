@@ -13,8 +13,10 @@ import { canAssignReview, canBulkAssignReviews, canReview, isReviewerOnly } from
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import {
   buildReviewOversightHref,
+  isUnassignedReviewerFilter,
   parseReviewOversightFilters,
   REVIEW_OVERSIGHT_PAGE_SIZE,
+  REVIEW_OVERSIGHT_UNASSIGNED,
   REVIEW_OVERSIGHT_ROLES,
   REVIEW_OVERSIGHT_ROUNDS,
   REVIEW_OVERSIGHT_STATUSES,
@@ -159,6 +161,20 @@ export default async function ReviewsPage(props: {
         stats.reviewer_email
       )
     }));
+
+  // Unassigned work is a filterable bucket of its own, not a missing reviewer.
+  // It is offered whenever such rows exist in the current filter context, or
+  // whenever it is already the active filter.
+  const hasUnassignedBucket = aggregateResult.data.some(
+    (stats) => !stats.reviewer_admin_user_id
+  );
+  if (hasUnassignedBucket || isUnassignedReviewerFilter(filters.reviewerId)) {
+    reviewerOptions.push({
+      id: REVIEW_OVERSIGHT_UNASSIGNED,
+      label: reviewerIdentityLabel(null, null, null)
+    });
+  }
+
   // A reviewer selected under a wider filter must stay selectable after the
   // filter narrows, or the control would silently clear itself.
   if (filters.reviewerId && !reviewerOptions.some((option) => option.id === filters.reviewerId)) {

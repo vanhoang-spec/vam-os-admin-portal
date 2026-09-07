@@ -13,6 +13,7 @@ import { isApplicationReviewAssignable } from "@/lib/application-review-assignab
 import {
   isCurrentWorkloadStatus,
   isOversightOperationalParent,
+  isUnassignedReviewerFilter,
   OVERSIGHT_OPERATIONAL_STATUSES,
   REVIEW_OVERSIGHT_PAGE_SIZE,
   reviewOversightBucket,
@@ -2258,8 +2259,15 @@ function applyReviewOversightPredicates(
 
   // Ownership. The actor wins; `reviewer=` from the URL is only ever read for
   // an account that already holds oversight authority.
+  //
+  // The unassigned sentinel is a REAL constraint, not the absence of one:
+  // `reviewer=unassigned` means `reviewer_admin_user_id IS NULL`. Treating it
+  // as "no filter" is what let an unassigned Progress count open a list of
+  // every reviewer's rows.
   if (actor.kind === "reviewer") {
     query = query.eq("reviewer_admin_user_id", actor.adminUserId);
+  } else if (isUnassignedReviewerFilter(filters.reviewerId)) {
+    query = query.is("reviewer_admin_user_id", null);
   } else if (filters.reviewerId) {
     query = query.eq("reviewer_admin_user_id", filters.reviewerId);
   }

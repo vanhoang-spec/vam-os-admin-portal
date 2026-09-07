@@ -90,6 +90,22 @@ function statsRow(overrides: Record<string, any> = {}) {
   };
 }
 
+/** The "(Chưa gán)" bucket: real countable rows with no assignee. */
+function unassignedStatsRow(overrides: Record<string, any> = {}) {
+  return statsRow({
+    reviewer_admin_user_id: null,
+    reviewer_full_name: null,
+    reviewer_email: null,
+    current_total: 6,
+    submitted_count: 1,
+    in_progress_count: 2,
+    pending_count: 2,
+    returned_count: 1,
+    cancelled_count: 3,
+    ...overrides
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getCurrentAdminUser.mockResolvedValue({ id: "admin-1", role: "core_team" });
@@ -170,6 +186,35 @@ describe("/reviews oversight list", () => {
     expect(html).toContain('name="review_status"');
     expect(html).toContain('data-testid="history-toggle"');
     expect(html).toContain("Chiến Nguyễn");
+  });
+
+  it("offers (Chưa gán) as a reviewer filter value when unassigned work exists", async () => {
+    mocks.getReviewOversightAggregate.mockResolvedValue({
+      data: [statsRow(), unassignedStatsRow()],
+      error: null
+    });
+    const html = renderToStaticMarkup(await ReviewsPage({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain('value="unassigned"');
+    expect(html).toContain("(Chưa gán)");
+  });
+
+  it("keeps the unassigned option selected when it is the active filter", async () => {
+    mocks.getReviewOversightAggregate.mockResolvedValue({ data: [statsRow()], error: null });
+    const html = renderToStaticMarkup(
+      await ReviewsPage({ searchParams: Promise.resolve({ reviewer: "unassigned" }) })
+    );
+    // Offered even though the aggregate returned no unassigned bucket, so the
+    // control cannot silently clear the operator's own filter.
+    expect(html).toContain('value="unassigned"');
+    const call = mocks.getReviewOversightQueue.mock.calls[0][0];
+    expect(call.filters.reviewerId).toBe("unassigned");
+  });
+
+  it("passes the unassigned sentinel through to the query as a real filter", async () => {
+    await ReviewsPage({ searchParams: Promise.resolve({ reviewer: "unassigned", scope: "all" }) });
+    const call = mocks.getReviewOversightQueue.mock.calls[0][0];
+    expect(call.filters.reviewerId).toBe("unassigned");
+    expect(call.filters.scopeMode).toBe("all");
   });
 
   it("hides the reviewer selector and history toggle from a reviewer-only account", async () => {
@@ -336,7 +381,7 @@ describe("/reviews/progress", () => {
     expect(html).toContain(">4<");
   });
 
-  it("links an email-only reviewer by email and does not link an unassigned bucket", async () => {
+  it("labels an email-only reviewer by email and keeps the unassigned bucket visible", async () => {
     mocks.getReviewOversightAggregate.mockResolvedValue({
       data: [
         statsRow({
@@ -344,17 +389,7 @@ describe("/reviews/progress", () => {
           reviewer_full_name: null,
           reviewer_email: "no-name@vam.test"
         }),
-        statsRow({
-          reviewer_admin_user_id: null,
-          reviewer_full_name: null,
-          reviewer_email: null,
-          current_total: 2,
-          submitted_count: 0,
-          in_progress_count: 0,
-          pending_count: 2,
-          returned_count: 0,
-          cancelled_count: 0
-        })
+        unassignedStatsRow()
       ],
       error: null
     });
@@ -364,6 +399,45 @@ describe("/reviews/progress", () => {
     expect(html).toContain("no-name@vam.test");
     expect(html).toContain("(Chưa gán)");
     expect(html).toContain('data-testid="progress-reviewer-link"');
+  });
+
+  it("drills the unassigned bucket through reviewer=unassigned, never through an absent filter", async () => {
+    mocks.getReviewOversightAggregate.mockResolvedValue({
+      data: [unassignedStatsRow()],
+      error: null
+    });
+    const html = renderToStaticMarkup(
+      await ReviewProgressPage({
+        searchParams: Promise.resolve({
+          season_id: SEASON,
+          intake_batch_id: BATCH,
+          role_applied: "mentee"
+        })
+      })
+    );
+
+    const hrefs = Array.from(html.matchAll(/href="([^"]*\/reviews\?[^"]*)"/g))
+      .map((match) => match[1].replace(/&amp;/g, "&"))
+      // The "back to list" link is not a count cell.
+      .filter((href) => href.includes("reviewer="));
+
+    expect(hrefs.length).toBeGreaterThanOrEqual(6);
+    for (const href of hrefs) {
+      expect(href).toContain("reviewer=unassigned");
+      expect(href).toContain(`season_id=${SEASON}`);
+      expect(href).toContain(`intake_batch_id=${BATCH}`);
+      expect(href).toContain("role_applied=mentee");
+      expect(href).toContain("review_round=profile_screening");
+    }
+
+    // Each bucket keeps its own status, and cancelled still switches to history.
+    expect(hrefs.some((href) => href.includes("review_status=submitted"))).toBe(true);
+    expect(hrefs.some((href) => href.includes("review_status=in_progress"))).toBe(true);
+    expect(hrefs.some((href) => href.includes("review_status=assigned"))).toBe(true);
+    expect(hrefs.some((href) => href.includes("review_status=returned_for_clarification"))).toBe(true);
+    const cancelled = hrefs.find((href) => href.includes("review_status=cancelled"));
+    expect(cancelled).toContain("scope=all");
+    expect(cancelled).toContain("reviewer=unassigned");
   });
 
   it("sends a reviewer without oversight rights back to /reviews", async () => {

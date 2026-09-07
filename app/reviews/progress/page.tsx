@@ -16,6 +16,7 @@ import {
   parseReviewOversightFilters,
   REVIEW_OVERSIGHT_ROLES,
   REVIEW_OVERSIGHT_ROUNDS,
+  reviewerFilterForRow,
   reviewerIdentityLabel,
   type ReviewOversightFilters,
   type ReviewOversightSearchParams
@@ -347,16 +348,20 @@ export default async function ReviewProgressPage(props: {
                     row.reviewer_email
                   );
                   const key = reviewerId ?? `__unassigned__${idx}`;
+                  // The unassigned row filters by the sentinel, not by the
+                  // absence of a reviewer parameter — absent means "everyone",
+                  // which would list rows this row never counted.
+                  const reviewerFilter = reviewerFilterForRow(reviewerId);
                   const operationalHref = (reviewStatus: string | null) =>
                     buildReviewOversightHref("/reviews", filters, {
                       ...drilldownBase,
-                      reviewerId,
+                      reviewerId: reviewerFilter,
                       reviewStatus,
                       scopeMode: "operational"
                     });
                   const cancelledHref = buildReviewOversightHref("/reviews", filters, {
                     ...drilldownBase,
-                    reviewerId,
+                    reviewerId: reviewerFilter,
                     reviewStatus: BUCKET_DRILLDOWN_STATUS.cancelled,
                     scopeMode: "all"
                   });
@@ -364,17 +369,15 @@ export default async function ReviewProgressPage(props: {
                   return (
                     <tr key={key} className="hover:bg-vam-mint/40">
                       <td className="px-4 py-3 font-medium text-vam-ink">
-                        {reviewerId ? (
-                          <Link
-                            href={operationalHref(null)}
-                            data-testid="progress-reviewer-link"
-                            className="hover:text-vam-green hover:underline"
-                          >
-                            {label}
-                          </Link>
-                        ) : (
-                          <span className="text-slate-400">{label}</span>
-                        )}
+                        <Link
+                          href={operationalHref(null)}
+                          data-testid="progress-reviewer-link"
+                          className={`hover:text-vam-green hover:underline ${
+                            reviewerId ? "" : "text-slate-400"
+                          }`}
+                        >
+                          {label}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-slate-500">{row.reviewer_email ?? "—"}</td>
                       <CountCell

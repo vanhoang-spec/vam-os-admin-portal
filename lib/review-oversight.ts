@@ -121,6 +121,51 @@ export const REVIEW_OVERSIGHT_STATUSES: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * The URL sentinel for "assignments with no reviewer".
+ *
+ * `reviewer_admin_user_id IS NULL` is a real, countable bucket that Progress
+ * aggregates and renders as "(Chưa gán)". It needs a value of its own because
+ * the reviewer filter has THREE states, not two, and the absent parameter is
+ * already spoken for by "every reviewer":
+ *
+ *   reviewer absent        -> no reviewer constraint
+ *   reviewer=<uuid>        -> that reviewer
+ *   reviewer=unassigned    -> reviewer_admin_user_id IS NULL
+ *
+ * Without it, clicking an unassigned count served a list of EVERY reviewer's
+ * rows under the remaining filters — the count and its list disagreed, which is
+ * the one invariant this module exists to hold.
+ */
+export const REVIEW_OVERSIGHT_UNASSIGNED = "unassigned";
+
+/**
+ * The three states of the reviewer filter. Empty string and `undefined` are not
+ * among them: `null` is "no filter" and the sentinel is "no reviewer".
+ */
+export type ReviewOversightReviewerFilter = string | typeof REVIEW_OVERSIGHT_UNASSIGNED | null;
+
+/** True when the filter selects the unassigned bucket rather than a person. */
+export function isUnassignedReviewerFilter(
+  reviewerId: ReviewOversightReviewerFilter
+): reviewerId is typeof REVIEW_OVERSIGHT_UNASSIGNED {
+  return reviewerId === REVIEW_OVERSIGHT_UNASSIGNED;
+}
+
+/**
+ * The filter value that drills into one Progress row.
+ *
+ * A row keyed by a real reviewer filters by that id; the unassigned row filters
+ * by the sentinel. Both surfaces call this rather than passing
+ * `reviewer_admin_user_id` straight through, which is what dropped the
+ * constraint for the unassigned bucket.
+ */
+export function reviewerFilterForRow(
+  reviewerAdminUserId: string | null | undefined
+): ReviewOversightReviewerFilter {
+  return reviewerAdminUserId ?? REVIEW_OVERSIGHT_UNASSIGNED;
+}
+
+/**
  * THE canonical filter structure. Both oversight surfaces, every drill-down link
  * and every pagination link carry exactly these keys and no others.
  */
@@ -130,7 +175,8 @@ export type ReviewOversightFilters = {
   roleApplied: string | null;
   /** `null` means every round. */
   reviewRound: string | null;
-  reviewerId: string | null;
+  /** A reviewer id, the unassigned sentinel, or `null` for every reviewer. */
+  reviewerId: ReviewOversightReviewerFilter;
   reviewStatus: string | null;
   scopeMode: ReviewOversightScopeMode;
   /** 1-based. */
@@ -169,6 +215,16 @@ function identifier(value: string | null): string | null {
 }
 
 /**
+ * The reviewer parameter, which accepts the unassigned sentinel in addition to
+ * an id. Anything else degrades to "no reviewer filter" rather than reaching
+ * the query.
+ */
+function reviewerFilter(value: string | null): ReviewOversightReviewerFilter {
+  if (value === REVIEW_OVERSIGHT_UNASSIGNED) return REVIEW_OVERSIGHT_UNASSIGNED;
+  return identifier(value);
+}
+
+/**
  * Parses the URL into the canonical filter structure.
  *
  * `defaultReviewRound` differs per surface by owner decision: /reviews defaults
@@ -193,7 +249,7 @@ export function parseReviewOversightFilters(
     reviewRound: requestedRound
       ? oneOf(requestedRound, REVIEW_OVERSIGHT_ROUNDS)
       : options?.defaultReviewRound ?? null,
-    reviewerId: identifier(single(params[REVIEW_OVERSIGHT_PARAMS.reviewerId])),
+    reviewerId: reviewerFilter(single(params[REVIEW_OVERSIGHT_PARAMS.reviewerId])),
     reviewStatus: oneOf(
       single(params[REVIEW_OVERSIGHT_PARAMS.reviewStatus]),
       REVIEW_OVERSIGHT_STATUSES

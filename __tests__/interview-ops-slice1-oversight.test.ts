@@ -22,9 +22,12 @@ import {
   BUCKET_DRILLDOWN_STATUS,
   buildReviewOversightHref,
   isOversightOperationalParent,
+  isUnassignedReviewerFilter,
   OVERSIGHT_OPERATIONAL_STATUSES,
   parseReviewOversightFilters,
   REVIEW_OVERSIGHT_PAGE_SIZE,
+  REVIEW_OVERSIGHT_UNASSIGNED,
+  reviewerFilterForRow,
   reviewerIdentityLabel,
   reviewOversightActionability,
   type ReviewOversightFilters
@@ -106,7 +109,13 @@ const REVIEW_SEEDS: ReviewSeed[] = [
   { id: "rev-15", app: "app-r1", reviewer: REVIEWER_INACTIVE, round: "interview", status: "cancelled" },
 
   // Orphan parent: the application does not exist. Must never render.
-  { id: "rev-16", app: "app-missing", reviewer: REVIEWER_NAMED, round: "profile_screening", status: "assigned" }
+  { id: "rev-16", app: "app-missing", reviewer: REVIEWER_NAMED, round: "profile_screening", status: "assigned" },
+
+  // Unassigned work — a real, countable bucket rendered as "(Chưa gán)".
+  { id: "rev-17", app: "app-a1", reviewer: null, round: "profile_screening", status: "assigned" },
+  { id: "rev-18", app: "app-b1", reviewer: null, round: "profile_screening", status: "cancelled" },
+  { id: "rev-19", app: "app-a3", reviewer: null, round: "profile_screening", status: "in_progress" },
+  { id: "rev-20", app: "app-b2", reviewer: null, round: "interview", status: "submitted", submitted_at: "2026-09-07T00:00:00.000Z" }
 ];
 
 function buildStore(reviews: ReviewSeed[] = REVIEW_SEEDS): FakeStore {
@@ -480,16 +489,20 @@ describe("progress count reconciles with the list it links to", () => {
     }
   ];
 
-  /** Mirrors exactly what the progress page renders for a count cell. */
+  /**
+   * Mirrors exactly what the progress page renders for a count cell, including
+   * mapping a null assignee to the unassigned sentinel rather than to "no
+   * reviewer filter".
+   */
   function drilldownHref(
     filters: ReviewOversightFilters,
-    reviewerId: string | null,
+    reviewerAdminUserId: string | null,
     reviewStatus: string | null,
     scopeMode: "operational" | "all"
   ) {
     return buildReviewOversightHref("/reviews", filters, {
       page: 1,
-      reviewerId,
+      reviewerId: reviewerFilterForRow(reviewerAdminUserId),
       reviewStatus,
       scopeMode
     });
@@ -558,6 +571,168 @@ describe("progress count reconciles with the list it links to", () => {
     const { params } = filtersFromHref(href);
     expect(params.review_round).toBe("profile_screening");
     expect(params.intake_batch_id).toBe(BATCH_A);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5b. The unassigned bucket is a filter value, not the absence of one
+// ---------------------------------------------------------------------------
+
+describe("unassigned reviewer bucket", () => {
+  it("round-trips the sentinel through parse and serialise", () => {
+    const parsed = parseReviewOversightFilters({ reviewer: REVIEW_OVERSIGHT_UNASSIGNED });
+    expect(parsed.reviewerId).toBe(REVIEW_OVERSIGHT_UNASSIGNED);
+    expect(isUnassignedReviewerFilter(parsed.reviewerId)).toBe(true);
+
+    const href = buildReviewOversightHref("/reviews", parsed);
+    expect(href).toContain(`reviewer=${REVIEW_OVERSIGHT_UNASSIGNED}`);
+
+    const { filters: reparsed } = filtersFromHref(href);
+    expect(reparsed.reviewerId).toBe(REVIEW_OVERSIGHT_UNASSIGNED);
+  });
+
+  it("keeps the three reviewer states distinct", () => {
+    expect(parseReviewOversightFilters({}).reviewerId).toBeNull();
+    expect(parseReviewOversightFilters({ reviewer: REVIEWER_NAMED }).reviewerId).toBe(REVIEWER_NAMED);
+    expect(parseReviewOversightFilters({ reviewer: REVIEW_OVERSIGHT_UNASSIGNED }).reviewerId).toBe(
+      REVIEW_OVERSIGHT_UNASSIGNED
+    );
+    // Neither empty string nor a junk value may become the unassigned filter.
+    expect(parseReviewOversightFilters({ reviewer: "" }).reviewerId).toBeNull();
+    expect(parseReviewOversightFilters({ reviewer: "none" }).reviewerId).toBeNull();
+    expect(buildReviewOversightHref("/reviews", filtersFor({ reviewerId: null }))).not.toContain(
+      "reviewer="
+    );
+  });
+
+  it("maps a null assignee to the sentinel, never to 'no filter'", () => {
+    expect(reviewerFilterForRow(null)).toBe(REVIEW_OVERSIGHT_UNASSIGNED);
+    expect(reviewerFilterForRow(undefined)).toBe(REVIEW_OVERSIGHT_UNASSIGNED);
+    expect(reviewerFilterForRow(REVIEWER_NAMED)).toBe(REVIEWER_NAMED);
+  });
+
+  it("applies IS NULL to the query rather than dropping the constraint", async () => {
+    fake.reset();
+    const result = await getReviewOversightQueue({
+      filters: filtersFor({ reviewerId: REVIEW_OVERSIGHT_UNASSIGNED }),
+      actor: OVERSIGHT
+    });
+
+    const query = fake.lastQueryFor("application_reviews")!;
+    expect(query.filters).toContainEqual({
+      op: "is",
+      column: "reviewer_admin_user_id",
+      value: null
+    });
+    // The reviewer constraint must be present — this is the regression.
+    const reviewerFilters = query.filters.filter(
+      (filter) => filter.column === "reviewer_admin_user_id"
+    );
+    expect(reviewerFilters).toHaveLength(1);
+    expect(result.data.rows.every((row) => row.reviewer_admin_user_id === null)).toBe(true);
+    expect(result.data.totalCount).toBeGreaterThan(0);
+  });
+
+  it("does not widen to every reviewer when the unassigned bucket is selected", async () => {
+    const unassigned = await getReviewOversightQueue({
+      filters: filtersFor({ reviewerId: REVIEW_OVERSIGHT_UNASSIGNED }),
+      actor: OVERSIGHT
+    });
+    const everyone = await getReviewOversightQueue({
+      filters: filtersFor({ reviewerId: null }),
+      actor: OVERSIGHT
+    });
+    expect(unassigned.data.totalCount).toBeLessThan(everyone.data.totalCount);
+  });
+
+  it("reconciles the unassigned current total with its drill-down", async () => {
+    const aggregate = await getReviewOversightAggregate({
+      filters: filtersFor(),
+      actor: OVERSIGHT
+    });
+    const unassigned = aggregate.data.find((row) => row.reviewer_admin_user_id === null);
+    expect(unassigned, "fixture must contain an unassigned bucket").toBeTruthy();
+    // rev-17 assigned, rev-19 in_progress, rev-20 submitted. rev-18 is cancelled.
+    expect(unassigned!.current_total).toBe(3);
+    expect(unassigned!.cancelled_count).toBe(1);
+
+    const href = buildReviewOversightHref("/reviews", filtersFor(), {
+      page: 1,
+      reviewerId: reviewerFilterForRow(unassigned!.reviewer_admin_user_id),
+      reviewStatus: null,
+      scopeMode: "operational"
+    });
+    expect(href).toContain("reviewer=unassigned");
+
+    const { filters: parsed } = filtersFromHref(href);
+    const listed = await getReviewOversightQueue({ filters: parsed, actor: OVERSIGHT });
+    expect(listed.data.totalCount).toBe(unassigned!.current_total);
+  });
+
+  it("reconciles the unassigned cancelled count with its history drill-down", async () => {
+    const aggregate = await getReviewOversightAggregate({
+      filters: filtersFor(),
+      actor: OVERSIGHT
+    });
+    const unassigned = aggregate.data.find((row) => row.reviewer_admin_user_id === null)!;
+
+    const href = buildReviewOversightHref("/reviews", filtersFor(), {
+      page: 1,
+      reviewerId: reviewerFilterForRow(unassigned.reviewer_admin_user_id),
+      reviewStatus: BUCKET_DRILLDOWN_STATUS.cancelled,
+      scopeMode: "all"
+    });
+    expect(href).toContain("reviewer=unassigned");
+    expect(href).toContain("review_status=cancelled");
+    expect(href).toContain("scope=all");
+
+    const { filters: parsed } = filtersFromHref(href);
+    const listed = await getReviewOversightQueue({ filters: parsed, actor: OVERSIGHT });
+    expect(listed.data.totalCount).toBe(unassigned.cancelled_count);
+  });
+
+  it("keeps a reviewer-only account off the unassigned bucket entirely", async () => {
+    const { filters } = filtersFromHref("/reviews?reviewer=unassigned&scope=all");
+    expect(filters.reviewerId).toBe(REVIEW_OVERSIGHT_UNASSIGNED);
+
+    fake.reset();
+    const result = await getReviewOversightQueue({
+      filters,
+      actor: { kind: "reviewer", adminUserId: REVIEWER_NAMED }
+    });
+
+    const query = fake.lastQueryFor("application_reviews")!;
+    expect(query.filters).toContainEqual({
+      op: "eq",
+      column: "reviewer_admin_user_id",
+      value: REVIEWER_NAMED
+    });
+    // The IS NULL constraint must never be applied for a reviewer-only actor.
+    expect(
+      query.filters.some(
+        (filter) => filter.op === "is" && filter.column === "reviewer_admin_user_id"
+      )
+    ).toBe(false);
+    expect(result.data.rows.every((row) => row.reviewer_admin_user_id === REVIEWER_NAMED)).toBe(true);
+    expect(result.data.rows.every((row) => row.status !== "cancelled")).toBe(true);
+  });
+
+  it("preserves every filter key alongside the sentinel", () => {
+    const filters = filtersFor({
+      seasonId: SEASON_A,
+      intakeBatchId: BATCH_A,
+      roleApplied: "mentee",
+      reviewRound: "profile_screening",
+      reviewerId: REVIEW_OVERSIGHT_UNASSIGNED,
+      reviewStatus: "assigned",
+      scopeMode: "all",
+      page: 3
+    });
+    const { filters: parsed, params } = filtersFromHref(
+      buildReviewOversightHref("/reviews", filters)
+    );
+    expect(params.reviewer).toBe("unassigned");
+    expect(parsed).toEqual(filters);
   });
 });
 
