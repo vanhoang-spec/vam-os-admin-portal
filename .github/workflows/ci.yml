@@ -1,0 +1,74 @@
+# Checks that run BEFORE a change reaches main.
+#
+# Until this existed, the only automated checks were in vercel-production.yml,
+# which runs on push to main — that is, after a pull request has already been
+# merged. A broken merge would land on main, the deploy would refuse it, and the
+# site would silently stop updating while somebody worked out why. This runs the
+# same checks a merge earlier, where a red mark costs a re-push instead of a
+# revert.
+#
+# It needs no secrets. The application reads its configuration at request time
+# and falls back safely when nothing is set, so `next build` succeeds without a
+# database or an API key. That is worth preserving: it means a pull request from
+# anywhere can be verified without handing it access to anything.
+
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Deliberately NOT on push to main: vercel-production.yml already runs
+# typecheck and the full suite there before it deploys. Running both would pay
+# for the same 4,500 tests twice on every merge, and Actions minutes on a
+# private repository are metered.
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per pull request. Pushing a fix cancels the run for the commit it
+  # replaced — nobody needs the result for code that no longer exists.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Pinned to the same version vercel-production.yml builds with, so a
+          # thing that passes here cannot fail there for a runtime difference.
+          node-version: "20.19.0"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Ordered cheapest-first. Typecheck fails in seconds and catches most of
+      # what goes wrong; the build takes minutes and catches the least.
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      # The build stays in even though the three steps above usually catch the
+      # problem first: it is the only step that exercises the server/client
+      # component boundary, and a mistake there compiles cleanly and fails at
+      # request time.
+      - name: Build
+        run: npm run build
