@@ -11,7 +11,12 @@ describe("S12 returning Mentor public-intake P0", () => {
     expect(blockStart).toBeGreaterThan(-1);
     expect(insertStart).toBeGreaterThan(blockStart);
     expect(block).toContain('.from("mentor_profiles")');
-    expect(block).toContain('.eq("person_id", existingPerson.id)');
+    // Scoped to the ONE canonical person the submission resolved to. The
+    // resolved identity is `identityPerson` since the backfill hotfix, which
+    // added canonical phone resolution as a fallback to the email lookup; what
+    // matters here is that the history lookup is person-scoped, not which
+    // signal resolved that person.
+    expect(block).toContain('.eq("person_id", identityPerson.id)');
     expect(block).toContain('.limit(1)');
   });
 

@@ -116,7 +116,11 @@ describe("S12-M1 public canonical identity lookup", () => {
       { table: "applications", column: "email_primary", pattern: escaped }, // Fallback
       { table: "people", column: "email_primary", pattern: escaped.slice(1, -1) }, // Exact
       { table: "people", column: "email_primary", pattern: escaped }, // Fallback
-      { table: "applications", column: "phone_primary", pattern: "%900000000%" }
+      { table: "applications", column: "phone_primary", pattern: "%900000000%" },
+      // Canonical phone resolution against `people`, added by the backfill
+      // identity hotfix. Its pattern is escaped by the same helper, so applicant
+      // phone input cannot become ILIKE syntax either.
+      { table: "people", column: "phone_primary", pattern: "%900000000%" }
     ]);
   });
 

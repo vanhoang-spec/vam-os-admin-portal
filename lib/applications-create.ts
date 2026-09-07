@@ -61,6 +61,15 @@ const SAFE_ERROR =
 const GATE_CLOSED_MESSAGE =
   "Đơn đăng ký cho vai trò này hiện chưa được mở. Vui lòng chờ thông báo chính thức.";
 
+/**
+ * Shown when the submission points at an existing identity the system cannot
+ * resolve unambiguously. It is deliberately the same sentence for every
+ * ambiguous case — which signal disagreed is operational detail an anonymous
+ * caller has no business probing, and it is in the server log instead.
+ */
+const IDENTITY_REVIEW_MESSAGE =
+  "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ.";
+
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string; details?: string };
   console.error("[applications-create]", scope, {
@@ -343,12 +352,89 @@ export async function submitPilotApplication(
       return {
         ok: false,
         code: "validation",
-        message: "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ."
+        message: IDENTITY_REVIEW_MESSAGE
       };
     }
   }
 
-  if (existingPerson) {
+  // ---------------------------------------------------------------------
+  // CANONICAL IDENTITY RESOLUTION BY PHONE
+  //
+  // The guard above asks `applications` whether this phone was seen before.
+  // That is not enough to recognise a returning participant, and a Production
+  // Season 11 Mentee proved it: she re-applied for Season 12 with a NEW email
+  // and her original phone. Her canonical identity exists as backfilled
+  // `people` -> `mentee_profiles` -> `person_season_memberships` data with NO
+  // historical application row behind it, so:
+  //
+  //   * the email lookup found nobody, because the email had changed;
+  //   * the applications phone lookup found nothing to bridge to her person;
+  //   * every Mentee participation guard below is inside `if (person)`, so all
+  //     of them were skipped;
+  //   * the row was inserted with `person_id = NULL`.
+  //
+  // `people` is the canonical identity table and it carries the phone, so it
+  // is asked directly rather than through whatever applications happen to
+  // exist. Resolution is exact: the `%suffix%` pattern only narrows the
+  // candidate window, and canonical phone equality is the decision, mirroring
+  // how `emailsEqual` re-filters the email lookups above.
+  //
+  // This resolves identity for the ELIGIBILITY DECISION only. It deliberately
+  // does not become `person_id` on the inserted row: linking an application to
+  // a person on a phone match alone would auto-merge two identities on one
+  // shared handset, and this hotfix must not write identity it only inferred.
+  const { data: phonePeopleRows, error: phonePeopleErr } = await client
+    .from("people")
+    .select("id,email_primary,phone_primary")
+    .ilike("phone_primary", `%${escapeIlikePattern(phoneSuffix)}%`)
+    .order("id")
+    .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+
+  if (phonePeopleErr) {
+    log("canonical phone identity lookup failed", phonePeopleErr);
+    return { ok: false, code: "db", message: SAFE_ERROR };
+  }
+  if ((phonePeopleRows ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+    log("canonical phone identity lookup limit exceeded", { limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
+    return { ok: false, code: "db", message: SAFE_ERROR };
+  }
+
+  const phonePeople = (phonePeopleRows ?? []).filter(
+    (person) => normalisePhone(String(person.phone_primary ?? "")) === phonePrimary
+  );
+  const phonePersonIds = Array.from(new Set(phonePeople.map((person) => person.id)));
+
+  // One phone, several canonical people: the system cannot say which of them
+  // is applying, so it must not guess in either direction — neither by letting
+  // the submission through nor by attributing it to one of them.
+  if (phonePersonIds.length > 1) {
+    log("canonical phone identity ambiguous", { matches: phonePersonIds.length });
+    return {
+      ok: false,
+      code: "validation",
+      message: IDENTITY_REVIEW_MESSAGE
+    };
+  }
+
+  const phonePerson = phonePeople[0] ?? null;
+
+  // Email says one person, phone says another. Treating either as authoritative
+  // would either block the wrong applicant or clear someone else's history.
+  if (existingPerson && phonePerson && phonePerson.id !== existingPerson.id) {
+    log("identity signals disagree", { byEmail: existingPerson.id, byPhone: phonePerson.id });
+    return {
+      ok: false,
+      code: "validation",
+      message: IDENTITY_REVIEW_MESSAGE
+    };
+  }
+
+  // The identity the eligibility guards below reason about. Email remains the
+  // primary signal; the canonical phone match is the fallback that the
+  // Production incident showed was missing.
+  const identityPerson = existingPerson ?? phonePerson;
+
+  if (identityPerson) {
     if (input.role === "mentor") {
       // P0 — Returning Mentors must use the controlled S12 renewal flow rather
       // than creating a new public Mentor application.
@@ -356,8 +442,8 @@ export async function submitPilotApplication(
         { data: mentorProfiles, error: profileErr },
         { data: mentorMemberships, error: membershipErr }
       ] = await Promise.all([
-        client.from("mentor_profiles").select("id").eq("person_id", existingPerson.id).limit(1),
-        client.from("person_season_memberships").select("id").eq("person_id", existingPerson.id).eq("role", "mentor").limit(1)
+        client.from("mentor_profiles").select("id").eq("person_id", identityPerson.id).limit(1),
+        client.from("person_season_memberships").select("id").eq("person_id", identityPerson.id).eq("role", "mentor").limit(1)
       ]);
 
       if (profileErr || membershipErr) {
@@ -381,7 +467,7 @@ export async function submitPilotApplication(
       const { data: menteeHistory, error: menteeHistoryErr } = await client
         .from("mentee_profiles")
         .select("id")
-        .eq("person_id", existingPerson.id)
+        .eq("person_id", identityPerson.id)
         .limit(1);
 
       if (menteeHistoryErr) {
@@ -392,7 +478,7 @@ export async function submitPilotApplication(
       const { data: anyMenteeMemberships, error: anyMenteeMembershipsErr } = await client
         .from("person_season_memberships")
         .select("id,status")
-        .eq("person_id", existingPerson.id)
+        .eq("person_id", identityPerson.id)
         .eq("role", "mentee");
 
       if (anyMenteeMembershipsErr) {
@@ -407,7 +493,7 @@ export async function submitPilotApplication(
       const { data: anyMatches, error: anyMatchesErr } = await client
         .from("matches")
         .select("id")
-        .eq("mentee_person_id", existingPerson.id)
+        .eq("mentee_person_id", identityPerson.id)
         .limit(1);
 
       if (anyMatchesErr) {
@@ -418,7 +504,7 @@ export async function submitPilotApplication(
       const { data: anyApproved, error: anyApprovedErr } = await client
         .from("applications")
         .select("id,season_id")
-        .eq("person_id", existingPerson.id)
+        .eq("person_id", identityPerson.id)
         .eq("role_applied", "mentee")
         .eq("status", "approved_as_mentee");
 
@@ -432,7 +518,7 @@ export async function submitPilotApplication(
       const { data: s12Memberships, error: s12MembershipsErr } = await client
         .from("person_season_memberships")
         .select("role")
-        .eq("person_id", existingPerson.id)
+        .eq("person_id", identityPerson.id)
         .eq("season_id", seasonRow.id)
         .in("role", ["mentee", "supporter"])
         .limit(1);
@@ -464,7 +550,7 @@ export async function submitPilotApplication(
         return {
           ok: false,
           code: "validation",
-          message: "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ."
+          message: IDENTITY_REVIEW_MESSAGE
         };
       }
     }
