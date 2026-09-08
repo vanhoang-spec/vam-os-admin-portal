@@ -26,7 +26,7 @@ Vào trang quản trị hosting/email của PA Vietnam, tạo một hộp thư t
 `alumni-mentoring.edu.vn`, ví dụ:
 
 ```
-mentoring@alumni-mentoring.edu.vn
+hello@alumni-mentoring.edu.vn
 ```
 
 Hộp thư này có hai vai trò:
@@ -48,34 +48,33 @@ Hộp thư này có hai vai trò:
 
 Vào trang quản lý DNS của tên miền (PA Vietnam) và tạo đúng những bản ghi đó.
 
-### ⚠️ Bản ghi SPF — chỗ dễ hỏng nhất
+### Đúng ba loại bản ghi — và SPF KHÔNG nằm trong đó
 
-Brevo sẽ yêu cầu thêm `include:spf.brevo.com` vào SPF.
+Theo tài liệu hiện hành của Brevo, xác thực tên miền cần đúng ba nhóm:
 
-**Một tên miền chỉ được có ĐÚNG MỘT bản ghi TXT loại SPF.** Nếu tên miền đã có
-sẵn một dòng `v=spf1 ...` (rất thường có, do PA Vietnam tạo cho hộp thư), bạn
-phải **hợp nhất** vào dòng đó:
+| Tên | Loại | Để làm gì |
+|---|---|---|
+| **Brevo code** | `TXT` | chứng minh bạn sở hữu tên miền |
+| **DKIM** | 1 `TXT` **hoặc** 2 `CNAME` | ký số từng lá thư |
+| **DMARC** | `TXT` | báo máy chủ nhận phải xử lý thế nào với thư đáng ngờ |
 
-```
-Trước:  v=spf1 include:spf.pavietnam.vn ~all
-Sau:    v=spf1 include:spf.pavietnam.vn include:spf.brevo.com ~all
-```
+**Brevo không yêu cầu `include:spf.brevo.com`.** Brevo dùng Return-Path trên tên
+miền của chính họ, nên SPF được đối chiếu ở phía Brevo; thứ làm DMARC đạt là DKIM
+căn chỉnh. Không cần đụng vào SPF của tên miền, và do đó cũng không có rủi ro
+"hai dòng SPF làm nhau vô hiệu".
 
-**Tuyệt đối không thêm dòng SPF thứ hai.** Hai dòng SPF làm cả hai cùng vô hiệu,
-và hậu quả là thư của cả hệ thống lẫn hộp thư sẵn có đều rơi vào Spam — một lỗi
-im lặng, không ai báo.
+Giá trị cụ thể của ba bản ghi **do Brevo sinh ra riêng cho từng tài khoản**, hiện
+trên màn hình sau khi thêm tên miền. Không thể biết trước, không chép từ tài liệu
+nào khác được.
 
-Kiểm tra bằng lệnh sau; kết quả phải có **đúng một** dòng chứa `v=spf1`:
+### Về DMARC — một lưu ý
 
-```bash
-nslookup -type=TXT alumni-mentoring.edu.vn
-```
+Brevo sẽ thêm bản ghi DMARC của họ. Nếu tên miền **đã có sẵn** một bản ghi DMARC,
+luồng xác thực tự động sẽ hỏi có ghi đè không — lúc đó nên chuyển sang xác thực
+thủ công thay vì để nó ghi đè chính sách đang chạy.
 
-### Về DMARC
-
-Không bắt buộc cho bước này. DKIM căn chỉnh đúng tên miền là đủ để thư được tin
-cậy. Nếu sau này muốn đặt DMARC, làm riêng và bắt đầu bằng `p=none` để theo dõi
-trước khi siết.
+Tính tới 08/09/2026, `alumni-mentoring.edu.vn` **chưa có** bản ghi DMARC nào, nên
+không vướng chuyện này.
 
 ## Bước 3 — Tạo khoá API hạn chế
 
@@ -96,8 +95,8 @@ trường **Production**:
 | `VAM_OS_EMAIL_ENABLED` | `true` | Config |
 | `VAM_OS_EMAIL_PROVIDER` | `brevo` | Config |
 | `BREVO_API_KEY` | khoá vừa tạo | **Secret** |
-| `VAM_OS_EMAIL_FROM` | `VAM Mentoring <mentoring@alumni-mentoring.edu.vn>` | Config |
-| `VAM_OS_EMAIL_REPLY_TO` | `mentoring@alumni-mentoring.edu.vn` | Config |
+| `VAM_OS_EMAIL_FROM` | `VAM Mentoring <hello@alumni-mentoring.edu.vn>` | Config |
+| `VAM_OS_EMAIL_REPLY_TO` | `hello@alumni-mentoring.edu.vn` | Config |
 
 `BREVO_API_KEY` phải để kiểu **Secret**: nó là khoá thật, không được hiện lại
 trên dashboard.
