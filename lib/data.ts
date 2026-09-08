@@ -2656,6 +2656,68 @@ export async function getReviewAssignmentProgress(filters: {
  * Optionally filtered by intake_batch_id for scoping to one season.
  * Rows without email_primary are excluded (cannot create an account without email).
  */
+/**
+ * Mentor candidates for the season behind `intakeBatchId`.
+ *
+ * WHY THIS DOES NOT FILTER ON `intake_batch_id`
+ * ---------------------------------------------------------------------------
+ * It used to. `mentor_profiles.intake_batch_id` records the intake a mentor
+ * ARRIVED through, and only the new-application approval path ever writes it.
+ * On Production 448 of 449 mentor profiles carry NULL, so an `.eq()` on that
+ * column could surface at most ONE person — every mentor who joined by
+ * historical import or by season renewal was invisible here, which is the
+ * entire standing mentor base. Season 12 opened with 193 active mentors and
+ * not one of them could be offered review rights through this page.
+ *
+ * The question the page actually asks is "who is taking part in THIS season".
+ * `person_season_memberships` is the table that answers it — and it is the
+ * same table the grant RPC writes into, so the candidate list and the grant
+ * now agree on what participation means.
+ */
+async function readSeasonMentorProfiles(
+  client: { from: (table: string) => any },
+  intakeBatchId: string
+): Promise<{ data: JsonRecord[]; error: unknown | null }> {
+  // `.limit(1)` rather than `.maybeSingle()`: one terminal call shape for every
+  // read in this module, and the id is a primary key.
+  const { data: batchRows, error: batchError } = await client
+    .from("intake_batches")
+    .select("id,season_id")
+    .eq("id", intakeBatchId)
+    .limit(1);
+  if (batchError) return { data: [], error: batchError };
+
+  const seasonId = String((batchRows?.[0] as JsonRecord | undefined)?.season_id ?? "").trim();
+  if (!seasonId) return { data: [], error: null };
+
+  const membershipRes = await readAllPages<JsonRecord>(
+    "person_season_memberships",
+    "id,person_id",
+    (projection) =>
+      client
+        .from("person_season_memberships")
+        .select(projection)
+        .eq("season_id", seasonId)
+        .eq("status", "active")
+        .eq("role", "mentor")
+  );
+  if (membershipRes.error) return { data: [], error: membershipRes.error };
+
+  const personIds = Array.from(
+    new Set(membershipRes.data.map((row) => String(row.person_id ?? "").trim()).filter(Boolean))
+  );
+  // Bounded by the season's own membership, which is the right bound: the read
+  // grows with the season being staffed, not with the all-time mentor table.
+  if (!personIds.length) return { data: [], error: null };
+
+  return selectInChunks<JsonRecord>(
+    "mentor_profiles",
+    "person_id",
+    personIds,
+    "id,person_id,mentor_code,intake_batch_id"
+  );
+}
+
 export async function getReviewerPool(filters?: {
   intakeBatchId?: string | null;
   scope?: ScopeFilter;
@@ -2663,33 +2725,24 @@ export async function getReviewerPool(filters?: {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewerPoolRow[]>([]);
 
-  // --- Query 1: mentor profiles (conditionally filtered)
-  // Class C: Production holds well over a thousand mentor profiles, so the
-  // unfiltered pool read was already past the cap. Filters live in a factory so
-  // every page carries the same predicate.
-  let narrow: (query: any) => any = (query) => query.not("person_id", "is", null);
-
+  // --- Query 1: mentor candidates for the SELECTED SEASON (see the helper).
+  // The scope check stays where it was: a batch outside the caller's scope is
+  // refused before any read, not filtered out afterwards.
   if (filters?.intakeBatchId) {
     const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters.scope);
     if (batchScopeError) return { data: [], error: batchScopeError };
     if (scopedBatchIds && !scopedBatchIds.includes(filters.intakeBatchId)) {
       return { data: [], error: null };
     }
-    const batchId = filters.intakeBatchId;
-    narrow = (query) => query.not("person_id", "is", null).eq("intake_batch_id", batchId);
-  } else {
-    const { batchIds: scopedBatchIds, error: batchScopeError } = await getScopedIntakeBatchIds(filters?.scope);
-    if (batchScopeError) return { data: [], error: batchScopeError };
-    if (scopedBatchIds) {
-      if (!scopedBatchIds.length) return { data: [], error: null };
-      narrow = (query) => query.not("person_id", "is", null).in("intake_batch_id", scopedBatchIds);
-    }
   }
 
   const [mentorRes, adminRes] = await Promise.all([
-    readAllPages<JsonRecord>("mentor_profiles", "id,person_id,mentor_code,intake_batch_id", (projection) =>
-      narrow(client.from("mentor_profiles").select(projection))
-    ),
+    // No batch chosen means no season, and without a season "taking part" has
+    // no meaning — so there are no mentor candidates to offer. The page keeps
+    // its grant buttons disabled in exactly that state.
+    filters?.intakeBatchId
+      ? readSeasonMentorProfiles(client, filters.intakeBatchId)
+      : Promise.resolve({ data: [] as JsonRecord[], error: null }),
     // Class B: staff accounts.
     readBounded<JsonRecord>("admin_users", client.from("admin_users").select("id,email,full_name,role,status,auth_user_id"))
   ]);
@@ -2714,7 +2767,10 @@ export async function getReviewerPool(filters?: {
     // Restores the `.order("id")` the paged read subsumes.
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
-  if (!mentors.length) return { data: [], error: null };
+  // Deliberately NO early return on an empty mentor list. Staff accounts are an
+  // independent source, and the old early return made them conditional on the
+  // mentor half finding someone — so the moment the mentor filter stopped
+  // matching, the Core Team rows vanished with it.
 
   // --- Query 2: people (only linked person_ids)
   // Class C: one person id per mentor profile, so this list tracks Query 1.
