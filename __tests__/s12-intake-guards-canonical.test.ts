@@ -174,7 +174,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Hồ sơ của bạn đã có trên hệ thống VAM OS");
+    if (!result.ok) expect(result.message).toContain("Email bạn nhập đã gắn với một hồ sơ");
   });
 
   it("Mentee: historical mentee_profiles -> block", async () => {
@@ -184,7 +184,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Hồ sơ của bạn đã có trên hệ thống VAM OS");
+    if (!result.ok) expect(result.message).toContain("Email bạn nhập đã gắn với một hồ sơ");
   });
 
   it("Mentee: historical matches -> block", async () => {
@@ -194,7 +194,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Hồ sơ của bạn đã có trên hệ thống VAM OS");
+    if (!result.ok) expect(result.message).toContain("Email bạn nhập đã gắn với một hồ sơ");
   });
 
   it("Mentee: prior approved application ONLY -> identity_review", async () => {
@@ -204,7 +204,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với một hồ sơ");
+    if (!result.ok) expect(result.message).toContain("Email bạn nhập trùng với một hồ sơ");
   });
 
   it("Mentee: current S12 approved Mentee -> block", async () => {
@@ -214,7 +214,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Hồ sơ của bạn đã có trên hệ thống VAM OS");
+    if (!result.ok) expect(result.message).toContain("Email bạn nhập đã gắn với một hồ sơ");
   });
 
   it("Mentee: historical mentee membership (S11) -> block", async () => {
@@ -224,7 +224,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Hồ sơ của bạn đã có trên hệ thống VAM OS");
+    if (!result.ok) expect(result.message).toContain("Email bạn nhập đã gắn với một hồ sơ");
   });
 
   it("Mentee: current supporter -> block", async () => {
@@ -234,7 +234,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Hồ sơ của bạn đã có trên hệ thống VAM OS");
+    if (!result.ok) expect(result.message).toContain("Email bạn nhập đã gắn với một hồ sơ");
   });
 
   // --- PHONE MATRIX ---
@@ -245,7 +245,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với một hồ sơ");
+    if (!result.ok) expect(result.message).toContain("Số điện thoại bạn nhập trùng với một hồ sơ");
   });
 
 
@@ -256,7 +256,7 @@ describe("S12 Intake Eligibility Guards", () => {
     });
     const result = await submitPilotApplication(baseInput); // submitted as 0901234567
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với một hồ sơ");
+    if (!result.ok) expect(result.message).toContain("Số điện thoại bạn nhập trùng với một hồ sơ");
   });
 
   // --- MENTOR MATRIX ---
@@ -341,7 +341,7 @@ describe("S12 Intake Eligibility Guards", () => {
       });
       const result = await submitPilotApplication(mentorInput);
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+      if (!result.ok) expect(result.message).toContain("Số điện thoại bạn nhập trùng với");
     });
 
     it("+84 / 0 normalization -> identity_review", async () => {
@@ -350,7 +350,7 @@ describe("S12 Intake Eligibility Guards", () => {
       });
       const result = await submitPilotApplication(mentorInput);
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+      if (!result.ok) expect(result.message).toContain("Số điện thoại bạn nhập trùng với");
     });
 
     it("changed email same role -> identity_review", async () => {
@@ -359,7 +359,7 @@ describe("S12 Intake Eligibility Guards", () => {
       });
       const result = await submitPilotApplication(mentorInput);
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+      if (!result.ok) expect(result.message).toContain("Số điện thoại bạn nhập trùng với");
     });
 
     it("role filter correctly scopes the candidate set (10 mentor + 1 mentee same phone -> 10 candidates -> identity_review)", async () => {
@@ -375,7 +375,7 @@ describe("S12 Intake Eligibility Guards", () => {
       });
       const result = await submitPilotApplication(mentorInput);
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+      if (!result.ok) expect(result.message).toContain("Số điện thoại bạn nhập trùng với");
     });
 
     it("phone filter correctly scopes the candidate set (10 matching + 1 decoy phone -> 10 candidates -> identity_review)", async () => {
@@ -391,7 +391,7 @@ describe("S12 Intake Eligibility Guards", () => {
       });
       const result = await submitPilotApplication(mentorInput);
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toContain("Thông tin bạn nhập trùng với");
+      if (!result.ok) expect(result.message).toContain("Số điện thoại bạn nhập trùng với");
     });
 
     it("candidate set MAX+1 -> fail closed", async () => {
