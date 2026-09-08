@@ -10,7 +10,7 @@ import {
 import { APPLY_TOKEN_FIELD, type ApplyActionState } from "@/lib/apply-types";
 import { sendApplicationConfirmation } from "@/lib/email";
 import { SEASON_CONFIG } from "@/lib/season-config";
-import { seasonLabel } from "@/lib/season-labels";
+import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
 import {
   acknowledgementsForRole,
   validateMenteeCommitments,
@@ -90,16 +90,6 @@ function fail(scope: string, err: unknown): ApplyActionState {
 }
 
 /**
- * Nhãn mùa như người nộp đơn đọc được, chứ không phải mã nội bộ: thư viết
- * "cho Mùa 12" thay vì "cho UEHM-S12".
- *
- * Cố ý KHÔNG kèm tên chương trình. Mọi tiêu đề thư đã mở đầu bằng
- * "[UEH Mentoring]", nên nhãn mùa mà cũng mang tên ấy thì một dòng tiêu đề sẽ
- * nhắc tên chương trình hai lần.
- */
-const APPLICATION_SEASON_LABEL = seasonLabel(SEASON_CODE);
-
-/**
  * Báo đã nhận đơn qua email.
  *
  * Không bao giờ được phép gây lỗi cho người nộp: đơn đã nằm trong database rồi,
@@ -118,7 +108,7 @@ async function acknowledgeSubmission(input: {
       toEmail: input.emailPrimary,
       applicantName: input.fullName,
       role: input.role,
-      seasonLabel: APPLICATION_SEASON_LABEL,
+      seasonLabel: CURRENT_APPLICATION_SEASON_LABEL,
       applicationId: input.applicationId
     });
   } catch (err) {
