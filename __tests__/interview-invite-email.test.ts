@@ -29,7 +29,7 @@ import {
 describe("buildInterviewRoundInviteEmail", () => {
   const built = buildInterviewRoundInviteEmail({
     candidateName: "Nguyễn Văn A",
-    seasonLabel: "UEH Mentoring Mùa 12"
+    seasonLabel: "Mùa 12"
   });
 
   it("KHÔNG hứa một giờ phỏng vấn cụ thể", () => {
@@ -56,9 +56,9 @@ describe("buildInterviewRoundInviteEmail", () => {
   });
 
   it("có cả hai nửa text và html, và nhắc tên mùa", () => {
-    expect(built.text).toContain("UEH Mentoring Mùa 12");
-    expect(built.html).toContain("UEH Mentoring Mùa 12");
-    expect(built.subject).toContain("UEH Mentoring Mùa 12");
+    expect(built.text).toContain("Mùa 12");
+    expect(built.html).toContain("Mùa 12");
+    expect(built.subject).toContain("Mùa 12");
   });
 
   it("thoát HTML trong tên người nhận", () => {

@@ -89,7 +89,7 @@ function enableSending() {
   process.env.VERCEL_ENV = "production";
   process.env.VAM_OS_EMAIL_PROVIDER = "brevo";
   process.env.BREVO_API_KEY = "xkeysib-test";
-  process.env.VAM_OS_EMAIL_FROM = "VAM Mentoring <mentoring@alumni-mentoring.edu.vn>";
+  process.env.VAM_OS_EMAIL_FROM = "UEH Mentoring <mentoring@alumni-mentoring.edu.vn>";
 }
 
 beforeEach(() => {

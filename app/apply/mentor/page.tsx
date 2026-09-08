@@ -3,7 +3,7 @@ import { ClosedFormView, PilotModeBanner } from "../_components/gate-views";
 import { ApplyMentorForm } from "./apply-mentor-form";
 
 export const metadata = {
-  title: "Đăng ký mentor — VAM Mentoring Season 12",
+  title: "Đăng ký mentor — UEH Mentoring Season 12",
   description: "Đơn đăng ký dành cho mentor mùa 12."
 };
 

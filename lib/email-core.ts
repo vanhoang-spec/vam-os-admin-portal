@@ -85,7 +85,7 @@ export type SenderAddress = { name: string | null; email: string };
  * Split the configured From value.
  *
  * The env var is written the way a mail client shows it —
- * "VAM Mentoring <no-reply@vam.vn>" — because that is what an operator copies
+ * "UEH Mentoring <no-reply@vam.vn>" — because that is what an operator copies
  * from a provider's dashboard. Brevo wants the two halves separately, so the
  * parsing lives here where it can be tested rather than inline at the call.
  */
@@ -189,9 +189,9 @@ export function isSafeAppLink(url: string, baseUrl: string): boolean {
   return true;
 }
 
-const SIGNATURE_TEXT = "Ban tổ chức VAM Mentoring\nVietnam Alumni Mentoring";
+const SIGNATURE_TEXT = "Ban tổ chức UEH Mentoring\nVietnam Alumni Mentoring";
 const SIGNATURE_HTML =
-  '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Ban tổ chức VAM Mentoring<br />Vietnam Alumni Mentoring</p>';
+  '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Ban tổ chức UEH Mentoring<br />Vietnam Alumni Mentoring</p>';
 
 function wrapHtml(bodyHtml: string): string {
   return [
@@ -213,12 +213,12 @@ export function buildMentorConfirmationLinkEmail(input: {
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
   const deadline = input.deadlineLabel ? safeDisplayName(input.deadlineLabel) : null;
 
-  const subject = `[VAM Mentoring] Xác nhận đồng hành ${season}`;
+  const subject = `[UEH Mentoring] Xác nhận đồng hành ${season}`;
 
   const lines = [
     `Kính gửi ${name},`,
     "",
-    `Ban tổ chức VAM Mentoring đang chuẩn bị cho ${season} và rất mong tiếp tục đồng hành cùng anh/chị.`,
+    `Ban tổ chức UEH Mentoring đang chuẩn bị cho ${season} và rất mong tiếp tục đồng hành cùng anh/chị.`,
     "",
     "Anh/chị vui lòng xác nhận qua đường dẫn dành riêng dưới đây (khoảng 1 phút):",
     input.confirmUrl,
@@ -244,7 +244,7 @@ export function buildMentorConfirmationLinkEmail(input: {
   const html = wrapHtml(
     [
       `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
-      `<p>Ban tổ chức VAM Mentoring đang chuẩn bị cho <strong>${escapeHtml(season)}</strong> và rất mong tiếp tục đồng hành cùng anh/chị.</p>`,
+      `<p>Ban tổ chức UEH Mentoring đang chuẩn bị cho <strong>${escapeHtml(season)}</strong> và rất mong tiếp tục đồng hành cùng anh/chị.</p>`,
       `<p style="margin:20px 0"><a href="${escapeHtml(input.confirmUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Xác nhận đồng hành ${escapeHtml(season)}</a></p>`,
       "<p>Trong biểu mẫu, anh/chị cho biết:</p>",
       "<ul><li>Có tiếp tục tham gia mùa này hay không</li><li>Số mentee tối đa có thể nhận (1 đến 3)</li><li>Có sẵn sàng tham gia chấm hồ sơ và phỏng vấn mentee hay không</li></ul>",
@@ -268,12 +268,12 @@ export function buildApplicationConfirmationEmail(input: {
   const roleLabel = input.role === "mentor" ? "mentor" : "mentee";
   const you = input.role === "mentor" ? "anh/chị" : "bạn";
 
-  const subject = `[VAM Mentoring] Đã nhận đơn đăng ký ${roleLabel} — ${season}`;
+  const subject = `[UEH Mentoring] Đã nhận đơn đăng ký ${roleLabel} — ${season}`;
 
   const lines = [
     `Chào ${name},`,
     "",
-    `Ban tổ chức VAM Mentoring đã nhận được đơn đăng ký ${roleLabel} của ${you} cho ${season}.`,
+    `Ban tổ chức UEH Mentoring đã nhận được đơn đăng ký ${roleLabel} của ${you} cho ${season}.`,
     "",
     "Các bước tiếp theo:",
     "1. Ban tổ chức rà soát và chấm hồ sơ",
@@ -291,7 +291,7 @@ export function buildApplicationConfirmationEmail(input: {
   const html = wrapHtml(
     [
       `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
-      `<p>Ban tổ chức VAM Mentoring đã nhận được đơn đăng ký <strong>${escapeHtml(roleLabel)}</strong> của ${escapeHtml(you)} cho <strong>${escapeHtml(season)}</strong>.</p>`,
+      `<p>Ban tổ chức UEH Mentoring đã nhận được đơn đăng ký <strong>${escapeHtml(roleLabel)}</strong> của ${escapeHtml(you)} cho <strong>${escapeHtml(season)}</strong>.</p>`,
       "<p>Các bước tiếp theo:</p>",
       "<ol><li>Ban tổ chức rà soát và chấm hồ sơ</li><li>Nếu hồ sơ phù hợp, ban tổ chức sẽ mời phỏng vấn qua email</li><li>Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn</li></ol>",
       `<p>Đây là email xác nhận tự động, ${escapeHtml(you)} không cần trả lời. Nếu cần chỉnh sửa thông tin đã gửi, vui lòng trả lời email này để ban tổ chức hỗ trợ.</p>`
@@ -310,7 +310,7 @@ export function buildReviewerInviteEmail(input: {
   const name = safeDisplayName(input.mentorName);
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
 
-  const subject = `[VAM Mentoring] Tài khoản chấm hồ sơ ${season}`;
+  const subject = `[UEH Mentoring] Tài khoản chấm hồ sơ ${season}`;
 
   const lines = [
     `Kính gửi ${name},`,
@@ -355,7 +355,7 @@ export function buildReviewBatchAssignedEmail(input: {
   const count = Math.max(0, Math.floor(Number(input.assignmentCount) || 0));
   const due = input.dueLabel ? safeDisplayName(input.dueLabel) : null;
 
-  const subject = `[VAM Mentoring] ${count} hồ sơ mentee chờ anh/chị chấm — ${season}`;
+  const subject = `[UEH Mentoring] ${count} hồ sơ mentee chờ anh/chị chấm — ${season}`;
 
   const lines = [
     `Kính gửi ${name},`,
@@ -408,7 +408,7 @@ export function buildInterviewScheduleEmail(input: {
   const modeLabel = input.modeLabel ? safeDisplayName(input.modeLabel) : null;
   const location = input.location ? safeDisplayName(input.location, "") : null;
 
-  const subject = `[VAM Mentoring] Lịch phỏng vấn ${count} ứng viên — ${season}`;
+  const subject = `[UEH Mentoring] Lịch phỏng vấn ${count} ứng viên — ${season}`;
 
   const lines = [
     `Kính gửi ${name},`,
@@ -468,7 +468,7 @@ export function buildInterviewInviteEmail(input: {
   const modeLabel = input.modeLabel ? safeDisplayName(input.modeLabel) : null;
   const location = input.location ? safeDisplayName(input.location, "") : null;
 
-  const subject = `[VAM Mentoring] Lịch phỏng vấn mentee ${season}`;
+  const subject = `[UEH Mentoring] Lịch phỏng vấn mentee ${season}`;
 
   const lines = [
     `Chào ${name},`,
@@ -530,7 +530,7 @@ export function buildInterviewRoundInviteEmail(input: {
   const name = safeDisplayName(input.candidateName, "bạn");
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
 
-  const subject = `[VAM Mentoring] Mời phỏng vấn — ${season}`;
+  const subject = `[UEH Mentoring] Mời phỏng vấn — ${season}`;
 
   const lines = [
     `Chào ${name},`,
@@ -668,12 +668,12 @@ export function buildParticipantInviteEmail(input: {
   const name = safeDisplayName(input.recipientName);
   const programs = (input.programNames ?? []).filter(Boolean).map((value) => safeDisplayName(value));
 
-  const subject = "[VAM Mentoring] Tài khoản VAM OS của anh/chị đã sẵn sàng";
+  const subject = "[UEH Mentoring] Tài khoản VAM OS của anh/chị đã sẵn sàng";
 
   const lines = [
     `Kính gửi ${name},`,
     "",
-    "Từ mùa này, mentor và mentee của VAM Mentoring có tài khoản riêng trên hệ thống VAM OS.",
+    "Từ mùa này, mentor và mentee của UEH Mentoring có tài khoản riêng trên hệ thống VAM OS.",
     "Anh/chị đăng nhập một lần là thấy đầy đủ: mùa đang tham gia, người được ghép cặp,",
     "quy tắc ứng xử và cẩm nang đồng hành — không cần tìm lại từng email cũ.",
     "",
@@ -703,7 +703,7 @@ export function buildParticipantInviteEmail(input: {
   const html = wrapHtml(
     [
       `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
-      "<p>Từ mùa này, mentor và mentee của VAM Mentoring có tài khoản riêng trên hệ thống VAM OS. Anh/chị đăng nhập một lần là thấy đầy đủ: mùa đang tham gia, người được ghép cặp, quy tắc ứng xử và cẩm nang đồng hành.</p>",
+      "<p>Từ mùa này, mentor và mentee của UEH Mentoring có tài khoản riêng trên hệ thống VAM OS. Anh/chị đăng nhập một lần là thấy đầy đủ: mùa đang tham gia, người được ghép cặp, quy tắc ứng xử và cẩm nang đồng hành.</p>",
       `<p style="margin:20px 0"><a href="${escapeHtml(input.inviteUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu và đăng nhập</a></p>`,
       programs.length > 1
         ? `<p>Anh/chị đang tham gia <strong>${programs.length} chương trình</strong>: ${escapeHtml(programs.join(", "))}. Sau khi đăng nhập, hệ thống sẽ hỏi anh/chị muốn vào chương trình nào.</p>`
@@ -738,7 +738,7 @@ export function buildCrossInviteEmail(input: {
   const topic = input.topic ? safeDisplayName(input.topic, "") : "";
   const deadline = input.deadlineLabel ? safeDisplayName(input.deadlineLabel) : null;
 
-  const subject = `[VAM Mentoring] Mời anh/chị nhận một buổi cross-mentoring — ${field}`;
+  const subject = `[UEH Mentoring] Mời anh/chị nhận một buổi cross-mentoring — ${field}`;
 
   const lines = [
     `Kính gửi ${name},`,
@@ -792,7 +792,7 @@ export function buildCrossSelectedEmail(input: {
   const time = input.timeLabel ? safeDisplayName(input.timeLabel) : null;
   const place = input.location ? safeDisplayName(input.location, "") : null;
 
-  const subject = `[VAM Mentoring] Anh/chị nhận buổi cross-mentoring — ${field}`;
+  const subject = `[UEH Mentoring] Anh/chị nhận buổi cross-mentoring — ${field}`;
 
   const lines = [
     `Kính gửi ${name},`,
@@ -847,7 +847,7 @@ export function buildCrossNotSelectedEmail(input: {
   const name = safeDisplayName(input.mentorName);
   const field = safeDisplayName(input.fieldLabel, "lĩnh vực này");
 
-  const subject = "[VAM Mentoring] Buổi cross-mentoring lần này đã có người phụ trách";
+  const subject = "[UEH Mentoring] Buổi cross-mentoring lần này đã có người phụ trách";
 
   const lines = [
     `Kính gửi ${name},`,
@@ -895,7 +895,7 @@ export function buildCrossScheduledEmail(input: {
   const time = input.timeLabel ? safeDisplayName(input.timeLabel) : null;
   const place = input.location ? safeDisplayName(input.location, "") : null;
 
-  const subject = `[VAM Mentoring] Buổi cross-mentoring bạn đề xuất đã có lịch — ${field}`;
+  const subject = `[UEH Mentoring] Buổi cross-mentoring bạn đề xuất đã có lịch — ${field}`;
 
   const lines = [
     `Chào ${name},`,

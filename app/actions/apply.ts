@@ -90,11 +90,14 @@ function fail(scope: string, err: unknown): ApplyActionState {
 }
 
 /**
- * Nhãn mùa như người nộp đơn đọc được, chứ không phải mã nội bộ: thư sẽ viết
- * "cho UEH Mentoring Mùa 12" thay vì "cho UEHM-S12". Builder nội suy nhãn này
- * nguyên văn vào cả tiêu đề lẫn thân thư.
+ * Nhãn mùa như người nộp đơn đọc được, chứ không phải mã nội bộ: thư viết
+ * "cho Mùa 12" thay vì "cho UEHM-S12".
+ *
+ * Cố ý KHÔNG kèm tên chương trình. Mọi tiêu đề thư đã mở đầu bằng
+ * "[UEH Mentoring]", nên nhãn mùa mà cũng mang tên ấy thì một dòng tiêu đề sẽ
+ * nhắc tên chương trình hai lần.
  */
-const APPLICATION_SEASON_LABEL = `UEH Mentoring ${seasonLabel(SEASON_CODE)}`;
+const APPLICATION_SEASON_LABEL = seasonLabel(SEASON_CODE);
 
 /**
  * Báo đã nhận đơn qua email.

@@ -34,9 +34,7 @@ export const INTERVIEW_INVITE_MAX_PER_RUN = 50;
 /** Ngân sách thời gian, nằm dưới maxDuration của trang. */
 export const INTERVIEW_INVITE_TIME_BUDGET_MS = 40_000;
 
-const APPLICATION_SEASON_LABEL = `UEH Mentoring ${seasonLabel(
-  SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE
-)}`;
+const APPLICATION_SEASON_LABEL = seasonLabel(SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE);
 
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string; details?: string };
