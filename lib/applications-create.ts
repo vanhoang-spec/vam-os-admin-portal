@@ -68,11 +68,49 @@ const GATE_CLOSED_MESSAGE =
  * operational detail an anonymous caller has no business probing. That
  * classification goes to the server log instead.
  */
-const EXISTING_PROFILE_MESSAGE =
-  "Hồ sơ của bạn đã có trên hệ thống VAM OS. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ nếu bạn cần cập nhật thông tin hoặc cho rằng đây là nhầm lẫn.";
+/**
+ * Từ vựng định danh hiển thị cho người nộp đơn.
+ *
+ * Trước 08/09/2026, mọi lần từ chối vì trùng định danh đều dùng một câu chung
+ * cố ý KHÔNG nói trùng ở trường nào — để một người ẩn danh không thể dò xem
+ * một email/số điện thoại/MSSV bất kỳ đã có trong hệ thống hay chưa.
+ *
+ * Cái giá của sự mơ hồ đó lớn hơn nhiều so với dự tính. Người nộp đơn hợp lệ
+ * không biết phải sửa gì nên đoán: một mentee đổi email nhiều lần trong khi
+ * thứ trùng là MSSV; một mentor bỏ cuộc sau bảy lần thử. Ngay cả người vận
+ * hành cũng đoán sai trường khi đọc báo cáo sự cố.
+ *
+ * Chủ chương trình đã cân nhắc và quyết định nêu rõ trường. Đánh đổi được
+ * chấp nhận có ý thức: form công khai giờ xác nhận được rằng một định danh cụ
+ * thể đã tồn tại. Thông điệp vẫn không tiết lộ gì thêm — không tên, không
+ * trạng thái hồ sơ, không cho biết đó là ai.
+ */
+type IdentityField = "email" | "phone" | "student_id";
 
-const IDENTITY_REVIEW_MESSAGE =
-  "Thông tin bạn nhập trùng với một hồ sơ đã có trên hệ thống. Vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ.";
+const IDENTITY_FIELD_LABEL: Record<IdentityField, string> = {
+  email: "Email",
+  phone: "Số điện thoại",
+  student_id: "Mã số sinh viên (MSSV)"
+};
+
+/** Cùng một lời khuyên hành động cho mọi trường hợp, viết một lần. */
+const IDENTITY_NEXT_STEP =
+  "Nếu bạn nhập nhầm, vui lòng kiểm tra và sửa lại. Nếu đây đúng là thông tin của bạn, vui lòng liên hệ Core Team UEH Mentoring để được hỗ trợ.";
+
+/** Đã có một đơn đăng ký trong chính đợt tuyển sinh này. */
+function sameSeasonDuplicateMessage(field: IdentityField) {
+  return `${IDENTITY_FIELD_LABEL[field]} bạn nhập đã có một đơn đăng ký trong đợt tuyển sinh hiện tại. ${IDENTITY_NEXT_STEP}`;
+}
+
+/** Đã gắn với một hồ sơ / lần tham gia có thật trên hệ thống. */
+function existingProfileMessage(field: IdentityField) {
+  return `${IDENTITY_FIELD_LABEL[field]} bạn nhập đã gắn với một hồ sơ đã có trên hệ thống VAM OS. ${IDENTITY_NEXT_STEP}`;
+}
+
+/** Trùng với một bản ghi cũ, cần Core Team rà soát trước khi nhận đơn mới. */
+function identityReviewMessage(field: IdentityField) {
+  return `${IDENTITY_FIELD_LABEL[field]} bạn nhập trùng với một hồ sơ đã có trên hệ thống. ${IDENTITY_NEXT_STEP}`;
+}
 
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string; details?: string };
@@ -319,8 +357,7 @@ export async function submitPilotApplication(
     return {
       ok: false,
       code: "duplicate",
-      message:
-        "Email này đã có đơn đăng ký trong đợt hiện tại. Nếu cần điều chỉnh thông tin, vui lòng liên hệ BTC qua email."
+      message: sameSeasonDuplicateMessage("email")
     };
   }
 
@@ -397,7 +434,7 @@ export async function submitPilotApplication(
       return {
         ok: false,
         code: "validation",
-        message: IDENTITY_REVIEW_MESSAGE
+        message: identityReviewMessage("phone")
       };
     }
   }
@@ -508,7 +545,7 @@ export async function submitPilotApplication(
         return {
           ok: false,
           code: "validation",
-          message: EXISTING_PROFILE_MESSAGE
+          message: existingProfileMessage("email")
         };
       }
 
@@ -517,7 +554,7 @@ export async function submitPilotApplication(
         return {
           ok: false,
           code: "validation",
-          message: IDENTITY_REVIEW_MESSAGE
+          message: identityReviewMessage("email")
         };
       }
     }
@@ -590,7 +627,7 @@ export async function submitPilotApplication(
           )
         ) {
           log("mentee intake refused on canonical student id", { column });
-          return { ok: false, code: "validation", message: EXISTING_PROFILE_MESSAGE };
+          return { ok: false, code: "validation", message: existingProfileMessage("student_id") };
         }
       }
 
@@ -616,7 +653,7 @@ export async function submitPilotApplication(
       if ((studentIdDupRows ?? []).some((row) => studentIdsEqual(row?.raw_payload?.mssv, submittedStudentId))) {
         // Duplicate semantics, generic wording: the applicant is not told which
         // of their identifiers collided.
-        return { ok: false, code: "duplicate", message: IDENTITY_REVIEW_MESSAGE };
+        return { ok: false, code: "duplicate", message: sameSeasonDuplicateMessage("student_id") };
       }
     }
 
@@ -704,12 +741,12 @@ export async function submitPilotApplication(
 
       if (hasHardParticipation) {
         log("mentee intake refused on canonical phone", { candidates: phonePersonIds.length });
-        return { ok: false, code: "validation", message: EXISTING_PROFILE_MESSAGE };
+        return { ok: false, code: "validation", message: existingProfileMessage("phone") };
       }
 
       if ((approvedMenteeApps.data ?? []).length > 0) {
         // Prior-season approved application ONLY -> identity_review
-        return { ok: false, code: "validation", message: IDENTITY_REVIEW_MESSAGE };
+        return { ok: false, code: "validation", message: identityReviewMessage("phone") };
       }
     }
   }

@@ -335,18 +335,41 @@ describe("P1-A Mentee 3-key intake guard", () => {
     expect(result).toMatchObject({ ok: true });
   });
 
-  // ── §9 — the refusal must not name the identifier that matched ────────────
-  it("never discloses which identifier matched", async () => {
+  // ── §9 — nêu TRƯỜNG đã trùng, nhưng không tiết lộ gì hơn thế ──────────────
+  //
+  // Bài này trước đây khẳng định điều ngược lại: thông điệp không được nêu
+  // trường nào trùng. Chủ chương trình đảo chính sách ngày 08/09/2026, sau khi
+  // sự mơ hồ đó tự chứng minh cái giá của nó — người nộp đơn không biết phải
+  // sửa gì nên đoán. Một mentee đổi email nhiều lần trong khi thứ trùng là
+  // MSSV; một mentor bỏ cuộc sau bảy lần thử; ngay cả người vận hành đọc báo
+  // cáo sự cố cũng đoán sai trường.
+  //
+  // Nhưng chỉ NỬA ĐẦU của tính chất cũ bị đảo. Nêu tên một trường là một
+  // chuyện; để lộ giá trị của người khác, hay bất cứ gì về hồ sơ của họ, vẫn
+  // là chuyện không được phép. Nửa sau đó là thứ bài này canh từ giờ.
+  it("names the field that matched, and discloses nothing beyond it", async () => {
     seed(priorMenteeFixture({ email: OTHER_EMAIL, mssv: OTHER_MSSV }));
 
     const result = await submitPilotApplication(menteeInput());
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.message).not.toMatch(/MSSV|điện thoại|phone|email|Season|S11/i);
+      // Phải nói rõ trường nào, nếu không người nộp đơn lại phải đoán.
+      expect(result.message).toMatch(/Email|Số điện thoại|Mã số sinh viên/);
+
+      // Không giá trị nào — của người nộp lẫn của người đã có trong hệ thống.
       expect(result.message).not.toContain(PHONE);
       expect(result.message).not.toContain(MSSV);
       expect(result.message).not.toContain(OLD_EMAIL);
+      expect(result.message).not.toContain(OTHER_EMAIL);
+      expect(result.message).not.toContain(OTHER_MSSV);
+
+      // Không hé lộ gì về hồ sơ đã có: mùa nào, trạng thái nào.
+      //
+      // Cố ý KHÔNG chặn chữ "mentor"/"mentee" ở đây: thông điệp kết bằng
+      // "liên hệ Core Team UEH Mentoring", và tên chương trình chứa sẵn chuỗi
+      // đó. Chặn theo chuỗi con sẽ bắt nhầm chính tên thương hiệu.
+      expect(result.message).not.toMatch(/\bSeason\b|\bS11\b|\bS12\b|đã duyệt|thành viên/i);
     }
   });
 
