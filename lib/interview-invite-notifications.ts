@@ -1,8 +1,7 @@
 import "server-only";
 
 import { sendInterviewRoundInvite } from "@/lib/email";
-import { SEASON_CONFIG } from "@/lib/season-config";
-import { seasonLabel } from "@/lib/season-labels";
+import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 /**
@@ -33,8 +32,6 @@ export const INTERVIEW_INVITE_MAX_PER_RUN = 50;
 
 /** Ngân sách thời gian, nằm dưới maxDuration của trang. */
 export const INTERVIEW_INVITE_TIME_BUDGET_MS = 40_000;
-
-const APPLICATION_SEASON_LABEL = seasonLabel(SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE);
 
 function log(scope: string, error: unknown) {
   const err = error as { code?: string; message?: string; hint?: string; details?: string };
@@ -126,7 +123,7 @@ export async function notifyInterviewRoundInvites(input: {
       const sendResult = await sendInterviewRoundInvite({
         toEmail,
         candidateName: displayName,
-        seasonLabel: APPLICATION_SEASON_LABEL,
+        seasonLabel: CURRENT_APPLICATION_SEASON_LABEL,
         applicationId: row.id
       });
       if (sendResult.skipped) result.skipped += 1;

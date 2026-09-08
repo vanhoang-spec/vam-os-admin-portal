@@ -19,7 +19,7 @@ import { evaluateEmailGate } from "@/lib/email-core";
 import { sendApplicationConfirmation } from "@/lib/email";
 import { MAIN_OUTBOUND_EMAIL_KINDS } from "@/lib/outbound-emails-core";
 import { SEASON_CONFIG } from "@/lib/season-config";
-import { seasonLabel } from "@/lib/season-labels";
+import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 /**
@@ -49,10 +49,6 @@ function log(scope: string, error: unknown) {
     details: err?.details
   });
 }
-
-const APPLICATION_SEASON_LABEL = `UEH Mentoring ${seasonLabel(
-  SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE
-)}`;
 
 export type BackfillCandidateSummary =
   | {
@@ -275,7 +271,7 @@ export async function runConfirmationBackfill(input: {
       toEmail: candidate.emailPrimary,
       applicantName: candidate.fullName,
       role: candidate.role,
-      seasonLabel: APPLICATION_SEASON_LABEL,
+      seasonLabel: CURRENT_APPLICATION_SEASON_LABEL,
       applicationId: candidate.applicationId,
       claimedRowId: String(claimed.id)
     });
