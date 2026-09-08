@@ -47,6 +47,11 @@ export type ApplyAutosave = {
   registry: AutosaveFieldRegistry;
   /** `onChangeCapture` handler that queues a debounced snapshot. */
   handleFormChange: React.FormEventHandler<HTMLFormElement>;
+  /**
+   * `onSubmitCapture` handler. Records exactly what is leaving the form, so a
+   * refusal can put it back — see the restore effect below.
+   */
+  handleFormSubmit: React.FormEventHandler<HTMLFormElement>;
   /** Explicit "clear draft" for the applicant, with confirmation. */
   handleClearDraft: () => void;
   /** False until the client has had a chance to read storage. */
@@ -203,6 +208,82 @@ export function useApplyAutosave({
     [autosaveKey, cancelPendingSnapshot]
   );
 
+  /**
+   * ───────────────────────────────────────────────────────────────────────────
+   * REACT RESETS THE FORM ON EVERY ACTION — INCLUDING THE ONES THAT FAIL
+   * ───────────────────────────────────────────────────────────────────────────
+   * Passing a function to `<form action>` makes React own the submission, and
+   * before it invokes the action it calls `requestFormReset` on the form fiber
+   * unconditionally (react-dom, `dispatchFormAction`). Every uncontrolled
+   * control therefore snaps back to its `defaultValue` when the action
+   * settles, whether the server accepted the answers or refused them.
+   *
+   * Our defaults come from `draftData`, which is read ONCE at mount. So the
+   * reset restored the form as it looked when the page loaded, and Owner UAT
+   * saw exactly the two shapes that produces:
+   *
+   *   - no draft at mount  -> a refusal blanked the whole form, and the answers
+   *     only came back on a manual page reload;
+   *   - a draft at mount   -> a refusal silently reverted edited fields to
+   *     their earlier values. An applicant correcting a rejected email watched
+   *     the old one reappear and concluded the form "remembers" it; one mentor
+   *     gave up on the seventh attempt.
+   *
+   * Both are the same bug. The fix does not fight the reset — it makes the
+   * defaults true at the moment the reset lands: capture what was submitted,
+   * and if the answer is a refusal, remount the field tree on top of it.
+   */
+  const pendingSubmissionRef = useRef<AutosaveData | null>(null);
+  const restoreCountRef = useRef(0);
+
+  const handleFormSubmit = useCallback<React.FormEventHandler<HTMLFormElement>>(
+    (event) => {
+      if (submittedRef.current) return;
+      const form = event.currentTarget;
+      formElementRef.current = form;
+
+      const formData = new FormData(form);
+      const submitted: AutosaveData = {};
+      // Same allowlist as the autosave snapshot, for the same reason: a hidden
+      // field nobody registered — `__apply_token` above all — must not be
+      // readable from here either.
+      for (const [name, field] of Array.from(registryRef.current.entries())) {
+        if (!isAutosaveSafeFieldName(name)) continue;
+        const values = formData
+          .getAll(name)
+          .filter((value): value is string => typeof value === "string" && value !== "");
+        // Unlike the autosave snapshot, an empty answer is RECORDED rather than
+        // skipped. This snapshot is the restore target, and a field the
+        // applicant deliberately emptied before submitting has to come back
+        // empty; skipping it would refill it from the older draft, which is the
+        // very thing being fixed.
+        submitted[name] = field.multiple ? values : (values[values.length - 1] ?? "");
+      }
+      pendingSubmissionRef.current = submitted;
+    },
+    []
+  );
+
+  useEffect(() => {
+    const submitted = pendingSubmissionRef.current;
+    // Null on mount and on every render that is not an action result, so this
+    // runs exactly once per submission — no need to inspect the state's shape
+    // to tell a real refusal from the initial value.
+    if (!submitted) return;
+    pendingSubmissionRef.current = null;
+    // A confirmed create clears the draft and navigates; leave that to the
+    // success effect rather than writing the answers back on the way out.
+    if (state.ok) return;
+
+    setDraftData(submitted);
+    // Persist it too, so a reload after a refusal shows what was submitted
+    // rather than the older keystroke draft — which still holds a value for
+    // any field that was emptied.
+    saveDraft(autosaveKey, submitted);
+    restoreCountRef.current += 1;
+    setFormKey(`restored-${restoreCountRef.current}`);
+  }, [state, autosaveKey]);
+
   // A snapshot that fires after the form is gone would resurrect a draft the
   // applicant just deleted, or one a successful submission just cleared.
   useEffect(() => cancelPendingSnapshot, [cancelPendingSnapshot]);
@@ -253,6 +334,7 @@ export function useApplyAutosave({
     formKey,
     registry,
     handleFormChange,
+    handleFormSubmit,
     handleClearDraft,
     isMounted,
     restored: draftData !== null,

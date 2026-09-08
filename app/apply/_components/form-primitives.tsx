@@ -4,7 +4,13 @@ import { useEffect, useRef, useState, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
 import { ApplySubmitButton } from "./submit-button";
 import { RETURNING_MENTOR_GUIDANCE, type ApplyActionState } from "@/lib/apply-types";
-import { draftChecked, draftList, draftText, type AutosaveData } from "@/lib/autosave";
+import {
+  draftChecked,
+  draftList,
+  draftText,
+  type AutosaveData,
+  type AutosaveValue
+} from "@/lib/autosave";
 
 /** The draft being restored into this render, or null when there is none. */
 export const AutosaveContext = createContext<AutosaveData | null>(null);
@@ -44,6 +50,25 @@ export function useAutosaveSafeField(name: string, options?: { multiple?: boolea
   }, [registry, name, multiple]);
 }
 
+/**
+ * Giá trị nào thắng: câu trả lời đã lưu, hay mặc định ban đầu của ô?
+ *
+ * Câu trả lời đã lưu. `defaultValue`/`defaultSelected` là gợi ý cho ô TRỐNG;
+ * một khi bản nháp (hoặc bản khôi phục sau khi đơn bị từ chối) có mục cho ô
+ * này thì đó là thao tác thật của người nộp đơn và nó phải thắng.
+ *
+ * Thứ tự cũ — `defaultValue ?? draft` — làm ngược lại. Ô duy nhất có mặc định
+ * là "Chương trình sẵn sàng tham gia" của mentor, mặc định tick UEHM: mentor bỏ
+ * tick, tải lại trang, thấy nó được tick lại. Sau khi đơn bị từ chối cũng vậy.
+ */
+function storedOr<T>(
+  stored: AutosaveValue | undefined,
+  read: (value: AutosaveValue) => T,
+  fallback: T
+): T {
+  return stored === undefined ? fallback : read(stored);
+}
+
 const inputClass =
   "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none placeholder:text-slate-400 focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
 
@@ -74,12 +99,19 @@ export function ApplicationForm({
   state,
   submitLabel,
   onChangeCapture,
+  onSubmitCapture,
   children
 }: {
   action: (formData: FormData) => void;
   state: ApplyActionState;
   submitLabel: string;
   onChangeCapture?: React.FormEventHandler<HTMLFormElement>;
+  /**
+   * Chạy ở pha CAPTURE, tức trước khi React nắm quyền nộp form. Đó là thời
+   * điểm cuối cùng còn đọc được đúng những gì đang rời khỏi form, trước khi
+   * React reset toàn bộ ô về giá trị mặc định.
+   */
+  onSubmitCapture?: React.FormEventHandler<HTMLFormElement>;
   children: React.ReactNode;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -147,6 +179,7 @@ export function ApplicationForm({
       className="grid gap-6"
       onInvalidCapture={revealInvalid}
       onChangeCapture={onChangeCapture}
+      onSubmitCapture={onSubmitCapture}
       onSubmit={(event) => {
         setMissing([]);
       }}
@@ -305,6 +338,7 @@ export function TextField({
   required,
   placeholder,
   helpText,
+  repeatPhrase,
   defaultValue
 }: {
   name: string;
@@ -313,17 +347,38 @@ export function TextField({
   required?: boolean;
   placeholder?: string;
   helpText?: string;
+  /**
+   * Câu người nộp đơn phải chép lại nguyên văn.
+   *
+   * Trước đây câu này đi qua `helpText`, tức hiện dưới dạng chú thích xám
+   * 12px giống hệt mọi gợi ý khác trên form — trong khi nó là thứ DUY NHẤT
+   * trên trang cần gõ lại đúng từng chữ. Truyền qua prop riêng để nó được
+   * trình bày như một yêu cầu, không phải một lời gợi ý.
+   */
+  repeatPhrase?: string;
   defaultValue?: string;
 }) {
   const draft = useContext(AutosaveContext);
   useAutosaveSafeField(name);
-  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const resolvedValue = storedOr(draft?.[name], draftText, defaultValue ?? "");
   const helpId = helpText ? `${name}-help` : undefined;
+  const phraseId = repeatPhrase ? `${name}-phrase` : undefined;
+  // Trình đọc màn hình phải đọc được câu cần chép, không chỉ nhãn của ô.
+  const describedBy = [helpId, phraseId].filter(Boolean).join(" ") || undefined;
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
       <Label htmlFor={name} required={required} helpText={helpText} helpId={helpId}>
         {label}
       </Label>
+      {repeatPhrase ? (
+        <p
+          id={phraseId}
+          data-testid={`${name}-repeat-phrase`}
+          className="mt-2 rounded-md border-2 border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold leading-6 text-red-800"
+        >
+          {repeatPhrase}
+        </p>
+      ) : null}
       <input
         id={name}
         name={name}
@@ -332,8 +387,8 @@ export function TextField({
         aria-required={required || undefined}
         placeholder={placeholder}
         defaultValue={resolvedValue}
-        aria-describedby={helpId}
-        className={inputClass}
+        aria-describedby={describedBy}
+        className={cn(inputClass, repeatPhrase && "mt-2")}
       />
       <InlineRequiredError />
     </div>
@@ -357,7 +412,7 @@ export function PhoneField({
 }) {
   const draft = useContext(AutosaveContext);
   useAutosaveSafeField(name);
-  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const resolvedValue = storedOr(draft?.[name], draftText, defaultValue ?? "");
   const helpId = helpText ? `${name}-help` : undefined;
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
@@ -408,7 +463,7 @@ export function NumberField({
 }) {
   const draft = useContext(AutosaveContext);
   useAutosaveSafeField(name);
-  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const resolvedValue = storedOr(draft?.[name], draftText, defaultValue ?? "");
   const helpId = helpText ? `${name}-help` : undefined;
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
@@ -455,7 +510,12 @@ export function TextAreaField({
 }) {
   const draft = useContext(AutosaveContext);
   useAutosaveSafeField(name);
-  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const resolvedValue = storedOr(draft?.[name], draftText, defaultValue ?? "");
+  // Đếm theo cùng đơn vị trình duyệt dùng cho `minLength`, nên con số hiển thị
+  // và điều kiện hợp lệ của chính ô đó không bao giờ lệch nhau.
+  const [typedLength, setTypedLength] = useState(resolvedValue.length);
+  const remaining = minLength ? minLength - typedLength : 0;
+  const met = remaining <= 0;
   return (
     <div data-field-name={name} data-field-label={label} className="group data-[invalid=true]:rounded-md data-[invalid=true]:border data-[invalid=true]:border-red-300 data-[invalid=true]:bg-red-50 data-[invalid=true]:p-2">
       <Label htmlFor={name} required={required} helpText={helpText}>
@@ -470,8 +530,29 @@ export function TextAreaField({
         rows={rows}
         minLength={minLength}
         placeholder={placeholder}
+        onChange={(event) => setTypedLength(event.target.value.length)}
         className={cn(inputClass, "min-h-[6rem] resize-y")}
       />
+      {/*
+        Ô có độ dài tối thiểu không tự nói ra điều đó. Trình duyệt chỉ báo khi
+        người ta đã bấm nộp — cuối một form dài — và chỉ nói "chưa đủ", không
+        nói còn thiếu bao nhiêu. Ở đây mốc hiển thị ngay cạnh ô, đổi màu theo
+        thời gian thực, và nói rõ còn thiếu bao nhiêu ký tự.
+      */}
+      {minLength ? (
+        <p
+          data-testid={`${name}-counter`}
+          data-met={met ? "true" : "false"}
+          className={cn(
+            "mt-1 inline-flex rounded-md px-2 py-1 text-xs font-semibold",
+            met ? "bg-vam-mint/60 text-vam-green" : "bg-amber-50 text-amber-800"
+          )}
+        >
+          {met
+            ? `Đã đủ độ dài tối thiểu — ${typedLength} ký tự`
+            : `${typedLength}/${minLength} ký tự — còn thiếu ${remaining}`}
+        </p>
+      ) : null}
       <InlineRequiredError />
     </div>
   );
@@ -498,7 +579,7 @@ export function SelectField({
 }) {
   const draft = useContext(AutosaveContext);
   useAutosaveSafeField(name);
-  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const resolvedValue = storedOr(draft?.[name], draftText, defaultValue ?? "");
   const [selectedValue, setSelectedValue] = useState(resolvedValue);
   const showOther = otherInput && selectedValue === (otherInput.triggerValue ?? "other");
 
@@ -550,7 +631,7 @@ export function CheckboxGroupField({
   // how a single-selection draft came back with the wrong boxes ticked, a
   // nonsense "n/3 selected" counter, and an "Other" companion that never
   // appeared.
-  const resolvedSelected = defaultSelected ?? draftList(draft?.[name]);
+  const resolvedSelected = storedOr(draft?.[name], draftList, defaultSelected ?? []);
   const [selected, setSelected] = useState<Set<string>>(new Set(resolvedSelected));
   const [limitError, setLimitError] = useState(false);
   const otherSelected = selected.has("other");
@@ -626,7 +707,7 @@ export function RadioGroupField({
 }) {
   const draft = useContext(AutosaveContext);
   useAutosaveSafeField(name);
-  const resolvedValue = defaultValue ?? draftText(draft?.[name]);
+  const resolvedValue = storedOr(draft?.[name], draftText, defaultValue ?? "");
   const [selectedValue, setSelectedValue] = useState(resolvedValue);
   const showOther = otherInput && selectedValue === (otherInput.triggerValue ?? "other");
 
@@ -676,7 +757,7 @@ export function ConsentCheckbox({
   useAutosaveSafeField(name);
   // Unticked boxes are absent from the draft entirely, so "no entry" restores
   // as unchecked without a special case.
-  const resolvedChecked = defaultChecked ?? draftChecked(draft?.[name]);
+  const resolvedChecked = storedOr(draft?.[name], draftChecked, defaultChecked ?? false);
   return (
     <label data-field-name={name} data-field-label={label} className="group flex cursor-pointer items-start gap-2 rounded-md border border-vam-line bg-slate-50 px-3 py-3 text-sm data-[invalid=true]:border-red-400 data-[invalid=true]:bg-red-50">
       <input

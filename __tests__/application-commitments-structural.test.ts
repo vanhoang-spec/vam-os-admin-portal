@@ -34,11 +34,14 @@ describe("Season 12 commitment structural safeguards", () => {
     expect(menteeForm).not.toContain("defaultChecked");
   });
 
-  it("associates Mentor and Mentee active-reading help sentences with their inputs", () => {
-    expect(primitives).toContain("aria-describedby={helpId}");
-    expect(primitives).toContain('const helpId = helpText ? `${name}-help` : undefined');
-    expect(mentorForm).toContain("helpText={MENTOR_CONFIRMATION_PHRASE}");
-    expect(menteeForm).toContain("helpText={MENTEE_CONFIRMATION_PHRASE}");
+  it("associates Mentor and Mentee active-reading sentences with their inputs", () => {
+    // Câu cần chép lại đi qua prop riêng `repeatPhrase`, không còn lẫn vào
+    // dòng chú thích xám. Nó vẫn phải được nối vào input qua aria-describedby.
+    expect(primitives).toContain("const describedBy = [helpId, phraseId]");
+    expect(primitives).toContain("aria-describedby={describedBy}");
+    expect(primitives).toContain('const phraseId = repeatPhrase ? `${name}-phrase` : undefined');
+    expect(mentorForm).toContain("repeatPhrase={MENTOR_CONFIRMATION_PHRASE}");
+    expect(menteeForm).toContain("repeatPhrase={MENTEE_CONFIRMATION_PHRASE}");
   });
 
   it("shows historical-safe and exception-review admin states", () => {
