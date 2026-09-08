@@ -173,6 +173,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           state={state}
           submitLabel="Gửi đơn đăng ký mentee"
           onChangeCapture={autosave.handleFormChange}
+          onSubmitCapture={autosave.handleFormSubmit}
         >
           <ApplyDraftNotice
             restored={autosave.restored}
@@ -280,7 +281,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           required
           minLength={100}
           rows={5}
-          helpText="Tối thiểu ~100 ký tự. Nói rõ bạn muốn đạt gì trong 1 năm tới."
+          helpText="Nói rõ bạn muốn đạt gì trong 1 năm tới."
         />
       </FormSection>
 
@@ -291,7 +292,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           required
           minLength={100}
           rows={5}
-          helpText="Tối thiểu ~100 ký tự. Tránh viết chung chung."
+          helpText="Tránh viết chung chung."
         />
         <TextAreaField
           name="top_3_questions_for_mentor"
@@ -307,7 +308,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           required
           minLength={100}
           rows={4}
-          helpText="Tối thiểu ~100 ký tự. Nêu tình huống cụ thể, điều bạn đã thử và điều bạn mong Mentor hỗ trợ."
+          helpText="Nêu tình huống cụ thể, điều bạn đã thử và điều bạn mong Mentor hỗ trợ."
         />
         <CheckboxGroupField
           name="target_soft_skills"
@@ -345,7 +346,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           required
           minLength={100}
           rows={4}
-          helpText="Tối thiểu ~100 ký tự. Chia sẻ điều bạn thực sự kỳ vọng ở hành trình mentoring này."
+          helpText="Chia sẻ điều bạn thực sự kỳ vọng ở hành trình mentoring này."
         />
         <TextAreaField
           name="mentoring_plan_text"
@@ -353,7 +354,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           required
           minLength={100}
           rows={4}
-          helpText="Tối thiểu ~100 ký tự. Nêu cách bạn sẽ chuẩn bị, hành động và theo dõi tiến bộ giữa các buổi mentoring."
+          helpText="Nêu cách bạn sẽ chuẩn bị, hành động và theo dõi tiến bộ giữa các buổi mentoring."
         />
         <TextAreaField
           name="if_not_effective_text"
@@ -361,7 +362,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
           required
           minLength={100}
           rows={4}
-          helpText="Tối thiểu ~100 ký tự. Hãy mô tả cách bạn sẽ chủ động xử lý trước khi nghĩ đến việc dừng mentoring."
+          helpText="Hãy mô tả cách bạn sẽ chủ động xử lý trước khi nghĩ đến việc dừng mentoring."
         />
         <TextField
           name="profile_or_cv_url"
@@ -445,7 +446,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
             name="MENTEE_ACTIVE_READING_V1"
             label="Vui lòng nhập lại câu dưới đây để xác nhận bạn đã đọc và hiểu các nguyên tắc chính."
             required
-            helpText={MENTEE_CONFIRMATION_PHRASE}
+            repeatPhrase={MENTEE_CONFIRMATION_PHRASE}
           />
         </div>
       </FormSection>

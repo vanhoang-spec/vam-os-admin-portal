@@ -212,6 +212,7 @@ function MentorFormBody({
           state={state}
           submitLabel="Gửi đơn đăng ký mentor"
           onChangeCapture={autosave.handleFormChange}
+          onSubmitCapture={autosave.handleFormSubmit}
         >
           <ApplyDraftNotice
             restored={autosave.restored}
@@ -338,7 +339,7 @@ function MentorFormBody({
           required
           minLength={100}
           rows={5}
-          helpText="Tối thiểu ~100 ký tự. Đây là phần BTC sẽ đọc kỹ khi review."
+          helpText="Đây là phần BTC sẽ đọc kỹ khi review."
         />
         <RadioGroupField
           name="can_attend_orientation"
@@ -516,7 +517,7 @@ function MentorFormBody({
             name="MENTOR_ACTIVE_READING_V1"
             label="Vui lòng nhập lại câu dưới đây để xác nhận bạn đã đọc và hiểu các nguyên tắc chính."
             required
-            helpText={MENTOR_CONFIRMATION_PHRASE}
+            repeatPhrase={MENTOR_CONFIRMATION_PHRASE}
           />
         </div>
       </FormSection>
