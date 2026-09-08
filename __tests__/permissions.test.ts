@@ -11,6 +11,9 @@ import {
   canManageReviewers,
   canSelfClaimInterview,
   canManageMatches,
+  canViewOutboundEmails,
+  canRunConfirmationBackfill,
+  canToggleApplicationForm,
 } from "../lib/permissions";
 
 // ── Role sets ─────────────────────────────────────────────────────────────────
@@ -176,5 +179,60 @@ describe("role set consistency", () => {
     });
     expect(canReview("reviewer")).toBe(true);
     expect(canAssignReview("reviewer")).toBe(false);
+  });
+});
+
+// ── Outbound email log (read) ─────────────────────────────────────────────────
+
+describe("canViewOutboundEmails", () => {
+  ADMIN_TIER.forEach((role) => {
+    it(`allows ${role}`, () => {
+      expect(canViewOutboundEmails(role)).toBe(true);
+    });
+  });
+
+  ["reviewer", ...LIMITED_ROLES].forEach((role) => {
+    it(`denies ${role}`, () => {
+      expect(canViewOutboundEmails(role)).toBe(false);
+    });
+  });
+
+  it("denies missing role", () => {
+    expect(canViewOutboundEmails(null)).toBe(false);
+    expect(canViewOutboundEmails(undefined)).toBe(false);
+  });
+});
+
+// ── Confirmation backfill (send) ──────────────────────────────────────────────
+
+describe("canRunConfirmationBackfill", () => {
+  ["super_admin", "admin"].forEach((role) => {
+    it(`allows ${role}`, () => {
+      expect(canRunConfirmationBackfill(role)).toBe(true);
+    });
+  });
+
+  // Pressing this writes to people outside the system: a mistake is mail
+  // already in somebody's inbox, not a row that can be corrected.
+  ["core_team", "reviewer", ...LIMITED_ROLES].forEach((role) => {
+    it(`denies ${role}`, () => {
+      expect(canRunConfirmationBackfill(role)).toBe(false);
+    });
+  });
+
+  it("is exactly as narrow as opening a public form", () => {
+    const roles = ["super_admin", "admin", "core_team", "reviewer", "support_team", "viewer"];
+    roles.forEach((r) => {
+      expect(canRunConfirmationBackfill(r)).toBe(canToggleApplicationForm(r));
+    });
+  });
+
+  it("is strictly narrower than reading the log", () => {
+    const roles = ["super_admin", "admin", "core_team", "reviewer", "support_team", "viewer"];
+    roles.forEach((r) => {
+      if (canRunConfirmationBackfill(r)) expect(canViewOutboundEmails(r)).toBe(true);
+    });
+    expect(canViewOutboundEmails("core_team")).toBe(true);
+    expect(canRunConfirmationBackfill("core_team")).toBe(false);
   });
 });
