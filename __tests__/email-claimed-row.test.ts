@@ -105,7 +105,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const [key, value] of ORIGINAL_ENV) {
+  // Duyệt mảng rồi tra Map, chứ không duyệt thẳng Map: tsconfig của kho này
+  // đặt target dưới es2015 nên iterate Map cần cờ downlevelIteration. Cùng
+  // khuôn với __tests__/email-delivery.test.ts.
+  for (const key of TOUCHED_ENV) {
+    const value = ORIGINAL_ENV.get(key);
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
