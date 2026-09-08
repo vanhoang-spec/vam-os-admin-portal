@@ -92,7 +92,15 @@ create unique index if not exists outbound_emails_application_confirmation_once_
 alter table public.outbound_emails enable row level security;
 alter table public.outbound_emails force row level security;
 
+-- Thu hồi TẤT CẢ trước, kể cả của service_role.
+--
+-- Supabase đặt ALTER DEFAULT PRIVILEGES cho schema public, nên mọi bảng vừa
+-- tạo đều đã được cấp sẵn ALL cho service_role — trong đó có DELETE. Nếu chỉ
+-- thu hồi của public/anon/authenticated rồi grant ba quyền mong muốn, lệnh
+-- grant chỉ chồng thêm lên quyền ALL có sẵn và DELETE ở lại. Phải về 0 trước
+-- rồi mới cấp lại đúng ba quyền.
 revoke all on table public.outbound_emails from public, anon, authenticated;
+revoke all on table public.outbound_emails from service_role;
 
 -- Không cấp delete: đây là sổ ghi, không phải hàng đợi xoá được.
 grant select, insert, update on table public.outbound_emails to service_role;

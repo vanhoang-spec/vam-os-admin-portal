@@ -118,6 +118,18 @@ describe("hợp đồng quyền", () => {
     );
   });
 
+  it("thu hồi cả của service_role TRƯỚC khi cấp lại ba quyền", () => {
+    // Supabase đặt ALTER DEFAULT PRIVILEGES cho schema public: bảng vừa tạo đã
+    // có sẵn ALL cho service_role, kể cả DELETE. Không thu hồi trước thì lệnh
+    // grant chỉ chồng thêm và DELETE ở lại — khối tự kiểm 5d đã bắt đúng lỗi
+    // này trên Production ngày 08/09/2026.
+    const revokeAt = code.indexOf("revoke all on table public.outbound_emails from service_role");
+    const grantAt = code.indexOf("grant select, insert, update on table public.outbound_emails");
+    expect(revokeAt).toBeGreaterThan(-1);
+    expect(grantAt).toBeGreaterThan(-1);
+    expect(revokeAt).toBeLessThan(grantAt);
+  });
+
   it("service_role được đọc/ghi/sửa nhưng KHÔNG được xoá — đây là sổ ghi", () => {
     expect(code).toMatch(
       /grant select, insert, update on table public\.outbound_emails to service_role/
