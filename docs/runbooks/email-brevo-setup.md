@@ -95,7 +95,7 @@ trường **Production**:
 | `VAM_OS_EMAIL_ENABLED` | `true` | Config |
 | `VAM_OS_EMAIL_PROVIDER` | `brevo` | Config |
 | `BREVO_API_KEY` | khoá vừa tạo | **Secret** |
-| `VAM_OS_EMAIL_FROM` | `VAM Mentoring <hello@alumni-mentoring.edu.vn>` | Config |
+| `VAM_OS_EMAIL_FROM` | `UEH Mentoring <hello@alumni-mentoring.edu.vn>` | Config |
 | `VAM_OS_EMAIL_REPLY_TO` | `hello@alumni-mentoring.edu.vn` | Config |
 
 `BREVO_API_KEY` phải để kiểu **Secret**: nó là khoá thật, không được hiện lại
@@ -134,7 +134,7 @@ trên GitHub → workflow *Vercel Production Deployment* → **Run workflow**.
 6. **Nộp thêm một đơn thử.** Lần này dòng trong sổ phải là **"Đã gửi"**, kèm một
    Message-ID dạng `<...@smtp-relay.brevo.com>`. Mở thư nhận được và kiểm:
    - Người gửi hiển thị đúng tên và đúng địa chỉ
-   - Bấm Trả lời thì thư về đúng hộp thư `mentoring@`
+   - Bấm Trả lời thì thư về đúng hộp thư `hello@`
    - Thư nằm ở Inbox chứ không phải Spam
    - Nội dung ghi đúng tên mùa ("Mùa 12")
    - Có bị Brevo chèn logo/footer quảng cáo ở cuối không (gói miễn phí đôi khi

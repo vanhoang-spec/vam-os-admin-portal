@@ -21,6 +21,13 @@ import { BulkInviteForm, type BulkInviteRow } from "./bulk-invite-form";
 export const dynamic = "force-dynamic";
 
 /**
+ * Mời phỏng vấn kéo theo một lá thư cho mỗi ứng viên, gửi tuần tự, và mỗi lời
+ * gọi tới nhà cung cấp email có thể treo tới 20 giây. Trần mặc định của Vercel
+ * ngắn hơn tổng đó, nên quyết định đã ghi xong vẫn có thể bị báo là hỏng.
+ */
+export const maxDuration = 60;
+
+/**
  * Mời phỏng vấn hàng loạt.
  *
  * The candidate population is decided by `evaluateBulkInviteCandidate`, which

@@ -42,7 +42,7 @@ import {
 } from "@/lib/application-commitments";
 
 const APPLICATION_ID = "00000000-0000-4000-8000-000000000a01";
-const SEASON_LABEL = "UEH Mentoring Mùa 12";
+const SEASON_LABEL = "Mùa 12";
 
 function long(text: string, min: number) {
   let out = text;
@@ -156,6 +156,9 @@ describe("thư xác nhận sau khi nộp đơn", () => {
     const arg = mocks.sendApplicationConfirmation.mock.calls[0][0] as { seasonLabel: string };
     expect(arg.seasonLabel).not.toContain("UEHM-S12");
     expect(arg.seasonLabel).toContain("Mùa 12");
+    // Tiêu đề thư đã mở đầu bằng "[UEH Mentoring]", nên nhãn mùa không được
+    // mang tên chương trình lần nữa.
+    expect(arg.seasonLabel).not.toContain("UEH Mentoring");
   });
 
   it("form đóng thì không gửi gì cả", async () => {

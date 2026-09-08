@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "VAM Mentoring — Đăng ký",
+  title: "UEH Mentoring — Đăng ký",
   description: "Đăng ký tham gia chương trình Vietnam Alumni Mentoring."
 };
 

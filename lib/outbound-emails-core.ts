@@ -27,10 +27,14 @@ export const CONFIRMATION_KIND_BY_ROLE = {
 export type ApplicantRole = keyof typeof CONFIRMATION_KIND_BY_ROLE;
 export type ConfirmationKind = (typeof CONFIRMATION_KIND_BY_ROLE)[ApplicantRole];
 
+/** Thư mời ứng viên vào vòng phỏng vấn — gửi khi đơn chuyển sang invited_to_interview. */
+export const INTERVIEW_ROUND_INVITE_KIND = "interview_round_invite";
+
 /** Những loại thư main thực sự có thể phát ra hôm nay. */
 export const MAIN_OUTBOUND_EMAIL_KINDS = [
   CONFIRMATION_KIND_BY_ROLE.mentee,
-  CONFIRMATION_KIND_BY_ROLE.mentor
+  CONFIRMATION_KIND_BY_ROLE.mentor,
+  INTERVIEW_ROUND_INVITE_KIND
 ] as const;
 
 export function confirmationKindForRole(role: unknown): ConfirmationKind | null {
@@ -54,6 +58,7 @@ export function outboundEmailStatusLabel(value: unknown): string {
 const KIND_LABELS: Record<string, string> = {
   mentee_application_confirmation: "Xác nhận đơn mentee",
   mentor_application_confirmation: "Xác nhận đơn mentor",
+  interview_round_invite: "Mời vòng phỏng vấn",
   mentor_confirmation_link: "Link xác nhận mentor",
   review_batch_assigned: "Giao lô chấm hồ sơ",
   interview_scheduled: "Lịch phỏng vấn",

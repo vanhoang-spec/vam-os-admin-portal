@@ -7,6 +7,12 @@ import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { BulkDecisionForm } from "./bulk-decision-form";
 
+/**
+ * Quyết định "mời phỏng vấn" từ màn này cũng gửi thư cho từng ứng viên, tuần
+ * tự, mỗi lời gọi có thể treo tới 20 giây. Cùng lý do với màn mời hàng loạt.
+ */
+export const maxDuration = 60;
+
 export default async function BulkDecisionPage(props: { searchParams: Promise<{ intake_batch_id?: string; role_applied?: string; status?: string }> }) {
   const searchParams = await props.searchParams;
   const actor = await getCurrentAdminUser();

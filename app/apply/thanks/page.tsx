@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Cảm ơn đã đăng ký — VAM Mentoring"
+  title: "Cảm ơn đã đăng ký — UEH Mentoring"
 };
 
 export default async function ApplyThanksPage(props: { searchParams?: Promise<{ role?: string }> }) {
