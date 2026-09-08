@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CONFIRMATION_KIND_BY_ROLE,
+  INTERVIEW_ROUND_INVITE_KIND,
   MAIN_OUTBOUND_EMAIL_KINDS,
   confirmationKindForRole,
   isOutboundEmailStatus,
@@ -28,10 +29,22 @@ describe("confirmationKindForRole", () => {
     }
   });
 
-  it("hai loại thư xác nhận đúng là những gì main phát ra", () => {
+  it("danh sách loại thư main phát ra đúng bằng những gì có người gọi", () => {
     expect([...MAIN_OUTBOUND_EMAIL_KINDS].sort()).toEqual(
-      [CONFIRMATION_KIND_BY_ROLE.mentee, CONFIRMATION_KIND_BY_ROLE.mentor].sort()
+      [
+        CONFIRMATION_KIND_BY_ROLE.mentee,
+        CONFIRMATION_KIND_BY_ROLE.mentor,
+        INTERVIEW_ROUND_INVITE_KIND
+      ].sort()
     );
+  });
+
+  it("thư mời vòng phỏng vấn KHÁC thư báo lịch đã xếp", () => {
+    // 'interview_scheduled' là thư của một buổi đã có giờ — nghĩa của nó trên
+    // nhánh s12. Main chưa lưu giờ phỏng vấn ở đâu cả, nên lá thư gửi lúc vào
+    // vòng là một loại riêng. Dùng chung mã sẽ làm sổ ghi nói dối.
+    expect(INTERVIEW_ROUND_INVITE_KIND).not.toBe("interview_scheduled");
+    expect(MAIN_OUTBOUND_EMAIL_KINDS as readonly string[]).not.toContain("interview_scheduled");
   });
 });
 

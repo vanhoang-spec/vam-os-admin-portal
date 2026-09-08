@@ -36,7 +36,12 @@ export type EmailKind =
   | "cross_invite"
   | "cross_selected"
   | "cross_not_selected"
-  | "cross_scheduled";
+  | "cross_scheduled"
+  // ── main-only. Giữ giá trị này khi merge stack. ────────────────────────────
+  // Thư báo ứng viên đã qua vòng hồ sơ và được mời vào vòng phỏng vấn — KHÁC
+  // với `interview_scheduled`, vốn báo một buổi đã có giờ. Trên main chưa có
+  // chỗ nào lưu giờ phỏng vấn, nên hai thời điểm này là hai lá thư khác nhau.
+  | "interview_round_invite";
 
 export type EmailMessage = {
   to: string;
@@ -499,6 +504,64 @@ export function buildInterviewInviteEmail(input: {
       detailRows ? `<p>Thông tin buổi phỏng vấn:</p><ul>${detailRows}</ul>` : "",
       "<p>Bạn vui lòng có mặt trước 5 phút. Buổi phỏng vấn kéo dài khoảng 20–30 phút, xoay quanh mục tiêu và mong đợi của bạn với chương trình.</p>",
       "<p>Nếu thời gian trên không phù hợp, bạn vui lòng trả lời email này sớm nhất có thể để ban tổ chức sắp xếp lại.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+// ── main-only. Giữ hàm này khi merge stack. ──────────────────────────────────
+/**
+ * Thư báo ứng viên đã qua vòng hồ sơ và được mời vào vòng phỏng vấn.
+ *
+ * KHÔNG phải `buildInterviewInviteEmail` ở trên: hàm đó đòi giờ, hình thức và
+ * địa điểm, tức là thư của một buổi ĐÃ có lịch. Trên main chưa có bảng hay cột
+ * nào lưu giờ phỏng vấn — việc hẹn giờ diễn ra ngoài hệ thống — nên tại thời
+ * điểm ứng viên chuyển sang `invited_to_interview` thì thứ duy nhất nói được
+ * một cách trung thực là: bạn đã qua vòng hồ sơ, ban tổ chức sẽ liên hệ hẹn giờ.
+ *
+ * Thư cố ý KHÔNG mang đường dẫn nào, giống thư xác nhận đơn: ứng viên không có
+ * màn hình nào để tự chọn lịch, nên một cái link chỉ tạo kỳ vọng sai.
+ */
+export function buildInterviewRoundInviteEmail(input: {
+  candidateName: string;
+  seasonLabel: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.candidateName, "bạn");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+
+  const subject = `[VAM Mentoring] Mời phỏng vấn — ${season}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Đơn đăng ký mentee của bạn đã qua vòng xét hồ sơ ${season}. Ban tổ chức trân trọng mời bạn tham gia vòng phỏng vấn.`,
+    "",
+    "Các bước tiếp theo:",
+    "1. Ban tổ chức sẽ liên hệ với bạn qua email hoặc điện thoại để thống nhất thời gian phỏng vấn",
+    "2. Buổi phỏng vấn kéo dài khoảng 20–30 phút, xoay quanh mục tiêu và mong đợi của bạn với chương trình",
+    "3. Kết quả sẽ được thông báo sau khi vòng phỏng vấn kết thúc",
+    "",
+    "Bạn nên chuẩn bị:",
+    "- Xem lại những gì đã viết trong đơn đăng ký",
+    "- Sẵn sàng nói cụ thể về mục tiêu và khó khăn bạn đang gặp",
+    "",
+    "Bạn vui lòng theo dõi hộp thư (kể cả thư mục Spam) trong những ngày tới.",
+    `Nếu số điện thoại hoặc email của bạn đã thay đổi, hoặc bạn không còn tham gia được, vui lòng trả lời email này để ban tổ chức nắm.`,
+    "",
+    "Chúc mừng bạn và hẹn gặp sớm.",
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Đơn đăng ký mentee của bạn đã qua vòng xét hồ sơ <strong>${escapeHtml(season)}</strong>. Ban tổ chức trân trọng mời bạn tham gia vòng phỏng vấn.</p>`,
+      "<p>Các bước tiếp theo:</p>",
+      "<ol><li>Ban tổ chức sẽ liên hệ với bạn qua email hoặc điện thoại để thống nhất thời gian phỏng vấn</li><li>Buổi phỏng vấn kéo dài khoảng 20–30 phút, xoay quanh mục tiêu và mong đợi của bạn với chương trình</li><li>Kết quả sẽ được thông báo sau khi vòng phỏng vấn kết thúc</li></ol>",
+      "<p>Bạn nên chuẩn bị: xem lại những gì đã viết trong đơn đăng ký, và sẵn sàng nói cụ thể về mục tiêu cũng như khó khăn bạn đang gặp.</p>",
+      "<p>Bạn vui lòng theo dõi hộp thư (kể cả thư mục Spam) trong những ngày tới. Nếu số điện thoại hoặc email của bạn đã thay đổi, hoặc bạn không còn tham gia được, vui lòng trả lời email này để ban tổ chức nắm.</p>"
     ].join("")
   );
 

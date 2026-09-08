@@ -14,7 +14,13 @@ import { describe, expect, it } from "vitest";
 import {
   CONFIRMATION_BACKFILL_AUDIT_ACTION_TYPE
 } from "@/lib/confirmation-backfill-core";
-import { MAIN_OUTBOUND_EMAIL_KINDS } from "@/lib/outbound-emails-core";
+import { CONFIRMATION_KIND_BY_ROLE } from "@/lib/outbound-emails-core";
+
+/** Hai loại thư mà migration đầu tiên và index chống trùng nói về. */
+const CONFIRMATION_KINDS = [
+  CONFIRMATION_KIND_BY_ROLE.mentee,
+  CONFIRMATION_KIND_BY_ROLE.mentor
+] as const;
 
 const ROOT = join(__dirname, "..");
 const MIGRATION = join(ROOT, "supabase", "migrations", "20260909090000_outbound_emails.sql");
@@ -50,8 +56,10 @@ describe("bảng", () => {
     expect(code).toMatch(/constraint outbound_emails_kind_check/);
   });
 
-  it("CHECK loại thư chấp nhận đúng những loại main phát ra", () => {
-    for (const kind of MAIN_OUTBOUND_EMAIL_KINDS) {
+  it("CHECK loại thư chấp nhận hai loại thư xác nhận", () => {
+    // Chỉ hai loại này: migration đầu chép nguyên sáu giá trị của 064, và
+    // interview_round_invite được thêm ở migration sau — có describe riêng.
+    for (const kind of CONFIRMATION_KINDS) {
       expect(code).toContain(`'${kind}'`);
     }
   });
@@ -98,11 +106,14 @@ describe("index", () => {
       /create unique index if not exists outbound_emails_application_confirmation_once_idx[\s\S]*?;/
     );
     expect(clause).not.toBeNull();
-    for (const kind of MAIN_OUTBOUND_EMAIL_KINDS) {
+    for (const kind of CONFIRMATION_KINDS) {
       expect(clause![0]).toContain(`'${kind}'`);
     }
     expect(clause![0]).not.toContain("'reviewer_invite'");
     expect(clause![0]).not.toContain("'interview_scheduled'");
+    // Thư mời phỏng vấn CỐ Ý nằm ngoài: một ứng viên bị chuyển trạng thái ra
+    // rồi mời lại là chuyện hợp lệ, và lần mời thứ hai phải gửi được thư.
+    expect(clause![0]).not.toContain("'interview_round_invite'");
   });
 });
 
@@ -177,6 +188,59 @@ describe("nới từ vựng audit", () => {
 
   it("bỏ qua êm khi constraint không tồn tại, thay vì làm hỏng migration", () => {
     expect(code).toMatch(/raise notice/);
+  });
+});
+
+// ── Migration thứ hai: nới kind cho thư mời vòng phỏng vấn ───────────────────
+
+describe("migration nới kind cho interview_round_invite", () => {
+  const SECOND = join(
+    ROOT,
+    "supabase",
+    "migrations",
+    "20260909120000_outbound_emails_interview_round_invite.sql"
+  );
+  const secondRaw = readFileSync(SECOND, "utf8");
+  const secondCode = secondRaw
+    .split("\n")
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
+
+  it("từ chối chạy nếu bảng chưa tồn tại", () => {
+    expect(secondCode).toMatch(/PREREQ_MISSING/);
+    expect(secondCode).toMatch(/to_regclass\('public\.outbound_emails'\)/);
+  });
+
+  it("MỞ RỘNG chứ không thay thế: sáu giá trị cũ phải còn nguyên", () => {
+    for (const kind of [
+      "mentor_confirmation_link",
+      "mentee_application_confirmation",
+      "mentor_application_confirmation",
+      "review_batch_assigned",
+      "interview_scheduled",
+      "reviewer_invite"
+    ]) {
+      expect(secondCode).toContain(`'${kind}'`);
+    }
+    expect(secondCode).toContain("'interview_round_invite'");
+  });
+
+  it("tự kiểm khẳng định từng giá trị vẫn được chấp nhận sau khi dựng lại", () => {
+    expect(secondCode).toMatch(/SCHEMA_CONTRACT_VIOLATION/);
+    expect(secondCode).toMatch(/pg_get_constraintdef/);
+  });
+
+  it("chỉ đụng đúng một ràng buộc, không tạo bảng hay đổi quyền", () => {
+    expect(secondCode).not.toMatch(/create table/i);
+    expect(secondCode).not.toMatch(/\bgrant\b/i);
+    expect(secondCode).not.toMatch(/\brevoke\b/i);
+    expect(secondCode).not.toMatch(/create index/i);
+  });
+
+  it("nằm trong transaction và nạp lại schema", () => {
+    expect(secondCode).toMatch(/\bbegin;/);
+    expect(secondCode).toMatch(/\bcommit;/);
+    expect(secondCode).toMatch(/notify pgrst/);
   });
 });
 

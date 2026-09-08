@@ -4,6 +4,8 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import {
   buildApplicationConfirmationEmail,
   buildInterviewInviteEmail,
+  // ── main-only. Giữ import này khi merge stack. ────────────────────────────
+  buildInterviewRoundInviteEmail,
   buildInterviewScheduleEmail,
   buildMentorConfirmationLinkEmail,
   textToHtmlEmail,
@@ -586,6 +588,31 @@ export async function sendInterviewInvite(input: {
  * It is the only sender whose words are not fixed in code, which is exactly
  * why the template it comes from has to be approved by a person first.
  */
+// ── main-only (thư mời vòng phỏng vấn). Giữ hàm này khi merge stack. ────────
+/**
+ * Báo ứng viên đã qua vòng hồ sơ và được mời phỏng vấn.
+ *
+ * Tách khỏi `sendInterviewInvite` vì hai thời điểm khác nhau: hàm kia báo một
+ * buổi đã có giờ, hàm này báo vừa vào vòng. Trên main chưa có chỗ lưu giờ nên
+ * hàm kia hiện không có người gọi.
+ */
+export async function sendInterviewRoundInvite(input: {
+  toEmail: string;
+  candidateName: string;
+  seasonLabel: string;
+  applicationId: string;
+}): Promise<SendEmailResult> {
+  const built = buildInterviewRoundInviteEmail({
+    candidateName: input.candidateName,
+    seasonLabel: input.seasonLabel
+  });
+  return deliver(
+    "interview_round_invite",
+    { ...built, to: input.toEmail },
+    { table: "applications", id: input.applicationId }
+  );
+}
+
 export async function sendTemplatedEmail(input: {
   kind: EmailKind;
   toEmail: string;

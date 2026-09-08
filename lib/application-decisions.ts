@@ -2,6 +2,11 @@ import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { DirectInviteEvaluation, DirectInviteReason } from "@/lib/direct-interview-eligibility";
+import {
+  INTERVIEW_INVITE_STATUS,
+  interviewInviteNotifyMessage,
+  notifyInterviewRoundInvites
+} from "@/lib/interview-invite-notifications";
 
 // All writes use service-role to bypass RLS.
 
@@ -111,14 +116,37 @@ export async function applyApplicationDecisions(input: ApplyDecisionsInput): Pro
     const reason = failedRows[0]?.reason;
     return { ok: false, message: REASON_MESSAGES[reason] ?? SAFE_ERROR, rows: rowResults };
   }
+
+  // Báo cho ứng viên biết họ được mời phỏng vấn.
+  //
+  // Đặt ở đây chứ không ở màn hình nào, vì cả màn "mời phỏng vấn hàng loạt"
+  // lẫn màn quyết định chung đều đi qua hàm này — móc vào một chỗ thì không
+  // đường nào lọt. Chỉ những dòng RPC báo `applied` mới được gửi: một đơn bị
+  // chặn vì trạng thái đã cũ thì không được nhận thư nói rằng nó đã qua vòng.
+  //
+  // Không bao giờ gây lỗi cho quyết định: quyết định đã nằm trong database.
+  let notifyMessage = "";
+  if (input.newStatus === INTERVIEW_INVITE_STATUS) {
+    const appliedIds = rows.filter((row) => row.applied).map((row) => String(row.application_id));
+    try {
+      notifyMessage = interviewInviteNotifyMessage(
+        await notifyInterviewRoundInvites({ applicationIds: appliedIds })
+      );
+    } catch (err) {
+      log("interview invite notification crashed", err);
+    }
+  }
+
+  const baseMessage = failedRows.length
+    ? `Đã cập nhật ${applied} đơn; ${failedRows.length} đơn bị chặn. ${failureSummary}`
+    : `Đã cập nhật ${applied} đơn.`;
+
   return {
     ok: true,
     id: rows.find((row) => row.applied)?.application_id ?? input.applicationIds[0],
     applied,
     failed: failedRows.length,
-    message: failedRows.length
-      ? `Đã cập nhật ${applied} đơn; ${failedRows.length} đơn bị chặn. ${failureSummary}`
-      : `Đã cập nhật ${applied} đơn.`,
+    message: notifyMessage ? `${baseMessage} ${notifyMessage}` : baseMessage,
     rows: rowResults
   };
 }
