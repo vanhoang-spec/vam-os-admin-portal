@@ -26,6 +26,16 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     cleanup();
   });
 
+  /**
+   * The list opens on "Chưa giao" — the work that still needs doing. A case
+   * that needs to see an already-assigned row has to say so, which is the
+   * point of the tabs.
+   */
+  const showAllRows = () => fireEvent.click(screen.getByTestId("pool-tab-all"));
+
+  /** One page is one lot, so "select all" is scoped to the page. */
+  const selectPageButton = () => screen.getByRole("button", { name: /Chọn cả trang/ });
+
   const mockReviewers: ReviewEligibleReviewer[] = [
     { id: "rev1", email: "rev1@example.com", full_name: "Reviewer 1", role: "reviewer", current_workload: 0 },
     { id: "rev2", email: "rev2@example.com", full_name: "Reviewer 2", role: "reviewer", current_workload: 5 }
@@ -92,7 +102,9 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
   it("EXPLICIT_APPLICATION_SELECTION: allows selecting applications via checkbox and updates count", () => {
     render(<AssignBulkForm {...defaultProps} />);
     
-    // Find checkboxes for app1 and app3 (unassigned)
+    // The default tab hides assigned work; this case counts every row, so it
+    // asks for all of them.
+    showAllRows();
     const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
     expect(checkboxes.length).toBe(3); // app1, app2, app3
     
@@ -108,29 +120,56 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     expect(screen.getByText(/Bạn sắp giao/).textContent).toContain("2");
   });
 
-  it("ALREADY_ASSIGNED_DISABLED: disables already assigned rows", () => {
-    render(<AssignBulkForm {...defaultProps} />);
-    
-    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
-    // app2 is already assigned
-    expect(checkboxes[1].disabled).toBe(true);
-    expect(checkboxes[0].disabled).toBe(false);
-    expect(checkboxes[2].disabled).toBe(false);
+  it("ASSIGNED_ROWS_ARE_SELECTABLE_BUT_NEVER_RE_ASSIGNED: handing back needs a tick", () => {
+    // These rows used to be disabled, which made handing an application back
+    // impossible from the one screen an admin opens for this job. They are
+    // selectable now — the protection is that eligibility is re-derived from
+    // the data, so a ticked assigned row cannot enter the assign payload.
+    const { container } = render(<AssignBulkForm {...defaultProps} />);
+    showAllRows();
 
-    // It should display "Đã phân công" or the reviewer's name
+    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    expect(checkboxes[1].disabled).toBe(false);
+
+    fireEvent.click(checkboxes[1]); // app2, already assigned to Reviewer 1
+    expect(checkboxes[1].checked).toBe(true);
+    expect(submittedIds(container)).not.toContain("app2");
+
+    // The current assignee is named, so the operator knows whose work they are
+    // taking back.
     expect(screen.getAllByText(/Reviewer 1/).length).toBeGreaterThan(0);
   });
 
-  it("SELECT_ALL_VISIBLE: selects all unassigned applications", () => {
+  it("HAND_BACK_PAYLOAD: an assigned row submits its review id to the cancel form", () => {
+    const { container } = render(
+      <AssignBulkForm
+        {...defaultProps}
+        applications={mockApplications.map((a) =>
+          a.id === "app2" ? { ...a, existing_review_id: "review-of-app2" } : a
+        )}
+      />
+    );
+    showAllRows();
+
+    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    fireEvent.click(checkboxes[1]);
+
+    const forms = container.querySelectorAll("form");
+    const cancelForm = forms[forms.length - 1];
+    const ids = new FormData(cancelForm).getAll("review_id").map(String);
+    expect(ids).toEqual(["review-of-app2"]);
+  });
+
+  it("SELECT_PAGE_IS_ONE_LOT: select-all takes the page, not the whole intake", () => {
     render(<AssignBulkForm {...defaultProps} />);
     
-    const selectAllBtn = screen.getByRole("button", { name: "Chọn tất cả đang hiển thị" });
+    const selectAllBtn = selectPageButton();
     fireEvent.click(selectAllBtn);
     
+    // Default tab lists exactly the unassigned pair, which is the lot.
     const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
-    expect(checkboxes[0].checked).toBe(true);
-    expect(checkboxes[1].checked).toBe(false); // disabled
-    expect(checkboxes[2].checked).toBe(true);
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes.every((box) => box.checked)).toBe(true);
 
     expect(screen.getByText(/Bạn sắp giao/).textContent).toContain("2");
   });
@@ -168,8 +207,9 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     const { container } = render(<AssignBulkForm {...defaultProps} />);
 
     const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    // The default tab lists exactly the unassigned pair, app1 and app3.
     fireEvent.click(checkboxes[0]); // app1
-    fireEvent.click(checkboxes[2]); // app3
+    fireEvent.click(checkboxes[1]); // app3
     expect(submittedIds(container)).toEqual(["app1", "app3"]);
 
     // Narrow the visible list to App 1 only. App 3 is unmounted from the table,
@@ -187,7 +227,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
   it("ALREADY_ASSIGNED_NEVER_SUBMITTED: select-all skips assigned rows", () => {
     const { container } = render(<AssignBulkForm {...defaultProps} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Chọn tất cả đang hiển thị" }));
+    fireEvent.click(selectPageButton());
 
     expect(submittedIds(container)).toEqual(["app1", "app3"]);
     expect(submittedIds(container)).not.toContain("app2");
@@ -198,11 +238,11 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     const search = screen.getByPlaceholderText("Tìm tên, email...");
 
     fireEvent.change(search, { target: { value: "App 1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Chọn tất cả đang hiển thị" }));
+    fireEvent.click(selectPageButton());
     expect(submittedIds(container)).toEqual(["app1"]);
 
     fireEvent.change(search, { target: { value: "App 3" } });
-    fireEvent.click(screen.getByRole("button", { name: "Chọn tất cả đang hiển thị" }));
+    fireEvent.click(selectPageButton());
     expect(submittedIds(container)).toEqual(["app1", "app3"]);
   });
 
@@ -254,7 +294,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
 
     // A profile-round application is not offered on the interview screen.
     expect(screen.queryByText("Profile 1")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Chọn tất cả đang hiển thị" }));
+    fireEvent.click(selectPageButton());
     expect(submittedIds(container)).toEqual(["iapp1"]);
   });
 

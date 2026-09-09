@@ -161,6 +161,14 @@ export type ReviewAssignableApplication = {
   intake_batch_id: string | null;
   existing_review_count: number;
   existing_reviewer_id?: string | null;
+  /**
+   * The active assignment for the round being viewed, when there is one.
+   *
+   * Carried so the assignment screen can hand an application BACK — cancelling
+   * needs the review row, and without it the only route was to open each
+   * application one at a time and find the control buried in its detail page.
+   */
+  existing_review_id?: string | null;
 };
 
 /**
