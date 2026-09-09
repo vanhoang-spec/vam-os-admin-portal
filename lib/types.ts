@@ -321,6 +321,10 @@ export type Event = JsonRecord & {
   ends_at?: string | null;
   /** "offline" | "online" | "hybrid" — xem lib/event-location.ts. */
   event_format?: string | null;
+  /** Mã nhóm của chuỗi lặp lại. Null với sự kiện đơn lẻ. */
+  series_id?: string | null;
+  series_index?: number | null;
+  series_total?: number | null;
   location_name?: string | null;
   location_address?: string | null;
   /** Đường dẫn Google Maps do BTC dán. Khi trống, suy ra từ location_address. */

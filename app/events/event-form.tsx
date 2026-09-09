@@ -15,6 +15,7 @@ import {
   needsVenue,
   type EventFormat
 } from "@/lib/event-location";
+import { RecurrenceFields } from "./recurrence-fields";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
@@ -44,6 +45,12 @@ export function EventForm({
 }) {
   // Hình thức quyết định form hỏi địa chỉ hay hỏi đường dẫn phòng họp, nên nó
   // phải là state chứ không phải một ô select bình thường.
+  // Hai ô thời gian là controlled vì phần xem trước lịch lặp phải đổi theo
+  // ngay lúc gõ — danh sách ngày đứng yên trong khi người dùng đổi ngày là một
+  // danh sách nói dối.
+  const [startsAt, setStartsAt] = useState(toLocalInputValue(event?.starts_at));
+  const [endsAt, setEndsAt] = useState(toLocalInputValue(event?.ends_at));
+
   const [format, setFormat] = useState<EventFormat>(
     isEventFormat(event?.event_format) ? event.event_format : "offline"
   );
@@ -167,7 +174,8 @@ export function EventForm({
           name="starts_at"
           type="datetime-local"
           required
-          defaultValue={toLocalInputValue(event?.starts_at)}
+          value={startsAt}
+          onChange={(e) => setStartsAt(e.target.value)}
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
       </label>
@@ -177,7 +185,8 @@ export function EventForm({
         <input
           name="ends_at"
           type="datetime-local"
-          defaultValue={toLocalInputValue(event?.ends_at)}
+          value={endsAt}
+          onChange={(e) => setEndsAt(e.target.value)}
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
         <span className="mt-1 block text-[11px] text-slate-500">
@@ -288,6 +297,15 @@ export function EventForm({
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
       </label>
+
+      {mode === "create" ? <RecurrenceFields startsAt={startsAt} endsAt={endsAt} /> : null}
+
+      {event?.series_id ? (
+        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Buổi {event.series_index}/{event.series_total} của một chuỗi lặp lại. Thay đổi ở đây chỉ
+          áp dụng cho buổi này.
+        </p>
+      ) : null}
 
       {/* --- CẤU HÌNH ĐĂNG KÝ & CHECK-IN --- */}
       <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
