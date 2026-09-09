@@ -16,7 +16,7 @@ import {
 import { ConfirmActionDialog, InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import type { RegistrationOperationActionState } from "@/lib/event-action-types";
 import type { EventRegistration } from "@/lib/types";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 
 const initialState: RegistrationOperationActionState = { ok: false, message: null };
 
@@ -355,8 +355,8 @@ export function RegistrationActionsPanel({
             <h3 className="text-sm font-semibold text-vam-ink">1. Trạng thái đăng ký</h3>
             <div className="mt-2">
               <InfoRow label="Hiện tại" value={statusPill(registrationStatusLabel(registrationStatus), registrationTone(registrationStatus))} />
-              <InfoRow label="Xác nhận lúc" value={registration.confirmed_at ? formatDate(registration.confirmed_at) : "-"} />
-              <InfoRow label="Waitlist lúc" value={registration.waitlisted_at ? formatDate(registration.waitlisted_at) : "-"} />
+              <InfoRow label="Xác nhận lúc" value={registration.confirmed_at ? formatDateTime(registration.confirmed_at) : "-"} />
+              <InfoRow label="Waitlist lúc" value={registration.waitlisted_at ? formatDateTime(registration.waitlisted_at) : "-"} />
             </div>
             {terminal ? (
               <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -391,8 +391,8 @@ export function RegistrationActionsPanel({
             <h3 className="text-sm font-semibold text-vam-ink">2. Thanh toán</h3>
             <div className="mt-2">
               <InfoRow label="Hiện tại" value={statusPill(paymentStatusLabel(paymentStatus), reviewTone(paymentStatus))} />
-              <InfoRow label="Xác nhận lúc" value={registration.payment_confirmed_at ? formatDate(registration.payment_confirmed_at) : "-"} />
-              <InfoRow label="Từ chối lúc" value={registration.payment_rejected_at ? formatDate(registration.payment_rejected_at) : "-"} />
+              <InfoRow label="Xác nhận lúc" value={registration.payment_confirmed_at ? formatDateTime(registration.payment_confirmed_at) : "-"} />
+              <InfoRow label="Từ chối lúc" value={registration.payment_rejected_at ? formatDateTime(registration.payment_rejected_at) : "-"} />
             </div>
             <div className="mt-3 grid gap-2">
               <OperationForm operation="confirm-payment" eventId={eventId} registrationId={registrationId} disabled={!paymentActions.canConfirm} />
@@ -414,7 +414,7 @@ export function RegistrationActionsPanel({
             <h3 className="text-sm font-semibold text-vam-ink">3. Minh chứng</h3>
             <div className="mt-2">
               <InfoRow label="Hiện tại" value={statusPill(proofStatusLabel(proofStatus), reviewTone(proofStatus))} />
-              <InfoRow label="Rà soát lúc" value={registration.proof_reviewed_at ? formatDate(registration.proof_reviewed_at) : "-"} />
+              <InfoRow label="Rà soát lúc" value={registration.proof_reviewed_at ? formatDateTime(registration.proof_reviewed_at) : "-"} />
             </div>
             <div className="mt-3 grid gap-2">
               <OperationForm operation="accept-proof" eventId={eventId} registrationId={registrationId} disabled={!proofActions.canAccept} />
@@ -442,7 +442,7 @@ export function RegistrationActionsPanel({
             <h3 className="text-sm font-semibold text-vam-ink">5. Check-in / attendance</h3>
             <div className="mt-2">
               <InfoRow label="Trạng thái" value={attendanceStatusLabel(registration.attendance_status)} />
-              <InfoRow label="Check-in lúc" value={registration.checked_in_at ? formatDate(registration.checked_in_at) : "-"} />
+              <InfoRow label="Check-in lúc" value={registration.checked_in_at ? formatDateTime(registration.checked_in_at) : "-"} />
               <InfoRow label="Nguồn check-in" value={registration.checkin_source ?? "-"} />
             </div>
             <p className="mt-3 text-xs text-slate-500">

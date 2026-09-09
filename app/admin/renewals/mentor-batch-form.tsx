@@ -12,6 +12,7 @@ import {
   type RenewalBatchRow
 } from "@/lib/renewal-types";
 import type { RenewalMentorOption } from "@/lib/renewal-console";
+import { formatDate } from "@/lib/utils";
 
 /**
  * How many matching mentors are rendered at once.
@@ -449,7 +450,7 @@ export function BatchRenewalInviteForm({
                     <td className="px-3 py-2 text-slate-600">{row.mentorCode ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-600">{row.email ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-600">
-                      {row.expiresAt ? new Date(row.expiresAt).toLocaleDateString("vi-VN") : "—"}
+                      {row.expiresAt ? formatDate(row.expiresAt) : "—"}
                     </td>
                     <td className="px-3 py-2">
                       {row.renewalPath ? (

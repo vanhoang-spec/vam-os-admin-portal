@@ -11,6 +11,7 @@ import { INTERVIEW_ELIGIBLE_STATUSES, PROFILE_ASSIGNMENT_STATUSES } from "@/lib/
 import type { IntakeBatch, ReviewAssignableApplication, ReviewEligibleReviewer, Season } from "@/lib/types";
 import { ErrorBox } from "@/components/ui";
 import { applicationStatusLabel, staffDisplayLabel } from "@/lib/ui-labels";
+import { formatDate } from "@/lib/utils";
 
 /**
  * One page is one lot.
@@ -317,7 +318,7 @@ export function AssignBulkForm({
                         <div className="text-xs text-slate-500">{a.email_primary}</div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2 text-slate-600">
-                        {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString("vi-VN") : "—"}
+                        {a.submitted_at ? formatDate(a.submitted_at) : "—"}
                       </td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge(a.status)}`}>

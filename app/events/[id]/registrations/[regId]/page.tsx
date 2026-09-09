@@ -4,7 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getRegistrationDetail, isValidUuid } from "@/lib/events";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDateTime } from "@/lib/utils";
 import type { EventRegistration } from "@/lib/types";
 import { RegistrationActionsPanel } from "./registration-actions";
 
@@ -198,7 +198,7 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
     <>
       <PageHeader
         title={`Chi tiết đăng ký: ${displayText(reg.full_name)}`}
-        description={`${eventName} · Đăng ký lúc ${formatDate(reg.registered_at)}`}
+        description={`${eventName} · Đăng ký lúc ${formatDateTime(reg.registered_at)}`}
       />
       {detail.error ? <ErrorBox message={detail.error} /> : null}
 
@@ -235,7 +235,7 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
               )}
             </Row>
             <Row label="Nguồn đăng ký">{field(reg.registration_source)}</Row>
-            <Row label="Thời điểm đăng ký">{formatDate(reg.registered_at)}</Row>
+            <Row label="Thời điểm đăng ký">{formatDateTime(reg.registered_at)}</Row>
           </dl>
         </Section>
 
@@ -359,7 +359,7 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
             </Row>
             <Row label="Trạng thái check-in">{attendanceStatusLabel(reg.attendance_status)}</Row>
             <Row label="Check-in lúc">
-              {reg.checked_in_at ? formatDate(reg.checked_in_at) : <span className="text-slate-400">—</span>}
+              {reg.checked_in_at ? formatDateTime(reg.checked_in_at) : <span className="text-slate-400">—</span>}
             </Row>
             <Row label="Nguồn check-in">{field(reg.checkin_source)}</Row>
             <Row label="Trạng thái rà soát (admin)">{field(reg.review_status)}</Row>
@@ -403,7 +403,7 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
             <Row label="Phương thức khớp">{field(reg.match_method)}</Row>
             <Row label="Trạng thái rà soát khớp">{matchReviewLabel(reg.match_review_status)}</Row>
             <Row label="Khớp lúc">
-              {reg.matched_at ? formatDate(reg.matched_at) : <span className="text-slate-400">—</span>}
+              {reg.matched_at ? formatDateTime(reg.matched_at) : <span className="text-slate-400">—</span>}
             </Row>
           </dl>
         </Section>
@@ -413,13 +413,13 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
           <Section title="F · Lịch sử workflow admin">
             <dl className="divide-y divide-vam-line">
               {reg.confirmed_at ? (
-                <Row label="Xác nhận lúc">{formatDate(reg.confirmed_at)}</Row>
+                <Row label="Xác nhận lúc">{formatDateTime(reg.confirmed_at)}</Row>
               ) : null}
               {reg.confirmed_by ? (
                 <Row label="Xác nhận bởi">{field(reg.confirmed_by)}</Row>
               ) : null}
               {reg.waitlisted_at ? (
-                <Row label="Đưa vào waitlist lúc">{formatDate(reg.waitlisted_at)}</Row>
+                <Row label="Đưa vào waitlist lúc">{formatDateTime(reg.waitlisted_at)}</Row>
               ) : null}
               {reg.waitlist_position != null ? (
                 <Row label="Vị trí waitlist">{String(reg.waitlist_position)}</Row>
@@ -428,7 +428,7 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
                 <Row label="Waitlist bởi">{field(reg.waitlisted_by)}</Row>
               ) : null}
               {reg.rejected_at ? (
-                <Row label="Từ chối lúc">{formatDate(reg.rejected_at)}</Row>
+                <Row label="Từ chối lúc">{formatDateTime(reg.rejected_at)}</Row>
               ) : null}
               {reg.rejected_by ? (
                 <Row label="Từ chối bởi">{field(reg.rejected_by)}</Row>
@@ -439,7 +439,7 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
                 </Row>
               ) : null}
               {reg.cancelled_at ? (
-                <Row label="Hủy lúc">{formatDate(reg.cancelled_at)}</Row>
+                <Row label="Hủy lúc">{formatDateTime(reg.cancelled_at)}</Row>
               ) : null}
               {reg.cancelled_by ? (
                 <Row label="Hủy bởi">{field(reg.cancelled_by)}</Row>
@@ -450,25 +450,25 @@ export default async function RegistrationDetailPage(props: { params: Promise<{ 
                 </Row>
               ) : null}
               {reg.proof_reviewed_at ? (
-                <Row label="Rà soát minh chứng lúc">{formatDate(reg.proof_reviewed_at)}</Row>
+                <Row label="Rà soát minh chứng lúc">{formatDateTime(reg.proof_reviewed_at)}</Row>
               ) : null}
               {reg.proof_reviewed_by ? (
                 <Row label="Rà soát minh chứng bởi">{field(reg.proof_reviewed_by)}</Row>
               ) : null}
               {reg.payment_confirmed_at ? (
-                <Row label="Xác nhận thanh toán lúc">{formatDate(reg.payment_confirmed_at)}</Row>
+                <Row label="Xác nhận thanh toán lúc">{formatDateTime(reg.payment_confirmed_at)}</Row>
               ) : null}
               {reg.payment_confirmed_by ? (
                 <Row label="Xác nhận thanh toán bởi">{field(reg.payment_confirmed_by)}</Row>
               ) : null}
               {reg.payment_rejected_at ? (
-                <Row label="Từ chối thanh toán lúc">{formatDate(reg.payment_rejected_at)}</Row>
+                <Row label="Từ chối thanh toán lúc">{formatDateTime(reg.payment_rejected_at)}</Row>
               ) : null}
               {reg.payment_rejected_by ? (
                 <Row label="Từ chối thanh toán bởi">{field(reg.payment_rejected_by)}</Row>
               ) : null}
               {reg.no_show_flagged_at ? (
-                <Row label="No-show flagged lúc">{formatDate(reg.no_show_flagged_at)}</Row>
+                <Row label="No-show flagged lúc">{formatDateTime(reg.no_show_flagged_at)}</Row>
               ) : null}
               {reg.no_show_flagged_by ? (
                 <Row label="No-show flagged bởi">{field(reg.no_show_flagged_by)}</Row>

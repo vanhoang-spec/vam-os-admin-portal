@@ -4,7 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getEventDetailData, isEventAbsenceStatus, isEventAttendedStatus, isValidUuid } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDateTime } from "@/lib/utils";
 import { AddParticipantForm, BulkAddForm, ParticipationRow } from "./attendance-forms";
 
 export default async function EventAttendancePage(props: { params: Promise<{ id: string }> }) {
@@ -85,7 +85,7 @@ export default async function EventAttendancePage(props: { params: Promise<{ id:
     <>
       <PageHeader
         title="Quản lý tham gia"
-        description={`${displayText(detail.event.event_name)} · ${displayText(seasonCode)} · ${formatDate(detail.event.starts_at)}`}
+        description={`${displayText(detail.event.event_name)} · ${displayText(seasonCode)} · ${formatDateTime(detail.event.starts_at)}`}
       />
       {detail.error ? <ErrorBox message={detail.error} /> : null}
 

@@ -9,7 +9,7 @@ import { EVENT_TYPE_OPTIONS, getEventListData, isEventAbsenceStatus, isEventAtte
 import type { EventListData } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, IntakeBatch, Season } from "@/lib/types";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDateTime } from "@/lib/utils";
 
 type EventRow = Event & {
   season_code: string | null;
@@ -256,7 +256,7 @@ export default async function EventsPage(props: { searchParams?: Promise<{
             {
               key: "starts_at",
               label: "Thời gian",
-              render: (row) => formatDate(row.starts_at)
+              render: (row) => formatDateTime(row.starts_at)
             },
             {
               key: "event_type",

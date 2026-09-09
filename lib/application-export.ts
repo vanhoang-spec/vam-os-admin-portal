@@ -1,6 +1,7 @@
 import { APPLICATION_ACKNOWLEDGEMENTS } from "@/lib/application-commitments";
 import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
 import type { Application, JsonRecord, MenteeProfile, MentorProfile, Person, Season } from "@/lib/types";
+import { formatDate as formatDateOnly, formatDateTime as formatTimestamp } from "@/lib/utils";
 
 export type ApplicationExportField = {
   section: string;
@@ -191,18 +192,23 @@ function text(value: unknown, key: unknown = ""): string {
   return String(value);
 }
 
+/**
+ * Ngày trong bản xuất, cùng một hình dạng với mọi màn hình.
+ *
+ * Uỷ quyền cho `lib/utils` chứ không tự dựng `Intl`: bản riêng ở đây từng cho
+ * ra `14:05 8/9/26` với một dấu thời gian, trong khi nhánh chỉ-có-ngày ngay
+ * bên trên nó cho ra `08/09/2026` — hai định dạng trong cùng một cột của cùng
+ * một file xuất.
+ *
+ * Chỉ giữ lại phần khác biệt thật sự: ô trống trong bản xuất là `MISSING`,
+ * không phải một dấu gạch.
+ */
 function formatDate(value: unknown): string {
   const raw = String(value ?? "").trim();
   if (!raw) return MISSING;
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (dateOnly) return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw;
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Asia/Ho_Chi_Minh"
-  }).format(date);
+  // Cột kiểu `date` không có giờ để mà hiện.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return formatDateOnly(raw);
+  return formatTimestamp(raw);
 }
 
 function roleLabel(value: unknown) {

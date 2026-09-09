@@ -1,5 +1,6 @@
 import { EmptyState, ErrorBox } from "@/components/ui";
 import type { FormControlAuditRow } from "@/lib/application-form-audit";
+import { formatDateTime } from "@/lib/utils";
 
 const STATE_LABEL: Record<string, string> = {
   closed: "ĐÓNG",
@@ -41,7 +42,7 @@ export function FormControlAuditTable({
           {rows.map((row) => (
             <tr key={row.id} className="border-b border-vam-line/60">
               <td className="py-2 pr-4 text-slate-700">
-                {row.createdAt ? new Date(row.createdAt).toLocaleString("vi-VN") : "—"}
+                {row.createdAt ? formatDateTime(row.createdAt) : "—"}
               </td>
               <td className="py-2 pr-4 text-slate-700">{row.actorEmail ?? "—"}</td>
               <td className="py-2 pr-4 text-slate-700">{row.applicantRole ?? "—"}</td>
