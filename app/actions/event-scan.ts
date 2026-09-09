@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canEditRecaps } from "@/lib/auth-constants";
+import { canScanEvent } from "@/lib/event-supporters";
 import { stationLabel } from "@/lib/event-checkin-code";
 import { recordScan } from "@/lib/event-checkin";
 import type { ScanActionState } from "@/lib/event-scan-action-types";
@@ -27,7 +27,15 @@ export async function recordEventScanAction(
     if (!adminUser?.id) {
       return { ok: false, tone: "error", message: "Bạn chưa đăng nhập.", fullName: null, badges: [] };
     }
-    if (!canEditRecaps(adminUser)) {
+    const eventId = String(formData.get("event_id") ?? "").trim();
+    if (!eventId) {
+      return { ok: false, tone: "error", message: "Thiếu mã sự kiện.", fullName: null, badges: [] };
+    }
+
+    // Cổng quyền hỏi về ĐÚNG buổi này: quản trị sự kiện, hoặc được ghép làm
+    // người hỗ trợ của chính buổi đó. Người hỗ trợ buổi orientation không quét
+    // được vé của buổi phỏng vấn tuần sau.
+    if (!(await canScanEvent(adminUser, eventId))) {
       return {
         ok: false,
         tone: "error",
@@ -35,11 +43,6 @@ export async function recordEventScanAction(
         fullName: null,
         badges: []
       };
-    }
-
-    const eventId = String(formData.get("event_id") ?? "").trim();
-    if (!eventId) {
-      return { ok: false, tone: "error", message: "Thiếu mã sự kiện.", fullName: null, badges: [] };
     }
 
     const result = await recordScan({
