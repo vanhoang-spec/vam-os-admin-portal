@@ -214,9 +214,19 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
 
       {/* Scoring form */}
       <Card className="mb-4">
-        <h2 className="mb-4 text-base font-semibold text-vam-ink">
-          Đánh giá & Chấm điểm
-        </h2>
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-semibold text-vam-ink">
+            Đánh giá & Chấm điểm
+          </h2>
+          {/*
+            The form labels each score but not what it MEANS; those descriptions
+            live only in the guide. A first-time reviewer needs them here, at the
+            moment of scoring, not after hunting for a page nothing links to.
+          */}
+          <Link href="/reviews/guide" className="text-sm font-medium text-vam-green hover:underline">
+            Xem mô tả 5 tiêu chí chấm điểm
+          </Link>
+        </div>
         {canEdit ? (
           <ReviewForm
             reviewId={review.id}
