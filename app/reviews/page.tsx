@@ -212,6 +212,20 @@ export default async function ReviewsPage(props: {
         >
           Phỏng vấn ứng viên
         </Link>
+        {/*
+          The guide is written for reviewers as much as for admins — it renumbers
+          its own sections for a non-admin reader, and it holds the ONLY
+          description of what each of the five scores means. Its single link used
+          to sit inside the admin-only bar below, and it appears nowhere in the
+          nav, so an invited reviewer had no route to the scoring rubric they
+          were being asked to apply.
+        */}
+        <Link
+          href="/reviews/guide"
+          className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-vam-green hover:bg-vam-mint"
+        >
+          Hướng dẫn chấm điểm
+        </Link>
       </div>
 
       {/* Admin action bar */}
@@ -244,12 +258,6 @@ export default async function ReviewsPage(props: {
             className="inline-flex items-center rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
             Cấu hình số review
-          </Link>
-          <Link
-            href="/reviews/guide"
-            className="inline-flex items-center gap-1.5 rounded-md border border-vam-line px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Hướng dẫn vận hành
           </Link>
         </div>
       )}
