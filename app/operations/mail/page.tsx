@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ErrorBox, KpiCard, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { countBulkRecipients, listEmailBatches } from "@/lib/bulk-mail";
 import { evaluateEmailGate } from "@/lib/email-core";
 import {
   countEmailTemplatesByStatus,
@@ -10,14 +11,19 @@ import {
 import {
   canApproveEmailTemplate,
   canComposeEmailTemplate,
+  canSendBulkEmail,
   canViewOutboundEmails
 } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { formatDateTime } from "@/lib/utils";
 import { MailClient, type MailTemplateSummary } from "./mail-client";
 import { MailTabs } from "./mail-tabs";
+import { SendPanel } from "./send-panel";
 
 export const dynamic = "force-dynamic";
+
+/** Lượt gửi gọi nhà cung cấp email tuần tự; trần mặc định của Vercel quá ngắn. */
+export const maxDuration = 60;
 
 export const metadata = {
   title: "Mail — VAM OS"
@@ -66,9 +72,24 @@ export default async function MailPage() {
     );
   }
 
-  const [listing, counts] = await Promise.all([
+  const maySend = canSendBulkEmail(adminUser.role);
+
+  // Đếm người nhận chỉ khi người đang xem gửi được: ba lượt đọc qua toàn bộ
+  // membership của mùa là cái giá không đáng trả cho một màn hình chỉ để soạn.
+  const [listing, counts, batches, recipientCounts] = await Promise.all([
     listEmailTemplates(season.id),
-    countEmailTemplatesByStatus(season.id)
+    countEmailTemplatesByStatus(season.id),
+    maySend ? listEmailBatches(season.id) : Promise.resolve({ rows: [], error: null }),
+    maySend
+      ? countBulkRecipients(season.id)
+      : Promise.resolve({
+          counts: {
+            mentee: { sendable: 0, unreachable: 0 },
+            mentor: { sendable: 0, unreachable: 0 },
+            both: { sendable: 0, unreachable: 0 }
+          },
+          error: null
+        })
   ]);
 
   const templates: MailTemplateSummary[] = listing.rows.map((row) => ({
@@ -124,6 +145,27 @@ export default async function MailPage() {
         canApprove={canApproveEmailTemplate(adminUser.role)}
         seasonCode={season.code}
       />
+
+      <div className="mt-6">
+        {recipientCounts.error ? <ErrorBox message={recipientCounts.error} /> : null}
+        <SendPanel
+          canSend={maySend}
+          templates={templates
+            .filter((row) => row.status === "approved")
+            .map((row) => ({ id: row.id, name: row.name, subject: row.subject }))}
+          counts={recipientCounts.counts}
+          batches={batches.rows.map((row) => ({
+            id: row.id,
+            note: row.note,
+            status: row.status,
+            requestedCount: row.requestedCount,
+            sentCount: row.sentCount,
+            skippedCount: row.skippedCount,
+            failedCount: row.failedCount,
+            createdAt: formatDateTime(row.createdAt)
+          }))}
+        />
+      </div>
 
       <p className="mt-6 text-xs text-slate-500">
         Mẫu thư giữ ô điền chứ không giữ tên một người cụ thể. Giá trị thật được điền lúc gửi,

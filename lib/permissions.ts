@@ -170,3 +170,19 @@ export function canComposeEmailTemplate(role?: string | null) {
 export function canApproveEmailTemplate(role?: string | null) {
   return ["super_admin", "admin"].includes(role || "");
 }
+
+/**
+ * Can press the button that sends mail to hundreds of participants.
+ *
+ * The narrowest gate in the Mail module, and the same allowlist as
+ * `canRunConfirmationBackfill` for the same reason: a mistake here is not a
+ * wrong row that can be corrected — it is mail already in somebody's inbox, and
+ * there is no recall.
+ *
+ * Named separately from `canApproveEmailTemplate` even though the two currently
+ * hold the same roles: they answer different questions, and the day one of them
+ * widens, the other must not follow by accident.
+ */
+export function canSendBulkEmail(role?: string | null) {
+  return ["super_admin", "admin"].includes(role || "");
+}

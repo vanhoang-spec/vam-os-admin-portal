@@ -41,7 +41,12 @@ export type EmailKind =
   // Thư báo ứng viên đã qua vòng hồ sơ và được mời vào vòng phỏng vấn — KHÁC
   // với `interview_scheduled`, vốn báo một buổi đã có giờ. Trên main chưa có
   // chỗ nào lưu giờ phỏng vấn, nên hai thời điểm này là hai lá thư khác nhau.
-  | "interview_round_invite";
+  | "interview_round_invite"
+  // ── main-only. Giữ giá trị này khi merge stack. ────────────────────────────
+  // Thư thông báo do Core Team tự soạn trên /operations/mail. Khác mọi giá trị
+  // trên ở một điểm: thân thư KHÔNG do builder trong file này dựng, mà đến từ
+  // một mẫu thư đã được duyệt. Xem lib/email-templates-core.ts.
+  | "general_announcement";
 
 export type EmailMessage = {
   to: string;
