@@ -95,7 +95,7 @@ describe("buildNavGroups — super_admin", () => {
     expect(opHrefs).toContain("/operations/tasks");
     expect(opHrefs).toContain("/operations/monthly");
     expect(opHrefs).toContain("/operations/intelligence");
-    expect(opHrefs).toContain("/operations/emails");
+    expect(opHrefs).toContain("/operations/mail");
     expect(opHrefs).toContain("/recaps/create");
   });
 });
@@ -370,9 +370,10 @@ const OPS_ADMIN_ROUTES = [
   "/operations/tasks",
   "/operations/monthly",
   "/operations/intelligence",
-  // Sổ thư đi. canViewOutboundEmails phủ đúng ba vai trò của admin tier, nên
-  // nó thuộc cùng nhóm này chứ không phải một cổng riêng.
-  "/operations/emails",
+  // Module Mail. Sổ thư đã gửi (/operations/emails) vẫn là route mở được,
+  // nhưng nav trỏ vào module chứ không vào một trang bên trong nó — vào đó
+  // bằng dải tab của module.
+  "/operations/mail",
   "/recaps/create",
 ];
 
@@ -404,7 +405,10 @@ const HELPER_REVIEW_ROUTES = ["/my-work", "/reviews", "/interviews"];
 
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       ["/"],
-  support_team: BASE_ROUTE_ARR,
+  // support_team là nhóm thật sự viết thư cho người tham gia, nên nó soạn
+  // được mẫu thư (canComposeEmailTemplate) dù không thuộc admin tier. Nó KHÔNG
+  // duyệt và KHÔNG gửi được, và không thấy sổ thư đã gửi — đó là các cổng khác.
+  support_team: [...BASE_ROUTE_ARR, "/operations/mail"],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
   admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],

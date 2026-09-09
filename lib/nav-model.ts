@@ -1,5 +1,5 @@
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
-import { canBrowseOperations } from "@/lib/permissions";
+import { canBrowseOperations, canComposeEmailTemplate } from "@/lib/permissions";
 import {
   canBrowseApplications,
   canBrowseParticipants,
@@ -86,14 +86,27 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/operations/tasks", label: "Nhiệm vụ & phân công" },
             { href: "/operations/monthly", label: "Báo cáo tháng" },
             { href: "/operations/intelligence", label: "Phân tích mùa" },
-            // canViewOutboundEmails phủ đúng ba vai trò của showAdminTier, nên
-            // nav và route không thể lệch nhau.
-            { href: "/operations/emails", label: "Email đã gửi" },
+            // canComposeEmailTemplate phủ đủ ba vai trò của showAdminTier, nên
+            // nav và route không thể lệch nhau. Sổ thư đã gửi giờ là một tab
+            // bên trong module này, không còn là một mục nav riêng.
+            { href: "/operations/mail", label: "Mail" },
             { href: "/recaps/create", label: "Tạo báo cáo" },
           ],
         }
       : showOperations
-        ? { key: "operations", label: "Vận hành", href: "/operations" }
+        ? // support_team không thuộc showAdminTier nhưng vẫn soạn được mẫu thư —
+          // đó là nhóm thật sự viết thư cho người tham gia. Nav phải mở đúng
+          // một cửa cho họ, nếu không route mở mà không đường nào tới.
+          canComposeEmailTemplate(role)
+          ? {
+              key: "operations",
+              label: "Vận hành",
+              items: [
+                { href: "/operations", label: "Tổng quan vận hành" },
+                { href: "/operations/mail", label: "Mail" },
+              ],
+            }
+          : { key: "operations", label: "Vận hành", href: "/operations" }
         : null,
     showCommunity
       ? {

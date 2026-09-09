@@ -142,3 +142,31 @@ export function canViewOutboundEmails(role?: string | null) {
 export function canRunConfirmationBackfill(role?: string | null) {
   return ["super_admin", "admin"].includes(role || "");
 }
+
+/**
+ * Can write and edit a DRAFT bulk-email template.
+ *
+ * Deliberately wider than `canViewOutboundEmails`: support_team is the group
+ * that actually writes to participants, and the whole point of the Mail module
+ * is that they stop filing a ticket to get a sentence changed. Writing a draft
+ * sends nothing — the draft sits in the app until somebody who can approve it
+ * reads it.
+ */
+export function canComposeEmailTemplate(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
+ * Can approve a template, which is what makes it eligible for a bulk send.
+ *
+ * As narrow as `canRunConfirmationBackfill`, and for the same reason: approval
+ * is the last human read before mail reaches hundreds of inboxes, and a mistake
+ * is not a wrong row that can be corrected — it is mail already delivered.
+ *
+ * Editing an approved template drops it back to draft, so this predicate is the
+ * only way text reaches a recipient: nobody can send words an approver did not
+ * read.
+ */
+export function canApproveEmailTemplate(role?: string | null) {
+  return ["super_admin", "admin"].includes(role || "");
+}
