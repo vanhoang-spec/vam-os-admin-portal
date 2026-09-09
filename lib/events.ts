@@ -19,6 +19,12 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
 import { randomUUID } from "node:crypto";
+import { checkinCodeUrl } from "@/lib/event-checkin-code";
+import { ensureCheckinCode } from "@/lib/event-checkin";
+import { resolveMapUrl } from "@/lib/event-location";
+import { resolveEmailBaseUrl, sendEventRegistrationConfirmation } from "@/lib/email";
+import { getPublicOrigin } from "@/lib/public-url";
+import { formatDate, formatDateTime, formatTime } from "@/lib/utils";
 import {
   generateOccurrences,
   isEndMode,
@@ -966,13 +972,86 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
   }
 
+  const registrationId = (data as { id?: string } | null)?.id ?? null;
+
+  // Vé và thư xác nhận. Cả hai đều KHÔNG được làm hỏng việc đăng ký nếu chúng
+  // hỏng: người đó đã đăng ký, chỗ ngồi đã giữ, và báo "đăng ký không thành
+  // công" vì một lỗi SMTP là nói dối họ về điều quan trọng hơn. Thư hỏng để
+  // lại một dòng trong sổ thư đi và BTC gửi lại được.
+  if (registrationId) {
+    await issueTicketAndConfirm({
+      registrationId,
+      event: registrationData.event,
+      toEmail: email,
+      fullName,
+      pendingApproval: baseStatus !== "registered"
+    });
+  }
+
   return {
     ok: true,
     status: "success",
     message: "Đăng ký thành công",
     eventName: registrationData.event.event_name ?? null,
-    registrationId: (data as { id?: string } | null)?.id ?? null
+    registrationId
   };
+}
+
+/**
+ * Cấp vé cho một đăng ký và gửi thư xác nhận.
+ *
+ * Nuốt mọi lỗi có chủ ý — xem chú thích ở nơi gọi. Lỗi được ghi ra console để
+ * còn lần ra, còn người đăng ký thì thấy đúng điều đã xảy ra: họ đã đăng ký.
+ */
+async function issueTicketAndConfirm(input: {
+  registrationId: string;
+  event: JsonRecord;
+  toEmail: string;
+  fullName: string;
+  pendingApproval: boolean;
+}): Promise<void> {
+  try {
+    const { code } = await ensureCheckinCode(input.registrationId);
+    if (!code) return;
+
+    const origin = (await getPublicOrigin()) ?? resolveEmailBaseUrl();
+    if (!origin) return;
+
+    const event = input.event as Event;
+    const format = isEventFormat(event.event_format) ? event.event_format : "offline";
+    const placeLabel = needsVenue(format)
+      ? [event.location_name, event.location_address]
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean)
+          .join(" — ") || null
+      : null;
+
+    await sendEventRegistrationConfirmation({
+      toEmail: input.toEmail,
+      recipientName: input.fullName,
+      eventName: String(event.event_name ?? "").trim() || "sự kiện",
+      whenLabel: formatEventWhenLabel(event),
+      placeLabel,
+      mapUrl: needsVenue(format)
+        ? resolveMapUrl({ mapUrl: event.location_map_url, address: event.location_address })
+        : null,
+      joinUrl: needsJoinUrl(format) ? clean(event.online_join_url) : null,
+      ticketUrl: checkinCodeUrl(origin, code),
+      ticketCode: code,
+      pendingApproval: input.pendingApproval,
+      registrationId: input.registrationId
+    });
+  } catch (error) {
+    log("issueTicketAndConfirm failed", error);
+  }
+}
+
+/** Khoảng thời gian của một sự kiện, dạng người đọc trong thư. */
+function formatEventWhenLabel(event: Event): string {
+  const start = formatDateTime(event.starts_at);
+  if (!event.ends_at) return start;
+  const sameDay = formatDate(event.starts_at) === formatDate(event.ends_at);
+  return sameDay ? `${start} – ${formatTime(event.ends_at)}` : `${start} – ${formatDateTime(event.ends_at)}`;
 }
 
 async function syncCheckedInParticipation(client: any, input: {
