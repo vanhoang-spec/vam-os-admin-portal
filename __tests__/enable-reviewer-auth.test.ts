@@ -6,6 +6,12 @@ vi.mock("react", async () => {
 });
 
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() }));
+// An invite with no destination lands on the Supabase Site URL, where nothing
+// can read the token out of the fragment. The header stub is what lets these
+// cases prove the destination is carried.
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ host: "os.alumni-mentoring.edu.vn", "x-forwarded-proto": "https" })
+}));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/program-scope", () => ({
   canOperateSeason: vi.fn(),
@@ -166,6 +172,12 @@ describe("enable-reviewer Auth pagination", () => {
     expect(result.ok).toBe(true);
     expect(result.authInvited).toBe(true);
     expect(inviteUserByEmail).toHaveBeenCalledTimes(1);
+    // The destination is the whole point: without it the invited reviewer lands
+    // on a page that cannot consume their token and is bounced to /login.
+    expect(inviteUserByEmail).toHaveBeenCalledWith(
+      "target.person@example.com",
+      { redirectTo: "https://os.alumni-mentoring.edu.vn/auth/callback?next=%2Freviews" }
+    );
     expect(rpc).toHaveBeenCalledWith(
       "vam084_grant_recruitment_participation",
       expect.objectContaining({ p_auth_user_id: "auth-invited" })

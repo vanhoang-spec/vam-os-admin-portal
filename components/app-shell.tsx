@@ -340,7 +340,15 @@ export function AppShell({
     prevDrawerOpenRef.current = drawerOpen;
   }, [drawerOpen]);
 
-  if (pathname === "/login" || pathname.startsWith("/apply")) {
+  // Pages that CREATE or REPAIR a session cannot themselves require one.
+  //
+  // `/reset-password` was missing from this list, so a logged-out visitor —
+  // the only kind that ever opens it — got the "Cần đăng nhập" panel instead of
+  // the form, and the page could never do its job. `/auth/callback` would have
+  // inherited exactly that: it reads the token out of the URL fragment, and it
+  // only ever runs before a session exists.
+  const SESSION_ESTABLISHING_PATHS = ["/login", "/reset-password", "/auth/callback"];
+  if (SESSION_ESTABLISHING_PATHS.includes(pathname) || pathname.startsWith("/apply")) {
     return <>{children}</>;
   }
 

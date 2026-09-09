@@ -543,13 +543,25 @@ describe("public route matcher is unchanged by this hotfix", () => {
   it("still excludes login, apply, reset-password and static assets", async () => {
     const { config } = await import("@/middleware");
     expect(config.matcher).toEqual([
-      "/((?!login|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"
+      "/((?!login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"
     ]);
+  });
+
+  it("opens exactly /auth/callback, not the /auth namespace", () => {
+    const pattern = new RegExp(
+      "^/((?!login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)$"
+    );
+    // The page that turns an emailed token into a session must be reachable
+    // without one.
+    expect(pattern.test("/auth/callback")).toBe(false);
+    // Everything else under /auth stays behind the gate.
+    expect(pattern.test("/auth")).toBe(true);
+    expect(pattern.test("/auth/admin")).toBe(true);
   });
 
   it("does not run for /apply/mentor or /apply/mentee", () => {
     const pattern = new RegExp(
-      "^/((?!login|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)$"
+      "^/((?!login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)$"
     );
     expect(pattern.test("/apply/mentor")).toBe(false);
     expect(pattern.test("/apply/mentee")).toBe(false);
