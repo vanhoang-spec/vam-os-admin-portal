@@ -2,6 +2,7 @@ import { Card } from "@/components/ui";
 import { getPublicRegistrationData, verifyPublicRegistrationId } from "@/lib/events";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { RegistrationForm } from "./registration-form";
+import { EventPlaceBlock } from "@/app/events/event-place";
 
 function selectedParam(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -96,8 +97,10 @@ export default async function PublicEventRegistrationPage(props: { params: Promi
         <div className="rounded-lg bg-vam-ink px-4 py-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-wide text-vam-mint">VAM event registration</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-normal">{eventName}</h1>
-          {data.event?.starts_at ? (
-            <p className="mt-1 text-sm text-slate-200">{formatDateTime(data.event.starts_at)}</p>
+          {data.event ? (
+            <div className="mt-3">
+              <EventPlaceBlock event={data.event} tone="dark" />
+            </div>
           ) : null}
         </div>
 

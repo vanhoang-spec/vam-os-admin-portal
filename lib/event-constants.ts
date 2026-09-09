@@ -1,5 +1,7 @@
 export type EventTypeValue =
   | "orientation"
+  | "mentee_orientation"
+  | "mentor_orientation"
   | "training"
   | "kickoff"
   | "company_tour"
@@ -7,6 +9,8 @@ export type EventTypeValue =
   | "closing"
   | "business_case"
   | "job_shadowing"
+  | "interview_day"
+  | "cross_mentoring"
   | "other";
 
 export type AttendanceStatusValue =
@@ -20,17 +24,39 @@ export type AttendanceStatusValue =
 export type RegistrationStatusValue = "registered" | "confirmed" | "declined" | "no_response" | "cancelled" | "unknown";
 export type EventRoleValue = "mentor" | "mentee" | "core_team" | "speaker" | "trainer" | "guest" | "unknown";
 
+/**
+ * Thứ tự ở đây là thứ tự một mùa diễn ra, không phải thứ tự bảng chữ cái:
+ * người tạo sự kiện đang nghĩ theo dòng thời gian của chương trình.
+ *
+ * `orientation` chung được giữ lại bên cạnh hai bản dành riêng cho mentor và
+ * mentee — các sự kiện đã diễn ra đang mang giá trị đó, và đổi nghĩa một giá
+ * trị cũ là viết lại lịch sử.
+ *
+ * `interview_day` là NGÀY phỏng vấn: một buổi có địa điểm, sức chứa và điểm
+ * danh. Nó không thay cho module /interviews, nơi quản lý từng ca phỏng vấn
+ * của từng ứng viên.
+ */
 export const EVENT_TYPE_OPTIONS: Array<{ value: EventTypeValue; label: string }> = [
-  { value: "orientation", label: "Orientation / Định hướng" },
-  { value: "training", label: "Training / Đào tạo" },
+  { value: "mentee_orientation", label: "Orientation cho Mentee" },
+  { value: "mentor_orientation", label: "Orientation cho Mentor" },
+  { value: "orientation", label: "Orientation / Định hướng (chung)" },
+  { value: "interview_day", label: "Ngày phỏng vấn" },
   { value: "kickoff", label: "Kickoff / Lễ phát động" },
+  { value: "training", label: "Training / Đào tạo" },
+  { value: "cross_mentoring", label: "Cross-mentoring" },
   { value: "company_tour", label: "Company tour / Tham quan doanh nghiệp" },
-  { value: "networking", label: "Networking / Giao lưu" },
-  { value: "closing", label: "Tổng kết / Closing" },
   { value: "business_case", label: "Business case" },
   { value: "job_shadowing", label: "Job shadowing" },
+  { value: "networking", label: "Networking / Giao lưu" },
+  { value: "closing", label: "Tổng kết / Closing" },
   { value: "other", label: "Khác" }
 ];
+
+/** Nhãn tiếng Việt của một loại sự kiện, hoặc chính giá trị nếu chưa biết. */
+export function eventTypeLabel(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  return EVENT_TYPE_OPTIONS.find((option) => option.value === raw)?.label || raw || "—";
+}
 
 export const ATTENDANCE_STATUS_OPTIONS: Array<{ value: AttendanceStatusValue; label: string }> = [
   { value: "attended", label: "Đã tham gia" },
