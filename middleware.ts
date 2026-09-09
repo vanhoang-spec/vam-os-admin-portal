@@ -188,5 +188,13 @@ export const config = {
   // Action both resolve. The default state is CLOSED, so excluding them here
   // does not expose an open form — it exposes a closed notice until an
   // authorised admin changes the state from Quản trị → Mùa & Form đăng ký.
-  matcher: ["/((?!login|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
+  // `auth/callback` is excluded for the same reason as `reset-password`: it
+  // is the page that CREATES the session. Gating it behind a session check
+  // would bounce every emailed link to /login and discard the token, which is
+  // exactly the failure it was built to fix.
+  //
+  // Named in full, NOT as `auth`. These alternatives are prefix tests, so a
+  // bare `auth` would take every future /auth/* route out of the gate — and
+  // /authors with it — by accident rather than by decision.
+  matcher: ["/((?!login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
 };

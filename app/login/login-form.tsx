@@ -2,12 +2,42 @@
 
 import React, { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { loginAction, type LoginActionState } from "./actions";
+import {
+  loginAction,
+  requestMagicLinkAction,
+  type LoginActionState,
+  type MagicLinkActionState
+} from "./actions";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 const initialState: LoginActionState = {
   error: null
 };
+
+const initialMagicLinkState: MagicLinkActionState = {
+  error: null,
+  sent: false
+};
+
+/**
+ * Sign-in link button.
+ *
+ * Its own submit button because it lives in its own <form>: two form actions
+ * cannot share one, and useFormStatus only reports on the form it sits inside.
+ */
+function MagicLinkButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="flex h-11 items-center justify-center gap-2 rounded-md border border-vam-green px-4 text-sm font-semibold text-vam-green hover:bg-vam-mint disabled:cursor-not-allowed disabled:opacity-70"
+    >
+      {pending && <Loader2 className="h-4 w-4 animate-spin" data-testid="magic-link-spinner" />}
+      {pending ? "Đang gửi..." : "Gửi liên kết đăng nhập qua email"}
+    </button>
+  );
+}
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -26,6 +56,10 @@ function SubmitButton() {
 
 export function LoginForm({ next }: { next: string }) {
   const [state, formAction] = useFormState(loginAction, initialState);
+  const [magicLinkState, magicLinkAction] = useFormState(
+    requestMagicLinkAction,
+    initialMagicLinkState
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const submitLock = React.useRef(false);
@@ -60,6 +94,7 @@ export function LoginForm({ next }: { next: string }) {
   };
 
   return (
+    <>
     <form action={formAction} onSubmit={handleSubmit} className="grid gap-4">
       <input type="hidden" name="next" value={next} />
       <label className="grid gap-2">
@@ -98,5 +133,49 @@ export function LoginForm({ next }: { next: string }) {
       {state.error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{state.error}</div> : null}
       <SubmitButton />
     </form>
+
+    {/*
+      A second, separate route in for people who hold an account for one season
+      and use it a handful of times — the mentors invited to score applications.
+      A password they must invent and remember is the largest piece of friction
+      in that flow, and clicking a link in their own mailbox proves the same
+      thing. It is a sibling form, not a second button on the one above: two
+      form actions cannot share a single <form>.
+    */}
+    <div className="mt-6 border-t border-vam-line pt-5">
+      <p className="text-sm text-slate-600">
+        Chưa đặt mật khẩu, hoặc không nhớ mật khẩu?
+      </p>
+      <form action={magicLinkAction} className="mt-3 grid gap-3">
+        <input type="hidden" name="next" value={next} />
+        <input type="hidden" name="email" value={email} />
+        {magicLinkState.sent ? (
+          <div
+            className="rounded-md border border-vam-green bg-vam-mint/40 px-3 py-2 text-sm text-vam-ink"
+            role="status"
+          >
+            Nếu email này có tài khoản, chúng tôi đã gửi một liên kết đăng nhập. Vui lòng
+            kiểm tra hộp thư, kể cả mục Spam.
+          </div>
+        ) : (
+          <>
+            {magicLinkState.error ? (
+              <div
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                role="alert"
+              >
+                {magicLinkState.error}
+              </div>
+            ) : null}
+            <MagicLinkButton />
+            <p className="text-xs leading-5 text-slate-500">
+              Chúng tôi gửi một liên kết tới email ở trên. Bấm vào liên kết đó là vào thẳng,
+              không cần mật khẩu.
+            </p>
+          </>
+        )}
+      </form>
+    </div>
+    </>
   );
 }

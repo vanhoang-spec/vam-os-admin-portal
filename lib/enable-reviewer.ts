@@ -2,6 +2,7 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canManageReviewers } from "@/lib/permissions";
+import { getAuthCallbackUrl } from "@/lib/public-url";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -82,7 +83,16 @@ export async function enableMentorAsReviewer(input: {
   }
   let invited = false;
   if (!authUser) {
-    const { data, error } = await (client as any).auth.admin.inviteUserByEmail(email);
+    // Without an explicit destination Supabase falls back to the project's
+    // Site URL, and the tokens arrive in the fragment of whatever page that
+    // names. Only /auth/callback can turn them into a session, so the invite
+    // has to say so — otherwise the account is created and can never be
+    // entered. (The URL must also sit in the project's Redirect Allow List.)
+    const redirectTo = await getAuthCallbackUrl("/reviews");
+    const { data, error } = await (client as any).auth.admin.inviteUserByEmail(
+      email,
+      redirectTo ? { redirectTo } : undefined
+    );
     if (error || !data?.user?.id) return { ok: false, message: "Không thể tạo lời mời đăng nhập cá nhân." };
     authUser = data.user;
     invited = true;
