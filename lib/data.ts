@@ -1954,7 +1954,7 @@ export async function getReviewAssignableApplications(filters: {
     "application_reviews",
     "application_id",
     appIds,
-    "application_id,reviewer_admin_user_id,status,review_round"
+    "id,application_id,reviewer_admin_user_id,status,review_round"
   );
   if (reviewErr) {
     logDataError("getReviewAssignableApplications.reviews", reviewErr);
@@ -1964,6 +1964,8 @@ export async function getReviewAssignableApplications(filters: {
 
   const reviewCountByAppId = new Map<string, number>();
   const reviewerIdByAppId = new Map<string, string>();
+  // The review row itself, so an assigned application can be handed back.
+  const reviewIdByAppId = new Map<string, string>();
   const hasAnyInterviewByAppId = new Set<string>();
 
   for (const row of reviewRows) {
@@ -1982,6 +1984,8 @@ export async function getReviewAssignableApplications(filters: {
       if (round === reviewRound && status !== "cancelled") {
         reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
         if (revId) reviewerIdByAppId.set(id, revId);
+        const reviewId = row.id as string | null;
+        if (reviewId) reviewIdByAppId.set(id, reviewId);
       }
     }
   }
@@ -1997,7 +2001,8 @@ export async function getReviewAssignableApplications(filters: {
   const data: ReviewAssignableApplication[] = validApps.map((a) => ({
     ...a,
     existing_review_count: reviewCountByAppId.get(a.id) ?? 0,
-    existing_reviewer_id: reviewerIdByAppId.get(a.id) ?? null
+    existing_reviewer_id: reviewerIdByAppId.get(a.id) ?? null,
+    existing_review_id: reviewIdByAppId.get(a.id) ?? null
   }));
 
   return { data, error: null };
