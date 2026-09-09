@@ -12,6 +12,9 @@ import { eventTypeLabel } from "@/lib/event-constants";
 import { EventPlaceBlock } from "../event-place";
 import { listEventSupporters } from "@/lib/event-supporters";
 import { SupportersPanel } from "./supporters-panel";
+import { countScansByStation } from "@/lib/event-checkin";
+import { stationLabel } from "@/lib/event-checkin-code";
+import { LiveRefresh } from "./live-refresh";
 
 async function getRequestOrigin() {
   const h = await headers();
@@ -78,6 +81,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
 
   const detail = await getEventDetailData(params.id, scope);
   const supporters = await listEventSupporters(params.id);
+  const scanCounts = await countScansByStation(params.id);
   if (!detail.event) {
     return (
       <>
@@ -211,6 +215,10 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         ) : null}
       </div>
 
+      <div className="mb-3">
+        <LiveRefresh />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Tổng đăng ký (không hủy)" value={activeRegistrations.length} />
         <KpiCard label="Giữ ghế (đăng ký / xác nhận)" value={confirmedSeatsCount} />
@@ -218,6 +226,20 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         <KpiCard label="Đã check-in" value={checkedInRegistrations.length} />
         <KpiCard label="Vãng lai" value={walkInRegistrations.length} />
       </div>
+
+      {scanCounts.counts.length ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {scanCounts.counts.map((row) => (
+            <span
+              key={row.station}
+              className="rounded-full border border-vam-line bg-white px-3 py-1 text-sm text-vam-ink"
+            >
+              {stationLabel(row.station)}:{" "}
+              <strong className="tabular-nums text-vam-green">{row.total}</strong>
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">
         <div className="grid gap-4">
