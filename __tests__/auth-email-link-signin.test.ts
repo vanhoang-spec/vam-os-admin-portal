@@ -91,6 +91,14 @@ describe("completeEmailLinkSignIn", () => {
     expect(mocks.setAuthCookies).toHaveBeenCalledWith("access-token", "refresh-token", 3600);
   });
 
+  it("lands on the review queue when the link carried no destination", async () => {
+    const result = await completeEmailLinkSignIn({ ...validInput, next: undefined });
+
+    // Every role that can hold a review assignment can open /reviews, and it is
+    // where an invited mentor is going anyway.
+    expect(result).toEqual({ ok: true, next: "/reviews" });
+  });
+
   it("REJECTS_UNVERIFIED_TOKEN: a token Supabase does not recognise sets no cookie", async () => {
     mocks.getSupabaseAuthClientWithAccessToken.mockReturnValue(
       authClientReturning(null, { name: "AuthApiError", status: 401 })
@@ -170,9 +178,10 @@ describe("requestMagicLinkAction", () => {
     );
 
     const options = mocks.signInWithOtp.mock.calls[0][0].options;
-    expect(options.emailRedirectTo).toBe(
-      "https://os.alumni-mentoring.edu.vn/auth/callback?next=%2Freviews"
-    );
+    expect(options.emailRedirectTo).toBe("https://os.alumni-mentoring.edu.vn/auth/callback");
+    // See the invite case: a query string would need a wildcard allow-list
+    // entry, and its absence fails silently at the worst moment.
+    expect(options.emailRedirectTo).not.toContain("?");
   });
 
   it("NO_ACCOUNT_ENUMERATION: an unknown address gets the same answer as a known one", async () => {

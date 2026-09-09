@@ -176,8 +176,14 @@ describe("enable-reviewer Auth pagination", () => {
     // on a page that cannot consume their token and is bounced to /login.
     expect(inviteUserByEmail).toHaveBeenCalledWith(
       "target.person@example.com",
-      { redirectTo: "https://os.alumni-mentoring.edu.vn/auth/callback?next=%2Freviews" }
+      { redirectTo: "https://os.alumni-mentoring.edu.vn/auth/callback" }
     );
+    // No query string: Supabase matches the destination against its Redirect
+    // Allow List, and a bare entry does not cover the same URL with parameters
+    // appended. Adding one would put this flow behind a wildcard entry someone
+    // has to remember.
+    const sent = inviteUserByEmail.mock.calls[0][1].redirectTo;
+    expect(sent).not.toContain("?");
     expect(rpc).toHaveBeenCalledWith(
       "vam084_grant_recruitment_participation",
       expect.objectContaining({ p_auth_user_id: "auth-invited" })

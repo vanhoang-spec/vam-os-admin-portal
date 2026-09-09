@@ -92,7 +92,7 @@ export async function requestMagicLinkAction(
   const client = getSupabaseAuthClientForPasswordSignIn();
   if (!client) return { error: mapAuthError("network_unavailable"), sent: false };
 
-  const emailRedirectTo = await getAuthCallbackUrl(safeNext(formData.get("next")));
+  const emailRedirectTo = await getAuthCallbackUrl();
 
   const { error } = await client.auth.signInWithOtp({
     email,
