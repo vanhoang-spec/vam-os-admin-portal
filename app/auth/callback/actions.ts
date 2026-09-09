@@ -82,5 +82,8 @@ export async function completeEmailLinkSignIn(input: {
   const expiresIn = Number.isFinite(input.expiresIn) && input.expiresIn > 0 ? input.expiresIn : 3600;
   await setAuthCookies(accessToken, refreshToken, expiresIn);
 
-  return { ok: true, next: safeNext(input.next) };
+  // The link that brought them here carries no destination — see
+  // `getAuthCallbackUrl`. Everyone who can hold a review assignment can open
+  // /reviews, and it is where an invited mentor is going anyway.
+  return { ok: true, next: safeNext(input.next ?? "/reviews") };
 }

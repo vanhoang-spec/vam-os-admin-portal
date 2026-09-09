@@ -45,10 +45,23 @@ export async function getPublicOrigin(): Promise<string | null> {
   return `${proto}://${host}`;
 }
 
-/** Absolute URL of the route that turns an emailed auth link into a session. */
-export async function getAuthCallbackUrl(next?: string): Promise<string | null> {
+/**
+ * Absolute URL of the route that turns an emailed auth link into a session.
+ *
+ * NO QUERY STRING, DELIBERATELY
+ * ---------------------------------------------------------------------------
+ * Supabase refuses to redirect anywhere that does not match its Redirect Allow
+ * List, and an entry written as a bare path does not cover the same URL with
+ * parameters appended — covering that needs a wildcard entry someone has to
+ * remember to add. Carrying a `?next=` here would put the whole invited-reviewer
+ * flow behind a configuration line that is easy to miss and fails silently.
+ *
+ * So the destination is fixed and the allow-list entry can be exact. Where to
+ * land afterwards is decided in the callback action instead, where it costs
+ * nothing.
+ */
+export async function getAuthCallbackUrl(): Promise<string | null> {
   const origin = await getPublicOrigin();
   if (!origin) return null;
-  const url = `${origin}/auth/callback`;
-  return next ? `${url}?next=${encodeURIComponent(next)}` : url;
+  return `${origin}/auth/callback`;
 }

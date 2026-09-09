@@ -88,7 +88,7 @@ export async function enableMentorAsReviewer(input: {
     // names. Only /auth/callback can turn them into a session, so the invite
     // has to say so — otherwise the account is created and can never be
     // entered. (The URL must also sit in the project's Redirect Allow List.)
-    const redirectTo = await getAuthCallbackUrl("/reviews");
+    const redirectTo = await getAuthCallbackUrl();
     const { data, error } = await (client as any).auth.admin.inviteUserByEmail(
       email,
       redirectTo ? { redirectTo } : undefined
