@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { handleReviewFormAction } from "@/app/actions/application-reviews";
 import {
@@ -15,12 +16,14 @@ function ScoreRadio({
   name,
   label,
   defaultValue,
-  disabled
+  disabled,
+  onPick
 }: {
   name: string;
   label: string;
   defaultValue?: number | null;
   disabled?: boolean;
+  onPick?: (value: number) => void;
 }) {
   return (
     <fieldset className="rounded-md border border-vam-line bg-slate-50 px-3 py-2.5">
@@ -34,6 +37,7 @@ function ScoreRadio({
               value={String(n)}
               defaultChecked={defaultValue === n}
               disabled={disabled}
+              onChange={() => onPick?.(n)}
               className="accent-vam-green"
             />
             <span className="text-xs font-medium text-slate-600">{n}</span>
@@ -137,6 +141,31 @@ export function ReviewForm({
     initialReviewActionState
   );
 
+  /**
+   * Running total of the five scores.
+   *
+   * The server stores `total_score` as the plain sum, but it only ever
+   * appeared after submitting — so a reviewer weighing whether a borderline
+   * application clears the bar had to add five numbers in their head, on every
+   * application. Kept uncontrolled: each radio reports its pick, the inputs
+   * stay the DOM's, and nothing about how the form submits changes.
+   */
+  const [scores, setScores] = useState<Record<string, number>>(() => {
+    const seeded: Record<string, number> = {};
+    if (typeof defaultScoreMotivation === "number") seeded.score_motivation = defaultScoreMotivation;
+    if (typeof defaultScoreGoalClarity === "number") seeded.score_goal_clarity = defaultScoreGoalClarity;
+    if (typeof defaultScoreCommitment === "number") seeded.score_commitment = defaultScoreCommitment;
+    if (typeof defaultScoreFit === "number") seeded.score_fit = defaultScoreFit;
+    if (typeof defaultScoreCommunication === "number") seeded.score_communication = defaultScoreCommunication;
+    return seeded;
+  });
+  const pick = (field: string) => (value: number) =>
+    setScores((previous) => ({ ...previous, [field]: value }));
+
+  const scored = Object.values(scores);
+  const total = scored.reduce((sum, value) => sum + value, 0);
+  const remaining = 5 - scored.length;
+
   return (
     <div>
       <ActionBanner state={state} />
@@ -153,35 +182,58 @@ export function ReviewForm({
         {/* Score grid */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <ScoreRadio
+            onPick={pick("score_motivation")}
             name="score_motivation"
             label="Động lực (1–5)"
             defaultValue={defaultScoreMotivation}
             disabled={isSubmitted}
           />
           <ScoreRadio
+            onPick={pick("score_goal_clarity")}
             name="score_goal_clarity"
             label="Rõ ràng mục tiêu (1–5)"
             defaultValue={defaultScoreGoalClarity}
             disabled={isSubmitted}
           />
           <ScoreRadio
+            onPick={pick("score_commitment")}
             name="score_commitment"
             label="Cam kết (1–5)"
             defaultValue={defaultScoreCommitment}
             disabled={isSubmitted}
           />
           <ScoreRadio
+            onPick={pick("score_fit")}
             name="score_fit"
             label="Phù hợp chương trình (1–5)"
             defaultValue={defaultScoreFit}
             disabled={isSubmitted}
           />
           <ScoreRadio
+            onPick={pick("score_communication")}
             name="score_communication"
             label="Giao tiếp (1–5)"
             defaultValue={defaultScoreCommunication}
             disabled={isSubmitted}
           />
+        </div>
+
+        {/*
+          Sits directly under the five inputs, where the question "does this
+          add up to enough?" is actually asked.
+        */}
+        <div
+          data-testid="review-score-total"
+          className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-vam-line bg-vam-mint px-3 py-2.5"
+        >
+          <span className="text-xs font-semibold uppercase text-slate-600">Tổng điểm</span>
+          <span className="text-sm text-slate-600">
+            <b className="text-lg font-semibold tabular-nums text-vam-ink">{total}</b>
+            <span className="ml-1 text-vam-ink">/ 25</span>
+            {remaining > 0 ? (
+              <span className="ml-2 text-slate-500">còn {remaining} tiêu chí chưa chấm</span>
+            ) : null}
+          </span>
         </div>
 
         {/* Recommendation */}

@@ -14,7 +14,12 @@ function SectionCard({
   accent = "slate",
   children
 }: {
-  number: string | number;
+  /**
+   * Omitted when the reader sees a single section. A numbered marker claims
+   * the reader is somewhere in a sequence; standing alone it says nothing
+   * true.
+   */
+  number?: string | number;
   title: string;
   accent?: "slate" | "green" | "amber" | "blue" | "red";
   children: React.ReactNode;
@@ -29,11 +34,13 @@ function SectionCard({
   return (
     <section className="rounded-lg border border-vam-line bg-white p-5 shadow-soft">
       <div className="mb-4 flex items-center gap-3">
-        <span
-          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${accentRing[accent]}`}
-        >
-          {number}
-        </span>
+        {number === undefined ? null : (
+          <span
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${accentRing[accent]}`}
+          >
+            {number}
+          </span>
+        )}
         <h2 className="text-base font-semibold text-vam-ink">{title}</h2>
       </div>
       {children}
@@ -153,10 +160,13 @@ function MenteeScoreGuide() {
     <div className="space-y-3">
       {criteria.map((c) => (
         <div key={c.field} className="rounded-md border border-vam-line bg-white p-3">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="text-sm font-semibold text-vam-ink">{c.label}</span>
-            <Code>{c.field}</Code>
-          </div>
+          {/*
+            No field code here. `score_motivation` is how the column is
+            spelled in storage and in the export — vocabulary for whoever
+            reconciles a CSV, not for the person deciding whether an answer
+            shows real motivation. The admin-only table below still carries it.
+          */}
+          <p className="text-sm font-semibold text-vam-ink">{c.label}</p>
           <p className="mt-2 text-xs font-semibold uppercase text-slate-500">Đọc câu nào trong đơn</p>
           <ul className="mt-1 space-y-0.5">
             {c.read.map((question) => (
@@ -244,15 +254,13 @@ function RecommendationTable() {
       <table className="min-w-full divide-y divide-vam-line text-sm">
         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
-            <th className="px-3 py-2">Giá trị (value)</th>
-            <th className="px-3 py-2">Hiển thị</th>
+            <th className="px-3 py-2">Lựa chọn</th>
             <th className="px-3 py-2">Khi nào dùng</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-vam-line">
           {recs.map((r) => (
             <tr key={r.value}>
-              <td className="px-3 py-2"><Code>{r.value}</Code></td>
               <td className="px-3 py-2 font-medium text-vam-ink whitespace-nowrap">{r.label}</td>
               <td className="px-3 py-2 text-slate-600">{r.when}</td>
             </tr>
@@ -301,7 +309,8 @@ export default async function ReviewerGuidePage() {
       </div>
 
       <div className="space-y-6 pb-16">
-        {/* ── 1. Account policy ─────────────────────────────────── */}
+        {/* ── 1. Account policy — ADMIN ONLY ─────────────────────── */}
+        {isAdmin && (
         <SectionCard number={1} title="Chính sách tài khoản reviewer" accent="red">
           <Callout variant="danger">
             <strong>Không dùng tài khoản chung (shared account).</strong> Mỗi reviewer phải có tài
@@ -325,6 +334,7 @@ export default async function ReviewerGuidePage() {
             </li>
           </ul>
         </SectionCard>
+        )}
 
         {/* ── 2. Admin setup checklist ──────────────────────────── */}
         {isAdmin && (
@@ -465,7 +475,7 @@ export default async function ReviewerGuidePage() {
 
         {/* ── 4. Reviewer workflow ──────────────────────────────── */}
         <SectionCard
-          number={isAdmin ? 4 : 2}
+          number={isAdmin ? 4 : undefined}
           title="Hướng dẫn Reviewer — Quy trình làm việc"
           accent="green"
         >
@@ -533,6 +543,7 @@ export default async function ReviewerGuidePage() {
               </h3>
               <MenteeScoreGuide />
             </div>
+            {isAdmin ? (
             <div>
               <h3 className="mb-2 text-xs font-semibold uppercase text-slate-500">
                 Tên trường dữ liệu (dùng khi đối chiếu file xuất điểm)
@@ -543,6 +554,7 @@ export default async function ReviewerGuidePage() {
                 vòng phỏng vấn. Phần mô tả ở trên viết riêng cho việc chấm đơn mentee vòng hồ sơ.
               </p>
             </div>
+            ) : null}
             <div>
               <h3 className="mb-2 text-xs font-semibold uppercase text-slate-500">
                 Kết quả đề xuất
@@ -552,9 +564,10 @@ export default async function ReviewerGuidePage() {
           </div>
         </SectionCard>
 
-        {/* ── 5. Security notes ─────────────────────────────────── */}
+        {/* ── 5. Security notes — ADMIN ONLY ────────────────────── */}
+        {isAdmin && (
         <SectionCard
-          number={isAdmin ? 5 : 3}
+          number={5}
           title="Bảo mật & quản trị tài khoản"
           accent="amber"
         >
@@ -599,6 +612,7 @@ export default async function ReviewerGuidePage() {
             </li>
           </ul>
         </SectionCard>
+        )}
 
         {/* ── 6. Test data ──────────────────────────────────────── */}
         {isAdmin && (

@@ -20,8 +20,12 @@ import { WorkDrawer } from "../../../work-drawer";
  * case is the pre-existing screen, never a broken one.
  */
 export default async function MyWorkReviewDetail(props: { params: Promise<{ id: string }> }) {
+  // Awaited here as well as inside the page: the drawer needs the id to offer
+  // the full-screen route, and `params` is a promise that resolves to the same
+  // value for both readers.
+  const { id } = await props.params;
   return (
-    <WorkDrawer>
+    <WorkDrawer fullScreenHref={`/reviews/${id}`}>
       {await ReviewDetailPage(props)}
     </WorkDrawer>
   );

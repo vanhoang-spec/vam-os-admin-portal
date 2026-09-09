@@ -69,20 +69,32 @@ const CRITERIA = [
 ] as const;
 
 describe("the rubric is served to a standalone reviewer", () => {
-  it("renders all five criteria, their field names and their descriptions", async () => {
+  it("renders all five criteria by name, with what separates a low mark from a high one", async () => {
     mocks.getCurrentAdminUser.mockResolvedValue(userForRole("reviewer"));
 
     const html = renderToStaticMarkup(await ReviewerGuidePage());
 
-    for (const [field, label] of CRITERIA) {
-      expect(html).toContain(field);
+    for (const [, label] of CRITERIA) {
       expect(html).toContain(label);
     }
-    // A label alone does not tell a first-time scorer what to weigh; the
-    // description is the part that makes two reviewers agree.
-    expect(html).toContain("Mức độ chủ động, nhiệt huyết");
-    expect(html).toContain("Khả năng duy trì tham gia xuyên suốt mùa");
+    // A label alone does not tell a first-time scorer what to weigh.
+    expect(html).toContain("Lý do ai viết cũng được");
+    expect(html).toContain("Khó khăn đúng loại mà một người đi trước gỡ được");
     expect(html).toContain("Hướng dẫn Reviewer");
+  });
+
+  it("STORAGE_VOCABULARY_IS_NOT_REVIEWER_VOCABULARY: no field codes reach a reviewer", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue(userForRole("reviewer"));
+
+    const html = renderToStaticMarkup(await ReviewerGuidePage());
+
+    // `score_motivation` is how the column is spelled in storage and in the
+    // export. A mentor reading an application has no use for it, and the
+    // programme owner asked for exactly this vocabulary split after seeing
+    // raw field names on the review screen.
+    for (const [field] of CRITERIA) {
+      expect(html).not.toContain(field);
+    }
   });
 
   it("does not offer a standalone reviewer the admin-only workflows", async () => {
@@ -100,13 +112,23 @@ describe("the rubric is served to a standalone reviewer", () => {
     expect(html).not.toContain("Danh sách công việc — Tạo tài khoản reviewer");
     expect(html).not.toContain("Danh sách công việc — Chia hồ sơ");
     expect(html).not.toContain('href="/reviews/progress"');
+    // Two more sections were withheld after the owner reviewed the real
+    // reviewer screen: account policy and account administration are both
+    // instructions for Core Team about reviewers, not for reviewers.
+    expect(html).not.toContain("Chính sách tài khoản reviewer");
+    expect(html).not.toContain("Bảo mật &amp; quản trị tài khoản");
   });
 
-  it("still serves the rubric to admin tiers", async () => {
+  it("still serves the rubric AND the field codes to admin tiers", async () => {
     mocks.getCurrentAdminUser.mockResolvedValue(userForRole("core_team"));
 
     const html = renderToStaticMarkup(await ReviewerGuidePage());
-    expect(html).toContain("score_motivation");
+    // The calibration guidance is for everyone; the storage vocabulary is for
+    // whoever reconciles the score export.
+    expect(html).toContain("Lý do ai viết cũng được");
+    for (const [field] of CRITERIA) {
+      expect(html).toContain(field);
+    }
     expect(html).toContain("/reviews/assign-bulk");
   });
 });
@@ -194,8 +216,8 @@ describe("the mentee rubric quotes questions that exist on the mentee form", () 
     mocks.getCurrentAdminUser.mockResolvedValue(userForRole("reviewer"));
     const html = renderToStaticMarkup(await ReviewerGuidePage());
 
-    for (const [field] of CRITERIA) {
-      expect(html).toContain(field);
+    for (const [, label] of CRITERIA) {
+      expect(html).toContain(label);
     }
     // Five criteria, each with both ends of the scale described.
     expect(html.match(/1–2 điểm/g)).toHaveLength(5);

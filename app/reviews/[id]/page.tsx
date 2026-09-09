@@ -12,6 +12,7 @@ import {
 } from "@/lib/data";
 import { canAssignReview, canReview } from "@/lib/permissions";
 import { isEditableReviewStatus } from "@/lib/review-status";
+import { flattenRawPayload, humanizeKey } from "@/lib/application-export";
 import { displayText, formatDate } from "@/lib/utils";
 import { Card, DetailGrid, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewForm } from "./review-form";
@@ -95,17 +96,23 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   const displayStatus = app?.status ?? app?.final_status ?? null;
   const applicationWithdrawn = displayStatus === "withdrawn";
 
-  // raw_payload entries
-  const rawPayloadEntries = ((): [string, string][] => {
-    const payload = app?.raw_payload;
-    if (!payload || typeof payload !== "object") return [];
-    return Object.entries(payload)
-      .filter(([, v]) => v !== null && v !== undefined && v !== "")
-      .map(([k, v]): [string, string] => [
-        k,
-        Array.isArray(v) ? (v as string[]).join(", ") : String(v)
-      ]);
-  })();
+  /**
+   * The applicant's answers, labelled the way the applicant saw them.
+   *
+   * This used to walk `raw_payload` directly and print each key in upper case
+   * — a reviewer read "IF_NOT_EFFECTIVE_TEXT" above the answer and had to guess
+   * which question it belonged to. The export layer already owns the mapping
+   * from storage key to the Vietnamese question, so this screen now asks it
+   * instead of inventing a second, worse answer.
+   *
+   * `flattenRawPayload` also brings something the old inline walk lacked: it
+   * drops the segments reserved for internal, scoring and authorisation
+   * metadata, so a nested field that was never meant for a reviewer cannot
+   * surface here just because it happens to sit in the payload.
+   */
+  const rawPayloadEntries = flattenRawPayload(
+    (app?.raw_payload ?? null) as Record<string, unknown> | null
+  );
 
   const isSubmitted = review.status === "submitted";
 
@@ -158,8 +165,14 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
       </Card>
 
       {/* Application summary */}
+      {/*
+        Stacked, not two columns. The answers are long-form Vietnamese prose —
+        several paragraphs per question — and half a screen forced them into a
+        column narrow enough that reviewers reported not being able to read the
+        application at all.
+      */}
       {app ? (
-        <div className="mb-4 grid gap-4 xl:grid-cols-2">
+        <div className="mb-4 grid gap-4">
           <Card>
             <h2 className="mb-3 text-base font-semibold text-vam-ink">Thông tin ứng viên</h2>
             <DetailGrid
@@ -190,19 +203,25 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
               Nội dung đơn
             </h2>
             {rawPayloadEntries.length > 0 ? (
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                {rawPayloadEntries.map(([key, value]) => (
+              /*
+                No `max-h` and no inner scroll. A fixed-height well inside an
+                already-scrolling page gave the reviewer a second scrollbar and
+                a viewport a few lines tall for answers that run to paragraphs.
+                The page scrolls; the answers do not need to.
+              */
+              <dl className="grid gap-2">
+                {rawPayloadEntries.map(({ key, value }) => (
                   <div
                     key={key}
-                    className="rounded-md border border-vam-line bg-slate-50 px-3 py-2"
+                    className="rounded-md border border-vam-line bg-slate-50 px-3 py-2.5"
                   >
-                    <dt className="text-xs font-medium uppercase text-slate-500">{key}</dt>
-                    <dd className="mt-1 whitespace-pre-wrap break-words text-sm text-vam-ink">
+                    <dt className="text-xs font-semibold text-slate-500">{humanizeKey(key)}</dt>
+                    <dd className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-vam-ink">
                       {value}
                     </dd>
                   </div>
                 ))}
-              </div>
+              </dl>
             ) : (
               <EmptyState message="Không có raw_payload. Xem câu trả lời legacy tại trang chi tiết đơn." />
             )}
