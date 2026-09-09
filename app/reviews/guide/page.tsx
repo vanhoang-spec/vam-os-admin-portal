@@ -85,6 +85,121 @@ function Code({ children }: { children: string }) {
   );
 }
 
+/**
+ * What each of the five scores means when reading a MENTEE application.
+ *
+ * The five criteria are shared by every review in the system — same columns for
+ * mentor and mentee, same columns for the profile round and the interview. That
+ * made the descriptions generic by necessity ("Mức độ chủ động, nhiệt huyết"),
+ * and generic descriptions are the thing that lets two reviewers score the same
+ * application four points apart.
+ *
+ * Season 12 puts twenty-two volunteer mentors on mentee profile screening, most
+ * of them scoring for the first time. So each criterion now names the questions
+ * in the mentee form it is actually read from, and says what separates a low
+ * score from a high one. The intake questions are quoted as they appear to the
+ * applicant, so a reviewer can find them on the page in front of them.
+ */
+function MenteeScoreGuide() {
+  const criteria = [
+    {
+      field: "score_motivation",
+      label: "Động lực",
+      read: ["Vì sao bạn chọn UEH Mentoring?", 'Mô tả "phiên bản tốt nhất của bạn sau 1 năm"'],
+      low: "Lý do ai viết cũng được — “muốn học hỏi”, “muốn phát triển bản thân”. Đọc xong không biết gì thêm về riêng người này.",
+      high: "Nói được hoàn cảnh cụ thể của chính mình: vì sao là lúc này, vì sao là chương trình này, đang đứng ở đâu và muốn đi đâu."
+    },
+    {
+      field: "score_goal_clarity",
+      label: "Rõ ràng mục tiêu",
+      read: ["Mục tiêu cụ thể bạn muốn đạt được qua mentoring (3-6 tháng)", "3 câu hỏi cụ thể bạn muốn hỏi mentor"],
+      low: "Mục tiêu quá rộng hoặc quá xa để làm được trong một mùa. Ba câu hỏi thực ra là một câu hỏi chung viết ba lần.",
+      high: "Mục tiêu nhìn vào là biết sau 3-6 tháng đạt hay chưa. Ba câu hỏi cho thấy đã tự tìm hiểu trước khi hỏi."
+    },
+    {
+      field: "score_commitment",
+      label: "Cam kết",
+      read: [
+        "Kế hoạch của bạn để tận dụng mentoring",
+        "Nếu mentoring không hiệu quả như mong đợi, bạn sẽ làm gì?",
+        "Bạn sẵn sàng phỏng vấn 30 phút (nếu được mời) trong đợt nào?",
+        "Bạn sẵn sàng tham gia kickoff event của chương trình không?"
+      ],
+      low: "Kế hoạch dừng ở “sẽ cố gắng”. Khi mọi việc không như ý thì quy về hoàn cảnh hoặc về phía mentor. Không chọn được đợt phỏng vấn nào.",
+      high: "Nói được sẽ chuẩn bị gì trước mỗi buổi và theo dõi tiến bộ ra sao. Nhận phần trách nhiệm của mình trước khi nghĩ đến việc dừng."
+    },
+    {
+      field: "score_fit",
+      label: "Phù hợp chương trình",
+      read: [
+        "Khó khăn cụ thể bạn đang cần mentor hỗ trợ",
+        "Ngành nghề bạn muốn theo đuổi",
+        "Chức năng / vị trí công việc bạn quan tâm",
+        "Soft skills bạn muốn phát triển (chọn tối đa 3)"
+      ],
+      low: "Thứ đang cần không phải là mentoring — cần một chỗ thực tập, cần dạy kèm một môn, cần hỗ trợ tài chính.",
+      high: "Khó khăn đúng loại mà một người đi trước gỡ được: chọn hướng, ra quyết định, hiểu nghề từ người đã làm."
+    },
+    {
+      field: "score_communication",
+      label: "Giao tiếp",
+      read: ["Toàn bộ các câu trả lời tự luận"],
+      low: "Rời rạc, lạc đề, hoặc viết cho đủ số ký tự tối thiểu rồi dừng.",
+      high: "Mạch lạc, đúng trọng tâm câu hỏi, người đọc hiểu ngay mà không phải đoán."
+    }
+  ];
+
+  return (
+    <div className="space-y-3">
+      {criteria.map((c) => (
+        <div key={c.field} className="rounded-md border border-vam-line bg-white p-3">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="text-sm font-semibold text-vam-ink">{c.label}</span>
+            <Code>{c.field}</Code>
+          </div>
+          <p className="mt-2 text-xs font-semibold uppercase text-slate-500">Đọc câu nào trong đơn</p>
+          <ul className="mt-1 space-y-0.5">
+            {c.read.map((question) => (
+              <li key={question} className="text-sm text-slate-700">
+                <span className="text-slate-400">·</span> {question}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5">
+              <p className="text-xs font-semibold uppercase text-amber-800">1–2 điểm</p>
+              <p className="mt-1 text-sm leading-6 text-amber-900">{c.low}</p>
+            </div>
+            <div className="rounded-md border border-vam-green bg-vam-mint/40 p-2.5">
+              <p className="text-xs font-semibold uppercase text-vam-green">4–5 điểm</p>
+              <p className="mt-1 text-sm leading-6 text-vam-ink">{c.high}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {/*
+        Straight from the mentee form's own opening text. A reviewer calibrating
+        against "the best candidate" instead of "the candidate this programme is
+        for" will reject exactly the people it was built to take.
+      */}
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm leading-6 text-blue-900">
+        <p className="font-semibold">Chấm theo chân dung chương trình, không theo thành tích</p>
+        <p className="mt-1">
+          Form đăng ký nói rõ với ứng viên: UEH Mentoring không tìm những người “giỏi nhất” hay
+          đã có sẵn mọi câu trả lời, mà tìm người thật sự muốn thay đổi và sẵn sàng hành động.
+          Một bạn chưa biết chính xác mình muốn trở thành ai nhưng chủ động và cầu thị vẫn có thể
+          là hồ sơ mạnh.
+        </p>
+        <p className="mt-2">
+          Không trừ điểm vì lỗi chính tả, vì viết ngắn khi câu trả lời đã đủ ý, hay vì trường lớp
+          và thành tích. Chấm dựa trên những gì ứng viên trả lời, không dựa trên họ là ai.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ScoreTable() {
   const criteria = [
     { field: "score_motivation", label: "Động lực", desc: "Mức độ chủ động, nhiệt huyết và lý do rõ ràng để tham gia." },
@@ -414,9 +529,19 @@ export default async function ReviewerGuidePage() {
           <div className="mt-5 space-y-4">
             <div>
               <h3 className="mb-2 text-xs font-semibold uppercase text-slate-500">
-                Tiêu chí chấm điểm (1 = Yếu · 3 = Trung bình · 5 = Xuất sắc)
+                Tiêu chí chấm điểm — đơn Mentee (1 = Yếu · 3 = Trung bình · 5 = Xuất sắc)
+              </h3>
+              <MenteeScoreGuide />
+            </div>
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase text-slate-500">
+                Tên trường dữ liệu (dùng khi đối chiếu file xuất điểm)
               </h3>
               <ScoreTable />
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Năm tiêu chí này dùng chung cho cả đơn mentor và đơn mentee, cả vòng hồ sơ và
+                vòng phỏng vấn. Phần mô tả ở trên viết riêng cho việc chấm đơn mentee vòng hồ sơ.
+              </p>
             </div>
             <div>
               <h3 className="mb-2 text-xs font-semibold uppercase text-slate-500">

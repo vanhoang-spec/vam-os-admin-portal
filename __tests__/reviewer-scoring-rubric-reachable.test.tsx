@@ -132,3 +132,84 @@ describe("a reviewer can find the rubric without being told the URL", () => {
     expect(reviewDetail).toContain('href="/reviews/guide"');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * The rubric quotes the mentee form. It has to quote it correctly.
+ *
+ * The five score columns are shared by every review in the system — same
+ * columns for mentor and mentee, for the profile round and the interview — so
+ * their descriptions were generic by necessity. Generic descriptions are what
+ * let two reviewers score the same application four points apart, and Season 12
+ * puts twenty-two first-time scorers on mentee screening.
+ *
+ * So each criterion now names the questions it is read from, quoted as the
+ * applicant sees them, and these cases keep those quotes true. A question
+ * reworded on the form and not here sends a reviewer hunting for text that is
+ * no longer on the page in front of them.
+ */
+describe("the mentee rubric quotes questions that exist on the mentee form", () => {
+  const guide = readFileSync(join(ROOT, "app", "reviews", "guide", "page.tsx"), "utf8");
+  const menteeForm = readFileSync(
+    join(ROOT, "app", "apply", "mentee", "apply-mentee-form.tsx"),
+    "utf8"
+  );
+
+  /** Curly and straight quotes are the same question to a reader. */
+  const normalise = (value: string) =>
+    value.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+
+  // Everything the guide tells a reviewer to read, except the one entry that is
+  // a scope statement rather than a question.
+  const QUOTED_QUESTIONS = [
+    "Vì sao bạn chọn UEH Mentoring?",
+    'Mô tả "phiên bản tốt nhất của bạn sau 1 năm"',
+    "Mục tiêu cụ thể bạn muốn đạt được qua mentoring (3-6 tháng)",
+    "3 câu hỏi cụ thể bạn muốn hỏi mentor",
+    "Kế hoạch của bạn để tận dụng mentoring",
+    "Nếu mentoring không hiệu quả như mong đợi, bạn sẽ làm gì?",
+    "Bạn sẵn sàng phỏng vấn 30 phút (nếu được mời) trong đợt nào?",
+    "Bạn sẵn sàng tham gia kickoff event của chương trình không?",
+    "Khó khăn cụ thể bạn đang cần mentor hỗ trợ",
+    "Ngành nghề bạn muốn theo đuổi",
+    "Chức năng / vị trí công việc bạn quan tâm",
+    "Soft skills bạn muốn phát triển (chọn tối đa 3)"
+  ];
+
+  it("every question the guide quotes is a real label on the mentee form", () => {
+    const form = normalise(menteeForm);
+    for (const question of QUOTED_QUESTIONS) {
+      expect(form).toContain(normalise(question));
+    }
+  });
+
+  it("the guide really does quote each of them", () => {
+    const source = normalise(guide);
+    for (const question of QUOTED_QUESTIONS) {
+      expect(source).toContain(normalise(question));
+    }
+  });
+
+  it("each of the five scores says what separates a low mark from a high one", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue(userForRole("reviewer"));
+    const html = renderToStaticMarkup(await ReviewerGuidePage());
+
+    for (const [field] of CRITERIA) {
+      expect(html).toContain(field);
+    }
+    // Five criteria, each with both ends of the scale described.
+    expect(html.match(/1–2 điểm/g)).toHaveLength(5);
+    expect(html.match(/4–5 điểm/g)).toHaveLength(5);
+  });
+
+  it("calibrates against the programme's own description of who it is for", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue(userForRole("reviewer"));
+    const html = renderToStaticMarkup(await ReviewerGuidePage());
+
+    // Straight from the mentee form's opening text. A reviewer calibrating
+    // against "the best candidate" rejects exactly the people this programme
+    // was built to take.
+    expect(html).toContain("không tìm những người");
+    expect(html).toContain("Không trừ điểm vì lỗi chính tả");
+  });
+});
