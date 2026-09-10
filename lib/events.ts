@@ -20,6 +20,7 @@ import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
 import { randomUUID } from "node:crypto";
 import { checkinCodeUrl } from "@/lib/event-checkin-code";
+import { chooseSession } from "@/lib/event-session-choice";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
 import { resolveEmailBaseUrl, sendEventRegistrationConfirmation } from "@/lib/email";
@@ -95,12 +96,36 @@ export type RegistrationDetailData = {
 
 export type PublicRegistrationStatus = "ready" | "not_found" | "inactive" | "not_open" | "closed" | "cancelled" | "error";
 
+/**
+ * Một buổi người đăng ký có thể chọn.
+ *
+ * `seatsLeft` là null khi buổi đó không giới hạn số lượng — khác hẳn 0, và
+ * hiện "còn 0 chỗ" cho một buổi không giới hạn là nói ngược hoàn toàn.
+ */
+export type SessionOption = {
+  id: string;
+  seriesIndex: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  seatsLeft: number | null;
+  full: boolean;
+  waitlistEnabled: boolean;
+};
+
 export type PublicRegistrationData = {
   ok: boolean;
   status: PublicRegistrationStatus;
   message: string;
   event: Event | null;
   eventLink: Pick<EventLink, "id" | "event_id" | "token" | "opens_at" | "closes_at" | "is_active"> | null;
+  /**
+   * Các buổi để chọn, khi link nhận đăng ký cho cả chuỗi.
+   *
+   * Null với link thường — và null KHÁC mảng rỗng: null nghĩa là "không có gì
+   * để chọn, cứ đăng ký buổi này", rỗng nghĩa là "chuỗi này không còn buổi nào
+   * mở", hai câu trả lời khác nhau cho người đang đứng trước form.
+   */
+  sessions?: SessionOption[] | null;
 };
 
 export type PublicCheckinData = PublicRegistrationData;
@@ -210,6 +235,13 @@ export type ParticipationUpdateInput = ParticipationInput & {
 
 export type PublicRegistrationInput = {
   token?: unknown;
+  /**
+   * Buổi người đăng ký chọn, khi link nhận đăng ký cho cả chuỗi.
+   *
+   * Bị bỏ qua với link thường: buổi đã do link quyết định, và nhận thêm một
+   * giá trị ở đó là mở một đường đăng ký sang buổi khác.
+   */
+  session_event_id?: unknown;
   full_name?: unknown;
   email?: unknown;
   phone?: unknown;
@@ -727,6 +759,71 @@ export async function verifyPublicRegistrationId(token: string, registrationId: 
   return !!(regData as { id?: string } | null)?.id;
 }
 
+/**
+ * Các buổi mà một link nhận-cả-chuỗi cho phép chọn.
+ *
+ * Chỉ trả về buổi CHƯA HUỶ. Buổi đã qua vẫn giữ lại: một người mở link vào
+ * sáng buổi 2 vẫn cần thấy buổi 2, và ẩn buổi đã qua đi thì danh sách "Buổi 1,
+ * Buổi 2" tự nhiên mất một dòng mà không giải thích gì.
+ *
+ * Số chỗ còn lại đếm bằng MỘT truy vấn cho tất cả các buổi, không phải một
+ * truy vấn mỗi buổi: form công khai này là thứ hàng trăm người mở cùng lúc khi
+ * bài đăng vừa lên.
+ */
+async function loadSeriesSessions(
+  client: any,
+  seriesId: string
+): Promise<SessionOption[]> {
+  const { data: rows, error } = await client
+    .from("events")
+    .select("id,series_index,starts_at,ends_at,capacity_limit_enabled,capacity_limit,waitlist_enabled,status")
+    .eq("series_id", seriesId)
+    .neq("status", "cancelled")
+    .order("series_index", { ascending: true });
+
+  if (error) {
+    log("series sessions load failed", error);
+    return [];
+  }
+
+  const sessions = (rows ?? []) as JsonRecord[];
+  if (!sessions.length) return [];
+
+  const ids = sessions.map((row) => String(row.id));
+  const { data: taken, error: takenError } = await client
+    .from("event_registrations")
+    .select("event_id,registration_status")
+    .in("event_id", ids)
+    .neq("registration_status", "cancelled");
+
+  if (takenError) log("series seat count failed", takenError);
+
+  // Ghế đang chiếm, cùng định nghĩa với đường đăng ký một buổi: danh sách chờ
+  // và đơn bị từ chối KHÔNG chiếm ghế.
+  const held = new Map<string, number>();
+  for (const row of ((taken ?? []) as JsonRecord[])) {
+    const status = String(row.registration_status ?? "");
+    if (status === "waitlisted" || status === "rejected") continue;
+    const key = String(row.event_id);
+    held.set(key, (held.get(key) ?? 0) + 1);
+  }
+
+  return sessions.map((row) => {
+    const limited = row.capacity_limit_enabled === true && typeof row.capacity_limit === "number";
+    const limit = limited ? Number(row.capacity_limit) : null;
+    const used = held.get(String(row.id)) ?? 0;
+    return {
+      id: String(row.id),
+      seriesIndex: typeof row.series_index === "number" ? row.series_index : null,
+      startsAt: clean(row.starts_at),
+      endsAt: clean(row.ends_at),
+      seatsLeft: limit === null ? null : Math.max(0, limit - used),
+      full: limit !== null && used >= limit,
+      waitlistEnabled: row.waitlist_enabled === true
+    };
+  });
+}
+
 async function getPublicEventLinkData(token: string, linkType: "registration" | "checkin"): Promise<PublicRegistrationData> {
   const { client, error } = clientResult();
   if (!client) {
@@ -752,7 +849,7 @@ async function getPublicEventLinkData(token: string, linkType: "registration" | 
 
   const { data, error: linkError } = await client
     .from("event_links")
-    .select("id,event_id,link_type,token,is_active,opens_at,closes_at,events(*)")
+    .select("id,event_id,link_type,token,is_active,opens_at,closes_at,covers_series,series_id,events(*)")
     .eq("token", cleanToken)
     .eq("link_type", linkType)
     .maybeSingle();
@@ -800,14 +897,68 @@ async function getPublicEventLinkData(token: string, linkType: "registration" | 
     };
   }
 
+  const raw = data as JsonRecord;
+  const coversSeries = raw.covers_series === true;
+  const seriesId = clean(raw.series_id);
+  const sessions = coversSeries && seriesId ? await loadSeriesSessions(client, seriesId) : null;
+
   const window = publicLinkWindowStatus(link);
   return {
     ok: window.status === "ready",
     status: window.status,
     message: window.message,
     event,
-    eventLink: link
+    eventLink: link,
+    sessions
   };
+}
+
+/**
+ * Buổi mà một đơn đăng ký thuộc về.
+ *
+ * Với link thường: chính buổi mà link trỏ tới, và ô chọn buổi bị bỏ qua.
+ *
+ * Với link nhận cả chuỗi: buổi người dùng chọn — sau khi kiểm nó nằm trong
+ * danh sách buổi mà LINK NÀY phục vụ. Không tin con số gửi lên: một form công
+ * khai nhận được bất kỳ giá trị nào, và tin nó nghĩa là gửi thẳng một event_id
+ * bất kỳ là đăng ký được vào sự kiện có link đang đóng, hoặc sự kiện mùa khác.
+ */
+async function resolveChosenSession(
+  data: PublicRegistrationData,
+  rawChoice: unknown
+): Promise<{ ok: true; event: Event } | { ok: false; message: string }> {
+  const anchor = data.event as Event;
+
+  // Phép kiểm nằm trong `lib/event-session-choice.ts`: nó là phép kiểm bảo mật
+  // của một form công khai, và ở đó nó kiểm được mà không cần database.
+  const picked = chooseSession({
+    sessions: data.sessions ?? null,
+    anchorId: String(anchor.id),
+    choice: rawChoice
+  });
+  if (!picked.ok) return { ok: false, message: picked.message };
+
+  // Buổi neo — khỏi đọc lại.
+  if (picked.sessionId === anchor.id) return { ok: true, event: anchor };
+
+  const { client } = clientResult();
+  if (!client) return { ok: false, message: "Không thể hoàn tất đăng ký lúc này." };
+
+  const { data: row, error } = await client
+    .from("events")
+    .select("*")
+    .eq("id", picked.sessionId)
+    .maybeSingle();
+
+  if (error || !row) {
+    log("chosen session load failed", error);
+    return { ok: false, message: "Không tải được buổi bạn chọn." };
+  }
+  if ((row as Event).status === "cancelled") {
+    return { ok: false, message: "Buổi bạn chọn đã bị huỷ." };
+  }
+
+  return { ok: true, event: row as Event };
 }
 
 export async function registerForEvent(input: PublicRegistrationInput): Promise<PublicRegistrationResult> {
@@ -837,7 +988,23 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   const { client, error } = clientResult();
   if (!client) return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
 
-  const eventId = registrationData.event.id;
+  // Buổi người đăng ký chọn.
+  //
+  // Kiểm nó có thuộc chuỗi mà LINK NÀY phục vụ không, chứ không tin con số gửi
+  // lên: nếu không, gửi thẳng một event_id bất kỳ là đăng ký được vào một sự
+  // kiện có link đang đóng, hoặc một sự kiện của mùa khác.
+  const chosen = await resolveChosenSession(registrationData, input.session_event_id);
+  if (!chosen.ok) {
+    return {
+      ok: false,
+      status: "validation_error",
+      message: chosen.message,
+      eventName: registrationData.event.event_name ?? null
+    };
+  }
+
+  const targetEvent = chosen.event;
+  const eventId = targetEvent.id;
   // Load all non-cancelled registrations for duplicate check AND capacity count.
   // 'rejected' rows are excluded from duplicate check so a previously-rejected person
   // could re-register, but currently they remain in this list (neq cancelled only).
@@ -862,12 +1029,12 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   );
 
   if (existingError) {
-    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
+    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: targetEvent.event_name ?? null };
   }
 
   const duplicate = existingRows.some((row) => normalizeEmail(row.email) === email);
   if (duplicate) {
-    return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: registrationData.event.event_name ?? null };
+    return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: targetEvent.event_name ?? null };
   }
 
   // Class B: a lookup of one email address against `people.email_primary`. The
@@ -879,26 +1046,26 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   );
   if (peopleError) {
     log("public registration people match failed", peopleError);
-    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
+    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: targetEvent.event_name ?? null };
   }
 
   const matchedPerson = peopleData.find((person) => normalizeEmail(person.email_primary) === email);
   const nowIso = matchedPerson ? new Date().toISOString() : null;
 
-  const cfg = readEventConfig(registrationData.event as JsonRecord);
+  const cfg = readEventConfig(targetEvent as JsonRecord);
 
   // SF-3: server-side proof / payment validation (HTML `required` alone is bypassable)
-  if (registrationData.event.proof_required_for_registration && !clean(input.proof_url)) {
-    return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn minh chứng.", eventName: registrationData.event.event_name ?? null };
+  if (targetEvent.proof_required_for_registration && !clean(input.proof_url)) {
+    return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn minh chứng.", eventName: targetEvent.event_name ?? null };
   }
   // Phase 2B: meal selection drives payment proof requirement
   const mealSelected = String(input.meal_selected ?? "").trim() === "true";
   const mealPaymentProofRequired =
-    registrationData.event.meal_option_enabled === true &&
+    targetEvent.meal_option_enabled === true &&
     mealSelected &&
-    registrationData.event.meal_payment_proof_required !== false;
-  if ((registrationData.event.payment_proof_required || mealPaymentProofRequired) && !clean(input.payment_proof_url)) {
-    return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn ảnh chuyển khoản.", eventName: registrationData.event.event_name ?? null };
+    targetEvent.meal_payment_proof_required !== false;
+  if ((targetEvent.payment_proof_required || mealPaymentProofRequired) && !clean(input.payment_proof_url)) {
+    return { ok: false, status: "validation_error", message: "Vui lòng cung cấp đường dẫn ảnh chuyển khoản.", eventName: targetEvent.event_name ?? null };
   }
 
   // Active seats = registered + pending_review + confirmed (not waitlisted, not rejected).
@@ -914,7 +1081,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
       ok: false,
       status: "capacity_full",
       message: "Sự kiện đã đủ số lượng đăng ký. Vui lòng liên hệ BTC nếu cần hỗ trợ.",
-      eventName: registrationData.event.event_name ?? null
+      eventName: targetEvent.event_name ?? null
     };
   }
 
@@ -924,6 +1091,9 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
 
   const payload: JsonRecord = {
     event_id: eventId,
+    // Sao xuống từ buổi. Dữ liệu lặp có chủ ý: ràng buộc "một email một chuỗi"
+    // là một unique index, và unique index không bắc qua được phép nối bảng.
+    series_id: clean(targetEvent.series_id),
     event_link_id: registrationData.eventLink.id,
     linked_person_id: matchedPerson?.id ?? null,
     full_name: fullName,
@@ -949,13 +1119,13 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     payment_proof_url: paymentProofUrl,
     payment_proof_note: clean(input.payment_proof_note),
     proof_status: proofUrl ? "submitted" : "not_required",
-    payment_status: paymentProofUrl ? "submitted" : ((registrationData.event.fee_required || mealSelected) ? "pending" : "not_required"),
+    payment_status: paymentProofUrl ? "submitted" : ((targetEvent.fee_required || mealSelected) ? "pending" : "not_required"),
     review_status: cfg.approval_required ? "pending" : "not_required",
     // Phase 2B: denormalize meal config into registration record
     meal_selected: mealSelected,
-    meal_label: mealSelected ? (clean(registrationData.event.meal_label) ?? null) : null,
-    meal_fee_amount: mealSelected ? (registrationData.event.meal_fee_amount ?? null) : null,
-    meal_fee_currency: mealSelected ? (clean(registrationData.event.meal_fee_currency) ?? "VND") : null
+    meal_label: mealSelected ? (clean(targetEvent.meal_label) ?? null) : null,
+    meal_fee_amount: mealSelected ? (targetEvent.meal_fee_amount ?? null) : null,
+    meal_fee_currency: mealSelected ? (clean(targetEvent.meal_fee_currency) ?? "VND") : null
   };
 
   const { data, error: insertError } = await client
@@ -966,10 +1136,23 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
 
   if (insertError) {
     if ((insertError as { code?: string }).code === "23505") {
-      return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: registrationData.event.event_name ?? null };
+      // Hai ràng buộc duy nhất cùng ném 23505, và người đọc cần biết là cái
+      // nào: "bạn đã đăng ký buổi này rồi" khác hẳn "bạn đã giữ chỗ ở một buổi
+      // khác của chuỗi này" — câu thứ hai còn phải nói họ làm gì tiếp theo.
+      const hitSeries = String((insertError as { message?: string }).message ?? "").includes(
+        "event_registrations_series_lower_email_active_uidx"
+      );
+      return {
+        ok: true,
+        status: "already_registered",
+        message: hitSeries
+          ? "Bạn đã giữ chỗ ở một buổi khác của chuỗi sự kiện này. Mỗi người chỉ đăng ký một buổi — vui lòng liên hệ ban tổ chức nếu cần đổi buổi."
+          : "Bạn đã đăng ký sự kiện này rồi",
+        eventName: targetEvent.event_name ?? null
+      };
     }
     log("public registration insert failed", insertError);
-    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
+    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: targetEvent.event_name ?? null };
   }
 
   const registrationId = (data as { id?: string } | null)?.id ?? null;
@@ -981,7 +1164,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   if (registrationId) {
     await issueTicketAndConfirm({
       registrationId,
-      event: registrationData.event,
+      event: targetEvent,
       toEmail: email,
       fullName,
       pendingApproval: baseStatus !== "registered"
@@ -992,7 +1175,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     ok: true,
     status: "success",
     message: "Đăng ký thành công",
-    eventName: registrationData.event.event_name ?? null,
+    eventName: targetEvent.event_name ?? null,
     registrationId
   };
 }
@@ -1478,7 +1661,15 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
   return { ok: true, status: "success", message: "Check-in thành công!", eventName: displayName };
 }
 
-async function createEventLinkForEvent(eventId: unknown, linkType: "registration" | "checkin"): Promise<MutationResult> {
+async function createEventLinkForEvent(
+  eventId: unknown,
+  linkType: "registration" | "checkin",
+  /**
+   * Link đăng ký nhận cho CẢ CHUỖI của buổi này, người đăng ký chọn buổi trên
+   * form. Chỉ có nghĩa với link đăng ký, và chỉ khi buổi này thuộc một chuỗi.
+   */
+  coversSeries = false
+): Promise<MutationResult> {
   const access = await requireEventAdmin();
   if (!access.ok) return { ok: false, message: access.message };
   const { client, error } = clientResult();
@@ -1490,7 +1681,7 @@ async function createEventLinkForEvent(eventId: unknown, linkType: "registration
 
   const { data: event, error: eventError } = await client
     .from("events")
-    .select("id,season_id")
+    .select("id,season_id,series_id")
     .eq("id", id)
     .maybeSingle();
   if (eventError) {
@@ -1502,6 +1693,17 @@ async function createEventLinkForEvent(eventId: unknown, linkType: "registration
   const ctx = await getAdminScopeContext();
   if (!(await canOperateSeason(ctx, clean((event as JsonRecord).season_id)))) {
     return { ok: false, message: "Ban khong co quyen operations trong mua cua su kien nay." };
+  }
+
+  // Một buổi đơn lẻ không có chuỗi để nhận thay. Chặn ở đây với câu nói rõ
+  // vì sao, thay vì để ràng buộc CHECK ném ra một thông báo của Postgres.
+  const seriesId = clean((event as JsonRecord).series_id);
+  const wantsSeries = coversSeries && linkType === "registration";
+  if (wantsSeries && !seriesId) {
+    return {
+      ok: false,
+      message: "Buổi này không thuộc chuỗi lặp lại nào, nên link không nhận đăng ký cho cả chuỗi được."
+    };
   }
 
   const { data: existing, error: existingError } = await client
@@ -1523,6 +1725,8 @@ async function createEventLinkForEvent(eventId: unknown, linkType: "registration
     .insert({
       event_id: id,
       link_type: linkType,
+      covers_series: wantsSeries,
+      series_id: wantsSeries ? seriesId : null,
       created_by: access.admin?.id ?? null
     })
     .select("id,event_id,link_type,token,is_active,opens_at,closes_at,created_by,created_at,updated_at")
@@ -1550,8 +1754,11 @@ async function createEventLinkForEvent(eventId: unknown, linkType: "registration
   return { ok: true, message: linkType === "checkin" ? "Đã tạo liên kết check-in." : "Đã tạo liên kết đăng ký.", data: data as EventLink };
 }
 
-export async function createRegistrationLinkForEvent(eventId: unknown): Promise<MutationResult> {
-  return createEventLinkForEvent(eventId, "registration");
+export async function createRegistrationLinkForEvent(
+  eventId: unknown,
+  coversSeries = false
+): Promise<MutationResult> {
+  return createEventLinkForEvent(eventId, "registration", coversSeries);
 }
 
 export async function createCheckinLinkForEvent(eventId: unknown): Promise<MutationResult> {

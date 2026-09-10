@@ -116,7 +116,12 @@ export default async function PublicEventRegistrationPage(props: { params: Promi
           ) : data.ok && data.event ? (
             <>
               <h2 className="mb-4 text-lg font-semibold text-vam-ink">Đăng ký tham gia</h2>
-              <RegistrationForm token={params.token} eventName={eventName} event={data.event} />
+              <RegistrationForm
+                token={params.token}
+                eventName={eventName}
+                event={data.event}
+                sessions={data.sessions ?? null}
+              />
             </>
           ) : (
             <RegistrationBlocked status={data.status} message={data.message} />

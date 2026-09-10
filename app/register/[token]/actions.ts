@@ -14,6 +14,9 @@ export async function submitEventRegistrationAction(
 ): Promise<PublicRegistrationActionState> {
   const token = formText(formData, "token");
   const values = {
+    // Buổi người đăng ký chọn. Chỉ có ý nghĩa với link nhận cả chuỗi; tầng dữ
+    // liệu kiểm nó có thuộc chuỗi của link này không rồi mới dùng.
+    session_event_id: formText(formData, "session_event_id"),
     full_name: formText(formData, "full_name"),
     email: formText(formData, "email"),
     phone: formText(formData, "phone"),
