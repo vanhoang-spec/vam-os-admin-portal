@@ -29,6 +29,7 @@ import {
 import { canRunConfirmationBackfill, canViewOutboundEmails } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { displayText, formatDateTime } from "@/lib/utils";
+import { MailTabs } from "../mail/mail-tabs";
 import { BackfillPanel } from "./backfill-panel";
 
 export const dynamic = "force-dynamic";
@@ -86,9 +87,12 @@ export default async function OutboundEmailsPage(props: {
   return (
     <>
       <PageHeader
-        title="Email đã gửi"
+        title="Mail"
         description="Mỗi lần hệ thống thử gửi một lá thư đều để lại đúng một dòng ở đây — kể cả những lần bị cấu hình chặn."
       />
+
+      {/* canViewOutboundEmails đã đúng, nếu không thì không tới được dòng này. */}
+      <MailTabs active="log" canSeeLog />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Đã gửi" value={counts.sent} tone="success" />
