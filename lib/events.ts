@@ -3338,6 +3338,58 @@ export async function listSeriesSessions(eventId: string): Promise<SeriesSession
  * Còn đúng một buổi thì nó rời khỏi chuỗi hẳn — ba cột về null cùng lúc. Một
  * "chuỗi một buổi" là một sự kiện đơn lẻ đang đeo nhãn sai.
  */
+/**
+ * Đánh số lại cả chuỗi theo thứ tự thời gian.
+ *
+ * Số thứ tự buổi là thứ người đọc dùng để đối chiếu giữa danh sách trong CRM,
+ * ô chọn buổi trên link đăng ký, và thư xác nhận. Nó phải chạy 1, 2, 3 theo
+ * đúng thứ tự các buổi diễn ra — một chuỗi hiện "Buổi 1" nằm sau "Buổi 2" là
+ * chuỗi không ai đọc được.
+ *
+ * Mỗi dòng nhận số thứ tự và tổng trong CÙNG một lệnh: ràng buộc
+ * `events_series_shape_check` xét theo từng dòng, nên miễn là mỗi dòng tự nhất
+ * quán thì không trạng thái trung gian nào vi phạm.
+ *
+ * Còn từ một buổi trở xuống thì chuỗi tan: ba cột về null cùng lúc.
+ *
+ * Trả về số buổi còn lại, hoặc `null` khi không đọc nổi chuỗi.
+ */
+async function renumberSeries(client: any, seriesId: string): Promise<number | null> {
+  const { data: rows, error } = await client
+    .from("events")
+    .select("id, starts_at")
+    .eq("series_id", seriesId)
+    .order("starts_at", { ascending: true });
+
+  if (error) {
+    log("renumberSeries: reload failed", error);
+    return null;
+  }
+
+  const list = (rows ?? []) as JsonRecord[];
+
+  if (list.length <= 1) {
+    // Một "chuỗi một buổi" là một sự kiện đơn lẻ đang đeo nhãn sai.
+    for (const left of list) {
+      await client
+        .from("events")
+        .update({ series_id: null, series_index: null, series_total: null })
+        .eq("id", String(left.id));
+    }
+    return list.length;
+  }
+
+  for (let index = 0; index < list.length; index += 1) {
+    const { error: writeError } = await client
+      .from("events")
+      .update({ series_index: index + 1, series_total: list.length })
+      .eq("id", String(list[index].id));
+    if (writeError) log("renumberSeries: write failed", writeError);
+  }
+
+  return list.length;
+}
+
 export async function removeSessionFromSeries(input: {
   eventId: unknown;
 }): Promise<MutationResult> {
@@ -3402,38 +3454,140 @@ export async function removeSessionFromSeries(input: {
     afterData: null
   });
 
-  const { data: remaining, error: remainingError } = await client
-    .from("events")
-    .select("id, starts_at")
-    .eq("series_id", seriesId)
-    .order("starts_at", { ascending: true });
-
-  if (remainingError) {
-    log("removeSessionFromSeries: reload failed", remainingError);
+  const remaining = await renumberSeries(client, seriesId);
+  if (remaining === null) {
     return { ok: true, message: "Đã xoá buổi, nhưng chưa đánh số lại được các buổi còn lại." };
   }
-
-  const rows = (remaining ?? []) as JsonRecord[];
-
-  if (rows.length <= 1) {
-    // Một "chuỗi một buổi" là một sự kiện đơn lẻ đang đeo nhãn sai.
-    for (const left of rows) {
-      await client
-        .from("events")
-        .update({ series_id: null, series_index: null, series_total: null })
-        .eq("id", String(left.id));
-    }
+  if (remaining <= 1) {
     return { ok: true, message: "Đã xoá buổi. Sự kiện quay lại là buổi đơn lẻ." };
   }
+  return { ok: true, message: `Đã xoá buổi. Chuỗi còn ${remaining} buổi.` };
+}
 
-  for (let index = 0; index < rows.length; index += 1) {
-    const { error: renumberError } = await client
-      .from("events")
-      .update({ series_index: index + 1, series_total: rows.length })
-      .eq("id", String(rows[index].id));
-    if (renumberError) log("removeSessionFromSeries: renumber failed", renumberError);
+/**
+ * Đổi giờ của MỘT buổi, không đụng gì khác.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO KHÔNG DÙNG LUÔN `updateEvent`
+ * ---------------------------------------------------------------------------
+ * `updateEvent` nhận cả biểu mẫu và ghi lại gần như mọi cột. Muốn dời một buổi
+ * đi nửa tiếng mà phải gửi lên toàn bộ cấu hình sự kiện thì mọi ô người ta
+ * không chạm tới cũng đi theo — và một ô đọc sai sẽ ghi đè lên giá trị đang
+ * đúng. Ô sửa giờ nằm trong danh sách các buổi, nơi không có sẵn phần còn lại
+ * của biểu mẫu, nên nó cần một đường ghi hẹp đúng bằng thứ nó sửa.
+ *
+ * ---------------------------------------------------------------------------
+ * VẪN CHẶN TRÙNG KHÍT
+ * ---------------------------------------------------------------------------
+ * Dời một buổi vào đúng giờ và đúng chỗ của một buổi khác tạo ra cùng cái sai
+ * mà `addSessionToSeries` đã chặn: hai lựa chọn không phân biệt được trên link
+ * đăng ký. Chặn ở cả hai đường vào, vì một cánh cửa khoá không giúp gì khi cửa
+ * bên cạnh vẫn mở.
+ */
+export async function updateSessionTime(input: {
+  eventId: unknown;
+  starts_at: unknown;
+  ends_at?: unknown;
+}): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const eventId = clean(input.eventId);
+  if (!eventId || !isValidUuid(eventId)) return { ok: false, message: "ID buổi không hợp lệ." };
+
+  const startsAt = parseDateTime(clean(input.starts_at));
+  if (!startsAt) return { ok: false, message: "Thời điểm bắt đầu không hợp lệ." };
+
+  const endsAtRaw = clean(input.ends_at);
+  const endsAt = endsAtRaw ? parseDateTime(endsAtRaw) : null;
+  if (endsAtRaw && !endsAt) return { ok: false, message: "Giờ kết thúc không hợp lệ." };
+  if (endsAt && endsAt <= startsAt) {
+    return { ok: false, message: "Giờ kết thúc phải sau giờ bắt đầu." };
   }
 
+  const { data: target, error: targetError } = await client
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
 
-  return { ok: true, message: `Đã xoá buổi. Chuỗi còn ${rows.length} buổi.` };
+  if (targetError || !target) return { ok: false, message: "Không tìm thấy buổi này." };
+
+  const row = target as JsonRecord;
+  const scopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(scopeContext, clean(row.season_id)))) {
+    return { ok: false, message: "Bạn không có quyền vận hành trong mùa của sự kiện này." };
+  }
+
+  const seriesId = clean(row.series_id);
+
+  if (seriesId) {
+    const { data: siblings, error: siblingsError } = await client
+      .from("events")
+      .select("id, starts_at, location_name, location_address")
+      .eq("series_id", seriesId);
+
+    if (siblingsError) {
+      log("updateSessionTime: load siblings failed", siblingsError);
+      return { ok: false, message: SAFE_ERROR };
+    }
+
+    const venue = venueKey(row);
+    const clash = ((siblings ?? []) as JsonRecord[]).find(
+      (other) =>
+        String(other.id) !== eventId &&
+        clean(other.starts_at) === startsAt &&
+        venueKey(other) === venue
+    );
+
+    if (clash) {
+      return {
+        ok: false,
+        message:
+          "Chuỗi này đã có một buổi khác đúng vào giờ đó, ở cùng địa điểm. Hai buổi trùng khít thì người đăng ký không phân biệt được để chọn."
+      };
+    }
+  }
+
+  const { error: updateError } = await client
+    .from("events")
+    .update({ starts_at: startsAt, ends_at: endsAt })
+    .eq("id", eventId);
+
+  if (updateError) {
+    log("updateSessionTime: update failed", updateError);
+    return {
+      ok: false,
+      message: `${SAFE_ERROR} (${(updateError as { message?: string }).message ?? ""})`
+    };
+  }
+
+  await writeAdminAudit(client, {
+    actionType: "update_event_session_time",
+    beforeData: row,
+    afterData: { ...row, starts_at: startsAt, ends_at: endsAt }
+  });
+
+  // Đổi giờ có thể làm buổi này nhảy qua một buổi khác. Số thứ tự đọc theo thời
+  // gian, nên phải chạy lại — nếu không danh sách hiện "Buổi 1" nằm sau "Buổi 2".
+  if (seriesId) await renumberSeries(client, seriesId);
+
+  // Người đã đăng ký đang giữ một tấm vé ghi giờ CŨ. Hệ thống không tự gửi thư
+  // báo đổi lịch, nên chỗ duy nhất chuyện này được nói ra là ngay đây, lúc
+  // người vận hành còn đang nhìn màn hình.
+  const { data: holders } = await client
+    .from("event_registrations")
+    .select("id")
+    .eq("event_id", eventId)
+    .neq("registration_status", "cancelled");
+
+  const count = (holders ?? []).length;
+  return {
+    ok: true,
+    message: count
+      ? `Đã đổi giờ. ${count} người đã đăng ký buổi này và đang giữ thư xác nhận ghi giờ cũ — nhớ báo lại cho họ.`
+      : "Đã đổi giờ buổi này."
+  };
 }

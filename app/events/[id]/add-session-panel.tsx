@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
-import { addEventSessionAction, removeEventSessionAction } from "@/app/actions/events";
+import {
+  addEventSessionAction,
+  removeEventSessionAction,
+  updateEventSessionTimeAction
+} from "@/app/actions/events";
 import type { EventActionState } from "@/lib/event-action-types";
 import type { SeriesSession } from "@/lib/events";
 import { toVietnamInputValue } from "@/lib/event-datetime";
@@ -39,6 +43,19 @@ function RemoveButton({ label }: { label: string }) {
   );
 }
 
+function SaveTimeButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-md bg-vam-green px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-vam-green/90 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {pending ? "Đang lưu…" : "Lưu giờ"}
+    </button>
+  );
+}
+
 function sessionLine(session: SeriesSession): string {
   if (!session.startsAt) return "Chưa đặt ngày giờ";
   const start = `${formatDate(session.startsAt)} lúc ${formatTime(session.startsAt)}`;
@@ -66,61 +83,132 @@ function SessionRow({
   eventId: string;
 }) {
   const [state, formAction] = useFormState(removeEventSessionAction, initialState);
+  const [timeState, timeAction] = useFormState(updateEventSessionTimeAction, initialState);
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
   const locked = session.registrationCount > 0;
 
+  // Lưu xong thì đóng ô sửa lại và để lời báo ở dòng của buổi. Giữ ô mở với
+  // đúng giá trị vừa gõ trông y như lúc chưa lưu, nên người ta bấm Lưu lần nữa.
+  useEffect(() => {
+    if (timeState.ok && timeState.message) {
+      setSaved(timeState.message);
+      setEditing(false);
+    }
+  }, [timeState]);
+
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 border-b border-vam-line py-2 last:border-b-0">
-      <div className="min-w-0">
-        <span className="text-sm text-vam-ink">
-          <span className="font-semibold">Buổi {session.seriesIndex ?? "?"}</span>
-          {session.isCurrent ? (
-            <span className="ml-2 rounded-full bg-vam-mint px-2 py-0.5 text-[11px] font-medium text-vam-ink">
-              đang xem
+    <li className="border-b border-vam-line py-2 last:border-b-0">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-sm text-vam-ink">
+            <span className="font-semibold">Buổi {session.seriesIndex ?? "?"}</span>
+            {session.isCurrent ? (
+              <span className="ml-2 rounded-full bg-vam-mint px-2 py-0.5 text-[11px] font-medium text-vam-ink">
+                đang xem
+              </span>
+            ) : null}
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-600">{sessionLine(session)}</span>
+          <span className="mt-0.5 block text-[11px] text-slate-500">
+            {locked
+              ? `${session.registrationCount} người đã đăng ký`
+              : "Chưa ai đăng ký"}
+          </span>
+          {state.message ? (
+            <span
+              role="status"
+              className={`mt-1 block text-[11px] font-medium ${
+                state.ok ? "text-vam-green" : "text-red-700"
+              }`}
+            >
+              {state.message}
             </span>
           ) : null}
-        </span>
-        <span className="mt-0.5 block text-xs text-slate-600">{sessionLine(session)}</span>
-        <span className="mt-0.5 block text-[11px] text-slate-500">
-          {locked
-            ? `${session.registrationCount} người đã đăng ký`
-            : "Chưa ai đăng ký"}
-        </span>
-        {state.message ? (
-          <span
-            role="status"
-            className={`mt-1 block text-[11px] font-medium ${
-              state.ok ? "text-vam-green" : "text-red-700"
-            }`}
+          {saved && !editing ? (
+            <span role="status" className="mt-1 block text-[11px] font-medium text-vam-green">
+              {saved}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSaved(null);
+              setEditing((open) => !open);
+            }}
+            aria-expanded={editing}
+            className="rounded-md border border-vam-line px-3 py-1.5 text-xs font-semibold text-vam-ink transition-colors hover:bg-slate-50"
           >
-            {state.message}
-          </span>
-        ) : null}
+            {editing ? "Thôi" : "Sửa giờ"}
+          </button>
+          {session.isCurrent ? null : (
+            <Link
+              href={`/events/${session.id}`}
+              className="text-xs font-medium text-vam-green underline-offset-2 hover:underline"
+            >
+              Mở buổi này
+            </Link>
+          )}
+          {locked ? (
+            // Buổi đã có người đăng ký thì những tấm vé đã gửi đi đang trỏ vào
+            // dòng này. Xoá nó là làm các vé ấy trỏ vào hư không mà không ai
+            // được báo — đường đúng là "Huỷ sự kiện", nó giữ dữ liệu lại.
+            //
+            // Đổi GIỜ thì vẫn cho, vì dời lịch là chuyện có thật; hàm ghi sẽ
+            // nhắc lại rằng có bao nhiêu người đang giữ thư ghi giờ cũ.
+            <span className="text-[11px] text-slate-500">
+              Đã có người đăng ký — dùng “Huỷ sự kiện” nếu buổi này không diễn ra nữa.
+            </span>
+          ) : (
+            <form action={formAction}>
+              <input type="hidden" name="session_id" value={session.id} />
+              <input type="hidden" name="event_id" value={eventId} />
+              <RemoveButton label={`Xoá buổi ${session.seriesIndex ?? ""}`} />
+            </form>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {session.isCurrent ? null : (
-          <Link
-            href={`/events/${session.id}`}
-            className="text-xs font-medium text-vam-green underline-offset-2 hover:underline"
-          >
-            Mở buổi này
-          </Link>
-        )}
-        {locked ? (
-          // Buổi đã có người đăng ký thì những tấm vé đã gửi đi đang trỏ vào
-          // dòng này. Xoá nó là làm các vé ấy trỏ vào hư không mà không ai
-          // được báo — đường đúng là "Huỷ sự kiện", nó giữ dữ liệu lại.
-          <span className="text-[11px] text-slate-500">
-            Đã có người đăng ký — dùng “Huỷ sự kiện” nếu buổi này không diễn ra nữa.
-          </span>
-        ) : (
-          <form action={formAction}>
-            <input type="hidden" name="session_id" value={session.id} />
-            <input type="hidden" name="event_id" value={eventId} />
-            <RemoveButton label={`Xoá buổi ${session.seriesIndex ?? ""}`} />
-          </form>
-        )}
-      </div>
+      {editing ? (
+        <form
+          action={timeAction}
+          className="mt-2 flex flex-wrap items-start gap-3 rounded-md border border-vam-line bg-white p-3"
+        >
+          <input type="hidden" name="session_id" value={session.id} />
+          <input type="hidden" name="event_id" value={eventId} />
+
+          <VietnamDateTimeField
+            name="starts_at"
+            label={`Buổi ${session.seriesIndex ?? ""} bắt đầu`}
+            required
+            defaultValue={session.startsAt}
+          />
+          {/* Kèm số buổi vào nhãn: trên màn hình này có nhiều ô "Kết thúc" —
+              của từng buổi và của phần thêm buổi mới — và một nhãn trần thì
+              người đọc màn hình nghe xong không biết mình đang ở ô nào. */}
+          <VietnamDateTimeField
+            name="ends_at"
+            label={`Buổi ${session.seriesIndex ?? ""} kết thúc`}
+            defaultValue={session.endsAt}
+          />
+
+          <div className="pt-5">
+            <SaveTimeButton />
+          </div>
+
+          {timeState.message && !timeState.ok ? (
+            <p
+              role="status"
+              className="w-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
+            >
+              {timeState.message}
+            </p>
+          ) : null}
+        </form>
+      ) : null}
     </li>
   );
 }
