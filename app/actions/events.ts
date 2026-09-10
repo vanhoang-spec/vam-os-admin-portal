@@ -12,6 +12,7 @@ import {
   createRegistrationLinkForEvent,
   addSessionToSeries,
   removeSessionFromSeries,
+  updateSessionTime,
   createEvent,
   createEventSeries,
   removeParticipation,
@@ -483,6 +484,36 @@ export async function removeEventSessionAction(
 
   // Buổi bị xoá có thể chính là buổi đang mở, nên vẽ lại cả hai đường dẫn —
   // nếu không, người ta ở lại trên một trang đã không còn tồn tại.
+  revalidatePath("/events");
+  revalidatePath(`/events/${targetId}`);
+  revalidatePath(`/events/${formText(formData, "event_id")}`);
+  revalidatePath("/operations");
+
+  return { ok: true, message: result.message };
+}
+
+/**
+ * Đổi giờ của một buổi trong chuỗi.
+ *
+ * Đường ghi hẹp, chỉ chạm giờ bắt đầu và giờ kết thúc — xem `updateSessionTime`.
+ * Đổi giờ có thể làm cả chuỗi được đánh số lại, nên vẽ lại cả danh sách sự kiện
+ * lẫn trang của buổi được sửa.
+ */
+export async function updateEventSessionTimeAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const targetId = formText(formData, "session_id");
+  const result = await updateSessionTime({
+    eventId: targetId,
+    starts_at: formText(formData, "starts_at"),
+    ends_at: formText(formData, "ends_at")
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+
   revalidatePath("/events");
   revalidatePath(`/events/${targetId}`);
   revalidatePath(`/events/${formText(formData, "event_id")}`);

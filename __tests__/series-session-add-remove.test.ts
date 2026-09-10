@@ -34,7 +34,11 @@ vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { addSessionToSeries, removeSessionFromSeries } from "@/lib/events";
+import {
+  addSessionToSeries,
+  removeSessionFromSeries,
+  updateSessionTime
+} from "@/lib/events";
 
 const EVENT = "00000000-0000-4000-8000-0000000000aa";
 const SEASON = "00000000-0000-4000-8000-0000000000bb";
@@ -60,6 +64,22 @@ type Write = {
  * `siblings` cho lệnh được await thẳng (nạp cả chuỗi) — đúng hai kiểu gọi mà
  * hai hàm đang dùng.
  */
+type OrderBy = { column: string; ascending: boolean };
+
+/** Sắp như Postgres sắp: chuỗi so theo chuỗi, số so theo số, thiếu thì xuống cuối. */
+function sortRows(rows: Array<Record<string, unknown>>, order: OrderBy) {
+  const direction = order.ascending ? 1 : -1;
+  return [...rows].sort((left, right) => {
+    const a = left[order.column];
+    const b = right[order.column];
+    if (a === b) return 0;
+    if (a === undefined || a === null) return 1;
+    if (b === undefined || b === null) return -1;
+    if (typeof a === "number" && typeof b === "number") return (a - b) * direction;
+    return String(a).localeCompare(String(b)) * direction;
+  });
+}
+
 function makeClient(options: {
   anchor: Record<string, unknown> | null;
   siblings?: Array<Record<string, unknown>>;
@@ -71,6 +91,7 @@ function makeClient(options: {
     const chain: Record<string, unknown> = {};
     let mode: "select" | "update" | "insert" | "delete" = "select";
     let current: Write | null = null;
+    let orderBy: OrderBy | null = null;
 
     chain.select = vi.fn(() => chain);
     chain.eq = vi.fn((column: string, value: unknown) => {
@@ -83,7 +104,15 @@ function makeClient(options: {
       return chain;
     });
     chain.limit = vi.fn(() => chain);
-    chain.order = vi.fn(() => chain);
+    // `.order()` phải sắp thật, không được nuốt lặng.
+    //
+    // Việc đánh số lại chuỗi CHỈ đúng khi nó đọc theo thời gian. Một bản giả
+    // trả về đúng thứ tự đã nạp vào bất kể sắp theo cột nào sẽ xanh y hệt cho
+    // cả bản đọc theo `series_index` — tức là xanh cho cả bản đã hỏng.
+    chain.order = vi.fn((column: string, options?: { ascending?: boolean }) => {
+      orderBy = { column, ascending: options?.ascending !== false };
+      return chain;
+    });
 
     chain.update = vi.fn((payload: Record<string, unknown>) => {
       mode = "update";
@@ -112,7 +141,8 @@ function makeClient(options: {
 
     chain.then = (resolve: (value: { data: unknown; error: null }) => unknown) => {
       if (mode !== "select") return Promise.resolve(resolve({ data: null, error: null }));
-      const data = name === "events" ? (options.siblings ?? []) : (options.registrations ?? []);
+      const rows = name === "events" ? (options.siblings ?? []) : (options.registrations ?? []);
+      const data = orderBy ? sortRows(rows, orderBy) : rows;
       return Promise.resolve(resolve({ data, error: null }));
     };
 
@@ -353,6 +383,210 @@ describe("xoá buổi thêm nhầm", () => {
     expect(result.ok).toBe(false);
     // Không chỉ "không ghi gì" — mà còn KHÔNG HỎI GÌ. Một ID rác không đáng
     // một vòng đi về database.
+    expect(fake.from).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Đổi giờ một buổi riêng lẻ.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO CÓ ĐƯỜNG NÀY
+ * ---------------------------------------------------------------------------
+ * Mỗi buổi là một dòng sự kiện riêng, nên về lý thì mở trang của buổi đó ra là
+ * sửa được. Nhưng trên màn hình chuỗi không có chỗ nào nói ra điều đó: người
+ * vận hành nhìn thấy đúng một ô ngày giờ — ô "thêm buổi mới" — và kết luận
+ * rằng chỉ sửa được buổi sau.
+ *
+ * Ô sửa giờ nằm ngay trong danh sách các buổi, nên nó cần một đường ghi hẹp
+ * đúng bằng thứ nó sửa: `updateEvent` nhận cả biểu mẫu và ghi lại gần như mọi
+ * cột, mà ở đây phần còn lại của biểu mẫu không có mặt.
+ */
+describe("đổi giờ một buổi", () => {
+  it("chỉ ghi giờ, không đụng cột nào khác", async () => {
+    const fake = makeClient({
+      anchor: anchorRow({ series_id: SERIES, series_index: 1, series_total: 2 }),
+      siblings: [
+        { id: EVENT, starts_at: ANCHOR_START },
+        { id: OTHER, starts_at: "2026-09-27T01:00:00.000Z" }
+      ],
+      registrations: []
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    const result = await updateSessionTime({
+      eventId: EVENT,
+      starts_at: "2026-09-20T07:00",
+      ends_at: "2026-09-20T13:00"
+    });
+
+    expect(result.ok).toBe(true);
+
+    const timeWrite = fake.writes.find(
+      (write) => write.kind === "update" && "starts_at" in (write.payload ?? {})
+    );
+    // Đúng hai cột. Gửi kèm bất cứ cột nào khác là mở đường cho một ô không ai
+    // chạm tới ghi đè lên giá trị đang đúng.
+    expect(Object.keys(timeWrite?.payload ?? {}).sort()).toEqual(["ends_at", "starts_at"]);
+    expect(timeWrite?.filters).toContainEqual(["id", EVENT]);
+  });
+
+  it("giờ được hiểu theo giờ Việt Nam", async () => {
+    const fake = makeClient({ anchor: anchorRow(), registrations: [] });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    await updateSessionTime({
+      eventId: EVENT,
+      starts_at: "2026-09-20T07:00",
+      ends_at: "2026-09-20T13:00"
+    });
+
+    const timeWrite = fake.writes.find(
+      (write) => write.kind === "update" && "starts_at" in (write.payload ?? {})
+    );
+    // 07:00 giờ Việt Nam là 00:00Z; 13:00 là 06:00Z.
+    expect(timeWrite?.payload?.starts_at).toBe("2026-09-20T00:00:00.000Z");
+    expect(timeWrite?.payload?.ends_at).toBe("2026-09-20T06:00:00.000Z");
+  });
+
+  it("giờ kết thúc trước giờ bắt đầu thì không ghi gì", async () => {
+    const fake = makeClient({ anchor: anchorRow(), registrations: [] });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    const result = await updateSessionTime({
+      eventId: EVENT,
+      starts_at: "2026-09-20T13:00",
+      ends_at: "2026-09-20T07:00"
+    });
+
+    expect(result.ok).toBe(false);
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("dời vào đúng giờ và đúng chỗ của một buổi khác thì bị chặn", async () => {
+    const fake = makeClient({
+      anchor: anchorRow({ series_id: SERIES, series_index: 1, series_total: 2 }),
+      siblings: [
+        {
+          id: EVENT,
+          starts_at: ANCHOR_START,
+          location_name: "Phòng B1-502",
+          location_address: "279 Nguyễn Tri Phương, P.5, Q.10"
+        },
+        {
+          id: OTHER,
+          starts_at: "2026-09-27T01:00:00.000Z",
+          location_name: "Phòng B1-502",
+          location_address: "279 Nguyễn Tri Phương, P.5, Q.10"
+        }
+      ],
+      registrations: []
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    // Một cánh cửa khoá không giúp gì khi cửa bên cạnh vẫn mở: chặn lúc thêm
+    // buổi mà không chặn lúc đổi giờ thì vẫn ra được hai buổi trùng khít.
+    const result = await updateSessionTime({ eventId: EVENT, starts_at: "2026-09-27T08:00" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("cùng địa điểm");
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("giữ nguyên giờ cũ của CHÍNH buổi đó thì không tính là trùng", async () => {
+    const fake = makeClient({
+      anchor: anchorRow({ series_id: SERIES, series_index: 1, series_total: 2 }),
+      siblings: [
+        {
+          id: EVENT,
+          starts_at: ANCHOR_START,
+          location_name: "Phòng B1-502",
+          location_address: "279 Nguyễn Tri Phương, P.5, Q.10"
+        },
+        {
+          id: OTHER,
+          starts_at: "2026-09-27T01:00:00.000Z",
+          location_name: "Phòng B1-502",
+          location_address: "279 Nguyễn Tri Phương, P.5, Q.10"
+        }
+      ],
+      registrations: []
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    // Sửa mỗi giờ kết thúc, giữ nguyên giờ bắt đầu. Buổi này trùng với chính
+    // nó — một phép so sánh cẩu thả sẽ chặn người ta sửa buổi của họ.
+    const result = await updateSessionTime({
+      eventId: EVENT,
+      starts_at: "2026-09-20T08:00",
+      ends_at: "2026-09-20T12:00"
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("đổi giờ xong thì cả chuỗi được đánh số lại theo thời gian", async () => {
+    const fake = makeClient({
+      anchor: anchorRow({ series_id: SERIES, series_index: 1, series_total: 2 }),
+      // Cố tình nạp vào SAI thứ tự thời gian, và cho buổi được dời mang
+      // `series_index` nhỏ hơn. Nếu phép đánh số lại đọc theo `series_index`
+      // thay vì theo thời gian thì nó giữ nguyên thứ tự sai này.
+      siblings: [
+        { id: EVENT, series_index: 1, starts_at: "2026-10-04T01:00:00.000Z" },
+        { id: "b-sau", series_index: 2, starts_at: "2026-09-27T01:00:00.000Z" }
+      ],
+      registrations: []
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    // Dời buổi 1 sang tháng 10 thì nó thành buổi cuối. Không đánh số lại thì
+    // danh sách hiện "Buổi 1" nằm sau "Buổi 2".
+    await updateSessionTime({ eventId: EVENT, starts_at: "2026-10-04T08:00" });
+
+    const renumbers = fake.writes.filter((write) => "series_index" in (write.payload ?? {}));
+    expect(renumbers).toHaveLength(2);
+    expect(renumbers[0].payload).toEqual({ series_index: 1, series_total: 2 });
+    expect(renumbers[0].filters).toContainEqual(["id", "b-sau"]);
+    expect(renumbers[1].payload).toEqual({ series_index: 2, series_total: 2 });
+    expect(renumbers[1].filters).toContainEqual(["id", EVENT]);
+  });
+
+  it("sự kiện đơn lẻ vẫn đổi được giờ, và không đánh số chuỗi nào cả", async () => {
+    const fake = makeClient({ anchor: anchorRow(), registrations: [] });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    const result = await updateSessionTime({ eventId: EVENT, starts_at: "2026-09-20T09:00" });
+
+    expect(result.ok).toBe(true);
+    expect(fake.writes.some((write) => "series_index" in (write.payload ?? {}))).toBe(false);
+  });
+
+  it("buổi đã có người đăng ký thì vẫn đổi được, nhưng phải nói ra", async () => {
+    const fake = makeClient({
+      anchor: anchorRow(),
+      registrations: [{ id: "r1" }, { id: "r2" }, { id: "r3" }]
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    const result = await updateSessionTime({ eventId: EVENT, starts_at: "2026-09-20T09:00" });
+
+    // Dời lịch là chuyện có thật, nên không chặn. Nhưng ba người đang giữ thư
+    // xác nhận ghi giờ cũ, và hệ thống không tự báo cho họ — chỗ duy nhất
+    // chuyện này được nói ra là ngay đây.
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("3 người");
+  });
+
+  it("ID không hợp lệ thì dừng trước khi chạm database", async () => {
+    const fake = makeClient({ anchor: anchorRow() });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    const result = await updateSessionTime({
+      eventId: "không-phải-uuid",
+      starts_at: "2026-09-20T09:00"
+    });
+
+    expect(result.ok).toBe(false);
     expect(fake.from).not.toHaveBeenCalled();
   });
 });
