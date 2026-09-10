@@ -5,6 +5,7 @@ import { assignApplicationReviewAction, cancelApplicationReviewAction } from "@/
 import { initialReviewActionState } from "@/lib/review-action-types";
 import type { AdminUserPublic, ApplicationReview } from "@/lib/types";
 import { staffDisplayLabel } from "@/lib/ui-labels";
+import { formatDate } from "@/lib/utils";
 
 function SubmitButton({ label, pendingLabel, variant = "primary" }: { label: string; pendingLabel: string; variant?: "primary" | "danger" | "secondary" }) {
   const { pending } = useFormStatus();
@@ -49,7 +50,7 @@ function ActiveAssignmentCard({
       <div className="mb-4 space-y-1 text-sm text-slate-700">
         <div><span className="font-medium">Người phụ trách hiện tại:</span> {review.reviewer_name}</div>
         <div><span className="font-medium">Trạng thái:</span> {reviewStatusLabel(review.status)}</div>
-        {review.due_at && <div><span className="font-medium">Hạn nộp:</span> {new Date(review.due_at).toLocaleDateString("vi-VN")}</div>}
+        {review.due_at && <div><span className="font-medium">Hạn nộp:</span> {formatDate(review.due_at)}</div>}
       </div>
 
       <div className="mt-4">

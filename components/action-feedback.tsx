@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { logActionTiming } from "@/lib/action-feedback";
 
@@ -70,7 +71,7 @@ export function InlineActionMessage({
 
   useEffect(() => {
     if (state.ok && showSavedAt) {
-      setSavedAt(new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
+      setSavedAt(formatTime(new Date().toISOString()));
     }
   }, [state.ok, state.message, showSavedAt]);
 

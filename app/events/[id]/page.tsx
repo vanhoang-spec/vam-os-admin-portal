@@ -6,7 +6,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getEventDetailData, isValidUuid } from "@/lib/events";
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 
 async function getRequestOrigin() {
@@ -128,7 +128,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
     <>
       <PageHeader
         title={displayText(detail.event.event_name, "Sự kiện")}
-        description={`${displayText(seasonCode)} · ${formatDate(detail.event.starts_at)} · ${displayText(detail.event.event_type)}`}
+        description={`${displayText(seasonCode)} · ${formatDateTime(detail.event.starts_at)} · ${displayText(detail.event.event_type)}`}
       />
       {detail.error ? <ErrorBox message={detail.error} /> : null}
 
@@ -297,7 +297,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
                 {
                   key: "registered_at",
                   label: "Thời gian",
-                  render: (row) => formatDate(row.registered_at)
+                  render: (row) => formatDateTime(row.registered_at)
                 },
                 {
                   key: "actions",

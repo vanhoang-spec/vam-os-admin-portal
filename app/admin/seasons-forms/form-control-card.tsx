@@ -7,6 +7,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { setApplicationFormStateAction } from "@/app/actions/application-form-controls";
 import { initialFormControlActionState } from "@/lib/application-form-control-types";
 import type { ApplicantRole, ApplicationFormState } from "@/lib/application-form-controls";
+import { formatDateTime } from "@/lib/utils";
 
 export type RoleControlView = {
   role: ApplicantRole;
@@ -170,7 +171,7 @@ export function FormControlCard({
 
       <p className="mt-3 text-xs text-slate-500">
         {control.updatedAt
-          ? `Thay đổi lần cuối: ${new Date(control.updatedAt).toLocaleString("vi-VN")} · ${
+          ? `Thay đổi lần cuối: ${formatDateTime(control.updatedAt)} · ${
               control.updatedByName || control.updatedByEmail || "không rõ người thực hiện"
             }`
           : "Chưa có thay đổi nào được ghi nhận."}
