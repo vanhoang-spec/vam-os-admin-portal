@@ -73,13 +73,19 @@ export function RegistrationForm({
   const [mealSelected, setMealSelected] = useState(false);
   const displayEventName = state.eventName || eventName;
 
-  // Buổi còn chỗ đầu tiên được chọn sẵn — không phải buổi đầu tiên.
+  // Lưu Ý ĐỊNH, rồi SUY RA buổi thật từ danh sách hiện có — không lưu thẳng
+  // giá trị. Cùng lý do với ô chọn mẫu thư ở /operations/mail: một giá trị
+  // khởi tạo trong `useState` chỉ chạy ở lần dựng đầu tiên, nên nếu danh sách
+  // tới sau thì ô chọn trông như đã chọn trong khi form gửi lên chuỗi rỗng.
   //
-  // Chọn sẵn một buổi đã đầy nghĩa là người bấm "Gửi đăng ký" ngay lập tức sẽ
-  // rơi vào danh sách chờ mà không hề chọn điều đó. BTC cũng khuyến khích buổi
-  // 1, nên "buổi còn chỗ sớm nhất" khớp luôn với ý định của họ.
-  const firstOpen = sessions?.find((session) => !session.full) ?? sessions?.[0] ?? null;
-  const [chosenSession, setChosenSession] = useState(firstOpen?.id ?? "");
+  // Buổi còn chỗ đầu tiên là mặc định, không phải buổi đầu tiên: chọn sẵn một
+  // buổi đã đầy nghĩa là người bấm "Gửi đăng ký" ngay lập tức rơi vào danh
+  // sách chờ mà không hề chọn điều đó. BTC cũng khuyến khích buổi 1, nên hai ý
+  // trùng nhau.
+  const [sessionChoice, setSessionChoice] = useState("");
+  const fallbackSession = sessions?.find((session) => !session.full) ?? sessions?.[0] ?? null;
+  const chosenSession =
+    sessions?.find((session) => session.id === sessionChoice)?.id ?? fallbackSession?.id ?? "";
 
   if (state.status === "success") {
     return (
@@ -144,7 +150,7 @@ export function RegistrationForm({
                     value={session.id}
                     checked={chosenSession === session.id}
                     disabled={disabled}
-                    onChange={() => setChosenSession(session.id)}
+                    onChange={() => setSessionChoice(session.id)}
                     className="mt-0.5 h-4 w-4 border-slate-300 text-vam-green focus:ring-vam-green"
                   />
                   <span>
