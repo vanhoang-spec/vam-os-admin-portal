@@ -160,6 +160,23 @@ export function formatDateTime(value: unknown) {
   return `${VN_DATE.format(date)} ${VN_TIME.format(date)}`;
 }
 
+/**
+ * Khoảng thời gian của một buổi, gộp lại khi cùng ngày.
+ *
+ * `20/09/2026 08:00 – 11:30` thay vì lặp lại ngày hai lần. Buổi vắt qua nửa
+ * đêm thì hiện đủ cả hai ngày, vì lúc đó ngày mới là phần người đọc cần.
+ *
+ * Một cửa duy nhất cho cả trang quản trị, trang đăng ký và biểu mẫu chọn buổi:
+ * ba cách viết khác nhau cho cùng một khoảng thời gian là ba cơ hội để một
+ * trong ba nói sai.
+ */
+export function formatTimeRange(startsAt: unknown, endsAt: unknown) {
+  const start = formatDateTime(startsAt);
+  if (!endsAt) return start;
+  const sameDay = formatDate(startsAt) === formatDate(endsAt);
+  return sameDay ? `${start} – ${formatTime(endsAt)}` : `${start} – ${formatDateTime(endsAt)}`;
+}
+
 export function includesQuery(values: unknown[], query: string) {
   const q = query.trim().toLowerCase();
   if (!q) return true;

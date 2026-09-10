@@ -7,7 +7,8 @@ import {
   type EventFormat
 } from "@/lib/event-location";
 import type { Event } from "@/lib/types";
-import { formatDate, formatDateTime, formatTime } from "@/lib/utils";
+import { WEEKDAY_LABELS, weekdayOf } from "@/lib/event-recurrence";
+import { formatTimeRange } from "@/lib/utils";
 
 /**
  * Nơi và lúc một sự kiện diễn ra.
@@ -30,11 +31,22 @@ function eventFormat(event: Event): EventFormat {
  * đêm thì hiện đủ cả hai ngày, vì lúc đó ngày mới là phần người đọc cần.
  */
 export function formatEventWhen(event: Event): string {
-  const start = formatDateTime(event.starts_at);
-  if (!event.ends_at) return start;
+  return formatTimeRange(event.starts_at, event.ends_at);
+}
 
-  const sameDay = formatDate(event.starts_at) === formatDate(event.ends_at);
-  return sameDay ? `${start} – ${formatTime(event.ends_at)}` : `${start} – ${formatDateTime(event.ends_at)}`;
+/** Một buổi trong chuỗi, đúng những gì khối này cần để nói "lúc nào". */
+export type PlaceSession = {
+  id: string;
+  seriesIndex: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+};
+
+/** `Chủ nhật, 20/09/2026 08:00 – 11:30` — thứ đứng trước vì người ta nhớ theo thứ. */
+export function sessionWhenLine(session: PlaceSession): string {
+  const when = formatTimeRange(session.startsAt, session.endsAt);
+  const weekday = session.startsAt ? weekdayOf(session.startsAt) : null;
+  return weekday === null ? when : `${WEEKDAY_LABELS[weekday]}, ${when}`;
 }
 
 /** Dòng một hàng cho danh sách: hình thức và nơi chốn, không có đường dẫn. */
@@ -71,11 +83,24 @@ export function EventPlaceSummary({ event }: { event: Event }) {
  */
 export function EventPlaceBlock({
   event,
-  tone = "light"
+  tone = "light",
+  sessions = null
 }: {
   event: Event;
   /** `dark` cho phần đầu trang công khai, nơi nền là màu đậm. */
   tone?: "light" | "dark";
+  /**
+   * Các buổi của chuỗi, khi khối này đại diện cho CẢ chuỗi chứ không phải
+   * một buổi.
+   *
+   * Link đăng ký của một chuỗi hai buổi từng chỉ hiện ngày của buổi neo —
+   * người mở link đọc thấy đúng một ngày và tưởng sự kiện chỉ có ngày đó.
+   * Truyền danh sách vào đây thì dòng "Thời gian" liệt kê đủ mọi buổi.
+   *
+   * Bỏ trống (hoặc chỉ một buổi) thì khối này giữ nguyên như cũ: một dòng
+   * thời gian của chính `event`.
+   */
+  sessions?: PlaceSession[] | null;
 }) {
   const format = eventFormat(event);
   const mapUrl = needsVenue(format)
@@ -91,12 +116,31 @@ export function EventPlaceBlock({
   const venueAddress = String(event.location_address ?? "").trim();
   const hasVenue = Boolean(venueName || venueAddress);
 
+  // Một buổi thì danh sách một dòng chỉ làm rối; nói thẳng như cũ.
+  const listed = sessions && sessions.length > 1 ? sessions : null;
+
   return (
     <div className="flex flex-col gap-2 text-sm">
-      <p className={body}>
-        <span className={`mr-2 text-xs uppercase ${muted}`}>Thời gian</span>
-        {formatEventWhen(event)}
-      </p>
+      {listed ? (
+        <div className={body}>
+          <span className={`mr-2 text-xs uppercase ${muted}`}>Thời gian</span>
+          <span className="font-medium">Chuỗi {listed.length} buổi</span>
+          <ul className="mt-1 space-y-0.5">
+            {listed.map((session, index) => (
+              <li key={session.id}>
+                <span className="font-medium">Buổi {session.seriesIndex ?? index + 1}</span>
+                <span className={muted}> · </span>
+                {sessionWhenLine(session)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className={body}>
+          <span className={`mr-2 text-xs uppercase ${muted}`}>Thời gian</span>
+          {formatEventWhen(event)}
+        </p>
+      )}
 
       <p className={body}>
         <span className={`mr-2 text-xs uppercase ${muted}`}>Hình thức</span>
