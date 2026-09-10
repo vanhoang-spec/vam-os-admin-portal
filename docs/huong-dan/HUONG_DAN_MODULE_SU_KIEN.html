@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Hướng dẫn sử dụng module Sự kiện — VAM OS</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm 16mm;
+    @bottom-center { content: counter(page); }
+  }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+    --red-bg: #fdeceb;
+    --red-line: #f0b8b4;
+    --red-ink: #8a2620;
+  }
+
+  * { box-sizing: border-box; }
+
+  /* Moi the deu thua font cua body: mot the quen dat font se roi ve Times,
+     va mot dong Times nam giua trang Segoe UI thi nhin ra ngay. */
+  body, body * { font-family: inherit; }
+  code {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9.4pt;
+    background: #f1f5f3;
+    padding: 0.2mm 1mm;
+    border-radius: 2px;
+  }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  /* ── Trang bìa ───────────────────────────────────────────────────── */
+  .cover {
+    page-break-after: always;
+    padding-top: 42mm;
+  }
+  .cover .eyebrow {
+    font-size: 9pt;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--green);
+    font-weight: 700;
+  }
+  .cover h1 {
+    font-size: 30pt;
+    line-height: 1.15;
+    margin: 10mm 0 4mm;
+    color: var(--ink);
+    font-weight: 700;
+    text-wrap: balance;
+  }
+  .cover .sub {
+    font-size: 13pt;
+    color: var(--muted);
+    max-width: 120mm;
+  }
+  .cover .rule {
+    height: 4px;
+    width: 46mm;
+    background: var(--green);
+    margin: 12mm 0;
+  }
+  .cover .meta {
+    font-size: 9.5pt;
+    color: var(--muted);
+  }
+  .cover .meta b { color: var(--ink); font-weight: 600; }
+  .cover-note {
+    margin-top: 26mm;
+    background: var(--mint);
+    border-left: 4px solid var(--green);
+    padding: 6mm 7mm;
+    font-size: 10pt;
+  }
+  .cover-note b { color: var(--ink); }
+
+  /* ── Cấu trúc ────────────────────────────────────────────────────── */
+  h2 {
+    font-size: 16pt;
+    color: var(--ink);
+    margin: 0 0 1mm;
+    padding-bottom: 2.5mm;
+    border-bottom: 2px solid var(--green);
+    page-break-after: avoid;
+    text-wrap: balance;
+  }
+  h2 .num {
+    display: inline-block;
+    min-width: 11mm;
+    color: var(--green);
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 11.8pt;
+    color: var(--ink);
+    margin: 7mm 0 2mm;
+    page-break-after: avoid;
+  }
+  h4 {
+    font-size: 10.5pt;
+    color: var(--green);
+    margin: 5mm 0 1.5mm;
+    page-break-after: avoid;
+  }
+  section { page-break-before: always; }
+  section.first { page-break-before: avoid; }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3.5mm; padding-left: 6mm; }
+  li { margin-bottom: 1.6mm; }
+  .lead { color: var(--muted); font-size: 10.5pt; margin-bottom: 5mm; }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block;
+    background: var(--green);
+    color: #fff;
+    border-radius: 3px;
+    padding: 0.5mm 2mm;
+    font-size: 9.2pt;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .field {
+    background: #f1f5f3;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0.3mm 1.6mm;
+    font-size: 9.4pt;
+    white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 2mm 0 5mm;
+    font-size: 9.6pt;
+    page-break-inside: avoid;
+  }
+  th {
+    background: var(--mint);
+    text-align: left;
+    padding: 2.2mm 2.5mm;
+    border: 1px solid var(--line);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  td {
+    padding: 2.2mm 2.5mm;
+    border: 1px solid var(--line);
+    vertical-align: top;
+  }
+  td.k { width: 38%; font-weight: 600; }
+
+  .note, .warn, .stop {
+    padding: 3.5mm 4mm;
+    margin: 3.5mm 0 5mm;
+    border-radius: 3px;
+    font-size: 9.9pt;
+    page-break-inside: avoid;
+  }
+  .note { background: var(--mint); border-left: 4px solid var(--green); }
+  .warn { background: var(--amber-bg); border-left: 4px solid var(--amber-line); color: var(--amber-ink); }
+  .stop { background: var(--red-bg); border-left: 4px solid var(--red-line); color: var(--red-ink); }
+  .note b, .warn b, .stop b { display: block; margin-bottom: 1mm; }
+
+  ol.steps { counter-reset: step; list-style: none; padding-left: 0; }
+  ol.steps > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 10mm;
+    margin-bottom: 3.5mm;
+    page-break-inside: avoid;
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0.2mm;
+    width: 6.5mm;
+    height: 6.5mm;
+    background: var(--green);
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 6.5mm;
+    font-size: 9pt;
+    font-weight: 700;
+  }
+  ol.steps > li b { display: block; }
+
+  .flow {
+    display: flex;
+    gap: 2mm;
+    margin: 4mm 0 6mm;
+    page-break-inside: avoid;
+  }
+  .flow .step {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--green);
+    border-radius: 3px;
+    padding: 3mm 2.5mm;
+    font-size: 8.8pt;
+    background: #fbfdfc;
+  }
+  .flow .step .n {
+    color: var(--green);
+    font-weight: 700;
+    font-size: 8pt;
+    display: block;
+    margin-bottom: 1mm;
+  }
+  .flow .step b { display: block; font-size: 9.4pt; margin-bottom: 1mm; }
+  .flow .step span.d { color: var(--muted); }
+
+  .toc { margin-top: 4mm; }
+  .toc div {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px dotted var(--line);
+    padding: 2mm 0;
+    font-size: 10.5pt;
+  }
+  .toc div b { color: var(--green); min-width: 9mm; display: inline-block; }
+  .toc .t { flex: 1; }
+
+  .who {
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 4mm;
+    background: #fbfdfc;
+    margin-bottom: 5mm;
+    font-size: 9.9pt;
+    page-break-inside: avoid;
+  }
+  .who b { color: var(--green); }
+
+  .kpi { display: flex; gap: 2mm; margin: 3mm 0 5mm; }
+  .kpi div {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 3mm 2mm;
+    text-align: center;
+    font-size: 8.4pt;
+    color: var(--muted);
+  }
+  .kpi div b { display: block; color: var(--ink); font-size: 9.2pt; margin-bottom: .8mm; }
+
+  .foot {
+    margin-top: 8mm;
+    padding-top: 3mm;
+    border-top: 1px solid var(--line);
+    font-size: 9pt;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ BÌA ══════════════════ -->
+<div class="cover">
+  <div class="eyebrow">VAM OS · Cổng quản trị dữ liệu Vietnam Alumni Mentoring</div>
+  <h1>Hướng dẫn sử dụng<br>module Sự kiện</h1>
+  <div class="rule"></div>
+  <p class="sub">Từ lúc tạo sự kiện, gửi link đăng ký, đến lúc đứng ở cửa quét mã QR cho người tham dự — và xem số liệu chạy theo thời gian thực.</p>
+  <p class="meta" style="margin-top:14mm">
+    Dành cho: <b>Core team, Support team, Ban tổ chức sự kiện</b><br>
+    Địa chỉ hệ thống: <b>os.alumni-mentoring.edu.vn</b><br>
+    Cập nhật: <b>10/09/2026</b>
+  </p>
+  <div class="cover-note">
+    <b>Tài liệu này không cần bạn biết gì về kỹ thuật.</b>
+    Mỗi phần đều chỉ rõ bấm vào đâu, điền gì, và điều gì sẽ xảy ra sau khi bấm.
+    Nếu chỉ cần làm cho xong một sự kiện đơn giản, đọc Phần 1, 2, 4 và 7 là đủ.
+  </div>
+</div>
+
+<!-- ══════════════════ MỤC LỤC ══════════════════ -->
+<section class="first">
+  <h2>Mục lục</h2>
+  <div class="toc">
+    <div><span class="t"><b>1.</b> Module Sự kiện làm được những gì</span></div>
+    <div><span class="t"><b>2.</b> Tạo một sự kiện mới</span></div>
+    <div><span class="t"><b>3.</b> Sự kiện nhiều buổi (chuỗi sự kiện)</span></div>
+    <div><span class="t"><b>4.</b> Link đăng ký gửi cho người tham dự</span></div>
+    <div><span class="t"><b>5.</b> Người đăng ký nhận được gì</span></div>
+    <div><span class="t"><b>6.</b> Người hỗ trợ điểm danh</span></div>
+    <div><span class="t"><b>7.</b> Ngày diễn ra: quét mã QR tại cửa</span></div>
+    <div><span class="t"><b>8.</b> Theo dõi số liệu theo thời gian thực</span></div>
+    <div><span class="t"><b>9.</b> Sau sự kiện</span></div>
+    <div><span class="t"><b>10.</b> Gặp sự cố thì làm gì</span></div>
+    <div><span class="t"><b>11.</b> Bảng thuật ngữ</span></div>
+  </div>
+
+  <div class="note" style="margin-top:8mm">
+    <b>Ba quy ước đọc tài liệu này</b>
+    <span class="btn">Nút bấm</span> là nút bạn bấm trên màn hình.
+    <span class="field">Ô nhập</span> là ô để điền thông tin.
+    <span class="path">Đường dẫn</span> là nơi cần đi tới trong hệ thống.
+  </div>
+</section>
+
+<!-- ══════════════════ 1 ══════════════════ -->
+<section>
+  <h2><span class="num">1</span>Module Sự kiện làm được những gì</h2>
+  <p class="lead">Toàn bộ vòng đời một sự kiện nằm gọn trong hệ thống: không cần Google Form, không cần file Excel danh sách, không cần gọi tên từng người ở cửa.</p>
+
+  <div class="flow">
+    <div class="step"><span class="n">BƯỚC 1</span><b>Tạo sự kiện</b><span class="d">Khai báo tên, thời gian, địa điểm, sức chứa</span></div>
+    <div class="step"><span class="n">BƯỚC 2</span><b>Tạo link</b><span class="d">Gửi link đăng ký cho mentor / mentee</span></div>
+    <div class="step"><span class="n">BƯỚC 3</span><b>Thư tự động</b><span class="d">Người đăng ký nhận thư kèm mã QR</span></div>
+    <div class="step"><span class="n">BƯỚC 4</span><b>Quét tại cửa</b><span class="d">Ban tổ chức quét QR, xác nhận có mặt</span></div>
+    <div class="step"><span class="n">BƯỚC 5</span><b>Xem số liệu</b><span class="d">Đăng ký, có mặt, vắng — cập nhật liên tục</span></div>
+  </div>
+
+  <h3>Ai làm được việc gì</h3>
+  <p>Hệ thống phân quyền theo vai trò của tài khoản. Nếu bạn không thấy một nút nào đó, gần như chắc chắn là do vai trò của bạn chưa đủ, chứ không phải hệ thống lỗi.</p>
+
+  <table>
+    <tr><th style="width:26%">Vai trò</th><th>Làm được gì trong module Sự kiện</th></tr>
+    <tr><td class="k">Super admin<br>Admin<br>Core team</td><td>Toàn quyền: tạo và sửa sự kiện, tạo link đăng ký, thêm người hỗ trợ, mở máy quét, điểm danh thủ công, xem toàn bộ số liệu.</td></tr>
+    <tr><td class="k">Support team</td><td>Được <b>mở máy quét của những buổi mà mình đã được thêm vào danh sách hỗ trợ</b>. Không tạo, không sửa sự kiện, không thêm người hỗ trợ khác.</td></tr>
+    <tr><td class="k">Reviewer, Viewer</td><td>Không tham gia vận hành sự kiện.</td></tr>
+  </table>
+
+  <div class="note">
+    <b>Vì sao quyền quét gắn theo từng buổi, không gắn theo tài khoản</b>
+    Sáu bạn hỗ trợ buổi Orientation không có việc gì ở buổi phỏng vấn tuần sau. Hết buổi thì chỉ cần bỏ tên khỏi danh sách của buổi đó — không phải hạ cấp tài khoản của ai.
+  </div>
+
+  <h3>Những gì hệ thống chưa làm</h3>
+  <p>Nói trước để bạn không mất thời gian đi tìm:</p>
+  <ul>
+    <li><b>Chưa có nút xuất danh sách ra Excel/CSV</b> cho danh sách đăng ký sự kiện. Danh sách hiện đầy đủ trên màn hình và bôi đen copy được.</li>
+    <li><b>Không tự gửi thư báo khi bạn đổi lịch.</b> Đổi giờ một buổi thì phải tự báo lại cho những người đã đăng ký.</li>
+    <li><b>Không tự tạo tài khoản.</b> Thêm người hỗ trợ chỉ chọn được từ những tài khoản đã có sẵn trong hệ thống.</li>
+  </ul>
+</section>
+
+<!-- ══════════════════ 2 ══════════════════ -->
+<section>
+  <h2><span class="num">2</span>Tạo một sự kiện mới</h2>
+  <p class="lead">Vào <span class="path">Sự kiện</span> trên thanh điều hướng, rồi bấm nút tạo sự kiện mới. Màn hình khai báo chia làm nhiều khối — chỉ bốn ô đầu là bắt buộc, phần còn lại bật khi cần.</p>
+
+  <h3>2.1 · Thông tin cơ bản</h3>
+  <table>
+    <tr><td class="k">Tên sự kiện <span style="color:#b23">(bắt buộc)</span></td><td>Tên này hiện trên link đăng ký và trong thư gửi người tham dự. Viết như bạn muốn người ngoài đọc thấy — ví dụ <i>Mentor Orientation</i>, không phải <i>MO-S12-b1</i>.</td></tr>
+    <tr><td class="k">Loại sự kiện <span style="color:#b23">(bắt buộc)</span></td><td>Chọn từ danh sách có sẵn (xem bảng dưới). Loại sự kiện dùng để lọc và thống kê, nên chọn đúng ngay từ đầu sẽ đỡ phải dọn về sau.</td></tr>
+    <tr><td class="k">Mùa <span style="color:#b23">(bắt buộc)</span></td><td>Mùa chương trình mà sự kiện thuộc về, ví dụ Season 12.</td></tr>
+    <tr><td class="k">Đợt tuyển</td><td>Tuỳ chọn. Dùng khi sự kiện gắn với một đợt tuyển cụ thể.</td></tr>
+    <tr><td class="k">Mã tham chiếu</td><td>Tuỳ chọn. Mã nội bộ để đối chiếu với file cũ. Người ngoài không nhìn thấy ô này.</td></tr>
+    <tr><td class="k">Mô tả / Ghi chú</td><td>Nội dung hiện trên trang đăng ký công khai: chương trình buổi, hướng dẫn gửi xe, số hotline. Xuống dòng thế nào thì hiển thị y như vậy.</td></tr>
+  </table>
+
+  <h4>Các loại sự kiện có sẵn</h4>
+  <p>Thứ tự trong danh sách là thứ tự một mùa diễn ra, không phải theo bảng chữ cái:</p>
+  <ul style="column-count:2; column-gap:8mm">
+    <li>Orientation cho Mentee</li>
+    <li>Orientation cho Mentor</li>
+    <li>Orientation / Định hướng (chung)</li>
+    <li>Ngày phỏng vấn</li>
+    <li>Kickoff / Lễ phát động</li>
+    <li>Training / Đào tạo</li>
+    <li>Cross-mentoring</li>
+    <li>Company tour</li>
+    <li>Business case</li>
+    <li>Job shadowing</li>
+    <li>Networking / Giao lưu</li>
+    <li>Tổng kết / Closing</li>
+    <li>Khác</li>
+  </ul>
+
+  <h3>2.2 · Thời gian</h3>
+  <p>Hai ô: <span class="field">Thời điểm bắt đầu</span> và <span class="field">Thời điểm kết thúc</span>. Mỗi ô gồm một ô ngày và một ô giờ.</p>
+  <ul>
+    <li><b>Ngày gõ theo thứ tự ngày / tháng / năm</b> — gõ liền tám chữ số <code>20092026</code>, hệ thống tự chèn dấu gạch chéo thành <code>20/09/2026</code>.</li>
+    <li><b>Giờ gõ bốn chữ số</b> — <code>0800</code> thành <code>08:00</code>. Giờ 24 tiếng, không có SA/CH.</li>
+    <li>Gõ xong đủ cả hai ô, ngay bên dưới hiện một dòng xanh xác nhận: <i>"Chủ nhật, 20/09/2026 lúc 08:00 (giờ Việt Nam)"</i>. <b>Luôn liếc dòng này trước khi lưu</b> — nó là cách chắc chắn nhất để biết mình không gõ nhầm tháng thành ngày.</li>
+    <li>Gõ một ngày không có thật (ví dụ 31/02) thì hiện cảnh báo màu vàng và không lưu được.</li>
+  </ul>
+  <div class="note">
+    <b>Toàn hệ thống dùng giờ Việt Nam và định dạng ngày/tháng/năm</b>
+    Không phụ thuộc máy tính của bạn đặt ngôn ngữ gì. Một đồng nghiệp mở cùng sự kiện trên máy khác sẽ thấy đúng con số như bạn.
+  </div>
+
+  <h3>2.3 · Hình thức và địa điểm</h3>
+  <p>Chọn một trong ba hình thức. Chọn xong, hệ thống chỉ hỏi những ô thật sự cần:</p>
+  <table>
+    <tr><td class="k">Tại địa điểm</td><td>Hỏi <span class="field">Tên địa điểm</span> và <span class="field">Địa chỉ</span>.</td></tr>
+    <tr><td class="k">Trực tuyến</td><td>Hỏi <span class="field">Đường dẫn tham gia</span> (Google Meet, Zoom…).</td></tr>
+    <tr><td class="k">Cả hai</td><td>Hỏi cả địa chỉ lẫn đường dẫn phòng họp.</td></tr>
+  </table>
+  <p><b>Đường dẫn bản đồ:</b> ô này tuỳ chọn. Nếu bỏ trống, hệ thống tự tạo đường dẫn Google Maps từ địa chỉ bạn đã điền. Chỉ cần dán link riêng khi địa chỉ tự do trỏ không đúng chỗ.</p>
+  <div class="warn">
+    <b>Chỉ nhận link Google Maps</b>
+    Hệ thống chỉ chấp nhận đường dẫn thuộc Google Maps (<code>google.com/maps</code>, <code>maps.app.goo.gl</code>, <code>goo.gl</code>). Dán link khác sẽ bị từ chối. Lý do: đường dẫn này đi vào thư gửi hàng trăm người kèm uy tín của chương trình.
+  </div>
+
+  <h3>2.4 · Sức chứa và danh sách chờ</h3>
+  <ol class="steps">
+    <li><b>Bật <span class="field">Giới hạn số lượng tham gia</span></b> nếu hội trường có hạn.</li>
+    <li><b>Điền <span class="field">Số lượng tối đa</span></b> — ví dụ 100.</li>
+    <li><b>Cân nhắc bật <span class="field">Cho phép danh sách chờ</span>.</b> Khi đầy chỗ, người đăng ký sau vẫn gửi được form nhưng vào danh sách chờ thay vì bị chặn.</li>
+  </ol>
+  <p>Ghế được tính là "đang giữ" gồm: đã đăng ký, đã xác nhận, và đang chờ duyệt. Người trong danh sách chờ và người bị từ chối <b>không</b> chiếm ghế.</p>
+
+  <h3>2.5 · Các cài đặt khác</h3>
+  <p>Tất cả đều tắt sẵn. Chỉ bật cái bạn thật sự cần — mỗi cái bật thêm là một ô nữa người đăng ký phải điền.</p>
+  <table>
+    <tr><th style="width:34%">Cài đặt</th><th>Bật khi nào</th></tr>
+    <tr><td class="k">Bắt buộc đăng ký trước</td><td>Sự kiện chỉ dành cho người đã đăng ký.</td></tr>
+    <tr><td class="k">Cần Admin phê duyệt</td><td>Muốn duyệt từng đơn trước khi cấp vé, thay vì tự động xác nhận.</td></tr>
+    <tr><td class="k">Cho phép vãng lai</td><td>Chấp nhận người tới thẳng hôm sự kiện mà chưa đăng ký.</td></tr>
+    <tr><td class="k">Bật khung giờ check-in</td><td>Chỉ cho điểm danh trong một khoảng giờ nhất định — tránh có người check-in từ hôm trước.</td></tr>
+    <tr><td class="k">Yêu cầu minh chứng</td><td>Cần người đăng ký nộp file/ảnh (CV, ảnh chụp màn hình…). Đặt được nhãn và hướng dẫn riêng.</td></tr>
+    <tr><td class="k">Thu phí tham dự</td><td>Sự kiện có phí. Điền số tiền, tiền tệ, thông tin chuyển khoản; có thể bắt buộc nộp ảnh chuyển khoản.</td></tr>
+    <tr><td class="k">Tuỳ chọn bữa trưa</td><td>Có suất ăn kèm để người đăng ký chọn, tính phí riêng.</td></tr>
+    <tr><td class="k">Thu thập câu hỏi cho diễn giả</td><td>Muốn gom câu hỏi trước để diễn giả chuẩn bị.</td></tr>
+    <tr><td class="k">Chính sách No-show</td><td>Hiện cam kết về việc vắng mặt không báo trên form đăng ký.</td></tr>
+    <tr><td class="k">Các ô hiển thị trên form</td><td>Bật/tắt từng ô: MSSV, Mentee Code, Trường, Ngành học, Vai trò, Ghi chú. Mỗi ô còn chọn được có bắt buộc hay không.</td></tr>
+  </table>
+  <div class="note">
+    <b>Mẹo thực tế</b>
+    Số điện thoại và các ô thông tin cá nhân nên để dạng điền tự do, không bắt buộc, trừ khi bạn thật sự dùng đến. Form càng ngắn thì tỉ lệ điền xong càng cao.
+  </div>
+</section>
+
+<!-- ══════════════════ 3 ══════════════════ -->
+<section>
+  <h2><span class="num">3</span>Sự kiện nhiều buổi (chuỗi sự kiện)</h2>
+  <p class="lead">Khi cùng một nội dung được tổ chức nhiều lần cho người tham dự chọn — ví dụ Orientation mở hai buổi Chủ nhật liên tiếp — hệ thống gọi đó là một <b>chuỗi</b>. Mỗi buổi có sức chứa riêng và danh sách điểm danh riêng, nhưng dùng chung <b>một link đăng ký duy nhất</b>.</p>
+
+  <h3>3.1 · Khai báo ngay lúc tạo</h3>
+  <p>Trong màn hình tạo sự kiện, bật phần lặp lại rồi chọn:</p>
+  <table>
+    <tr><td class="k">Tần suất</td><td><b>Hằng tuần</b> hoặc <b>Hằng tháng</b>.</td></tr>
+    <tr><td class="k">Cách nhau mấy tuần/tháng</td><td>1 là tuần nào cũng có; 2 là cách một tuần.</td></tr>
+    <tr><td class="k">Hằng tháng thì theo cách nào</td><td>Theo <b>ngày trong tháng</b> (mùng 5 hằng tháng) hoặc theo <b>thứ trong tuần</b> (Chủ nhật tuần thứ hai).</td></tr>
+    <tr><td class="k">Dừng khi nào</td><td>Sau một số buổi nhất định, hoặc đến một ngày cụ thể.</td></tr>
+  </table>
+  <p>Trước khi lưu, hệ thống liệt kê sẵn <b>toàn bộ các buổi sắp tạo, kèm ngày và thứ</b>. Đọc lại danh sách đó — sửa lúc này dễ hơn nhiều so với sau khi đã tạo.</p>
+  <div class="warn">
+    <b>Vì sao không nên chọn "hằng tháng vào ngày 31"</b>
+    Tháng Hai không có ngày 31. Hệ thống có xử lý, nhưng kết quả có thể không phải điều bạn nghĩ. Với chuỗi rơi vào cuối tháng, chọn theo thứ trong tuần sẽ chắc chắn hơn.
+  </div>
+
+  <h3>3.2 · Thêm buổi sau khi đã tạo</h3>
+  <p>Mở trang chi tiết sự kiện. Ngay đầu trang có khối <span class="field">Chuỗi N buổi</span> với danh sách đầy đủ các buổi. Bên dưới là ô thêm buổi mới, đã điền sẵn <b>đúng khung giờ của buổi đang xem, đẩy sang tuần sau</b> — sửa lại nếu cần rồi bấm <span class="btn">Thêm buổi</span>.</p>
+  <p>Buổi mới chép lại toàn bộ cấu hình của buổi cũ: địa điểm, sức chứa, các ô trên form. Chỉ khác ngày giờ.</p>
+  <div class="stop">
+    <b>Hệ thống chặn buổi trùng khít</b>
+    Nếu buổi bạn sắp thêm có <b>cùng giờ bắt đầu và cùng địa điểm</b> với một buổi đã có, hệ thống hiện cảnh báo đỏ và không cho thêm. Hai buổi giống hệt nhau thì người đăng ký không có cách nào phân biệt để chọn, còn sức chứa thì bị chia đôi vô nghĩa.<br><br>
+    Hai buổi cùng giờ ở <b>hai phòng khác nhau</b> vẫn thêm được bình thường.
+  </div>
+
+  <h3>3.3 · Sửa giờ của một buổi bất kỳ</h3>
+  <ol class="steps">
+    <li><b>Tìm dòng của buổi cần sửa</b> trong danh sách các buổi.</li>
+    <li><b>Bấm <span class="btn">Sửa giờ</span></b> — hai ô ngày giờ mở ra, đã điền sẵn giờ hiện tại của đúng buổi đó.</li>
+    <li><b>Sửa rồi bấm <span class="btn">Lưu giờ</span>.</b> Ô đóng lại và dòng thời gian trên danh sách đổi theo ngay.</li>
+  </ol>
+  <p>Sửa được giờ của <b>mọi buổi</b>, kể cả buổi bạn đang mở. Nếu buổi mới dời sang sau một buổi khác, hệ thống tự đánh số lại cả chuỗi theo thứ tự thời gian — không để xảy ra cảnh "Buổi 1" nằm sau "Buổi 2".</p>
+  <div class="warn">
+    <b>Đổi giờ buổi đã có người đăng ký</b>
+    Vẫn đổi được. Nhưng hệ thống sẽ báo lại có <b>bao nhiêu người đang giữ thư xác nhận ghi giờ cũ</b>. Hệ thống <b>không</b> tự gửi thư báo đổi lịch — bạn phải chủ động liên hệ những người đó.
+  </div>
+
+  <h3>3.4 · Xoá buổi thêm nhầm</h3>
+  <p>Trên dòng của buổi cần xoá, bấm <span class="btn">Xoá buổi</span>. Các buổi còn lại tự đánh số lại liền mạch. Nếu chỉ còn một buổi, nó quay về là sự kiện đơn lẻ bình thường.</p>
+  <div class="stop">
+    <b>Buổi đã có người đăng ký thì không xoá được</b>
+    Nút xoá biến mất, thay bằng dòng chữ nhắc dùng <b>Huỷ sự kiện</b>. Lý do: những người đã đăng ký đang giữ vé trỏ về buổi đó trong hộp thư của họ. Xoá dòng dữ liệu đi là làm các vé ấy trỏ vào hư không mà không ai được báo. "Huỷ sự kiện" giữ lại toàn bộ dữ liệu và đánh dấu là đã huỷ.
+  </div>
+</section>
+
+<!-- ══════════════════ 4 ══════════════════ -->
+<section>
+  <h2><span class="num">4</span>Link đăng ký gửi cho người tham dự</h2>
+  <p class="lead">Link này thay hoàn toàn cho Google Form. Người nhận không cần tài khoản, không cần đăng nhập.</p>
+
+  <h3>4.1 · Tạo và gửi link</h3>
+  <ol class="steps">
+    <li><b>Mở trang chi tiết sự kiện</b>, kéo tới khối <span class="field">Liên kết đăng ký công khai</span>.</li>
+    <li><b>Bấm <span class="btn">Tạo link đăng ký</span>.</b> Hệ thống sinh ra một đường dẫn dạng <code>os.alumni-mentoring.edu.vn/register/…</code></li>
+    <li><b>Bấm <span class="btn">Sao chép link đăng ký</span></b> rồi dán vào bài đăng, thư mời, hay tin nhắn nhóm.</li>
+  </ol>
+
+  <h3>4.2 · Người mở link nhìn thấy gì</h3>
+  <ul>
+    <li>Tên sự kiện, thời gian, hình thức, địa điểm kèm nút <b>Xem trên bản đồ</b>.</li>
+    <li><b>Nếu là chuỗi nhiều buổi:</b> phần đầu ghi rõ <i>"Chuỗi 2 buổi"</i> và liệt kê đủ từng buổi kèm thứ, ngày và khung giờ.</li>
+    <li>Phần mô tả sự kiện bạn đã điền.</li>
+    <li>Biểu mẫu đăng ký với đúng những ô bạn đã bật.</li>
+    <li><b>Với chuỗi nhiều buổi:</b> một nhóm nút chọn buổi, mỗi buổi ghi rõ còn bao nhiêu chỗ. Buổi đã đầy sẽ bị khoá lại, hoặc chuyển sang danh sách chờ nếu bạn đã bật.</li>
+  </ul>
+  <div class="note">
+    <b>Một link cho cả chuỗi, không phải mỗi buổi một link</b>
+    Người đăng ký chọn buổi ngay trên form, hệ thống tự lưu họ vào đúng buổi. Bạn chỉ phải công bố và theo dõi một đường dẫn duy nhất.
+  </div>
+
+  <h3>4.3 · Đóng và mở lại đăng ký</h3>
+  <p>Bấm <span class="btn">Đóng đăng ký</span> để ngừng nhận đơn mới. Các đơn đã có <b>không</b> bị xoá. Bấm <span class="btn">Mở lại đăng ký</span> khi muốn nhận tiếp.</p>
+  <p>Nếu sức chứa đã đầy mà bạn mở lại, hệ thống sẽ nhắc trước: đơn mới có thể vào danh sách chờ hoặc bị chặn, tuỳ cấu hình hiện tại.</p>
+</section>
+
+<!-- ══════════════════ 5 ══════════════════ -->
+<section>
+  <h2><span class="num">5</span>Người đăng ký nhận được gì</h2>
+  <p class="lead">Ngay sau khi bấm gửi form, hệ thống gửi một thư xác nhận tự động từ địa chỉ <b>hello@alumni-mentoring.edu.vn</b>. Bạn không phải làm gì cả.</p>
+
+  <h3>Nội dung thư</h3>
+  <ul>
+    <li><b>Xác nhận đã đăng ký</b>, kèm tên sự kiện.</li>
+    <li><b>Thời gian và địa điểm</b> của đúng buổi họ đã chọn, kèm đường dẫn bản đồ.</li>
+    <li><b>Ảnh mã QR đính kèm thư</b> — đây là tấm vé vào cửa. Thư nhắc rõ: <i>lưu ảnh vào máy ngay, mở ra cho ban tổ chức quét khi tới sự kiện — như vậy không cần mạng ở hội trường.</i></li>
+    <li><b>Mã dự phòng 4 ký tự</b> in kèm trong thư, phòng khi máy quét không đọc được QR.</li>
+  </ul>
+
+  <div class="note">
+    <b>Vì sao có mã 4 ký tự</b>
+    Màn hình vỡ, độ sáng thấp, camera hỏng, hoặc người tham dự chỉ có mã in trên giấy — lúc đó ban tổ chức gõ 4 ký tự này vào là check-in được ngay, không phải xếp hàng chờ xử lý thủ công.
+  </div>
+
+  <div class="warn">
+    <b>Nhắc người đăng ký kiểm tra hộp thư rác</b>
+    Thư tự động đôi khi bị bộ lọc xếp vào mục Spam / Quảng cáo. Khi công bố sự kiện, nên viết kèm một dòng nhắc kiểm tra mục đó nếu sau vài phút chưa thấy thư.
+  </div>
+</section>
+
+<!-- ══════════════════ 6 ══════════════════ -->
+<section>
+  <h2><span class="num">6</span>Người hỗ trợ điểm danh</h2>
+  <p class="lead">Đây là các bạn sẽ cầm điện thoại đứng ở cửa quét mã. Mỗi buổi có danh sách riêng.</p>
+
+  <h3>Cách thêm</h3>
+  <ol class="steps">
+    <li><b>Mở trang chi tiết sự kiện</b>, tìm khối <span class="field">Người hỗ trợ điểm danh</span>.</li>
+    <li><b>Mở ô <span class="field">Chọn từ support team</span></b> — danh sách hiện tên và email của các tài khoản thuộc Support team đang hoạt động và chưa có trong buổi này.</li>
+    <li><b>Chọn người rồi bấm <span class="btn">Thêm</span>.</b> Tên xuất hiện ngay trong danh sách phía trên.</li>
+  </ol>
+  <p>Muốn bỏ ai ra khỏi danh sách, bấm <span class="btn">Bỏ</span> ở dòng của người đó.</p>
+
+  <div class="warn">
+    <b>Nếu ô chọn không có ai</b>
+    Nghĩa là chưa tài khoản nào mang vai trò <b>Support team</b>, hoặc bạn đã thêm hết rồi. Vào <span class="path">Quản trị tài khoản</span> đặt vai trò Support team cho các bạn hỗ trợ, rồi quay lại. Màn hình có sẵn đường dẫn tới đó.
+  </div>
+
+  <div class="note">
+    <b>Admin và Core team không cần thêm vào đây</b>
+    Họ đã mở được máy quét của mọi buổi. Danh sách này chỉ để cấp quyền cho những người vốn không có quyền đó.
+  </div>
+</section>
+
+<!-- ══════════════════ 7 ══════════════════ -->
+<section>
+  <h2><span class="num">7</span>Ngày diễn ra: quét mã QR tại cửa</h2>
+  <p class="lead">Máy của ban tổ chức quét mã QR trên điện thoại người tham dự. Cả thao tác gọn trong vài giây cho mỗi người.</p>
+
+  <h3>7.1 · Chuẩn bị trước giờ mở cửa</h3>
+  <ol class="steps">
+    <li><b>Mỗi bạn hỗ trợ đăng nhập VAM OS trên điện thoại của mình.</b></li>
+    <li><b>Mở trang chi tiết sự kiện</b> của đúng buổi hôm đó.</li>
+    <li><b>Bấm <span class="btn">Mở máy quét điểm danh</span>.</b></li>
+    <li><b>Chọn <span class="field">Trạm quét</span></b> — xem mục 7.3.</li>
+    <li><b>Bấm <span class="btn">Bật camera quét</span></b> và cho phép trình duyệt dùng camera khi được hỏi.</li>
+  </ol>
+  <div class="warn">
+    <b>Thử trước ít nhất một lần</b>
+    Lần đầu bật camera, trình duyệt sẽ hỏi xin quyền. Đừng để lần hỏi đó rơi vào đúng lúc có hàng người đang đứng chờ. Tự đăng ký một vé thử và quét nó trước ngày sự kiện.
+  </div>
+
+  <h3>7.2 · Thao tác khi có khách tới</h3>
+  <p>Chĩa camera vào mã QR trên điện thoại người tham dự. Máy đọc xong sẽ hiện <b>tên người đó</b> trên màn hình — liếc một cái, đúng người thì mời vào.</p>
+  <p><b>Nếu quét mãi không được:</b> hỏi người tham dự <b>mã 4 ký tự</b> trong thư xác nhận, gõ vào ô <span class="field">Hoặc gõ mã trên vé</span> ở phía dưới. Ô này nhận cả mã 4 ký tự lẫn mã dài đầy đủ.</p>
+
+  <h3>7.3 · Trạm quét — dùng cho hoạt động bên lề</h3>
+  <p>Cùng một mã QR quét được ở nhiều điểm khác nhau trong sự kiện. Mỗi lần quét được ghi lại kèm tên trạm:</p>
+  <table>
+    <tr><td class="k">Cửa vào</td><td><b>Trạm duy nhất tính là đã tham dự.</b> Dùng cho bàn đón khách.</td></tr>
+    <tr><td class="k">Booth chương trình</td><td>Ghi nhận có ghé gian của chương trình.</td></tr>
+    <tr><td class="k">Booth đối tác</td><td>Ghi nhận có ghé gian đối tác.</td></tr>
+    <tr><td class="k">Khu trải nghiệm</td><td>Ghi nhận có tham gia hoạt động trải nghiệm.</td></tr>
+  </table>
+  <div class="stop">
+    <b>Chọn đúng trạm trước khi quét người đầu tiên</b>
+    Bàn đón khách phải để <b>Cửa vào</b>. Nếu để nhầm sang một trạm khác, những người đã quét sẽ <b>không</b> được tính là có mặt, dù máy vẫn kêu bíp bình thường.
+  </div>
+  <p>Cách dùng thực tế: mỗi bạn hỗ trợ đứng một điểm và chọn đúng trạm của điểm đó. Cuối buổi bạn biết được ai đã đi qua những đâu — dùng cho thể lệ tích điểm, quà tặng, hoặc báo cáo với đối tác.</p>
+
+  <h3>7.4 · Điểm danh thủ công</h3>
+  <p>Vào <span class="btn">Quản lý tham gia</span> để chỉnh trạng thái từng người bằng tay, hoặc thêm người vào danh sách. Dùng cho trường hợp khách vãng lai, hoặc khi cần sửa lại một trường hợp đặc biệt.</p>
+</section>
+
+<!-- ══════════════════ 8 ══════════════════ -->
+<section>
+  <h2><span class="num">8</span>Theo dõi số liệu theo thời gian thực</h2>
+  <p class="lead">Trang chi tiết sự kiện là màn hình bạn để mở suốt buổi. Số liệu tự cập nhật mỗi 15 giây.</p>
+
+  <h3>Năm ô số ở đầu trang</h3>
+  <div class="kpi">
+    <div><b>Tổng đăng ký</b>Mọi đơn chưa huỷ</div>
+    <div><b>Giữ ghế</b>Đã đăng ký + đã xác nhận + chờ duyệt</div>
+    <div><b>Danh sách chờ</b>Đăng ký khi đã hết chỗ</div>
+    <div><b>Đã check-in</b>Đã quét ở Cửa vào</div>
+    <div><b>Vãng lai</b>Tới thẳng, không đăng ký trước</div>
+  </div>
+
+  <p><b>Ô Sức chứa</b> ngay bên trên hiển thị dạng <i>45 / 100 ghế</i> để bạn biết còn bao nhiêu chỗ.</p>
+  <p><b>Số lượt quét theo từng trạm</b> hiện riêng bên dưới, cho biết mỗi điểm đã đón bao nhiêu lượt.</p>
+  <p><b>Danh sách đăng ký &amp; check-in</b> ở cuối trang liệt kê từng người kèm trạng thái, có gắn nhãn màu cho người vãng lai và người trong danh sách chờ.</p>
+
+  <div class="note">
+    <b>Tắt tự cập nhật khi cần</b>
+    Ô <span class="field">Tự cập nhật mỗi 15 giây</span> có thể bỏ tick nếu bạn đang đọc danh sách dài và không muốn trang nhảy. Bấm <span class="btn">Cập nhật ngay</span> khi cần số liệu mới nhất. Dòng chữ bên cạnh luôn ghi rõ lần đọc gần nhất lúc mấy giờ.
+  </div>
+</section>
+
+<!-- ══════════════════ 9 ══════════════════ -->
+<section>
+  <h2><span class="num">9</span>Sau sự kiện</h2>
+  <p class="lead">Dữ liệu đã nằm sẵn trong hệ thống, không phải gõ lại từ giấy.</p>
+
+  <h3>Danh sách người có mặt</h3>
+  <p>Mở trang chi tiết sự kiện, kéo xuống <b>Danh sách đăng ký &amp; check-in</b>. Những người có trạng thái <b>Đã check-in</b> là những người đã được quét ở trạm <b>Cửa vào</b>.</p>
+  <p>Đây chính là danh sách dùng để gửi đề nghị cộng điểm rèn luyện cho sinh viên, vì nó là bằng chứng có mặt thật chứ không phải danh sách đăng ký.</p>
+
+  <div class="warn">
+    <b>Hiện chưa có nút xuất Excel</b>
+    Danh sách hiển thị đầy đủ trên màn hình. Cần đưa sang file thì bôi đen phần bảng, sao chép và dán vào Excel hoặc Google Sheets.
+  </div>
+
+  <h3>Lượt ghé các trạm</h3>
+  <p>Số lượt theo từng trạm hiện ngay trên trang chi tiết. Dùng cho báo cáo với đối tác về lưu lượng ghé gian hàng.</p>
+
+  <h3>Dọn dẹp</h3>
+  <ul>
+    <li><b>Đóng đăng ký</b> để không còn ai gửi form sau khi sự kiện đã xong.</li>
+    <li><b>Bỏ người hỗ trợ khỏi danh sách</b> của buổi đã kết thúc — quyền quét chỉ nên còn hiệu lực khi thật sự cần.</li>
+  </ul>
+</section>
+
+<!-- ══════════════════ 10 ══════════════════ -->
+<section>
+  <h2><span class="num">10</span>Gặp sự cố thì làm gì</h2>
+
+  <table>
+    <tr><th style="width:38%">Hiện tượng</th><th>Nguyên nhân thường gặp và cách xử lý</th></tr>
+    <tr><td class="k">Không mở được camera quét</td><td>Trình duyệt chưa được cấp quyền camera. Vào phần cài đặt quyền của trình duyệt và bật lại. Trong lúc chờ, dùng ô gõ mã 4 ký tự để không tắc hàng.</td></tr>
+    <tr><td class="k">Bạn hỗ trợ báo không mở được máy quét</td><td>Kiểm hai điều: tài khoản của bạn đó có vai trò <b>Support team</b> chưa, và đã được thêm vào danh sách hỗ trợ của <b>đúng buổi hôm đó</b> chưa. Quyền gắn theo từng buổi.</td></tr>
+    <tr><td class="k">Người tham dự không tìm thấy thư xác nhận</td><td>Nhờ họ kiểm mục Spam / Quảng cáo. Nếu vẫn không có, vào <b>Quản lý tham gia</b> điểm danh thủ công cho người đó.</td></tr>
+    <tr><td class="k">Quét xong nhưng ô "Đã check-in" không tăng</td><td>Nhiều khả năng máy quét đang để nhầm trạm. Chỉ trạm <b>Cửa vào</b> mới tính là đã tham dự. Đổi lại trạm và quét lại những người vừa qua cửa.</td></tr>
+    <tr><td class="k">Hiện cảnh báo đỏ khi thêm buổi mới</td><td>Buổi bạn định thêm trùng khít giờ và địa điểm với một buổi đã có. Kiểm lại ngày giờ, hoặc xoá buổi cũ trước.</td></tr>
+    <tr><td class="k">Không xoá được một buổi</td><td>Buổi đó đã có người đăng ký. Dùng <b>Huỷ sự kiện</b> thay vì xoá — vé đã gửi đi vẫn trỏ về buổi này.</td></tr>
+    <tr><td class="k">Ngày hiển thị sai thứ tự</td><td>Toàn hệ thống dùng ngày/tháng/năm. Nếu bạn đang gõ, hãy đọc dòng xanh xác nhận bên dưới ô nhập — nó ghi rõ thứ và ngày bằng chữ.</td></tr>
+    <tr><td class="k">Không thấy nút bạn cần</td><td>Gần như luôn là do vai trò tài khoản chưa đủ. Xem lại bảng phân quyền ở Phần 1 và liên hệ Admin.</td></tr>
+  </table>
+
+  <div class="note">
+    <b>Nguyên tắc chung khi bí</b>
+    Hệ thống được thiết kế để mọi thao tác đều có đường lùi: đăng ký đóng được rồi mở lại, giờ sửa được, buổi thêm nhầm xoá được, điểm danh chỉnh tay được. Không có thao tác nào ở đây làm mất dữ liệu của người đã đăng ký.
+  </div>
+</section>
+
+<!-- ══════════════════ 11 ══════════════════ -->
+<section>
+  <h2><span class="num">11</span>Bảng thuật ngữ</h2>
+  <table>
+    <tr><td class="k">Buổi</td><td>Một lần tổ chức cụ thể, có ngày giờ, sức chứa và danh sách điểm danh riêng.</td></tr>
+    <tr><td class="k">Chuỗi</td><td>Nhiều buổi cùng nội dung, dùng chung một link đăng ký. Người đăng ký chọn buổi khi điền form.</td></tr>
+    <tr><td class="k">Giữ ghế</td><td>Số người đang thật sự chiếm chỗ: đã đăng ký, đã xác nhận, và đang chờ duyệt. Không tính danh sách chờ.</td></tr>
+    <tr><td class="k">Danh sách chờ</td><td>Người đăng ký khi đã hết chỗ. Chưa có ghế, nhưng đã ở trong hệ thống để gọi khi có người huỷ.</td></tr>
+    <tr><td class="k">Vãng lai</td><td>Người tới dự mà không đăng ký trước.</td></tr>
+    <tr><td class="k">Trạm quét</td><td>Điểm quét mã trong sự kiện. Chỉ trạm <b>Cửa vào</b> tính là đã tham dự.</td></tr>
+    <tr><td class="k">Mã dự phòng</td><td>Bốn ký tự in trong thư xác nhận, gõ tay thay cho quét QR khi máy không đọc được.</td></tr>
+    <tr><td class="k">Người hỗ trợ điểm danh</td><td>Tài khoản Support team được cấp quyền mở máy quét của <b>một buổi cụ thể</b>.</td></tr>
+    <tr><td class="k">Huỷ sự kiện</td><td>Đánh dấu buổi không diễn ra nữa nhưng giữ nguyên toàn bộ dữ liệu. Khác với xoá.</td></tr>
+  </table>
+
+  <div class="foot">
+    <b>VAM OS — Cổng quản trị dữ liệu Vietnam Alumni Mentoring</b><br>
+    Tài liệu hướng dẫn module Sự kiện · Cập nhật 10/09/2026<br>
+    Gặp lỗi hoặc thấy phần nào chưa rõ, báo lại cho người phụ trách hệ thống để tài liệu được cập nhật.
+  </div>
+</section>
+
+</body>
+</html>
