@@ -20,6 +20,7 @@ import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
 import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
+import { parseVietnamDateTime } from "@/lib/event-datetime";
 import { checkinCodeUrl } from "@/lib/event-checkin-code";
 import { chooseSession } from "@/lib/event-session-choice";
 import { ensureCheckinCode } from "@/lib/event-checkin";
@@ -333,11 +334,16 @@ export function isValidUuid(value: unknown): value is string {
   return UUID_REGEX.test(value);
 }
 
+/**
+ * Uy quyen cho lib/event-datetime.
+ *
+ * Ban cu goi thang new Date(), va mot chuoi tu o datetime-local khong mang mui
+ * gio nen no duoc hieu theo gio MAY DANG CHAY. May chu Vercel chay UTC, nen 8
+ * gio sang nguoi dung go thanh 8 gio sang UTC — lech bay tieng, va moi lan
+ * luu lai lech them mot lan nua.
+ */
 function parseDateTime(value: string | null): string | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
+  return parseVietnamDateTime(value);
 }
 
 /**

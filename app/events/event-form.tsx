@@ -15,18 +15,51 @@ import {
   needsVenue,
   type EventFormat
 } from "@/lib/event-location";
+import { parseVietnamDateTime, toVietnamInputValue } from "@/lib/event-datetime";
+import { WEEKDAY_LABELS, weekdayOf } from "@/lib/event-recurrence";
+import { formatDate, formatTime } from "@/lib/utils";
 import { RecurrenceFields } from "./recurrence-fields";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 const initialState: EventActionState = { ok: false, message: null };
 
-function toLocalInputValue(value: string | null | undefined) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const tzOffset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
+/**
+ * Uy quyen cho lib/event-datetime.
+ *
+ * Ban cu dung getTimezoneOffset() cua may. Mot quan tri vien dang o nuoc ngoai
+ * mo form sua se thay gio noi ho dung, sua mot cho khac, va luu de len gio that
+ * cua su kien. Su kien dien ra o Viet Nam thi form phai noi gio Viet Nam.
+ */
+const toLocalInputValue = toVietnamInputValue;
+
+/**
+ * Nhắc lại ngày giờ vừa chọn, theo định dạng của CRM.
+ *
+ * Ô `<input type="datetime-local">` hiển thị theo NGÔN NGỮ CỦA TRÌNH DUYỆT —
+ * Chrome đặt tiếng Anh thì vẽ ra `mm/dd/yyyy`, và không có cách nào bắt nó về
+ * `dd/mm/yyyy` từ phía trang web.
+ *
+ * Không đổi được thì nói rõ: dòng này hiện lại đúng thứ và ngày mà hệ thống
+ * hiểu, nên không ai phải đoán `09/20` là ngày 20 tháng 9 hay ngày 9 tháng 20.
+ * Nó cũng là chỗ người dùng phát hiện ngay nếu chọn nhầm sang một thứ khác.
+ */
+function WhenEcho({ value }: { value: string }) {
+  const iso = parseVietnamDateTime(value);
+  if (!iso) {
+    return (
+      <span className="mt-1 block text-[11px] text-slate-400">
+        Định dạng ô nhập do trình duyệt quyết định. Chọn xong sẽ hiện lại ở đây theo dd/mm/yyyy.
+      </span>
+    );
+  }
+  const weekday = weekdayOf(iso);
+  return (
+    <span className="mt-1 block text-[11px] font-medium text-vam-green">
+      {weekday === null ? "" : `${WEEKDAY_LABELS[weekday]}, `}
+      {formatDate(iso)} lúc {formatTime(iso)} (giờ Việt Nam)
+    </span>
+  );
 }
 
 export function EventForm({
@@ -178,6 +211,7 @@ export function EventForm({
           onChange={(e) => setStartsAt(e.target.value)}
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
+        <WhenEcho value={startsAt} />
       </label>
 
       <label className="block">
@@ -189,6 +223,7 @@ export function EventForm({
           onChange={(e) => setEndsAt(e.target.value)}
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
+        <WhenEcho value={endsAt} />
         <span className="mt-1 block text-[11px] text-slate-500">
           Để trống nếu chưa chốt. Người tham dự sẽ chỉ thấy giờ bắt đầu.
         </span>
