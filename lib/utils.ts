@@ -114,6 +114,28 @@ export function formatDate(value: unknown) {
   return VN_DATE.format(date);
 }
 
+/**
+ * Giờ kèm giây, dạng HH:mm:ss.
+ *
+ * Chỉ dùng cho những chỗ đếm nhịp — "đọc lại lúc 14:05:32" — nơi giây là phần
+ * thông tin thật: nó cho người xem biết con số trước mặt vừa mới hay đã cũ.
+ */
+const VN_CLOCK = new Intl.DateTimeFormat("en-GB", {
+  timeZone: VN_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23"
+});
+
+/** Giờ kèm giây theo giờ Việt Nam. */
+export function formatClock(value: unknown) {
+  if (!value) return "-";
+  const date = toDate(value);
+  if (!date) return String(value);
+  return VN_CLOCK.format(date);
+}
+
 /** Giờ, dạng HH:mm theo giờ Việt Nam. */
 export function formatTime(value: unknown) {
   if (!value) return "-";
