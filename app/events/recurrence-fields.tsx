@@ -15,6 +15,7 @@ import {
   type MonthlyMode,
   type RecurrenceFrequency
 } from "@/lib/event-recurrence";
+import { parseVietnamDateTime } from "@/lib/event-datetime";
 import { formatDate, formatTime } from "@/lib/utils";
 
 const INPUT =
@@ -28,12 +29,7 @@ const INPUT =
  * hợp lệ, nên gọi thẳng `.toISOString()` ở đây từng làm sập cả trang tạo sự
  * kiện xuống error boundary — chỉ vì ai đó đang gõ một ngày.
  */
-function toIsoOrNull(local: string): string | null {
-  const raw = String(local ?? "").trim();
-  if (!raw) return null;
-  const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
+const toIsoOrNull = parseVietnamDateTime;
 
 /**
  * Ô đặt lịch lặp, kèm danh sách ngày sẽ được tạo.
