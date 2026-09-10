@@ -4,6 +4,8 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { PreviewEnvironmentBanner } from "@/components/preview-environment-banner";
+import { ParticipantShell } from "@/components/participant-shell";
+import { getParticipantDisplayName } from "@/lib/participant-person";
 
 export const metadata: Metadata = {
   title: "VAM OS",
@@ -11,11 +13,30 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const publicRoute = (await headers()).get("x-vam-public-route");
+  const requestHeaders = await headers();
+  const publicRoute = requestHeaders.get("x-vam-public-route");
   if (publicRoute === "register" || publicRoute === "checkin" || publicRoute === "renewal") {
     return (
       <html lang="vi">
         <body><PreviewEnvironmentBanner />{children}</body>
+      </html>
+    );
+  }
+
+  // Mentor và mentee dùng khung riêng, không phải khung của ban tổ chức.
+  //
+  // Dấu này do middleware đặt TỪ ĐƯỜNG DẪN — không bao giờ đọc từ đầu vào của
+  // client. Nhận nó từ ngoài vào nghĩa là để người ta tự chọn khung của mình,
+  // và một người có thể yêu cầu khung participant trên một đường của ban tổ
+  // chức. Khung không cấp quyền, nhưng nó quyết định thanh điều hướng nào hiện
+  // ra, và đó đã là một chỉ dẫn sai.
+  if (requestHeaders.get("x-vam-participant-route") === "1") {
+    const displayName = await getParticipantDisplayName();
+    return (
+      <html lang="vi">
+        <body>
+          <ParticipantShell displayName={displayName}>{children}</ParticipantShell>
+        </body>
       </html>
     );
   }

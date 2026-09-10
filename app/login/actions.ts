@@ -1,9 +1,16 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { clearAuthCookies, getSupabaseAuthClientForPasswordSignIn, setAuthCookies, findAdminUserForAuthUser } from "@/lib/admin-auth";
+import {
+  clearAuthCookies,
+  findAdminUserForAuthUser,
+  getSupabaseAuthClientForPasswordSignIn,
+  hasAnyAdminUserRow,
+  setAuthCookies
+} from "@/lib/admin-auth";
 import { getSafeAuthErrorType, mapAuthError, safeNext } from "@/lib/auth-error-messages";
 import { getAuthCallbackUrl } from "@/lib/public-url";
+import { resolveParticipantIdentity } from "@/lib/participant-auth";
 
 export type LoginActionState = {
   error: string | null;
@@ -58,11 +65,66 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
     return { error: mapAuthError("unauthorized_admin") };
   }
 
+  // Không phải nhân sự ban tổ chức thì thử đường participant: mentor và mentee
+  // đăng nhập bằng chính hòm thư của họ.
+  //
+  // Thứ tự này quan trọng. Ai vừa là mentor vừa có chân trong ban tổ chức —
+  // 22 mentor đang chấm hồ sơ chẳng hạn — vẫn vào đúng màn hình cũ của họ, vì
+  // phép tra nhân sự chạy trước và thắng.
   if (!adminUser) {
-    console.warn("[login] active admin_users lookup failed (no match)");
-    await client.auth.signOut();
-    await clearAuthCookies();
-    return { error: mapAuthError("unauthorized_admin") };
+    // Có dòng trong admin_users nhưng KHÔNG hoạt động — bị khoá, đình chỉ,
+    // hoặc mới mời chưa kích hoạt — thì từ chối y như trước, KHÔNG rơi xuống
+    // đường participant.
+    //
+    // findAdminUserForAuthUser lọc sẵn status = active nên nó trả về null
+    // giống hệt nhau cho "chưa bao giờ là nhân sự" và "đã bị khoá". Gộp hai
+    // trường hợp lại nghĩa là thu hồi quyền nhân sự của một người rồi lặng lẽ
+    // đưa cho họ một cánh cửa khác trong cùng phiên đó — và người bấm nút đình
+    // chỉ không hề biết mình vừa làm việc ấy.
+    let wasStaff = true;
+    try {
+      wasStaff = await hasAnyAdminUserRow(data.user);
+    } catch (err: any) {
+      console.warn("[login] admin_users existence check failed", err.message);
+      await client.auth.signOut();
+      await clearAuthCookies();
+      return { error: mapAuthError("network_unavailable") };
+    }
+
+    if (wasStaff) {
+      console.warn("[login] admin_users row exists but is not active");
+      await client.auth.signOut();
+      await clearAuthCookies();
+      return { error: mapAuthError("unauthorized_admin") };
+    }
+
+    const identity = await resolveParticipantIdentity({
+      authUserId: data.user.id,
+      authEmail: data.user.email
+    });
+
+    if (identity.error) {
+      // Hạ tầng hỏng, KHÔNG phải "không nhận ra bạn". Nói đúng thứ đang xảy ra
+      // thay vì đổ cho danh bạ.
+      await client.auth.signOut();
+      await clearAuthCookies();
+      return { error: mapAuthError("network_unavailable") };
+    }
+
+    if (!identity.personId) {
+      await client.auth.signOut();
+      await clearAuthCookies();
+      return { error: identity.refusal ?? mapAuthError("unauthorized_admin") };
+    }
+
+    await setAuthCookies(
+      data.session.access_token,
+      data.session.refresh_token,
+      data.session.expires_in
+    );
+    // Bỏ qua `next`: nó là đường của ban tổ chức mà middleware vừa chặn họ lại,
+    // nên đưa họ về đó là đá qua đá lại.
+    redirect("/ct");
   }
 
   await setAuthCookies(data.session.access_token, data.session.refresh_token, data.session.expires_in);

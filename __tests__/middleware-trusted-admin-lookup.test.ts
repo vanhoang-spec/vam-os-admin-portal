@@ -379,6 +379,24 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
     return { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE };
   }
 
+  /**
+   * Bị đưa đi khỏi đường của ban tổ chức, tới đâu thì tuỳ.
+   *
+   * Điều bài kiểm này quan tâm là KHÔNG VÀO ĐƯỢC /operations. Đích đến khác
+   * nhau theo lý do: chưa đăng nhập thì về /login; đăng nhập thật nhưng không
+   * phải nhân sự thì về /ct, vì đá một người vừa đăng nhập xong về lại chỗ đăng
+   * nhập là một vòng lặp không lối ra.
+   */
+  function isRedirectTo(response: any, pathname: string) {
+    if (!response) return false;
+    const location = response.headers.get("location");
+    return (
+      response.status === 307 &&
+      Boolean(location) &&
+      new URL(location).pathname === pathname
+    );
+  }
+
   function isRedirectToLogin(response: any) {
     if (!response) return false;
     const location = response.headers.get("location");
@@ -414,16 +432,21 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
     expect(isRedirectToLogin(second)).toBe(false);
   });
 
-  it("redirects an authenticated non-admin to /login", async () => {
+  it("đưa một người đăng nhập không phải nhân sự sang /ct, KHÔNG cho vào /operations", async () => {
     const { fetchImpl } = createFakeSupabase([]);
     globalThis.fetch = fetchImpl;
     const { AUTH_ACCESS_COOKIE } = await authCookies();
 
     const response = await runMiddleware({ [AUTH_ACCESS_COOKIE]: VALID_ACCESS_TOKEN });
-    expect(isRedirectToLogin(response)).toBe(true);
+
+    // Điều quan trọng nhất: không lọt vào đường của ban tổ chức.
+    expect(response.status).not.toBe(200);
+    expect(isRedirectTo(response, "/ct")).toBe(true);
+    // Và KHÔNG về /login: họ vừa đăng nhập xong.
+    expect(isRedirectToLogin(response)).toBe(false);
   });
 
-  it("redirects an inactive admin to /login", async () => {
+  it("đưa một nhân sự đã bị khoá ra khỏi /operations", async () => {
     const { fetchImpl } = createFakeSupabase([
       { auth_user_id: ADMIN_ID, email: ADMIN_EMAIL, status: "inactive" }
     ]);
@@ -431,7 +454,12 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
     const { AUTH_ACCESS_COOKIE } = await authCookies();
 
     const response = await runMiddleware({ [AUTH_ACCESS_COOKIE]: VALID_ACCESS_TOKEN });
-    expect(isRedirectToLogin(response)).toBe(true);
+
+    // Middleware chỉ dẫn đường, không phân biệt được "chưa bao giờ là nhân sự"
+    // với "đã bị khoá" — phép tra tin cậy trả về cùng một lý do cho cả hai. Nơi
+    // tách hai trường hợp ấy là trang /ct, bằng phép kiểm hasAnyAdminUserRow.
+    expect(response.status).not.toBe(200);
+    expect(isRedirectTo(response, "/ct")).toBe(true);
   });
 
   it("fails closed to /login when the service-role credential is missing", async () => {
@@ -482,7 +510,7 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
 
     const response = await runMiddleware({ [AUTH_ACCESS_COOKIE]: VALID_ACCESS_TOKEN });
 
-    expect(isRedirectToLogin(response)).toBe(true);
+    expect(isRedirectTo(response, "/ct")).toBe(true);
     // No user identity in the logs on the routine path.
     expect(errorSpy).not.toHaveBeenCalled();
     expect(warnSpy).not.toHaveBeenCalled();
@@ -505,7 +533,7 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
     expect(response.cookies.get(AUTH_ACCESS_COOKIE)?.value).toBe(REFRESHED_ACCESS_TOKEN);
   });
 
-  it("denies a refreshed session whose user is not an active admin", async () => {
+  it("phiên vừa làm mới mà không phải nhân sự cũng KHÔNG vào được /operations", async () => {
     const { fetchImpl } = createFakeSupabase([]);
     globalThis.fetch = fetchImpl;
     const { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE } = await authCookies();
@@ -514,7 +542,11 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
       [AUTH_ACCESS_COOKIE]: EXPIRED_ACCESS_TOKEN,
       [AUTH_REFRESH_COOKIE]: VALID_REFRESH_TOKEN
     });
-    expect(isRedirectToLogin(response)).toBe(true);
+
+    // Đường làm mới token có nhánh riêng, và nó cũng phải phân loại đúng ba
+    // trạng thái — không phải chỉ nhánh token còn hạn.
+    expect(response.status).not.toBe(200);
+    expect(isRedirectTo(response, "/ct")).toBe(true);
   });
 
   it("redirects an anonymous visitor to /login without touching admin_users", async () => {
