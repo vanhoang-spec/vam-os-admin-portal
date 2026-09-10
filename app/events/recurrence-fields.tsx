@@ -21,6 +21,21 @@ const INPUT =
   "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
 
 /**
+ * Chuỗi từ một ô `datetime-local`, thành ISO — hoặc null nếu chưa đọc được.
+ *
+ * Tồn tại vì `new Date(x).toISOString()` **ném RangeError** với một Date không
+ * hợp lệ; nó không trả về chuỗi rỗng. Một ô đang được gõ dở luôn có lúc không
+ * hợp lệ, nên gọi thẳng `.toISOString()` ở đây từng làm sập cả trang tạo sự
+ * kiện xuống error boundary — chỉ vì ai đó đang gõ một ngày.
+ */
+function toIsoOrNull(local: string): string | null {
+  const raw = String(local ?? "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/**
  * Ô đặt lịch lặp, kèm danh sách ngày sẽ được tạo.
  *
  * ---------------------------------------------------------------------------
@@ -45,9 +60,10 @@ export function RecurrenceFields({ startsAt, endsAt }: { startsAt: string; endsA
   const [endsOn, setEndsOn] = useState("");
 
   // `datetime-local` cho ra giờ theo máy người dùng; ISO hoá để phần sinh buổi
-  // đọc cùng một mốc với máy chủ.
-  const startIso = startsAt ? new Date(startsAt).toISOString() : "";
-  const valid = Boolean(startIso) && !Number.isNaN(new Date(startIso).getTime());
+  // đọc cùng một mốc với máy chủ. Qua `toIsoOrNull` — xem chú thích ở hàm đó.
+  const startIso = toIsoOrNull(startsAt);
+  const endIso = toIsoOrNull(endsAt);
+  const valid = startIso !== null;
 
   const rule = {
     frequency,
@@ -58,20 +74,23 @@ export function RecurrenceFields({ startsAt, endsAt }: { startsAt: string; endsA
     count: count ? Number(count) : null
   };
 
-  const preview = valid
+  const preview = startIso
     ? generateOccurrences({
         startsAt: startIso,
-        endsAt: endsAt ? new Date(endsAt).toISOString() : null,
+        endsAt: endIso,
         rule
       })
     : null;
 
-  const weekday = valid ? weekdayOf(startIso) : null;
-  const ordinal = valid ? weekdayOrdinalOf(startIso) : null;
-  const dayOfMonth = valid ? new Date(startIso).getUTCDate() : null;
+  const weekday = startIso ? weekdayOf(startIso) : null;
+  const ordinal = startIso ? weekdayOrdinalOf(startIso) : null;
+  // Ngày trong tháng đọc từ chuỗi đã định dạng theo giờ Việt Nam, không từ
+  // `getUTCDate()`: một buổi 8 giờ tối ngày 20 giờ Việt Nam đã sang ngày 21
+  // theo UTC, và nhãn "Ngày 21 hằng tháng" sẽ nói sai với người đang nhìn.
+  const dayLabel = startIso ? formatDate(startIso).slice(0, 2) : null;
 
   const monthlyLabel: Record<MonthlyMode, string> = {
-    day_of_month: dayOfMonth ? `Ngày ${formatDate(startIso).slice(0, 2)} hằng tháng` : "Theo ngày trong tháng",
+    day_of_month: dayLabel ? `Ngày ${dayLabel} hằng tháng` : "Theo ngày trong tháng",
     weekday_of_month:
       weekday !== null && ordinal
         ? `${WEEKDAY_LABELS[weekday]} tuần thứ ${ordinal} hằng tháng`
