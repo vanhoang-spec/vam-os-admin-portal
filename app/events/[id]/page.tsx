@@ -8,6 +8,8 @@ import { getEventDetailData, isValidUuid } from "@/lib/events";
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
+import { eventTypeLabel } from "@/lib/event-constants";
+import { EventPlaceBlock } from "../event-place";
 
 async function getRequestOrigin() {
   const h = await headers();
@@ -128,8 +130,12 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
     <>
       <PageHeader
         title={displayText(detail.event.event_name, "Sự kiện")}
-        description={`${displayText(seasonCode)} · ${formatDateTime(detail.event.starts_at)} · ${displayText(detail.event.event_type)}`}
+        description={`${displayText(seasonCode)} · ${eventTypeLabel(detail.event.event_type)}`}
       />
+
+      <div className="mb-6 rounded-md border border-vam-line bg-white p-4">
+        <EventPlaceBlock event={detail.event} />
+      </div>
       {detail.error ? <ErrorBox message={detail.error} /> : null}
 
       {/* Capacity / waitlist info banner */}

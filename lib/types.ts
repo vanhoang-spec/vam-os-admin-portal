@@ -317,6 +317,15 @@ export type Event = JsonRecord & {
   /** Phase 045A: "active" (default) | "cancelled". */
   status?: "active" | "cancelled" | string | null;
   starts_at?: string | null;
+  /** Giờ kết thúc. Null nghĩa là chưa ghi, không phải sự kiện không có hồi kết. */
+  ends_at?: string | null;
+  /** "offline" | "online" | "hybrid" — xem lib/event-location.ts. */
+  event_format?: string | null;
+  location_name?: string | null;
+  location_address?: string | null;
+  /** Đường dẫn Google Maps do BTC dán. Khi trống, suy ra từ location_address. */
+  location_map_url?: string | null;
+  online_join_url?: string | null;
   source_notes?: string | null;
 
   // ── Phase 2: configurable registration & check-in fields ─────────────────

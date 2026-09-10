@@ -18,6 +18,14 @@ import {
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
+import {
+  isEventFormat,
+  needsJoinUrl,
+  needsVenue,
+  normalizeJoinUrl,
+  normalizeMapUrl,
+  type EventFormat
+} from "@/lib/event-location";
 import type {
   Event,
   EventLink,
@@ -108,6 +116,12 @@ export type EventInput = {
   /** Phase 045A: UUID of intake_batches row, or null/empty to leave unlinked. */
   intake_batch_id?: unknown;
   starts_at?: unknown;
+  ends_at?: unknown;
+  event_format?: unknown;
+  location_name?: unknown;
+  location_address?: unknown;
+  location_map_url?: unknown;
+  online_join_url?: unknown;
   source_notes?: unknown;
   legacy_event_temp_id?: unknown;
   registration_required?: unknown;
@@ -1894,6 +1908,67 @@ export async function updateRegistrationReviewNote(input: RegistrationOperationI
   });
   return result.ok ? { ...result, message: "Đã cập nhật ghi chú rà soát." } : result;
 }
+/**
+ * Nơi và lúc một sự kiện diễn ra, đọc từ form và kiểm xong.
+ *
+ * Dùng chung cho cả tạo mới lẫn sửa, vì một quy tắc chỉ đúng khi nó là MỘT
+ * quy tắc: hai bản kiểm riêng cho hai đường là hai bản sẽ trôi lệch nhau, và
+ * đường ít người dùng hơn sẽ là đường trôi.
+ *
+ * Cố ý KHÔNG bắt buộc phải có địa chỉ cho sự kiện offline. BTC thường tạo sự
+ * kiện trước khi chốt được hội trường; chặn ở đây là buộc họ gõ một địa chỉ
+ * giả để lưu được, và một địa chỉ giả tệ hơn một ô trống.
+ */
+function resolveEventPlaceInput(
+  input: EventInput,
+  startsAtIso: string
+):
+  | {
+      ok: true;
+      place: {
+        endsAt: string | null;
+        format: EventFormat;
+        locationName: string | null;
+        locationAddress: string | null;
+        mapUrl: string | null;
+        joinUrl: string | null;
+      };
+    }
+  | { ok: false; message: string } {
+  const rawFormat = clean(input.event_format);
+  // Không ghi hình thức thì là sự kiện tới-tận-nơi, đúng như mọi sự kiện đã có
+  // trong bảng trước khi cột này tồn tại.
+  const format: EventFormat = isEventFormat(rawFormat) ? rawFormat : "offline";
+
+  const endsAtRaw = clean(input.ends_at);
+  const endsAt = endsAtRaw ? parseDateTime(endsAtRaw) : null;
+  if (endsAtRaw && !endsAt) return { ok: false, message: "Giờ kết thúc không hợp lệ." };
+  if (endsAt && endsAt <= startsAtIso) {
+    return { ok: false, message: "Giờ kết thúc phải sau giờ bắt đầu." };
+  }
+
+  const map = normalizeMapUrl(input.location_map_url);
+  if (!map.ok) return { ok: false, message: map.message };
+
+  const join = normalizeJoinUrl(input.online_join_url);
+  if (!join.ok) return { ok: false, message: join.message };
+
+  return {
+    ok: true,
+    place: {
+      endsAt,
+      format,
+      locationName: needsVenue(format) ? clean(input.location_name) : null,
+      locationAddress: needsVenue(format) ? clean(input.location_address) : null,
+      // Địa điểm bị xoá khi sự kiện chuyển sang thuần trực tuyến, và đường dẫn
+      // phòng họp bị xoá khi nó chuyển sang thuần tại chỗ. Giữ lại nghĩa là gửi
+      // cho người tham dự một địa chỉ của lần sửa trước.
+      mapUrl: needsVenue(format) ? map.url : null,
+      joinUrl: needsJoinUrl(format) ? join.url : null
+    }
+  };
+}
+
 export async function createEvent(input: EventInput): Promise<MutationResult> {
   const access = await requireEventAdmin();
   if (!access.ok) return { ok: false, message: access.message };
@@ -1908,6 +1983,10 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   const startsAtRaw = clean(input.starts_at);
   const startsAt = parseDateTime(startsAtRaw);
   if (!startsAt) return { ok: false, message: "Thời điểm sự kiện không hợp lệ." };
+
+  const placeResult = resolveEventPlaceInput(input, startsAt);
+  if (!placeResult.ok) return { ok: false, message: placeResult.message };
+  const place = placeResult.place;
 
   const seasonCode = clean(input.season_code) ?? DEFAULT_SEASON_CODE;
   const { seasonId, error: seasonError } = await resolveSeasonId(client, seasonCode);
@@ -1930,6 +2009,12 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     event_name: eventName,
     event_type: eventType,
     starts_at: startsAt,
+    ends_at: place.endsAt,
+    event_format: place.format,
+    location_name: place.locationName,
+    location_address: place.locationAddress,
+    location_map_url: place.mapUrl,
+    online_join_url: place.joinUrl,
     source_notes: clean(input.source_notes),
     legacy_event_temp_id: clean(input.legacy_event_temp_id),
     registration_required: String(input.registration_required) === "true",
@@ -2019,6 +2104,15 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   const startsAt = parseDateTime(startsAtRaw);
   if (!startsAt) return { ok: false, message: "Thời điểm sự kiện không hợp lệ." };
   updates.starts_at = startsAt;
+
+  const placeResult = resolveEventPlaceInput(input, startsAt);
+  if (!placeResult.ok) return { ok: false, message: placeResult.message };
+  updates.ends_at = placeResult.place.endsAt;
+  updates.event_format = placeResult.place.format;
+  updates.location_name = placeResult.place.locationName;
+  updates.location_address = placeResult.place.locationAddress;
+  updates.location_map_url = placeResult.place.mapUrl;
+  updates.online_join_url = placeResult.place.joinUrl;
 
   const seasonCode = clean(input.season_code) ?? DEFAULT_SEASON_CODE;
   const { seasonId, error: seasonError } = await resolveSeasonId(client, seasonCode);
