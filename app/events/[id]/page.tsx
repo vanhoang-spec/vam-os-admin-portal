@@ -5,6 +5,8 @@ import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getEventDetailData, isValidUuid, listSeriesSessions } from "@/lib/events";
+import type { EventRegistration } from "@/lib/types";
+import { hasAnyMealOrPayment, hasAnyProfileInfo } from "@/lib/event-registration-columns";
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
@@ -129,6 +131,10 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
   const walkInRegistrations = activeRegistrations.filter(
     (row) => row.is_walk_in === true || String(row.is_walk_in) === "true"
   );
+
+  // Cột mà CẢ BẢNG đều rỗng thì không vẽ ra — xem lib/event-registration-columns.
+  const hasProfileInfo = hasAnyProfileInfo(activeRegistrations);
+  const hasMealOrPayment = hasAnyMealOrPayment(activeRegistrations);
 
   // Capacity info
   const capacityEnabled = detail.event.capacity_limit_enabled === true;
@@ -289,33 +295,40 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">
-        <div className="grid gap-4">
-          <Card>
-            <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết đăng ký công khai</h2>
-            <RegistrationLinkPanel
-              eventId={detail.event.id}
-              registrationUrl={registrationUrl}
-              registrationLinkIsActive={regLinkIsActive}
-              canCreate={canCreateLink}
-              capacityWarning={reopenCapacityWarning}
-              seriesTotal={
-                typeof detail.event.series_total === "number" ? detail.event.series_total : null
-              }
-            />
-          </Card>
+      {/* Hai khối liên kết đứng cạnh nhau ở hàng trên, bảng danh sách chiếm
+          trọn bề ngang ở hàng dưới.
 
-          <Card>
-            <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết điểm danh / QR</h2>
-            <CheckinLinkPanel
-              eventId={detail.event.id}
-              checkinUrl={checkinUrl}
-              canCreate={canCreateLink}
-              qrDataUrl={checkinQrDataUrl}
-            />
-          </Card>
-        </div>
+          Trước đây bảng nằm cạnh hai khối này, nên nó chỉ còn hơn nửa màn
+          hình cho sáu cột — và mỗi ô hẹp tới mức "Đã đăng ký" bị bẻ thành ba
+          dòng. Một hàng cao gần trăm điểm ảnh nghĩa là màn hình chỉ chứa nổi
+          ba người, trong khi việc thường làm với bảng này là dò cả danh sách. */}
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết đăng ký công khai</h2>
+          <RegistrationLinkPanel
+            eventId={detail.event.id}
+            registrationUrl={registrationUrl}
+            registrationLinkIsActive={regLinkIsActive}
+            canCreate={canCreateLink}
+            capacityWarning={reopenCapacityWarning}
+            seriesTotal={
+              typeof detail.event.series_total === "number" ? detail.event.series_total : null
+            }
+          />
+        </Card>
 
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết điểm danh / QR</h2>
+          <CheckinLinkPanel
+            eventId={detail.event.id}
+            checkinUrl={checkinUrl}
+            canCreate={canCreateLink}
+            qrDataUrl={checkinQrDataUrl}
+          />
+        </Card>
+      </div>
+
+      <div className="mt-4">
         <Card>
           <h2 className="mb-3 text-base font-semibold text-vam-ink">
             Danh sách đăng ký &amp; check-in <span className="text-sm font-normal text-slate-500">({activeRegistrations.length})</span>
@@ -336,43 +349,51 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
                     </div>
                   )
                 },
-                {
-                  key: "school",
-                  label: "Thông tin",
-                  render: (row) => (
-                    <div className="text-xs text-slate-600">
-                      <div>{displayText(row.school)}</div>
-                      <div className="mt-0.5">{displayText(row.program_of_study)}</div>
-                    </div>
-                  )
-                },
+                ...(hasProfileInfo
+                  ? [
+                      {
+                        key: "school",
+                        label: "Thông tin",
+                        render: (row: EventRegistration) => (
+                          <div className="text-xs text-slate-600">
+                            <div>{displayText(row.school)}</div>
+                            <div className="mt-0.5">{displayText(row.program_of_study)}</div>
+                          </div>
+                        )
+                      }
+                    ]
+                  : []),
                 {
                   key: "status",
                   label: "Trạng thái",
                   render: (row) => {
                     const regBadge = registrationStatusLabel(row.registration_status);
                     return (
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className={`rounded px-2 py-1 text-xs font-medium ${regBadge.color}`}>
+                      // Bốn huy hiệu nằm ngang. `max-w-xs` của ô bảng bó chúng
+                      // lại thành cột dọc, nên nới riêng ô này ra.
+                      <div className="flex max-w-none flex-wrap items-center gap-1.5">
+                        <span className={`whitespace-nowrap rounded px-2 py-1 text-xs font-medium ${regBadge.color}`}>
                           {regBadge.label}
                         </span>
-                        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                        <span className="whitespace-nowrap rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
                           {attendanceLabel(row.attendance_status)}
                         </span>
                         {row.is_walk_in ? (
-                          <span className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">Vãng lai</span>
+                          <span className="whitespace-nowrap rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">Vãng lai</span>
                         ) : null}
-                        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+                        <span className="whitespace-nowrap rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
                           {matchReviewLabel(row.match_review_status)}
                         </span>
                       </div>
                     );
                   }
                 },
-                {
+                ...(hasMealOrPayment
+                  ? [
+                      {
                   key: "meal_payment",
                   label: "Ăn trưa / Thanh toán",
-                  render: (row) => (
+                  render: (row: EventRegistration) => (
                     <div className="flex flex-wrap gap-1">
                       {row.meal_selected === true ? (
                         <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-medium text-blue-800">
@@ -392,11 +413,19 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
                       ) : null}
                     </div>
                   )
-                },
+                      }
+                    ]
+                  : []),
                 {
                   key: "registered_at",
                   label: "Thời gian",
-                  render: (row) => formatDateTime(row.registered_at)
+                  // Không cho bẻ dòng: một cột hẹp sẽ tách "10/09/2026" khỏi
+                  // "21:27" và đẩy cả hàng cao thêm một dòng.
+                  render: (row) => (
+                    <span className="whitespace-nowrap tabular-nums">
+                      {formatDateTime(row.registered_at)}
+                    </span>
+                  )
                 },
                 {
                   key: "actions",
