@@ -349,9 +349,8 @@
   <h3>Những gì hệ thống chưa làm</h3>
   <p>Nói trước để bạn không mất thời gian đi tìm:</p>
   <ul>
-    <li><b>Chưa có nút xuất danh sách ra Excel/CSV</b> cho danh sách đăng ký sự kiện. Danh sách hiện đầy đủ trên màn hình và bôi đen copy được.</li>
-    <li><b>Không tự gửi thư báo khi bạn đổi lịch.</b> Đổi giờ một buổi thì phải tự báo lại cho những người đã đăng ký.</li>
     <li><b>Không tự tạo tài khoản.</b> Thêm người hỗ trợ chỉ chọn được từ những tài khoản đã có sẵn trong hệ thống.</li>
+    <li><b>Không tự gửi thư báo đổi lịch.</b> Hệ thống soạn sẵn và nhớ hộ còn ai chưa được báo, nhưng chờ bạn bấm gửi — xem mục 3.3.</li>
   </ul>
 </section>
 
@@ -478,9 +477,20 @@
     <li><b>Sửa rồi bấm <span class="btn">Lưu giờ</span>.</b> Ô đóng lại và dòng thời gian trên danh sách đổi theo ngay.</li>
   </ol>
   <p>Sửa được giờ của <b>mọi buổi</b>, kể cả buổi bạn đang mở. Nếu buổi mới dời sang sau một buổi khác, hệ thống tự đánh số lại cả chuỗi theo thứ tự thời gian — không để xảy ra cảnh "Buổi 1" nằm sau "Buổi 2".</p>
+  <h4>Đổi giờ buổi đã có người đăng ký — nhớ gửi thư báo</h4>
+  <p>Vẫn đổi được. Sau khi lưu, ngay dưới dòng của buổi đó hiện một dải màu vàng:</p>
+  <p style="margin:0 0 3mm"><i>&ldquo;<b>42 người</b> đang giữ thư xác nhận ghi giờ cũ và chưa được báo về giờ hiện tại.&rdquo;</i> kèm nút <span class="btn">Gửi thư báo đổi lịch cho 42 người</span></p>
+  <p>Bấm nút đó, hệ thống gửi thư cho từng người: giờ mới, giờ cũ để đối chiếu, và câu quan trọng nhất — <b>mã QR cũ vẫn dùng được, không phải đăng ký lại</b>.</p>
+  <ul>
+    <li>Mỗi lượt gửi tối đa <b>20 thư</b>. Còn người thì bấm lại, hệ thống gửi tiếp cho phần còn lại.</li>
+    <li>Bấm lại nhiều lần <b>không</b> làm ai nhận hai thư — gửi tới đâu đánh dấu tới đó.</li>
+    <li>Lịch đổi lần thứ hai thì dải vàng hiện lại, vì những người đã báo lần trước giờ lại chưa biết giờ mới nhất.</li>
+    <li>Thư báo đổi lịch được ghi vào <b>Nhật ký gửi</b> của module Mail như mọi thư khác.</li>
+  </ul>
   <div class="warn">
-    <b>Đổi giờ buổi đã có người đăng ký</b>
-    Vẫn đổi được. Nhưng hệ thống sẽ báo lại có <b>bao nhiêu người đang giữ thư xác nhận ghi giờ cũ</b>. Hệ thống <b>không</b> tự gửi thư báo đổi lịch — bạn phải chủ động liên hệ những người đó.
+    <b>Vì sao phải bấm, không tự gửi</b>
+    Sửa giờ hiếm khi là một thao tác: người ta gõ nhầm rồi sửa lại, hoặc dời cả hai buổi của chuỗi trong cùng một phút. Tự gửi sau mỗi lần lưu nghĩa là hàng trăm người nhận ba lá thư trong năm phút và chỉ lá cuối là đúng.<br><br>
+    Dải vàng <b>không mất đi</b> khi bạn đóng trang hay đóng ô sửa giờ. Nó còn đó cho tới khi mọi người đã được báo, nên không sợ quên.
   </div>
 
   <h3>3.4 · Xoá buổi thêm nhầm</h3>
@@ -642,9 +652,15 @@
   <p>Mở trang chi tiết sự kiện, kéo xuống <b>Danh sách đăng ký &amp; check-in</b>. Những người có trạng thái <b>Đã check-in</b> là những người đã được quét ở trạm <b>Cửa vào</b>.</p>
   <p>Đây chính là danh sách dùng để gửi đề nghị cộng điểm rèn luyện cho sinh viên, vì nó là bằng chứng có mặt thật chứ không phải danh sách đăng ký.</p>
 
-  <div class="warn">
-    <b>Hiện chưa có nút xuất Excel</b>
-    Danh sách hiển thị đầy đủ trên màn hình. Cần đưa sang file thì bôi đen phần bảng, sao chép và dán vào Excel hoặc Google Sheets.
+  <h4>Tải danh sách về máy</h4>
+  <p>Ở hàng nút đầu trang chi tiết sự kiện, bấm <span class="btn">Tải danh sách (CSV)</span>. File mở thẳng được bằng Excel hoặc Google Sheets.</p>
+  <p>Với chuỗi nhiều buổi, có thêm nút <span class="btn">Tải cả N buổi (CSV)</span> — gộp mọi buổi vào một file, kèm cột <b>Buổi</b> để lọc.</p>
+  <p>File gồm 20 cột: buổi, thời gian, họ tên, email, số điện thoại, trạng thái đăng ký, trạng thái tham dự, đã check-in, thời điểm check-in, vãng lai, MSSV, mã mentee, trường, ngành học, vai trò tự khai, ghi chú, câu hỏi cho diễn giả, mã vé, mã dự phòng, thời điểm đăng ký.</p>
+  <p>Tên file có sẵn tên sự kiện và ngày, ví dụ <code>dang-ky_mentor-orientation_20-09-2026.csv</code> — tải ba buổi về cùng một thư mục vẫn phân biệt được.</p>
+  <div class="stop">
+    <b>File này mang dữ liệu cá nhân của hàng trăm người</b>
+    Họ tên, email, số điện thoại, MSSV. Khi đã tải về máy, nó không còn được hệ thống ghi vết, không thu hồi được và không hết hạn.<br><br>
+    Đừng gửi nguyên file qua chat nhóm hay email cá nhân. Cần chia sẻ thì xoá bớt cột không dùng tới trước, và chỉ gửi cho người thật sự cần. Chỉ tài khoản có quyền vận hành mùa đó mới tải được — nhưng file thì đi tới đâu là do bạn.
   </div>
 
   <h3>Lượt ghé các trạm</h3>
@@ -670,6 +686,8 @@
     <tr><td class="k">Hiện cảnh báo đỏ khi thêm buổi mới</td><td>Buổi bạn định thêm trùng khít giờ và địa điểm với một buổi đã có. Kiểm lại ngày giờ, hoặc xoá buổi cũ trước.</td></tr>
     <tr><td class="k">Không xoá được một buổi</td><td>Buổi đó đã có người đăng ký. Dùng <b>Huỷ sự kiện</b> thay vì xoá — vé đã gửi đi vẫn trỏ về buổi này.</td></tr>
     <tr><td class="k">Ngày hiển thị sai thứ tự</td><td>Toàn hệ thống dùng ngày/tháng/năm. Nếu bạn đang gõ, hãy đọc dòng xanh xác nhận bên dưới ô nhập — nó ghi rõ thứ và ngày bằng chữ.</td></tr>
+    <tr><td class="k">Tải CSV thì báo không có quyền</td><td>Chỉ tài khoản vận hành được mùa của sự kiện mới tải được danh sách — file mang dữ liệu cá nhân nên cổng hẹp hơn cổng xem trang.</td></tr>
+    <tr><td class="k">Bấm gửi thư báo đổi lịch mà vẫn còn người</td><td>Mỗi lượt gửi tối đa 20 thư. Bấm lại cho tới khi dải vàng biến mất. Không ai nhận hai thư.</td></tr>
     <tr><td class="k">Không thấy nút bạn cần</td><td>Gần như luôn là do vai trò tài khoản chưa đủ. Xem lại bảng phân quyền ở Phần 1 và liên hệ Admin.</td></tr>
   </table>
 

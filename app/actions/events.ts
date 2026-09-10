@@ -12,6 +12,7 @@ import {
   createRegistrationLinkForEvent,
   addSessionToSeries,
   removeSessionFromSeries,
+  notifyScheduleChange,
   updateSessionTime,
   createEvent,
   createEventSeries,
@@ -519,5 +520,56 @@ export async function updateEventSessionTimeAction(
   revalidatePath(`/events/${formText(formData, "event_id")}`);
   revalidatePath("/operations");
 
-  return { ok: true, message: result.message };
+  const change = result.data as Record<string, unknown> | undefined;
+  return {
+    ok: true,
+    message: result.message,
+    scheduleChange: change
+      ? {
+          previousStartsAt: (change.previous_starts_at as string | null) ?? null,
+          previousEndsAt: (change.previous_ends_at as string | null) ?? null,
+          holders: Number(change.holders ?? 0)
+        }
+      : null
+  };
+}
+
+/**
+ * Gửi thư báo đổi lịch cho những người đang giữ vé của một buổi.
+ *
+ * Một cú bấm riêng, không tự chạy sau khi lưu giờ — xem `notifyScheduleChange`
+ * về lý do. Gửi theo lô, nên bấm lại là gửi tiếp cho phần còn lại.
+ */
+export async function notifyScheduleChangeAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const targetId = formText(formData, "session_id");
+  const result = await notifyScheduleChange({
+    eventId: targetId,
+    previousStartsAt: formText(formData, "previous_starts_at"),
+    previousEndsAt: formText(formData, "previous_ends_at")
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+
+  revalidatePath(`/events/${targetId}`);
+  revalidatePath(`/events/${formText(formData, "event_id")}`);
+  revalidatePath("/operations/emails");
+
+  // Còn người chưa gửi thì giữ nguyên giờ cũ trong trạng thái, để lượt bấm
+  // tiếp theo vẫn nói được "đổi từ đâu sang đâu".
+  return {
+    ok: true,
+    message: result.message,
+    scheduleChange: result.remaining
+      ? {
+          previousStartsAt: formText(formData, "previous_starts_at") || null,
+          previousEndsAt: formText(formData, "previous_ends_at") || null,
+          holders: result.remaining
+        }
+      : null
+  };
 }

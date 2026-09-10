@@ -116,3 +116,24 @@ export function isEventAttendedStatus(value: unknown): boolean {
 export function isEventAbsenceStatus(value: unknown): boolean {
   return EVENT_ABSENCE_STATUS_VALUES.has(String(value ?? "").trim() as AttendanceStatusValue);
 }
+
+/**
+ * Nhãn tiếng Việt của một trạng thái đăng ký.
+ *
+ * Một cửa duy nhất cho cả huy hiệu trên màn hình lẫn ô trong bảng xuất ra: hai
+ * bảng chữ khác nhau cho cùng một trạng thái là hai bảng sẽ lệch nhau, và lúc
+ * đó không ai biết bảng nào đúng.
+ *
+ * `REGISTRATION_STATUS_OPTIONS` chỉ liệt kê những giá trị hệ thống tự ghi ra;
+ * các giá trị đến từ quy trình duyệt đơn được ghi thêm ở đây.
+ */
+export function eventRegistrationStatusLabel(value: unknown): string {
+  const status = String(value ?? "").trim();
+  if (status === "registered") return "Đã đăng ký";
+  if (status === "pending_review") return "Chờ duyệt";
+  if (status === "confirmed") return "Đã xác nhận";
+  if (status === "waitlisted") return "Danh sách chờ";
+  if (status === "rejected") return "Bị từ chối";
+  if (status === "cancelled") return "Đã hủy";
+  return REGISTRATION_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status;
+}
