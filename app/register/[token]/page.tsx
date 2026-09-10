@@ -99,7 +99,9 @@ export default async function PublicEventRegistrationPage(props: { params: Promi
           <h1 className="mt-2 text-2xl font-semibold tracking-normal">{eventName}</h1>
           {data.event ? (
             <div className="mt-3">
-              <EventPlaceBlock event={data.event} tone="dark" />
+              {/* Truyền cả chuỗi vào: link này đại diện cho MỌI buổi, nên
+                  phần đầu trang phải nói đủ, không chỉ ngày của buổi neo. */}
+              <EventPlaceBlock event={data.event} tone="dark" sessions={data.sessions} />
             </div>
           ) : null}
         </div>

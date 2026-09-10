@@ -5,7 +5,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { initialPublicRegistrationActionState } from "@/lib/event-action-types";
 import { submitEventRegistrationAction } from "./actions";
 import type { SessionOption } from "@/lib/events";
-import { formatDateTime, formatTime } from "@/lib/utils";
+import { formatTimeRange } from "@/lib/utils";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -128,9 +128,7 @@ export function RegistrationForm({
           <div className="flex flex-col gap-2">
             {sessions.map((session, index) => {
               const label = `Buổi ${session.seriesIndex ?? index + 1}`;
-              const when = session.endsAt
-                ? `${formatDateTime(session.startsAt)} – ${formatTime(session.endsAt)}`
-                : formatDateTime(session.startsAt);
+              const when = formatTimeRange(session.startsAt, session.endsAt);
               // Buổi đầy mà KHÔNG có danh sách chờ thì không chọn được: hiện nó
               // ra để người ta biết buổi đó tồn tại và đã hết chỗ, thay vì thấy
               // một danh sách tự nhiên thiếu mất một dòng.
