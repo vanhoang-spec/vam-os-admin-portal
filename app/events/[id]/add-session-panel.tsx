@@ -4,12 +4,8 @@ import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { addEventSessionAction } from "@/app/actions/events";
 import type { EventActionState } from "@/lib/event-action-types";
-import { parseVietnamDateTime, toVietnamInputValue } from "@/lib/event-datetime";
-import { WEEKDAY_LABELS, weekdayOf } from "@/lib/event-recurrence";
-import { formatDate, formatTime } from "@/lib/utils";
-
-const INPUT =
-  "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
+import { toVietnamInputValue } from "@/lib/event-datetime";
+import { VietnamDateTimeField } from "../vietnam-datetime-field";
 
 const initialState: EventActionState = { ok: false, message: null };
 
@@ -23,19 +19,6 @@ function Submit() {
     >
       {pending ? "Đang thêm…" : "Thêm buổi"}
     </button>
-  );
-}
-
-/** Nhắc lại ngày giờ theo định dạng của CRM — xem `WhenEcho` ở form sự kiện. */
-function WhenEcho({ value }: { value: string }) {
-  const iso = parseVietnamDateTime(value);
-  if (!iso) return null;
-  const weekday = weekdayOf(iso);
-  return (
-    <span className="mt-1 block text-[11px] font-medium text-vam-green">
-      {weekday === null ? "" : `${WEEKDAY_LABELS[weekday]}, `}
-      {formatDate(iso)} lúc {formatTime(iso)} (giờ Việt Nam)
-    </span>
   );
 }
 
@@ -94,30 +77,14 @@ export function AddSessionPanel({
       <form action={formAction} className="mt-4 flex flex-wrap items-start gap-3">
         <input type="hidden" name="event_id" value={eventId} />
 
-        <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">Bắt đầu buổi mới</span>
-          <input
-            name="starts_at"
-            type="datetime-local"
-            required
-            value={start}
-            onChange={(event) => setStart(event.target.value)}
-            className={INPUT}
-          />
-          <WhenEcho value={start} />
-        </label>
+        <VietnamDateTimeField
+          name="starts_at"
+          label="Bắt đầu buổi mới"
+          required
+          defaultValue={start}
+        />
 
-        <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">Kết thúc</span>
-          <input
-            name="ends_at"
-            type="datetime-local"
-            value={end}
-            onChange={(event) => setEnd(event.target.value)}
-            className={INPUT}
-          />
-          <WhenEcho value={end} />
-        </label>
+        <VietnamDateTimeField name="ends_at" label="Kết thúc" defaultValue={end} />
 
         <div className="pt-5">
           <Submit />

@@ -16,6 +16,7 @@ import {
   type RecurrenceFrequency
 } from "@/lib/event-recurrence";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
+import { VietnamDateField } from "./vietnam-datetime-field";
 import { formatDate, formatTime } from "@/lib/utils";
 
 const INPUT =
@@ -207,13 +208,12 @@ export function RecurrenceFields({ startsAt, endsAt }: { startsAt: string; endsA
                   className="h-4 w-4 border-slate-300 text-vam-green focus:ring-vam-green"
                 />
                 Đến hết ngày
-                <input
+                <VietnamDateField
                   name="recurrence_ends_on"
-                  type="date"
-                  value={endsOn}
-                  onChange={(event) => setEndsOn(event.target.value)}
+                  label="Ngày kết thúc chuỗi"
+                  defaultValue={endsOn}
                   disabled={endMode !== "on_date"}
-                  className="rounded-md border border-vam-line bg-white px-2 py-1 text-sm disabled:bg-slate-100"
+                  onChange={setEndsOn}
                 />
               </label>
             </div>
