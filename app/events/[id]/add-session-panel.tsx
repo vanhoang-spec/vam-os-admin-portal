@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
-import { addEventSessionAction } from "@/app/actions/events";
+import { addEventSessionAction, removeEventSessionAction } from "@/app/actions/events";
 import type { EventActionState } from "@/lib/event-action-types";
+import type { SeriesSession } from "@/lib/events";
 import { toVietnamInputValue } from "@/lib/event-datetime";
+import { formatDate, formatTime } from "@/lib/utils";
 import { VietnamDateTimeField } from "../vietnam-datetime-field";
 
 const initialState: EventActionState = { ok: false, message: null };
@@ -19,6 +22,106 @@ function Submit() {
     >
       {pending ? "Đang thêm…" : "Thêm buổi"}
     </button>
+  );
+}
+
+function RemoveButton({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-label={label}
+      className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {pending ? "Đang xoá…" : "Xoá buổi"}
+    </button>
+  );
+}
+
+function sessionLine(session: SeriesSession): string {
+  if (!session.startsAt) return "Chưa đặt ngày giờ";
+  const start = `${formatDate(session.startsAt)} lúc ${formatTime(session.startsAt)}`;
+  return session.endsAt ? `${start} – ${formatTime(session.endsAt)}` : start;
+}
+
+/**
+ * Danh sách các buổi của chuỗi, kèm đường xoá buổi thêm nhầm.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO PHẢI LIỆT KÊ RA ĐÂY
+ * ---------------------------------------------------------------------------
+ * Mỗi buổi là một dòng sự kiện riêng, nên trước đây muốn thấy đủ chuỗi thì
+ * phải quay ra danh sách sự kiện và tự nhận ra những dòng cùng tên. Ai bấm
+ * "Thêm buổi" nhầm hai lần cũng không thấy mình vừa làm gì — chỉ người đăng ký
+ * mới thấy, khi mở link ra và gặp hai buổi giống hệt nhau.
+ *
+ * Chỗ tự nhiên để sửa một cú bấm nhầm là ngay cạnh cái nút đã gây ra nó.
+ */
+function SessionRow({
+  session,
+  eventId
+}: {
+  session: SeriesSession;
+  eventId: string;
+}) {
+  const [state, formAction] = useFormState(removeEventSessionAction, initialState);
+  const locked = session.registrationCount > 0;
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 border-b border-vam-line py-2 last:border-b-0">
+      <div className="min-w-0">
+        <span className="text-sm text-vam-ink">
+          <span className="font-semibold">Buổi {session.seriesIndex ?? "?"}</span>
+          {session.isCurrent ? (
+            <span className="ml-2 rounded-full bg-vam-mint px-2 py-0.5 text-[11px] font-medium text-vam-ink">
+              đang xem
+            </span>
+          ) : null}
+        </span>
+        <span className="mt-0.5 block text-xs text-slate-600">{sessionLine(session)}</span>
+        <span className="mt-0.5 block text-[11px] text-slate-500">
+          {locked
+            ? `${session.registrationCount} người đã đăng ký`
+            : "Chưa ai đăng ký"}
+        </span>
+        {state.message ? (
+          <span
+            role="status"
+            className={`mt-1 block text-[11px] font-medium ${
+              state.ok ? "text-vam-green" : "text-red-700"
+            }`}
+          >
+            {state.message}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-2">
+        {session.isCurrent ? null : (
+          <Link
+            href={`/events/${session.id}`}
+            className="text-xs font-medium text-vam-green underline-offset-2 hover:underline"
+          >
+            Mở buổi này
+          </Link>
+        )}
+        {locked ? (
+          // Buổi đã có người đăng ký thì những tấm vé đã gửi đi đang trỏ vào
+          // dòng này. Xoá nó là làm các vé ấy trỏ vào hư không mà không ai
+          // được báo — đường đúng là "Huỷ sự kiện", nó giữ dữ liệu lại.
+          <span className="text-[11px] text-slate-500">
+            Đã có người đăng ký — dùng “Huỷ sự kiện” nếu buổi này không diễn ra nữa.
+          </span>
+        ) : (
+          <form action={formAction}>
+            <input type="hidden" name="session_id" value={session.id} />
+            <input type="hidden" name="event_id" value={eventId} />
+            <RemoveButton label={`Xoá buổi ${session.seriesIndex ?? ""}`} />
+          </form>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -41,13 +144,15 @@ export function AddSessionPanel({
   startsAt,
   endsAt,
   seriesIndex,
-  seriesTotal
+  seriesTotal,
+  sessions
 }: {
   eventId: string;
   startsAt: string | null;
   endsAt: string | null;
   seriesIndex: number | null;
   seriesTotal: number | null;
+  sessions: SeriesSession[];
 }) {
   const [state, formAction] = useFormState(addEventSessionAction, initialState);
 
@@ -58,8 +163,8 @@ export function AddSessionPanel({
     return toVietnamInputValue(new Date(date.getTime() + 7 * 86_400_000).toISOString());
   };
 
-  const [start, setStart] = useState(() => nextWeek(startsAt));
-  const [end, setEnd] = useState(() => nextWeek(endsAt));
+  const [start] = useState(() => nextWeek(startsAt));
+  const [end] = useState(() => nextWeek(endsAt));
 
   const inSeries = seriesIndex !== null && seriesTotal !== null;
 
@@ -73,6 +178,17 @@ export function AddSessionPanel({
           ? "Thêm một buổi nữa vào chuỗi. Buổi mới chép lại toàn bộ cấu hình của buổi này, chỉ khác ngày giờ."
           : "Sự kiện này đang là buổi đơn lẻ. Thêm một buổi sẽ biến nó thành chuỗi, và một link đăng ký duy nhất sẽ cho người tham dự chọn buổi."}
       </p>
+
+      {sessions.length > 1 ? (
+        <div className="mt-4 rounded-md border border-vam-line bg-slate-50/60 p-3">
+          <h3 className="text-xs font-semibold uppercase text-slate-500">Các buổi của chuỗi</h3>
+          <ul className="mt-1">
+            {sessions.map((session) => (
+              <SessionRow key={session.id} session={session} eventId={eventId} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <form action={formAction} className="mt-4 flex flex-wrap items-start gap-3">
         <input type="hidden" name="event_id" value={eventId} />
