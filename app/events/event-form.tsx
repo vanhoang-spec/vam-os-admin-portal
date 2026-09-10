@@ -15,9 +15,8 @@ import {
   needsVenue,
   type EventFormat
 } from "@/lib/event-location";
-import { parseVietnamDateTime, toVietnamInputValue } from "@/lib/event-datetime";
-import { WEEKDAY_LABELS, weekdayOf } from "@/lib/event-recurrence";
-import { formatDate, formatTime } from "@/lib/utils";
+import { toVietnamInputValue } from "@/lib/event-datetime";
+import { VietnamDateTimeField } from "./vietnam-datetime-field";
 import { RecurrenceFields } from "./recurrence-fields";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
 import { SEASON_CONFIG } from "@/lib/season-config";
@@ -32,35 +31,6 @@ const initialState: EventActionState = { ok: false, message: null };
  * cua su kien. Su kien dien ra o Viet Nam thi form phai noi gio Viet Nam.
  */
 const toLocalInputValue = toVietnamInputValue;
-
-/**
- * Nhắc lại ngày giờ vừa chọn, theo định dạng của CRM.
- *
- * Ô `<input type="datetime-local">` hiển thị theo NGÔN NGỮ CỦA TRÌNH DUYỆT —
- * Chrome đặt tiếng Anh thì vẽ ra `mm/dd/yyyy`, và không có cách nào bắt nó về
- * `dd/mm/yyyy` từ phía trang web.
- *
- * Không đổi được thì nói rõ: dòng này hiện lại đúng thứ và ngày mà hệ thống
- * hiểu, nên không ai phải đoán `09/20` là ngày 20 tháng 9 hay ngày 9 tháng 20.
- * Nó cũng là chỗ người dùng phát hiện ngay nếu chọn nhầm sang một thứ khác.
- */
-function WhenEcho({ value }: { value: string }) {
-  const iso = parseVietnamDateTime(value);
-  if (!iso) {
-    return (
-      <span className="mt-1 block text-[11px] text-slate-400">
-        Định dạng ô nhập do trình duyệt quyết định. Chọn xong sẽ hiện lại ở đây theo dd/mm/yyyy.
-      </span>
-    );
-  }
-  const weekday = weekdayOf(iso);
-  return (
-    <span className="mt-1 block text-[11px] font-medium text-vam-green">
-      {weekday === null ? "" : `${WEEKDAY_LABELS[weekday]}, `}
-      {formatDate(iso)} lúc {formatTime(iso)} (giờ Việt Nam)
-    </span>
-  );
-}
 
 export function EventForm({
   mode,
@@ -201,33 +171,21 @@ export function EventForm({
         </span>
       </label>
 
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Thời điểm bắt đầu (*)</span>
-        <input
-          name="starts_at"
-          type="datetime-local"
-          required
-          value={startsAt}
-          onChange={(e) => setStartsAt(e.target.value)}
-          className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
-        />
-        <WhenEcho value={startsAt} />
-      </label>
+      <VietnamDateTimeField
+        name="starts_at"
+        label="Thời điểm bắt đầu"
+        required
+        defaultValue={event?.starts_at ?? null}
+        onChange={setStartsAt}
+      />
 
-      <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Thời điểm kết thúc</span>
-        <input
-          name="ends_at"
-          type="datetime-local"
-          value={endsAt}
-          onChange={(e) => setEndsAt(e.target.value)}
-          className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
-        />
-        <WhenEcho value={endsAt} />
-        <span className="mt-1 block text-[11px] text-slate-500">
-          Để trống nếu chưa chốt. Người tham dự sẽ chỉ thấy giờ bắt đầu.
-        </span>
-      </label>
+      <VietnamDateTimeField
+        name="ends_at"
+        label="Thời điểm kết thúc"
+        defaultValue={event?.ends_at ?? null}
+        helper="Để trống nếu chưa chốt. Người tham dự sẽ chỉ thấy giờ bắt đầu."
+        onChange={setEndsAt}
+      />
 
       {/* --- HÌNH THỨC & ĐỊA ĐIỂM --- */}
       <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
@@ -415,11 +373,11 @@ export function EventForm({
             <div className="ml-6 grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="text-xs text-slate-500">Mở check-in lúc</span>
-                <input type="datetime-local" name="checkin_opens_at" defaultValue={toLocalInputValue(event?.checkin_opens_at)} className="mt-1 w-full rounded border px-3 py-1.5 text-sm" />
+                <VietnamDateTimeField name="checkin_opens_at" label="Mở check-in từ" defaultValue={event?.checkin_opens_at ?? null} />
               </label>
               <label className="block">
                 <span className="text-xs text-slate-500">Đóng check-in lúc</span>
-                <input type="datetime-local" name="checkin_closes_at" defaultValue={toLocalInputValue(event?.checkin_closes_at)} className="mt-1 w-full rounded border px-3 py-1.5 text-sm" />
+                <VietnamDateTimeField name="checkin_closes_at" label="Đóng check-in lúc" defaultValue={event?.checkin_closes_at ?? null} />
               </label>
             </div>
           )}
