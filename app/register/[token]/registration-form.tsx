@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { initialPublicRegistrationActionState } from "@/lib/event-action-types";
 import { submitEventRegistrationAction } from "./actions";
+import type { SessionOption } from "@/lib/events";
+import { formatDateTime, formatTime } from "@/lib/utils";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -50,10 +52,34 @@ function Field({
 
 import type { Event } from "@/lib/types";
 
-export function RegistrationForm({ token, eventName, event }: { token: string; eventName: string; event: Event }) {
+export function RegistrationForm({
+  token,
+  eventName,
+  event,
+  sessions = null
+}: {
+  token: string;
+  eventName: string;
+  event: Event;
+  /**
+   * Các buổi để chọn, khi link nhận đăng ký cho cả chuỗi.
+   *
+   * Null với link thường — và khi đó form không hỏi gì về buổi, vì buổi đã do
+   * chính link quyết định.
+   */
+  sessions?: SessionOption[] | null;
+}) {
   const [state, formAction] = useFormState(submitEventRegistrationAction, initialPublicRegistrationActionState);
   const [mealSelected, setMealSelected] = useState(false);
   const displayEventName = state.eventName || eventName;
+
+  // Buổi còn chỗ đầu tiên được chọn sẵn — không phải buổi đầu tiên.
+  //
+  // Chọn sẵn một buổi đã đầy nghĩa là người bấm "Gửi đăng ký" ngay lập tức sẽ
+  // rơi vào danh sách chờ mà không hề chọn điều đó. BTC cũng khuyến khích buổi
+  // 1, nên "buổi còn chỗ sớm nhất" khớp luôn với ý định của họ.
+  const firstOpen = sessions?.find((session) => !session.full) ?? sessions?.[0] ?? null;
+  const [chosenSession, setChosenSession] = useState(firstOpen?.id ?? "");
 
   if (state.status === "success") {
     return (
@@ -83,6 +109,63 @@ export function RegistrationForm({ token, eventName, event }: { token: string; e
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {state.message}
         </div>
+      ) : null}
+
+      {sessions && sessions.length ? (
+        <fieldset className="rounded-md border border-vam-line bg-slate-50 p-3">
+          <legend className="px-1 text-sm font-medium text-slate-700">
+            Bạn đăng ký tham dự buổi nào?
+          </legend>
+          <p className="mb-2 text-xs text-slate-500">
+            Mỗi người chỉ đăng ký một buổi. Nội dung hai buổi giống nhau, chỉ khác ngày.
+          </p>
+          <div className="flex flex-col gap-2">
+            {sessions.map((session, index) => {
+              const label = `Buổi ${session.seriesIndex ?? index + 1}`;
+              const when = session.endsAt
+                ? `${formatDateTime(session.startsAt)} – ${formatTime(session.endsAt)}`
+                : formatDateTime(session.startsAt);
+              // Buổi đầy mà KHÔNG có danh sách chờ thì không chọn được: hiện nó
+              // ra để người ta biết buổi đó tồn tại và đã hết chỗ, thay vì thấy
+              // một danh sách tự nhiên thiếu mất một dòng.
+              const disabled = session.full && !session.waitlistEnabled;
+              return (
+                <label
+                  key={session.id}
+                  className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
+                    disabled
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                      : "cursor-pointer border-vam-line bg-white text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="session_event_id"
+                    value={session.id}
+                    checked={chosenSession === session.id}
+                    disabled={disabled}
+                    onChange={() => setChosenSession(session.id)}
+                    className="mt-0.5 h-4 w-4 border-slate-300 text-vam-green focus:ring-vam-green"
+                  />
+                  <span>
+                    <span className="block font-medium">
+                      {label} — {when}
+                    </span>
+                    <span className="block text-xs">
+                      {session.full
+                        ? session.waitlistEnabled
+                          ? "Đã đủ chỗ — đăng ký buổi này sẽ vào danh sách chờ"
+                          : "Đã đủ chỗ"
+                        : session.seatsLeft === null
+                          ? "Còn nhận đăng ký"
+                          : `Còn ${session.seatsLeft} chỗ`}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
       ) : null}
 
       <Field label="Họ và tên / Full name" name="full_name" required autoComplete="name" defaultValue={state.values?.full_name} />

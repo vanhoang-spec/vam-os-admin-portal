@@ -321,7 +321,11 @@ export async function createRegistrationLinkAction(
   const eventId = formText(formData, "event_id");
   if (!eventId) return { ok: false, message: "Thiáº¿u event id." };
 
-  const result = await createRegistrationLinkForEvent(eventId);
+  // Ô tick trên panel. Chỉ hiện với buổi thuộc một chuỗi; tầng dữ liệu vẫn
+  // kiểm lại, vì một form gửi lên được bất cứ giá trị nào.
+  const coversSeries = formData.get("covers_series") === "true";
+
+  const result = await createRegistrationLinkForEvent(eventId, coversSeries);
   if (!result.ok) return { ok: false, message: result.message };
 
   revalidatePath(`/events/${eventId}`);

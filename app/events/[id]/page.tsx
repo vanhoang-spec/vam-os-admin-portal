@@ -251,6 +251,9 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
               registrationLinkIsActive={regLinkIsActive}
               canCreate={canCreateLink}
               capacityWarning={reopenCapacityWarning}
+              seriesTotal={
+                typeof detail.event.series_total === "number" ? detail.event.series_total : null
+              }
             />
           </Card>
 

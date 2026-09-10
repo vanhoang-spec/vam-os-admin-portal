@@ -25,7 +25,8 @@ function PublicLinkPanel({
   noPermissionMessage,
   copyLabel,
   helperText,
-  qrDataUrl = null
+  qrDataUrl = null,
+  seriesTotal = null
 }: {
   eventId: string;
   url: string | null;
@@ -36,6 +37,8 @@ function PublicLinkPanel({
   copyLabel: string;
   helperText: string;
   qrDataUrl?: string | null;
+  /** Tong so buoi cua chuoi, null neu buoi nay dung mot minh. */
+  seriesTotal?: number | null;
 }) {
   const [state, formAction] = useFormState(action, initialState);
   const [copied, setCopied] = useState(false);
@@ -83,6 +86,30 @@ function PublicLinkPanel({
   return (
     <form action={formAction} className="grid gap-3">
       <input type="hidden" name="event_id" value={eventId} />
+      {/*
+        Chỉ hiện với buổi thuộc một chuỗi. Một buổi đơn lẻ không có chuỗi để
+        nhận thay, và một ô tick không làm được gì là một ô tick sẽ bị bấm.
+      */}
+      {seriesTotal && seriesTotal > 1 ? (
+        <label className="flex items-start gap-2 rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            name="covers_series"
+            value="true"
+            defaultChecked
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-vam-green focus:ring-vam-green"
+          />
+          <span>
+            <span className="block font-medium">
+              Một link cho cả {seriesTotal} buổi
+            </span>
+            <span className="block text-xs text-slate-500">
+              Người đăng ký chọn buổi ngay trên form, và mỗi người chỉ giữ được một chỗ trong
+              cả chuỗi. Bỏ tick nếu muốn link này chỉ nhận đăng ký cho đúng buổi đang mở.
+            </span>
+          </span>
+        </label>
+      ) : null}
       <CreateLinkButton label={createLabel} />
       {state.message ? (
         <p className={state.ok ? "text-sm text-green-700" : "text-sm text-red-700"}>{state.message}</p>
@@ -123,7 +150,8 @@ export function RegistrationLinkPanel({
   registrationUrl,
   registrationLinkIsActive,
   canCreate,
-  capacityWarning = null
+  capacityWarning = null,
+  seriesTotal = null
 }: {
   eventId: string;
   registrationUrl: string | null;
@@ -131,6 +159,8 @@ export function RegistrationLinkPanel({
   registrationLinkIsActive: boolean | null;
   canCreate: boolean;
   capacityWarning?: string | null;
+  /** Tong so buoi cua chuoi, null neu buoi nay dung mot minh. */
+  seriesTotal?: number | null;
 }) {
   const [toggleState, toggleAction] = useFormState(toggleRegistrationLinkAction, initialState);
   // null means no link yet -> treat as open for status label
@@ -148,6 +178,7 @@ export function RegistrationLinkPanel({
         noPermissionMessage="Bạn có thể xem sự kiện này nhưng không có quyền tạo link đăng ký."
         copyLabel="Sao chép link đăng ký"
         helperText="Dùng link này để người tham dự đăng ký trước sự kiện."
+        seriesTotal={seriesTotal}
       />
 
       {/* Admin toggle: only shown when a link exists and admin has create/edit permission */}
