@@ -24,6 +24,26 @@ function log(scope: string, error: unknown) {
   });
 }
 
+/**
+ * Những vai trò được thêm làm người hỗ trợ điểm danh.
+ *
+ * Chỉ support team. Quản trị sự kiện (super_admin, admin, core_team) đã quét
+ * được sẵn qua `canEditRecaps`, nên thêm họ vào đây chỉ tạo ra một dòng thừa;
+ * còn reviewer và viewer là hai nhóm khác hẳn — reviewer là mentor chấm hồ sơ,
+ * viewer là quyền đọc — không ai trong hai nhóm đó đứng ở cửa quét mã.
+ *
+ * Muốn nới ra thì thêm vai trò vào đúng mảng này, không rải điều kiện ra chỗ
+ * khác.
+ */
+export const SUPPORTER_ELIGIBLE_ROLES = ["support_team"] as const;
+
+/** Một người có thể chọn vào danh sách hỗ trợ. */
+export type SupporterCandidate = {
+  adminUserId: string;
+  fullName: string;
+  email: string;
+};
+
 export type EventSupporter = {
   id: string;
   adminUserId: string;
@@ -69,6 +89,73 @@ export async function canScanEvent(
     return false;
   }
   return Boolean(data);
+}
+
+/**
+ * Ai còn có thể được thêm vào buổi này.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO LÀ Ô CHỌN CHỨ KHÔNG PHẢI Ô GÕ EMAIL
+ * ---------------------------------------------------------------------------
+ * Ô gõ email bắt người vận hành nhớ chính xác địa chỉ của một người khác, rồi
+ * gõ lại không sai một ký tự. Gõ sai thì hệ thống báo "chưa có tài khoản" —
+ * một câu đúng về mặt kỹ thuật nhưng dẫn người ta đi sai hướng, vì tài khoản
+ * vẫn ở đó, chỉ là email vừa gõ không phải của nó.
+ *
+ * Danh sách support team đã nằm sẵn trong CRM. Chọn từ danh sách thì không có
+ * gì để gõ sai.
+ *
+ * Người đã trong danh sách hỗ trợ của buổi này bị loại khỏi ô chọn: chọn lại
+ * họ là một thao tác vô nghĩa, và để họ trong đó làm người ta tưởng chưa thêm.
+ */
+export async function listSupporterCandidates(
+  eventId: string
+): Promise<{ rows: SupporterCandidate[]; error: string | null }> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { rows: [], error: VI_ERROR };
+
+  const { data, error } = await client
+    .from("admin_users")
+    .select("id, full_name, email")
+    .in("role", [...SUPPORTER_ELIGIBLE_ROLES])
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    log("listSupporterCandidates", error);
+    return { rows: [], error: VI_ERROR };
+  }
+
+  const { data: taken, error: takenError } = await client
+    .from("event_supporters")
+    .select("admin_user_id")
+    .eq("event_id", eventId);
+
+  if (takenError) {
+    log("listSupporterCandidates:taken", takenError);
+    return { rows: [], error: VI_ERROR };
+  }
+
+  const already = new Set(
+    ((taken ?? []) as Array<{ admin_user_id: string }>).map((row) => String(row.admin_user_id))
+  );
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    full_name: string | null;
+    email: string | null;
+  }>;
+
+  return {
+    rows: rows
+      .filter((row) => !already.has(String(row.id)))
+      .map((row) => ({
+        adminUserId: String(row.id),
+        fullName: String(row.full_name ?? "").trim(),
+        email: String(row.email ?? "").trim()
+      })),
+    error: null
+  };
 }
 
 export async function listEventSupporters(
@@ -126,8 +213,12 @@ export async function listEventSupporters(
 /**
  * Ghép một người vào buổi này.
  *
- * Tra theo email chứ không theo id: người thêm đang cầm một danh sách tên và
- * email, không cầm một danh sách UUID.
+ * Nhận id của tài khoản, lấy từ ô chọn — xem `listSupporterCandidates`.
+ *
+ * Vẫn kiểm lại vai trò và trạng thái ở đây, không tin vào việc ô chọn đã lọc.
+ * Cái đến từ biểu mẫu là thứ người gửi tự đặt được, nên một danh sách đã lọc
+ * trên màn hình không phải một phép kiểm — và bên kia cổng này là quyền ghi dữ
+ * liệu tham dự.
  *
  * Người chưa có tài khoản thì KHÔNG tự tạo tài khoản hộ. Tạo tài khoản là một
  * việc khác, có cổng riêng, và làm lén nó ở đây nghĩa là một cú bấm "thêm
@@ -135,19 +226,19 @@ export async function listEventSupporters(
  */
 export async function addEventSupporter(input: {
   eventId: string;
-  email: string;
+  adminUserId: string;
   addedBy: string | null;
 }): Promise<{ ok: boolean; message: string }> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return { ok: false, message: VI_ERROR };
 
-  const email = String(input.email ?? "").trim().toLowerCase();
-  if (!email) return { ok: false, message: "Chưa nhập email người hỗ trợ." };
+  const adminUserId = String(input.adminUserId ?? "").trim();
+  if (!adminUserId) return { ok: false, message: "Chưa chọn người hỗ trợ." };
 
   const { data, error } = await client
     .from("admin_users")
-    .select("id, status, full_name")
-    .ilike("email", email)
+    .select("id, status, role, full_name, email")
+    .eq("id", adminUserId)
     .maybeSingle();
 
   if (error) {
@@ -155,15 +246,26 @@ export async function addEventSupporter(input: {
     return { ok: false, message: VI_ERROR };
   }
   if (!data) {
-    return {
-      ok: false,
-      message: `${email} chưa có tài khoản trên hệ thống. Tạo tài khoản trước, rồi thêm lại.`
-    };
+    return { ok: false, message: "Không tìm thấy tài khoản này." };
   }
 
-  const person = data as { id: string; status: string; full_name: string | null };
+  const person = data as {
+    id: string;
+    status: string;
+    role: string;
+    full_name: string | null;
+    email: string | null;
+  };
+  const email = String(person.email ?? "").trim();
+
   if (person.status !== "active") {
-    return { ok: false, message: `Tài khoản ${email} đang không hoạt động.` };
+    return { ok: false, message: `Tài khoản ${email || adminUserId} đang không hoạt động.` };
+  }
+  if (!(SUPPORTER_ELIGIBLE_ROLES as readonly string[]).includes(person.role)) {
+    return {
+      ok: false,
+      message: "Chỉ tài khoản Support team mới thêm được vào danh sách hỗ trợ điểm danh."
+    };
   }
 
   const { error: insertError } = await client.from("event_supporters").insert({
