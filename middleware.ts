@@ -212,7 +212,12 @@ export async function middleware(request: NextRequest) {
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
-    request.nextUrl.pathname.startsWith("/renew/")
+    request.nextUrl.pathname.startsWith("/renew/") ||
+    // Blog: bài công khai phải đọc được mà không cần đăng nhập — đó là cả lý do
+    // nó tồn tại. Phép quyết định bài nào ra được ngoài nằm ở lib/blog-core.ts,
+    // chạy trên máy chủ cho từng bài; middleware chỉ mở cửa đường dẫn.
+    request.nextUrl.pathname === "/blog" ||
+    request.nextUrl.pathname.startsWith("/blog/")
   ) {
     const requestHeaders = new Headers(request.headers);
     const publicRoute = request.nextUrl.pathname.startsWith("/checkin/")
@@ -221,7 +226,10 @@ export async function middleware(request: NextRequest) {
         ? "renewal"
         : request.nextUrl.pathname.startsWith("/ve/")
           ? "ticket"
-          : "register";
+          : request.nextUrl.pathname === "/blog" ||
+              request.nextUrl.pathname.startsWith("/blog/")
+            ? "blog"
+            : "register";
     requestHeaders.set("x-vam-public-route", publicRoute);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
     // Vé mang tên một người và một mã dùng được ở cửa; nó không được nằm lại
