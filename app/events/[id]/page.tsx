@@ -6,8 +6,15 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getEventDetailData, isValidUuid } from "@/lib/events";
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
+import { eventTypeLabel } from "@/lib/event-constants";
+import { EventPlaceBlock } from "../event-place";
+import { listEventSupporters } from "@/lib/event-supporters";
+import { SupportersPanel } from "./supporters-panel";
+import { countScansByStation } from "@/lib/event-checkin";
+import { stationLabel } from "@/lib/event-checkin-code";
+import { LiveRefresh } from "./live-refresh";
 
 async function getRequestOrigin() {
   const h = await headers();
@@ -73,6 +80,8 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
   }
 
   const detail = await getEventDetailData(params.id, scope);
+  const supporters = await listEventSupporters(params.id);
+  const scanCounts = await countScansByStation(params.id);
   if (!detail.event) {
     return (
       <>
@@ -128,8 +137,29 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
     <>
       <PageHeader
         title={displayText(detail.event.event_name, "Sự kiện")}
-        description={`${displayText(seasonCode)} · ${formatDate(detail.event.starts_at)} · ${displayText(detail.event.event_type)}`}
+        description={`${displayText(seasonCode)} · ${eventTypeLabel(detail.event.event_type)}`}
       />
+
+      <div className="mb-6 rounded-md border border-vam-line bg-white p-4">
+        <EventPlaceBlock event={detail.event} />
+      </div>
+
+      <div className="mb-6">
+        <SupportersPanel
+          eventId={params.id}
+          supporters={supporters.rows.map((row) => ({ id: row.id, fullName: row.fullName, email: row.email }))}
+          canManage={canEditRecaps(adminUser)}
+        />
+      </div>
+
+      <p className="mb-6">
+        <Link
+          href={`/events/${params.id}/scan`}
+          className="inline-block rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
+        >
+          Mở máy quét điểm danh
+        </Link>
+      </p>
       {detail.error ? <ErrorBox message={detail.error} /> : null}
 
       {/* Capacity / waitlist info banner */}
@@ -185,6 +215,10 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         ) : null}
       </div>
 
+      <div className="mb-3">
+        <LiveRefresh />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Tổng đăng ký (không hủy)" value={activeRegistrations.length} />
         <KpiCard label="Giữ ghế (đăng ký / xác nhận)" value={confirmedSeatsCount} />
@@ -192,6 +226,20 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         <KpiCard label="Đã check-in" value={checkedInRegistrations.length} />
         <KpiCard label="Vãng lai" value={walkInRegistrations.length} />
       </div>
+
+      {scanCounts.counts.length ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {scanCounts.counts.map((row) => (
+            <span
+              key={row.station}
+              className="rounded-full border border-vam-line bg-white px-3 py-1 text-sm text-vam-ink"
+            >
+              {stationLabel(row.station)}:{" "}
+              <strong className="tabular-nums text-vam-green">{row.total}</strong>
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[420px_1fr]">
         <div className="grid gap-4">
@@ -297,7 +345,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
                 {
                   key: "registered_at",
                   label: "Thời gian",
-                  render: (row) => formatDate(row.registered_at)
+                  render: (row) => formatDateTime(row.registered_at)
                 },
                 {
                   key: "actions",

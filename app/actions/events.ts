@@ -11,6 +11,7 @@ import {
   createCheckinLinkForEvent,
   createRegistrationLinkForEvent,
   createEvent,
+  createEventSeries,
   removeParticipation,
   setRegistrationLinkActive,
   updateEvent,
@@ -38,12 +39,29 @@ export async function createEventAction(
   const denied = await ensureAuth();
   if (denied) return denied;
 
-  const result = await createEvent({
+  // Lặp lại là một hộp tick trên form, không phải một hành động riêng: người
+  // tạo nghĩ "sự kiện này lặp hằng tuần", không nghĩ "tôi muốn tạo một chuỗi".
+  const repeats = formData.get("recurrence_enabled") === "true";
+  const create = repeats ? createEventSeries : createEvent;
+
+  const result = await create({
     event_name: formText(formData, "event_name"),
+    recurrence_frequency: formText(formData, "recurrence_frequency"),
+    recurrence_interval: formText(formData, "recurrence_interval"),
+    recurrence_monthly_mode: formText(formData, "recurrence_monthly_mode"),
+    recurrence_end_mode: formText(formData, "recurrence_end_mode"),
+    recurrence_ends_on: formText(formData, "recurrence_ends_on"),
+    recurrence_count: formText(formData, "recurrence_count"),
     event_type: formText(formData, "event_type"),
     season_code: formText(formData, "season_code"),
     intake_batch_id: formText(formData, "intake_batch_id"),
     starts_at: formText(formData, "starts_at"),
+    ends_at: formText(formData, "ends_at"),
+    event_format: formText(formData, "event_format"),
+    location_name: formText(formData, "location_name"),
+    location_address: formText(formData, "location_address"),
+    location_map_url: formText(formData, "location_map_url"),
+    online_join_url: formText(formData, "online_join_url"),
     source_notes: formText(formData, "source_notes"),
     legacy_event_temp_id: formText(formData, "legacy_event_temp_id"),
     registration_required: formText(formData, "registration_required"),
@@ -120,6 +138,12 @@ export async function updateEventAction(
     season_code: formText(formData, "season_code"),
     intake_batch_id: formText(formData, "intake_batch_id"),
     starts_at: formText(formData, "starts_at"),
+    ends_at: formText(formData, "ends_at"),
+    event_format: formText(formData, "event_format"),
+    location_name: formText(formData, "location_name"),
+    location_address: formText(formData, "location_address"),
+    location_map_url: formText(formData, "location_map_url"),
+    online_join_url: formText(formData, "online_join_url"),
     source_notes: formText(formData, "source_notes"),
     legacy_event_temp_id: formText(formData, "legacy_event_temp_id"),
     registration_required: formText(formData, "registration_required"),

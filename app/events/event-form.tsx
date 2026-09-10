@@ -7,6 +7,15 @@ import { createEventAction, updateEventAction } from "@/app/actions/events";
 import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import type { EventActionState } from "@/lib/event-action-types";
 import { EVENT_TYPE_OPTIONS } from "@/lib/event-constants";
+import {
+  EVENT_FORMATS,
+  EVENT_FORMAT_LABELS,
+  isEventFormat,
+  needsJoinUrl,
+  needsVenue,
+  type EventFormat
+} from "@/lib/event-location";
+import { RecurrenceFields } from "./recurrence-fields";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
@@ -34,6 +43,18 @@ export function EventForm({
   intakeBatches?: IntakeBatch[];
   defaultSeasonCode?: string;
 }) {
+  // Hình thức quyết định form hỏi địa chỉ hay hỏi đường dẫn phòng họp, nên nó
+  // phải là state chứ không phải một ô select bình thường.
+  // Hai ô thời gian là controlled vì phần xem trước lịch lặp phải đổi theo
+  // ngay lúc gõ — danh sách ngày đứng yên trong khi người dùng đổi ngày là một
+  // danh sách nói dối.
+  const [startsAt, setStartsAt] = useState(toLocalInputValue(event?.starts_at));
+  const [endsAt, setEndsAt] = useState(toLocalInputValue(event?.ends_at));
+
+  const [format, setFormat] = useState<EventFormat>(
+    isEventFormat(event?.event_format) ? event.event_format : "offline"
+  );
+
   const action = mode === "create" ? createEventAction : updateEventAction;
   const [state, formAction] = useFormState(action, initialState);
   const timing = useActionTiming(mode === "create" ? "event.create" : "event.update", state);
@@ -153,10 +174,108 @@ export function EventForm({
           name="starts_at"
           type="datetime-local"
           required
-          defaultValue={toLocalInputValue(event?.starts_at)}
+          value={startsAt}
+          onChange={(e) => setStartsAt(e.target.value)}
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
       </label>
+
+      <label className="block">
+        <span className="text-xs font-medium uppercase text-slate-500">Thời điểm kết thúc</span>
+        <input
+          name="ends_at"
+          type="datetime-local"
+          value={endsAt}
+          onChange={(e) => setEndsAt(e.target.value)}
+          className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+        />
+        <span className="mt-1 block text-[11px] text-slate-500">
+          Để trống nếu chưa chốt. Người tham dự sẽ chỉ thấy giờ bắt đầu.
+        </span>
+      </label>
+
+      {/* --- HÌNH THỨC & ĐỊA ĐIỂM --- */}
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+        <h3 className="mb-3 font-semibold text-slate-800">Hình thức và địa điểm</h3>
+
+        <fieldset className="mb-4">
+          <legend className="text-xs font-medium uppercase text-slate-500">Hình thức tổ chức</legend>
+          <div className="mt-2 flex flex-wrap gap-3">
+            {EVENT_FORMATS.map((value) => (
+              <label key={value} className="flex items-center gap-2 text-sm text-vam-ink">
+                <input
+                  type="radio"
+                  name="event_format"
+                  value={value}
+                  checked={format === value}
+                  onChange={() => setFormat(value)}
+                  className="h-4 w-4 border-slate-300 text-vam-green focus:ring-vam-green"
+                />
+                {EVENT_FORMAT_LABELS[value]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {needsVenue(format) ? (
+          <div className="flex flex-col gap-3">
+            <label className="block">
+              <span className="text-xs font-medium uppercase text-slate-500">Tên địa điểm</span>
+              <input
+                name="location_name"
+                defaultValue={event?.location_name ?? ""}
+                placeholder="ví dụ: Hội trường A, cơ sở B"
+                className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-medium uppercase text-slate-500">Địa chỉ</span>
+              <input
+                name="location_address"
+                defaultValue={event?.location_address ?? ""}
+                placeholder="ví dụ: 59C Nguyễn Đình Chiểu, Quận 3, TP.HCM"
+                className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+              />
+              <span className="mt-1 block text-[11px] text-slate-500">
+                Hệ thống tự dựng đường dẫn Google Maps từ địa chỉ này và gửi kèm trong thư mời.
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-medium uppercase text-slate-500">
+                Đường dẫn Google Maps (tuỳ chọn)
+              </span>
+              <input
+                name="location_map_url"
+                type="url"
+                defaultValue={event?.location_map_url ?? ""}
+                placeholder="https://maps.app.goo.gl/..."
+                className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+              />
+              <span className="mt-1 block text-[11px] text-slate-500">
+                Chỉ cần khi địa chỉ ở trên không trỏ đúng chỗ trên bản đồ. Đường dẫn này được gửi
+                cho người tham dự, nên hệ thống chỉ nhận đường dẫn Google Maps.
+              </span>
+            </label>
+          </div>
+        ) : null}
+
+        {needsJoinUrl(format) ? (
+          <label className="mt-3 block">
+            <span className="text-xs font-medium uppercase text-slate-500">
+              Đường dẫn tham gia trực tuyến
+            </span>
+            <input
+              name="online_join_url"
+              type="url"
+              defaultValue={event?.online_join_url ?? ""}
+              placeholder="https://meet.google.com/..."
+              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+            />
+          </label>
+        ) : null}
+      </div>
 
       <label className="block">
         <span className="text-xs font-medium uppercase text-slate-500">Mã tham chiếu (legacy_event_temp_id)</span>
@@ -169,15 +288,24 @@ export function EventForm({
       </label>
 
       <label className="block">
-        <span className="text-xs font-medium uppercase text-slate-500">Mô tả / Ghi chú (gồm địa điểm)</span>
+        <span className="text-xs font-medium uppercase text-slate-500">Mô tả / Ghi chú</span>
         <textarea
           name="source_notes"
           rows={4}
           defaultValue={event?.source_notes ?? ""}
-          placeholder="Mô tả nội dung, địa điểm, link tài liệu..."
+          placeholder="Mô tả nội dung, link tài liệu..."
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
       </label>
+
+      {mode === "create" ? <RecurrenceFields startsAt={startsAt} endsAt={endsAt} /> : null}
+
+      {event?.series_id ? (
+        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Buổi {event.series_index}/{event.series_total} của một chuỗi lặp lại. Thay đổi ở đây chỉ
+          áp dụng cho buổi này.
+        </p>
+      ) : null}
 
       {/* --- CẤU HÌNH ĐĂNG KÝ & CHECK-IN --- */}
       <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">

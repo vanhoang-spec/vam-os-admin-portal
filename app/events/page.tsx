@@ -9,7 +9,9 @@ import { EVENT_TYPE_OPTIONS, getEventListData, isEventAbsenceStatus, isEventAtte
 import type { EventListData } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, IntakeBatch, Season } from "@/lib/types";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDateTime } from "@/lib/utils";
+import { eventTypeLabel } from "@/lib/event-constants";
+import { EventPlaceSummary, formatEventWhen } from "./event-place";
 
 type EventRow = Event & {
   season_code: string | null;
@@ -250,13 +252,16 @@ export default async function EventsPage(props: { searchParams?: Promise<{
                   <div className="mt-0.5 text-xs text-slate-500">
                     {[row.season_code, row.batch_code].filter(Boolean).join(" · ") || "—"}
                   </div>
+                  <div className="mt-0.5">
+                    <EventPlaceSummary event={row} />
+                  </div>
                 </div>
               )
             },
             {
               key: "starts_at",
               label: "Thời gian",
-              render: (row) => formatDate(row.starts_at)
+              render: (row) => formatEventWhen(row)
             },
             {
               key: "event_type",

@@ -18,6 +18,28 @@ import {
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
+import { randomUUID } from "node:crypto";
+import { checkinCodeUrl } from "@/lib/event-checkin-code";
+import { ensureCheckinCode } from "@/lib/event-checkin";
+import { resolveMapUrl } from "@/lib/event-location";
+import { resolveEmailBaseUrl, sendEventRegistrationConfirmation } from "@/lib/email";
+import { getPublicOrigin } from "@/lib/public-url";
+import { formatDate, formatDateTime, formatTime } from "@/lib/utils";
+import {
+  generateOccurrences,
+  isEndMode,
+  isMonthlyMode,
+  isRecurrenceFrequency,
+  type RecurrenceRule
+} from "@/lib/event-recurrence";
+import {
+  isEventFormat,
+  needsJoinUrl,
+  needsVenue,
+  normalizeJoinUrl,
+  normalizeMapUrl,
+  type EventFormat
+} from "@/lib/event-location";
 import type {
   Event,
   EventLink,
@@ -108,6 +130,23 @@ export type EventInput = {
   /** Phase 045A: UUID of intake_batches row, or null/empty to leave unlinked. */
   intake_batch_id?: unknown;
   starts_at?: unknown;
+  ends_at?: unknown;
+  event_format?: unknown;
+  location_name?: unknown;
+  location_address?: unknown;
+  location_map_url?: unknown;
+  online_join_url?: unknown;
+  /** Chuỗi lặp lại — chỉ do createEventSeries đặt, form không gửi trực tiếp. */
+  series_id?: unknown;
+  series_index?: unknown;
+  series_total?: unknown;
+  /** Quy tắc lặp, chỉ đọc lúc tạo chuỗi. */
+  recurrence_frequency?: unknown;
+  recurrence_interval?: unknown;
+  recurrence_monthly_mode?: unknown;
+  recurrence_end_mode?: unknown;
+  recurrence_ends_on?: unknown;
+  recurrence_count?: unknown;
   source_notes?: unknown;
   legacy_event_temp_id?: unknown;
   registration_required?: unknown;
@@ -933,13 +972,86 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: registrationData.event.event_name ?? null };
   }
 
+  const registrationId = (data as { id?: string } | null)?.id ?? null;
+
+  // Vé và thư xác nhận. Cả hai đều KHÔNG được làm hỏng việc đăng ký nếu chúng
+  // hỏng: người đó đã đăng ký, chỗ ngồi đã giữ, và báo "đăng ký không thành
+  // công" vì một lỗi SMTP là nói dối họ về điều quan trọng hơn. Thư hỏng để
+  // lại một dòng trong sổ thư đi và BTC gửi lại được.
+  if (registrationId) {
+    await issueTicketAndConfirm({
+      registrationId,
+      event: registrationData.event,
+      toEmail: email,
+      fullName,
+      pendingApproval: baseStatus !== "registered"
+    });
+  }
+
   return {
     ok: true,
     status: "success",
     message: "Đăng ký thành công",
     eventName: registrationData.event.event_name ?? null,
-    registrationId: (data as { id?: string } | null)?.id ?? null
+    registrationId
   };
+}
+
+/**
+ * Cấp vé cho một đăng ký và gửi thư xác nhận.
+ *
+ * Nuốt mọi lỗi có chủ ý — xem chú thích ở nơi gọi. Lỗi được ghi ra console để
+ * còn lần ra, còn người đăng ký thì thấy đúng điều đã xảy ra: họ đã đăng ký.
+ */
+async function issueTicketAndConfirm(input: {
+  registrationId: string;
+  event: JsonRecord;
+  toEmail: string;
+  fullName: string;
+  pendingApproval: boolean;
+}): Promise<void> {
+  try {
+    const { code } = await ensureCheckinCode(input.registrationId);
+    if (!code) return;
+
+    const origin = (await getPublicOrigin()) ?? resolveEmailBaseUrl();
+    if (!origin) return;
+
+    const event = input.event as Event;
+    const format = isEventFormat(event.event_format) ? event.event_format : "offline";
+    const placeLabel = needsVenue(format)
+      ? [event.location_name, event.location_address]
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean)
+          .join(" — ") || null
+      : null;
+
+    await sendEventRegistrationConfirmation({
+      toEmail: input.toEmail,
+      recipientName: input.fullName,
+      eventName: String(event.event_name ?? "").trim() || "sự kiện",
+      whenLabel: formatEventWhenLabel(event),
+      placeLabel,
+      mapUrl: needsVenue(format)
+        ? resolveMapUrl({ mapUrl: event.location_map_url, address: event.location_address })
+        : null,
+      joinUrl: needsJoinUrl(format) ? clean(event.online_join_url) : null,
+      ticketUrl: checkinCodeUrl(origin, code),
+      ticketCode: code,
+      pendingApproval: input.pendingApproval,
+      registrationId: input.registrationId
+    });
+  } catch (error) {
+    log("issueTicketAndConfirm failed", error);
+  }
+}
+
+/** Khoảng thời gian của một sự kiện, dạng người đọc trong thư. */
+function formatEventWhenLabel(event: Event): string {
+  const start = formatDateTime(event.starts_at);
+  if (!event.ends_at) return start;
+  const sameDay = formatDate(event.starts_at) === formatDate(event.ends_at);
+  return sameDay ? `${start} – ${formatTime(event.ends_at)}` : `${start} – ${formatDateTime(event.ends_at)}`;
 }
 
 async function syncCheckedInParticipation(client: any, input: {
@@ -1894,6 +2006,67 @@ export async function updateRegistrationReviewNote(input: RegistrationOperationI
   });
   return result.ok ? { ...result, message: "Đã cập nhật ghi chú rà soát." } : result;
 }
+/**
+ * Nơi và lúc một sự kiện diễn ra, đọc từ form và kiểm xong.
+ *
+ * Dùng chung cho cả tạo mới lẫn sửa, vì một quy tắc chỉ đúng khi nó là MỘT
+ * quy tắc: hai bản kiểm riêng cho hai đường là hai bản sẽ trôi lệch nhau, và
+ * đường ít người dùng hơn sẽ là đường trôi.
+ *
+ * Cố ý KHÔNG bắt buộc phải có địa chỉ cho sự kiện offline. BTC thường tạo sự
+ * kiện trước khi chốt được hội trường; chặn ở đây là buộc họ gõ một địa chỉ
+ * giả để lưu được, và một địa chỉ giả tệ hơn một ô trống.
+ */
+function resolveEventPlaceInput(
+  input: EventInput,
+  startsAtIso: string
+):
+  | {
+      ok: true;
+      place: {
+        endsAt: string | null;
+        format: EventFormat;
+        locationName: string | null;
+        locationAddress: string | null;
+        mapUrl: string | null;
+        joinUrl: string | null;
+      };
+    }
+  | { ok: false; message: string } {
+  const rawFormat = clean(input.event_format);
+  // Không ghi hình thức thì là sự kiện tới-tận-nơi, đúng như mọi sự kiện đã có
+  // trong bảng trước khi cột này tồn tại.
+  const format: EventFormat = isEventFormat(rawFormat) ? rawFormat : "offline";
+
+  const endsAtRaw = clean(input.ends_at);
+  const endsAt = endsAtRaw ? parseDateTime(endsAtRaw) : null;
+  if (endsAtRaw && !endsAt) return { ok: false, message: "Giờ kết thúc không hợp lệ." };
+  if (endsAt && endsAt <= startsAtIso) {
+    return { ok: false, message: "Giờ kết thúc phải sau giờ bắt đầu." };
+  }
+
+  const map = normalizeMapUrl(input.location_map_url);
+  if (!map.ok) return { ok: false, message: map.message };
+
+  const join = normalizeJoinUrl(input.online_join_url);
+  if (!join.ok) return { ok: false, message: join.message };
+
+  return {
+    ok: true,
+    place: {
+      endsAt,
+      format,
+      locationName: needsVenue(format) ? clean(input.location_name) : null,
+      locationAddress: needsVenue(format) ? clean(input.location_address) : null,
+      // Địa điểm bị xoá khi sự kiện chuyển sang thuần trực tuyến, và đường dẫn
+      // phòng họp bị xoá khi nó chuyển sang thuần tại chỗ. Giữ lại nghĩa là gửi
+      // cho người tham dự một địa chỉ của lần sửa trước.
+      mapUrl: needsVenue(format) ? map.url : null,
+      joinUrl: needsJoinUrl(format) ? join.url : null
+    }
+  };
+}
+
 export async function createEvent(input: EventInput): Promise<MutationResult> {
   const access = await requireEventAdmin();
   if (!access.ok) return { ok: false, message: access.message };
@@ -1908,6 +2081,10 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   const startsAtRaw = clean(input.starts_at);
   const startsAt = parseDateTime(startsAtRaw);
   if (!startsAt) return { ok: false, message: "Thời điểm sự kiện không hợp lệ." };
+
+  const placeResult = resolveEventPlaceInput(input, startsAt);
+  if (!placeResult.ok) return { ok: false, message: placeResult.message };
+  const place = placeResult.place;
 
   const seasonCode = clean(input.season_code) ?? DEFAULT_SEASON_CODE;
   const { seasonId, error: seasonError } = await resolveSeasonId(client, seasonCode);
@@ -1930,6 +2107,15 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     event_name: eventName,
     event_type: eventType,
     starts_at: startsAt,
+    ends_at: place.endsAt,
+    event_format: place.format,
+    location_name: place.locationName,
+    location_address: place.locationAddress,
+    location_map_url: place.mapUrl,
+    online_join_url: place.joinUrl,
+    series_id: clean(input.series_id),
+    series_index: input.series_index ? Number(input.series_index) : null,
+    series_total: input.series_total ? Number(input.series_total) : null,
     source_notes: clean(input.source_notes),
     legacy_event_temp_id: clean(input.legacy_event_temp_id),
     registration_required: String(input.registration_required) === "true",
@@ -1984,6 +2170,105 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   return { ok: true, message: "Đã tạo sự kiện.", data };
 }
 
+/**
+ * Tạo một chuỗi sự kiện lặp lại.
+ *
+ * Gọi lại chính `createEvent` cho từng buổi thay vì tự dựng payload: mọi quy
+ * tắc quyền, phạm vi mùa, kiểm địa điểm và ghi nhật ký đều nằm trong đó, và
+ * một bản sao thứ hai của chúng ở đây là bản sẽ trôi lệch.
+ *
+ * Hỏng giữa chừng thì KHÔNG quay lui. Những buổi đã tạo là đã tạo, và nói thật
+ * điều đó có ích hơn là xoá đi những dòng có thể đã có người mở ra xem. Buổi
+ * nào hỏng được nêu tên, và chuỗi ghi lại tổng số buổi theo ý định ban đầu chứ
+ * không theo số buổi tạo được — `series_total` là ý định, không phải kết quả.
+ */
+export async function createEventSeries(
+  input: EventInput & { recurrence?: unknown }
+): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+
+  const startsAt = parseDateTime(clean(input.starts_at));
+  if (!startsAt) return { ok: false, message: "Thời điểm sự kiện không hợp lệ." };
+
+  const rule = readRecurrenceInput(input);
+  if (!rule.ok) return { ok: false, message: rule.message };
+
+  const generated = generateOccurrences({
+    startsAt,
+    endsAt: parseDateTime(clean(input.ends_at)),
+    rule: rule.rule
+  });
+  if (!generated.ok) return { ok: false, message: generated.message };
+
+  const seriesId = randomUUID();
+  const total = generated.occurrences.length;
+  const failures: string[] = [];
+  let created = 0;
+  let firstId: string | null = null;
+
+  // Vòng lặp theo chỉ số chứ không dùng .entries(): dự án biên dịch xuống ES5,
+  // nơi duyệt thẳng một iterator cần bật downlevelIteration cho cả codebase.
+  for (let index = 0; index < generated.occurrences.length; index += 1) {
+    const occurrence = generated.occurrences[index];
+    const result = await createEvent({
+      ...input,
+      starts_at: occurrence.startsAt,
+      ends_at: occurrence.endsAt,
+      series_id: seriesId,
+      series_index: index + 1,
+      series_total: total
+    });
+
+    if (result.ok) {
+      created += 1;
+      if (!firstId) firstId = clean((result.data as JsonRecord | undefined)?.id) ?? null;
+    } else {
+      failures.push(`Buổi ${index + 1}: ${result.message}`);
+    }
+  }
+
+  if (!created) {
+    return { ok: false, message: failures[0] ?? "Không tạo được buổi nào." };
+  }
+
+  return {
+    ok: true,
+    message: failures.length
+      ? `Đã tạo ${created}/${total} buổi. ${failures.length} buổi không tạo được: ${failures.join("; ")}`
+      : `Đã tạo chuỗi ${total} buổi.`,
+    data: firstId ? { id: firstId, series_id: seriesId } : { series_id: seriesId }
+  };
+}
+
+/** Đọc quy tắc lặp từ dữ liệu form, kiểm từng ô trước khi sinh buổi nào. */
+function readRecurrenceInput(
+  input: EventInput & { recurrence?: unknown }
+): { ok: true; rule: RecurrenceRule } | { ok: false; message: string } {
+  const frequency = clean(input.recurrence_frequency);
+  if (!isRecurrenceFrequency(frequency)) {
+    return { ok: false, message: "Tần suất lặp không hợp lệ." };
+  }
+
+  const monthlyMode = clean(input.recurrence_monthly_mode);
+  const endMode = clean(input.recurrence_end_mode);
+  if (!isEndMode(endMode)) {
+    return { ok: false, message: "Điều kiện kết thúc chuỗi không hợp lệ." };
+  }
+
+  return {
+    ok: true,
+    rule: {
+      frequency,
+      interval: Number(clean(input.recurrence_interval) ?? 1),
+      monthlyMode: isMonthlyMode(monthlyMode) ? monthlyMode : "day_of_month",
+      endMode,
+      endsOn: clean(input.recurrence_ends_on),
+      count: input.recurrence_count ? Number(input.recurrence_count) : null
+    }
+  };
+}
+
 export async function updateEvent(input: EventInput & { id?: unknown }): Promise<MutationResult> {
   const access = await requireEventAdmin();
   if (!access.ok) return { ok: false, message: access.message };
@@ -2019,6 +2304,15 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   const startsAt = parseDateTime(startsAtRaw);
   if (!startsAt) return { ok: false, message: "Thời điểm sự kiện không hợp lệ." };
   updates.starts_at = startsAt;
+
+  const placeResult = resolveEventPlaceInput(input, startsAt);
+  if (!placeResult.ok) return { ok: false, message: placeResult.message };
+  updates.ends_at = placeResult.place.endsAt;
+  updates.event_format = placeResult.place.format;
+  updates.location_name = placeResult.place.locationName;
+  updates.location_address = placeResult.place.locationAddress;
+  updates.location_map_url = placeResult.place.mapUrl;
+  updates.online_join_url = placeResult.place.joinUrl;
 
   const seasonCode = clean(input.season_code) ?? DEFAULT_SEASON_CODE;
   const { seasonId, error: seasonError } = await resolveSeasonId(client, seasonCode);

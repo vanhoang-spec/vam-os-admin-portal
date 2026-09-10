@@ -1,7 +1,8 @@
 import { Card } from "@/components/ui";
 import { getPublicCheckinData } from "@/lib/events";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinForm } from "./checkin-form";
+import { EventPlaceBlock } from "@/app/events/event-place";
 
 function selectedParam(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -51,8 +52,10 @@ export default async function PublicEventCheckinPage(props: { params: Promise<{ 
         <div className="rounded-lg bg-vam-ink px-4 py-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-wide text-vam-mint">VAM event check-in</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-normal">{eventName}</h1>
-          {data.event?.starts_at ? (
-            <p className="mt-1 text-sm text-slate-200">{formatDate(data.event.starts_at)}</p>
+          {data.event ? (
+            <div className="mt-3">
+              <EventPlaceBlock event={data.event} tone="dark" />
+            </div>
           ) : null}
         </div>
 
