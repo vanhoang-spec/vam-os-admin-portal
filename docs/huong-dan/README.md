@@ -7,6 +7,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | Tài liệu | Dành cho | Nội dung |
 |---|---|---|
 | `HUONG_DAN_MODULE_SU_KIEN.pdf` | Core team, Support team, BTC sự kiện | Toàn bộ module Sự kiện: tạo sự kiện, chuỗi nhiều buổi, link đăng ký, thư xác nhận kèm QR, quét mã tại cửa, theo dõi số liệu |
+| `HUONG_DAN_MODULE_MAIL.pdf` | Core team, Support team, Admin | Toàn bộ module Mail: soạn mẫu thư và ô điền, duyệt, gửi hàng loạt theo lô, nhật ký gửi, cách viết để không rơi vào hộp thư rác |
 
 ## Sửa và xuất lại bản PDF
 
@@ -27,9 +28,21 @@ trong biểu mẫu, hay đổi cách phân quyền thì phải sửa tài liệu
 thay đổi đó — một hướng dẫn nói sai còn tệ hơn không có hướng dẫn, vì người đọc
 tin nó và đi tìm thứ không tồn tại.
 
-Phần dễ lạc hậu nhất, kiểm lại trước tiên:
+Phần dễ lạc hậu nhất, kiểm lại trước tiên.
+
+**Module Sự kiện:**
 
 - Bảng phân quyền ở Phần 1 (`lib/auth-constants.ts`, `lib/permissions.ts`)
 - Danh sách loại sự kiện ở Phần 2 (`lib/event-constants.ts`)
 - Danh sách trạm quét ở Phần 7 (`lib/event-checkin-code.ts`)
 - Mục "Những gì hệ thống chưa làm" ở Phần 1 — sửa ngay khi một trong số đó được làm
+
+**Module Mail:**
+
+- Bảng phân quyền ở Phần 2 (`lib/permissions.ts`: `canComposeEmailTemplate`,
+  `canApproveEmailTemplate`, `canSendBulkEmail`, `canViewOutboundEmails`)
+- Danh sách ô điền và loại mẫu thư ở Phần 3 (`lib/email-templates-core.ts`:
+  `TEMPLATE_SPECS`, `TEMPLATE_KINDS`)
+- Con số "mỗi lượt 25 thư" ở Phần 5 (`lib/bulk-mail-core.ts`: `BULK_SEND_CHUNK`)
+- Nhóm người nhận ở Phần 5 (`lib/bulk-mail-core.ts`: `BULK_AUDIENCE_LABELS`)
+- Các lời báo lỗi trích trong Phần 3 (`lib/email-templates-core.ts`, hàm kiểm mẫu thư)
