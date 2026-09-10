@@ -271,11 +271,14 @@ export function EventScanner({ eventId }: { eventId: string }) {
           <input
             value={manual}
             onChange={(event) => setManual(event.target.value.toUpperCase())}
-            placeholder="VD: A7K2M9PQRS"
+            placeholder="VD: A7K2 hoặc A7K2M9PQRS"
             autoComplete="off"
             autoCapitalize="characters"
             className="mt-1 w-48 rounded-md border border-vam-line bg-white px-3 py-2 font-mono text-sm tracking-widest"
           />
+          <span className="mt-1 block text-[11px] text-slate-500">
+            Mã 4 ký tự trong email của người tham dự, hoặc mã 10 ký tự đầy đủ.
+          </span>
         </label>
         <button
           type="submit"

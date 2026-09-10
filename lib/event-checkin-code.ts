@@ -172,3 +172,67 @@ export function collectBadges(
     .map(([station, scannedAt]) => ({ station, label: stationLabel(station), scannedAt }))
     .sort((a, b) => a.scannedAt.localeCompare(b.scannedAt));
 }
+
+/**
+ * Độ dài mã ngắn — đường lùi khi máy quét chịu thua.
+ *
+ * Bốn ký tự gõ được trong ba giây, giữa một hàng người đang chờ ở cửa. Mã đầy
+ * đủ 10 ký tự cũng gõ được nhưng chậm, và ở đúng lúc đó thì chậm là hỏng.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO 4 KÝ TỰ AN TOÀN Ở ĐÂY, VÀ CHỈ Ở ĐÂY
+ * ---------------------------------------------------------------------------
+ * 4 ký tự trên bảng 31 ký tự là khoảng 923 nghìn tổ hợp. Với 200 người đăng
+ * ký, đoán mò trúng MỘT mã bất kỳ là khoảng 1/4.600 — tức là đoán được.
+ *
+ * Nên mã này chỉ được nhận ở ô gõ tay của máy quét: một trang đã đăng nhập, do
+ * người hỗ trợ được ghép vào đúng buổi đó mở, với người tham dự đứng trước mặt
+ * và tên hiện lên ngay sau khi gõ. Gõ trúng mã của người khác thì người đứng
+ * quét thấy ngay một cái tên lạ.
+ *
+ * `readCheckinCode` — đường công khai — KHÔNG bao giờ nhận nó.
+ */
+export const SHORT_CODE_LENGTH = 4;
+
+const SHORT_CODE_PATTERN = new RegExp(`^[${ALPHABET}]{${SHORT_CODE_LENGTH}}$`);
+
+export function generateShortCode(randomBytes: (size: number) => Uint8Array): string {
+  const limit = Math.floor(256 / ALPHABET.length) * ALPHABET.length;
+  let code = "";
+  while (code.length < SHORT_CODE_LENGTH) {
+    const bytes = randomBytes(SHORT_CODE_LENGTH);
+    for (let index = 0; index < bytes.length && code.length < SHORT_CODE_LENGTH; index += 1) {
+      const byte = bytes[index];
+      if (byte >= limit) continue;
+      code += ALPHABET[byte % ALPHABET.length];
+    }
+  }
+  return code;
+}
+
+export function isShortCode(value: unknown): boolean {
+  return typeof value === "string" && SHORT_CODE_PATTERN.test(value);
+}
+
+/**
+ * Thứ người hỗ trợ vừa gõ hoặc vừa quét, phân loại.
+ *
+ * Hai đường tra khác nhau: mã đầy đủ tra trên toàn hệ thống, mã ngắn chỉ tra
+ * trong đúng sự kiện đang mở. Trả về loại nào để nơi gọi tra đúng đường — chứ
+ * không phải thử lần lượt cả hai, vì thử mã ngắn trên toàn hệ thống là mở đúng
+ * cái cửa mà mã ngắn không được phép mở.
+ */
+export type ScannedInput =
+  | { kind: "full"; code: string }
+  | { kind: "short"; code: string }
+  | { kind: "unreadable" };
+
+export function classifyScannedInput(scanned: unknown): ScannedInput {
+  const full = readCheckinCode(scanned);
+  if (full) return { kind: "full", code: full };
+
+  const raw = String(scanned ?? "").trim().toUpperCase();
+  if (isShortCode(raw)) return { kind: "short", code: raw };
+
+  return { kind: "unreadable" };
+}

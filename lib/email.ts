@@ -304,6 +304,14 @@ async function sendViaBrevo(input: {
         subject: input.message.subject,
         textContent: input.message.text,
         htmlContent: input.message.html,
+        ...(input.message.attachments?.length
+          ? {
+              attachment: input.message.attachments.map((file) => ({
+                name: file.filename,
+                content: file.contentBase64
+              }))
+            }
+          : {}),
         ...(input.replyTo ? { replyTo: { email: input.replyTo } } : {})
       }),
       signal: controller.signal,
@@ -360,6 +368,14 @@ async function sendViaResend(input: {
         subject: input.message.subject,
         text: input.message.text,
         html: input.message.html,
+        ...(input.message.attachments?.length
+          ? {
+              attachments: input.message.attachments.map((file) => ({
+                filename: file.filename,
+                content: file.contentBase64
+              }))
+            }
+          : {}),
         ...(input.replyTo ? { reply_to: input.replyTo } : {})
       }),
       signal: controller.signal,
@@ -836,6 +852,8 @@ export async function sendEventRegistrationConfirmation(input: {
   joinUrl?: string | null;
   ticketUrl: string;
   ticketCode: string;
+  shortCode?: string | null;
+  qrPngBase64?: string | null;
   pendingApproval?: boolean;
   registrationId: string;
 }): Promise<SendEmailResult> {

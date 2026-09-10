@@ -3,8 +3,10 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import {
   ENTRANCE_STATION,
+  classifyScannedInput,
   collectBadges,
   generateCheckinCode,
+  generateShortCode,
   normalizeStation,
   readCheckinCode,
   type ScanBadge
@@ -52,26 +54,81 @@ function cryptoBytes(size: number): Uint8Array {
  * là ràng buộc duy nhất thật ở database, nên hai request song song không thể
  * cùng ghi một mã — một trong hai thua và thử lại.
  */
+export type TicketCodes = { code: string; shortCode: string | null };
+
+/**
+ * Mã ngắn cho một đăng ký, duy nhất trong sự kiện của nó.
+ *
+ * Thử lại khi đụng ràng buộc duy nhất: 4 ký tự trên 31 ký tự là ~923 nghìn tổ
+ * hợp, nên với vài trăm người mỗi buổi, va chạm hiếm nhưng có thật — và cách
+ * duy nhất để biết là để database nói.
+ *
+ * Hết lượt thử thì trả null chứ không ném: mã ngắn là ĐƯỜNG LÙI, và không cấp
+ * được đường lùi thì tấm vé vẫn dùng được bằng QR. Chặn cả việc đăng ký chỉ vì
+ * không sinh nổi bốn ký tự là đổi một bất tiện lấy một hỏng hóc.
+ */
+async function ensureShortCode(
+  client: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
+  registrationId: string,
+  eventId: string
+): Promise<string | null> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const shortCode = generateShortCode(cryptoBytes);
+    const { error } = await client
+      .from("event_registrations")
+      .update({ short_code: shortCode })
+      .eq("id", registrationId)
+      .is("short_code", null);
+
+    if (!error) {
+      const { data } = await client
+        .from("event_registrations")
+        .select("short_code")
+        .eq("id", registrationId)
+        .maybeSingle();
+      const saved = String((data as { short_code?: string } | null)?.short_code ?? "").trim();
+      if (saved) return saved;
+      continue;
+    }
+
+    if ((error as { code?: string }).code !== "23505") {
+      log("ensureShortCode", error);
+      return null;
+    }
+  }
+
+  log("ensureShortCode", `hết lượt thử mã ngắn cho sự kiện ${eventId}`);
+  return null;
+}
+
 export async function ensureCheckinCode(
   registrationId: string
-): Promise<{ code: string | null; error: string | null }> {
+): Promise<{ code: string | null; shortCode: string | null; error: string | null }> {
   const client = getSupabaseServiceRoleClient();
-  if (!client) return { code: null, error: VI_ERROR };
+  if (!client) return { code: null, shortCode: null, error: VI_ERROR };
 
   const { data, error } = await client
     .from("event_registrations")
-    .select("id, checkin_code")
+    .select("id, event_id, checkin_code, short_code")
     .eq("id", registrationId)
     .maybeSingle();
 
   if (error) {
     log("ensureCheckinCode:read", error);
-    return { code: null, error: VI_ERROR };
+    return { code: null, shortCode: null, error: VI_ERROR };
   }
-  if (!data) return { code: null, error: "Không tìm thấy đăng ký." };
+  if (!data) return { code: null, shortCode: null, error: "Không tìm thấy đăng ký." };
 
-  const existing = String((data as { checkin_code?: string }).checkin_code ?? "").trim();
-  if (existing) return { code: existing, error: null };
+  const row = data as { event_id?: string; checkin_code?: string; short_code?: string };
+  const eventId = String(row.event_id ?? "");
+  // Mã ngắn cấp một lần rồi thôi, y như mã đầy đủ: cấp lại một mã cho người đã
+  // nhận email nghĩa là tấm vé trong hộp thư của họ ngừng hoạt động.
+  const shortCode =
+    String(row.short_code ?? "").trim() ||
+    (eventId ? await ensureShortCode(client, registrationId, eventId) : null);
+
+  const existing = String(row.checkin_code ?? "").trim();
+  if (existing) return { code: existing, shortCode, error: null };
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = generateCheckinCode(cryptoBytes);
@@ -90,19 +147,19 @@ export async function ensureCheckinCode(
         .eq("id", registrationId)
         .maybeSingle();
       const saved = String((after as { checkin_code?: string } | null)?.checkin_code ?? "").trim();
-      if (saved) return { code: saved, error: null };
+      if (saved) return { code: saved, shortCode, error: null };
       continue;
     }
 
     // 23505 = trùng khoá duy nhất. Bất kỳ lỗi nào khác là lỗi thật.
     if ((writeError as { code?: string }).code !== "23505") {
       log("ensureCheckinCode:write", writeError);
-      return { code: null, error: VI_ERROR };
+      return { code: null, shortCode, error: VI_ERROR };
     }
   }
 
   log("ensureCheckinCode", "hết lượt thử sinh mã không trùng");
-  return { code: null, error: VI_ERROR };
+  return { code: null, shortCode, error: VI_ERROR };
 }
 
 export type TicketData = {
@@ -201,8 +258,15 @@ export async function recordScan(input: {
   const client = getSupabaseServiceRoleClient();
   if (!client) return { ok: false, reason: "error", message: VI_ERROR };
 
-  const code = readCheckinCode(input.scanned);
-  if (!code) {
+  // Hai loại mã, hai PHẠM VI TRA khác nhau — và đó là cả điểm của việc phân
+  // loại trước thay vì thử lần lượt:
+  //
+  //   * mã đầy đủ tra trên toàn hệ thống, vì máy quét đọc được nó trước khi
+  //     biết nó thuộc sự kiện nào;
+  //   * mã ngắn CHỈ tra trong đúng sự kiện đang mở. Bốn ký tự là đoán được,
+  //     nên tra nó trên toàn hệ thống là mở đúng cái cửa nó không được mở.
+  const scanned = classifyScannedInput(input.scanned);
+  if (scanned.kind === "unreadable") {
     return {
       ok: false,
       reason: "unreadable",
@@ -214,11 +278,14 @@ export async function recordScan(input: {
   if (!stationInput.ok) return { ok: false, reason: "error", message: stationInput.message };
   const station = stationInput.station;
 
-  const { data, error } = await client
+  const lookup = client
     .from("event_registrations")
-    .select("id, event_id, full_name, registration_status")
-    .eq("checkin_code", code)
-    .maybeSingle();
+    .select("id, event_id, full_name, registration_status");
+
+  const { data, error } =
+    scanned.kind === "full"
+      ? await lookup.eq("checkin_code", scanned.code).maybeSingle()
+      : await lookup.eq("event_id", input.eventId).eq("short_code", scanned.code).maybeSingle();
 
   if (error) {
     log("recordScan:lookup", error);
