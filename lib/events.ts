@@ -3141,31 +3141,30 @@ export async function addSessionToSeries(input: {
     return { ok: false, message: SAFE_ERROR };
   }
 
+  const alreadyInSeries = Boolean(clean(source.series_id));
   const existingIds = ((siblings ?? []) as JsonRecord[]).map((row) => String(row.id));
-  const idsToRenumber = existingIds.length ? existingIds : [eventId];
+  const idsToRenumber = alreadyInSeries && existingIds.length ? existingIds : [eventId];
   const newTotal = idsToRenumber.length + 1;
 
-  // Nâng tổng TRƯỚC — xem chú thích ở đầu hàm.
-  const { error: totalError } = await client
-    .from("events")
-    .update({ series_total: newTotal })
-    .in("id", idsToRenumber);
+  // `events_series_shape_check` bắt BA CỘT đi cùng nhau hoặc cùng vắng. Nên
+  // với một sự kiện chưa thuộc chuỗi nào, ghi mình `series_total` là vi phạm
+  // ngay ràng buộc đó — cả ba phải vào trong CÙNG MỘT lệnh.
+  //
+  // Với chuỗi đã có, các dòng đều đã mang `series_id` và `series_index`, nên
+  // nâng riêng tổng là hợp lệ.
+  const { error: totalError } = alreadyInSeries
+    ? await client.from("events").update({ series_total: newTotal }).in("id", idsToRenumber)
+    : await client
+        .from("events")
+        .update({ series_id: seriesId, series_index: 1, series_total: newTotal })
+        .eq("id", eventId);
 
   if (totalError) {
     log("addSessionToSeries: bump total failed", totalError);
-    return { ok: false, message: SAFE_ERROR };
-  }
-
-  // Sự kiện đơn lẻ mới được nạp vào chuỗi thì phải nhận số thứ tự đầu tiên.
-  if (!clean(source.series_id)) {
-    const { error: anchorSeriesError } = await client
-      .from("events")
-      .update({ series_id: seriesId, series_index: 1, series_total: newTotal })
-      .eq("id", eventId);
-    if (anchorSeriesError) {
-      log("addSessionToSeries: attach anchor failed", anchorSeriesError);
-      return { ok: false, message: SAFE_ERROR };
-    }
+    return {
+      ok: false,
+      message: `${SAFE_ERROR} (${(totalError as { message?: string }).message ?? ""})`
+    };
   }
 
   // Chép nguyên cấu hình, đổi đúng ngày giờ và số thứ tự. Bỏ những cột thuộc về
