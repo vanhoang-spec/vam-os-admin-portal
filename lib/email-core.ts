@@ -43,6 +43,10 @@ export type EmailKind =
   // chỗ nào lưu giờ phỏng vấn, nên hai thời điểm này là hai lá thư khác nhau.
   | "interview_round_invite"
   // ── main-only. Giữ giá trị này khi merge stack. ────────────────────────────
+  // Thư thông báo do Core Team tự soạn trên /operations/mail. Khác mọi giá trị
+  // trên ở một điểm: thân thư KHÔNG do builder trong file này dựng, mà đến từ
+  // một mẫu thư đã được duyệt. Xem lib/email-templates-core.ts.
+  | "general_announcement"
   // Thư xác nhận đăng ký sự kiện, mang theo đường dẫn vé cá nhân và mã QR.
   | "event_registration_confirmation";
 
