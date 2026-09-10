@@ -10,7 +10,7 @@ import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 import { eventTypeLabel } from "@/lib/event-constants";
 import { EventPlaceBlock } from "../event-place";
-import { listEventSupporters } from "@/lib/event-supporters";
+import { listEventSupporters, listSupporterCandidates } from "@/lib/event-supporters";
 import { SupportersPanel } from "./supporters-panel";
 import { countScansByStation } from "@/lib/event-checkin";
 import { stationLabel } from "@/lib/event-checkin-code";
@@ -82,6 +82,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
 
   const detail = await getEventDetailData(params.id, scope);
   const supporters = await listEventSupporters(params.id);
+  const supporterCandidates = await listSupporterCandidates(params.id);
   const scanCounts = await countScansByStation(params.id);
   if (!detail.event) {
     return (
@@ -165,6 +166,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         <SupportersPanel
           eventId={params.id}
           supporters={supporters.rows.map((row) => ({ id: row.id, fullName: row.fullName, email: row.email }))}
+          candidates={supporterCandidates.rows}
           canManage={canEditRecaps(adminUser)}
         />
       </div>

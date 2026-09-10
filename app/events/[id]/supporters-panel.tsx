@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import {
   initialEventSupporterActionState,
@@ -15,6 +16,20 @@ export type SupporterRow = {
   fullName: string;
   email: string;
 };
+
+export type SupporterChoice = {
+  adminUserId: string;
+  fullName: string;
+  email: string;
+};
+
+/** Tên nếu có, không thì email — đừng bao giờ hiện ra một dòng trống. */
+function personLabel(person: { fullName: string; email: string }): string {
+  const name = person.fullName.trim();
+  const email = person.email.trim();
+  if (name && email) return `${name} — ${email}`;
+  return name || email || "(không có tên)";
+}
 
 function Button({ label, busyLabel, quiet }: { label: string; busyLabel: string; quiet?: boolean }) {
   const { pending } = useFormStatus();
@@ -59,10 +74,13 @@ function Notice({ state }: { state: EventSupporterActionState }) {
 export function SupportersPanel({
   eventId,
   supporters,
+  candidates,
   canManage
 }: {
   eventId: string;
   supporters: SupporterRow[];
+  /** Support team chưa có trong danh sách của buổi này. */
+  candidates: SupporterChoice[];
   canManage: boolean;
 }) {
   const [addState, addAction] = useFormState(
@@ -111,25 +129,49 @@ export function SupportersPanel({
 
       {canManage ? (
         <>
-          <form action={addAction} className="mt-4 flex flex-wrap items-end gap-2 border-t border-vam-line pt-4">
-            <input type="hidden" name="event_id" value={eventId} />
-            <label className="block">
-              <span className="text-xs font-medium uppercase text-slate-500">
-                Email người hỗ trợ
-              </span>
-              <input
-                name="email"
-                type="email"
-                autoComplete="off"
-                placeholder="ten@vam.org"
-                className="mt-1 w-64 rounded-md border border-vam-line bg-white px-3 py-2 text-sm"
-              />
-            </label>
-            <Button label="Thêm" busyLabel="Đang thêm…" />
-          </form>
-          <p className="mt-2 text-xs text-slate-500">
-            Người đó phải đã có tài khoản trên hệ thống. Thêm ở đây không tạo tài khoản mới.
-          </p>
+          {candidates.length ? (
+            <>
+              <form
+                action={addAction}
+                className="mt-4 flex flex-wrap items-end gap-2 border-t border-vam-line pt-4"
+              >
+                <input type="hidden" name="event_id" value={eventId} />
+                <label className="block">
+                  <span className="text-xs font-medium uppercase text-slate-500">
+                    Chọn từ support team
+                  </span>
+                  <select
+                    name="admin_user_id"
+                    defaultValue={candidates[0].adminUserId}
+                    className="mt-1 w-72 rounded-md border border-vam-line bg-white px-3 py-2 text-sm"
+                  >
+                    {candidates.map((person) => (
+                      <option key={person.adminUserId} value={person.adminUserId}>
+                        {personLabel(person)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Button label="Thêm" busyLabel="Đang thêm…" />
+              </form>
+              <p className="mt-2 text-xs text-slate-500">
+                Chỉ hiện những người thuộc Support team và chưa có trong danh sách của buổi này.
+              </p>
+            </>
+          ) : (
+            // Không có ai để chọn thì nói thẳng vì sao và chỉ đường, thay vì
+            // để lại một ô chọn rỗng cho người ta bấm mãi không ra gì.
+            <p className="mt-4 border-t border-vam-line pt-4 text-sm text-slate-500">
+              {supporters.length
+                ? "Đã thêm hết Support team vào buổi này."
+                : "Chưa có tài khoản nào thuộc Support team."}{" "}
+              Đặt vai trò Support team cho tài khoản trong{" "}
+              <Link href="/admin/users" className="text-vam-green underline underline-offset-2">
+                Quản trị tài khoản
+              </Link>
+              , rồi quay lại đây.
+            </p>
+          )}
           <div className="mt-3 flex flex-col gap-2">
             <Notice state={addState} />
             <Notice state={removeState} />

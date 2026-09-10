@@ -40,7 +40,7 @@ export async function addEventSupporterAction(
 
     const result = await addEventSupporter({
       eventId,
-      email: String(formData.get("email") ?? ""),
+      adminUserId: String(formData.get("admin_user_id") ?? ""),
       addedBy: auth.adminUserId
     });
 
