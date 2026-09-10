@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canEditRecaps } from "@/lib/auth-constants";
+import { canScanEvent } from "@/lib/event-supporters";
 import { countScansByStation } from "@/lib/event-checkin";
 import { stationLabel } from "@/lib/event-checkin-code";
 import { getEventDetailData } from "@/lib/events";
@@ -18,7 +18,7 @@ export default async function EventScanPage(props: { params: Promise<{ id: strin
 
   const adminUser = await getCurrentAdminUser();
   if (!adminUser) redirect("/login");
-  if (!canEditRecaps(adminUser)) {
+  if (!(await canScanEvent(adminUser, id))) {
     return (
       <PageHeader
         title="Không có quyền truy cập"

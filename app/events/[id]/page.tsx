@@ -10,6 +10,8 @@ import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 import { eventTypeLabel } from "@/lib/event-constants";
 import { EventPlaceBlock } from "../event-place";
+import { listEventSupporters } from "@/lib/event-supporters";
+import { SupportersPanel } from "./supporters-panel";
 
 async function getRequestOrigin() {
   const h = await headers();
@@ -75,6 +77,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
   }
 
   const detail = await getEventDetailData(params.id, scope);
+  const supporters = await listEventSupporters(params.id);
   if (!detail.event) {
     return (
       <>
@@ -135,6 +138,14 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
 
       <div className="mb-6 rounded-md border border-vam-line bg-white p-4">
         <EventPlaceBlock event={detail.event} />
+      </div>
+
+      <div className="mb-6">
+        <SupportersPanel
+          eventId={params.id}
+          supporters={supporters.rows.map((row) => ({ id: row.id, fullName: row.fullName, email: row.email }))}
+          canManage={canEditRecaps(adminUser)}
+        />
       </div>
 
       <p className="mb-6">
