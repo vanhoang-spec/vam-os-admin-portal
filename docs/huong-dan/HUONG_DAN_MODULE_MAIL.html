@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Hướng dẫn sử dụng module Mail — VAM OS</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+    --red-bg: #fdeceb;
+    --red-line: #f0b8b4;
+    --red-ink: #8a2620;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  code {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9.4pt;
+    background: #f1f5f3;
+    padding: 0.2mm 1mm;
+    border-radius: 2px;
+  }
+
+  /* ── Trang bìa ───────────────────────────────────────────────────── */
+  .cover { page-break-after: always; padding-top: 42mm; }
+  .cover .eyebrow {
+    font-size: 9pt; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  .cover h1 {
+    font-size: 30pt; line-height: 1.15; margin: 10mm 0 4mm;
+    color: var(--ink); font-weight: 700; text-wrap: balance;
+  }
+  .cover .sub { font-size: 13pt; color: var(--muted); max-width: 120mm; }
+  .cover .rule { height: 4px; width: 46mm; background: var(--green); margin: 12mm 0; }
+  .cover .meta { font-size: 9.5pt; color: var(--muted); }
+  .cover .meta b { color: var(--ink); font-weight: 600; }
+  .cover-note {
+    margin-top: 22mm; background: var(--mint); border-left: 4px solid var(--green);
+    padding: 6mm 7mm; font-size: 10pt;
+  }
+  .cover-note b { color: var(--ink); }
+
+  /* ── Cấu trúc ────────────────────────────────────────────────────── */
+  h2 {
+    font-size: 16pt; color: var(--ink); margin: 0 0 1mm; padding-bottom: 2.5mm;
+    border-bottom: 2px solid var(--green); page-break-after: avoid; text-wrap: balance;
+  }
+  h2 .num { display: inline-block; min-width: 11mm; color: var(--green); font-weight: 700; }
+  h3 { font-size: 11.8pt; color: var(--ink); margin: 7mm 0 2mm; page-break-after: avoid; }
+  h4 { font-size: 10.5pt; color: var(--green); margin: 5mm 0 1.5mm; page-break-after: avoid; }
+  section { page-break-before: always; }
+  section.first { page-break-before: avoid; }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3.5mm; padding-left: 6mm; }
+  li { margin-bottom: 1.6mm; }
+  .lead { color: var(--muted); font-size: 10.5pt; margin-bottom: 5mm; }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block; background: var(--green); color: #fff; border-radius: 3px;
+    padding: 0.5mm 2mm; font-size: 9.2pt; font-weight: 600; white-space: nowrap;
+  }
+  .field {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0.3mm 1.6mm; font-size: 9.4pt; white-space: nowrap;
+  }
+  .tab {
+    display: inline-block; background: var(--mint); border: 1px solid var(--green);
+    color: var(--ink); border-radius: 3px; padding: 0.3mm 2mm;
+    font-size: 9.2pt; font-weight: 600; white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 2mm 0 5mm;
+    font-size: 9.6pt; page-break-inside: avoid;
+  }
+  th {
+    background: var(--mint); text-align: left; padding: 2.2mm 2.5mm;
+    border: 1px solid var(--line); font-weight: 600; color: var(--ink);
+  }
+  td { padding: 2.2mm 2.5mm; border: 1px solid var(--line); vertical-align: top; }
+  td.k { width: 36%; font-weight: 600; }
+
+  .note, .warn, .stop {
+    padding: 3.5mm 4mm; margin: 3.5mm 0 5mm; border-radius: 3px;
+    font-size: 9.9pt; page-break-inside: avoid;
+  }
+  .note { background: var(--mint); border-left: 4px solid var(--green); }
+  .warn { background: var(--amber-bg); border-left: 4px solid var(--amber-line); color: var(--amber-ink); }
+  .stop { background: var(--red-bg); border-left: 4px solid var(--red-line); color: var(--red-ink); }
+  .note b, .warn b, .stop b { display: block; margin-bottom: 1mm; }
+
+  ol.steps { counter-reset: step; list-style: none; padding-left: 0; }
+  ol.steps > li {
+    counter-increment: step; position: relative; padding-left: 10mm;
+    margin-bottom: 3.5mm; page-break-inside: avoid;
+  }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; left: 0; top: 0.2mm;
+    width: 6.5mm; height: 6.5mm; background: var(--green); color: #fff;
+    border-radius: 50%; text-align: center; line-height: 6.5mm;
+    font-size: 9pt; font-weight: 700;
+  }
+  ol.steps > li b { display: block; }
+
+  .flow { display: flex; gap: 2mm; margin: 4mm 0 6mm; page-break-inside: avoid; }
+  .flow .step {
+    flex: 1; border: 1px solid var(--line); border-top: 3px solid var(--green);
+    border-radius: 3px; padding: 3mm 2.5mm; font-size: 8.8pt; background: #fbfdfc;
+  }
+  .flow .step .n {
+    color: var(--green); font-weight: 700; font-size: 8pt;
+    display: block; margin-bottom: 1mm;
+  }
+  .flow .step b { display: block; font-size: 9.4pt; margin-bottom: 1mm; }
+  .flow .step span.d { color: var(--muted); }
+
+  .toc { margin-top: 4mm; }
+  .toc div {
+    display: flex; justify-content: space-between;
+    border-bottom: 1px dotted var(--line); padding: 2mm 0; font-size: 10.5pt;
+  }
+  .toc div b { color: var(--green); min-width: 9mm; display: inline-block; }
+  .toc .t { flex: 1; }
+
+  .mailbox {
+    border: 1px solid var(--line); border-radius: 3px; background: #fbfdfc;
+    padding: 4mm 5mm; margin: 3mm 0 5mm; font-size: 9.8pt;
+    page-break-inside: avoid;
+  }
+  .mailbox .hdr {
+    border-bottom: 1px solid var(--line); padding-bottom: 2mm; margin-bottom: 2.5mm;
+    font-size: 9pt; color: var(--muted);
+  }
+  .mailbox .hdr b { color: var(--ink); }
+  .mailbox .body { white-space: pre-line; }
+  .tok { background: #fff5cc; border-bottom: 1px solid #d9b84a; padding: 0 0.6mm; }
+
+  .kpi { display: flex; gap: 2mm; margin: 3mm 0 5mm; }
+  .kpi div {
+    flex: 1; border: 1px solid var(--line); border-radius: 3px;
+    padding: 3mm 2mm; text-align: center; font-size: 8.4pt; color: var(--muted);
+  }
+  .kpi div b { display: block; color: var(--ink); font-size: 9.2pt; margin-bottom: .8mm; }
+
+  .foot {
+    margin-top: 8mm; padding-top: 3mm; border-top: 1px solid var(--line);
+    font-size: 9pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ BÌA ══════════════════ -->
+<div class="cover">
+  <div class="eyebrow">VAM OS · Cổng quản trị dữ liệu Vietnam Alumni Mentoring</div>
+  <h1>Hướng dẫn sử dụng<br>module Mail</h1>
+  <div class="rule"></div>
+  <p class="sub">Soạn thư gửi hàng loạt cho mentor và mentee, đưa quản trị viên duyệt, gửi đi theo lô, rồi tra lại từng lá thư đã đi tới ai.</p>
+  <p class="meta" style="margin-top:14mm">
+    Dành cho: <b>Core team, Support team, Admin</b><br>
+    Địa chỉ hệ thống: <b>os.alumni-mentoring.edu.vn/operations/mail</b><br>
+    Cập nhật: <b>10/09/2026</b>
+  </p>
+  <div class="cover-note">
+    <b>Điều quan trọng nhất cần nhớ trước khi đọc tiếp</b>
+    Thư gửi hàng loạt <b>không thu hồi được</b>. Vì vậy hệ thống dựng sẵn ba chốt chặn: người soạn không phải người duyệt, người duyệt không tự động gửi, và trước khi gửi phải gõ lại đúng số lượng thư sắp đi. Đọc kỹ Phần 5 trước lần gửi thật đầu tiên.
+  </div>
+</div>
+
+<!-- ══════════════════ MỤC LỤC ══════════════════ -->
+<section class="first">
+  <h2>Mục lục</h2>
+  <div class="toc">
+    <div><span class="t"><b>1.</b> Module Mail dùng để làm gì</span></div>
+    <div><span class="t"><b>2.</b> Ai làm được việc gì</span></div>
+    <div><span class="t"><b>3.</b> Soạn một mẫu thư</span></div>
+    <div><span class="t"><b>4.</b> Duyệt mẫu thư</span></div>
+    <div><span class="t"><b>5.</b> Gửi hàng loạt</span></div>
+    <div><span class="t"><b>6.</b> Nhật ký gửi — tra lại thư đã đi</span></div>
+    <div><span class="t"><b>7.</b> Viết thư sao cho không rơi vào hộp thư rác</span></div>
+    <div><span class="t"><b>8.</b> Gặp sự cố thì làm gì</span></div>
+    <div><span class="t"><b>9.</b> Bảng thuật ngữ</span></div>
+  </div>
+
+  <div class="note" style="margin-top:8mm">
+    <b>Quy ước đọc tài liệu này</b>
+    <span class="btn">Nút bấm</span> là nút bạn bấm.
+    <span class="field">Ô nhập</span> là ô để điền.
+    <span class="tab">Tab</span> là thẻ chuyển trang ở đầu module.
+    <span class="path">Đường dẫn</span> là nơi cần đi tới.
+  </div>
+</section>
+
+<!-- ══════════════════ 1 ══════════════════ -->
+<section>
+  <h2><span class="num">1</span>Module Mail dùng để làm gì</h2>
+  <p class="lead">Gửi một nội dung thư cho toàn bộ mentor, toàn bộ mentee, hoặc cả hai — mà mỗi người vẫn nhận được thư gọi đúng tên mình. Không cần Mail Merge, không cần file Excel danh sách email.</p>
+
+  <div class="flow">
+    <div class="step"><span class="n">BƯỚC 1</span><b>Soạn</b><span class="d">Core team viết nội dung, chèn ô điền tên</span></div>
+    <div class="step"><span class="n">BƯỚC 2</span><b>Duyệt</b><span class="d">Quản trị viên đọc lại và duyệt</span></div>
+    <div class="step"><span class="n">BƯỚC 3</span><b>Gửi thử</b><span class="d">Gửi một bản về hộp thư của chính mình</span></div>
+    <div class="step"><span class="n">BƯỚC 4</span><b>Gửi thật</b><span class="d">Chọn nhóm nhận, gõ lại số lượng, gửi</span></div>
+    <div class="step"><span class="n">BƯỚC 5</span><b>Tra lại</b><span class="d">Xem từng lá thư đã đi tới ai</span></div>
+  </div>
+
+  <h3>Hai tab của module</h3>
+  <p>Vào <span class="path">Vận hành › Mail</span>. Đầu trang có hai tab:</p>
+  <table>
+    <tr><td class="k"><span class="tab">Mẫu thư</span></td><td>Soạn và duyệt nội dung. Đây cũng là nơi có ô gửi hàng loạt.</td></tr>
+    <tr><td class="k"><span class="tab">Nhật ký gửi</span></td><td>Mọi lá thư đã đi, tra được theo người nhận và theo trạng thái.</td></tr>
+  </table>
+
+  <h3>Ba ô số ở đầu tab Mẫu thư</h3>
+  <div class="kpi">
+    <div><b>Đã duyệt</b>Dùng được cho một lượt gửi</div>
+    <div><b>Bản nháp</b>Chờ quản trị viên duyệt</div>
+    <div><b>Lưu trữ</b>Đã cất đi</div>
+  </div>
+
+  <h3>Mẫu thư gắn theo mùa</h3>
+  <p>Danh sách hiện <b>Mẫu thư của [mã mùa]</b>, ví dụ <i>Mẫu thư của UEHM-S12</i>. Bạn chỉ thấy mẫu thư của mùa mình đang vận hành — mùa cũ không lẫn vào.</p>
+
+  <div class="note">
+    <b>Vì sao mẫu thư không chứa tên người cụ thể</b>
+    Mẫu thư giữ <b>ô điền</b> chứ không giữ tên một người. Giá trị thật được điền vào lúc gửi, cho từng người nhận. Nhờ vậy nội dung đọc được, chuyền tay nhau duyệt được, mà không lộ dữ liệu cá nhân của ai.
+  </div>
+</section>
+
+<!-- ══════════════════ 2 ══════════════════ -->
+<section>
+  <h2><span class="num">2</span>Ai làm được việc gì</h2>
+  <p class="lead">Quyền được chia nhỏ có chủ đích: <b>người soạn không phải người gửi</b>. Một lá thư đi ra ngoài mang tên chương trình, nên nó cần ít nhất hai người nhìn qua.</p>
+
+  <table>
+    <tr>
+      <th style="width:26%">Vai trò</th>
+      <th>Soạn mẫu thư</th>
+      <th>Duyệt</th>
+      <th>Gửi</th>
+      <th>Xem nhật ký</th>
+    </tr>
+    <tr><td class="k">Super admin</td><td>Có</td><td>Có</td><td>Có</td><td>Có</td></tr>
+    <tr><td class="k">Admin</td><td>Có</td><td>Có</td><td>Có</td><td>Có</td></tr>
+    <tr><td class="k">Core team</td><td>Có</td><td>Không</td><td>Không</td><td>Có</td></tr>
+    <tr><td class="k">Support team</td><td>Có</td><td>Không</td><td>Không</td><td>Không</td></tr>
+    <tr><td class="k">Reviewer, Viewer</td><td>Không</td><td>Không</td><td>Không</td><td>Không</td></tr>
+  </table>
+
+  <h3>Điều này có nghĩa gì trong thực tế</h3>
+  <ul>
+    <li><b>Core team và Support team</b> chủ động viết nội dung, lưu thành bản nháp, rồi báo quản trị viên. Ở ô gửi hàng loạt, họ thấy dòng chữ: <i>"Chỉ quản trị viên gửi được. Bạn soạn và lưu mẫu thư ở trên, rồi báo quản trị viên duyệt và gửi."</i></li>
+    <li><b>Admin</b> đọc lại, duyệt, rồi mới gửi được. Duyệt và gửi là hai thao tác riêng — duyệt xong thư vẫn nằm im cho tới khi có người bấm gửi.</li>
+    <li><b>Support team</b> không thấy tab Nhật ký gửi. Họ soạn nội dung, không cần nhìn danh sách địa chỉ người nhận.</li>
+  </ul>
+
+  <div class="note">
+    <b>Không thấy nút bạn cần?</b>
+    Gần như luôn là do vai trò tài khoản, không phải hệ thống lỗi. Đối chiếu bảng trên rồi liên hệ Admin.
+  </div>
+</section>
+
+<!-- ══════════════════ 3 ══════════════════ -->
+<section>
+  <h2><span class="num">3</span>Soạn một mẫu thư</h2>
+  <p class="lead">Ở tab <span class="tab">Mẫu thư</span>, bấm <span class="btn">Soạn thông báo chung</span> ở góc phải khối danh sách. Muốn sửa mẫu đã có thì bấm thẳng vào dòng của nó — trình soạn mở ra ngay bên dưới.</p>
+
+  <h3>3.1 · Ba ô cần điền</h3>
+  <table>
+    <tr><td class="k">Tên mẫu thư</td><td><b>Chỉ Core team nhìn thấy. Người nhận không thấy ô này.</b> Đây là tên để bạn tìm lại mẫu thư về sau — đặt theo việc, ví dụ <i>Nhắc hạn nộp hồ sơ đợt 1</i>, đừng đặt <i>Thư 1</i>.</td></tr>
+    <tr><td class="k">Tiêu đề thư</td><td>Dòng người nhận thấy trong hộp thư. Chèn được ô điền, ví dụ <i>Thông báo từ Ban tổ chức <code>{{mua}}</code></i>. Tối đa 200 ký tự.</td></tr>
+    <tr><td class="k">Nội dung thư</td><td>Phần thân thư. Tối đa 8.000 ký tự — có bộ đếm ngay góc phải nhãn để bạn theo dõi.</td></tr>
+  </table>
+
+  <h3>3.2 · Chèn thông tin của từng người</h3>
+  <p>Bên phải trình soạn có khối <b>Chèn thông tin vào thư</b>. Đặt con trỏ vào chỗ muốn chèn trong tiêu đề hoặc nội dung, rồi bấm một nút — hệ thống chèn đúng vào vị trí con trỏ đang đứng.</p>
+
+  <table>
+    <tr><th style="width:30%">Nút</th><th style="width:26%">Ô điền</th><th>Điền bằng gì lúc gửi</th></tr>
+    <tr><td class="k">Tên người nhận</td><td><code>{{ten_nguoi_nhan}}</code></td><td>Họ tên đầy đủ đang lưu trong hệ thống.</td></tr>
+    <tr><td class="k">Tên mùa</td><td><code>{{mua}}</code></td><td>Mã mùa của lô gửi, ví dụ UEHM-S12.</td></tr>
+    <tr><td class="k">Vai trò</td><td><code>{{vai_tro}}</code></td><td><i>mentor</i> hoặc <i>mentee</i>, theo vai trò của người nhận trong mùa.</td></tr>
+  </table>
+
+  <h4>Trông như thế nào khi gửi đi</h4>
+  <p>Bạn soạn:</p>
+  <div class="mailbox">
+    <div class="hdr"><b>Tiêu đề:</b> Thông báo từ Ban tổ chức <span class="tok">{{mua}}</span></div>
+    <div class="body">Chào anh/chị <span class="tok">{{ten_nguoi_nhan}}</span>,
+
+Ban tổ chức xin gửi tới anh/chị một vài thông tin quan trọng cho chặng sắp tới.</div>
+  </div>
+  <p>Chị Nguyễn Thị B nhận được:</p>
+  <div class="mailbox">
+    <div class="hdr"><b>Tiêu đề:</b> Thông báo từ Ban tổ chức UEHM-S12</div>
+    <div class="body">Chào anh/chị Nguyễn Thị B,
+
+Ban tổ chức xin gửi tới anh/chị một vài thông tin quan trọng cho chặng sắp tới.</div>
+  </div>
+
+  <h3>3.3 · Xem trước</h3>
+  <p>Khối <b>Xem trước</b> nằm ngay dưới khối chèn thông tin, hiển thị thư với dữ liệu mẫu. Đọc phần này trước khi lưu — nó cho thấy đúng thứ người nhận sẽ thấy.</p>
+
+  <h3>3.4 · Lưu</h3>
+  <p>Bấm <span class="btn">Tạo bản nháp</span> (mẫu mới) hoặc <span class="btn">Lưu thay đổi</span> (mẫu đã có).</p>
+
+  <div class="warn">
+    <b>Sửa một mẫu đã duyệt sẽ đưa nó về bản nháp</b>
+    Màn hình có nhắc trước điều này. Sau khi sửa, mẫu cần được duyệt lại mới gửi được. Đó là chủ ý: nội dung đã đổi thì lần duyệt cũ không còn nói lên điều gì.
+  </div>
+
+  <h3>3.5 · Những gì hệ thống không cho lưu</h3>
+  <table>
+    <tr><th style="width:44%">Nếu bạn…</th><th>Hệ thống báo</th></tr>
+    <tr><td class="k">Chưa đặt tên mẫu thư</td><td>"Chưa đặt tên. Cần có tên trước khi lưu."</td></tr>
+    <tr><td class="k">Chưa có tiêu đề</td><td>"Chưa có tiêu đề. Cần có trước khi lưu."</td></tr>
+    <tr><td class="k">Dán nội dung có thẻ HTML (dấu <code>&lt;</code> và <code>&gt;</code>)</td><td>"Thư chỉ nhận văn bản thuần… Định dạng do hệ thống tự dựng."</td></tr>
+    <tr><td class="k">Gõ tay một ô điền không có thật</td><td>"Thư đang dùng ô không có dữ liệu: <code>{{...}}</code>. Vui lòng xoá hoặc thay bằng ô hợp lệ."</td></tr>
+  </table>
+
+  <div class="note">
+    <b>Luôn chèn ô điền bằng nút, đừng gõ tay</b>
+    Gõ tay dễ sai một chữ — <code>{{ten_nhan}}</code> thay vì <code>{{ten_nguoi_nhan}}</code> — và hệ thống sẽ từ chối lưu. Bấm nút thì không bao giờ sai.
+  </div>
+
+  <div class="warn">
+    <b>Vì sao chỉ nhận văn bản thuần</b>
+    Bạn viết chữ, hệ thống tự dựng phần trình bày của thư. Điều này giữ cho mọi thư của chương trình trông giống nhau, và tránh việc một đoạn HTML dán từ Word làm vỡ bố cục trên điện thoại của hàng trăm người.
+  </div>
+</section>
+
+<!-- ══════════════════ 4 ══════════════════ -->
+<section>
+  <h2><span class="num">4</span>Duyệt mẫu thư</h2>
+  <p class="lead">Chỉ <b>Admin</b> và <b>Super admin</b> làm được bước này. Mở mẫu thư ở trạng thái bản nháp, kéo xuống khối <b>Duyệt mẫu thư</b> bên phải.</p>
+
+  <ol class="steps">
+    <li><b>Đọc lại phần Xem trước.</b> Đây là lần cuối có người đọc trước khi thư ra khỏi hệ thống.</li>
+    <li><b>Gõ lại tiêu đề thư</b> vào ô xác nhận. Ô có gợi ý sẵn <i>"Gõ lại tiêu đề ở trên"</i>.</li>
+    <li><b>Bấm <span class="btn">Duyệt mẫu thư</span>.</b> Trạng thái đổi sang <b>Đã duyệt</b>, và mẫu thư hiện ra trong ô chọn của phần Gửi hàng loạt.</li>
+  </ol>
+
+  <div class="note">
+    <b>Vì sao phải gõ lại tiêu đề</b>
+    Bấm một nút là việc tay có thể làm trong lúc đầu đang nghĩ chuyện khác. Gõ lại tiêu đề buộc mắt phải đọc nó một lần — và tiêu đề chính là dòng chữ hàng trăm người sẽ nhìn thấy đầu tiên.
+  </div>
+
+  <p>Sau khi duyệt, dòng của mẫu thư trong danh sách hiển thị <b>Duyệt bởi [tên người duyệt]</b> thay cho ngày sửa lần cuối. Ai duyệt cái gì đều có dấu vết.</p>
+
+  <div class="warn">
+    <b>Duyệt không phải là gửi</b>
+    Duyệt xong, thư vẫn nằm im. Nó chỉ đi khi có người vào phần Gửi hàng loạt, chọn nhóm nhận, gõ lại số lượng và bấm gửi.
+  </div>
+</section>
+
+<!-- ══════════════════ 5 ══════════════════ -->
+<section>
+  <h2><span class="num">5</span>Gửi hàng loạt</h2>
+  <p class="lead">Khối <b>Gửi hàng loạt</b> nằm cuối tab Mẫu thư. Chỉ <b>Admin</b> và <b>Super admin</b> thấy đầy đủ. Nếu chưa có mẫu nào được duyệt, khối này chỉ hiện dòng nhắc duyệt một mẫu trước.</p>
+
+  <h3>5.1 · Chọn thư và nhóm nhận</h3>
+  <table>
+    <tr><td class="k">Mẫu thư</td><td>Ô chọn chỉ liệt kê <b>mẫu đã duyệt</b>. Chọn xong, tiêu đề thư hiện ngay bên dưới để đối chiếu.</td></tr>
+    <tr><td class="k">Gửi cho</td><td>Ba lựa chọn: <b>Mentee</b>, <b>Mentor</b>, hoặc <b>Cả mentor và mentee</b>. Chọn xong, số lượng thư sắp gửi tự cập nhật.</td></tr>
+  </table>
+
+  <div class="warn">
+    <b>Dòng cảnh báo về người không nhận được</b>
+    Nếu có người thiếu email hoặc thiếu họ tên trong hệ thống, ngay dưới ô chọn sẽ hiện: <i>"N người không nhận được: thiếu email hoặc thiếu họ tên."</i> Những người này bị bỏ ra khỏi lượt gửi. Muốn họ nhận được thì phải bổ sung dữ liệu của họ trước, rồi gửi lại.
+  </div>
+
+  <h3>5.2 · Gửi thử cho chính mình — đừng bỏ bước này</h3>
+  <p>Bấm <span class="btn">Gửi thử cho tôi</span>. Hệ thống gửi <b>một bản dùng dữ liệu mẫu tới hộp thư của chính bạn</b>. Không ai khác nhận.</p>
+  <p>Mở thư đó ra và kiểm ba điều:</p>
+  <ul>
+    <li>Tiêu đề đọc có xuôi không, ô điền đã thành chữ thật chưa.</li>
+    <li>Xuống dòng, khoảng cách đoạn có đúng ý không.</li>
+    <li>Mở trên <b>điện thoại</b> — phần lớn mentor và mentee đọc thư trên điện thoại.</li>
+  </ul>
+
+  <h3>5.3 · Gửi thật</h3>
+  <ol class="steps">
+    <li><b>Đọc dòng xác nhận.</b> Màn hình ghi rõ: <i>"Sắp gửi <b>N</b> lá thư cho <b>[nhóm]</b>. Thư đã gửi không thu hồi được."</i></li>
+    <li><b>Gõ lại đúng con số N</b> vào ô <span class="field">Gõ lại số … để xác nhận</span>. Gõ sai thì nút không chạy.</li>
+    <li><b>Bấm <span class="btn">Bắt đầu gửi</span>.</b></li>
+  </ol>
+
+  <div class="stop">
+    <b>Ba câu hỏi tự đặt trước khi bấm</b>
+    Đúng mẫu thư chưa? Đúng nhóm nhận chưa? Con số trên màn hình có gần đúng với con số mình nghĩ trong đầu không?<br><br>
+    Nếu màn hình nói 480 mà bạn đang nghĩ tới 120 người, <b>dừng lại</b> — nhiều khả năng bạn đang chọn nhầm nhóm nhận. Thư đã đi thì không gọi về được.
+  </div>
+
+  <h3>5.4 · Gửi theo lô, mỗi lượt 25 thư</h3>
+  <p>Mỗi lần chạy gửi tối đa <b>25 thư</b>. Phần còn lại nằm chờ trong khối <b>Lô đang gửi dở</b>, hiển thị dạng <i>Đã gửi 25/240</i>. Bấm <span class="btn">Gửi tiếp</span> để đi tiếp, lặp lại đến khi hết.</p>
+
+  <div class="note">
+    <b>Bấm "Gửi tiếp" nhiều lần không làm ai nhận hai thư</b>
+    Trước mỗi lượt, hệ thống đọc lại xem đã gửi tới những ai rồi và chỉ gửi cho phần còn lại. Kể cả khi máy bị mất mạng giữa chừng, chạy tiếp vẫn an toàn. Cứ bấm cho tới khi con số chạy hết.
+  </div>
+
+  <p>Bên cạnh số đã gửi, dòng của lô còn ghi <b>lỗi</b> và <b>bỏ qua</b> nếu có. Khối <b>Các lượt gửi gần đây</b> phía dưới lưu lại 8 lượt gần nhất kèm thời điểm và kết quả.</p>
+
+  <h3>5.5 · Khi hệ thống đang không gửi thư được</h3>
+  <p>Nếu đầu trang hiện dải màu vàng <i>"Hệ thống đang không gửi thư được"</i> kèm lý do, nghĩa là cấu hình gửi thư đang có vấn đề. <b>Mẫu thư vẫn soạn và duyệt được bình thường</b> — chỉ việc gửi phải chờ. Báo người phụ trách hệ thống kèm nguyên văn dòng lý do đó.</p>
+</section>
+
+<!-- ══════════════════ 6 ══════════════════ -->
+<section>
+  <h2><span class="num">6</span>Nhật ký gửi — tra lại thư đã đi</h2>
+  <p class="lead">Tab <span class="tab">Nhật ký gửi</span> ghi lại <b>mọi lá thư hệ thống từng gửi</b> — không chỉ thư gửi hàng loạt, mà cả thư xác nhận đăng ký sự kiện, thư mời phỏng vấn và các thư tự động khác.</p>
+
+  <h3>Bốn ô số ở đầu trang</h3>
+  <div class="kpi">
+    <div><b>Đã gửi</b>Đi thành công</div>
+    <div><b>Lỗi</b>Không gửi được</div>
+    <div><b>Bỏ qua</b>Bị loại khỏi lượt gửi</div>
+    <div><b>Đang chờ</b>Chưa đi</div>
+  </div>
+
+  <h3>Ba bộ lọc</h3>
+  <table>
+    <tr><td class="k">Lọc theo trạng thái</td><td>Đã gửi, lỗi, bỏ qua, đang chờ — hoặc <i>Mọi trạng thái</i>.</td></tr>
+    <tr><td class="k">Lọc theo loại thư</td><td>Tách thư thông báo hàng loạt khỏi các thư tự động.</td></tr>
+    <tr><td class="k">Tìm theo email người nhận</td><td>Gõ địa chỉ email để xem riêng lịch sử của một người.</td></tr>
+  </table>
+
+  <h4>Dùng thực tế nhất</h4>
+  <p>Khi một mentor nhắn <i>"em không nhận được thư"</i>: mở tab Nhật ký gửi, gõ email của họ vào ô tìm kiếm. Kết quả trả lời dứt điểm ba khả năng:</p>
+  <ul>
+    <li><b>Có dòng, trạng thái Đã gửi</b> — thư đã rời hệ thống. Nhờ họ kiểm mục Spam / Quảng cáo.</li>
+    <li><b>Có dòng, trạng thái Lỗi</b> — địa chỉ có vấn đề, hoặc nhà cung cấp từ chối. Kiểm lại email trong hồ sơ.</li>
+    <li><b>Không có dòng nào</b> — họ chưa từng nằm trong lượt gửi. Kiểm xem họ có thuộc đúng nhóm nhận và có đủ email, họ tên trong hệ thống không.</li>
+  </ul>
+
+  <p>Với những thư gắn với một hồ sơ ứng tuyển, dòng nhật ký có nút <span class="btn">Mở đơn</span> dẫn thẳng tới hồ sơ đó.</p>
+</section>
+
+<!-- ══════════════════ 7 ══════════════════ -->
+<section>
+  <h2><span class="num">7</span>Viết thư sao cho không rơi vào hộp thư rác</h2>
+  <p class="lead">Thư của chương trình gửi từ <b>hello@alumni-mentoring.edu.vn</b>. Bộ lọc thư rác chấm điểm từng lá thư, và một vài thói quen viết lách kéo điểm đó xuống mà không ai ngờ.</p>
+
+  <h3>Nên</h3>
+  <ul>
+    <li><b>Tiêu đề cụ thể, nói đúng việc.</b> <i>Nhắc hạn nộp hồ sơ mentee — 25/09</i> tốt hơn <i>Thông báo quan trọng</i>.</li>
+    <li><b>Xưng danh chương trình ngay câu đầu.</b> Người đọc biết ngay thư từ đâu tới.</li>
+    <li><b>Viết đủ dài để thành một lá thư thật</b> — vài dòng nội dung có nghĩa, không phải một câu cụt kèm một đường dẫn.</li>
+    <li><b>Chèn <code>{{ten_nguoi_nhan}}</code></b>. Thư gọi đúng tên trông ít giống thư rác hơn hẳn.</li>
+  </ul>
+
+  <h3>Tránh</h3>
+  <ul>
+    <li><b>VIẾT HOA TOÀN BỘ tiêu đề</b>, hoặc nhiều dấu chấm than liên tiếp.</li>
+    <li><b>Các từ hay bị chấm điểm xấu:</b> miễn phí, trúng thưởng, khẩn cấp, click ngay, cơ hội cuối cùng.</li>
+    <li><b>Thư chỉ có một đường dẫn</b> và gần như không có chữ nào khác.</li>
+    <li><b>Dán nội dung từ Word.</b> Hệ thống chỉ nhận văn bản thuần nên sẽ từ chối, nhưng đừng mất công thử.</li>
+  </ul>
+
+  <div class="warn">
+    <b>Nhắc người nhận kiểm mục Spam</b>
+    Với những thư quan trọng có hạn chót, nên nhắn kèm trên kênh khác (nhóm chat, fanpage) rằng thư đã gửi và nhờ mọi người kiểm cả mục Spam / Quảng cáo. Một dòng nhắn như vậy cứu được rất nhiều người bỏ lỡ hạn.
+  </div>
+
+  <div class="note">
+    <b>Kiểm chứng bằng số liệu, không đoán</b>
+    Sau một lượt gửi lớn, mở tab Nhật ký gửi lọc theo trạng thái <b>Lỗi</b>. Nếu con số bất thường, báo người phụ trách hệ thống — đó là dấu hiệu của vấn đề cấu hình, không phải chuyện viết lách.
+  </div>
+</section>
+
+<!-- ══════════════════ 8 ══════════════════ -->
+<section>
+  <h2><span class="num">8</span>Gặp sự cố thì làm gì</h2>
+
+  <table>
+    <tr><th style="width:38%">Hiện tượng</th><th>Nguyên nhân thường gặp và cách xử lý</th></tr>
+    <tr><td class="k">Không lưu được mẫu thư</td><td>Đọc dòng chữ màu vàng ngay dưới ô đang thiếu — nó nói rõ thiếu gì. Thường là chưa đặt tên, chưa có tiêu đề, hoặc nội dung có dấu <code>&lt;</code> <code>&gt;</code>.</td></tr>
+    <tr><td class="k">Báo "Thư đang dùng ô không có dữ liệu"</td><td>Có một ô điền gõ tay bị sai chính tả. Xoá nó đi và chèn lại bằng nút ở khối <b>Chèn thông tin vào thư</b>.</td></tr>
+    <tr><td class="k">Mẫu thư không hiện trong ô chọn lúc gửi</td><td>Ô chọn chỉ liệt kê mẫu <b>đã duyệt</b>. Kiểm trạng thái của mẫu — nếu vừa sửa, nó đã quay về bản nháp và cần duyệt lại.</td></tr>
+    <tr><td class="k">Không thấy khối Gửi hàng loạt</td><td>Chỉ Admin và Super admin gửi được. Báo quản trị viên duyệt và gửi giúp.</td></tr>
+    <tr><td class="k">Nút "Bắt đầu gửi" không chạy</td><td>Con số gõ vào ô xác nhận chưa khớp với số thư sắp gửi. Gõ lại đúng con số hiện trên màn hình.</td></tr>
+    <tr><td class="k">Gửi được một phần rồi dừng</td><td>Bình thường — mỗi lượt chạy tối đa 25 thư. Bấm <span class="btn">Gửi tiếp</span> ở khối <b>Lô đang gửi dở</b> cho tới khi hết.</td></tr>
+    <tr><td class="k">Lỡ bấm "Gửi tiếp" mấy lần liền</td><td>Không sao. Hệ thống kiểm lại đã gửi tới ai trước mỗi lượt, không ai nhận hai thư.</td></tr>
+    <tr><td class="k">Dải vàng "Hệ thống đang không gửi thư được"</td><td>Cấu hình gửi thư đang có vấn đề. Soạn và duyệt vẫn bình thường. Báo người phụ trách kèm nguyên văn dòng lý do.</td></tr>
+    <tr><td class="k">Có người báo không nhận được thư</td><td>Tab <b>Nhật ký gửi</b>, gõ email của họ vào ô tìm kiếm. Xem mục 6 để đọc kết quả.</td></tr>
+    <tr><td class="k">Gửi nhầm nội dung hoặc nhầm nhóm</td><td>Thư đã gửi <b>không thu hồi được</b>. Cách duy nhất là soạn một thư đính chính, duyệt và gửi tiếp cho đúng nhóm đó. Viết ngắn, nói thẳng vào việc.</td></tr>
+  </table>
+
+  <div class="stop">
+    <b>Một thói quen đáng giá</b>
+    Luôn bấm <span class="btn">Gửi thử cho tôi</span> trước mỗi lượt gửi thật — kể cả khi chỉ sửa một chữ. Bước này mất ba mươi giây và là chốt chặn cuối cùng trước khi thư ra khỏi hệ thống.
+  </div>
+</section>
+
+<!-- ══════════════════ 9 ══════════════════ -->
+<section>
+  <h2><span class="num">9</span>Bảng thuật ngữ</h2>
+  <table>
+    <tr><td class="k">Mẫu thư</td><td>Nội dung thư đã soạn sẵn, có chỗ trống để hệ thống điền thông tin của từng người lúc gửi.</td></tr>
+    <tr><td class="k">Ô điền</td><td>Đoạn dạng <code>{{ten_nguoi_nhan}}</code> trong mẫu thư. Lúc gửi, nó biến thành giá trị thật của từng người nhận.</td></tr>
+    <tr><td class="k">Bản nháp</td><td>Mẫu thư đã lưu nhưng chưa được duyệt. Chưa gửi được.</td></tr>
+    <tr><td class="k">Đã duyệt</td><td>Quản trị viên đã đọc và chấp thuận. Dùng được cho một lượt gửi.</td></tr>
+    <tr><td class="k">Lưu trữ</td><td>Mẫu thư đã cất đi, không dùng nữa nhưng vẫn giữ lại để tra cứu.</td></tr>
+    <tr><td class="k">Lô gửi</td><td>Một lượt gửi hàng loạt. Có số thư yêu cầu, số đã gửi, số lỗi, số bỏ qua.</td></tr>
+    <tr><td class="k">Bỏ qua</td><td>Người bị loại khỏi lượt gửi, thường do thiếu email hoặc thiếu họ tên trong hệ thống.</td></tr>
+    <tr><td class="k">Gửi thử</td><td>Gửi một bản dùng dữ liệu mẫu về hộp thư của chính người đang thao tác. Không ai khác nhận.</td></tr>
+    <tr><td class="k">Nhật ký gửi</td><td>Sổ ghi mọi lá thư hệ thống từng gửi, tra được theo người nhận và theo trạng thái.</td></tr>
+  </table>
+
+  <div class="foot">
+    <b>VAM OS — Cổng quản trị dữ liệu Vietnam Alumni Mentoring</b><br>
+    Tài liệu hướng dẫn module Mail · Cập nhật 10/09/2026<br>
+    Tài liệu cùng bộ: <i>Hướng dẫn sử dụng module Sự kiện</i>.<br>
+    Gặp lỗi hoặc thấy phần nào chưa rõ, báo lại cho người phụ trách hệ thống để tài liệu được cập nhật.
+  </div>
+</section>
+
+</body>
+</html>
