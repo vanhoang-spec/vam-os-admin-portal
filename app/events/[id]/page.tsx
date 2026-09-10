@@ -136,6 +136,15 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
       <div className="mb-6 rounded-md border border-vam-line bg-white p-4">
         <EventPlaceBlock event={detail.event} />
       </div>
+
+      <p className="mb-6">
+        <Link
+          href={`/events/${params.id}/scan`}
+          className="inline-block rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
+        >
+          Mở máy quét điểm danh
+        </Link>
+      </p>
       {detail.error ? <ErrorBox message={detail.error} /> : null}
 
       {/* Capacity / waitlist info banner */}

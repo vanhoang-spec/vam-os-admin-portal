@@ -152,6 +152,9 @@ export async function middleware(request: NextRequest) {
   if (
     request.nextUrl.pathname.startsWith("/register/") ||
     request.nextUrl.pathname.startsWith("/checkin/") ||
+    // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
+    // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
+    request.nextUrl.pathname.startsWith("/ve/") ||
     request.nextUrl.pathname.startsWith("/renew/")
   ) {
     const requestHeaders = new Headers(request.headers);
@@ -159,10 +162,15 @@ export async function middleware(request: NextRequest) {
       ? "checkin"
       : request.nextUrl.pathname.startsWith("/renew/")
         ? "renewal"
-        : "register";
+        : request.nextUrl.pathname.startsWith("/ve/")
+          ? "ticket"
+          : "register";
     requestHeaders.set("x-vam-public-route", publicRoute);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
-    if (publicRoute === "renewal") {
+    // Vé mang tên một người và một mã dùng được ở cửa; nó không được nằm lại
+    // trong cache dùng chung, và trang đích của bất kỳ đường dẫn nào trên đó
+    // không cần biết mã là gì.
+    if (publicRoute === "renewal" || publicRoute === "ticket") {
       response.headers.set("Referrer-Policy", "no-referrer");
       response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
       response.headers.set("Pragma", "no-cache");

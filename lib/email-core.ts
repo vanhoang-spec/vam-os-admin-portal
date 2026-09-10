@@ -41,7 +41,10 @@ export type EmailKind =
   // Thư báo ứng viên đã qua vòng hồ sơ và được mời vào vòng phỏng vấn — KHÁC
   // với `interview_scheduled`, vốn báo một buổi đã có giờ. Trên main chưa có
   // chỗ nào lưu giờ phỏng vấn, nên hai thời điểm này là hai lá thư khác nhau.
-  | "interview_round_invite";
+  | "interview_round_invite"
+  // ── main-only. Giữ giá trị này khi merge stack. ────────────────────────────
+  // Thư xác nhận đăng ký sự kiện, mang theo đường dẫn vé cá nhân và mã QR.
+  | "event_registration_confirmation";
 
 export type EmailMessage = {
   to: string;
@@ -927,6 +930,84 @@ export function buildCrossScheduledEmail(input: {
         ? `<p style="margin:20px 0"><a href="${escapeHtml(input.registerUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đăng ký tham dự</a></p>`
         : "",
       "<p>Buổi này mở cho các bạn mentee khác cùng tham dự, nên nhớ đăng ký sớm nhé.</p>"
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư xác nhận đăng ký sự kiện, mang theo vé cá nhân.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO ĐƯỜNG DẪN VÉ CHỨ KHÔNG PHẢI ẢNH QR ĐÍNH KÈM
+ * ---------------------------------------------------------------------------
+ * Ảnh nhúng trong thư bị nhiều hộp thư chặn cho tới khi người đọc bấm "hiện
+ * ảnh", và một tấm vé không hiện ra là một người đứng ở cửa không có gì để
+ * giơ. Đường dẫn thì luôn bấm được, mở ra trang vé với mã QR to bằng cả màn
+ * hình, và mã đó vẫn còn nguyên ở đó nếu họ mở lại vào sáng hôm sự kiện.
+ *
+ * Mã dạng chữ được in ngay trong thư bên cạnh đường dẫn: khi mạng ở hội trường
+ * không vào được, người ta vẫn đọc được mười ký tự cho người quét gõ tay.
+ */
+export function buildEventRegistrationConfirmationEmail(input: {
+  recipientName: string;
+  eventName: string;
+  whenLabel: string;
+  placeLabel?: string | null;
+  mapUrl?: string | null;
+  joinUrl?: string | null;
+  ticketUrl: string;
+  ticketCode: string;
+  pendingApproval?: boolean;
+}): EmailMessage {
+  const name = safeDisplayName(input.recipientName);
+  const eventName = String(input.eventName ?? "").trim() || "sự kiện";
+  const pending = Boolean(input.pendingApproval);
+
+  const subject = pending
+    ? `Đã nhận đăng ký ${eventName}`
+    : `Vé tham dự ${eventName}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    pending
+      ? `Ban tổ chức đã nhận đăng ký của bạn cho ${eventName}. Ban tổ chức sẽ xét duyệt và báo lại.`
+      : `Bạn đã đăng ký thành công ${eventName}.`,
+    "",
+    `Thời gian: ${input.whenLabel}`
+  ];
+
+  if (input.placeLabel) lines.push(`Địa điểm: ${input.placeLabel}`);
+  if (input.mapUrl) lines.push(`Xem trên bản đồ: ${input.mapUrl}`);
+  if (input.joinUrl) lines.push(`Đường dẫn tham gia: ${input.joinUrl}`);
+
+  lines.push(
+    "",
+    `Vé của bạn: ${input.ticketUrl}`,
+    `Mã điểm danh: ${input.ticketCode}`,
+    "",
+    "Mở đường dẫn trên khi tới sự kiện và đưa mã QR cho ban tổ chức quét. Nếu không mở được, đọc mã điểm danh ở trên cho ban tổ chức."
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      pending
+        ? `<p>Ban tổ chức đã nhận đăng ký của bạn cho <strong>${escapeHtml(eventName)}</strong>. Ban tổ chức sẽ xét duyệt và báo lại.</p>`
+        : `<p>Bạn đã đăng ký thành công <strong>${escapeHtml(eventName)}</strong>.</p>`,
+      `<p><strong>Thời gian:</strong> ${escapeHtml(input.whenLabel)}</p>`,
+      input.placeLabel ? `<p><strong>Địa điểm:</strong> ${escapeHtml(input.placeLabel)}</p>` : "",
+      input.mapUrl
+        ? `<p><a href="${escapeHtml(input.mapUrl)}" style="color:#16834c">Xem trên bản đồ</a></p>`
+        : "",
+      input.joinUrl
+        ? `<p><a href="${escapeHtml(input.joinUrl)}" style="color:#16834c">Đường dẫn tham gia trực tuyến</a></p>`
+        : "",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở vé tham dự</a></p>`,
+      `<p>Mã điểm danh: <strong style="font-family:monospace;letter-spacing:2px">${escapeHtml(input.ticketCode)}</strong></p>`,
+      `<p style="color:#4f6b60;font-size:13px">Mở vé khi tới sự kiện và đưa mã QR cho ban tổ chức quét. Nếu không mở được, đọc mã điểm danh ở trên cho ban tổ chức.</p>`
     ].join("")
   );
 
