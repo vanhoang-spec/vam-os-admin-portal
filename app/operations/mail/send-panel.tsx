@@ -117,7 +117,19 @@ export function SendPanel({
   batches: BatchSummary[];
   canSend: boolean;
 }) {
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  // Lưu Ý ĐỊNH của người dùng, rồi mới SUY RA giá trị thật từ danh sách hiện
+  // có — không lưu thẳng giá trị.
+  //
+  // `useState(templates[0]?.id)` chỉ chạy ở lần dựng đầu tiên. Panel này được
+  // dựng khi CHƯA có mẫu thư nào được duyệt, nên state khởi tạo bằng chuỗi
+  // rỗng; sau khi duyệt xong và trang đọc lại, `templates` có dòng mới nhưng
+  // component không dựng lại nên state vẫn rỗng. Một `<select value="">` không
+  // khớp option nào thì trình duyệt TỰ hiển thị option đầu — ô chọn trông như
+  // đã chọn, còn form gửi lên chuỗi rỗng.
+  //
+  // Suy ra thì cả trường hợp đó lẫn trường hợp mẫu đang chọn bị cất đi đều
+  // rơi về một mẫu có thật, thay vì rơi về rỗng.
+  const [templateChoice, setTemplateChoice] = useState("");
   const [audience, setAudience] = useState<BulkAudience>("mentee");
 
   const [testState, testAction] = useFormState(sendTestEmailAction, initialBulkMailActionState);
@@ -127,7 +139,11 @@ export function SendPanel({
     initialBulkMailActionState
   );
 
-  const selected = templates.find((row) => row.id === templateId) ?? null;
+  // Ý định của người dùng nếu nó còn hợp lệ, nếu không thì mẫu đầu tiên còn
+  // lại. Đây là chỗ duy nhất quyết định "mẫu nào", và cả ô chọn lẫn form đều
+  // đọc từ nó — nên thứ nhìn thấy và thứ gửi lên không thể lệch nhau.
+  const selected = templates.find((row) => row.id === templateChoice) ?? templates[0] ?? null;
+  const templateId = selected?.id ?? "";
   const target = counts[audience];
   const runningBatches = batches.filter((row) => row.status === "running");
 
@@ -172,7 +188,7 @@ export function SendPanel({
           <select
             id="send-template"
             value={templateId}
-            onChange={(event) => setTemplateId(event.target.value)}
+            onChange={(event) => setTemplateChoice(event.target.value)}
             className="w-full rounded-md border border-vam-line px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
           >
             {templates.map((row) => (
