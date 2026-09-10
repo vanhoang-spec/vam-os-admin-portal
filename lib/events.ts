@@ -18,6 +18,14 @@ import {
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
+import { randomUUID } from "node:crypto";
+import {
+  generateOccurrences,
+  isEndMode,
+  isMonthlyMode,
+  isRecurrenceFrequency,
+  type RecurrenceRule
+} from "@/lib/event-recurrence";
 import {
   isEventFormat,
   needsJoinUrl,
@@ -122,6 +130,17 @@ export type EventInput = {
   location_address?: unknown;
   location_map_url?: unknown;
   online_join_url?: unknown;
+  /** Chuỗi lặp lại — chỉ do createEventSeries đặt, form không gửi trực tiếp. */
+  series_id?: unknown;
+  series_index?: unknown;
+  series_total?: unknown;
+  /** Quy tắc lặp, chỉ đọc lúc tạo chuỗi. */
+  recurrence_frequency?: unknown;
+  recurrence_interval?: unknown;
+  recurrence_monthly_mode?: unknown;
+  recurrence_end_mode?: unknown;
+  recurrence_ends_on?: unknown;
+  recurrence_count?: unknown;
   source_notes?: unknown;
   legacy_event_temp_id?: unknown;
   registration_required?: unknown;
@@ -2015,6 +2034,9 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     location_address: place.locationAddress,
     location_map_url: place.mapUrl,
     online_join_url: place.joinUrl,
+    series_id: clean(input.series_id),
+    series_index: input.series_index ? Number(input.series_index) : null,
+    series_total: input.series_total ? Number(input.series_total) : null,
     source_notes: clean(input.source_notes),
     legacy_event_temp_id: clean(input.legacy_event_temp_id),
     registration_required: String(input.registration_required) === "true",
@@ -2067,6 +2089,105 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   }
   await writeAdminAudit(client, { actionType: "create_event", afterData: data });
   return { ok: true, message: "Đã tạo sự kiện.", data };
+}
+
+/**
+ * Tạo một chuỗi sự kiện lặp lại.
+ *
+ * Gọi lại chính `createEvent` cho từng buổi thay vì tự dựng payload: mọi quy
+ * tắc quyền, phạm vi mùa, kiểm địa điểm và ghi nhật ký đều nằm trong đó, và
+ * một bản sao thứ hai của chúng ở đây là bản sẽ trôi lệch.
+ *
+ * Hỏng giữa chừng thì KHÔNG quay lui. Những buổi đã tạo là đã tạo, và nói thật
+ * điều đó có ích hơn là xoá đi những dòng có thể đã có người mở ra xem. Buổi
+ * nào hỏng được nêu tên, và chuỗi ghi lại tổng số buổi theo ý định ban đầu chứ
+ * không theo số buổi tạo được — `series_total` là ý định, không phải kết quả.
+ */
+export async function createEventSeries(
+  input: EventInput & { recurrence?: unknown }
+): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+
+  const startsAt = parseDateTime(clean(input.starts_at));
+  if (!startsAt) return { ok: false, message: "Thời điểm sự kiện không hợp lệ." };
+
+  const rule = readRecurrenceInput(input);
+  if (!rule.ok) return { ok: false, message: rule.message };
+
+  const generated = generateOccurrences({
+    startsAt,
+    endsAt: parseDateTime(clean(input.ends_at)),
+    rule: rule.rule
+  });
+  if (!generated.ok) return { ok: false, message: generated.message };
+
+  const seriesId = randomUUID();
+  const total = generated.occurrences.length;
+  const failures: string[] = [];
+  let created = 0;
+  let firstId: string | null = null;
+
+  // Vòng lặp theo chỉ số chứ không dùng .entries(): dự án biên dịch xuống ES5,
+  // nơi duyệt thẳng một iterator cần bật downlevelIteration cho cả codebase.
+  for (let index = 0; index < generated.occurrences.length; index += 1) {
+    const occurrence = generated.occurrences[index];
+    const result = await createEvent({
+      ...input,
+      starts_at: occurrence.startsAt,
+      ends_at: occurrence.endsAt,
+      series_id: seriesId,
+      series_index: index + 1,
+      series_total: total
+    });
+
+    if (result.ok) {
+      created += 1;
+      if (!firstId) firstId = clean((result.data as JsonRecord | undefined)?.id) ?? null;
+    } else {
+      failures.push(`Buổi ${index + 1}: ${result.message}`);
+    }
+  }
+
+  if (!created) {
+    return { ok: false, message: failures[0] ?? "Không tạo được buổi nào." };
+  }
+
+  return {
+    ok: true,
+    message: failures.length
+      ? `Đã tạo ${created}/${total} buổi. ${failures.length} buổi không tạo được: ${failures.join("; ")}`
+      : `Đã tạo chuỗi ${total} buổi.`,
+    data: firstId ? { id: firstId, series_id: seriesId } : { series_id: seriesId }
+  };
+}
+
+/** Đọc quy tắc lặp từ dữ liệu form, kiểm từng ô trước khi sinh buổi nào. */
+function readRecurrenceInput(
+  input: EventInput & { recurrence?: unknown }
+): { ok: true; rule: RecurrenceRule } | { ok: false; message: string } {
+  const frequency = clean(input.recurrence_frequency);
+  if (!isRecurrenceFrequency(frequency)) {
+    return { ok: false, message: "Tần suất lặp không hợp lệ." };
+  }
+
+  const monthlyMode = clean(input.recurrence_monthly_mode);
+  const endMode = clean(input.recurrence_end_mode);
+  if (!isEndMode(endMode)) {
+    return { ok: false, message: "Điều kiện kết thúc chuỗi không hợp lệ." };
+  }
+
+  return {
+    ok: true,
+    rule: {
+      frequency,
+      interval: Number(clean(input.recurrence_interval) ?? 1),
+      monthlyMode: isMonthlyMode(monthlyMode) ? monthlyMode : "day_of_month",
+      endMode,
+      endsOn: clean(input.recurrence_ends_on),
+      count: input.recurrence_count ? Number(input.recurrence_count) : null
+    }
+  };
 }
 
 export async function updateEvent(input: EventInput & { id?: unknown }): Promise<MutationResult> {
