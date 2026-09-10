@@ -50,11 +50,31 @@ export type EmailKind =
   // Thư xác nhận đăng ký sự kiện, mang theo đường dẫn vé cá nhân và mã QR.
   | "event_registration_confirmation";
 
+/**
+ * Một tệp đi kèm thư.
+ *
+ * `contentBase64` chứ không phải Buffer: cả hai nhà cung cấp đều nhận base64
+ * qua JSON, và giữ nguyên dạng đó tránh một vòng chuyển đổi ở mỗi transport.
+ */
+export type EmailAttachment = {
+  filename: string;
+  contentBase64: string;
+};
+
 export type EmailMessage = {
   to: string;
   subject: string;
   text: string;
   html: string;
+  /**
+   * Tệp đính kèm.
+   *
+   * Dùng cho tấm vé: ảnh QR đi kèm thư thì người nhận LƯU được vào máy, và ở
+   * cửa sự kiện họ mở ảnh trong thư viện thay vì phải có mạng để mở trang vé.
+   * Ảnh nhúng trong thân thư không làm được điều đó — nhiều hộp thư chặn ảnh
+   * cho tới khi người đọc bấm "hiện ảnh", và không lưu riêng ra được.
+   */
+  attachments?: EmailAttachment[];
 };
 
 /** Who actually puts the message on the wire. */
@@ -963,6 +983,10 @@ export function buildEventRegistrationConfirmationEmail(input: {
   joinUrl?: string | null;
   ticketUrl: string;
   ticketCode: string;
+  /** Mã 4 ký tự gõ tay khi máy quét chịu thua. Null khi không cấp được. */
+  shortCode?: string | null;
+  /** Ảnh QR đính kèm, để người nhận LƯU được vào máy. */
+  qrPngBase64?: string | null;
   pendingApproval?: boolean;
 }): EmailMessage {
   const name = safeDisplayName(input.recipientName);
@@ -989,11 +1013,19 @@ export function buildEventRegistrationConfirmationEmail(input: {
 
   lines.push(
     "",
-    `Vé của bạn: ${input.ticketUrl}`,
-    `Mã điểm danh: ${input.ticketCode}`,
+    "MÃ QR THAM DỰ",
+    "Ảnh mã QR được đính kèm thư này. Vui lòng LƯU ẢNH VÀO MÁY ngay bây giờ và mở ra cho ban tổ chức quét khi tới sự kiện — như vậy bạn không cần mạng ở hội trường.",
     "",
-    "Mở đường dẫn trên khi tới sự kiện và đưa mã QR cho ban tổ chức quét. Nếu không mở được, đọc mã điểm danh ở trên cho ban tổ chức."
+    `Vé của bạn (mở được trên trình duyệt): ${input.ticketUrl}`
   );
+
+  if (input.shortCode) {
+    lines.push(
+      "",
+      `MÃ DỰ PHÒNG: ${input.shortCode}`,
+      "Nếu máy quét không đọc được mã QR — màn hình vỡ, thiếu sáng, hết pin — chỉ cần đọc 4 ký tự này cho ban tổ chức là check-in được."
+    );
+  }
 
   const html = wrapHtml(
     [
@@ -1009,11 +1041,25 @@ export function buildEventRegistrationConfirmationEmail(input: {
       input.joinUrl
         ? `<p><a href="${escapeHtml(input.joinUrl)}" style="color:#16834c">Đường dẫn tham gia trực tuyến</a></p>`
         : "",
-      `<p style="margin:20px 0"><a href="${escapeHtml(input.ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở vé tham dự</a></p>`,
-      `<p>Mã điểm danh: <strong style="font-family:monospace;letter-spacing:2px">${escapeHtml(input.ticketCode)}</strong></p>`,
-      `<p style="color:#4f6b60;font-size:13px">Mở vé khi tới sự kiện và đưa mã QR cho ban tổ chức quét. Nếu không mở được, đọc mã điểm danh ở trên cho ban tổ chức.</p>`
+      `<p style="margin:20px 0 8px"><strong>Mã QR tham dự</strong></p>`,
+      `<p style="margin:0 0 16px">Ảnh mã QR được <strong>đính kèm thư này</strong>. Vui lòng <strong>lưu ảnh vào máy</strong> ngay bây giờ và mở ra cho ban tổ chức quét khi tới sự kiện — như vậy bạn không cần mạng ở hội trường.</p>`,
+      input.shortCode
+        ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fbf4ea;border-radius:6px">Mã dự phòng: <strong style="font-family:monospace;font-size:20px;letter-spacing:4px">${escapeHtml(input.shortCode)}</strong><br /><span style="color:#4f6b60;font-size:13px">Nếu máy quét không đọc được mã QR, chỉ cần đọc 4 ký tự này cho ban tổ chức.</span></p>`
+        : "",
+      `<p style="margin:16px 0"><a href="${escapeHtml(input.ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở vé trên trình duyệt</a></p>`
     ].join("")
   );
 
-  return { to: "", subject, text: lines.join("\n"), html };
+  return {
+    to: "",
+    subject,
+    text: lines.join("\n"),
+    html,
+    // Đính ảnh chứ không nhúng vào thân thư: nhiều hộp thư chặn ảnh cho tới khi
+    // người đọc bấm "hiện ảnh", và ảnh nhúng thì không lưu riêng ra được. Người
+    // nhận cần LƯU được tấm vé vào máy để mở ở cửa mà không cần mạng.
+    attachments: input.qrPngBase64
+      ? [{ filename: `ve-${input.ticketCode}.png`, contentBase64: input.qrPngBase64 }]
+      : undefined
+  };
 }

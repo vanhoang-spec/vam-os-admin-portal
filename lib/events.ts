@@ -19,6 +19,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-action-types";
 import { randomUUID } from "node:crypto";
+import QRCode from "qrcode";
 import { checkinCodeUrl } from "@/lib/event-checkin-code";
 import { chooseSession } from "@/lib/event-session-choice";
 import { ensureCheckinCode } from "@/lib/event-checkin";
@@ -1186,6 +1187,31 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
  * Nuốt mọi lỗi có chủ ý — xem chú thích ở nơi gọi. Lỗi được ghi ra console để
  * còn lần ra, còn người đăng ký thì thấy đúng điều đã xảy ra: họ đã đăng ký.
  */
+/**
+ * Ảnh QR của một tấm vé, dạng base64 để đính vào thư.
+ *
+ * Kích thước 480px: đủ lớn để quét được từ một màn hình điện thoại đang ở độ
+ * sáng thấp, và vẫn chỉ vài kilobyte. `margin: 2` là vùng trắng quanh mã —
+ * máy quét cần nó, và một ảnh sát mép thường không đọc được.
+ *
+ * Hỏng thì trả null: thư vẫn đi, vẫn có đường dẫn vé và mã dự phòng. Chặn cả
+ * lá thư vì không vẽ được một ảnh là đổi một bất tiện lấy một hỏng hóc.
+ */
+async function renderTicketQrBase64(ticketUrl: string): Promise<string | null> {
+  try {
+    const buffer = await QRCode.toBuffer(ticketUrl, {
+      type: "png",
+      margin: 2,
+      width: 480,
+      errorCorrectionLevel: "M"
+    });
+    return buffer.toString("base64");
+  } catch (error) {
+    log("ticket QR render failed", error);
+    return null;
+  }
+}
+
 async function issueTicketAndConfirm(input: {
   registrationId: string;
   event: JsonRecord;
@@ -1194,12 +1220,13 @@ async function issueTicketAndConfirm(input: {
   pendingApproval: boolean;
 }): Promise<void> {
   try {
-    const { code } = await ensureCheckinCode(input.registrationId);
+    const { code, shortCode } = await ensureCheckinCode(input.registrationId);
     if (!code) return;
 
     const origin = (await getPublicOrigin()) ?? resolveEmailBaseUrl();
     if (!origin) return;
 
+    const ticketUrl = checkinCodeUrl(origin, code);
     const event = input.event as Event;
     const format = isEventFormat(event.event_format) ? event.event_format : "offline";
     const placeLabel = needsVenue(format)
@@ -1219,8 +1246,10 @@ async function issueTicketAndConfirm(input: {
         ? resolveMapUrl({ mapUrl: event.location_map_url, address: event.location_address })
         : null,
       joinUrl: needsJoinUrl(format) ? clean(event.online_join_url) : null,
-      ticketUrl: checkinCodeUrl(origin, code),
+      ticketUrl: ticketUrl,
       ticketCode: code,
+      shortCode,
+      qrPngBase64: await renderTicketQrBase64(ticketUrl),
       pendingApproval: input.pendingApproval,
       registrationId: input.registrationId
     });
