@@ -4,6 +4,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import {
   buildApplicationConfirmationEmail,
   buildEventRegistrationConfirmationEmail,
+  buildEventScheduleChangeEmail,
   buildInterviewInviteEmail,
   // ── main-only. Giữ import này khi merge stack. ────────────────────────────
   buildInterviewRoundInviteEmail,
@@ -842,6 +843,34 @@ export async function sendCrossScheduled(input: {
  * dối họ về điều quan trọng hơn. Thư hỏng để lại một dòng trong sổ thư đi, và
  * BTC gửi lại được từ trang sự kiện.
  */
+/**
+ * Gửi thư báo đổi lịch cho một người đang giữ vé.
+ *
+ * Ghi sổ gắn với dòng đăng ký, đúng như thư xác nhận: người vận hành tra một
+ * địa chỉ trong Nhật ký gửi phải thấy đủ mọi thư đã đi tới họ về buổi này,
+ * không phải mỗi thư đầu tiên.
+ */
+export async function sendEventScheduleChange(input: {
+  toEmail: string;
+  recipientName: string;
+  eventName: string;
+  whenLabel: string;
+  previousWhenLabel?: string | null;
+  placeLabel?: string | null;
+  mapUrl?: string | null;
+  joinUrl?: string | null;
+  ticketUrl?: string | null;
+  shortCode?: string | null;
+  registrationId: string;
+}): Promise<SendEmailResult> {
+  const built = buildEventScheduleChangeEmail(input);
+  return deliver(
+    "event_schedule_change",
+    { ...built, to: input.toEmail },
+    { table: "event_registrations", id: input.registrationId }
+  );
+}
+
 export async function sendEventRegistrationConfirmation(input: {
   toEmail: string;
   recipientName: string;

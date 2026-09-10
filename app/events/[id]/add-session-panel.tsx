@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import {
   addEventSessionAction,
+  notifyScheduleChangeAction,
   removeEventSessionAction,
   updateEventSessionTimeAction
 } from "@/app/actions/events";
@@ -56,6 +57,19 @@ function SaveTimeButton() {
   );
 }
 
+function NotifyButton({ count }: { count: number }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {pending ? "Đang gửi…" : `Gửi thư báo đổi lịch cho ${count} người`}
+    </button>
+  );
+}
+
 function sessionLine(session: SeriesSession): string {
   if (!session.startsAt) return "Chưa đặt ngày giờ";
   const start = `${formatDate(session.startsAt)} lúc ${formatTime(session.startsAt)}`;
@@ -84,9 +98,20 @@ function SessionRow({
 }) {
   const [state, formAction] = useFormState(removeEventSessionAction, initialState);
   const [timeState, timeAction] = useFormState(updateEventSessionTimeAction, initialState);
+  const [noticeState, noticeAction] = useFormState(notifyScheduleChangeAction, initialState);
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const locked = session.registrationCount > 0;
+
+  // Số người chưa được báo, đọc từ máy chủ nên vẫn còn sau khi tải lại trang.
+  // Lượt gửi vừa xong ghi đè lên nó, vì trang chưa kịp vẽ lại.
+  const stillPending = noticeState.ok
+    ? (noticeState.scheduleChange?.holders ?? 0)
+    : session.pendingNotice;
+
+  // Giờ CŨ chỉ có ngay sau lượt sửa trong chính phiên làm việc này. Không có
+  // thì thư vẫn gửi được, chỉ là nói mỗi giờ mới.
+  const previous = noticeState.scheduleChange ?? timeState.scheduleChange ?? null;
 
   // Lưu xong thì đóng ô sửa lại và để lời báo ở dòng của buổi. Giữ ô mở với
   // đúng giá trị vừa gõ trông y như lúc chưa lưu, nên người ta bấm Lưu lần nữa.
@@ -208,6 +233,41 @@ function SessionRow({
             </p>
           ) : null}
         </form>
+      ) : null}
+
+      {stillPending > 0 ? (
+        // Nằm ngoài ô sửa giờ, và không biến mất khi đóng ô lại: người đổi giờ
+        // xong rồi đóng tab đi họp vẫn thấy lời nhắc này ở lần mở sau. Hệ thống
+        // không tự gửi — xem `notifyScheduleChange` về lý do — nên đây là chỗ
+        // duy nhất việc này được nhớ hộ.
+        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-xs text-amber-900">
+            <strong className="font-semibold">{stillPending} người</strong> đang giữ thư xác nhận
+            ghi giờ cũ và chưa được báo về giờ hiện tại.
+          </span>
+          <form action={noticeAction}>
+            <input type="hidden" name="session_id" value={session.id} />
+            <input type="hidden" name="event_id" value={eventId} />
+            <input
+              type="hidden"
+              name="previous_starts_at"
+              value={previous?.previousStartsAt ?? ""}
+            />
+            <input type="hidden" name="previous_ends_at" value={previous?.previousEndsAt ?? ""} />
+            <NotifyButton count={stillPending} />
+          </form>
+        </div>
+      ) : null}
+
+      {noticeState.message ? (
+        <p
+          role="status"
+          className={`mt-2 text-[11px] font-medium ${
+            noticeState.ok ? "text-vam-green" : "text-red-700"
+          }`}
+        >
+          {noticeState.message}
+        </p>
       ) : null}
     </li>
   );

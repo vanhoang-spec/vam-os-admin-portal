@@ -25,9 +25,13 @@ import { checkinCodeUrl } from "@/lib/event-checkin-code";
 import { chooseSession } from "@/lib/event-session-choice";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
-import { resolveEmailBaseUrl, sendEventRegistrationConfirmation } from "@/lib/email";
+import {
+  resolveEmailBaseUrl,
+  sendEventRegistrationConfirmation,
+  sendEventScheduleChange
+} from "@/lib/email";
 import { getPublicOrigin } from "@/lib/public-url";
-import { formatDate, formatDateTime, formatTime } from "@/lib/utils";
+import { formatDate, formatDateTime, formatTime, formatTimeRange } from "@/lib/utils";
 import {
   generateOccurrences,
   isEndMode,
@@ -1132,7 +1136,11 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     meal_selected: mealSelected,
     meal_label: mealSelected ? (clean(targetEvent.meal_label) ?? null) : null,
     meal_fee_amount: mealSelected ? (targetEvent.meal_fee_amount ?? null) : null,
-    meal_fee_currency: mealSelected ? (clean(targetEvent.meal_fee_currency) ?? "VND") : null
+    meal_fee_currency: mealSelected ? (clean(targetEvent.meal_fee_currency) ?? "VND") : null,
+    // Người vừa đăng ký đã biết giờ hiện tại — biểu mẫu và thư xác nhận đều
+    // ghi nó. Đánh dấu ngay để họ không nằm trong danh sách cần báo của một
+    // lần đổi lịch đã xảy ra TRƯỚC khi họ đăng ký.
+    schedule_notified_for: clean(targetEvent.starts_at)
   };
 
   const { data, error: insertError } = await client
@@ -1266,10 +1274,7 @@ async function issueTicketAndConfirm(input: {
 
 /** Khoảng thời gian của một sự kiện, dạng người đọc trong thư. */
 function formatEventWhenLabel(event: Event): string {
-  const start = formatDateTime(event.starts_at);
-  if (!event.ends_at) return start;
-  const sameDay = formatDate(event.starts_at) === formatDate(event.ends_at);
-  return sameDay ? `${start} – ${formatTime(event.ends_at)}` : `${start} – ${formatDateTime(event.ends_at)}`;
+  return formatTimeRange(event.starts_at, event.ends_at);
 }
 
 async function syncCheckedInParticipation(client: any, input: {
@@ -1669,7 +1674,10 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
     checkin_source: "self_qr",
     match_method: matchedPerson ? "exact_email" : "unlinked",
     match_review_status: matchedPerson ? "auto_linked" : "pending_review",
-    matched_at: matchedPerson ? nowIso : null
+    matched_at: matchedPerson ? nowIso : null,
+    // Khách vãng lai đang đứng ngay tại sự kiện: không có lần đổi lịch nào
+    // còn phải báo cho họ.
+    schedule_notified_for: clean((eventRow as JsonRecord).starts_at)
   };
 
   const { data: inserted, error: insertError } = await client
@@ -3253,6 +3261,14 @@ export type SeriesSession = {
   status: string | null;
   /** Đăng ký chưa huỷ. Buổi đã có người thì không xoá được. */
   registrationCount: number;
+  /**
+   * Bao nhiêu người trong số đó chưa được báo về giờ hiện tại.
+   *
+   * Đếm ở đây chứ không chỉ hiện ngay sau lượt sửa: người vận hành đổi giờ rồi
+   * đóng tab đi họp, và nếu con số này chỉ sống trong màn hình thì không còn
+   * chỗ nào nhắc rằng vẫn còn người chưa biết lịch mới.
+   */
+  pendingNotice: number;
   isCurrent: boolean;
 };
 
@@ -3292,14 +3308,19 @@ export async function listSeriesSessions(eventId: string): Promise<SeriesSession
   // Một truy vấn cho cả chuỗi, không phải một truy vấn mỗi buổi.
   const { data: registrations } = await client
     .from("event_registrations")
-    .select("event_id")
+    .select("event_id, schedule_notified_for")
     .in("event_id", sessions.map((row) => String(row.id)))
     .neq("registration_status", "cancelled");
 
+  const startsById = new Map(sessions.map((row) => [String(row.id), clean(row.starts_at)]));
   const counts = new Map<string, number>();
+  const pending = new Map<string, number>();
   for (const row of ((registrations ?? []) as JsonRecord[])) {
     const key = String(row.event_id);
     counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (clean(row.schedule_notified_for) !== startsById.get(key)) {
+      pending.set(key, (pending.get(key) ?? 0) + 1);
+    }
   }
 
   return sessions.map((row) => ({
@@ -3309,6 +3330,7 @@ export async function listSeriesSessions(eventId: string): Promise<SeriesSession
     endsAt: clean(row.ends_at),
     status: clean(row.status),
     registrationCount: counts.get(String(row.id)) ?? 0,
+    pendingNotice: pending.get(String(row.id)) ?? 0,
     isCurrent: String(row.id) === eventId
   }));
 }
@@ -3587,7 +3609,226 @@ export async function updateSessionTime(input: {
   return {
     ok: true,
     message: count
-      ? `Đã đổi giờ. ${count} người đã đăng ký buổi này và đang giữ thư xác nhận ghi giờ cũ — nhớ báo lại cho họ.`
-      : "Đã đổi giờ buổi này."
+      ? `Đã đổi giờ. ${count} người đang giữ thư xác nhận ghi giờ cũ.`
+      : "Đã đổi giờ buổi này.",
+    // Trả giờ CŨ về cho màn hình, để nút gửi thư báo đổi lịch nói được đổi từ
+    // đâu sang đâu. Không lưu lại ở đâu cả: nó chỉ có nghĩa trong đúng lượt
+    // thao tác này, và lưu một giá trị chỉ dùng một lần là tạo thêm một thứ
+    // nữa có thể lệch với sự thật.
+    data: {
+      previous_starts_at: clean(row.starts_at),
+      previous_ends_at: clean(row.ends_at),
+      holders: count
+    }
   };
+}
+
+/**
+ * Mỗi lượt gửi thư báo đổi lịch đi bao nhiêu thư.
+ *
+ * Cùng lý do với lô thư hàng loạt: một lượt chạy có giới hạn thời gian, và bị
+ * cắt giữa chừng nghĩa là bức thư cuối đi rồi mà dòng đánh dấu chưa kịp ghi —
+ * người đó sẽ nhận thư lần thứ hai ở lượt sau.
+ */
+export const SCHEDULE_NOTICE_CHUNK = 20;
+
+/** Những người của buổi này chưa biết giờ hiện tại. */
+async function pendingScheduleNotice(
+  client: any,
+  event: JsonRecord
+): Promise<{ rows: JsonRecord[]; error: string | null }> {
+  const startsAt = clean(event.starts_at);
+
+  const { data, error } = await client
+    .from("event_registrations")
+    .select("id, full_name, email, short_code, checkin_code, schedule_notified_for")
+    .eq("event_id", String(event.id))
+    .neq("registration_status", "cancelled")
+    .order("registered_at", { ascending: true });
+
+  if (error) {
+    log("pendingScheduleNotice failed", error);
+    return { rows: [], error: SAFE_ERROR };
+  }
+
+  // Lọc ở đây chứ không lọc trong câu truy vấn: phép so "khác, kể cả khi một
+  // bên rỗng" không có trong bộ lọc của thư viện, còn `neq` thì bỏ luôn các
+  // dòng rỗng — đúng những dòng cần nhất, vì rỗng nghĩa là chưa từng được báo.
+  const rows = ((data ?? []) as JsonRecord[]).filter(
+    (row) => clean(row.schedule_notified_for) !== startsAt
+  );
+  return { rows, error: null };
+}
+
+/** Còn bao nhiêu người của buổi này chưa được báo về giờ hiện tại. */
+export async function countPendingScheduleNotice(eventId: string): Promise<number> {
+  const { client } = clientResult();
+  if (!client) return 0;
+
+  const { data: event } = await client
+    .from("events")
+    .select("id, starts_at")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return 0;
+  const { rows } = await pendingScheduleNotice(client, event as JsonRecord);
+  return rows.length;
+}
+
+export type ScheduleNoticeResult = MutationResult & {
+  sent?: number;
+  failed?: number;
+  remaining?: number;
+};
+
+/**
+ * Gửi thư báo đổi lịch cho những người đang giữ vé của buổi này.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO KHÔNG TỰ GỬI NGAY LÚC LƯU GIỜ MỚI
+ * ---------------------------------------------------------------------------
+ * Sửa giờ hiếm khi là một thao tác. Người vận hành gõ nhầm rồi sửa lại, hoặc
+ * dời cả hai buổi của một chuỗi trong cùng một phút. Gửi tự động sau mỗi lần
+ * lưu nghĩa là hàng trăm người nhận ba lá thư báo đổi lịch trong năm phút, và
+ * lá cuối mới là lá đúng — sau đó thì không ai đọc thư của chương trình nữa.
+ *
+ * Một cú bấm sau khi đã sửa xong giữ cho người quyết định GIỜ và người quyết
+ * định GỬI là cùng một người, ở cùng một thời điểm, nhìn thấy đúng con số mình
+ * sắp gửi. Đây cũng đúng nếp của thư hàng loạt trong module Mail: hệ thống
+ * không tự bắn thư ra ngoài thay cho người vận hành.
+ *
+ * ---------------------------------------------------------------------------
+ * GỬI LẠI AN TOÀN
+ * ---------------------------------------------------------------------------
+ * Gửi tới đâu đánh dấu tới đó. Mất mạng giữa chừng rồi bấm lại chỉ gửi cho phần
+ * còn lại. Dấu ghi CHÍNH giá trị `starts_at` họ được báo, nên lần đổi lịch sau
+ * lại nhận ra đúng những người này là chưa biết.
+ */
+export async function notifyScheduleChange(input: {
+  eventId: unknown;
+  /** Giờ cũ, để thư nói rõ đổi từ đâu sang đâu. Bỏ trống vẫn gửi được. */
+  previousStartsAt?: unknown;
+  previousEndsAt?: unknown;
+}): Promise<ScheduleNoticeResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const eventId = clean(input.eventId);
+  if (!eventId || !isValidUuid(eventId)) return { ok: false, message: "ID buổi không hợp lệ." };
+
+  const { data: eventRow, error: eventError } = await client
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (eventError || !eventRow) return { ok: false, message: "Không tìm thấy buổi này." };
+
+  const event = eventRow as JsonRecord;
+  const scopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(scopeContext, clean(event.season_id)))) {
+    return { ok: false, message: "Bạn không có quyền vận hành trong mùa của sự kiện này." };
+  }
+
+  const startsAt = clean(event.starts_at);
+  if (!startsAt) return { ok: false, message: "Buổi này chưa có giờ bắt đầu." };
+
+  const { rows, error: audienceError } = await pendingScheduleNotice(client, event);
+  if (audienceError) return { ok: false, message: audienceError };
+  if (!rows.length) {
+    return {
+      ok: true,
+      message: "Mọi người đã được báo về giờ hiện tại.",
+      sent: 0,
+      failed: 0,
+      remaining: 0
+    };
+  }
+
+  const typed = event as unknown as Event;
+  const format = isEventFormat(typed.event_format) ? typed.event_format : "offline";
+  const placeLabel = needsVenue(format)
+    ? [typed.location_name, typed.location_address]
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+        .join(" — ") || null
+    : null;
+  const mapUrl = needsVenue(format)
+    ? resolveMapUrl({ mapUrl: typed.location_map_url, address: typed.location_address })
+    : null;
+  const joinUrl = needsJoinUrl(format) ? clean(typed.online_join_url) : null;
+  const eventName = String(typed.event_name ?? "").trim() || "sự kiện";
+
+  const previousStart = clean(input.previousStartsAt);
+  const previousWhenLabel = previousStart
+    ? formatTimeRange(previousStart, clean(input.previousEndsAt))
+    : null;
+
+  const origin = (await getPublicOrigin()) ?? resolveEmailBaseUrl();
+
+  const batch = rows.slice(0, SCHEDULE_NOTICE_CHUNK);
+  let sent = 0;
+  let failed = 0;
+
+  for (const row of batch) {
+    const toEmail = clean(row.email);
+    if (!toEmail) {
+      failed += 1;
+      continue;
+    }
+
+    const code = clean(row.checkin_code);
+    try {
+      const result = await sendEventScheduleChange({
+        toEmail,
+        recipientName: String(row.full_name ?? "").trim(),
+        eventName,
+        whenLabel: formatEventWhenLabel(typed),
+        previousWhenLabel,
+        placeLabel,
+        mapUrl,
+        joinUrl,
+        ticketUrl: origin && code ? checkinCodeUrl(origin, code) : null,
+        shortCode: clean(row.short_code),
+        registrationId: String(row.id)
+      });
+
+      if (!result.ok) {
+        failed += 1;
+        continue;
+      }
+    } catch (sendError) {
+      log("notifyScheduleChange: send failed", sendError);
+      failed += 1;
+      continue;
+    }
+
+    // Đánh dấu NGAY sau khi thư đi, từng người một. Đánh dấu cả lô ở cuối thì
+    // một lượt bị cắt giữa chừng để lại những người đã nhận thư mà chưa được
+    // đánh dấu — và họ nhận lá thứ hai ở lượt sau.
+    const { error: markError } = await client
+      .from("event_registrations")
+      .update({ schedule_notified_for: startsAt })
+      .eq("id", String(row.id));
+
+    if (markError) log("notifyScheduleChange: mark failed", markError);
+    sent += 1;
+  }
+
+  const remaining = Math.max(0, rows.length - batch.length);
+
+  await writeAdminAudit(client, {
+    actionType: "notify_event_schedule_change",
+    beforeData: { event_id: eventId, previous_starts_at: previousStart },
+    afterData: { starts_at: startsAt, sent, failed, remaining }
+  });
+
+  const parts = [`Đã gửi ${sent} thư báo đổi lịch.`];
+  if (failed) parts.push(`${failed} thư không gửi được — xem Nhật ký gửi.`);
+  if (remaining) parts.push(`Còn ${remaining} người, bấm lại để gửi tiếp.`);
+
+  return { ok: true, message: parts.join(" "), sent, failed, remaining };
 }

@@ -20,6 +20,8 @@ export type EmailKind =
   | "review_batch_assigned"
   | "interview_scheduled"
   | "reviewer_invite"
+  // Thư báo một buổi đã đổi giờ, gửi cho những người đang giữ vé của buổi đó.
+  | "event_schedule_change"
   // The four post-matching sends (migration 069). Their bodies come from an
   // approved template rather than from a builder in this file.
   | "mentee_selected"
@@ -1062,4 +1064,104 @@ export function buildEventRegistrationConfirmationEmail(input: {
       ? [{ filename: `ve-${input.ticketCode}.png`, contentBase64: input.qrPngBase64 }]
       : undefined
   };
+}
+
+
+/**
+ * Thư báo một buổi đã đổi giờ.
+ *
+ * ---------------------------------------------------------------------------
+ * BA ĐIỀU THƯ NÀY PHẢI NÓI, THEO ĐÚNG THỨ TỰ NGƯỜI ĐỌC CẦN
+ * ---------------------------------------------------------------------------
+ * 1. Giờ MỚI, ngay dòng đầu. Người mở thư trên điện thoại giữa giờ làm chỉ đọc
+ *    hai dòng đầu rồi cất máy — nếu giờ mới nằm ở đoạn ba thì coi như không nói.
+ * 2. Giờ CŨ, để họ đối chiếu với thứ đang ghi trong lịch của mình. Không có nó,
+ *    người ta không biết mình có cần sửa lịch hay không.
+ * 3. Vé cũ vẫn dùng được. Đây là câu hỏi đầu tiên họ sẽ nghĩ tới, và nếu thư
+ *    không trả lời thì ban tổ chức sẽ phải trả lời từng người một.
+ *
+ * Không đính kèm lại mã QR: mã không đổi, và gửi lại một ảnh khác cho cùng một
+ * tấm vé là cách chắc chắn để tới hôm sự kiện có người mở nhầm ảnh cũ.
+ */
+export function buildEventScheduleChangeEmail(input: {
+  recipientName: string;
+  eventName: string;
+  /** Khung giờ mới, đã định dạng sẵn theo giờ Việt Nam. */
+  whenLabel: string;
+  /** Khung giờ cũ. Bỏ trống thì thư chỉ nói giờ mới. */
+  previousWhenLabel?: string | null;
+  placeLabel?: string | null;
+  mapUrl?: string | null;
+  joinUrl?: string | null;
+  ticketUrl?: string | null;
+  shortCode?: string | null;
+}): EmailMessage {
+  const name = safeDisplayName(input.recipientName);
+  const eventName = String(input.eventName ?? "").trim() || "sự kiện";
+  const previous = String(input.previousWhenLabel ?? "").trim();
+
+  const subject = `Đổi lịch: ${eventName} — ${input.whenLabel}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Ban tổ chức xin báo: buổi ${eventName} mà bạn đã đăng ký ĐÃ ĐỔI THỜI GIAN.`,
+    "",
+    `THỜI GIAN MỚI: ${input.whenLabel}`
+  ];
+
+  if (previous) lines.push(`Thời gian cũ: ${previous}`);
+  if (input.placeLabel) lines.push(`Địa điểm: ${input.placeLabel} (không đổi)`);
+  if (input.mapUrl) lines.push(`Xem trên bản đồ: ${input.mapUrl}`);
+  if (input.joinUrl) lines.push(`Đường dẫn tham gia: ${input.joinUrl}`);
+
+  lines.push(
+    "",
+    "VÉ CỦA BẠN VẪN DÙNG ĐƯỢC",
+    "Mã QR đã gửi trước đây không đổi. Bạn không cần đăng ký lại — chỉ cần mở đúng ảnh QR đó ra cho ban tổ chức quét vào giờ mới."
+  );
+
+  if (input.shortCode) {
+    lines.push(`Mã dự phòng của bạn vẫn là: ${input.shortCode}`);
+  }
+  if (input.ticketUrl) {
+    lines.push("", `Mở lại vé: ${input.ticketUrl}`);
+  }
+
+  lines.push(
+    "",
+    "Nếu giờ mới không phù hợp với bạn, vui lòng phản hồi lại thư này để ban tổ chức sắp xếp."
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Ban tổ chức xin báo: buổi <strong>${escapeHtml(eventName)}</strong> mà bạn đã đăng ký <strong>đã đổi thời gian</strong>.</p>`,
+      `<p style="margin:16px 0;padding:14px 18px;background:#e8f6ee;border-left:4px solid #16834c;border-radius:6px"><span style="color:#4f6b60;font-size:13px;text-transform:uppercase;letter-spacing:1px">Thời gian mới</span><br /><strong style="font-size:18px">${escapeHtml(input.whenLabel)}</strong></p>`,
+      previous
+        ? `<p style="color:#6b7c74">Thời gian cũ: <s>${escapeHtml(previous)}</s></p>`
+        : "",
+      input.placeLabel
+        ? `<p><strong>Địa điểm:</strong> ${escapeHtml(input.placeLabel)} <span style="color:#6b7c74">(không đổi)</span></p>`
+        : "",
+      input.mapUrl
+        ? `<p><a href="${escapeHtml(input.mapUrl)}" style="color:#16834c">Xem trên bản đồ</a></p>`
+        : "",
+      input.joinUrl
+        ? `<p><a href="${escapeHtml(input.joinUrl)}" style="color:#16834c">Đường dẫn tham gia trực tuyến</a></p>`
+        : "",
+      `<p style="margin:20px 0 8px"><strong>Vé của bạn vẫn dùng được</strong></p>`,
+      `<p style="margin:0 0 12px">Mã QR đã gửi trước đây <strong>không đổi</strong>. Bạn không cần đăng ký lại — chỉ cần mở đúng ảnh QR đó ra cho ban tổ chức quét vào giờ mới.${
+        input.shortCode
+          ? ` Mã dự phòng của bạn vẫn là <strong style="font-family:monospace;letter-spacing:3px">${escapeHtml(input.shortCode)}</strong>.`
+          : ""
+      }</p>`,
+      input.ticketUrl
+        ? `<p style="margin:16px 0"><a href="${escapeHtml(input.ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở lại vé</a></p>`
+        : "",
+      `<p style="color:#6b7c74;font-size:13px">Nếu giờ mới không phù hợp với bạn, vui lòng phản hồi lại thư này để ban tổ chức sắp xếp.</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
 }

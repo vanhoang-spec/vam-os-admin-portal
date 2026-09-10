@@ -20,6 +20,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/app/actions/events", () => ({
   addEventSessionAction: vi.fn(),
+  notifyScheduleChangeAction: vi.fn(),
   removeEventSessionAction: vi.fn(),
   updateEventSessionTimeAction: vi.fn()
 }));
@@ -49,6 +50,7 @@ function session(overrides: Partial<SeriesSession> = {}): SeriesSession {
     endsAt: "2026-09-20T06:00:00.000Z",
     status: "scheduled",
     registrationCount: 0,
+    pendingNotice: 0,
     isCurrent: false,
     ...overrides
   };
@@ -167,5 +169,69 @@ describe("ô sửa giờ", () => {
 
     expect(screen.getByLabelText(/Buổi 1 bắt đầu — ngày/)).toBeTruthy();
     expect(screen.queryByLabelText(/Buổi 2 bắt đầu — ngày/)).toBeNull();
+  });
+});
+
+describe("lời nhắc còn người chưa được báo đổi lịch", () => {
+  it("có người chưa được báo thì hiện lời nhắc và nút gửi", () => {
+    panel([
+      session({ id: EVENT, seriesIndex: 1, isCurrent: true, registrationCount: 42, pendingNotice: 42 }),
+      session({ id: "s2", seriesIndex: 2 })
+    ]);
+
+    // Soi câu của LỜI NHẮC, không soi con số trần: "42 người" cũng xuất hiện ở
+    // dòng đếm đăng ký ngay phía trên, nên một phép tìm theo số sẽ xanh kể cả
+    // khi lời nhắc không hề được vẽ ra.
+    expect(screen.getByText(/chưa được báo về giờ hiện tại/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Gửi thư báo đổi lịch cho 42 người" })
+    ).toBeTruthy();
+  });
+
+  it("lời nhắc KHÔNG nằm trong ô sửa giờ — đóng ô lại vẫn còn", () => {
+    // Người vận hành đổi giờ xong rồi đóng tab đi họp. Nếu lời nhắc chỉ sống
+    // trong ô sửa giờ thì không còn chỗ nào nhớ hộ rằng vẫn còn người chưa biết.
+    panel([
+      session({ id: EVENT, seriesIndex: 1, isCurrent: true, registrationCount: 42, pendingNotice: 42 }),
+      session({ id: "s2", seriesIndex: 2 })
+    ]);
+
+    // Ô sửa giờ đang đóng, mà nút vẫn ở đó.
+    expect(screen.queryByLabelText(/Buổi 1 bắt đầu — ngày/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Gửi thư báo đổi lịch/ })).toBeTruthy();
+  });
+
+  it("mọi người đã được báo thì không hiện gì cả", () => {
+    panel([
+      session({ id: EVENT, seriesIndex: 1, isCurrent: true, registrationCount: 42, pendingNotice: 0 }),
+      session({ id: "s2", seriesIndex: 2 })
+    ]);
+
+    expect(screen.queryByRole("button", { name: /Gửi thư báo đổi lịch/ })).toBeNull();
+  });
+
+  it("chỉ hiện ở ĐÚNG buổi còn người chưa được báo", () => {
+    panel([
+      session({ id: EVENT, seriesIndex: 1, isCurrent: true, registrationCount: 42, pendingNotice: 0 }),
+      session({ id: "s2", seriesIndex: 2, registrationCount: 7, pendingNotice: 7 })
+    ]);
+
+    const rows = screen.getAllByRole("listitem");
+    // Nút phải nằm ở dòng của buổi 2, không phải dòng buổi 1.
+    expect(within(rows[0]).queryByRole("button", { name: /Gửi thư báo đổi lịch/ })).toBeNull();
+    expect(within(rows[1]).getByRole("button", { name: /Gửi thư báo đổi lịch/ })).toBeTruthy();
+  });
+
+  it("form gửi mang id của chính buổi đó", () => {
+    panel([
+      session({ id: EVENT, seriesIndex: 1, isCurrent: true }),
+      session({ id: "s2", seriesIndex: 2, registrationCount: 7, pendingNotice: 7 })
+    ]);
+
+    const noticeForm = Array.from(document.querySelectorAll("form")).find((form) =>
+      form.querySelector('input[name="previous_starts_at"]')
+    );
+    expect(noticeForm, "không tìm thấy form gửi thư báo").toBeTruthy();
+    expect(noticeForm!.querySelector('input[name="session_id"]')).toHaveProperty("value", "s2");
   });
 });

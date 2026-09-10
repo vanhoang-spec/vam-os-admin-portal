@@ -8,6 +8,18 @@ export type EventActionState = {
   ok: boolean;
   message: string | null;
   createdEventId?: string | null;
+  /**
+   * Sau khi đổi giờ một buổi: giờ CŨ, và còn bao nhiêu người đang giữ thư ghi
+   * giờ đó. Màn hình dùng để hiện nút gửi thư báo đổi lịch, và để thư nói được
+   * đổi từ đâu sang đâu.
+   *
+   * Chỉ có mặt ngay sau lượt lưu đó — không phải trạng thái được lưu lại ở đâu.
+   */
+  scheduleChange?: {
+    previousStartsAt: string | null;
+    previousEndsAt: string | null;
+    holders: number;
+  } | null;
 };
 
 export const initialEventActionState: EventActionState = { ok: false, message: null };

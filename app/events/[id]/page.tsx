@@ -8,7 +8,7 @@ import { getEventDetailData, isValidUuid, listSeriesSessions } from "@/lib/event
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
-import { eventTypeLabel } from "@/lib/event-constants";
+import { eventRegistrationStatusLabel, eventTypeLabel } from "@/lib/event-constants";
 import { EventPlaceBlock } from "../event-place";
 import { listEventSupporters, listSupporterCandidates } from "@/lib/event-supporters";
 import { SupportersPanel } from "./supporters-panel";
@@ -44,15 +44,23 @@ function matchReviewLabel(value: unknown) {
   return displayText(status);
 }
 
+const REGISTRATION_BADGE_COLORS: Record<string, string> = {
+  registered: "bg-slate-100 text-slate-700",
+  pending_review: "bg-amber-100 text-amber-800",
+  confirmed: "bg-green-100 text-green-800",
+  waitlisted: "bg-blue-100 text-blue-800",
+  rejected: "bg-red-100 text-red-700",
+  cancelled: "bg-red-100 text-red-700"
+};
+
+// Chữ lấy từ eventRegistrationStatusLabel, chỉ màu là việc riêng của màn hình
+// này: bảng xuất ra Excel không có màu, nhưng phải nói cùng một bộ chữ.
 function registrationStatusLabel(value: unknown) {
   const status = String(value ?? "").trim();
-  if (status === "registered") return { label: "Đã đăng ký", color: "bg-slate-100 text-slate-700" };
-  if (status === "pending_review") return { label: "Chờ duyệt", color: "bg-amber-100 text-amber-800" };
-  if (status === "confirmed") return { label: "Đã xác nhận", color: "bg-green-100 text-green-800" };
-  if (status === "waitlisted") return { label: "Danh sách chờ", color: "bg-blue-100 text-blue-800" };
-  if (status === "rejected") return { label: "Bị từ chối", color: "bg-red-100 text-red-700" };
-  if (status === "cancelled") return { label: "Đã hủy", color: "bg-red-100 text-red-700" };
-  return { label: displayText(status), color: "bg-slate-100 text-slate-700" };
+  return {
+    label: eventRegistrationStatusLabel(status),
+    color: REGISTRATION_BADGE_COLORS[status] ?? "bg-slate-100 text-slate-700"
+  };
 }
 
 export default async function EventDetailPage(props: { params: Promise<{ id: string }> }) {
@@ -231,6 +239,27 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
           >
             Sửa sự kiện
           </Link>
+        ) : null}
+        {canEditRecaps(adminUser) ? (
+          <>
+            {/* Thẻ <a> thường, không phải <Link>: đây là một file tải về, không
+                phải một trang trong ứng dụng. Cho Next điều hướng tới nó sẽ ra
+                một màn hình trắng thay vì hộp thoại lưu file. */}
+            <a
+              href={`/api/exports/event-registrations?event_id=${detail.event.id}`}
+              className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+            >
+              Tải danh sách (CSV)
+            </a>
+            {seriesSessions.length > 1 ? (
+              <a
+                href={`/api/exports/event-registrations?event_id=${detail.event.id}&series=1`}
+                className="inline-flex w-fit items-center justify-center rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+              >
+                Tải cả {seriesSessions.length} buổi (CSV)
+              </a>
+            ) : null}
+          </>
         ) : null}
       </div>
 
