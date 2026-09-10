@@ -11,6 +11,7 @@ import {
   createCheckinLinkForEvent,
   createRegistrationLinkForEvent,
   addSessionToSeries,
+  removeSessionFromSeries,
   createEvent,
   createEventSeries,
   removeParticipation,
@@ -461,4 +462,31 @@ export async function addEventSessionAction(
     message: result.message,
     createdEventId: (result.data?.id as string) ?? null
   };
+}
+
+/**
+ * Xoá một buổi khỏi chuỗi.
+ *
+ * Cùng cổng quyền với việc thêm buổi. Sau khi xoá, trang phải được vẽ lại từ
+ * dữ liệu mới: danh sách buổi ngắn đi, và các buổi sau đó đã đổi số thứ tự.
+ */
+export async function removeEventSessionAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const targetId = formText(formData, "session_id");
+  const result = await removeSessionFromSeries({ eventId: targetId });
+  if (!result.ok) return { ok: false, message: result.message };
+
+  // Buổi bị xoá có thể chính là buổi đang mở, nên vẽ lại cả hai đường dẫn —
+  // nếu không, người ta ở lại trên một trang đã không còn tồn tại.
+  revalidatePath("/events");
+  revalidatePath(`/events/${targetId}`);
+  revalidatePath(`/events/${formText(formData, "event_id")}`);
+  revalidatePath("/operations");
+
+  return { ok: true, message: result.message };
 }

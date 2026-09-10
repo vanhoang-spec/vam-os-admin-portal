@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { Card, EmptyState, ErrorBox, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
-import { getEventDetailData, isValidUuid } from "@/lib/events";
+import { getEventDetailData, isValidUuid, listSeriesSessions } from "@/lib/events";
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
@@ -101,6 +101,9 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
   const checkinQrDataUrl = checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 200 }) : null;
   const canCreateLink = await canOperateSeason(scopeContext, detail.event.season_id ?? null);
 
+  // Sự kiện đơn lẻ trả về mảng rỗng — không có chuỗi thì không có gì để liệt kê.
+  const seriesSessions = await listSeriesSessions(params.id);
+
   // Registration breakdown by status
   const allRegistrations = detail.registrations;
   const activeRegistrations = allRegistrations.filter((row) => row.registration_status !== "cancelled");
@@ -153,6 +156,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
             endsAt={detail.event.ends_at ?? null}
             seriesIndex={detail.event.series_index ?? null}
             seriesTotal={detail.event.series_total ?? null}
+            sessions={seriesSessions}
           />
         </div>
       ) : null}

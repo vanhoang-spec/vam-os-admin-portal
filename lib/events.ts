@@ -3088,6 +3088,19 @@ export {
  * NÂNG TỔNG trên các buổi đang có TRƯỚC, rồi mới chèn buổi mới — làm ngược lại
  * thì dòng mới vi phạm ràng buộc và cả thao tác hỏng.
  */
+/**
+ * Khoá so sánh địa điểm của một buổi.
+ *
+ * Chuẩn hoá khoảng trắng và hoa thường: "Phòng B1-502" và "phòng  b1-502" là
+ * một chỗ, và để chúng thành hai chỗ khác nhau nghĩa là phép chặn trùng bỏ lọt
+ * đúng những trường hợp nó sinh ra để bắt.
+ */
+function venueKey(row: JsonRecord): string {
+  return [row.location_name, row.location_address]
+    .map((value) => String(value ?? "").trim().toLowerCase().replace(/\s+/g, " "))
+    .join("|");
+}
+
 export async function addSessionToSeries(input: {
   eventId: unknown;
   starts_at: unknown;
@@ -3133,12 +3146,38 @@ export async function addSessionToSeries(input: {
   // Các buổi đang có của chuỗi. Sự kiện đơn lẻ thì chính nó là buổi duy nhất.
   const { data: siblings, error: siblingsError } = await client
     .from("events")
-    .select("id")
+    .select("id, starts_at, location_name, location_address")
     .eq("series_id", seriesId);
 
   if (siblingsError) {
     log("addSessionToSeries: load siblings failed", siblingsError);
     return { ok: false, message: SAFE_ERROR };
+  }
+
+  // Chặn buổi trùng khít.
+  //
+  // Hai buổi cùng giờ ở cùng một phòng là điều không thể xảy ra thật — nó chỉ
+  // xảy ra khi ai đó bấm "Thêm buổi" hai lần, hoặc quay lại trang rồi bấm lại.
+  // Và một chuỗi có hai buổi giống hệt nhau thì người đăng ký không phân biệt
+  // được để chọn, còn sức chứa thì bị chia đôi vô nghĩa.
+  //
+  // Buổi mới luôn chép địa điểm từ buổi gốc, nên trong thực tế đây là phép so
+  // theo GIỜ BẮT ĐẦU. Vẫn so cả địa điểm, vì hai buổi song song ở hai phòng
+  // khác nhau là chuyện có thật và không được chặn.
+  const newVenue = venueKey(source);
+  const clash = ((siblings ?? []) as JsonRecord[]).find(
+    (row) =>
+      clean(row.starts_at) === startsAt &&
+      venueKey(row) === newVenue
+  );
+  const anchorClashes = clean(source.starts_at) === startsAt && venueKey(source) === newVenue;
+
+  if (clash || anchorClashes) {
+    return {
+      ok: false,
+      message:
+        "Chuỗi này đã có một buổi đúng vào giờ đó, ở cùng địa điểm. Hai buổi trùng khít thì người đăng ký không phân biệt được để chọn — kiểm lại ngày giờ, hoặc xoá buổi cũ trước."
+    };
   }
 
   const alreadyInSeries = Boolean(clean(source.series_id));
@@ -3204,4 +3243,197 @@ export async function addSessionToSeries(input: {
     message: `Đã thêm buổi ${newTotal}. Link đăng ký của chuỗi sẽ hiện buổi này ngay.`,
     data: created as JsonRecord
   };
+}
+
+export type SeriesSession = {
+  id: string;
+  seriesIndex: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: string | null;
+  /** Đăng ký chưa huỷ. Buổi đã có người thì không xoá được. */
+  registrationCount: number;
+  isCurrent: boolean;
+};
+
+/**
+ * Các buổi của chuỗi mà một sự kiện thuộc về, kèm số người đã đăng ký.
+ *
+ * Sự kiện đơn lẻ trả về mảng rỗng — không có chuỗi thì không có gì để liệt kê,
+ * và một danh sách "một buổi" chỉ làm màn hình rối thêm.
+ */
+export async function listSeriesSessions(eventId: string): Promise<SeriesSession[]> {
+  const { client } = clientResult();
+  if (!client) return [];
+
+  const { data: anchor } = await client
+    .from("events")
+    .select("series_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  const seriesId = clean((anchor as JsonRecord | null)?.series_id);
+  if (!seriesId) return [];
+
+  const { data: rows, error } = await client
+    .from("events")
+    .select("id, series_index, starts_at, ends_at, status")
+    .eq("series_id", seriesId)
+    .order("series_index", { ascending: true });
+
+  if (error) {
+    log("listSeriesSessions failed", error);
+    return [];
+  }
+
+  const sessions = (rows ?? []) as JsonRecord[];
+  if (!sessions.length) return [];
+
+  // Một truy vấn cho cả chuỗi, không phải một truy vấn mỗi buổi.
+  const { data: registrations } = await client
+    .from("event_registrations")
+    .select("event_id")
+    .in("event_id", sessions.map((row) => String(row.id)))
+    .neq("registration_status", "cancelled");
+
+  const counts = new Map<string, number>();
+  for (const row of ((registrations ?? []) as JsonRecord[])) {
+    const key = String(row.event_id);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return sessions.map((row) => ({
+    id: String(row.id),
+    seriesIndex: typeof row.series_index === "number" ? row.series_index : null,
+    startsAt: clean(row.starts_at),
+    endsAt: clean(row.ends_at),
+    status: clean(row.status),
+    registrationCount: counts.get(String(row.id)) ?? 0,
+    isCurrent: String(row.id) === eventId
+  }));
+}
+
+/**
+ * Bỏ một buổi khỏi chuỗi, và xoá hẳn nó.
+ *
+ * ---------------------------------------------------------------------------
+ * CHỈ XOÁ ĐƯỢC BUỔI CHƯA CÓ AI ĐĂNG KÝ
+ * ---------------------------------------------------------------------------
+ * Đây là nút để sửa một cú bấm nhầm, không phải để huỷ một buổi đã mở bán. Một
+ * buổi đã có người đăng ký nghĩa là có những tấm vé đang nằm trong hộp thư
+ * người ta; xoá dòng đó là làm các tấm vé ấy trỏ vào hư không mà không ai được
+ * báo. Trường hợp đó dùng "Huỷ sự kiện" — nó giữ lại dữ liệu và đánh dấu
+ * cancelled.
+ *
+ * ---------------------------------------------------------------------------
+ * ĐÁNH SỐ LẠI
+ * ---------------------------------------------------------------------------
+ * Xoá buổi 2 của chuỗi 3 buổi thì buổi 3 phải thành buổi 2 — nếu không, danh
+ * sách hiện "Buổi 1, Buổi 3" và người đọc tưởng mình bỏ lỡ mất một buổi.
+ *
+ * Mỗi dòng được ghi số thứ tự và tổng trong CÙNG một lệnh: ràng buộc
+ * `events_series_shape_check` xét theo từng dòng, nên miễn là mỗi dòng tự nhất
+ * quán thì không có trạng thái trung gian nào vi phạm.
+ *
+ * Còn đúng một buổi thì nó rời khỏi chuỗi hẳn — ba cột về null cùng lúc. Một
+ * "chuỗi một buổi" là một sự kiện đơn lẻ đang đeo nhãn sai.
+ */
+export async function removeSessionFromSeries(input: {
+  eventId: unknown;
+}): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const eventId = clean(input.eventId);
+  if (!eventId || !isValidUuid(eventId)) return { ok: false, message: "ID buổi không hợp lệ." };
+
+  const { data: target, error: targetError } = await client
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (targetError || !target) return { ok: false, message: "Không tìm thấy buổi này." };
+
+  const row = target as JsonRecord;
+  const seriesId = clean(row.series_id);
+  if (!seriesId) return { ok: false, message: "Buổi này không thuộc chuỗi nào." };
+
+  const scopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(scopeContext, clean(row.season_id)))) {
+    return { ok: false, message: "Bạn không có quyền vận hành trong mùa của sự kiện này." };
+  }
+
+  const { data: registrations, error: regError } = await client
+    .from("event_registrations")
+    .select("id")
+    .eq("event_id", eventId)
+    .neq("registration_status", "cancelled")
+    .limit(1);
+
+  if (regError) {
+    log("removeSessionFromSeries: count registrations failed", regError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if ((registrations ?? []).length) {
+    return {
+      ok: false,
+      message:
+        "Buổi này đã có người đăng ký nên không xoá được — những tấm vé đã gửi đi sẽ trỏ vào hư không. Dùng \"Huỷ sự kiện\" nếu buổi này không diễn ra nữa."
+    };
+  }
+
+  const { error: deleteError } = await client.from("events").delete().eq("id", eventId);
+  if (deleteError) {
+    log("removeSessionFromSeries: delete failed", deleteError);
+    return {
+      ok: false,
+      message: `${SAFE_ERROR} (${(deleteError as { message?: string }).message ?? ""})`
+    };
+  }
+  // Ghi nhật ký NGAY sau khi xoá, không đợi đánh số xong: nếu bước đánh số
+  // hỏng giữa chừng thì dòng đã biến mất rồi, và thứ cần lần lại là ai đã
+  // xoá nó, chứ không phải các số thứ tự sau đó.
+  await writeAdminAudit(client, {
+    actionType: "remove_event_series_session",
+    beforeData: row,
+    afterData: null
+  });
+
+  const { data: remaining, error: remainingError } = await client
+    .from("events")
+    .select("id, starts_at")
+    .eq("series_id", seriesId)
+    .order("starts_at", { ascending: true });
+
+  if (remainingError) {
+    log("removeSessionFromSeries: reload failed", remainingError);
+    return { ok: true, message: "Đã xoá buổi, nhưng chưa đánh số lại được các buổi còn lại." };
+  }
+
+  const rows = (remaining ?? []) as JsonRecord[];
+
+  if (rows.length <= 1) {
+    // Một "chuỗi một buổi" là một sự kiện đơn lẻ đang đeo nhãn sai.
+    for (const left of rows) {
+      await client
+        .from("events")
+        .update({ series_id: null, series_index: null, series_total: null })
+        .eq("id", String(left.id));
+    }
+    return { ok: true, message: "Đã xoá buổi. Sự kiện quay lại là buổi đơn lẻ." };
+  }
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const { error: renumberError } = await client
+      .from("events")
+      .update({ series_index: index + 1, series_total: rows.length })
+      .eq("id", String(rows[index].id));
+    if (renumberError) log("removeSessionFromSeries: renumber failed", renumberError);
+  }
+
+
+  return { ok: true, message: `Đã xoá buổi. Chuỗi còn ${rows.length} buổi.` };
 }
