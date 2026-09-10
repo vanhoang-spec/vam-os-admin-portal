@@ -3066,3 +3066,143 @@ export {
   isEventAttendedStatus,
   REGISTRATION_STATUS_OPTIONS
 } from "@/lib/event-constants";
+
+/**
+ * Thêm một buổi nữa vào chuỗi của một sự kiện đã có.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO CẦN, KHI ĐÃ CÓ "SỰ KIỆN LẶP LẠI" LÚC TẠO
+ * ---------------------------------------------------------------------------
+ * Lịch chương trình đổi sau khi sự kiện đã tạo, và đó là chuyện bình thường:
+ * chốt thêm một buổi vì đăng ký vượt dự kiến, hoặc lúc tạo chưa biết có mấy
+ * buổi. Bắt người ta xoá đi tạo lại nghĩa là mất luôn những đăng ký đã có.
+ *
+ * Buổi mới CHÉP LẠI toàn bộ cấu hình của buổi gốc — sức chứa, cấu hình đăng
+ * ký, mô tả, địa điểm — vì "một buổi nữa của cùng một thứ" đúng nghĩa là vậy.
+ * Chỉ ngày giờ là khác.
+ *
+ * ---------------------------------------------------------------------------
+ * THỨ TỰ GHI QUAN TRỌNG
+ * ---------------------------------------------------------------------------
+ * `events_series_shape_check` bắt `series_index <= series_total`. Nên phải
+ * NÂNG TỔNG trên các buổi đang có TRƯỚC, rồi mới chèn buổi mới — làm ngược lại
+ * thì dòng mới vi phạm ràng buộc và cả thao tác hỏng.
+ */
+export async function addSessionToSeries(input: {
+  eventId: unknown;
+  starts_at: unknown;
+  ends_at?: unknown;
+}): Promise<MutationResult> {
+  const access = await requireEventAdmin();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, error } = clientResult();
+  if (!client) return { ok: false, message: error ?? SAFE_ERROR };
+
+  const eventId = clean(input.eventId);
+  if (!eventId || !isValidUuid(eventId)) return { ok: false, message: "ID sự kiện không hợp lệ." };
+
+  const startsAt = parseDateTime(clean(input.starts_at));
+  if (!startsAt) return { ok: false, message: "Thời điểm buổi mới không hợp lệ." };
+
+  const endsAtRaw = clean(input.ends_at);
+  const endsAt = endsAtRaw ? parseDateTime(endsAtRaw) : null;
+  if (endsAtRaw && !endsAt) return { ok: false, message: "Giờ kết thúc không hợp lệ." };
+  if (endsAt && endsAt <= startsAt) {
+    return { ok: false, message: "Giờ kết thúc phải sau giờ bắt đầu." };
+  }
+
+  const { data: anchor, error: anchorError } = await client
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (anchorError || !anchor) {
+    log("addSessionToSeries: load anchor failed", anchorError);
+    return { ok: false, message: "Không tìm thấy sự kiện." };
+  }
+
+  const scopeContext = await getAdminScopeContext();
+  if (!(await canOperateSeason(scopeContext, clean((anchor as JsonRecord).season_id)))) {
+    return { ok: false, message: "Bạn không có quyền vận hành trong mùa của sự kiện này." };
+  }
+
+  const source = anchor as JsonRecord;
+  const seriesId = clean(source.series_id) ?? randomUUID();
+
+  // Các buổi đang có của chuỗi. Sự kiện đơn lẻ thì chính nó là buổi duy nhất.
+  const { data: siblings, error: siblingsError } = await client
+    .from("events")
+    .select("id")
+    .eq("series_id", seriesId);
+
+  if (siblingsError) {
+    log("addSessionToSeries: load siblings failed", siblingsError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  const existingIds = ((siblings ?? []) as JsonRecord[]).map((row) => String(row.id));
+  const idsToRenumber = existingIds.length ? existingIds : [eventId];
+  const newTotal = idsToRenumber.length + 1;
+
+  // Nâng tổng TRƯỚC — xem chú thích ở đầu hàm.
+  const { error: totalError } = await client
+    .from("events")
+    .update({ series_total: newTotal })
+    .in("id", idsToRenumber);
+
+  if (totalError) {
+    log("addSessionToSeries: bump total failed", totalError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  // Sự kiện đơn lẻ mới được nạp vào chuỗi thì phải nhận số thứ tự đầu tiên.
+  if (!clean(source.series_id)) {
+    const { error: anchorSeriesError } = await client
+      .from("events")
+      .update({ series_id: seriesId, series_index: 1, series_total: newTotal })
+      .eq("id", eventId);
+    if (anchorSeriesError) {
+      log("addSessionToSeries: attach anchor failed", anchorSeriesError);
+      return { ok: false, message: SAFE_ERROR };
+    }
+  }
+
+  // Chép nguyên cấu hình, đổi đúng ngày giờ và số thứ tự. Bỏ những cột thuộc về
+  // riêng một dòng: id, thời điểm tạo, và mã tham chiếu legacy (nó là mã của
+  // MỘT sự kiện, hai dòng cùng mang một mã là hai dòng không phân biệt được).
+  const payload: JsonRecord = { ...source };
+  delete payload.id;
+  delete payload.created_at;
+  delete payload.updated_at;
+  delete payload.legacy_event_temp_id;
+
+  payload.starts_at = startsAt;
+  payload.ends_at = endsAt;
+  payload.series_id = seriesId;
+  payload.series_index = newTotal;
+  payload.series_total = newTotal;
+
+  const { data: created, error: insertError } = await client
+    .from("events")
+    .insert(payload)
+    .select("id")
+    .maybeSingle();
+
+  if (insertError || !created) {
+    log("addSessionToSeries: insert failed", insertError);
+    return { ok: false, message: `${SAFE_ERROR} (${(insertError as { message?: string })?.message ?? ""})` };
+  }
+
+  await writeAdminAudit(client, {
+    actionType: "add_event_series_session",
+    beforeData: source,
+    afterData: created as JsonRecord
+  });
+
+  return {
+    ok: true,
+    message: `Đã thêm buổi ${newTotal}. Link đăng ký của chuỗi sẽ hiện buổi này ngay.`,
+    data: created as JsonRecord
+  };
+}

@@ -10,6 +10,7 @@ import {
   cancelEvent,
   createCheckinLinkForEvent,
   createRegistrationLinkForEvent,
+  addSessionToSeries,
   createEvent,
   createEventSeries,
   removeParticipation,
@@ -428,3 +429,36 @@ export async function bulkAddEventParticipantsAction(
 }
 
 // NOTE: EventActionState type and initialEventActionState are in lib/event-action-types.ts
+
+/**
+ * Thêm một buổi nữa vào chuỗi của sự kiện đang mở.
+ *
+ * Cùng cổng quyền với việc sửa sự kiện: thêm một buổi là thay đổi lịch của
+ * chương trình, và người sửa được giờ thì cũng chốt được buổi.
+ */
+export async function addEventSessionAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  const denied = await ensureAuth();
+  if (denied) return denied;
+
+  const result = await addSessionToSeries({
+    eventId: formText(formData, "event_id"),
+    starts_at: formText(formData, "starts_at"),
+    ends_at: formText(formData, "ends_at")
+  });
+
+  if (!result.ok) return { ok: false, message: result.message };
+
+  const eventId = formText(formData, "event_id");
+  revalidatePath("/events");
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/operations");
+
+  return {
+    ok: true,
+    message: result.message,
+    createdEventId: (result.data?.id as string) ?? null
+  };
+}

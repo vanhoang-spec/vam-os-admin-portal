@@ -15,6 +15,7 @@ import { SupportersPanel } from "./supporters-panel";
 import { countScansByStation } from "@/lib/event-checkin";
 import { stationLabel } from "@/lib/event-checkin-code";
 import { LiveRefresh } from "./live-refresh";
+import { AddSessionPanel } from "./add-session-panel";
 
 async function getRequestOrigin() {
   const h = await headers();
@@ -143,6 +144,18 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
       <div className="mb-6 rounded-md border border-vam-line bg-white p-4">
         <EventPlaceBlock event={detail.event} />
       </div>
+
+      {canEditRecaps(adminUser) ? (
+        <div className="mb-6">
+          <AddSessionPanel
+            eventId={params.id}
+            startsAt={detail.event.starts_at ?? null}
+            endsAt={detail.event.ends_at ?? null}
+            seriesIndex={detail.event.series_index ?? null}
+            seriesTotal={detail.event.series_total ?? null}
+          />
+        </div>
+      ) : null}
 
       <div className="mb-6">
         <SupportersPanel
