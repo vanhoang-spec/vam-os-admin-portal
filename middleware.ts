@@ -109,24 +109,66 @@ async function hasActiveAdminUser(user: { id?: string; email?: string }) {
     });
   }
 
-  return decision.allowed;
+  // KHÔNG phải nhân sự là một chuyện; KHÔNG XÁC ĐỊNH ĐƯỢC là chuyện khác hẳn.
+  //
+  // Chỉ `no_active_admin_row` mới có nghĩa là phép tra chạy xong và câu trả lời
+  // là không. Khoá cấu hình sai, phép đọc hỏng, dữ liệu nhập nhằng — tất cả đều
+  // trả về allowed = false, nhưng chúng KHÔNG nói người này không phải nhân sự.
+  //
+  // Trước khi có đường participant, gộp lại vô hại: cả hai đều bị chặn. Giờ thì
+  // không: coi "không xác định được" là "không phải nhân sự" nghĩa là một sự cố
+  // hạ tầng biến mọi người đăng nhập thành participant, và cổng chặn-khi-hỏng mà
+  // đợt T2 dựng lên bị vô hiệu ngay lúc nó cần chạy nhất.
+  return {
+    allowed: decision.allowed,
+    conclusive: decision.allowed || decision.reason === "no_active_admin_row"
+  };
 }
 
-async function authAllowsRequest(request: NextRequest) {
+/**
+ * Ba trạng thái, không phải hai.
+ *
+ * Trước đây hàm này chỉ trả lời "vào được" hay "không". Mentor và mentee sắp
+ * có tài khoản, và họ là trạng thái thứ ba: phiên đăng nhập THẬT, nhưng không
+ * phải nhân sự ban tổ chức. Gộp họ vào "không" nghĩa là đá họ về trang đăng
+ * nhập trong khi họ vừa đăng nhập xong — một vòng lặp không lối ra.
+ *
+ * `admin` vẫn dùng đúng `resolveActiveAdminViaTrustedServer` như cũ. KHÔNG
+ * thêm một phép tra vai trò nào đọc `admin_users` bằng token của chính người
+ * dùng — đó là phép đọc đã bị thu hồi, và lấy lại là tái sinh vòng lặp
+ * chuyển hướng mà module tra cứu tin cậy này sinh ra để chữa.
+ */
+type SessionState =
+  | { kind: "none" }
+  | { kind: "admin"; response: NextResponse }
+  | { kind: "signed_in"; response: NextResponse };
+
+async function resolveSession(request: NextRequest): Promise<SessionState> {
   const accessToken = request.cookies.get(AUTH_ACCESS_COOKIE)?.value;
   if (accessToken) {
     const user = await fetchAuthUser(accessToken);
-    if (user && (await hasActiveAdminUser(user))) return NextResponse.next();
+    if (user) {
+      const verdict = await hasActiveAdminUser(user);
+      if (!verdict.conclusive) return { kind: "none" };
+      return {
+        kind: verdict.allowed ? "admin" : "signed_in",
+        response: NextResponse.next()
+      };
+    }
   }
 
   const refreshToken = request.cookies.get(AUTH_REFRESH_COOKIE)?.value;
-  if (!refreshToken) return null;
+  if (!refreshToken) return { kind: "none" };
 
   const refreshed = await refreshAccessToken(refreshToken);
-  if (!refreshed?.access_token) return null;
+  if (!refreshed?.access_token) return { kind: "none" };
 
   const user = await fetchAuthUser(refreshed.access_token);
-  if (!user || !(await hasActiveAdminUser(user))) return null;
+  if (!user) return { kind: "none" };
+
+  const verdict = await hasActiveAdminUser(user);
+  if (!verdict.conclusive) return { kind: "none" };
+  const kind = verdict.allowed ? "admin" : "signed_in";
 
   const response = NextResponse.next();
   response.cookies.set(AUTH_ACCESS_COOKIE, refreshed.access_token, {
@@ -145,7 +187,22 @@ async function authAllowsRequest(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30
     });
   }
-  return response;
+  return { kind, response };
+}
+
+/**
+ * Những đường mà một người đăng nhập KHÔNG phải nhân sự được vào.
+ *
+ * Danh sách đóng, và đó là điểm chính: mọi đường khác vẫn chỉ dành cho ban tổ
+ * chức. Thêm một đường vào đây là một quyết định có người ký, không phải hệ
+ * quả tình cờ của việc đặt tên thư mục.
+ */
+const PARTICIPANT_PATHS = ["/ct"] as const;
+
+function isParticipantPath(pathname: string): boolean {
+  return PARTICIPANT_PATHS.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
 }
 
 export async function middleware(request: NextRequest) {
@@ -155,7 +212,12 @@ export async function middleware(request: NextRequest) {
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
-    request.nextUrl.pathname.startsWith("/renew/")
+    request.nextUrl.pathname.startsWith("/renew/") ||
+    // Blog: bài công khai phải đọc được mà không cần đăng nhập — đó là cả lý do
+    // nó tồn tại. Phép quyết định bài nào ra được ngoài nằm ở lib/blog-core.ts,
+    // chạy trên máy chủ cho từng bài; middleware chỉ mở cửa đường dẫn.
+    request.nextUrl.pathname === "/blog" ||
+    request.nextUrl.pathname.startsWith("/blog/")
   ) {
     const requestHeaders = new Headers(request.headers);
     const publicRoute = request.nextUrl.pathname.startsWith("/checkin/")
@@ -164,7 +226,10 @@ export async function middleware(request: NextRequest) {
         ? "renewal"
         : request.nextUrl.pathname.startsWith("/ve/")
           ? "ticket"
-          : "register";
+          : request.nextUrl.pathname === "/blog" ||
+              request.nextUrl.pathname.startsWith("/blog/")
+            ? "blog"
+            : "register";
     requestHeaders.set("x-vam-public-route", publicRoute);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
     // Vé mang tên một người và một mã dùng được ở cửa; nó không được nằm lại
@@ -182,8 +247,29 @@ export async function middleware(request: NextRequest) {
   // admin_users row, the request is allowed through and the unlock
   // gate is not re-checked. This is intentional — real auth is
   // strictly stronger than the shared MVP password.
-  const authResponse = await authAllowsRequest(request);
-  if (authResponse) return authResponse;
+  const session = await resolveSession(request);
+  if (session.kind === "admin") return session.response;
+
+  if (session.kind === "signed_in") {
+    // Đăng nhập thật, nhưng không phải nhân sự ban tổ chức. Chỉ vào được
+    // đường của participant; mọi đường khác đưa về trang của họ, KHÔNG đưa về
+    // trang đăng nhập — đá một người vừa đăng nhập xong về lại chỗ đăng nhập
+    // là một vòng lặp không lối ra.
+    if (!isParticipantPath(request.nextUrl.pathname)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/ct";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
+    // Đặt từ ĐƯỜNG DẪN, không bao giờ đọc từ đầu vào của client: bố cục dùng
+    // dấu này để chọn khung hiển thị, nên nhận nó từ ngoài vào là để người ta
+    // tự chọn khung của mình.
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-vam-participant-route", "1");
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
   return redirectToLogin(request);
 }
 

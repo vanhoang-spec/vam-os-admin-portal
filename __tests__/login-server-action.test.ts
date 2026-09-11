@@ -63,6 +63,7 @@ type QueryStage = {
   or: Mock;
   limit: Mock;
   is: Mock;
+  ilike: Mock;
   maybeSingle: Mock;
 };
 
@@ -74,7 +75,8 @@ function createServiceClientMock() {
     const builder: any = {};
     const stage = { table, op, payload } as QueryStage;
 
-    for (const name of ["select", "eq", "or", "limit", "is"] as const) {
+    // `ilike` có mặt vì đường participant dò email không phân biệt hoa thường.
+    for (const name of ["select", "eq", "or", "limit", "is", "ilike"] as const) {
       const fn = vi.fn((..._args: unknown[]) => builder);
       stage[name] = fn;
       builder[name] = fn;
@@ -232,12 +234,31 @@ describe("Server-Side Login Flow", () => {
       expect(mockAuthClient.auth.signOut).not.toHaveBeenCalled();
     });
 
-    it("no matching active admin row denies, signs out and does not redirect", async () => {
-      service.queue({ data: [], error: null });
+    it("không có dòng nhân sự nào, và cũng không nhận ra trong danh bạ, thì từ chối", async () => {
+      // Bốn truy vấn, theo đúng thứ tự mã chạy:
+      //   1. đọc admin_users lọc status = active   → rỗng
+      //   2. kiểm có dòng admin_users nào không    → rỗng (chưa bao giờ là nhân sự)
+      //   3. đọc mối nối danh tính participant     → chưa có
+      //   4. dò email trong danh bạ                → không ai
+      service.queue(
+        { data: [], error: null },
+        { data: [], error: null },
+        { data: null, error: null },
+        { data: [], error: null }
+      );
 
       const res = await loginAction({ error: null }, loginFormData());
 
-      expect(res.error).toBe(UNAUTHORIZED_MESSAGE);
+      // Lời báo ở đây KHÁC "sai email hoặc mật khẩu", và đó là chủ ý.
+      //
+      // Người này vừa nhập đúng mật khẩu — họ đã chứng minh mình sở hữu tài
+      // khoản. Bảo họ "sai mật khẩu" là đẩy một mentor thật đi đặt lại một mật
+      // khẩu vốn không sai gì cả, rồi đặt xong vẫn không vào được.
+      //
+      // Nó cũng không lộ chuyện của ai: câu trả lời chỉ nói về chính tài khoản
+      // mà người gõ vừa chứng minh là của mình.
+      expect(res.error).toContain("ban tổ chức");
+      expect(res.error).not.toBe(UNAUTHORIZED_MESSAGE);
       expect(mockAuthClient.auth.signOut).toHaveBeenCalledTimes(1);
       expect(adminAuth.clearAuthCookies).toHaveBeenCalled();
       expect(adminAuth.setAuthCookies).not.toHaveBeenCalled();
@@ -481,8 +502,14 @@ describe("Server-Side Login Flow", () => {
     // that the predicate is actually applied to the read. Each ineligible status
     // is then exercised through the DB honouring that filter (empty result set).
     for (const status of ["invited", "suspended", "inactive"] as const) {
-      it(`a ${status} administrator is excluded by the active-status filter and denied`, async () => {
-        service.queue({ data: [], error: null });
+      it(`một quản trị viên ${status} bị lọc khỏi phép đọc active và bị từ chối`, async () => {
+        // Truy vấn thứ hai TRẢ VỀ MỘT DÒNG: người này CÓ trong admin_users,
+        // chỉ là không ở trạng thái hoạt động. Đó chính là thứ chặn họ khỏi
+        // rơi xuống đường participant.
+        service.queue(
+          { data: [], error: null },
+          { data: [{ id: "admin-1" }], error: null }
+        );
 
         const res = await loginAction({ error: null }, loginFormData());
 
@@ -498,9 +525,56 @@ describe("Server-Side Login Flow", () => {
     }
   });
 
+  describe("nhân sự bị khoá KHÔNG rơi xuống đường participant", () => {
+    // Thu hồi quyền nhân sự của một người rồi lặng lẽ đưa cho họ một cánh cửa
+    // khác trong cùng phiên đó là điều người bấm nút đình chỉ không hề biết
+    // mình vừa làm. findAdminUserForAuthUser lọc sẵn status = active nên nó
+    // trả về null giống hệt nhau cho "chưa bao giờ là nhân sự" và "đã bị
+    // khoá" — phép kiểm tồn tại là thứ tách hai trường hợp ấy ra.
+    it("dừng lại ngay khi thấy có dòng admin_users, KHÔNG dò danh bạ", async () => {
+      service.queue(
+        { data: [], error: null },
+        { data: [{ id: "admin-1" }], error: null }
+      );
+
+      const res = await loginAction({ error: null }, loginFormData());
+
+      expect(res.error).toBe(UNAUTHORIZED_MESSAGE);
+      expect(adminAuth.setAuthCookies).not.toHaveBeenCalled();
+      expect(redirect).not.toHaveBeenCalled();
+
+      // Đúng hai truy vấn. Có truy vấn thứ ba nghĩa là đã bắt đầu dò danh bạ
+      // — tức là đã bước vào đường participant.
+      expect(service.stages).toHaveLength(2);
+      for (const stage of service.stages) {
+        expect(stage.table).toBe("admin_users");
+      }
+    });
+
+    it("đọc hỏng ở phép kiểm tồn tại thì TỪ CHỐI, không đoán là chưa từng là nhân sự", async () => {
+      // Fail-closed. Coi một lỗi đọc là "không có dòng nào" nghĩa là một sự cố
+      // hạ tầng mở ra đúng cánh cửa mà phép kiểm này sinh ra để đóng.
+      service.queue(
+        { data: [], error: null },
+        { data: null, error: { message: "DB read error" } }
+      );
+
+      const res = await loginAction({ error: null }, loginFormData());
+
+      expect(res.error).toBeTruthy();
+      expect(adminAuth.setAuthCookies).not.toHaveBeenCalled();
+      expect(redirect).not.toHaveBeenCalled();
+    });
+  });
+
   describe("error messages stay generic", () => {
-    it("uses one non-enumerating message for every post-authentication denial", async () => {
-      service.queue({ data: [], error: null });
+    it("lỗi hạ tầng và dữ liệu hỏng nói y hệt nhau, và không lộ gì bên trong", async () => {
+      service.queue(
+        { data: [], error: null },
+        { data: [], error: null },
+        { data: null, error: null },
+        { data: [], error: null }
+      );
       const noMatch = await loginAction({ error: null }, loginFormData());
 
       service = createServiceClientMock();
@@ -519,13 +593,19 @@ describe("Server-Side Login Flow", () => {
       });
       const ambiguous = await loginAction({ error: null }, loginFormData());
 
-      // A caller cannot distinguish "no admin row", "database failure" and
-      // "corrupt/ambiguous data" from the response.
-      expect(noMatch.error).toBe(UNAUTHORIZED_MESSAGE);
+      // Tính chất phải giữ: "database hỏng" và "dữ liệu nhân sự nhập nhằng"
+      // KHÔNG phân biệt được với nhau, và không lời nào để lộ gì bên trong.
       expect(dbError.error).toBe(UNAUTHORIZED_MESSAGE);
       expect(ambiguous.error).toBe(UNAUTHORIZED_MESSAGE);
-      expect(noMatch.error).not.toContain("admin_users");
       expect(dbError.error).not.toContain("DB read error");
+      expect(ambiguous.error).not.toContain("admin_users");
+
+      // "Không phải nhân sự, và cũng không nhận ra trong danh bạ" thì nói
+      // khác — xem lời giải thích ở ca trên. Nhưng nó vẫn không được nhắc tới
+      // tên bảng hay lời lỗi của database.
+      expect(noMatch.error).not.toContain("admin_users");
+      expect(noMatch.error).not.toContain("people");
+      expect(noMatch.error).not.toContain("DB read error");
     });
   });
 });
