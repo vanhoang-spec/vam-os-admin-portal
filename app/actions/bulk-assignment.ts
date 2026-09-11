@@ -13,6 +13,14 @@ function fail(message: string): BulkAssignmentActionState {
   return { ok: false, message };
 }
 
+/** Every screen that lists assignments, so none keeps showing the old state. */
+function revalidateAssignmentScreens() {
+  revalidatePath("/reviews");
+  revalidatePath("/reviews/assign-bulk");
+  revalidatePath("/reviews/progress");
+  revalidatePath("/applications");
+}
+
 export async function bulkAssignApplicationReviewsAction(
   _prev: BulkAssignmentActionState,
   formData: FormData
@@ -53,12 +61,15 @@ export async function bulkAssignApplicationReviewsAction(
       assignedByAdminUserId: adminUser.id
     });
 
-    if (!result.ok) return { ok: false, message: result.message };
+    if (!result.ok) {
+      // The database refused because the screen is out of date — a lot already
+      // assigned, a status that moved on. Reload it, or the operator can only
+      // tick the same rows and be refused again.
+      if (result.refreshList) revalidateAssignmentScreens();
+      return { ok: false, message: result.message };
+    }
 
-    revalidatePath("/reviews");
-    revalidatePath("/reviews/assign-bulk");
-    revalidatePath("/reviews/progress");
-    revalidatePath("/applications");
+    revalidateAssignmentScreens();
 
     const assigned = due.dueAt
       ? `Đã giao thành công ${result.applicationsAssigned} hồ sơ, hạn hoàn tất hết ngày ${formatDate(due.dueAt)}.`

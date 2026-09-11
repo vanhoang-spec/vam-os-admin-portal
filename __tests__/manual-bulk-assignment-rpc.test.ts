@@ -156,6 +156,60 @@ describe("Server Action: assignSelectedApplicationReviews", () => {
     }
   });
 
+  it("ALREADY_ASSIGNED: says why, and asks the screen to reload its stale list", async () => {
+    const { getSupabaseServiceRoleClient } = await import("@/lib/supabase-server");
+    const { getCurrentAdminUser } = await import("@/lib/admin-auth");
+
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "actor-1", role: "admin", email: "admin@test", auth_user_id: "auth" } as any);
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "One or more applications are already assigned for this round" }
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue({ rpc: rpcMock } as any);
+
+    const result = await assignSelectedApplicationReviews({
+      applicationIds: ["app1", "app2"],
+      reviewerAdminUserId: "rev1",
+      reviewRound: "profile_screening",
+      dueAt: null,
+      assignmentNote: null,
+      assignedByAdminUserId: "actor-1"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: expect.stringContaining("đã được giao chấm hồ sơ trước đó"),
+      refreshList: true
+    });
+  });
+
+  it("SCOPE_DENIED: says so, and does not ask for a reload", async () => {
+    const { getSupabaseServiceRoleClient } = await import("@/lib/supabase-server");
+    const { getCurrentAdminUser } = await import("@/lib/admin-auth");
+
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "actor-1", role: "admin", email: "admin@test", auth_user_id: "auth" } as any);
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "Assignment batch scope denied" }
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue({ rpc: rpcMock } as any);
+
+    const result = await assignSelectedApplicationReviews({
+      applicationIds: ["app1"],
+      reviewerAdminUserId: "rev1",
+      reviewRound: "profile_screening",
+      dueAt: null,
+      assignmentNote: null,
+      assignedByAdminUserId: "actor-1"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Bạn không có quyền vận hành mùa của các hồ sơ này.",
+      refreshList: false
+    });
+  });
+
   it("NEGATIVE_AUTH_ROLE: a reviewer cannot assign work to anyone", async () => {
     const { getSupabaseServiceRoleClient } = await import("@/lib/supabase-server");
     const { getCurrentAdminUser } = await import("@/lib/admin-auth");
