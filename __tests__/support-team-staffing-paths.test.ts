@@ -26,7 +26,17 @@ vi.mock("@/lib/program-scope", () => ({
   canReviewSeason: vi.fn(async () => false)
 }));
 vi.mock("@/lib/public-url", () => ({
-  getAuthCallbackUrl: vi.fn(async () => "https://os.example.org/auth/callback")
+  getAuthCallbackUrl: vi.fn(async () => "https://os.example.org/auth/callback"),
+  getPublicOrigin: vi.fn(async () => "https://os.example.org")
+}));
+// Thư đặt mật khẩu đi qua Brevo; ở đây chỉ cần biết lời gọi không làm gãy đường cấp quyền.
+vi.mock("@/lib/email", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  sendReviewerInvite: vi.fn(async () => ({ ok: true, skipped: false }))
+}));
+vi.mock("@/lib/outbound-emails", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  hasRecentSentEmail: vi.fn(async () => ({ ok: true, found: false }))
 }));
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleClient: () => ({
@@ -60,9 +70,11 @@ vi.mock("@/lib/supabase-server", () => ({
           data: { users: [{ id: "auth-1", email: "mentor@example.com" }] },
           error: null
         }),
-        inviteUserByEmail: async () => {
+        // Mọi lần tạo tài khoản hay link đặt mật khẩu đều đi qua đây: một cổng
+        // quyền mở nhầm sẽ đẩy số này lên.
+        generateLink: async ({ email }: { email: string }) => {
           state.invites += 1;
-          return { data: { user: { id: "auth-new" } }, error: null };
+          return { data: { user: { id: "auth-1", email }, properties: { hashed_token: "h" } }, error: null };
         },
         deleteUser: async () => ({ error: null })
       }
