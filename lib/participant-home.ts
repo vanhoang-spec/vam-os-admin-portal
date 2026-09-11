@@ -161,3 +161,176 @@ export function participantRoleLabel(role: unknown): string {
   if (value === "guest") return "Khách mời";
   return value || "—";
 }
+
+export type ParticipantEvent = {
+  id: string;
+  eventName: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  locationName: string | null;
+  attendanceStatus: string | null;
+  checkedIn: boolean;
+};
+
+export type ParticipantProgramView = {
+  programCode: string;
+  programName: string | null;
+  seasons: Array<{
+    seasonId: string;
+    seasonCode: string | null;
+    seasonName: string | null;
+    role: string;
+    isPast: boolean;
+    events: ParticipantEvent[];
+  }>;
+};
+
+/**
+ * Trang của MỘT chương trình.
+ *
+ * ---------------------------------------------------------------------------
+ * ĐỐI CHIẾU TƯ CÁCH THÀNH VIÊN TRƯỚC KHI NẠP BẤT CỨ GÌ
+ * ---------------------------------------------------------------------------
+ * Mã chương trình đến từ đường dẫn, tức là từ tay người dùng. Gõ mã của một
+ * chương trình khác vào thanh địa chỉ phải ra con số không, chứ không ra dữ
+ * liệu của chương trình đó.
+ *
+ * Trả về `null` khi người này không thuộc chương trình — chỗ gọi hiện 404, y
+ * như khi mã không có thật. Hai câu trả lời giống nhau, vì phân biệt chúng là
+ * nói cho người ta biết chương trình nào có tồn tại.
+ */
+export async function getParticipantProgram(input: {
+  personId: string;
+  programCode: string;
+}): Promise<{ view: ParticipantProgramView | null; error: string | null }> {
+  const personId = String(input.personId ?? "").trim();
+  const programCode = String(input.programCode ?? "").trim();
+  if (!personId || !programCode) return { view: null, error: null };
+
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { view: null, error: VI_ERROR };
+
+  const { data: programRow, error: programError } = await client
+    .from("programs")
+    .select("id, code, name")
+    .ilike("code", programCode)
+    .maybeSingle();
+
+  if (programError) {
+    log("đọc chương trình", programError);
+    return { view: null, error: VI_ERROR };
+  }
+  if (!programRow) return { view: null, error: null };
+
+  const program = programRow as { id: string; code: string; name: string | null };
+
+  // Cổng: người này có thuộc chương trình đó không.
+  const { data: membershipRows, error: membershipError } = await client
+    .from("person_season_memberships")
+    .select("season_id, role, status")
+    .eq("person_id", personId)
+    .eq("program_id", program.id)
+    .in("status", [...VISIBLE_MEMBERSHIP_STATUSES]);
+
+  if (membershipError) {
+    log("đọc tư cách thành viên", membershipError);
+    return { view: null, error: VI_ERROR };
+  }
+
+  const memberships = (membershipRows ?? []) as Array<{
+    season_id: string;
+    role: string;
+    status: string;
+  }>;
+  if (!memberships.length) return { view: null, error: null };
+
+  const seasonIds = Array.from(new Set(memberships.map((row) => String(row.season_id))));
+
+  const [seasons, registrations] = await Promise.all([
+    client.from("seasons").select("id, code, name").in("id", seasonIds),
+    // Sự kiện người này đã đăng ký. Lọc theo CẢ người lẫn mùa: một dòng đăng ký
+    // của mùa khác không được lọt vào trang của mùa này.
+    client
+      .from("event_registrations")
+      .select("id, event_id, attendance_status, registration_status")
+      .eq("linked_person_id", personId)
+      .neq("registration_status", "cancelled")
+  ]);
+
+  if (seasons.error || registrations.error) {
+    log("đọc mùa / đăng ký sự kiện", seasons.error ?? registrations.error);
+    return { view: null, error: VI_ERROR };
+  }
+
+  const registrationRows = (registrations.data ?? []) as Array<{
+    event_id: string;
+    attendance_status: string | null;
+  }>;
+
+  const eventsById = new Map<string, Record<string, unknown>>();
+  if (registrationRows.length) {
+    const { data: eventRows, error: eventError } = await client
+      .from("events")
+      .select("id, event_name, starts_at, ends_at, location_name, season_id")
+      .in("id", Array.from(new Set(registrationRows.map((row) => String(row.event_id)))));
+
+    if (eventError) {
+      log("đọc sự kiện", eventError);
+      return { view: null, error: VI_ERROR };
+    }
+    for (const row of ((eventRows ?? []) as Array<Record<string, unknown>>)) {
+      eventsById.set(String(row.id), row);
+    }
+  }
+
+  const seasonById = new Map(
+    ((seasons.data ?? []) as Array<{ id: string; code: string | null; name: string | null }>).map(
+      (row) => [String(row.id), row]
+    )
+  );
+
+  const view: ParticipantProgramView = {
+    programCode: program.code,
+    programName: program.name,
+    seasons: memberships
+      .map((membership) => {
+        const seasonId = String(membership.season_id);
+        const season = seasonById.get(seasonId);
+
+        const events = registrationRows
+          .map((registration) => {
+            const event = eventsById.get(String(registration.event_id));
+            if (!event) return null;
+            if (String(event.season_id ?? "") !== seasonId) return null;
+            return {
+              id: String(event.id),
+              eventName: event.event_name ? String(event.event_name) : null,
+              startsAt: event.starts_at ? String(event.starts_at) : null,
+              endsAt: event.ends_at ? String(event.ends_at) : null,
+              locationName: event.location_name ? String(event.location_name) : null,
+              attendanceStatus: registration.attendance_status,
+              checkedIn: registration.attendance_status === "checked_in"
+            };
+          })
+          .filter((row): row is ParticipantEvent => row !== null)
+          .sort((left, right) =>
+            String(left.startsAt ?? "").localeCompare(String(right.startsAt ?? ""))
+          );
+
+        return {
+          seasonId,
+          seasonCode: season?.code ?? null,
+          seasonName: season?.name ?? null,
+          role: String(membership.role),
+          isPast: membership.status === "completed",
+          events
+        };
+      })
+      .sort((left, right) => {
+        if (left.isPast !== right.isPast) return left.isPast ? 1 : -1;
+        return String(right.seasonCode ?? "").localeCompare(String(left.seasonCode ?? ""));
+      })
+  };
+
+  return { view, error: null };
+}
