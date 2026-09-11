@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Mời reviewer vào VAM OS — Hướng dẫn cho Support team</title>
+<style>
+  @page { size: A4; margin: 10mm 12mm 9mm 12mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 9.1pt;
+    line-height: 1.42;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  /* ── Đầu trang ───────────────────────────────────────────────────── */
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.6mm; margin-bottom: 3.4mm;
+  }
+  .eyebrow {
+    font-size: 7.4pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  h1 { font-size: 19pt; line-height: 1.1; margin: 1.2mm 0 1mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 9.4pt; max-width: 125mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.6pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  /* ── Bố cục ──────────────────────────────────────────────────────── */
+  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 6mm; align-items: start; }
+  h2 {
+    font-size: 8.4pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin: 0 0 1.6mm; font-weight: 700;
+  }
+  .block + .block { margin-top: 3.2mm; }
+  p { margin: 0 0 1.6mm; }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.5mm; font-size: 8.4pt; font-weight: 600; white-space: nowrap;
+  }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 1.3mm; font-size: 8.4pt; white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+  .ok { color: #1c7a43; font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  .prep {
+    background: var(--mint); border-left: 3px solid var(--green);
+    padding: 2.2mm 3.2mm; margin-bottom: 3.2mm;
+  }
+  .prep b.h { display: block; margin-bottom: .6mm; }
+  .prep ul { margin: 0; padding-left: 4.2mm; }
+  .prep li { margin: .5mm 0; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 8mm; margin-bottom: 2.2mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5.6mm; height: 5.6mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 8.2pt; text-align: center; line-height: 5.6mm;
+  }
+  ol.steps b.t { display: block; font-size: 9.6pt; margin-bottom: .3mm; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-top: 1.4mm; }
+  th, td { border: 1px solid var(--line); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+
+  /* Một dòng minh hoạ trên màn hình — tên và email là ví dụ, không phải người thật. */
+  .mock {
+    margin-top: 1.8mm; border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+    font-size: 7.8pt; background: #fff;
+  }
+  .mock .cap { background: #f6f9f7; color: var(--muted); padding: .7mm 2mm; font-size: 7pt; letter-spacing: .06em; text-transform: uppercase; }
+  .mock .row { display: grid; grid-template-columns: 0.95fr 1.1fr 1fr 1.25fr; gap: 1.6mm; padding: 1.4mm 2mm; align-items: center; }
+  .mock .row > span:first-child { white-space: nowrap; }
+  .mock .badge { display: inline-block; border: 1px solid var(--line); background: #f6f9f7; color: var(--muted); border-radius: 3px; padding: 0 1.2mm; white-space: nowrap; }
+  .mock .acts { display: flex; flex-direction: column; gap: .8mm; }
+  .mock .acts .btn { text-align: center; font-size: 7.8pt; }
+
+  ul.tight { margin: 0; padding-left: 4.2mm; }
+  ul.tight li { margin: .6mm 0; }
+
+  .warn {
+    background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink);
+    padding: 2.2mm 3.2mm;
+  }
+  .warn b.h { display: block; margin-bottom: .5mm; }
+
+  footer {
+    margin-top: 3mm; border-top: 1px solid var(--line); padding-top: 1.6mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7.3pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho Support team · Tuyển sinh</div>
+    <h1>Mời reviewer vào VAM OS</h1>
+    <p class="sub">Cấp quyền chấm hồ sơ và phỏng vấn cho mentor trong mùa. Hệ thống tự tạo tài khoản
+      và gửi thư mời — bạn không phải tạo tài khoản ở đâu khác.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 11/09/2026</div>
+</header>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái: các bước ─────────────── -->
+  <div>
+    <div class="prep">
+      <b class="h">Trước khi bắt đầu</b>
+      <ul>
+        <li>Tài khoản của bạn cần <b>quyền vận hành (Operations)</b> cho mùa đang tuyển. Nếu bấm nút mà
+          thấy <span class="err">Bạn không có quyền vận hành mùa này</span>, nhờ Super Admin cấp.</li>
+        <li>Có sẵn danh sách reviewer, ghi rõ mỗi người <b>chỉ chấm hồ sơ</b>, <b>chỉ phỏng vấn</b> hay
+          <b>cả hai</b>.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Các bước</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Mở trang cấp quyền</b>
+          Menu <span class="path">Ứng tuyển → Danh sách nhân sự tuyển sinh</span>.
+        </li>
+        <li>
+          <b class="t">Chọn đợt tuyển</b>
+          Ở ô <span class="ui">Đợt tuyển</span> chọn một đợt của mùa đang tuyển, bấm
+          <span class="btn solid">Lọc</span>. Chưa chọn đợt thì các nút cấp quyền bị khoá.
+        </li>
+        <li>
+          <b class="t">Tìm người</b>
+          Gõ tên, email hoặc mã mentor vào ô <span class="ui">Tìm theo tên, email, mentor code…</span>
+        </li>
+        <li>
+          <b class="t">Bấm theo vai trò của người đó</b>
+          <table>
+            <tr><th style="width:38%">Người này</th><th>Bấm</th></tr>
+            <tr><td>Chỉ chấm hồ sơ</td><td><span class="btn">Cấp quyền đánh giá</span></td></tr>
+            <tr><td>Chỉ phỏng vấn</td><td><span class="btn">Cấp quyền phỏng vấn</span></td></tr>
+            <tr><td>Cả hai</td><td><span class="btn">Cấp quyền đánh giá</span> rồi <span class="btn">Cấp quyền phỏng vấn</span></td></tr>
+          </table>
+          <div class="mock">
+            <div class="cap">Minh hoạ một dòng trên màn hình</div>
+            <div class="row">
+              <span><b>Nguyễn Văn A</b></span>
+              <span>vana@example.com</span>
+              <span class="badge">Chưa có tài khoản</span>
+              <span class="acts"><span class="btn">Cấp quyền đánh giá</span><span class="btn">Cấp quyền phỏng vấn</span></span>
+            </div>
+          </div>
+        </li>
+        <li>
+          <b class="t">Kiểm dòng báo</b>
+          Thấy <span class="ok">✓ Đã cấp quyền Reviewer hồ sơ cho đúng mùa.</span> (hoặc
+          <span class="ok">Interviewer</span>) và nút đổi thành <span class="btn">Thu hồi quyền…</span> là xong.
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải: sau khi bấm ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>Điều gì xảy ra khi bấm</h2>
+      <ul class="tight">
+        <li><b>Lần bấm đầu tiên</b> cho một người: hệ thống tạo tài khoản và <b>gửi thư mời ngay</b> tới
+          email của họ.</li>
+        <li><b>Bấm nút thứ hai</b> cho cùng người: chỉ thêm quyền, không gửi thêm thư.</li>
+        <li>Cột <span class="ui">Tài khoản hiện tại</span> đổi từ “Chưa có tài khoản” sang
+          “Đang có quyền đánh giá”.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Reviewer làm gì</h2>
+      <ul class="tight">
+        <li>Mở thư mời — nhắc họ xem cả mục <b>Spam</b> — bấm liên kết là vào thẳng VAM OS, trang
+          <b>Đánh giá</b>.</li>
+        <li><b>Lần sau:</b> vào trang đăng nhập, gõ email, bấm
+          <span class="btn">Gửi liên kết đăng nhập qua email</span>. Không cần mật khẩu.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Khi gặp lỗi</h2>
+      <table>
+        <tr><th style="width:47%">Thấy</th><th>Làm gì</th></tr>
+        <tr><td class="err">Bạn không có quyền vận hành mùa này.</td>
+            <td>Nhờ Super Admin cấp quyền Operations mùa này cho tài khoản của bạn.</td></tr>
+        <tr><td class="err">Không thể tạo lời mời đăng nhập cá nhân.</td>
+            <td>Dừng lại, báo Admin. Chưa có tài khoản nào được tạo cho người đó.</td></tr>
+        <tr><td class="err">Không thể cấp quyền tham gia tuyển sinh…</td>
+            <td>Thử lại một lần. Vẫn lỗi thì báo Admin.</td></tr>
+        <tr><td>Không thấy người cần mời trong danh sách</td>
+            <td>Người đó chưa là mentor của mùa này trong hệ thống. Báo Admin, đừng mời bằng cách khác.</td></tr>
+        <tr><td>Reviewer báo liên kết đã hết hạn</td>
+            <td>Nhờ họ vào trang đăng nhập, bấm <b>Gửi liên kết đăng nhập qua email</b>.</td></tr>
+      </table>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Lưu ý khi giao hồ sơ</b>
+      Người <b>chỉ phỏng vấn</b> vẫn hiện trong ô chọn người khi giao hồ sơ chấm. Khi giao hồ sơ ở
+      <span class="path">Ứng tuyển → Giao hồ sơ đánh giá</span>, đừng chọn họ.
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn cho Support team · Mời và cấp quyền reviewer</span>
+  <span>Muốn thôi một quyền: bấm <b>Thu hồi quyền…</b> ở đúng dòng của người đó.</span>
+</footer>
+
+</body>
+</html>

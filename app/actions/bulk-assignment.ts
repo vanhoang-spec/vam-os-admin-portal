@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { assignSelectedApplicationReviews } from "@/lib/bulk-assignment";
-import { canBulkAssignReviews } from "@/lib/permissions";
+import { canAssignReviewLots } from "@/lib/permissions";
 import { notifyReviewerOfAssignment } from "@/lib/review-assignment-notice";
 import { parseReviewDueDate } from "@/lib/review-due";
 import { formatDate } from "@/lib/utils";
@@ -20,7 +20,7 @@ export async function bulkAssignApplicationReviewsAction(
   try {
     const adminUser = await getCurrentAdminUser();
     if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
-    if (!canBulkAssignReviews(adminUser.role)) return fail("Bạn không có quyền thực hiện thao tác này.");
+    if (!canAssignReviewLots(adminUser.role)) return fail("Bạn không có quyền thực hiện thao tác này.");
 
     // Parse form fields
     const applicationIds = formData.getAll("application_ids").map((v) => String(v).trim()).filter(Boolean);

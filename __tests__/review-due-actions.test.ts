@@ -17,6 +17,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: mocks.getCurrentAdminUser }));
 vi.mock("@/lib/permissions", () => ({
   canBulkAssignReviews: () => true,
+  canAssignReviewLots: () => true,
   canAssignReview: () => true,
   canReview: () => true
 }));

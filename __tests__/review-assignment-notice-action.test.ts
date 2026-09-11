@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: mocks.getCurrentAdminUser }));
-vi.mock("@/lib/permissions", () => ({ canBulkAssignReviews: () => true }));
+vi.mock("@/lib/permissions", () => ({ canBulkAssignReviews: () => true, canAssignReviewLots: () => true }));
 vi.mock("@/lib/bulk-assignment", () => ({
   assignSelectedApplicationReviews: mocks.assignSelectedApplicationReviews
 }));
