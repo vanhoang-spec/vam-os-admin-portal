@@ -16,7 +16,7 @@ const SAFE_ERROR = "Không thể cấp quyền tham gia tuyển sinh. Vui lòng 
  */
 const AUTH_PAGE_LIMIT = 200;
 
-class AuthLookupIncomplete extends Error {
+export class AuthLookupIncomplete extends Error {
   constructor() {
     super("Auth user directory exceeded the safe pagination limit");
     this.name = "AuthLookupIncomplete";
@@ -32,7 +32,14 @@ class AuthLookupIncomplete extends Error {
  * the caller invite an account that may already exist, creating a duplicate
  * identity. We fail closed instead.
  */
-async function findAuthUserByEmail(client: any, email: string) {
+/**
+ * Tra một hòm thư trong danh bạ Auth, đọc hết mọi trang.
+ *
+ * Xuất ra để lời mời participant dùng chung — hai phép tra danh bạ Auth là hai
+ * chỗ có thể lệch nhau về cách xử lý trang cuối, và lệch ở đó nghĩa là tạo
+ * tài khoản thứ hai cho cùng một hòm thư.
+ */
+export async function findAuthUserByEmail(client: any, email: string) {
   const normalizedEmail = email.trim().toLowerCase();
   for (let page = 1; page <= AUTH_PAGE_LIMIT; page++) {
     const { data, error } = await client.auth.admin.listUsers({ page, perPage: 1000 });
