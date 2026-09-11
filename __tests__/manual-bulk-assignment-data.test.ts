@@ -263,4 +263,26 @@ describe("getReviewAssignableApplications (Data layer round semantics)", () => {
     expect(cancelled?.existing_review_count).toBe(0);
     expect(cancelled?.existing_reviewer_id).toBe(null);
   });
+
+  it("DUE_AT_OF_THE_ACTIVE_ASSIGNMENT: the Đã giao tab can say when the lot is due", async () => {
+    mockDb.apps = [
+      { id: "app_assigned", status: "screening_assigned" },
+      { id: "app_interview_only", status: "submitted" }
+    ];
+    mockDb.reviews = [
+      { id: "r1", application_id: "app_assigned", review_round: "profile_screening", status: "assigned", reviewer_admin_user_id: "rev1", due_at: "2026-09-20T16:59:59.000Z" },
+      // A cancelled assignment read AFTER the live one must not overwrite its deadline.
+      { id: "r0", application_id: "app_assigned", review_round: "profile_screening", status: "cancelled", reviewer_admin_user_id: "rev0", due_at: "2026-09-01T16:59:59.000Z" },
+      // Another round's deadline must not leak into this round's tab.
+      { id: "r2", application_id: "app_interview_only", review_round: "interview", status: "assigned", reviewer_admin_user_id: "rev2", due_at: "2026-09-25T16:59:59.000Z" }
+    ];
+
+    const { data, error } = await getReviewAssignableApplications({ reviewRound: "profile_screening" });
+    if (error) throw new Error(String(error));
+
+    // The fake projects only selected columns, so a read that forgets `due_at`
+    // comes back without it and this fails.
+    expect(data.find((a) => a.id === "app_assigned")?.existing_due_at).toBe("2026-09-20T16:59:59.000Z");
+    expect(data.find((a) => a.id === "app_interview_only")?.existing_due_at).toBe(null);
+  });
 });
