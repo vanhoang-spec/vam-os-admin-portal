@@ -158,3 +158,37 @@ export async function resolveParticipantIdentity(input: {
     error: null
   };
 }
+
+/**
+ * Ghi mốc lần đầu một người đăng nhập bằng tài khoản được mời.
+ *
+ * Mối nối tạo từ lời mời không có `activated_at`; không ghi mốc này thì màn hình
+ * mời hiện người đó là "chưa vào" mãi, và ban tổ chức cứ gửi lại thư cho một
+ * người đang dùng tài khoản.
+ *
+ * Gọi từ đường đăng nhập, KHÔNG từ `resolveParticipantIdentity`: hàm kia chạy ở
+ * khung màn hình của mọi lượt tải trang, và một lệnh ghi không có chỗ trong
+ * đường đọc.
+ *
+ * Ghi hẹp: chỉ cột `activated_at`, chỉ khi còn trống, chỉ trên mối nối đang
+ * hoạt động của đúng cặp tài khoản-người. Không bao giờ ném lỗi — đây là một
+ * tín hiệu, không phải một quyền, và nó không được chặn ai đăng nhập.
+ */
+export async function recordParticipantActivation(input: { authUserId: string; personId: string }): Promise<void> {
+  try {
+    const client = getSupabaseServiceRoleClient();
+    if (!client) return;
+
+    const { error } = await client
+      .from("account_person_auth_links")
+      .update({ activated_at: new Date().toISOString() })
+      .eq("auth_user_id", input.authUserId)
+      .eq("person_id", input.personId)
+      .eq("status", "active")
+      .is("activated_at", null);
+
+    if (error) log("ghi lần đăng nhập đầu", error);
+  } catch (error) {
+    log("ghi lần đăng nhập đầu", error);
+  }
+}

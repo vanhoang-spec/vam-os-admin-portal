@@ -3,6 +3,7 @@ import {
   canAssignReviewLots,
   canBrowseOperations,
   canComposeEmailTemplate,
+  canInviteParticipants,
   canManageReviewers
 } from "@/lib/permissions";
 import {
@@ -129,6 +130,13 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/people", label: "Cộng đồng VAM" },
             { href: "/mentors", label: "Mentor" },
             { href: "/mentees", label: "Mentee" },
+            // Mời mentor/mentee lập tài khoản. Theo đúng predicate trang
+            // /participant-accounts tự kiểm, không theo cổng của cả nhóm: hôm nay
+            // hai cổng trùng nhau, nhưng ngày nhóm này mở cho một vai trò đọc
+            // thôi, mục này không được mở theo.
+            ...(canInviteParticipants(role)
+              ? [{ href: "/participant-accounts", label: "Tài khoản đăng nhập" }]
+              : []),
           ],
         }
       : null,

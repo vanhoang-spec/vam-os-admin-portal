@@ -32,26 +32,78 @@ export class AuthLookupIncomplete extends Error {
  * the caller invite an account that may already exist, creating a duplicate
  * identity. We fail closed instead.
  */
+type AuthUserEntry = { id: string; email?: string | null };
+
 /**
- * Tra một hòm thư trong danh bạ Auth, đọc hết mọi trang.
+ * Đi qua từng trang danh bạ Auth cho tới một trang RỖNG.
  *
- * Xuất ra để lời mời participant dùng chung — hai phép tra danh bạ Auth là hai
- * chỗ có thể lệch nhau về cách xử lý trang cuối, và lệch ở đó nghĩa là tạo
- * tài khoản thứ hai cho cùng một hòm thư.
+ * Một vòng trang duy nhất cho mọi phép tra danh bạ: hai vòng là hai chỗ có thể
+ * lệch nhau về cách xử lý trang cuối, và lệch ở đó nghĩa là tạo tài khoản thứ
+ * hai cho cùng một hòm thư. `visit` trả về true để dừng sớm.
  */
-export async function findAuthUserByEmail(client: any, email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
+async function walkAuthUserPages(client: any, visit: (users: AuthUserEntry[]) => boolean): Promise<void> {
   for (let page = 1; page <= AUTH_PAGE_LIMIT; page++) {
     const { data, error } = await client.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw error;
-    const users = (data?.users ?? []) as Array<{ id: string; email?: string }>;
+    const users = (data?.users ?? []) as AuthUserEntry[];
     // Only an empty page proves the directory is exhausted.
-    if (users.length === 0) return null;
-
-    const found = users.find(user => String(user.email ?? "").trim().toLowerCase() === normalizedEmail);
-    if (found) return found;
+    if (users.length === 0) return;
+    if (visit(users)) return;
   }
   throw new AuthLookupIncomplete();
+}
+
+/** Tra một hòm thư trong danh bạ Auth, đọc hết mọi trang. */
+export async function findAuthUserByEmail(client: any, email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  // Một hộp chứ không phải một biến: TypeScript không theo được phép gán bên
+  // trong callback, và sẽ coi biến vẫn là null sau vòng lặp.
+  const box: { found: { id: string; email?: string } | null } = { found: null };
+  await walkAuthUserPages(client, (users) => {
+    const match = users.find((user) => String(user.email ?? "").trim().toLowerCase() === normalizedEmail);
+    if (!match) return false;
+    box.found = match as { id: string; email?: string };
+    return true;
+  });
+  return box.found;
+}
+
+/**
+ * Toàn bộ danh bạ Auth, đọc MỘT lần cho cả một lượt mời.
+ *
+ * Tra từng người bằng `findAuthUserByEmail` nghĩa là đi lại cả danh bạ cho mỗi
+ * người trong lượt — hai mươi người là hai mươi lần đọc toàn bộ tài khoản.
+ *
+ * Là một lớp chứ không phải một object thường: hàm mời chỉ nhận bản danh bạ
+ * dựng bằng `AuthDirectory.load`. Một object gửi lên từ trình duyệt mất
+ * prototype trên đường đi, nên không giả được thành danh bạ.
+ */
+export class AuthDirectory {
+  private readonly byEmail: Map<string, Array<{ id: string; email: string }>>;
+
+  private constructor(byEmail: Map<string, Array<{ id: string; email: string }>>) {
+    this.byEmail = byEmail;
+  }
+
+  static async load(client: any): Promise<AuthDirectory> {
+    const byEmail = new Map<string, Array<{ id: string; email: string }>>();
+    await walkAuthUserPages(client, (users) => {
+      for (const user of users) {
+        const email = String(user.email ?? "").trim().toLowerCase();
+        if (!email || !user.id) continue;
+        const list = byEmail.get(email) ?? [];
+        list.push({ id: String(user.id), email });
+        byEmail.set(email, list);
+      }
+      return false;
+    });
+    return new AuthDirectory(byEmail);
+  }
+
+  /** Mọi tài khoản mang đúng email này. Nhiều hơn một là dữ liệu hỏng, người gọi phải từ chối. */
+  usersWithEmail(email: string): Array<{ id: string; email: string }> {
+    return (this.byEmail.get(String(email ?? "").trim().toLowerCase()) ?? []).slice();
+  }
 }
 
 export type EnableReviewerResult = {

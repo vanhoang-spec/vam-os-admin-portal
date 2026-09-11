@@ -248,7 +248,14 @@ describe("tên file theo quy ước hiện hành", () => {
     expect(FILE).toMatch(/^\d{14}_[a-z0-9_]+\.sql$/);
   });
 
-  it("chạy sau mọi migration đang có", () => {
-    expect(migrationFiles.every((name) => name < FILE)).toBe(true);
+  it("chạy sau mọi migration định nghĩa bốn hàm nó sửa", () => {
+    // Điều cần giữ là: không migration nào SAU nó định nghĩa lại một trong bốn
+    // hàm — làm vậy là đưa lời gọi cũ trở lại, và support_team mất quyền mà
+    // không ai biết. Bản cũ của ca này đòi migration này mới nhất trong cả thư
+    // mục, nên đỏ với mọi migration thêm sau dù không đụng tới bốn hàm ấy.
+    for (const signature of EXPECTED_TARGETS) {
+      const name = signature.slice("public.".length, signature.indexOf("("));
+      expect(latestDefinition(name).file < FILE, name).toBe(true);
+    }
   });
 });

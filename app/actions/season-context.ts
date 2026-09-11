@@ -7,7 +7,7 @@ import {
   SEASON_COOKIE_NAME,
   type ResolvedSeasonContext
 } from "@/lib/season-context";
-import { seasonLabel } from "@/lib/season-labels";
+import { isSeasonAwarePath, seasonLabel } from "@/lib/season-labels";
 
 export type SeasonSelectorState = {
   ok: boolean;
@@ -32,8 +32,10 @@ function safeReturnTo(value: unknown) {
   if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/";
   try {
     const url = new URL(raw, "https://vam.invalid");
-    const supported = new Set(["/", "/mentors", "/mentees", "/matches", "/operations", "/operations/tasks"]);
-    if (url.origin !== "https://vam.invalid" || !supported.has(url.pathname)) return "/";
+    // Cùng một danh sách với chỗ quyết định có hiện ô chọn mùa hay không. Hai
+    // danh sách riêng thì trang nào được thêm vào một mà quên cái kia sẽ hiện ô
+    // chọn mùa, rồi đổi mùa xong lại bị đẩy về trang chủ.
+    if (url.origin !== "https://vam.invalid" || !isSeasonAwarePath(url.pathname)) return "/";
     url.searchParams.delete("season");
     return `${url.pathname}${url.search}`;
   } catch {

@@ -31,7 +31,8 @@ export type EmailKind =
   // Internal, to the organisers: time to collect the group posts (migration 070).
   // Server-authored like the two above it, not a template anybody has to approve.
   | "recap_period_reminder"
-  // The letter that gives a mentor or a mentee their account (migration 071).
+  // The letter that gives a mentor or a mentee their account
+  // (supabase/migrations/20260911140000_participant_account_invites.sql).
   | "participant_invite"
   // Cross-mentoring (migration 072). The first carries a token a mentor answers
   // through; the other three simply tell somebody what was decided.
@@ -697,65 +698,69 @@ export function buildRecapPeriodReminderEmail(input: {
   return { to: "", subject, text: lines.join("\n"), html };
 }
 
+/** Subject of the account letter; separate so a failed send can still be logged under it. */
+export function participantInviteSubject(linkType: "invite" | "recovery"): string {
+  return linkType === "recovery"
+    ? "[UEH Mentoring] Đường dẫn đặt mật khẩu VAM OS"
+    : "[UEH Mentoring] Tài khoản VAM OS của anh/chị đã sẵn sàng";
+}
+
 /**
- * The letter that gives a mentor or a mentee an account.
+ * The letter that gives a mentor or a mentee an account — or, with
+ * `linkType: "recovery"`, a fresh password link for an account they already
+ * hold.
  *
- * Sent once, to roughly eleven hundred people, and it has one job: get them to
- * set a password and sign in. Everything else — which programme, which season,
- * who they are matched with — the system works out after they arrive, so the
- * letter says none of it.
+ * It promises only what /ct shows today: the programmes and seasons the person
+ * belongs to, and the events they registered for. An earlier draft promised a
+ * matched pair, a code of conduct and a handbook, none of which the screen has —
+ * the first thing a mentor would notice after signing in.
+ *
+ * The login address is spelled out as a second step because the link only sets
+ * a password. It does not sign anyone in.
  */
 export function buildParticipantInviteEmail(input: {
   recipientName: string;
-  inviteUrl: string;
-  programNames?: string[];
+  linkUrl: string;
+  linkType: "invite" | "recovery";
+  loginUrl: string;
+  loginEmail: string;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.recipientName);
-  const programs = (input.programNames ?? []).filter(Boolean).map((value) => safeDisplayName(value));
+  const loginEmail = normalizeEmailAddress(input.loginEmail) ?? safeDisplayName(input.loginEmail, "");
+  const subject = participantInviteSubject(input.linkType);
 
-  const subject = "[UEH Mentoring] Tài khoản VAM OS của anh/chị đã sẵn sàng";
+  const intro =
+    input.linkType === "recovery"
+      ? "Đây là đường dẫn mới để đặt mật khẩu cho tài khoản VAM OS của anh/chị. Đường dẫn trong các thư trước (nếu có) không còn dùng được."
+      : "UEH Mentoring đã mở cho anh/chị một tài khoản trên VAM OS. Sau khi đăng nhập, anh/chị xem được các chương trình và mùa mình đang tham gia hoặc đã hoàn thành, cùng các sự kiện đã đăng ký.";
+  const expiry =
+    "Đường dẫn chỉ dùng được một lần và có hạn sử dụng. Nếu đã hết hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.";
 
   const lines = [
     `Kính gửi ${name},`,
     "",
-    "Từ mùa này, mentor và mentee của UEH Mentoring có tài khoản riêng trên hệ thống VAM OS.",
-    "Anh/chị đăng nhập một lần là thấy đầy đủ: mùa đang tham gia, người được ghép cặp,",
-    "quy tắc ứng xử và cẩm nang đồng hành — không cần tìm lại từng email cũ.",
+    intro,
     "",
-    "Bấm vào đường dẫn dưới đây để đặt mật khẩu:",
-    input.inviteUrl,
-    ""
-  ];
-
-  if (programs.length > 1) {
-    lines.push(
-      `Anh/chị đang tham gia ${programs.length} chương trình: ${programs.join(", ")}.`,
-      "Sau khi đăng nhập, hệ thống sẽ hỏi anh/chị muốn vào chương trình nào.",
-      ""
-    );
-  } else if (programs.length === 1) {
-    lines.push(`Chương trình: ${programs[0]}.`, "");
-  }
-
-  lines.push(
-    "Đường dẫn này chỉ dùng được một lần và sẽ hết hạn. Nếu quá hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.",
+    "Bước 1 — Bấm vào đường dẫn dưới đây để đặt mật khẩu:",
+    input.linkUrl,
+    "",
+    `Bước 2 — Đăng nhập tại ${input.loginUrl} bằng email ${loginEmail} và mật khẩu vừa đặt.`,
+    "",
+    expiry,
     "",
     "Trân trọng,",
     "",
     SIGNATURE_TEXT
-  );
+  ];
 
   const html = wrapHtml(
     [
       `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
-      "<p>Từ mùa này, mentor và mentee của UEH Mentoring có tài khoản riêng trên hệ thống VAM OS. Anh/chị đăng nhập một lần là thấy đầy đủ: mùa đang tham gia, người được ghép cặp, quy tắc ứng xử và cẩm nang đồng hành.</p>",
-      `<p style="margin:20px 0"><a href="${escapeHtml(input.inviteUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu và đăng nhập</a></p>`,
-      programs.length > 1
-        ? `<p>Anh/chị đang tham gia <strong>${programs.length} chương trình</strong>: ${escapeHtml(programs.join(", "))}. Sau khi đăng nhập, hệ thống sẽ hỏi anh/chị muốn vào chương trình nào.</p>`
-        : programs.length === 1
-          ? `<p>Chương trình: <strong>${escapeHtml(programs[0])}</strong>.</p>`
-          : "",
-      "<p>Đường dẫn này chỉ dùng được một lần và sẽ hết hạn. Nếu quá hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.</p>"
+      `<p>${escapeHtml(intro)}</p>`,
+      "<p><strong>Bước 1</strong> — Bấm nút dưới đây để đặt mật khẩu:</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.linkUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu</a></p>`,
+      `<p><strong>Bước 2</strong> — Đăng nhập tại <a href="${escapeHtml(input.loginUrl)}">${escapeHtml(input.loginUrl)}</a> bằng email <strong>${escapeHtml(loginEmail)}</strong> và mật khẩu vừa đặt.</p>`,
+      `<p>${escapeHtml(expiry)}</p>`
     ].join("")
   );
 

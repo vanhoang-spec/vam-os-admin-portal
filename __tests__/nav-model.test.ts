@@ -178,7 +178,7 @@ describe("buildNavGroups — reviewer", () => {
     [
       "/people", "/mentors", "/mentees",
       "/applications", "/applications/mentor-review", "/applications/mentee-review",
-      "/events", "/data-issues"
+      "/events", "/data-issues", "/participant-accounts"
     ].forEach((r) => expect(hrefs).not.toContain(r));
   });
 
@@ -200,7 +200,7 @@ describe("buildNavGroups — viewer", () => {
   it("has ≤ 9 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(9));
 
   it("does NOT include review, interview, or admin routes", () => {
-    ["/reviews", "/interviews", "/admin", "/team", "/admin/users"].forEach((r) =>
+    ["/reviews", "/interviews", "/admin", "/team", "/admin/users", "/participant-accounts"].forEach((r) =>
       expect(hrefs).not.toContain(r)
     );
   });
@@ -256,7 +256,7 @@ describe("buildNavGroups — null user", () => {
   });
 
   it("returns no gated routes", () => {
-    ["/reviews", "/interviews", "/admin", "/team", "/admin/users", "/operations", "/matches"].forEach((r) =>
+    ["/reviews", "/interviews", "/admin", "/team", "/admin/users", "/operations", "/matches", "/participant-accounts"].forEach((r) =>
       expect(hrefs).not.toContain(r)
     );
   });
@@ -403,6 +403,11 @@ const REVIEW_ROUTES = [
 // the nav offers.
 const HELPER_REVIEW_ROUTES = ["/my-work", "/reviews", "/interviews"];
 
+// Mời mentor/mentee lập tài khoản (11/09/2026). Bốn vai trò của
+// canInviteParticipants — support_team có mặt theo quyết định của chủ chương
+// trình, reviewer và viewer thì không.
+const LOGIN_ACCOUNT_ROUTES = ["/participant-accounts"];
+
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       ["/"],
   // support_team là nhóm thật sự viết thư cho người tham gia, nên nó soạn
@@ -411,11 +416,11 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   //
   // Từ 11/09/2026 support_team cũng mời reviewer và giao hồ sơ, nên thấy đúng
   // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
-  support_team: [...BASE_ROUTE_ARR, "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool"],
+  support_team: [...BASE_ROUTE_ARR, "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users"],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES],
 };
 
 function sortedRoutes(arr: string[]) {
