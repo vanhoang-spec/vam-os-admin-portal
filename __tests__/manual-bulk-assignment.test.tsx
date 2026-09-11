@@ -1,8 +1,16 @@
 /** @vitest-environment jsdom */
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { AssignBulkForm } from "@/app/reviews/assign-bulk/assign-bulk-form";
 import type { ReviewAssignableApplication, ReviewEligibleReviewer, IntakeBatch, Season } from "@/lib/types";
+import { toVietnamDateInput, toVietnamInputValue } from "@/lib/event-datetime";
+
+/**
+ * The application rows' checkboxes. Scoped to the table because the assign form
+ * has a checkbox of its own ("Gửi thư báo cho người chấm") — a page-wide query
+ * would count it as one more application.
+ */
+const rowCheckboxes = () => within(screen.getByRole("table")).getAllByRole("checkbox");
 
 vi.mock("react", async () => {
   const original = await vi.importActual("react");
@@ -105,7 +113,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     // The default tab hides assigned work; this case counts every row, so it
     // asks for all of them.
     showAllRows();
-    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    const checkboxes = rowCheckboxes() as HTMLInputElement[];
     expect(checkboxes.length).toBe(3); // app1, app2, app3
     
     // Check app1
@@ -128,7 +136,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     const { container } = render(<AssignBulkForm {...defaultProps} />);
     showAllRows();
 
-    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    const checkboxes = rowCheckboxes() as HTMLInputElement[];
     expect(checkboxes[1].disabled).toBe(false);
 
     fireEvent.click(checkboxes[1]); // app2, already assigned to Reviewer 1
@@ -151,7 +159,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     );
     showAllRows();
 
-    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    const checkboxes = rowCheckboxes() as HTMLInputElement[];
     fireEvent.click(checkboxes[1]);
 
     const forms = container.querySelectorAll("form");
@@ -167,7 +175,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     fireEvent.click(selectAllBtn);
     
     // Default tab lists exactly the unassigned pair, which is the lot.
-    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    const checkboxes = rowCheckboxes() as HTMLInputElement[];
     expect(checkboxes).toHaveLength(2);
     expect(checkboxes.every((box) => box.checked)).toBe(true);
 
@@ -193,7 +201,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
 
     expect(submittedIds(container)).toEqual([]);
 
-    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    const checkboxes = rowCheckboxes() as HTMLInputElement[];
     fireEvent.click(checkboxes[0]); // app1 only
 
     expect(submittedIds(container)).toEqual(["app1"]);
@@ -206,7 +214,7 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
   it("SELECTION_SURVIVES_SEARCH_FILTER: filtering the list does not silently drop selected ids", () => {
     const { container } = render(<AssignBulkForm {...defaultProps} />);
 
-    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    const checkboxes = rowCheckboxes() as HTMLInputElement[];
     // The default tab lists exactly the unassigned pair, app1 and app3.
     fireEvent.click(checkboxes[0]); // app1
     fireEvent.click(checkboxes[1]); // app3
@@ -306,5 +314,213 @@ describe("Manual Bulk Assignment UX (AssignBulkForm)", () => {
     expect(screen.getByText("Chưa có Người phỏng vấn cho mùa này.")).toBeDefined();
     const link = screen.getByText("Mở Danh sách nhân sự tuyển sinh để cấp quyền.");
     expect(link.closest("a")?.getAttribute("href")).toBe("/reviews/reviewer-pool");
+  });
+});
+
+describe("Hạn hoàn tất khi giao hồ sơ", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const reviewers: ReviewEligibleReviewer[] = [
+    { id: "rev1", email: "rev1@example.com", full_name: "Reviewer 1", role: "reviewer", current_workload: 0 }
+  ];
+
+  const applications: ReviewAssignableApplication[] = [
+    {
+      id: "app1",
+      full_name: "App 1",
+      email_primary: "app1@test.com",
+      status: "submitted",
+      role_applied: "mentor",
+      intake_batch_id: "batch1",
+      submitted_at: "2026-01-01T00:00:00Z",
+      existing_review_count: 0
+    },
+    {
+      id: "app2",
+      full_name: "App 2",
+      email_primary: "app2@test.com",
+      status: "screening_assigned",
+      role_applied: "mentor",
+      intake_batch_id: "batch1",
+      submitted_at: "2026-01-02T00:00:00Z",
+      existing_review_count: 1,
+      existing_reviewer_id: "rev1",
+      existing_review_id: "review-of-app2",
+      existing_due_at: "2026-09-20T16:59:59.000Z"
+    }
+  ];
+
+  const props = {
+    applications,
+    reviewers,
+    intakeBatchId: "batch1",
+    roleApplied: "mentor",
+    reviewRound: "profile_screening" as const,
+    intakeBatches: [] as IntakeBatch[],
+    seasons: [] as Season[],
+    adminUserId: "admin1"
+  };
+
+  /** A day N days from now: as the operator types it, and as the form posts it. */
+  function dayFromNow(days: number) {
+    const posted = toVietnamInputValue(new Date(Date.now() + days * 86_400_000).toISOString()).slice(0, 10);
+    return { typed: toVietnamDateInput(posted), posted };
+  }
+
+  const dueInput = (label = "Hạn hoàn tất chấm") => screen.getByLabelText(`${label} — dạng ngày/tháng/năm`);
+  const assignForm = (container: HTMLElement) => container.querySelectorAll("form")[0] as HTMLFormElement;
+  const submitButton = () => screen.getByRole("button", { name: /Xác nhận giao hồ sơ/ }) as HTMLButtonElement;
+  const summary = () => screen.getByText(/Bạn sắp giao/).textContent ?? "";
+
+  /** Reviewer chosen and one unassigned application ticked. */
+  function readyToAssign() {
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "rev1" } });
+    fireEvent.click(rowCheckboxes()[0]);
+  }
+
+  it("DUE_FIELD_BELONGS_TO_THE_ASSIGN_FORM: posted with an assignment, never with a hand-back", () => {
+    const { container } = render(<AssignBulkForm {...props} />);
+    const forms = container.querySelectorAll("form");
+
+    expect(new FormData(forms[0]).has("due_at")).toBe(true);
+    expect(new FormData(forms[forms.length - 1]).has("due_at")).toBe(false);
+  });
+
+  it("DUE_DATE_IS_POSTED_AS_A_DATE_AND_ANNOUNCED", () => {
+    const { container } = render(<AssignBulkForm {...props} />);
+    readyToAssign();
+    const day = dayFromNow(9);
+    fireEvent.change(dueInput(), { target: { value: day.typed } });
+
+    expect(new FormData(assignForm(container)).get("due_at")).toBe(day.posted);
+    expect(summary()).toContain(`hạn hoàn tất hết ngày ${day.typed}`);
+    expect(submitButton().disabled).toBe(false);
+  });
+
+  it("NO_DUE_IS_SAID_OUT_LOUD: leaving it empty is visible before confirming", () => {
+    render(<AssignBulkForm {...props} />);
+    readyToAssign();
+
+    expect(summary()).toContain("chưa đặt hạn hoàn tất");
+    expect(submitButton().disabled).toBe(false);
+  });
+
+  it("HALF_TYPED_DUE_BLOCKS_ASSIGNING: otherwise the lot goes out with no deadline", () => {
+    const { container } = render(<AssignBulkForm {...props} />);
+    readyToAssign();
+    fireEvent.change(dueInput(), { target: { value: "20/09/20" } });
+
+    // What the browser would send is empty — the silent loss being blocked.
+    expect(new FormData(assignForm(container)).get("due_at")).toBe("");
+    expect(submitButton().disabled).toBe(true);
+    expect(screen.getByText(/Gõ đủ ngày\/tháng\/năm/)).toBeDefined();
+    expect(summary()).not.toContain("chưa đặt hạn");
+  });
+
+  it("PAST_DUE_BLOCKS_ASSIGNING", () => {
+    render(<AssignBulkForm {...props} />);
+    readyToAssign();
+    fireEvent.change(dueInput(), { target: { value: dayFromNow(-2).typed } });
+
+    expect(submitButton().disabled).toBe(true);
+    expect(screen.getByText(/đã qua/)).toBeDefined();
+  });
+
+  it("INTERVIEW_ROUND_NAMES_ITS_OWN_DEADLINE", () => {
+    render(<AssignBulkForm {...props} reviewRound="interview" applications={[]} />);
+    expect(dueInput("Hạn hoàn tất phỏng vấn")).toBeDefined();
+  });
+
+  it("ASSIGNED_ROW_SHOWS_ITS_DEADLINE", () => {
+    render(<AssignBulkForm {...props} />);
+    fireEvent.click(screen.getByTestId("pool-tab-assigned"));
+
+    expect(screen.getByText("Hạn 20/09/2026")).toBeDefined();
+  });
+});
+
+describe("Thư báo cho người chấm khi giao hồ sơ", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const reviewers: ReviewEligibleReviewer[] = [
+    { id: "rev1", email: "rev1@example.com", full_name: "Reviewer 1", role: "reviewer", current_workload: 0 }
+  ];
+
+  const applications: ReviewAssignableApplication[] = [
+    {
+      id: "app1",
+      full_name: "App 1",
+      email_primary: "app1@test.com",
+      status: "submitted",
+      role_applied: "mentee",
+      intake_batch_id: "batch1",
+      submitted_at: "2026-01-01T00:00:00Z",
+      existing_review_count: 0
+    }
+  ];
+
+  const props = {
+    applications,
+    reviewers,
+    intakeBatchId: "batch1",
+    roleApplied: "mentee",
+    reviewRound: "profile_screening" as const,
+    intakeBatches: [] as IntakeBatch[],
+    seasons: [] as Season[],
+    adminUserId: "admin1"
+  };
+
+  const noticeBox = () => screen.getByRole("checkbox", { name: /Gửi thư báo cho người chấm/ }) as HTMLInputElement;
+  const assignForm = (container: HTMLElement) => container.querySelectorAll("form")[0] as HTMLFormElement;
+  const summary = () => screen.getByText(/Bạn sắp giao/).textContent ?? "";
+
+  it("NOTICE_IS_ON_BY_DEFAULT_AND_POSTED", () => {
+    const { container } = render(<AssignBulkForm {...props} />);
+
+    expect(noticeBox().checked).toBe(true);
+    expect(new FormData(assignForm(container)).get("notify_reviewer")).toBe("1");
+    expect(summary()).toContain("Người chấm sẽ nhận thư báo.");
+  });
+
+  it("UNTICKED_NOTICE_IS_NOT_POSTED_AND_THE_SUMMARY_SAYS_SO", () => {
+    const { container } = render(<AssignBulkForm {...props} />);
+    fireEvent.click(noticeBox());
+
+    expect(noticeBox().checked).toBe(false);
+    expect(new FormData(assignForm(container)).has("notify_reviewer")).toBe(false);
+    expect(summary()).toContain("Không gửi thư báo.");
+  });
+
+  it("NOTICE_BELONGS_TO_THE_ASSIGN_FORM: a hand-back never mails anyone", () => {
+    const { container } = render(<AssignBulkForm {...props} />);
+    const forms = container.querySelectorAll("form");
+
+    expect(new FormData(forms[forms.length - 1]).has("notify_reviewer")).toBe(false);
+  });
+
+  it("INTERVIEW_ROUND_OFFERS_NO_NOTICE", () => {
+    const { container } = render(<AssignBulkForm {...props} reviewRound="interview" applications={[]} />);
+
+    expect(screen.queryByRole("checkbox", { name: /Gửi thư báo/ })).toBeNull();
+    expect(new FormData(assignForm(container)).has("notify_reviewer")).toBe(false);
+    expect(summary()).not.toContain("thư báo");
+  });
+
+  it("NO_REVIEWERS_NO_NOTICE", () => {
+    render(<AssignBulkForm {...props} reviewers={[]} />);
+
+    expect(screen.queryByRole("checkbox", { name: /Gửi thư báo/ })).toBeNull();
+    expect(summary()).not.toContain("thư báo");
+  });
+
+  it("ROW_CHECKBOXES_STAY_ROWS: the notice box is not counted as an application", () => {
+    render(<AssignBulkForm {...props} />);
+
+    expect(rowCheckboxes()).toHaveLength(1);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
   });
 });

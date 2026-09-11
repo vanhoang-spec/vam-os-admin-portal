@@ -153,7 +153,8 @@ export function VietnamDateField({
   label,
   defaultValue,
   disabled,
-  onChange
+  onChange,
+  onTextChange
 }: {
   name: string;
   label: string;
@@ -161,6 +162,11 @@ export function VietnamDateField({
   defaultValue?: string | null;
   disabled?: boolean;
   onChange?: (value: string) => void;
+  /**
+   * Chữ đang nằm trong ô. `onChange` báo rỗng cả khi ô trống lẫn khi gõ dở, nên
+   * chỗ nào cần phân biệt hai trường hợp đó thì nghe thêm cái này.
+   */
+  onTextChange?: (text: string) => void;
 }) {
   const [text, setText] = useState(toVietnamDateInput(defaultValue));
   const iso = parseVietnamDateInput(text);
@@ -180,6 +186,7 @@ export function VietnamDateField({
           const next = maskVietnamDate(event.target.value);
           setText(next);
           onChange?.(parseVietnamDateInput(next) ?? "");
+          onTextChange?.(next);
         }}
         className={`${BOX} w-36 tabular-nums disabled:bg-slate-100`}
       />

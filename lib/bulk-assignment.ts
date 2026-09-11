@@ -6,7 +6,7 @@ import {
   PROFILE_ASSIGNMENT_STATUSES,
   WITHDRAWN_APPLICATION_REVIEW_MESSAGE
 } from "@/lib/application-review-assignability";
-import { canBulkAssignReviews } from "@/lib/permissions";
+import { canAssignReviewLots, canBulkAssignReviews } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -173,7 +173,9 @@ export async function assignSelectedApplicationReviews(
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
   const actor = await getCurrentAdminUser();
-  if (!actor?.id || actor.id !== input.assignedByAdminUserId || !canBulkAssignReviews(actor.role)) {
+  // One lot to one person — the screen Support team uses. The automatic
+  // distribution above stays on canBulkAssignReviews.
+  if (!actor?.id || actor.id !== input.assignedByAdminUserId || !canAssignReviewLots(actor.role)) {
     return { ok: false, message: "Bạn không có quyền thực hiện thao tác giao review." };
   }
 

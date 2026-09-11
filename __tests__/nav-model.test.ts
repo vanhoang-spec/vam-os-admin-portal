@@ -408,7 +408,10 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   // support_team là nhóm thật sự viết thư cho người tham gia, nên nó soạn
   // được mẫu thư (canComposeEmailTemplate) dù không thuộc admin tier. Nó KHÔNG
   // duyệt và KHÔNG gửi được, và không thấy sổ thư đã gửi — đó là các cổng khác.
-  support_team: [...BASE_ROUTE_ARR, "/operations/mail"],
+  //
+  // Từ 11/09/2026 support_team cũng mời reviewer và giao hồ sơ, nên thấy đúng
+  // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
+  support_team: [...BASE_ROUTE_ARR, "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool"],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],
   admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES],

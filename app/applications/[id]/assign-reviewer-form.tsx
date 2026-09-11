@@ -1,22 +1,35 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { assignApplicationReviewAction, cancelApplicationReviewAction } from "@/app/actions/application-reviews";
+import { VietnamDateField } from "@/app/events/vietnam-datetime-field";
 import { initialReviewActionState } from "@/lib/review-action-types";
+import { reviewDueInputProblem } from "@/lib/review-due";
 import type { AdminUserPublic, ApplicationReview } from "@/lib/types";
 import { staffDisplayLabel } from "@/lib/ui-labels";
 import { formatDate } from "@/lib/utils";
 
-function SubmitButton({ label, pendingLabel, variant = "primary" }: { label: string; pendingLabel: string; variant?: "primary" | "danger" | "secondary" }) {
+function SubmitButton({
+  label,
+  pendingLabel,
+  variant = "primary",
+  disabled
+}: {
+  label: string;
+  pendingLabel: string;
+  variant?: "primary" | "danger" | "secondary";
+  disabled?: boolean;
+}) {
   const { pending } = useFormStatus();
-  
+
   let btnClass = "inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm font-medium text-white disabled:opacity-50";
   if (variant === "primary") btnClass += " bg-vam-green hover:bg-vam-ink";
   if (variant === "secondary") btnClass += " bg-vam-ink hover:bg-vam-ink/90";
   if (variant === "danger") btnClass = "inline-flex h-9 items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50";
-  
+
   return (
-    <button type="submit" disabled={pending} className={btnClass}>
+    <button type="submit" disabled={pending || disabled} className={btnClass}>
       {pending ? pendingLabel : label}
     </button>
   );
@@ -33,12 +46,12 @@ function reviewStatusLabel(status: string) {
   }
 }
 
-function ActiveAssignmentCard({ 
-  review, 
+function ActiveAssignmentCard({
+  review,
   reviewers,
-  title 
-}: { 
-  review: ApplicationReview & { reviewer_name: string }; 
+  title
+}: {
+  review: ApplicationReview & { reviewer_name: string };
   reviewers: AdminUserPublic[];
   title: string;
 }) {
@@ -50,7 +63,7 @@ function ActiveAssignmentCard({
       <div className="mb-4 space-y-1 text-sm text-slate-700">
         <div><span className="font-medium">Người phụ trách hiện tại:</span> {review.reviewer_name}</div>
         <div><span className="font-medium">Trạng thái:</span> {reviewStatusLabel(review.status)}</div>
-        {review.due_at && <div><span className="font-medium">Hạn nộp:</span> {formatDate(review.due_at)}</div>}
+        {review.due_at && <div><span className="font-medium">Hạn hoàn tất:</span> {formatDate(review.due_at)}</div>}
       </div>
 
       <div className="mt-4">
@@ -87,13 +100,18 @@ function AssignNewForm({
   title: string;
 }) {
   const [state, action] = useFormState(assignApplicationReviewAction, initialReviewActionState);
+  // As on the bulk screen: the field posts an empty value for a half-typed
+  // date too, so the typed text is what tells that apart from "no deadline".
+  const [dueDate, setDueDate] = useState("");
+  const [dueText, setDueText] = useState("");
+  const dueProblem = reviewDueInputProblem(dueText, dueDate);
 
   return (
     <form action={action} className="rounded-md border border-vam-line bg-white p-4">
       <h3 className="mb-2 text-sm font-semibold text-vam-ink">{title}</h3>
       <input type="hidden" name="application_id" value={applicationId} />
       <input type="hidden" name="review_round" value={round} />
-      
+
       {state.message && (
         <div className={`mb-3 rounded-md border px-3 py-2 text-sm ${state.ok ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"}`}>
           {state.message}
@@ -119,17 +137,18 @@ function AssignNewForm({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium uppercase text-slate-500 mb-1">
-            Hạn nộp (tuỳ chọn)
-          </label>
-          <input
-            type="date"
-            name="due_at"
-            className="w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm text-vam-ink focus:outline-none focus:ring-1 focus:ring-vam-green"
-          />
+          <span className="block text-xs font-medium uppercase text-slate-500 mb-1">
+            Hạn hoàn tất (tuỳ chọn)
+          </span>
+          <VietnamDateField name="due_at" label="Hạn hoàn tất" onChange={setDueDate} onTextChange={setDueText} />
+          {dueProblem ? (
+            <p className="mt-1 text-xs font-medium text-amber-800">{dueProblem}</p>
+          ) : (
+            <p className="mt-1 text-xs text-slate-500">Hết ngày này theo giờ Việt Nam.</p>
+          )}
         </div>
       </div>
-      <SubmitButton label="Giao Review" pendingLabel="Đang giao..." />
+      <SubmitButton label="Giao Review" pendingLabel="Đang giao..." disabled={Boolean(dueProblem)} />
     </form>
   );
 }
@@ -164,17 +183,17 @@ export function AssignmentControls({
     <div className="space-y-6">
       <div>
         {activeProfileReview ? (
-          <ActiveAssignmentCard 
-            title="Đánh giá hồ sơ" 
-            review={activeProfileReview} 
-            reviewers={profileReviewers} 
+          <ActiveAssignmentCard
+            title="Đánh giá hồ sơ"
+            review={activeProfileReview}
+            reviewers={profileReviewers}
           />
         ) : profileAssignable ? (
-          <AssignNewForm 
-            title="Đánh giá hồ sơ" 
-            applicationId={applicationId} 
-            reviewers={profileReviewers} 
-            round="profile_screening" 
+          <AssignNewForm
+            title="Đánh giá hồ sơ"
+            applicationId={applicationId}
+            reviewers={profileReviewers}
+            round="profile_screening"
           />
         ) : (
           <NotAssignableNotice title="Đánh giá hồ sơ" />
@@ -183,17 +202,17 @@ export function AssignmentControls({
 
       <div>
         {activeInterviewReview ? (
-          <ActiveAssignmentCard 
-            title="Phỏng vấn" 
-            review={activeInterviewReview} 
-            reviewers={interviewers} 
+          <ActiveAssignmentCard
+            title="Phỏng vấn"
+            review={activeInterviewReview}
+            reviewers={interviewers}
           />
         ) : interviewAssignable ? (
-          <AssignNewForm 
-            title="Phỏng vấn" 
-            applicationId={applicationId} 
-            reviewers={interviewers} 
-            round="interview" 
+          <AssignNewForm
+            title="Phỏng vấn"
+            applicationId={applicationId}
+            reviewers={interviewers}
+            round="interview"
           />
         ) : (
           <NotAssignableNotice title="Phỏng vấn" />

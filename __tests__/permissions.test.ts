@@ -125,16 +125,20 @@ describe("canBulkAssignReviews", () => {
   });
 });
 
-// ── canManageReviewers (admin tier only) ──────────────────────────────────────
+// ── canManageReviewers (admin tier + support_team, owner decision 11/09/2026) ─
+//
+// support_team is the group that invites reviewers, so it may grant recruitment
+// participation. Every neighbouring predicate in this file stays admin-tier —
+// see __tests__/support-team-staffing-permissions.test.ts for that boundary.
 
 describe("canManageReviewers", () => {
   ADMIN_TIER.forEach((role) => {
     it(`grants ${role}`, () => expect(canManageReviewers(role)).toBe(true));
   });
+  it("grants support_team", () => expect(canManageReviewers("support_team")).toBe(true));
   it("denies reviewer", () => expect(canManageReviewers("reviewer")).toBe(false));
-  LIMITED_ROLES.forEach((role) => {
-    it(`denies ${role}`, () => expect(canManageReviewers(role)).toBe(false));
-  });
+  it("denies viewer", () => expect(canManageReviewers("viewer")).toBe(false));
+  it("denies null", () => expect(canManageReviewers(null)).toBe(false));
 });
 
 // ── canSelfClaimInterview (admin tier + reviewer) ─────────────────────────────

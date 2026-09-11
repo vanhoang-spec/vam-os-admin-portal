@@ -11,6 +11,7 @@ import {
 } from "@/lib/application-reviews";
 import { canAssignReview, canReview } from "@/lib/permissions";
 import type { ReviewActionState } from "@/lib/review-action-types";
+import { parseReviewDueDate } from "@/lib/review-due";
 
 function fail(message: string): ReviewActionState {
   return { ok: false, message };
@@ -32,7 +33,6 @@ export async function assignApplicationReviewAction(
     const applicationId = String(formData.get("application_id") ?? "").trim();
     const reviewerAdminUserId = String(formData.get("reviewer_admin_user_id") ?? "").trim();
     const reviewRoundRaw = String(formData.get("review_round") ?? "").trim();
-    const dueAt = String(formData.get("due_at") ?? "").trim() || null;
 
     if (!applicationId) return fail("Thiếu application_id.");
     if (!reviewerAdminUserId) return fail("Vui lòng chọn reviewer.");
@@ -40,12 +40,18 @@ export async function assignApplicationReviewAction(
       return fail("review_round không hợp lệ.");
     }
 
+    // Same reading as the bulk screen: a date means the end of that day in
+    // Vietnam. Passing the raw `YYYY-MM-DD` through let Postgres read it as
+    // midnight UTC — 07:00 in Vietnam — so reviewers went overdue that morning.
+    const due = parseReviewDueDate(formData.get("due_at"));
+    if (!due.ok) return fail(due.message);
+
     const result = await assignApplicationReview({
       applicationId,
       reviewerAdminUserId,
       assignedByAdminUserId: adminUser.id,
       reviewRound: reviewRoundRaw,
-      dueAt
+      dueAt: due.dueAt
     });
 
     if (!result.ok) return fail(result.message);

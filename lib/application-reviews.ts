@@ -2,7 +2,7 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { WITHDRAWN_APPLICATION_REVIEW_MESSAGE } from "@/lib/application-review-assignability";
-import { canAssignReview, canReview } from "@/lib/permissions";
+import { canAssignReview, canAssignReviewLots, canReview } from "@/lib/permissions";
 import { canOperateSeason, canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { isEditableReviewStatus } from "@/lib/review-status";
 import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
@@ -59,13 +59,21 @@ async function canWriteReviewWorkflowForApplication(client: any, applicationId: 
 
 async function requireMutationActor(
   expectedAdminUserId: string,
-  permission: "review" | "assign"
+  // `hand_back` is returning an assignment to the queue from the lot screen —
+  // the one mutation here Support team may make. Assigning one application and
+  // swapping reviewers stay on `assign`.
+  permission: "review" | "assign" | "hand_back"
 ) {
   const actor = await getCurrentAdminUser();
   if (!actor?.id || actor.id !== expectedAdminUserId) {
     return { ok: false as const, message: "Bạn chưa đăng nhập hoặc phiên làm việc không hợp lệ." };
   }
-  const permitted = permission === "review" ? canReview(actor.role) : canAssignReview(actor.role);
+  const permitted =
+    permission === "review"
+      ? canReview(actor.role)
+      : permission === "hand_back"
+        ? canAssignReviewLots(actor.role)
+        : canAssignReview(actor.role);
   if (!permitted) {
     return { ok: false as const, message: "Bạn không có quyền thực hiện thao tác review này." };
   }
@@ -286,7 +294,7 @@ export async function cancelApplicationReview(input: {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
-  const actorAccess = await requireMutationActor(input.adminUserId, "assign");
+  const actorAccess = await requireMutationActor(input.adminUserId, "hand_back");
   if (!actorAccess.ok) return actorAccess;
 
   const reason = input.reason?.trim() || "Operational cancellation";

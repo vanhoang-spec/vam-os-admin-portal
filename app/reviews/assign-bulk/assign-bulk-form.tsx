@@ -5,9 +5,12 @@ import { useFormState, useFormStatus } from "react-dom";
 import Link from "next/link";
 import { bulkAssignApplicationReviewsAction } from "@/app/actions/bulk-assignment";
 import { bulkCancelApplicationReviewsAction } from "@/app/actions/bulk-cancel";
+import { VietnamDateField } from "@/app/events/vietnam-datetime-field";
 import { initialBulkAssignmentActionState } from "@/lib/bulk-assignment-action-types";
 import { initialBulkCancelActionState } from "@/lib/bulk-cancel-action-types";
 import { INTERVIEW_ELIGIBLE_STATUSES, PROFILE_ASSIGNMENT_STATUSES } from "@/lib/application-review-assignability";
+import { toVietnamDateInput } from "@/lib/event-datetime";
+import { reviewDueInputProblem } from "@/lib/review-due";
 import type { IntakeBatch, ReviewAssignableApplication, ReviewEligibleReviewer, Season } from "@/lib/types";
 import { ErrorBox } from "@/components/ui";
 import { applicationStatusLabel, staffDisplayLabel } from "@/lib/ui-labels";
@@ -84,8 +87,19 @@ export function AssignBulkForm({
   const [searchQuery, setSearchQuery] = useState("");
   const [tab, setTab] = useState<PoolTab>("unassigned");
   const [page, setPage] = useState(1);
+  // The deadline as posted (`YYYY-MM-DD`, or empty) and as typed. Both are
+  // needed: the field posts an empty value for a half-typed date too, and only
+  // the typed text tells that apart from "no deadline".
+  const [dueDate, setDueDate] = useState("");
+  const [dueText, setDueText] = useState("");
+  // On by default: a reviewer who is not told only finds the work by opening
+  // the list. Off is for an operator who has already told them another way.
+  const [notifyReviewer, setNotifyReviewer] = useState(true);
 
   const allowedStatuses = reviewRound === "interview" ? INTERVIEW_ELIGIBLE_STATUSES : PROFILE_ASSIGNMENT_STATUSES;
+  // The notice is written for scoring an application. An interview needs a slot
+  // first, and telling the interviewer belongs to scheduling.
+  const offersNotice = reviewRound === "profile_screening";
 
   const validApps = useMemo(
     () => applications.filter((a) => a.status && allowedStatuses.has(a.status)),
@@ -188,9 +202,14 @@ export function AssignBulkForm({
       .filter((reviewId): reviewId is string => Boolean(reviewId));
   }, [validApps, selectedAppIds]);
 
-  const canSubmit = submittableIds.length > 0 && !!selectedReviewerId;
+  // Same check the server runs, so what the screen lets through is what the
+  // server accepts.
+  const dueProblem = reviewDueInputProblem(dueText, dueDate);
+
+  const canSubmit = submittableIds.length > 0 && !!selectedReviewerId && !dueProblem;
   const submitLabel = reviewRound === "interview" ? "Xác nhận giao phỏng vấn" : "Xác nhận giao hồ sơ";
   const unitLabel = reviewRound === "interview" ? "ứng viên phỏng vấn" : "hồ sơ";
+  const dueLabel = reviewRound === "interview" ? "Hạn hoàn tất phỏng vấn" : "Hạn hoàn tất chấm";
 
   const tabs: Array<{ key: PoolTab; label: string; count: number }> = [
     { key: "unassigned", label: "Chưa giao", count: unassignedCount },
@@ -203,6 +222,11 @@ export function AssignBulkForm({
       {state.ok && state.message && (
         <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
           <p className="font-medium">{state.message}</p>
+        </div>
+      )}
+      {state.ok && state.emailWarning && (
+        <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-medium">{state.emailWarning}</p>
         </div>
       )}
       {!state.ok && state.message && <ErrorBox message={state.message} />}
@@ -327,7 +351,12 @@ export function AssignBulkForm({
                       </td>
                       <td className="px-4 py-2 text-slate-600">
                         {isAssigned ? (
-                          <span className="font-medium">{assignee}</span>
+                          <>
+                            <span className="font-medium">{assignee}</span>
+                            {a.existing_due_at ? (
+                              <span className="block text-xs text-slate-500">Hạn {formatDate(a.existing_due_at)}</span>
+                            ) : null}
+                          </>
                         ) : (
                           <span className="italic text-slate-400">Chưa giao</span>
                         )}
@@ -386,30 +415,93 @@ export function AssignBulkForm({
             </p>
           </div>
         ) : (
-          <div className="max-w-md">
-            <select
-              name="reviewer_id"
-              value={selectedReviewerId}
-              onChange={(e) => setSelectedReviewerId(e.target.value)}
-              className="w-full rounded-md border border-vam-line px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
-              required
-            >
-              <option value="">
-                {reviewRound === "interview" ? "-- Chọn người phỏng vấn --" : "-- Chọn người đánh giá hồ sơ --"}
-              </option>
-              {reviewers.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {staffDisplayLabel({ adminFullName: r.full_name, email: r.email, role: r.role })}
-                </option>
-              ))}
-            </select>
-          </div>
+          <>
+            <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+              <label className="block w-full max-w-md">
+                <span className="text-xs font-medium uppercase text-slate-500">
+                  {reviewRound === "interview" ? "Người phỏng vấn" : "Người đánh giá hồ sơ"}
+                </span>
+                <select
+                  name="reviewer_id"
+                  value={selectedReviewerId}
+                  onChange={(e) => setSelectedReviewerId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-vam-line px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
+                  required
+                >
+                  <option value="">
+                    {reviewRound === "interview" ? "-- Chọn người phỏng vấn --" : "-- Chọn người đánh giá hồ sơ --"}
+                  </option>
+                  {reviewers.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {staffDisplayLabel({ adminFullName: r.full_name, email: r.email, role: r.role })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {/*
+                The deadline travels with the lot, not with the person: one
+                reviewer can hold two lots due on different days. The field keeps
+                its value after each assignment, because operators usually hand
+                out several lots in a row against the same deadline.
+              */}
+              <div>
+                <span className="block text-xs font-medium uppercase text-slate-500">
+                  {dueLabel} <span className="normal-case text-slate-400">(tuỳ chọn)</span>
+                </span>
+                <div className="mt-1">
+                  <VietnamDateField name="due_at" label={dueLabel} onChange={setDueDate} onTextChange={setDueText} />
+                </div>
+                {dueProblem ? (
+                  <p className="mt-1 text-xs font-medium text-amber-800">{dueProblem}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Hết ngày này theo giờ Việt Nam. {reviewRound === "interview" ? "Người phỏng vấn" : "Người chấm"} thấy
+                    hạn này trong danh sách việc của mình.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {offersNotice ? (
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="notify_reviewer"
+                  value="1"
+                  checked={notifyReviewer}
+                  onChange={(e) => setNotifyReviewer(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-vam-green focus:ring-vam-green"
+                />
+                <span>
+                  <span className="font-medium">Gửi thư báo cho người chấm</span>
+                  <span className="block text-xs text-slate-500">
+                    Thư ghi số hồ sơ của lô này, hạn hoàn tất, và đường dẫn mở danh sách chấm.
+                  </span>
+                </span>
+              </label>
+            ) : null}
+          </>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
           <p className="text-sm text-slate-700">
             Bạn sắp giao <span className="font-bold text-vam-green">{submittableIds.length}</span> {unitLabel} cho{" "}
-            <span className="font-bold text-slate-900">{selectedReviewerName || "…"}</span>.
+            <span className="font-bold text-slate-900">{selectedReviewerName || "…"}</span>
+            {dueProblem ? (
+              "."
+            ) : dueDate ? (
+              <>
+                , hạn hoàn tất hết ngày <span className="font-bold text-slate-900">{toVietnamDateInput(dueDate)}</span>.
+              </>
+            ) : (
+              ", chưa đặt hạn hoàn tất."
+            )}
+            {offersNotice && reviewers.length > 0
+              ? notifyReviewer
+                ? " Người chấm sẽ nhận thư báo."
+                : " Không gửi thư báo."
+              : null}
           </p>
           <SubmitButton disabled={!canSubmit} label={submitLabel} />
         </div>
