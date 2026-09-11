@@ -7,7 +7,7 @@ import {
   getReviewEligibleReviewers,
   getSeasons
 } from "@/lib/data";
-import { canBulkAssignReviews } from "@/lib/permissions";
+import { canAssignReviewLots, canManageReviewers, canReview } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { AssignBulkForm } from "./assign-bulk-form";
@@ -21,7 +21,12 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
 
   const adminUser = await getCurrentAdminUser();
   if (!adminUser?.id) redirect("/login");
-  if (!canBulkAssignReviews(adminUser.role)) redirect("/reviews");
+  if (!canAssignReviewLots(adminUser.role)) redirect("/reviews");
+
+  // Support team reaches this screen without the rest of /reviews. A link to a
+  // page that turns them away is worse than no link.
+  const canOpenGuide = canReview(adminUser.role);
+  const canOpenPool = canManageReviewers(adminUser.role);
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
   const roleApplied = searchParams.role_applied?.trim() || null;
@@ -47,12 +52,16 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
           <div className="mb-4 flex items-center justify-between">
           <p className="text-sm font-medium text-slate-700">Bước 1 — Chọn batch và role ứng tuyển</p>
           <div className="flex gap-3">
-            <Link href="/reviews/reviewer-pool" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
-              Quản lý reviewer pool
-            </Link>
-            <Link href="/reviews/guide" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
-              Hướng dẫn vận hành
-            </Link>
+            {canOpenPool ? (
+              <Link href="/reviews/reviewer-pool" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
+                Quản lý reviewer pool
+              </Link>
+            ) : null}
+            {canOpenGuide ? (
+              <Link href="/reviews/guide" className="text-xs text-slate-400 hover:text-vam-green hover:underline">
+                Hướng dẫn vận hành
+              </Link>
+            ) : null}
           </div>
         </div>
           <form method="GET" className="flex flex-wrap gap-3">

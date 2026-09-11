@@ -8,6 +8,7 @@ gì, và điều gì xảy ra sau khi bấm.
 |---|---|---|
 | `HUONG_DAN_MODULE_SU_KIEN.pdf` | Core team, Support team, BTC sự kiện | Toàn bộ module Sự kiện: tạo sự kiện, chuỗi nhiều buổi, link đăng ký, thư xác nhận kèm QR, quét mã tại cửa, theo dõi số liệu |
 | `HUONG_DAN_MODULE_MAIL.pdf` | Core team, Support team, Admin | Toàn bộ module Mail: soạn mẫu thư và ô điền, duyệt, gửi hàng loạt theo lô, nhật ký gửi, cách viết để không rơi vào hộp thư rác |
+| `HUONG_DAN_CAP_QUYEN_REVIEWER.pdf` | Support team, Core team | Một trang: mời reviewer — cấp quyền chấm hồ sơ / phỏng vấn, thư mời, reviewer đăng nhập lần sau, các lỗi thường gặp |
 
 ## Sửa và xuất lại bản PDF
 
@@ -46,3 +47,10 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 - Con số "mỗi lượt 25 thư" ở Phần 5 (`lib/bulk-mail-core.ts`: `BULK_SEND_CHUNK`)
 - Nhóm người nhận ở Phần 5 (`lib/bulk-mail-core.ts`: `BULK_AUDIENCE_LABELS`)
 - Các lời báo lỗi trích trong Phần 3 (`lib/email-templates-core.ts`, hàm kiểm mẫu thư)
+
+**Mời reviewer (một trang):**
+
+- Tên menu, nhãn nút và lời báo trích trong trang — `__tests__/huong-dan-cap-quyen-reviewer.test.ts`
+  đối chiếu từng câu với mã nguồn, đổi nhãn mà quên sửa hướng dẫn thì test đỏ
+- Ai làm được (`lib/permissions.ts`: `canManageReviewers`, `canAssignReviewLots`)
+- Giữ **đúng một trang**: in xong, mở PDF kiểm lại số trang
