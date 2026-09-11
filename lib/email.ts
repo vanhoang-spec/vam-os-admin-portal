@@ -509,6 +509,7 @@ export async function sendReviewBatchAssigned(input: {
   seasonLabel: string;
   assignmentCount: number;
   dueLabel?: string | null;
+  roleApplied?: string | null;
   assignmentBatchId?: string | null;
   requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
@@ -522,7 +523,8 @@ export async function sendReviewBatchAssigned(input: {
     seasonLabel: input.seasonLabel,
     assignmentCount: input.assignmentCount,
     reviewsUrl: `${base}/reviews`,
-    dueLabel: input.dueLabel ?? null
+    dueLabel: input.dueLabel ?? null,
+    roleApplied: input.roleApplied ?? null
   });
 
   return deliver(

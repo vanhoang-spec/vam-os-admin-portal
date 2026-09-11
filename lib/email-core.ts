@@ -371,34 +371,50 @@ export function buildReviewerInviteEmail(input: {
   return { to: "", subject, text: lines.join("\n"), html };
 }
 
-/** Notice that a batch of applications is waiting for this reviewer. */
+/**
+ * Notice that a lot of applications is waiting for this reviewer.
+ *
+ * `dueLabel` is a date (DD/MM/YYYY) meaning the END of that day in Vietnam —
+ * the reading `lib/review-due.ts` stores. The mail says "hết ngày": the old
+ * "trước 20/09" reads as "before the 20th begins", so a careful reviewer
+ * finishes a day early and a relaxed one is flagged late.
+ */
 export function buildReviewBatchAssignedEmail(input: {
   reviewerName: string;
   seasonLabel: string;
   assignmentCount: number;
   reviewsUrl: string;
   dueLabel?: string | null;
+  /** `mentor` / `mentee` — what the applications in this lot applied for. */
+  roleApplied?: string | null;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.reviewerName);
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
   const count = Math.max(0, Math.floor(Number(input.assignmentCount) || 0));
   const due = input.dueLabel ? safeDisplayName(input.dueLabel) : null;
+  // A lot holds one role only — the assign RPC refuses a mixed lot. When the
+  // role is unknown say "hồ sơ" rather than guess: calling mentor applications
+  // "hồ sơ mentee" is wrong to the very person holding them.
+  const role = String(input.roleApplied ?? "").trim().toLowerCase();
+  const unit = role === "mentor" || role === "mentee" ? `hồ sơ ${role}` : "hồ sơ";
 
-  const subject = `[UEH Mentoring] ${count} hồ sơ mentee chờ anh/chị chấm — ${season}`;
+  const subject = due
+    ? `[UEH Mentoring] ${count} ${unit} chờ anh/chị chấm — ${season}, hạn ${due}`
+    : `[UEH Mentoring] ${count} ${unit} chờ anh/chị chấm — ${season}`;
 
   const lines = [
     `Kính gửi ${name},`,
     "",
-    `Ban tổ chức vừa phân công ${count} hồ sơ mentee ${season} cho anh/chị chấm.`,
-    "",
+    `Ban tổ chức vừa phân công ${count} ${unit} ${season} cho anh/chị chấm.`,
+    ""
+  ];
+  if (due) lines.push(`Hạn hoàn tất: hết ngày ${due} (giờ Việt Nam).`, "");
+  lines.push(
     "Anh/chị đăng nhập VAM OS và vào mục “Đánh giá” để bắt đầu:",
     input.reviewsUrl,
     "",
     "Mỗi hồ sơ được chấm theo 5 tiêu chí (thang điểm 1–5) kèm một đề xuất.",
-    ""
-  ];
-  if (due) lines.push(`Ban tổ chức mong nhận kết quả trước ${due}.`, "");
-  lines.push(
+    "",
     "Nếu anh/chị cần hỗ trợ hoặc muốn điều chỉnh số lượng hồ sơ, vui lòng trả lời email này.",
     "",
     "Trân trọng cảm ơn anh/chị.",
@@ -409,10 +425,10 @@ export function buildReviewBatchAssignedEmail(input: {
   const html = wrapHtml(
     [
       `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
-      `<p>Ban tổ chức vừa phân công <strong>${count} hồ sơ mentee</strong> ${escapeHtml(season)} cho anh/chị chấm.</p>`,
+      `<p>Ban tổ chức vừa phân công <strong>${count} ${escapeHtml(unit)}</strong> ${escapeHtml(season)} cho anh/chị chấm.</p>`,
+      due ? `<p>Hạn hoàn tất: <strong>hết ngày ${escapeHtml(due)}</strong> (giờ Việt Nam).</p>` : "",
       `<p style="margin:20px 0"><a href="${escapeHtml(input.reviewsUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở danh sách hồ sơ</a></p>`,
       "<p>Mỗi hồ sơ được chấm theo 5 tiêu chí (thang điểm 1–5) kèm một đề xuất.</p>",
-      due ? `<p>Ban tổ chức mong nhận kết quả trước <strong>${escapeHtml(due)}</strong>.</p>` : "",
       "<p>Nếu anh/chị cần hỗ trợ hoặc muốn điều chỉnh số lượng hồ sơ, vui lòng trả lời email này.</p>"
     ].join("")
   );
