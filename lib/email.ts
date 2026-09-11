@@ -24,6 +24,7 @@ import {
   normalizeEmailAddress,
   parseSenderAddress,
   participantInviteSubject,
+  reviewerInviteSubject,
   type EmailKind,
   type EmailMessage,
   type EmailProvider
@@ -485,35 +486,50 @@ export async function sendApplicationConfirmation(input: {
 }
 
 /**
- * Invite a mentor who agreed to score applications.
+ * Invite a mentor who agreed to score applications or interview, or send a
+ * fresh password link to one who has never signed in.
  *
- * The link comes from Supabase Auth (`generateLink`), not from us, so it is
- * validated as an absolute https URL rather than against our own base URL —
- * Supabase hosts the password-setting page.
+ * Same pipeline as the participant letter: the link is built HERE from the token
+ * hash Supabase's `generateLink` returned, points at this application's own
+ * /reset-password, and must pass the own-origin check. Supabase sends nothing —
+ * when it sent the reviewer invite itself, a refusal left the operator with a
+ * generic message and no trace of the reason.
  */
 export async function sendReviewerInvite(input: {
   toEmail: string;
   mentorName: string;
   seasonLabel: string;
-  inviteUrl: string;
+  linkType: PasswordLinkType;
+  tokenHash: string;
   adminUserId?: string | null;
+  requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
-  const url = String(input.inviteUrl ?? "").trim();
-  if (!url.startsWith("https://") || /[\r\n\s]/.test(url)) {
-    return { ok: false, skipped: false, reason: "Đường dẫn mời không hợp lệ." };
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  const linkUrl = base ? buildPasswordLinkUrl(base, { tokenHash: input.tokenHash, type: input.linkType }) : null;
+  const relation = input.adminUserId ? { table: "admin_users", id: input.adminUserId } : null;
+
+  if (!base || !linkUrl || !isSafeAppLink(linkUrl, base)) {
+    await logOutboundEmail({
+      kind: "reviewer_invite",
+      toEmail: String(input.toEmail ?? "").slice(0, 200),
+      subject: reviewerInviteSubject(input.seasonLabel),
+      status: "failed",
+      error: "Không dựng được đường dẫn đặt mật khẩu",
+      relation
+    });
+    return { ok: false, skipped: false, reason: "Không dựng được đường dẫn đặt mật khẩu." };
   }
 
   const built = buildReviewerInviteEmail({
     mentorName: input.mentorName,
     seasonLabel: input.seasonLabel,
-    inviteUrl: url
+    linkUrl,
+    linkType: input.linkType,
+    loginUrl: `${base}/login`,
+    loginEmail: input.toEmail
   });
 
-  return deliver(
-    "reviewer_invite",
-    { ...built, to: input.toEmail },
-    input.adminUserId ? { table: "admin_users", id: input.adminUserId } : null
-  );
+  return deliver("reviewer_invite", { ...built, to: input.toEmail }, relation);
 }
 
 /** Tell a reviewer that a batch of applications is waiting for them. */

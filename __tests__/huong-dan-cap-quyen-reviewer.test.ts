@@ -32,10 +32,13 @@ const QUOTED: Array<[string, string, string]> = [
   ["Đang có quyền đánh giá", POOL_CLIENT, 'reviewer_active: "Đang có quyền đánh giá"'],
   ["Tài khoản hiện tại", POOL_CLIENT, ">Tài khoản hiện tại<"],
   ["Đã cấp quyền Reviewer hồ sơ cho đúng mùa.", "lib/enable-reviewer.ts", "Đã cấp quyền ${label} cho đúng mùa."],
+  ["CHƯA gửi được thư đặt mật khẩu", "lib/enable-reviewer.ts", "CHƯA gửi được thư đặt mật khẩu"],
   ["Bạn không có quyền vận hành mùa này.", "lib/enable-reviewer.ts", "Bạn không có quyền vận hành mùa này."],
   ["Không thể tạo lời mời đăng nhập cá nhân.", "lib/enable-reviewer.ts", "Không thể tạo lời mời đăng nhập cá nhân."],
   ["Không thể cấp quyền tham gia tuyển sinh", "lib/enable-reviewer.ts", "Không thể cấp quyền tham gia tuyển sinh"],
-  ["Gửi liên kết đăng nhập qua email", "app/login/login-form.tsx", '"Gửi liên kết đăng nhập qua email"']
+  // Nút trong thư, và nút trên trang đặt mật khẩu.
+  ["Đặt mật khẩu", "lib/email-core.ts", ">Đặt mật khẩu</a>"],
+  ["Tiếp tục", "lib/password-link-core.ts", 'continueLabel: "Tiếp tục"']
 ];
 
 describe("mỗi câu hướng dẫn trích đều có thật trên màn hình", () => {
@@ -52,17 +55,27 @@ describe("mỗi câu hướng dẫn trích đều có thật trên màn hình", 
 });
 
 describe("những điều hướng dẫn khẳng định về cách hệ thống chạy", () => {
-  it("bấm liên kết trong thư mời là vào thẳng trang Đánh giá", () => {
-    expect(guideText).toContain("trang Đánh giá");
-    expect(read("app/auth/callback/actions.ts")).toContain('safeNext(input.next ?? "/reviews")');
+  it("thư mời dẫn tới trang đặt mật khẩu của chính hệ thống, rồi đăng nhập bằng mật khẩu và vào mục Đánh giá", () => {
+    expect(guideText).toContain("email và mật khẩu vừa đặt");
+    expect(guideText).toContain("Đánh giá");
+    expect(read("lib/email.ts")).toMatch(/export async function sendReviewerInvite[\s\S]*?buildPasswordLinkUrl\(/);
+    expect(read("lib/email-core.ts")).toContain("rồi vào mục “Đánh giá”");
   });
 
-  it("chỉ lần bấm đầu tiên gửi thư mời — người đã có tài khoản không bị mời lại", () => {
+  it("hướng dẫn không còn dạy đăng nhập bằng liên kết qua email", () => {
+    // Liên kết đăng nhập đi qua thư của Supabase, đường mà chính lỗi mời reviewer
+    // cho thấy không đáng tin. Mật khẩu là đường reviewer dùng được chắc chắn.
+    expect(guideText).not.toContain("Gửi liên kết đăng nhập qua email");
+    expect(guideText).not.toContain("Không cần mật khẩu");
+  });
+
+  it("chỉ lần bấm đầu tiên tạo tài khoản — người đã có tài khoản không bị mời lại", () => {
     expect(guideText).toContain("không gửi thêm thư");
     const source = read("lib/enable-reviewer.ts");
     const lookup = source.indexOf("findAuthUserByEmail(client, email)");
-    const invite = source.indexOf("inviteUserByEmail(");
+    const invite = source.indexOf('generatePasswordLink(client, "invite", email)');
     expect(lookup).toBeGreaterThan(0);
+    expect(invite).toBeGreaterThan(lookup);
     expect(source.slice(lookup, invite)).toContain("if (!authUser) {");
   });
 

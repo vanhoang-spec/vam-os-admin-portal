@@ -331,27 +331,52 @@ export function buildApplicationConfirmationEmail(input: {
   return { to: "", subject, text: lines.join("\n"), html };
 }
 
-/** Invitation for a mentor who agreed to score applications this season. */
+/** Subject of the reviewer letter; separate so a failed send can still be logged under it. */
+export function reviewerInviteSubject(seasonLabel: string): string {
+  return `[UEH Mentoring] Tài khoản chấm hồ sơ ${safeDisplayName(seasonLabel, "mùa mới")}`;
+}
+
+/**
+ * Letter for a mentor who agreed to score applications or interview this
+ * season — or, with `linkType: "recovery"`, a fresh password link for an
+ * account that has never been signed into.
+ *
+ * The link only sets a password; it does not sign anyone in. So the letter
+ * spells the login out as a second step, the same shape as the participant
+ * letter.
+ */
 export function buildReviewerInviteEmail(input: {
   mentorName: string;
   seasonLabel: string;
-  inviteUrl: string;
+  linkUrl: string;
+  linkType: "invite" | "recovery";
+  loginUrl: string;
+  loginEmail: string;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.mentorName);
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const loginEmail = normalizeEmailAddress(input.loginEmail) ?? safeDisplayName(input.loginEmail, "");
+  const subject = reviewerInviteSubject(input.seasonLabel);
 
-  const subject = `[UEH Mentoring] Tài khoản chấm hồ sơ ${season}`;
+  const intro =
+    input.linkType === "recovery"
+      ? `Ban tổ chức gửi lại đường dẫn đặt mật khẩu cho tài khoản VAM OS mà anh/chị dùng để tham gia tuyển sinh ${season}. Đường dẫn trong các thư trước (nếu có) không còn dùng được.`
+      : `Cảm ơn anh/chị đã nhận lời tham gia tuyển sinh ${season}. Ban tổ chức đã tạo tài khoản trên VAM OS cho anh/chị.`;
+  const step2 = `Bước 2 — Đăng nhập tại ${input.loginUrl} bằng email ${loginEmail} và mật khẩu vừa đặt, rồi vào mục “Đánh giá” để xem các hồ sơ được phân công.`;
+  const expiry =
+    "Đường dẫn là riêng cho anh/chị, chỉ dùng được một lần và có hạn sử dụng — vui lòng không chuyển tiếp. Nếu đã hết hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.";
 
   const lines = [
     `Kính gửi ${name},`,
     "",
-    `Cảm ơn anh/chị đã nhận lời tham gia chấm hồ sơ mentee ${season}.`,
+    intro,
     "",
-    "Ban tổ chức đã tạo tài khoản trên VAM OS cho anh/chị. Vui lòng đặt mật khẩu qua đường dẫn dưới đây:",
-    input.inviteUrl,
+    "Bước 1 — Bấm vào đường dẫn dưới đây để đặt mật khẩu:",
+    input.linkUrl,
     "",
-    "Sau khi đăng nhập, anh/chị vào mục “Đánh giá” để xem các hồ sơ được phân công.",
-    "Đường dẫn đặt mật khẩu là riêng cho anh/chị, vui lòng không chuyển tiếp.",
+    step2,
+    "",
+    expiry,
     "",
     "Trân trọng cảm ơn anh/chị.",
     "",
@@ -361,11 +386,12 @@ export function buildReviewerInviteEmail(input: {
   const html = wrapHtml(
     [
       `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
-      `<p>Cảm ơn anh/chị đã nhận lời tham gia chấm hồ sơ mentee <strong>${escapeHtml(season)}</strong>.</p>`,
-      `<p style="margin:20px 0"><a href="${escapeHtml(input.inviteUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu và đăng nhập</a></p>`,
-      "<p>Sau khi đăng nhập, anh/chị vào mục <strong>Đánh giá</strong> để xem các hồ sơ được phân công.</p>",
-      "<p>Đường dẫn đặt mật khẩu là riêng cho anh/chị, vui lòng không chuyển tiếp.</p>",
-      `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.inviteUrl)}</p>`
+      `<p>${escapeHtml(intro)}</p>`,
+      "<p><strong>Bước 1</strong> — Bấm nút dưới đây để đặt mật khẩu:</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.linkUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu</a></p>`,
+      `<p><strong>Bước 2</strong> — Đăng nhập tại <a href="${escapeHtml(input.loginUrl)}">${escapeHtml(input.loginUrl)}</a> bằng email <strong>${escapeHtml(loginEmail)}</strong> và mật khẩu vừa đặt, rồi vào mục <strong>Đánh giá</strong> để xem các hồ sơ được phân công.</p>`,
+      `<p>${escapeHtml(expiry)}</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.linkUrl)}</p>`
     ].join("")
   );
 

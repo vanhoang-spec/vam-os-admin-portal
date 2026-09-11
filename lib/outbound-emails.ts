@@ -168,6 +168,36 @@ export async function countOutboundEmailsSince(
 }
 
 /**
+ * Đã có một lá thư loại này THẬT SỰ đi tới địa chỉ này kể từ `sinceIso` chưa.
+ *
+ * Chỉ tính `sent`: một lần gửi hỏng hay bị cổng thư chặn không được chặn lần
+ * gửi lại. Đọc hỏng thì trả `ok: false` để người gọi tự quyết.
+ */
+export async function hasRecentSentEmail(input: {
+  kind: string;
+  toEmail: string;
+  sinceIso: string;
+}): Promise<{ ok: true; found: boolean } | { ok: false }> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { ok: false };
+
+  const { data, error } = await client
+    .from("outbound_emails")
+    .select("id")
+    .eq("kind", input.kind)
+    .eq("to_email", String(input.toEmail ?? "").trim().toLowerCase())
+    .eq("status", "sent")
+    .gte("created_at", input.sinceIso)
+    .limit(1);
+
+  if (error) {
+    log("recent send lookup failed", error);
+    return { ok: false };
+  }
+  return { ok: true, found: (data ?? []).length > 0 };
+}
+
+/**
  * Mọi dòng thư mời tài khoản của những người này, gom theo người.
  *
  * Trả về cả `failed` và `skipped`: màn hình cần biết lần gửi gần nhất bị lỗi,

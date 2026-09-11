@@ -1,9 +1,12 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { sendReviewerInvite } from "@/lib/email";
+import { hasRecentSentEmail } from "@/lib/outbound-emails";
 import { canManageReviewers } from "@/lib/permissions";
-import { getAuthCallbackUrl } from "@/lib/public-url";
+import { getPublicOrigin } from "@/lib/public-url";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { seasonLabel } from "@/lib/season-labels";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 const SAFE_ERROR = "Không thể cấp quyền tham gia tuyển sinh. Vui lòng thử lại hoặc liên hệ admin.";
@@ -132,7 +135,7 @@ export async function enableMentorAsReviewer(input: {
   const email = String(person.email_primary ?? "").trim().toLowerCase();
   if (!email.includes("@")) return { ok: false, message: "Người này chưa có email hợp lệ." };
 
-  let authUser: { id: string; email?: string } | null;
+  let authUser: { id: string; email?: string; last_sign_in_at?: string | null } | null;
   try {
     authUser = await findAuthUserByEmail(client, email);
   } catch (lookupError) {
@@ -140,23 +143,20 @@ export async function enableMentorAsReviewer(input: {
     console.error("[enable-reviewer] auth lookup failed", lookupError);
     return { ok: false, message: SAFE_ERROR };
   }
-  let invited = false;
+
+  // Tài khoản mới: tạo bằng generateLink, KHÔNG nhờ Supabase gửi thư. Link đặt
+  // mật khẩu đi qua Brevo ở cuối hàm, sau khi quyền đã được cấp.
+  let link: { type: "invite" | "recovery"; tokenHash: string } | null = null;
+  let createdAccount = false;
   if (!authUser) {
-    // Without an explicit destination Supabase falls back to the project's
-    // Site URL, and the tokens arrive in the fragment of whatever page that
-    // names. Only /auth/callback can turn them into a session, so the invite
-    // has to say so — otherwise the account is created and can never be
-    // entered. (The URL must also sit in the project's Redirect Allow List.)
-    const redirectTo = await getAuthCallbackUrl();
-    const { data, error } = await (client as any).auth.admin.inviteUserByEmail(
-      email,
-      redirectTo ? { redirectTo } : undefined
-    );
-    if (error || !data?.user?.id) return { ok: false, message: "Không thể tạo lời mời đăng nhập cá nhân." };
-    authUser = data.user;
-    invited = true;
+    const generated = await generatePasswordLink(client, "invite", email);
+    if (!generated.ok) return { ok: false, message: INVITE_ERROR };
+    authUser = { id: generated.userId, email };
+    link = { type: "invite", tokenHash: generated.tokenHash };
+    createdAccount = true;
   }
   if (!authUser?.id) return { ok: false, message: "Không thể xác định tài khoản Auth cá nhân." };
+
   const { data, error } = await client.rpc("vam084_grant_recruitment_participation", {
     p_actor: actor.id,
     p_person_id: input.personId,
@@ -166,12 +166,103 @@ export async function enableMentorAsReviewer(input: {
     p_email: email
   });
   if (error || !data) {
-    if (invited) await (client as any).auth.admin.deleteUser(authUser.id);
+    if (createdAccount) await (client as any).auth.admin.deleteUser(authUser.id);
     console.error("[enable-reviewer] atomic grant failed", error);
     return { ok: false, message: SAFE_ERROR };
   }
+
+  const adminUserId = String(data);
   const label = input.participationRole === "reviewer" ? "Reviewer hồ sơ" : "Interviewer";
-  return { ok: true, message: `Đã cấp quyền ${label} cho đúng mùa.`, adminUserId: String(data), authInvited: invited };
+  const granted = { ok: true, message: `Đã cấp quyền ${label} cho đúng mùa.`, adminUserId, authInvited: createdAccount };
+  const notSent = (why: string) => ({
+    ...granted,
+    message: `Đã cấp quyền ${label} nhưng CHƯA gửi được thư đặt mật khẩu${why}. Gửi lại: bấm Thu hồi rồi Cấp lại.`
+  });
+
+  if (!link) {
+    // Đã từng đăng nhập: họ có cách vào rồi, một thư đặt mật khẩu chỉ gây bối rối.
+    if (authUser.last_sign_in_at) return granted;
+
+    // Có tài khoản mà CHƯA đăng nhập lần nào — thư mời trước có thể chưa từng tới.
+    // Nhưng hai nút cấp quyền cho cùng một người thường được bấm liền nhau, và
+    // thư thứ hai làm link trong thư thứ nhất hết hiệu lực. Chỉ tính thư ĐÃ ĐI:
+    // một lần gửi hỏng không được chặn lần gửi lại.
+    const recent = await hasRecentSentEmail({
+      kind: "reviewer_invite",
+      toEmail: email,
+      sinceIso: new Date(Date.now() - RESEND_SUPPRESS_MINUTES * 60_000).toISOString()
+    });
+    if (recent.ok && recent.found) return granted;
+
+    const generated = await generatePasswordLink(client, "recovery", email, authUser.id);
+    if (!generated.ok) return notSent("");
+    link = { type: "recovery", tokenHash: generated.tokenHash };
+  }
+
+  const { data: season } = await client.from("seasons").select("code,name").eq("id", input.seasonId).maybeSingle();
+  const sent = await sendReviewerInvite({
+    toEmail: email,
+    mentorName: String(person.full_name ?? "").trim() || email,
+    seasonLabel: season ? seasonLabel(String(season.code ?? ""), season.name ?? null) : "",
+    linkType: link.type,
+    tokenHash: link.tokenHash,
+    adminUserId,
+    requestOrigin: await getPublicOrigin()
+  });
+
+  // `skipped` là cổng thư tắt: không có lá thư nào đi, nên không được báo là đã gửi.
+  if (sent.skipped) return notSent(" (môi trường này đang tắt gửi thư)");
+  if (!sent.ok) return notSent("");
+  return { ...granted, message: `${granted.message} Đã gửi thư đặt mật khẩu tới ${email} — nhắc họ xem cả mục Spam.` };
+}
+
+const INVITE_ERROR = "Không thể tạo lời mời đăng nhập cá nhân.";
+
+/**
+ * Hai lần gửi thư cho cùng một người phải cách nhau chừng này. Thư sau làm link
+ * trong thư trước hết hiệu lực.
+ */
+const RESEND_SUPPRESS_MINUTES = 60;
+
+/**
+ * Tạo link đặt mật khẩu — và với `invite`, tạo luôn tài khoản — mà KHÔNG gửi thư.
+ *
+ * Bản cũ gọi `inviteUserByEmail`, để Supabase tự gửi thư. Supabase từ chối thì
+ * màn hình chỉ hiện một câu chung chung và không có dòng log nào, nên không ai
+ * biết lý do. Ở đây lý do được ghi lại.
+ *
+ * Link trả về phải thuộc đúng email này (và đúng tài khoản đã biết, nếu có):
+ * một link của tài khoản khác nằm trong hộp thư người này là trao tài khoản của
+ * người kia cho họ.
+ */
+async function generatePasswordLink(
+  client: any,
+  type: "invite" | "recovery",
+  email: string,
+  expectedUserId?: string
+): Promise<{ ok: true; userId: string; tokenHash: string } | { ok: false }> {
+  try {
+    const { data, error } = await client.auth.admin.generateLink({ type, email });
+    if (error) {
+      console.error("[enable-reviewer] generateLink failed", {
+        type,
+        code: error.code ?? error.status ?? null,
+        message: error.message ?? null
+      });
+      return { ok: false };
+    }
+    const userId = String(data?.user?.id ?? "").trim();
+    const userEmail = String(data?.user?.email ?? "").trim().toLowerCase();
+    const tokenHash = String(data?.properties?.hashed_token ?? "").trim();
+    if (!userId || !tokenHash || userEmail !== email || (expectedUserId && userId !== expectedUserId)) {
+      console.error("[enable-reviewer] generateLink returned a link that does not match the recipient", { type });
+      return { ok: false };
+    }
+    return { ok: true, userId, tokenHash };
+  } catch (error) {
+    console.error("[enable-reviewer] generateLink threw", { type, message: (error as Error)?.message ?? String(error) });
+    return { ok: false };
+  }
 }
 
 export async function revokeMentorRecruitmentParticipation(input: {
