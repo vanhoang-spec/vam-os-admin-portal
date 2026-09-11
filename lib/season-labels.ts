@@ -6,7 +6,10 @@ const SEASON_AWARE_PATHS = new Set([
   "/mentees",
   "/matches",
   "/operations",
-  "/operations/tasks"
+  "/operations/tasks",
+  // Lời mời tài khoản làm việc theo từng mùa: người vận hành chọn mùa rồi mới
+  // thấy danh sách mentor/mentee của mùa đó.
+  "/participant-accounts"
 ]);
 
 export function seasonLabel(code: string, fallback?: string | null) {

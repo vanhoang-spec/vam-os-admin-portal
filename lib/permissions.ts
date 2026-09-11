@@ -77,6 +77,24 @@ export function canAssignReviewLots(role?: string | null) {
 }
 
 /**
+ * Can invite mentors and mentees to create a VAM OS login — one person, or a
+ * season's worth in runs — on /participant-accounts.
+ *
+ * support_team is here by the programme owner's decision of 11/09/2026, for the
+ * same reason as canManageReviewers: they are the group that does this work.
+ * This is only the role half. The caller must ALSO prove canOperateSeason for
+ * the exact season, which is what keeps a support account with no operations
+ * scope out.
+ *
+ * Deliberately NOT canSendBulkEmail widened. That gate sends words an operator
+ * wrote; this one sends one fixed letter, written in code, to people the season
+ * cohort already decides.
+ */
+export function canInviteParticipants(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
  * Can self-claim an interview review from /interviews.
  * Includes reviewer role in addition to all admin tiers.
  * Viewer and support_team cannot self-claim.

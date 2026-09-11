@@ -30,10 +30,8 @@ export function intersectAuthorizedAndCohort(
   return cohort.filter((personId) => authorized.has(personId));
 }
 
-export async function getSeasonCohortPersonIds(
-  seasonId: string,
-  role: SeasonCohortRole
-): Promise<{ data: string[]; error: string | null }> {
+/** Mọi tư cách thành viên của một mùa. Một phép đọc cho mọi câu hỏi về thành viên chính thức. */
+async function readSeasonMemberships(seasonId: string): Promise<{ data: JsonRecord[]; error: string | null }> {
   const client = getSupabaseServiceRoleClient();
   if (!client || !seasonId) return { data: [], error: COHORT_ERROR };
 
@@ -55,13 +53,50 @@ export async function getSeasonCohortPersonIds(
     return { data: [], error: COHORT_ERROR };
   }
 
+  return { data, error: null };
+}
+
+export async function getSeasonCohortPersonIds(
+  seasonId: string,
+  role: SeasonCohortRole
+): Promise<{ data: string[]; error: string | null }> {
+  const memberships = await readSeasonMemberships(seasonId);
+  if (memberships.error) return { data: [], error: memberships.error };
+
   return {
     data: Array.from(new Set(
-      data
+      memberships.data
         .filter((row) => isOfficialSeasonMembership(row, role))
         .map((row) => String(row.person_id ?? "").trim())
         .filter(Boolean)
     )),
     error: null
   };
+}
+
+/**
+ * Thành viên chính thức của mùa, kèm vai trò của từng người.
+ *
+ * Một người có thể vừa là mentor vừa là mentee trong cùng một mùa (ràng buộc
+ * duy nhất là theo người-mùa-vai trò), nên trả về danh sách vai trò chứ không
+ * phải một vai trò.
+ */
+export async function getSeasonCohortRoleMap(
+  seasonId: string
+): Promise<{ data: Map<string, SeasonCohortRole[]>; error: string | null }> {
+  const memberships = await readSeasonMemberships(seasonId);
+  if (memberships.error) return { data: new Map(), error: memberships.error };
+
+  const roles = new Map<string, SeasonCohortRole[]>();
+  for (const row of memberships.data) {
+    const personId = String(row.person_id ?? "").trim();
+    if (!personId) continue;
+    for (const role of ["mentor", "mentee"] as const) {
+      if (!isOfficialSeasonMembership(row, role)) continue;
+      const list = roles.get(personId) ?? [];
+      if (!list.includes(role)) list.push(role);
+      roles.set(personId, list);
+    }
+  }
+  return { data: roles, error: null };
 }

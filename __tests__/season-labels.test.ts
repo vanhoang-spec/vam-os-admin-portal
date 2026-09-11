@@ -8,8 +8,12 @@ describe("season labels and P0 visibility", () => {
     expect(seasonLabel("UEHM-S11")).toBe("Mùa 11");
   });
 
-  it("shows the selector only on the six season-aware P0 routes", () => {
-    expect(["/", "/mentors", "/mentees", "/matches", "/operations", "/operations/tasks"].every(isSeasonAwarePath)).toBe(true);
+  it("shows the selector only on the seven season-aware routes", () => {
+    expect(
+      ["/", "/mentors", "/mentees", "/matches", "/operations", "/operations/tasks", "/participant-accounts"].every(
+        isSeasonAwarePath
+      )
+    ).toBe(true);
     expect([
       "/applications", "/admin/applications/x", "/portfolio", "/programs/UEHM",
       "/admin/renewals", "/admin/users", "/apply/mentor", "/renew/x",

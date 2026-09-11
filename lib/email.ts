@@ -23,10 +23,13 @@ import {
   isSafeAppLink,
   normalizeEmailAddress,
   parseSenderAddress,
+  participantInviteSubject,
   type EmailKind,
   type EmailMessage,
   type EmailProvider
 } from "@/lib/email-core";
+import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib/participant-invite-core";
+import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
 /**
  * lib/email.ts
@@ -61,6 +64,12 @@ export type SendEmailResult = {
   skipped: boolean;
   reason?: string;
   providerMessageId?: string | null;
+  /**
+   * HTTP status the provider answered a rejection with. 429 is how Brevo says
+   * the day's allowance is gone — a caller sending in runs must stop there
+   * instead of burning through the rest of its list one failure at a time.
+   */
+  providerStatus?: number | null;
 };
 
 export type EmailRelation = {
@@ -234,7 +243,12 @@ async function deliver(
         provider: gate.provider
       });
       console.error("[email] send failed", { kind, provider: gate.provider });
-      return { ok: false, skipped: false, reason: "Không gửi được email. Vui lòng thử lại sau." };
+      return {
+        ok: false,
+        skipped: false,
+        reason: "Không gửi được email. Vui lòng thử lại sau.",
+        providerStatus: sent.status ?? null
+      };
     }
 
     await logOutboundEmail({
@@ -267,7 +281,7 @@ async function deliver(
   }
 }
 
-type TransportResult = { ok: true; messageId: string | null } | { ok: false; error: string };
+type TransportResult = { ok: true; messageId: string | null } | { ok: false; error: string; status?: number };
 
 const TRANSPORT_TIMEOUT_MS = 20_000;
 
@@ -323,7 +337,7 @@ async function sendViaBrevo(input: {
       // Brevo answers a rejection with { code, message }: the code is what says
       // whether the key, the sender or the daily allowance is the problem.
       const detail = await readProviderError(response);
-      return { ok: false, error: `Brevo HTTP ${response.status}: ${detail}` };
+      return { ok: false, error: `Brevo HTTP ${response.status}: ${detail}`, status: response.status };
     }
 
     const payload = (await response.json().catch(() => null)) as { messageId?: string } | null;
@@ -385,7 +399,7 @@ async function sendViaResend(input: {
 
     if (!response.ok) {
       const detail = await readProviderError(response);
-      return { ok: false, error: `Resend HTTP ${response.status}: ${detail}` };
+      return { ok: false, error: `Resend HTTP ${response.status}: ${detail}`, status: response.status };
     }
 
     const payload = (await response.json().catch(() => null)) as { id?: string } | null;
@@ -687,36 +701,140 @@ export async function sendRecapPeriodReminder(input: {
 }
 
 /**
- * Hand somebody the account that has been waiting for them.
+ * Hand somebody the account that has been waiting for them, or a new password
+ * link for one they already hold.
  *
- * The invite URL comes from Supabase's own admin API, so it is not an app link
- * and is not checked against the public base URL the way the others are. It is
- * still refused if it is not https, because a plain-http link in a letter to a
- * thousand people is a credential travelling in the open.
+ * The link is built HERE, from the base URL and the token hash Supabase's
+ * `generateLink` returned — never taken whole from a caller — and it must pass
+ * the same own-origin check every other app link does. A token in a letter
+ * that points at somebody else's host is a credential handed to a stranger.
+ *
+ * `claimedRowId` is the `queued` row the caller reserved before generating the
+ * link. The result is written onto that row; when the link cannot be built the
+ * row is closed as failed here, so it does not hold the person "in flight" for
+ * fifteen minutes over a letter that never left.
  */
 export async function sendParticipantInvite(input: {
   toEmail: string;
   recipientName: string;
-  inviteUrl: string;
-  programNames?: string[];
-  personId?: string | null;
+  linkType: PasswordLinkType;
+  tokenHash: string;
+  personId: string;
+  claimedRowId: string | null;
+  requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
-  const url = String(input.inviteUrl ?? "").trim();
-  if (!url.startsWith("https://") || /[\r\n\s]/.test(url)) {
-    return { ok: false, skipped: false, reason: "Đường dẫn mời không hợp lệ." };
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  const linkUrl = base ? buildPasswordLinkUrl(base, { tokenHash: input.tokenHash, type: input.linkType }) : null;
+  const relation = { table: "people", id: input.personId };
+
+  if (!base || !linkUrl || !isSafeAppLink(linkUrl, base)) {
+    await logOutboundEmail({
+      kind: PARTICIPANT_INVITE_EMAIL_KIND,
+      toEmail: String(input.toEmail ?? "").slice(0, 200),
+      subject: participantInviteSubject(input.linkType),
+      status: "failed",
+      error: "Không dựng được đường dẫn đặt mật khẩu",
+      relation,
+      claimedRowId: input.claimedRowId
+    });
+    return { ok: false, skipped: false, reason: "Không dựng được đường dẫn đặt mật khẩu." };
   }
 
   const built = buildParticipantInviteEmail({
     recipientName: input.recipientName,
-    inviteUrl: url,
-    programNames: input.programNames
+    linkUrl,
+    linkType: input.linkType,
+    loginUrl: `${base}/login`,
+    loginEmail: input.toEmail
   });
 
-  return deliver(
-    "participant_invite",
-    { ...built, to: input.toEmail },
-    input.personId ? { table: "people", id: input.personId } : null
-  );
+  return deliver(PARTICIPANT_INVITE_EMAIL_KIND, { ...built, to: input.toEmail }, relation, null, input.claimedRowId);
+}
+
+export type ParticipantInviteClaim =
+  | { ok: true; claimId: string }
+  | { ok: false; reason: "in_flight" | "error" };
+
+/**
+ * Reserve the send for one person BEFORE a link is generated.
+ *
+ * The partial unique index `outbound_emails_participant_invite_inflight_idx`
+ * admits one `queued` row per person. A second operator pressing the same
+ * button a second later gets 23505 here and stops — before a second link
+ * silently kills the first one, and before a second letter goes out.
+ */
+export async function claimParticipantInviteSend(input: {
+  personId: string;
+  toEmail: string;
+}): Promise<ParticipantInviteClaim> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { ok: false, reason: "error" };
+
+  const { data, error } = await client
+    .from("outbound_emails")
+    .insert({
+      kind: PARTICIPANT_INVITE_EMAIL_KIND,
+      to_email: input.toEmail,
+      subject: null,
+      status: "queued",
+      provider: "brevo",
+      related_table: "people",
+      related_id: input.personId
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if ((error as { code?: string }).code === "23505") return { ok: false, reason: "in_flight" };
+    console.error("[email] participant invite claim failed", { code: error.code, message: error.message });
+    return { ok: false, reason: "error" };
+  }
+  if (!data?.id) return { ok: false, reason: "error" };
+  return { ok: true, claimId: String(data.id) };
+}
+
+/**
+ * Close a reservation whose send never happened.
+ *
+ * `.eq("status", "queued")`: a row that already carries a result is never
+ * overwritten by a late release.
+ */
+export async function releaseOutboundEmailClaim(claimId: string, reason: string): Promise<void> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return;
+
+  const { error } = await client
+    .from("outbound_emails")
+    .update({ status: "failed", error: String(reason ?? "").slice(0, 500) })
+    .eq("id", claimId)
+    .eq("status", "queued");
+
+  if (error) {
+    console.error("[email] participant invite claim release failed", { code: error.code, message: error.message });
+  }
+}
+
+/**
+ * Close reservations left behind by a run that was cut off mid-send.
+ *
+ * Such a row stays inside the unique index and would block that person from
+ * ever being invited again.
+ */
+export async function expireStaleParticipantInviteClaims(nowMs: number): Promise<void> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return;
+
+  const cutoff = new Date(nowMs - INVITE_CLAIM_STALE_MINUTES * 60_000).toISOString();
+  const { error } = await client
+    .from("outbound_emails")
+    .update({ status: "failed", error: "Claim hết hạn (lượt gửi bị gián đoạn)" })
+    .eq("kind", PARTICIPANT_INVITE_EMAIL_KIND)
+    .eq("status", "queued")
+    .lt("created_at", cutoff);
+
+  if (error) {
+    console.error("[email] participant invite stale claim sweep failed", { code: error.code, message: error.message });
+  }
 }
 
 /**

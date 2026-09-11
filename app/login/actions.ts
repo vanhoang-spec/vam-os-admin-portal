@@ -10,7 +10,7 @@ import {
 } from "@/lib/admin-auth";
 import { getSafeAuthErrorType, mapAuthError, safeNext } from "@/lib/auth-error-messages";
 import { getAuthCallbackUrl } from "@/lib/public-url";
-import { resolveParticipantIdentity } from "@/lib/participant-auth";
+import { recordParticipantActivation, resolveParticipantIdentity } from "@/lib/participant-auth";
 
 export type LoginActionState = {
   error: string | null;
@@ -116,6 +116,10 @@ export async function loginAction(_previousState: LoginActionState, formData: Fo
       await clearAuthCookies();
       return { error: identity.refusal ?? mapAuthError("unauthorized_admin") };
     }
+
+    // Lần đăng nhập đầu của người được mời: ghi mốc để màn hình mời thôi hiện
+    // họ là "chưa vào". Hàm không bao giờ ném lỗi, nên không chặn đăng nhập.
+    await recordParticipantActivation({ authUserId: data.user.id, personId: identity.personId });
 
     await setAuthCookies(
       data.session.access_token,

@@ -138,6 +138,8 @@ export type PageOrder =
  *   review_assignment_batches                                            044a
  *   person_season_memberships                                            052
  *   applications / application_answers / application_reviews             059
+ *   outbound_emails               supabase/migrations/20260909090000 create table (id uuid primary key)
+ *   account_person_auth_links     supabase/migrations/20260910260000 create table (id uuid primary key)
  *
  * The two `range` tables are the exception and the reason this registry is not
  * just `.order("id")`: `mentor_industries` and `mentor_function_areas` are
@@ -145,6 +147,7 @@ export type PageOrder =
  * Ordering them by `id` would fail with a PostgREST 400, not degrade quietly.
  */
 export const PAGE_ORDER = {
+  account_person_auth_links: { strategy: "keyset", key: "id" },
   action_items: { strategy: "keyset", key: "id" },
   admin_users: { strategy: "keyset", key: "id" },
   application_answers: { strategy: "keyset", key: "id" },
@@ -166,6 +169,7 @@ export const PAGE_ORDER = {
   mentor_program_participations: { strategy: "keyset", key: "id" },
   mentoring_recaps: { strategy: "keyset", key: "id" },
   operational_team_assignments: { strategy: "keyset", key: "id" },
+  outbound_emails: { strategy: "keyset", key: "id" },
   people: { strategy: "keyset", key: "id" },
   person_season_invites: { strategy: "keyset", key: "id" },
   person_season_memberships: { strategy: "keyset", key: "id" },
@@ -280,6 +284,43 @@ export async function readAllPages<T extends Record<string, any>>(
     // Advance by rows RECEIVED, not by the window requested: a server cap below
     // `pageSize` must cost requests, never rows.
     from += batch.length;
+  }
+  return { data: rows, error: null };
+}
+
+/** Values per `.in()` filter. Keeps the request URL well under proxy limits. */
+export const IN_FILTER_CHUNK = 200;
+
+/**
+ * Class C, keyed by a list: every row whose `column` is one of `values`.
+ *
+ * The list is split into chunks of IN_FILTER_CHUNK, and EACH chunk is paged to
+ * exhaustion with `readAllPages`. Chunking alone is not enough — 200 people can
+ * own more than 1000 rows between them — and paging alone is not enough either,
+ * because 1000 ids in one `.in()` makes a URL some proxies refuse.
+ *
+ * The client is a parameter so the caller decides which credentials read the
+ * table. Several tables this is used for have RLS with no policies; a quiet
+ * fallback to a user client would return zero rows and no error.
+ */
+export async function readAllPagesIn<T extends Record<string, any>>(
+  client: any,
+  table: PagedTable,
+  column: string,
+  values: string[],
+  columns: string,
+  refine?: (query: any) => any
+): Promise<PagedResult<T>> {
+  const unique = Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
+  const rows: T[] = [];
+  for (let start = 0; start < unique.length; start += IN_FILTER_CHUNK) {
+    const chunk = unique.slice(start, start + IN_FILTER_CHUNK);
+    const result = await readAllPages<T>(table, columns, (projection) => {
+      const query = client.from(table).select(projection).in(column, chunk);
+      return refine ? refine(query) : query;
+    });
+    if (result.error) return { data: rows, error: result.error };
+    rows.push(...result.data);
   }
   return { data: rows, error: null };
 }

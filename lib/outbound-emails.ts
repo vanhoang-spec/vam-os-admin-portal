@@ -5,6 +5,8 @@ import {
   type OutboundEmailFilters,
   type OutboundEmailStatus
 } from "@/lib/outbound-emails-core";
+import { readAllPagesIn } from "@/lib/paged-read";
+import { PARTICIPANT_INVITE_EMAIL_KIND, type InviteSend } from "@/lib/participant-invite-core";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 /**
@@ -15,6 +17,11 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
  * Bảng bật RLS và không có policy nào, nên chỉ service_role đọc được — đúng như
  * hợp đồng migration đặt ra. Ở đây chỉ có đọc; không hàm nào trong file này ghi
  * hay xoá.
+ *
+ * Phép đọc cho lời mời tài khoản cũng nằm ở đây, không nằm trong
+ * `lib/participant-*.ts`: bộ quét của migration danh tính đòi mọi cột mà các
+ * file đó đọc phải có trong khối dò trước của một migration đã chạy, và
+ * `outbound_emails` không thuộc gói ấy.
  */
 
 const VI_ERROR = "Không đọc được sổ thư đã gửi.";
@@ -129,4 +136,75 @@ export async function countOutboundEmailsByStatus(): Promise<OutboundEmailStatus
   const counts = { ...empty };
   for (const [status, value] of results) counts[status] = value;
   return counts;
+}
+
+/**
+ * Số thư đã gửi hoặc đang gửi kể từ `sinceIso`, của MỌI loại thư.
+ *
+ * Không lọc theo loại: hạn mức 300 thư một ngày của Brevo tính trên cả tài
+ * khoản, nên thư xác nhận đơn và thư sự kiện ăn vào cùng một hạn mức với thư
+ * mời. Đếm riêng thư mời là để lượt mời hàng loạt tiêu hết phần của người khác.
+ *
+ * Đọc hỏng thì trả `ok: false`, không trả 0: đoán là 0 nghĩa là mở cửa cho
+ * đúng lượt gửi mà phép đếm này sinh ra để chặn.
+ */
+export async function countOutboundEmailsSince(
+  sinceIso: string
+): Promise<{ ok: true; count: number } | { ok: false }> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { ok: false };
+
+  const { count, error } = await client
+    .from("outbound_emails")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["queued", "sent"])
+    .gte("created_at", sinceIso);
+
+  if (error) {
+    log("count since failed", error);
+    return { ok: false };
+  }
+  return { ok: true, count: count ?? 0 };
+}
+
+/**
+ * Mọi dòng thư mời tài khoản của những người này, gom theo người.
+ *
+ * Trả về cả `failed` và `skipped`: màn hình cần biết lần gửi gần nhất bị lỗi,
+ * và phần thuần tự bỏ `skipped` khi tính "đã gửi chưa". Thứ tự do phần thuần
+ * tự sắp theo `created_at`, không dựa vào thứ tự database trả về.
+ */
+export async function readParticipantInviteSends(
+  personIds: string[]
+): Promise<{ ok: true; byPersonId: Map<string, InviteSend[]> } | { ok: false }> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { ok: false };
+
+  const { data, error } = await readAllPagesIn<Record<string, unknown>>(
+    client,
+    "outbound_emails",
+    "related_id",
+    personIds,
+    "id,related_id,status,created_at,error",
+    (query) => query.eq("kind", PARTICIPANT_INVITE_EMAIL_KIND).eq("related_table", "people")
+  );
+
+  if (error) {
+    log("participant invite sends read failed", error);
+    return { ok: false };
+  }
+
+  const byPersonId = new Map<string, InviteSend[]>();
+  for (const row of data) {
+    const personId = String(row.related_id ?? "");
+    if (!personId) continue;
+    const list = byPersonId.get(personId) ?? [];
+    list.push({
+      status: String(row.status ?? ""),
+      createdAt: String(row.created_at ?? ""),
+      error: row.error === null || row.error === undefined ? null : String(row.error)
+    });
+    byPersonId.set(personId, list);
+  }
+  return { ok: true, byPersonId };
 }
