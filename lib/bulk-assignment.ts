@@ -3,11 +3,11 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
   INTERVIEW_ELIGIBLE_STATUSES,
-  PROFILE_ASSIGNMENT_STATUSES,
-  WITHDRAWN_APPLICATION_REVIEW_MESSAGE
+  PROFILE_ASSIGNMENT_STATUSES
 } from "@/lib/application-review-assignability";
 import { canAssignReviewLots, canBulkAssignReviews } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { describeAssignmentRefusal } from "@/lib/review-assignment-refusals";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 const SAFE_ERROR = "Không thể thực hiện thao tác. Vui lòng thử lại hoặc liên hệ admin.";
@@ -51,7 +51,8 @@ export type BulkAssignResult =
       skippedAlreadyAssigned: number;
       batchId: string;
     }
-  | { ok: false; message: string };
+  /** `refreshList`: database says the screen is showing stale data — reload it. */
+  | { ok: false; message: string; refreshList?: boolean };
 
 type BulkAssignmentRpcRow = {
   batch_id: string;
@@ -78,7 +79,8 @@ export type AssignSelectedResult =
       reviewerId: string;
       batchId: string;
     }
-  | { ok: false; message: string };
+  /** `refreshList`: database says the screen is showing stale data — reload it. */
+  | { ok: false; message: string; refreshList?: boolean };
 
 export async function bulkAssignApplicationReviews(
   input: BulkAssignInput
@@ -139,7 +141,8 @@ export async function bulkAssignApplicationReviews(
   });
   if (error) {
     log("atomic bulk assignment failed", error);
-    return { ok: false, message: SAFE_ERROR };
+    const refusal = describeAssignmentRefusal(error, reviewRound);
+    return { ok: false, message: refusal.message, refreshList: refusal.refreshList };
   }
   const row = (Array.isArray(data) ? data[0] : data) as BulkAssignmentRpcRow | null;
   if (!row?.batch_id || !Number.isInteger(row.applications_assigned) || row.applications_assigned < 1) {
@@ -191,12 +194,8 @@ export async function assignSelectedApplicationReviews(
   });
   if (error) {
     log("atomic selected assignment failed", error);
-    return {
-      ok: false,
-      message: String(error.message ?? "").includes("APPLICATION_WITHDRAWN")
-        ? WITHDRAWN_APPLICATION_REVIEW_MESSAGE
-        : SAFE_ERROR
-    };
+    const refusal = describeAssignmentRefusal(error, reviewRound);
+    return { ok: false, message: refusal.message, refreshList: refusal.refreshList };
   }
   const row = (Array.isArray(data) ? data[0] : data) as { batch_id: string; applications_assigned: number; reviewer_id: string } | null;
   if (!row?.batch_id || !Number.isInteger(row.applications_assigned) || row.applications_assigned < 1) {
