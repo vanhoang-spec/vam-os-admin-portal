@@ -276,3 +276,53 @@ export function getSupabaseAuthClientForPasswordSignIn() {
 export function getSupabaseAuthClientWithAccessToken(accessToken: string) {
   return authClient(accessToken);
 }
+
+/**
+ * Tài khoản đăng nhập này có dòng trong `admin_users` không — BẤT KỂ trạng thái.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO CẦN MỘT HÀM RIÊNG
+ * ---------------------------------------------------------------------------
+ * `findAdminUserForAuthUser` lọc sẵn `status = 'active'`, nên nó trả về `null`
+ * giống hệt nhau cho hai chuyện rất khác nhau: "người này chưa bao giờ là nhân
+ * sự" và "người này từng là nhân sự nhưng đã bị khoá".
+ *
+ * Chừng nào cả hai đều bị từ chối thì gộp lại không sao. Nhưng khi mentor và
+ * mentee bắt đầu đăng nhập được, đường đi của hai trường hợp phải khác nhau:
+ *
+ *   • chưa bao giờ là nhân sự  → thử đường participant
+ *   • đã bị khoá / đình chỉ    → TỪ CHỐI, y như trước
+ *
+ * Gộp lại nghĩa là thu hồi quyền nhân sự của một người rồi lặng lẽ đưa cho họ
+ * một cánh cửa khác trong cùng phiên đó. Người bấm nút đình chỉ không hề biết
+ * mình vừa làm việc ấy.
+ *
+ * Fail-closed: đọc không được thì ném lỗi, để chỗ gọi từ chối. Trả về `false`
+ * khi có sự cố sẽ biến một lỗi hạ tầng thành một lối vào.
+ */
+export async function hasAnyAdminUserRow(user: User): Promise<boolean> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) {
+    throw new Error(
+      "[admin-auth] Cannot check admin_users membership: SUPABASE_SERVICE_ROLE_KEY is missing or misconfigured."
+    );
+  }
+  if (!user.email && !user.id) return false;
+
+  const filterParts: string[] = [];
+  if (user.id) filterParts.push(`auth_user_id.eq.${user.id}`);
+  if (user.email) filterParts.push(`email.eq.${user.email}`);
+
+  const { data, error } = await client
+    .from("admin_users")
+    .select("id")
+    .or(filterParts.join(","))
+    .limit(1);
+
+  if (error) {
+    logAdminAuthError("admin_users existence check failed", error);
+    throw new Error(`[admin-auth] admin_users existence check failed: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown[]).length > 0;
+}
