@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canAssignReview } from "@/lib/permissions";
+import { canAssignReviewLots } from "@/lib/permissions";
 import { cancelApplicationReview } from "@/lib/application-reviews";
 import {
   BULK_CANCEL_MAX,
@@ -50,7 +50,7 @@ export async function bulkCancelApplicationReviewsAction(
   try {
     const adminUser = await getCurrentAdminUser();
     if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
-    if (!canAssignReview(adminUser.role)) {
+    if (!canAssignReviewLots(adminUser.role)) {
       return fail("Bạn không có quyền huỷ phân công review.");
     }
 
