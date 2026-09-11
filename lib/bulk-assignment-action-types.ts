@@ -16,6 +16,12 @@ export type BulkAssignmentActionState = {
   maxPerReviewer?: number;
   skippedAlreadyAssigned?: number;
   batchId?: string;
+  /**
+   * Set when the lot WAS assigned but the reviewer could not be emailed. Kept
+   * apart from `message` so it renders as a warning, not buried in the green
+   * success line — an operator who misses it assumes the reviewer knows.
+   */
+  emailWarning?: string | null;
 };
 
 export const initialBulkAssignmentActionState: BulkAssignmentActionState = {

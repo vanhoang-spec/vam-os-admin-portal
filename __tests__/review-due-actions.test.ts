@@ -23,6 +23,9 @@ vi.mock("@/lib/permissions", () => ({
 vi.mock("@/lib/bulk-assignment", () => ({
   assignSelectedApplicationReviews: mocks.assignSelectedApplicationReviews
 }));
+vi.mock("@/lib/review-assignment-notice", () => ({
+  notifyReviewerOfAssignment: vi.fn(async () => ({ status: "sent", reviewerLabel: "Reviewer 1" }))
+}));
 vi.mock("@/lib/application-reviews", () => ({
   assignApplicationReview: mocks.assignApplicationReview,
   cancelApplicationReview: vi.fn(),
