@@ -64,44 +64,80 @@ function columnDef(name: string): string {
 
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+type ColumnRead = { file: string; table: string; column: string };
+
 /**
- * Mọi cặp bảng.cột mà mã `lib/participant-*.ts` chạm tới qua Supabase.
+ * Đọc mọi câu truy vấn Supabase trong `lib/participant-*.ts`.
  *
  * Đọc từ mã chứ không chép tay, để danh sách không cũ đi khi mã đổi. Mỗi
- * `.from("bảng")` lấy tới `from(` kế tiếp hoặc dấu `;`, rồi gom cột trong
- * `.select("…")` và cột đầu tiên của các phép lọc.
+ * `.from(…)` lấy tới `.from(` kế tiếp hoặc dấu `;`, rồi gom cột trong
+ * `.select(…)` và cột đầu tiên của các phép lọc.
+ *
+ * Câu nào không đọc được — tên bảng là biến, danh sách cột là hằng số — thì ghi
+ * vào `unreadable` chứ không bỏ qua. Bỏ qua im lặng nghĩa là cột của câu đó
+ * không bao giờ được đối chiếu với khối dò trước, mà test vẫn xanh.
  */
-function columnsReadByParticipantCode(): Array<{ file: string; table: string; column: string }> {
+function scanParticipantCode(): { found: ColumnRead[]; unreadable: string[] } {
   const libDir = join(ROOT, "lib");
   const files = readdirSync(libDir).filter(
     (name) => name.startsWith("participant-") && name.endsWith(".ts")
   );
 
-  const found: Array<{ file: string; table: string; column: string }> = [];
+  const found: ColumnRead[] = [];
+  const unreadable: string[] = [];
   for (const file of files) {
-    const source = readFileSync(join(libDir, file), "utf8");
-    const chains = source.split(/(?=\.from\(")/);
-    for (const chain of chains) {
-      const head = chain.match(/^\.from\("([a-z_]+)"\)/);
-      if (!head) continue;
-      const table = head[1];
+    // `Array.from(…)`, `Buffer.from(…)` cũng là `.from(` nhưng không phải truy
+    // vấn. Supabase client luôn là biến viết thường, nên đổi tên các lời gọi
+    // tĩnh viết hoa đi trước khi cắt.
+    const source = readFileSync(join(libDir, file), "utf8").replace(
+      /\b([A-Z][A-Za-z0-9]*)\.from\(/g,
+      "$1_from("
+    );
+
+    for (const chain of source.split(/(?=\.from\()/)) {
+      if (!chain.startsWith(".from(")) continue;
       const body = chain.split(";")[0];
 
+      const head = body.match(/^\.from\(\s*["'`]([a-z_]+)["'`]\s*\)/);
+      if (!head) {
+        unreadable.push(`${file}: ${body.slice(0, 40)}`);
+        continue;
+      }
+      const table = head[1];
+
+      const selectCalls = body.match(/\.select\(/g) ?? [];
+      const selects = Array.from(body.matchAll(/\.select\(\s*["'`]([^"'`]*)["'`]/g));
+      if (selects.length !== selectCalls.length) {
+        unreadable.push(`${file}: .from("${table}") có .select(…) không đọc được`);
+      }
+
       const columns = new Set<string>();
-      for (const select of Array.from(body.matchAll(/\.select\("([^"]*)"\)/g))) {
+      for (const select of selects) {
         for (const column of select[1].split(",")) {
           const name = column.trim();
           if (name) columns.add(name);
         }
       }
-      for (const filter of Array.from(body.matchAll(/\.(?:eq|neq|in|ilike|is|order|gt|gte|lt|lte)\("([a-z_]+)"/g))) {
+      for (const filter of Array.from(body.matchAll(/\.(?:eq|neq|in|ilike|is|order|gt|gte|lt|lte)\(\s*["'`]([a-z_]+)["'`]/g))) {
         columns.add(filter[1]);
       }
       for (const column of Array.from(columns)) found.push({ file, table, column });
     }
   }
-  return found;
+  return { found, unreadable };
 }
+
+function columnsReadByParticipantCode(): ColumnRead[] {
+  return scanParticipantCode().found;
+}
+
+describe("bộ đọc mã participant", () => {
+  it("không lặng lẽ bỏ qua câu truy vấn nào", () => {
+    // Tên bảng hay danh sách cột nằm trong biến thì bộ đọc không thấy, và cột
+    // của câu đó sẽ không bao giờ được đối chiếu. Viết thẳng chuỗi vào.
+    expect(scanParticipantCode().unreadable).toEqual([]);
+  });
+});
 
 describe("dò trước: thiếu gì thì báo một lần, trước khi tạo gì", () => {
   it("khối dò trước chạy TRƯỚC mọi câu lệnh ghi", () => {
