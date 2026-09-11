@@ -1,5 +1,10 @@
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
-import { canBrowseOperations, canComposeEmailTemplate } from "@/lib/permissions";
+import {
+  canAssignReviewLots,
+  canBrowseOperations,
+  canComposeEmailTemplate,
+  canManageReviewers
+} from "@/lib/permissions";
 import {
   canBrowseApplications,
   canBrowseParticipants,
@@ -60,6 +65,14 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const showApplicationOps = readAccess(canBrowseApplications);
   const showEvents = canBrowseOperations(role);
   const showDataIssues = canBrowseOperations(role);
+
+  // Support team mời reviewer và giao hồ sơ (quyết định 11/09/2026) nhưng không
+  // vào được trang Đánh giá — trang đó dành cho người chấm và ban điều hành. Nav
+  // mở đúng hai màn hình họ dùng, bằng chính hai predicate mà hai trang đó kiểm.
+  // Vai trò đã thấy "Đánh giá" thì vào hai màn hình này từ đó, nav giữ nguyên.
+  const canAssignLots = canAssignReviewLots(role);
+  const canStaffReviewers = canManageReviewers(role);
+  const showStaffingOnly = !showReviews && (canAssignLots || canStaffReviewers);
 
   const groups: (NavGroupDef | null)[] = [
     // "Công việc của tôi" sits at the very top, above Tổng quan, for everyone
@@ -139,9 +152,21 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/interviews", label: "Phỏng vấn" },
           ],
         }
-      : showApplicationOps
-        ? { key: "applications", label: "Ứng tuyển", href: "/applications" }
-        : null,
+      : showStaffingOnly
+        ? {
+            key: "applications",
+            label: "Ứng tuyển",
+            items: [
+              ...(showApplicationOps ? [{ href: "/applications", label: "Ứng tuyển (Tất cả)" }] : []),
+              ...(canAssignLots ? [{ href: "/reviews/assign-bulk", label: "Giao hồ sơ đánh giá" }] : []),
+              ...(canStaffReviewers
+                ? [{ href: "/reviews/reviewer-pool", label: "Danh sách nhân sự tuyển sinh" }]
+                : []),
+            ],
+          }
+        : showApplicationOps
+          ? { key: "applications", label: "Ứng tuyển", href: "/applications" }
+          : null,
     showOperations ? { key: "matches", label: "Ghép cặp", href: "/matches" } : null,
     showEvents ? { key: "events", label: "Sự kiện", href: "/events" } : null,
     showDataIssues ? { key: "data", label: "Rà soát dữ liệu", href: "/data-issues" } : null,

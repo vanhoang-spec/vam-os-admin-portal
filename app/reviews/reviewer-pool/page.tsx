@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getReviewerPool, getReviewEligibleReviewers } from "@/lib/data";
-import { canManageReviewers, canManageUsers } from "@/lib/permissions";
+import { canManageReviewers, canManageUsers, canReview } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { ReviewerPoolClient } from "./reviewer-pool-client";
@@ -19,6 +19,9 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
   if (!adminUser?.id) redirect("/login");
   if (!canManageReviewers(adminUser.role)) redirect("/reviews");
   const canManageUserAccounts = canManageUsers(adminUser.role);
+  // Support team reaches this screen without the rest of /reviews. A link to a
+  // page that turns them away is worse than no link.
+  const canOpenReviews = canReview(adminUser.role);
 
   const intakeBatchId = searchParams.intake_batch_id?.trim() || null;
   const scopeContext = await getAdminScopeContext();
@@ -46,11 +49,13 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
       />
 
       {/* Back nav */}
-      <div className="mb-4">
-        <Link href="/reviews" className="text-sm text-vam-green hover:underline">
-          ← Quay lại Đánh giá
-        </Link>
-      </div>
+      {canOpenReviews ? (
+        <div className="mb-4">
+          <Link href="/reviews" className="text-sm text-vam-green hover:underline">
+            ← Quay lại Đánh giá
+          </Link>
+        </div>
+      ) : null}
 
       {/* Auth caution callout */}
       <div className="mb-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -74,12 +79,14 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
       <Card className="mb-5">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-medium text-slate-700">Lọc theo đợt tuyển</p>
-          <Link
-            href="/reviews/guide"
-            className="text-xs text-slate-400 hover:text-vam-green hover:underline"
-          >
-            Hướng dẫn vận hành
-          </Link>
+          {canOpenReviews ? (
+            <Link
+              href="/reviews/guide"
+              className="text-xs text-slate-400 hover:text-vam-green hover:underline"
+            >
+              Hướng dẫn vận hành
+            </Link>
+          ) : null}
         </div>
         <form method="GET" className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">

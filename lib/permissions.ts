@@ -49,11 +49,31 @@ export function canBulkAssignReviews(role?: string | null) {
 }
 
 /**
- * Can enable a mentor as a reviewer (create/upgrade their admin_users row).
- * Same role set as canBulkAssignReviews — separate name for semantic clarity.
+ * Can grant and revoke recruitment participation (score applications,
+ * interview) on "Danh sách nhân sự tuyển sinh" — which creates the account and
+ * sends the invitation for someone who has none.
+ *
+ * support_team is here by the programme owner's decision of 11/09/2026: they are
+ * the group that actually invites reviewers. It carries nothing else — reading
+ * scores, exporting results, deciding, configuring review rounds all stay on
+ * canAssignReview / canBulkAssignReviews / canDecide. The database re-checks the
+ * same thing through vam084_staffing_operator_for_season, which still requires
+ * an operations scope on the exact season.
  */
 export function canManageReviewers(role?: string | null) {
-  return ["super_admin", "admin", "core_team"].includes(role || "");
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
+ * Can hand one lot of applications to one reviewer, and hand assignments back,
+ * on /reviews/assign-bulk.
+ *
+ * Deliberately NOT canBulkAssignReviews widened: that predicate also opens the
+ * review-count settings and interview assignment. Same 11/09 decision and same
+ * limits as canManageReviewers.
+ */
+export function canAssignReviewLots(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
 }
 
 /**
