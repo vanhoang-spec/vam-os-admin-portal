@@ -169,6 +169,11 @@ export type ReviewAssignableApplication = {
    * application one at a time and find the control buried in its detail page.
    */
   existing_review_id?: string | null;
+  /**
+   * When that active assignment is due, if a deadline was set — so the
+   * "Đã giao" tab can say when each lot has to be finished.
+   */
+  existing_due_at?: string | null;
 };
 
 /**

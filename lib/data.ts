@@ -1954,7 +1954,7 @@ export async function getReviewAssignableApplications(filters: {
     "application_reviews",
     "application_id",
     appIds,
-    "id,application_id,reviewer_admin_user_id,status,review_round"
+    "id,application_id,reviewer_admin_user_id,status,review_round,due_at"
   );
   if (reviewErr) {
     logDataError("getReviewAssignableApplications.reviews", reviewErr);
@@ -1966,6 +1966,8 @@ export async function getReviewAssignableApplications(filters: {
   const reviewerIdByAppId = new Map<string, string>();
   // The review row itself, so an assigned application can be handed back.
   const reviewIdByAppId = new Map<string, string>();
+  // Its deadline, so the "Đã giao" tab can say when the lot is due.
+  const dueAtByAppId = new Map<string, string>();
   const hasAnyInterviewByAppId = new Set<string>();
 
   for (const row of reviewRows) {
@@ -1973,19 +1975,21 @@ export async function getReviewAssignableApplications(filters: {
     const revId = row.reviewer_admin_user_id as string | null;
     const round = row.review_round as string | null;
     const status = row.status as string | null;
-    
+
     if (id) {
       // Any interview row (even cancelled) counts for needs_more_review provenance
       if (round === "interview") {
         hasAnyInterviewByAppId.add(id);
       }
-      
+
       // Active assignments for the TARGET round disable the checkbox
       if (round === reviewRound && status !== "cancelled") {
         reviewCountByAppId.set(id, (reviewCountByAppId.get(id) ?? 0) + 1);
         if (revId) reviewerIdByAppId.set(id, revId);
         const reviewId = row.id as string | null;
         if (reviewId) reviewIdByAppId.set(id, reviewId);
+        const dueAt = row.due_at as string | null;
+        if (dueAt) dueAtByAppId.set(id, dueAt);
       }
     }
   }
@@ -2002,7 +2006,8 @@ export async function getReviewAssignableApplications(filters: {
     ...a,
     existing_review_count: reviewCountByAppId.get(a.id) ?? 0,
     existing_reviewer_id: reviewerIdByAppId.get(a.id) ?? null,
-    existing_review_id: reviewIdByAppId.get(a.id) ?? null
+    existing_review_id: reviewIdByAppId.get(a.id) ?? null,
+    existing_due_at: dueAtByAppId.get(a.id) ?? null
   }));
 
   return { data, error: null };
