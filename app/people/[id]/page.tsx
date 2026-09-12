@@ -27,6 +27,7 @@ import {
 } from "@/lib/data";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFilter, resolveCanonicalScope } from "@/lib/program-scope";
+import { isMembershipRole, MEMBERSHIP_ROLE_LABELS } from "@/lib/membership-lifecycle";
 import { MembershipLifecycleControls } from "./membership-lifecycle-controls";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
@@ -159,8 +160,7 @@ function operationalRoleLabel(value: unknown) {
 
 function membershipRoleLabel(value: unknown) {
   const normalized = normalizeStatus(value);
-  if (normalized === "mentee") return "Mentee";
-  if (normalized === "mentor") return "Mentor";
+  if (isMembershipRole(normalized)) return MEMBERSHIP_ROLE_LABELS[normalized];
   if (normalized === "supporter") return "Supporter";
   if (normalized === "reviewer") return "Reviewer";
   if (normalized === "interviewer") return "Interviewer";
