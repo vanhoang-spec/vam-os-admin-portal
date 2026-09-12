@@ -143,6 +143,32 @@ export function normalizeJoinUrl(value: unknown): JoinUrlResult {
   return { ok: true, url: parsed.toString() };
 }
 
+/**
+ * Buổi có phần trực tuyến thì đường dẫn phòng họp là BẮT BUỘC.
+ *
+ * Trước luật này, `normalizeJoinUrl("")` trả về hợp lệ với `url: null`, nên một
+ * buổi trực tuyến lưu được mà không có chỗ để vào. Hỏng ở chỗ không ai thấy:
+ * form lưu êm, danh sách hiện bình thường, và người đăng ký nhận một lá thư xác
+ * nhận không nói được vào bằng cách nào — họ chỉ phát hiện ra đúng lúc buổi bắt
+ * đầu, khi không còn ai kịp sửa.
+ *
+ * Đặt ở module thuần để form của BTC và hàm ghi dùng chung một câu trả lời: ô
+ * đánh dấu bắt buộc trên màn hình không phải một phép kiểm, và hàm ghi phải tự
+ * kiểm lại thứ người gửi tự đặt được.
+ */
+export function validateJoinUrlForFormat(
+  format: EventFormat,
+  joinUrl: string | null
+): { ok: true } | { ok: false; message: string } {
+  if (needsJoinUrl(format) && !joinUrl) {
+    return {
+      ok: false,
+      message: "Buổi có phần trực tuyến phải có đường dẫn phòng họp — thư xác nhận gửi cho người đăng ký lấy đường dẫn từ đây."
+    };
+  }
+  return { ok: true };
+}
+
 export type EventPlace = {
   format: EventFormat;
   locationName: string | null;
