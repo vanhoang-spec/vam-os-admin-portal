@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isMembershipRole, MEMBERSHIP_ROLE_LABELS } from "@/lib/membership-lifecycle";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 /**
@@ -153,8 +154,10 @@ export function sortMemberships(rows: ParticipantMembership[]): ParticipantMembe
 /** Nhãn tiếng Việt của vai trò trong mùa. */
 export function participantRoleLabel(role: unknown): string {
   const value = String(role ?? "").trim();
-  if (value === "mentor") return "Mentor";
-  if (value === "mentee") return "Mentee";
+  // Bốn vai trò thêm tay được lấy nhãn từ MEMBERSHIP_ROLE_LABELS, để tên của
+  // Trainer và Speaker chỉ có đúng một cách viết trong toàn sản phẩm. Những vai
+  // trò còn lại chỉ tồn tại trong dữ liệu cũ và không có mặt ở ô chọn nào.
+  if (isMembershipRole(value)) return MEMBERSHIP_ROLE_LABELS[value];
   if (value === "alumni_mentee") return "Mentee (cựu)";
   if (value === "supporter") return "Hỗ trợ";
   if (value === "advisor") return "Cố vấn";

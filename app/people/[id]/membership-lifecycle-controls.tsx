@@ -8,6 +8,8 @@ import {
 import {
   availableMembershipActions,
   MEMBERSHIP_ACTION_LABELS,
+  MEMBERSHIP_ROLES,
+  MEMBERSHIP_ROLE_LABELS,
   membershipOperationNeedsReason,
   type MembershipLifecycleOperation,
   initialMembershipLifecycleState,
@@ -388,8 +390,11 @@ export function MembershipLifecycleControls({
             <option value="" disabled>
               — Chọn vai trò —
             </option>
-            <option value="mentor">Mentor</option>
-            <option value="mentee">Mentee</option>
+            {MEMBERSHIP_ROLES.map((value) => (
+              <option key={value} value={value}>
+                {MEMBERSHIP_ROLE_LABELS[value]}
+              </option>
+            ))}
           </select>
         </label>
         <label className="text-sm">

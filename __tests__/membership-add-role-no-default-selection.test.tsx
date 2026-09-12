@@ -19,6 +19,7 @@ vi.mock("react-dom", async (importOriginal) => {
 });
 
 import { MembershipLifecycleControls } from "@/app/people/[id]/membership-lifecycle-controls";
+import { MEMBERSHIP_ROLES } from "@/lib/membership-lifecycle";
 
 const PERSON = "11111111-1111-4111-8111-111111111111";
 const PROGRAM_FIRST = "44444444-4444-4444-8444-4444444444aa";
@@ -103,6 +104,9 @@ describe("Add membership role — no silent default selection", () => {
     const seasonValues = Array.from(select(container, "season_id").options).map((o) => o.value);
     expect(programValues).toEqual(["", PROGRAM_FIRST, PROGRAM_SECOND]);
     expect(seasonValues).toEqual(["", SEASON_S11, SEASON_S12]);
-    expect(Array.from(select(container, "role").options).map((o) => o.value)).toEqual(["", "mentor", "mentee"]);
+    // Lấy từ cùng nguồn mà server action dùng để kiểm, chứ không chép lại danh
+    // sách: chép lại thì ô chọn mời được một vai trò mà server từ chối, và test
+    // vẫn xanh cho tới khi có người vận hành bấm phải nó.
+    expect(Array.from(select(container, "role").options).map((o) => o.value)).toEqual(["", ...MEMBERSHIP_ROLES]);
   });
 });
