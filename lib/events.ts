@@ -43,6 +43,7 @@ import {
   isEventFormat,
   needsJoinUrl,
   needsVenue,
+  validateJoinUrlForFormat,
   normalizeJoinUrl,
   normalizeMapUrl,
   type EventFormat
@@ -2300,6 +2301,9 @@ function resolveEventPlaceInput(
 
   const join = normalizeJoinUrl(input.online_join_url);
   if (!join.ok) return { ok: false, message: join.message };
+
+  const joinRequired = validateJoinUrlForFormat(format, join.url);
+  if (!joinRequired.ok) return { ok: false, message: joinRequired.message };
 
   return {
     ok: true,

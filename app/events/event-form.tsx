@@ -257,11 +257,15 @@ export function EventForm({
         {needsJoinUrl(format) ? (
           <label className="mt-3 block">
             <span className="text-xs font-medium uppercase text-slate-500">
-              Đường dẫn tham gia trực tuyến
+              Đường dẫn tham gia trực tuyến <span className="text-red-600">*</span>
+            </span>
+            <span className="mt-0.5 block text-xs font-normal normal-case text-slate-500">
+              Bắt buộc với buổi trực tuyến. Thư xác nhận gửi cho người đăng ký lấy đường dẫn từ ô này.
             </span>
             <input
               name="online_join_url"
               type="url"
+              required
               defaultValue={event?.online_join_url ?? ""}
               placeholder="https://meet.google.com/..."
               className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
