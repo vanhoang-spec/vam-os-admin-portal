@@ -19,12 +19,14 @@ import {
   buildRecapPeriodReminderEmail,
   buildReviewBatchAssignedEmail,
   buildReviewerInviteEmail,
+  buildStaffInviteEmail,
   evaluateEmailGate,
   isSafeAppLink,
   normalizeEmailAddress,
   parseSenderAddress,
   participantInviteSubject,
   reviewerInviteSubject,
+  staffInviteSubject,
   type EmailKind,
   type EmailMessage,
   type EmailProvider
@@ -530,6 +532,54 @@ export async function sendReviewerInvite(input: {
   });
 
   return deliver("reviewer_invite", { ...built, to: input.toEmail }, relation);
+}
+
+/**
+ * Thư mời một người vào ban tổ chức, thay cho thư mặc định của Supabase.
+ *
+ * Dựng đường dẫn ở đây chứ không nhận từ nơi gọi: chỉ chỗ này biết base URL
+ * thật của môi trường đang chạy, và chỉ chỗ này chạy `isSafeAppLink`. Một
+ * đường dẫn sai host mà vẫn gửi đi là một lá thư mời người ta nhập mật khẩu
+ * vào một trang không phải của mình.
+ *
+ * Link hỏng thì ghi sổ `failed` rồi dừng — không gửi thư không có link, vì thư
+ * đó chỉ làm người nhận tưởng mình bỏ sót nút bấm.
+ */
+export async function sendStaffInvite(input: {
+  toEmail: string;
+  fullName: string;
+  roleLabel: string;
+  linkType: PasswordLinkType;
+  tokenHash: string;
+  adminUserId?: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  const linkUrl = base ? buildPasswordLinkUrl(base, { tokenHash: input.tokenHash, type: input.linkType }) : null;
+  const relation = input.adminUserId ? { table: "admin_users", id: input.adminUserId } : null;
+
+  if (!base || !linkUrl || !isSafeAppLink(linkUrl, base)) {
+    await logOutboundEmail({
+      kind: "staff_invite",
+      toEmail: String(input.toEmail ?? "").slice(0, 200),
+      subject: staffInviteSubject(),
+      status: "failed",
+      error: "Không dựng được đường dẫn đặt mật khẩu",
+      relation
+    });
+    return { ok: false, skipped: false, reason: "Không dựng được đường dẫn đặt mật khẩu." };
+  }
+
+  const built = buildStaffInviteEmail({
+    fullName: input.fullName,
+    roleLabel: input.roleLabel,
+    linkUrl,
+    linkType: input.linkType,
+    loginUrl: `${base}/login`,
+    loginEmail: input.toEmail
+  });
+
+  return deliver("staff_invite", { ...built, to: input.toEmail }, relation);
 }
 
 /** Tell a reviewer that a batch of applications is waiting for them. */
