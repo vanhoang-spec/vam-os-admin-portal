@@ -8,6 +8,8 @@ import type { JsonRecord } from "@/lib/types";
 import { isValidEmail, normalizeEmail } from "@/lib/identity";
 import { findExactAuthUsers, resolveAuthOwnership } from "@/lib/account-auth-ownership";
 import { executeManualStaffProvisioning, type ProvisioningResult } from "@/lib/manual-staff-provisioning";
+import { sendStaffInvite } from "@/lib/email";
+import { adminRoleLabel } from "@/lib/ui-labels";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
 export type ScopeRole = "full_access" | "operations" | "review" | "read";
@@ -454,6 +456,50 @@ export async function upsertScope(client: any, input: {
   if (result.error) throw new Error(`Không thể lưu phân quyền: ${result.error.message}`);
 }
 
+/**
+ * Tạo tài khoản Auth cho một địa chỉ và lấy về mã đặt mật khẩu một lần.
+ *
+ * Thay cho `inviteUserByEmail`, vốn làm hai việc trong một lệnh: tạo tài khoản
+ * VÀ tự gửi thư. Thư tự gửi đó mang đường dẫn về Site URL của Supabase — một
+ * đường không nằm trong ba đường được phép dựng phiên từ mảnh `#` của sản phẩm,
+ * nên người nhận bấm vào là rơi vào ngõ cụt.
+ *
+ * `generateLink` tạo đúng tài khoản ấy nhưng KHÔNG gửi gì, và trả về
+ * `hashed_token` để mình tự dựng đường dẫn về /reset-password rồi gửi qua Brevo.
+ *
+ * Ba phép kiểm trước khi tin kết quả, chép khuôn đã chạy thật ở
+ * `lib/enable-reviewer.ts`. Phép thứ ba là phép quan trọng: Supabase trả về
+ * email của tài khoản mà mã này thuộc về, và nó phải khớp đúng người mình định
+ * mời. Lệch nghĩa là mã của người khác — gửi đi là trao quyền vào nhầm tay.
+ */
+async function generateStaffPasswordLink(
+  client: any,
+  type: "invite" | "recovery",
+  email: string
+): Promise<{ ok: true; userId: string; tokenHash: string } | { ok: false }> {
+  try {
+    const { data, error } = await client.auth.admin.generateLink({ type, email });
+    if (error) {
+      logAdminUsersRuntime("staff generateLink failed", {
+        type,
+        code: error.code ?? error.status ?? null
+      });
+      return { ok: false };
+    }
+    const userId = String(data?.user?.id ?? "").trim();
+    const userEmail = String(data?.user?.email ?? "").trim().toLowerCase();
+    const tokenHash = String(data?.properties?.hashed_token ?? "").trim();
+    if (!userId || !tokenHash || userEmail !== email) {
+      logAdminUsersRuntime("staff generateLink returned a link that does not match the recipient", { type });
+      return { ok: false };
+    }
+    return { ok: true, userId, tokenHash };
+  } catch (error) {
+    logAdminUsersRuntime("staff generateLink threw", { type, message: (error as Error)?.message ?? null });
+    return { ok: false };
+  }
+}
+
 export async function createManagedAdminUser(input: {
   operationId?: unknown;
   email: unknown;
@@ -482,6 +528,9 @@ export async function createManagedAdminUser(input: {
     : randomUUID();
   const emailHash = createHash("sha256").update(email, "utf8").digest("hex");
   const authHash = (id: string | null) => id ? createHash("sha256").update(id, "utf8").digest("hex") : null;
+  // Mã đặt mật khẩu do bước `invite` lấy về. Giữ ở đây vì chuỗi cung cấp chỉ
+  // trả về được id tài khoản Auth, mà thư thì cần cả mã.
+  let inviteTokenHash: string | null = null;
   const logSafe = (stage: string, failureClass: string, code?: string) => logAdminUsersRuntime("staff provisioning", { operationId, stage, failureClass, code: code ?? null });
   const result = await executeManualStaffProvisioning(operationId, {
     beginJournal: async () => {
@@ -498,7 +547,12 @@ export async function createManagedAdminUser(input: {
       if (stageError) { logSafe(stage, failureClass ?? "stage_recording_failed", stageError.code); throw new Error("STAGE_RECORDING_FAILED"); }
     },
     preLookup: () => findExactAuthUsers(client, email).then((lookup) => ({ ok: lookup.ok, ids: lookup.users.map((user) => user.id) })),
-    invite: async () => { const invitation = await client.auth.admin.inviteUserByEmail(email); return { id: String(invitation?.data?.user?.id ?? "").trim() || null, error: Boolean(invitation?.error) }; },
+    invite: async () => {
+      const generated = await generateStaffPasswordLink(client, "invite", email);
+      if (!generated.ok) return { id: null, error: true };
+      inviteTokenHash = generated.tokenHash;
+      return { id: generated.userId, error: false };
+    },
     postLookup: () => findExactAuthUsers(client, email).then((lookup) => ({ ok: lookup.ok, ids: lookup.users.map((user) => user.id) })),
     commitApplication: async (authUserId) => {
       const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
@@ -512,7 +566,39 @@ export async function createManagedAdminUser(input: {
   });
   const reference = `Mã tham chiếu: ${result.operationId}`;
   const base = { ...result, operationId: result.operationId };
-  if (result.ok) return { ...base, message: `Đã gửi lời mời và tạo tài khoản ở trạng thái đã mời. ${reference}` };
+  if (result.ok) {
+    // Thư gửi SAU khi tài khoản đã ghi xong, không phải trước: thư đi rồi mà
+    // ghi hỏng thì người nhận cầm một đường dẫn trỏ tới tài khoản không tồn tại.
+    // Thứ tự này đổi lại thành trường hợp dễ chịu hơn — tài khoản có thật,
+    // thư chưa tới, và gửi lại được.
+    const created = await client.from("admin_users").select("id").eq("email", email).maybeSingle();
+    const delivery = await sendStaffInvite({
+      toEmail: email,
+      fullName: cleanText(input.fullName) ?? email,
+      roleLabel: adminRoleLabel(validRole(input.role)),
+      linkType: "invite",
+      tokenHash: inviteTokenHash ?? "",
+      adminUserId: String(created?.data?.id ?? "").trim() || null
+    });
+
+    if (delivery.ok) {
+      return { ...base, message: `Đã tạo tài khoản ở trạng thái đã mời và gửi thư mời đặt mật khẩu. ${reference}` };
+    }
+
+    // Nói rõ là CHƯA gửi được, chứ không gộp vào một câu "đã gửi lời mời".
+    // Người vận hành tin câu báo này rồi đi chờ; báo sai thì họ chờ một lá thư
+    // không bao giờ tới, và người được mời thì tưởng mình bị bỏ quên.
+    logAdminUsersRuntime("staff invite email not delivered", {
+      operationId,
+      skipped: delivery.skipped,
+      reason: delivery.reason ?? null
+    });
+    const why = delivery.reason ? ` Lý do: ${delivery.reason}` : "";
+    return {
+      ...base,
+      message: `Đã tạo tài khoản ở trạng thái đã mời, nhưng CHƯA gửi được thư mời.${why} Xem Nhật ký gửi để biết chi tiết. ${reference}`
+    };
+  }
   if (result.status === "rejected") return { ...base, message: `Danh tính đã tồn tại. Không có dữ liệu nào được cập nhật; hãy dùng quy trình xem xét tài khoản hiện có. ${reference}` };
   if (result.reconciliationRequired) return { ...base, message: `Trạng thái cần đối soát thủ công. Không tự động thử lại. ${reference}` };
   return { ...base, message: `Tác vụ dừng an toàn trước khi hoàn tất. Không tự động thử lại. ${reference}` };

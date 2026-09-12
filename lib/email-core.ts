@@ -34,6 +34,14 @@ export type EmailKind =
   // The letter that gives a mentor or a mentee their account
   // (supabase/migrations/20260911140000_participant_account_invites.sql).
   | "participant_invite"
+  // Thư mời một người vào ban tổ chức, gửi khi /admin/users tạo tài khoản
+  // (supabase/migrations/20260913100000_outbound_emails_staff_invite.sql).
+  //
+  // Cố ý KHÔNG dùng lại 'reviewer_invite': `lib/enable-reviewer.ts` chống gửi
+  // trùng bằng cách tra thư loại đó đã gửi cho địa chỉ này trong 60 phút gần
+  // nhất, nên mời ai vào ban tổ chức sẽ chặn im lặng thư mời reviewer của chính
+  // họ trong một tiếng.
+  | "staff_invite"
   // Cross-mentoring (migration 072). The first carries a token a mentor answers
   // through; the other three simply tell somebody what was decided.
   | "cross_invite"
@@ -390,6 +398,83 @@ export function buildReviewerInviteEmail(input: {
       "<p><strong>Bước 1</strong> — Bấm nút dưới đây để đặt mật khẩu:</p>",
       `<p style="margin:20px 0"><a href="${escapeHtml(input.linkUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu</a></p>`,
       `<p><strong>Bước 2</strong> — Đăng nhập tại <a href="${escapeHtml(input.loginUrl)}">${escapeHtml(input.loginUrl)}</a> bằng email <strong>${escapeHtml(loginEmail)}</strong> và mật khẩu vừa đặt, rồi vào mục <strong>Đánh giá</strong> để xem các hồ sơ được phân công.</p>`,
+      `<p>${escapeHtml(expiry)}</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.linkUrl)}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/** Tiêu đề thư mời nhân sự; tách riêng để một lần gửi hỏng vẫn ghi sổ được đúng tiêu đề. */
+export function staffInviteSubject(): string {
+  return "[UEH Mentoring] Tài khoản VAM OS của anh/chị";
+}
+
+/**
+ * Thư mời một người vào ban tổ chức.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO THƯ NÀY PHẢI NÓI TRƯỚC VỀ BƯỚC KÍCH HOẠT
+ * ---------------------------------------------------------------------------
+ * Tài khoản vừa tạo mang trạng thái `invited`, và `lib/admin-auth.ts` chỉ cho
+ * tài khoản `active` đăng nhập. Nên chuỗi thật là: đặt mật khẩu xong, người
+ * nhận VẪN CHƯA vào được, cho tới khi người quản trị bấm Kích hoạt.
+ *
+ * Không nói ra thì người nhận đặt mật khẩu, đăng nhập, bị từ chối, và kết luận
+ * là hệ thống hỏng — rồi nhắn cho ban tổ chức. Nói ra thì đó là một bước đã
+ * báo trước. Một dòng ở đây rẻ hơn nhiều so với mỗi người một lần hỏi.
+ */
+export function buildStaffInviteEmail(input: {
+  fullName: string;
+  roleLabel: string;
+  linkUrl: string;
+  linkType: "invite" | "recovery";
+  loginUrl: string;
+  loginEmail: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.fullName);
+  const role = safeDisplayName(input.roleLabel, "thành viên ban tổ chức");
+  const loginEmail = normalizeEmailAddress(input.loginEmail) ?? safeDisplayName(input.loginEmail, "");
+  const subject = staffInviteSubject();
+
+  const intro =
+    input.linkType === "recovery"
+      ? `Ban tổ chức gửi lại đường dẫn đặt mật khẩu cho tài khoản VAM OS của anh/chị. Đường dẫn trong các thư trước (nếu có) không còn dùng được.`
+      : `Ban tổ chức UEH Mentoring đã tạo cho anh/chị một tài khoản trên VAM OS với vai trò ${role}.`;
+  const step2 = `Bước 2 — Đăng nhập tại ${input.loginUrl} bằng email ${loginEmail} và mật khẩu vừa đặt.`;
+  const activation =
+    "Lưu ý: sau khi đặt mật khẩu, ban tổ chức cần bật tài khoản một lần nữa thì anh/chị mới vào được. Nếu lần đăng nhập đầu tiên báo tài khoản chưa sẵn sàng, vui lòng chờ ban tổ chức xác nhận — đây là một bước bình thường, không phải lỗi.";
+  const expiry =
+    "Đường dẫn là riêng cho anh/chị, chỉ dùng được một lần và có hạn sử dụng — vui lòng không chuyển tiếp. Nếu đã hết hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.";
+
+  const lines = [
+    `Kính gửi ${name},`,
+    "",
+    intro,
+    "",
+    "Bước 1 — Bấm vào đường dẫn dưới đây để đặt mật khẩu:",
+    input.linkUrl,
+    "",
+    step2,
+    "",
+    activation,
+    "",
+    expiry,
+    "",
+    "Trân trọng cảm ơn anh/chị.",
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>${escapeHtml(intro)}</p>`,
+      "<p><strong>Bước 1</strong> — Bấm nút dưới đây để đặt mật khẩu:</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.linkUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu</a></p>`,
+      `<p><strong>Bước 2</strong> — Đăng nhập tại <a href="${escapeHtml(input.loginUrl)}">${escapeHtml(input.loginUrl)}</a> bằng email <strong>${escapeHtml(loginEmail)}</strong> và mật khẩu vừa đặt.</p>`,
+      `<p>${escapeHtml(activation)}</p>`,
       `<p>${escapeHtml(expiry)}</p>`,
       `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.linkUrl)}</p>`
     ].join("")
