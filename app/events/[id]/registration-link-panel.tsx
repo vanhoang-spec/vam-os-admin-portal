@@ -204,12 +204,15 @@ export function CheckinLinkPanel({
   eventId,
   checkinUrl,
   canCreate,
-  qrDataUrl
+  qrDataUrl,
+  qrEnabled = true
 }: {
   eventId: string;
   checkinUrl: string | null;
   canCreate: boolean;
   qrDataUrl: string | null;
+  /** Sự kiện có dùng mã QR check-in không. Tắt thì chỉ còn link, không vẽ mã. */
+  qrEnabled?: boolean;
 }) {
   return (
     <PublicLinkPanel
@@ -220,8 +223,12 @@ export function CheckinLinkPanel({
       createLabel="Tạo link check-in"
       noPermissionMessage="Bạn có thể xem sự kiện này nhưng không có quyền tạo link check-in."
       copyLabel="Sao chép link check-in"
-      helperText="Dùng QR hoặc link này để người tham dự check-in tại sự kiện."
-      qrDataUrl={qrDataUrl}
+      helperText={
+        qrEnabled
+          ? "Dùng QR hoặc link này để người tham dự check-in tại sự kiện."
+          : "Sự kiện này không dùng mã QR. Link này vẫn dùng được để người tham dự tự check-in."
+      }
+      qrDataUrl={qrEnabled ? qrDataUrl : null}
     />
   );
 }

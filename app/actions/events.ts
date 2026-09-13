@@ -76,6 +76,7 @@ export async function createEventAction(
     // Checkboxes that default-true use has() to distinguish "unchecked" from "absent":
     // pass explicit "true"/"false" so the lib function never receives undefined.
     allow_walk_in: formData.has("allow_walk_in") ? "true" : "false",
+    qr_checkin_enabled: formData.has("qr_checkin_enabled") ? "true" : "false",
     checkin_mode: formText(formData, "checkin_mode"),
     checkin_window_enabled: formText(formData, "checkin_window_enabled"),
     checkin_opens_at: formText(formData, "checkin_opens_at"),
@@ -158,6 +159,7 @@ export async function updateEventAction(
     // Checkboxes that default-true use has() to distinguish "unchecked" from "absent":
     // pass explicit "true"/"false" so the lib function never receives undefined.
     allow_walk_in: formData.has("allow_walk_in") ? "true" : "false",
+    qr_checkin_enabled: formData.has("qr_checkin_enabled") ? "true" : "false",
     checkin_mode: formText(formData, "checkin_mode"),
     checkin_window_enabled: formText(formData, "checkin_window_enabled"),
     checkin_opens_at: formText(formData, "checkin_opens_at"),

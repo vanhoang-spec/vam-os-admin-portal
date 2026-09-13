@@ -15,7 +15,7 @@ import { EventPlaceBlock } from "../event-place";
 import { listEventSupporters, listSupporterCandidates } from "@/lib/event-supporters";
 import { SupportersPanel } from "./supporters-panel";
 import { countScansByStation } from "@/lib/event-checkin";
-import { stationLabel } from "@/lib/event-checkin-code";
+import { stationLabel, usesQrCheckin } from "@/lib/event-checkin-code";
 import { LiveRefresh } from "./live-refresh";
 import { AddSessionPanel } from "./add-session-panel";
 
@@ -109,7 +109,10 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
   const origin = await getRequestOrigin();
   const registrationUrl = detail.registrationLink?.token ? `${origin}/register/${detail.registrationLink.token}` : null;
   const checkinUrl = detail.checkinLink?.token ? `${origin}/checkin/${detail.checkinLink.token}` : null;
-  const checkinQrDataUrl = checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 200 }) : null;
+  // BTC tắt QR cho sự kiện này thì không vẽ mã nào, kể cả mã của link điểm danh
+  // chung. Link vẫn hiện và quản lý được, để một link đang mở còn đóng lại được.
+  const qrEnabled = usesQrCheckin(detail.event);
+  const checkinQrDataUrl = qrEnabled && checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 200 }) : null;
   const canCreateLink = await canOperateSeason(scopeContext, detail.event.season_id ?? null);
 
   // Sự kiện đơn lẻ trả về mảng rỗng — không có chuỗi thì không có gì để liệt kê.
@@ -185,14 +188,28 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         />
       </div>
 
-      <p className="mb-6">
-        <Link
-          href={`/events/${params.id}/scan`}
-          className="inline-block rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
-        >
-          Mở máy quét điểm danh
-        </Link>
-      </p>
+      {/* Không dùng QR thì không có mã nào để quét: nút mở máy quét chỉ dẫn tới
+          một màn hình vô ích. Chỉ thẳng tới đường điểm danh thật của sự kiện. */}
+      {qrEnabled ? (
+        <p className="mb-6">
+          <Link
+            href={`/events/${params.id}/scan`}
+            className="inline-block rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
+          >
+            Mở máy quét điểm danh
+          </Link>
+        </p>
+      ) : (
+        <p className="mb-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Sự kiện này không dùng mã QR check-in — người đăng ký không nhận mã trong thư xác nhận.{" "}
+          <Link
+            href={`/events/${params.id}/attendance`}
+            className="font-medium text-vam-green underline-offset-2 hover:underline"
+          >
+            Điểm danh thủ công
+          </Link>
+        </p>
+      )}
       {detail.error ? <ErrorBox message={detail.error} /> : null}
 
       {/* Capacity / waitlist info banner */}
@@ -318,12 +335,15 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         </Card>
 
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">Liên kết điểm danh / QR</h2>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">
+            {qrEnabled ? "Liên kết điểm danh / QR" : "Liên kết điểm danh"}
+          </h2>
           <CheckinLinkPanel
             eventId={detail.event.id}
             checkinUrl={checkinUrl}
             canCreate={canCreateLink}
             qrDataUrl={checkinQrDataUrl}
+            qrEnabled={qrEnabled}
           />
         </Card>
       </div>

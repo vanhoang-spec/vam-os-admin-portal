@@ -1065,8 +1065,9 @@ export async function sendEventRegistrationConfirmation(input: {
   placeLabel?: string | null;
   mapUrl?: string | null;
   joinUrl?: string | null;
-  ticketUrl: string;
-  ticketCode: string;
+  /** Null khi sự kiện không dùng mã QR check-in: thư không mang phần vé. */
+  ticketUrl?: string | null;
+  ticketCode?: string | null;
   shortCode?: string | null;
   qrPngBase64?: string | null;
   pendingApproval?: boolean;

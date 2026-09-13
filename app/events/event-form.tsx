@@ -347,6 +347,26 @@ export function EventForm({
           </label>
         </div>
 
+        {/* Luôn hiện, ở cả form tạo lẫn form sửa: action đọc ô này bằng
+            formData.has(), nên một form thiếu ô này sẽ âm thầm tắt QR. */}
+        <label className="mb-4 flex items-start gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+          <input
+            type="checkbox"
+            name="qr_checkin_enabled"
+            value="true"
+            defaultChecked={event?.qr_checkin_enabled !== false}
+            className="mt-1"
+          />
+          <div>
+            <span className="text-sm font-medium">Dùng mã QR check-in</span>
+            <p className="text-xs text-slate-500">
+              Bật: mỗi người đăng ký nhận mã QR cá nhân trong thư xác nhận để quét ở cửa. Tắt: thư xác
+              nhận không kèm mã QR, ban tổ chức điểm danh thủ công theo danh sách. Mã đã gửi trước đó vẫn
+              quét được.
+            </p>
+          </div>
+        </label>
+
         {/* Cấu hình giới hạn số lượng */}
         <div className="mb-4 border-t border-slate-200 pt-4">
           <label className="flex items-start gap-2 mb-2">
