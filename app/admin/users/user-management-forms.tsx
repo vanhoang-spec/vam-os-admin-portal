@@ -135,7 +135,7 @@ export function CreateAdminUserForm({ scopeOptions }: { scopeOptions: ScopeCatal
       programCode: selectedProgram?.code ?? "",
       seasonCode: selectedSeason?.code ?? "",
       scopeRole: String(formData.get("scope_role") ?? ""),
-      accountStatus: String(formData.get("status") ?? ""),
+      accountStatus: "active",
       scopeStatus: String(formData.get("scope_status") ?? "")
     });
     let timedOut = false;
@@ -210,10 +210,10 @@ export function CreateAdminUserForm({ scopeOptions }: { scopeOptions: ScopeCatal
           <span className="text-xs font-medium uppercase text-slate-500">Vai trò</span>
           <RoleSelect defaultValue="viewer" />
         </label>
-        <label className="block">
+        <div className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
-          <select name="status" required defaultValue="invited" className={inputClass}><option value="invited">Đã mời — chưa kích hoạt</option></select>
-        </label>
+          <p className="mt-1 rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-vam-ink">Kích hoạt ngay · người dùng nhận thư để tự đặt mật khẩu</p>
+        </div>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Season</span>
           <select name="season_id" required className={inputClass} value={selectedSeasonId} onChange={(event) => setSelectedSeasonId(event.target.value)}>
@@ -326,7 +326,7 @@ export function StatusToggleForm({ user, disabled }: { user: ManagedAdminUser; d
       <input type="hidden" name="id" value={user.id} />
       <input type="hidden" name="status" value={nextStatus} />
       <button type="submit" disabled={disabled} className={nextStatus === "active" ? quietButtonClass : dangerButtonClass}>
-        {nextStatus === "active" ? "Kích hoạt lại" : "Tạm khóa"}
+        {nextStatus === "active" ? (user.status === "invited" ? "Kích hoạt" : "Kích hoạt lại") : "Tạm khóa"}
       </button>
       <ActionMessage state={state} />
     </form>
@@ -360,19 +360,22 @@ export function RemoveAccessForm({ user, disabled }: { user: ManagedAdminUser; d
 }
 
 /**
- * Gửi lại thư mời — chỉ hiện với tài khoản còn ở trạng thái đã mời.
+ * Gửi link đặt mật khẩu — cho tài khoản đang hoạt động hoặc còn ở trạng thái đã
+ * mời. Người mới chưa nhận được thư và người cũ quên mật khẩu đều đi qua đây.
+ * Tài khoản đang khoá thì không hiện: gửi link đăng nhập cho người đã bị khoá là
+ * mở một cánh cửa mà nút Tạm khóa vừa đóng.
  *
- * Hỏi lại trước khi gửi, vì mỗi lần gửi làm link trong thư cũ hết dùng được: bấm
- * hai lần là người nhận cầm hai lá thư mà chỉ lá sau còn chạy.
+ * Hỏi lại trước khi gửi, vì mỗi lần gửi làm link trong thư trước hết dùng được:
+ * bấm hai lần là người nhận cầm hai lá thư mà chỉ lá sau còn chạy.
  */
 export function ResendInviteForm({ user }: { user: ManagedAdminUser }) {
   const [state, formAction] = useFormState(resendAdminInviteAction, initialState);
-  if (user.status !== "invited") return null;
+  if (user.status !== "invited" && user.status !== "active") return null;
   return (
-    <form action={formAction} className="grid gap-1" onSubmit={(event) => { if (!window.confirm("Gửi lại thư mời đặt mật khẩu? Link trong thư cũ sẽ không còn dùng được.")) event.preventDefault(); }}>
+    <form action={formAction} className="grid gap-1" onSubmit={(event) => { if (!window.confirm("Gửi thư đặt mật khẩu cho người này? Link trong thư trước (nếu có) sẽ không còn dùng được.")) event.preventDefault(); }}>
       <input type="hidden" name="id" value={user.id} />
       <button type="submit" className={quietButtonClass}>
-        Gửi lại thư mời
+        Gửi link đặt mật khẩu
       </button>
       <ActionMessage state={state} />
     </form>

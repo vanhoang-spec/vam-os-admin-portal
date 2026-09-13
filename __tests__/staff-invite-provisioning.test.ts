@@ -162,6 +162,20 @@ describe("2. thư đi qua Brevo, và đi SAU khi tài khoản đã ghi", () => {
     expect(arg.roleLabel).toBe("Ban Điều hành");
     expect(arg.roleLabel).not.toBe("core_team");
   });
+
+  it("tài khoản tạo ra ĐÃ KÍCH HOẠT — không còn bước chờ bấm Kích hoạt", async () => {
+    // 13/09/2026: chị Thảo đặt mật khẩu xong, đăng nhập đúng mật khẩu 6 lần và
+    // lần nào cũng bị đẩy ra, vì tài khoản còn nằm ở `invited`.
+    const client = makeClient();
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const result = await create();
+
+    const calls = client.rpc.mock.calls as unknown as Array<[string, Record<string, any>]>;
+    const commit = calls.find(([name]) => name === "vam062_admin_mutation_atomic");
+    expect(commit?.[1]).toMatchObject({ p_operation: "upsert", p_payload: { status: "active" } });
+    expect(result.message).toContain("kích hoạt");
+  });
 });
 
 describe("3. những lúc KHÔNG được gửi", () => {

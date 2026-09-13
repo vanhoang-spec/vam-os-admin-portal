@@ -414,16 +414,10 @@ export function staffInviteSubject(): string {
 /**
  * Thư mời một người vào ban tổ chức.
  *
- * ---------------------------------------------------------------------------
- * VÌ SAO THƯ NÀY PHẢI NÓI TRƯỚC VỀ BƯỚC KÍCH HOẠT
- * ---------------------------------------------------------------------------
- * Tài khoản vừa tạo mang trạng thái `invited`, và `lib/admin-auth.ts` chỉ cho
- * tài khoản `active` đăng nhập. Nên chuỗi thật là: đặt mật khẩu xong, người
- * nhận VẪN CHƯA vào được, cho tới khi người quản trị bấm Kích hoạt.
- *
- * Không nói ra thì người nhận đặt mật khẩu, đăng nhập, bị từ chối, và kết luận
- * là hệ thống hỏng — rồi nhắn cho ban tổ chức. Nói ra thì đó là một bước đã
- * báo trước. Một dòng ở đây rẻ hơn nhiều so với mỗi người một lần hỏi.
+ * Tài khoản được kích hoạt ngay lúc tạo, nên thư chỉ có hai bước: đặt mật khẩu,
+ * rồi đăng nhập. Đừng thêm lại câu "chờ ban tổ chức bật tài khoản" — bước đó đã
+ * bỏ, và một lời dặn chờ đợi không có thật khiến người nhận ngồi chờ thay vì
+ * đăng nhập.
  */
 export function buildStaffInviteEmail(input: {
   fullName: string;
@@ -443,8 +437,6 @@ export function buildStaffInviteEmail(input: {
       ? `Ban tổ chức gửi lại đường dẫn đặt mật khẩu cho tài khoản VAM OS của anh/chị. Đường dẫn trong các thư trước (nếu có) không còn dùng được.`
       : `Ban tổ chức UEH Mentoring đã tạo cho anh/chị một tài khoản trên VAM OS với vai trò ${role}.`;
   const step2 = `Bước 2 — Đăng nhập tại ${input.loginUrl} bằng email ${loginEmail} và mật khẩu vừa đặt.`;
-  const activation =
-    "Lưu ý: sau khi đặt mật khẩu, ban tổ chức cần bật tài khoản một lần nữa thì anh/chị mới vào được. Nếu lần đăng nhập đầu tiên báo tài khoản chưa sẵn sàng, vui lòng chờ ban tổ chức xác nhận — đây là một bước bình thường, không phải lỗi.";
   const expiry =
     "Đường dẫn là riêng cho anh/chị, chỉ dùng được một lần và có hạn sử dụng — vui lòng không chuyển tiếp. Nếu đã hết hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.";
 
@@ -457,8 +449,6 @@ export function buildStaffInviteEmail(input: {
     input.linkUrl,
     "",
     step2,
-    "",
-    activation,
     "",
     expiry,
     "",
@@ -474,7 +464,6 @@ export function buildStaffInviteEmail(input: {
       "<p><strong>Bước 1</strong> — Bấm nút dưới đây để đặt mật khẩu:</p>",
       `<p style="margin:20px 0"><a href="${escapeHtml(input.linkUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu</a></p>`,
       `<p><strong>Bước 2</strong> — Đăng nhập tại <a href="${escapeHtml(input.loginUrl)}">${escapeHtml(input.loginUrl)}</a> bằng email <strong>${escapeHtml(loginEmail)}</strong> và mật khẩu vừa đặt.</p>`,
-      `<p>${escapeHtml(activation)}</p>`,
       `<p>${escapeHtml(expiry)}</p>`,
       `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.linkUrl)}</p>`
     ].join("")

@@ -41,7 +41,6 @@ export async function createAdminUserAction(_previousState: AdminUserActionState
     const email = text(formData, "email").toLowerCase();
     const fullName = text(formData, "full_name");
     const role = text(formData, "role");
-    const status = text(formData, "status");
     const programId = textAny(formData, ["program_id", "program"]);
     const seasonId = textAny(formData, ["season_id", "season_code"]);
     const scopeRole = textAny(formData, ["scope_role", "scope_level"]);
@@ -51,13 +50,13 @@ export async function createAdminUserAction(_previousState: AdminUserActionState
     const season = catalog.seasons.find((row) => row.id === seasonId && row.programId === program?.id);
     const validRole = ["viewer", "reviewer", "support_team", "core_team", "admin", "super_admin"].includes(role);
     const validScopeRole = ["read", "review", "operations", "full_access"].includes(scopeRole);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !fullName || fullName.length < 2 || !validRole || status !== "invited" || !program || !season || !validScopeRole || !["active", "inactive"].includes(scopeStatus)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !fullName || fullName.length < 2 || !validRole || !program || !season || !validScopeRole || !["active", "inactive"].includes(scopeStatus)) {
       return { ok: false, status: "rejected", failureClass: "invalid_catalog_or_form_input", failureStage: "pre_lookup", operationId: validationReference, reconciliationRequired: false, ownerAction: "none", message: "Dữ liệu biểu mẫu hoặc phạm vi program/season không hợp lệ. Chưa gọi nhà cung cấp Auth." };
     }
     const result = await createManagedAdminUser({
       operationId: validationReference,
       email,
-      fullName, role, status, programId, seasonId, scopeRole, scopeStatus
+      fullName, role, programId, seasonId, scopeRole, scopeStatus
     });
     revalidatePath("/admin/users");
     return { ...result, operationId: result.operationId ?? validationReference };

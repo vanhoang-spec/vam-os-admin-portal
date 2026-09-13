@@ -195,7 +195,7 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
       <Card className="mb-6">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Thêm user quản trị</h2>
         <p className="mb-4 text-sm text-slate-600">
-          Luồng tạo user sẽ tìm hoặc mời Supabase Auth user trước, sau đó lưu admin_users với auth_user_id và cập nhật scope. Service-role key chỉ chạy server-side.
+          Tạo xong là tài khoản được kích hoạt ngay. Người dùng nhận thư để tự đặt mật khẩu, đặt xong là đăng nhập được. Chưa nhận được thư hoặc quên mật khẩu thì bấm &quot;Gửi link đặt mật khẩu&quot; ở dòng của họ.
         </p>
         {contextError ? <p className="text-sm text-slate-600">Chọn phạm vi hợp lệ để bật biểu mẫu.</p> : <CreateAdminUserForm scopeOptions={scopeOptions} />}
       </Card>
