@@ -236,3 +236,18 @@ export function classifyScannedInput(scanned: unknown): ScannedInput {
 
   return { kind: "unreadable" };
 }
+
+/**
+ * Sự kiện này có dùng mã QR check-in cá nhân không.
+ *
+ * BTC chọn khi tạo hoặc sửa sự kiện. Tắt thì lượt đăng ký mới không được cấp mã,
+ * thư xác nhận không kèm QR, và trang sự kiện không vẽ mã nào.
+ *
+ * Chỉ `false` mới là tắt. Vắng mặt — dòng tạo trước khi có cột, hoặc một câu
+ * select không lấy cột này — là BẬT, đúng như mọi sự kiện đã chạy trước đây:
+ * tắt QR vì thiếu một cột trong câu select là lặng lẽ lấy mất tấm vé của người
+ * đăng ký mà không ai quyết định chuyện đó.
+ */
+export function usesQrCheckin(event: { qr_checkin_enabled?: unknown } | null | undefined): boolean {
+  return event?.qr_checkin_enabled !== false;
+}

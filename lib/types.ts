@@ -351,6 +351,11 @@ export type Event = JsonRecord & {
   /** If false, walk-in check-in is blocked. Default: true (open behaviour). */
   allow_walk_in?: boolean | null;
   /**
+   * Có cấp mã QR check-in cá nhân cho lượt đăng ký mới không. Mặc định true.
+   * Đọc qua `usesQrCheckin` — chỉ `false` mới là tắt.
+   */
+  qr_checkin_enabled?: boolean | null;
+  /**
    * Check-in mode:
    *   "open"                 — anyone with the link may check in (default)
    *   "registration_required"— must have a non-cancelled registration

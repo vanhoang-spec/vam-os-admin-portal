@@ -21,7 +21,7 @@ import type { CheckinActionStatus, RegistrationActionStatus } from "@/lib/event-
 import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
-import { checkinCodeUrl } from "@/lib/event-checkin-code";
+import { checkinCodeUrl, usesQrCheckin } from "@/lib/event-checkin-code";
 import { chooseSession } from "@/lib/event-session-choice";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
@@ -187,6 +187,7 @@ export type EventInput = {
   capacity_limit?: unknown;
   waitlist_enabled?: unknown;
   allow_walk_in?: unknown;
+  qr_checkin_enabled?: unknown;
   checkin_mode?: unknown;
   checkin_window_enabled?: unknown;
   checkin_opens_at?: unknown;
@@ -1227,7 +1228,23 @@ async function renderTicketQrBase64(ticketUrl: string): Promise<string | null> {
   }
 }
 
-async function issueTicketAndConfirm(input: {
+/**
+ * Cấp vé (khi sự kiện dùng mã QR) và gửi thư xác nhận đăng ký.
+ *
+ * ---------------------------------------------------------------------------
+ * TẮT QR KHÔNG ĐƯỢC LÀM MẤT THƯ XÁC NHẬN
+ * ---------------------------------------------------------------------------
+ * Trước khi có công tắc QR, thư chỉ đi sau khi cấp được mã (`if (!code) return`).
+ * Tắt QR bằng cách bỏ bước cấp mã mà giữ nguyên dòng ấy thì người đăng ký KHÔNG
+ * nhận được thư nào: họ bấm đăng ký xong, hộp thư trống, và không có gì cho họ
+ * biết mình đã đăng ký. Nên khi tắt QR, thư vẫn đi — chỉ không mang phần vé.
+ *
+ * Khi QR bật, hành vi giữ nguyên như trước, kể cả chỗ dừng khi không cấp được
+ * mã: một lá thư hứa vé mà không có vé tệ hơn một lá thư đến muộn.
+ *
+ * Export để test được đúng quyết định này mà không phải dựng cả luồng đăng ký.
+ */
+export async function issueTicketAndConfirm(input: {
   registrationId: string;
   event: JsonRecord;
   toEmail: string;
@@ -1235,14 +1252,19 @@ async function issueTicketAndConfirm(input: {
   pendingApproval: boolean;
 }): Promise<void> {
   try {
-    const { code, shortCode } = await ensureCheckinCode(input.registrationId);
-    if (!code) return;
-
-    const origin = (await getPublicOrigin()) ?? resolveEmailBaseUrl();
-    if (!origin) return;
-
-    const ticketUrl = checkinCodeUrl(origin, code);
     const event = input.event as Event;
+
+    let ticket: { url: string; code: string; shortCode: string | null } | null = null;
+    if (usesQrCheckin(event)) {
+      const { code, shortCode } = await ensureCheckinCode(input.registrationId);
+      if (!code) return;
+
+      const origin = (await getPublicOrigin()) ?? resolveEmailBaseUrl();
+      if (!origin) return;
+
+      ticket = { url: checkinCodeUrl(origin, code), code, shortCode };
+    }
+
     const format = isEventFormat(event.event_format) ? event.event_format : "offline";
     const placeLabel = needsVenue(format)
       ? [event.location_name, event.location_address]
@@ -1261,10 +1283,10 @@ async function issueTicketAndConfirm(input: {
         ? resolveMapUrl({ mapUrl: event.location_map_url, address: event.location_address })
         : null,
       joinUrl: needsJoinUrl(format) ? clean(event.online_join_url) : null,
-      ticketUrl: ticketUrl,
-      ticketCode: code,
-      shortCode,
-      qrPngBase64: await renderTicketQrBase64(ticketUrl),
+      ticketUrl: ticket ? ticket.url : null,
+      ticketCode: ticket ? ticket.code : null,
+      shortCode: ticket ? ticket.shortCode : null,
+      qrPngBase64: ticket ? await renderTicketQrBase64(ticket.url) : null,
       pendingApproval: input.pendingApproval,
       registrationId: input.registrationId
     });
@@ -2378,6 +2400,7 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     capacity_limit: input.capacity_limit ? Number(input.capacity_limit) : null,
     waitlist_enabled: String(input.waitlist_enabled) === "true",
     allow_walk_in: String(input.allow_walk_in) !== "false",
+    qr_checkin_enabled: String(input.qr_checkin_enabled) !== "false",
     checkin_mode: clean(input.checkin_mode) ?? "open",
     checkin_window_enabled: String(input.checkin_window_enabled) === "true",
     checkin_opens_at: parseDateTime(clean(input.checkin_opens_at)),
@@ -2611,6 +2634,9 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
 
   if (Object.prototype.hasOwnProperty.call(input, "allow_walk_in")) {
     updates.allow_walk_in = String(input.allow_walk_in) !== "false";
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "qr_checkin_enabled")) {
+    updates.qr_checkin_enabled = String(input.qr_checkin_enabled) !== "false";
   }
   if (Object.prototype.hasOwnProperty.call(input, "show_student_id_field")) {
     updates.show_student_id_field = String(input.show_student_id_field) !== "false";

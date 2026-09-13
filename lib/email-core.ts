@@ -1115,8 +1115,12 @@ export function buildEventRegistrationConfirmationEmail(input: {
   placeLabel?: string | null;
   mapUrl?: string | null;
   joinUrl?: string | null;
-  ticketUrl: string;
-  ticketCode: string;
+  /**
+   * Đường dẫn vé. Null khi sự kiện KHÔNG dùng mã QR check-in: thư khi đó không
+   * mang phần vé nào, mà nói rõ ban tổ chức điểm danh theo danh sách.
+   */
+  ticketUrl?: string | null;
+  ticketCode?: string | null;
   /** Mã 4 ký tự gõ tay khi máy quét chịu thua. Null khi không cấp được. */
   shortCode?: string | null;
   /** Ảnh QR đính kèm, để người nhận LƯU được vào máy. */
@@ -1126,10 +1130,18 @@ export function buildEventRegistrationConfirmationEmail(input: {
   const name = safeDisplayName(input.recipientName);
   const eventName = String(input.eventName ?? "").trim() || "sự kiện";
   const pending = Boolean(input.pendingApproval);
+  const ticketUrl = String(input.ticketUrl ?? "").trim();
+  const hasTicket = ticketUrl !== "";
+  const noQrNote =
+    "Sự kiện này không dùng mã QR check-in. Bạn không cần mang theo mã nào — ban tổ chức sẽ điểm danh theo danh sách đăng ký.";
 
+  // "Vé tham dự" chỉ khi thật có vé. Tiêu đề hứa một tấm vé mà thân thư không có
+  // là người nhận lục cả hộp thư đi tìm một thứ không tồn tại.
   const subject = pending
     ? `Đã nhận đăng ký ${eventName}`
-    : `Vé tham dự ${eventName}`;
+    : hasTicket
+      ? `Vé tham dự ${eventName}`
+      : `Xác nhận đăng ký ${eventName}`;
 
   const lines = [
     `Chào ${name},`,
@@ -1145,21 +1157,39 @@ export function buildEventRegistrationConfirmationEmail(input: {
   if (input.mapUrl) lines.push(`Xem trên bản đồ: ${input.mapUrl}`);
   if (input.joinUrl) lines.push(`Đường dẫn tham gia: ${input.joinUrl}`);
 
-  lines.push(
-    "",
-    "MÃ QR THAM DỰ",
-    "Ảnh mã QR được đính kèm thư này. Vui lòng LƯU ẢNH VÀO MÁY ngay bây giờ và mở ra cho ban tổ chức quét khi tới sự kiện — như vậy bạn không cần mạng ở hội trường.",
-    "",
-    `Vé của bạn (mở được trên trình duyệt): ${input.ticketUrl}`
-  );
-
-  if (input.shortCode) {
+  if (hasTicket) {
     lines.push(
       "",
-      `MÃ DỰ PHÒNG: ${input.shortCode}`,
-      "Nếu máy quét không đọc được mã QR — màn hình vỡ, thiếu sáng, hết pin — chỉ cần đọc 4 ký tự này cho ban tổ chức là check-in được."
+      "MÃ QR THAM DỰ",
+      "Ảnh mã QR được đính kèm thư này. Vui lòng LƯU ẢNH VÀO MÁY ngay bây giờ và mở ra cho ban tổ chức quét khi tới sự kiện — như vậy bạn không cần mạng ở hội trường.",
+      "",
+      `Vé của bạn (mở được trên trình duyệt): ${ticketUrl}`
     );
+
+    if (input.shortCode) {
+      lines.push(
+        "",
+        `MÃ DỰ PHÒNG: ${input.shortCode}`,
+        "Nếu máy quét không đọc được mã QR — màn hình vỡ, thiếu sáng, hết pin — chỉ cần đọc 4 ký tự này cho ban tổ chức là check-in được."
+      );
+    }
+  } else {
+    lines.push("", "ĐIỂM DANH", noQrNote);
   }
+
+  const ticketHtml = hasTicket
+    ? [
+        `<p style="margin:20px 0 8px"><strong>Mã QR tham dự</strong></p>`,
+        `<p style="margin:0 0 16px">Ảnh mã QR được <strong>đính kèm thư này</strong>. Vui lòng <strong>lưu ảnh vào máy</strong> ngay bây giờ và mở ra cho ban tổ chức quét khi tới sự kiện — như vậy bạn không cần mạng ở hội trường.</p>`,
+        input.shortCode
+          ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fbf4ea;border-radius:6px">Mã dự phòng: <strong style="font-family:monospace;font-size:20px;letter-spacing:4px">${escapeHtml(input.shortCode)}</strong><br /><span style="color:#4f6b60;font-size:13px">Nếu máy quét không đọc được mã QR, chỉ cần đọc 4 ký tự này cho ban tổ chức.</span></p>`
+          : "",
+        `<p style="margin:16px 0"><a href="${escapeHtml(ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở vé trên trình duyệt</a></p>`
+      ]
+    : [
+        `<p style="margin:20px 0 8px"><strong>Điểm danh</strong></p>`,
+        `<p style="margin:0 0 16px">${escapeHtml(noQrNote)}</p>`
+      ];
 
   const html = wrapHtml(
     [
@@ -1174,14 +1204,10 @@ export function buildEventRegistrationConfirmationEmail(input: {
         : "",
       input.joinUrl
         ? `<p><a href="${escapeHtml(input.joinUrl)}" style="color:#16834c">Đường dẫn tham gia trực tuyến</a></p>`
-        : "",
-      `<p style="margin:20px 0 8px"><strong>Mã QR tham dự</strong></p>`,
-      `<p style="margin:0 0 16px">Ảnh mã QR được <strong>đính kèm thư này</strong>. Vui lòng <strong>lưu ảnh vào máy</strong> ngay bây giờ và mở ra cho ban tổ chức quét khi tới sự kiện — như vậy bạn không cần mạng ở hội trường.</p>`,
-      input.shortCode
-        ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fbf4ea;border-radius:6px">Mã dự phòng: <strong style="font-family:monospace;font-size:20px;letter-spacing:4px">${escapeHtml(input.shortCode)}</strong><br /><span style="color:#4f6b60;font-size:13px">Nếu máy quét không đọc được mã QR, chỉ cần đọc 4 ký tự này cho ban tổ chức.</span></p>`
-        : "",
-      `<p style="margin:16px 0"><a href="${escapeHtml(input.ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở vé trên trình duyệt</a></p>`
-    ].join("")
+        : ""
+    ]
+      .concat(ticketHtml)
+      .join("")
   );
 
   return {
@@ -1192,9 +1218,18 @@ export function buildEventRegistrationConfirmationEmail(input: {
     // Đính ảnh chứ không nhúng vào thân thư: nhiều hộp thư chặn ảnh cho tới khi
     // người đọc bấm "hiện ảnh", và ảnh nhúng thì không lưu riêng ra được. Người
     // nhận cần LƯU được tấm vé vào máy để mở ở cửa mà không cần mạng.
-    attachments: input.qrPngBase64
-      ? [{ filename: `ve-${input.ticketCode}.png`, contentBase64: input.qrPngBase64 }]
-      : undefined
+    //
+    // Không có vé thì không đính gì, kể cả khi nơi gọi lỡ truyền ảnh vào: một ảnh
+    // QR trong thư của sự kiện không dùng QR là một tấm vé không ai quét.
+    attachments:
+      hasTicket && input.qrPngBase64
+        ? [
+            {
+              filename: `ve-${String(input.ticketCode ?? "").trim() || "tham-du"}.png`,
+              contentBase64: input.qrPngBase64
+            }
+          ]
+        : undefined
   };
 }
 
@@ -1231,6 +1266,12 @@ export function buildEventScheduleChangeEmail(input: {
   const name = safeDisplayName(input.recipientName);
   const eventName = String(input.eventName ?? "").trim() || "sự kiện";
   const previous = String(input.previousWhenLabel ?? "").trim();
+  const ticketUrl = String(input.ticketUrl ?? "").trim();
+  const shortCode = String(input.shortCode ?? "").trim();
+  // Chỉ nói về vé khi người này THẬT có vé. Sự kiện không dùng QR thì câu "mã QR
+  // đã gửi trước đây không đổi" nói về một thứ họ chưa từng nhận, và họ sẽ đi
+  // lục hộp thư tìm nó.
+  const hasTicket = ticketUrl !== "" || shortCode !== "";
 
   const subject = `Đổi lịch: ${eventName} — ${input.whenLabel}`;
 
@@ -1247,23 +1288,43 @@ export function buildEventScheduleChangeEmail(input: {
   if (input.mapUrl) lines.push(`Xem trên bản đồ: ${input.mapUrl}`);
   if (input.joinUrl) lines.push(`Đường dẫn tham gia: ${input.joinUrl}`);
 
-  lines.push(
-    "",
-    "VÉ CỦA BẠN VẪN DÙNG ĐƯỢC",
-    "Mã QR đã gửi trước đây không đổi. Bạn không cần đăng ký lại — chỉ cần mở đúng ảnh QR đó ra cho ban tổ chức quét vào giờ mới."
-  );
-
-  if (input.shortCode) {
-    lines.push(`Mã dự phòng của bạn vẫn là: ${input.shortCode}`);
-  }
-  if (input.ticketUrl) {
-    lines.push("", `Mở lại vé: ${input.ticketUrl}`);
+  if (hasTicket) {
+    lines.push(
+      "",
+      "VÉ CỦA BẠN VẪN DÙNG ĐƯỢC",
+      "Mã QR đã gửi trước đây không đổi. Bạn không cần đăng ký lại — chỉ cần mở đúng ảnh QR đó ra cho ban tổ chức quét vào giờ mới."
+    );
+    if (shortCode) lines.push(`Mã dự phòng của bạn vẫn là: ${shortCode}`);
+    if (ticketUrl) lines.push("", `Mở lại vé: ${ticketUrl}`);
+  } else {
+    lines.push(
+      "",
+      "ĐĂNG KÝ CỦA BẠN VẪN GIỮ NGUYÊN",
+      "Bạn không cần đăng ký lại. Ban tổ chức sẽ điểm danh theo danh sách đăng ký vào giờ mới."
+    );
   }
 
   lines.push(
     "",
     "Nếu giờ mới không phù hợp với bạn, vui lòng phản hồi lại thư này để ban tổ chức sắp xếp."
   );
+
+  const ticketHtml = hasTicket
+    ? [
+        `<p style="margin:20px 0 8px"><strong>Vé của bạn vẫn dùng được</strong></p>`,
+        `<p style="margin:0 0 12px">Mã QR đã gửi trước đây <strong>không đổi</strong>. Bạn không cần đăng ký lại — chỉ cần mở đúng ảnh QR đó ra cho ban tổ chức quét vào giờ mới.${
+          shortCode
+            ? ` Mã dự phòng của bạn vẫn là <strong style="font-family:monospace;letter-spacing:3px">${escapeHtml(shortCode)}</strong>.`
+            : ""
+        }</p>`,
+        ticketUrl
+          ? `<p style="margin:16px 0"><a href="${escapeHtml(ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở lại vé</a></p>`
+          : ""
+      ]
+    : [
+        `<p style="margin:20px 0 8px"><strong>Đăng ký của bạn vẫn giữ nguyên</strong></p>`,
+        `<p style="margin:0 0 12px">Bạn không cần đăng ký lại. Ban tổ chức sẽ điểm danh theo danh sách đăng ký vào giờ mới.</p>`
+      ];
 
   const html = wrapHtml(
     [
@@ -1281,18 +1342,13 @@ export function buildEventScheduleChangeEmail(input: {
         : "",
       input.joinUrl
         ? `<p><a href="${escapeHtml(input.joinUrl)}" style="color:#16834c">Đường dẫn tham gia trực tuyến</a></p>`
-        : "",
-      `<p style="margin:20px 0 8px"><strong>Vé của bạn vẫn dùng được</strong></p>`,
-      `<p style="margin:0 0 12px">Mã QR đã gửi trước đây <strong>không đổi</strong>. Bạn không cần đăng ký lại — chỉ cần mở đúng ảnh QR đó ra cho ban tổ chức quét vào giờ mới.${
-        input.shortCode
-          ? ` Mã dự phòng của bạn vẫn là <strong style="font-family:monospace;letter-spacing:3px">${escapeHtml(input.shortCode)}</strong>.`
-          : ""
-      }</p>`,
-      input.ticketUrl
-        ? `<p style="margin:16px 0"><a href="${escapeHtml(input.ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở lại vé</a></p>`
-        : "",
-      `<p style="color:#6b7c74;font-size:13px">Nếu giờ mới không phù hợp với bạn, vui lòng phản hồi lại thư này để ban tổ chức sắp xếp.</p>`
-    ].join("")
+        : ""
+    ]
+      .concat(ticketHtml)
+      .concat([
+        `<p style="color:#6b7c74;font-size:13px">Nếu giờ mới không phù hợp với bạn, vui lòng phản hồi lại thư này để ban tổ chức sắp xếp.</p>`
+      ])
+      .join("")
   );
 
   return { to: "", subject, text: lines.join("\n"), html };
