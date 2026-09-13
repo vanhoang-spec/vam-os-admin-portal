@@ -33,7 +33,7 @@ function person(overrides: Partial<BulkRecipient> = {}): BulkRecipient {
 }
 
 describe("đối tượng nhận thư", () => {
-  it("có nhãn tiếng Việt cho cả ba", () => {
+  it("có nhãn tiếng Việt cho mọi nhóm", () => {
     for (const audience of BULK_AUDIENCES) {
       expect(BULK_AUDIENCE_LABELS[audience].trim()).not.toBe("");
     }
@@ -45,7 +45,7 @@ describe("đối tượng nhận thư", () => {
     expect(rolesForAudience("both").sort()).toEqual(["mentee", "mentor"]);
   });
 
-  it("isBulkAudience chỉ nhận đúng ba giá trị", () => {
+  it("isBulkAudience chỉ nhận đúng các nhóm đã khai báo", () => {
     expect(BULK_AUDIENCES.every(isBulkAudience)).toBe(true);
     expect(isBulkAudience("reviewer")).toBe(false);
     expect(isBulkAudience(null)).toBe(false);

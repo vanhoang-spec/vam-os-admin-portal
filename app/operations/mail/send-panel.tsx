@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import {
-  BULK_AUDIENCES,
   BULK_AUDIENCE_LABELS,
   BULK_SEND_CHUNK,
-  type BulkAudience
+  FIXED_BULK_AUDIENCES,
+  type BulkAudience,
+  type BulkEventOption,
+  type FixedBulkAudience
 } from "@/lib/bulk-mail-core";
 import {
   initialBulkMailActionState,
@@ -31,7 +33,15 @@ export type BatchSummary = {
   createdAt: string;
 };
 
-export type AudienceCounts = Record<BulkAudience, { sendable: number; unreachable: number }>;
+/**
+ * Số người nhận của từng nhóm cố định.
+ *
+ * Partial vì một nhóm có thể chưa được đếm (trang đọc lỗi, hoặc người xem không
+ * gửi được). Thiếu thì hiện 0 — và nút gửi tắt ở 0 — chứ không vỡ màn hình.
+ */
+export type AudienceCounts = Partial<Record<FixedBulkAudience, { sendable: number; unreachable: number }>>;
+
+const ZERO = { sendable: 0, unreachable: 0 };
 
 function SubmitButton({
   label,
@@ -109,11 +119,14 @@ function Result({ state }: { state: BulkMailActionState }) {
 export function SendPanel({
   templates,
   counts,
+  eventOptions = [],
   batches,
   canSend
 }: {
   templates: SendableTemplate[];
   counts: AudienceCounts;
+  /** Sự kiện chọn được cho nhóm "người đã đăng ký một sự kiện". */
+  eventOptions?: BulkEventOption[];
   batches: BatchSummary[];
   canSend: boolean;
 }) {
@@ -128,9 +141,12 @@ export function SendPanel({
   // đã chọn, còn form gửi lên chuỗi rỗng.
   //
   // Suy ra thì cả trường hợp đó lẫn trường hợp mẫu đang chọn bị cất đi đều
-  // rơi về một mẫu có thật, thay vì rơi về rỗng.
+  // rơi về một mẫu có thật, thay vì rơi về rỗng. Nhóm nhận thư và sự kiện đi
+  // theo đúng lối đó, vì cùng một cái bẫy.
   const [templateChoice, setTemplateChoice] = useState("");
-  const [audience, setAudience] = useState<BulkAudience>("mentee");
+  const [audienceChoice, setAudienceChoice] = useState<BulkAudience>("mentee");
+  const [eventChoice, setEventChoice] = useState("");
+  const [coversSeries, setCoversSeries] = useState(true);
 
   const [testState, testAction] = useFormState(sendTestEmailAction, initialBulkMailActionState);
   const [sendState, sendAction] = useFormState(startBulkSendAction, initialBulkMailActionState);
@@ -144,7 +160,35 @@ export function SendPanel({
   // đọc từ nó — nên thứ nhìn thấy và thứ gửi lên không thể lệch nhau.
   const selected = templates.find((row) => row.id === templateChoice) ?? templates[0] ?? null;
   const templateId = selected?.id ?? "";
-  const target = counts[audience];
+
+  // Nhóm "sự kiện" mà không còn sự kiện nào chọn được thì rơi về nhóm đầu tiên,
+  // chứ không để ô chọn hiện một nhóm còn form gửi lên nhóm khác.
+  const audience: BulkAudience =
+    audienceChoice === "event" && !eventOptions.length ? "mentee" : audienceChoice;
+  const selectedEvent =
+    eventOptions.find((row) => row.id === eventChoice) ?? eventOptions[0] ?? null;
+  const seriesAvailable = Boolean(selectedEvent && selectedEvent.seriesSendable !== null);
+  const useSeries = audience === "event" && seriesAvailable && coversSeries;
+
+  const target =
+    audience === "event"
+      ? selectedEvent
+        ? useSeries
+          ? {
+              sendable: selectedEvent.seriesSendable ?? 0,
+              unreachable: selectedEvent.seriesUnreachable ?? 0
+            }
+          : { sendable: selectedEvent.sendable, unreachable: selectedEvent.unreachable }
+        : ZERO
+      : counts[audience] ?? ZERO;
+
+  const audienceText =
+    audience === "event"
+      ? selectedEvent
+        ? `người đã đăng ký ${selectedEvent.label}${useSeries ? " (cả chuỗi)" : ""}`
+        : "người đã đăng ký sự kiện"
+      : BULK_AUDIENCE_LABELS[audience].toLowerCase();
+
   const runningBatches = batches.filter((row) => row.status === "running");
 
   if (!canSend) {
@@ -209,14 +253,17 @@ export function SendPanel({
           <select
             id="send-audience"
             value={audience}
-            onChange={(event) => setAudience(event.target.value as BulkAudience)}
+            onChange={(event) => setAudienceChoice(event.target.value as BulkAudience)}
             className="w-full rounded-md border border-vam-line px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
           >
-            {BULK_AUDIENCES.map((key) => (
+            {FIXED_BULK_AUDIENCES.map((key) => (
               <option key={key} value={key}>
-                {BULK_AUDIENCE_LABELS[key]} — {counts[key].sendable} người
+                {BULK_AUDIENCE_LABELS[key]} — {(counts[key] ?? ZERO).sendable} người
               </option>
             ))}
+            {eventOptions.length ? (
+              <option value="event">{BULK_AUDIENCE_LABELS.event}…</option>
+            ) : null}
           </select>
           {target.unreachable > 0 ? (
             <p className="mt-1 text-xs text-amber-800">
@@ -225,6 +272,45 @@ export function SendPanel({
           ) : null}
         </div>
       </div>
+
+      {audience === "event" && selectedEvent ? (
+        <div className="grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3">
+          <div>
+            <label htmlFor="send-event" className="mb-1 block text-sm font-medium text-vam-ink">
+              Sự kiện
+            </label>
+            <select
+              id="send-event"
+              value={selectedEvent.id}
+              onChange={(event) => setEventChoice(event.target.value)}
+              className="w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
+            >
+              {eventOptions.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.label} — {row.sendable} người
+                </option>
+              ))}
+            </select>
+          </div>
+          {seriesAvailable ? (
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={coversSeries}
+                onChange={(event) => setCoversSeries(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-vam-green focus:ring-vam-green"
+              />
+              <span>
+                <span className="block font-medium">Gồm cả các buổi khác trong chuỗi</span>
+                <span className="block text-xs text-slate-500">
+                  {selectedEvent.seriesSendable} người đã đăng ký một buổi bất kỳ của chuỗi. Người
+                  đăng ký hai buổi chỉ nhận một lá.
+                </span>
+              </span>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
 
       <form action={testAction} className="flex flex-wrap items-center gap-3 border-t border-vam-line pt-4">
         <input type="hidden" name="template_id" value={templateId} />
@@ -238,11 +324,16 @@ export function SendPanel({
       <form action={sendAction} className="flex flex-col gap-3 border-t border-vam-line pt-4">
         <input type="hidden" name="template_id" value={templateId} />
         <input type="hidden" name="audience" value={audience} />
+        <input
+          type="hidden"
+          name="event_id"
+          value={audience === "event" && selectedEvent ? selectedEvent.id : ""}
+        />
+        <input type="hidden" name="covers_series" value={useSeries ? "true" : "false"} />
 
         <p className="text-sm text-vam-ink">
           Sắp gửi <strong className="text-vam-green">{target.sendable}</strong> lá thư cho{" "}
-          <strong>{BULK_AUDIENCE_LABELS[audience].toLowerCase()}</strong>. Thư đã gửi không thu hồi
-          được.
+          <strong>{audienceText}</strong>. Thư đã gửi không thu hồi được.
         </p>
 
         <div className="flex flex-wrap items-end gap-3">
