@@ -167,3 +167,42 @@ describe("2. gửi thư", () => {
     expect(db.inserts[0].payload).toMatchObject({ status: "failed" });
   });
 });
+
+describe("3. production không đặt VAM_OS_PUBLIC_BASE_URL", () => {
+  // Đúng điều kiện đã làm hỏng thư mời nhân sự đầu tiên trên production: biến môi
+  // trường vắng mặt, và địa chỉ của request là nguồn duy nhất để dựng link. Hai ca
+  // ở trên đặt sẵn biến đó, nên chúng xanh cả khi nơi gọi quên truyền địa chỉ.
+  const input = {
+    toEmail: "thao@example.com",
+    fullName: "Võ Thị Thảo",
+    roleLabel: "Ban Điều hành",
+    linkType: "invite" as const,
+    tokenHash: "hash-9",
+    adminUserId: "admin-9"
+  };
+
+  it("dựng link từ địa chỉ của request khi biến môi trường vắng mặt", async () => {
+    delete process.env.VAM_OS_PUBLIC_BASE_URL;
+    const db = insertRecorder();
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(db.client as never);
+    fetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ messageId: "<m@brevo>" }) });
+
+    const result = await sendStaffInvite({ ...input, requestOrigin: "https://os.alumni-mentoring.edu.vn" });
+
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body.textContent).toContain("https://os.alumni-mentoring.edu.vn/reset-password#token_hash=hash-9&type=invite");
+  });
+
+  it("thiếu cả biến môi trường lẫn địa chỉ request: không gửi, sổ thư ghi failed", async () => {
+    delete process.env.VAM_OS_PUBLIC_BASE_URL;
+    const db = insertRecorder();
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(db.client as never);
+
+    const result = await sendStaffInvite({ ...input });
+
+    expect(result.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.inserts[0].payload).toMatchObject({ kind: "staff_invite", status: "failed" });
+  });
+});

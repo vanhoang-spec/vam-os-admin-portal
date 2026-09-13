@@ -33,6 +33,7 @@ vi.mock("@/lib/account-auth-ownership", () => ({
   resolveAuthOwnership: vi.fn()
 }));
 vi.mock("@/lib/email", () => ({ sendStaffInvite: vi.fn() }));
+vi.mock("@/lib/public-url", () => ({ getPublicOrigin: vi.fn(async () => "https://os.example.org") }));
 
 import { createManagedAdminUser } from "@/lib/admin-users";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
@@ -145,7 +146,10 @@ describe("2. thư đi qua Brevo, và đi SAU khi tài khoản đã ghi", () => {
       toEmail: EMAIL,
       tokenHash: TOKEN,
       linkType: "invite",
-      adminUserId: ADMIN_ID
+      adminUserId: ADMIN_ID,
+      // Production không đặt VAM_OS_PUBLIC_BASE_URL: thiếu địa chỉ request là thư
+      // không dựng được link và không đi — đúng lỗi của thư mời đầu tiên.
+      requestOrigin: "https://os.example.org"
     }));
   });
 
