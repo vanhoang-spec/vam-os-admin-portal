@@ -18,6 +18,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   if (
     publicRoute === "register" ||
     publicRoute === "checkin" ||
+    // Vé cá nhân: người mở là người dự sự kiện, trên một điện thoại chưa đăng
+    // nhập. Thiếu dòng này, /ve/<mã> rơi xuống AppShell và hiện "Cần đăng nhập"
+    // thay cho tấm vé (13/09/2026) — dù middleware đã gắn nhãn "ticket" từ trước.
+    publicRoute === "ticket" ||
     publicRoute === "renewal" ||
     publicRoute === "blog"
   ) {
