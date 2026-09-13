@@ -92,8 +92,12 @@ export function EventForm({
     }
   }, [state.ok, state.message, mode]);
 
+  // autoComplete="off": mọi ô ở đây là dữ liệu của MỘT sự kiện, và điền lại giá trị
+  // của sự kiện khác chỉ có hại. 13/09/2026 trình duyệt tự điền mã tham chiếu của
+  // buổi 1 vào form sửa buổi 2, và lượt lưu hỏng vì trùng mã. Chrome vẫn có thể
+  // bỏ qua lời dặn này ở ô địa chỉ, nên phép kiểm thật nằm ở máy chủ.
   return (
-    <form action={formAction} onSubmit={timing.markSubmitStart} className="grid gap-4">
+    <form action={formAction} onSubmit={timing.markSubmitStart} autoComplete="off" className="grid gap-4">
       {mode === "edit" && event ? <input type="hidden" name="id" value={event.id} /> : null}
 
       <InlineActionMessage
@@ -278,10 +282,14 @@ export function EventForm({
         <span className="text-xs font-medium uppercase text-slate-500">Mã tham chiếu (legacy_event_temp_id)</span>
         <input
           name="legacy_event_temp_id"
+          autoComplete="off"
           defaultValue={event?.legacy_event_temp_id ?? ""}
           placeholder="ví dụ: UEHM-S12-CLOSING"
           className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
         />
+        <span className="mt-1 block text-[11px] text-slate-500">
+          Không bắt buộc. Mỗi sự kiện, kể cả từng buổi trong cùng một chuỗi, cần một mã riêng. Để trống nếu không dùng.
+        </span>
       </label>
 
       <label className="block">

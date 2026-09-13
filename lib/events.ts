@@ -292,6 +292,53 @@ function clean(value: unknown) {
   return text || null;
 }
 
+const LEGACY_REFERENCE_UNIQUE = "events_legacy_event_temp_id_key";
+
+/**
+ * Câu báo khi mã tham chiếu (`legacy_event_temp_id`) bị trùng.
+ *
+ * Cột này là duy nhất. Trước bản vá, gõ trùng thì màn hình dội nguyên câu của
+ * database — "duplicate key value violates unique constraint
+ * events_legacy_event_temp_id_key" — nên người vận hành không biết mã nào trùng
+ * với sự kiện nào, càng không biết lỗi nằm ở một ô họ không hề sửa. 13/09/2026
+ * trình duyệt tự điền mã của buổi 1 vào form sửa buổi 2 của Mentee Orientation
+ * Mùa 12: bấm lưu ba lần, hỏng ba lần, không lần nào nói ô nào sai.
+ */
+function legacyReferenceMessage(reference: string, owner?: { event_name?: unknown; starts_at?: unknown } | null) {
+  const ownerName = clean(owner?.event_name);
+  const ownerDate = clean(owner?.starts_at);
+  const whose = owner
+    ? `đang thuộc về “${ownerName ?? "một sự kiện khác"}”${ownerDate ? ` (${formatDate(ownerDate)})` : ""}`
+    : "đang thuộc về một sự kiện khác";
+  return `Mã tham chiếu “${reference}” ${whose}. Mỗi sự kiện, kể cả từng buổi trong cùng một chuỗi, cần một mã riêng. Xoá trống ô “Mã tham chiếu” hoặc đặt mã khác rồi lưu lại.`;
+}
+
+/**
+ * Mã tham chiếu đã thuộc về một sự kiện khác chưa. Trả về câu báo khi trùng.
+ *
+ * Đọc hỏng thì trả null và để lệnh ghi đi tiếp: ràng buộc của database vẫn chặn,
+ * và lỗi ấy được dịch bởi `isLegacyReferenceViolation`. Chặn cả lượt lưu chỉ vì
+ * không đọc được một phép kiểm phụ là biến lỗi hạ tầng thành lỗi của người dùng.
+ */
+async function legacyReferenceConflict(client: any, reference: string | null, excludeId: string | null): Promise<string | null> {
+  if (!reference) return null;
+  let query = client.from("events").select("id,event_name,starts_at").eq("legacy_event_temp_id", reference);
+  if (excludeId) query = query.neq("id", excludeId);
+  const { data, error } = await query.limit(1);
+  if (error) {
+    log("legacy reference lookup failed", error);
+    return null;
+  }
+  const owner = Array.isArray(data) ? data[0] : null;
+  return owner ? legacyReferenceMessage(reference, owner) : null;
+}
+
+/** Lệnh ghi hỏng vì trùng mã tham chiếu — hai người lưu cùng lúc lọt qua phép kiểm trước. */
+function isLegacyReferenceViolation(err: unknown) {
+  const e = err as { code?: string; message?: string } | null;
+  return e?.code === "23505" && String(e?.message ?? "").includes(LEGACY_REFERENCE_UNIQUE);
+}
+
 function clientResult() {
   const client = getSupabaseServiceRoleClient();
   if (!client) return { client: null, error: "Thiếu SUPABASE_SERVICE_ROLE_KEY trên server." as string | null };
@@ -2377,6 +2424,9 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   const intakeBatchId =
     intakeBatchIdRaw && isValidUuid(intakeBatchIdRaw) ? intakeBatchIdRaw : null;
 
+  const legacyConflict = await legacyReferenceConflict(client, clean(input.legacy_event_temp_id), null);
+  if (legacyConflict) return { ok: false, message: legacyConflict };
+
   const payload: JsonRecord = {
     season_id: seasonId,
     intake_batch_id: intakeBatchId,
@@ -2441,6 +2491,9 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   const { data, error: insertError } = await client.from("events").insert(payload).select("*").maybeSingle();
   if (insertError) {
     log("create event failed", insertError);
+    if (isLegacyReferenceViolation(insertError)) {
+      return { ok: false, message: legacyReferenceMessage(String(payload.legacy_event_temp_id ?? "")) };
+    }
     return { ok: false, message: `${SAFE_ERROR} (${insertError.message})` };
   }
   await writeAdminAudit(client, { actionType: "create_event", afterData: data });
@@ -2492,6 +2545,10 @@ export async function createEventSeries(
       ...input,
       starts_at: occurrence.startsAt,
       ends_at: occurrence.endsAt,
+      // Mã tham chiếu là mã của MỘT sự kiện và cột này là duy nhất: chép nó cho mọi
+      // buổi thì buổi 2 trở đi hỏng vì trùng mã. Chỉ buổi đầu giữ mã, giống cách
+      // addSessionToSeries bỏ mã khi thêm buổi.
+      legacy_event_temp_id: index === 0 ? input.legacy_event_temp_id : null,
       series_id: seriesId,
       series_index: index + 1,
       series_total: total
@@ -2608,8 +2665,15 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   updates.season_id = seasonId;
 
   updates.source_notes = clean(input.source_notes);
+  // Mã tham chiếu chỉ ghi khi thật sự đổi. Giữ nguyên thì không đụng tới cột duy
+  // nhất này: một lượt sửa ngày giờ hay địa điểm không có lý do gì để hỏng vì nó.
   if (Object.prototype.hasOwnProperty.call(input, "legacy_event_temp_id")) {
-    updates.legacy_event_temp_id = clean(input.legacy_event_temp_id);
+    const reference = clean(input.legacy_event_temp_id);
+    if (reference !== clean(before.legacy_event_temp_id)) {
+      const conflict = await legacyReferenceConflict(client, reference, id);
+      if (conflict) return { ok: false, message: conflict };
+      updates.legacy_event_temp_id = reference;
+    }
   }
 
   // Phase 045A: intake_batch_id (nullable — empty string clears it)
@@ -2681,6 +2745,9 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   const { data: after, error: updateError } = await client.from("events").update(updates).eq("id", id).select("*").maybeSingle();
   if (updateError) {
     log("update event failed", updateError);
+    if (isLegacyReferenceViolation(updateError)) {
+      return { ok: false, message: legacyReferenceMessage(String(updates.legacy_event_temp_id ?? "")) };
+    }
     return { ok: false, message: `${SAFE_ERROR} (${updateError.message})` };
   }
   await writeAdminAudit(client, { actionType: "update_event", beforeData: before, afterData: after });
