@@ -69,6 +69,8 @@ function batch(overrides: Partial<EmailBatchRow> = {}): EmailBatchRow {
     kind: "general_announcement",
     templateId: "t1",
     audience: "mentee",
+    audienceEventId: null,
+    audienceCoversSeries: false,
     status: "running",
     requestedCount: 0,
     sentCount: 0,

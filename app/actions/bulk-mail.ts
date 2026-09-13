@@ -6,8 +6,7 @@ import {
   BULK_AUDIENCE_LABELS,
   confirmBulkSend,
   describeRunResult,
-  isBulkAudience,
-  type BulkAudience
+  resolveAudienceChoice
 } from "@/lib/bulk-mail-core";
 import {
   createEmailBatch,
@@ -145,9 +144,13 @@ export async function startBulkSendAction(
     const templateId = String(formData.get("template_id") ?? "").trim();
     if (!templateId) return fail("Chưa chọn mẫu thư.");
 
-    const rawAudience = String(formData.get("audience") ?? "").trim();
-    if (!isBulkAudience(rawAudience)) return fail("Chưa chọn đối tượng nhận thư.");
-    const audience: BulkAudience = rawAudience;
+    const resolved = resolveAudienceChoice({
+      audience: formData.get("audience"),
+      eventId: formData.get("event_id"),
+      coversSeries: formData.get("covers_series")
+    });
+    if (!resolved.ok) return fail(resolved.message);
+    const { audience, eventId, coversSeries } = resolved.choice;
 
     const { row, error } = await getEmailTemplate(templateId);
     if (error) return fail(error);
@@ -157,7 +160,13 @@ export async function startBulkSendAction(
       return fail("Mẫu thư này chưa được duyệt. Chỉ mẫu đã duyệt mới gửi được.");
     }
 
-    const recipients = await listBulkRecipients({ seasonId: auth.seasonId, audience });
+    // Tham số của nhóm `event` chỉ đi kèm khi nhóm là `event`. Nhóm khác nhận
+    // đúng hai trường như trước, để không lô nào mang một sự kiện nó không dùng.
+    const recipients = await listBulkRecipients(
+      audience === "event"
+        ? { seasonId: auth.seasonId, audience, eventId, coversSeries }
+        : { seasonId: auth.seasonId, audience }
+    );
     if (recipients.error) return fail(recipients.error);
 
     const expected = recipients.partition.sendable.length;
@@ -169,8 +178,9 @@ export async function startBulkSendAction(
       kind: row.kind,
       templateId: row.id,
       audience,
+      ...(audience === "event" ? { audienceEventId: eventId, audienceCoversSeries: coversSeries } : {}),
       requestedCount: expected,
-      note: `${BULK_AUDIENCE_LABELS[audience]} · ${row.name}`,
+      note: `${recipients.label ?? BULK_AUDIENCE_LABELS[audience]} · ${row.name}`,
       actorAdminUserId: auth.adminUserId
     });
     if (created.error || !created.batch) return fail(created.error ?? "Không mở được lô gửi.");

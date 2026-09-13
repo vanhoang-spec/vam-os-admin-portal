@@ -98,7 +98,7 @@ export const TEMPLATE_SPECS: Record<TemplateKind, TemplateSpec> = {
         label: "Vai trò",
         required: false,
         sample: "mentee",
-        hint: "'mentor' hoặc 'mentee', theo vai trò của người nhận trong mùa."
+        hint: "'mentor', 'mentee', 'ban tổ chức' hoặc 'người tham dự', theo nhóm nhận thư."
       }
     ]
   }

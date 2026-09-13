@@ -10,24 +10,118 @@
 import { normalizeEmailAddress } from "@/lib/email-core";
 import { TEMPLATE_SPECS, type TemplateKind } from "@/lib/email-templates-core";
 
-export const BULK_AUDIENCES = ["mentee", "mentor", "both"] as const;
+/**
+ * Các nhóm nhận thư.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO MỖI NHÓM LÀ MỘT CÂU TRUY VẤN VIẾT SẴN, KHÔNG PHẢI MỘT BỘ LỌC TỰ DO
+ * ---------------------------------------------------------------------------
+ * Một lô không gửi xong trong một lần chạy, và lần "Gửi tiếp" dựng lại danh sách
+ * từ nhóm đã chốt vào lô. Nhóm phải dựng lại được ĐÚNG như lần đầu, và con số
+ * người bấm gõ xác nhận phải bằng đúng con số máy chủ tự đếm. Một bộ lọc tự do
+ * gõ trên màn hình không giữ được cả hai lời hứa đó.
+ *
+ * Nhóm "đã đăng ký một sự kiện" mang tham số — sự kiện nào, có gồm cả chuỗi
+ * không — để một nhóm phủ được mọi buổi: orientation của mentor, của mentee, và
+ * mọi sự kiện sau này, mà không phải thêm mã cho từng buổi.
+ */
+export const BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "event"] as const;
 export type BulkAudience = (typeof BULK_AUDIENCES)[number];
+
+/** Nhóm cố định: không mang tham số, nên đếm sẵn được để hiện ngay trong ô chọn. */
+export const FIXED_BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor"] as const;
+export type FixedBulkAudience = (typeof FIXED_BULK_AUDIENCES)[number];
 
 export const BULK_AUDIENCE_LABELS: Record<BulkAudience, string> = {
   mentee: "Mentee",
   mentor: "Mentor",
-  both: "Cả mentor và mentee"
+  both: "Cả mentor và mentee",
+  staff: "Ban tổ chức (admin, core team, support team)",
+  returning_mentor: "Mentor đã xác nhận quay lại mùa này",
+  event: "Người đã đăng ký một sự kiện"
 };
 
 export function isBulkAudience(value: unknown): value is BulkAudience {
   return typeof value === "string" && (BULK_AUDIENCES as readonly string[]).includes(value);
 }
 
+/** Ba nhóm đọc thẳng từ membership của mùa. */
+export type MembershipAudience = "mentee" | "mentor" | "both";
+
+export function isMembershipAudience(value: unknown): value is MembershipAudience {
+  return value === "mentee" || value === "mentor" || value === "both";
+}
+
 /** Các vai trò membership mà một đối tượng nhận thư tương ứng. */
-export function rolesForAudience(audience: BulkAudience): Array<"mentor" | "mentee"> {
+export function rolesForAudience(audience: MembershipAudience): Array<"mentor" | "mentee"> {
   if (audience === "both") return ["mentor", "mentee"];
   return [audience];
 }
+
+/**
+ * Vai trò tài khoản được tính là "Ban tổ chức".
+ *
+ * Không gồm `reviewer` và `viewer`: reviewer là mentor được mở quyền chấm hồ sơ,
+ * và thư gửi BTC thường nói việc nội bộ mà người chấm không cần nhận. Muốn gửi
+ * cho reviewer thì đó là một nhóm riêng, có tên riêng — không phải một nhóm lặng
+ * lẽ rộng hơn cái tên của nó.
+ */
+export const STAFF_ROLES = ["super_admin", "admin", "core_team", "support_team"] as const;
+
+export type AudienceChoice = {
+  audience: BulkAudience;
+  /** Chỉ có với nhóm `event`. */
+  eventId: string | null;
+  /** Chỉ có nghĩa với nhóm `event`: gồm cả các buổi khác cùng chuỗi. */
+  coversSeries: boolean;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Đọc nhóm nhận thư từ những gì form gửi lên.
+ *
+ * Nhóm không mang tham số thì BỎ mọi tham số đi kèm, kể cả khi form lỡ gửi: một
+ * lô "Mentor" mà mang theo một event id là một lô mà lần gửi tiếp có thể đọc
+ * nhầm. Nhóm `event` mà thiếu sự kiện thì từ chối, không đoán.
+ *
+ * Hàm này chỉ kiểm HÌNH DẠNG. Sự kiện có thuộc mùa đang gửi không là việc của
+ * đường đọc danh sách — event id là thứ người gửi form tự đặt được.
+ */
+export function resolveAudienceChoice(input: {
+  audience: unknown;
+  eventId?: unknown;
+  coversSeries?: unknown;
+}): { ok: true; choice: AudienceChoice } | { ok: false; message: string } {
+  const audience = String(input.audience ?? "").trim();
+  if (!isBulkAudience(audience)) return { ok: false, message: "Chưa chọn đối tượng nhận thư." };
+
+  if (audience !== "event") {
+    return { ok: true, choice: { audience, eventId: null, coversSeries: false } };
+  }
+
+  const eventId = String(input.eventId ?? "").trim();
+  if (!UUID_PATTERN.test(eventId)) {
+    return { ok: false, message: "Chưa chọn sự kiện cho nhóm người đã đăng ký." };
+  }
+  return {
+    ok: true,
+    choice: { audience, eventId, coversSeries: String(input.coversSeries ?? "").trim() === "true" }
+  };
+}
+
+/** Một sự kiện chọn được cho nhóm `event`, kèm số người nhận đã đếm sẵn. */
+export type BulkEventOption = {
+  id: string;
+  label: string;
+  seriesId: string | null;
+  /** Số người nhận nếu chỉ lấy đúng buổi này. */
+  sendable: number;
+  unreachable: number;
+  /** Số người nhận nếu lấy cả chuỗi; null khi buổi này không thuộc chuỗi nào. */
+  seriesSendable: number | null;
+  seriesUnreachable: number | null;
+};
 
 /**
  * Số thư tối đa một lần chạy được gửi.
@@ -48,11 +142,36 @@ export const BULK_SEND_CHUNK = 25;
  */
 export const BULK_TIME_BUDGET_MS = 40_000;
 
+/** Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ. */
+export type RecipientSource = "people" | "admin_users" | "event_registrations";
+
+/**
+ * Vai trò của người nhận trong lô, dùng để điền ô {{vai_tro}}.
+ *
+ * `staff` và `attendee` có mặt vì BTC và người đăng ký sự kiện không phải mentor
+ * hay mentee. Ô đã dùng trong thư mà để trống thì cả lá thư bị chặn — nên nhóm
+ * nào cũng phải có một chữ để điền vào đó.
+ */
+export type RecipientRole = "mentor" | "mentee" | "staff" | "attendee";
+
+export const RECIPIENT_ROLE_WORDS: Record<RecipientRole, string> = {
+  mentor: "mentor",
+  mentee: "mentee",
+  staff: "ban tổ chức",
+  attendee: "người tham dự"
+};
+
 export type BulkRecipient = {
+  /**
+   * Id của dòng nguồn — người trong danh bạ, tài khoản BTC, hoặc phiếu đăng ký
+   * sự kiện, tuỳ `relationTable`. Giữ tên cũ vì mọi nhóm có trước đều là người.
+   */
   personId: string;
   fullName: string;
   email: string;
-  role: "mentor" | "mentee";
+  role: RecipientRole;
+  /** Vắng mặt nghĩa là `people`, như mọi nhóm trước khi có nhóm BTC và sự kiện. */
+  relationTable?: RecipientSource;
 };
 
 /**
@@ -71,7 +190,7 @@ export function buildRecipientValues(input: {
   const source: Record<string, string> = {
     ten_nguoi_nhan: input.recipient.fullName,
     mua: input.seasonCode,
-    vai_tro: input.recipient.role === "mentor" ? "mentor" : "mentee"
+    vai_tro: RECIPIENT_ROLE_WORDS[input.recipient.role] ?? RECIPIENT_ROLE_WORDS.mentee
   };
 
   const values: Record<string, string> = {};
@@ -130,7 +249,13 @@ export function partitionRecipients(rows: BulkRecipient[]): RecipientPartition {
     if (seen.has(email)) continue;
 
     seen.add(email);
-    sendable.push({ personId: row.personId, fullName, email, role: row.role });
+    sendable.push({
+      personId: row.personId,
+      fullName,
+      email,
+      role: row.role,
+      ...(row.relationTable ? { relationTable: row.relationTable } : {})
+    });
   }
 
   return { sendable, unreachable };
