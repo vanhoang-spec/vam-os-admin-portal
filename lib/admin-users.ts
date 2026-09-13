@@ -506,7 +506,8 @@ export async function createManagedAdminUser(input: {
   email: unknown;
   fullName: unknown;
   role: unknown;
-  status: unknown;
+  /** Bỏ qua: tài khoản mới luôn được kích hoạt ngay. Giữ để nơi gọi cũ không vỡ. */
+  status?: unknown;
   programId: unknown;
   seasonId: unknown;
   scopeRole: unknown;
@@ -555,10 +556,15 @@ export async function createManagedAdminUser(input: {
       return { id: generated.userId, error: false };
     },
     postLookup: () => findExactAuthUsers(client, email).then((lookup) => ({ ok: lookup.ok, ids: lookup.users.map((user) => user.id) })),
+    // Tạo là kích hoạt luôn. Bước cũ "đã mời → chờ bấm Kích hoạt" không kiểm thêm
+    // được gì về danh tính — người bấm chỉ thấy email đã xác nhận — mà chặn người
+    // được mời ngay ở cửa: 13/09/2026 chị Thảo đặt mật khẩu xong, đăng nhập đúng
+    // mật khẩu 6 lần và lần nào cũng bị đẩy ra. Mật khẩu vẫn chỉ có qua link trong
+    // thư, nên tài khoản active mà chưa đặt mật khẩu thì cũng chưa ai vào được.
     commitApplication: async (authUserId) => {
       const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", {
         p_actor_admin_user_id: actor.id, p_operation: "upsert", p_target_admin_user_id: null,
-        p_payload: { auth_user_id: authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: "invited", program_id: validatedScope.programId, season_id: validatedScope.seasonId, scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
+        p_payload: { auth_user_id: authUserId, email, full_name: cleanText(input.fullName), role: validRole(input.role), status: "active", program_id: validatedScope.programId, season_id: validatedScope.seasonId, scope_role: validScopeRole(input.scopeRole), scope_status: validScopeStatus(input.scopeStatus) }
       });
       if (atomicError) { logSafe("application", "application_mutation_failed", atomicError.code); throw new Error("APPLICATION_MUTATION_FAILED"); }
     },
@@ -587,7 +593,7 @@ export async function createManagedAdminUser(input: {
     });
 
     if (delivery.ok) {
-      return { ...base, message: `Đã tạo tài khoản ở trạng thái đã mời và gửi thư mời đặt mật khẩu. ${reference}` };
+      return { ...base, message: `Đã tạo và kích hoạt tài khoản, và gửi thư mời đặt mật khẩu. Người nhận đặt mật khẩu xong là đăng nhập được. ${reference}` };
     }
 
     // Nói rõ là CHƯA gửi được, chứ không gộp vào một câu "đã gửi lời mời".
@@ -601,7 +607,7 @@ export async function createManagedAdminUser(input: {
     const why = delivery.reason ? ` Lý do: ${delivery.reason}` : "";
     return {
       ...base,
-      message: `Đã tạo tài khoản ở trạng thái đã mời, nhưng CHƯA gửi được thư mời.${why} Xem Nhật ký gửi để biết chi tiết. ${reference}`
+      message: `Đã tạo và kích hoạt tài khoản, nhưng CHƯA gửi được thư mời.${why} Bấm "Gửi link đặt mật khẩu" ở dòng tài khoản để gửi lại. ${reference}`
     };
   }
   if (result.status === "rejected") return { ...base, message: `Danh tính đã tồn tại. Không có dữ liệu nào được cập nhật; hãy dùng quy trình xem xét tài khoản hiện có. ${reference}` };
@@ -728,7 +734,8 @@ export async function updateManagedAdminUser(input: {
 }
 
 /**
- * Gửi lại thư mời cho một tài khoản nhân sự còn ở trạng thái đã mời.
+ * Gửi link đặt mật khẩu cho một tài khoản nhân sự đang hoạt động hoặc còn ở
+ * trạng thái đã mời.
  *
  * ---------------------------------------------------------------------------
  * VÌ SAO CẦN ĐƯỜNG NÀY
@@ -741,12 +748,13 @@ export async function updateManagedAdminUser(input: {
  *
  * Mỗi lần gửi lại tạo một link MỚI; link cũ hết dùng được.
  *
- * Không gửi cho người đã xác nhận email: họ đã đặt mật khẩu, việc còn lại là bấm
- * Kích hoạt — một link đặt mật khẩu mới chỉ làm họ tưởng phải làm lại từ đầu.
+ * Dùng được cho tài khoản đang hoạt động: người đã đặt mật khẩu mà quên nó nhận
+ * link `recovery`, dẫn tới đúng trang đặt mật khẩu. Tài khoản đang khoá thì từ
+ * chối — gửi link đăng nhập cho người bị khoá là mở lại cánh cửa vừa đóng.
  */
 export async function resendManagedAdminInvite(id: unknown): Promise<AdminUserMutationResult> {
   const actor = await requireSuperAdmin();
-  if (!actor) return { ok: false, message: "Chỉ super_admin mới được gửi lại thư mời." };
+  if (!actor) return { ok: false, message: "Chỉ super_admin mới được gửi link đặt mật khẩu." };
   const { client, error } = serviceClient();
   if (!client) return { ok: false, message: error };
 
@@ -759,8 +767,8 @@ export async function resendManagedAdminInvite(id: unknown): Promise<AdminUserMu
     .eq("id", targetId)
     .maybeSingle();
   if (readError || !current) return { ok: false, message: "Không tìm thấy người dùng." };
-  if (current.status !== "invited") {
-    return { ok: false, message: "Chỉ gửi lại thư mời cho tài khoản đang ở trạng thái đã mời." };
+  if (current.status !== "invited" && current.status !== "active") {
+    return { ok: false, message: "Tài khoản đang tạm khóa hoặc đã ngừng quyền. Kích hoạt lại trước rồi mới gửi link đặt mật khẩu." };
   }
 
   const email = normalizeEmail(current.email);
@@ -773,19 +781,13 @@ export async function resendManagedAdminInvite(id: unknown): Promise<AdminUserMu
   if (authError || !authData?.user) {
     return { ok: false, message: "Không đọc được tài khoản đăng nhập của người này." };
   }
-  if (authData.user.email_confirmed_at) {
-    return {
-      ok: false,
-      message: "Người này đã xác nhận email và đặt mật khẩu. Bấm Kích hoạt, không cần gửi lại thư."
-    };
-  }
-
-  // `invite` đúng nghĩa cho người chưa từng đặt mật khẩu. Supabase có thể từ chối
-  // vì địa chỉ đã có tài khoản — khi đó `recovery` dẫn tới cùng một trang đặt mật
-  // khẩu, và đó là đường mời reviewer đang chạy được trên production.
-  let linkType: "invite" | "recovery" = "invite";
-  let generated = await generateStaffPasswordLink(client, "invite", email);
-  if (!generated.ok) {
+  // Người đã xác nhận email thì đi thẳng `recovery`: họ đã có mật khẩu, chỉ cần
+  // đặt lại. Người chưa thì `invite` đúng nghĩa; Supabase có thể từ chối vì địa
+  // chỉ đã có tài khoản — khi đó `recovery` dẫn tới cùng một trang đặt mật khẩu,
+  // và đó là đường mời reviewer đang chạy được trên production.
+  let linkType: "invite" | "recovery" = authData.user.email_confirmed_at ? "recovery" : "invite";
+  let generated = await generateStaffPasswordLink(client, linkType, email);
+  if (!generated.ok && linkType === "invite") {
     linkType = "recovery";
     generated = await generateStaffPasswordLink(client, "recovery", email);
   }
@@ -826,8 +828,41 @@ export async function resendManagedAdminInvite(id: unknown): Promise<AdminUserMu
   }
   return {
     ok: true,
-    message: `Đã gửi lại thư mời đặt mật khẩu tới ${email}. Link trong thư cũ không còn dùng được.`
+    message: `Đã gửi thư đặt mật khẩu tới ${email}. Link trong thư trước (nếu có) không còn dùng được.`
   };
+}
+
+/**
+ * Payload kích hoạt cho `vam062_admin_mutation_atomic` (thao tác `status`).
+ *
+ * Hàm SQL chỉ đụng đúng một phạm vi khi payload nêu program/season/scope_role.
+ * Không nêu thì nó rơi vào nhánh TẮT MỌI phạm vi đang bật — kể cả khi đang kích
+ * hoạt. Gọi trần `{ status: "active" }` vì thế vừa kích hoạt tài khoản vừa tước
+ * sạch quyền của chính người đó: đăng nhập được mà không thấy mùa nào.
+ *
+ * Nên kích hoạt luôn nêu một phạm vi đang bật: hàm bật lại đúng phạm vi ấy (vốn
+ * đã bật) và để yên các phạm vi khác. Không có phạm vi nào đang bật thì nhánh
+ * kia cũng không còn gì để tắt, gọi trần là an toàn.
+ *
+ * Trả null khi không an toàn để gọi: đọc bảng hỏng, hoặc có phạm vi đang bật mà
+ * không nêu được đích danh (thiếu program/season). Thà chưa kích hoạt còn hơn
+ * kích hoạt mà tắt nhầm quyền.
+ */
+async function activationPayload(client: any, authUserId: unknown): Promise<JsonRecord | null> {
+  const authId = String(authUserId ?? "").trim();
+  if (!authId) return { status: "active" };
+  const { data, error } = await client
+    .from("admin_scope_access")
+    .select("program_id,season_id,role")
+    .eq("user_id", authId)
+    .eq("status", "active")
+    .order("id", { ascending: true })
+    .limit(50);
+  if (error || !Array.isArray(data)) return null;
+  if (!data.length) return { status: "active" };
+  const named = data.find((scope: any) => cleanText(scope?.program_id) && cleanText(scope?.season_id) && cleanText(scope?.role));
+  if (!named) return null;
+  return { status: "active", program_id: named.program_id, season_id: named.season_id, scope_role: named.role };
 }
 
 export async function setManagedAdminUserStatus(id: unknown, status: unknown): Promise<AdminUserMutationResult> {
@@ -842,17 +877,20 @@ export async function setManagedAdminUserStatus(id: unknown, status: unknown): P
 
   const { data: current } = await client.from("admin_users").select("role,status,auth_user_id").eq("id", targetId).maybeSingle();
   const nextRole = validRole(current?.role);
-  if (current?.status === "invited" && nextStatus === "active") {
-    if (!current.auth_user_id) return { ok: false, message: "Tài khoản chưa liên kết Auth nên chưa thể kích hoạt." };
-    const { data: authData, error: authError } = await client.auth.admin.getUserById(current.auth_user_id);
-    if (authError || !authData?.user?.email_confirmed_at) {
-      return { ok: false, message: "Người dùng chưa hoàn tất xác nhận thông tin đăng nhập; trạng thái vẫn là đã mời." };
-    }
+  // Kích hoạt người "đã mời" không còn đòi xác nhận email trước. Chờ xác nhận
+  // không chứng minh thêm được gì — người bấm chỉ thấy một mốc thời gian — mà
+  // chặn người vừa đặt mật khẩu ở cửa đăng nhập.
+  if (current?.status === "invited" && nextStatus === "active" && !current.auth_user_id) {
+    return { ok: false, message: "Tài khoản chưa liên kết Auth nên chưa thể kích hoạt." };
   }
   if (await wouldRemoveLastActiveSuperAdmin(client, targetId, nextRole, nextStatus)) {
     return { ok: false, message: "Không thể tạm khóa super_admin active cuối cùng." };
   }
-  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "status", p_target_admin_user_id: targetId, p_payload: { status: nextStatus } });
+  const payload = nextStatus === "active" ? await activationPayload(client, current?.auth_user_id) : { status: nextStatus };
+  if (!payload) {
+    return { ok: false, message: "Chưa kích hoạt: không xác định được phạm vi đang bật của người dùng, nên dừng lại để không tắt nhầm quyền." };
+  }
+  const { error: atomicError } = await client.rpc("vam062_admin_mutation_atomic", { p_actor_admin_user_id: actor.id, p_operation: "status", p_target_admin_user_id: targetId, p_payload: payload });
   if (atomicError) return { ok: false, message: "Không thể đổi trạng thái và ghi audit trong cùng giao dịch." };
   return { ok: true, message: nextStatus === "active" ? "Đã kích hoạt lại người dùng." : "Đã tạm khóa người dùng. Supabase Auth user không bị xóa." };
   /* Legacy direct-write path retained unreachable for rollback comparison; remove after staging RPC verification.

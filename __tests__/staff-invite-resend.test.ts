@@ -1,5 +1,6 @@
 /**
- * Gửi lại thư mời cho tài khoản nhân sự còn ở trạng thái đã mời.
+ * Gửi link đặt mật khẩu cho tài khoản nhân sự đang hoạt động hoặc còn ở trạng
+ * thái đã mời.
  *
  * ---------------------------------------------------------------------------
  * VÌ SAO ĐƯỜNG NÀY TỒN TẠI
@@ -10,7 +11,7 @@
  * gì, và tạo lại thì bị từ chối vì địa chỉ đã có tài khoản đăng nhập.
  *
  * Bộ test canh ba điều: không gửi nhầm người (mã phải thuộc đúng tài khoản), không
- * gửi thừa (người đã xác nhận thì bấm Kích hoạt), và luôn truyền địa chỉ request.
+ * mở cửa cho tài khoản đang khoá, và luôn truyền địa chỉ request.
  *
  * Phân loại: DIRECT PRODUCTION TESTS — gọi thẳng `resendManagedAdminInvite`.
  */
@@ -109,22 +110,12 @@ describe("1. những lúc KHÔNG được gửi", () => {
     expect(sendStaffInvite).not.toHaveBeenCalled();
   });
 
-  it("tài khoản không còn ở trạng thái đã mời: từ chối", async () => {
-    const fake = use({ row: { ...ROW, status: "active" } });
+  it.each(["suspended", "inactive"])("tài khoản đang %s: từ chối, không tạo link, không gửi — không mở lại cửa vừa khoá", async (status) => {
+    const fake = use({ row: { ...ROW, status } });
 
     const result = await resendManagedAdminInvite(ADMIN_ID);
 
     expect(result.ok).toBe(false);
-    expect(fake.generateLink).not.toHaveBeenCalled();
-  });
-
-  it("người đã xác nhận email: từ chối và bảo bấm Kích hoạt — không gửi link đặt mật khẩu mới", async () => {
-    const fake = use({ confirmed: true });
-
-    const result = await resendManagedAdminInvite(ADMIN_ID);
-
-    expect(result.ok).toBe(false);
-    expect(result.message).toContain("Kích hoạt");
     expect(fake.generateLink).not.toHaveBeenCalled();
     expect(sendStaffInvite).not.toHaveBeenCalled();
   });
@@ -187,6 +178,31 @@ describe("2. gửi lại", () => {
 
     expect(result.ok).toBe(false);
     expect(sendStaffInvite).not.toHaveBeenCalled();
+  });
+
+  it("người đã xác nhận email (quên mật khẩu): gửi thẳng recovery, không thử invite", async () => {
+    const fake = use({ row: { ...ROW, status: "active" }, confirmed: true });
+
+    const result = await resendManagedAdminInvite(ADMIN_ID);
+
+    expect(result.ok).toBe(true);
+    expect(fake.generateLink).toHaveBeenCalledTimes(1);
+    expect(fake.generateLink).toHaveBeenCalledWith({ type: "recovery", email: "thao@example.com" });
+    expect(sendStaffInvite).toHaveBeenCalledWith(expect.objectContaining({
+      linkType: "recovery",
+      tokenHash: "recovery-token",
+      requestOrigin: ORIGIN
+    }));
+  });
+
+  it("tài khoản đang hoạt động mà chưa đặt mật khẩu: vẫn gửi được, kiểu invite", async () => {
+    const fake = use({ row: { ...ROW, status: "active" } });
+
+    const result = await resendManagedAdminInvite(ADMIN_ID);
+
+    expect(result.ok).toBe(true);
+    expect(fake.generateLink).toHaveBeenCalledWith({ type: "invite", email: "thao@example.com" });
+    expect(sendStaffInvite).toHaveBeenCalledWith(expect.objectContaining({ linkType: "invite", requestOrigin: ORIGIN }));
   });
 });
 

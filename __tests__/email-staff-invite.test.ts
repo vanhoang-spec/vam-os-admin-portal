@@ -85,14 +85,14 @@ describe("1. lời thư", () => {
     expect(letter("invite").text).toContain("Ban Điều hành");
   });
 
-  it("BÁO TRƯỚC bước kích hoạt — đây là lý do lá thư này tồn tại riêng", () => {
-    // Tài khoản vừa tạo mang trạng thái `invited`, mà lib/admin-auth.ts chỉ cho
-    // `active` đăng nhập. Không báo trước thì người nhận đặt mật khẩu xong, bị
-    // từ chối, và kết luận hệ thống hỏng.
-    const { text, html } = letter("invite");
-    expect(text).toContain("ban tổ chức cần bật tài khoản một lần nữa");
-    expect(text).toContain("không phải lỗi");
-    expect(html).toContain("ban tổ chức cần bật tài khoản một lần nữa");
+  it("KHÔNG dặn chờ ban tổ chức bật tài khoản — tài khoản đã kích hoạt ngay lúc tạo", () => {
+    // Bước chờ kích hoạt đã bỏ (13/09/2026). Một lời dặn chờ không có thật khiến
+    // người nhận ngồi chờ thay vì đăng nhập.
+    for (const type of ["invite", "recovery"] as const) {
+      const { text, html } = letter(type);
+      expect(text).not.toMatch(/bật tài khoản|chờ ban tổ chức|chưa sẵn sàng/);
+      expect(html).not.toMatch(/bật tài khoản|chờ ban tổ chức|chưa sẵn sàng/);
+    }
   });
 
   it("thư gửi lại nói link cũ đã hết dùng", () => {
