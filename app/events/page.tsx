@@ -11,6 +11,8 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import type { Event, EventParticipation, IntakeBatch, Season } from "@/lib/types";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { eventTypeLabel } from "@/lib/event-constants";
+import { getMentorOrientationSplits } from "@/lib/mentor-orientation";
+import type { MentorSplit } from "@/lib/mentor-orientation-core";
 import { EventPlaceSummary, formatEventWhen } from "./event-place";
 
 type EventRow = Event & {
@@ -22,6 +24,8 @@ type EventRow = Event & {
   pending_count: number;
   reg_count: number;
   reg_pending_review_count: number;
+  /** Chỉ có ở buổi Mentor Orientation, và chỉ khi đếm được. Không bao giờ mang email. */
+  mentor_split: MentorSplit | null;
 };
 
 const TYPE_LABELS = new Map<string, string>(EVENT_TYPE_OPTIONS.map((option) => [option.value, option.label]));
@@ -41,7 +45,8 @@ function buildEventRows(
   participations: EventParticipation[],
   seasons: Season[],
   batches: IntakeBatch[],
-  registrationRows: EventListData["registrationRows"]
+  registrationRows: EventListData["registrationRows"],
+  mentorSplits: Map<string, MentorSplit> | null
 ): EventRow[] {
   const seasonsById = new Map(seasons.map((season) => [season.id, season]));
   const batchesById = new Map(batches.map((b) => [b.id, b]));
@@ -76,7 +81,8 @@ function buildEventRows(
         registered_absent_count: rows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length,
         pending_count: rows.filter((row) => isEventPendingStatus(row.attendance_status)).length,
         reg_count: regCountByEvent.get(event.id) ?? 0,
-        reg_pending_review_count: regPendingByEvent.get(event.id) ?? 0
+        reg_pending_review_count: regPendingByEvent.get(event.id) ?? 0,
+        mentor_split: mentorSplits?.get(event.id) ?? null
       };
     })
     .sort((a, b) => String(b.starts_at ?? "").localeCompare(String(a.starts_at ?? "")));
@@ -113,6 +119,9 @@ export default async function EventsPage(props: { searchParams?: Promise<{
     getIntakeBatches(scope)
   ]);
   const allowEdit = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
+  // Sau khi đã có danh sách sự kiện trong phạm vi: chỉ những buổi người này đã
+  // được thấy mới được đếm, và không có buổi orientation nào thì không đọc gì.
+  const mentorSplits = await getMentorOrientationSplits(data.events);
 
   const seasonFilter = selectedParam(searchParams?.season).trim();
   const typeFilter = selectedParam(searchParams?.type).trim();
@@ -123,7 +132,14 @@ export default async function EventsPage(props: { searchParams?: Promise<{
 
   const batchOptions = intakeBatchesRes.data ?? [];
 
-  const allRows = buildEventRows(data.events, data.participations, data.seasons, batchOptions, data.registrationRows);
+  const allRows = buildEventRows(
+    data.events,
+    data.participations,
+    data.seasons,
+    batchOptions,
+    data.registrationRows,
+    mentorSplits.ok ? mentorSplits.splits : null
+  );
   const filteredRows = allRows.filter((row) => {
     if (seasonFilter && row.season_code !== seasonFilter) return false;
     if (typeFilter && row.event_type !== typeFilter) return false;
@@ -279,6 +295,14 @@ export default async function EventsPage(props: { searchParams?: Promise<{
                       {row.reg_pending_review_count > 0 ? (
                         <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                           {row.reg_pending_review_count} chờ
+                        </span>
+                      ) : null}
+                      {row.mentor_split ? (
+                        <span
+                          className="mt-0.5 block whitespace-nowrap text-[11px] text-slate-600"
+                          title="Mentor cũ: email trùng một người từng làm mentor ở mùa khác. Còn lại là mentor mới."
+                        >
+                          Cũ {row.mentor_split.returning} · Mới {row.mentor_split.fresh}
                         </span>
                       ) : null}
                     </>
