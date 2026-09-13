@@ -4,7 +4,7 @@ import { listAdminAuditLogs, listManagedAdminUsers, requireSuperAdmin, type Mana
 import { displayText, formatDate } from "@/lib/utils";
 import { loadProgramContextCatalog, resolveAuthorizedProgramContext } from "@/lib/program-context";
 import { ProgramContextError } from "@/lib/program-context-core";
-import { CreateAdminUserForm, EditAdminUserForm, RemoveAccessForm, StatusToggleForm, SyncAuthForm, type ScopeCatalogOptions } from "./user-management-forms";
+import { CreateAdminUserForm, EditAdminUserForm, RemoveAccessForm, ResendInviteForm, StatusToggleForm, SyncAuthForm, type ScopeCatalogOptions } from "./user-management-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +99,7 @@ function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedA
       {users.map((user) => <article key={user.id} className="rounded-lg border border-vam-line bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="break-words font-semibold text-vam-ink">{displayText(user.full_name)}</h3><p className="break-all text-sm text-slate-600">{displayText(user.email)}</p></div><StatusBadges user={user} /></div>
         <dl className="mt-3 grid gap-2 text-sm"><div><dt className="text-xs uppercase text-slate-500">Operational role</dt><dd>{roleLabel(user.role)}</dd></div><div><dt className="text-xs uppercase text-slate-500">Program / season scope</dt><dd className="break-words">{scopeText(user)}</dd></div><div><dt className="text-xs uppercase text-slate-500">Auth identity</dt><dd>{user.auth_user_id ? "Đã liên kết" : "Chưa liên kết"}</dd></div><div><dt className="text-xs uppercase text-slate-500">Participant membership</dt><dd>Không quản lý tại tài khoản staff</dd></div></dl>
-        <div className="mt-4 grid gap-2"><Link href={`/admin/users?edit=${user.id}`} className="min-h-11 rounded-md border border-vam-line px-3 py-2.5 text-center font-medium text-vam-green">Sửa tài khoản</Link><StatusToggleForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /><RemoveAccessForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /></div>
+        <div className="mt-4 grid gap-2"><Link href={`/admin/users?edit=${user.id}`} className="min-h-11 rounded-md border border-vam-line px-3 py-2.5 text-center font-medium text-vam-green">Sửa tài khoản</Link><ResendInviteForm user={user} /><StatusToggleForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /><RemoveAccessForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /></div>
       </article>)}
     </div><div className="hidden overflow-hidden rounded-lg border border-vam-line bg-white md:block">
       <div className="overflow-x-auto">
@@ -132,6 +132,7 @@ function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedA
                         Sửa
                       </Link>
                       <SyncAuthForm user={user} />
+                      <ResendInviteForm user={user} />
                       <StatusToggleForm user={user} disabled={!safe} />
                       <RemoveAccessForm user={user} disabled={!safe} />
                     </div>

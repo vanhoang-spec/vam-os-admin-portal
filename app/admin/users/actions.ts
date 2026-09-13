@@ -6,6 +6,7 @@ import { loadProgramContextCatalog } from "@/lib/program-context";
 import {
   createManagedAdminUser,
   removeManagedAdminAccess,
+  resendManagedAdminInvite,
   setManagedAdminUserStatus,
   syncManagedAdminAuthUser,
   updateManagedAdminUser,
@@ -109,6 +110,16 @@ export async function syncAdminUserAuthAction(_previousState: AdminUserActionSta
 export async function removeAdminAccessAction(_previousState: AdminUserActionState = initialState, formData: FormData): Promise<AdminUserActionState> {
   try {
     const result = await removeManagedAdminAccess(text(formData, "id"));
+    revalidatePath("/admin/users");
+    return result;
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function resendAdminInviteAction(_previousState: AdminUserActionState = initialState, formData: FormData): Promise<AdminUserActionState> {
+  try {
+    const result = await resendManagedAdminInvite(text(formData, "id"));
     revalidatePath("/admin/users");
     return result;
   } catch (error) {

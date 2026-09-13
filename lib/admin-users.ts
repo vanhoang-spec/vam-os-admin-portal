@@ -10,6 +10,7 @@ import { findExactAuthUsers, resolveAuthOwnership } from "@/lib/account-auth-own
 import { executeManualStaffProvisioning, type ProvisioningResult } from "@/lib/manual-staff-provisioning";
 import { sendStaffInvite } from "@/lib/email";
 import { adminRoleLabel } from "@/lib/ui-labels";
+import { getPublicOrigin } from "@/lib/public-url";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
 export type ScopeRole = "full_access" | "operations" | "review" | "read";
@@ -578,7 +579,11 @@ export async function createManagedAdminUser(input: {
       roleLabel: adminRoleLabel(validRole(input.role)),
       linkType: "invite",
       tokenHash: inviteTokenHash ?? "",
-      adminUserId: String(created?.data?.id ?? "").trim() || null
+      adminUserId: String(created?.data?.id ?? "").trim() || null,
+      // Production không đặt VAM_OS_PUBLIC_BASE_URL, nên địa chỉ của chính request
+      // là nguồn duy nhất để dựng link. Thiếu dòng này, thư mời nhân sự đầu tiên
+      // trên production (13/09/2026) không dựng được link và không đi.
+      requestOrigin: await getPublicOrigin()
     });
 
     if (delivery.ok) {
@@ -720,6 +725,109 @@ export async function updateManagedAdminUser(input: {
 
   return { ok: true, message: "Đã cập nhật người dùng và phân quyền." };
   */
+}
+
+/**
+ * Gửi lại thư mời cho một tài khoản nhân sự còn ở trạng thái đã mời.
+ *
+ * ---------------------------------------------------------------------------
+ * VÌ SAO CẦN ĐƯỜNG NÀY
+ * ---------------------------------------------------------------------------
+ * Tạo lại tài khoản không phải là cách gửi lại thư: luồng tạo từ chối mọi địa chỉ
+ * đã có tài khoản đăng nhập. Nên một lá thư mời hỏng — link hết hạn, hộp thư lọc
+ * mất, hoặc máy chủ không dựng được link như thư mời nhân sự đầu tiên trên
+ * production — trước đây để lại một tài khoản không ai vào được và không có đường
+ * nào cứu.
+ *
+ * Mỗi lần gửi lại tạo một link MỚI; link cũ hết dùng được.
+ *
+ * Không gửi cho người đã xác nhận email: họ đã đặt mật khẩu, việc còn lại là bấm
+ * Kích hoạt — một link đặt mật khẩu mới chỉ làm họ tưởng phải làm lại từ đầu.
+ */
+export async function resendManagedAdminInvite(id: unknown): Promise<AdminUserMutationResult> {
+  const actor = await requireSuperAdmin();
+  if (!actor) return { ok: false, message: "Chỉ super_admin mới được gửi lại thư mời." };
+  const { client, error } = serviceClient();
+  if (!client) return { ok: false, message: error };
+
+  const targetId = String(id ?? "").trim();
+  if (!targetId) return { ok: false, message: "Thiếu admin user id." };
+
+  const { data: current, error: readError } = await client
+    .from("admin_users")
+    .select("id,email,full_name,role,status,auth_user_id")
+    .eq("id", targetId)
+    .maybeSingle();
+  if (readError || !current) return { ok: false, message: "Không tìm thấy người dùng." };
+  if (current.status !== "invited") {
+    return { ok: false, message: "Chỉ gửi lại thư mời cho tài khoản đang ở trạng thái đã mời." };
+  }
+
+  const email = normalizeEmail(current.email);
+  if (!isValidEmail(email)) return { ok: false, message: "Tài khoản này chưa có địa chỉ email hợp lệ." };
+  if (!current.auth_user_id) {
+    return { ok: false, message: "Tài khoản chưa liên kết Auth. Bấm Đồng bộ Auth trước rồi gửi lại." };
+  }
+
+  const { data: authData, error: authError } = await client.auth.admin.getUserById(current.auth_user_id);
+  if (authError || !authData?.user) {
+    return { ok: false, message: "Không đọc được tài khoản đăng nhập của người này." };
+  }
+  if (authData.user.email_confirmed_at) {
+    return {
+      ok: false,
+      message: "Người này đã xác nhận email và đặt mật khẩu. Bấm Kích hoạt, không cần gửi lại thư."
+    };
+  }
+
+  // `invite` đúng nghĩa cho người chưa từng đặt mật khẩu. Supabase có thể từ chối
+  // vì địa chỉ đã có tài khoản — khi đó `recovery` dẫn tới cùng một trang đặt mật
+  // khẩu, và đó là đường mời reviewer đang chạy được trên production.
+  let linkType: "invite" | "recovery" = "invite";
+  let generated = await generateStaffPasswordLink(client, "invite", email);
+  if (!generated.ok) {
+    linkType = "recovery";
+    generated = await generateStaffPasswordLink(client, "recovery", email);
+  }
+
+  // Mã phải thuộc ĐÚNG tài khoản đăng nhập đang nối với dòng nhân sự này. Lệch
+  // nghĩa là địa chỉ đang thuộc về một tài khoản khác — gửi đi là trao quyền vào
+  // nhầm tay.
+  if (!generated.ok || generated.userId !== current.auth_user_id) {
+    return { ok: false, message: "Không tạo được đường dẫn đặt mật khẩu mới cho tài khoản này." };
+  }
+
+  const delivery = await sendStaffInvite({
+    toEmail: email,
+    fullName: cleanText(current.full_name) ?? email,
+    roleLabel: adminRoleLabel(validRole(current.role)),
+    linkType,
+    tokenHash: generated.tokenHash,
+    adminUserId: targetId,
+    requestOrigin: await getPublicOrigin()
+  });
+
+  // Ghi nhật ký cả khi thư hỏng: link mới đã được tạo và link cũ đã hết dùng —
+  // đó là một thay đổi có thật trên tài khoản, dù thư có tới hay không. Không ghi
+  // email, không ghi mã.
+  await writeAuditLog(client, {
+    actorAdminUserId: actor.id,
+    actionType: "update_admin_user",
+    targetAdminUserId: targetId,
+    afterData: { staff_invite_resent: true, link_type: linkType, delivered: delivery.ok }
+  });
+
+  if (!delivery.ok) {
+    const why = delivery.reason ? ` Lý do: ${delivery.reason}` : "";
+    return {
+      ok: false,
+      message: `Đã tạo link mới nhưng CHƯA gửi được thư.${why} Xem Nhật ký gửi để biết chi tiết.`
+    };
+  }
+  return {
+    ok: true,
+    message: `Đã gửi lại thư mời đặt mật khẩu tới ${email}. Link trong thư cũ không còn dùng được.`
+  };
 }
 
 export async function setManagedAdminUserStatus(id: unknown, status: unknown): Promise<AdminUserMutationResult> {

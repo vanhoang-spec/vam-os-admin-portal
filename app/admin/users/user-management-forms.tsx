@@ -8,6 +8,7 @@ import type { ProgramCatalogRow, SeasonCatalogRow } from "@/lib/program-context-
 import {
   createAdminUserAction,
   removeAdminAccessAction,
+  resendAdminInviteAction,
   setAdminUserStatusAction,
   syncAdminUserAuthAction,
   updateAdminUserAction,
@@ -352,6 +353,26 @@ export function RemoveAccessForm({ user, disabled }: { user: ManagedAdminUser; d
       <input type="hidden" name="id" value={user.id} />
       <button type="submit" disabled={disabled} className={dangerButtonClass}>
         Xóa quyền admin
+      </button>
+      <ActionMessage state={state} />
+    </form>
+  );
+}
+
+/**
+ * Gửi lại thư mời — chỉ hiện với tài khoản còn ở trạng thái đã mời.
+ *
+ * Hỏi lại trước khi gửi, vì mỗi lần gửi làm link trong thư cũ hết dùng được: bấm
+ * hai lần là người nhận cầm hai lá thư mà chỉ lá sau còn chạy.
+ */
+export function ResendInviteForm({ user }: { user: ManagedAdminUser }) {
+  const [state, formAction] = useFormState(resendAdminInviteAction, initialState);
+  if (user.status !== "invited") return null;
+  return (
+    <form action={formAction} className="grid gap-1" onSubmit={(event) => { if (!window.confirm("Gửi lại thư mời đặt mật khẩu? Link trong thư cũ sẽ không còn dùng được.")) event.preventDefault(); }}>
+      <input type="hidden" name="id" value={user.id} />
+      <button type="submit" className={quietButtonClass}>
+        Gửi lại thư mời
       </button>
       <ActionMessage state={state} />
     </form>

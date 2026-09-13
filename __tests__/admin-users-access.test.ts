@@ -29,6 +29,7 @@ vi.mock("@/app/admin/users/user-management-forms", () => ({
   CreateAdminUserForm: () => null,
   EditAdminUserForm: () => null,
   RemoveAccessForm: () => null,
+  ResendInviteForm: () => null,
   StatusToggleForm: () => null,
   SyncAuthForm: () => null
 }));
