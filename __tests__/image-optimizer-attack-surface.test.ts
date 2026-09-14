@@ -26,10 +26,33 @@
  *
  * If a change has to break one of these, the sharp advisory must be
  * re-classified before that change ships.
+ *
+ * RE-CLASSIFIED 14/09/2026 for the AI tools (/ai), by the programme owner's
+ * decision to accept document uploads. They are the first feature that takes
+ * binary uploads (PDF, DOCX, XLSX), and pdf-parse brings a native graphics
+ * library, @napi-rs/canvas, which pdf.js loads when pdf-parse is imported (it
+ * polyfills DOMMatrix, Path2D and ImageData). Conditions 1–4 above are
+ * unchanged and still pinned below. The uploads stay outside every image
+ * decoder because:
+ *
+ *   - No image is accepted under any name. The accept list has no image type,
+ *     and the server rejects image signatures even behind a .pdf or .txt name
+ *     (lib/ai/upload-core.ts), deciding the type from the bytes, never from the
+ *     browser-supplied MIME type.
+ *   - Raw bytes are taken in exactly one place (lib/ai/uploads.ts) and handed
+ *     only to text extractors. They are never stored, never returned under any
+ *     content type, and never passed to sharp.
+ *   - pdf-parse is only ever asked for text (`getText`). Nothing renders a page
+ *     or pulls embedded images, which is the only path that would put image
+ *     bytes into @napi-rs/canvas.
+ *
+ * Section 3b pins each of those. Widening any of them is a new
+ * re-classification, not a test update.
  */
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { describe, it, expect } from "vitest";
+import { AI_UPLOAD_ACCEPT, AI_UPLOAD_KINDS, AI_UPLOAD_MIME } from "../lib/ai/upload-core";
 
 const repoRoot = join(__dirname, "..");
 const SOURCE_DIRS = ["app", "lib", "components"];
@@ -47,6 +70,8 @@ function sourceFiles(): string[] {
   for (const dir of SOURCE_DIRS) walk(join(repoRoot, dir));
   return out;
 }
+
+const relative = (file: string) => file.slice(repoRoot.length + 1).replace(/\\/g, "/");
 
 describe("1. no remote image source reaches the optimizer", () => {
   const config = readFileSync(join(repoRoot, "next.config.mjs"), "utf8");
@@ -73,7 +98,7 @@ describe("2. no UI path routes bytes through the optimizer", () => {
   it("every file importing next/image is accounted for", () => {
     // Kept explicit so that ADDING an optimized image is a failure here rather
     // than a silent widening of the attack surface.
-    expect(usages.map((u) => u.file.slice(repoRoot.length + 1).replace(/\\/g, "/"))).toEqual([
+    expect(usages.map((u) => relative(u.file))).toEqual([
       "app/events/[id]/registration-link-panel.tsx"
     ]);
   });
@@ -128,20 +153,23 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
   it("no object-storage bucket is written or signed, so no upload becomes a served URL", () => {
     const offenders = sourceFiles()
       .filter((file) => /storage\s*\.\s*from\(|createSignedUrl|getPublicUrl/.test(readFileSync(file, "utf8")))
-      .map((file) => file.slice(repoRoot.length + 1).replace(/\\/g, "/"));
+      .map(relative);
     expect(offenders).toEqual([]);
   });
 
-  it("the only file upload in the app is CSV and is consumed as text, never as bytes", () => {
+  it("file uploads are the two CSV importers plus the AI tools' single input", () => {
     const fileInputs = sourceFiles()
       .filter((file) => /type=["']file["']/.test(readFileSync(file, "utf8")))
-      .map((file) => file.slice(repoRoot.length + 1).replace(/\\/g, "/"));
+      .map(relative)
+      .sort();
     // An upload only matters to the sharp advisory if its bytes can be handed
-    // back out under an image content type, or fed to a decoder. This one is
-    // neither: both are admin-only, decoded as UTF-8 text and parsed as CSV.
+    // back out under an image content type, or fed to a decoder. The CSV
+    // importers are neither: both are admin-only, decoded as UTF-8 text and
+    // parsed as CSV. The AI input is pinned separately in 3b.
     expect(fileInputs).toEqual([
       "app/admin/renewals/legacy/legacy-client.tsx",
-      "app/admin/users/import/import-client.tsx"
+      "app/admin/users/import/import-client.tsx",
+      "app/ai/ai-file-input.tsx"
     ]);
 
     const client = readFileSync(join(repoRoot, "app/admin/users/import/import-client.tsx"), "utf8");
@@ -156,6 +184,63 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
     // No raw-byte handle is ever taken, which is what a decoder would need.
     expect(action).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|Buffer\.from\(/);
     expect(legacyAction).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|Buffer\.from\(/);
+  });
+});
+
+describe("3b. AI tool uploads never reach an image decoder", () => {
+  const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|heic|heif|avif|tiff?|bmp|ico)\b/i;
+
+  it("the accept list and the server allowlist contain no image type", () => {
+    expect(AI_UPLOAD_ACCEPT).not.toMatch(/image/i);
+    expect(AI_UPLOAD_ACCEPT).not.toMatch(IMAGE_EXTENSIONS);
+    expect(AI_UPLOAD_MIME.filter((mime) => mime.startsWith("image/"))).toEqual([]);
+    expect(Object.keys(AI_UPLOAD_KINDS).sort()).toEqual(["csv", "docx", "md", "pdf", "txt", "xlsx"]);
+  });
+
+  it("the AI file input takes its accept list from that allowlist and nowhere else", () => {
+    const input = readFileSync(join(repoRoot, "app/ai/ai-file-input.tsx"), "utf8");
+    expect(input).toContain("accept={AI_UPLOAD_ACCEPT}");
+    expect(input.match(/accept=/g)).toHaveLength(1);
+  });
+
+  it("raw upload bytes are taken in exactly one file", () => {
+    const takers = sourceFiles()
+      .filter((file) => /arrayBuffer\(\)|\.stream\(\)/.test(readFileSync(file, "utf8")))
+      .map(relative);
+    expect(takers).toEqual(["lib/ai/uploads.ts"]);
+  });
+
+  it("that file checks the bytes before extracting, and hands them only to the text extractor", () => {
+    const uploads = readFileSync(join(repoRoot, "lib/ai/uploads.ts"), "utf8");
+    const readAt = uploads.indexOf("arrayBuffer()");
+    const sniffAt = uploads.indexOf("sniffAiUpload(bytes");
+    const extractAt = uploads.indexOf("extractTextFromFile(");
+    expect(readAt).toBeGreaterThan(-1);
+    expect(sniffAt).toBeGreaterThan(readAt);
+    expect(extractAt).toBeGreaterThan(sniffAt);
+    // The only copy of the bytes is the one handed straight to the text extractor.
+    expect(uploads.match(/Buffer\.from\(/g)).toHaveLength(1);
+    expect(uploads).toContain("extractTextFromFile(Buffer.from(bytes)");
+    // Nothing that could persist or serve the bytes.
+    expect(uploads).not.toMatch(/writeFile|createWriteStream|supabase|storage\s*\.|new Response|NextResponse|sharp/);
+  });
+
+  it("only the text extractor imports pdf-parse, and it never renders or pulls images", () => {
+    const importers = sourceFiles()
+      .filter((file) => /from\s+["']pdf-parse|import\(["']pdf-parse/.test(readFileSync(file, "utf8")))
+      .map(relative);
+    expect(importers).toEqual(["lib/ai/extract-text.ts"]);
+
+    const extractor = readFileSync(join(repoRoot, "lib/ai/extract-text.ts"), "utf8");
+    expect(extractor).toMatch(/\.getText\(/);
+    expect(extractor).not.toMatch(/getScreenshot|getImage|CanvasFactory|createCanvas|\.render\(/);
+  });
+
+  it("no application source touches @napi-rs/canvas directly", () => {
+    const offenders = sourceFiles()
+      .filter((file) => /["']@napi-rs\/canvas["']/.test(readFileSync(file, "utf8")))
+      .map(relative);
+    expect(offenders).toEqual([]);
   });
 });
 

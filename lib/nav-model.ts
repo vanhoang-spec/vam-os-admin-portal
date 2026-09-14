@@ -4,7 +4,8 @@ import {
   canBrowseOperations,
   canComposeEmailTemplate,
   canInviteParticipants,
-  canManageReviewers
+  canManageReviewers,
+  canUseAiTools
 } from "@/lib/permissions";
 import {
   canBrowseApplications,
@@ -105,6 +106,10 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // bên trong module này, không còn là một mục nav riêng.
             { href: "/operations/mail", label: "Mail" },
             { href: "/recaps/create", label: "Tạo báo cáo" },
+            // Công cụ AI (14/09/2026) nằm trong nhóm này chứ không thành nhóm riêng:
+            // ba vai trò admin tier đã chạm trần 9 nhóm của sidebar. Gate theo đúng
+            // predicate trang /ai tự kiểm.
+            ...(canUseAiTools(role) ? [{ href: "/ai", label: "Công cụ AI" }] : []),
           ],
         }
       : showOperations
@@ -118,6 +123,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
               items: [
                 { href: "/operations", label: "Tổng quan vận hành" },
                 { href: "/operations/mail", label: "Mail" },
+                ...(canUseAiTools(role) ? [{ href: "/ai", label: "Công cụ AI" }] : []),
               ],
             }
           : { key: "operations", label: "Vận hành", href: "/operations" }

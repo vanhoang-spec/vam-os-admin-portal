@@ -84,6 +84,29 @@ bằng khoảng trắng thay vì gộp khoảng trắng.
 Nội dung có dấu gạch chéo ngược thì dùng công cụ Write, hoặc dựng ký tự bằng
 `String.fromCharCode(92)` trong script node. Ghi xong `grep` lại đúng dòng đó.
 
+Công cụ Write cũng không an toàn hoàn toàn: escape Unicode viết một gạch (gạch
+chéo ngược, chữ `u`, bốn chữ số hex) bị đổi thành **chính ký tự đó** (14/09/2026:
+regex bỏ dấu tiếng Việt thành một regex chứa dấu kết hợp thật, regex bỏ BOM chứa
+BOM thật). Mã vẫn chạy đúng nên không cổng nào bắt — chỉ lộ khi quét ký tự vô
+hình. Cần escape Unicode trong mã thì ghi bằng `String.fromCharCode(92)`, rồi quét
+file tìm U+0000–U+001F, U+0300–U+036F, U+FEFF.
+
+### Công cụ AI: đọc PDF hỏng lặng lẽ, và tải file là bề mặt tấn công
+
+- `serverExternalPackages: ["pdf-parse", "@napi-rs/canvas"]` trong
+  `next.config.mjs` **đừng gỡ**. Thiếu nó, pdf.js không tìm được worker sau khi
+  Next đóng gói, mọi PDF trả về rỗng, và không có lỗi nào hiện ra vì
+  `lib/ai/extract-text.ts` cố ý nuốt lỗi từng file. Chạy thử ngoài Next vẫn đọc
+  được — chỉ hỏng trong app.
+- pdf-parse tự ghim `pdfjs-dist` và `@napi-rs/canvas`. Đừng thêm hai gói đó làm
+  dependency trực tiếp: nó chỉ tạo bản sao thứ hai mà pdf-parse không dùng.
+- Byte của file tải lên chỉ được lấy ở **một chỗ**: `lib/ai/uploads.ts`. Loại file
+  quyết định bằng byte đầu (`lib/ai/upload-core.ts`), không bằng MIME trình duyệt
+  gửi. Test sharp (`image-optimizer-attack-surface`, mục 3b) khoá cả hai; nới ra
+  là phải xếp loại lại cảnh báo sharp, không phải sửa test.
+- Khoá `DEEPSEEK_API_KEY`, `TAVILY_API_KEY` chỉ nằm trong biến môi trường Vercel,
+  không bao giờ có tiền tố `NEXT_PUBLIC_`. Kết quả AI không lưu ở đâu cả.
+
 ---
 
 ## Bốn cổng, và cái mỗi cổng bắt được

@@ -20,3 +20,36 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/*
+ * Công cụ AI — nút "Tải PDF" chỉ in đúng khối kết quả đang chọn (app/ai/ai-shared.tsx).
+ * Mọi luật nằm dưới body.ai-printing, lớp chỉ được gắn trong lúc in từ Công cụ AI, để
+ * cách in của mọi trang khác giữ nguyên.
+ */
+@media print {
+  body.ai-printing * {
+    visibility: hidden;
+  }
+  body.ai-printing .ai-print-target,
+  body.ai-printing .ai-print-target * {
+    visibility: visible;
+  }
+  body.ai-printing .ai-print-target {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    padding: 0 !important;
+    /* Bỏ giới hạn chiều cao và thanh cuộn, nếu không bản PDF chỉ có phần đang thấy trên màn hình. */
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body.ai-printing .ai-print-target table {
+    page-break-inside: auto;
+  }
+  body.ai-printing .ai-print-target tr {
+    page-break-inside: avoid;
+  }
+}
