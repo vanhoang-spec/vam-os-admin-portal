@@ -169,6 +169,35 @@ export function validateJoinUrlForFormat(
   return { ok: true };
 }
 
+/**
+ * Nơi diễn ra, dạng mà thân thư cần: một dòng địa điểm, link bản đồ, link họp.
+ *
+ * Một cửa cho ba lá thư — xác nhận đăng ký, báo đổi lịch, nhắc lịch. Trước đây
+ * mỗi lá tự dựng ba giá trị này, và ba bản chép là ba cơ hội để một lá gửi link
+ * bản đồ cho buổi thuần trực tuyến, hay quên link họp của buổi vừa tại chỗ vừa
+ * trực tuyến.
+ */
+export function eventEmailPlace(event: {
+  event_format?: unknown;
+  location_name?: unknown;
+  location_address?: unknown;
+  location_map_url?: unknown;
+  online_join_url?: unknown;
+}): { format: EventFormat; placeLabel: string | null; mapUrl: string | null; joinUrl: string | null } {
+  const format = isEventFormat(event.event_format) ? event.event_format : "offline";
+  const placeLabel = needsVenue(format)
+    ? [event.location_name, event.location_address]
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+        .join(" — ") || null
+    : null;
+  const mapUrl = needsVenue(format)
+    ? resolveMapUrl({ mapUrl: event.location_map_url, address: event.location_address })
+    : null;
+  const joinUrl = needsJoinUrl(format) ? String(event.online_join_url ?? "").trim() || null : null;
+  return { format, placeLabel, mapUrl, joinUrl };
+}
+
 export type EventPlace = {
   format: EventFormat;
   locationName: string | null;

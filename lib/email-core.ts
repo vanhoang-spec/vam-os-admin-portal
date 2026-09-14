@@ -59,7 +59,10 @@ export type EmailKind =
   // một mẫu thư đã được duyệt. Xem lib/email-templates-core.ts.
   | "general_announcement"
   // Thư xác nhận đăng ký sự kiện, mang theo đường dẫn vé cá nhân và mã QR.
-  | "event_registration_confirmation";
+  | "event_registration_confirmation"
+  // Thư nhắc lịch một buổi, do ban tổ chức bấm "Gửi remind" trên trang sự kiện
+  // (supabase/migrations/20260914090000_event_reminders.sql).
+  | "event_reminder";
 
 /**
  * Một tệp đi kèm thư.
@@ -1341,4 +1344,137 @@ export function buildEventScheduleChangeEmail(input: {
   );
 
   return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư nhắc lịch một buổi sự kiện, do ban tổ chức bấm "Gửi remind".
+ *
+ * ---------------------------------------------------------------------------
+ * THƯ NÀY TỰ ĐỦ, VÌ NÓ LÀ LÁ NGƯỜI TA MỞ VÀO SÁNG HÔM SỰ KIỆN
+ * ---------------------------------------------------------------------------
+ * Người nhận có thể đang giữ một thư xác nhận từ hai tuần trước — trước khi đổi
+ * phòng, trước khi có link họp. Nên lá này mang lại đủ: giờ, nơi, bản đồ, link
+ * họp, và tấm vé. Mọi giá trị do nơi gọi đọc từ database ngay lúc gửi, không lấy
+ * từ lúc bấm nút.
+ *
+ * Đính kèm lại ảnh QR, khác với thư đổi lịch: ảnh dựng từ đúng đường dẫn vé cũ
+ * nên giống hệt ảnh đã gửi, và người lỡ xoá lá thư đầu cần một bản để lưu vào
+ * máy trước khi tới cửa.
+ */
+export function buildEventReminderEmail(input: {
+  recipientName: string;
+  eventName: string;
+  /** Khung giờ, đã định dạng sẵn theo giờ Việt Nam. */
+  whenLabel: string;
+  placeLabel?: string | null;
+  mapUrl?: string | null;
+  joinUrl?: string | null;
+  /** Mô tả ban tổ chức viết cho sự kiện. Văn bản thuần, được escape. */
+  description?: string | null;
+  /** Sự kiện có dùng mã QR check-in không. */
+  qrCheckin: boolean;
+  ticketUrl?: string | null;
+  ticketCode?: string | null;
+  shortCode?: string | null;
+  qrPngBase64?: string | null;
+  pendingApproval?: boolean;
+}): EmailMessage {
+  const name = safeDisplayName(input.recipientName);
+  const eventName = String(input.eventName ?? "").trim() || "sự kiện";
+  const ticketUrl = String(input.ticketUrl ?? "").trim();
+  const shortCode = String(input.shortCode ?? "").trim();
+  const hasTicket = ticketUrl !== "";
+  const pending = Boolean(input.pendingApproval);
+  const rawDescription = String(input.description ?? "").trim();
+  const description = rawDescription.length > 1500 ? `${rawDescription.slice(0, 1497)}...` : rawDescription;
+
+  // Ba cách nói về điểm danh, và mỗi người chỉ nhận đúng một cách. Sự kiện dùng QR
+  // mà người này chưa có vé thì KHÔNG được nói "sự kiện không dùng mã QR" — đó là
+  // câu sai, và họ sẽ đứng ở cửa cãi với người quét.
+  const noQrNote =
+    "Sự kiện này không dùng mã QR check-in. Bạn không cần mang theo mã nào — ban tổ chức sẽ điểm danh theo danh sách đăng ký.";
+  const missingTicketNote =
+    "Tại quầy check-in, vui lòng báo họ tên và email bạn đã dùng để đăng ký — ban tổ chức sẽ điểm danh theo danh sách.";
+
+  const subject = `Nhắc lịch: ${eventName} — ${input.whenLabel}`;
+
+  const intro = `Ban tổ chức nhắc bạn lịch tham dự ${eventName}. Thông tin dưới đây là thông tin mới nhất tính tới lúc gửi thư này.`;
+  const pendingNote = "Đăng ký của bạn đang chờ ban tổ chức xác nhận.";
+
+  const lines = [`Chào ${name},`, "", intro];
+  if (pending) lines.push("", pendingNote);
+  lines.push("", `THỜI GIAN: ${input.whenLabel}`);
+  if (input.placeLabel) lines.push(`Địa điểm: ${input.placeLabel}`);
+  if (input.mapUrl) lines.push(`Xem trên bản đồ: ${input.mapUrl}`);
+  if (input.joinUrl) lines.push(`Đường dẫn tham gia: ${input.joinUrl}`);
+  if (description) lines.push("", "NỘI DUNG", description);
+
+  if (hasTicket) {
+    lines.push(
+      "",
+      "VÉ THAM DỰ",
+      "Ảnh mã QR của bạn được đính kèm thư này. Vui lòng lưu ảnh vào máy và mở ra cho ban tổ chức quét khi tới sự kiện.",
+      "",
+      `Vé của bạn (mở được trên trình duyệt): ${ticketUrl}`
+    );
+    if (shortCode) {
+      lines.push("", `MÃ DỰ PHÒNG: ${shortCode}`, "Nếu máy quét không đọc được mã QR, chỉ cần đọc 4 ký tự này cho ban tổ chức.");
+    }
+  } else {
+    lines.push("", "ĐIỂM DANH", input.qrCheckin ? missingTicketNote : noQrNote);
+  }
+
+  lines.push("", "Nếu bạn không thể tham dự, vui lòng phản hồi thư này để ban tổ chức sắp xếp chỗ cho người khác.", "", SIGNATURE_TEXT);
+
+  const ticketHtml = hasTicket
+    ? [
+        `<p style="margin:20px 0 8px"><strong>Vé tham dự</strong></p>`,
+        `<p style="margin:0 0 16px">Ảnh mã QR của bạn được <strong>đính kèm thư này</strong>. Vui lòng <strong>lưu ảnh vào máy</strong> và mở ra cho ban tổ chức quét khi tới sự kiện.</p>`,
+        shortCode
+          ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fbf4ea;border-radius:6px">Mã dự phòng: <strong style="font-family:monospace;font-size:20px;letter-spacing:4px">${escapeHtml(shortCode)}</strong><br /><span style="color:#4f6b60;font-size:13px">Nếu máy quét không đọc được mã QR, chỉ cần đọc 4 ký tự này cho ban tổ chức.</span></p>`
+          : "",
+        `<p style="margin:16px 0"><a href="${escapeHtml(ticketUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở vé trên trình duyệt</a></p>`
+      ]
+    : [
+        `<p style="margin:20px 0 8px"><strong>Điểm danh</strong></p>`,
+        `<p style="margin:0 0 16px">${escapeHtml(input.qrCheckin ? missingTicketNote : noQrNote)}</p>`
+      ];
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Ban tổ chức nhắc bạn lịch tham dự <strong>${escapeHtml(eventName)}</strong>. Thông tin dưới đây là thông tin mới nhất tính tới lúc gửi thư này.</p>`,
+      pending ? `<p style="color:#8a5a00">${escapeHtml(pendingNote)}</p>` : "",
+      `<p style="margin:16px 0;padding:14px 18px;background:#e8f6ee;border-left:4px solid #16834c;border-radius:6px"><span style="color:#4f6b60;font-size:13px;text-transform:uppercase;letter-spacing:1px">Thời gian</span><br /><strong style="font-size:18px">${escapeHtml(input.whenLabel)}</strong></p>`,
+      input.placeLabel ? `<p><strong>Địa điểm:</strong> ${escapeHtml(input.placeLabel)}</p>` : "",
+      input.mapUrl ? `<p><a href="${escapeHtml(input.mapUrl)}" style="color:#16834c">Xem trên bản đồ</a></p>` : "",
+      input.joinUrl
+        ? `<p><a href="${escapeHtml(input.joinUrl)}" style="color:#16834c">Đường dẫn tham gia trực tuyến</a></p>`
+        : "",
+      description
+        ? `<p style="margin:20px 0 8px"><strong>Nội dung</strong></p><p style="margin:0 0 16px">${escapeHtml(description).replace(/\r?\n/g, "<br />")}</p>`
+        : ""
+    ]
+      .concat(ticketHtml)
+      .concat([
+        `<p style="color:#6b7c74;font-size:13px">Nếu bạn không thể tham dự, vui lòng phản hồi thư này để ban tổ chức sắp xếp chỗ cho người khác.</p>`
+      ])
+      .join("")
+  );
+
+  return {
+    to: "",
+    subject,
+    text: lines.join("\n"),
+    html,
+    attachments:
+      hasTicket && input.qrPngBase64
+        ? [
+            {
+              filename: `ve-${String(input.ticketCode ?? "").trim() || "tham-du"}.png`,
+              contentBase64: input.qrPngBase64
+            }
+          ]
+        : undefined
+  };
 }
