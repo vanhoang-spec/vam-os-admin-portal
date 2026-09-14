@@ -337,7 +337,7 @@
   <table>
     <tr><th style="width:26%">Vai trò</th><th>Làm được gì trong module Sự kiện</th></tr>
     <tr><td class="k">Super admin<br>Admin<br>Core team</td><td>Toàn quyền: tạo và sửa sự kiện, tạo link đăng ký, thêm người hỗ trợ, mở máy quét, điểm danh thủ công, xem toàn bộ số liệu.</td></tr>
-    <tr><td class="k">Support team</td><td>Được <b>mở máy quét của những buổi mà mình đã được thêm vào danh sách hỗ trợ</b>. Không tạo, không sửa sự kiện, không thêm người hỗ trợ khác.</td></tr>
+    <tr><td class="k">Support team</td><td>Được <b>mở máy quét của những buổi mà mình đã được thêm vào danh sách hỗ trợ</b>, và <b>thiết lập các lần quét mã QR</b> của chính những buổi đó ngay trên máy quét. Không tạo sự kiện, không sửa các thông tin khác của sự kiện, không thêm người hỗ trợ khác.</td></tr>
     <tr><td class="k">Reviewer, Viewer</td><td>Không tham gia vận hành sự kiện.</td></tr>
   </table>
 
@@ -612,9 +612,9 @@
     <tr><td class="k">Check seminar</td><td>Ghi nhận đã vào seminar.</td></tr>
     <tr><td class="k">Check out</td><td>Ghi nhận lúc ra về.</td></tr>
   </table>
-  <p><b>Ai thiết lập:</b> người sửa được sự kiện (Super Admin, Admin, Core team), ở phần <span class="field">Các lần quét mã QR</span> ngay dưới ô <span class="field">Dùng mã QR check-in</span> trong form tạo hoặc sửa sự kiện. Bấm <span class="btn">+ Thêm lần quét</span> để thêm, nút ↑ ↓ để đổi thứ tự, <span class="btn">Xoá</span> để bỏ. Một mục dùng được nhiều lần, ví dụ hai talkshow. Sự kiện chưa ai thiết lập có đúng một lần quét là Check in.</p>
+  <p><b>Ai thiết lập:</b> Super Admin, Admin, Core team ở phần <span class="field">Các lần quét mã QR</span> ngay dưới ô <span class="field">Dùng mã QR check-in</span> trong form tạo hoặc sửa sự kiện. <b>Support team</b> được thêm vào buổi đó thì thiết lập ngay trên màn hình máy quét: bấm <span class="btn">Thiết lập các lần quét</span> (dưới ô chọn lần quét), sửa danh sách, rồi bấm <span class="btn">Lưu các lần quét</span>. Bấm <span class="btn">+ Thêm lần quét</span> để thêm, nút ↑ ↓ để đổi thứ tự, <span class="btn">Xoá</span> để bỏ. Một mục dùng được nhiều lần, ví dụ hai talkshow. Sự kiện chưa ai thiết lập có đúng một lần quét là Check in.</p>
   <p><b>Ví dụ:</b> sự kiện chỉ cần điểm danh lúc ra về thì để đúng một lần — <i>Quét lần 1 · Check out</i>. Sự kiện có quầy quà thì có thể là <i>Quét lần 1 · Check in</i>, <i>Quét lần 2 · Check quầy đổi quà</i>, <i>Quét lần 3 · Check out</i>.</p>
-  <p><b>Bạn hỗ trợ</b> chỉ chọn lần quét của điểm mình đứng; máy quét chỉ hiện đúng danh sách của sự kiện đó, không thêm hay đổi được. Máy nhớ lần quét đã chọn, tải lại trang không bị đổi.</p>
+  <p><b>Khi quét</b>, mỗi bạn hỗ trợ chọn lần quét của điểm mình đứng; máy quét chỉ hiện đúng danh sách của sự kiện đó. Máy nhớ lần quét đã chọn, tải lại trang không bị đổi.</p>
   <div class="note">
     <b>Được quét ở bất kỳ lần nào cũng tính là đã tham dự</b>
     Ô <b>Đã check-in</b> tăng ngay ở lần quét đầu tiên của mỗi người, dù đó là Check in, quầy quà hay Check out. Thời điểm check-in là giờ của lần quét đầu tiên; các lần quét sau không ghi đè.
@@ -696,7 +696,7 @@
     <tr><td class="k">Bạn hỗ trợ báo không mở được máy quét</td><td>Kiểm hai điều: tài khoản của bạn đó có vai trò <b>Support team</b> chưa, và đã được thêm vào danh sách hỗ trợ của <b>đúng buổi hôm đó</b> chưa. Quyền gắn theo từng buổi.</td></tr>
     <tr><td class="k">Người tham dự không tìm thấy thư xác nhận</td><td>Nhờ họ kiểm mục Spam / Quảng cáo. Nếu vẫn không có, vào <b>Quản lý tham gia</b> điểm danh thủ công cho người đó.</td></tr>
     <tr><td class="k">Máy quét báo lần quét "không còn trong thiết lập"</td><td>Lần quét đó vừa bị bỏ khỏi thiết lập của sự kiện, trong khi trang máy quét vẫn là bản mở từ trước. Tải lại trang máy quét, chọn lại lần quét, rồi quét lại người vừa báo lỗi — lượt đó chưa được ghi.</td></tr>
-    <tr><td class="k">Máy quét không có lần quét mình cần</td><td>Danh sách lần quét do người sửa được sự kiện thiết lập (mục 7.3). Nhờ Core team hoặc Admin thêm vào form sự kiện, rồi tải lại trang máy quét.</td></tr>
+    <tr><td class="k">Máy quét không có lần quét mình cần</td><td>Bạn hỗ trợ của buổi đó tự thêm ở khung <span class="btn">Thiết lập các lần quét</span> cuối trang máy quét (mục 7.3), hoặc nhờ Core team sửa trong form sự kiện. Lưu xong, các máy quét khác tải lại trang để thấy lần quét mới.</td></tr>
     <tr><td class="k">Hiện cảnh báo đỏ khi thêm buổi mới</td><td>Buổi bạn định thêm trùng khít giờ và địa điểm với một buổi đã có. Kiểm lại ngày giờ, hoặc xoá buổi cũ trước.</td></tr>
     <tr><td class="k">Không xoá được một buổi</td><td>Buổi đó đã có người đăng ký. Dùng <b>Huỷ sự kiện</b> thay vì xoá — vé đã gửi đi vẫn trỏ về buổi này.</td></tr>
     <tr><td class="k">Ngày hiển thị sai thứ tự</td><td>Toàn hệ thống dùng ngày/tháng/năm. Nếu bạn đang gõ, hãy đọc dòng xanh xác nhận bên dưới ô nhập — nó ghi rõ thứ và ngày bằng chữ.</td></tr>

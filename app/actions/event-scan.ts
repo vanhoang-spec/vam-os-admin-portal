@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import type { EventActionState } from "@/lib/event-action-types";
 import { canScanEvent } from "@/lib/event-supporters";
 import { recordScan } from "@/lib/event-checkin";
+import { updateEventCheckinSteps } from "@/lib/event-checkin-steps-server";
 import { MISSING_CHECK_IN_NOTE, type ScanActionState } from "@/lib/event-scan-action-types";
 
 /**
@@ -79,5 +81,38 @@ export async function recordEventScanAction(
       fullName: null,
       badges: []
     };
+  }
+}
+
+/**
+ * Lưu các lần quét từ khung "Thiết lập các lần quét" trên trang máy quét.
+ *
+ * Quyền nằm trong `updateEventCheckinSteps`, không ở đây: một cổng quyền đặt ở
+ * action thì hàm ghi gọi từ chỗ khác sẽ không có cổng nào.
+ */
+export async function updateCheckinStepsAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  try {
+    const eventId = String(formData.get("event_id") ?? "").trim();
+    const result = await updateEventCheckinSteps({
+      eventId,
+      steps: formData.getAll("checkin_steps").map((value) => String(value))
+    });
+
+    if (!result.ok) return { ok: false, message: result.message };
+
+    revalidatePath(`/events/${eventId}`);
+    revalidatePath(`/events/${eventId}/scan`);
+    revalidatePath(`/events/${eventId}/edit`);
+
+    return {
+      ok: true,
+      message: "Đã lưu các lần quét. Máy quét của các bạn hỗ trợ khác cần tải lại trang để thấy danh sách mới."
+    };
+  } catch (error) {
+    console.error("[updateCheckinStepsAction]", error);
+    return { ok: false, message: "Lỗi hệ thống. Thử lưu lại." };
   }
 }

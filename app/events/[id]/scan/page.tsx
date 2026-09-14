@@ -2,12 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canEditRecaps } from "@/lib/auth-constants";
 import { canScanEvent } from "@/lib/event-supporters";
 import { countScansByStation } from "@/lib/event-checkin";
-import { buildCheckinSteps, checkinStepsOf, summarizeStepCounts } from "@/lib/event-checkin-steps";
+import {
+  CHECKIN_STEPS_PANEL_ID,
+  buildCheckinSteps,
+  checkinStepsOf,
+  summarizeStepCounts
+} from "@/lib/event-checkin-steps";
+import { canConfigureCheckinSteps } from "@/lib/event-checkin-steps-server";
 import { getEventDetailData } from "@/lib/events";
 import { displayText } from "@/lib/utils";
+import { CheckinStepsPanel } from "./checkin-steps-panel";
 import { EventScanner } from "./scanner";
 
 export const dynamic = "force-dynamic";
@@ -38,13 +44,18 @@ export default async function EventScanPage(props: { params: Promise<{ id: strin
     );
   }
 
-  const steps = buildCheckinSteps(checkinStepsOf(detail.event));
+  const purposes = checkinStepsOf(detail.event);
+  const steps = buildCheckinSteps(purposes);
   const scans = await countScansByStation(id);
   const summary = summarizeStepCounts(steps, scans.counts);
 
-  // Chỉ người sửa được sự kiện mới đổi được các lần quét (chủ dự án chốt 14/09/2026).
-  // Người hỗ trợ được ghép vào buổi chỉ chọn lần quét của điểm mình đứng.
-  const settingsHref = canEditRecaps(adminUser) ? `/events/${id}/edit#checkin-steps` : null;
+  // Người sửa được sự kiện, và support team được ghép vào đúng buổi này, thiết lập
+  // được các lần quét ngay tại đây (chủ dự án chốt lại 14/09/2026). Support team
+  // không mở được form Sửa sự kiện, nên máy quét là chỗ duy nhất họ tới được.
+  const canConfigure = await canConfigureCheckinSteps(adminUser, {
+    id,
+    season_id: detail.event.season_id ?? null
+  });
 
   return (
     <>
@@ -82,8 +93,10 @@ export default async function EventScanPage(props: { params: Promise<{ id: strin
       <EventScanner
         eventId={id}
         steps={steps.map((step) => ({ station: step.station, label: step.label }))}
-        settingsHref={settingsHref}
+        settingsHref={canConfigure ? `#${CHECKIN_STEPS_PANEL_ID}` : null}
       />
+
+      {canConfigure ? <CheckinStepsPanel eventId={id} initialSteps={purposes} /> : null}
     </>
   );
 }

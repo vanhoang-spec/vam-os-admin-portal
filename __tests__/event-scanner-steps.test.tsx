@@ -138,10 +138,8 @@ describe("3. thiết lập", () => {
     expect(screen.queryByRole("link", { name: "Thiết lập các lần quét" })).toBeNull();
   });
 
-  it("người sửa được sự kiện: link tới đúng phần thiết lập", () => {
-    render(<EventScanner eventId={EVENT_ID} steps={STEPS} settingsHref={`/events/${EVENT_ID}/edit#checkin-steps`} />);
-    expect(screen.getByRole("link", { name: "Thiết lập các lần quét" }).getAttribute("href")).toBe(
-      `/events/${EVENT_ID}/edit#checkin-steps`
-    );
+  it("người được thiết lập: link tới khung thiết lập trên cùng trang", () => {
+    render(<EventScanner eventId={EVENT_ID} steps={STEPS} settingsHref="#thiet-lap-lan-quet" />);
+    expect(screen.getByRole("link", { name: "Thiết lập các lần quét" }).getAttribute("href")).toBe("#thiet-lap-lan-quet");
   });
 });
