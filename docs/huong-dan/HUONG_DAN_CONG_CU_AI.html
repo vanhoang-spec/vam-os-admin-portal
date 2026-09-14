@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Dùng Công cụ AI trên VAM OS — Hướng dẫn cho team vận hành</title>
+<style>
+  @page { size: A4; margin: 9mm 11mm 8mm 11mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+    --red-bg: #fbeeec;
+    --red-line: #e3a59d;
+    --red-ink: #7d231b;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 8.7pt;
+    line-height: 1.38;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  /* ── Đầu trang ───────────────────────────────────────────────────── */
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.4mm; margin-bottom: 3mm;
+  }
+  .eyebrow {
+    font-size: 7.4pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  h1 { font-size: 19pt; line-height: 1.1; margin: 1.2mm 0 1mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 9.2pt; max-width: 128mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.6pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  /* ── Bố cục ──────────────────────────────────────────────────────── */
+  .grid { display: grid; grid-template-columns: 1.08fr 1fr; gap: 5.5mm; align-items: start; }
+  h2 {
+    font-size: 8.3pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin: 0 0 1.4mm; font-weight: 700;
+  }
+  .block + .block { margin-top: 2.9mm; }
+  p { margin: 0 0 1.4mm; }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.4mm; font-size: 8.1pt; font-weight: 600; white-space: nowrap;
+  }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 1.2mm; font-size: 8.1pt; white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+  .ok { color: #1c7a43; font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  .prep {
+    background: var(--mint); border-left: 3px solid var(--green);
+    padding: 2mm 3mm; margin-bottom: 2.9mm;
+  }
+  .prep b.h { display: block; margin-bottom: .5mm; }
+  .prep ul { margin: 0; padding-left: 4.2mm; }
+  .prep li { margin: .4mm 0; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.6mm; margin-bottom: 1.9mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5.4mm; height: 5.4mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 8pt; text-align: center; line-height: 5.4mm;
+  }
+  ol.steps b.t { display: block; font-size: 9.3pt; margin-bottom: .2mm; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 8.1pt; margin-top: 1.2mm; }
+  th, td { border: 1px solid var(--line); padding: .9mm 1.6mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+  td.tool { font-weight: 600; white-space: nowrap; }
+  td.tool small { display: block; font-weight: 400; color: var(--muted); font-size: 7.3pt; white-space: normal; }
+
+  ul.tight { margin: 0; padding-left: 4.2mm; }
+  ul.tight li { margin: .5mm 0; }
+
+  .rules {
+    background: var(--red-bg); border-left: 3px solid var(--red-line); color: var(--red-ink);
+    padding: 2mm 3mm;
+  }
+  .rules b.h { display: block; margin-bottom: .5mm; font-size: 9.2pt; }
+  .rules ul { margin: 0; padding-left: 4.2mm; }
+  .rules li { margin: .5mm 0; }
+
+  .warn {
+    background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink);
+    padding: 2mm 3mm;
+  }
+  .warn b.h { display: block; margin-bottom: .5mm; }
+
+  footer {
+    margin-top: 2.6mm; border-top: 1px solid var(--line); padding-top: 1.4mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7.2pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho team vận hành · Công cụ AI</div>
+    <h1>Dùng Công cụ AI trên VAM OS</h1>
+    <p class="sub">Trợ lý soạn nháp ý tưởng, nội dung, brief thiết kế, văn bản và tổng hợp xu hướng ngành.
+      AI viết bản nháp — <b>bạn là người kiểm và chịu trách nhiệm</b> với nội dung gửi đi.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 14/09/2026</div>
+</header>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái: công cụ và các bước ─────────────── -->
+  <div>
+    <div class="prep">
+      <b class="h">Mở ở đâu, ai dùng được</b>
+      <ul>
+        <li>Menu <span class="path">Vận hành → Công cụ AI</span>.</li>
+        <li><b>Super Admin, Admin, Core team, Support team</b> dùng được. Riêng
+          <b>Báo cáo Ban điều hành</b> chỉ Super Admin và Admin thấy.</li>
+        <li>Không thấy mục này trong menu: tài khoản chưa đúng vai trò, báo Admin.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Sáu công cụ</h2>
+      <table>
+        <tr><th style="width:36%">Công cụ</th><th>Điền gì để có kết quả tốt</th></tr>
+        <tr><td class="tool">Tìm ý tưởng hoạt động<small>Sự kiện, buổi sinh hoạt, chuỗi nội dung</small></td>
+            <td>Tên hoạt động và brief: mục tiêu, đối tượng, thời gian, ngân sách, hướng đã loại trừ.</td></tr>
+        <tr><td class="tool">Viết content<small>Fanpage, email, nhóm Zalo, thông báo</small></td>
+            <td>Chủ đề và yêu cầu: kênh đăng, người đọc, giọng văn, thông tin bắt buộc phải có.</td></tr>
+        <tr><td class="tool">Brief thiết kế cho Canva AI<small>Prompt tiếng Anh dán vào Canva AI</small></td>
+            <td>Hạng mục cần thiết kế (bắt buộc), chữ cần có trên thiết kế, tông màu, điều cần tránh.</td></tr>
+        <tr><td class="tool">Báo cáo Ban điều hành<small>Chỉ Super Admin, Admin</small></td>
+            <td>Không cần điền: bấm chạy, hệ thống tự lấy <b>số liệu tổng</b> của mùa đang chọn.</td></tr>
+        <tr><td class="tool">Xu hướng ngành tại Việt Nam<small>Định hướng mentee, chọn chủ đề</small></td>
+            <td>Một câu hỏi cụ thể, ví dụ: “Ngành logistics đang tuyển vị trí nào cho sinh viên mới ra trường?”</td></tr>
+        <tr><td class="tool">Soạn thảo văn bản<small>Quyết định, thông báo, công văn, tờ trình, biên bản, quy chế, thư gửi mentor</small></td>
+            <td>Chọn loại văn bản, ghi đủ dữ kiện (việc gì, ngày nào, áp dụng cho ai). Có thể kèm <b>1 file mẫu</b> để AI học bố cục.</td></tr>
+      </table>
+    </div>
+
+    <div class="block">
+      <h2>Các bước</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Điền ô của công cụ</b>
+          Viết cụ thể: ai, việc gì, khi nào, bao nhiêu. Thiếu dữ kiện thì AI để chỗ trống <b>[…]</b> cho bạn
+          điền, chứ không tự đoán — đó là chủ ý.
+        </li>
+        <li>
+          <b class="t">Đính kèm tài liệu (tuỳ chọn)</b>
+          PDF, DOCX, XLSX, TXT, CSV, MD — tối đa <b>3 file</b>, mỗi file <b>8MB</b>. AI chỉ đọc được file có chữ;
+          file ảnh và file scan dạng ảnh bị bỏ qua.
+        </li>
+        <li>
+          <b class="t">Bấm <span class="btn solid">Chạy trợ lý</span></b>
+          Chờ tới khi nút hết <span class="ui">Đang xử lý… (có thể mất tới 1 phút)</span>. Đừng tải lại trang.
+        </li>
+        <li>
+          <b class="t">Đọc lại toàn bộ</b>
+          Kiểm tên, ngày, số liệu, đường link. Muốn đổi hướng: sửa ô nhập rồi bấm
+          <span class="btn">Chạy lại</span> — chữ bạn đã gõ vẫn còn nguyên.
+        </li>
+        <li>
+          <b class="t">Lưu ngay</b>
+          <span class="btn">Tải Word</span> để sửa tiếp, <span class="btn">Tải PDF</span> để in hoặc gửi,
+          <span class="btn">Sao chép</span> để dán vào Zalo, email, Canva.
+          <b>App không lưu kết quả</b> — rời trang hoặc tải lại là mất.
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải: quy tắc, mẹo, lỗi ─────────────── -->
+  <div>
+    <div class="block rules">
+      <b class="h">Quy tắc bắt buộc</b>
+      <ul>
+        <li>Nội dung bạn nhập và file đính kèm được gửi sang <b>DeepSeek, máy chủ ở nước ngoài</b>.</li>
+        <li><b>KHÔNG</b> dán họ tên, email, số điện thoại, MSSV của mentor/mentee — kể cả trong file đính kèm.
+          Cần ví dụ thì dùng tên giả.</li>
+        <li>Không đưa tài liệu nội bộ nhạy cảm: hợp đồng, số tài khoản, thông tin nhà tài trợ chưa công bố.</li>
+        <li>AI có thể viết sai hoặc bịa. <b>Không gửi ra ngoài</b> hay trình lên khi chưa có người đọc lại.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Mẹo theo từng công cụ</h2>
+      <ul class="tight">
+        <li><b>Xu hướng ngành</b> — xem dòng dưới nút chạy.
+          <span class="ok">Câu trả lời dựa trên N nguồn web</span>: có link kiểm chứng ở phần Nguồn tham khảo.
+          <span class="err">Không có nguồn web</span>: chỉ là kiến thức chung, <b>đừng trích số liệu</b> trong đó.</li>
+        <li><b>Brief Canva</b> — mỗi mục “Prompt” là một thiết kế; dán nguyên đoạn tiếng Anh vào Canva AI, rồi tự
+          thay logo thật và kiểm chính tả.</li>
+        <li><b>Báo cáo Ban điều hành</b> — số liệu lấy lúc bấm chạy, khớp các trang Vận hành. Mục ghi
+          “không đọc được” là hệ thống chưa lấy được số đó, <b>không phải bằng 0</b>.</li>
+        <li><b>Soạn thảo văn bản</b> — AI không tự điền số hiệu và ngày ban hành; danh sách chỗ còn trống nằm ở
+          cuối văn bản.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Khi gặp lỗi</h2>
+      <table>
+        <tr><th style="width:47%">Thấy</th><th>Làm gì</th></tr>
+        <tr><td class="err">Chưa cấu hình khoá API DeepSeek cho Công cụ AI.</td>
+            <td>Báo Admin.</td></tr>
+        <tr><td class="err">Trợ lý phản hồi quá lâu.</td>
+            <td>Bấm lại. Vẫn lỗi thì rút gọn brief hoặc bớt file đính kèm.</td></tr>
+        <tr><td class="err">Trợ lý trả về nội dung sai khuôn…</td>
+            <td>Bấm lại, hoặc chia yêu cầu thành nhiều lần nhỏ hơn.</td></tr>
+        <tr><td class="err">DeepSeek đang từ chối yêu cầu…</td>
+            <td>Chờ vài phút rồi thử lại. Lặp lại nhiều lần thì báo Admin.</td></tr>
+        <tr><td class="err">Không dùng được các file sau: … (không lấy được chữ…)</td>
+            <td>File scan hoặc ảnh: dùng bản PDF/DOCX có chữ, hoặc dán nội dung (đã bỏ thông tin cá nhân) vào ô nhập.</td></tr>
+        <tr><td class="err">Vai trò của bạn không dùng được Công cụ AI.</td>
+            <td>Báo Admin nếu công việc của bạn cần dùng.</td></tr>
+      </table>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Nhớ</b>
+      Kết quả chỉ nằm trên màn hình đang mở. Làm xong một việc là <b>tải Word/PDF hoặc sao chép ngay</b>,
+      trước khi chuyển sang công cụ khác hay đóng trình duyệt.
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn cho team vận hành · Công cụ AI</span>
+  <span>Báo lỗi hoặc góp ý: gửi Admin kèm ảnh chụp màn hình (che thông tin cá nhân).</span>
+</footer>
+
+</body>
+</html>
