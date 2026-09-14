@@ -224,3 +224,35 @@ export function canApproveEmailTemplate(role?: string | null) {
 export function canSendBulkEmail(role?: string | null) {
   return ["super_admin", "admin"].includes(role || "");
 }
+
+/**
+ * Can use the AI tools on /ai: activity ideas, content, Canva brief, industry
+ * trends, document drafting.
+ *
+ * support_team is here by the programme owner's decision of 14/09/2026. Every
+ * press sends what the user typed to DeepSeek abroad and costs API money, which
+ * is why reviewer and viewer stay out. None of these tools reads programme data:
+ * they work only on what the user types or uploads.
+ */
+export function canUseAiTools(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
+ * Can run the AI executive report, the one AI tool that reads programme data
+ * (season-wide counts, never names) and sends it to DeepSeek.
+ *
+ * Narrower than canUseAiTools by the same 14/09/2026 decision. The caller must
+ * ALSO prove canReadSeason for the season being reported.
+ */
+export function canRunAiExecutiveReport(role?: string | null) {
+  return ["super_admin", "admin"].includes(role || "");
+}
+
+/**
+ * Can open /ai/status, which says whether the DeepSeek and Tavily keys are set.
+ * It never shows a key, but which paid integrations exist is an admin concern.
+ */
+export function canViewAiStatus(role?: string | null) {
+  return ["super_admin", "admin"].includes(role || "");
+}
