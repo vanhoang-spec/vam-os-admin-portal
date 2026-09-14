@@ -9,6 +9,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_MODULE_SU_KIEN.pdf` | Core team, Support team, BTC sự kiện | Toàn bộ module Sự kiện: tạo sự kiện, chuỗi nhiều buổi, link đăng ký, thư xác nhận kèm QR, quét mã tại cửa, theo dõi số liệu |
 | `HUONG_DAN_MODULE_MAIL.pdf` | Core team, Support team, Admin | Toàn bộ module Mail: soạn mẫu thư và ô điền, duyệt, gửi hàng loạt theo lô, nhật ký gửi, cách viết để không rơi vào hộp thư rác |
 | `HUONG_DAN_CAP_QUYEN_REVIEWER.pdf` | Support team, Core team | Một trang: mời reviewer — cấp quyền chấm hồ sơ / phỏng vấn, thư đặt mật khẩu qua Brevo, reviewer đăng nhập bằng mật khẩu, các lỗi thường gặp |
+| `HUONG_DAN_CONG_CU_AI.pdf` | Super Admin, Admin, Core team, Support team | Một trang: sáu công cụ AI, các bước chạy và lưu kết quả, quy tắc không đưa dữ liệu cá nhân sang DeepSeek, các lỗi thường gặp |
 
 ## Sửa và xuất lại bản PDF
 
@@ -53,4 +54,15 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 - Tên menu, nhãn nút và lời báo trích trong trang — `__tests__/huong-dan-cap-quyen-reviewer.test.ts`
   đối chiếu từng câu với mã nguồn, đổi nhãn mà quên sửa hướng dẫn thì test đỏ
 - Ai làm được (`lib/permissions.ts`: `canManageReviewers`, `canAssignReviewLots`)
+- Giữ **đúng một trang**: in xong, mở PDF kiểm lại số trang
+
+**Công cụ AI (một trang):**
+
+- Tên công cụ, nhãn nút, lời báo lỗi — `__tests__/huong-dan-cong-cu-ai.test.ts`
+  đối chiếu từng câu với mã nguồn (`app/ai/ai-tools.tsx`, `app/ai/ai-shared.tsx`,
+  `lib/ai/ai-core.ts`)
+- Số file, dung lượng, loại file (`lib/ai/upload-core.ts`) và ai dùng được
+  (`lib/permissions.ts`: `canUseAiTools`, `canRunAiExecutiveReport`) — test cũng
+  đối chiếu với hằng số
+- Thêm hay bỏ một công cụ thì sửa bảng "Sáu công cụ" và mục "Mẹo theo từng công cụ"
 - Giữ **đúng một trang**: in xong, mở PDF kiểm lại số trang
