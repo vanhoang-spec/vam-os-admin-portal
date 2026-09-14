@@ -501,7 +501,7 @@ async function selectAllScopedBySeason<T extends Record<string, any>>(
   return { data, error: null as string | null };
 }
 
-async function writeAdminAudit(client: any, input: {
+export async function writeAdminAudit(client: any, input: {
   actionType: string;
   beforeData?: unknown;
   afterData?: unknown;

@@ -11,6 +11,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/event-supporters", () => ({ canScanEvent: vi.fn() }));
 vi.mock("@/lib/event-checkin", () => ({ recordScan: vi.fn() }));
+vi.mock("@/lib/event-checkin-steps-server", () => ({ updateEventCheckinSteps: vi.fn() }));
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canScanEvent } from "@/lib/event-supporters";

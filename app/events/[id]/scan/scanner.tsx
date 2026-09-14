@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import jsQR from "jsqr";
 import {
   initialScanActionState,
@@ -35,9 +34,10 @@ function rememberKey(eventId: string) {
  * ---------------------------------------------------------------------------
  * LẦN QUÉT
  * ---------------------------------------------------------------------------
- * Danh sách lần quét là của RIÊNG sự kiện này, do BTC thiết lập trong form sự
- * kiện. Người hỗ trợ chỉ chọn lần quét của điểm mình đứng; họ không thêm hay
- * đổi được danh sách ở đây.
+ * Danh sách lần quét là của RIÊNG sự kiện này. Người sửa được sự kiện và support
+ * team được ghép vào buổi đặt nó — support team ở khung "Thiết lập các lần quét"
+ * cuối trang này. Máy quét chỉ đọc danh sách đó; chọn lần quét ở đây không đổi
+ * danh sách.
  *
  * ---------------------------------------------------------------------------
  * VÌ SAO CÓ CẢ HAI ĐƯỜNG GIẢI MÃ
@@ -60,7 +60,7 @@ export function EventScanner({
 }: {
   eventId: string;
   steps: ScannerStep[];
-  /** Đường tới phần thiết lập các lần quét — chỉ truyền cho người sửa được sự kiện. */
+  /** Đường tới khung thiết lập các lần quét — chỉ truyền cho người được thiết lập. */
   settingsHref?: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -286,10 +286,14 @@ export function EventScanner({
           {steps.length > 1
             ? "Chọn đúng lần quét của điểm bạn đứng trước khi quét người đầu tiên."
             : "Sự kiện này chỉ có một lần quét."}{" "}
+          {/* Thẻ <a> thường, không phải Link: link trỏ tới khung trên CÙNG trang, và
+              khung đó tự mở khi nghe `hashchange`. Link của Next đổi địa chỉ bằng
+              pushState, không phát `hashchange`, nên bấm vào chỉ nhảy tới một khung
+              vẫn đang gập. */}
           {settingsHref ? (
-            <Link href={settingsHref} className="font-medium text-vam-green hover:underline">
+            <a href={settingsHref} className="font-medium text-vam-green hover:underline">
               Thiết lập các lần quét
-            </Link>
+            </a>
           ) : null}
         </p>
       </div>

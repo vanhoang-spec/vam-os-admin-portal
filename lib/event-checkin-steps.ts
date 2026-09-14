@@ -32,6 +32,13 @@
 /** Chủ dự án chốt 14/09/2026: tối đa 20 lần quét cho một sự kiện. */
 export const MAX_CHECKIN_STEPS = 20;
 
+/**
+ * Mã của khung "Thiết lập các lần quét" trên trang máy quét, để link trên máy quét
+ * trỏ tới. Đặt ở module thuần chứ không ở file component: trang máy chủ nhập một
+ * hằng số từ file "use client" thì nhận về một tham chiếu client, không phải chuỗi.
+ */
+export const CHECKIN_STEPS_PANEL_ID = "thiet-lap-lan-quet";
+
 /** Các mục một lần quét được chọn, đúng thứ tự và cách gọi của team vận hành. */
 export const CHECKIN_PURPOSES = [
   { value: "entrance", label: "Check in" },
