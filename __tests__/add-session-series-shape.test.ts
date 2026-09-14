@@ -55,6 +55,8 @@ function client(anchor: Record<string, unknown>, siblings: Array<{ id: string }>
     chain.select = vi.fn(() => chain);
     chain.eq = vi.fn(() => chain);
     chain.in = vi.fn(() => chain);
+    // Thêm buổi xong thì đánh số lại cả chuỗi theo thời gian, và lệnh đọc đó có sắp xếp.
+    chain.order = vi.fn(() => chain);
     chain.update = vi.fn((payload: Record<string, unknown>) => {
       mode = "update";
       writes.push({ kind: "update", payload });

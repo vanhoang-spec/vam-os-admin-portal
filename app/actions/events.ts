@@ -204,8 +204,15 @@ export async function updateEventAction(
   revalidatePath(`/events/${id}/attendance`);
   revalidatePath("/operations");
 
-  return { ok: true, message: "Đã lưu thay đổi sự kiện thành công." };
+  // Lưu làm thứ tự các buổi trong chuỗi đổi (hoặc chưa sắp lại được) thì nói ra
+  // ngay tại đây: người vừa dời ngày cần biết buổi này giờ là buổi mấy, trước khi
+  // gửi link hay thông báo cho người đăng ký.
+  const note = result.message.startsWith(UPDATE_EVENT_OK) ? result.message.slice(UPDATE_EVENT_OK.length).trim() : "";
+  return { ok: true, message: note ? `Đã lưu thay đổi sự kiện thành công. ${note}` : "Đã lưu thay đổi sự kiện thành công." };
 }
+
+/** Câu mở đầu mọi lời báo thành công của `updateEvent`; phần ghi chú nằm sau nó. */
+const UPDATE_EVENT_OK = "Đã cập nhật sự kiện.";
 
 export async function addParticipationAction(
   _previousState: EventActionState,

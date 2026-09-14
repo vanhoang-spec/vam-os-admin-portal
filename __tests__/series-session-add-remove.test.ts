@@ -83,9 +83,12 @@ function sortRows(rows: Array<Record<string, unknown>>, order: OrderBy) {
 function makeClient(options: {
   anchor: Record<string, unknown> | null;
   siblings?: Array<Record<string, unknown>>;
+  /** Cả chuỗi như database trả về SAU lệnh chèn buổi mới. Không đặt thì dùng `siblings`. */
+  siblingsAfterInsert?: Array<Record<string, unknown>>;
   registrations?: Array<Record<string, unknown>>;
 }) {
   const writes: Write[] = [];
+  let inserted = false;
 
   function table(name: string) {
     const chain: Record<string, unknown> = {};
@@ -124,6 +127,7 @@ function makeClient(options: {
       mode = "insert";
       current = { table: name, kind: "insert", payload, filters: [] };
       writes.push(current);
+      if (name === "events") inserted = true;
       return chain;
     });
     chain.delete = vi.fn(() => {
@@ -141,7 +145,8 @@ function makeClient(options: {
 
     chain.then = (resolve: (value: { data: unknown; error: null }) => unknown) => {
       if (mode !== "select") return Promise.resolve(resolve({ data: null, error: null }));
-      const rows = name === "events" ? (options.siblings ?? []) : (options.registrations ?? []);
+      const eventRows = inserted && options.siblingsAfterInsert ? options.siblingsAfterInsert : (options.siblings ?? []);
+      const rows = name === "events" ? eventRows : (options.registrations ?? []);
       const data = orderBy ? sortRows(rows, orderBy) : rows;
       return Promise.resolve(resolve({ data, error: null }));
     };
@@ -262,6 +267,66 @@ describe("chặn buổi trùng khít", () => {
 
     expect(result.ok).toBe(false);
     expect(fake.writes).toEqual([]);
+  });
+});
+
+describe("thêm một buổi diễn ra sớm hơn các buổi đã có", () => {
+  const VENUE = { location_name: "Phòng B1-502", location_address: "279 Nguyễn Tri Phương, P.5, Q.10" };
+
+  it("buổi mới thành Buổi 1, các buổi sau lùi số — và lời báo nói đúng số của buổi vừa thêm", async () => {
+    const fake = makeClient({
+      anchor: anchorRow({ series_id: SERIES, series_index: 1, series_total: 2, starts_at: "2026-09-27T01:00:00.000Z" }),
+      siblings: [
+        { id: EVENT, starts_at: "2026-09-27T01:00:00.000Z", series_index: 1, series_total: 2, ...VENUE },
+        { id: OTHER, starts_at: "2026-10-04T01:00:00.000Z", series_index: 2, series_total: 2, ...VENUE }
+      ],
+      // Buổi mới được chèn với số cuối (3/3), đúng như lệnh chèn đang làm.
+      siblingsAfterInsert: [
+        { id: EVENT, starts_at: "2026-09-27T01:00:00.000Z", series_index: 1, series_total: 3 },
+        { id: OTHER, starts_at: "2026-10-04T01:00:00.000Z", series_index: 2, series_total: 3 },
+        { id: "new-session", starts_at: "2026-09-20T01:00:00.000Z", series_index: 3, series_total: 3 }
+      ]
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    // Chốt thêm một buổi 20/09 — sớm hơn cả hai buổi đang có.
+    const result = await addSessionToSeries({ eventId: EVENT, starts_at: "2026-09-20T08:00" });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("Đã thêm buổi 1.");
+
+    const insertAt = fake.writes.findIndex((write) => write.kind === "insert");
+    const renumbers = fake.writes
+      .slice(insertAt + 1)
+      .filter((write) => write.kind === "update" && "series_index" in (write.payload ?? {}));
+    expect(renumbers.map((write) => [write.filters.find(([column]) => column === "id")?.[1], write.payload])).toEqual([
+      ["new-session", { series_index: 1, series_total: 3 }],
+      [EVENT, { series_index: 2, series_total: 3 }],
+      [OTHER, { series_index: 3, series_total: 3 }]
+    ]);
+  });
+
+  it("buổi mới diễn ra sau cùng thì giữ số cuối, và không ghi thêm số thứ tự nào", async () => {
+    const fake = makeClient({
+      anchor: anchorRow({ series_id: SERIES, series_index: 1, series_total: 2, starts_at: "2026-09-20T01:00:00.000Z" }),
+      siblings: [
+        { id: EVENT, starts_at: "2026-09-20T01:00:00.000Z", series_index: 1, series_total: 2, ...VENUE },
+        { id: OTHER, starts_at: "2026-09-27T01:00:00.000Z", series_index: 2, series_total: 2, ...VENUE }
+      ],
+      siblingsAfterInsert: [
+        { id: EVENT, starts_at: "2026-09-20T01:00:00.000Z", series_index: 1, series_total: 3 },
+        { id: OTHER, starts_at: "2026-09-27T01:00:00.000Z", series_index: 2, series_total: 3 },
+        { id: "new-session", starts_at: "2026-10-04T01:00:00.000Z", series_index: 3, series_total: 3 }
+      ]
+    });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake as never);
+
+    const result = await addSessionToSeries({ eventId: EVENT, starts_at: "2026-10-04T08:00" });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("Đã thêm buổi 3.");
+    const insertAt = fake.writes.findIndex((write) => write.kind === "insert");
+    expect(fake.writes.slice(insertAt + 1).filter((write) => "series_index" in (write.payload ?? {}))).toEqual([]);
   });
 });
 

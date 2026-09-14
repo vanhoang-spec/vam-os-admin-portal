@@ -25,6 +25,7 @@ import { checkinCodeUrl, usesQrCheckin } from "@/lib/event-checkin-code";
 import { chooseSession } from "@/lib/event-session-choice";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
+import { chronologicalSeriesSlots, seriesRenumberWrites } from "@/lib/event-series-core";
 import {
   resolveEmailBaseUrl,
   sendEventRegistrationConfirmation,
@@ -2744,6 +2745,34 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
     return { ok: false, message: `${SAFE_ERROR} (${updateError.message})` };
   }
   await writeAdminAudit(client, { actionType: "update_event", beforeData: before, afterData: after });
+
+  // Buổi thuộc chuỗi: đánh số lại cả chuỗi theo thời gian sau MỖI lần lưu.
+  //
+  // 14/09/2026: Mentor Orientation dời buổi 20/09 sang 04/10 bằng chính form này,
+  // và 04/10 vẫn mang "Buổi 1", nằm sau "Buổi 2" ngày 27/09 — trong khi hai buổi có
+  // nội dung khác nhau. Chạy cả khi ngày giờ không đổi, vì nó chỉ ghi những buổi
+  // đang sai số: một lần lưu bình thường cũng tự sửa một chuỗi đã lệch từ trước.
+  const seriesId = clean(before.series_id);
+  if (!seriesId) return { ok: true, message: "Đã cập nhật sự kiện.", data: after };
+
+  const renumbered = await renumberSeries(client, seriesId);
+  if (!renumbered) {
+    return {
+      ok: true,
+      message: "Đã cập nhật sự kiện. Chưa sắp lại được thứ tự các buổi trong chuỗi — bấm lưu thêm một lần để hệ thống sắp lại.",
+      data: after
+    };
+  }
+
+  const nextIndex = renumbered.indexById.get(id);
+  const previousIndex = typeof before.series_index === "number" ? before.series_index : null;
+  if (nextIndex && nextIndex !== previousIndex) {
+    return {
+      ok: true,
+      message: `Đã cập nhật sự kiện. Thứ tự các buổi trong chuỗi đã được sắp lại theo thời gian: buổi này giờ là Buổi ${nextIndex}/${renumbered.total}.`,
+      data: after ? { ...after, series_index: nextIndex, series_total: renumbered.total } : after
+    };
+  }
   return { ok: true, message: "Đã cập nhật sự kiện.", data: after };
 }
 
@@ -3336,9 +3365,19 @@ export async function addSessionToSeries(input: {
     afterData: created as JsonRecord
   });
 
+  // Buổi mới có thể diễn ra TRƯỚC các buổi đã có — chốt thêm một buổi sớm hơn là
+  // chuyện bình thường. Số thứ tự đọc theo thời gian, nên đánh số lại cả chuỗi;
+  // nếu không, buổi sớm nhất lại mang số cuối.
+  const createdId = clean((created as JsonRecord).id);
+  const renumbered = await renumberSeries(client, seriesId);
+  const position = (createdId ? renumbered?.indexById.get(createdId) : undefined) ?? newTotal;
+
   return {
     ok: true,
-    message: `Đã thêm buổi ${newTotal}. Link đăng ký của chuỗi sẽ hiện buổi này ngay.`,
+    message:
+      position < newTotal
+        ? `Đã thêm buổi ${position}. Các buổi diễn ra sau đó đã được đánh số lại theo thời gian. Link đăng ký của chuỗi sẽ hiện buổi này ngay.`
+        : `Đã thêm buổi ${position}. Link đăng ký của chuỗi sẽ hiện buổi này ngay.`,
     data: created as JsonRecord
   };
 }
@@ -3464,12 +3503,19 @@ export async function listSeriesSessions(eventId: string): Promise<SeriesSession
  *
  * Còn từ một buổi trở xuống thì chuỗi tan: ba cột về null cùng lúc.
  *
- * Trả về số buổi còn lại, hoặc `null` khi không đọc nổi chuỗi.
+ * Thứ tự và luật phá hoà nằm ở `lib/event-series-core.ts`, và chỉ những buổi
+ * đang mang sai số mới bị ghi — một lần lưu không đổi thứ tự thì không có lệnh
+ * ghi nào.
+ *
+ * Trả về tổng số buổi và số thứ tự mới của từng buổi, hoặc `null` khi không đọc
+ * nổi chuỗi.
  */
-async function renumberSeries(client: any, seriesId: string): Promise<number | null> {
+type SeriesRenumber = { total: number; indexById: Map<string, number> };
+
+async function renumberSeries(client: any, seriesId: string): Promise<SeriesRenumber | null> {
   const { data: rows, error } = await client
     .from("events")
-    .select("id, starts_at")
+    .select("id, starts_at, series_index, series_total")
     .eq("series_id", seriesId)
     .order("starts_at", { ascending: true });
 
@@ -3488,18 +3534,23 @@ async function renumberSeries(client: any, seriesId: string): Promise<number | n
         .update({ series_id: null, series_index: null, series_total: null })
         .eq("id", String(left.id));
     }
-    return list.length;
+    return { total: list.length, indexById: new Map() };
   }
 
-  for (let index = 0; index < list.length; index += 1) {
+  const writes = seriesRenumberWrites(list);
+  for (let index = 0; index < writes.length; index += 1) {
+    const slot = writes[index];
     const { error: writeError } = await client
       .from("events")
-      .update({ series_index: index + 1, series_total: list.length })
-      .eq("id", String(list[index].id));
+      .update({ series_index: slot.series_index, series_total: slot.series_total })
+      .eq("id", slot.id);
     if (writeError) log("renumberSeries: write failed", writeError);
   }
 
-  return list.length;
+  return {
+    total: list.length,
+    indexById: new Map(chronologicalSeriesSlots(list).map((slot) => [slot.id, slot.series_index]))
+  };
 }
 
 export async function removeSessionFromSeries(input: {
@@ -3566,10 +3617,11 @@ export async function removeSessionFromSeries(input: {
     afterData: null
   });
 
-  const remaining = await renumberSeries(client, seriesId);
-  if (remaining === null) {
+  const renumbered = await renumberSeries(client, seriesId);
+  if (renumbered === null) {
     return { ok: true, message: "Đã xoá buổi, nhưng chưa đánh số lại được các buổi còn lại." };
   }
+  const remaining = renumbered.total;
   if (remaining <= 1) {
     return { ok: true, message: "Đã xoá buổi. Sự kiện quay lại là buổi đơn lẻ." };
   }
