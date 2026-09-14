@@ -429,6 +429,7 @@
     <tr><td class="k">Cần Admin phê duyệt</td><td>Muốn duyệt từng đơn trước khi cấp vé, thay vì tự động xác nhận.</td></tr>
     <tr><td class="k">Cho phép vãng lai</td><td>Chấp nhận người tới thẳng hôm sự kiện mà chưa đăng ký.</td></tr>
     <tr><td class="k">Bật khung giờ check-in</td><td>Chỉ cho điểm danh trong một khoảng giờ nhất định — tránh có người check-in từ hôm trước.</td></tr>
+    <tr><td class="k">Dùng mã QR check-in · Các lần quét mã QR</td><td>Khác các ô khác, ô này bật sẵn: mỗi người đăng ký nhận một mã QR. Ngay bên dưới, đặt sự kiện quét mấy lần và mỗi lần để làm gì — Check in, quầy đổi quà, talkshow, Check out… Xem mục 7.3.</td></tr>
     <tr><td class="k">Yêu cầu minh chứng</td><td>Cần người đăng ký nộp file/ảnh (CV, ảnh chụp màn hình…). Đặt được nhãn và hướng dẫn riêng.</td></tr>
     <tr><td class="k">Thu phí tham dự</td><td>Sự kiện có phí. Điền số tiền, tiền tệ, thông tin chuyển khoản; có thể bắt buộc nộp ảnh chuyển khoản.</td></tr>
     <tr><td class="k">Tuỳ chọn bữa trưa</td><td>Có suất ăn kèm để người đăng ký chọn, tính phí riêng.</td></tr>
@@ -540,7 +541,7 @@
   <ul>
     <li><b>Xác nhận đã đăng ký</b>, kèm tên sự kiện.</li>
     <li><b>Thời gian và địa điểm</b> của đúng buổi họ đã chọn, kèm đường dẫn bản đồ.</li>
-    <li><b>Ảnh mã QR đính kèm thư</b> — đây là tấm vé vào cửa. Thư nhắc rõ: <i>lưu ảnh vào máy ngay, mở ra cho ban tổ chức quét khi tới sự kiện — như vậy không cần mạng ở hội trường.</i></li>
+    <li><b>Ảnh mã QR đính kèm thư</b> — đây là tấm vé, dùng cho mọi lần quét trong sự kiện. Trang vé mở từ thư cũng có nút <span class="btn">Lưu ảnh mã QR</span>. Thư nhắc rõ: <i>lưu ảnh vào máy ngay, mở ra cho ban tổ chức quét khi tới sự kiện — như vậy không cần mạng ở hội trường.</i></li>
     <li><b>Mã dự phòng 4 ký tự</b> in kèm trong thư, phòng khi máy quét không đọc được QR.</li>
   </ul>
 
@@ -589,7 +590,7 @@
     <li><b>Mỗi bạn hỗ trợ đăng nhập VAM OS trên điện thoại của mình.</b></li>
     <li><b>Mở trang chi tiết sự kiện</b> của đúng buổi hôm đó.</li>
     <li><b>Bấm <span class="btn">Mở máy quét điểm danh</span>.</b></li>
-    <li><b>Chọn <span class="field">Trạm quét</span></b> — xem mục 7.3.</li>
+    <li><b>Chọn <span class="field">Lần quét</span></b> của điểm mình đứng — xem mục 7.3.</li>
     <li><b>Bấm <span class="btn">Bật camera quét</span></b> và cho phép trình duyệt dùng camera khi được hỏi.</li>
   </ol>
   <div class="warn">
@@ -601,19 +602,31 @@
   <p>Chĩa camera vào mã QR trên điện thoại người tham dự. Máy đọc xong sẽ hiện <b>tên người đó</b> trên màn hình — liếc một cái, đúng người thì mời vào.</p>
   <p><b>Nếu quét mãi không được:</b> hỏi người tham dự <b>mã 4 ký tự</b> trong thư xác nhận, gõ vào ô <span class="field">Hoặc gõ mã trên vé</span> ở phía dưới. Ô này nhận cả mã 4 ký tự lẫn mã dài đầy đủ.</p>
 
-  <h3>7.3 · Trạm quét — dùng cho hoạt động bên lề</h3>
-  <p>Cùng một mã QR quét được ở nhiều điểm khác nhau trong sự kiện. Mỗi lần quét được ghi lại kèm tên trạm:</p>
+  <h3>7.3 · Các lần quét — mỗi sự kiện thiết lập riêng</h3>
+  <p>Người tham dự chỉ có <b>một mã QR</b> — trong thư xác nhận, hoặc ảnh đã lưu bằng nút <span class="btn">Lưu ảnh mã QR</span> trên trang vé. Cùng mã đó được quét ở nhiều điểm trong sự kiện. Mỗi điểm là một <b>lần quét</b>: <i>Quét lần 1</i>, <i>Quét lần 2</i>… tối đa 20 lần, mỗi lần chọn một mục:</p>
   <table>
-    <tr><td class="k">Cửa vào</td><td><b>Trạm duy nhất tính là đã tham dự.</b> Dùng cho bàn đón khách.</td></tr>
-    <tr><td class="k">Booth chương trình</td><td>Ghi nhận có ghé gian của chương trình.</td></tr>
-    <tr><td class="k">Booth đối tác</td><td>Ghi nhận có ghé gian đối tác.</td></tr>
-    <tr><td class="k">Khu trải nghiệm</td><td>Ghi nhận có tham gia hoạt động trải nghiệm.</td></tr>
+    <tr><td class="k">Check in</td><td>Bàn đón khách ở cửa.</td></tr>
+    <tr><td class="k">Check quầy đổi quà</td><td>Ghi nhận đã nhận quà.</td></tr>
+    <tr><td class="k">Check quầy trải nghiệm</td><td>Ghi nhận đã tham gia hoạt động trải nghiệm.</td></tr>
+    <tr><td class="k">Check talkshow</td><td>Ghi nhận đã vào talkshow.</td></tr>
+    <tr><td class="k">Check seminar</td><td>Ghi nhận đã vào seminar.</td></tr>
+    <tr><td class="k">Check out</td><td>Ghi nhận lúc ra về.</td></tr>
   </table>
-  <div class="stop">
-    <b>Chọn đúng trạm trước khi quét người đầu tiên</b>
-    Bàn đón khách phải để <b>Cửa vào</b>. Nếu để nhầm sang một trạm khác, những người đã quét sẽ <b>không</b> được tính là có mặt, dù máy vẫn kêu bíp bình thường.
+  <p><b>Ai thiết lập:</b> người sửa được sự kiện (Super Admin, Admin, Core team), ở phần <span class="field">Các lần quét mã QR</span> ngay dưới ô <span class="field">Dùng mã QR check-in</span> trong form tạo hoặc sửa sự kiện. Bấm <span class="btn">+ Thêm lần quét</span> để thêm, nút ↑ ↓ để đổi thứ tự, <span class="btn">Xoá</span> để bỏ. Một mục dùng được nhiều lần, ví dụ hai talkshow. Sự kiện chưa ai thiết lập có đúng một lần quét là Check in.</p>
+  <p><b>Ví dụ:</b> sự kiện chỉ cần điểm danh lúc ra về thì để đúng một lần — <i>Quét lần 1 · Check out</i>. Sự kiện có quầy quà thì có thể là <i>Quét lần 1 · Check in</i>, <i>Quét lần 2 · Check quầy đổi quà</i>, <i>Quét lần 3 · Check out</i>.</p>
+  <p><b>Bạn hỗ trợ</b> chỉ chọn lần quét của điểm mình đứng; máy quét chỉ hiện đúng danh sách của sự kiện đó, không thêm hay đổi được. Máy nhớ lần quét đã chọn, tải lại trang không bị đổi.</p>
+  <div class="note">
+    <b>Được quét ở bất kỳ lần nào cũng tính là đã tham dự</b>
+    Ô <b>Đã check-in</b> tăng ngay ở lần quét đầu tiên của mỗi người, dù đó là Check in, quầy quà hay Check out. Thời điểm check-in là giờ của lần quét đầu tiên; các lần quét sau không ghi đè.
   </div>
-  <p>Cách dùng thực tế: mỗi bạn hỗ trợ đứng một điểm và chọn đúng trạm của điểm đó. Cuối buổi bạn biết được ai đã đi qua những đâu — dùng cho thể lệ tích điểm, quà tặng, hoặc báo cáo với đối tác.</p>
+  <div class="warn">
+    <b>Màn hình vàng: "Người này chưa được quét Check in"</b>
+    Sự kiện có lần Check in mà người tới điểm khác chưa qua Check in thì lượt quét <b>vẫn được ghi</b>, nhưng máy hiện màu vàng để bạn tự quyết — ví dụ mời họ quay lại bàn đón khách.
+  </div>
+  <div class="stop">
+    <b>Sửa các lần quét khi sự kiện đang diễn ra</b>
+    Mọi bạn hỗ trợ phải tải lại trang máy quét để thấy danh sách mới. Máy chưa tải lại mà quét vào một lần quét vừa bị bỏ sẽ báo lỗi và không ghi. Các lượt đã quét trước đó vẫn giữ nguyên.
+  </div>
 
   <h3>7.4 · Điểm danh thủ công</h3>
   <p>Vào <span class="btn">Quản lý tham gia</span> để chỉnh trạng thái từng người bằng tay, hoặc thêm người vào danh sách. Dùng cho trường hợp khách vãng lai, hoặc khi cần sửa lại một trường hợp đặc biệt.</p>
@@ -629,12 +642,12 @@
     <div><b>Tổng đăng ký</b>Mọi đơn chưa huỷ</div>
     <div><b>Giữ ghế</b>Đã đăng ký + đã xác nhận + chờ duyệt</div>
     <div><b>Danh sách chờ</b>Đăng ký khi đã hết chỗ</div>
-    <div><b>Đã check-in</b>Đã quét ở Cửa vào</div>
+    <div><b>Đã check-in</b>Đã được quét ít nhất một lần</div>
     <div><b>Vãng lai</b>Tới thẳng, không đăng ký trước</div>
   </div>
 
   <p><b>Ô Sức chứa</b> ngay bên trên hiển thị dạng <i>45 / 100 ghế</i> để bạn biết còn bao nhiêu chỗ.</p>
-  <p><b>Số lượt quét theo từng trạm</b> hiện riêng bên dưới, cho biết mỗi điểm đã đón bao nhiêu lượt.</p>
+  <p><b>Số lượt theo từng lần quét</b> hiện riêng bên dưới, đúng thứ tự đã thiết lập — kể cả lần quét chưa có ai: <i>Quét lần 3 · Check out: 0</i> nghĩa là chưa ai ra về.</p>
   <p><b>Danh sách đăng ký &amp; check-in</b> ở cuối trang liệt kê từng người kèm trạng thái, có gắn nhãn màu cho người vãng lai và người trong danh sách chờ.</p>
 
   <div class="note">
@@ -649,13 +662,13 @@
   <p class="lead">Dữ liệu đã nằm sẵn trong hệ thống, không phải gõ lại từ giấy.</p>
 
   <h3>Danh sách người có mặt</h3>
-  <p>Mở trang chi tiết sự kiện, kéo xuống <b>Danh sách đăng ký &amp; check-in</b>. Những người có trạng thái <b>Đã check-in</b> là những người đã được quét ở trạm <b>Cửa vào</b>.</p>
+  <p>Mở trang chi tiết sự kiện, kéo xuống <b>Danh sách đăng ký &amp; check-in</b>. Những người có trạng thái <b>Đã check-in</b> là những người đã được quét ít nhất một lần, ở bất kỳ lần quét nào. Cần biết ai đã Check out hay đã nhận quà thì xem cột <b>Các lần quét</b> trong file tải về.</p>
   <p>Đây chính là danh sách dùng để gửi đề nghị cộng điểm rèn luyện cho sinh viên, vì nó là bằng chứng có mặt thật chứ không phải danh sách đăng ký.</p>
 
   <h4>Tải danh sách về máy</h4>
   <p>Ở hàng nút đầu trang chi tiết sự kiện, bấm <span class="btn">Tải danh sách (CSV)</span>. File mở thẳng được bằng Excel hoặc Google Sheets.</p>
   <p>Với chuỗi nhiều buổi, có thêm nút <span class="btn">Tải cả N buổi (CSV)</span> — gộp mọi buổi vào một file, kèm cột <b>Buổi</b> để lọc.</p>
-  <p>File gồm 20 cột: buổi, thời gian, họ tên, email, số điện thoại, trạng thái đăng ký, trạng thái tham dự, đã check-in, thời điểm check-in, vãng lai, MSSV, mã mentee, trường, ngành học, vai trò tự khai, ghi chú, câu hỏi cho diễn giả, mã vé, mã dự phòng, thời điểm đăng ký.</p>
+  <p>File gồm 21 cột: buổi, thời gian, họ tên, email, số điện thoại, trạng thái đăng ký, trạng thái tham dự, đã check-in, thời điểm check-in, các lần quét (kèm giờ), vãng lai, MSSV, mã mentee, trường, ngành học, vai trò tự khai, ghi chú, câu hỏi cho diễn giả, mã vé, mã dự phòng, thời điểm đăng ký.</p>
   <p>Tên file có sẵn tên sự kiện và ngày, ví dụ <code>dang-ky_mentor-orientation_20-09-2026.csv</code> — tải ba buổi về cùng một thư mục vẫn phân biệt được.</p>
   <div class="stop">
     <b>File này mang dữ liệu cá nhân của hàng trăm người</b>
@@ -663,8 +676,8 @@
     Đừng gửi nguyên file qua chat nhóm hay email cá nhân. Cần chia sẻ thì xoá bớt cột không dùng tới trước, và chỉ gửi cho người thật sự cần. Chỉ tài khoản có quyền vận hành mùa đó mới tải được — nhưng file thì đi tới đâu là do bạn.
   </div>
 
-  <h3>Lượt ghé các trạm</h3>
-  <p>Số lượt theo từng trạm hiện ngay trên trang chi tiết. Dùng cho báo cáo với đối tác về lưu lượng ghé gian hàng.</p>
+  <h3>Lượt quét theo từng lần quét</h3>
+  <p>Số lượt của từng lần quét hiện ngay trên trang chi tiết: bao nhiêu người đã nhận quà, vào talkshow, hay ở tới lúc Check out. Muốn biết từng người đã qua những lần quét nào, lúc mấy giờ, xem cột <b>Các lần quét</b> trong file CSV.</p>
 
   <h3>Dọn dẹp</h3>
   <ul>
@@ -682,7 +695,8 @@
     <tr><td class="k">Không mở được camera quét</td><td>Trình duyệt chưa được cấp quyền camera. Vào phần cài đặt quyền của trình duyệt và bật lại. Trong lúc chờ, dùng ô gõ mã 4 ký tự để không tắc hàng.</td></tr>
     <tr><td class="k">Bạn hỗ trợ báo không mở được máy quét</td><td>Kiểm hai điều: tài khoản của bạn đó có vai trò <b>Support team</b> chưa, và đã được thêm vào danh sách hỗ trợ của <b>đúng buổi hôm đó</b> chưa. Quyền gắn theo từng buổi.</td></tr>
     <tr><td class="k">Người tham dự không tìm thấy thư xác nhận</td><td>Nhờ họ kiểm mục Spam / Quảng cáo. Nếu vẫn không có, vào <b>Quản lý tham gia</b> điểm danh thủ công cho người đó.</td></tr>
-    <tr><td class="k">Quét xong nhưng ô "Đã check-in" không tăng</td><td>Nhiều khả năng máy quét đang để nhầm trạm. Chỉ trạm <b>Cửa vào</b> mới tính là đã tham dự. Đổi lại trạm và quét lại những người vừa qua cửa.</td></tr>
+    <tr><td class="k">Máy quét báo lần quét "không còn trong thiết lập"</td><td>Lần quét đó vừa bị bỏ khỏi thiết lập của sự kiện, trong khi trang máy quét vẫn là bản mở từ trước. Tải lại trang máy quét, chọn lại lần quét, rồi quét lại người vừa báo lỗi — lượt đó chưa được ghi.</td></tr>
+    <tr><td class="k">Máy quét không có lần quét mình cần</td><td>Danh sách lần quét do người sửa được sự kiện thiết lập (mục 7.3). Nhờ Core team hoặc Admin thêm vào form sự kiện, rồi tải lại trang máy quét.</td></tr>
     <tr><td class="k">Hiện cảnh báo đỏ khi thêm buổi mới</td><td>Buổi bạn định thêm trùng khít giờ và địa điểm với một buổi đã có. Kiểm lại ngày giờ, hoặc xoá buổi cũ trước.</td></tr>
     <tr><td class="k">Không xoá được một buổi</td><td>Buổi đó đã có người đăng ký. Dùng <b>Huỷ sự kiện</b> thay vì xoá — vé đã gửi đi vẫn trỏ về buổi này.</td></tr>
     <tr><td class="k">Ngày hiển thị sai thứ tự</td><td>Toàn hệ thống dùng ngày/tháng/năm. Nếu bạn đang gõ, hãy đọc dòng xanh xác nhận bên dưới ô nhập — nó ghi rõ thứ và ngày bằng chữ.</td></tr>
@@ -706,7 +720,7 @@
     <tr><td class="k">Giữ ghế</td><td>Số người đang thật sự chiếm chỗ: đã đăng ký, đã xác nhận, và đang chờ duyệt. Không tính danh sách chờ.</td></tr>
     <tr><td class="k">Danh sách chờ</td><td>Người đăng ký khi đã hết chỗ. Chưa có ghế, nhưng đã ở trong hệ thống để gọi khi có người huỷ.</td></tr>
     <tr><td class="k">Vãng lai</td><td>Người tới dự mà không đăng ký trước.</td></tr>
-    <tr><td class="k">Trạm quét</td><td>Điểm quét mã trong sự kiện. Chỉ trạm <b>Cửa vào</b> tính là đã tham dự.</td></tr>
+    <tr><td class="k">Lần quét</td><td>Một điểm quét mã QR trong sự kiện — Quét lần 1, Quét lần 2… mỗi lần một mục như Check in, quầy đổi quà, Check out. Mỗi sự kiện thiết lập riêng; quét ở lần nào cũng tính là đã tham dự.</td></tr>
     <tr><td class="k">Mã dự phòng</td><td>Bốn ký tự in trong thư xác nhận, gõ tay thay cho quét QR khi máy không đọc được.</td></tr>
     <tr><td class="k">Người hỗ trợ điểm danh</td><td>Tài khoản Support team được cấp quyền mở máy quét của <b>một buổi cụ thể</b>.</td></tr>
     <tr><td class="k">Huỷ sự kiện</td><td>Đánh dấu buổi không diễn ra nữa nhưng giữ nguyên toàn bộ dữ liệu. Khác với xoá.</td></tr>

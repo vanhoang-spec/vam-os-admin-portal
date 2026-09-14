@@ -18,7 +18,8 @@ import { EventPlaceBlock } from "../event-place";
 import { listEventSupporters, listSupporterCandidates } from "@/lib/event-supporters";
 import { SupportersPanel } from "./supporters-panel";
 import { countScansByStation } from "@/lib/event-checkin";
-import { stationLabel, usesQrCheckin } from "@/lib/event-checkin-code";
+import { usesQrCheckin } from "@/lib/event-checkin-code";
+import { buildCheckinSteps, checkinStepsOf, summarizeStepCounts } from "@/lib/event-checkin-steps";
 import { LiveRefresh } from "./live-refresh";
 import { AddSessionPanel } from "./add-session-panel";
 
@@ -327,14 +328,22 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
         <KpiCard label="Vãng lai" value={walkInRegistrations.length} />
       </div>
 
-      {scanCounts.counts.length ? (
+      {/* Mọi lần quét đang thiết lập đều hiện, kể cả khi còn 0: "Check out: 0" nghĩa
+          là chưa ai về. Tắt QR thì chỉ còn hiện lượt quét cũ, nếu có. Đọc hỏng thì
+          không vẽ gì, thay vì vẽ một dãy số 0 trông như thật. */}
+      {!scanCounts.error && (qrEnabled || scanCounts.counts.length > 0) ? (
         <div className="mt-4 flex flex-wrap gap-2">
-          {scanCounts.counts.map((row) => (
+          {summarizeStepCounts(
+            qrEnabled ? buildCheckinSteps(checkinStepsOf(detail.event)) : [],
+            scanCounts.counts
+          ).map((row) => (
             <span
               key={row.station}
-              className="rounded-full border border-vam-line bg-white px-3 py-1 text-sm text-vam-ink"
+              className={`rounded-full border border-vam-line px-3 py-1 text-sm ${
+                row.configured ? "bg-white text-vam-ink" : "bg-slate-50 text-slate-500"
+              }`}
             >
-              {stationLabel(row.station)}:{" "}
+              {row.label}:{" "}
               <strong className="tabular-nums text-vam-green">{row.total}</strong>
             </span>
           ))}

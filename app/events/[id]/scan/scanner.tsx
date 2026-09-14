@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import jsQR from "jsqr";
-import { DEFAULT_STATIONS, ENTRANCE_STATION } from "@/lib/event-checkin-code";
 import {
   initialScanActionState,
   type ScanActionState
@@ -12,18 +12,32 @@ import { recordEventScanAction } from "@/app/actions/event-scan";
 /** Bao lâu thì cho phép quét lại CÙNG một mã, tính bằng mili giây. */
 const SAME_CODE_COOLDOWN_MS = 3000;
 
+/** Một lần quét, đúng những gì máy quét cần: khoá gửi lên và chữ hiện ra. */
+export type ScannerStep = { station: string; label: string };
+
+function rememberKey(eventId: string) {
+  return `vam-os:scan-step:${eventId}`;
+}
+
 /**
  * Máy quét của event supporter.
  *
  * ---------------------------------------------------------------------------
- * LUỒNG THẬT TẠI CỬA
+ * LUỒNG THẬT TẠI SỰ KIỆN
  * ---------------------------------------------------------------------------
- * Người tham dự mở email, giơ mã QR trên màn hình điện thoại. Supporter chĩa
- * camera vào, nghe một tiếng bíp, liếc màn hình thấy tên, cho vào. Cả thao tác
- * dưới hai giây và không ai gõ gì.
+ * Người tham dự mở email hoặc ảnh đã lưu, giơ mã QR trên màn hình điện thoại.
+ * Supporter chĩa camera vào, nghe một tiếng bíp, liếc màn hình thấy tên, cho qua.
+ * Cả thao tác dưới hai giây và không ai gõ gì.
  *
  * Vì thế màn hình này ưu tiên đúng ba thứ: khung hình lớn, kết quả to và rõ
  * màu, và không có bước xác nhận nào chen vào giữa.
+ *
+ * ---------------------------------------------------------------------------
+ * LẦN QUÉT
+ * ---------------------------------------------------------------------------
+ * Danh sách lần quét là của RIÊNG sự kiện này, do BTC thiết lập trong form sự
+ * kiện. Người hỗ trợ chỉ chọn lần quét của điểm mình đứng; họ không thêm hay
+ * đổi được danh sách ở đây.
  *
  * ---------------------------------------------------------------------------
  * VÌ SAO CÓ CẢ HAI ĐƯỜNG GIẢI MÃ
@@ -39,17 +53,60 @@ const SAME_CODE_COOLDOWN_MS = 3000;
  * giấy. Mã được thiết kế để gõ được: mười ký tự, không có `0`/`O`/`1`/`I`/`L`.
  * Một máy quét không có đường lùi là một máy quét sẽ chặn cửa vào.
  */
-export function EventScanner({ eventId }: { eventId: string }) {
+export function EventScanner({
+  eventId,
+  steps,
+  settingsHref = null
+}: {
+  eventId: string;
+  steps: ScannerStep[];
+  /** Đường tới phần thiết lập các lần quét — chỉ truyền cho người sửa được sự kiện. */
+  settingsHref?: string | null;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [scanning, setScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [station, setStation] = useState(ENTRANCE_STATION);
+  const [station, setStation] = useState(steps[0]?.station ?? "");
   const [state, setState] = useState<ScanActionState>(initialScanActionState);
   const [busy, setBusy] = useState(false);
   const [manual, setManual] = useState("");
+
+  const stepsKey = steps.map((step) => step.station).join("|");
+
+  // Nhớ lần quét đã chọn của sự kiện này, trên chính máy này.
+  //
+  // Tải lại trang giữa buổi — mạng chập, lỡ tay vuốt — mà lần quét quay về Quét
+  // lần 1 thì người đứng ở quầy Check out quét cả hàng người thành Check in, và máy
+  // vẫn kêu bíp bình thường. Lần quét đã nhớ không còn trong thiết lập thì về lần
+  // quét đầu tiên.
+  useEffect(() => {
+    const stations = stepsKey ? stepsKey.split("|") : [];
+    let remembered: string | null = null;
+    try {
+      remembered = window.localStorage.getItem(rememberKey(eventId));
+    } catch {
+      remembered = null;
+    }
+    setStation((current) => {
+      if (remembered && stations.includes(remembered)) return remembered;
+      return stations.includes(current) ? current : stations[0] ?? "";
+    });
+  }, [eventId, stepsKey]);
+
+  const chooseStation = useCallback(
+    (value: string) => {
+      setStation(value);
+      try {
+        window.localStorage.setItem(rememberKey(eventId), value);
+      } catch {
+        // Trình duyệt chặn bộ nhớ (chế độ riêng tư): vẫn quét được, chỉ không nhớ.
+      }
+    },
+    [eventId]
+  );
 
   // Camera đọc được cùng một mã hàng chục lần mỗi giây khi nó nằm yên trong
   // khung. Không chặn lại thì mỗi lần giơ vé là hàng chục lượt gọi máy chủ.
@@ -58,6 +115,8 @@ export function EventScanner({ eventId }: { eventId: string }) {
   const stationRef = useRef(station);
   useEffect(() => {
     stationRef.current = station;
+    // Đổi lần quét thì cùng một mã quét ngay được ở lần quét mới.
+    lastRef.current = { code: "", at: 0 };
   }, [station]);
 
   const submit = useCallback(
@@ -170,45 +229,69 @@ export function EventScanner({ eventId }: { eventId: string }) {
   const tone =
     state.tone === "success"
       ? "border-vam-green bg-vam-mint text-vam-ink"
-      : state.tone === "repeat"
-        ? "border-amber-300 bg-amber-50 text-amber-900"
-        : "border-red-300 bg-red-50 text-red-800";
+      : state.tone === "warning"
+        ? "border-amber-500 bg-amber-50 text-amber-900"
+        : state.tone === "repeat"
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : "border-red-300 bg-red-50 text-red-800";
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block">
-          <span className="text-xs font-medium uppercase text-slate-500">Trạm quét</span>
-          <select
-            value={station}
-            onChange={(event) => setStation(event.target.value)}
-            className="mt-1 rounded-md border border-vam-line bg-white px-3 py-2 text-sm"
-          >
-            {DEFAULT_STATIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-end gap-3">
+          {steps.length > 1 ? (
+            <label className="block min-w-0 max-w-full">
+              <span className="text-xs font-medium uppercase text-slate-500">Lần quét</span>
+              <select
+                value={station}
+                onChange={(event) => chooseStation(event.target.value)}
+                className="mt-1 block max-w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm"
+              >
+                {steps.map((step) => (
+                  <option key={step.station} value={step.station}>
+                    {step.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="min-w-0 max-w-full">
+              <span className="text-xs font-medium uppercase text-slate-500">Lần quét</span>
+              <p className="mt-1 rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-sm text-vam-ink">
+                {steps[0]?.label ?? "—"}
+              </p>
+            </div>
+          )}
 
-        {scanning ? (
-          <button
-            type="button"
-            onClick={stop}
-            className="rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-semibold text-vam-ink hover:bg-slate-50"
-          >
-            Tắt camera
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void start()}
-            className="rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
-          >
-            Bật camera quét
-          </button>
-        )}
+          {scanning ? (
+            <button
+              type="button"
+              onClick={stop}
+              className="rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-semibold text-vam-ink hover:bg-slate-50"
+            >
+              Tắt camera
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void start()}
+              className="rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
+            >
+              Bật camera quét
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-500">
+          {steps.length > 1
+            ? "Chọn đúng lần quét của điểm bạn đứng trước khi quét người đầu tiên."
+            : "Sự kiện này chỉ có một lần quét."}{" "}
+          {settingsHref ? (
+            <Link href={settingsHref} className="font-medium text-vam-green hover:underline">
+              Thiết lập các lần quét
+            </Link>
+          ) : null}
+        </p>
       </div>
 
       {cameraError ? (

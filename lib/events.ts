@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
 import { checkinCodeUrl, usesQrCheckin } from "@/lib/event-checkin-code";
+import { DEFAULT_CHECKIN_STEPS, parseCheckinStepsInput, type StepsInput } from "@/lib/event-checkin-steps";
 import { chooseSession } from "@/lib/event-session-choice";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
@@ -190,6 +191,8 @@ export type EventInput = {
   waitlist_enabled?: unknown;
   allow_walk_in?: unknown;
   qr_checkin_enabled?: unknown;
+  /** Các lần quét mã QR. Chỉ có mặt khi form gửi phần thiết lập — xem `parseCheckinStepsInput`. */
+  checkin_steps?: unknown;
   checkin_mode?: unknown;
   checkin_window_enabled?: unknown;
   checkin_opens_at?: unknown;
@@ -2421,6 +2424,14 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
   const legacyConflict = await legacyReferenceConflict(client, clean(input.legacy_event_temp_id), null);
   if (legacyConflict) return { ok: false, message: legacyConflict };
 
+  // Vắng mặt — một đường tạo không có phần thiết lập các lần quét — là mặc định một
+  // lần Check in, đúng như cột trong database. Có mặt thì cả danh sách phải hợp lệ:
+  // bỏ lặng lẽ một ô là dịch số của mọi lần quét phía sau.
+  const checkinSteps: StepsInput = Object.prototype.hasOwnProperty.call(input, "checkin_steps")
+    ? parseCheckinStepsInput(input.checkin_steps)
+    : { ok: true, steps: DEFAULT_CHECKIN_STEPS.slice() };
+  if (!checkinSteps.ok) return { ok: false, message: checkinSteps.message };
+
   const payload: JsonRecord = {
     season_id: seasonId,
     intake_batch_id: intakeBatchId,
@@ -2445,6 +2456,7 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     waitlist_enabled: String(input.waitlist_enabled) === "true",
     allow_walk_in: String(input.allow_walk_in) !== "false",
     qr_checkin_enabled: String(input.qr_checkin_enabled) !== "false",
+    checkin_steps: checkinSteps.steps,
     checkin_mode: clean(input.checkin_mode) ?? "open",
     checkin_window_enabled: String(input.checkin_window_enabled) === "true",
     checkin_opens_at: parseDateTime(clean(input.checkin_opens_at)),
@@ -2695,6 +2707,14 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   }
   if (Object.prototype.hasOwnProperty.call(input, "qr_checkin_enabled")) {
     updates.qr_checkin_enabled = String(input.qr_checkin_enabled) !== "false";
+  }
+  // Chỉ ghi khi form có gửi phần thiết lập các lần quét — đường ghi hẹp: một form
+  // không có phần này không được đổi các lần quét BTC đã đặt. Có gửi thì cả danh
+  // sách phải hợp lệ, và sai thì không lưu gì của lượt này.
+  if (Object.prototype.hasOwnProperty.call(input, "checkin_steps")) {
+    const checkinSteps = parseCheckinStepsInput(input.checkin_steps);
+    if (!checkinSteps.ok) return { ok: false, message: checkinSteps.message };
+    updates.checkin_steps = checkinSteps.steps;
   }
   if (Object.prototype.hasOwnProperty.call(input, "show_student_id_field")) {
     updates.show_student_id_field = String(input.show_student_id_field) !== "false";

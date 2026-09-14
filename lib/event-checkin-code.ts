@@ -106,72 +106,8 @@ export function readCheckinCode(scanned: unknown): string | null {
   return isCheckinCode(candidate) ? candidate : null;
 }
 
-/**
- * Trạm quét.
- *
- * `entrance` là cửa vào và là trạm duy nhất tính là "đã tham dự". Các trạm
- * khác — booth chương trình, booth nhà tài trợ — dùng chung mã đó và được đếm
- * riêng, nên quét ở booth không bao giờ biến một người vắng mặt thành có mặt.
- */
-export const ENTRANCE_STATION = "entrance";
-
-export const DEFAULT_STATIONS: Array<{ value: string; label: string }> = [
-  { value: ENTRANCE_STATION, label: "Cửa vào (tính là đã tham dự)" },
-  { value: "booth_program", label: "Booth chương trình" },
-  { value: "booth_partner", label: "Booth đối tác" },
-  { value: "workshop", label: "Khu trải nghiệm" }
-];
-
-export function stationLabel(value: unknown): string {
-  const raw = String(value ?? "").trim();
-  return DEFAULT_STATIONS.find((station) => station.value === raw)?.label || raw || "—";
-}
-
-export type StationInput = { ok: true; station: string } | { ok: false; message: string };
-
-/**
- * Chuẩn hoá tên trạm.
- *
- * Cho phép trạm ngoài danh sách: mỗi sự kiện có các hoạt động bên lề riêng, và
- * một danh sách đóng sẽ chặn đúng những sự kiện làm nhiều thứ nhất. Nhưng vẫn
- * ràng buộc hình dạng, vì tên trạm là khoá của phép đếm — `Booth A` và
- * `booth a` mà thành hai trạm thì bảng điều khiển nói sai.
- */
-export function normalizeStation(value: unknown): StationInput {
-  const raw = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
-  if (!raw) return { ok: false, message: "Chưa chọn trạm quét." };
-  if (raw.length > 60) return { ok: false, message: "Tên trạm quá dài." };
-  if (!/^[a-z0-9_]+$/.test(raw)) {
-    return { ok: false, message: "Tên trạm chỉ gồm chữ không dấu, số và dấu gạch dưới." };
-  }
-  return { ok: true, station: raw };
-}
-
-export type ScanBadge = { station: string; label: string; scannedAt: string };
-
-/**
- * Huy hiệu của một người: mỗi trạm đã quét là một huy hiệu.
- *
- * Trùng trạm chỉ tính một lần, giữ lần quét ĐẦU tiên — lần thứ hai thường là
- * quét lại vì máy không đọc được, và mốc thời gian có ý nghĩa là lúc người đó
- * thật sự tới trạm.
- */
-export function collectBadges(
-  scans: Array<{ station: string; scannedAt: string }>
-): ScanBadge[] {
-  const earliest = new Map<string, string>();
-
-  for (const scan of scans) {
-    const station = String(scan.station ?? "").trim();
-    if (!station) continue;
-    const current = earliest.get(station);
-    if (!current || scan.scannedAt < current) earliest.set(station, scan.scannedAt);
-  }
-
-  return Array.from(earliest.entries())
-    .map(([station, scannedAt]) => ({ station, label: stationLabel(station), scannedAt }))
-    .sort((a, b) => a.scannedAt.localeCompare(b.scannedAt));
-}
+// Quét ở đâu, quét lần mấy, nhãn và huy hiệu của từng lần quét: xem
+// `lib/event-checkin-steps.ts`. Module này chỉ lo chính cái mã.
 
 /**
  * Độ dài mã ngắn — đường lùi khi máy quét chịu thua.

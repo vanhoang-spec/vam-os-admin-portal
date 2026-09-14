@@ -3,9 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canScanEvent } from "@/lib/event-supporters";
-import { stationLabel } from "@/lib/event-checkin-code";
 import { recordScan } from "@/lib/event-checkin";
-import type { ScanActionState } from "@/lib/event-scan-action-types";
+import { MISSING_CHECK_IN_NOTE, type ScanActionState } from "@/lib/event-scan-action-types";
 
 /**
  * Ghi nhận một lần quét mã QR tại sự kiện.
@@ -13,10 +12,6 @@ import type { ScanActionState } from "@/lib/event-scan-action-types";
  * Gọi từ máy của event supporter, mỗi lần camera đọc được một mã. Vì thế nó
  * phải trả lời NHANH và trả lời RÕ: người bấm đang đứng trước một hàng người,
  * và họ chỉ liếc màn hình một cái rồi cho người tiếp theo vào.
- *
- * Cổng quyền hiện dùng chung với các thao tác sự kiện khác. Vai trò "event
- * supporter" gắn theo từng buổi là lát tiếp theo; tới lúc đó cổng này nới ra ở
- * đúng một chỗ.
  */
 export async function recordEventScanAction(
   _previousState: ScanActionState,
@@ -61,13 +56,17 @@ export async function recordEventScanAction(
 
     // Quét lại không phải lỗi — máy không đọc được lần đầu, hàng người dồn
     // lại, người quét bấm hai lần. Màu vàng chứ không phải màu đỏ, và vẫn hiện
-    // tên để người quét biết "đúng người này, đã vào rồi".
+    // tên để người quét biết "đúng người này, đã qua rồi".
+    const said = result.repeat
+      ? `${result.fullName} đã được quét ở ${result.stationLabel} rồi.`
+      : `${result.fullName} — ${result.stationLabel}.`;
+
+    // Chưa Check in thì vẫn ghi nhận, chỉ nhắc: người vào cửa phụ hay bị quét sót
+    // ở cửa vẫn phải nhận được quà, vẫn Check out được.
     return {
       ok: true,
-      tone: result.repeat ? "repeat" : "success",
-      message: result.repeat
-        ? `${result.fullName} đã được quét ở ${stationLabel(result.station)} rồi.`
-        : `${result.fullName} — ${stationLabel(result.station)}.`,
+      tone: result.repeat ? "repeat" : result.missingCheckIn ? "warning" : "success",
+      message: result.missingCheckIn ? `${said} ${MISSING_CHECK_IN_NOTE}` : said,
       fullName: result.fullName,
       badges: result.badges.map((badge) => badge.label)
     };

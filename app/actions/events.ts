@@ -77,6 +77,11 @@ export async function createEventAction(
     // pass explicit "true"/"false" so the lib function never receives undefined.
     allow_walk_in: formData.has("allow_walk_in") ? "true" : "false",
     qr_checkin_enabled: formData.has("qr_checkin_enabled") ? "true" : "false",
+    // Chỉ gửi khi form có phần thiết lập các lần quét. Hàm ghi đọc "có khoá này"
+    // là "BTC vừa lưu danh sách mới"; một form không có phần đó không được đổi nó.
+    ...(formData.has("checkin_steps_present")
+      ? { checkin_steps: formData.getAll("checkin_steps").map((value) => String(value)) }
+      : {}),
     checkin_mode: formText(formData, "checkin_mode"),
     checkin_window_enabled: formText(formData, "checkin_window_enabled"),
     checkin_opens_at: formText(formData, "checkin_opens_at"),
@@ -160,6 +165,11 @@ export async function updateEventAction(
     // pass explicit "true"/"false" so the lib function never receives undefined.
     allow_walk_in: formData.has("allow_walk_in") ? "true" : "false",
     qr_checkin_enabled: formData.has("qr_checkin_enabled") ? "true" : "false",
+    // Chỉ gửi khi form có phần thiết lập các lần quét. Hàm ghi đọc "có khoá này"
+    // là "BTC vừa lưu danh sách mới"; một form không có phần đó không được đổi nó.
+    ...(formData.has("checkin_steps_present")
+      ? { checkin_steps: formData.getAll("checkin_steps").map((value) => String(value)) }
+      : {}),
     checkin_mode: formText(formData, "checkin_mode"),
     checkin_window_enabled: formText(formData, "checkin_window_enabled"),
     checkin_opens_at: formText(formData, "checkin_opens_at"),

@@ -356,6 +356,11 @@ export type Event = JsonRecord & {
    */
   qr_checkin_enabled?: boolean | null;
   /**
+   * Các lần quét mã QR theo thứ tự: Quét lần 1, Quét lần 2… mỗi phần tử một mục.
+   * Đọc qua `checkinStepsOf` — vắng hay rỗng là một lần Check in.
+   */
+  checkin_steps?: string[] | null;
+  /**
    * Check-in mode:
    *   "open"                 — anyone with the link may check in (default)
    *   "registration_required"— must have a non-cancelled registration

@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { CSV_UTF8_BOM } from "@/lib/csv-export";
+import { listEventScans } from "@/lib/event-checkin";
+import { buildCheckinSteps, checkinStepsOf } from "@/lib/event-checkin-steps";
 import {
   buildEventRegistrationCsv,
   exportFileName,
+  type ExportScan,
   type ExportSession
 } from "@/lib/event-export";
 import { isValidUuid } from "@/lib/events";
@@ -81,8 +84,9 @@ export async function GET(request: Request) {
   const seriesId = String(event.series_id ?? "").trim();
   const exportSeries = wholeSeries && Boolean(seriesId);
 
-  // Các buổi cần lấy: một buổi, hoặc cả chuỗi.
-  const sessionQuery = client.from("events").select("id, series_index, starts_at");
+  // Các buổi cần lấy: một buổi, hoặc cả chuỗi. Mỗi buổi mang các lần quét của
+  // riêng nó, để cột lịch sử quét nói đúng chữ trên máy quét của buổi đó.
+  const sessionQuery = client.from("events").select("id, series_index, starts_at, checkin_steps");
   const { data: sessionRows, error: sessionError } = exportSeries
     ? await sessionQuery.eq("series_id", seriesId).order("series_index", { ascending: true })
     : await sessionQuery.eq("id", eventId);
@@ -96,7 +100,8 @@ export async function GET(request: Request) {
     sessions.set(String(row.id), {
       id: String(row.id),
       seriesIndex: typeof row.series_index === "number" ? row.series_index : null,
-      startsAt: row.starts_at ? String(row.starts_at) : null
+      startsAt: row.starts_at ? String(row.starts_at) : null,
+      steps: buildCheckinSteps(checkinStepsOf(row))
     });
   }
 
@@ -116,9 +121,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Không đọc được danh sách đăng ký." }, { status: 500 });
   }
 
+  // Đọc lịch sử quét hỏng thì dừng hẳn, không xuất một cột trống: cột trống đọc
+  // như "không ai được quét", mà file này là thứ dùng để xét cộng điểm rèn luyện.
+  const scanResult = await listEventScans(ids);
+  if (scanResult.error) {
+    return NextResponse.json({ error: "Không đọc được lịch sử quét." }, { status: 500 });
+  }
+
+  const scans = new Map<string, ExportScan[]>();
+  for (const scan of scanResult.scans) {
+    const list = scans.get(scan.registrationId) ?? [];
+    list.push({ station: scan.station, scannedAt: scan.scannedAt });
+    scans.set(scan.registrationId, list);
+  }
+
   const csv = buildEventRegistrationCsv(
     (registrations ?? []) as Array<Record<string, unknown>>,
-    sessions
+    sessions,
+    scans
   );
   const filename = exportFileName(event.event_name, event.starts_at);
 

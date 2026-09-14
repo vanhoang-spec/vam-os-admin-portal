@@ -39,8 +39,10 @@ export default async function TicketPage(props: { params: Promise<{ code: string
   // thiếu origin là thiếu thật và phải nói ra.
   const origin = (await getPublicOrigin()) ?? "";
   const qr = await QRCode.toDataURL(checkinCodeUrl(origin, ticket.code), {
-    margin: 1,
-    width: 320
+    margin: 2,
+    // Đủ lớn để lưu thành ảnh rồi mở ra quét: ảnh lưu từ một mã nhỏ, lại bị thu
+    // nhỏ thêm trong thư viện ảnh, là mã camera ở cửa phải dí sát mới đọc được.
+    width: 640
   });
 
   return (
@@ -57,8 +59,21 @@ export default async function TicketPage(props: { params: Promise<{ code: string
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={qr} alt="Mã QR điểm danh" width={280} height={280} className="h-auto w-full max-w-[280px]" />
           <p className="font-mono text-lg tracking-[0.3em] text-vam-ink">{ticket.code}</p>
+          {/* Lưu thành ảnh để mở được cả khi ở cửa không có mạng, và không phải lục
+              lại hộp thư giữa hàng người. Một mã dùng cho mọi lần quét của cả buổi. */}
+          <a
+            href={qr}
+            download={`ve-${ticket.code}.png`}
+            className="rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
+          >
+            Lưu ảnh mã QR
+          </a>
           <p className="text-center text-sm text-slate-600">
-            Đưa mã này cho ban tổ chức quét khi tới sự kiện. Không cần gõ gì.
+            Đưa mã này cho ban tổ chức quét khi tới sự kiện. Không cần gõ gì. Cả buổi chỉ dùng một mã này, ở
+            mọi điểm quét.
+          </p>
+          <p className="text-center text-xs text-slate-500">
+            Nếu nút không lưu được ảnh, nhấn giữ vào mã QR rồi chọn lưu ảnh.
           </p>
         </div>
 
