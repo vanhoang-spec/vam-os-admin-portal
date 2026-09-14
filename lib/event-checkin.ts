@@ -2,15 +2,18 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import {
-  ENTRANCE_STATION,
   classifyScannedInput,
-  collectBadges,
   generateCheckinCode,
   generateShortCode,
-  normalizeStation,
-  readCheckinCode,
-  type ScanBadge
+  readCheckinCode
 } from "@/lib/event-checkin-code";
+import {
+  buildCheckinSteps,
+  checkinStepsOf,
+  collectBadges,
+  needsCheckInReminder,
+  type ScanBadge
+} from "@/lib/event-checkin-steps";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 /**
@@ -231,8 +234,22 @@ export async function getTicketByCode(
 }
 
 export type ScanOutcome =
-  | { ok: true; repeat: boolean; fullName: string; station: string; badges: ScanBadge[] }
-  | { ok: false; reason: "unreadable" | "not_found" | "wrong_event" | "cancelled" | "error"; message: string };
+  | {
+      ok: true;
+      repeat: boolean;
+      fullName: string;
+      station: string;
+      /** "Quét lần 2 · Check out" — đúng chữ trên máy quét. */
+      stationLabel: string;
+      badges: ScanBadge[];
+      /** Quét một lần khác mà người này chưa qua lần Check in nào của sự kiện. */
+      missingCheckIn: boolean;
+    }
+  | {
+      ok: false;
+      reason: "unreadable" | "not_found" | "wrong_event" | "cancelled" | "stale_step" | "error";
+      message: string;
+    };
 
 /**
  * Ghi nhận một lần quét.
@@ -274,9 +291,37 @@ export async function recordScan(input: {
     };
   }
 
-  const stationInput = normalizeStation(input.station ?? ENTRANCE_STATION);
-  if (!stationInput.ok) return { ok: false, reason: "error", message: stationInput.message };
-  const station = stationInput.station;
+  // Lần quét phải là một lần ĐANG CÓ trong thiết lập của sự kiện. Máy quét chỉ cho
+  // chọn trong danh sách, nhưng danh sách trên máy là bản đọc lúc mở trang: BTC sửa
+  // thiết lập giữa buổi thì máy đang mở vẫn gửi lần quét cũ. Ghi nó vào là tạo ra
+  // một trạm không ai thiết lập, đếm lệch khỏi mọi con số trên trang.
+  const { data: eventRow, error: eventError } = await client
+    .from("events")
+    .select("id, checkin_steps")
+    .eq("id", input.eventId)
+    .maybeSingle();
+
+  if (eventError) {
+    log("recordScan:event", eventError);
+    return { ok: false, reason: "error", message: VI_ERROR };
+  }
+  if (!eventRow) {
+    return { ok: false, reason: "not_found", message: "Không tìm thấy sự kiện." };
+  }
+
+  const steps = buildCheckinSteps(checkinStepsOf(eventRow as { checkin_steps?: unknown }));
+  const requested = String(input.station ?? "").trim();
+  // Không gửi lần quét nào (gọi từ một chỗ khác máy quét) thì là lần quét đầu tiên.
+  const step = requested ? steps.find((candidate) => candidate.station === requested) : steps[0];
+  if (!step) {
+    return {
+      ok: false,
+      reason: "stale_step",
+      message:
+        "Lần quét đang chọn không còn trong thiết lập của sự kiện. Tải lại trang máy quét rồi chọn lại lần quét."
+    };
+  }
+  const station = step.station;
 
   const lookup = client
     .from("event_registrations")
@@ -331,70 +376,141 @@ export async function recordScan(input: {
     return { ok: false, reason: "error", message: VI_ERROR };
   }
 
-  // Chỉ cửa vào mới là "đã tham dự". Quét ở booth không bao giờ biến một người
-  // vắng mặt thành có mặt.
-  if (station === ENTRANCE_STATION && !repeat) {
-    const { error: markError } = await client
-      .from("event_registrations")
-      .update({
-        attendance_status: "checked_in",
-        checked_in_at: new Date().toISOString(),
-        checkin_source: "admin_manual"
-      })
-      .eq("id", registrationId);
-    if (markError) log("recordScan:mark", markError);
-  }
+  // Mọi lần quét đều tính là đã tham dự — chủ dự án chốt 14/09/2026: được quét ở
+  // bất kỳ điểm nào trong sự kiện là đã có mặt, nên sự kiện chỉ có Check out vẫn
+  // đếm đúng người tham dự.
+  //
+  // Chỉ ghi khi CHƯA check-in: người Check in lúc 8 giờ rồi Check out lúc 11 giờ
+  // thì giờ check-in vẫn là 8 giờ. Ghi đè là mất đúng mốc dùng để xét có mặt từ
+  // đầu buổi.
+  //
+  // Chạy cả khi quét lại: lần quét trước có thể đã ghi được lượt quét mà chưa ghi
+  // được trạng thái tham dự. Người đã check-in thì điều kiện lọc làm lệnh này
+  // không chạm dòng nào.
+  const { error: markError } = await client
+    .from("event_registrations")
+    .update({
+      attendance_status: "checked_in",
+      checked_in_at: new Date().toISOString(),
+      checkin_source: "admin_manual"
+    })
+    .eq("id", registrationId)
+    .neq("attendance_status", "checked_in");
+  if (markError) log("recordScan:mark", markError);
 
-  const { data: scans } = await client
+  const { data: scans, error: scansError } = await client
     .from("event_scans")
     .select("station, scanned_at")
     .eq("registration_id", registrationId);
+
+  const history = ((scans ?? []) as Array<{ station: string; scanned_at: string }>).map((scan) => ({
+    station: scan.station,
+    scannedAt: scan.scanned_at
+  }));
 
   return {
     ok: true,
     repeat,
     fullName,
     station,
-    badges: collectBadges(
-      ((scans ?? []) as Array<{ station: string; scanned_at: string }>).map((scan) => ({
-        station: scan.station,
-        scannedAt: scan.scanned_at
-      }))
-    )
+    stationLabel: step.label,
+    badges: collectBadges(history, steps),
+    // Không đọc được lịch sử thì không nhắc: nhắc sai "chưa Check in" với người đã
+    // qua cửa là giữ họ lại vô cớ giữa một hàng người.
+    missingCheckIn: scansError
+      ? false
+      : needsCheckInReminder(
+          steps,
+          station,
+          history.map((scan) => scan.station)
+        )
   };
 }
 
-/** Số lượt quét theo từng trạm của một sự kiện, cho bảng điều khiển. */
+/** Số dòng xin mỗi lần đọc. Supabase mặc định trả tối đa 1.000 dòng một lần. */
+const SCAN_PAGE_SIZE = 1000;
+
+/** Chặn vòng đọc chạy mãi nếu máy chủ bỏ qua phân trang: 200 trang là 200.000 lượt quét. */
+const SCAN_PAGE_LIMIT = 200;
+
+export type EventScanRow = { registrationId: string; station: string; scannedAt: string };
+
+/**
+ * Mọi lượt quét của một hay nhiều buổi, đọc theo từng trang.
+ *
+ * Supabase cắt mỗi lần đọc ở 1.000 dòng và KHÔNG báo lỗi. Một buổi 300 người
+ * quét bốn lần đã là 1.200 dòng: đọc một lần thì số đếm trên trang và cột lịch sử
+ * quét trong file xuất lặng lẽ thiếu những người quét sau cùng.
+ *
+ * Trang sau bắt đầu từ chỗ trang trước THẬT SỰ dừng, không phải chỗ nó được xin
+ * dừng: máy chủ đặt giới hạn thấp hơn 1.000 thì vẫn đọc đủ. Chỉ dừng khi gặp một
+ * trang rỗng.
+ */
+export async function listEventScans(
+  eventIds: string[]
+): Promise<{ scans: EventScanRow[]; error: string | null }> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { scans: [], error: VI_ERROR };
+  if (!eventIds.length) return { scans: [], error: null };
+
+  const scans: EventScanRow[] = [];
+  let offset = 0;
+
+  for (let page = 0; page < SCAN_PAGE_LIMIT; page += 1) {
+    const { data, error } = await client
+      .from("event_scans")
+      .select("id, registration_id, station, scanned_at")
+      .in("event_id", eventIds)
+      // Thứ tự cố định theo khoá chính: phân trang không có thứ tự thì hai trang
+      // có thể trùng dòng hoặc bỏ sót dòng.
+      .order("id", { ascending: true })
+      .range(offset, offset + SCAN_PAGE_SIZE - 1);
+
+    if (error) {
+      log("listEventScans", error);
+      return { scans: [], error: VI_ERROR };
+    }
+
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    if (!rows.length) return { scans, error: null };
+
+    for (const row of rows) {
+      scans.push({
+        registrationId: String(row.registration_id ?? ""),
+        station: String(row.station ?? ""),
+        scannedAt: String(row.scanned_at ?? "")
+      });
+    }
+    offset += rows.length;
+  }
+
+  // Trả lỗi chứ không trả phần đã đọc: một con số thiếu mà trông như đủ là thứ
+  // tệ hơn không có con số nào.
+  log("listEventScans", `vượt ${SCAN_PAGE_LIMIT} trang, dừng đọc`);
+  return { scans: [], error: VI_ERROR };
+}
+
+/**
+ * Số lượt quét theo từng trạm của một sự kiện.
+ *
+ * Thứ tự hiển thị không quyết định ở đây mà ở `summarizeStepCounts`, theo đúng
+ * thứ tự các lần quét BTC đã đặt.
+ */
 export async function countScansByStation(
   eventId: string
 ): Promise<{ counts: Array<{ station: string; total: number }>; error: string | null }> {
-  const client = getSupabaseServiceRoleClient();
-  if (!client) return { counts: [], error: VI_ERROR };
-
-  const { data, error } = await client
-    .from("event_scans")
-    .select("station")
-    .eq("event_id", eventId);
-
-  if (error) {
-    log("countScansByStation", error);
-    return { counts: [], error: VI_ERROR };
-  }
+  const { scans, error } = await listEventScans([eventId]);
+  if (error) return { counts: [], error };
 
   const totals = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ station: string }>) {
-    const station = String(row.station ?? "").trim();
+  for (const scan of scans) {
+    const station = scan.station.trim();
     if (!station) continue;
     totals.set(station, (totals.get(station) ?? 0) + 1);
   }
 
   return {
-    counts: Array.from(totals.entries())
-      .map(([station, total]) => ({ station, total }))
-      // Cửa vào luôn đứng đầu: nó là con số người ta hỏi trước tiên.
-      .sort((a, b) =>
-        a.station === ENTRANCE_STATION ? -1 : b.station === ENTRANCE_STATION ? 1 : b.total - a.total
-      ),
+    counts: Array.from(totals.entries()).map(([station, total]) => ({ station, total })),
     error: null
   };
 }

@@ -36,7 +36,9 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 
 - Bảng phân quyền ở Phần 1 (`lib/auth-constants.ts`, `lib/permissions.ts`)
 - Danh sách loại sự kiện ở Phần 2 (`lib/event-constants.ts`)
-- Danh sách trạm quét ở Phần 7 (`lib/event-checkin-code.ts`)
+- Các mục của một lần quét và giới hạn 20 lần ở Phần 7 (`lib/event-checkin-steps.ts`:
+  `CHECKIN_PURPOSES`, `MAX_CHECKIN_STEPS`), số cột của file CSV ở Phần 9
+  (`lib/event-export.ts`: `EVENT_EXPORT_HEADERS`)
 - Mục "Những gì hệ thống chưa làm" ở Phần 1 — sửa ngay khi một trong số đó được làm
 
 **Module Mail:**

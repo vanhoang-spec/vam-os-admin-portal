@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ENTRANCE_STATION } from "@/lib/event-checkin-code";
+import { ENTRANCE_STATION } from "@/lib/event-checkin-steps";
 
 const ROOT = join(__dirname, "..");
 const raw = readFileSync(

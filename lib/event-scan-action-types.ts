@@ -4,16 +4,20 @@
  * Module riêng vì `app/actions/event-scan.ts` mang `"use server"`, và
  * `__tests__/use-server-export-contract.test.ts` chỉ cho phép hàm async ở đó.
  */
-export type ScanTone = "success" | "repeat" | "error";
+export type ScanTone = "success" | "repeat" | "warning" | "error";
+
+/** Câu nhắc khi quét một lần khác mà người đó chưa qua lần Check in nào. */
+export const MISSING_CHECK_IN_NOTE = "Người này chưa được quét Check in.";
 
 export type ScanActionState = {
   ok: boolean;
   /**
-   * Ba sắc thái, không phải hai.
+   * Bốn sắc thái, không phải hai.
    *
-   * Quét lại cùng một người ở cùng một trạm KHÔNG phải lỗi — nó xảy ra suốt
+   * Quét lại cùng một người ở cùng một lần quét KHÔNG phải lỗi — nó xảy ra suốt
    * khi camera không đọc được lần đầu. Người đứng quét cần phân biệt ngay
-   * "người này vừa vào" với "người này vào rồi" với "có gì đó sai".
+   * "người này vừa qua" với "người này qua rồi" với "ghi nhận rồi, nhưng người
+   * này chưa Check in" với "có gì đó sai".
    */
   tone: ScanTone;
   message: string | null;

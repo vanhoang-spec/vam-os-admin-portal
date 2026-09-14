@@ -7,15 +7,10 @@
 import { describe, expect, it } from "vitest";
 import {
   CHECKIN_CODE_LENGTH,
-  DEFAULT_STATIONS,
-  ENTRANCE_STATION,
   checkinCodeUrl,
-  collectBadges,
   generateCheckinCode,
   isCheckinCode,
-  normalizeStation,
-  readCheckinCode,
-  stationLabel
+  readCheckinCode
 } from "@/lib/event-checkin-code";
 
 /** Nguồn ngẫu nhiên biết trước, để mã sinh ra kiểm được từng ký tự. */
@@ -149,81 +144,4 @@ describe("readCheckinCode — đọc thứ máy quét thấy", () => {
   });
 });
 
-describe("trạm quét", () => {
-  it("cửa vào là trạm mặc định và có trong danh sách", () => {
-    expect(DEFAULT_STATIONS[0].value).toBe(ENTRANCE_STATION);
-    expect(stationLabel(ENTRANCE_STATION)).toContain("đã tham dự");
-  });
-
-  it("chuẩn hoá tên trạm gõ tay", () => {
-    // `Booth A` và `booth a` mà thành hai trạm thì bảng điều khiển đếm sai.
-    // Nhiều khoảng trắng liền nhau gộp thành MỘT gạch dưới, nên gõ thừa dấu
-    // cách cũng không sinh ra một trạm thứ hai.
-    for (const typed of ["  Booth  A ", "booth a", "BOOTH A", "Booth   A"]) {
-      const result = normalizeStation(typed);
-      expect(result.ok, typed).toBe(true);
-      if (result.ok) expect(result.station, typed).toBe("booth_a");
-    }
-  });
-
-  it("cho phép trạm ngoài danh sách", () => {
-    // Mỗi sự kiện có hoạt động bên lề riêng; danh sách đóng sẽ chặn đúng những
-    // sự kiện làm nhiều thứ nhất.
-    expect(normalizeStation("khu_trai_nghiem_vr").ok).toBe(true);
-  });
-
-  it("từ chối tên trạm rỗng, quá dài, hoặc có ký tự lạ", () => {
-    expect(normalizeStation("").ok).toBe(false);
-    expect(normalizeStation("x".repeat(61)).ok).toBe(false);
-    expect(normalizeStation("booth/đối tác").ok).toBe(false);
-  });
-
-  it("nhãn của trạm lạ là chính tên nó, không nuốt mất", () => {
-    expect(stationLabel("khu_vr")).toBe("khu_vr");
-  });
-});
-
-describe("collectBadges", () => {
-  it("mỗi trạm một huy hiệu, xếp theo thứ tự đã đi qua", () => {
-    const badges = collectBadges([
-      { station: "booth_partner", scannedAt: "2026-09-20T04:00:00Z" },
-      { station: "entrance", scannedAt: "2026-09-20T01:00:00Z" },
-      { station: "booth_program", scannedAt: "2026-09-20T02:00:00Z" }
-    ]);
-    expect(badges.map((badge) => badge.station)).toEqual([
-      "entrance",
-      "booth_program",
-      "booth_partner"
-    ]);
-  });
-
-  it("quét lại cùng một trạm chỉ tính một huy hiệu, giữ lần đầu", () => {
-    // Lần thứ hai thường là quét lại vì máy không đọc được; mốc thời gian có
-    // ý nghĩa là lúc người đó thật sự tới trạm.
-    //
-    // Thử theo CẢ HAI thứ tự đưa vào. Chỉ đưa lần muộn trước thì một bản cài
-    // đặt "lần ghi sau đè lần trước" cũng cho ra đúng kết quả, và ca test trông
-    // như đang bảo vệ điều gì đó trong khi không.
-    for (const order of [
-      ["2026-09-20T01:00:00Z", "2026-09-20T02:00:00Z"],
-      ["2026-09-20T02:00:00Z", "2026-09-20T01:00:00Z"]
-    ]) {
-      const badges = collectBadges(order.map((scannedAt) => ({ station: "entrance", scannedAt })));
-      expect(badges).toHaveLength(1);
-      expect(badges[0].scannedAt, order.join(" rồi ")).toBe("2026-09-20T01:00:00Z");
-    }
-  });
-
-  it("bỏ qua dòng không có tên trạm", () => {
-    expect(collectBadges([{ station: "  ", scannedAt: "2026-09-20T01:00:00Z" }])).toEqual([]);
-  });
-
-  it("chưa quét đâu thì chưa có huy hiệu nào", () => {
-    expect(collectBadges([])).toEqual([]);
-  });
-
-  it("gắn nhãn tiếng Việt cho từng huy hiệu", () => {
-    const badges = collectBadges([{ station: "booth_program", scannedAt: "2026-09-20T01:00:00Z" }]);
-    expect(badges[0].label).toBe("Booth chương trình");
-  });
-});
+// Trạm quét, huy hiệu và các lần quét của sự kiện: __tests__/event-checkin-steps.test.ts.

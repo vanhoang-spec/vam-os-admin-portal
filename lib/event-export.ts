@@ -1,8 +1,9 @@
 import "server-only";
 
 import { csvCell } from "@/lib/csv-export";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatTime } from "@/lib/utils";
 import { attendanceStatusLabel, eventRegistrationStatusLabel } from "@/lib/event-constants";
+import { collectBadges, type CheckinStep } from "@/lib/event-checkin-steps";
 
 /**
  * lib/event-export.ts
@@ -21,7 +22,12 @@ export type ExportSession = {
   id: string;
   seriesIndex: number | null;
   startsAt: string | null;
+  /** Các lần quét của buổi, để cột "Các lần quét" nói đúng chữ trên máy quét. */
+  steps?: readonly CheckinStep[];
 };
+
+/** Một lượt quét của một người, đúng những gì cột "Các lần quét" cần. */
+export type ExportScan = { station: string; scannedAt: string };
 
 /**
  * Tiêu đề cột.
@@ -40,6 +46,7 @@ export const EVENT_EXPORT_HEADERS = [
   "Trạng thái tham dự",
   "Đã check-in",
   "Thời điểm check-in",
+  "Các lần quét",
   "Vãng lai",
   "MSSV",
   "Mã mentee",
@@ -70,7 +77,8 @@ function text(value: unknown): string {
  */
 export function eventRegistrationRow(
   row: ExportRegistration,
-  sessions: Map<string, ExportSession>
+  sessions: Map<string, ExportSession>,
+  scans?: Map<string, ExportScan[]>
 ): string[] {
   const session = sessions.get(String(row.event_id));
   const checkedIn = row.attendance_status === "checked_in";
@@ -85,6 +93,7 @@ export function eventRegistrationRow(
     attendanceStatusLabel(row.attendance_status),
     yesNo(checkedIn),
     row.checked_in_at ? formatDateTime(row.checked_in_at) : "",
+    scanHistory(scans?.get(String(row.id)) ?? [], session?.steps),
     yesNo(row.is_walk_in),
     text(row.student_id),
     text(row.mentee_code),
@@ -121,14 +130,28 @@ export function exportFileName(eventName: unknown, startsAt: unknown): string {
   return ["dang-ky", slug || "su-kien", day].filter(Boolean).join("_") + ".csv";
 }
 
-/** Bảng hoàn chỉnh, kèm dòng tiêu đề. */
+/**
+ * Các lần quét của một người, theo thứ tự đã đi qua, kèm giờ Việt Nam:
+ * "Quét lần 1 · Check in 08:05; Quét lần 3 · Check out 11:32".
+ *
+ * Có giờ, vì câu hỏi sau sự kiện thường là "có ở tới cuối không" — Check out lúc
+ * 8 giờ 10 và lúc 11 giờ 30 là hai câu trả lời khác nhau.
+ */
+function scanHistory(scans: ExportScan[], steps?: readonly CheckinStep[]): string {
+  return collectBadges(scans, steps)
+    .map((badge) => `${badge.label} ${formatTime(badge.scannedAt)}`)
+    .join("; ");
+}
+
+/** Bảng hoàn chỉnh, kèm dòng tiêu đề. `scans` tra theo mã dòng đăng ký. */
 export function buildEventRegistrationCsv(
   rows: ExportRegistration[],
-  sessions: Map<string, ExportSession>
+  sessions: Map<string, ExportSession>,
+  scans?: Map<string, ExportScan[]>
 ): string {
   const table = [
     [...EVENT_EXPORT_HEADERS],
-    ...rows.map((row) => eventRegistrationRow(row, sessions))
+    ...rows.map((row) => eventRegistrationRow(row, sessions, scans))
   ];
   return table.map((line) => line.map(csvCell).join(",")).join("\n");
 }

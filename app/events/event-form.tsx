@@ -18,6 +18,8 @@ import {
 import { toVietnamInputValue } from "@/lib/event-datetime";
 import { VietnamDateTimeField } from "./vietnam-datetime-field";
 import { RecurrenceFields } from "./recurrence-fields";
+import { CheckinStepsField } from "./checkin-steps-field";
+import { checkinStepsOf } from "@/lib/event-checkin-steps";
 import type { Event, IntakeBatch, Season } from "@/lib/types";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
@@ -75,6 +77,7 @@ export function EventForm({
   const [mealOptionEnabled, setMealOptionEnabled] = useState(event?.meal_option_enabled === true);
   const [studentIdEnabled, setStudentIdEnabled] = useState(event?.show_student_id_field !== false);
   const [menteeCodeEnabled, setMenteeCodeEnabled] = useState(event?.show_mentee_code_field === true);
+  const [qrEnabled, setQrEnabled] = useState(event?.qr_checkin_enabled !== false);
   // SF-1: track approval_required to show coupling hint
   const [approvalRequired, setApprovalRequired] = useState(event?.approval_required === true);
 
@@ -363,17 +366,20 @@ export function EventForm({
             name="qr_checkin_enabled"
             value="true"
             defaultChecked={event?.qr_checkin_enabled !== false}
+            onChange={(e) => setQrEnabled(e.target.checked)}
             className="mt-1"
           />
           <div>
             <span className="text-sm font-medium">Dùng mã QR check-in</span>
             <p className="text-xs text-slate-500">
-              Bật: mỗi người đăng ký nhận mã QR cá nhân trong thư xác nhận để quét ở cửa. Tắt: thư xác
-              nhận không kèm mã QR, ban tổ chức điểm danh thủ công theo danh sách. Mã đã gửi trước đó vẫn
-              quét được.
+              Bật: mỗi người đăng ký nhận một mã QR cá nhân trong thư xác nhận, dùng cho mọi lần quét trong sự
+              kiện. Tắt: thư xác nhận không kèm mã QR, ban tổ chức điểm danh thủ công theo danh sách. Mã đã gửi
+              trước đó vẫn quét được.
             </p>
           </div>
         </label>
+
+        <CheckinStepsField initialSteps={checkinStepsOf(event)} hidden={!qrEnabled} />
 
         {/* Cấu hình giới hạn số lượng */}
         <div className="mb-4 border-t border-slate-200 pt-4">

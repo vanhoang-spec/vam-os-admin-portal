@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canEditRecaps } from "@/lib/auth-constants";
 import { canScanEvent } from "@/lib/event-supporters";
 import { countScansByStation } from "@/lib/event-checkin";
-import { stationLabel } from "@/lib/event-checkin-code";
+import { buildCheckinSteps, checkinStepsOf, summarizeStepCounts } from "@/lib/event-checkin-steps";
 import { getEventDetailData } from "@/lib/events";
 import { displayText } from "@/lib/utils";
 import { EventScanner } from "./scanner";
@@ -37,7 +38,13 @@ export default async function EventScanPage(props: { params: Promise<{ id: strin
     );
   }
 
+  const steps = buildCheckinSteps(checkinStepsOf(detail.event));
   const scans = await countScansByStation(id);
+  const summary = summarizeStepCounts(steps, scans.counts);
+
+  // Chỉ người sửa được sự kiện mới đổi được các lần quét (chủ dự án chốt 14/09/2026).
+  // Người hỗ trợ được ghép vào buổi chỉ chọn lần quét của điểm mình đứng.
+  const settingsHref = canEditRecaps(adminUser) ? `/events/${id}/edit#checkin-steps` : null;
 
   return (
     <>
@@ -52,21 +59,31 @@ export default async function EventScanPage(props: { params: Promise<{ id: strin
         </Link>
       </p>
 
-      {scans.counts.length ? (
+      {/* Đọc số lượt quét hỏng thì nói ra, không vẽ một dãy số 0: "Check in: 0"
+          giữa buổi làm người đứng quét tưởng máy không ghi được gì. */}
+      {scans.error ? (
+        <p className="mb-6 text-sm text-amber-800">Chưa đọc được số lượt quét. Máy quét vẫn dùng được.</p>
+      ) : (
         <div className="mb-6 flex flex-wrap gap-2">
-          {scans.counts.map((row) => (
+          {summary.map((row) => (
             <span
               key={row.station}
-              className="rounded-full border border-vam-line bg-white px-3 py-1 text-sm text-vam-ink"
+              className={`rounded-full border border-vam-line px-3 py-1 text-sm ${
+                row.configured ? "bg-white text-vam-ink" : "bg-slate-50 text-slate-500"
+              }`}
             >
-              {stationLabel(row.station)}:{" "}
+              {row.label}:{" "}
               <strong className="tabular-nums text-vam-green">{row.total}</strong>
             </span>
           ))}
         </div>
-      ) : null}
+      )}
 
-      <EventScanner eventId={id} />
+      <EventScanner
+        eventId={id}
+        steps={steps.map((step) => ({ station: step.station, label: step.label }))}
+        settingsHref={settingsHref}
+      />
     </>
   );
 }

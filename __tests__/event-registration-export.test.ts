@@ -74,7 +74,7 @@ describe("cột và nhãn", () => {
     const row = eventRegistrationRow(registration(), SESSIONS);
     expect(row[5]).toBe("Đã đăng ký");
     expect(row[7]).toBe("Có");
-    expect(row[9]).toBe("Không");
+    expect(row[10]).toBe("Không");
   });
 
   it("chưa check-in thì cột thời điểm để trống, không ghi số 0 hay chữ null", () => {
