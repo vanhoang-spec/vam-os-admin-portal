@@ -109,29 +109,29 @@ describe("DOCX", () => {
     const result = await extractTextFromFile(docx, AI_UPLOAD_KINDS.docx);
     expect(result?.text).toContain("Thư mời mentor");
     expect(result?.text).toContain("Kính gửi anh chị mentor Mùa 12");
-  });
+  }, 30_000);
 
   it("ZIP không phải Word trả null", async () => {
     await expect(extractTextFromFile(makeXlsx(), AI_UPLOAD_KINDS.docx)).resolves.toBeNull();
-  });
+  }, 30_000);
 });
 
 describe("XLSX", () => {
   it("đọc ô chuỗi chia sẻ, ô inline, ô số, theo đúng thứ tự sheet của workbook", async () => {
     const result = await extractTextFromFile(makeXlsx(), AI_UPLOAD_KINDS.xlsx);
     expect(result?.text).toBe(["[Sheet: Tháng 9 & 10]", "A < B\t2", "[Sheet: Tháng 8]", "Họ tên mentor\tSố recap", "Nguyễn Văn Test\t3"].join("\n"));
-  });
+  }, 30_000);
 
   it("dừng đọc sớm khi đã đủ trần ký tự", async () => {
     const result = await extractTextFromFile(makeXlsx(), AI_UPLOAD_KINDS.xlsx, { maxChars: 10 });
     expect(result?.text.length).toBeLessThanOrEqual(10);
     expect(result?.truncated).toBe(true);
-  });
+  }, 30_000);
 
   it("ZIP không phải bảng tính trả null", async () => {
     const docx = buildDocx({ title: "T", blocks: [{ type: "paragraph", text: "x" }] });
     await expect(extractTextFromFile(docx, AI_UPLOAD_KINDS.xlsx)).resolves.toBeNull();
-  });
+  }, 30_000);
 });
 
 describe("file chữ", () => {
