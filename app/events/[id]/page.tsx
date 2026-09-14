@@ -8,7 +8,10 @@ import { getEventDetailData, isValidUuid, listSeriesSessions } from "@/lib/event
 import type { EventRegistration } from "@/lib/types";
 import { hasAnyMealOrPayment, hasAnyProfileInfo } from "@/lib/event-registration-columns";
 import { canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
-import { displayText, formatDateTime } from "@/lib/utils";
+import { displayText, formatDateTime, formatTimeRange } from "@/lib/utils";
+import { eventVietnamDate, isReminderRecipient, reminderBlockReason } from "@/lib/event-reminder-core";
+import { getLatestEventReminder } from "@/lib/event-reminders";
+import { EventReminderPanel } from "./event-reminder-panel";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 import { eventRegistrationStatusLabel, eventTypeLabel } from "@/lib/event-constants";
 import { EventPlaceBlock } from "../event-place";
@@ -155,6 +158,18 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
       ? `Sức chứa hiện tại: ${confirmedSeatsCount}/${capacityLimit}. Mở lại đăng ký có thể đưa đăng ký mới vào waitlist hoặc bị chặn theo cấu hình hiện tại.`
       : null;
 
+  // "Gửi remind": đếm người nhận bằng đúng phép lọc máy chủ dùng khi gửi.
+  const latestReminder = await getLatestEventReminder(params.id);
+  const reminderSessionLabel = [
+    displayText(detail.event.event_name, "Sự kiện"),
+    typeof detail.event.series_index === "number" && typeof detail.event.series_total === "number"
+      ? `Buổi ${detail.event.series_index}/${detail.event.series_total}`
+      : null,
+    formatTimeRange(detail.event.starts_at, detail.event.ends_at)
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <>
       <PageHeader
@@ -284,6 +299,20 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
             ) : null}
           </>
         ) : null}
+      </div>
+
+      <div className="mb-4">
+        <EventReminderPanel
+          eventId={detail.event.id}
+          sessionLabel={reminderSessionLabel}
+          expectedDate={eventVietnamDate(detail.event.starts_at) ?? ""}
+          recipientCount={allRegistrations.filter(isReminderRecipient).length}
+          waitlistedCount={waitlistedRegistrations.length}
+          blockReason={reminderBlockReason(detail.event, Date.now())}
+          canSend={canCreateLink}
+          latestRun={latestReminder.run}
+          latestRunError={latestReminder.error}
+        />
       </div>
 
       <div className="mb-3">

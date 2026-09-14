@@ -40,6 +40,7 @@ import {
   type RecurrenceRule
 } from "@/lib/event-recurrence";
 import {
+  eventEmailPlace,
   isEventFormat,
   needsJoinUrl,
   needsVenue,
@@ -345,7 +346,7 @@ function clientResult() {
   return { client, error: null as string | null };
 }
 
-async function requireEventAdmin(): Promise<{ ok: true; admin: Awaited<ReturnType<typeof getCurrentAdminUser>> } | { ok: false; message: string }> {
+export async function requireEventAdmin(): Promise<{ ok: true; admin: Awaited<ReturnType<typeof getCurrentAdminUser>> } | { ok: false; message: string }> {
   const admin = await getCurrentAdminUser();
   if (!canEditRecaps(admin)) return { ok: false, message: "Bạn không có quyền quản lý sự kiện." };
   const ctx = await getAdminScopeContext();
@@ -1260,7 +1261,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
  * Hỏng thì trả null: thư vẫn đi, vẫn có đường dẫn vé và mã dự phòng. Chặn cả
  * lá thư vì không vẽ được một ảnh là đổi một bất tiện lấy một hỏng hóc.
  */
-async function renderTicketQrBase64(ticketUrl: string): Promise<string | null> {
+export async function renderTicketQrBase64(ticketUrl: string): Promise<string | null> {
   try {
     const buffer = await QRCode.toBuffer(ticketUrl, {
       type: "png",
@@ -1312,24 +1313,16 @@ export async function issueTicketAndConfirm(input: {
       ticket = { url: checkinCodeUrl(origin, code), code, shortCode };
     }
 
-    const format = isEventFormat(event.event_format) ? event.event_format : "offline";
-    const placeLabel = needsVenue(format)
-      ? [event.location_name, event.location_address]
-          .map((value) => String(value ?? "").trim())
-          .filter(Boolean)
-          .join(" — ") || null
-      : null;
+    const place = eventEmailPlace(event);
 
     await sendEventRegistrationConfirmation({
       toEmail: input.toEmail,
       recipientName: input.fullName,
       eventName: String(event.event_name ?? "").trim() || "sự kiện",
       whenLabel: formatEventWhenLabel(event),
-      placeLabel,
-      mapUrl: needsVenue(format)
-        ? resolveMapUrl({ mapUrl: event.location_map_url, address: event.location_address })
-        : null,
-      joinUrl: needsJoinUrl(format) ? clean(event.online_join_url) : null,
+      placeLabel: place.placeLabel,
+      mapUrl: place.mapUrl,
+      joinUrl: place.joinUrl,
       ticketUrl: ticket ? ticket.url : null,
       ticketCode: ticket ? ticket.code : null,
       shortCode: ticket ? ticket.shortCode : null,
@@ -3846,17 +3839,7 @@ export async function notifyScheduleChange(input: {
   }
 
   const typed = event as unknown as Event;
-  const format = isEventFormat(typed.event_format) ? typed.event_format : "offline";
-  const placeLabel = needsVenue(format)
-    ? [typed.location_name, typed.location_address]
-        .map((value) => String(value ?? "").trim())
-        .filter(Boolean)
-        .join(" — ") || null
-    : null;
-  const mapUrl = needsVenue(format)
-    ? resolveMapUrl({ mapUrl: typed.location_map_url, address: typed.location_address })
-    : null;
-  const joinUrl = needsJoinUrl(format) ? clean(typed.online_join_url) : null;
+  const { placeLabel, mapUrl, joinUrl } = eventEmailPlace(typed);
   const eventName = String(typed.event_name ?? "").trim() || "sự kiện";
 
   const previousStart = clean(input.previousStartsAt);
