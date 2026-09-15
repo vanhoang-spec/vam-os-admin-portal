@@ -336,7 +336,7 @@
 
   <table>
     <tr><th style="width:26%">Vai trò</th><th>Làm được gì trong module Sự kiện</th></tr>
-    <tr><td class="k">Super admin<br>Admin<br>Core team</td><td>Toàn quyền: tạo và sửa sự kiện, tạo link đăng ký, thêm người hỗ trợ, mở máy quét, điểm danh thủ công, xem toàn bộ số liệu.</td></tr>
+    <tr><td class="k">Super admin<br>Admin<br>Core team</td><td>Toàn quyền: tạo và sửa sự kiện, tạo link đăng ký, <b>sửa chữ trên form đăng ký kể cả khi link đã gửi đi</b>, thêm người hỗ trợ, mở máy quét, điểm danh thủ công, xem toàn bộ số liệu.</td></tr>
     <tr><td class="k">Support team</td><td>Được <b>mở máy quét của những buổi mà mình đã được thêm vào danh sách hỗ trợ</b>, và <b>thiết lập các lần quét mã QR</b> của chính những buổi đó ngay trên máy quét. Không tạo sự kiện, không sửa các thông tin khác của sự kiện, không thêm người hỗ trợ khác.</td></tr>
     <tr><td class="k">Reviewer, Viewer</td><td>Không tham gia vận hành sự kiện.</td></tr>
   </table>
@@ -530,6 +530,19 @@
   <h3>4.3 · Đóng và mở lại đăng ký</h3>
   <p>Bấm <span class="btn">Đóng đăng ký</span> để ngừng nhận đơn mới. Các đơn đã có <b>không</b> bị xoá. Bấm <span class="btn">Mở lại đăng ký</span> khi muốn nhận tiếp.</p>
   <p>Nếu sức chứa đã đầy mà bạn mở lại, hệ thống sẽ nhắc trước: đơn mới có thể vào danh sách chờ hoặc bị chặn, tuỳ cấu hình hiện tại.</p>
+
+  <h3>4.4 · Sửa chữ trên form đã gửi link</h3>
+  <p>Link đã gửi đi mà nội dung cần đổi — ví dụ dời ngày làm dòng agenda sai — thì <b>không cần tạo link mới</b>. Người mở link sau khi bạn lưu thấy ngay nội dung mới.</p>
+  <ol class="steps">
+    <li><b>Mở trang chi tiết sự kiện</b>, trong khối <span class="field">Liên kết đăng ký công khai</span> bấm <span class="btn">Sửa nội dung form đăng ký ↓</span>. Trang nhảy xuống khối <span class="field">Nội dung form đăng ký</span> ở cuối trang.</li>
+    <li><b>Sửa trong các ô chữ.</b> Luôn có <span class="field">Giới thiệu sự kiện</span>. <span class="field">Chính sách tham dự</span>, <span class="field">Hướng dẫn gửi minh chứng</span> và phần phí, thanh toán chỉ hiện khi phần đó đang bật trên form.</li>
+    <li><b>Sự kiện nhiều buổi:</b> để nguyên dấu tick <span class="field">Áp dụng cho cả … buổi trong chuỗi</span>. Mỗi buổi giữ một bản nội dung riêng; bỏ tick thì chỉ buổi đang mở được sửa.</li>
+    <li><b>Bấm <span class="btn">Lưu nội dung form</span></b>, rồi bấm <span class="btn">Mở form đăng ký để xem →</span> để kiểm lại.</li>
+  </ol>
+  <div class="note">
+    <b>Ở đây chỉ đổi chữ, không đổi các ô cần điền</b>
+    Thêm bớt ô (MSSV, trường, minh chứng…) hay đổi nhãn của một ô vẫn làm ở <span class="btn">Sửa sự kiện</span>: người đã đăng ký trả lời theo câu hỏi cũ, nên đổi câu hỏi là việc cần cân nhắc riêng. Mỗi lần lưu đều được ghi vào nhật ký thay đổi.
+  </div>
 </section>
 
 <!-- ══════════════════ 5 ══════════════════ -->

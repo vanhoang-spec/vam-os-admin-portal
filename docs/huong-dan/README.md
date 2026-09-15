@@ -39,6 +39,8 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 - Các mục của một lần quét và giới hạn 20 lần ở Phần 7 (`lib/event-checkin-steps.ts`:
   `CHECKIN_PURPOSES`, `MAX_CHECKIN_STEPS`), số cột của file CSV ở Phần 9
   (`lib/event-export.ts`: `EVENT_EXPORT_HEADERS`)
+- Các đoạn chữ sửa được trên form đã gửi link ở mục 4.4 (`lib/event-form-text.ts`:
+  `FORM_TEXT_FIELDS`, `visibleFormTextFields`)
 - Mục "Những gì hệ thống chưa làm" ở Phần 1 — sửa ngay khi một trong số đó được làm
 
 **Module Mail:**

@@ -22,6 +22,9 @@ import { usesQrCheckin } from "@/lib/event-checkin-code";
 import { buildCheckinSteps, checkinStepsOf, summarizeStepCounts } from "@/lib/event-checkin-steps";
 import { LiveRefresh } from "./live-refresh";
 import { AddSessionPanel } from "./add-session-panel";
+import { REGISTRATION_FORM_TEXT_PANEL_ID, formTextPanelFields } from "@/lib/event-form-text";
+import { canEditRegistrationFormText } from "@/lib/event-form-text-server";
+import { RegistrationFormTextPanel } from "./registration-form-text-panel";
 
 async function getRequestOrigin() {
   const h = await headers();
@@ -118,6 +121,11 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
   const qrEnabled = usesQrCheckin(detail.event);
   const checkinQrDataUrl = qrEnabled && checkinUrl ? await QRCode.toDataURL(checkinUrl, { margin: 1, width: 200 }) : null;
   const canCreateLink = await canOperateSeason(scopeContext, detail.event.season_id ?? null);
+  // Sửa chữ trên form đã gửi link: cùng cổng quyền với sửa sự kiện, nhưng đường ghi
+  // chỉ chạm các đoạn chữ — xem lib/event-form-text-server.ts.
+  const canEditFormText = await canEditRegistrationFormText(adminUser, {
+    season_id: detail.event.season_id ?? null
+  });
 
   // Sự kiện đơn lẻ trả về mảng rỗng — không có chuỗi thì không có gì để liệt kê.
   const seriesSessions = await listSeriesSessions(params.id);
@@ -370,6 +378,16 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
               typeof detail.event.series_total === "number" ? detail.event.series_total : null
             }
           />
+          {/* Khung sửa nằm cuối trang để không đẩy bảng danh sách xuống; người đang
+              nhìn link đăng ký là người cần tìm thấy nó. */}
+          {canEditFormText ? (
+            <a
+              href={`#${REGISTRATION_FORM_TEXT_PANEL_ID}`}
+              className="mt-3 inline-block text-sm font-medium text-vam-green underline-offset-2 hover:underline"
+            >
+              Sửa nội dung form đăng ký ↓
+            </a>
+          ) : null}
         </Card>
 
         <Card>
@@ -502,6 +520,20 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
           )}
         </Card>
       </div>
+
+      {canEditFormText ? (
+        <div id={REGISTRATION_FORM_TEXT_PANEL_ID} className="mt-4 scroll-mt-4">
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-vam-ink">Nội dung form đăng ký</h2>
+            <RegistrationFormTextPanel
+              eventId={detail.event.id}
+              fields={formTextPanelFields(detail.event)}
+              seriesTotal={typeof detail.event.series_total === "number" ? detail.event.series_total : null}
+              registrationUrl={registrationUrl}
+            />
+          </Card>
+        </div>
+      ) : null}
     </>
   );
 }

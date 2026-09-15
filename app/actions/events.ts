@@ -21,6 +21,8 @@ import {
   updateEvent,
   updateParticipation
 } from "@/lib/events";
+import { FORM_TEXT_FIELDS } from "@/lib/event-form-text";
+import { updateRegistrationFormText } from "@/lib/event-form-text-server";
 
 const initialState: EventActionState = { ok: false, message: null };
 
@@ -34,6 +36,41 @@ async function ensureAuth(): Promise<EventActionState | null> {
     return { ok: false, message: "Bạn không có quyền quản lý sự kiện." };
   }
   return null;
+}
+
+/**
+ * Lưu phần chữ của form đăng ký, từ khung "Nội dung form đăng ký" trên trang sự kiện.
+ *
+ * Chỉ chuyển xuống những đoạn CÓ MẶT trong form. Khung sửa không bày đoạn của một
+ * phần đang tắt, nên form không mang khoá đó — và hàm ghi hiểu vắng khoá là không
+ * đụng tới, thay vì xoá trắng một đoạn người sửa không hề thấy. Quyền nằm ở hàm ghi.
+ */
+export async function updateRegistrationFormTextAction(
+  _previousState: EventActionState,
+  formData: FormData
+): Promise<EventActionState> {
+  try {
+    const texts: Record<string, string> = {};
+    for (const spec of FORM_TEXT_FIELDS) {
+      if (formData.has(spec.key)) texts[spec.key] = String(formData.get(spec.key) ?? "");
+    }
+
+    const result = await updateRegistrationFormText({
+      eventId: formText(formData, "event_id"),
+      texts,
+      applyToSeries: formData.get("apply_to_series") === "1"
+    });
+    if (!result.ok) return { ok: false, message: result.message };
+
+    for (const id of result.eventIds) {
+      revalidatePath(`/events/${id}`);
+      revalidatePath(`/events/${id}/edit`);
+    }
+    return { ok: true, message: result.message };
+  } catch (error) {
+    console.error("[events] updateRegistrationFormTextAction", error);
+    return { ok: false, message: "Lỗi hệ thống. Thử lưu lại." };
+  }
 }
 
 export async function createEventAction(

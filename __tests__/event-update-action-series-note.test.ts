@@ -14,6 +14,7 @@ const updateEvent = vi.hoisted(() => vi.fn());
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
+vi.mock("@/lib/event-form-text-server", () => ({ updateRegistrationFormText: vi.fn() }));
 vi.mock("@/lib/events", () => ({
   addParticipation: vi.fn(),
   bulkAddEventParticipants: vi.fn(),
