@@ -1,4 +1,6 @@
+import { FormRichText } from "@/components/form-rich-text";
 import { evaluateApplyGate } from "@/lib/apply-gate";
+import { getApplicationFormTexts } from "@/lib/application-form-texts";
 import { ClosedFormView, PilotModeBanner } from "../_components/gate-views";
 import { ApplyMentorForm } from "./apply-mentor-form";
 
@@ -30,28 +32,29 @@ export default async function ApplyMentorPage(props: { searchParams?: Promise<{ 
   // judged by the same gate the render was. In open state nothing is carried.
   const carriedToken = gate.state === "pilot" ? String(tokenRaw ?? "").trim() : null;
 
+  // Chữ trên form do admin sửa ở /admin/seasons-forms/form-texts. Đọc hỏng thì là
+  // chữ mặc định — không bao giờ là một form trống hay một form đóng.
+  const texts = await getApplicationFormTexts();
+
   return (
     <>
       {gate.state === "pilot" ? <PilotModeBanner /> : null}
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-vam-green">
-          Vietnam Alumni Mentoring - UEH Mentoring Season 12
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-vam-ink sm:text-3xl">
-          Đơn đăng ký mentor
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Cảm ơn anh/chị đã quan tâm đồng hành cùng chương trình mentoring. Vui lòng dành
-          khoảng <strong>10-12 phút</strong> để hoàn thành. Trường có dấu <span className="text-red-600">*</span> là
-          bắt buộc.
-        </p>
-        <p className="mt-2 text-xs text-slate-500">
-          Lưu ý: việc gửi đơn không tự động trở thành mentor chính thức. BTC sẽ review hồ sơ
-          và liên hệ về bước tiếp theo (intro call/orientation) trước khi chính thức ghép cặp.
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-vam-green">{texts["mentor.header.eyebrow"]}</p>
+        <h1 className="mt-1 text-2xl font-semibold text-vam-ink sm:text-3xl">{texts["mentor.header.title"]}</h1>
+        <FormRichText
+          text={texts["mentor.header.intro"]}
+          className="mt-2 space-y-2 text-sm leading-6 text-slate-600"
+          strongClassName="font-semibold"
+        />
+        <FormRichText
+          text={texts["mentor.header.note"]}
+          className="mt-2 space-y-2 text-xs text-slate-500"
+          strongClassName="font-semibold"
+        />
       </header>
 
-      <ApplyMentorForm applyToken={carriedToken} />
+      <ApplyMentorForm applyToken={carriedToken} texts={texts} />
     </>
   );
 }

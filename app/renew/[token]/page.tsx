@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getApplicationFormTexts } from "@/lib/application-form-texts";
 import { loadRenewalPage } from "@/lib/renewal-runtime";
 import { RenewalForm } from "./renewal-form";
 
@@ -15,6 +16,9 @@ export const metadata: Metadata = {
 export default async function RenewalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const data = await loadRenewalPage(token);
+  // Phần chân dung và liên hệ mentor dùng chung chữ với form nộp đơn mentor. Chỉ
+  // đọc khi form thật sự hiện ra.
+  const texts = data.status === "renewable" ? await getApplicationFormTexts() : null;
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">
@@ -42,7 +46,7 @@ export default async function RenewalPage({ params }: { params: Promise<{ token:
         ) : null}
 
         {data.status === "renewable" ? (
-          <RenewalForm token={token} display={data.display} />
+          <RenewalForm token={token} display={data.display} texts={texts ?? undefined} />
         ) : null}
       </div>
     </main>
