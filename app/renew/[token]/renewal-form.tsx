@@ -20,6 +20,7 @@ import {
 import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import { MentorProfileIntro } from "@/app/apply/_components/mentor-profile-intro";
 import { MentorSupportContacts } from "@/app/apply/_components/mentor-support-contacts";
+import { DEFAULT_APPLICATION_FORM_TEXTS, type ApplicationFormTexts } from "@/lib/application-form-text-core";
 
 function fieldClass() {
   return "mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink focus:border-vam-green focus:outline-none focus:ring-2 focus:ring-vam-mint";
@@ -45,10 +46,13 @@ function Feedback({ ok, message }: { ok: boolean; message: string }) {
 
 export function RenewalForm({
   token,
-  display
+  display,
+  texts = DEFAULT_APPLICATION_FORM_TEXTS
 }: {
   token: string;
   display: RenewalPublicDisplayDto;
+  /** Chữ phần chân dung và liên hệ, dùng chung với form nộp đơn mentor. */
+  texts?: ApplicationFormTexts;
 }) {
   const [university, setUniversity] = useState("");
   const [functionPrimary, setFunctionPrimary] = useState(() => {
@@ -91,7 +95,7 @@ export function RenewalForm({
 
   return (
     <div className="grid gap-6">
-      <MentorProfileIntro includeApplicationProcess={false} />
+      <MentorProfileIntro texts={texts} includeApplicationProcess={false} />
       <section className="rounded-lg border border-vam-line bg-white p-5 shadow-soft">
         <h2 className="text-lg font-semibold text-vam-ink">Hồ sơ mentor hiện tại</h2>
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
@@ -311,7 +315,7 @@ export function RenewalForm({
         </div>
       </form>
 
-      <MentorSupportContacts />
+      <MentorSupportContacts texts={texts} />
 
       <form action={declineAction} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
         <h2 className="text-base font-semibold text-vam-ink">Không tiếp tục Season 12</h2>

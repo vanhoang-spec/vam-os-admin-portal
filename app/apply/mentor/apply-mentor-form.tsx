@@ -10,6 +10,7 @@ import { ApplyDraftNotice } from "../_components/draft-notice";
 import { draftText } from "@/lib/autosave";
 import { MentorProfileIntro } from "../_components/mentor-profile-intro";
 import { MentorSupportContacts } from "../_components/mentor-support-contacts";
+import { DEFAULT_APPLICATION_FORM_TEXTS, type ApplicationFormTexts } from "@/lib/application-form-text-core";
 import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   ApplicationForm,
@@ -136,7 +137,14 @@ const REFERRER_OPTIONS = [
   { value: "other", label: "Khác" }
 ];
 
-export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) {
+export function ApplyMentorForm({
+  applyToken,
+  texts = DEFAULT_APPLICATION_FORM_TEXTS
+}: {
+  applyToken?: string | null;
+  /** Chữ admin sửa được — xem lib/application-form-text-core.ts. */
+  texts?: ApplicationFormTexts;
+}) {
   // The action no longer redirects. It returns a state carrying
   // `applicationId` on a confirmed create, which is the only signal that
   // clears the local draft — see use-apply-autosave.ts.
@@ -161,6 +169,7 @@ export function ApplyMentorForm({ applyToken }: { applyToken?: string | null }) 
       state={state}
       formAction={formAction}
       applyToken={applyToken}
+      texts={texts}
     />
   );
 }
@@ -182,12 +191,14 @@ function MentorFormBody({
   autosave,
   state,
   formAction,
-  applyToken
+  applyToken,
+  texts
 }: {
   autosave: ReturnType<typeof useApplyAutosave>;
   state: ApplyActionState;
   formAction: (formData: FormData) => void;
   applyToken?: string | null;
+  texts: ApplicationFormTexts;
 }) {
   const draft = autosave.draftData;
   const seededNumber = (name: string) => {
@@ -228,7 +239,7 @@ function MentorFormBody({
       {applyToken ? <input type="hidden" name={APPLY_TOKEN_FIELD} value={applyToken} /> : null}
 
       {/* Content-only section. Renders no inputs and cannot affect submission. */}
-      <MentorProfileIntro />
+      <MentorProfileIntro texts={texts} />
 
       <FormSection title="1. Đồng ý & quyền riêng tư">
         <ConsentCheckbox
@@ -522,7 +533,7 @@ function MentorFormBody({
         </div>
       </FormSection>
 
-      <MentorSupportContacts />
+      <MentorSupportContacts texts={texts} />
 
         </ApplicationForm>
       </AutosaveRegistryContext.Provider>

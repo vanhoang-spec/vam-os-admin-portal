@@ -1,39 +1,22 @@
-const MENTEE_SUPPORT_CONTACTS = Object.freeze([
-  {
-    name: "Trần Mỹ Anh",
-    role: "Support Team UEH Mentoring",
-    phone: "0394983679"
-  },
-  {
-    name: "Bùi Trần Hoàng Vy",
-    role: "Support Team UEH Mentoring",
-    phone: "0936359670"
-  }
-]);
+import { FormRichText } from "@/components/form-rich-text";
+import { DEFAULT_APPLICATION_FORM_TEXTS, type ApplicationFormTexts } from "@/lib/application-form-text-core";
 
-export function MenteeSupportContacts() {
+/**
+ * Liên hệ hỗ trợ cuối form mentee. Chữ admin sửa được; danh bạ mặc định nằm ở
+ * `MENTEE_SUPPORT_CONTACTS` trong lib/application-form-text-core.ts.
+ */
+export function MenteeSupportContacts({ texts = DEFAULT_APPLICATION_FORM_TEXTS }: { texts?: ApplicationFormTexts }) {
   return (
     <section className="rounded-lg border border-vam-line bg-white p-5 shadow-soft sm:p-6">
-      <h2 className="text-base font-semibold text-vam-ink">Liên hệ hỗ trợ</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Nếu cần hỗ trợ khi điền hoặc gửi thông tin, bạn vui lòng liên hệ:
-      </p>
-      <ul className="mt-3 grid gap-3 text-sm text-slate-700">
-        {MENTEE_SUPPORT_CONTACTS.map((contact) => (
-          <li key={contact.name} className="rounded-md border border-vam-line bg-slate-50 p-3">
-            <span className="font-medium text-vam-ink">{contact.name}</span> — {contact.role}
-            <span>
-              {" — "}
-              <a
-                className="text-vam-green underline"
-                href={`tel:${contact.phone}`}
-              >
-                {contact.phone}
-              </a>
-            </span>
-          </li>
-        ))}
-      </ul>
+      <h2 className="text-base font-semibold text-vam-ink">{texts["mentee.contacts.heading"]}</h2>
+      <FormRichText text={texts["mentee.contacts.intro"]} className="mt-1 space-y-2 text-sm text-slate-600" />
+      <FormRichText
+        text={texts["mentee.contacts.list"]}
+        className="mt-3 grid gap-3 text-sm text-slate-700"
+        listClassName="grid gap-3"
+        itemClassName="rounded-md border border-vam-line bg-slate-50 p-3"
+        strongClassName="font-medium text-vam-ink"
+      />
     </section>
   );
 }

@@ -142,6 +142,20 @@ export function canViewApplicationFormControls(role?: string | null) {
 }
 
 /**
+ * Can edit the COPY of the public application forms — intro, deadline note,
+ * support contacts — but never their fields, options or commitments.
+ *
+ * Owner decision 15/09/2026: admin and core team fix wording such as a moved
+ * deadline themselves, without waiting for a deploy. Wider than
+ * `canToggleApplicationForm` on purpose: changing a sentence on a form that is
+ * already open is not a publication event, whereas opening or closing the form
+ * is. The caller must ALSO prove operations scope on the season.
+ */
+export function canEditApplicationFormTexts(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}
+
+/**
  * Can browse general admin-tier operational surfaces: /operations,
  * /operations/tasks, /matches/[id].
  *

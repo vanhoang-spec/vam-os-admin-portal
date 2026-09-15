@@ -1,11 +1,17 @@
+import Link from "next/link";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { APPLICATION_FORM_TEXTS_PATH } from "@/lib/application-form-text-core";
 import {
   readApplicationFormControls,
   S12_BINDING,
   type ApplicantRole
 } from "@/lib/application-form-controls";
-import { canToggleApplicationForm, canViewApplicationFormControls } from "@/lib/permissions";
+import {
+  canEditApplicationFormTexts,
+  canToggleApplicationForm,
+  canViewApplicationFormControls
+} from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { FormControlCard, type RoleControlView } from "./form-control-card";
 import { FormControlAuditTable } from "./audit-table";
@@ -119,6 +125,22 @@ export default async function SeasonsFormsPage() {
           </p>
         ) : null}
       </Card>
+
+      {canEditApplicationFormTexts(admin.role) ? (
+        <Card className="mt-6">
+          <h2 className="text-lg font-semibold text-vam-ink">Chữ trên form</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Lời giới thiệu, hạn nộp, người liên hệ trên form mentor và mentee. Sửa xong có hiệu lực ngay, không
+            cần deploy. Ô cần điền và câu cam kết không đổi ở đó.
+          </p>
+          <Link
+            href={APPLICATION_FORM_TEXTS_PATH}
+            className="mt-3 inline-flex w-fit items-center rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Sửa chữ trên form →
+          </Link>
+        </Card>
+      ) : null}
 
       <Card className="mt-6">
         <h2 className="text-lg font-semibold text-vam-ink">Lịch sử thay đổi</h2>

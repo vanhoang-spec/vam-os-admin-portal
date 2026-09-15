@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { enforceOtherDetails, MENTOR_OTHER_DETAIL_RULES } from "@/lib/application-form-validation";
 import { MENTOR_PROGRAM_OPTIONS, MENTOR_SUPPORT_CONTACTS, MENTOR_UNIVERSITY_OPTIONS } from "@/lib/mentor-intake-content";
+import { DEFAULT_APPLICATION_FORM_TEXTS } from "@/lib/application-form-text-core";
 import { validateRenewalAcceptance } from "@/lib/renewal-runtime";
 import { RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD } from "@/lib/renewal-types";
 import { ACTIVE_READING_KEYS, CONFIRMATION_PHRASES, requiredCheckboxAcknowledgements } from "@/lib/application-commitments";
@@ -47,16 +48,19 @@ describe("S12-M1 mentor form content", () => {
 
   it("contains UEH Alumni, approved mentor portrait, and all support contacts", () => {
     const newForm = fs.readFileSync("app/apply/mentor/apply-mentor-form.tsx", "utf8");
-    const intro = fs.readFileSync("app/apply/_components/mentor-profile-intro.tsx", "utf8");
     const renewal = fs.readFileSync("app/renew/[token]/renewal-form.tsx", "utf8");
     expect(newForm).toContain('value: "ueh_alumni", label: "UEH Alumni"');
-    expect(intro).toContain("Chân dung Mentor mà UEH Mentoring đang tìm kiếm");
-    expect(newForm).toContain("<MentorProfileIntro />");
-    expect(renewal).toContain("<MentorProfileIntro includeApplicationProcess={false} />");
+    // Chữ chân dung giờ nằm trong danh mục admin sửa được; mặc định vẫn là bản đã duyệt.
+    expect(DEFAULT_APPLICATION_FORM_TEXTS["mentor.profile.heading"]).toBe("Chân dung Mentor mà UEH Mentoring đang tìm kiếm");
+    expect(newForm).toContain("<MentorProfileIntro texts={texts} />");
+    expect(renewal).toContain("<MentorProfileIntro texts={texts} includeApplicationProcess={false} />");
     expect(MENTOR_SUPPORT_CONTACTS).toHaveLength(3);
     expect(JSON.stringify(MENTOR_SUPPORT_CONTACTS)).toContain("lieu.nguyen@hoatay.com.vn");
     expect(JSON.stringify(MENTOR_SUPPORT_CONTACTS)).toContain("0905.376.392");
     expect(JSON.stringify(MENTOR_SUPPORT_CONTACTS)).toContain("0979.578.128");
+    for (const contact of MENTOR_SUPPORT_CONTACTS) {
+      expect(DEFAULT_APPLICATION_FORM_TEXTS["mentor.contacts.list"]).toContain(contact.name);
+    }
   });
 
   it("removes public Batch 1 Pilot wording without changing the token gate", () => {

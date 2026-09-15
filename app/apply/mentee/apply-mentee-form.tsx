@@ -7,6 +7,7 @@ import { AutosaveContext, AutosaveRegistryContext } from "../_components/form-pr
 import { useApplyAutosave } from "../_components/use-apply-autosave";
 import { ApplyDraftNotice } from "../_components/draft-notice";
 import { MenteeSupportContacts } from "../_components/mentee-support-contacts";
+import { DEFAULT_APPLICATION_FORM_TEXTS, type ApplicationFormTexts } from "@/lib/application-form-text-core";
 import {
   ApplicationForm,
   CheckboxGroupField,
@@ -145,7 +146,14 @@ const REFERRER_OPTIONS = [
   { value: "other", label: "Khác" }
 ];
 
-export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) {
+export function ApplyMenteeForm({
+  applyToken,
+  texts = DEFAULT_APPLICATION_FORM_TEXTS
+}: {
+  applyToken?: string | null;
+  /** Chữ admin sửa được — xem lib/application-form-text-core.ts. */
+  texts?: ApplicationFormTexts;
+}) {
   // The action no longer redirects. It returns a state carrying
   // `applicationId` on a confirmed create, which is the only signal that
   // clears the local draft — see use-apply-autosave.ts.
@@ -451,7 +459,7 @@ export function ApplyMenteeForm({ applyToken }: { applyToken?: string | null }) 
         </div>
       </FormSection>
 
-      <MenteeSupportContacts />
+      <MenteeSupportContacts texts={texts} />
 
         </ApplicationForm>
       </AutosaveRegistryContext.Provider>
