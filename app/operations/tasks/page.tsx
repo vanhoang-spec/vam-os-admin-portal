@@ -6,7 +6,7 @@ import { canManageWorkflow } from "@/lib/auth-constants";
 import { canBrowseOperations } from "@/lib/permissions";
 import { getOperationsWorkflowData } from "@/lib/data";
 import type { WorkflowOwner, WorkflowQueueItem } from "@/lib/types";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDate, vietnamDateKey } from "@/lib/utils";
 import { currentMonthVN } from "@/lib/dashboard-month";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { followUpStatusLabel } from "@/lib/ui-labels";
@@ -53,7 +53,7 @@ function actionTypeLabel(value: unknown) {
 
 function isOverdue(row: WorkflowQueueItem) {
   if (!row.due_date || ["resolved", "dropped", "no_response"].includes(row.status)) return false;
-  return row.due_date < new Date().toISOString().slice(0, 10);
+  return row.due_date < (vietnamDateKey(new Date()) ?? "");
 }
 
 function filterRows(rows: WorkflowQueueItem[], filters: TaskFilters) {

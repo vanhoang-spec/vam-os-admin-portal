@@ -6,6 +6,7 @@ import { canBrowseOperations, canManageMatches } from "@/lib/permissions";
 import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
+import { vietnamDateKey } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -834,7 +835,7 @@ export async function createManualMatch(input: {
     status: "active",
     match_source_raw: "manual",
     match_type: "primary",
-    matched_at: new Date().toISOString().slice(0, 10),
+    matched_at: vietnamDateKey(new Date()),
     notes: clean(input.adminNotes)
   };
 

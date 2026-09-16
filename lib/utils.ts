@@ -115,6 +115,23 @@ export function formatDate(value: unknown) {
 }
 
 /**
+ * Ngày theo lịch Việt Nam, dạng `YYYY-MM-DD` — để GHI vào một cột DATE, hay để so
+ * hai ngày với nhau.
+ *
+ * Cùng bộ định dạng với `formatDate`, không tự cộng bảy tiếng. `toISOString().slice(0, 10)`
+ * là ngày UTC: đơn nộp lúc 00:30 sáng 11/09 giờ Việt Nam thành 10/09. Lỗi đó nằm
+ * trong cột `applications.submitted_at` cho tới 16/09/2026 và đúng trên máy người
+ * phát triển (giờ Việt Nam), chỉ sai trên Vercel.
+ */
+export function vietnamDateKey(value: unknown): string | null {
+  if (!value) return null;
+  const date = toDate(value);
+  if (!date) return null;
+  const [day, month, year] = VN_DATE.format(date).split("/");
+  return day && month && year ? `${year}-${month}-${day}` : null;
+}
+
+/**
  * Giờ kèm giây, dạng HH:mm:ss.
  *
  * Chỉ dùng cho những chỗ đếm nhịp — "đọc lại lúc 14:05:32" — nơi giây là phần
