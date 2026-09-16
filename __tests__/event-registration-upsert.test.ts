@@ -15,6 +15,7 @@
  * Bản giả PostgREST ở đây lấy theo events-pagination-contract.test.ts, thêm phần
  * bắt lỗi trùng khoá để dựng lại hai tình huống 23505.
  */
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 vi.mock("server-only", () => ({}));
