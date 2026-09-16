@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { APPLICATION_FORM_TEXTS_PATH } from "@/lib/application-form-text-core";
+import { SUBMISSION_BONUS_PATH } from "@/lib/submission-bonus-core";
 import {
   readApplicationFormControls,
   S12_BINDING,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/application-form-controls";
 import {
   canEditApplicationFormTexts,
+  canManageSubmissionBonus,
   canToggleApplicationForm,
   canViewApplicationFormControls
 } from "@/lib/permissions";
@@ -138,6 +140,22 @@ export default async function SeasonsFormsPage() {
             className="mt-3 inline-flex w-fit items-center rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
           >
             Sửa chữ trên form →
+          </Link>
+        </Card>
+      ) : null}
+
+      {canManageSubmissionBonus(admin.role) ? (
+        <Card className="mt-6">
+          <h2 className="text-lg font-semibold text-vam-ink">Điểm cộng theo ngày nộp</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Nộp từ ngày nào, đến hết ngày nào thì được cộng bao nhiêu điểm vào tổng điểm reviewer. Có hiệu lực ngay, kể
+            cả với đơn đã nộp.
+          </p>
+          <Link
+            href={SUBMISSION_BONUS_PATH}
+            className="mt-3 inline-flex w-fit items-center rounded-md border border-vam-line bg-white px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"
+          >
+            Đặt điểm cộng →
           </Link>
         </Card>
       ) : null}

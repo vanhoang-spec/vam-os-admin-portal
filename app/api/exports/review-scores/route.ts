@@ -12,6 +12,8 @@ import {
   parseEnumList,
   parseUuid
 } from "@/lib/recruitment-export";
+import { bonusForApplication, readApplicationBonusRules } from "@/lib/submission-bonus";
+import { addSubmissionBonus } from "@/lib/submission-bonus-core";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -119,7 +121,8 @@ export async function GET(request: Request) {
         email_primary,
         role_applied,
         season_id,
-        intake_batch_id
+        intake_batch_id,
+        created_at
       )
     `,
     (columns) => {
@@ -156,28 +159,43 @@ export async function GET(request: Request) {
     "Tổng điểm",
     "Khuyến nghị",
     "Ghi chú reviewer",
-    "Thời điểm gửi"
+    "Thời điểm gửi",
+    // Hai cột điểm cộng nối vào CUỐI, không chen sau "Tổng điểm": bảng tính nào đang
+    // đọc cột theo vị trí vẫn đọc đúng cột cũ.
+    "Điểm cộng theo ngày nộp (của đơn)",
+    "Tổng điểm sau cộng"
   ];
 
-  const body = (reviews ?? []).map((review: any) => [
-    review.application_id,
-    review.application?.full_name ?? "",
-    review.application?.email_primary ?? "",
-    review.application?.role_applied ?? "",
-    review.review_round,
-    review.reviewer?.email ?? "",
-    review.reviewer?.full_name ?? "",
-    review.status,
-    review.score_motivation,
-    review.score_goal_clarity,
-    review.score_commitment,
-    review.score_fit,
-    review.score_communication,
-    review.total_score,
-    review.recommendation,
-    review.reviewer_note,
-    review.submitted_at
-  ]);
+  // Không đọc được mốc thì ghi rõ vào ô, không để trống: ô trống trong cột điểm cộng
+  // đọc y như "không được cộng", và file này là thứ người ta dùng để xếp hạng.
+  const bonusLookup = await readApplicationBonusRules(
+    (reviews ?? []).map((review: any) => review.application?.intake_batch_id)
+  );
+
+  const body = (reviews ?? []).map((review: any) => {
+    const bonus = bonusForApplication(bonusLookup, review.application ?? {});
+    return [
+      review.application_id,
+      review.application?.full_name ?? "",
+      review.application?.email_primary ?? "",
+      review.application?.role_applied ?? "",
+      review.review_round,
+      review.reviewer?.email ?? "",
+      review.reviewer?.full_name ?? "",
+      review.status,
+      review.score_motivation,
+      review.score_goal_clarity,
+      review.score_commitment,
+      review.score_fit,
+      review.score_communication,
+      review.total_score,
+      review.recommendation,
+      review.reviewer_note,
+      review.submitted_at,
+      bonus.kind === "unknown" ? "Không đọc được" : bonus.kind === "bonus" ? bonus.points : 0,
+      bonus.kind === "unknown" ? "" : addSubmissionBonus(review.total_score, bonus)
+    ];
+  });
 
   const csv = toCsv([headers, ...body]);
   const scopeLabel = intakeBatchId ?? seasonId;

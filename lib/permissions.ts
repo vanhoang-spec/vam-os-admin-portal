@@ -156,6 +156,21 @@ export function canEditApplicationFormTexts(role?: string | null) {
 }
 
 /**
+ * Can set the "submitted by date X → +N points" windows of an application form.
+ *
+ * support_team is here by the programme owner's decision of 16/09/2026: they are
+ * the group asked to set these. Deliberately NOT canEditApplicationFormTexts
+ * widened — that one changes words the public reads, this one changes the score
+ * Core Team ranks by, and the day one of them moves the other must not follow.
+ *
+ * This is only the role half. The caller must ALSO prove canOperateSeason for the
+ * season of the intake batch.
+ */
+export function canManageSubmissionBonus(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
  * Can browse general admin-tier operational surfaces: /operations,
  * /operations/tasks, /matches/[id].
  *

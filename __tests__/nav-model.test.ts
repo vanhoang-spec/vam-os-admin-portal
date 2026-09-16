@@ -414,6 +414,11 @@ const LOGIN_ACCOUNT_ROUTES = ["/participant-accounts"];
 // "Vận hành" chứ không thành nhóm riêng: admin tier đã chạm trần 9 nhóm.
 const AI_TOOL_ROUTES = ["/ai"];
 
+// Điểm cộng theo ngày nộp (16/09/2026). Bốn vai trò của canManageSubmissionBonus —
+// support_team có mặt vì đó là nhóm được giao đặt mốc; reviewer và viewer thì không:
+// mốc đổi điểm mà Core Team dùng để xếp hạng.
+const SUBMISSION_BONUS_ROUTES = ["/admin/seasons-forms/bonus-points"];
+
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       ["/"],
   // support_team là nhóm thật sự viết thư cho người tham gia, nên nó soạn
@@ -422,11 +427,11 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   //
   // Từ 11/09/2026 support_team cũng mời reviewer và giao hồ sơ, nên thấy đúng
   // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
-  support_team: [...BASE_ROUTE_ARR, "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES],
+  support_team: [...BASE_ROUTE_ARR, "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
 };
 
 function sortedRoutes(arr: string[]) {

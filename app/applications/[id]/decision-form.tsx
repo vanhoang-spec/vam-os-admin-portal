@@ -56,6 +56,8 @@ export type DecisionFormProps = {
   hasSubmittedReview: boolean;
   latestRecommendation?: string | null;
   latestTotalScore?: number | null;
+  /** Chữ điểm đã gồm điểm cộng theo ngày nộp, ví dụ `18 + 3 = 21`. Không có thì hiện `latestTotalScore`. */
+  latestScoreText?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -67,7 +69,8 @@ export function DecisionForm({
   currentStatus,
   hasSubmittedReview,
   latestRecommendation,
-  latestTotalScore
+  latestTotalScore,
+  latestScoreText
 }: DecisionFormProps) {
   const [state, action] = useFormState(
     updateApplicationDecisionAction,
@@ -109,7 +112,7 @@ export function DecisionForm({
               <>
                 {latestRecommendation ?? "-"}
                 {latestTotalScore !== null && latestTotalScore !== undefined
-                  ? ` · Điểm: ${latestTotalScore}`
+                  ? ` · Điểm: ${latestScoreText ?? latestTotalScore}`
                   : ""}
               </>
             ) : (

@@ -52,7 +52,10 @@ export type Application = JsonRecord & {
   role_applied: string | null;
   // Legacy status field (Season 11 and earlier)
   final_status: string | null;
+  /** Cột DATE ghi bằng ngày UTC — lệch một ngày với đơn nộp sau nửa đêm giờ Việt Nam. */
   submitted_at: string | null;
+  /** Giờ nộp thật (timestamptz). Điểm cộng theo ngày nộp đọc cột này, không đọc submitted_at. */
+  created_at?: string | null;
   sbd: string | null;
   // Legacy PDPA fields
   consent_pdpa: boolean | string | null;
