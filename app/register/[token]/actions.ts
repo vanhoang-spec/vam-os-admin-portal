@@ -42,8 +42,11 @@ export async function submitEventRegistrationAction(
   if (result.status === "success") {
     // Redirect with the real registration ID so the page can verify server-side.
     // Never redirect to ?status=success — that param is no longer trusted.
+    // `updated=1` chỉ đổi câu chữ trên màn hình kết quả: người vừa sửa đăng ký cũ
+    // cần biết là đã GHI ĐÈ, không phải vừa tạo thêm một đăng ký nữa.
     const regId = result.registrationId;
-    redirect(regId ? `/register/${token}?registration_id=${regId}` : `/register/${token}`);
+    const updated = result.updated ? "&updated=1" : "";
+    redirect(regId ? `/register/${token}?registration_id=${regId}${updated}` : `/register/${token}`);
   }
   if (result.status === "already_registered") {
     redirect(`/register/${token}?status=already_registered`);

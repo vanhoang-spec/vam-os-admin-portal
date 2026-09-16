@@ -483,14 +483,19 @@ describe("registerForEvent — duplicate detection over the complete set", () =>
     consent_given: true,
   };
 
-  it("BOUNDARY: a duplicate sitting past the cap is still detected, and nothing is written", async () => {
+  it("BOUNDARY: a duplicate sitting past the cap is still detected — now overwritten, never re-inserted", async () => {
+    // 16/09/2026 luật đổi: nộp lại là GHI ĐÈ đăng ký cũ, không còn là "đã đăng
+    // ký rồi". Điều ca này canh vẫn y nguyên: đọc thiếu trang thì dòng cũ biến
+    // mất khỏi phép kiểm, và hệ thống tạo thêm một dòng trùng cho cùng một người.
     const client = publicClient(makeRegistrations(2500));
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
 
     const result = await registerForEvent(input);
 
-    expect(result.status).toBe("already_registered");
+    expect(result.status).toBe("success");
+    expect(result.updated).toBe(true);
     expect(client.inserts).toEqual([]);
+    expect(client.updates.some((write) => write.table === "event_registrations")).toBe(true);
   });
 
   it("BOUNDARY: capacity counts every seat, so a full event past the cap is refused", async () => {
