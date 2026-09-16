@@ -11,10 +11,13 @@ function selectedParam(value: string | string[] | undefined) {
 
 function RegistrationResult({
   status,
-  eventName
+  eventName,
+  updated = false
 }: {
   status: "success" | "already_registered";
   eventName: string;
+  /** Lượt gửi vừa rồi ghi đè một đăng ký đã có của chính buổi này. */
+  updated?: boolean;
 }) {
   const success = status === "success";
   return (
@@ -26,11 +29,15 @@ function RegistrationResult({
       }
     >
       <h2 className="text-lg font-semibold">
-        {success ? "Đăng ký thành công" : "Bạn đã đăng ký sự kiện này rồi"}
+        {success ? (updated ? "Đã cập nhật đăng ký" : "Đăng ký thành công") : "Bạn đã đăng ký sự kiện này rồi"}
       </h2>
       <p className="mt-2 text-base font-medium">{eventName}</p>
       <p className="mt-2 text-sm">
-        {success ? "VAM đã ghi nhận đăng ký của bạn." : "Không cần gửi lại biểu mẫu. VAM đã có đăng ký của bạn."}
+        {success
+          ? updated
+            ? "VAM đã ghi nhận bản mới nhất, thay cho đăng ký trước đó của bạn ở buổi này."
+            : "VAM đã ghi nhận đăng ký của bạn."
+          : "Không cần gửi lại biểu mẫu. VAM đã có đăng ký của bạn."}
       </p>
       {success ? <p className="mt-1 text-sm">Bạn có thể đóng trang này.</p> : null}
     </div>
@@ -69,7 +76,7 @@ function RegistrationBlocked({
   );
 }
 
-export default async function PublicEventRegistrationPage(props: { params: Promise<{ token: string }>; searchParams?: Promise<{ status?: string | string[]; registration_id?: string | string[] }> }) {
+export default async function PublicEventRegistrationPage(props: { params: Promise<{ token: string }>; searchParams?: Promise<{ status?: string | string[]; registration_id?: string | string[]; updated?: string | string[] }> }) {
   const params = await props.params;
   const searchParams = await props.searchParams;
 
@@ -114,7 +121,11 @@ export default async function PublicEventRegistrationPage(props: { params: Promi
 
         <Card>
           {showResult && data.event ? (
-            <RegistrationResult status={showResultStatus} eventName={eventName} />
+            <RegistrationResult
+              status={showResultStatus}
+              eventName={eventName}
+              updated={isVerifiedSuccess && selectedParam(searchParams?.updated) === "1"}
+            />
           ) : data.ok && data.event ? (
             <>
               <h2 className="mb-4 text-lg font-semibold text-vam-ink">Đăng ký tham gia</h2>

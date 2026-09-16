@@ -20,7 +20,19 @@ export type ChoosableSession = {
 
 export type SessionChoice =
   | { ok: true; sessionId: string }
-  | { ok: false; message: string };
+  | {
+      ok: false;
+      /**
+       * Lý do, để nơi gọi xử lý khác nhau cho từng loại. `session_full` là loại
+       * duy nhất nơi gọi được phép đi tiếp: người ĐÃ có chỗ trong chính buổi đó
+       * nộp lại là sửa đăng ký cũ, không xin thêm ghế — và chỉ tầng dữ liệu mới
+       * biết điều đó. Các loại còn lại là từ chối dứt khoát.
+       */
+      reason: "no_sessions" | "no_choice" | "not_in_series" | "session_full";
+      /** Chỉ có với `session_full`: buổi đã chọn, đã kiểm là thuộc chuỗi của link này. */
+      sessionId?: string;
+      message: string;
+    };
 
 /**
  * Chọn buổi cho một đơn đăng ký.
@@ -40,23 +52,29 @@ export function chooseSession(input: {
   if (!input.sessions) return { ok: true, sessionId: input.anchorId };
 
   if (!input.sessions.length) {
-    return { ok: false, message: "Chuỗi sự kiện này hiện không còn buổi nào để đăng ký." };
+    return { ok: false, reason: "no_sessions", message: "Chuỗi sự kiện này hiện không còn buổi nào để đăng ký." };
   }
 
   const choice = String(input.choice ?? "").trim();
-  if (!choice) return { ok: false, message: "Vui lòng chọn buổi bạn muốn tham dự." };
+  if (!choice) return { ok: false, reason: "no_choice", message: "Vui lòng chọn buổi bạn muốn tham dự." };
 
   const match = input.sessions.find((session) => session.id === choice);
   if (!match) {
     // Cùng một câu trả lời cho "buổi không tồn tại" và "buổi của chuỗi khác":
     // phân biệt hai câu đó là nói cho người gửi biết id nào có thật.
-    return { ok: false, message: "Buổi bạn chọn không thuộc chuỗi sự kiện này." };
+    return { ok: false, reason: "not_in_series", message: "Buổi bạn chọn không thuộc chuỗi sự kiện này." };
   }
 
   if (match.full && !match.waitlistEnabled) {
     // Form đã khoá ô này, nhưng form không phải hàng rào: nó chỉ là thứ người
-    // dùng nhìn thấy.
-    return { ok: false, message: "Buổi bạn chọn đã đủ chỗ. Vui lòng chọn buổi khác." };
+    // dùng nhìn thấy. Kèm `sessionId` vì buổi này ĐÃ được kiểm là thuộc chuỗi
+    // của link — nơi gọi cần nó để xét tiếp người đã có chỗ sẵn ở đây.
+    return {
+      ok: false,
+      reason: "session_full",
+      sessionId: match.id,
+      message: "Buổi bạn chọn đã đủ chỗ. Vui lòng chọn buổi khác."
+    };
   }
 
   return { ok: true, sessionId: match.id };

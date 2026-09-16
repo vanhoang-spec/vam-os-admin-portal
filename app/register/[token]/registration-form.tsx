@@ -123,7 +123,8 @@ export function RegistrationForm({
             Bạn đăng ký tham dự buổi nào?
           </legend>
           <p className="mb-2 text-xs text-slate-500">
-            Mỗi người chỉ đăng ký một buổi. Nội dung hai buổi giống nhau, chỉ khác ngày.
+            Bạn có thể đăng ký cả hai buổi — mỗi lần gửi là một buổi. Đăng ký lại bằng cùng email hoặc
+            cùng số điện thoại sẽ cập nhật đăng ký trước đó của buổi đã chọn.
           </p>
           <div className="flex flex-col gap-2">
             {sessions.map((session, index) => {

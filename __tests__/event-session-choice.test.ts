@@ -100,6 +100,39 @@ describe("buổi đã đầy", () => {
   });
 });
 
+describe("lý do từ chối", () => {
+  // Nơi gọi chỉ được đi tiếp với một lý do duy nhất: buổi đầy — vì người đã giữ
+  // chỗ sẵn ở đó nộp lại là sửa đăng ký cũ. Các lý do còn lại là từ chối dứt khoát,
+  // và không kèm id nào để đi tiếp.
+  it("buổi đầy: kèm đúng id buổi đã kiểm, để nơi gọi xét tiếp người đã có chỗ", () => {
+    const sessions = [session(ANCHOR), session(SECOND, { full: true })];
+    const result = chooseSession({ sessions, anchorId: ANCHOR, choice: SECOND });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("session_full");
+      expect(result.sessionId).toBe(SECOND);
+    }
+  });
+
+  it.each([
+    [STRANGER, "not_in_series"],
+    ["", "no_choice"]
+  ])("%s → %s, và KHÔNG kèm id nào", (choice, reason) => {
+    const result = chooseSession({ sessions: TWO, anchorId: ANCHOR, choice });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe(reason);
+      expect(result.sessionId).toBeUndefined();
+    }
+  });
+
+  it("chuỗi rỗng → no_sessions", () => {
+    const result = chooseSession({ sessions: [], anchorId: ANCHOR, choice: ANCHOR });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("no_sessions");
+  });
+});
+
 describe("chuỗi không còn buổi nào", () => {
   it("nói rõ thay vì lặng lẽ rơi về buổi neo", () => {
     // Rơi về buổi neo nghĩa là ghi một đơn vào một buổi đã huỷ.

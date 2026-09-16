@@ -24,6 +24,7 @@ import { parseVietnamDateTime } from "@/lib/event-datetime";
 import { checkinCodeUrl, usesQrCheckin } from "@/lib/event-checkin-code";
 import { DEFAULT_CHECKIN_STEPS, parseCheckinStepsInput, type StepsInput } from "@/lib/event-checkin-steps";
 import { chooseSession } from "@/lib/event-session-choice";
+import { findExistingRegistration } from "@/lib/event-registration-match";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
 import { chronologicalSeriesSlots, seriesRenumberWrites } from "@/lib/event-series-core";
@@ -151,6 +152,8 @@ export type PublicRegistrationResult = MutationResult & {
   eventName?: string | null;
   /** Returned only on status === "success"; used to verify the redirect URL server-side. */
   registrationId?: string | null;
+  /** True khi lượt gửi này ghi đè một đăng ký đã có của cùng buổi, thay vì tạo mới. */
+  updated?: boolean;
 };
 
 export type PublicCheckinResult = MutationResult & {
@@ -1001,10 +1004,19 @@ async function resolveChosenSession(
     anchorId: String(anchor.id),
     choice: rawChoice
   });
-  if (!picked.ok) return { ok: false, message: picked.message };
+  // "Buổi đã đầy" không phải từ chối ở đây: người ĐÃ giữ chỗ trong chính buổi đó
+  // nộp lại là sửa đăng ký cũ, không xin thêm ghế — và chỉ chỗ đọc danh sách đăng
+  // ký mới biết họ là ai. Cổng sức chứa trong `registerForEvent` vẫn từ chối
+  // người MỚI, nên hàng rào không hề nới ra.
+  const sessionId = picked.ok
+    ? picked.sessionId
+    : picked.reason === "session_full" && picked.sessionId
+      ? picked.sessionId
+      : null;
+  if (!sessionId) return { ok: false, message: picked.ok ? "" : picked.message };
 
   // Buổi neo — khỏi đọc lại.
-  if (picked.sessionId === anchor.id) return { ok: true, event: anchor };
+  if (sessionId === anchor.id) return { ok: true, event: anchor };
 
   const { client } = clientResult();
   if (!client) return { ok: false, message: "Không thể hoàn tất đăng ký lúc này." };
@@ -1012,7 +1024,7 @@ async function resolveChosenSession(
   const { data: row, error } = await client
     .from("events")
     .select("*")
-    .eq("id", picked.sessionId)
+    .eq("id", sessionId)
     .maybeSingle();
 
   if (error || !row) {
@@ -1084,11 +1096,12 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   const { data: existingRows, error: existingError } = await selectAllWhere<{
     id: string;
     email: string | null;
+    phone: string | null;
     registration_status: string | null;
   }>(
     client,
     "event_registrations",
-    "id,email,registration_status",
+    "id,email,phone,registration_status",
     (query) => query.eq("event_id", eventId).neq("registration_status", "cancelled"),
     "public registration duplicate check failed"
   );
@@ -1097,10 +1110,11 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: targetEvent.event_name ?? null };
   }
 
-  const duplicate = existingRows.some((row) => normalizeEmail(row.email) === email);
-  if (duplicate) {
-    return { ok: true, status: "already_registered", message: "Bạn đã đăng ký sự kiện này rồi", eventName: targetEvent.event_name ?? null };
-  }
+  // Chủ dự án chốt 16/09/2026: nộp lại bằng cùng email HOẶC cùng số điện thoại thì
+  // GHI ĐÈ đăng ký cũ của đúng buổi này, thay vì báo "Bạn đã đăng ký rồi". Ràng
+  // buộc "một email một chuỗi" cũng đã bỏ, nên một người đăng ký được cả hai buổi
+  // — xem 20260916140000_series_registration_both_sessions.sql.
+  const existing = findExistingRegistration(existingRows, { email, phone: input.phone });
 
   // Class B: a lookup of one email address against `people.email_primary`. The
   // result is a handful of rows even with duplicate person records; `readBounded`
@@ -1141,11 +1155,16 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   ).length;
   const isFull = cfg.capacity_limit_enabled && cfg.capacity_limit != null && activeSeatsCount >= cfg.capacity_limit;
 
-  if (isFull && !cfg.waitlist_enabled) {
+  // Người đã có chỗ trong buổi này nộp lại thì không đi qua cổng sức chứa: họ
+  // không xin thêm ghế nào. Chặn họ ở đây nghĩa là một cái tên gõ sai không sửa
+  // được nữa chỉ vì buổi đã đầy.
+  if (!existing && isFull && !cfg.waitlist_enabled) {
     return {
       ok: false,
       status: "capacity_full",
-      message: "Sự kiện đã đủ số lượng đăng ký. Vui lòng liên hệ BTC nếu cần hỗ trợ.",
+      message: registrationData.sessions?.length
+        ? "Buổi bạn chọn đã đủ chỗ. Vui lòng chọn buổi khác."
+        : "Sự kiện đã đủ số lượng đăng ký. Vui lòng liên hệ BTC nếu cần hỗ trợ.",
       eventName: targetEvent.event_name ?? null
     };
   }
@@ -1197,34 +1216,85 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
     schedule_notified_for: clean(targetEvent.starts_at)
   };
 
-  const { data, error: insertError } = await client
-    .from("event_registrations")
-    .insert(payload)
-    .select("id")
-    .maybeSingle();
+  // Ghi đè một đăng ký đã có: chỉ chạm phần người ta vừa khai lại. Chỗ đã giữ
+  // (`registration_status`), việc đã điểm danh (`attendance_status`) và tấm vé
+  // (`checkin_code`, không nằm trong payload) giữ nguyên — sửa tên gõ sai không
+  // được biến một người đang có mặt thành chưa tới, cũng không được huỷ tấm vé
+  // đã nằm trong hộp thư của họ.
+  const applyUpdate = (existingId: string) => {
+    const updates: JsonRecord = { ...payload };
+    delete updates.registration_status;
+    delete updates.attendance_status;
+    delete updates.is_walk_in;
+    delete updates.registration_source;
+    return client.from("event_registrations").update(updates).eq("id", existingId).select("id").maybeSingle();
+  };
 
-  if (insertError) {
-    if ((insertError as { code?: string }).code === "23505") {
-      // Hai ràng buộc duy nhất cùng ném 23505, và người đọc cần biết là cái
-      // nào: "bạn đã đăng ký buổi này rồi" khác hẳn "bạn đã giữ chỗ ở một buổi
-      // khác của chuỗi này" — câu thứ hai còn phải nói họ làm gì tiếp theo.
-      const hitSeries = String((insertError as { message?: string }).message ?? "").includes(
-        "event_registrations_series_lower_email_active_uidx"
-      );
-      return {
-        ok: true,
-        status: "already_registered",
-        message: hitSeries
-          ? "Bạn đã giữ chỗ ở một buổi khác của chuỗi sự kiện này. Mỗi người chỉ đăng ký một buổi — vui lòng liên hệ ban tổ chức nếu cần đổi buổi."
-          : "Bạn đã đăng ký sự kiện này rồi",
-        eventName: targetEvent.event_name ?? null
-      };
+  let registrationId: string | null = null;
+  let updatedExisting = false;
+  let effectiveStatus = baseStatus;
+
+  if (existing) {
+    const { data: updatedRow, error: updateError } = await applyUpdate(existing.row.id);
+    if (updateError) {
+      // Khớp bằng số điện thoại, nhưng email mới lại trùng một đăng ký KHÁC của
+      // cùng buổi: hai người khác nhau, nên không ghi đè ai cả.
+      if ((updateError as { code?: string }).code === "23505") {
+        return {
+          ok: false,
+          status: "validation_error",
+          message: "Email này đã dùng cho một đăng ký khác của buổi này. Vui lòng kiểm tra lại email.",
+          eventName: targetEvent.event_name ?? null
+        };
+      }
+      log("public registration update failed", updateError);
+      return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: targetEvent.event_name ?? null };
     }
-    log("public registration insert failed", insertError);
-    return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: targetEvent.event_name ?? null };
-  }
+    registrationId = (updatedRow as { id?: string } | null)?.id ?? existing.row.id;
+    updatedExisting = true;
+    effectiveStatus = String(existing.row.registration_status ?? baseStatus);
+  } else {
+    const { data, error: insertError } = await client
+      .from("event_registrations")
+      .insert(payload)
+      .select("id")
+      .maybeSingle();
 
-  const registrationId = (data as { id?: string } | null)?.id ?? null;
+    if (insertError) {
+      if ((insertError as { code?: string }).code === "23505") {
+        // Hai lần bấm gửi gần nhau: dòng kia vừa được tạo giữa lúc đọc và ghi.
+        // Ràng buộc một-email-một-buổi là thứ bắt được, và việc đúng vẫn là ghi
+        // đè dòng đã có — đọc lại rồi cập nhật, thay vì báo lỗi cho người đăng ký.
+        const { data: raceRows } = await selectAllWhere<{
+          id: string;
+          email: string | null;
+          phone: string | null;
+          registration_status: string | null;
+        }>(
+          client,
+          "event_registrations",
+          "id,email,phone,registration_status",
+          (query) => query.eq("event_id", eventId).neq("registration_status", "cancelled"),
+          "public registration race re-read failed"
+        );
+        const raced = findExistingRegistration(raceRows, { email, phone: input.phone });
+        if (raced) {
+          const { error: raceUpdateError } = await applyUpdate(raced.row.id);
+          if (!raceUpdateError) {
+            registrationId = raced.row.id;
+            updatedExisting = true;
+            effectiveStatus = String(raced.row.registration_status ?? baseStatus);
+          }
+        }
+      }
+      if (!registrationId) {
+        log("public registration insert failed", insertError);
+        return { ok: false, status: "server_error", message: "Không thể hoàn tất đăng ký lúc này.", eventName: targetEvent.event_name ?? null };
+      }
+    } else {
+      registrationId = (data as { id?: string } | null)?.id ?? null;
+    }
+  }
 
   // Vé và thư xác nhận. Cả hai đều KHÔNG được làm hỏng việc đăng ký nếu chúng
   // hỏng: người đó đã đăng ký, chỗ ngồi đã giữ, và báo "đăng ký không thành
@@ -1236,16 +1306,17 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
       event: targetEvent,
       toEmail: email,
       fullName,
-      pendingApproval: baseStatus !== "registered"
+      pendingApproval: effectiveStatus !== "registered"
     });
   }
 
   return {
     ok: true,
     status: "success",
-    message: "Đăng ký thành công",
+    message: updatedExisting ? "Đã cập nhật đăng ký của bạn." : "Đăng ký thành công",
     eventName: targetEvent.event_name ?? null,
-    registrationId
+    registrationId,
+    updated: updatedExisting
   };
 }
 
