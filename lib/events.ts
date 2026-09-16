@@ -34,7 +34,7 @@ import {
   sendEventScheduleChange
 } from "@/lib/email";
 import { getPublicOrigin } from "@/lib/public-url";
-import { formatDate, formatDateTime, formatTime, formatTimeRange } from "@/lib/utils";
+import { formatDate, formatDateTime, formatTime, formatTimeRange, vietnamDateKey } from "@/lib/utils";
 import {
   generateOccurrences,
   isEndMode,
@@ -1446,7 +1446,7 @@ async function syncCheckedInParticipation(client: any, input: {
       .update({
         attendance_status: "attended",
         registration_status: "registered",
-        attendance_date: new Date().toISOString().slice(0, 10)
+        attendance_date: vietnamDateKey(new Date())
       })
       .in("id", existingIds);
     if (updateError) {
@@ -1463,7 +1463,7 @@ async function syncCheckedInParticipation(client: any, input: {
     role_at_event: "unknown",
     registration_status: "registered",
     attendance_status: "attended",
-    attendance_date: new Date().toISOString().slice(0, 10),
+    attendance_date: vietnamDateKey(new Date()),
     captured_by: "self_qr",
     walk_in: false
   });

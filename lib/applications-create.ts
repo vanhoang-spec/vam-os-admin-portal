@@ -5,6 +5,7 @@ import { S12_BINDING } from "@/lib/application-form-controls";
 import { emailsEqual, escapeIlikePattern, isValidEmail, normalizeEmail } from "@/lib/identity";
 import { getSupabaseServiceRoleClient, getSupabaseServiceRoleEnvStatus } from "@/lib/supabase-server";
 import type { JsonRecord } from "@/lib/types";
+import { vietnamDateKey } from "@/lib/utils";
 
 export type ApplicationRole = "mentor" | "mentee";
 
@@ -765,7 +766,9 @@ export async function submitPilotApplication(
     gender,
     consent_data_storage: input.consentDataStorage,
     raw_payload: input.rawPayload,
-    submitted_at: new Date().toISOString().slice(0, 10)
+    // Ngày theo lịch Việt Nam. `toISOString().slice(0, 10)` là ngày UTC — đơn nộp
+    // sau nửa đêm giờ Việt Nam mang ngày hôm trước, vì máy chủ chạy UTC.
+    submitted_at: vietnamDateKey(new Date())
   };
 
   const { data: inserted, error: insertErr } = await client

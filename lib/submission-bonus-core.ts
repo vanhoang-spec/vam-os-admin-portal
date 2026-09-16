@@ -14,18 +14,20 @@
  *   đổi theo ngay. Cái giá: sửa mốc sau khi đã xếp hạng sẽ đổi điểm đã xếp — vì thế
  *   mỗi lần thêm/xoá mốc đều ghi nhật ký.
  *
- * NGÀY NỘP LÀ `created_at` ĐỌC THEO GIỜ VIỆT NAM, KHÔNG PHẢI `submitted_at`
- *   `applications.submitted_at` là cột DATE được ghi bằng ngày UTC
- *   (`toISOString().slice(0, 10)`): đơn nộp lúc 01:00 sáng 11/09 giờ Việt Nam
- *   mang `submitted_at` = 10/09. Dùng cột đó thì một đơn nộp trễ vẫn lọt mốc
- *   "đến hết 10/09". Ngày 16/09/2026 có 30 đơn mentee S12 lệch ngày như vậy.
+ * NGÀY NỘP LÀ `created_at` ĐỌC THEO GIỜ VIỆT NAM
+ *   `applications.submitted_at` chỉ là một NGÀY, và cho tới 16/09/2026 nó còn được
+ *   ghi bằng ngày UTC (40 đơn S12 lệch một ngày, đã chỉnh bằng migration
+ *   20260916190000_vietnam_submission_date.sql). `created_at` là đúng khoảnh khắc
+ *   bấm gửi, nên nó vẫn là nguồn đáng tin nhất cho câu hỏi "nộp ngày nào".
  *
  * Module thuần, không I/O — để phần quyết định ai được cộng kiểm được mà không
  * cần database.
  */
 
 import { parseVietnamDateInput, toVietnamDateInput } from "@/lib/event-datetime";
-import { formatDate } from "@/lib/utils";
+import { vietnamDateKey } from "@/lib/utils";
+
+export { vietnamDateKey };
 
 export const SUBMISSION_BONUS_PATH = "/admin/seasons-forms/bonus-points";
 
@@ -56,17 +58,6 @@ export function bonusTargetKey(intakeBatchId: unknown, role: unknown): string {
   return `${String(intakeBatchId ?? "").trim()}:${String(role ?? "").trim()}`;
 }
 
-/**
- * Mốc thời gian → ngày theo giờ Việt Nam, dạng `YYYY-MM-DD`.
- *
- * Đi qua đúng cửa định dạng ngày của cả sản phẩm (`formatDate`, đã ấn định múi
- * giờ) rồi đọc ngược lại, thay vì tự cộng bảy tiếng: một phép cộng tay là thêm
- * một chỗ nữa có thể sai múi giờ.
- */
-export function vietnamDateKey(value: unknown): string | null {
-  if (!value) return null;
-  return parseVietnamDateInput(formatDate(value));
-}
 
 /** So chuỗi `YYYY-MM-DD` là so ngày: cùng độ dài, năm-tháng-ngày từ trái sang. */
 export function ruleCoversDate(rule: Pick<SubmissionBonusRule, "startsOn" | "endsOn">, dateKey: string): boolean {

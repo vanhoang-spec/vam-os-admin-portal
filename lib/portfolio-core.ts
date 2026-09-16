@@ -1,4 +1,5 @@
 import type { ProgramContextCatalog, SeasonCatalogRow } from "@/lib/program-context-core";
+import { vietnamDateKey } from "@/lib/utils";
 
 export type CountValue = number | null;
 export type PortfolioSources = { applications: any[] | null; memberships: any[] | null; matches: any[] | null; events: any[] | null; actions: any[] | null };
@@ -40,7 +41,9 @@ export function reconcilePortfolioRows(
   now = new Date(),
   scope: PortfolioSeasonScope = { mode: "current" }
 ) {
-  const today = now.toISOString().slice(0, 10);
+  // "Hôm nay" theo lịch Việt Nam: theo UTC thì từ 00:00 đến 06:59 sáng, việc hạn hôm qua
+  // chưa bị tính là quá hạn.
+  const today = vietnamDateKey(now) ?? "";
   return catalog.programs.filter((program) => !programId || program.id === programId).map((program) => {
     const linkedSeasons = catalog.seasons.filter((row) => row.programId === program.id);
     const currentSeason = resolveCurrentSeason(linkedSeasons);
