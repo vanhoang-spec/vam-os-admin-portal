@@ -185,6 +185,12 @@ của database.
 - Thư đi qua **Brevo**, gửi từ `hello@alumni-mentoring.edu.vn`.
 - Không dán khoá `service_role` / `sb_secret_` vào bất cứ đâu ngoài biến môi
   trường.
+- **Bảng mới trong `public`: bật RLS ngay trong migration tạo bảng, và thu hồi
+  quyền của `anon`.** Khoá công khai nằm sẵn trong mã trang web, ai cũng lấy
+  được; Supabase thì mặc định cấp quyền bảng cho `anon`. 16/09/2026: 27 bảng
+  đọc được — và ghi được — từ bên ngoài vì thiếu đúng hai dòng đó. View cũng
+  phải `security_invoker = on`, không thì nó là đường vòng qua mặt RLS. Xem
+  `supabase/migrations/20260916090000_lock_down_public_api.sql`.
 - Đổi nameserver khỏi PA Vietnam sẽ phá MX và hộp thư `hello@`. Đừng.
 - File CSV xuất ra mang họ tên, email, SĐT, MSSV của hàng trăm người. Cổng tải
   hẹp hơn cổng đọc trang, và đó là cố ý.
