@@ -48,6 +48,10 @@ cũng xanh trên máy.
   Chrome tiếng Anh vẽ `mm/dd/yyyy`. Không thuộc tính HTML hay CSS nào bắt nó đổi.
 - `vitest.config.ts` đặt `process.env.TZ = "UTC"` **trước** khi vitest nạp bất
   cứ thứ gì, để test chạy đúng múi giờ production.
+- `applications.submitted_at` là cột DATE ghi bằng **ngày UTC**: đơn nộp sau
+  nửa đêm giờ Việt Nam mang ngày hôm trước (16/09/2026: 30 đơn mentee S12). Cần
+  "nộp ngày nào" theo giờ Việt Nam — ví dụ điểm cộng theo ngày nộp — thì đọc
+  `created_at` qua `vietnamDateKey` trong `lib/submission-bonus-core.ts`.
 
 Định dạng ngày xuyên suốt sản phẩm là **DD/MM/YYYY**.
 

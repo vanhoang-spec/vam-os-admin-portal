@@ -6,6 +6,8 @@ import { updateApplicationDecisionAction } from "@/app/actions/application-decis
 import { ConfirmActionDialog } from "@/components/action-feedback";
 import { initialDecisionActionState } from "@/lib/decision-action-types";
 import { DIRECT_INVITE_REASON_MESSAGE } from "@/lib/direct-interview-eligibility";
+import { scoreWithBonusText } from "@/components/submission-bonus-badge";
+import type { SubmissionBonus } from "@/lib/submission-bonus-core";
 import {
   ASSIGNMENT_STATE_LABEL,
   BLOCKED_CHOICE_SUFFIX,
@@ -51,7 +53,7 @@ function SubmitButton({ label, disabled }: { label: string; disabled?: boolean }
 // Evidence — one block per submitted review, never averaged
 // ---------------------------------------------------------------------------
 
-function EvidencePanel({ state }: { state: ScreeningDecisionState }) {
+function EvidencePanel({ state, submissionBonus }: { state: ScreeningDecisionState; submissionBonus: SubmissionBonus }) {
   if (!state.evidence.length) return null;
   return (
     <section data-testid="screening-evidence" className="grid gap-3">
@@ -79,7 +81,7 @@ function EvidencePanel({ state }: { state: ScreeningDecisionState }) {
             <span>
               <span className="text-slate-500">Điểm tổng: </span>
               <strong className="font-medium text-vam-ink tabular-nums">
-                {row.totalScore ?? "—"}
+                {row.totalScore === null ? "—" : scoreWithBonusText(row.totalScore, submissionBonus)}
               </strong>
             </span>
           </div>
@@ -205,13 +207,16 @@ export type ScreeningDecisionPanelProps = {
   currentStatus: string | null;
   state: ScreeningDecisionState;
   canAssignReview: boolean;
+  /** Điểm cộng theo ngày nộp của đơn. Không truyền = không có điểm cộng, hiện điểm reviewer như cũ. */
+  submissionBonus?: SubmissionBonus;
 };
 
 export function ScreeningDecisionPanel({
   applicationId,
   currentStatus,
   state,
-  canAssignReview
+  canAssignReview,
+  submissionBonus = { kind: "none", submittedOn: null }
 }: ScreeningDecisionPanelProps) {
   const [formState, action] = useFormState(
     updateApplicationDecisionAction,
@@ -237,7 +242,7 @@ export function ScreeningDecisionPanel({
         </div>
       ) : null}
 
-      <EvidencePanel state={state} />
+      <EvidencePanel state={state} submissionBonus={submissionBonus} />
 
       {nothingAvailable ? <Guidance state={state} canAssign={canAssignReview} /> : null}
 

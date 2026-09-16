@@ -7,6 +7,8 @@ import { displayConsent, displayText, formatDate } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { canDecide } from "@/lib/permissions";
+import { bonusForApplication, readApplicationBonusRules } from "@/lib/submission-bonus";
+import { SubmissionBonusBadge } from "@/components/submission-bonus-badge";
 import { redirect } from "next/navigation";
 import { bulkS12ScreeningAction } from "@/app/actions/s12-screening-bulk";
 import { BulkScreeningRowCheckbox, BulkScreeningToolbar } from "@/app/applications/_components/bulk-screening-controls";
@@ -87,6 +89,8 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
+  const bonusLookup = await readApplicationBonusRules(applications.map((application: any) => application.intake_batch_id));
+
   const rows = applications.map((application: any) => {
     const fullName = application.full_name ?? null;
     const emailPrimary = application.email_primary ?? null;
@@ -103,6 +107,7 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
       status_raw: String(statusUnified ?? ""),
       status_display: applicationStatusLabel(statusUnified),
       submitted_at_display: formatDate(application.submitted_at),
+      bonus: bonusForApplication(bonusLookup, application),
       consent_display: displayConsent(consentUnified),
       source_display: displayText(application.source),
       classification
@@ -185,6 +190,7 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
                   <th className="px-4 py-3 font-semibold">Email</th>
                   <th className="px-4 py-3 font-semibold">Trạng thái</th>
                   <th className="px-4 py-3 font-semibold">Ngày nộp</th>
+                  <th className="px-4 py-3 font-semibold" title="Điểm cộng theo ngày nộp, cộng vào tổng điểm của từng reviewer">Điểm cộng</th>
                   <th className="px-4 py-3 text-right font-semibold">Hành động</th>
                 </tr>
               </thead>
@@ -220,6 +226,7 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">{row.submitted_at_display}</td>
+                      <td className="px-4 py-3"><SubmissionBonusBadge bonus={row.bonus} /></td>
                       <td className="px-4 py-3 text-right">
                         <Link
                           href={`/applications/${row.id}?queue=mentor-review&page=${page}${querySuffix}`}
@@ -233,7 +240,7 @@ export default async function MentorReviewQueuePage(props: { searchParams: Promi
                 })}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={canBulkDecide ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={canBulkDecide ? 10 : 9} className="px-4 py-8 text-center text-slate-500">
                       Không tìm thấy đơn nào.
                     </td>
                   </tr>

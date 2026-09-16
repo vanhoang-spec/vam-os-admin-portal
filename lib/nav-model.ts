@@ -5,6 +5,7 @@ import {
   canComposeEmailTemplate,
   canInviteParticipants,
   canManageReviewers,
+  canManageSubmissionBonus,
   canUseAiTools
 } from "@/lib/permissions";
 import {
@@ -12,6 +13,7 @@ import {
   canBrowseParticipants,
   canBrowsePeople
 } from "@/lib/read-access";
+import { SUBMISSION_BONUS_PATH } from "@/lib/submission-bonus-core";
 
 export type NavItemDef = { href: string; label: string };
 
@@ -75,6 +77,13 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const canAssignLots = canAssignReviewLots(role);
   const canStaffReviewers = canManageReviewers(role);
   const showStaffingOnly = !showReviews && (canAssignLots || canStaffReviewers);
+
+  // Điểm cộng theo ngày nộp (16/09/2026): team support là nhóm được giao đặt mốc,
+  // nên mục này nằm trong "Ứng tuyển" — nhóm support_team đã thấy — chứ không chỉ
+  // trong "Quản trị", nơi support_team không vào. Gate theo đúng predicate trang tự kiểm.
+  const bonusItems = canManageSubmissionBonus(role)
+    ? [{ href: SUBMISSION_BONUS_PATH, label: "Điểm cộng theo ngày nộp" }]
+    : [];
 
   const groups: (NavGroupDef | null)[] = [
     // "Công việc của tôi" sits at the very top, above Tổng quan, for everyone
@@ -162,6 +171,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
                   { href: "/applications", label: "Ứng tuyển (Tất cả)" },
                 ]
               : []),
+            ...bonusItems,
             { href: "/reviews", label: "Đánh giá" },
             { href: "/interviews", label: "Phỏng vấn" },
           ],
@@ -176,6 +186,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
               ...(canStaffReviewers
                 ? [{ href: "/reviews/reviewer-pool", label: "Danh sách nhân sự tuyển sinh" }]
                 : []),
+              ...bonusItems,
             ],
           }
         : showApplicationOps

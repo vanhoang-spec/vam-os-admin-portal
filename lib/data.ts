@@ -3130,7 +3130,8 @@ export async function getS12ApplicationReviewQueue(options: {
   const s12SeasonId = targetSeason.id;
 
   // Bounded projection containing only required fields for list rendering & detail links
-  const projection = "id, person_id, season_id, intake_batch_id, full_name, email_primary, role_applied, status, final_status, sbd, submitted_at, consent_data_storage, consent_pdpa, source";
+  // created_at: giờ nộp thật, để tính điểm cộng theo ngày nộp (submitted_at là ngày UTC).
+  const projection = "id, person_id, season_id, intake_batch_id, full_name, email_primary, role_applied, status, final_status, sbd, submitted_at, created_at, consent_data_storage, consent_pdpa, source";
 
   let query = client.from("applications").select(projection, { count: "exact" })
     .eq("role_applied", role)

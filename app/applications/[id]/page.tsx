@@ -22,7 +22,10 @@ import { canAssignReview, canDecide } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person } from "@/lib/types";
 import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
-import { displayText, formatDate } from "@/lib/utils";
+import { displayText, formatDate, formatDateTime } from "@/lib/utils";
+import { bonusForApplication, readApplicationBonusRules, rulesForTarget } from "@/lib/submission-bonus";
+import { describeBonusWindow } from "@/lib/submission-bonus-core";
+import { scoreWithBonusText } from "@/components/submission-bonus-badge";
 import { canBrowseApplications } from "@/lib/read-access";
 import { getStageRequirements, type StageRequirement } from "@/lib/recruitment-stage-requirements";
 import {
@@ -239,6 +242,13 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   })();
 
   const reviews: ApplicationReview[] = reviewsResult.data ?? [];
+
+  // Điểm cộng theo ngày nộp: tính từ giờ nộp thật (created_at, giờ Việt Nam) và cộng
+  // vào tổng của TỪNG reviewer ở mọi chỗ trang này in điểm. Xem lib/submission-bonus-core.ts.
+  const bonusLookup = await readApplicationBonusRules([application.data.intake_batch_id]);
+  const submissionBonus = bonusForApplication(bonusLookup, application.data);
+  const formHasBonusRules =
+    (rulesForTarget(bonusLookup, application.data.intake_batch_id, application.data.role_applied)?.length ?? 0) > 0;
   const adminUsers = adminUsersRes.data ?? [];
   const adminUserMap = new Map(adminUsers.map((u) => [u.id, u]));
 
@@ -473,6 +483,22 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
         <h2 className="mb-3 text-base font-semibold text-vam-ink">
           Lịch sử đánh giá{reviews.length > 0 ? ` (${reviews.length})` : ""}
         </h2>
+        {submissionBonus.kind === "unknown" ? (
+          <p data-testid="submission-bonus-line" className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Không đọc được mốc điểm cộng theo ngày nộp. Điểm tổng dưới đây CHƯA gồm điểm cộng.
+          </p>
+        ) : submissionBonus.kind === "bonus" ? (
+          <p data-testid="submission-bonus-line" className="mb-3 rounded-md border border-vam-green/30 bg-vam-mint px-3 py-2 text-sm text-vam-ink">
+            <strong className="text-vam-green">Điểm cộng theo ngày nộp: +{submissionBonus.points}</strong>
+            {` — nộp lúc ${formatDateTime(application.data.created_at)} (giờ Việt Nam), mốc “${describeBonusWindow(submissionBonus.rule)}”`}
+            {submissionBonus.rule.label ? ` · ${submissionBonus.rule.label}` : ""}
+            {". Đã cộng vào điểm tổng của từng reviewer."}
+          </p>
+        ) : formHasBonusRules ? (
+          <p data-testid="submission-bonus-line" className="mb-3 text-sm text-slate-600">
+            Không có điểm cộng theo ngày nộp — nộp lúc {formatDateTime(application.data.created_at)} (giờ Việt Nam), ngoài các mốc đang đặt.
+          </p>
+        ) : null}
         {reviews.length === 0 ? (
           <EmptyState message="Chưa có review nào cho đơn này." />
         ) : (
@@ -508,7 +534,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                         {review.due_at ? formatDate(review.due_at) : "-"}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
-                        {review.total_score !== null ? review.total_score : "-"}
+                        {review.total_score !== null ? scoreWithBonusText(review.total_score, submissionBonus) : "-"}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
                         {displayText(review.recommendation)}
@@ -576,6 +602,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
               currentStatus={displayStatus}
               state={screeningState}
               canAssignReview={canAssign}
+              submissionBonus={submissionBonus}
             />
           ) : (
           <DecisionForm
@@ -584,6 +611,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             hasSubmittedReview={hasSubmittedReview}
             latestRecommendation={latestSubmittedReview?.recommendation}
             latestTotalScore={latestSubmittedReview?.total_score}
+            latestScoreText={scoreWithBonusText(latestSubmittedReview?.total_score, submissionBonus)}
           />
           )
         ) : (
