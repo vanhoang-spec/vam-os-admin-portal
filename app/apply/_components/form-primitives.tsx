@@ -688,6 +688,63 @@ export function CheckboxGroupField({
   );
 }
 
+/**
+ * Một nhóm lựa chọn ban tổ chức đã chốt: người nộp thấy đủ các lựa chọn, lựa chọn
+ * mở được tick sẵn và không bỏ tick được, lựa chọn khóa mờ đi kèm chữ "tạm khóa".
+ *
+ * Checkbox bị disabled không đi vào FormData, nên giá trị gửi đi nằm ở input ẩn.
+ * Cố ý KHÔNG đăng ký autosave: giá trị không do người nộp chọn, và một bản nháp từ
+ * trước khi khóa không được tick lại lựa chọn đã khóa. Server vẫn tự quyết giá trị
+ * cuối cùng.
+ */
+export function LockedChoiceField({
+  name,
+  label,
+  helpText,
+  options
+}: {
+  name: string;
+  label: string;
+  helpText?: string;
+  options: ReadonlyArray<{ value: string; label: string; locked: boolean }>;
+}) {
+  return (
+    <fieldset data-field-name={name} data-field-label={label}>
+      <legend className="block text-sm font-medium text-vam-ink">{label}</legend>
+      {helpText ? <p className="mt-0.5 text-xs text-slate-500">{helpText}</p> : null}
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        {options.map((o) => (
+          <label
+            key={o.value}
+            className={cn(
+              "flex items-start gap-2 rounded-md border border-vam-line px-3 py-2 text-sm",
+              o.locked ? "bg-slate-50 text-slate-400" : "bg-white text-vam-ink"
+            )}
+          >
+            <input
+              type="checkbox"
+              value={o.value}
+              checked={!o.locked}
+              disabled
+              readOnly
+              className="mt-0.5 h-4 w-4 rounded border-vam-line text-vam-green"
+            />
+            <span>
+              {o.label}
+              {o.locked ? " — tạm khóa" : null}
+            </span>
+          </label>
+        ))}
+      </div>
+      {options
+        .filter((o) => !o.locked)
+        .map((o) => (
+          <input key={o.value} type="hidden" name={name} value={o.value} />
+        ))}
+    </fieldset>
+  );
+}
+
 export function RadioGroupField({
   name,
   label,
