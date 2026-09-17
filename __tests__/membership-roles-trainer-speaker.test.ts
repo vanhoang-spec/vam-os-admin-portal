@@ -124,7 +124,8 @@ describe("2. một cửa cho tên gọi", () => {
 
   it("ô chọn dựng từ hằng số, không khoá cứng trong JSX", () => {
     const ui = read("app/people/[id]/membership-lifecycle-controls.tsx");
-    expect(ui).toContain("MEMBERSHIP_ROLES.map");
+    // Lọc theo quyền của người xem rồi mới dựng ô chọn — vẫn từ cùng hằng số.
+    expect(ui).toContain("MEMBERSHIP_ROLES.filter((value) =>");
     expect(ui).not.toContain('<option value="mentor">');
     expect(ui).not.toContain('<option value="mentee">');
   });

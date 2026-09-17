@@ -102,6 +102,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -140,6 +141,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -172,6 +174,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -204,6 +207,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -236,6 +240,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -268,6 +273,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -300,6 +306,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -343,6 +350,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -376,6 +384,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -409,6 +418,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -442,6 +452,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -450,11 +461,11 @@ describe.each(FIXTURES)(
         />,
       );
 
-      // Active membership supports pause/withdraw/opt_out
+      // Active mentor: participation toggle first, pause/withdraw under "Thao tác khác";
+      // opt_out is the toggle, so it is not offered a second time.
+      expect(screen.getByRole("button", { name: "Chuyển sang Không tham dự" })).not.toBeNull();
       expect(screen.getByRole("button", { name: "Tạm nghỉ" })).not.toBeNull();
-      expect(
-        screen.getByRole("button", { name: "Không tiếp tục" }),
-      ).not.toBeNull();
+      expect(screen.queryByRole("button", { name: "Không tiếp tục" })).toBeNull();
     });
 
     it("shows existing paused S12 actions if S12 membership is paused", () => {
@@ -475,6 +486,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -483,10 +495,11 @@ describe.each(FIXTURES)(
         />,
       );
 
-      // Paused membership supports reactivate
+      // Paused mentor: reactivate is the participation toggle
       expect(
-        screen.getByRole("button", { name: "Kích hoạt lại" }),
+        screen.getByRole("button", { name: "Chuyển sang Tham dự" }),
       ).not.toBeNull();
+      expect(screen.queryByRole("button", { name: "Kích hoạt lại" })).toBeNull();
     });
 
     it("applies the same UX to Mentee roles", () => {
@@ -507,6 +520,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -540,6 +554,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -570,6 +585,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -607,6 +623,7 @@ describe.each(FIXTURES)(
         const { unmount } = render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -650,6 +667,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -696,6 +714,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -753,6 +772,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -810,6 +830,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -857,6 +878,7 @@ describe.each(FIXTURES)(
         const { unmount } = render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -890,6 +912,7 @@ describe.each(FIXTURES)(
         const { unmount } = render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -922,6 +945,7 @@ describe.each(FIXTURES)(
         const { unmount } = render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -964,6 +988,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -1005,6 +1030,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -1046,6 +1072,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -1087,6 +1114,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -1116,6 +1144,7 @@ describe.each(FIXTURES)(
       const { container } = render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -1158,6 +1187,7 @@ describe.each(FIXTURES)(
       const { container } = render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}
@@ -1205,6 +1235,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1235,6 +1266,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1279,6 +1311,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={WEIRD_LINK_SEASONS}
@@ -1323,6 +1356,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={BAD_S12_LINK_SEASONS}
@@ -1356,6 +1390,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={NO_UEHM_PROGRAMS}
             seasons={SEASONS}
@@ -1394,6 +1429,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={NO_S11}
@@ -1432,6 +1468,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={NO_S12}
@@ -1462,6 +1499,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1492,6 +1530,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1529,6 +1568,7 @@ describe.each(FIXTURES)(
           const { unmount } = render(
             <MembershipLifecycleControls
               personId={PERSON}
+              adminRole="super_admin"
               memberships={memberships}
               programs={PROGRAMS}
               seasons={SEASONS}
@@ -1580,6 +1620,7 @@ describe.each(FIXTURES)(
           const { unmount } = render(
             <MembershipLifecycleControls
               personId={PERSON}
+              adminRole="super_admin"
               memberships={memberships}
               programs={PROGRAMS}
               seasons={SEASONS}
@@ -1624,6 +1665,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1654,6 +1696,7 @@ describe.each(FIXTURES)(
         render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1684,6 +1727,7 @@ describe.each(FIXTURES)(
         const { container } = render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1716,6 +1760,7 @@ describe.each(FIXTURES)(
         const { container } = render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1748,6 +1793,7 @@ describe.each(FIXTURES)(
         const { container } = render(
           <MembershipLifecycleControls
             personId={PERSON}
+            adminRole="super_admin"
             memberships={memberships}
             programs={PROGRAMS}
             seasons={SEASONS}
@@ -1801,6 +1847,7 @@ describe.each(FIXTURES)(
       render(
         <MembershipLifecycleControls
           personId={PERSON}
+          adminRole="super_admin"
           memberships={memberships}
           programs={PROGRAMS}
           seasons={SEASONS}

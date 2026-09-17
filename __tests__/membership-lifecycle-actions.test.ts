@@ -28,8 +28,8 @@ function query(single: unknown) {
   const chain: any = { select: vi.fn(() => chain), eq: vi.fn(() => chain), maybeSingle: vi.fn(async () => single) };
   return chain;
 }
-function client(options: { status?: string; validSeason?: boolean; rpcOutcome?: string; rpcError?: string } = {}) {
-  const membership = { data: { id: MEMBERSHIP, person_id: PERSON, program_id: PROGRAM, season_id: SEASON, status: options.status ?? "active" }, error: null };
+function client(options: { status?: string; role?: string; validSeason?: boolean; rpcOutcome?: string; rpcError?: string } = {}) {
+  const membership = { data: { id: MEMBERSHIP, person_id: PERSON, program_id: PROGRAM, season_id: SEASON, role: options.role ?? "mentor", status: options.status ?? "active" }, error: null };
   const season = { data: options.validSeason === false ? null : { id: SEASON, program_id: PROGRAM }, error: null };
   const membershipQuery = query(membership), seasonQuery = query(season);
   const rpc = vi.fn(async () => options.rpcError ? { data: null, error: { message: options.rpcError } } : { data: [{ outcome_status: options.rpcOutcome ?? "transitioned" }], error: null });
