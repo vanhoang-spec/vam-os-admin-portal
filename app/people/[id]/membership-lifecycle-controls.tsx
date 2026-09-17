@@ -6,14 +6,21 @@ import {
   transitionMembershipAction,
 } from "@/app/actions/membership-lifecycle";
 import {
-  availableMembershipActions,
+  isMembershipRole,
+  isParticipationRole,
   MEMBERSHIP_ACTION_LABELS,
   MEMBERSHIP_ROLES,
   MEMBERSHIP_ROLE_LABELS,
+  membershipChangeDeniedMessage,
   membershipOperationNeedsReason,
+  otherMembershipActions,
+  PARTICIPATION_MOVE_LABELS,
+  participationView,
   type MembershipLifecycleOperation,
+  type ParticipationMove,
   initialMembershipLifecycleState,
 } from "@/lib/membership-lifecycle";
+import { canChangeSeasonMembership } from "@/lib/permissions";
 import { SubmitButton } from "@/components/submit-button";
 import {
   resolveContinuationLineage,
@@ -57,6 +64,25 @@ function Feedback({
   ) : null;
 }
 
+function roleLabelOf(role: string) {
+  const normalized = String(role ?? "").trim().toLowerCase();
+  return isMembershipRole(normalized) ? MEMBERSHIP_ROLE_LABELS[normalized] : role;
+}
+
+/**
+ * Câu hỏi lại trước khi đổi tham dự nói luôn hệ quả: danh sách Mentor/Mentee của
+ * mùa, thư gửi theo mùa và lời mời tạo tài khoản đều chỉ đọc membership đang
+ * active. Một câu "Xác nhận?" trần không cho người bấm biết mình vừa đưa ai ra
+ * khỏi những thứ đó.
+ */
+function participationConfirmMessage(move: ParticipationMove, membership: Membership) {
+  const who = `${roleLabelOf(membership.role)} · ${membership.seasonLabel}`;
+  if (move === "opt_out") {
+    return `Chuyển ${who} sang "Không tham dự"? Người này sẽ ra khỏi danh sách ${roleLabelOf(membership.role)} của mùa, không nằm trong thư gửi hàng loạt theo mùa và không được mời tạo tài khoản. Chuyển lại được bất cứ lúc nào.`;
+  }
+  return `Chuyển ${who} sang "Tham dự"? Người này sẽ vào lại danh sách ${roleLabelOf(membership.role)} chính thức của mùa.`;
+}
+
 function TransitionForm({
   personId,
   membership,
@@ -64,6 +90,9 @@ function TransitionForm({
   isLocked,
   onLock,
   onUnlock,
+  label: labelOverride,
+  confirmMessage,
+  primary = false,
 }: {
   personId: string;
   membership: Membership;
@@ -71,13 +100,16 @@ function TransitionForm({
   isLocked: boolean;
   onLock: () => void;
   onUnlock: () => void;
+  label?: string;
+  confirmMessage?: string;
+  primary?: boolean;
 }) {
   const [state, action] = useFormState(
     transitionMembershipAction,
     initialMembershipLifecycleState,
   );
   const required = membershipOperationNeedsReason(operation);
-  const label = MEMBERSHIP_ACTION_LABELS[operation];
+  const label = labelOverride ?? MEMBERSHIP_ACTION_LABELS[operation];
 
   useEffect(() => {
     if (state !== initialMembershipLifecycleState) {
@@ -92,7 +124,9 @@ function TransitionForm({
       return;
     }
     if (
-      !window.confirm(`Xác nhận ${label.toLowerCase()} cho membership này?`)
+      !window.confirm(
+        confirmMessage ?? `Xác nhận ${label.toLowerCase()} cho membership này?`,
+      )
     ) {
       event.preventDefault();
       return;
@@ -120,8 +154,12 @@ function TransitionForm({
         />
       </label>
       <SubmitButton
-        variant="outline"
-        className="justify-self-start border-vam-line px-3 py-2 text-sm font-medium text-vam-green"
+        variant={primary ? "primary" : "outline"}
+        className={
+          primary
+            ? "justify-self-start px-3 py-2 text-sm font-medium"
+            : "justify-self-start border-vam-line px-3 py-2 text-sm font-medium text-vam-green"
+        }
         disabled={isLocked}
         pendingText={`Đang ${label.toLowerCase()}...`}
       >
@@ -139,6 +177,7 @@ export function MembershipLifecycleControls({
   seasons,
   enabled,
   canOperateUehmS12,
+  adminRole,
 }: {
   personId: string;
   memberships: Membership[];
@@ -146,6 +185,11 @@ export function MembershipLifecycleControls({
   seasons: Option[];
   enabled: boolean;
   canOperateUehmS12?: boolean;
+  /**
+   * Vai trò của người đang xem. Bắt buộc, không có mặc định: thiếu nó thì không
+   * vai trò nào đổi được, thay vì mọi nút hiện ra rồi server từ chối.
+   */
+  adminRole: string | null;
 }) {
   const [addState, addAction] = useFormState(
     addMembershipRoleAction,
@@ -203,6 +247,12 @@ export function MembershipLifecycleControls({
       .trim()
       .toLowerCase();
 
+  // Chỉ những vai trò người xem được đổi. Support Team không thấy Mentor trong ô
+  // chọn; không còn vai trò nào thì không dựng form thêm vai trò.
+  const addableRoles = MEMBERSHIP_ROLES.filter((value) =>
+    canChangeSeasonMembership(adminRole, value),
+  );
+
   const finalBranch = lineage.ok && canOperateUehmS12;
 
   if (finalBranch) {
@@ -217,7 +267,7 @@ export function MembershipLifecycleControls({
       const normalizedRole = normalize(s11.role);
       const isSuppressed = isSuppressedForRole(memberships, lineage.targetSeasonId, normalizedRole);
 
-      if (!isSuppressed) {
+      if (!isSuppressed && canChangeSeasonMembership(adminRole, normalizedRole)) {
         if (!missingS12Roles.some((m) => m.role === normalizedRole)) {
           missingS12Roles.push({
             role: normalizedRole,
@@ -234,8 +284,22 @@ export function MembershipLifecycleControls({
   return (
     <div className="grid gap-4">
       {memberships.map((membership) => {
-        const actions = availableMembershipActions(membership.status);
+        const canChange = canChangeSeasonMembership(adminRole, membership.role);
+        const participation = isParticipationRole(membership.role)
+          ? participationView(membership.status)
+          : null;
+        const actions = otherMembershipActions(membership.role, membership.status);
         const isLocked = pendingMembershipId === membership.id;
+        const lockProps = {
+          personId,
+          membership,
+          isLocked,
+          onLock: () => setPendingMembershipId(membership.id),
+          onUnlock: () =>
+            setPendingMembershipId((prev) =>
+              prev === membership.id ? null : prev,
+            ),
+        };
 
         return (
           <section
@@ -254,31 +318,54 @@ export function MembershipLifecycleControls({
                 {membership.programLabel} / {membership.seasonLabel}
               </strong>
               <span className="ml-2">
-                {membership.role} · {membership.status}
+                {roleLabelOf(membership.role)} ·{" "}
+                {participation ? participation.label : membership.status}
               </span>
             </div>
-            {actions.length ? (
-              <div className="grid gap-2 lg:grid-cols-2">
-                {actions.map((operation) => (
-                  <TransitionForm
-                    key={operation}
-                    personId={personId}
-                    membership={membership}
-                    operation={operation}
-                    isLocked={isLocked}
-                    onLock={() => setPendingMembershipId(membership.id)}
-                    onUnlock={() =>
-                      setPendingMembershipId((prev) =>
-                        prev === membership.id ? null : prev,
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
+            {!canChange ? (
               <p className="text-sm text-slate-600">
-                Không có thao tác lifecycle hợp lệ từ trạng thái này.
+                {membershipChangeDeniedMessage(membership.role)}
               </p>
+            ) : (
+              <div className="grid gap-3">
+                {participation?.moves.length ? (
+                  <div className="grid gap-2 lg:grid-cols-2">
+                    {participation.moves.map((move) => (
+                      <TransitionForm
+                        key={move}
+                        {...lockProps}
+                        operation={move}
+                        label={PARTICIPATION_MOVE_LABELS[move]}
+                        confirmMessage={participationConfirmMessage(move, membership)}
+                        primary
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {actions.length ? (
+                  <div className="grid gap-2">
+                    {participation ? (
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Thao tác khác
+                      </p>
+                    ) : null}
+                    <div className="grid gap-2 lg:grid-cols-2">
+                      {actions.map((operation) => (
+                        <TransitionForm
+                          key={operation}
+                          {...lockProps}
+                          operation={operation}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {!actions.length && !participation?.moves.length ? (
+                  <p className="text-sm text-slate-600">
+                    Không có thao tác lifecycle hợp lệ từ trạng thái này.
+                  </p>
+                ) : null}
+              </div>
             )}
           </section>
         );
@@ -326,95 +413,97 @@ export function MembershipLifecycleControls({
         </section>
       ))}
 
-      <form
-        action={addAction}
-        className="grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3"
-        onSubmit={handleAddSubmit}
-      >
-        <h3 className="font-medium">Thêm vai trò membership</h3>
-        <input type="hidden" name="person_id" value={personId} />
-        {/*
-          Every select opens on an empty placeholder rather than on its first
-          option. A browser select with no defaultValue silently pre-selects
-          option 0, so this form previously arrived pre-filled with whichever
-          program and season happened to sort first, and with Mentor — which is
-          wrong for an approved mentee. The operator had to notice and change a
-          value that already looked chosen. `required` plus an empty value means
-          an unchosen field cannot be submitted at all, and the server action's
-          uuid/role validation rejects it as a second line of defence.
-        */}
-        <label className="text-sm">
-          Program
-          <select
-            name="program_id"
-            required
-            defaultValue=""
-            className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
-          >
-            <option value="" disabled>
-              — Chọn program —
-            </option>
-            {programs.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          Season
-          <select
-            name="season_id"
-            required
-            defaultValue=""
-            className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
-          >
-            <option value="" disabled>
-              — Chọn season —
-            </option>
-            {seasons.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          Vai trò
-          <select
-            name="role"
-            required
-            defaultValue=""
-            className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
-          >
-            <option value="" disabled>
-              — Chọn vai trò —
-            </option>
-            {MEMBERSHIP_ROLES.map((value) => (
-              <option key={value} value={value}>
-                {MEMBERSHIP_ROLE_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          Lý do (không bắt buộc)
-          <input
-            name="reason"
-            maxLength={500}
-            className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
-          />
-        </label>
-        <SubmitButton
-          name="add_new"
-          disabled={pendingMembershipId === "add_new"}
-          pendingText="Đang thêm vai trò..."
-          className="justify-self-start bg-vam-green px-3 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+      {addableRoles.length ? (
+        <form
+          action={addAction}
+          className="grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3"
+          onSubmit={handleAddSubmit}
         >
-          Thêm vai trò active
-        </SubmitButton>
-        {pendingMembershipId === "add_new" && <Feedback state={addState} />}
-      </form>
+          <h3 className="font-medium">Thêm vai trò membership</h3>
+          <input type="hidden" name="person_id" value={personId} />
+          {/*
+            Every select opens on an empty placeholder rather than on its first
+            option. A browser select with no defaultValue silently pre-selects
+            option 0, so this form previously arrived pre-filled with whichever
+            program and season happened to sort first, and with Mentor — which is
+            wrong for an approved mentee. The operator had to notice and change a
+            value that already looked chosen. `required` plus an empty value means
+            an unchosen field cannot be submitted at all, and the server action's
+            uuid/role validation rejects it as a second line of defence.
+          */}
+          <label className="text-sm">
+            Program
+            <select
+              name="program_id"
+              required
+              defaultValue=""
+              className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
+            >
+              <option value="" disabled>
+                — Chọn program —
+              </option>
+              {programs.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            Season
+            <select
+              name="season_id"
+              required
+              defaultValue=""
+              className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
+            >
+              <option value="" disabled>
+                — Chọn season —
+              </option>
+              {seasons.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            Vai trò
+            <select
+              name="role"
+              required
+              defaultValue=""
+              className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
+            >
+              <option value="" disabled>
+                — Chọn vai trò —
+              </option>
+              {addableRoles.map((value) => (
+                <option key={value} value={value}>
+                  {MEMBERSHIP_ROLE_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            Lý do (không bắt buộc)
+            <input
+              name="reason"
+              maxLength={500}
+              className="mt-1 w-full rounded-md border border-vam-line px-3 py-2"
+            />
+          </label>
+          <SubmitButton
+            name="add_new"
+            disabled={pendingMembershipId === "add_new"}
+            pendingText="Đang thêm vai trò..."
+            className="justify-self-start bg-vam-green px-3 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+          >
+            Thêm vai trò active
+          </SubmitButton>
+          {pendingMembershipId === "add_new" && <Feedback state={addState} />}
+        </form>
+      ) : null}
     </div>
   );
 }

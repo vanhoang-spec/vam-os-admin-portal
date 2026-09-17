@@ -44,6 +44,7 @@ it("forwards an inactive DB program through the page mapping and suppresses cont
   render(
     <MembershipLifecycleControls
       personId="person"
+      adminRole="super_admin"
       enabled={true}
       canOperateUehmS12={true}
       programs={[mappedProgram]}

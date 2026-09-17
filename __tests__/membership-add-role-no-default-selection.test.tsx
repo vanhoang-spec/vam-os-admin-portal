@@ -31,6 +31,7 @@ function renderControls() {
   return render(
     <MembershipLifecycleControls
       personId={PERSON}
+      adminRole="super_admin"
       memberships={[]}
       // Deliberately ordered so that the first option is the WRONG answer for
       // an approved Season 12 candidate: HAM before UEHM, S11 before S12.

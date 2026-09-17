@@ -45,3 +45,71 @@ export function membershipOperationNeedsReason(operation: MembershipLifecycleOpe
 export const MEMBERSHIP_ACTION_LABELS: Record<MembershipLifecycleOperation, string> = {
   pause: "Tạm nghỉ", reactivate: "Kích hoạt lại", withdraw: "Rút khỏi chương trình", opt_out: "Không tiếp tục", cancel: "Hủy membership", remove_role: "Gỡ vai trò"
 };
+
+/**
+ * "Tham dự / Không tham dự" của mentor và mentee trong một mùa — kết quả nhận mà
+ * ban tổ chức sửa trực tiếp trên hồ sơ CRM (chủ dự án chốt 17/09/2026).
+ *
+ * Không tham dự ghi `opted_out`, không phải `withdrawn` hay `cancelled`. Đó là
+ * trạng thái luồng gia hạn ghi khi mentor từ chối, và là trạng thái duy nhất luồng
+ * đó tự kích hoạt lại khi mentor đổi ý bấm xác nhận (`lib/renewal-runtime.ts`).
+ * Ghi `withdrawn` thì mentor đổi ý bị chặn lại ở bước duyệt đơn.
+ *
+ * Chuyển về "Tham dự" nhận mọi trạng thái không tham dự, kể cả đã rút, đã hủy:
+ * với người vận hành chúng cùng một nghĩa. Phân biệt chúng là việc của phần
+ * "Thao tác khác", nơi hai nút này không lặp lại.
+ */
+export const PARTICIPATION_ROLES = ["mentor", "mentee"] as const;
+export type ParticipationRole = (typeof PARTICIPATION_ROLES)[number];
+export type ParticipationMove = Extract<MembershipLifecycleOperation, "opt_out" | "reactivate">;
+
+export const PARTICIPATION_MOVE_LABELS: Record<ParticipationMove, string> = {
+  reactivate: "Chuyển sang Tham dự",
+  opt_out: "Chuyển sang Không tham dự"
+};
+
+const PARTICIPATION_MOVES: readonly ParticipationMove[] = ["reactivate", "opt_out"];
+
+const PARTICIPATION_STATUS_LABELS: Record<string, string> = {
+  active: "Đang tham dự",
+  opted_out: "Không tham dự",
+  withdrawn: "Không tham dự · đã rút khỏi chương trình",
+  cancelled: "Không tham dự · membership đã hủy",
+  paused: "Tạm nghỉ",
+  invited: "Được mời, chưa xác nhận",
+  completed: "Đã hoàn thành mùa",
+  graduated: "Đã hoàn thành mùa"
+};
+
+function normalizedText(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+export function isParticipationRole(value: unknown): value is ParticipationRole {
+  return PARTICIPATION_ROLES.includes(normalizedText(value) as ParticipationRole);
+}
+
+/** Nhãn trạng thái tham dự và các lần chuyển hợp lệ, cùng bảng trạng thái với RPC. */
+export function participationView(status: unknown): { label: string; moves: ParticipationMove[] } {
+  const key = normalizedText(status);
+  const available = availableMembershipActions(key);
+  return {
+    label: PARTICIPATION_STATUS_LABELS[key] ?? (String(status ?? "").trim() || "Không rõ trạng thái"),
+    moves: PARTICIPATION_MOVES.filter((move) => available.includes(move))
+  };
+}
+
+/** Các thao tác còn lại của một membership; với mentor/mentee đã bỏ hai lần chuyển tham dự. */
+export function otherMembershipActions(role: unknown, status: unknown): MembershipLifecycleOperation[] {
+  const available = availableMembershipActions(status);
+  if (!isParticipationRole(role)) return available;
+  return available.filter((operation) => !(PARTICIPATION_MOVES as readonly string[]).includes(operation));
+}
+
+/** Câu từ chối khi vai trò của người thao tác không được đổi membership này. */
+export function membershipChangeDeniedMessage(role: unknown) {
+  const kind = normalizedText(role);
+  if (kind === "mentor") return "Chỉ Core Team, Admin và Super Admin được đổi trạng thái tham dự của mentor.";
+  if (kind === "mentee") return "Chỉ Support Team, Core Team, Admin và Super Admin được đổi trạng thái tham dự của mentee.";
+  return "Bạn không có quyền đổi vai trò này trong mùa.";
+}

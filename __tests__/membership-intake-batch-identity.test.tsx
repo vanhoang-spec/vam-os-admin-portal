@@ -202,6 +202,7 @@ describe("membership intake batch DOM contract", () => {
     const { container } = render(
       <MembershipLifecycleControls
         personId={PERSON}
+        adminRole="super_admin"
         enabled
         memberships={[membershipView(MEMBERSHIP_A, "SYNTH-BATCH-A"), membershipView(MEMBERSHIP_B, "SYNTH-BATCH-B")]}
         programs={[{ id: PROGRAM, label: "UEHM" }]}
@@ -221,6 +222,7 @@ describe("membership intake batch DOM contract", () => {
     const { container } = render(
       <MembershipLifecycleControls
         personId={PERSON}
+        adminRole="super_admin"
         enabled
         memberships={[membershipView(MEMBERSHIP_A, "SYNTH-BATCH-A"), membershipView(MEMBERSHIP_B, "SYNTH-BATCH-B")]}
         programs={[{ id: PROGRAM, label: "UEHM" }]}
@@ -237,6 +239,7 @@ describe("membership intake batch DOM contract", () => {
     const { container } = render(
       <MembershipLifecycleControls
         personId={PERSON}
+        adminRole="super_admin"
         enabled
         memberships={[membershipView(MEMBERSHIP_A, null), membershipView(MEMBERSHIP_B, "SYNTH-BATCH-B")]}
         programs={[{ id: PROGRAM, label: "UEHM" }]}
@@ -255,6 +258,7 @@ describe("membership intake batch DOM contract", () => {
     const { container } = render(
       <MembershipLifecycleControls
         personId={PERSON}
+        adminRole="super_admin"
         enabled
         memberships={[membershipView(MEMBERSHIP_A, null), membershipView(MEMBERSHIP_B, null)]}
         programs={[{ id: PROGRAM, label: "UEHM" }]}
@@ -270,6 +274,7 @@ describe("membership intake batch DOM contract", () => {
     const { container } = render(
       <MembershipLifecycleControls
         personId={PERSON}
+        adminRole="super_admin"
         enabled
         memberships={[membershipView(MEMBERSHIP_A, hostile)]}
         programs={[{ id: PROGRAM, label: "UEHM" }]}
@@ -285,6 +290,7 @@ describe("membership intake batch DOM contract", () => {
     const { container } = render(
       <MembershipLifecycleControls
         personId={PERSON}
+        adminRole="super_admin"
         enabled
         memberships={[membershipView(MEMBERSHIP_A, "SYNTH-BATCH-A"), membershipView(MEMBERSHIP_B, null)]}
         programs={[{ id: PROGRAM, label: "UEHM" }]}
@@ -302,6 +308,7 @@ describe("membership intake batch DOM contract", () => {
     const { container } = render(
       <MembershipLifecycleControls
         personId={PERSON}
+        adminRole="super_admin"
         enabled={false}
         memberships={[membershipView(MEMBERSHIP_A, "SYNTH-BATCH-A")]}
         programs={[{ id: PROGRAM, label: "UEHM" }]}

@@ -36,6 +36,7 @@ export default function E2eHarnessPage() {
           programs={[{ id: "10000000-0000-0000-0000-000000000000", label: "P1" }]}
           seasons={[{ id: "20000000-0000-0000-0000-000000000000", label: "S1" }]}
           enabled={true}
+          adminRole="super_admin"
         />
       </div>
       <div id="crm-harness" className="mt-8">

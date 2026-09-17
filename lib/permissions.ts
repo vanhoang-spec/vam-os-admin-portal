@@ -187,6 +187,46 @@ export function canBrowseOperations(role?: string | null) {
   return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
 }
 
+/**
+ * Can switch a MENTOR between "Tham dự" and "Không tham dự" for a season on the
+ * CRM profile, or make any other lifecycle move on a mentor membership. New and
+ * returning mentors alike: both end up as the same person_season_memberships row.
+ *
+ * Owner decision 17/09/2026: core team edits the mentor result. support_team is
+ * deliberately NOT here even though it holds operations scope on the season —
+ * the same decision gives it mentees only. Until then scope was the only gate,
+ * so support_team could change mentors too.
+ *
+ * This is only the role half. The caller must ALSO prove canOperateSeason for the
+ * membership's season, and the database re-checks that scope.
+ */
+export function canChangeMentorParticipation(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}
+
+/** Mentee counterpart of canChangeMentorParticipation; support_team is here by the same 17/09/2026 decision. */
+export function canChangeMenteeParticipation(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
+ * One door for every write on a season membership: the server actions and the
+ * CRM controls both ask this, so a button is never offered that the server
+ * refuses.
+ *
+ * `membershipRole` must come from the stored row, never from the form — a form
+ * saying "mentee" about a mentor row is exactly how support_team would get
+ * around the split. Trainer, speaker, reviewer and interviewer keep the tiers
+ * that held operations scope before the split; that set now also shuts out a
+ * reviewer or viewer who is ever granted operations scope by mistake.
+ */
+export function canChangeSeasonMembership(role: string | null | undefined, membershipRole: unknown) {
+  const kind = String(membershipRole ?? "").trim().toLowerCase();
+  if (kind === "mentor") return canChangeMentorParticipation(role);
+  if (kind === "mentee") return canChangeMenteeParticipation(role);
+  return canBrowseOperations(role);
+}
+
 /** Can read the outbound email log without being able to send anything. */
 export function canViewOutboundEmails(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");

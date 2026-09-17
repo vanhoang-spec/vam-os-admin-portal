@@ -19,6 +19,7 @@ vi.mock("react-dom", () => ({ useFormState: () => [{}, vi.fn()], useFormStatus: 
 vi.mock("next/headers", () => ({ cookies: vi.fn(() => ({ get: vi.fn() })) }));
 
 import { getAdminScopeContext, resolveCanonicalScope, canOperateAnyScope } from "@/lib/program-scope";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
 
 vi.mock("@/lib/program-scope", async (importOriginal) => {
   const actual = await importOriginal<any>();
@@ -351,6 +352,9 @@ describe("Authorization Observability Instrumentation", () => {
       programScopes: [] as any[]
     } as any);
     mockCanOperateAnyScope.mockReturnValueOnce(true);
+    // Nút đổi membership còn cần nửa vai trò (mentor: Core Team trở lên), nên người
+    // xem phải mang một vai trò có thật — mock mặc định "Admin" viết hoa không phải.
+    vi.mocked(getCurrentAdminUser).mockResolvedValueOnce({ id: "1", role: "super_admin" } as any);
     
     const pageAuthorized = await PersonDetailPage({ params: Promise.resolve({ id: "1" }) });
     const { container: containerAuthorized } = render(pageAuthorized);

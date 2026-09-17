@@ -43,7 +43,7 @@ test.describe("admin actions ux - membership lifecycle", () => {
     await expect(siblingButton).toBeDisabled();
     
     const pausedSection = page.locator('section[data-vam-membership-id="22222222-2222-2222-2222-222222222222"]');
-    const reactivateButton = pausedSection.getByRole("button", { name: "Kích hoạt lại" });
+    const reactivateButton = pausedSection.getByRole("button", { name: "Chuyển sang Tham dự" });
     await expect(reactivateButton).toBeEnabled();
     
     const errorAlert = activeSection.locator('[role="status"]');
@@ -55,14 +55,14 @@ test.describe("admin actions ux - membership lifecycle", () => {
     expect(calls).toHaveLength(1);
   });
 
-  test("B. paused state: Kích hoạt lại", async ({ page }) => {
+  test("B. paused state: Chuyển sang Tham dự", async ({ page }) => {
     const calls = await instrumentServerAction(page, { delayMs: 1000 });
     const pausedSection = page.locator('section[data-vam-membership-id="22222222-2222-2222-2222-222222222222"]');
-    const reactivateButton = pausedSection.getByRole("button", { name: "Kích hoạt lại" });
+    const reactivateButton = pausedSection.getByRole("button", { name: "Chuyển sang Tham dự" });
     
     await reactivateButton.click();
     await expect(reactivateButton).toBeDisabled();
-    await expect(reactivateButton).toHaveText(/Đang kích hoạt/i);
+    await expect(reactivateButton).toHaveText(/Đang chuyển sang tham dự/i);
     
     const withdrawButton = pausedSection.getByRole("button", { name: "Rút khỏi chương trình" });
     await expect(withdrawButton).toBeDisabled();
