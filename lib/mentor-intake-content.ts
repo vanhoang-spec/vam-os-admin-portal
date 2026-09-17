@@ -63,3 +63,35 @@ export const MENTOR_SUPPORT_CONTACTS = Object.freeze([
     phone: "0979.578.128"
   }
 ]);
+
+/**
+ * Hình thức gặp mentee mà form nộp đơn mentor nhận.
+ *
+ * Chủ dự án chốt 17/09/2026: khóa Online, chỉ để Offline, và đó là mặc định.
+ * "Cả hai" có Online bên trong nên khóa cùng. Hai lựa chọn khóa vẫn hiện trên form
+ * (mờ, ghi "tạm khóa") để mentor thấy đó là quyết định của chương trình, không
+ * phải form thiếu lựa chọn.
+ *
+ * Form và server đọc cùng danh sách này. Mở lại Online sau này là đổi `locked` ở
+ * đây, rồi cho ô trên form chọn lại được.
+ */
+export const MENTOR_MEETING_FORMAT_OPTIONS = Object.freeze([
+  { value: "offline", label: "Offline (gặp trực tiếp)", locked: false },
+  { value: "online", label: "Online", locked: true },
+  { value: "both", label: "Cả hai", locked: true }
+]);
+
+export const MENTOR_MEETING_FORMATS_OPEN: readonly string[] = Object.freeze(
+  MENTOR_MEETING_FORMAT_OPTIONS.filter((option) => !option.locked).map((option) => option.value)
+);
+
+/**
+ * Giá trị ghi vào đơn. Cái form gửi lên là thứ người nộp tự đặt được, nên giá trị
+ * đã khóa bị bỏ. Còn đúng một hình thức mở thì đó là câu trả lời, kể cả khi form
+ * không gửi gì — một tab mở từ trước khi khóa vẫn gửi "online".
+ */
+export function mentorMeetingFormatsForSubmission(submitted: readonly string[]): string[] {
+  const kept = Array.from(new Set(submitted.filter((value) => MENTOR_MEETING_FORMATS_OPEN.includes(value))));
+  if (kept.length) return kept;
+  return MENTOR_MEETING_FORMATS_OPEN.length === 1 ? [...MENTOR_MEETING_FORMATS_OPEN] : [];
+}

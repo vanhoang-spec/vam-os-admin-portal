@@ -23,6 +23,7 @@ import {
   MENTEE_OTHER_DETAIL_RULES,
   MENTOR_OTHER_DETAIL_RULES
 } from "@/lib/application-form-validation";
+import { mentorMeetingFormatsForSubmission } from "@/lib/mentor-intake-content";
 
 const SEASON_CODE = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
 const INTAKE_BATCH_CODE = SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE;
@@ -215,7 +216,8 @@ export async function submitMentorApplicationAction(
       // Section 6 — capacity & commitment
       mentoring_capacity_total: formText(formData, "mentoring_capacity_total"),
       meeting_frequency: formText(formData, "meeting_frequency") || null,
-      meeting_format_preference: formArray(formData, "meeting_format_preference"),
+      // Online đã khóa: server tự quyết, không tin ô form gửi lên.
+      meeting_format_preference: mentorMeetingFormatsForSubmission(formArray(formData, "meeting_format_preference")),
       preferred_mentee_persona: formText(formData, "preferred_mentee_persona") || null,
       preferred_language: formArray(formData, "preferred_language"),
       programs_willing_to_join: formArray(formData, "programs_willing_to_join"),

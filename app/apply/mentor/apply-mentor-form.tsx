@@ -11,12 +11,13 @@ import { draftText } from "@/lib/autosave";
 import { MentorProfileIntro } from "../_components/mentor-profile-intro";
 import { MentorSupportContacts } from "../_components/mentor-support-contacts";
 import { DEFAULT_APPLICATION_FORM_TEXTS, type ApplicationFormTexts } from "@/lib/application-form-text-core";
-import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
+import { MENTOR_MEETING_FORMAT_OPTIONS, MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   ApplicationForm,
   CheckboxGroupField,
   ConsentCheckbox,
   FormSection,
+  LockedChoiceField,
   NumberField,
   PhoneField,
   RadioGroupField,
@@ -104,12 +105,6 @@ const MEETING_FREQUENCY_OPTIONS = [
   { value: "once_per_month", label: "1 lần/tháng" },
   { value: "once_per_two_months", label: "1 lần/2 tháng" },
   { value: "depends_on_mentee", label: "Tùy mentee" }
-];
-
-const MEETING_FORMAT_OPTIONS = [
-  { value: "online", label: "Online" },
-  { value: "offline", label: "Offline" },
-  { value: "both", label: "Cả hai" }
 ];
 
 const LANGUAGE_OPTIONS = [
@@ -378,10 +373,11 @@ function MentorFormBody({
           label="Tần suất gặp mentee anh/chị có thể cam kết"
           options={MEETING_FREQUENCY_OPTIONS}
         />
-        <CheckboxGroupField
+        <LockedChoiceField
           name="meeting_format_preference"
-          label="Hình thức gặp ưu tiên"
-          options={MEETING_FORMAT_OPTIONS}
+          label="Hình thức gặp mentee"
+          helpText="Hiện chương trình chỉ nhận hình thức Offline (gặp trực tiếp)."
+          options={MENTOR_MEETING_FORMAT_OPTIONS}
         />
         <TextAreaField
           name="preferred_mentee_persona"
