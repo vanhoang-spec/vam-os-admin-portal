@@ -26,7 +26,7 @@ import {
   OUTBOUND_EMAIL_PAGE_SIZE,
   type OutboundEmailRow
 } from "@/lib/outbound-emails";
-import { canRunConfirmationBackfill, canViewOutboundEmails } from "@/lib/permissions";
+import { canRunConfirmationBackfill, canViewEmailSamples, canViewOutboundEmails } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { MailTabs } from "../mail/mail-tabs";
@@ -92,7 +92,7 @@ export default async function OutboundEmailsPage(props: {
       />
 
       {/* canViewOutboundEmails đã đúng, nếu không thì không tới được dòng này. */}
-      <MailTabs active="log" canSeeLog />
+      <MailTabs active="log" canSeeLog canSeeSamples={canViewEmailSamples(adminUser.role)} />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Đã gửi" value={counts.sent} tone="success" />
