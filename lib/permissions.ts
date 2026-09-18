@@ -227,6 +227,21 @@ export function canChangeSeasonMembership(role: string | null | undefined, membe
   return canBrowseOperations(role);
 }
 
+/**
+ * Can read the SAMPLES of the letters the system sends by itself.
+ *
+ * Owner decision 18/09/2026, asked for by support team: they answer the people
+ * who received these letters, and until now nothing in the app showed what a
+ * letter actually says.
+ *
+ * Wider than `canViewOutboundEmails` on purpose, and safely so: a sample is
+ * built from invented data — no recipient, no real name, no working link — while
+ * the log is a list of real people and their addresses.
+ */
+export function canViewEmailSamples(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
 /** Can read the outbound email log without being able to send anything. */
 export function canViewOutboundEmails(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");

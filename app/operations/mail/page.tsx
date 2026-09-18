@@ -12,6 +12,7 @@ import {
   canApproveEmailTemplate,
   canComposeEmailTemplate,
   canSendBulkEmail,
+  canViewEmailSamples,
   canViewOutboundEmails
 } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
@@ -107,7 +108,11 @@ export default async function MailPage() {
         description="Soạn nội dung thư gửi hàng loạt cho mentor và mentee, rồi tra lại mọi lá thư đã đi."
       />
 
-      <MailTabs active="templates" canSeeLog={canViewOutboundEmails(adminUser.role)} />
+      <MailTabs
+        active="templates"
+        canSeeLog={canViewOutboundEmails(adminUser.role)}
+        canSeeSamples={canViewEmailSamples(adminUser.role)}
+      />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard

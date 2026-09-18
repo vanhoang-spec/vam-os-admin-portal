@@ -12,7 +12,7 @@ import Link from "next/link";
  * biết mình là tab nào, và không cần đẩy một client component vào chỉ để tô đậm
  * một chữ.
  */
-export type MailTab = "templates" | "log";
+export type MailTab = "templates" | "samples" | "log";
 
 const TABS: Array<{ key: MailTab; href: string; label: string; helper: string }> = [
   {
@@ -22,6 +22,12 @@ const TABS: Array<{ key: MailTab; href: string; label: string; helper: string }>
     helper: "Soạn và duyệt nội dung"
   },
   {
+    key: "samples",
+    href: "/operations/mail/samples",
+    label: "Thư tự động",
+    helper: "Nội dung hệ thống tự gửi"
+  },
+  {
     key: "log",
     href: "/operations/emails",
     label: "Nhật ký gửi",
@@ -29,10 +35,20 @@ const TABS: Array<{ key: MailTab; href: string; label: string; helper: string }>
   }
 ];
 
-export function MailTabs({ active, canSeeLog }: { active: MailTab; canSeeLog: boolean }) {
+export function MailTabs({
+  active,
+  canSeeLog,
+  canSeeSamples = true
+}: {
+  active: MailTab;
+  canSeeLog: boolean;
+  canSeeSamples?: boolean;
+}) {
   // Tab dẫn tới một trang người dùng không vào được thì tệ hơn là không có tab:
   // nó hứa một chỗ rồi trả về màn hình từ chối.
-  const visible = TABS.filter((tab) => tab.key !== "log" || canSeeLog);
+  const visible = TABS.filter(
+    (tab) => (tab.key !== "log" || canSeeLog) && (tab.key !== "samples" || canSeeSamples)
+  );
   if (visible.length < 2) return null;
 
   return (
