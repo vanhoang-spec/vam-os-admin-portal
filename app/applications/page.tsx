@@ -9,7 +9,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { canAssignReview, canDecide } from "@/lib/permissions";
+import { canAssignReview, canDecideAnyApplicationResult } from "@/lib/permissions";
 import { SEASON_CONFIG } from "@/lib/season-config";
 
 
@@ -171,7 +171,7 @@ export default async function ApplicationsPage() {
         {/* S12 throughput: the profile round now closes with ONE Core Team
             decision, and this is where that decision is taken in bulk. Same
             authority as the action itself (canDecide). */}
-        {canDecide(adminUser.role) && (
+        {canDecideAnyApplicationResult(adminUser.role) && (
           <Link
             href="/applications/bulk-invite-interview"
             className="inline-flex rounded-md border border-vam-green bg-vam-mint px-4 py-2 text-sm font-medium text-vam-green hover:bg-white"
@@ -179,7 +179,7 @@ export default async function ApplicationsPage() {
             Mời phỏng vấn hàng loạt
           </Link>
         )}
-        {canDecide(adminUser.role) && (
+        {canDecideAnyApplicationResult(adminUser.role) && (
           <Link
             href="/applications/bulk-approval"
             className="inline-flex rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint"

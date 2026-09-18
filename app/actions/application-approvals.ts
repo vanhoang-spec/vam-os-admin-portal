@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { approveApplication } from "@/lib/application-approvals";
-import { canDecide } from "@/lib/permissions";
+import { refuseApplicationsBeyondDecisionRole } from "@/lib/application-decisions";
+import { canDecideAnyApplicationResult } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { ApprovalActionState } from "@/lib/approval-action-types";
@@ -43,8 +44,8 @@ export async function approveApplicationAction(
   try {
     const adminUser = await getCurrentAdminUser();
     if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
-    if (!canDecide(adminUser.role)) {
-      return fail("Chỉ admin / core team mới có thể duyệt đơn ứng tuyển.");
+    if (!canDecideAnyApplicationResult(adminUser.role)) {
+      return fail("Bạn không có quyền duyệt đơn ứng tuyển.");
     }
 
     const applicationId = String(formData.get("application_id") ?? "").trim();
@@ -58,6 +59,11 @@ export async function approveApplicationAction(
     const previousStatus = String(formData.get("previous_status") ?? "").trim() || null;
 
     if (!applicationId) return fail("Thiếu application_id.");
+    const roleGate = await refuseApplicationsBeyondDecisionRole({
+      applicationIds: [applicationId],
+      actorRole: adminUser.role
+    });
+    if (!roleGate.ok) return fail(roleGate.message);
     if (targetRole !== "mentor" && targetRole !== "mentee") {
       return fail("target_role phải là 'mentor' hoặc 'mentee'.");
     }

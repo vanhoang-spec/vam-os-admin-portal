@@ -18,7 +18,7 @@ import {
   getActiveAdminUsers
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canAssignReview, canDecide } from "@/lib/permissions";
+import { canAssignReview, canDecideApplicationResult } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person } from "@/lib/types";
 import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
@@ -270,7 +270,9 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
 
   const decisions: ApplicationDecision[] = decisionsResult.data ?? [];
   const canAssign = canAssignReview(adminUser?.role) && canOperateAnyScope(scopeContext);
-  const canMakeDecision = canDecide(adminUser?.role) && canOperateAnyScope(scopeContext);
+  // Mentor: Core Team trở lên. Mentee: thêm Support Team. Vai trò lấy từ đơn.
+  const canMakeDecision =
+    canDecideApplicationResult(adminUser?.role, roleApplied) && canOperateAnyScope(scopeContext);
   const isWithdrawn = displayStatus === "withdrawn";
   const latestWithdrawal = decisions.find((decision) => decision.new_status === "withdrawn") ?? null;
   const correctionNeededReviews = reviews.filter((review) => isEditableReviewStatus(review.status));

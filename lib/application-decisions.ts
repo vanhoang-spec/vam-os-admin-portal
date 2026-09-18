@@ -1,5 +1,6 @@
 import "server-only";
 
+import { canDecide, canDecideApplicationResult } from "@/lib/permissions";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { DirectInviteEvaluation, DirectInviteReason } from "@/lib/direct-interview-eligibility";
 import {
@@ -250,5 +251,50 @@ export async function getApplicationDecisionEligibility(
       : row.eligible
         ? "eligible"
         : "eligibility_unknown"
+  };
+}
+
+/**
+ * Chặn trước khi ghi: người thao tác có đổi được kết quả của ĐÚNG những đơn này không.
+ *
+ * Vai trò ứng tuyển đọc từ chính các đơn, không lấy từ form — form nói "mentee" về
+ * một đơn mentor là đúng đường vòng qua phần chia mentor/mentee. Đọc không ra đủ số
+ * đơn thì từ chối cả lượt: một id lạ trong danh sách là dấu hiệu yêu cầu đã bị sửa.
+ *
+ * Database vẫn kiểm lại từng đơn (vam096_decision_operator_for_application). Phép
+ * kiểm ở đây là để người bấm nút nhận được một câu tiếng Việt nói rõ vì sao, thay vì
+ * một lượt chạy im lặng không đổi gì.
+ */
+export async function refuseApplicationsBeyondDecisionRole(input: {
+  applicationIds: string[];
+  actorRole: string | null | undefined;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  // Vai trò quyết định được MỌI hồ sơ thì không cần đọc gì: một phép đọc thêm cho
+  // đường đi thường ngày chỉ là một chỗ nữa để hỏng.
+  if (canDecide(input.actorRole)) return { ok: true };
+
+  const ids = Array.from(new Set(input.applicationIds.map((id) => String(id ?? "").trim()).filter(Boolean)));
+  if (!ids.length) return { ok: false, message: "Chưa chọn hồ sơ nào." };
+
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const { data, error } = await client.from("applications").select("id,role_applied").in("id", ids);
+  if (error) {
+    log("read role_applied for decision gate failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const rows = (data ?? []) as Array<{ id?: unknown; role_applied?: unknown }>;
+  if (rows.length !== ids.length) return { ok: false, message: "Không tìm thấy đủ hồ sơ đã chọn." };
+
+  const blocked = rows.filter((row) => !canDecideApplicationResult(input.actorRole, row.role_applied));
+  if (!blocked.length) return { ok: true };
+
+  return {
+    ok: false,
+    message:
+      blocked.length === rows.length
+        ? "Bạn không có quyền đổi kết quả của hồ sơ này. Support Team chỉ đổi được kết quả hồ sơ mentee."
+        : `Trong danh sách có ${blocked.length} hồ sơ bạn không có quyền đổi kết quả. Support Team chỉ đổi được kết quả hồ sơ mentee.`
   };
 }

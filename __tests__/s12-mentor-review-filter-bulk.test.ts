@@ -51,7 +51,10 @@ describe("S12 mentor review filter + bounded bulk operations", () => {
   });
 
   it("re-checks permission, scoped object, applied role, and expected status before each write", () => {
-    expect(ACTION).toContain("canDecide(actor.role)");
+    // 18/09/2026: cổng vai trò đổi tên khi Support Team được quyết kết quả mentee.
+    // Hàng đợi mentor không mở thêm cho ai: phép chia nằm ở phép kiểm ngay dưới.
+    expect(ACTION).toContain("canDecideAnyApplicationResult(actor.role)");
+    expect(ACTION).toContain("refuseApplicationsBeyondDecisionRole");
     expect(ACTION).toContain("getScopeFilter(await getAdminScopeContext())");
     expect(ACTION).toContain("getApplication(applicationId, scope)");
     expect(ACTION).toContain("current.data.role_applied !== role");

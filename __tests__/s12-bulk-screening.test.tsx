@@ -18,7 +18,11 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/data", () => ({ getApplication: vi.fn() }));
-vi.mock("@/lib/application-decisions", () => ({ recordApplicationDecision: vi.fn() }));
+vi.mock("@/lib/application-decisions", () => ({
+  // Cổng chia mentor/mentee: vai trò trong các ca này quyết được mọi hồ sơ.
+  refuseApplicationsBeyondDecisionRole: vi.fn(async () => ({ ok: true })),
+  recordApplicationDecision: vi.fn()
+}));
 vi.mock("@/lib/program-scope", () => ({
   getAdminScopeContext: vi.fn(async () => ({ scope: "s" })),
   getScopeFilter: vi.fn(async () => ({ scope: "s" }))
@@ -31,7 +35,10 @@ import {
   BulkScreeningToolbar
 } from "@/app/applications/_components/bulk-screening-controls";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { recordApplicationDecision } from "@/lib/application-decisions";
+import {
+  recordApplicationDecision,
+  refuseApplicationsBeyondDecisionRole
+} from "@/lib/application-decisions";
 import { getApplication } from "@/lib/data";
 
 const mockedGetApplication = vi.mocked(getApplication);
@@ -277,12 +284,32 @@ describe("bulk screening safety contract", () => {
 
 // ── Authorization ───────────────────────────────────────────────────────────
 
-describe("bulk screening authorization follows canDecide", () => {
-  it.each(["reviewer", "viewer", "support_team"])("denies %s", async (role) => {
+describe("bulk screening authorization follows the mentor/mentee split", () => {
+  it.each(["reviewer", "viewer"])("denies %s", async (role) => {
     vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "u", role } as never);
     const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
     expect(mockedRecord).not.toHaveBeenCalled();
     expect(resultMessage(url)).toContain("Bạn không có quyền duyệt hàng loạt.");
+  });
+
+  // 18/09/2026: support_team đi qua được cổng vai trò, rồi dừng lại ở phép chia
+  // mentor/mentee — hàng đợi mentor không mở cho họ, hàng đợi mentee thì có.
+  it("support_team: bị chặn ở hồ sơ mentor", async () => {
+    vi.mocked(refuseApplicationsBeyondDecisionRole).mockResolvedValueOnce({
+      ok: false,
+      message: "Support Team chỉ đổi được kết quả hồ sơ mentee."
+    } as never);
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "u", role: "support_team" } as never);
+    const url = await runAction(formFor("mentor", [appId(1)], "needs_more_review"));
+    expect(mockedRecord).not.toHaveBeenCalled();
+    expect(resultMessage(url)).toContain("chỉ đổi được kết quả hồ sơ mentee");
+  });
+
+  it("support_team: quyết được hồ sơ mentee", async () => {
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "u", role: "support_team" } as never);
+    mockedGetApplication.mockResolvedValue(application("mentee"));
+    await runAction(formFor("mentee", [appId(1)], "needs_more_review"));
+    expect(mockedRecord).toHaveBeenCalledTimes(1);
   });
 
   it.each(["core_team", "admin", "super_admin"])("allows %s", async (role) => {

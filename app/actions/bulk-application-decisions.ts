@@ -2,14 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { applyApplicationDecisions } from "@/lib/application-decisions";
+import {
+  applyApplicationDecisions,
+  refuseApplicationsBeyondDecisionRole
+} from "@/lib/application-decisions";
 import {
   ALLOWED_DECISION_STATUSES,
   RETIRED_FORWARD_DECISION_MESSAGE,
   RETIRED_FORWARD_DECISION_STATUSES,
   type DecisionActionState
 } from "@/lib/decision-action-types";
-import { canDecide } from "@/lib/permissions";
+import { canDecideAnyApplicationResult } from "@/lib/permissions";
 
 const allowed = new Set<string>(ALLOWED_DECISION_STATUSES);
 
@@ -19,7 +22,9 @@ export async function bulkApplicationDecisionAction(
 ): Promise<DecisionActionState> {
   const actor = await getCurrentAdminUser();
   if (!actor?.id) return { ok: false, message: "Bạn chưa đăng nhập." };
-  if (!canDecide(actor.role)) return { ok: false, message: "Bạn không có quyền ra quyết định." };
+  if (!canDecideAnyApplicationResult(actor.role)) {
+    return { ok: false, message: "Bạn không có quyền ra quyết định." };
+  }
 
   const ids = Array.from(new Set(formData.getAll("application_id").map(String).filter(Boolean)));
   const newStatus = String(formData.get("new_status") ?? "").trim();
@@ -33,6 +38,8 @@ export async function bulkApplicationDecisionAction(
   if (RETIRED_FORWARD_DECISION_STATUSES.has(newStatus)) {
     return { ok: false, message: RETIRED_FORWARD_DECISION_MESSAGE };
   }
+  const roleGate = await refuseApplicationsBeyondDecisionRole({ applicationIds: ids, actorRole: actor.role });
+  if (!roleGate.ok) return { ok: false, message: roleGate.message };
   const expectedStatuses: Record<string, string> = {};
   for (const id of ids) expectedStatuses[id] = String(formData.get(`expected_status_${id}`) ?? "");
 

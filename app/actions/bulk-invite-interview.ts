@@ -9,7 +9,8 @@ import {
   type BulkInviteRowResult,
   type BulkInviteState
 } from "@/lib/bulk-invite-action-types";
-import { canDecide } from "@/lib/permissions";
+import { refuseApplicationsBeyondDecisionRole } from "@/lib/application-decisions";
+import { canDecideAnyApplicationResult } from "@/lib/permissions";
 
 /**
  * Bulk "Mời phỏng vấn".
@@ -35,7 +36,7 @@ export async function bulkInviteInterviewAction(
   try {
     const actor = await getCurrentAdminUser();
     if (!actor?.id) return fail("Bạn chưa đăng nhập.");
-    if (!canDecide(actor.role)) return fail("Bạn không có quyền ra quyết định.");
+    if (!canDecideAnyApplicationResult(actor.role)) return fail("Bạn không có quyền ra quyết định.");
 
     const ids = Array.from(
       new Set(formData.getAll("application_id").map(String).map((v) => v.trim()).filter(Boolean))
@@ -44,6 +45,9 @@ export async function bulkInviteInterviewAction(
     if (ids.length > BULK_INVITE_MAX) {
       return fail(`Mỗi lần chỉ mời tối đa ${BULK_INVITE_MAX} hồ sơ.`);
     }
+
+    const roleGate = await refuseApplicationsBeyondDecisionRole({ applicationIds: ids, actorRole: actor.role });
+    if (!roleGate.ok) return fail(roleGate.message);
 
     // Names are display-only; the decision is keyed by id.
     const names = new Map<string, string>();
