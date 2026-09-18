@@ -139,6 +139,11 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Gỡ liên kết Auth đã chết trước khi cấp quyền tuyển sinh — migration
+  // 20260918100000_reviewer_stale_auth_link.sql. Nằm ở đây cho tới khi chủ dự án
+  // dán migration lên Production và có bằng chứng đọc catalog; app gọi được ngay
+  // vì lỗi của lệnh này không chặn lượt cấp quyền.
+  "vam084_clear_stale_recruitment_auth_link",
   // VAM095 P1 withdrawn-application quarantine. These remain explicitly
   // Production-pending until the owner applies 20260905140900 and records
   // read-only catalog verification; this candidate does not apply it.

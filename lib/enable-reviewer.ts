@@ -12,6 +12,53 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 const SAFE_ERROR = "Không thể cấp quyền tham gia tuyển sinh. Vui lòng thử lại hoặc liên hệ admin.";
 
 /**
+ * Vì sao lệnh cấp quyền bị database từ chối, nói bằng tiếng Việt.
+ *
+ * Trước đây mọi lý do đều ra cùng một câu "vui lòng thử lại", còn lý do thật chỉ
+ * nằm trong log máy chủ. Người bấm nút không đọc được log, nên họ bấm lại — và với
+ * những lý do dưới đây thì bấm lại bao nhiêu lần cũng hỏng y như vậy (18/09/2026:
+ * một mentor kẹt đúng kiểu đó cả buổi sáng).
+ *
+ * Chỉ người đã qua canManageReviewers và quyền vận hành mùa mới thấy các câu này,
+ * và chúng nói về trạng thái tài khoản chứ không lộ dữ liệu của ai.
+ */
+const GRANT_FAILURE_MESSAGES: ReadonlyArray<readonly [string, string]> = [
+  [
+    "Account email is linked to a different Auth identity",
+    "Email này đang gắn với một tài khoản đăng nhập khác. Nhờ admin rà lại tài khoản của người này trước khi cấp quyền."
+  ],
+  [
+    "Duplicate admin account emails",
+    "Có nhiều hơn một tài khoản quản trị dùng email này. Nhờ admin gộp lại trước khi cấp quyền."
+  ],
+  [
+    "non-qualifying active scope",
+    "Tài khoản này đang giữ một phạm vi quyền khác cho mùa này. Nhờ admin chỉnh phạm vi quyền trước khi cấp quyền đánh giá."
+  ],
+  [
+    "Existing account role cannot join recruitment",
+    "Vai trò hiện tại của tài khoản này không tham gia tuyển sinh được. Nhờ admin kiểm tra lại."
+  ],
+  [
+    "Inactive privileged accounts require super-admin reactivation",
+    "Tài khoản này thuộc nhóm quản trị và đang bị khoá. Cần super admin mở lại trước."
+  ],
+  ["Recruitment participation grant rejected", "Bạn không có quyền vận hành mùa này."],
+  [
+    "identity or season is invalid",
+    "Email trong hồ sơ và email của tài khoản không khớp. Nhờ admin kiểm tra lại email của người này."
+  ]
+];
+
+function grantFailureMessage(error: unknown) {
+  const text = String((error as { message?: string })?.message ?? "");
+  for (const [needle, message] of GRANT_FAILURE_MESSAGES) {
+    if (text.includes(needle)) return message;
+  }
+  return SAFE_ERROR;
+}
+
+/**
  * Hard cap on Auth pages walked while looking for an existing account.
  * GoTrue caps `perPage` server-side (commonly 50) regardless of what we ask
  * for, so we must never infer "no more users" from a short page — only an
@@ -157,6 +204,21 @@ export async function enableMentorAsReviewer(input: {
   }
   if (!authUser?.id) return { ok: false, message: "Không thể xác định tài khoản Auth cá nhân." };
 
+  // Hồ sơ quản trị trỏ tới một tài khoản đăng nhập đã bị xoá thì mọi lần cấp quyền
+  // sau đó đều bị từ chối, và không thao tác nào trên màn hình gỡ được. Database tự
+  // kiểm liên kết còn sống hay không — service_role không đọc được auth.users — và
+  // không làm gì nếu nó còn sống. Đặt ngay trước lệnh cấp quyền, sau khi đã có tài
+  // khoản Auth: mọi đường hỏng trước đó vẫn không chạm tới database. Phép kiểm này
+  // hỏng cũng không được chặn lượt cấp quyền; lệnh bên dưới mới là nơi quyết định.
+  const staleLink = await client.rpc("vam084_clear_stale_recruitment_auth_link", {
+    p_actor: actor.id,
+    p_person_id: input.personId,
+    p_season_id: input.seasonId
+  });
+  if (staleLink.error) {
+    console.error("[enable-reviewer] stale auth link check failed", staleLink.error);
+  }
+
   const { data, error } = await client.rpc("vam084_grant_recruitment_participation", {
     p_actor: actor.id,
     p_person_id: input.personId,
@@ -168,7 +230,7 @@ export async function enableMentorAsReviewer(input: {
   if (error || !data) {
     if (createdAccount) await (client as any).auth.admin.deleteUser(authUser.id);
     console.error("[enable-reviewer] atomic grant failed", error);
-    return { ok: false, message: SAFE_ERROR };
+    return { ok: false, message: grantFailureMessage(error) };
   }
 
   const adminUserId = String(data);

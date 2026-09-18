@@ -110,8 +110,13 @@ describe("cấp và thu hồi quyền tuyển sinh", () => {
     const result = await enableMentorAsReviewer(grant);
 
     expect(result.ok).toBe(true);
-    expect(rpcNames()).toEqual(["vam084_grant_recruitment_participation"]);
-    expect(state.rpcCalls[0].args.p_actor).toBe("actor-1");
+    // Gỡ liên kết Auth đã chết chạy trước, rồi mới tới lệnh cấp quyền. Cả hai
+    // lệnh đều phải mang người thao tác của phiên đăng nhập.
+    expect(rpcNames()).toEqual([
+      "vam084_clear_stale_recruitment_auth_link",
+      "vam084_grant_recruitment_participation"
+    ]);
+    for (const call of state.rpcCalls) expect(call.args.p_actor).toBe("actor-1");
   });
 
   it("support_team KHÔNG có quyền vận hành mùa: bị chặn, không ghi gì", async () => {
