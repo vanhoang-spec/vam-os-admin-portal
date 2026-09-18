@@ -118,7 +118,16 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   // (uuid[], uuid, text, timestamptz, text, uuid), SECURITY INVOKER
   // (security_definer=false) with search_path='', and a service_role-only
   // execute ACL (postgres + service_role, no PUBLIC/anon/authenticated).
-  "vam094_assign_selected_application_reviews"
+  "vam094_assign_selected_application_reviews",
+  // Gỡ liên kết Auth đã chết trước khi cấp quyền tuyển sinh (migration
+  // 20260918100000). Dán lên Production 18/09/2026; kiểm đọc catalog ngay sau đó:
+  // SECURITY DEFINER, ACL đúng postgres + service_role, không anon/authenticated.
+  "vam084_clear_stale_recruitment_auth_link",
+  // Quyền đổi kết quả theo vai trò ứng tuyển của hồ sơ (migration 20260918150000).
+  // Dán lên Production 18/09/2026; kiểm đọc catalog: hàm có thật, ACL chỉ
+  // service_role, và cả ba hàm ghi kết quả đã gọi nó, không hàm nào còn gọi
+  // vam084_operator_for_season.
+  "vam096_decision_operator_for_application"
 ];
 
 /**
@@ -139,11 +148,10 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
-  // Gỡ liên kết Auth đã chết trước khi cấp quyền tuyển sinh — migration
-  // 20260918100000_reviewer_stale_auth_link.sql. Nằm ở đây cho tới khi chủ dự án
-  // dán migration lên Production và có bằng chứng đọc catalog; app gọi được ngay
-  // vì lỗi của lệnh này không chặn lượt cấp quyền.
-  "vam084_clear_stale_recruitment_auth_link",
+  // Ban tổ chức sửa nội dung bài chấm — migration
+  // 20260918170000_review_content_override.sql. Nằm ở đây cho tới khi chủ dự án dán
+  // migration lên Production và có bằng chứng đọc catalog.
+  "vam096_override_application_review",
   // VAM095 P1 withdrawn-application quarantine. These remain explicitly
   // Production-pending until the owner applies 20260905140900 and records
   // read-only catalog verification; this candidate does not apply it.

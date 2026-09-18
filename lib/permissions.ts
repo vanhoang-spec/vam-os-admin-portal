@@ -72,6 +72,40 @@ export function canDecideAnyApplicationResult(role?: string | null) {
 }
 
 /**
+ * Can change the CONTENT of a review — scores, recommendation, reviewer note —
+ * on somebody else's review, and after it was submitted.
+ *
+ * Owner decision 18/09/2026: Core Team edits review content for both roles;
+ * support_team for mentee applications. Same split as the result, deliberately
+ * named separately: these are two different questions, and the day one of them
+ * moves the other must not follow by accident.
+ *
+ * This never touches the reviewer's own path. `vam084_submit_application_review`
+ * still requires the actor to BE the assignee and the review to be unsubmitted;
+ * an edit by the organising team goes through its own database function, which
+ * records who changed what.
+ *
+ * Role half only: the database re-checks the same split per application and
+ * still requires an operations scope on the season.
+ */
+export function canEditReviewContent(role: string | null | undefined, roleApplied: unknown) {
+  const applied = String(roleApplied ?? "").trim().toLowerCase();
+  if (applied === "mentee") return canDecide(role) || role === "support_team";
+  return canDecide(role);
+}
+
+/**
+ * Can edit SOME review content — the gate for a screen or a route that has not
+ * yet resolved which application is involved.
+ *
+ * Never a substitute for canEditReviewContent: the write path must still ask that
+ * question for the exact application it is about to change.
+ */
+export function canEditReviewContentAnyApplication(role?: string | null) {
+  return canDecide(role) || role === "support_team";
+}
+
+/**
  * Can bulk-assign applications to reviewers.
  * Same role set as canAssignReview — reviewer role cannot bulk-assign.
  */

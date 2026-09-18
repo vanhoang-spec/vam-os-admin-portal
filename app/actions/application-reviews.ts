@@ -5,11 +5,16 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
   assignApplicationReview,
   cancelApplicationReview,
+  overrideApplicationReview,
   reassignApplicationReview,
   saveApplicationReviewDraft,
   submitApplicationReview
 } from "@/lib/application-reviews";
-import { canAssignReview, canReview } from "@/lib/permissions";
+import {
+  canAssignReview,
+  canEditReviewContentAnyApplication,
+  canReview
+} from "@/lib/permissions";
 import type { ReviewActionState } from "@/lib/review-action-types";
 import { parseReviewDueDate } from "@/lib/review-due";
 
@@ -249,4 +254,53 @@ export async function handleReviewFormAction(
   if (intent === "draft") return saveApplicationReviewDraftAction(_prev, formData);
   if (intent === "submit") return submitApplicationReviewAction(_prev, formData);
   return fail("Hành động không hợp lệ.");
+}
+
+// ----------------------------------------------------------------
+// Ban tổ chức sửa nội dung bài chấm (Core Team mọi hồ sơ, Support Team hồ sơ mentee)
+// ----------------------------------------------------------------
+
+export async function overrideApplicationReviewAction(
+  _prev: ReviewActionState,
+  formData: FormData
+): Promise<ReviewActionState> {
+  try {
+    const adminUser = await getCurrentAdminUser();
+    if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
+    // Vai trò ứng tuyển của hồ sơ đọc trong lib, không lấy từ form.
+    if (!canEditReviewContentAnyApplication(adminUser.role)) {
+      return fail("Bạn không có quyền sửa bài chấm.");
+    }
+
+    const reviewId = String(formData.get("review_id") ?? "").trim();
+    const recommendation = String(formData.get("recommendation") ?? "").trim();
+    if (!reviewId) return fail("Thiếu review_id.");
+    if (!recommendation) return fail("Vui lòng chọn đề xuất.");
+
+    const result = await overrideApplicationReview({
+      reviewId,
+      adminUserId: adminUser.id,
+      actorRole: adminUser.role,
+      scoreMotivation: parseScore(formData.get("score_motivation")),
+      scoreGoalClarity: parseScore(formData.get("score_goal_clarity")),
+      scoreCommitment: parseScore(formData.get("score_commitment")),
+      scoreFit: parseScore(formData.get("score_fit")),
+      scoreCommunication: parseScore(formData.get("score_communication")),
+      recommendation,
+      reviewerNote: String(formData.get("reviewer_note") ?? "").trim() || null
+    });
+
+    if (!result.ok) return fail(result.message);
+
+    const applicationId = String(formData.get("application_id") ?? "").trim();
+    if (applicationId) revalidatePath(`/applications/${applicationId}`);
+    revalidatePath(`/reviews/${reviewId}`);
+    revalidatePath("/reviews");
+    revalidatePath("/applications/mentee-review");
+    revalidatePath("/applications/mentor-review");
+    return { ok: true, message: "Đã sửa bài chấm và ghi lại giá trị trước đó." };
+  } catch (err) {
+    console.error("[overrideApplicationReviewAction]", err);
+    return fail("Lỗi hệ thống. Vui lòng thử lại.");
+  }
 }
