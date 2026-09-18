@@ -4,6 +4,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/application-decisions", () => ({
+  // Cổng chia mentor/mentee: vai trò trong các ca này quyết được mọi hồ sơ.
+  refuseApplicationsBeyondDecisionRole: vi.fn(async () => ({ ok: true })),
   recordApplicationDecision: vi.fn(),
   restoreWithdrawnApplication: vi.fn()
 }));

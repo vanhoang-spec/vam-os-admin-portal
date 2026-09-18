@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getApplications, getIntakeBatches } from "@/lib/data";
-import { canDecide } from "@/lib/permissions";
+import { canDecideAnyApplicationResult } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { MAX_BULK_APPROVAL_IDS } from "@/lib/bulk-official-approval-types";
@@ -24,7 +24,7 @@ export default async function BulkApprovalPage(props: {
   const searchParams = await props.searchParams;
   const actor = await getCurrentAdminUser();
   if (!actor?.id) redirect("/login");
-  if (!canDecide(actor.role)) redirect("/applications");
+  if (!canDecideAnyApplicationResult(actor.role)) redirect("/applications");
 
   const scope = await getScopeFilter(await getAdminScopeContext());
   const [result, batches] = await Promise.all([getApplications(scope), getIntakeBatches(scope)]);

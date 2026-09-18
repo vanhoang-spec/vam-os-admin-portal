@@ -294,7 +294,9 @@ describe("M092 — entry point respects the current information architecture", (
 
   it("gates the new entry point on the same authority as the action", () => {
     expect(APPLICATIONS_PAGE).toContain('href="/applications/bulk-approval"');
-    expect(APPLICATIONS_PAGE).toContain("canDecide(adminUser.role)");
+    // 18/09/2026: cổng đổi tên khi Support Team được quyết kết quả mentee — vẫn là
+    // đúng cổng mà chính hành động dùng, chỉ là cổng đó nay hỏi theo vai trò hồ sơ.
+    expect(APPLICATIONS_PAGE).toContain("canDecideAnyApplicationResult(adminUser.role)");
   });
 
   it("does not resurrect the Slice 2A hidden bulk-decision entry point", () => {

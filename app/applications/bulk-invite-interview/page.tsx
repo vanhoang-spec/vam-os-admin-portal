@@ -8,7 +8,7 @@ import {
   getLatestNeedsMoreReviewByApplication,
   getSeasons
 } from "@/lib/data";
-import { canDecide } from "@/lib/permissions";
+import { canDecideAnyApplicationResult } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getStageRequirements } from "@/lib/recruitment-stage-requirements";
 import { applicationStatusLabel } from "@/lib/ui-labels";
@@ -49,7 +49,7 @@ export default async function BulkInviteInterviewPage(props: {
   const searchParams = await props.searchParams;
   const actor = await getCurrentAdminUser();
   if (!actor?.id) redirect("/login");
-  if (!canDecide(actor.role)) redirect("/applications");
+  if (!canDecideAnyApplicationResult(actor.role)) redirect("/applications");
 
   const scopeContext = await getAdminScopeContext();
   if (!canOperateAnyScope(scopeContext)) redirect("/applications");

@@ -7,7 +7,8 @@ import {
   MAX_BULK_APPROVAL_IDS,
   type BulkApprovalActionState
 } from "@/lib/bulk-official-approval-types";
-import { canDecide } from "@/lib/permissions";
+import { refuseApplicationsBeyondDecisionRole } from "@/lib/application-decisions";
+import { canDecideAnyApplicationResult } from "@/lib/permissions";
 
 function fail(message: string): BulkApprovalActionState {
   return { ok: false, message };
@@ -19,18 +20,20 @@ export async function bulkOfficialApprovalAction(
 ): Promise<BulkApprovalActionState> {
   const actor = await getCurrentAdminUser();
   if (!actor?.id) return fail("Bạn chưa đăng nhập.");
-  // Same authority gate as the single official-approval path and the
-  // generic bulk-decision path: super_admin / admin / core_team only.
-  // reviewer, support_team and viewer are intentionally excluded — see
-  // lib/permissions.ts canDecide().
-  if (!canDecide(actor.role)) {
-    return fail("Chỉ admin / core team mới có thể duyệt chính thức đơn ứng tuyển.");
+  // Cùng cổng quyền với đường duyệt từng đơn: Core Team trở lên cho mọi hồ sơ,
+  // Support Team cho hồ sơ mentee (chủ dự án chốt 18/09/2026). reviewer và viewer
+  // vẫn nằm ngoài — xem canDecideApplicationResult trong lib/permissions.ts.
+  if (!canDecideAnyApplicationResult(actor.role)) {
+    return fail("Bạn không có quyền duyệt chính thức đơn ứng tuyển.");
   }
 
   const ids = Array.from(new Set(formData.getAll("application_id").map(String).filter(Boolean)));
   if (!ids.length || ids.length > MAX_BULK_APPROVAL_IDS) {
     return fail(`Chọn từ 1 đến ${MAX_BULK_APPROVAL_IDS} đơn.`);
   }
+
+  const roleGate = await refuseApplicationsBeyondDecisionRole({ applicationIds: ids, actorRole: actor.role });
+  if (!roleGate.ok) return fail(roleGate.message);
 
   // Season/program scope, role derivation, eligibility, identity resolution
   // and every mutation happen server-side inside the trusted RPC — this

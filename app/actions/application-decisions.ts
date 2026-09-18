@@ -2,8 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { recordApplicationDecision, restoreWithdrawnApplication } from "@/lib/application-decisions";
-import { canDecide } from "@/lib/permissions";
+import {
+  recordApplicationDecision,
+  refuseApplicationsBeyondDecisionRole,
+  restoreWithdrawnApplication
+} from "@/lib/application-decisions";
+import { canDecide, canDecideAnyApplicationResult } from "@/lib/permissions";
 import type { DecisionActionState } from "@/lib/decision-action-types";
 import {
   ALLOWED_DECISION_STATUSES,
@@ -24,7 +28,9 @@ export async function updateApplicationDecisionAction(
   try {
     const adminUser = await getCurrentAdminUser();
     if (!adminUser?.id) return fail("Bạn chưa đăng nhập.");
-    if (!canDecide(adminUser.role)) return fail("Bạn không có quyền ra quyết định cho đơn ứng tuyển.");
+    if (!canDecideAnyApplicationResult(adminUser.role)) {
+      return fail("Bạn không có quyền ra quyết định cho đơn ứng tuyển.");
+    }
 
     const applicationId = String(formData.get("application_id") ?? "").trim();
     const newStatus = String(formData.get("new_status") ?? "").trim();
@@ -32,6 +38,12 @@ export async function updateApplicationDecisionAction(
     const decisionNote = String(formData.get("decision_note") ?? "").trim() || null;
 
     if (!applicationId) return fail("Thiếu application_id.");
+    // Vai trò ứng tuyển đọc từ đơn đã lưu: mentor là việc của Core Team trở lên.
+    const roleGate = await refuseApplicationsBeyondDecisionRole({
+      applicationIds: [applicationId],
+      actorRole: adminUser.role
+    });
+    if (!roleGate.ok) return fail(roleGate.message);
     if (!newStatus) return fail("Vui lòng chọn quyết định.");
     if (!allowedDecisionStatuses.has(newStatus)) {
       return fail(`Quyết định không hợp lệ: ${newStatus}`);

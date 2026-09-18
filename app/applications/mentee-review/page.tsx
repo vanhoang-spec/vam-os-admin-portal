@@ -6,7 +6,7 @@ import { applicationStatusLabel } from "@/lib/ui-labels";
 import { displayConsent, displayText, formatDate } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseApplications } from "@/lib/read-access";
-import { canDecide } from "@/lib/permissions";
+import { canDecideApplicationResult } from "@/lib/permissions";
 import { bonusForApplication, readApplicationBonusRules } from "@/lib/submission-bonus";
 import { SubmissionBonusBadge } from "@/components/submission-bonus-badge";
 import { redirect } from "next/navigation";
@@ -20,7 +20,7 @@ export default async function MenteeReviewQueuePage(props: {
   const adminUser = await getCurrentAdminUser();
   if (!adminUser || !canBrowseApplications(adminUser.role)) redirect(adminUser?.role === "reviewer" ? "/reviews" : "/");
   const scope = await getScopeFilter(await getAdminScopeContext());
-  const canBulkDecide = canDecide(adminUser.role);
+  const canBulkDecide = canDecideApplicationResult(adminUser.role, "mentee");
 
   const page = Math.max(1, parseInt(searchParams.page || "1", 10) || 1);
   const q = searchParams.q || "";

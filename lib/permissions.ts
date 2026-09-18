@@ -41,6 +41,37 @@ export function canDecide(role?: string | null) {
 }
 
 /**
+ * Can change the RESULT of ONE application — every decision status and the
+ * official approval that turns an applicant into a member of the season.
+ *
+ * Owner decision 18/09/2026: support_team decides MENTEE results, up to and
+ * including the official approval. Mentor results stay with core_team and above,
+ * which is what `canDecide` already says, and this predicate keeps saying.
+ *
+ * `roleApplied` must come from the stored application, never from the form: a
+ * request claiming "mentee" about a mentor application is exactly how the split
+ * would be walked around. The database re-checks the same split per application
+ * (vam096_decision_operator_for_application) and still requires an operations
+ * scope on that season.
+ */
+export function canDecideApplicationResult(role: string | null | undefined, roleApplied: unknown) {
+  const applied = String(roleApplied ?? "").trim().toLowerCase();
+  if (applied === "mentee") return canDecide(role) || role === "support_team";
+  return canDecide(role);
+}
+
+/**
+ * Can decide SOME application — the gate for a screen or a bulk route that has
+ * not yet resolved which applications are involved.
+ *
+ * Never a substitute for `canDecideApplicationResult`: every write path must
+ * still ask that question for the exact applications it is about to change.
+ */
+export function canDecideAnyApplicationResult(role?: string | null) {
+  return canDecide(role) || role === "support_team";
+}
+
+/**
  * Can bulk-assign applications to reviewers.
  * Same role set as canAssignReview — reviewer role cannot bulk-assign.
  */

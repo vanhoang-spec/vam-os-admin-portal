@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { recordApplicationDecision } from "@/lib/application-decisions";
 import { getApplication } from "@/lib/data";
-import { canDecide } from "@/lib/permissions";
+import { refuseApplicationsBeyondDecisionRole } from "@/lib/application-decisions";
+import { canDecideAnyApplicationResult } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import {
   BULK_SCREENING_MAX,
@@ -81,7 +82,7 @@ export async function bulkS12ScreeningAction(formData: FormData): Promise<void> 
   }
 
   const actor = await getCurrentAdminUser();
-  if (!actor?.id || !canDecide(actor.role)) {
+  if (!actor?.id || !canDecideAnyApplicationResult(actor.role)) {
     redirect(queueUrl(role, formData, "Bạn không có quyền duyệt hàng loạt.", false));
   }
 
@@ -98,6 +99,15 @@ export async function bulkS12ScreeningAction(formData: FormData): Promise<void> 
   }
   if (!ALLOWED_BULK_STATUSES.has(newStatus)) {
     redirect(queueUrl(role, formData, "Quyết định hàng loạt không hợp lệ.", false));
+  }
+
+  // Vai trò ứng tuyển đọc từ chính các đơn, không lấy từ hàng đợi trên form.
+  const roleGate = await refuseApplicationsBeyondDecisionRole({
+    applicationIds,
+    actorRole: actor.role
+  });
+  if (!roleGate.ok) {
+    redirect(queueUrl(role, formData, roleGate.message, false));
   }
 
   const scope = await getScopeFilter(await getAdminScopeContext());
