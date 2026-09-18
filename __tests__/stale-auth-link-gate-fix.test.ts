@@ -29,17 +29,23 @@ const sqlCode = sql
   .map((line) => line.replace(/--.*$/, ""))
   .join(LF);
 
-/** Thân từng hàm khai trong một file migration, cắt theo mốc create-or-replace. */
+/**
+ * Thân từng hàm khai trong một file migration.
+ *
+ * Cắt ở dấu kết thúc thân hàm, không cắt ở hàm kế tiếp: phần tự kiểm phía sau có
+ * nhắc lời gọi cũ bên trong một chuỗi, và một phép quét đọc lố sang đó sẽ tố cáo
+ * nhầm chính bản vá đang sửa lỗi.
+ */
 function functionBodies(text: string): Array<{ header: string; body: string }> {
   const marker = /create or replace function\s+public\.([a-z0-9_]+)/gi;
   const found: Array<{ header: string; body: string }> = [];
-  const starts: Array<{ index: number; name: string }> = [];
   let match: RegExpExecArray | null;
-  while ((match = marker.exec(text))) starts.push({ index: match.index, name: match[1] });
-  starts.forEach((start, position) => {
-    const end = position + 1 < starts.length ? starts[position + 1].index : text.length;
-    found.push({ header: start.name, body: text.slice(start.index, end) });
-  });
+  while ((match = marker.exec(text))) {
+    const rest = text.slice(match.index);
+    const terminator = rest.indexOf('$function$;');
+    const end = terminator > -1 ? terminator + '$function$;'.length : rest.length;
+    found.push({ header: match[1], body: rest.slice(0, end) });
+  }
   return found;
 }
 
@@ -51,8 +57,24 @@ describe("1. bản vá", () => {
   });
 
   it("không còn gọi phép kiểm phụ thuộc current_user", () => {
-    expect(sqlCode).not.toContain("vam084_staffing_operator_for_season(");
-    expect(sqlCode.match(/vam084_operator_for_season\(/g)).toBeNull();
+    const body = sqlCode.slice(
+      sqlCode.indexOf("create or replace function public.vam084_clear_stale_recruitment_auth_link"),
+      sqlCode.indexOf("alter function")
+    );
+    expect(body).not.toContain("vam084_staffing_operator_for_season(");
+    expect(body).not.toContain("vam084_operator_for_season(");
+  });
+
+  // Lần dán đầu tiên của file này bị chính khối tự kiểm từ chối: nó tìm TÊN phép
+  // kiểm cũ, mà chú thích trong thân hàm có nhắc tên đó để nói vì sao không dùng.
+  // Cả migration tự hoàn nguyên, và không ai sửa được gì cho tới khi neo được sửa.
+  it("tự kiểm tìm LỜI GỌI, không tìm cái tên trong chú thích", () => {
+    const check = sqlCode.slice(sqlCode.indexOf("do $self_check$"));
+    expect(check).toContain("position('vam084_staffing_operator_for_season(' in v_def)");
+    expect(check).toContain("position('vam084_operator_for_season(' in v_def)");
+    expect(check).not.toContain("position('vam084_staffing_operator_for_season' in v_def)");
+    // Và thân hàm vẫn giữ chú thích giải thích — thứ đã làm phép tìm cũ hiểu nhầm.
+    expect(sql).toContain("Đúng tập vai trò của vam084_staffing_operator_for_season");
   });
 
   it("giữ nguyên tập vai trò cũ: super admin, hoặc admin/core team/support team có quyền vận hành mùa", () => {

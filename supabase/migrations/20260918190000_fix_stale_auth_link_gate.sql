@@ -31,7 +31,7 @@ begin
   if to_regprocedure('public.vam063_trusted_api_role()') is null then
     raise exception 'PRECONDITION: thiếu vam063_trusted_api_role';
   end if;
-  if position('vam084_staffing_operator_for_season' in (
+  if position('vam084_staffing_operator_for_season(' in (
     select pg_get_functiondef(p.oid)
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'vam084_clear_stale_recruitment_auth_link'
@@ -168,8 +168,11 @@ begin
   if position('vam063_trusted_api_role' in v_def) = 0 then
     raise exception 'SELF_CHECK: hàm chưa kiểm ngữ cảnh gọi bằng claim của request';
   end if;
-  if position('vam084_staffing_operator_for_season' in v_def) > 0
-     or position('vam084_operator_for_season' in v_def) > 0 then
+  -- Tìm LỜI GỌI, không tìm cái tên: chú thích trong thân hàm có nhắc tên phép kiểm
+  -- cũ để nói vì sao không dùng nó, và phép tìm theo tên trần sẽ tưởng đó là lời gọi.
+  -- Đó chính là lỗi làm lần dán đầu tiên của file này bị raise và tự hoàn nguyên.
+  if position('vam084_staffing_operator_for_season(' in v_def) > 0
+     or position('vam084_operator_for_season(' in v_def) > 0 then
     raise exception 'SELF_CHECK: hàm vẫn gọi phép kiểm phụ thuộc current_user';
   end if;
   if position('u.id = v_auth_user_id' in v_def) = 0 then
