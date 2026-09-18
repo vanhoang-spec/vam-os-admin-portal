@@ -2,7 +2,13 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { WITHDRAWN_APPLICATION_REVIEW_MESSAGE } from "@/lib/application-review-assignability";
-import { canAssignReview, canAssignReviewLots, canReview } from "@/lib/permissions";
+import {
+  canAssignReview,
+  canAssignReviewLots,
+  canEditReviewContent,
+  canEditReviewContentAnyApplication,
+  canReview
+} from "@/lib/permissions";
 import { canOperateSeason, canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { isEditableReviewStatus } from "@/lib/review-status";
 import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
@@ -62,7 +68,9 @@ async function requireMutationActor(
   // `hand_back` is returning an assignment to the queue from the lot screen —
   // the one mutation here Support team may make. Assigning one application and
   // swapping reviewers stay on `assign`.
-  permission: "review" | "assign" | "hand_back"
+  // "override_review" là ban tổ chức sửa bài chấm của người khác — cổng riêng, vì
+  // nó không đi cùng quyền tự chấm bài (canReview) mà đi cùng quyền đổi kết quả.
+  permission: "review" | "assign" | "hand_back" | "override_review"
 ) {
   const actor = await getCurrentAdminUser();
   if (!actor?.id || actor.id !== expectedAdminUserId) {
@@ -71,9 +79,11 @@ async function requireMutationActor(
   const permitted =
     permission === "review"
       ? canReview(actor.role)
-      : permission === "hand_back"
-        ? canAssignReviewLots(actor.role)
-        : canAssignReview(actor.role);
+      : permission === "override_review"
+        ? canEditReviewContentAnyApplication(actor.role)
+        : permission === "hand_back"
+          ? canAssignReviewLots(actor.role)
+          : canAssignReview(actor.role);
   if (!permitted) {
     return { ok: false as const, message: "Bạn không có quyền thực hiện thao tác review này." };
   }
@@ -335,4 +345,99 @@ export async function reassignApplicationReview(input: {
     return { ok: false, message: mutationErrorMessage(error) };
   }
   return { ok: true, id: String(data) };
+}
+
+/**
+ * Ban tổ chức sửa nội dung một bài chấm, kể cả bài đã nộp.
+ *
+ * Khác hẳn `submitApplicationReview`: đường kia là ô chấm của chính người được giao
+ * và chỉ nhận bài chưa nộp. Đường này dành cho người sửa kết quả chấm — Core Team
+ * với mọi hồ sơ, Support Team với hồ sơ mentee — nên nó KHÔNG hỏi "người thao tác có
+ * phải người được giao không", mà hỏi quyền theo vai trò ứng tuyển của hồ sơ.
+ *
+ * Vai trò ứng tuyển đọc từ chính hồ sơ. Database kiểm lại đúng phép chia đó và ghi
+ * lại giá trị trước khi sửa.
+ */
+export async function overrideApplicationReview(input: {
+  reviewId: string;
+  adminUserId: string;
+  actorRole: string | null | undefined;
+  scoreMotivation: number | null;
+  scoreGoalClarity: number | null;
+  scoreCommitment: number | null;
+  scoreFit: number | null;
+  scoreCommunication: number | null;
+  recommendation: string | null;
+  reviewerNote: string | null;
+}): Promise<ReviewActionResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const actorAccess = await requireMutationActor(input.adminUserId, "override_review");
+  if (!actorAccess.ok) return actorAccess;
+
+  const { data: review, error: reviewError } = await client
+    .from("application_reviews")
+    .select("id,application_id,status")
+    .eq("id", input.reviewId)
+    .maybeSingle();
+  if (reviewError) {
+    log("load review for override failed", reviewError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!review) return { ok: false, message: "Không tìm thấy bài chấm." };
+
+  const { data: application, error: applicationError } = await client
+    .from("applications")
+    .select("id,role_applied")
+    .eq("id", review.application_id as string)
+    .maybeSingle();
+  if (applicationError) {
+    log("load application for review override failed", applicationError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!application) return { ok: false, message: "Không tìm thấy đơn ứng tuyển." };
+
+  if (!canEditReviewContent(input.actorRole, application.role_applied)) {
+    return {
+      ok: false,
+      message: "Bạn không có quyền sửa bài chấm của hồ sơ này. Support Team chỉ sửa được bài chấm hồ sơ mentee."
+    };
+  }
+
+  const scopeAccess = await canWriteReviewWorkflowForApplication(client, review.application_id as string);
+  if (!scopeAccess.ok) return scopeAccess;
+
+  const { data: updated, error } = await client.rpc("vam096_override_application_review", {
+    p_review_id: input.reviewId,
+    p_actor: input.adminUserId,
+    p_score_motivation: input.scoreMotivation ?? null,
+    p_score_goal_clarity: input.scoreGoalClarity ?? null,
+    p_score_commitment: input.scoreCommitment ?? null,
+    p_score_fit: input.scoreFit ?? null,
+    p_score_communication: input.scoreCommunication ?? null,
+    p_recommendation: input.recommendation ?? null,
+    p_reviewer_note: input.reviewerNote ?? null
+  });
+
+  if (error) {
+    log("override review failed", error);
+    const message = String((error as { message?: string }).message ?? "");
+    if (message.includes("Review is not editable")) {
+      return { ok: false, message: "Bài chấm đã huỷ thì không sửa được nữa." };
+    }
+    if (message.includes("not authorized")) {
+      return { ok: false, message: "Bạn không có quyền sửa bài chấm của hồ sơ này." };
+    }
+    if (message.includes("Invalid recommendation")) {
+      return { ok: false, message: "Vui lòng chọn đề xuất hợp lệ." };
+    }
+    if (message.includes("scores must be between")) {
+      return { ok: false, message: "Điểm từng mục phải từ 1 đến 5." };
+    }
+    return { ok: false, message: mutationErrorMessage(error) };
+  }
+  if (!updated) return { ok: false, message: SAFE_ERROR };
+
+  return { ok: true, id: input.reviewId };
 }

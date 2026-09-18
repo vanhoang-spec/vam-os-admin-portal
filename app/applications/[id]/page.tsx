@@ -18,7 +18,8 @@ import {
   getActiveAdminUsers
 } from "@/lib/data";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { canAssignReview, canDecideApplicationResult } from "@/lib/permissions";
+import { canAssignReview, canDecideApplicationResult, canEditReviewContent } from "@/lib/permissions";
+import { ReviewOverridePanel, type OverridableReview } from "./review-override-panel";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { ApplicationDecision, ApplicationReview, JsonRecord, Match, Person } from "@/lib/types";
 import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
@@ -273,6 +274,9 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   // Mentor: Core Team trở lên. Mentee: thêm Support Team. Vai trò lấy từ đơn.
   const canMakeDecision =
     canDecideApplicationResult(adminUser?.role, roleApplied) && canOperateAnyScope(scopeContext);
+  // Sửa nội dung bài chấm: cùng phép chia mentor/mentee với việc đổi kết quả.
+  const canEditReviews =
+    canEditReviewContent(adminUser?.role, roleApplied) && canOperateAnyScope(scopeContext);
   const isWithdrawn = displayStatus === "withdrawn";
   const latestWithdrawal = decisions.find((decision) => decision.new_status === "withdrawn") ?? null;
   const correctionNeededReviews = reviews.filter((review) => isEditableReviewStatus(review.status));
@@ -588,6 +592,36 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             </div>
           </div>
         )}
+
+        {canEditReviews && !isWithdrawn && reviews.length > 0 ? (
+          <div className="mt-4 border-t border-vam-line pt-4">
+            <h3 className="mb-2 text-sm font-semibold text-vam-ink">Sửa nội dung bài chấm</h3>
+            <ReviewOverridePanel
+              applicationId={params.id}
+              reviews={reviews
+                .filter((review) => review.status !== "cancelled")
+                .map((review): OverridableReview => {
+                  const reviewer = review.reviewer_admin_user_id
+                    ? adminUserMap.get(review.reviewer_admin_user_id)
+                    : null;
+                  return {
+                    id: review.id,
+                    roundLabel: roundLabel(review.review_round),
+                    reviewerName: reviewer ? reviewer.full_name || reviewer.email : "Không xác định",
+                    statusLabel: reviewStatusLabel(review.status),
+                    scoreMotivation: review.score_motivation ?? null,
+                    scoreGoalClarity: review.score_goal_clarity ?? null,
+                    scoreCommitment: review.score_commitment ?? null,
+                    scoreFit: review.score_fit ?? null,
+                    scoreCommunication: review.score_communication ?? null,
+                    totalScore: review.total_score ?? null,
+                    recommendation: review.recommendation ?? null,
+                    reviewerNote: review.reviewer_note ?? null
+                  };
+                })}
+            />
+          </div>
+        ) : null}
       </Card>
 
       {/* ── Admin/core-team decision ──────────────────────────────────────────── */}
