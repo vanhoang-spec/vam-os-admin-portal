@@ -433,10 +433,18 @@ export type Event = JsonRecord & {
   show_notes_field?: boolean | null;
 };
 
+/**
+ * Ba loại link công khai của một sự kiện.
+ *
+ * "survey" là phiếu khảo sát cuối buổi, và nộp phiếu chính là thao tác check out
+ * (supabase/migrations/20260919043000_event_survey_checkout.sql).
+ */
+export type EventLinkType = "registration" | "checkin" | "survey";
+
 export type EventLink = JsonRecord & {
   id: string;
   event_id: string;
-  link_type: "registration" | "checkin" | string;
+  link_type: EventLinkType | string;
   token: string;
   is_active: boolean;
   opens_at: string | null;

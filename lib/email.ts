@@ -6,6 +6,7 @@ import {
   buildEventRegistrationConfirmationEmail,
   buildEventScheduleChangeEmail,
   buildEventReminderEmail,
+  buildEventSurveyEmail,
   buildInterviewInviteEmail,
   // ── main-only. Giữ import này khi merge stack. ────────────────────────────
   buildInterviewRoundInviteEmail,
@@ -1108,6 +1109,32 @@ export async function sendEventReminder(input: {
   const built = buildEventReminderEmail(input);
   return deliver(
     "event_reminder",
+    { ...built, to: input.toEmail },
+    { table: "event_registrations", id: input.registrationId }
+  );
+}
+
+/**
+ * Thư khảo sát cuối buổi.
+ *
+ * Ghi sổ theo dòng ĐĂNG KÝ chứ không theo sự kiện, giống thư nhắc lịch: câu hỏi
+ * hay gặp nhất sau đó là "người này đã nhận thư gì", và nó chỉ trả lời được khi
+ * sổ thư trỏ về đúng một người.
+ */
+export async function sendEventSurvey(input: {
+  toEmail: string;
+  recipientName: string;
+  eventName: string;
+  impressionQuestion: string;
+  question: string;
+  trackingNotice: string;
+  surveyUrl: string;
+  deadlineLabel?: string | null;
+  registrationId: string;
+}): Promise<SendEmailResult> {
+  const built = buildEventSurveyEmail(input);
+  return deliver(
+    "event_survey",
     { ...built, to: input.toEmail },
     { table: "event_registrations", id: input.registrationId }
   );
