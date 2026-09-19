@@ -57,8 +57,22 @@ export const EVENT_EXPORT_HEADERS = [
   "Câu hỏi cho diễn giả",
   "Mã vé",
   "Mã dự phòng",
-  "Thời điểm đăng ký"
+  "Thời điểm đăng ký",
+  // Bốn cột khảo sát cuối buổi đứng CUỐI, sau mọi cột đã có. Người vận hành đã
+  // quen vị trí các cột cũ, và một cột chèn vào giữa làm mọi công thức Excel
+  // họ đang dùng trỏ sai chỗ mà không báo gì.
+  "Đã check out (nộp phiếu)",
+  "Điều ấn tượng nhất",
+  "Câu hỏi cho BTC",
+  "Thời điểm nộp phiếu"
 ] as const;
+
+/** Phiếu khảo sát của một người, đúng những gì bốn cột cuối cần. */
+export type ExportSurvey = {
+  impression: string;
+  question: string | null;
+  submittedAt: string | null;
+};
 
 function yesNo(value: unknown): string {
   return value === true || String(value) === "true" ? "Có" : "Không";
@@ -78,10 +92,12 @@ function text(value: unknown): string {
 export function eventRegistrationRow(
   row: ExportRegistration,
   sessions: Map<string, ExportSession>,
-  scans?: Map<string, ExportScan[]>
+  scans?: Map<string, ExportScan[]>,
+  surveys?: Map<string, ExportSurvey>
 ): string[] {
   const session = sessions.get(String(row.event_id));
   const checkedIn = row.attendance_status === "checked_in";
+  const survey = surveys?.get(String(row.id)) ?? null;
 
   return [
     session?.seriesIndex == null ? "" : `Buổi ${session.seriesIndex}`,
@@ -104,7 +120,11 @@ export function eventRegistrationRow(
     text(row.speaker_question),
     text(row.checkin_code),
     text(row.short_code),
-    row.registered_at ? formatDateTime(row.registered_at) : ""
+    row.registered_at ? formatDateTime(row.registered_at) : "",
+    yesNo(Boolean(survey)),
+    text(survey?.impression),
+    text(survey?.question),
+    survey?.submittedAt ? formatDateTime(survey.submittedAt) : ""
   ];
 }
 
@@ -147,11 +167,12 @@ function scanHistory(scans: ExportScan[], steps?: readonly CheckinStep[]): strin
 export function buildEventRegistrationCsv(
   rows: ExportRegistration[],
   sessions: Map<string, ExportSession>,
-  scans?: Map<string, ExportScan[]>
+  scans?: Map<string, ExportScan[]>,
+  surveys?: Map<string, ExportSurvey>
 ): string {
   const table = [
     [...EVENT_EXPORT_HEADERS],
-    ...rows.map((row) => eventRegistrationRow(row, sessions, scans))
+    ...rows.map((row) => eventRegistrationRow(row, sessions, scans, surveys))
   ];
   return table.map((line) => line.map(csvCell).join(",")).join("\n");
 }

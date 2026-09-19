@@ -12,6 +12,8 @@ import { displayText, formatDateTime, formatTimeRange } from "@/lib/utils";
 import { eventVietnamDate, isReminderRecipient, reminderBlockReason } from "@/lib/event-reminder-core";
 import { getLatestEventReminder } from "@/lib/event-reminders";
 import { EventReminderPanel } from "./event-reminder-panel";
+import { EventSurveyPanel } from "./survey-panel";
+import { getEventSurveyOverview } from "@/lib/event-survey";
 import { CheckinLinkPanel, RegistrationLinkPanel } from "./registration-link-panel";
 import { eventRegistrationStatusLabel, eventTypeLabel } from "@/lib/event-constants";
 import { EventPlaceBlock } from "../event-place";
@@ -169,6 +171,9 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
 
   // "Gửi remind": đếm người nhận bằng đúng phép lọc máy chủ dùng khi gửi.
   const latestReminder = await getLatestEventReminder(params.id);
+
+  // Khảo sát cuối buổi. Đọc cả link, mã QR lẫn các con số trong một lần.
+  const surveyOverview = await getEventSurveyOverview(params.id);
   const reminderSessionLabel = [
     displayText(detail.event.event_name, "Sự kiện"),
     typeof detail.event.series_index === "number" && typeof detail.event.series_total === "number"
@@ -308,6 +313,23 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
             ) : null}
           </>
         ) : null}
+      </div>
+
+      <div className="mb-4">
+        <EventSurveyPanel
+          eventId={detail.event.id}
+          canOperate={canCreateLink}
+          url={surveyOverview.url}
+          qrDataUrl={surveyOverview.qrDataUrl}
+          sendAt={surveyOverview.sendAt}
+          counts={surveyOverview.counts}
+          eligibleCheckedIn={surveyOverview.eligibleCheckedIn}
+          eligibleAll={surveyOverview.eligibleAll}
+          responses={surveyOverview.responses}
+          completed={surveyOverview.completed}
+          checkedIn={surveyOverview.checkedIn}
+          blockReason={surveyOverview.blockReason}
+        />
       </div>
 
       <div className="mb-4">

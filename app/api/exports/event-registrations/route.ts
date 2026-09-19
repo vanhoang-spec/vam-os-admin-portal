@@ -8,8 +8,10 @@ import {
   buildEventRegistrationCsv,
   exportFileName,
   type ExportScan,
-  type ExportSession
+  type ExportSession,
+  type ExportSurvey
 } from "@/lib/event-export";
+import { readAllPages } from "@/lib/paged-read";
 import { isValidUuid } from "@/lib/events";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -135,10 +137,33 @@ export async function GET(request: Request) {
     scans.set(scan.registrationId, list);
   }
 
+  // Phiếu khảo sát cuối buổi. Đọc hỏng thì dừng hẳn, cùng lý do với lịch sử quét:
+  // bốn cột trống đọc như "không ai nộp phiếu", mà đó chính là căn cứ check out.
+  const { data: surveyRows, error: surveyError } = await readAllPages<Record<string, unknown>>(
+    "event_survey_responses",
+    "id,registration_id,impression,question,submitted_at",
+    (projection) => client.from("event_survey_responses").select(projection).in("event_id", ids)
+  );
+  if (surveyError) {
+    return NextResponse.json({ error: "Không đọc được phiếu khảo sát." }, { status: 500 });
+  }
+
+  const surveys = new Map<string, ExportSurvey>();
+  for (const row of surveyRows) {
+    const registrationId = String(row.registration_id ?? "").trim();
+    if (!registrationId) continue;
+    surveys.set(registrationId, {
+      impression: String(row.impression ?? ""),
+      question: row.question ? String(row.question) : null,
+      submittedAt: row.submitted_at ? String(row.submitted_at) : null
+    });
+  }
+
   const csv = buildEventRegistrationCsv(
     (registrations ?? []) as Array<Record<string, unknown>>,
     sessions,
-    scans
+    scans,
+    surveys
   );
   const filename = exportFileName(event.event_name, event.starts_at);
 

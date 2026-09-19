@@ -22,6 +22,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     // nhập. Thiếu dòng này, /ve/<mã> rơi xuống AppShell và hiện "Cần đăng nhập"
     // thay cho tấm vé (13/09/2026) — dù middleware đã gắn nhãn "ticket" từ trước.
     publicRoute === "ticket" ||
+    // Phiếu khảo sát cuối buổi, mở từ mã QR trong hội trường.
+    publicRoute === "survey" ||
     publicRoute === "renewal" ||
     publicRoute === "blog"
   ) {

@@ -22,6 +22,7 @@ import {
   buildCrossSelectedEmail,
   buildEventRegistrationConfirmationEmail,
   buildEventReminderEmail,
+  buildEventSurveyEmail,
   buildEventScheduleChangeEmail,
   buildInterviewInviteEmail,
   buildInterviewRoundInviteEmail,
@@ -34,6 +35,7 @@ import {
   buildStaffInviteEmail,
   type EmailKind
 } from "@/lib/email-core";
+import { QUESTION_PROMPT, impressionQuestion, trackingNotice } from "@/lib/event-survey-core";
 
 const ORIGIN = "https://os.alumni-mentoring.edu.vn";
 const SEASON = "UEH Mentoring Mùa 12";
@@ -270,6 +272,24 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         ticketCode: "VIDU123456",
         shortCode: "VD12",
         qrPngBase64: null
+      })
+    )
+  },
+  {
+    kind: "event_survey",
+    group: "Sự kiện",
+    title: "Khảo sát cuối buổi (cũng là check out)",
+    audience: "Người đã được check in ở buổi đó",
+    trigger:
+      'Tới giờ đã đặt ở khung "Khảo sát cuối buổi" trên trang sự kiện, hoặc khi ban tổ chức bấm "Gửi khảo sát ngay".',
+    body: built(
+      buildEventSurveyEmail({
+        recipientName: MENTEE,
+        eventName: "Mentee Orientation (ví dụ)",
+        impressionQuestion: impressionQuestion("Mentee Orientation (ví dụ)"),
+        question: QUESTION_PROMPT,
+        trackingNotice: trackingNotice("Mentee Orientation (ví dụ)", "19/09/2026"),
+        surveyUrl: `${ORIGIN}/khao-sat/ma-vi-du?tu=thu`
       })
     )
   },

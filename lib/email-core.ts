@@ -62,7 +62,10 @@ export type EmailKind =
   | "event_registration_confirmation"
   // Thư nhắc lịch một buổi, do ban tổ chức bấm "Gửi remind" trên trang sự kiện
   // (supabase/migrations/20260914090000_event_reminders.sql).
-  | "event_reminder";
+  | "event_reminder"
+  // Thư khảo sát sau sự kiện, gửi cho người đã check in. Nộp phiếu chính là thao
+  // tác check out (supabase/migrations/20260919043000_event_survey_checkout.sql).
+  | "event_survey";
 
 /**
  * Một tệp đi kèm thư.
@@ -1477,4 +1480,71 @@ export function buildEventReminderEmail(input: {
           ]
         : undefined
   };
+}
+
+/**
+ * Thư khảo sát sau sự kiện.
+ *
+ * Gửi vào cuối buổi, cho người đã check in. Điều lá thư này phải nói rõ — và là
+ * lý do nó không dùng lại khuôn thư nhắc lịch — là NỘP PHIẾU CHÍNH LÀ CHECK OUT:
+ * người đọc lướt rồi để đó vì tưởng "khảo sát thì tuỳ" sẽ mất phần điểm rèn
+ * luyện mà chính buổi này được lập ra để đề xuất.
+ *
+ * Hai câu hỏi hiện ngay trong thư, không giấu sau đường dẫn: người đọc trên điện
+ * thoại giữa hội trường cần biết mình sắp trả lời gì trước khi bấm.
+ */
+export function buildEventSurveyEmail(input: {
+  recipientName: string;
+  eventName: string;
+  /** Câu hỏi 1, dựng theo tên buổi ở lib/event-survey-core.ts. */
+  impressionQuestion: string;
+  /** Câu hỏi 2. */
+  question: string;
+  /** Câu nói rõ phiếu dùng để đề xuất điểm rèn luyện. */
+  trackingNotice: string;
+  surveyUrl: string;
+  /** Hạn điền, đã định dạng sẵn theo giờ Việt Nam. Không có thì không nhắc hạn. */
+  deadlineLabel?: string | null;
+}): EmailMessage {
+  const name = safeDisplayName(input.recipientName);
+  const eventName = String(input.eventName ?? "").trim() || "sự kiện";
+  const url = String(input.surveyUrl ?? "").trim();
+  const deadline = String(input.deadlineLabel ?? "").trim();
+
+  const subject = `Khảo sát cuối buổi ${eventName} — cũng là bước check out của bạn`;
+
+  const checkoutNote =
+    "Bấm gửi phiếu này ĐƯỢC TÍNH LÀ THAO TÁC CHECK OUT của bạn cho buổi hôm nay. Ban tổ chức đối chiếu với lượt check in đầu buổi để ghi nhận bạn tham dự đầy đủ.";
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Cảm ơn bạn đã tham dự ${eventName}. Ban tổ chức xin bạn hai phút cho hai câu hỏi ngắn.`,
+    "",
+    checkoutNote,
+    "",
+    "HAI CÂU HỎI",
+    `1. ${input.impressionQuestion}`,
+    `2. ${input.question}`,
+    "",
+    `Điền phiếu tại: ${url}`
+  ];
+  if (deadline) lines.push("", `Vui lòng gửi trước ${deadline}.`);
+  lines.push("", String(input.trackingNotice ?? "").trim(), "", SIGNATURE_TEXT);
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Cảm ơn bạn đã tham dự <strong>${escapeHtml(eventName)}</strong>. Ban tổ chức xin bạn hai phút cho hai câu hỏi ngắn.</p>`,
+      `<p style="margin:16px 0;padding:14px 18px;background:#e8f6ee;border-left:4px solid #16834c;border-radius:6px">${escapeHtml(checkoutNote)}</p>`,
+      `<p style="margin:20px 0 8px"><strong>Hai câu hỏi</strong></p>`,
+      `<ol style="margin:0 0 16px;padding-left:20px"><li>${escapeHtml(input.impressionQuestion)}</li><li>${escapeHtml(input.question)}</li></ol>`,
+      `<p style="margin:20px 0"><a href="${escapeHtml(url)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Điền phiếu khảo sát</a></p>`,
+      `<p style="margin:0 0 16px;font-size:13px;color:#4f6b60">Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(url)}</p>`,
+      deadline ? `<p>Vui lòng gửi trước <strong>${escapeHtml(deadline)}</strong>.</p>` : "",
+      `<p style="color:#6b7c74;font-size:13px">${escapeHtml(String(input.trackingNotice ?? "").trim())}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
 }

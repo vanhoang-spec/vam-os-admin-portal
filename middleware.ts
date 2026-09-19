@@ -209,6 +209,10 @@ export async function middleware(request: NextRequest) {
   if (
     request.nextUrl.pathname.startsWith("/register/") ||
     request.nextUrl.pathname.startsWith("/checkin/") ||
+    // Phiếu khảo sát cuối buổi. Người điền là người vừa dự sự kiện, mở bằng mã
+    // QR chiếu trên màn hình hoặc bằng link trong thư — không ai trong số họ có
+    // tài khoản ban tổ chức để đăng nhập.
+    request.nextUrl.pathname.startsWith("/khao-sat/") ||
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
@@ -222,14 +226,16 @@ export async function middleware(request: NextRequest) {
     const requestHeaders = new Headers(request.headers);
     const publicRoute = request.nextUrl.pathname.startsWith("/checkin/")
       ? "checkin"
-      : request.nextUrl.pathname.startsWith("/renew/")
-        ? "renewal"
-        : request.nextUrl.pathname.startsWith("/ve/")
-          ? "ticket"
-          : request.nextUrl.pathname === "/blog" ||
-              request.nextUrl.pathname.startsWith("/blog/")
-            ? "blog"
-            : "register";
+      : request.nextUrl.pathname.startsWith("/khao-sat/")
+        ? "survey"
+          : request.nextUrl.pathname.startsWith("/renew/")
+          ? "renewal"
+          : request.nextUrl.pathname.startsWith("/ve/")
+            ? "ticket"
+            : request.nextUrl.pathname === "/blog" ||
+                request.nextUrl.pathname.startsWith("/blog/")
+              ? "blog"
+              : "register";
     requestHeaders.set("x-vam-public-route", publicRoute);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
     // Vé mang tên một người và một mã dùng được ở cửa; nó không được nằm lại
