@@ -55,6 +55,7 @@ import {
 import type {
   Event,
   EventLink,
+  EventLinkType,
   EventParticipation,
   EventRegistration,
   JsonRecord,
@@ -1842,9 +1843,31 @@ export async function checkInForEvent(input: PublicCheckinInput): Promise<Public
   return { ok: true, status: "success", message: "Check-in thành công!", eventName: displayName };
 }
 
+/** Chữ của từng loại link, để hàm dưới không phải rẽ nhánh ba lần cho ba câu. */
+const LINK_TYPE_TEXT: Record<
+  EventLinkType,
+  { exists: string; created: string; auditAction: string }
+> = {
+  registration: {
+    exists: "Liên kết đăng ký đã tồn tại.",
+    created: "Đã tạo liên kết đăng ký.",
+    auditAction: "create_event_registration_link"
+  },
+  checkin: {
+    exists: "Liên kết check-in đã tồn tại.",
+    created: "Đã tạo liên kết check-in.",
+    auditAction: "create_event_checkin_link"
+  },
+  survey: {
+    exists: "Liên kết khảo sát đã tồn tại.",
+    created: "Đã tạo liên kết khảo sát.",
+    auditAction: "create_event_survey_link"
+  }
+};
+
 async function createEventLinkForEvent(
   eventId: unknown,
-  linkType: "registration" | "checkin",
+  linkType: EventLinkType,
   /**
    * Link đăng ký nhận cho CẢ CHUỖI của buổi này, người đăng ký chọn buổi trên
    * form. Chỉ có nghĩa với link đăng ký, và chỉ khi buổi này thuộc một chuỗi.
@@ -1898,7 +1921,7 @@ async function createEventLinkForEvent(
     return { ok: false, message: SAFE_ERROR };
   }
   if (existing) {
-    return { ok: true, message: linkType === "checkin" ? "Liên kết check-in đã tồn tại." : "Liên kết đăng ký đã tồn tại.", data: existing as EventLink };
+    return { ok: true, message: LINK_TYPE_TEXT[linkType].exists, data: existing as EventLink };
   }
 
   const { data, error: insertError } = await client
@@ -1921,7 +1944,7 @@ async function createEventLinkForEvent(
         .eq("link_type", linkType)
         .maybeSingle();
       if (retry) {
-        return { ok: true, message: linkType === "checkin" ? "Liên kết check-in đã tồn tại." : "Liên kết đăng ký đã tồn tại.", data: retry as EventLink };
+        return { ok: true, message: LINK_TYPE_TEXT[linkType].exists, data: retry as EventLink };
       }
     }
     log("create registration link failed", insertError);
@@ -1929,10 +1952,10 @@ async function createEventLinkForEvent(
   }
 
   await writeAdminAudit(client, {
-    actionType: linkType === "checkin" ? "create_event_checkin_link" : "create_event_registration_link",
+    actionType: LINK_TYPE_TEXT[linkType].auditAction,
     afterData: { event_id: id, link_type: linkType }
   });
-  return { ok: true, message: linkType === "checkin" ? "Đã tạo liên kết check-in." : "Đã tạo liên kết đăng ký.", data: data as EventLink };
+  return { ok: true, message: LINK_TYPE_TEXT[linkType].created, data: data as EventLink };
 }
 
 export async function createRegistrationLinkForEvent(
@@ -1944,6 +1967,17 @@ export async function createRegistrationLinkForEvent(
 
 export async function createCheckinLinkForEvent(eventId: unknown): Promise<MutationResult> {
   return createEventLinkForEvent(eventId, "checkin");
+}
+
+/**
+ * Link công khai của phiếu khảo sát cuối buổi.
+ *
+ * Một link riêng chứ không dùng lại link đăng ký: đăng ký đóng TRƯỚC giờ diễn
+ * ra, còn khảo sát mở ra đúng lúc đó. Dùng chung một dòng nghĩa là mở lại đăng
+ * ký cho cả người chưa từng đăng ký, ngay giữa buổi.
+ */
+export async function createSurveyLinkForEvent(eventId: unknown): Promise<MutationResult> {
+  return createEventLinkForEvent(eventId, "survey");
 }
 
 /**
