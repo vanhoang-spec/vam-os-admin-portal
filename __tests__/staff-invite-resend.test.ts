@@ -99,8 +99,16 @@ beforeEach(() => {
 });
 
 describe("1. những lúc KHÔNG được gửi", () => {
-  it("không phải super_admin: từ chối, không tạo link, không gửi", async () => {
-    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: ACTOR, role: "admin", status: "active" } as never);
+  /**
+   * 20/09/2026: cổng đổi từ "chỉ super_admin" sang bậc quản lý — admin quản core
+   * team, core team quản support team. Hai ca dưới canh hai cạnh của bậc đó:
+   * cấp không quản được ai, và cấp NGANG hàng với người bị thao tác.
+   */
+  it.each([
+    ["support_team", "cấp không quản được ai"],
+    ["core_team", "ngang cấp với tài khoản đích"]
+  ])("%s (%s): từ chối, không tạo link, không gửi", async (role) => {
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: ACTOR, role, status: "active" } as never);
     const fake = use();
 
     const result = await resendManagedAdminInvite(ADMIN_ID);
@@ -108,6 +116,16 @@ describe("1. những lúc KHÔNG được gửi", () => {
     expect(result.ok).toBe(false);
     expect(fake.generateLink).not.toHaveBeenCalled();
     expect(sendStaffInvite).not.toHaveBeenCalled();
+  });
+
+  it("không tự gửi cho chính mình", async () => {
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: ADMIN_ID, role: "admin", status: "active" } as never);
+    const fake = use();
+
+    const result = await resendManagedAdminInvite(ADMIN_ID);
+
+    expect(result.ok).toBe(false);
+    expect(fake.generateLink).not.toHaveBeenCalled();
   });
 
   it.each(["suspended", "inactive"])("tài khoản đang %s: từ chối, không tạo link, không gửi — không mở lại cửa vừa khoá", async (status) => {

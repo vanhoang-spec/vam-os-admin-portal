@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
-import { listAdminAuditLogs, listManagedAdminUsers, requireSuperAdmin, type ManagedAdminUser } from "@/lib/admin-users";
+import { listAdminAuditLogs, listManagedAdminUsers, requireAdminAccountManager, type ManagedAdminUser } from "@/lib/admin-users";
+import { canCreateAdminAccount, canManageAdminAccount, manageableAdminRoles } from "@/lib/permissions";
 import { displayText, formatDate } from "@/lib/utils";
 import { loadProgramContextCatalog, resolveAuthorizedProgramContext } from "@/lib/program-context";
 import { ProgramContextError } from "@/lib/program-context-core";
-import { CreateAdminUserForm, EditAdminUserForm, RemoveAccessForm, ResendInviteForm, StatusToggleForm, SyncAuthForm, type ScopeCatalogOptions } from "./user-management-forms";
+import { CreateAdminUserForm, DeleteAccountForm, EditAdminUserForm, RemoveAccessForm, ResendInviteForm, StatusToggleForm, SyncAuthForm, type ScopeCatalogOptions } from "./user-management-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,7 @@ function AccessDeniedView() {
       <Card>
         <h1 className="text-xl font-semibold text-vam-ink">Bạn không có quyền truy cập chức năng này</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Chức năng Quản lý người dùng chỉ dành cho Super Admin.
+          Chức năng Quản lý người dùng dành cho Super Admin, Admin và Core team — mỗi cấp quản được cấp dưới của mình.
           <br />
           Nếu bạn cần được cấp quyền, vui lòng liên hệ Super Admin.
         </p>
@@ -92,14 +93,31 @@ function AccessDeniedView() {
   );
 }
 
-function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedAdminUser[]; activeSuperAdminCount: number }) {
+function UserManagementTable({
+  users,
+  activeSuperAdminCount,
+  actorRole,
+  actorId
+}: {
+  users: ManagedAdminUser[];
+  activeSuperAdminCount: number;
+  actorRole: string;
+  actorId: string;
+}) {
+  // Một dòng người mở trang KHÔNG quản được vẫn hiện (chính họ), nhưng không kèm
+  // nút nào: ẩn hẳn thì họ tưởng tài khoản mình biến mất khỏi hệ thống.
+  const managed = (user: ManagedAdminUser) => user.id !== actorId && canManageAdminAccount(actorRole, user.role);
   if (!users.length) return <EmptyState message="Chưa có admin user để hiển thị." />;
   return (
     <><div className="grid gap-3 md:hidden">
       {users.map((user) => <article key={user.id} className="rounded-lg border border-vam-line bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="break-words font-semibold text-vam-ink">{displayText(user.full_name)}</h3><p className="break-all text-sm text-slate-600">{displayText(user.email)}</p></div><StatusBadges user={user} /></div>
         <dl className="mt-3 grid gap-2 text-sm"><div><dt className="text-xs uppercase text-slate-500">Operational role</dt><dd>{roleLabel(user.role)}</dd></div><div><dt className="text-xs uppercase text-slate-500">Program / season scope</dt><dd className="break-words">{scopeText(user)}</dd></div><div><dt className="text-xs uppercase text-slate-500">Auth identity</dt><dd>{user.auth_user_id ? "Đã liên kết" : "Chưa liên kết"}</dd></div><div><dt className="text-xs uppercase text-slate-500">Participant membership</dt><dd>Không quản lý tại tài khoản staff</dd></div></dl>
-        <div className="mt-4 grid gap-2"><Link href={`/admin/users?edit=${user.id}`} className="min-h-11 rounded-md border border-vam-line px-3 py-2.5 text-center font-medium text-vam-green">Sửa tài khoản</Link><ResendInviteForm user={user} /><StatusToggleForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /><RemoveAccessForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /></div>
+        {managed(user) ? (
+          <div className="mt-4 grid gap-2"><Link href={`/admin/users?edit=${user.id}`} className="min-h-11 rounded-md border border-vam-line px-3 py-2.5 text-center font-medium text-vam-green">Sửa tài khoản</Link><ResendInviteForm user={user} /><StatusToggleForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /><RemoveAccessForm user={user} disabled={!canRemoveOrDeactivate(user, activeSuperAdminCount)} /><DeleteAccountForm user={user} /></div>
+        ) : (
+          <p className="mt-4 text-xs text-slate-500">Tài khoản của chính bạn — không tự thao tác trên dòng này.</p>
+        )}
       </article>)}
     </div><div className="hidden overflow-hidden rounded-lg border border-vam-line bg-white md:block">
       <div className="overflow-x-auto">
@@ -127,15 +145,21 @@ function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedA
                   <td className="max-w-64 break-all px-4 py-3 font-mono text-xs text-slate-700">{displayText(user.auth_user_id)}</td>
                   <td className="max-w-80 break-words px-4 py-3 text-slate-700">{scopeText(user)}</td>
                   <td className="sticky right-0 z-10 w-64 min-w-64 border-l border-vam-line bg-white px-4 py-3 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]">
-                    <div className="grid gap-2">
-                      <Link href={`/admin/users?edit=${user.id}`} className="inline-flex justify-center rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
-                        Sửa
-                      </Link>
-                      <SyncAuthForm user={user} />
-                      <ResendInviteForm user={user} />
-                      <StatusToggleForm user={user} disabled={!safe} />
-                      <RemoveAccessForm user={user} disabled={!safe} />
-                    </div>
+                    {managed(user) ? (
+                      <div className="grid gap-2">
+                        <Link href={`/admin/users?edit=${user.id}`} className="inline-flex justify-center rounded-md border border-vam-line px-3 py-2 text-sm font-medium text-vam-green hover:bg-vam-mint">
+                          Sửa
+                        </Link>
+                        {/* Đồng bộ Auth là thao tác danh tính, vẫn chỉ của super admin. */}
+                        {actorRole === "super_admin" ? <SyncAuthForm user={user} /> : null}
+                        <ResendInviteForm user={user} />
+                        <StatusToggleForm user={user} disabled={!safe} />
+                        <RemoveAccessForm user={user} disabled={!safe} />
+                        <DeleteAccountForm user={user} />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Tài khoản của chính bạn</p>
+                    )}
                   </td>
                 </tr>
               );
@@ -150,7 +174,7 @@ function UserManagementTable({ users, activeSuperAdminCount }: { users: ManagedA
 export default async function AdminUsersPage(props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
 
-  const adminUser = await requireSuperAdmin();
+  const adminUser = await requireAdminAccountManager();
   if (!adminUser) return <AccessDeniedView />;
 
   const [usersResult, auditResult, catalog] = await Promise.all([
@@ -179,19 +203,30 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
   const users = usersResult.data;
   const activeSuperAdminCount = users.filter((user) => user.role === "super_admin" && user.status === "active").length;
   const selectedEditId = single(searchParams?.edit);
-  const selectedUser = selectedEditId ? users.find((user) => user.id === selectedEditId) : null;
+  const selectedUser = selectedEditId
+    ? users.find(
+        (user) =>
+          user.id === selectedEditId &&
+          user.id !== adminUser.id &&
+          canManageAdminAccount(adminUser.role, user.role)
+      ) ?? null
+    : null;
 
   return (
     <>
-      <PageHeader title="Quản lý người dùng" description="Super Admin Console cho user, vai trò, trạng thái và phân quyền mùa/chương trình." />
+      <PageHeader
+        title="Quản lý người dùng"
+        description={`Bạn quản được các cấp: ${manageableAdminRoles(adminUser.role).map(roleLabel).join(", ") || "không có"}.`}
+      />
       <div className="mb-6 flex flex-wrap gap-3"><Link href="/admin/users/import" className="min-h-11 rounded-md bg-vam-green px-4 py-2.5 font-medium text-white">Import CSV an toàn</Link></div>
       {usersResult.error ? <ErrorBox message={usersResult.error} /> : null}
-      {auditResult.error ? <ErrorBox message={auditResult.error} /> : null}
+      {auditResult.error && adminUser.role === "super_admin" ? <ErrorBox message={auditResult.error} /> : null}
       {catalog.warnings?.length ? <ErrorBox message={catalog.warnings.join(" ")} /> : null}
       {contextError ? <ErrorBox message={contextError} /> : (
         <Card className="mb-6"><p className="text-sm text-slate-700">Program: <strong>{requestedProgram}</strong> · Season: <strong>{requestedSeason}</strong></p></Card>
       )}
 
+      {canCreateAdminAccount(adminUser.role) ? (
       <Card className="mb-6">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Thêm user quản trị</h2>
         <p className="mb-4 text-sm text-slate-600">
@@ -199,6 +234,7 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
         </p>
         {contextError ? <p className="text-sm text-slate-600">Chọn phạm vi hợp lệ để bật biểu mẫu.</p> : <CreateAdminUserForm scopeOptions={scopeOptions} />}
       </Card>
+      ) : null}
 
       {selectedUser ? (
         <section className="mb-6">
@@ -220,9 +256,15 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
 
       <section className="mb-6">
         <h2 id="managed-users" className="mb-3 scroll-mt-24 text-lg font-semibold text-vam-ink">Danh sách người dùng</h2>
-        <UserManagementTable users={users} activeSuperAdminCount={activeSuperAdminCount} />
+        <UserManagementTable
+          users={users}
+          activeSuperAdminCount={activeSuperAdminCount}
+          actorRole={String(adminUser.role ?? "")}
+          actorId={String(adminUser.id ?? "")}
+        />
       </section>
 
+      {adminUser.role === "super_admin" ? (
       <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Nhật ký thay đổi quyền</h2>
         <SimpleTable
@@ -236,6 +278,7 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
           ]}
         />
       </section>
+      ) : null}
     </>
   );
 }

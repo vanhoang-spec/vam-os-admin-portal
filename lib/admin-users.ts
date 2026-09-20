@@ -11,6 +11,7 @@ import { executeManualStaffProvisioning, type ProvisioningResult } from "@/lib/m
 import { sendStaffInvite } from "@/lib/email";
 import { adminRoleLabel } from "@/lib/ui-labels";
 import { getPublicOrigin } from "@/lib/public-url";
+import { canManageAdminAccount, canOpenAdminUsers, manageableAdminRoles } from "@/lib/permissions";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
 export type ScopeRole = "full_access" | "operations" | "review" | "read";
@@ -174,6 +175,58 @@ export async function requireSuperAdmin(): Promise<CurrentAdminUser | null> {
   }
 }
 
+/**
+ * Người mở được trang quản lý tài khoản.
+ *
+ * Chủ dự án chốt 20/09/2026: admin quản core team, core team quản support team.
+ * Trước đó mọi cửa ở file này đều là super_admin, nên một tài khoản support team
+ * cấp nhầm phải chờ super admin mới gỡ được.
+ *
+ * Mở được trang KHÔNG phải là sửa được mọi dòng: từng thao tác còn đi qua
+ * `requireManagerOf`, và danh sách chỉ trả về những tài khoản người mở quản được.
+ */
+export async function requireAdminAccountManager(): Promise<CurrentAdminUser | null> {
+  try {
+    const adminUser = await getCurrentAdminUser();
+    if (!adminUser || adminUser.status !== "active") return null;
+    return canOpenAdminUsers(adminUser.role) ? adminUser : null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("Dynamic server usage")) throw error;
+    logAdminUsersRuntime("requireAdminAccountManager failed", { message });
+    return null;
+  }
+}
+
+/**
+ * Người này có được đụng vào tài khoản kia không — đọc vai trò đích từ DATABASE.
+ *
+ * Không nhận vai trò đích từ nơi gọi: một tham số "support_team" gửi kèm về một
+ * dòng core_team chính là cách đi vòng qua bậc quản lý.
+ */
+async function requireManagerOf(
+  client: any,
+  targetId: string
+): Promise<{ ok: true; actor: CurrentAdminUser; targetRole: AdminRole } | { ok: false; message: string }> {
+  const actor = await requireAdminAccountManager();
+  if (!actor) return { ok: false, message: "Bạn không có quyền quản lý tài khoản ban tổ chức." };
+  if (!targetId) return { ok: false, message: "Thiếu admin user id." };
+  if (actor.id === targetId) return { ok: false, message: "Không tự thao tác trên tài khoản của chính mình." };
+
+  const { data, error } = await client.from("admin_users").select("role").eq("id", targetId).maybeSingle();
+  if (error) {
+    logAdminUsersRuntime("requireManagerOf lookup failed", { message: error.message });
+    return { ok: false, message: "Không đọc được tài khoản đích." };
+  }
+  if (!data) return { ok: false, message: "Không tìm thấy tài khoản này." };
+
+  const targetRole = validRole((data as JsonRecord).role);
+  if (!canManageAdminAccount(actor.role, targetRole)) {
+    return { ok: false, message: `Bạn không có quyền thao tác trên tài khoản cấp ${targetRole}.` };
+  }
+  return { ok: true, actor, targetRole };
+}
+
 function cleanText(value: unknown) {
   const text = String(value ?? "").trim();
   return text || null;
@@ -243,8 +296,11 @@ async function getScopesForAuthUsers(client: any, authUserIds: string[]): Promis
 
 export async function listManagedAdminUsers(): Promise<{ data: ManagedAdminUser[]; error: string | null }> {
   try {
-    const access = await requireSuperAdmin();
+    const access = await requireAdminAccountManager();
     if (!access) return { data: [], error: "Bạn không có quyền truy cập trang quản lý người dùng." };
+    // Danh sách cắt theo bậc quản lý, không cắt ở giao diện: một trang ẩn nút
+    // nhưng vẫn trả về cả danh bạ là một trang đã lộ dữ liệu rồi.
+    const visibleRoles = new Set(manageableAdminRoles(access.role));
 
     const { client, error } = serviceClient();
     if (!client) return { data: [], error };
@@ -263,12 +319,16 @@ export async function listManagedAdminUsers(): Promise<{ data: ManagedAdminUser[
       return { data: [], error: `Không thể tải admin_users: ${usersError.message}` };
     }
 
-    const users = ((data ?? []) as Omit<ManagedAdminUser, "scopes">[]).map((user) => ({
-      ...user,
-      email: user.email ?? "",
-      role: validRole(user.role),
-      status: validStatus(user.status)
-    }));
+    const users = ((data ?? []) as Omit<ManagedAdminUser, "scopes">[])
+      .map((user) => ({
+        ...user,
+        email: user.email ?? "",
+        role: validRole(user.role),
+        status: validStatus(user.status)
+      }))
+      // Chính mình luôn hiện, để người mở trang thấy được mình đang là ai; mọi
+      // thao tác trên dòng đó đã bị requireManagerOf chặn sẵn.
+      .filter((user) => user.id === access.id || visibleRoles.has(user.role));
     const scopesResult = await getScopesForAuthUsers(client, users.map((user) => user.auth_user_id).filter(Boolean) as string[]);
     const scopesByUserId = new Map<string, AdminScopeAccessRow[]>();
     for (const scope of scopesResult.data) {
@@ -659,6 +719,7 @@ export async function createManagedAdminUser(input: {
   */
 }
 
+/** Sửa tài khoản: theo bậc quản lý, không còn là đặc quyền của super admin. */
 export async function updateManagedAdminUser(input: {
   id: unknown;
   fullName: unknown;
@@ -670,19 +731,26 @@ export async function updateManagedAdminUser(input: {
   scopeRole: unknown;
   scopeStatus: unknown;
 }): Promise<AdminUserMutationResult> {
-  const actor = await requireSuperAdmin();
-  if (!actor) return { ok: false, message: "Chỉ super_admin mới được chỉnh sửa người dùng nội bộ." };
-
   const { client, error } = serviceClient();
   if (!client) return { ok: false, message: error };
 
   const id = String(input.id ?? "").trim();
   if (!id) return { ok: false, message: "Thiếu admin user id." };
 
+  const manager = await requireManagerOf(client, id);
+  if (!manager.ok) return { ok: false, message: manager.message };
+  const actor = manager.actor;
+
+  // Không nâng người khác lên cấp mình không quản được: core team sửa một tài
+  // khoản support team thành admin là tự cấp cho mình một cấp trên.
+  const nextRole = validRole(input.role);
+  if (!canManageAdminAccount(actor.role, nextRole)) {
+    return { ok: false, message: `Bạn không thể đặt tài khoản này thành cấp ${nextRole}.` };
+  }
+
   const validatedScope = await validateExplicitAdminScope(client, input.programId, input.seasonId);
   if (!validatedScope.ok) return validatedScope.result;
 
-  const nextRole = validRole(input.role);
   const nextStatus = validStatus(input.status);
   if (await wouldRemoveLastActiveSuperAdmin(client, id, nextRole, nextStatus)) {
     return { ok: false, message: "Không thể tạm khóa hoặc hạ quyền super_admin active cuối cùng." };
@@ -753,13 +821,15 @@ export async function updateManagedAdminUser(input: {
  * chối — gửi link đăng nhập cho người bị khoá là mở lại cánh cửa vừa đóng.
  */
 export async function resendManagedAdminInvite(id: unknown): Promise<AdminUserMutationResult> {
-  const actor = await requireSuperAdmin();
-  if (!actor) return { ok: false, message: "Chỉ super_admin mới được gửi link đặt mật khẩu." };
   const { client, error } = serviceClient();
   if (!client) return { ok: false, message: error };
 
   const targetId = String(id ?? "").trim();
   if (!targetId) return { ok: false, message: "Thiếu admin user id." };
+
+  const manager = await requireManagerOf(client, targetId);
+  if (!manager.ok) return { ok: false, message: manager.message };
+  const actor = manager.actor;
 
   const { data: current, error: readError } = await client
     .from("admin_users")
@@ -866,14 +936,16 @@ async function activationPayload(client: any, authUserId: unknown): Promise<Json
 }
 
 export async function setManagedAdminUserStatus(id: unknown, status: unknown): Promise<AdminUserMutationResult> {
-  const actor = await requireSuperAdmin();
-  if (!actor) return { ok: false, message: "Chỉ super_admin mới được đổi trạng thái người dùng." };
   const { client, error } = serviceClient();
   if (!client) return { ok: false, message: error };
 
   const targetId = String(id ?? "").trim();
   const nextStatus = validStatus(status);
   if (!targetId) return { ok: false, message: "Thiếu admin user id." };
+
+  const manager = await requireManagerOf(client, targetId);
+  if (!manager.ok) return { ok: false, message: manager.message };
+  const actor = manager.actor;
 
   const { data: current } = await client.from("admin_users").select("role,status,auth_user_id").eq("id", targetId).maybeSingle();
   const nextRole = validRole(current?.role);
@@ -917,13 +989,15 @@ export async function setManagedAdminUserStatus(id: unknown, status: unknown): P
 }
 
 export async function removeManagedAdminAccess(id: unknown): Promise<AdminUserMutationResult> {
-  const actor = await requireSuperAdmin();
-  if (!actor) return { ok: false, message: "Chỉ super_admin mới được xóa quyền admin." };
   const { client, error } = serviceClient();
   if (!client) return { ok: false, message: error };
 
   const targetId = String(id ?? "").trim();
   if (!targetId) return { ok: false, message: "Thiếu admin user id." };
+
+  const manager = await requireManagerOf(client, targetId);
+  if (!manager.ok) return { ok: false, message: manager.message };
+  const actor = manager.actor;
 
   const { data: current } = await client.from("admin_users").select("role,status,auth_user_id").eq("id", targetId).maybeSingle();
   if (await wouldRemoveLastActiveSuperAdmin(client, targetId, validRole(current?.role), "inactive")) {
@@ -1008,4 +1082,179 @@ export async function syncManagedAdminAuthUser(id: unknown): Promise<AdminUserMu
 
 export async function deactivateManagedAdminUser(id: unknown): Promise<AdminUserMutationResult> {
   return setManagedAdminUserStatus(id, "inactive");
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Xoá hẳn một tài khoản ban tổ chức
+// ───────────────────────────────────────────────────────────────────────────
+//
+// KHÁC "Ngừng quyền admin", và khác ở chỗ quan trọng nhất: đường kia đặt status
+// về inactive và cố ý GIỮ tài khoản Auth, còn đường này xoá dòng khỏi database
+// và xoá luôn danh tính đăng nhập.
+//
+// Nên nó chỉ nhận những tài khoản CHƯA để lại dấu vết công việc — chưa chấm bài,
+// chưa ra quyết định, chưa có thao tác nào vào nhật ký. Tài khoản đã làm việc mà
+// bị xoá thì mọi dòng nhật ký trỏ về một mã không còn ai mang, và câu hỏi "ai đã
+// duyệt hồ sơ này" mất câu trả lời vĩnh viễn. Hàm vam097_admin_account_delete_report
+// giữ đúng danh sách đó, và hàm xoá hỏi lại chính nó.
+
+/** Nhãn tiếng Việt cho từng khoá trong bản kê tài khoản. */
+export const ACCOUNT_BLOCKER_LABELS: Record<string, string> = {
+  bai_cham_dang_hoac_da_lam: "bài chấm đang làm hoặc đã làm",
+  da_phan_cong_bai_cham: "lượt phân công bài chấm do người này tạo",
+  quyet_dinh_ket_qua: "quyết định kết quả hồ sơ",
+  thao_tac_da_ghi_nhat_ky: "thao tác đã ghi nhật ký",
+  dot_phan_cong: "đợt phân công đã tạo",
+  loi_moi_da_tao: "lời mời mùa đã tạo",
+  su_kien_phan_cong: "sự kiện phân công",
+  thao_tac_tai_khoan: "thao tác tài khoản",
+  sua_cong_tac_form: "lần bật/tắt form ứng tuyển",
+  sua_chu_tren_form: "lần sửa chữ trên form",
+  quy_tac_diem_cong: "quy tắc điểm cộng đã tạo"
+};
+
+export const ACCOUNT_REMOVE_LABELS: Record<string, string> = {
+  bai_cham_da_huy: "phân công chấm đã huỷ",
+  su_kien_phan_cong_cu: "dòng sự kiện phân công cũ",
+  pham_vi: "phạm vi truy cập"
+};
+
+export type AccountCountEntry = { key: string; label: string; total: number };
+
+export type AdminAccountDeleteReport = {
+  found: boolean;
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  status: string;
+  blockers: AccountCountEntry[];
+  removes: AccountCountEntry[];
+  canDelete: boolean;
+};
+
+function accountEntries(source: unknown, labels: Record<string, string>): AccountCountEntry[] {
+  const raw = (source ?? {}) as JsonRecord;
+  return Object.keys(raw)
+    .map((key) => ({ key, label: labels[key] ?? key, total: Number((raw as any)[key]) || 0 }))
+    .filter((entry) => entry.total > 0)
+    .sort((left, right) => right.total - left.total || left.key.localeCompare(right.key));
+}
+
+/** Bản kê: xoá tài khoản này thì mất gì, và cái gì đang chặn. */
+export async function getAdminAccountDeleteReport(
+  id: unknown
+): Promise<{ ok: boolean; message?: string; report?: AdminAccountDeleteReport; allowed?: boolean }> {
+  const targetId = String(id ?? "").trim();
+  if (!targetId) return { ok: false, message: "Thiếu admin user id." };
+
+  const { client, error } = serviceClient();
+  if (!client) return { ok: false, message: error };
+
+  const manager = await requireManagerOf(client, targetId);
+  if (!manager.ok) return { ok: false, message: manager.message, allowed: false };
+
+  const { data, error: rpcError } = await client.rpc("vam097_admin_account_delete_report", { p_target: targetId });
+  if (rpcError) {
+    logAdminUsersRuntime("account delete report failed", { message: rpcError.message });
+    return { ok: false, message: "Không đọc được bản kê tài khoản." };
+  }
+
+  const payload = (data ?? {}) as JsonRecord;
+  if (payload.found !== true) return { ok: false, message: "Không tìm thấy tài khoản này." };
+  const account = (payload.account ?? {}) as JsonRecord;
+
+  return {
+    ok: true,
+    allowed: true,
+    report: {
+      found: true,
+      id: targetId,
+      fullName: String(account.full_name ?? "").trim(),
+      email: String(account.email ?? "").trim(),
+      role: String(account.role ?? ""),
+      status: String(account.status ?? ""),
+      blockers: accountEntries(payload.blockers, ACCOUNT_BLOCKER_LABELS),
+      removes: accountEntries(payload.removes, ACCOUNT_REMOVE_LABELS),
+      canDelete: payload.can_delete === true
+    }
+  };
+}
+
+/**
+ * Xoá hẳn.
+ *
+ * Người bấm phải gõ lại ĐÚNG email của tài khoản. Danh sách tài khoản có những
+ * dòng tên gần giống nhau, và một cú bấm nhầm ở đây không hoàn lại được.
+ *
+ * Tài khoản Auth xoá SAU, bằng API quản trị của Supabase: xoá thẳng `auth.users`
+ * trong SQL bỏ qua mọi thứ Supabase dọn kèm một danh tính. Xoá dòng public thành
+ * công mà xoá Auth hỏng thì báo rõ, vì lúc đó email kia vẫn chưa dùng lại được.
+ */
+export async function deleteManagedAdminAccount(input: {
+  id: unknown;
+  reason: unknown;
+  confirmEmail: unknown;
+}): Promise<AdminUserMutationResult> {
+  const targetId = String(input.id ?? "").trim();
+  const reason = String(input.reason ?? "").trim();
+  const typed = normalizeEmail(input.confirmEmail);
+  if (!targetId) return { ok: false, message: "Thiếu admin user id." };
+  if (!reason) return { ok: false, message: "Vui lòng ghi lý do xoá." };
+
+  const { client, error } = serviceClient();
+  if (!client) return { ok: false, message: error };
+
+  const loaded = await getAdminAccountDeleteReport(targetId);
+  if (!loaded.ok || !loaded.report) return { ok: false, message: loaded.message ?? "Không đọc được tài khoản." };
+  const report = loaded.report;
+
+  if (!typed || typed !== normalizeEmail(report.email)) {
+    return { ok: false, message: "Email gõ lại chưa khớp tài khoản này. Kiểm lại đúng người bạn định xoá." };
+  }
+  if (!report.canDelete) {
+    return {
+      ok: false,
+      message: `Không xoá được: tài khoản này đã có ${report.blockers
+        .map((entry) => `${entry.total} ${entry.label}`)
+        .join(", ")}. Hãy dùng "Ngừng quyền admin" thay vì xoá.`
+    };
+  }
+
+  const actor = await requireAdminAccountManager();
+  if (!actor) return { ok: false, message: "Bạn không có quyền quản lý tài khoản ban tổ chức." };
+
+  const { data, error: rpcError } = await client.rpc("vam097_delete_admin_account", {
+    p_actor: actor.id,
+    p_target: targetId,
+    p_reason: reason
+  });
+  if (rpcError) {
+    logAdminUsersRuntime("delete admin account failed", { message: rpcError.message });
+    const text = String(rpcError.message ?? "");
+    if (text.includes("Không xoá được") || text.includes("Bạn không có quyền") || text.includes("Không tìm thấy") || text.includes("Không tự xoá")) {
+      return { ok: false, message: text };
+    }
+    return { ok: false, message: "Không xoá được tài khoản. Xem server logs." };
+  }
+
+  const authUserId = String(((data ?? {}) as JsonRecord).auth_user_id ?? "").trim();
+  if (authUserId) {
+    try {
+      const removed = await client.auth.admin.deleteUser(authUserId);
+      if (removed.error) {
+        return {
+          ok: true,
+          message: `Đã xoá tài khoản ${report.email} khỏi VAM OS, NHƯNG chưa xoá được danh tính đăng nhập. Email này chưa dùng lại được cho tài khoản mới — báo super admin dọn nốt trong Supabase Auth.`
+        };
+      }
+    } catch {
+      return {
+        ok: true,
+        message: `Đã xoá tài khoản ${report.email} khỏi VAM OS, NHƯNG chưa xoá được danh tính đăng nhập. Email này chưa dùng lại được cho tài khoản mới — báo super admin dọn nốt trong Supabase Auth.`
+      };
+    }
+  }
+
+  return { ok: true, message: `Đã xoá hẳn tài khoản ${report.email} khỏi hệ thống.` };
 }

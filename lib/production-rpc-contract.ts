@@ -127,7 +127,18 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   // Dán lên Production 18/09/2026; kiểm đọc catalog: hàm có thật, ACL chỉ
   // service_role, và cả ba hàm ghi kết quả đã gọi nó, không hàm nào còn gọi
   // vam084_operator_for_season.
-  "vam096_decision_operator_for_application"
+  "vam096_decision_operator_for_application",
+  // Xoá hẳn một người và xoá hẳn một tài khoản ban tổ chức (migration
+  // 20260920060000). Dán lên Production 20/09/2026; kiểm đọc catalog ngay sau
+  // đó cho cả bốn hàm: SECURITY DEFINER, ACL đúng postgres + service_role
+  // (không anon/authenticated), thân hàm đọc vai trò API qua
+  // vam063_trusted_api_role() và KHÔNG gọi vam084_operator_for_season( hay
+  // vam084_staffing_operator_for_season( — phép kiểm phụ thuộc current_user vốn
+  // luôn sai trong ngữ cảnh definer (bài học 18/09/2026).
+  "vam097_person_delete_report",
+  "vam097_delete_person",
+  "vam097_admin_account_delete_report",
+  "vam097_delete_admin_account"
 ];
 
 /**
