@@ -7,6 +7,7 @@ import type { ManagedAdminUser } from "@/lib/admin-users";
 import type { ProgramCatalogRow, SeasonCatalogRow } from "@/lib/program-context-core";
 import {
   createAdminUserAction,
+  deleteAdminAccountAction,
   removeAdminAccessAction,
   resendAdminInviteAction,
   setAdminUserStatusAction,
@@ -377,6 +378,59 @@ export function ResendInviteForm({ user }: { user: ManagedAdminUser }) {
       <button type="submit" className={quietButtonClass}>
         Gửi link đặt mật khẩu
       </button>
+      <ActionMessage state={state} />
+    </form>
+  );
+}
+
+/**
+ * Xoá hẳn một tài khoản.
+ *
+ * ---------------------------------------------------------------------------
+ * GÕ LẠI EMAIL, KHÔNG PHẢI MỘT HỘP "BẠN CHẮC CHỨ?"
+ * ---------------------------------------------------------------------------
+ * Danh sách này có những dòng tên gần giống nhau và các nút xếp sát nhau. Một
+ * hộp xác nhận thì người ta bấm Yes theo phản xạ; gõ lại email bắt người bấm
+ * nhìn một lần nữa xem mình đang đứng ở dòng nào. Máy chủ so lại email đó, nên
+ * bỏ qua bước này ở trình duyệt cũng không xoá được.
+ *
+ * Khung chỉ mở ra khi bấm — nó không nên nằm sẵn cạnh các nút dùng hằng ngày.
+ */
+export function DeleteAccountForm({ user }: { user: ManagedAdminUser }) {
+  const [state, formAction] = useFormState(deleteAdminAccountAction, initialState);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className={dangerButtonClass}>
+        Xoá hẳn tài khoản
+      </button>
+    );
+  }
+
+  return (
+    <form action={formAction} className="grid gap-2 rounded-md border border-red-200 bg-red-50 p-3">
+      <input type="hidden" name="id" value={user.id} />
+      <p className="text-xs text-red-800">
+        Xoá hẳn <strong>không hoàn lại được</strong>. Tài khoản đã chấm bài hoặc đã có thao tác ghi nhật ký thì
+        hệ thống sẽ từ chối — khi đó dùng &quot;Xóa quyền admin&quot;.
+      </p>
+      <label className="block text-xs font-medium text-red-900">
+        Gõ lại email để xác nhận
+        <input name="confirm_email" autoComplete="off" placeholder={user.email} className={inputClass} />
+      </label>
+      <label className="block text-xs font-medium text-red-900">
+        Lý do xoá
+        <input name="reason" autoComplete="off" className={inputClass} />
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className={dangerButtonClass}>
+          Xoá hẳn
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className={quietButtonClass}>
+          Thôi
+        </button>
+      </div>
       <ActionMessage state={state} />
     </form>
   );

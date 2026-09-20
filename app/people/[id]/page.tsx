@@ -29,6 +29,7 @@ import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFilter, resolveCanonicalScope } from "@/lib/program-scope";
 import { isMembershipRole, MEMBERSHIP_ROLE_LABELS } from "@/lib/membership-lifecycle";
 import { MembershipLifecycleControls } from "./membership-lifecycle-controls";
+import { PersonDeletePanel } from "./person-delete-panel";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 import { SubmitButton } from "@/components/submit-button";
@@ -460,6 +461,13 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
           seasons={seasons.data.map((row) => ({ id: row.id, label: String(row.name ?? row.code ?? row.id), code: row.code ?? undefined, programId: row.program_id ?? undefined }))} />
         <p className="mt-3 text-xs text-slate-500">Đổi Tham dự / Không tham dự: mentor do Core Team, Admin, Super Admin; mentee thêm cả Support Team.</p>
         <p className="mt-1 text-xs text-slate-500">Mỗi thao tác thành công ghi person_season_membership_log và admin_audit_log; trạng thái Lịch sử VAM trên trang được làm mới sau thao tác.</p>
+
+        {/* Xoá hẳn nằm CUỐI khung trạng thái, sau mọi đường khôi phục được.
+            Thứ tự trên màn hình là một lời khuyên: đọc hết các cách cho người ta
+            ngưng tham gia rồi mới tới cái nút không hoàn lại được. */}
+        <div className="mt-4 border-t border-vam-line pt-4">
+          <PersonDeletePanel personId={params.id} fullName={String(person.data.full_name ?? "")} />
+        </div>
       </Card>
 
       <Card className="mb-4">

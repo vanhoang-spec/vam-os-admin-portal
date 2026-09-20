@@ -29,6 +29,7 @@ vi.mock("@/lib/portfolio", () => ({
 }));
 vi.mock("@/lib/admin-users", () => ({
   requireSuperAdmin: vi.fn(async () => ({ id: "actor", role: "super_admin" })),
+  requireAdminAccountManager: vi.fn(async () => ({ id: "actor", role: "super_admin" })),
   listManagedAdminUsers: vi.fn(async () => ({ data: [], error: null })),
   listAdminAuditLogs: vi.fn(async () => ({ data: [], error: null }))
 }));

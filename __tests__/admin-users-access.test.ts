@@ -31,7 +31,8 @@ vi.mock("@/app/admin/users/user-management-forms", () => ({
   RemoveAccessForm: () => null,
   ResendInviteForm: () => null,
   StatusToggleForm: () => null,
-  SyncAuthForm: () => null
+  SyncAuthForm: () => null,
+  DeleteAccountForm: () => null
 }));
 
 import AdminUsersPage from "../app/admin/users/page";
@@ -126,7 +127,37 @@ describe("/admin/users access boundary", () => {
     expect(mocks.getCurrentAdminUser).toHaveBeenCalledTimes(3);
   });
 
-  it.each(["admin", "core_team", "support_team", "reviewer", "viewer"] as const)(
+  /**
+   * Chủ dự án chốt 20/09/2026: admin quản core team, core team quản support
+   * team. Trang mở ra cho hai cấp đó — nhưng mở trang KHÔNG phải là thấy cả
+   * danh bạ: danh sách bị cắt theo bậc quản lý ngay ở máy chủ.
+   */
+  it.each(["admin", "core_team"] as const)(
+    "mở trang cho %s, nhưng KHÔNG hiện dòng ngang cấp hoặc cấp trên",
+    async (role) => {
+      mocks.getCurrentAdminUser.mockResolvedValue(userForRole(role));
+      mocks.getSupabaseServiceRoleClient.mockReturnValue(authorizedServiceClient());
+
+      const html = await renderPage();
+
+      expect(html).toContain("Quản lý người dùng");
+      expect(html).not.toContain("Bạn không có quyền truy cập chức năng này");
+      // MANAGED_USER mang vai trò admin: admin không quản được người ngang cấp,
+      // core team lại càng không. Dòng đó phải vắng mặt trong HTML.
+      expect(html).not.toContain(MANAGED_USER.email);
+    }
+  );
+
+  it("chỉ super admin mới thấy khung Thêm user quản trị", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue(userForRole("core_team"));
+    mocks.getSupabaseServiceRoleClient.mockReturnValue(authorizedServiceClient());
+
+    const html = await renderPage();
+
+    expect(html).not.toContain("Thêm user quản trị");
+  });
+
+  it.each(["support_team", "reviewer", "viewer"] as const)(
     "shows friendly denial to %s before any managed-user, audit, or program-context load",
     async (role) => {
       mocks.getCurrentAdminUser.mockResolvedValue(userForRole(role));
@@ -134,7 +165,6 @@ describe("/admin/users access boundary", () => {
       const html = await renderPage();
 
       expect(html).toContain("Bạn không có quyền truy cập chức năng này");
-      expect(html).toContain("Chức năng Quản lý người dùng chỉ dành cho Super Admin.");
       expect(html).toContain("Nếu bạn cần được cấp quyền, vui lòng liên hệ Super Admin.");
       expect(html).toContain("Quay về Tổng quan");
       expect(html).not.toContain(MANAGED_USER.email);
@@ -196,7 +226,9 @@ describe("/admin/users access boundary", () => {
   });
 
   it("keeps both managed-data loaders independently fail-closed", async () => {
-    mocks.getCurrentAdminUser.mockResolvedValue(userForRole("admin"));
+    // support_team không nằm trong bậc quản lý nào: cả hai hàm nạp dữ liệu đều
+    // phải tự từ chối, không dựa vào cổng của trang.
+    mocks.getCurrentAdminUser.mockResolvedValue(userForRole("support_team"));
 
     const [users, audit] = await Promise.all([
       listManagedAdminUsers(),
@@ -208,5 +240,20 @@ describe("/admin/users access boundary", () => {
     expect(audit.data).toEqual([]);
     expect(audit.error).toContain("không có quyền");
     expect(mocks.getSupabaseServiceRoleClient).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Hai cổng KHÁC NHAU, và đó là chủ ý: danh sách tài khoản mở cho người quản
+   * lý cấp dưới, còn nhật ký thay đổi quyền — thứ ghi mọi thao tác của mọi cấp,
+   * kể cả super admin — vẫn chỉ của super admin.
+   */
+  it("admin nạp được danh sách nhưng KHÔNG nạp được nhật ký quyền", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue(userForRole("admin"));
+    mocks.getSupabaseServiceRoleClient.mockReturnValue(authorizedServiceClient());
+
+    const audit = await listAdminAuditLogs();
+
+    expect(audit.data).toEqual([]);
+    expect(audit.error).toContain("không có quyền");
   });
 });

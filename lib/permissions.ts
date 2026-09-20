@@ -293,6 +293,104 @@ export function canChangeSeasonMembership(role: string | null | undefined, membe
 }
 
 /**
+ * XOÁ HẲN MỘT NGƯỜI KHỎI HỆ THỐNG — nửa vai trò.
+ *
+ * Chủ dự án chốt 20/09/2026: admin và core team xoá được mentor; support team
+ * xoá được mentee. Cùng một cách chia với việc đổi trạng thái tham dự
+ * (17/09/2026), và cố ý như vậy — support team chỉ đụng tới mentee, ở mọi cửa.
+ *
+ * Đây CHỈ là nửa vai trò. Nơi gọi còn phải chứng minh phạm vi mùa, và hàm
+ * vam097_delete_person trong database kiểm lại cả hai lần nữa — cùng với danh
+ * sách những thứ khiến một hồ sơ không được phép xoá.
+ */
+export function canDeleteMentor(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}
+
+/** Mentee: support team có mặt ở đây, mentor thì không. */
+export function canDeleteMentee(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
+ * Một cửa cho mọi nút "Xoá khỏi hệ thống".
+ *
+ * Vai trò của người bị xoá phải đọc từ DỮ LIỆU ĐÃ LƯU, không đọc từ form: một
+ * form khai "mentee" về một hồ sơ mentor chính là cách support team đi vòng qua
+ * phép chia này.
+ *
+ * Người vừa là mentor vừa là mentee, hoặc mang thêm vai trò khác (trainer,
+ * speaker, reviewer…), thì tính theo mức CHẶT hơn. Xoá một người là xoá mọi vai
+ * trò của họ cùng lúc, nên quyền phải đủ cho vai trò khó nhất, không phải vai
+ * trò dễ nhất.
+ */
+export function canDeletePerson(
+  role: string | null | undefined,
+  person: { isMentor?: boolean; isMentee?: boolean; hasOtherRole?: boolean } | null | undefined
+) {
+  const isMentee = person?.isMentee === true;
+  const isMentor = person?.isMentor === true;
+  const hasOther = person?.hasOtherRole === true;
+  if (isMentee && !isMentor && !hasOther) return canDeleteMentee(role);
+  return canDeleteMentor(role);
+}
+
+/**
+ * TÀI KHOẢN BAN TỔ CHỨC: mỗi cấp sửa và xoá được những cấp nào.
+ *
+ * Chủ dự án chốt 20/09/2026: admin quản core team, core team quản support team.
+ * Bảng dưới đây nói đủ cả bậc, và quy tắc chỉ có một: **chỉ cấp thấp hơn
+ * mình**. Không ngang cấp, không cấp trên, không chính mình.
+ *
+ * Reviewer và viewer nằm trong tầm của admin và core team vì hai cấp đó vốn đã
+ * cấp và thu hồi quyền đánh giá cho mentor hằng ngày (canManageReviewers). Một
+ * tài khoản reviewer cấp nhầm mà phải chờ super admin mới xoá được là lý do
+ * khiến người ta để nguyên đó.
+ *
+ * Bảng này là nửa vai trò. Hàm vam097_delete_admin_account trong database giữ
+ * đúng bậc này một lần nữa, và còn từ chối khi tài khoản đã để lại dấu vết công
+ * việc — lúc đó đường đúng là Tạm khoá, không phải xoá.
+ */
+export const MANAGEABLE_ADMIN_ROLES: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  super_admin: Object.freeze(["admin", "core_team", "support_team", "reviewer", "viewer"]),
+  admin: Object.freeze(["core_team", "support_team", "reviewer", "viewer"]),
+  core_team: Object.freeze(["support_team", "reviewer", "viewer"])
+});
+
+/** Những cấp mà vai trò này được sửa/xoá. Vai trò lạ trả về danh sách rỗng. */
+export function manageableAdminRoles(role?: string | null): readonly string[] {
+  return MANAGEABLE_ADMIN_ROLES[String(role ?? "")] ?? [];
+}
+
+/**
+ * Người này có được sửa/xoá tài khoản kia không.
+ *
+ * Fail-closed ở mọi nhánh: thiếu vai trò của một trong hai bên là KHÔNG.
+ */
+export function canManageAdminAccount(actorRole?: string | null, targetRole?: string | null) {
+  const target = String(targetRole ?? "").trim();
+  if (!target) return false;
+  return manageableAdminRoles(actorRole).includes(target);
+}
+
+/**
+ * Ai mở được trang Quản lý người dùng.
+ *
+ * Rộng hơn canManageUsers (chỉ super admin) có chủ ý: admin và core team giờ
+ * quản được cấp dưới của mình. Nhưng mở được trang KHÔNG phải là sửa được mọi
+ * dòng trên đó — từng dòng vẫn đi qua canManageAdminAccount, và danh sách chỉ
+ * hiện những tài khoản người mở thật sự quản được.
+ */
+export function canOpenAdminUsers(role?: string | null) {
+  return manageableAdminRoles(role).length > 0;
+}
+
+/** Tạo tài khoản mới vẫn chỉ của super admin — chủ dự án không yêu cầu mở rộng. */
+export function canCreateAdminAccount(role?: string | null) {
+  return role === "super_admin";
+}
+
+/**
  * Can read the SAMPLES of the letters the system sends by itself.
  *
  * Owner decision 18/09/2026, asked for by support team: they answer the people

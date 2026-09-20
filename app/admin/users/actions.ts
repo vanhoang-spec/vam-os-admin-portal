@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { loadProgramContextCatalog } from "@/lib/program-context";
 import {
   createManagedAdminUser,
+  deleteManagedAdminAccount,
   removeManagedAdminAccess,
   resendManagedAdminInvite,
   setManagedAdminUserStatus,
@@ -120,6 +121,26 @@ export async function resendAdminInviteAction(_previousState: AdminUserActionSta
   try {
     const result = await resendManagedAdminInvite(text(formData, "id"));
     revalidatePath("/admin/users");
+    return result;
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+/**
+ * Xoá HẲN một tài khoản ban tổ chức.
+ *
+ * Khác "Ngừng quyền admin" ở chỗ không hoàn lại được, nên form bắt gõ lại email
+ * và ghi lý do. Cả hai thứ đó được kiểm ở máy chủ, không phải ở trình duyệt.
+ */
+export async function deleteAdminAccountAction(_previousState: AdminUserActionState = initialState, formData: FormData): Promise<AdminUserActionState> {
+  try {
+    const result = await deleteManagedAdminAccount({
+      id: text(formData, "id"),
+      reason: text(formData, "reason"),
+      confirmEmail: text(formData, "confirm_email")
+    });
+    if (result.ok) revalidatePath("/admin/users");
     return result;
   } catch (error) {
     return actionError(error);

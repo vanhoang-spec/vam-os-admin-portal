@@ -148,6 +148,13 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Xoá hẳn một người / một tài khoản ban tổ chức — migration
+  // 20260920060000_delete_person_and_admin_account.sql. Nằm ở đây cho tới khi
+  // chủ dự án dán migration lên Production và có bằng chứng đọc catalog.
+  "vam097_person_delete_report",
+  "vam097_delete_person",
+  "vam097_admin_account_delete_report",
+  "vam097_delete_admin_account",
   // Ban tổ chức sửa nội dung bài chấm — migration
   // 20260918170000_review_content_override.sql. Nằm ở đây cho tới khi chủ dự án dán
   // migration lên Production và có bằng chứng đọc catalog.

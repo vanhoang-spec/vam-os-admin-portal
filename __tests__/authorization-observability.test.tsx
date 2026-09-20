@@ -13,7 +13,13 @@ vi.mock("react", async (importOriginal) => {
 });
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/navigation", () => ({ notFound: vi.fn(), redirect: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  notFound: vi.fn(),
+  redirect: vi.fn(),
+  // Khung "Xoá khỏi hệ thống" trên trang hồ sơ dùng useRouter để quay về danh
+  // sách sau khi xoá. Thiếu nó ở bản giả thì cả trang không dựng được.
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn(), forward: vi.fn(), prefetch: vi.fn() })
+}));
 vi.mock("next/link", () => ({ default: ({ children, href }: any) => <a href={href}>{children}</a> }));
 vi.mock("react-dom", () => ({ useFormState: () => [{}, vi.fn()], useFormStatus: () => ({ pending: false }) }));
 vi.mock("next/headers", () => ({ cookies: vi.fn(() => ({ get: vi.fn() })) }));
