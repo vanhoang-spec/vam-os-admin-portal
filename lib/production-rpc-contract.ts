@@ -138,7 +138,19 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   "vam097_person_delete_report",
   "vam097_delete_person",
   "vam097_admin_account_delete_report",
-  "vam097_delete_admin_account"
+  "vam097_delete_admin_account",
+  // Lịch phỏng vấn mentor 1:1 (migration 20260922100000). Dán lên Production
+  // 22/09/2026; kiểm đọc catalog ngay sau đó cho cả ba hàm: SECURITY DEFINER,
+  // ACL đúng postgres + service_role (không anon/authenticated), thân hàm đọc
+  // vai trò API qua vam063_trusted_api_role() và KHÔNG gọi hàm phụ đọc
+  // current_user; hàm giữ chỗ có `for update skip locked` + FIFO theo
+  // available_since; hàm mentor tự huỷ có mốc chặn 24 giờ. Migration đó cũng
+  // THAY THÂN vam084_recompute_application_review_status theo lối cộng thêm —
+  // đã đọc lại pg_get_functiondef xác nhận tấm chắn vòng-hồ-sơ có mặt, hai
+  // whitelist cũ và câu raise gốc còn nguyên, vẫn security invoker.
+  "vam098_book_interview_slot",
+  "vam098_cancel_interview_booking_mentor",
+  "vam098_cancel_interview_booking_btc"
 ];
 
 /**
@@ -159,15 +171,6 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
-  // Lịch phỏng vấn mentor 1:1 — migration 20260922100000_interview_slot_booking.sql.
-  // Giữ chỗ nguyên tử ai-bấm-trước-được-trước và hai đường huỷ (mentor tự huỷ khi
-  // còn >24h; ban tổ chức huỷ bất kỳ lúc nào). Migration đó cũng THAY THÂN
-  // vam084_recompute_application_review_status (đã ở PRODUCTION_PROVIDED) theo lối
-  // cộng thêm — sau khi chủ dự án dán, phải đọc lại pg_get_functiondef xác nhận
-  // tấm chắn vòng-hồ-sơ có mặt rồi mới chuyển ba tên này lên PRODUCTION_PROVIDED.
-  "vam098_book_interview_slot",
-  "vam098_cancel_interview_booking_mentor",
-  "vam098_cancel_interview_booking_btc",
   // Ban tổ chức sửa nội dung bài chấm — migration
   // 20260918170000_review_content_override.sql. Nằm ở đây cho tới khi chủ dự án dán
   // migration lên Production và có bằng chứng đọc catalog.
