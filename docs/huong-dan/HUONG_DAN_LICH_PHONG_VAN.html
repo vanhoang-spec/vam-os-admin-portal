@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Lịch phỏng vấn mentor 1:1 — Hướng dẫn cho Core team, Support team và BTC</title>
+<style>
+  @page { size: A4; margin: 10mm 12mm 9mm 12mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 8.2pt;
+    line-height: 1.29;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  /* ── Đầu trang ───────────────────────────────────────────────────── */
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2mm; margin-bottom: 2.5mm;
+  }
+  .eyebrow {
+    font-size: 7.4pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  h1 { font-size: 16pt; line-height: 1.1; margin: 1.2mm 0 1mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 8.7pt; max-width: 128mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.6pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  /* ── Bố cục ──────────────────────────────────────────────────────── */
+  .grid { display: grid; grid-template-columns: 1.06fr 1fr; gap: 5mm; align-items: start; }
+  h2 {
+    font-size: 8.3pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin: 0 0 1.2mm; font-weight: 700;
+  }
+  .block + .block { margin-top: 2mm; }
+  p { margin: 0 0 1.2mm; }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.5mm; font-size: 8.2pt; font-weight: 600; white-space: nowrap;
+  }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 1.3mm; font-size: 8.2pt; white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+  .ok { color: #1c7a43; font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  .prep {
+    background: var(--mint); border-left: 3px solid var(--green);
+    padding: 1.8mm 3mm; margin-bottom: 2.3mm;
+  }
+  .prep b.h { display: block; margin-bottom: .6mm; }
+  .prep ol { margin: 0; padding-left: 4.2mm; }
+  .prep li { margin: .35mm 0; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.6mm; margin-bottom: 1.2mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5.4mm; height: 5.4mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 8pt; text-align: center; line-height: 5.4mm;
+  }
+  ol.steps b.t { display: block; font-size: 9pt; margin-bottom: .3mm; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 7.9pt; margin-top: 1mm; }
+  th, td { border: 1px solid var(--line); padding: .85mm 1.5mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+
+  /* Minh hoạ một hàng của lưới giờ — ngày và tên là ví dụ, không phải người thật. */
+  .mock {
+    margin-top: 1.6mm; border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+    font-size: 7.6pt; background: #fff;
+  }
+  .mock .cap { background: #f6f9f7; color: var(--muted); padding: .7mm 2mm; font-size: 7pt; letter-spacing: .06em; text-transform: uppercase; }
+  .mock .row { display: flex; gap: 1.4mm; padding: 1.3mm 2mm; align-items: center; flex-wrap: wrap; }
+  .mock .day { font-weight: 600; white-space: nowrap; margin-right: 1mm; }
+  .mock .cell {
+    display: inline-block; width: 6.6mm; text-align: center; border: 1px solid var(--line);
+    border-radius: 2px; background: #fff; color: var(--muted); font-size: 7pt; line-height: 3.5mm;
+  }
+  .mock .cell.on { background: var(--mint); border-color: var(--green); color: var(--green); font-weight: 700; }
+  .mock .cell.booked { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; }
+  .mock .cell.past { background: #f4f4f4; color: #c2c9c5; }
+
+  ul.tight { margin: 0; padding-left: 4.2mm; }
+  ul.tight li { margin: .4mm 0; }
+
+  .warn {
+    background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink);
+    padding: 1.7mm 3mm;
+  }
+  .warn b.h { display: block; margin-bottom: .5mm; }
+
+  footer {
+    margin-top: 1.8mm; border-top: 1px solid var(--line); padding-top: 1.2mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7.3pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho Core team · Support team · BTC tuyển sinh</div>
+    <h1>Lịch phỏng vấn mentor 1:1</h1>
+    <p class="sub">Người phỏng vấn đăng giờ rảnh; ứng viên mentor tự chọn giờ qua link riêng trong email — ai giữ trước được trước.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Đợt <b>22/09 – 05/10/2026</b> · Cập nhật 22/09/2026</div>
+</header>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái ─────────────── -->
+  <div>
+    <div class="prep">
+      <b class="h">Vòng đời một buổi phỏng vấn — 4 nhịp</b>
+      <ol>
+        <li><b>Người phỏng vấn</b> tick giờ rảnh trên lưới (mỗi buổi online tròn 60 phút, khung 07:00–22:00).</li>
+        <li><b>Hệ thống gửi email</b> kèm link riêng cho từng ứng viên mentor đã nộp đơn mà chưa phỏng vấn.</li>
+        <li><b>Ứng viên bấm giữ một khung giờ</b> → hai bên + hộp thư BTC nhận thư xác nhận có tên, email, SĐT của nhau.</li>
+        <li><b>Sau buổi</b>, người phỏng vấn vào mục <span class="path">Đánh giá</span> chấm điểm — phiếu đã được giao sẵn.</li>
+      </ol>
+    </div>
+
+    <div class="block">
+      <h2>Người phỏng vấn: đăng giờ rảnh</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Mở trang lịch</b>
+          Menu <span class="path">Ứng tuyển → Lịch phỏng vấn</span>. Vào được: Admin, Core team, và mentor
+          đã được <b>cấp quyền phỏng vấn</b>.
+        </li>
+        <li>
+          <b class="t">Điền số điện thoại (lần đầu bắt buộc)</b>
+          Số này in vào thư xác nhận gửi ứng viên để hai bên gọi được nhau. Chưa điền thì không lưu được giờ.
+        </li>
+        <li>
+          <b class="t">Tick giờ rảnh rồi bấm <span class="btn solid">Lưu giờ rảnh</span></b>
+          Lưới 14 ngày × 15 giờ; nút <span class="btn">cả ngày</span> tick nhanh nguyên hàng. Ô mờ là giờ đã qua.
+          <div class="mock">
+            <div class="cap">Minh hoạ một hàng — Thứ Năm 24/09</div>
+            <div class="row">
+              <span class="day">24/09</span>
+              <span class="cell past">7h</span><span class="cell">8h</span><span class="cell on">9h</span><span class="cell booked">Đặt</span><span class="cell on">11h</span><span class="cell">14h</span><span class="cell on">19h</span><span class="cell">20h</span>
+            </div>
+          </div>
+        </li>
+        <li>
+          <b class="t">Đọc dải thống kê sau khi lưu</b>
+          <span class="ui">Đã đăng ký X giờ · Đã phỏng vấn xong Y · Sắp diễn ra Z · Còn trống W</span> —
+          đúng số giờ của riêng bạn trong đợt.
+        </li>
+      </ol>
+    </div>
+
+    <div class="block">
+      <h2>Ô «Đặt» màu xanh nghĩa là gì</h2>
+      <ul class="tight">
+        <li>Một ứng viên đã giữ giờ đó — rê chuột thấy tên. Ô này <b>khoá lại</b>, không tự gỡ được.</li>
+        <li>Muốn trả giờ đó (bận đột xuất): nhờ BTC bấm <span class="btn">Huỷ lịch</span> ở mục
+          <span class="ui">Lịch hẹn sắp diễn ra</span>. Khung giờ mở lại, hai bên nhận thư báo huỷ,
+          ứng viên chọn lại giờ khác bằng chính link cũ.</li>
+        <li>Gỡ một giờ còn trống thì cứ bỏ tick rồi lưu. Nếu đúng lúc đó có người vừa đặt, hệ thống giữ
+          buổi hẹn và báo rõ — không có buổi nào bị xoá ngầm.</li>
+      </ul>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Mentor ngoài Core team muốn làm người phỏng vấn?</b>
+      Support team cấp quyền ở <span class="path">Ứng tuyển → Danh sách nhân sự tuyển sinh</span> →
+      <span class="btn">Cấp quyền phỏng vấn</span> (xem tờ hướng dẫn «Mời reviewer vào VAM OS»).
+      Người đó đăng nhập xong sẽ thấy mục Lịch phỏng vấn.
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>Ứng viên thấy gì</h2>
+      <ul class="tight">
+        <li>Email mang <b>link riêng của từng người</b> (đường dẫn <span class="ui">/dat-lich/…</span>) —
+          có trong thư xác nhận nộp đơn và thư mời chọn giờ. Không cần tài khoản, mở được trên điện thoại.</li>
+        <li>Trang hiện các khung giờ kèm <span class="ui">còn N chỗ</span> (N người phỏng vấn cùng rảnh giờ đó),
+          tự cập nhật mỗi 15 giây. Bấm giờ → <span class="btn solid">Giữ chỗ</span>. Ai bấm trước được trước;
+          trượt slot thì trang mời chọn giờ khác ngay.</li>
+        <li><b>Tự đổi lịch được khi còn hơn 24 giờ</b> trước buổi hẹn (huỷ rồi chọn lại trên chính link đó).
+          Sát giờ hơn: liên hệ Zalo BTC <b>0919144638</b> để BTC huỷ giúp.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Thư mời và thư nhắc — tự động</h2>
+      <ul class="tight">
+        <li>Thư mời đi ngay khi lịch có giờ trống đầu tiên; ai chưa đặt thì được nhắc sau mỗi <b>3 ngày</b>,
+          tối đa 3 lần — lần thứ ba CC về <span class="ui">hello@alumni-mentoring.edu.vn</span> để BTC biết ai im lặng.</li>
+        <li>Đã đặt lịch, hồ sơ có kết quả, hoặc hết đợt: hệ thống ngừng gửi cho người đó.</li>
+      </ul>
+      <div class="warn" style="margin-top:1.8mm">
+        <b class="h">Thư chỉ tự đi khi có tab đang mở trang Lịch phỏng vấn</b>
+        Hệ thống không có bộ hẹn giờ chạy nền. Mỗi ngày, một người của BTC mở trang này một lần và để
+        vài phút (trang tự gửi mỗi 20 giây), hoặc bấm <span class="btn solid">Gửi thư mời/nhắc ngay</span> —
+        nút hiện sẵn số người đến hạn. Brevo giới hạn ~300 thư/ngày: chạm trần thì hệ thống tự dừng, mai gửi tiếp.
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>BTC theo dõi trên cùng trang</h2>
+      <ul class="tight">
+        <li>Năm ô số cập nhật liên tục: <b>giờ còn trống đến hết 05/10</b> · mentor sẵn sàng phỏng vấn ·
+          <b>chưa đặt lịch</b> · đã đặt, sắp diễn ra · đã qua giờ hẹn.</li>
+        <li>Bảng theo từng người phỏng vấn (đăng ký / đã xong / sắp tới / còn trống) và
+          <span class="ui">Lịch hẹn sắp diễn ra</span> kèm nút <span class="btn">Huỷ lịch</span> từng buổi.</li>
+        <li>Kết quả phỏng vấn nộp ở mục <span class="path">Đánh giá</span> như mọi phiếu chấm khác —
+          đơn tự chuyển sang «Sẵn sàng ra quyết định cuối».</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Tình huống thường gặp</h2>
+      <table>
+        <tr><th style="width:46%">Tình huống</th><th>Làm gì</th></tr>
+        <tr><td>Ứng viên nhắn Zalo xin đổi giờ khi còn dưới 24 giờ</td>
+            <td>BTC bấm <span class="btn">Huỷ lịch</span> buổi đó — ứng viên chọn lại bằng link cũ.</td></tr>
+        <tr><td>Người phỏng vấn bận đột xuất một buổi đã có người đặt</td>
+            <td>BTC <span class="btn">Huỷ lịch</span>; hai bên nhận thư báo, khung giờ mở lại cho người khác.</td></tr>
+        <tr><td>Ứng viên báo <span class="err">«Hồ sơ hiện không ở bước đặt lịch»</span></td>
+            <td>Đơn đã có người phụ trách theo cách phân công cũ, hoặc đã có kết quả. Kiểm tra hồ sơ ở mục Ứng tuyển.</td></tr>
+        <tr><td>Mentor được cấp quyền phỏng vấn nhưng bị chặn vào trang</td>
+            <td>Kiểm lại đã bấm đúng <span class="btn">Cấp quyền phỏng vấn</span> (không phải chỉ «đánh giá») cho đúng mùa.</td></tr>
+        <tr><td>Ứng viên không nhận được thư</td>
+            <td>Nhắc xem mục Spam; BTC tra <span class="path">Vận hành → Mail → Nhật ký gửi</span> xem thư đi chưa.</td></tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>VAM OS · Lịch phỏng vấn mentor 1:1 · Đợt 22/09 – 05/10/2026</span>
+  <span>Hotline Zalo BTC: <b>0919144638</b> · Thư hệ thống gửi từ hello@alumni-mentoring.edu.vn</span>
+</footer>
+
+</body>
+</html>
