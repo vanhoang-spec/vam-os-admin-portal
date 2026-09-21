@@ -10,6 +10,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_MODULE_MAIL.pdf` | Core team, Support team, Admin | Toàn bộ module Mail: soạn mẫu thư và ô điền, duyệt, gửi hàng loạt theo lô, nhật ký gửi, cách viết để không rơi vào hộp thư rác |
 | `HUONG_DAN_CAP_QUYEN_REVIEWER.pdf` | Support team, Core team | Một trang: mời reviewer — cấp quyền chấm hồ sơ / phỏng vấn, thư đặt mật khẩu qua Brevo, reviewer đăng nhập bằng mật khẩu, các lỗi thường gặp |
 | `HUONG_DAN_CONG_CU_AI.pdf` | Super Admin, Admin, Core team, Support team | Một trang: sáu công cụ AI, các bước chạy và lưu kết quả, quy tắc không đưa dữ liệu cá nhân sang DeepSeek, các lỗi thường gặp |
+| `HUONG_DAN_LICH_PHONG_VAN.pdf` | Core team, Support team, BTC tuyển sinh | Một trang: lịch phỏng vấn mentor 1:1 — interviewer đăng giờ rảnh, ứng viên tự giữ chỗ qua link riêng, thư mời/nhắc tự động, huỷ và đổi lịch, các tình huống thường gặp |
 
 ## Sửa và xuất lại bản PDF
 
@@ -69,4 +70,13 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   (`lib/permissions.ts`: `canUseAiTools`, `canRunAiExecutiveReport`) — test cũng
   đối chiếu với hằng số
 - Thêm hay bỏ một công cụ thì sửa bảng "Sáu công cụ" và mục "Mẹo theo từng công cụ"
+- Giữ **đúng một trang**: in xong, mở PDF kiểm lại số trang
+
+**Lịch phỏng vấn mentor (một trang):**
+
+- Tên menu, nhãn nút, lời báo và MỌI con số (đợt 22/09–05/10, khung 07:00–22:00,
+  nhịp nhắc 3 ngày, mốc 24 giờ, hotline) — `__tests__/huong-dan-lich-phong-van.test.ts`
+  đối chiếu từng câu với mã nguồn và hằng số trong `lib/interview-schedule-core.ts`
+- Ô cảnh báo vàng "thư chỉ tự đi khi có tab đang mở" mô tả trạng thái CHƯA bật
+  CRON_SECRET — ngày nào bật cron thật thì viết lại ô đó (test sẽ nhắc)
 - Giữ **đúng một trang**: in xong, mở PDF kiểm lại số trang
