@@ -171,7 +171,9 @@ describe("buildNavGroups — reviewer", () => {
   // reviewer at the page — nav simply had not caught up, so a helper invited to
   // score mentee applications was shown six links that bounced them back.
   it("is offered only its own recruitment surfaces", () => {
-    expect(sortedRoutes(hrefs)).toEqual(sortedRoutes(["/", "/my-work", "/reviews", "/interviews"]));
+    expect(sortedRoutes(hrefs)).toEqual(
+      sortedRoutes(["/", "/my-work", "/reviews", "/interviews", "/interviews/lich"])
+    );
   });
 
   it("is NOT offered browse routes its pages refuse", () => {
@@ -392,6 +394,10 @@ const REVIEW_ROUTES = [
   "/applications/mentee-review",
   "/reviews",
   "/interviews",
+  // Lịch phỏng vấn mentor 1:1 (22/09/2026): cùng khán giả showReviews — trang
+  // tự gate bằng canSelfClaimInterview, tài khoản reviewer còn phải được cấp
+  // vai trò interviewer của mùa ở tầng lib.
+  "/interviews/lich",
 ];
 
 // S12 helper boundary: the browse routes in the base set are now gated on the
@@ -401,7 +407,7 @@ const REVIEW_ROUTES = [
 // reviewer satisfy none, so both keep only what they can actually open —
 // reviewer plus its recruitment surfaces. No route's access changed; only what
 // the nav offers.
-const HELPER_REVIEW_ROUTES = ["/my-work", "/reviews", "/interviews"];
+const HELPER_REVIEW_ROUTES = ["/my-work", "/reviews", "/interviews", "/interviews/lich"];
 
 // Mời mentor/mentee lập tài khoản (11/09/2026). Bốn vai trò của
 // canInviteParticipants — support_team có mặt theo quyết định của chủ chương

@@ -2,7 +2,6 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { sendInterviewInvite, sendInterviewSchedule, sendInterviewSlotCancelled, sendInterviewSlotInvite } from "@/lib/email";
-import { isValidUuid } from "@/lib/events";
 import {
   BOOKING_ELIGIBLE_STATUSES,
   BTC_EMAIL,
@@ -59,6 +58,15 @@ function log(message: string, error?: unknown) {
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+// Chép tại chỗ thay vì import từ lib/events: module đó kéo theo cả chuỗi
+// program-scope (React cache), và app/actions/apply.ts import file này — năm
+// bài test form nộp đơn từng vỡ ngay lúc nạp chỉ vì một cái regex đi mượn.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_REGEX.test(value);
 }
 
 function serviceClient() {
