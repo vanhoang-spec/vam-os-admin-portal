@@ -62,6 +62,8 @@ const KIND_LABELS: Record<string, string> = {
   mentor_confirmation_link: "Link xác nhận mentor",
   review_batch_assigned: "Giao lô chấm hồ sơ",
   interview_scheduled: "Lịch phỏng vấn",
+  interview_slot_invite: "Mời đặt lịch phỏng vấn",
+  interview_slot_cancelled: "Huỷ lịch phỏng vấn",
   reviewer_invite: "Mời chấm hồ sơ"
 };
 

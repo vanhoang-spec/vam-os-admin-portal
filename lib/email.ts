@@ -11,6 +11,8 @@ import {
   // ── main-only. Giữ import này khi merge stack. ────────────────────────────
   buildInterviewRoundInviteEmail,
   buildInterviewScheduleEmail,
+  buildInterviewSlotCancelledEmail,
+  buildInterviewSlotInviteEmail,
   buildMentorConfirmationLinkEmail,
   textToHtmlEmail,
   buildCrossInviteEmail,
@@ -34,6 +36,7 @@ import {
   type EmailProvider
 } from "@/lib/email-core";
 import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib/participant-invite-core";
+import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/lib/interview-schedule-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
 /**
@@ -321,6 +324,7 @@ async function sendViaBrevo(input: {
           ? { name: input.sender.name, email: input.sender.email }
           : { email: input.sender.email },
         to: [{ email: input.to }],
+        ...(input.message.cc?.length ? { cc: input.message.cc.map((email) => ({ email })) } : {}),
         subject: input.message.subject,
         textContent: input.message.text,
         htmlContent: input.message.html,
@@ -385,6 +389,7 @@ async function sendViaResend(input: {
       body: JSON.stringify({
         from: input.from,
         to: [input.to],
+        ...(input.message.cc?.length ? { cc: input.message.cc } : {}),
         subject: input.message.subject,
         text: input.message.text,
         html: input.message.html,
@@ -473,11 +478,23 @@ export async function sendApplicationConfirmation(input: {
   // ── main-only (claim-before-send). Giữ trường này khi merge stack. ─────────
   /** Dòng outbound_emails đã đặt chỗ trước; chỉ lượt gửi bù dùng tới. */
   claimedRowId?: string | null;
+  /**
+   * Mã link đặt lịch phỏng vấn riêng của đơn — chỉ đơn mentor trong đợt
+   * phỏng vấn 1:1 mới có. Có mã thì thư xác nhận mang luôn nút "Chọn giờ
+   * phỏng vấn"; thiếu base URL thì thư vẫn đi, chỉ vắng nút.
+   */
+  bookingToken?: string | null;
+  requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
   const built = buildApplicationConfirmationEmail({
     applicantName: input.applicantName,
     role: input.role,
-    seasonLabel: input.seasonLabel
+    seasonLabel: input.seasonLabel,
+    bookingUrl:
+      input.role === "mentor" && input.bookingToken && base
+        ? interviewBookingUrl(base, input.bookingToken)
+        : null
   });
 
   return deliver(
@@ -617,20 +634,23 @@ export async function sendReviewBatchAssigned(input: {
 }
 
 /**
- * Tell an interviewer which candidates they have been booked to interview.
+ * Một mentor vừa đặt lịch phỏng vấn — báo cho interviewer của slot đó.
  * Both this and sendInterviewInvite use the `interview_scheduled` kind; the
  * related_table distinguishes the interviewer's copy (a review row) from the
- * candidate's copy (their application).
+ * candidate's copy (their application). Bản gửi hộp thư ban tổ chức dùng lại
+ * đúng hàm này với `reviewId: null` + `applicationId` — cùng nội dung, khác
+ * người nhận và khác dòng liên quan trong sổ thư.
  */
 export async function sendInterviewSchedule(input: {
   toEmail: string;
   interviewerName: string;
   seasonLabel: string;
-  interviewCount: number;
-  firstSlotLabel?: string | null;
-  modeLabel?: string | null;
-  location?: string | null;
+  slotLabel: string;
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone?: string | null;
   reviewId?: string | null;
+  applicationId?: string | null;
   requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
   const base = resolveEmailBaseUrl(input.requestOrigin);
@@ -641,40 +661,131 @@ export async function sendInterviewSchedule(input: {
   const built = buildInterviewScheduleEmail({
     interviewerName: input.interviewerName,
     seasonLabel: input.seasonLabel,
-    interviewCount: input.interviewCount,
-    firstSlotLabel: input.firstSlotLabel ?? null,
-    modeLabel: input.modeLabel ?? null,
-    location: input.location ?? null,
-    interviewsUrl: `${base}/interviews`
+    slotLabel: input.slotLabel,
+    candidateName: input.candidateName,
+    candidateEmail: input.candidateEmail,
+    candidatePhone: input.candidatePhone ?? null,
+    reviewsUrl: `${base}/reviews`,
+    hotlineZalo: HOTLINE_ZALO
   });
 
   return deliver(
     "interview_scheduled",
     { ...built, to: input.toEmail },
-    input.reviewId ? { table: "application_reviews", id: input.reviewId } : null
+    input.reviewId
+      ? { table: "application_reviews", id: input.reviewId }
+      : input.applicationId
+        ? { table: "applications", id: input.applicationId }
+        : null
   );
 }
 
-/** Send a candidate the time, mode and place of their interview. */
+/** Thư xác nhận buổi hẹn cho chính mentor vừa đặt lịch. */
 export async function sendInterviewInvite(input: {
   toEmail: string;
   candidateName: string;
   seasonLabel: string;
-  timeLabel: string;
-  modeLabel?: string | null;
-  location?: string | null;
+  slotLabel: string;
+  interviewerName: string;
+  interviewerEmail: string;
+  interviewerPhone?: string | null;
+  /** Mã link riêng của đơn — đường dẫn quản lý lịch dựng TẠI ĐÂY từ base của app. */
+  bookingToken: string;
   applicationId: string;
+  requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base) {
+    return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  }
+
   const built = buildInterviewInviteEmail({
     candidateName: input.candidateName,
     seasonLabel: input.seasonLabel,
-    timeLabel: input.timeLabel,
-    modeLabel: input.modeLabel ?? null,
-    location: input.location ?? null
+    slotLabel: input.slotLabel,
+    interviewerName: input.interviewerName,
+    interviewerEmail: input.interviewerEmail,
+    interviewerPhone: input.interviewerPhone ?? null,
+    manageUrl: interviewBookingUrl(base, input.bookingToken),
+    hotlineZalo: HOTLINE_ZALO
   });
 
   return deliver(
     "interview_scheduled",
+    { ...built, to: input.toEmail },
+    { table: "applications", id: input.applicationId }
+  );
+}
+
+/**
+ * Thư mời mentor mới tự chọn giờ phỏng vấn, và các thư nhắc 3-6-9 ngày.
+ *
+ * Đường dẫn đặt lịch dựng tại đây từ base của chính app — không nhận URL từ
+ * ngoài, nên không cần isSafeAppLink. `ccBtc` bật ở lượt nhắc thứ ba: ban tổ
+ * chức được CC để biết mentor nào đã im lặng chín ngày.
+ */
+export async function sendInterviewSlotInvite(input: {
+  toEmail: string;
+  candidateName: string;
+  seasonLabel: string;
+  bookingToken: string;
+  reminderNumber: number;
+  windowEndLabel: string;
+  ccBtc: boolean;
+  applicationId: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base) {
+    return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  }
+
+  const built = buildInterviewSlotInviteEmail({
+    candidateName: input.candidateName,
+    seasonLabel: input.seasonLabel,
+    bookingUrl: interviewBookingUrl(base, input.bookingToken),
+    reminderNumber: input.reminderNumber,
+    windowEndLabel: input.windowEndLabel,
+    hotlineZalo: HOTLINE_ZALO
+  });
+
+  return deliver(
+    "interview_slot_invite",
+    { ...built, to: input.toEmail, ...(input.ccBtc ? { cc: [BTC_EMAIL] } : {}) },
+    { table: "applications", id: input.applicationId }
+  );
+}
+
+/** Thư báo huỷ một buổi phỏng vấn — gọi hai lần, một cho mỗi bên. */
+export async function sendInterviewSlotCancelled(input: {
+  toEmail: string;
+  audience: "candidate" | "interviewer";
+  recipientName: string;
+  otherPartyName: string;
+  slotLabel: string;
+  cancelledByLabel: string;
+  /** Chỉ bản gửi mentor mới cần: mã link riêng để đặt lại. */
+  bookingToken?: string | null;
+  applicationId: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+
+  const built = buildInterviewSlotCancelledEmail({
+    audience: input.audience,
+    recipientName: input.recipientName,
+    otherPartyName: input.otherPartyName,
+    slotLabel: input.slotLabel,
+    cancelledByLabel: input.cancelledByLabel,
+    rebookUrl:
+      input.audience === "candidate" && input.bookingToken && base
+        ? interviewBookingUrl(base, input.bookingToken)
+        : null,
+    hotlineZalo: HOTLINE_ZALO
+  });
+
+  return deliver(
+    "interview_slot_cancelled",
     { ...built, to: input.toEmail },
     { table: "applications", id: input.applicationId }
   );

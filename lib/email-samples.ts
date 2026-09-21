@@ -27,6 +27,8 @@ import {
   buildInterviewInviteEmail,
   buildInterviewRoundInviteEmail,
   buildInterviewScheduleEmail,
+  buildInterviewSlotCancelledEmail,
+  buildInterviewSlotInviteEmail,
   buildMentorConfirmationLinkEmail,
   buildParticipantInviteEmail,
   buildRecapPeriodReminderEmail,
@@ -130,37 +132,79 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
     body: built(buildInterviewRoundInviteEmail({ candidateName: MENTOR, seasonLabel: SEASON }))
   },
   {
-    kind: "interview_scheduled",
+    kind: "interview_slot_invite",
     group: "Nộp đơn và tuyển chọn",
-    title: "Báo lịch phỏng vấn cho ứng viên",
-    audience: "Ứng viên đã có giờ phỏng vấn",
-    trigger: "Khi một buổi phỏng vấn được chốt giờ.",
+    title: "Mời mentor mới tự chọn giờ phỏng vấn",
+    audience: "Mentor đã nộp đơn, chưa phỏng vấn và chưa đặt lịch",
+    trigger:
+      "Khi có interviewer đăng giờ rảnh đầu tiên; nhắc lại sau mỗi 3 ngày nếu chưa chọn, tối đa 3 lần (lần 3 CC hộp thư ban tổ chức).",
+    note: "Mỗi mentor nhận một đường dẫn riêng; mở link của người khác không đặt được.",
     body: built(
-      buildInterviewInviteEmail({
+      buildInterviewSlotInviteEmail({
         candidateName: MENTOR,
         seasonLabel: SEASON,
-        timeLabel: "19:30 – 20:00, thứ Năm 24/09/2026",
-        modeLabel: "Google Meet",
-        location: `${ORIGIN}/vi-du-link-hop`
+        bookingUrl: `${ORIGIN}/dat-lich/ma-vi-du`,
+        reminderNumber: 0,
+        windowEndLabel: "05/10/2026",
+        hotlineZalo: "0919144638"
       })
     )
   },
   {
     kind: "interview_scheduled",
     group: "Nộp đơn và tuyển chọn",
-    title: "Báo lịch phỏng vấn cho người phỏng vấn",
-    audience: "Mentor nhận nhiệm vụ phỏng vấn",
-    trigger: "Khi ban tổ chức giao lịch phỏng vấn cho một người phỏng vấn.",
+    title: "Xác nhận buổi hẹn cho mentor vừa đặt lịch",
+    audience: "Mentor vừa chọn xong một khung giờ phỏng vấn",
+    trigger: "Ngay khi mentor bấm giữ một khung giờ trên trang đặt lịch.",
+    body: built(
+      buildInterviewInviteEmail({
+        candidateName: MENTOR,
+        seasonLabel: SEASON,
+        slotLabel: "Thứ Năm 24/09/2026, 19:30–20:30 (giờ Việt Nam)",
+        interviewerName: MENTEE,
+        interviewerEmail: SAMPLE_EMAIL,
+        interviewerPhone: "0900000000",
+        manageUrl: `${ORIGIN}/dat-lich/ma-vi-du`,
+        hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "interview_scheduled",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Báo interviewer có mentor vừa đặt lịch",
+    audience: "Người phỏng vấn của khung giờ vừa được đặt — và bản CC về hộp thư ban tổ chức",
+    trigger: "Ngay khi mentor bấm giữ một khung giờ trên trang đặt lịch.",
     note: 'Cùng loại "interview_scheduled" trong sổ thư với lá thư gửi ứng viên, nhưng là hai nội dung khác nhau.',
     body: built(
       buildInterviewScheduleEmail({
-        interviewerName: MENTOR,
+        interviewerName: MENTEE,
         seasonLabel: SEASON,
-        interviewCount: 3,
-        firstSlotLabel: "19:30, thứ Năm 24/09/2026",
-        modeLabel: "Google Meet",
-        location: `${ORIGIN}/vi-du-link-hop`,
-        interviewsUrl: `${ORIGIN}/interviews`
+        slotLabel: "Thứ Năm 24/09/2026, 19:30–20:30 (giờ Việt Nam)",
+        candidateName: MENTOR,
+        candidateEmail: SAMPLE_EMAIL,
+        candidatePhone: "0900000000",
+        reviewsUrl: `${ORIGIN}/reviews`,
+        hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "interview_slot_cancelled",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Báo huỷ một buổi phỏng vấn",
+    audience: "Cả interviewer lẫn mentor của buổi bị huỷ (mỗi bên một bản)",
+    trigger:
+      "Khi mentor tự huỷ (còn hơn 24 giờ trước buổi hẹn) hoặc ban tổ chức huỷ trên trang Lịch phỏng vấn.",
+    body: built(
+      buildInterviewSlotCancelledEmail({
+        audience: "candidate",
+        recipientName: MENTOR,
+        otherPartyName: MENTEE,
+        slotLabel: "Thứ Năm 24/09/2026, 19:30–20:30 (giờ Việt Nam)",
+        cancelledByLabel: "ban tổ chức huỷ",
+        rebookUrl: `${ORIGIN}/dat-lich/ma-vi-du`,
+        hotlineZalo: "0919144638"
       })
     )
   },
