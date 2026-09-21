@@ -65,7 +65,15 @@ export type EmailKind =
   | "event_reminder"
   // Thư khảo sát sau sự kiện, gửi cho người đã check in. Nộp phiếu chính là thao
   // tác check out (supabase/migrations/20260919043000_event_survey_checkout.sql).
-  | "event_survey";
+  | "event_survey"
+  // Thư mời mentor mới tự đặt lịch phỏng vấn qua link riêng, và các thư nhắc
+  // 3-6-9 ngày của nó (supabase/migrations/20260922100000_interview_slot_booking.sql).
+  // KHÁC 'interview_round_invite': thư này mang link chọn giờ; thư kia chỉ báo
+  // đã qua vòng hồ sơ. Và KHÁC 'interview_scheduled': lịch chưa chốt.
+  | "interview_slot_invite"
+  // Thư báo một buổi phỏng vấn đã bị huỷ (mentor tự huỷ khi còn >24h, hoặc ban
+  // tổ chức huỷ), gửi cho cả interviewer lẫn mentor.
+  | "interview_slot_cancelled";
 
 /**
  * Một tệp đi kèm thư.
@@ -92,6 +100,15 @@ export type EmailMessage = {
    * cho tới khi người đọc bấm "hiện ảnh", và không lưu riêng ra được.
    */
   attachments?: EmailAttachment[];
+  /**
+   * Địa chỉ nhận bản sao (CC).
+   *
+   * Dùng cho thư nhắc đặt lịch phỏng vấn lần thứ ba: ban tổ chức được CC để
+   * biết mentor nào im lặng suốt chín ngày. CC chứ không phải gửi hai thư
+   * riêng, vì hai bên cần THẤY nhau trong cùng một lá — đó chính là tín hiệu
+   * "ban tổ chức đã biết chuyện này".
+   */
+  cc?: string[];
 };
 
 /** Who actually puts the message on the wire. */
@@ -306,11 +323,19 @@ export function buildApplicationConfirmationEmail(input: {
   applicantName: string;
   role: "mentor" | "mentee";
   seasonLabel: string;
+  /**
+   * Link đặt lịch phỏng vấn riêng của đơn — chỉ đơn MENTOR mới có, trong đợt
+   * phỏng vấn 1:1. Có link thì thư gộp luôn hai việc: "đã nhận đơn" và "chọn
+   * giờ phỏng vấn ngay tại đây" — mentor vừa nộp xong khỏi phải chờ lá thư
+   * mời thứ hai. Mentee truyền gì vào đây cũng bị bỏ qua.
+   */
+  bookingUrl?: string | null;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.applicantName, input.role === "mentor" ? "anh/chị" : "bạn");
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
   const roleLabel = input.role === "mentor" ? "mentor" : "mentee";
   const you = input.role === "mentor" ? "anh/chị" : "bạn";
+  const bookingUrl = input.role === "mentor" ? (input.bookingUrl ?? null) : null;
 
   const subject = `[UEH Mentoring] Đã nhận đơn đăng ký ${roleLabel} — ${season}`;
 
@@ -318,26 +343,48 @@ export function buildApplicationConfirmationEmail(input: {
     `Chào ${name},`,
     "",
     `Ban tổ chức UEH Mentoring đã nhận được đơn đăng ký ${roleLabel} của ${you} cho ${season}.`,
-    "",
-    "Các bước tiếp theo:",
-    "1. Ban tổ chức rà soát và chấm hồ sơ",
-    "2. Nếu hồ sơ phù hợp, ban tổ chức sẽ mời phỏng vấn qua email",
-    "3. Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn",
-    "",
+    ""
+  ];
+  if (bookingUrl) {
+    lines.push(
+      "Các bước tiếp theo:",
+      "1. Ban tổ chức rà soát hồ sơ",
+      `2. ${you === "anh/chị" ? "Anh/chị" : "Bạn"} chọn giờ phỏng vấn online 1:1 phù hợp ngay tại đường dẫn riêng dưới đây`,
+      "3. Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn",
+      "",
+      `Đặt lịch phỏng vấn của ${you} (đường dẫn riêng, vui lòng không chuyển tiếp):`,
+      bookingUrl,
+      ""
+    );
+  } else {
+    lines.push(
+      "Các bước tiếp theo:",
+      "1. Ban tổ chức rà soát và chấm hồ sơ",
+      "2. Nếu hồ sơ phù hợp, ban tổ chức sẽ mời phỏng vấn qua email",
+      "3. Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn",
+      ""
+    );
+  }
+  lines.push(
     `Đây là email xác nhận tự động, ${you} không cần trả lời.`,
     `Nếu ${you} cần chỉnh sửa thông tin đã gửi, vui lòng trả lời email này để ban tổ chức hỗ trợ.`,
     "",
     `Cảm ơn ${you} đã quan tâm đến chương trình.`,
     "",
     SIGNATURE_TEXT
-  ];
+  );
 
   const html = wrapHtml(
     [
       `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
       `<p>Ban tổ chức UEH Mentoring đã nhận được đơn đăng ký <strong>${escapeHtml(roleLabel)}</strong> của ${escapeHtml(you)} cho <strong>${escapeHtml(season)}</strong>.</p>`,
       "<p>Các bước tiếp theo:</p>",
-      "<ol><li>Ban tổ chức rà soát và chấm hồ sơ</li><li>Nếu hồ sơ phù hợp, ban tổ chức sẽ mời phỏng vấn qua email</li><li>Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn</li></ol>",
+      bookingUrl
+        ? `<ol><li>Ban tổ chức rà soát hồ sơ</li><li>${escapeHtml(you === "anh/chị" ? "Anh/chị" : "Bạn")} chọn giờ phỏng vấn online 1:1 phù hợp ngay tại đường dẫn riêng dưới đây</li><li>Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn</li></ol>`
+        : "<ol><li>Ban tổ chức rà soát và chấm hồ sơ</li><li>Nếu hồ sơ phù hợp, ban tổ chức sẽ mời phỏng vấn qua email</li><li>Kết quả và thông tin ghép cặp sẽ được thông báo sau vòng phỏng vấn</li></ol>",
+      bookingUrl
+        ? `<p style="margin:20px 0"><a href="${escapeHtml(bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn giờ phỏng vấn</a></p><p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho ${escapeHtml(you)}, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(bookingUrl)}</p>`
+        : "",
       `<p>Đây là email xác nhận tự động, ${escapeHtml(you)} không cần trả lời. Nếu cần chỉnh sửa thông tin đã gửi, vui lòng trả lời email này để ban tổ chức hỗ trợ.</p>`
     ].join("")
   );
@@ -543,43 +590,48 @@ export function buildReviewBatchAssignedEmail(input: {
   return { to: "", subject, text: lines.join("\n"), html };
 }
 
-/** The interview appointments one interviewer has just been given. */
+/**
+ * Một mentor mới vừa đặt lịch phỏng vấn với interviewer này — thư xác nhận
+ * gửi interviewer, và cũng chính là bản CC về hộp thư ban tổ chức.
+ *
+ * Viết lại 22/09/2026 cho bộ lịch tự đặt (trước đó hàm nhận "N ứng viên
+ * mentee" và chưa từng có người gọi, vì hệ thống chưa có chỗ lưu giờ).
+ */
 export function buildInterviewScheduleEmail(input: {
   interviewerName: string;
   seasonLabel: string;
-  interviewCount: number;
-  firstSlotLabel?: string | null;
-  modeLabel?: string | null;
-  location?: string | null;
-  interviewsUrl: string;
+  slotLabel: string;
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone?: string | null;
+  reviewsUrl: string;
+  hotlineZalo: string;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.interviewerName);
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
-  const count = Math.max(0, Math.floor(Number(input.interviewCount) || 0));
-  const first = input.firstSlotLabel ? safeDisplayName(input.firstSlotLabel) : null;
-  const modeLabel = input.modeLabel ? safeDisplayName(input.modeLabel) : null;
-  const location = input.location ? safeDisplayName(input.location, "") : null;
+  const slot = safeDisplayName(input.slotLabel, "");
+  const candidate = safeDisplayName(input.candidateName, "ứng viên");
+  const candidatePhone = input.candidatePhone ? safeDisplayName(input.candidatePhone, "") : null;
 
-  const subject = `[UEH Mentoring] Lịch phỏng vấn ${count} ứng viên — ${season}`;
+  const subject = `[UEH Mentoring] Lịch phỏng vấn mentor ${candidate} — ${slot}`;
 
   const lines = [
     `Kính gửi ${name},`,
     "",
-    `Ban tổ chức đã xếp lịch cho anh/chị phỏng vấn ${count} ứng viên mentee ${season}.`,
-    ""
+    `Một ứng viên mentor ${season} vừa đặt lịch phỏng vấn online 1:1 với anh/chị theo giờ anh/chị đã đăng ký rảnh:`,
+    "",
+    `- Thời gian: ${slot}`,
+    `- Ứng viên: ${candidate}`,
+    `- Email: ${input.candidateEmail}`
   ];
-  if (first) lines.push(`Ca đầu tiên: ${first}`);
-  if (modeLabel) lines.push(`Hình thức: ${modeLabel}`);
-  if (location) lines.push(`Địa điểm / đường dẫn: ${location}`);
-  if (first || modeLabel || location) lines.push("");
+  if (candidatePhone) lines.push(`- Số điện thoại: ${candidatePhone}`);
   lines.push(
-    "Danh sách đầy đủ kèm giờ từng ca có trong mục “Phỏng vấn” sau khi anh/chị đăng nhập:",
-    input.interviewsUrl,
     "",
-    "Khi mở hồ sơ, anh/chị sẽ thấy điểm vòng hồ sơ ngay cạnh phiếu chấm phỏng vấn.",
-    "Sau khi nộp điểm, nếu muốn nhận bạn này làm mentee, anh/chị bấm “Chọn làm mentee của tôi” ngay trên màn hình đó.",
+    "Anh/chị chủ động liên hệ ứng viên trước buổi để thống nhất kênh gọi online (Google Meet/Zoom/Zalo).",
+    "Sau buổi phỏng vấn, anh/chị đăng nhập VAM OS, vào mục “Đánh giá” để chấm điểm và ghi đề xuất:",
+    input.reviewsUrl,
     "",
-    "Nếu lịch chưa phù hợp, anh/chị vui lòng trả lời email này để ban tổ chức sắp xếp lại.",
+    `Nếu giờ này không còn phù hợp, anh/chị báo ban tổ chức qua Zalo ${input.hotlineZalo} hoặc trả lời email này để sắp xếp lại.`,
     "",
     "Trân trọng cảm ơn anh/chị.",
     "",
@@ -587,75 +639,215 @@ export function buildInterviewScheduleEmail(input: {
   );
 
   const detailRows = [
-    first ? `<li>Ca đầu tiên: <strong>${escapeHtml(first)}</strong></li>` : "",
-    modeLabel ? `<li>Hình thức: <strong>${escapeHtml(modeLabel)}</strong></li>` : "",
-    location ? `<li>Địa điểm / đường dẫn: ${escapeHtml(location)}</li>` : ""
+    `<li>Thời gian: <strong>${escapeHtml(slot)}</strong></li>`,
+    `<li>Ứng viên: <strong>${escapeHtml(candidate)}</strong></li>`,
+    `<li>Email: ${escapeHtml(input.candidateEmail)}</li>`,
+    candidatePhone ? `<li>Số điện thoại: ${escapeHtml(candidatePhone)}</li>` : ""
   ].join("");
 
   const html = wrapHtml(
     [
       `<p>Kính gửi <strong>${escapeHtml(name)}</strong>,</p>`,
-      `<p>Ban tổ chức đã xếp lịch cho anh/chị phỏng vấn <strong>${count} ứng viên mentee</strong> ${escapeHtml(season)}.</p>`,
-      detailRows ? `<ul>${detailRows}</ul>` : "",
-      `<p style="margin:20px 0"><a href="${escapeHtml(input.interviewsUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Xem lịch phỏng vấn của tôi</a></p>`,
-      "<p>Khi mở hồ sơ, anh/chị sẽ thấy điểm vòng hồ sơ ngay cạnh phiếu chấm phỏng vấn. Sau khi nộp điểm, nếu muốn nhận bạn này làm mentee, anh/chị bấm <strong>“Chọn làm mentee của tôi”</strong> ngay trên màn hình đó.</p>",
-      "<p>Nếu lịch chưa phù hợp, anh/chị vui lòng trả lời email này để ban tổ chức sắp xếp lại.</p>"
+      `<p>Một ứng viên mentor ${escapeHtml(season)} vừa đặt lịch phỏng vấn online 1:1 với anh/chị theo giờ anh/chị đã đăng ký rảnh:</p>`,
+      `<ul>${detailRows}</ul>`,
+      "<p>Anh/chị chủ động liên hệ ứng viên trước buổi để thống nhất kênh gọi online (Google Meet/Zoom/Zalo).</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.reviewsUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chấm kết quả sau buổi phỏng vấn</a></p>`,
+      `<p>Nếu giờ này không còn phù hợp, anh/chị báo ban tổ chức qua Zalo <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này để sắp xếp lại.</p>`
     ].join("")
   );
 
   return { to: "", subject, text: lines.join("\n"), html };
 }
 
-/** The appointment itself, sent to the candidate being interviewed. */
+/**
+ * Thư xác nhận buổi hẹn, gửi cho chính mentor vừa đặt lịch.
+ *
+ * Viết lại 22/09/2026 cho bộ lịch tự đặt: mang đủ thông tin liên hệ của
+ * interviewer và đường dẫn quản lý lịch riêng (tự huỷ được khi còn hơn 24
+ * giờ; sát giờ hơn thì hotline).
+ */
 export function buildInterviewInviteEmail(input: {
   candidateName: string;
   seasonLabel: string;
-  timeLabel: string;
-  modeLabel?: string | null;
-  location?: string | null;
+  slotLabel: string;
+  interviewerName: string;
+  interviewerEmail: string;
+  interviewerPhone?: string | null;
+  manageUrl: string;
+  hotlineZalo: string;
 }): EmailMessage & { to: string } {
-  const name = safeDisplayName(input.candidateName, "bạn");
+  const name = safeDisplayName(input.candidateName, "anh/chị");
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
-  const time = safeDisplayName(input.timeLabel, "");
-  const modeLabel = input.modeLabel ? safeDisplayName(input.modeLabel) : null;
-  const location = input.location ? safeDisplayName(input.location, "") : null;
+  const slot = safeDisplayName(input.slotLabel, "");
+  const interviewer = safeDisplayName(input.interviewerName, "người phỏng vấn");
+  const interviewerPhone = input.interviewerPhone ? safeDisplayName(input.interviewerPhone, "") : null;
 
-  const subject = `[UEH Mentoring] Lịch phỏng vấn mentee ${season}`;
+  const subject = `[UEH Mentoring] Xác nhận lịch phỏng vấn mentor — ${slot}`;
 
   const lines = [
     `Chào ${name},`,
     "",
-    `Chúc mừng bạn đã vào vòng phỏng vấn chương trình mentoring ${season}.`,
+    `Anh/chị đã đặt thành công buổi phỏng vấn online 1:1 cho đơn đăng ký mentor ${season}:`,
     "",
-    "Thông tin buổi phỏng vấn:"
+    `- Thời gian: ${slot}`,
+    `- Người phỏng vấn: ${interviewer}`,
+    `- Email: ${input.interviewerEmail}`
   ];
-  if (time) lines.push(`- Thời gian: ${time}`);
-  if (modeLabel) lines.push(`- Hình thức: ${modeLabel}`);
-  if (location) lines.push(`- Địa điểm / đường dẫn: ${location}`);
+  if (interviewerPhone) lines.push(`- Số điện thoại: ${interviewerPhone}`);
   lines.push(
     "",
-    "Bạn vui lòng có mặt trước 5 phút. Buổi phỏng vấn kéo dài khoảng 20–30 phút, xoay quanh mục tiêu và mong đợi của bạn với chương trình.",
+    "Buổi phỏng vấn diễn ra online, kéo dài khoảng 30–60 phút. Người phỏng vấn sẽ liên hệ anh/chị để thống nhất kênh gọi (Google Meet/Zoom/Zalo) — anh/chị vui lòng để ý email và điện thoại.",
     "",
-    "Nếu thời gian trên không phù hợp, bạn vui lòng trả lời email này sớm nhất có thể để ban tổ chức sắp xếp lại.",
+    "Cần đổi lịch? Khi còn NHIỀU HƠN 24 giờ trước buổi hẹn, anh/chị tự huỷ và chọn giờ khác tại đường dẫn riêng của mình:",
+    input.manageUrl,
+    `Sát giờ hơn, anh/chị liên hệ ban tổ chức qua Zalo ${input.hotlineZalo}.`,
     "",
-    "Hẹn gặp bạn.",
+    "Hẹn gặp anh/chị.",
     "",
     SIGNATURE_TEXT
   );
 
   const detailRows = [
-    time ? `<li>Thời gian: <strong>${escapeHtml(time)}</strong></li>` : "",
-    modeLabel ? `<li>Hình thức: <strong>${escapeHtml(modeLabel)}</strong></li>` : "",
-    location ? `<li>Địa điểm / đường dẫn: ${escapeHtml(location)}</li>` : ""
+    `<li>Thời gian: <strong>${escapeHtml(slot)}</strong></li>`,
+    `<li>Người phỏng vấn: <strong>${escapeHtml(interviewer)}</strong></li>`,
+    `<li>Email: ${escapeHtml(input.interviewerEmail)}</li>`,
+    interviewerPhone ? `<li>Số điện thoại: ${escapeHtml(interviewerPhone)}</li>` : ""
   ].join("");
 
   const html = wrapHtml(
     [
       `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
-      `<p>Chúc mừng bạn đã vào vòng phỏng vấn chương trình mentoring <strong>${escapeHtml(season)}</strong>.</p>`,
-      detailRows ? `<p>Thông tin buổi phỏng vấn:</p><ul>${detailRows}</ul>` : "",
-      "<p>Bạn vui lòng có mặt trước 5 phút. Buổi phỏng vấn kéo dài khoảng 20–30 phút, xoay quanh mục tiêu và mong đợi của bạn với chương trình.</p>",
-      "<p>Nếu thời gian trên không phù hợp, bạn vui lòng trả lời email này sớm nhất có thể để ban tổ chức sắp xếp lại.</p>"
+      `<p>Anh/chị đã đặt thành công buổi phỏng vấn online 1:1 cho đơn đăng ký mentor <strong>${escapeHtml(season)}</strong>:</p>`,
+      `<ul>${detailRows}</ul>`,
+      "<p>Buổi phỏng vấn diễn ra online, kéo dài khoảng 30–60 phút. Người phỏng vấn sẽ liên hệ anh/chị để thống nhất kênh gọi (Google Meet/Zoom/Zalo) — anh/chị vui lòng để ý email và điện thoại.</p>",
+      `<p>Cần đổi lịch? Khi còn <strong>nhiều hơn 24 giờ</strong> trước buổi hẹn, anh/chị tự huỷ và chọn giờ khác tại <a href="${escapeHtml(input.manageUrl)}">đường dẫn riêng của mình</a>. Sát giờ hơn, anh/chị liên hệ ban tổ chức qua Zalo <strong>${escapeHtml(input.hotlineZalo)}</strong>.</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Nếu đường dẫn trên không mở được: ${escapeHtml(input.manageUrl)}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư mời mentor mới tự chọn giờ phỏng vấn — và các thư nhắc của nó.
+ *
+ * `reminderNumber` 0 là thư mời đầu; 1..3 là ba lượt nhắc cách nhau 3 ngày.
+ * Nội dung nhắc nói thẳng đây là lần thứ mấy, để người nhận hiểu chuỗi thư
+ * không phải máy gửi trùng.
+ */
+export function buildInterviewSlotInviteEmail(input: {
+  candidateName: string;
+  seasonLabel: string;
+  bookingUrl: string;
+  reminderNumber: number;
+  windowEndLabel: string;
+  hotlineZalo: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.candidateName, "anh/chị");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const reminder = Math.max(0, Math.floor(Number(input.reminderNumber) || 0));
+  const deadline = safeDisplayName(input.windowEndLabel, "");
+
+  const subject =
+    reminder > 0
+      ? `[UEH Mentoring] Nhắc lần ${reminder}: chọn giờ phỏng vấn mentor — ${season}`
+      : `[UEH Mentoring] Mời chọn giờ phỏng vấn mentor — ${season}`;
+
+  const lines = [`Chào ${name},`, ""];
+  if (reminder > 0) {
+    lines.push(
+      `Ban tổ chức nhắc lần ${reminder}: anh/chị chưa chọn giờ phỏng vấn cho đơn đăng ký mentor ${season}.`,
+      ""
+    );
+  } else {
+    lines.push(
+      `Đơn đăng ký mentor ${season} của anh/chị đã sẵn sàng cho bước phỏng vấn online 1:1 với ban tổ chức.`,
+      ""
+    );
+  }
+  lines.push(
+    "Anh/chị mở đường dẫn riêng dưới đây, xem các khung giờ đang trống (07:00–22:00 hằng ngày, mỗi buổi 60 phút) và chọn giờ phù hợp. Lịch cập nhật liên tục — chỗ trống có thể được người khác giữ trước, nên anh/chị nên chọn sớm:",
+    input.bookingUrl,
+    "",
+    `Đợt phỏng vấn kéo dài đến hết ngày ${deadline}.`,
+    `Cần hỗ trợ, anh/chị liên hệ ban tổ chức qua Zalo ${input.hotlineZalo} hoặc trả lời email này.`,
+    "",
+    "Trân trọng,",
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      reminder > 0
+        ? `<p>Ban tổ chức nhắc lần <strong>${reminder}</strong>: anh/chị chưa chọn giờ phỏng vấn cho đơn đăng ký mentor <strong>${escapeHtml(season)}</strong>.</p>`
+        : `<p>Đơn đăng ký mentor <strong>${escapeHtml(season)}</strong> của anh/chị đã sẵn sàng cho bước phỏng vấn online 1:1 với ban tổ chức.</p>`,
+      "<p>Anh/chị mở đường dẫn riêng dưới đây, xem các khung giờ đang trống (07:00–22:00 hằng ngày, mỗi buổi 60 phút) và chọn giờ phù hợp. Lịch cập nhật liên tục — chỗ trống có thể được người khác giữ trước, nên anh/chị nên chọn sớm.</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn giờ phỏng vấn</a></p>`,
+      `<p>Đợt phỏng vấn kéo dài đến hết ngày <strong>${escapeHtml(deadline)}</strong>.</p>`,
+      `<p>Cần hỗ trợ, anh/chị liên hệ ban tổ chức qua Zalo <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho anh/chị, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.bookingUrl)}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư báo một buổi phỏng vấn đã bị huỷ — cùng một hàm dựng cho cả hai người
+ * nhận, vì hai lá thư phải kể CÙNG một câu chuyện (ai huỷ, buổi nào); chỉ
+ * xưng hô và câu hành-động-tiếp-theo là khác.
+ */
+export function buildInterviewSlotCancelledEmail(input: {
+  audience: "candidate" | "interviewer";
+  recipientName: string;
+  otherPartyName: string;
+  slotLabel: string;
+  cancelledByLabel: string;
+  /** Link đặt lại — chỉ bản gửi mentor mới có. */
+  rebookUrl?: string | null;
+  hotlineZalo: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.recipientName, "anh/chị");
+  const other = safeDisplayName(input.otherPartyName, input.audience === "candidate" ? "người phỏng vấn" : "ứng viên");
+  const slot = safeDisplayName(input.slotLabel, "");
+  const by = safeDisplayName(input.cancelledByLabel, "");
+  const rebookUrl = input.audience === "candidate" ? (input.rebookUrl ?? null) : null;
+
+  const subject = `[UEH Mentoring] Đã huỷ lịch phỏng vấn — ${slot}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Buổi phỏng vấn ${slot} ${input.audience === "candidate" ? `với ${other}` : `với ứng viên ${other}`} đã được huỷ (${by}).`,
+    ""
+  ];
+  if (rebookUrl) {
+    lines.push("Anh/chị chọn lại giờ khác tại đường dẫn riêng của mình:", rebookUrl, "");
+  } else if (input.audience === "interviewer") {
+    lines.push("Khung giờ này đã mở lại cho ứng viên khác đặt; anh/chị không cần làm gì thêm.", "");
+  }
+  lines.push(
+    `Cần hỗ trợ, liên hệ ban tổ chức qua Zalo ${input.hotlineZalo} hoặc trả lời email này.`,
+    "",
+    SIGNATURE_TEXT
+  );
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Buổi phỏng vấn <strong>${escapeHtml(slot)}</strong> ${
+        input.audience === "candidate"
+          ? `với <strong>${escapeHtml(other)}</strong>`
+          : `với ứng viên <strong>${escapeHtml(other)}</strong>`
+      } đã được huỷ (${escapeHtml(by)}).</p>`,
+      rebookUrl
+        ? `<p style="margin:20px 0"><a href="${escapeHtml(rebookUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn lại giờ phỏng vấn</a></p><p style="color:#4f6b60;font-size:13px">Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(rebookUrl)}</p>`
+        : input.audience === "interviewer"
+          ? "<p>Khung giờ này đã mở lại cho ứng viên khác đặt; anh/chị không cần làm gì thêm.</p>"
+          : "",
+      `<p>Cần hỗ trợ, liên hệ ban tổ chức qua Zalo <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`
     ].join("")
   );
 

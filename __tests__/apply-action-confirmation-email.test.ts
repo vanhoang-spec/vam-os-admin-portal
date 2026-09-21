@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
   submitPilotApplication: vi.fn(),
   revalidatePath: vi.fn(),
   redirect: vi.fn(),
-  sendApplicationConfirmation: vi.fn()
+  sendApplicationConfirmation: vi.fn(),
+  ensureInterviewInviteToken: vi.fn()
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
@@ -29,6 +30,11 @@ vi.mock("@/lib/applications-create", () => ({
 }));
 vi.mock("@/lib/email", () => ({
   sendApplicationConfirmation: mocks.sendApplicationConfirmation
+}));
+// Bộ lịch phỏng vấn kéo theo cả lib/events (React cache) — với bài kiểm thư
+// xác nhận thì thứ cần khoá chỉ là: mentor được cấp mã đặt lịch, mentee không.
+vi.mock("@/lib/interview-schedule", () => ({
+  ensureInterviewInviteToken: mocks.ensureInterviewInviteToken
 }));
 
 import {
@@ -118,6 +124,7 @@ beforeEach(() => {
   mocks.evaluateApplyGate.mockResolvedValue({ status: "open", state: "open" });
   mocks.submitPilotApplication.mockResolvedValue({ ok: true, applicationId: APPLICATION_ID });
   mocks.sendApplicationConfirmation.mockResolvedValue({ ok: true, skipped: false });
+  mocks.ensureInterviewInviteToken.mockResolvedValue("ma-dat-lich-vi-du");
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -132,8 +139,20 @@ describe("thư xác nhận sau khi nộp đơn", () => {
       applicantName: "Mentor Test",
       role: "mentor",
       seasonLabel: SEASON_LABEL,
-      applicationId: APPLICATION_ID
+      applicationId: APPLICATION_ID,
+      // Mentor được cấp mã đặt lịch phỏng vấn ngay trong thư xác nhận (22/09/2026).
+      bookingToken: "ma-dat-lich-vi-du"
     });
+    expect(mocks.ensureInterviewInviteToken).toHaveBeenCalledWith(APPLICATION_ID);
+  });
+
+  it("hết đợt phỏng vấn (không cấp được mã) thì thư mentor vẫn đi, chỉ vắng nút", async () => {
+    mocks.ensureInterviewInviteToken.mockResolvedValue(null);
+    const state = await submitMentorApplicationAction({ ok: false, message: "" }, validMentorForm());
+
+    expect(state.ok).toBe(true);
+    const arg = mocks.sendApplicationConfirmation.mock.calls[0][0] as { bookingToken: string | null };
+    expect(arg.bookingToken).toBeNull();
   });
 
   it("mentee nộp thành công thì gửi thư với vai trò mentee, không phải mentor", async () => {
@@ -146,8 +165,11 @@ describe("thư xác nhận sau khi nộp đơn", () => {
       applicantName: "Mentee Test",
       role: "mentee",
       seasonLabel: SEASON_LABEL,
-      applicationId: APPLICATION_ID
+      applicationId: APPLICATION_ID,
+      bookingToken: null
     });
+    // Mentee không có vòng đặt lịch — không được phép tốn một dòng invite nào.
+    expect(mocks.ensureInterviewInviteToken).not.toHaveBeenCalled();
   });
 
   it("nhãn mùa là tên người đọc được, không phải mã nội bộ", async () => {

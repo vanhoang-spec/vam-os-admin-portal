@@ -9,6 +9,7 @@ import {
 } from "@/lib/applications-create";
 import { APPLY_TOKEN_FIELD, type ApplyActionState } from "@/lib/apply-types";
 import { sendApplicationConfirmation } from "@/lib/email";
+import { ensureInterviewInviteToken } from "@/lib/interview-schedule";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
 import {
@@ -105,12 +106,19 @@ async function acknowledgeSubmission(input: {
   emailPrimary: string;
 }) {
   try {
+    // Đơn MENTOR trong đợt phỏng vấn 1:1: cấp luôn mã link đặt lịch để thư
+    // xác nhận mang nút "Chọn giờ phỏng vấn" — người vừa nộp xong không phải
+    // chờ lá thư mời thứ hai. Hết đợt hoặc trục trặc thì trả null, thư vẫn
+    // đi bình thường, chỉ vắng nút.
+    const bookingToken =
+      input.role === "mentor" ? await ensureInterviewInviteToken(input.applicationId) : null;
     await sendApplicationConfirmation({
       toEmail: input.emailPrimary,
       applicantName: input.fullName,
       role: input.role,
       seasonLabel: CURRENT_APPLICATION_SEASON_LABEL,
-      applicationId: input.applicationId
+      applicationId: input.applicationId,
+      bookingToken
     });
   } catch (err) {
     console.error("[apply] confirmation email failed (non-fatal)", err);

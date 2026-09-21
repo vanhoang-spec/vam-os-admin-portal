@@ -351,7 +351,10 @@ describe("reviewer navigation offers only the helper's own work surfaces", () =>
 
   it("offers no link that the route would refuse", () => {
     // The whole point of the trim: nav and route may not disagree.
-    const helperAllowed = new Set(["/my-work", "/reviews", "/interviews", "/"]);
+    // /interviews/lich (22/09/2026): trang gate bằng đúng canSelfClaimInterview
+    // nên reviewer mở được; tầng lib còn đòi thêm vai trò interviewer của mùa,
+    // nhưng đó là câu từ chối tử tế trên trang, không phải cú đá về trang chủ.
+    const helperAllowed = new Set(["/my-work", "/reviews", "/interviews", "/interviews/lich", "/"]);
     for (const href of hrefs) expect(helperAllowed.has(href)).toBe(true);
   });
 });

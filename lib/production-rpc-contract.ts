@@ -138,7 +138,19 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   "vam097_person_delete_report",
   "vam097_delete_person",
   "vam097_admin_account_delete_report",
-  "vam097_delete_admin_account"
+  "vam097_delete_admin_account",
+  // Lịch phỏng vấn mentor 1:1 (migration 20260922100000). Dán lên Production
+  // 22/09/2026; kiểm đọc catalog ngay sau đó cho cả ba hàm: SECURITY DEFINER,
+  // ACL đúng postgres + service_role (không anon/authenticated), thân hàm đọc
+  // vai trò API qua vam063_trusted_api_role() và KHÔNG gọi hàm phụ đọc
+  // current_user; hàm giữ chỗ có `for update skip locked` + FIFO theo
+  // available_since; hàm mentor tự huỷ có mốc chặn 24 giờ. Migration đó cũng
+  // THAY THÂN vam084_recompute_application_review_status theo lối cộng thêm —
+  // đã đọc lại pg_get_functiondef xác nhận tấm chắn vòng-hồ-sơ có mặt, hai
+  // whitelist cũ và câu raise gốc còn nguyên, vẫn security invoker.
+  "vam098_book_interview_slot",
+  "vam098_cancel_interview_booking_mentor",
+  "vam098_cancel_interview_booking_btc"
 ];
 
 /**

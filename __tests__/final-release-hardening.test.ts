@@ -54,7 +54,12 @@ describe("single-step application authentication", () => {
     // `auth/callback` joined this list when emailed sign-in links were wired up:
     // it is the page that CREATES a session from a token in the URL fragment, so
     // gating it behind a session check would bounce every link to /login.
-    expect(middleware).toContain("login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image");
+    // `api/cron` joined 22/09/2026: request của Vercel Cron không mang cookie
+    // phiên nào — để middleware chặn thì job gửi thư nhắc bị đá về /login và
+    // chết lặng. Route cron tự kiểm CRON_SECRET.
+    expect(middleware).toContain(
+      "login|auth/callback|apply|reset-password|e2e-harness|api/cron|_next/static|_next/image"
+    );
     expect(middleware).toContain('request.nextUrl.pathname.startsWith("/register/")');
     expect(middleware).toContain('request.nextUrl.pathname.startsWith("/checkin/")');
   });
@@ -93,7 +98,9 @@ describe("e2e-harness security fail-closed gate", () => {
     expect(matcherRegex).not.toContain("people");
     expect(matcherRegex).not.toContain("portfolio");
     // Ensure it is an exact segment bypass, not a wildcard
-    expect(matcherRegex).toContain("login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image");
+    expect(matcherRegex).toContain(
+      "login|auth/callback|apply|reset-password|e2e-harness|api/cron|_next/static|_next/image"
+    );
     // The auth exception is one named route, not the /auth namespace: these
     // alternatives are prefix tests, so a bare "auth" would silently unprotect
     // every future /auth/* route.

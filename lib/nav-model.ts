@@ -174,6 +174,10 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             ...bonusItems,
             { href: "/reviews", label: "Đánh giá" },
             { href: "/interviews", label: "Phỏng vấn" },
+            // Cùng khán giả với /interviews: trang tự gate bằng đúng
+            // canSelfClaimInterview mà showReviews đại diện — nav không được
+            // hứa một trang sẽ đá người bấm về trang chủ.
+            { href: "/interviews/lich", label: "Lịch phỏng vấn" },
           ],
         }
       : showStaffingOnly

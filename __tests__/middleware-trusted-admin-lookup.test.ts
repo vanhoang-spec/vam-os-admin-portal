@@ -574,8 +574,11 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
 describe("public route matcher is unchanged by this hotfix", () => {
   it("still excludes login, apply, reset-password and static assets", async () => {
     const { config } = await import("@/middleware");
+    // `api/cron` thêm 22/09/2026 cho bộ gửi thư nhắc đặt lịch phỏng vấn:
+    // request của Vercel Cron không mang cookie, để middleware chặn là job
+    // chết lặng ở /login. Route tự kiểm CRON_SECRET.
     expect(config.matcher).toEqual([
-      "/((?!login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"
+      "/((?!login|auth/callback|apply|reset-password|e2e-harness|api/cron|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"
     ]);
   });
 

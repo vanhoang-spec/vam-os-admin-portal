@@ -4,5 +4,11 @@
     "deploymentEnabled": {
       "main": false
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/interview-emails",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
