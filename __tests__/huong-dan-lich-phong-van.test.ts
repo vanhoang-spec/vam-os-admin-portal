@@ -130,4 +130,17 @@ describe("những điều hướng dẫn khẳng định về cách hệ thống
     expect(migration).toContain("interview_bookings_active_app_uidx");
     expect(migration).toContain("for update skip locked");
   });
+
+  it("nhiều interviewer cùng rảnh một khung giờ — mỗi người một ô riêng, chạy song song", () => {
+    // 22/09/2026: hai chỗ trong bản nháp đầu từng khiến người đọc tưởng một khung
+    // giờ chỉ có MỘT chỗ chung cho mọi interviewer. Hướng dẫn phải nói ngược lại,
+    // và database phải đúng như lời nói: khoá duy nhất là (interviewer, giờ) —
+    // KHÔNG có khoá duy nhất nào trên riêng slot_starts_at.
+    expect(guideText).toContain("buổi 1:1 song song");
+    expect(guideText).toContain("với chính bạn");
+    expect(guideText).toContain("interviewer khác vẫn có ô riêng ở cùng khung giờ");
+    const migration = read("supabase/migrations/20260922100000_interview_slot_booking.sql");
+    expect(migration).toContain("unique (admin_user_id, slot_starts_at)");
+    expect(migration).not.toMatch(/unique\s*\(\s*slot_starts_at\s*\)/);
+  });
 });
