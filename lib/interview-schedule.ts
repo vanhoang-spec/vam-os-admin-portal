@@ -6,6 +6,8 @@ import { isValidUuid } from "@/lib/events";
 import {
   BOOKING_ELIGIBLE_STATUSES,
   BTC_EMAIL,
+  BookingPageDayGroup,
+  DispatchResult,
   GridDay,
   HOTLINE_ZALO,
   INTERVIEW_SEASON_CODE,
@@ -420,9 +422,6 @@ export async function saveInterviewerSlots(input: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Trang công khai /dat-lich/[token]
 // ─────────────────────────────────────────────────────────────────────────────
-
-export type BookingPageHour = { startsAtIso: string; hour: number; openCount: number };
-export type BookingPageDayGroup = { dateKey: string; label: string; hours: BookingPageHour[] };
 
 export type BookingPageData =
   | { ok: false; state: "invalid"; message: string }
@@ -1125,16 +1124,6 @@ export async function ensureInterviewInviteToken(applicationId: unknown): Promis
   if (!client) return null;
   return ensureInviteTokenRow(client, id);
 }
-
-export type DispatchResult = {
-  ok: boolean;
-  message: string;
-  sent: number;
-  failed: number;
-  remaining: number;
-  /** Brevo báo hết hạn mức ngày — dừng, mai gửi tiếp. */
-  stopped429: boolean;
-};
 
 function dispatchFail(message: string): DispatchResult {
   return { ok: false, message, sent: 0, failed: 0, remaining: 0, stopped429: false };

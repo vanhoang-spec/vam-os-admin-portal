@@ -213,6 +213,9 @@ export async function middleware(request: NextRequest) {
     // QR chiếu trên màn hình hoặc bằng link trong thư — không ai trong số họ có
     // tài khoản ban tổ chức để đăng nhập.
     request.nextUrl.pathname.startsWith("/khao-sat/") ||
+    // Trang đặt lịch phỏng vấn của mentor mới. Công khai có chủ ý: người mở là
+    // ứng viên chưa có tài khoản, mã riêng nằm trong hộp thư của chính họ.
+    request.nextUrl.pathname.startsWith("/dat-lich/") ||
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
@@ -228,6 +231,8 @@ export async function middleware(request: NextRequest) {
       ? "checkin"
       : request.nextUrl.pathname.startsWith("/khao-sat/")
         ? "survey"
+        : request.nextUrl.pathname.startsWith("/dat-lich/")
+          ? "interview_booking"
           : request.nextUrl.pathname.startsWith("/renew/")
           ? "renewal"
           : request.nextUrl.pathname.startsWith("/ve/")
@@ -240,8 +245,9 @@ export async function middleware(request: NextRequest) {
     const response = NextResponse.next({ request: { headers: requestHeaders } });
     // Vé mang tên một người và một mã dùng được ở cửa; nó không được nằm lại
     // trong cache dùng chung, và trang đích của bất kỳ đường dẫn nào trên đó
-    // không cần biết mã là gì.
-    if (publicRoute === "renewal" || publicRoute === "ticket") {
+    // không cần biết mã là gì. Trang đặt lịch phỏng vấn cùng loại: URL mang mã
+    // riêng của một ứng viên, ai cầm được mã là đặt/huỷ được lịch của họ.
+    if (publicRoute === "renewal" || publicRoute === "ticket" || publicRoute === "interview_booking") {
       response.headers.set("Referrer-Policy", "no-referrer");
       response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
       response.headers.set("Pragma", "no-cache");
@@ -296,5 +302,8 @@ export const config = {
   // Named in full, NOT as `auth`. These alternatives are prefix tests, so a
   // bare `auth` would take every future /auth/* route out of the gate — and
   // /authors with it — by accident rather than by decision.
-  matcher: ["/((?!login|auth/callback|apply|reset-password|e2e-harness|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
+  // `api/cron` được nêu đích danh: request của Vercel Cron không mang cookie
+  // phiên nào, và nếu để middleware chặn thì nó bị đẩy về /login — job gửi
+  // thư nhắc chết lặng, không lỗi nào hiện ra. Route tự kiểm CRON_SECRET.
+  matcher: ["/((?!login|auth/callback|apply|reset-password|e2e-harness|api/cron|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"]
 };

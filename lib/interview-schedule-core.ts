@@ -294,3 +294,35 @@ export function slotRangeLabel(startsAtIso: string): string {
 export function bookingUrl(base: string, token: string): string {
   return `${base.replace(/\/+$/, "")}${INTERVIEW_BOOKING_PATH_PREFIX}/${token}`;
 }
+
+/** Một khung giờ còn chỗ trên trang đặt lịch công khai. */
+export type BookingPageHour = { startsAtIso: string; hour: number; openCount: number };
+/** Một ngày trên trang đặt lịch công khai — chỉ mang các giờ còn chỗ. */
+export type BookingPageDayGroup = { dateKey: string; label: string; hours: BookingPageHour[] };
+
+/**
+ * Kết quả một lượt của bộ gửi thư mời/nhắc. Nằm ở phần thuần để panel phía
+ * client đọc được kiểu mà không chạm vào module server-only.
+ */
+export type DispatchResult = {
+  ok: boolean;
+  message: string;
+  sent: number;
+  failed: number;
+  remaining: number;
+  /** Brevo báo hết hạn mức ngày — dừng, mai gửi tiếp. */
+  stopped429: boolean;
+};
+
+/** Vòng lặp "gửi tới khi xong" của panel còn nên gọi tiếp không. */
+export function shouldContinueDispatch(result: DispatchResult): boolean {
+  return result.ok && !result.stopped429 && result.remaining > 0;
+}
+
+/**
+ * Trần số lượt gọi cho một phiên gửi — cùng lý do với surveyMaxRounds: một
+ * lỗi lặp vô hạn không được phép quay mãi chỉ vì `remaining` không giảm.
+ */
+export function dispatchMaxRounds(firstResult: DispatchResult): number {
+  return Math.ceil((firstResult.sent + firstResult.remaining) / INVITE_CHUNK) + 5;
+}

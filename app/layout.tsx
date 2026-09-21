@@ -24,6 +24,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     publicRoute === "ticket" ||
     // Phiếu khảo sát cuối buổi, mở từ mã QR trong hội trường.
     publicRoute === "survey" ||
+    // Trang đặt lịch phỏng vấn của mentor mới — mã riêng trong thư mời.
+    publicRoute === "interview_booking" ||
     publicRoute === "renewal" ||
     publicRoute === "blog"
   ) {
