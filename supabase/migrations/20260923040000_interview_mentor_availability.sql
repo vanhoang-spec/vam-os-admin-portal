@@ -7,11 +7,16 @@
 -- giờ nào trống — 23/09/2026 có 50 mentor cầm link mà mở ra chỉ thấy một ô
 -- vàng "hiện chưa có khung giờ trống nào".
 --
--- Chiều này đi ngược lại: mentor tick những giờ MÌNH rảnh, interviewer mở lưới
+-- Chiều này đi ngược lại: mentor chọn MỘT giờ mình rảnh, interviewer mở lưới
 -- thấy "khung giờ này có N người đang chờ" rồi bấm ghép. Hai chiều gặp nhau ở
 -- đúng một kết quả — một dòng `interview_bookings`, một phiếu phỏng vấn giao
 -- cho interviewer, ba lá thư xác nhận — nên phần sau của quy trình không phải
 -- biết buổi hẹn đã sinh ra từ chiều nào.
+--
+-- Mỗi mentor chỉ giữ MỘT lời ngỏ tại một thời điểm (chủ dự án chốt 23/09/2026):
+-- chọn giờ khác là bỏ giờ cũ, rồi chờ tới khi có interviewer khớp vào đúng giờ
+-- đó. Nhờ vậy con số "N người đang chờ" đếm đúng N CON NGƯỜI, không phải N lượt
+-- khai — ban tổ chức đọc nó để quyết định mở thêm giờ nào.
 --
 -- Giá trị lớn nhất không phải là thêm một đường đặt lịch, mà là ban tổ chức
 -- lần đầu NHÌN THẤY nhu cầu: hôm nay họ chỉ biết là thiếu giờ, không biết
@@ -135,6 +140,18 @@ create index if not exists interview_mentor_availability_app_idx
 
 create index if not exists interview_mentor_availability_season_idx
   on public.interview_mentor_availability (season_id);
+
+-- MỘT mentor chỉ giữ MỘT lời ngỏ tại một thời điểm (chủ dự án chốt 23/09/2026).
+-- Chọn giờ khác nghĩa là bỏ giờ cũ, không phải khai thêm giờ thứ hai; rồi chờ
+-- tới khi có interviewer khớp vào đúng giờ đó.
+--
+-- Luật này được canh Ở ĐÂY chứ không phải ở tầng ứng dụng: tầng ứng dụng không
+-- có transaction chung giữa hai request, nên hai tab của cùng một người bấm hai
+-- giờ khác nhau trong cùng một giây sẽ lọt qua mọi phép "đọc rồi ghi". Chỉ số
+-- bộ phận này thì không lọt.
+create unique index if not exists interview_mentor_availability_active_uidx
+  on public.interview_mentor_availability (application_id)
+  where status = 'open';
 
 comment on table public.interview_mentor_availability is
   'Giờ mentor tự khai là mình rảnh, để interviewer mở lưới ra ghép. Chiều ngược của interview_slots.';
@@ -419,6 +436,14 @@ begin
       and c.contype = 'u'
   ) then
     raise exception 'SCHEMA_CONTRACT_VIOLATION: thiếu khoá duy nhất (application_id, slot_starts_at)';
+  end if;
+
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public'
+      and indexname = 'interview_mentor_availability_active_uidx'
+  ) then
+    raise exception 'SCHEMA_CONTRACT_VIOLATION: thiếu chỉ số một-mentor-một-lời-ngỏ';
   end if;
 
   select pg_get_functiondef(p.oid) into v_fn

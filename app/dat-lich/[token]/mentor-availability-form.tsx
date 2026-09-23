@@ -4,30 +4,31 @@ import { useEffect, useMemo, useRef, useState } from "react";
 // React 18.3.1: useFormState của react-dom — hook thay thế của React 19 qua
 // được cả bốn cổng rồi mới vỡ trắng trang lúc chạy, nên cấm dùng ở đây.
 import { useFormState, useFormStatus } from "react-dom";
-import type { GridDay } from "@/lib/interview-schedule-core";
+import { slotRangeLabel, type GridDay } from "@/lib/interview-schedule-core";
 import { INITIAL_MENTOR_AVAILABILITY_STATE } from "@/lib/interview-booking-action-types";
 import { saveMentorAvailabilityAction } from "./actions";
 
 /**
- * Chiều ngược: mentor tự khai giờ MÌNH rảnh.
+ * Chiều ngược: mentor chọn MỘT giờ mình rảnh rồi chờ được ghép.
  *
- * Đây KHÔNG phải giữ chỗ. Không ai bị hẹn khi bấm Lưu ở đây — chỉ là một lời
- * ngỏ để ban tổ chức mở lưới ra ghép. Chữ trên màn hình phải nói đúng điều đó,
- * vì người đọc nhầm sẽ ngồi chờ một buổi hẹn chưa tồn tại.
+ * Đây KHÔNG phải giữ chỗ. Không ai bị hẹn khi bấm ở đây — chỉ là một lời ngỏ
+ * để ban tổ chức mở lưới ra ghép. Chữ trên màn hình phải nói đúng điều đó, vì
+ * người đọc nhầm sẽ ngồi chờ một buổi hẹn chưa tồn tại.
  *
- * Chip từng ngày chứ không phải bảng 14×15: người bấm là ứng viên trên điện
- * thoại, một bảng cuộn ngang ở đó là cực hình.
+ * Một giờ tại một thời điểm (chủ dự án chốt 23/09/2026): các ô cư xử như một
+ * nhóm radio, chọn ô mới là bỏ ô cũ. Database canh luật đó bằng chỉ số bộ
+ * phận, màn hình chỉ làm cho nó hiển nhiên.
  */
 
-function SubmitButton() {
+function SubmitButton({ label, disabled }: { label: string; disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       className="inline-flex w-full items-center justify-center rounded-md border border-vam-green bg-white px-4 py-3 text-base font-semibold text-vam-green disabled:opacity-60 sm:w-auto sm:text-sm"
     >
-      {pending ? "Đang lưu..." : "Lưu giờ tôi rảnh"}
+      {pending ? "Đang lưu..." : label}
     </button>
   );
 }
@@ -35,90 +36,54 @@ function SubmitButton() {
 export function MentorAvailabilityForm({
   token,
   days,
-  mine
+  chosen
 }: {
   token: string;
   days: GridDay[];
-  mine: string[];
+  chosen: string | null;
 }) {
   const [state, formAction] = useFormState(saveMentorAvailabilityAction, INITIAL_MENTOR_AVAILABILITY_STATE);
 
-  // Chỉ những ngày còn ít nhất một giờ chưa trôi qua. Ngày đã hết thì hiện ra
-  // chỉ tổ làm trang dài thêm.
+  // Chỉ những ngày còn ít nhất một giờ chưa trôi qua.
   const openDays = useMemo(
-    () => days.map((day) => ({ ...day, slots: day.slots.filter((slot) => !slot.isPast) })).filter((day) => day.slots.length > 0),
+    () =>
+      days
+        .map((day) => ({ ...day, slots: day.slots.filter((slot) => !slot.isPast) }))
+        .filter((day) => day.slots.length > 0),
     [days]
   );
 
-  const serverChecked = useMemo(() => new Set(mine), [mine]);
-  // Chữ ký của dữ liệu máy chủ: giờ đã khai, cộng số ô còn bấm được. Trang này
-  // có <LiveRefresh /> đọc lại mỗi 15 giây, và props luôn là mảng MỚI kể cả khi
-  // dữ liệu y hệt — đồng bộ theo danh tính sẽ xoá sạch ô vừa tick (đúng lỗi đã
-  // sửa ở lưới interviewer ngày 23/09/2026).
+  // Trang này có <LiveRefresh /> đọc lại máy chủ mỗi 15 giây, và props luôn là
+  // mảng MỚI kể cả khi dữ liệu y hệt. Đồng bộ theo danh tính sẽ xoá ô vừa chọn
+  // — đúng lỗi đã sửa ở lưới interviewer ngày 23/09/2026 — nên chỉ đồng bộ khi
+  // CHỮ KÝ dữ liệu đổi.
   const signature = useMemo(
-    () => `${[...mine].sort().join("|")}#${openDays.map((day) => `${day.dateKey}:${day.slots.length}`).join(",")}`,
-    [mine, openDays]
+    () => `${chosen ?? "-"}#${openDays.map((day) => `${day.dateKey}:${day.slots.length}`).join(",")}`,
+    [chosen, openDays]
   );
 
-  const [checked, setChecked] = useState<Set<string>>(serverChecked);
+  const [selected, setSelected] = useState<string>(chosen ?? "");
   const lastSignature = useRef(signature);
   useEffect(() => {
     if (lastSignature.current === signature) return;
     lastSignature.current = signature;
-    setChecked((current) => {
-      // Ở ô còn bấm được, phần đang làm dở của người dùng được giữ; mọi thứ
-      // khác lấy theo máy chủ.
-      const next = new Set(serverChecked);
-      for (const day of openDays) {
-        for (const slot of day.slots) {
-          if (current.has(slot.startsAtIso)) next.add(slot.startsAtIso);
-          else next.delete(slot.startsAtIso);
-        }
-      }
-      return next;
-    });
-  }, [signature, openDays, serverChecked]);
+    setSelected(chosen ?? "");
+  }, [signature, chosen]);
 
-  const toggle = (iso: string) => {
-    setChecked((current) => {
-      const next = new Set(current);
-      if (next.has(iso)) next.delete(iso);
-      else next.add(iso);
-      return next;
-    });
-  };
-
-  const toggleDay = (day: GridDay) => {
-    const allOn = day.slots.every((slot) => checked.has(slot.startsAtIso));
-    setChecked((current) => {
-      const next = new Set(current);
-      for (const slot of day.slots) {
-        if (allOn) next.delete(slot.startsAtIso);
-        else next.add(slot.startsAtIso);
-      }
-      return next;
-    });
-  };
-
-  const { add, remove } = useMemo(() => {
-    const toAdd: string[] = [];
-    const toRemove: string[] = [];
-    for (const day of openDays) {
-      for (const slot of day.slots) {
-        const was = serverChecked.has(slot.startsAtIso);
-        const want = checked.has(slot.startsAtIso);
-        if (want && !was) toAdd.push(slot.startsAtIso);
-        if (!want && was) toRemove.push(slot.startsAtIso);
-      }
-    }
-    return { add: toAdd, remove: toRemove };
-  }, [openDays, serverChecked, checked]);
+  const dirty = selected !== (chosen ?? "");
+  const label = !selected ? "Bỏ giờ đã chọn" : chosen && chosen !== selected ? "Đổi sang giờ này" : "Chọn giờ này";
 
   return (
     <form action={formAction} className="grid gap-4">
       <input type="hidden" name="token" value={token} />
-      <input type="hidden" name="add" value={JSON.stringify(add)} />
-      <input type="hidden" name="remove" value={JSON.stringify(remove)} />
+      <input type="hidden" name="slotStartsAt" value={selected} />
+
+      {chosen ? (
+        <p className="rounded-md border border-vam-green/40 bg-vam-mint/40 px-3 py-2 text-sm text-vam-ink">
+          Anh/chị đang chờ được ghép vào <strong>{slotRangeLabel(chosen)}</strong>. Chọn ô khác bên dưới nếu muốn
+          đổi giờ.
+        </p>
+      ) : null}
 
       {state.status !== "idle" ? (
         <p
@@ -139,14 +104,14 @@ export function MentorAvailabilityForm({
             <legend className="px-1 text-sm font-semibold text-vam-ink">{day.label}</legend>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {day.slots.map((slot) => {
-                const on = checked.has(slot.startsAtIso);
+                const on = selected === slot.startsAtIso;
                 return (
                   <button
                     key={slot.startsAtIso}
                     type="button"
                     aria-pressed={on}
                     aria-label={`${day.label} ${String(slot.hour).padStart(2, "0")}:00`}
-                    onClick={() => toggle(slot.startsAtIso)}
+                    onClick={() => setSelected((current) => (current === slot.startsAtIso ? "" : slot.startsAtIso))}
                     className={`rounded-md border px-2.5 py-2 text-sm ${
                       on
                         ? "border-vam-green bg-vam-green font-semibold text-white"
@@ -157,22 +122,15 @@ export function MentorAvailabilityForm({
                   </button>
                 );
               })}
-              <button
-                type="button"
-                onClick={() => toggleDay(day)}
-                className="rounded-md border border-vam-line px-2.5 py-2 text-xs text-slate-600"
-              >
-                cả ngày
-              </button>
             </div>
           </fieldset>
         ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton />
+        <SubmitButton label={label} disabled={!dirty} />
         <span className="text-xs text-slate-500">
-          Đang chờ lưu: thêm {add.length} giờ, bỏ {remove.length} giờ.
+          Mỗi lần chỉ chọn được một khung giờ. Chọn ô khác là tự bỏ ô cũ.
         </span>
       </div>
     </form>

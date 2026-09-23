@@ -162,48 +162,68 @@ const AVAIL_DAYS = [
   }
 ];
 
-describe("4. lưới mentor tự khai giờ rảnh", () => {
-  function hidden(container: HTMLElement) {
-    return {
-      add: JSON.parse((container.querySelector('input[name="add"]') as HTMLInputElement).value) as string[],
-      remove: JSON.parse((container.querySelector('input[name="remove"]') as HTMLInputElement).value) as string[]
-    };
+describe("4. mentor chọn một giờ rảnh", () => {
+  const H09 = "2026-09-24T02:00:00.000Z";
+  const H10 = "2026-09-24T03:00:00.000Z";
+
+  function picked(container: HTMLElement) {
+    return (container.querySelector('input[name="slotStartsAt"]') as HTMLInputElement).value;
   }
 
   /** Bản sao mới tinh của cùng dữ liệu — đúng thứ router.refresh() trả về. */
   const freshDays = () => AVAIL_DAYS.map((day) => ({ ...day, slots: day.slots.map((slot) => ({ ...slot })) }));
 
   it("chỉ hiện ngày còn giờ chưa trôi qua, và giờ đã qua không có nút để bấm", () => {
-    render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} mine={[]} />);
+    render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} chosen={null} />);
     expect(screen.getByText("Thứ Năm 24/09/2026")).toBeTruthy();
     expect(screen.queryByText("Thứ Sáu 25/09/2026")).toBeNull();
     expect(screen.queryByLabelText("Thứ Năm 24/09/2026 07:00")).toBeNull();
   });
 
-  it("phần chênh nằm trong ô ẩn: tick giờ mới → add, bỏ giờ đã khai → remove", () => {
-    const { container } = render(
-      <MentorAvailabilityForm token="tok" days={AVAIL_DAYS} mine={["2026-09-24T02:00:00.000Z"]} />
-    );
-    expect(hidden(container)).toEqual({ add: [], remove: [] });
+  it("chọn ô khác là THAY chứ không cộng thêm — một lần chỉ một giờ", () => {
+    const { container } = render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} chosen={null} />);
+    expect(picked(container)).toBe("");
 
-    fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 10:00"));
     fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 09:00"));
-    expect(hidden(container)).toEqual({
-      add: ["2026-09-24T03:00:00.000Z"],
-      remove: ["2026-09-24T02:00:00.000Z"]
-    });
-  });
+    expect(picked(container)).toBe(H09);
 
-  it("trang tự làm mới không được xoá ô vừa tick — cùng lỗi đã sửa ở lưới interviewer", () => {
-    const { container, rerender } = render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} mine={[]} />);
     fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 10:00"));
-    rerender(<MentorAvailabilityForm token="tok" days={freshDays()} mine={[]} />);
-    expect(hidden(container).add).toEqual(["2026-09-24T03:00:00.000Z"]);
+    expect(picked(container)).toBe(H10);
+    // Ô cũ phải thôi được nhấn — nếu cả hai cùng nhấn thì màn hình đang hứa
+    // một thứ mà database không cho.
+    expect(screen.getByLabelText("Thứ Năm 24/09/2026 09:00").getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("nút lưu nói rõ đây là khai giờ rảnh, không phải giữ chỗ", () => {
-    render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} mine={[]} />);
-    expect(screen.getByRole("button", { name: "Lưu giờ tôi rảnh" })).toBeTruthy();
+  it("bấm lại đúng ô đang chọn là bỏ chọn", () => {
+    const { container } = render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} chosen={null} />);
+    fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 09:00"));
+    fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 09:00"));
+    expect(picked(container)).toBe("");
+    expect(screen.getByRole("button", { name: "Bỏ giờ đã chọn" })).toBeTruthy();
+  });
+
+  it("đang chờ một giờ thì trang nói rõ, và nút chuyển thành đổi giờ", () => {
+    render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} chosen={H09} />);
+    expect(screen.getByText(/đang chờ được ghép vào/)).toBeTruthy();
+    // Chưa đổi gì thì không có gì để lưu.
+    expect((screen.getByRole("button", { name: "Chọn giờ này" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 10:00"));
+    expect((screen.getByRole("button", { name: "Đổi sang giờ này" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("trang tự làm mới không được xoá ô vừa chọn — cùng lỗi đã sửa ở lưới interviewer", () => {
+    const { container, rerender } = render(
+      <MentorAvailabilityForm token="tok" days={AVAIL_DAYS} chosen={null} />
+    );
+    fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 10:00"));
+    rerender(<MentorAvailabilityForm token="tok" days={freshDays()} chosen={null} />);
+    expect(picked(container)).toBe(H10);
+  });
+
+  it("chữ trên màn hình không được nghe như đã giữ chỗ", () => {
+    render(<MentorAvailabilityForm token="tok" days={AVAIL_DAYS} chosen={null} />);
+    expect(screen.getByText(/Mỗi lần chỉ chọn được một khung giờ/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Giữ chỗ/ })).toBeNull();
   });
 });

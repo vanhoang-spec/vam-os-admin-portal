@@ -42,6 +42,14 @@ describe("1. bảng giờ rảnh do mentor khai", () => {
     expect(sql).toContain("unique (application_id, slot_starts_at)");
   });
 
+  it("một mentor chỉ giữ MỘT lời ngỏ đang mở — luật canh ở database, không ở tầng ứng dụng", () => {
+    expect(sql).toMatch(
+      /create unique index if not exists interview_mentor_availability_active_uidx\s+on public\.interview_mentor_availability \(application_id\)\s+where status = 'open'/
+    );
+    // Và khối tự kiểm phải canh chính chỉ số đó ở mỗi lần chạy lại.
+    expect(sql).toContain("thiếu chỉ số một-mentor-một-lời-ngỏ");
+  });
+
   it("chỉ nhận ô đúng lưới: tròn giờ, 07..21 giờ Việt Nam", () => {
     expect(sql).toContain("at time zone 'Asia/Ho_Chi_Minh'");
     expect(sql).toContain("between 7 and 21");

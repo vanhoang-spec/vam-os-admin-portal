@@ -508,11 +508,15 @@ export type BookingPageData =
       windowEndLabel: string;
       hotlineZalo: string;
       /**
-       * Chiều ngược: lưới để mentor tự khai giờ MÌNH rảnh. Luôn hiện song song
+       * Chiều ngược: lưới để mentor chọn MỘT giờ mình rảnh. Luôn hiện song song
        * với phần giữ chỗ (chủ dự án chốt 23/09/2026) — người bận đúng những giờ
        * đang mở vẫn nói ra được thay vì đóng trang rồi thôi.
+       *
+       * `chosen` là một giá trị chứ không phải một danh sách: mỗi mentor chỉ giữ
+       * một lời ngỏ tại một thời điểm, và database canh điều đó bằng chỉ số bộ
+       * phận chứ không tin vào tầng này.
        */
-      availability: { days: GridDay[]; mine: string[] };
+      availability: { days: GridDay[]; chosen: string | null };
     };
 
 const INVALID_LINK: BookingPageData = {
@@ -654,7 +658,7 @@ export async function getBookingPageData(token: unknown): Promise<BookingPageDat
     }))
     .filter((day) => day.hours.length > 0);
 
-  // Giờ chính mentor này đã khai là mình rảnh — để lưới mở ra đã tick sẵn.
+  // Giờ mentor này đang chờ — nhiều nhất một dòng, database canh bằng chỉ số.
   const mine = await readAllPages<Json>("interview_mentor_availability", "slot_starts_at", (columns) =>
     client
       .from("interview_mentor_availability")
@@ -677,7 +681,7 @@ export async function getBookingPageData(token: unknown): Promise<BookingPageDat
     hotlineZalo: HOTLINE_ZALO,
     availability: {
       days: buildSlotGrid(nowIso),
-      mine: mine.data.map((row) => normIso(row.slot_starts_at))
+      chosen: mine.data.length > 0 ? normIso(mine.data[0].slot_starts_at) : null
     }
   };
 }
@@ -834,33 +838,30 @@ async function sendBookingConfirmationEmails(payload: Json, bookingToken: string
 // Chiều ngược: mentor khai giờ mình rảnh, interviewer mở lưới ra ghép
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SaveMentorAvailabilityResult = {
-  ok: boolean;
-  message: string;
-  /** Giờ xin bỏ nhưng vừa được ghép mất — không bỏ được, và phải nói rõ. */
-  blockedRemovals: string[];
-};
+export type SaveMentorAvailabilityResult = { ok: boolean; message: string };
 
 /**
- * Mentor tick giờ mình rảnh. Không phải là giữ chỗ: không ai bị hẹn ở đây, chỉ
- * là một lời ngỏ để interviewer mở lưới ra thấy mà ghép.
+ * Mentor chọn MỘT giờ mình rảnh, rồi chờ interviewer khớp vào đúng giờ đó.
  *
- * Cùng khuôn ghi với saveInterviewerSlots: thêm giờ là upsert rồi mở lại dòng
- * đã bỏ (reset available_since — đã rút lời thì xếp cuối hàng FIFO), bỏ giờ là
- * update CÓ ĐIỀU KIỆN status='open' nên một ô vừa được ghép giữa chừng sẽ không
- * khớp và buổi hẹn không bị xoá ngầm.
+ * Không phải là giữ chỗ: không ai bị hẹn ở đây. Và chỉ một giờ tại một thời
+ * điểm (chủ dự án chốt 23/09/2026) — chọn giờ khác nghĩa là bỏ giờ cũ, chuỗi
+ * rỗng nghĩa là thôi không chờ nữa.
+ *
+ * Thứ tự ghi là phần đáng chú ý: bỏ lời ngỏ cũ TRƯỚC rồi mới mở lời ngỏ mới.
+ * Chỉ số bộ phận chỉ cho một dòng 'open' mỗi người, nên làm ngược lại sẽ vấp
+ * 23505 — và đó chính là tấm lưới đỡ khi hai tab của cùng một người bấm hai giờ
+ * khác nhau trong cùng một giây.
  */
 export async function saveMentorAvailability(input: {
   token: unknown;
-  add: string[];
-  remove: string[];
+  slotStartsAt: unknown;
 }): Promise<SaveMentorAvailabilityResult> {
   const client = serviceClient();
-  if (!client) return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
+  if (!client) return { ok: false, message: SAFE_ERROR };
 
   const token = clean(input.token);
   if (!token || !isValidUuid(token)) {
-    return { ok: false, message: BOOK_ERROR_MESSAGES.invalid_token, blockedRemovals: [] };
+    return { ok: false, message: BOOK_ERROR_MESSAGES.invalid_token };
   }
 
   const { data: invite, error: inviteError } = await client
@@ -870,10 +871,10 @@ export async function saveMentorAvailability(input: {
     .maybeSingle();
   if (inviteError) {
     log("invite lookup failed", inviteError);
-    return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (!invite?.application_id) {
-    return { ok: false, message: BOOK_ERROR_MESSAGES.invalid_token, blockedRemovals: [] };
+    return { ok: false, message: BOOK_ERROR_MESSAGES.invalid_token };
   }
   const applicationId = String(invite.application_id);
 
@@ -884,7 +885,7 @@ export async function saveMentorAvailability(input: {
     .maybeSingle();
   if (appError || !app) {
     log("application read failed", appError);
-    return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
+    return { ok: false, message: SAFE_ERROR };
   }
 
   // Đã có lịch rồi thì lời ngỏ không còn nghĩa gì. Kiểm lại ở máy chủ chứ
@@ -897,10 +898,10 @@ export async function saveMentorAvailability(input: {
     .limit(1);
   if (bookedError) {
     log("booking check failed", bookedError);
-    return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
+    return { ok: false, message: SAFE_ERROR };
   }
   if ((booked ?? []).length > 0) {
-    return { ok: false, message: BOOK_ERROR_MESSAGES.already_booked, blockedRemovals: [] };
+    return { ok: false, message: BOOK_ERROR_MESSAGES.already_booked };
   }
 
   const reviews = await readAllPages<Json>("application_reviews", "id,status,review_round", (columns) =>
@@ -913,82 +914,84 @@ export async function saveMentorAvailability(input: {
   );
   if (reviews.error) {
     log("reviews read failed", reviews.error);
-    return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
+    return { ok: false, message: SAFE_ERROR };
   }
   if (!isBookingEligibleApplication(app, reviews.data.map((row) => String(row.id)), null)) {
-    return { ok: false, message: BOOK_ERROR_MESSAGES.application_not_eligible, blockedRemovals: [] };
+    return { ok: false, message: BOOK_ERROR_MESSAGES.application_not_eligible };
   }
 
   const nowIso = new Date().toISOString();
-  const adds: string[] = [];
-  for (const raw of input.add) {
-    const checked = isValidSlotInstant(clean(raw), nowIso);
-    if (!checked.ok) {
-      return { ok: false, message: "Có khung giờ không hợp lệ hoặc đã qua — tải lại trang rồi chọn lại.", blockedRemovals: [] };
-    }
-    adds.push(checked.startsAtIso);
-  }
-  const removes: string[] = [];
-  for (const raw of input.remove) {
-    const checked = isValidSlotInstant(clean(raw), nowIso);
-    if (!checked.ok) {
-      return { ok: false, message: "Có khung giờ không hợp lệ hoặc đã qua — tải lại trang rồi chọn lại.", blockedRemovals: [] };
-    }
-    removes.push(checked.startsAtIso);
-  }
+  const wanted = clean(input.slotStartsAt);
 
-  if (adds.length > 0) {
-    const { error: insertError } = await client.from("interview_mentor_availability").upsert(
-      adds.map((startsAt) => ({
-        application_id: applicationId,
-        season_id: String(app.season_id),
-        slot_starts_at: startsAt,
-        status: "open"
-      })),
-      { onConflict: "application_id,slot_starts_at", ignoreDuplicates: true }
-    );
-    if (insertError) {
-      log("mentor availability upsert failed", insertError);
-      return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
-    }
-    const { error: reopenError } = await client
-      .from("interview_mentor_availability")
-      .update({ status: "open", available_since: nowIso, removed_at: null })
-      .eq("application_id", applicationId)
-      .in("slot_starts_at", adds)
-      .eq("status", "removed");
-    if (reopenError) {
-      log("mentor availability reopen failed", reopenError);
-      return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
-    }
-  }
-
-  const blockedRemovals: string[] = [];
-  if (removes.length > 0) {
-    const { data: removed, error: removeError } = await client
+  /**
+   * Gỡ mọi lời ngỏ đang mở, trừ giờ vừa chọn. Điều kiện status='open' giữ
+   * nguyên dòng đã ghép — dòng đó là bằng chứng của một buổi hẹn, không phải
+   * một lựa chọn đang chờ.
+   */
+  async function clearOpenExcept(except: string | null) {
+    let query = client!
       .from("interview_mentor_availability")
       .update({ status: "removed", removed_at: nowIso })
       .eq("application_id", applicationId)
-      .in("slot_starts_at", removes)
-      .eq("status", "open")
-      .select("slot_starts_at");
-    if (removeError) {
-      log("mentor availability remove failed", removeError);
-      return { ok: false, message: SAFE_ERROR, blockedRemovals: [] };
+      .eq("status", "open");
+    if (except) query = query.neq("slot_starts_at", except);
+    return query;
+  }
+
+  if (!wanted) {
+    const { error } = await clearOpenExcept(null);
+    if (error) {
+      log("mentor availability clear failed", error);
+      return { ok: false, message: SAFE_ERROR };
     }
-    const removedSet = new Set((removed ?? []).map((row: Json) => normIso(row.slot_starts_at)));
-    for (const startsAt of removes) {
-      if (!removedSet.has(startsAt)) blockedRemovals.push(startsAt);
-    }
+    return { ok: true, message: "Đã bỏ giờ anh/chị khai. Lúc nào rảnh lại, anh/chị chọn giờ khác." };
+  }
+
+  const checked = isValidSlotInstant(wanted, nowIso);
+  if (!checked.ok) {
+    return { ok: false, message: "Khung giờ không hợp lệ hoặc đã qua — tải lại trang rồi chọn lại." };
+  }
+
+  const { error: clearError } = await clearOpenExcept(checked.startsAtIso);
+  if (clearError) {
+    log("mentor availability clear failed", clearError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  const { error: insertError } = await client.from("interview_mentor_availability").upsert(
+    [
+      {
+        application_id: applicationId,
+        season_id: String(app.season_id),
+        slot_starts_at: checked.startsAtIso,
+        status: "open"
+      }
+    ],
+    { onConflict: "application_id,slot_starts_at", ignoreDuplicates: true }
+  );
+  if (insertError) {
+    log("mentor availability upsert failed", insertError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  // Dòng cũ của đúng giờ này có thể đang 'removed' (từng bỏ rồi chọn lại) hoặc
+  // 'matched' (từng được ghép rồi huỷ lịch). Cả hai đều mở lại được — đến đây
+  // thì đã chắc người này không còn buổi hẹn nào đang hiệu lực. available_since
+  // reset: đã rút lời thì xếp lại cuối hàng FIFO.
+  const { error: reopenError } = await client
+    .from("interview_mentor_availability")
+    .update({ status: "open", available_since: nowIso, removed_at: null, matched_booking_id: null, matched_at: null })
+    .eq("application_id", applicationId)
+    .eq("slot_starts_at", checked.startsAtIso)
+    .in("status", ["removed", "matched"]);
+  if (reopenError) {
+    log("mentor availability reopen failed", reopenError);
+    return { ok: false, message: SAFE_ERROR };
   }
 
   return {
     ok: true,
-    message:
-      blockedRemovals.length > 0
-        ? "Đã lưu. Có khung giờ vừa được ban tổ chức ghép nên không bỏ được — anh/chị xem lại lịch hẹn ở đầu trang."
-        : "Đã lưu giờ rảnh của anh/chị. Ban tổ chức sẽ ghép và gửi thư xác nhận.",
-    blockedRemovals
+    message: `Đã ghi nhận anh/chị rảnh ${slotRangeLabel(checked.startsAtIso)}. Ban tổ chức sẽ ghép và gửi thư xác nhận.`
   };
 }
 

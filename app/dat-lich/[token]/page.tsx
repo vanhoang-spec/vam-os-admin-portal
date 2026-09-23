@@ -106,17 +106,18 @@ export default async function PublicInterviewBookingPage(props: { params: Promis
             <Card className="mt-5">
               <h2 className="mb-1 text-base font-semibold text-vam-ink">Giờ anh/chị rảnh</h2>
               <p className="mb-1 text-sm text-vam-ink">
-                Không có khung giờ nào ở trên hợp với anh/chị? Tick những giờ mình rảnh rồi bấm lưu. Ban tổ chức
-                nhìn thấy ngay và sẽ ghép người phỏng vấn vào đúng giờ đó.
+                Không có khung giờ nào ở trên hợp với anh/chị? Chọn <strong>một</strong> khung giờ mình rảnh rồi
+                bấm lưu, và chờ ban tổ chức ghép người phỏng vấn vào đúng giờ đó.
               </p>
               <p className="mb-4 text-xs text-slate-500">
                 Lưu ở đây <strong>chưa phải là lịch hẹn</strong> — chỉ khi ban tổ chức ghép xong, anh/chị mới nhận
-                thư xác nhận kèm tên và số điện thoại người phỏng vấn. Khai càng nhiều giờ, ghép càng nhanh.
+                thư xác nhận kèm tên và số điện thoại người phỏng vấn. Trong lúc chờ, anh/chị đổi sang giờ khác
+                lúc nào cũng được.
               </p>
               <MentorAvailabilityForm
                 token={params.token}
                 days={data.availability.days}
-                mine={data.availability.mine}
+                chosen={data.availability.chosen}
               />
             </Card>
 
