@@ -11,6 +11,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_CAP_QUYEN_REVIEWER.pdf` | Support team, Core team | Một trang: mời reviewer — cấp quyền chấm hồ sơ / phỏng vấn, thư đặt mật khẩu qua Brevo, reviewer đăng nhập bằng mật khẩu, các lỗi thường gặp |
 | `HUONG_DAN_CONG_CU_AI.pdf` | Super Admin, Admin, Core team, Support team | Một trang: sáu công cụ AI, các bước chạy và lưu kết quả, quy tắc không đưa dữ liệu cá nhân sang DeepSeek, các lỗi thường gặp |
 | `HUONG_DAN_LICH_PHONG_VAN.pdf` | Core team, Support team, BTC tuyển sinh | Một trang: lịch phỏng vấn mentor 1:1 — interviewer đăng giờ rảnh, ứng viên tự giữ chỗ qua link riêng, thư mời/nhắc tự động, huỷ và đổi lịch, các tình huống thường gặp |
+| `HUONG_DAN_CANVA_AI.pdf` | Support team, Core team | Một trang: dùng công cụ **Brief thiết kế cho Canva AI** trên app để soạn prompt tiếng Anh, rồi dán sang Canva AI ra key visual / poster / video — kèm ba thứ luôn phải sửa tay và quy tắc không đưa dữ liệu cá nhân ra ngoài |
 
 ## Sửa và xuất lại bản PDF
 
@@ -80,3 +81,18 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 - Ô cảnh báo vàng "thư chỉ tự đi khi có tab đang mở" mô tả trạng thái CHƯA bật
   CRON_SECRET — ngày nào bật cron thật thì viết lại ô đó (test sẽ nhắc)
 - Giữ **đúng một trang**: in xong, mở PDF kiểm lại số trang
+
+**Canva AI (một trang):**
+
+- Nhãn ô nhập, nhãn nút, lời báo lỗi và số file/dung lượng —
+  `__tests__/huong-dan-canva-ai.test.ts` đối chiếu từng câu với `app/ai/ai-tools.tsx`,
+  `app/ai/ai-shared.tsx`, `lib/ai/ai-core.ts`, `lib/ai/upload-core.ts` và
+  `lib/ai/prompts.ts`
+- Ba phần của kết quả (ghi chú → prompt đánh số → checklist) mô tả đúng cấu trúc
+  mà `canvaBriefPrompt` yêu cầu model trả về — đổi cấu trúc đó thì sửa cả tài liệu
+- **Nửa Canva cố ý không ghim vào nhãn nút của Canva.** Đó là sản phẩm của bên
+  khác, họ đổi giao diện lúc nào tuỳ họ và không ai báo. Tài liệu tả theo chức
+  năng ("ô nhập mô tả"), và test canh chính sự cố ý đó — đừng "sửa cho chính xác"
+  bằng cách chép tên nút hiện tại của Canva vào
+- Giữ **đúng một trang**: test tự đếm số trang trong PDF, nên sửa HTML xong phải
+  dựng lại PDF bằng lệnh Chrome ở trên

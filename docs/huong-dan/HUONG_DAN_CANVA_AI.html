@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Từ VAM OS sang Canva AI — Hướng dẫn cho Support team</title>
+<style>
+  @page { size: A4; margin: 9mm 11mm 8mm 11mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+    --code-bg: #0f2a20;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 8.7pt;
+    line-height: 1.38;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  /* ── Đầu trang ───────────────────────────────────────────────────── */
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.4mm; margin-bottom: 3mm;
+  }
+  .eyebrow {
+    font-size: 7.2pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  h1 { font-size: 18pt; line-height: 1.1; margin: 1.1mm 0 .9mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 9pt; max-width: 128mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.4pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  /* ── Bố cục ──────────────────────────────────────────────────────── */
+  .grid { display: grid; grid-template-columns: 1.06fr 1fr; gap: 5.4mm; align-items: start; }
+  h2 {
+    font-size: 8.2pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin: 0 0 1.5mm; font-weight: 700;
+  }
+  .block + .block { margin-top: 2.9mm; }
+  p { margin: 0 0 1.5mm; }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.4mm; font-size: 8.1pt; font-weight: 600; white-space: nowrap;
+  }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 1.2mm; font-size: 8.1pt; white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  .prep {
+    background: var(--mint); border-left: 3px solid var(--green);
+    padding: 2mm 3mm; margin-bottom: 2.9mm;
+  }
+  .prep b.h { display: block; margin-bottom: .5mm; }
+  .prep ul { margin: 0; padding-left: 4mm; }
+  .prep li { margin: .45mm 0; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.4mm; margin-bottom: 1.9mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5.2mm; height: 5.2mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 8pt; text-align: center; line-height: 5.2mm;
+  }
+  ol.steps b.t { display: block; font-size: 9.2pt; margin-bottom: .2mm; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 8.2pt; margin-top: 1.2mm; }
+  th, td { border: 1px solid var(--line); padding: 1mm 1.6mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+
+  ul.tight { margin: 0; padding-left: 4mm; }
+  ul.tight li { margin: .55mm 0; }
+
+  /* Mẫu kết quả: ba khối AI trả về, xếp đúng thứ tự người đọc sẽ thấy. */
+  .out { border: 1px solid var(--line); border-radius: 3px; overflow: hidden; margin-top: 1.4mm; }
+  .out .cap {
+    background: #f6f9f7; color: var(--muted); padding: .7mm 2mm;
+    font-size: 6.9pt; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .out .part { padding: 1.3mm 2mm; border-top: 1px solid var(--line); font-size: 7.9pt; }
+  .out .part:first-of-type { border-top: 0; }
+  .out .tag {
+    display: inline-block; background: var(--mint); color: var(--green);
+    border-radius: 3px; padding: 0 1.2mm; font-size: 6.9pt; font-weight: 700; margin-right: 1.2mm;
+  }
+  .en {
+    display: block; margin-top: .7mm; background: var(--code-bg); color: #d7f0e2;
+    border-radius: 3px; padding: 1.4mm 2mm; font-size: 7.5pt; line-height: 1.34;
+  }
+
+  .warn {
+    background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink);
+    padding: 2mm 3mm;
+  }
+  .warn b.h { display: block; margin-bottom: .45mm; }
+  .warn ul { margin: 0; padding-left: 4mm; }
+  .warn li { margin: .45mm 0; }
+
+  footer {
+    margin-top: 2.6mm; border-top: 1px solid var(--line); padding-top: 1.4mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7.1pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho Support team · Thiết kế</div>
+    <h1>Từ VAM OS sang Canva AI</h1>
+    <p class="sub">VAM OS soạn giúp bạn <b>prompt tiếng Anh</b>; Canva AI biến prompt đó thành hình.
+      Bạn không cần biết viết prompt — chỉ cần tả rõ mình muốn gì bằng tiếng Việt.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 23/09/2026</div>
+</header>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái: làm trong VAM OS ─────────────── -->
+  <div>
+    <div class="prep">
+      <b class="h">Trước khi bắt đầu</b>
+      <ul>
+        <li>Công cụ AI mở cho <b>Super Admin, Admin, Core team và Support team</b>. Nếu thấy
+          <span class="err">Vai trò của bạn không dùng được Công cụ AI.</span> thì nhờ Admin cấp quyền.</li>
+        <li>Chuẩn bị sẵn <b>đoạn chữ chính xác</b> sẽ hiện trên thiết kế (tên sự kiện, ngày giờ, địa điểm,
+          câu kêu gọi). AI không tự bịa những thứ này, và cũng không nên bịa.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Bước 1–4 · Trong VAM OS</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Mở công cụ</b>
+          Menu <span class="path">Vận hành → Công cụ AI</span>, tìm thẻ
+          <b>Brief thiết kế cho Canva AI</b>.
+        </li>
+        <li>
+          <b class="t">Điền “Hạng mục cần thiết kế”</b>
+          Ô bắt buộc. Viết rõ một sản phẩm: <span class="ui">Key visual, backdrop, standee, bài đăng Facebook…</span>
+          Cần nhiều sản phẩm thì cứ ghi cả, AI sẽ tách thành nhiều prompt đánh số.
+        </li>
+        <li>
+          <b class="t">Điền “Ghi chú / định hướng (tuỳ chọn)”</b>
+          Đây là ô quyết định chất lượng. Viết: <b>đúng câu chữ</b> muốn hiện trên thiết kế, tông màu,
+          phong cách hình ảnh, khổ/kích thước, và điều cần tránh.
+          Muốn <b>video</b> thì nói thẳng ở đây: “video 5 giây, máy quay lia chậm, không có chữ”.
+        </li>
+        <li>
+          <b class="t">Đính kèm nếu có brief sẵn</b>
+          <span class="ui">Tài liệu đính kèm (tuỳ chọn)</span> — PDF, DOCX, XLSX, TXT, CSV, MD,
+          tối đa <b>3 file</b>, mỗi file <b>8MB</b>. AI chỉ đọc chữ trong file; file scan dạng ảnh
+          không đọc được. App không lưu file.
+          Rồi bấm <span class="btn solid">Chạy trợ lý</span> và chờ — có thể tới một phút.
+        </li>
+      </ol>
+    </div>
+
+    <div class="block">
+      <h2>Kết quả trả về gồm ba phần</h2>
+      <div class="out">
+        <div class="cap">Minh hoạ — nội dung thật sẽ theo brief của bạn</div>
+        <div class="part"><span class="tag">1</span><b>Ghi chú cho người thiết kế</b> — tiếng Việt,
+          1–2 câu bối cảnh và điều cần sửa tay sau khi xuất.</div>
+        <div class="part"><span class="tag">2</span><b>Prompt 1: Key visual</b> — tiếng Anh, dán thẳng
+          vào Canva.
+          <span class="en">Vertical event key visual for a university mentoring programme. Warm green
+          and cream palette, clean editorial layout, soft daylight photography. Headline text exactly:
+          "UEH Mentoring Mùa 12". Leave clear space at the bottom for a logo.</span></div>
+        <div class="part"><span class="tag">3</span><b>Checklist trước khi gửi duyệt</b> — logo thật,
+          chính tả, kích thước xuất.</div>
+      </div>
+      <p style="margin-top:1.4mm">Bấm <span class="btn">Sao chép</span> để lấy cả tài liệu, hoặc
+        <span class="btn">Tải Word</span> / <span class="btn">Tải PDF</span> để gửi cho người khác.
+        Không vừa ý thì sửa ô Ghi chú rồi bấm <span class="btn">Chạy lại</span>.</p>
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải: sang Canva ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>Bước 5–7 · Sang Canva AI</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Mở công cụ AI trong Canva</b>
+          Đăng nhập canva.com, vào nhóm tính năng AI (Magic Studio) — tạo ảnh/thiết kế bằng mô tả, hoặc
+          tạo video bằng mô tả. Canva đổi tên nút khá thường xuyên: cứ tìm <b>ô nhập mô tả</b>, đừng
+          tìm đúng chữ.
+        </li>
+        <li>
+          <b class="t">Dán MỘT prompt, không dán cả tài liệu</b>
+          Mỗi “Prompt N” là một sản phẩm riêng. Dán cả trang (có cả tiếng Việt lẫn checklist) thì Canva
+          hiểu sai và ra hình lộn xộn. Làm xong prompt 1 rồi quay lại lấy prompt 2.
+        </li>
+        <li>
+          <b class="t">Chỉnh tay ba thứ AI luôn làm sai</b>
+          <ul class="tight" style="margin-top:.5mm">
+            <li><b>Logo</b> — AI vẽ logo giả. Xoá, chèn logo thật của chương trình.</li>
+            <li><b>Dấu tiếng Việt</b> — chữ AI sinh ra hay rơi dấu. Xoá chữ của AI, gõ lại bằng ô text
+              của Canva.</li>
+            <li><b>Màu nhận diện</b> — không đưa mã màu thì AI ghi “placeholder palette” và tự chọn màu.
+              Thay bằng màu thật trước khi gửi duyệt.</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+
+    <div class="block">
+      <h2>Vì sao prompt là tiếng Anh</h2>
+      <p style="margin:0">Canva AI hiểu prompt tiếng Anh tốt hơn hẳn — ít lệch bố cục, ít lỗi font.
+        Phần ghi chú và checklist vẫn là tiếng Việt để bạn đọc ngay. <b>Đừng dịch prompt sang tiếng
+        Việt</b> trước khi dán.</p>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Hai điều không được làm</b>
+      <ul>
+        <li><b>Không đưa dữ liệu cá nhân vào ô nhập.</b> Không tên thật, email, số điện thoại hay ảnh
+          chân dung mentor/mentee. Chữ bạn gõ được gửi sang DeepSeek, và prompt bạn dán được gửi sang
+          Canva — cả hai đều là nhà cung cấp bên ngoài.</li>
+        <li><b>Không gửi thẳng thành phẩm đi.</b> Nội dung do AI soạn — người đọc phải kiểm lại trước
+          khi dùng. Mọi thiết kế đi ra ngoài đều qua Core team duyệt như thường lệ.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Khi gặp lỗi</h2>
+      <table>
+        <tr><th style="width:52%">Thấy</th><th>Làm gì</th></tr>
+        <tr><td class="err">Vai trò của bạn không dùng được Công cụ AI.</td>
+            <td>Nhờ Admin cấp quyền Support team trở lên.</td></tr>
+        <tr><td class="err">Trợ lý phản hồi quá lâu. Vui lòng thử lại.</td>
+            <td>Bấm <b>Chạy lại</b>. Vẫn lâu thì rút ngắn ghi chú hoặc bớt file đính kèm.</td></tr>
+        <tr><td class="err">DeepSeek đang từ chối yêu cầu…</td>
+            <td>Chờ vài phút rồi thử lại. Lặp lại nhiều lần thì báo Admin kiểm tra số dư.</td></tr>
+        <tr><td class="err">Chưa cấu hình khoá API DeepSeek…</td>
+            <td>Báo Admin. Bạn không tự xử lý được.</td></tr>
+        <tr><td class="err">Phiên đăng nhập đã hết hạn.</td>
+            <td>Đăng nhập lại rồi chạy lại. Kết quả cũ không được lưu.</td></tr>
+        <tr><td>Canva ra hình không giống mô tả</td>
+            <td>Không sửa prompt tiếng Anh bằng tay. Về VAM OS, viết rõ hơn ở ô Ghi chú, chạy lại.</td></tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn cho Support team · Brief thiết kế cho Canva AI</span>
+  <span>Một prompt một sản phẩm. Logo, dấu tiếng Việt và màu nhận diện luôn phải sửa tay.</span>
+</footer>
+
+</body>
+</html>
