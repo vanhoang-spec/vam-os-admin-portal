@@ -43,12 +43,35 @@ describe("1. thư mời và thư nhắc chọn giờ", () => {
 
   it("thư mời đầu không mang chữ 'Nhắc'", () => {
     const mail = buildInterviewSlotInviteEmail({ ...base, reminderNumber: 0 });
-    expect(mail.subject).toContain("Mời chọn giờ phỏng vấn mentor");
+    expect(mail.subject).toContain("Mời chọn giờ trao đổi với core team");
     expect(mail.subject).not.toContain("Nhắc");
     expect(mail.text).toContain(base.bookingUrl);
     expect(mail.text).toContain("05/10/2026");
     expect(mail.text).toContain(HOTLINE);
-    expect(mail.html).toContain("Chọn giờ phỏng vấn");
+    expect(mail.html).toContain("Chọn giờ trao đổi");
+  });
+
+  it("gọi đúng tên việc: trao đổi với core team, không phải phỏng vấn", () => {
+    // Chủ dự án chốt 23/09/2026: với mentor — những người tình nguyện — chữ
+    // "phỏng vấn" nghe như đi xin việc. Thư gửi HỌ phải nói "trao đổi với core
+    // team"; bản gửi người phỏng vấn và ban tổ chức giữ chữ nội bộ.
+    for (const reminderNumber of [0, 2]) {
+      const mail = buildInterviewSlotInviteEmail({ ...base, reminderNumber });
+      expect(mail.subject).not.toContain("phỏng vấn");
+      expect(mail.text).not.toContain("phỏng vấn");
+      expect(mail.html).not.toContain("phỏng vấn");
+      expect(mail.text).toContain("trao đổi");
+    }
+  });
+
+  it("mang câu nhắc đường dây hỗ trợ trong lúc hệ thống còn hoàn thiện", () => {
+    // Câu này sống chung với đợt hoàn thiện. Ngày gỡ nó ra thì ca test này đỏ
+    // — đúng chỗ cần nhìn lại, thay vì lặng lẽ biến mất khỏi bốn lá thư.
+    const mail = buildInterviewSlotInviteEmail({ ...base, reminderNumber: 0 });
+    expect(mail.text).toContain("0777885674");
+    expect(mail.text).toContain("Bảo Châu");
+    expect(mail.text).toContain("trong quá trình hoàn thiện");
+    expect(mail.html).toContain("0777885674");
   });
 
   it("thư nhắc nói thẳng đây là lần thứ mấy", () => {
@@ -139,7 +162,9 @@ describe("4. thư xác nhận đơn mentor mang thêm nút chọn giờ", () => 
       bookingUrl: `${ORIGIN}/dat-lich/ma-rieng`
     });
     expect(mail.text).toContain(`${ORIGIN}/dat-lich/ma-rieng`);
-    expect(mail.html).toContain("Chọn giờ phỏng vấn");
+    expect(mail.html).toContain("Chọn giờ trao đổi");
+    // Thư đầu tiên mentor nhận cũng phải mang đường dây hỗ trợ.
+    expect(mail.text).toContain("0777885674");
   });
 
   it("mentee truyền bookingUrl vào cũng KHÔNG thấy link — fail-closed", () => {

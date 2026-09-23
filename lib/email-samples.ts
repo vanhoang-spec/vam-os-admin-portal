@@ -134,8 +134,8 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
   {
     kind: "interview_slot_invite",
     group: "Nộp đơn và tuyển chọn",
-    title: "Mời mentor mới tự chọn giờ phỏng vấn",
-    audience: "Mentor đã nộp đơn, chưa phỏng vấn và chưa đặt lịch",
+    title: "Mời mentor mới tự chọn giờ trao đổi với core team",
+    audience: "Mentor đã nộp đơn, chưa trao đổi và chưa đặt lịch",
     trigger:
       "Khi có interviewer đăng giờ rảnh đầu tiên; nhắc lại sau mỗi 3 ngày nếu chưa chọn, tối đa 3 lần (lần 3 CC hộp thư ban tổ chức).",
     note: "Mỗi mentor nhận một đường dẫn riêng; mở link của người khác không đặt được.",
@@ -154,7 +154,7 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
     kind: "interview_scheduled",
     group: "Nộp đơn và tuyển chọn",
     title: "Xác nhận buổi hẹn cho mentor vừa đặt lịch",
-    audience: "Mentor vừa chọn xong một khung giờ phỏng vấn",
+    audience: "Mentor vừa chọn xong một khung giờ trao đổi",
     trigger: "Ngay khi mentor bấm giữ một khung giờ trên trang đặt lịch.",
     body: built(
       buildInterviewInviteEmail({
