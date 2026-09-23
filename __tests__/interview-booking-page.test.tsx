@@ -138,6 +138,26 @@ describe("3. khẳng định tĩnh trên mã nguồn", () => {
     const window = source.slice(Math.max(0, guard - 300), guard + 500);
     expect(window).toContain("no-store");
   });
+
+  it("bề mặt mentor gọi đúng tên việc: trao đổi với core team, không phải phỏng vấn", () => {
+    // Chủ dự án chốt 23/09/2026. Thư gửi mentor đã đổi chữ; trang họ bấm vào
+    // TỪ CHÍNH LÁ THƯ ĐÓ phải nói cùng một thứ tiếng, nếu không người đọc
+    // tưởng đây là hai việc khác nhau. Quét nguồn chứ không render: một chuỗi
+    // nằm trong nhánh hiếm (đã có lịch, hết hạn huỷ) vẫn phải đúng.
+    for (const file of [
+      "app/dat-lich/[token]/page.tsx",
+      "app/dat-lich/[token]/booking-form.tsx",
+      "app/dat-lich/[token]/mentor-availability-form.tsx"
+    ]) {
+      expect(readFileSync(file, "utf8"), `${file} còn chữ "phỏng vấn"`).not.toContain("hỏng vấn");
+    }
+
+    // Hai câu máy chủ trả về cho chính trang này — nằm chung file với các câu
+    // gửi interviewer, nên ghim từng câu thay vì quét cả file.
+    const lib = readFileSync("lib/interview-schedule.ts", "utf8");
+    expect(lib).toContain("Anh/chị đã có một lịch trao đổi đang hiệu lực");
+    expect(lib).toContain("Buổi trao đổi này đã có kết quả nên không huỷ được");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

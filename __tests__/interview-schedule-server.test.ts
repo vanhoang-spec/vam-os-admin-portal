@@ -574,7 +574,7 @@ describe("7. mentor chọn một giờ rảnh", () => {
     ];
     const result = await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: H_24_09 });
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("đã có một lịch phỏng vấn");
+    expect(result.message).toContain("đã có một lịch trao đổi");
     expect(db.rows("interview_mentor_availability")).toHaveLength(0);
   });
 

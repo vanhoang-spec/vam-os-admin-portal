@@ -5,7 +5,7 @@ import { BookingForm, CancelBookingForm } from "./booking-form";
 import { MentorAvailabilityForm } from "./mentor-availability-form";
 
 /**
- * Trang đặt lịch phỏng vấn — công khai, không cần đăng nhập.
+ * Trang đặt lịch trao đổi với core team — công khai, không cần đăng nhập.
  *
  * Người mở là ứng viên mentor cầm điện thoại, vào bằng mã riêng trong thư.
  * Số chỗ trống đổi liên tục khi interviewer thêm giờ và mentor khác giữ chỗ,
@@ -24,13 +24,13 @@ export default async function PublicInterviewBookingPage(props: { params: Promis
       <div className="mx-auto grid w-full max-w-xl gap-4">
         <div className="rounded-lg bg-vam-ink px-4 py-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-wide text-vam-mint">
-            Phỏng vấn mentor · UEH Mentoring Mùa 12
+            Trao đổi với core team · UEH Mentoring Mùa 12
           </p>
           <h1 className="mt-2 text-2xl font-semibold tracking-normal">
-            {data.ok ? data.mentorName : "Đặt lịch phỏng vấn"}
+            {data.ok ? data.mentorName : "Đặt lịch trao đổi"}
           </h1>
           <p className="mt-2 text-sm text-slate-200">
-            Buổi phỏng vấn online 1:1, kéo dài 60 phút, trong khung 07:00–22:00 hằng ngày.
+            Buổi trao đổi 1:1 với core team, kéo dài 60 phút, trong khung 07:00–22:00 hằng ngày.
           </p>
         </div>
 
@@ -44,14 +44,14 @@ export default async function PublicInterviewBookingPage(props: { params: Promis
         ) : data.state === "booked" ? (
           <Card>
             <div className="rounded-lg border border-vam-green/40 bg-vam-mint/40 p-5 text-vam-ink">
-              <h2 className="text-lg font-semibold">Anh/chị đã có lịch phỏng vấn</h2>
+              <h2 className="text-lg font-semibold">Anh/chị đã có lịch trao đổi</h2>
               <p className="mt-2 text-sm font-medium">{data.booking.slotLabel}</p>
               <p className="mt-2 text-sm">
-                Người phỏng vấn: <strong>{data.booking.interviewerName}</strong>
+                Người trao đổi: <strong>{data.booking.interviewerName}</strong>
                 {data.booking.interviewerPhone ? ` · SĐT ${data.booking.interviewerPhone}` : ""}
               </p>
               <p className="mt-2 text-sm">
-                Buổi diễn ra online; người phỏng vấn sẽ liên hệ để thống nhất kênh gọi. Anh/chị để ý email và điện
+                Buổi diễn ra online; người trao đổi sẽ liên hệ để thống nhất kênh gọi. Anh/chị để ý email và điện
                 thoại trước giờ hẹn.
               </p>
             </div>
@@ -86,7 +86,7 @@ export default async function PublicInterviewBookingPage(props: { params: Promis
           <>
             <Card>
               <p className="mb-1 text-sm text-vam-ink">
-                Anh/chị chọn một khung giờ còn chỗ rồi bấm <strong>Giữ chỗ</strong>. Đợt phỏng vấn kéo dài đến hết
+                Anh/chị chọn một khung giờ còn chỗ rồi bấm <strong>Giữ chỗ</strong>. Đợt trao đổi kéo dài đến hết
                 ngày <strong>{data.windowEndLabel}</strong>; hiện còn <strong>{data.totalOpen}</strong> chỗ trống.
               </p>
               <p className="mb-4 text-xs text-slate-500">
@@ -107,11 +107,11 @@ export default async function PublicInterviewBookingPage(props: { params: Promis
               <h2 className="mb-1 text-base font-semibold text-vam-ink">Giờ anh/chị rảnh</h2>
               <p className="mb-1 text-sm text-vam-ink">
                 Không có khung giờ nào ở trên hợp với anh/chị? Chọn <strong>một</strong> khung giờ mình rảnh rồi
-                bấm lưu, và chờ ban tổ chức ghép người phỏng vấn vào đúng giờ đó.
+                bấm lưu, và chờ ban tổ chức ghép người của core team vào đúng giờ đó.
               </p>
               <p className="mb-4 text-xs text-slate-500">
                 Lưu ở đây <strong>chưa phải là lịch hẹn</strong> — chỉ khi ban tổ chức ghép xong, anh/chị mới nhận
-                thư xác nhận kèm tên và số điện thoại người phỏng vấn. Trong lúc chờ, anh/chị đổi sang giờ khác
+                thư xác nhận kèm tên và số điện thoại người trao đổi. Trong lúc chờ, anh/chị đổi sang giờ khác
                 lúc nào cũng được.
               </p>
               <MentorAvailabilityForm
