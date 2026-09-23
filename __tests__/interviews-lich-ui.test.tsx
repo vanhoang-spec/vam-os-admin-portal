@@ -140,6 +140,50 @@ describe("1. lưới giờ rảnh", () => {
     expect(strip).toContain("2 giờ");
     expect(strip).toContain("Đã phỏng vấn xong");
   });
+
+  /** Bản sao mới tinh của cùng dữ liệu — đúng thứ router.refresh() trả về mỗi 15 giây. */
+  function freshDays() {
+    return DAYS.map((day) => ({ ...day, slots: day.slots.map((slot) => ({ ...slot })) }));
+  }
+
+  it("trang tự làm mới không được xoá ô vừa tick mà chưa kịp Lưu", () => {
+    // 23/09/2026: interviewer báo tick xong một lúc thì ô trước đó mất sạch.
+    // <LiveRefresh /> gọi router.refresh() mỗi 15 giây, và props `days` trả về
+    // là mảng MỚI dù dữ liệu y hệt — lưới phải nhận ra là không có gì đổi.
+    const { container, rerender } = render(
+      <AvailabilityGrid days={DAYS} phone="0912345678" needsPhone={false} stats={STATS} />
+    );
+    fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 11:00"));
+    expect(hiddenValues(container).add).toEqual(["2026-09-24T04:00:00.000Z"]);
+
+    rerender(<AvailabilityGrid days={freshDays()} phone="0912345678" needsPhone={false} stats={STATS} />);
+
+    expect((screen.getByLabelText("Thứ Năm 24/09/2026 11:00") as HTMLInputElement).checked).toBe(true);
+    expect(hiddenValues(container).add).toEqual(["2026-09-24T04:00:00.000Z"]);
+  });
+
+  it("máy chủ đổi thật: giờ vừa bị mentor giữ thành ô khoá, phần đang tick dở vẫn còn", () => {
+    const { container, rerender } = render(
+      <AvailabilityGrid days={DAYS} phone="0912345678" needsPhone={false} stats={STATS} />
+    );
+    fireEvent.click(screen.getByLabelText("Thứ Năm 24/09/2026 11:00"));
+
+    // 09:00 đang trống bị một mentor giữ mất ngay giữa lúc người này còn đang tick.
+    const days = freshDays().map((day) => ({
+      ...day,
+      slots: day.slots.map((slot) =>
+        slot.hour === 9 ? { ...slot, mine: "booked" as const, candidateName: "Trần Thị B" } : slot
+      )
+    }));
+    rerender(<AvailabilityGrid days={days} phone="0912345678" needsPhone={false} stats={STATS} />);
+
+    // Máy chủ thắng ở ô không sửa được nữa...
+    expect(screen.queryByLabelText("Thứ Năm 24/09/2026 09:00")).toBeNull();
+    expect(screen.getByTitle(/Trần Thị B/)).toBeTruthy();
+    // ...nhưng không cuốn theo phần người dùng đang làm dở ở ô khác.
+    expect((screen.getByLabelText("Thứ Năm 24/09/2026 11:00") as HTMLInputElement).checked).toBe(true);
+    expect(hiddenValues(container)).toEqual({ add: ["2026-09-24T04:00:00.000Z"], remove: [] });
+  });
 });
 
 describe("2. bảng điều hành ban tổ chức", () => {

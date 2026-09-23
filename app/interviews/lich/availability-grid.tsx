@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 // React 18.3.1: useFormState của react-dom — hook thay thế của React 19 qua
 // được cả bốn cổng rồi mới vỡ trắng trang lúc chạy, nên cấm dùng ở đây.
 import { useFormState, useFormStatus } from "react-dom";
@@ -57,18 +57,39 @@ export function AvailabilityGrid({
     () => days.map((day) => day.slots.map((slot) => `${slot.startsAtIso}:${slot.mine ?? "-"}`).join("|")).join("\n"),
     [days]
   );
-  const initialChecked = useMemo(() => {
+  const serverChecked = useMemo(() => {
     const set = new Set<string>();
     for (const day of days) {
       for (const slot of day.slots) if (slot.mine === "open") set.add(slot.startsAtIso);
     }
     return set;
   }, [days]);
-  const [checked, setChecked] = useState<Set<string>>(initialChecked);
+  const [checked, setChecked] = useState<Set<string>>(serverChecked);
+  const lastSignature = useRef(signature);
   useEffect(() => {
-    setChecked(initialChecked);
-    // signature đại diện cho dữ liệu server mới nhất — đổi thì đồng bộ lại.
-  }, [signature, initialChecked]);
+    // Trang này có <LiveRefresh /> đọc lại máy chủ mỗi 15 giây, và mỗi lần đọc
+    // lại `days` là một mảng MỚI kể cả khi dữ liệu y hệt. Bản trước đồng bộ
+    // theo danh tính của nó, nên cứ 15 giây một lần mọi ô vừa tick mà chưa kịp
+    // bấm Lưu đều bay sạch — interviewer báo đúng lỗi này ngày 23/09/2026.
+    // Chữ ký mới là thứ nói được "máy chủ có gì khác thật không".
+    if (lastSignature.current === signature) return;
+    lastSignature.current = signature;
+    setChecked((current) => {
+      // Dữ liệu mới có thể tới ngay giữa lúc đang tick — ví dụ một mentor vừa
+      // giữ một giờ của chính mình. Ở những ô không còn sửa được nữa (đã bị
+      // đặt, hoặc đã trôi qua) thì máy chủ nói đúng; ở ô còn sửa được thì phần
+      // đang làm dở của người dùng được giữ, không ai mất công tick lại.
+      const next = new Set(serverChecked);
+      for (const day of days) {
+        for (const slot of day.slots) {
+          if (slot.isPast || slot.mine === "booked") continue;
+          if (current.has(slot.startsAtIso)) next.add(slot.startsAtIso);
+          else next.delete(slot.startsAtIso);
+        }
+      }
+      return next;
+    });
+  }, [signature, days, serverChecked]);
 
   const toggle = (iso: string) => {
     setChecked((current) => {
