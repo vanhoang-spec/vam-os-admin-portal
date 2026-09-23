@@ -18,6 +18,7 @@ import {
   InterviewerStats,
   MentorBucket,
   WaitingDayGroup,
+  bookingBlockedReason,
   buildSlotGrid,
   buildWaitingGrid,
   canMentorCancel,
@@ -295,7 +296,13 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
 
   // Mentor đã tự giữ chỗ qua link riêng thì giờ họ khai không còn là nhu cầu —
   // lọc ở lúc đọc chứ không dọn bảng, để huỷ lịch là họ chờ lại được ngay.
+  //
+  // Cùng lẽ đó với hồ sơ chưa qua vòng chấm hoặc đã bị từ chối: hàm ghép
+  // vam099 sẽ không nhận họ, nên đếm họ vào "N người đang chờ" là mời
+  // interviewer bấm vào một ô rồi nhận câu "không còn ai chờ". Lưới phải nói
+  // đúng thứ mà cú bấm làm được.
   const alreadyBooked = new Set<string>();
+  const notEligible = new Set<string>();
   const waitingAppIds = Array.from(new Set(waitingRows.data.map((row) => String(row.application_id))));
   if (waitingAppIds.length > 0) {
     const live = await readAllPagesIn<Json>(
@@ -312,9 +319,55 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
     for (const row of live.data) {
       if (String(row.status) === "booked") alreadyBooked.add(String(row.application_id));
     }
+
+    const waitingApps = await readAllPagesIn<Json>(
+      client,
+      "applications",
+      "id",
+      waitingAppIds,
+      "id,status,role_applied,source"
+    );
+    if (waitingApps.error) {
+      log("waiting applications read failed", waitingApps.error);
+      return { ok: false, message: SAFE_ERROR };
+    }
+    const waitingReviews = await readAllPagesIn<Json>(
+      client,
+      "application_reviews",
+      "application_id",
+      waitingAppIds,
+      "id,application_id,status,review_round",
+      (query: any) => query.eq("review_round", "interview").neq("status", "cancelled")
+    );
+    if (waitingReviews.error) {
+      log("waiting reviews read failed", waitingReviews.error);
+      return { ok: false, message: SAFE_ERROR };
+    }
+    const reviewIdsByApp = new Map<string, string[]>();
+    for (const row of waitingReviews.data) {
+      const key = String(row.application_id);
+      reviewIdsByApp.set(key, [...(reviewIdsByApp.get(key) ?? []), String(row.id)]);
+    }
+    const eligibleAppIds = new Set(
+      waitingApps.data
+        .filter((row) =>
+          isBookingEligibleApplication(
+            { status: row.status, role_applied: row.role_applied, source: row.source },
+            reviewIdsByApp.get(String(row.id)) ?? [],
+            null
+          )
+        )
+        .map((row) => String(row.id))
+    );
+    for (const id of waitingAppIds) {
+      if (!eligibleAppIds.has(id)) notEligible.add(id);
+    }
   }
 
-  const stillWaiting = waitingRows.data.filter((row) => !alreadyBooked.has(String(row.application_id)));
+  const stillWaiting = waitingRows.data.filter(
+    (row) =>
+      !alreadyBooked.has(String(row.application_id)) && !notEligible.has(String(row.application_id))
+  );
 
   return {
     ok: true,
@@ -525,6 +578,19 @@ const INVALID_LINK: BookingPageData = {
   message: "Không tìm thấy trang đặt lịch. Đường dẫn có thể đã bị chép thiếu — anh/chị mở lại từ email của ban tổ chức."
 };
 
+/**
+ * Hai lý do rất khác nhau cùng dẫn tới "chưa đặt lịch được", và nói nhầm câu
+ * là nói sai với người thật: 9 mentor đã nhận thư mời trước khi luật siết lại
+ * ngày 23/09/2026, nên người mở link mà hồ sơ còn đang được chấm KHÔNG phải
+ * người đã có kết quả. Câu cho họ phải là "sẽ tới", không phải "đã xong".
+ */
+const INELIGIBLE_MESSAGES: Record<ReturnType<typeof bookingBlockedReason>, string> = {
+  pending_screening:
+    "Hồ sơ của anh/chị đang được ban tổ chức xem. Khi hồ sơ qua vòng này, anh/chị sẽ nhận thư mời chọn giờ trao đổi với core team — chưa cần làm gì thêm lúc này.",
+  closed:
+    "Hồ sơ của anh/chị hiện không ở bước đặt lịch (đã có lịch được ban tổ chức thu xếp riêng, hoặc hồ sơ đã có kết quả). Cần hỗ trợ, anh/chị liên hệ Zalo ban tổ chức."
+};
+
 export async function getBookingPageData(token: unknown): Promise<BookingPageData> {
   const client = serviceClient();
   if (!client) return { ok: false, state: "invalid", message: SAFE_ERROR };
@@ -617,8 +683,7 @@ export async function getBookingPageData(token: unknown): Promise<BookingPageDat
       ok: true,
       state: "ineligible",
       mentorName,
-      message:
-        "Hồ sơ của anh/chị hiện không ở bước đặt lịch (đã có lịch được ban tổ chức thu xếp riêng, hoặc hồ sơ đã có kết quả). Cần hỗ trợ, anh/chị liên hệ Zalo ban tổ chức.",
+      message: INELIGIBLE_MESSAGES[bookingBlockedReason(app.status)],
       hotlineZalo: HOTLINE_ZALO
     };
   }
@@ -917,7 +982,9 @@ export async function saveMentorAvailability(input: {
     return { ok: false, message: SAFE_ERROR };
   }
   if (!isBookingEligibleApplication(app, reviews.data.map((row) => String(row.id)), null)) {
-    return { ok: false, message: BOOK_ERROR_MESSAGES.application_not_eligible };
+    // Trang có thể đã mở từ trước khi hồ sơ đổi trạng thái — nói đúng lý do,
+    // đừng đẩy người đang chờ chấm sang câu dành cho người đã có kết quả.
+    return { ok: false, message: INELIGIBLE_MESSAGES[bookingBlockedReason(app.status)] };
   }
 
   const nowIso = new Date().toISOString();

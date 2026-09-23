@@ -9,6 +9,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BOOKING_ELIGIBLE_STATUSES,
+  PROFILE_ROUND_STATUSES,
+  bookingBlockedReason,
   bookingUrl,
   buildSlotGrid,
   buildWaitingGrid,
@@ -109,18 +111,56 @@ describe("2. kiểm một instant có phải ô lưới hợp lệ", () => {
 });
 
 describe("3. luật đối tượng đặt lịch", () => {
-  const mentorApp = { status: "submitted", role_applied: "mentor", source: "vam_os_form" };
+  const mentorApp = { status: "invited_to_interview", role_applied: "mentor", source: "vam_os_form" };
 
-  it("đủ 9 trạng thái được đặt", () => {
-    expect(BOOKING_ELIGIBLE_STATUSES.size).toBe(9);
+  it("đúng ba trạng thái được đặt, và cả ba đều là 'đã qua vòng hồ sơ'", () => {
+    expect(Array.from(BOOKING_ELIGIBLE_STATUSES).sort()).toEqual([
+      "interview_scheduled",
+      "invited_to_interview",
+      "screening_passed"
+    ]);
     for (const status of Array.from(BOOKING_ELIGIBLE_STATUSES)) {
       expect(isBookingEligibleApplication({ ...mentorApp, status }, [], null)).toBe(true);
+    }
+  });
+
+  /**
+   * Gọi tên từng trạng thái chứ không chỉ đếm: đây đúng là sáu trạng thái mà
+   * 9 mentor đang đứng khi họ nhận thư mời sáng 23/09/2026. Một ngày nào đó có
+   * người nới danh sách "cho tiện" thì ca này phải đỏ, kèm tên người bị mời sớm.
+   */
+  it("hồ sơ chưa ai chấm xong thì KHÔNG được mời — sáu trạng thái vòng hồ sơ", () => {
+    for (const status of [
+      "submitted",
+      "under_data_check",
+      "ready_for_screening",
+      "screening_assigned",
+      "screening_in_progress",
+      "screening_completed"
+    ]) {
+      expect(isBookingEligibleApplication({ ...mentorApp, status }, [], null)).toBe(false);
     }
   });
 
   it("interview_in_progress và needs_more_review đứng ngoài", () => {
     expect(isBookingEligibleApplication({ ...mentorApp, status: "interview_in_progress" }, [], null)).toBe(false);
     expect(isBookingEligibleApplication({ ...mentorApp, status: "needs_more_review" }, [], null)).toBe(false);
+  });
+
+  it("hai tập không chồng nhau — chưa qua vòng thì không thể vừa đủ điều kiện", () => {
+    for (const status of Array.from(PROFILE_ROUND_STATUSES)) {
+      expect(BOOKING_ELIGIBLE_STATUSES.has(status)).toBe(false);
+    }
+  });
+
+  it("lý do bị chặn phân đúng hai nhóm — người chờ chấm nghe câu khác người đã có kết quả", () => {
+    expect(bookingBlockedReason("screening_assigned")).toBe("pending_screening");
+    expect(bookingBlockedReason("submitted")).toBe("pending_screening");
+    expect(bookingBlockedReason("needs_more_review")).toBe("pending_screening");
+    expect(bookingBlockedReason("rejected_or_not_fit")).toBe("closed");
+    expect(bookingBlockedReason("approved_as_mentor")).toBe("closed");
+    expect(bookingBlockedReason("ready_for_final_decision")).toBe("closed");
+    expect(bookingBlockedReason(null)).toBe("closed");
   });
 
   it("mentee và đơn tái tục không đặt lịch phỏng vấn", () => {
