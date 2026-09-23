@@ -300,6 +300,34 @@ export type BookingPageHour = { startsAtIso: string; hour: number; openCount: nu
 /** Một ngày trên trang đặt lịch công khai — chỉ mang các giờ còn chỗ. */
 export type BookingPageDayGroup = { dateKey: string; label: string; hours: BookingPageHour[] };
 
+/** Một khung giờ đang có mentor tự khai rảnh và chờ được ghép. */
+export type WaitingHour = { startsAtIso: string; hour: number; waitingCount: number };
+/** Một ngày trên bảng "mentor đang chờ" — chỉ mang các giờ thật sự có người. */
+export type WaitingDayGroup = { dateKey: string; label: string; hours: WaitingHour[] };
+
+/**
+ * Lưới "ai đang chờ giờ nào" cho interviewer, dựng từ bảng đếm theo khung giờ.
+ *
+ * Giờ đã trôi qua và giờ không ai chờ đều bị loại, rồi ngày rỗng cũng bị loại:
+ * interviewer mở bảng ra phải thấy ngay chỗ đang tắc, không phải lướt qua 14
+ * ngày toàn số 0 để tìm.
+ */
+export function buildWaitingGrid(counts: Map<string, number>, nowIso: string): WaitingDayGroup[] {
+  return buildSlotGrid(nowIso)
+    .map((day) => ({
+      dateKey: day.dateKey,
+      label: day.label,
+      hours: day.slots
+        .filter((slot) => !slot.isPast && (counts.get(slot.startsAtIso) ?? 0) > 0)
+        .map((slot) => ({
+          startsAtIso: slot.startsAtIso,
+          hour: slot.hour,
+          waitingCount: counts.get(slot.startsAtIso) ?? 0
+        }))
+    }))
+    .filter((day) => day.hours.length > 0);
+}
+
 /**
  * Kết quả một lượt của bộ gửi thư mời/nhắc. Nằm ở phần thuần để panel phía
  * client đọc được kiểu mà không chạm vào module server-only.

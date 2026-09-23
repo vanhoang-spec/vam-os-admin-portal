@@ -171,6 +171,12 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Chiều ngược của lịch phỏng vấn: interviewer ghép vào giờ mentor tự khai —
+  // migration 20260923040000_interview_mentor_availability.sql. Đã chạy thử
+  // nguyên văn trên Production trong một transaction rồi rollback (23/09/2026,
+  // sạch, không sót dòng nào), nhưng CHƯA dán thật. Chỉ chuyển sang nhóm
+  // PRODUCTION_PROVIDED khi đã đọc catalog xác nhận hàm có mặt.
+  "vam099_match_mentor_at_hour",
   // Ban tổ chức sửa nội dung bài chấm — migration
   // 20260918170000_review_content_override.sql. Nằm ở đây cho tới khi chủ dự án dán
   // migration lên Production và có bằng chứng đọc catalog.

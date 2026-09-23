@@ -57,6 +57,17 @@ function defaultsFor(db: FakeDb, table: string): Row {
   if (table === "interview_bookings") {
     return { status: "booked", cancelled_at: null, cancelled_by: null, cancel_note: null };
   }
+  if (table === "interview_mentor_availability") {
+    // Cùng lý do với interview_slots: thiếu `status` thì phép lọc "đang chờ"
+    // không thấy dòng nào, và test xanh cho một bảng rỗng.
+    return {
+      status: "open",
+      matched_booking_id: null,
+      matched_at: null,
+      removed_at: null,
+      available_since: "2026-09-01T00:00:00.000Z"
+    };
+  }
   return {};
 }
 
@@ -73,6 +84,9 @@ function duplicate(table: string, row: Row, candidate: Row): boolean {
   }
   if (table === "interviewer_profiles") {
     return row.admin_user_id === candidate.admin_user_id;
+  }
+  if (table === "interview_mentor_availability") {
+    return row.application_id === candidate.application_id && row.slot_starts_at === candidate.slot_starts_at;
   }
   return false;
 }

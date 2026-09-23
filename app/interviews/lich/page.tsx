@@ -7,6 +7,7 @@ import { getBtcOverview, getMyInterviewerSchedule } from "@/lib/interview-schedu
 import { canAssignReview, canSelfClaimInterview } from "@/lib/permissions";
 import { AvailabilityGrid } from "./availability-grid";
 import { BtcPanel } from "./btc-panel";
+import { WaitingPanel } from "./waiting-panel";
 
 /**
  * /interviews/lich — lịch phỏng vấn mentor 1:1 (đợt 22/09–05/10/2026).
@@ -53,6 +54,13 @@ export default async function InterviewSchedulePage() {
         ) : (
           <ErrorBox message={overview.message} />
         )
+      ) : null}
+
+      {schedule.ok ? (
+        <Card className="mb-5">
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Mentor đang chờ được ghép</h2>
+          <WaitingPanel waiting={schedule.waiting} waitingTotal={schedule.waitingTotal} />
+        </Card>
       ) : null}
 
       <Card className="mb-5">

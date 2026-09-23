@@ -34,11 +34,13 @@ vi.mock("@/app/actions/interview-schedule", () => ({
     remaining: 0,
     stopped429: false
   })),
-  cancelBookingByBtcAction: vi.fn(async () => ({ ok: true, message: "Đã huỷ." }))
+  cancelBookingByBtcAction: vi.fn(async () => ({ ok: true, message: "Đã huỷ." })),
+  matchMentorAtHourAction: vi.fn(async () => ({ status: "idle", message: "" }))
 }));
 
 import { AvailabilityGrid } from "@/app/interviews/lich/availability-grid";
 import { BtcPanel } from "@/app/interviews/lich/btc-panel";
+import { WaitingPanel } from "@/app/interviews/lich/waiting-panel";
 import { cancelBookingByBtcAction, runInterviewDispatchAction } from "@/app/actions/interview-schedule";
 
 const DAYS = [
@@ -237,5 +239,49 @@ describe("3. khẳng định tĩnh trên mã nguồn", () => {
     expect(source).toContain("canSelfClaimInterview(adminUser.role)");
     expect(source).toContain("canAssignReview(adminUser.role)");
     expect(source).toContain('redirect("/login")');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chiều ngược: bảng mentor đang chờ được ghép
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WAITING = [
+  {
+    dateKey: "2026-09-26",
+    label: "Thứ Bảy 26/09/2026",
+    hours: [
+      { startsAtIso: "2026-09-26T08:00:00.000Z", hour: 15, waitingCount: 18 },
+      { startsAtIso: "2026-09-26T13:00:00.000Z", hour: 20, waitingCount: 2 }
+    ]
+  }
+];
+
+describe("3. bảng mentor đang chờ", () => {
+  it("hiện số người chờ từng khung giờ và tổng số mentor", () => {
+    render(<WaitingPanel waiting={WAITING} waitingTotal={19} />);
+    expect(screen.getByText(/19 mentor/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /15h · 18 chờ/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /20h · 2 chờ/ })).toBeTruthy();
+  });
+
+  it("nút mang khung giờ chứ không mang tên ai — database chọn người khai sớm nhất", () => {
+    render(<WaitingPanel waiting={WAITING} waitingTotal={19} />);
+    const button = screen.getByRole("button", { name: /15h · 18 chờ/ }) as HTMLButtonElement;
+    expect(button.name).toBe("slotStartsAt");
+    expect(button.value).toBe("2026-09-26T08:00:00.000Z");
+  });
+
+  it("ghép phải qua hộp thoại xác nhận — bấm là chốt và thư đi ngay", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<WaitingPanel waiting={WAITING} waitingTotal={19} />);
+    fireEvent.submit(screen.getByRole("button", { name: /15h · 18 chờ/ }).closest("form") as HTMLFormElement);
+    expect(confirmSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("chưa ai khai giờ thì nói rõ, không hiện một bảng rỗng", () => {
+    render(<WaitingPanel waiting={[]} waitingTotal={0} />);
+    expect(screen.getByText(/Chưa có mentor nào tự khai giờ rảnh/)).toBeTruthy();
   });
 });
