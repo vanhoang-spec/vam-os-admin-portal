@@ -694,7 +694,7 @@ export type BookingActionResult = { ok: boolean; message: string; slotLabel?: st
 
 const BOOK_ERROR_MESSAGES: Record<string, string> = {
   invalid_token: "Đường dẫn không còn hiệu lực — anh/chị mở lại từ email của ban tổ chức.",
-  already_booked: "Anh/chị đã có một lịch phỏng vấn đang hiệu lực. Muốn đổi giờ, huỷ lịch cũ trước.",
+  already_booked: "Anh/chị đã có một lịch trao đổi đang hiệu lực. Muốn đổi giờ, huỷ lịch cũ trước.",
   application_not_eligible: `Hồ sơ hiện không ở bước đặt lịch. Cần hỗ trợ, liên hệ Zalo ban tổ chức ${HOTLINE_ZALO}.`,
   slot_in_past: "Khung giờ này đã qua — anh/chị tải lại trang và chọn giờ khác.",
   slot_full: "Khung giờ này vừa có người giữ trước — anh/chị chọn giờ khác nhé."
@@ -704,7 +704,7 @@ const CANCEL_ERROR_MESSAGES: Record<string, string> = {
   invalid_token: "Đường dẫn không còn hiệu lực — anh/chị mở lại từ email của ban tổ chức.",
   no_active_booking: "Không có lịch hẹn nào đang hiệu lực để huỷ.",
   inside_24h: `Buổi hẹn còn dưới 24 giờ nên không tự huỷ được nữa — anh/chị liên hệ Zalo ban tổ chức ${HOTLINE_ZALO} để được thu xếp.`,
-  already_completed: "Buổi phỏng vấn này đã có kết quả nên không huỷ được."
+  already_completed: "Buổi trao đổi này đã có kết quả nên không huỷ được."
 };
 
 /** Bóc payload jsonb hai bên (interviewer/candidate) mà ba hàm vam098 trả về. */

@@ -37,7 +37,7 @@ export function BookingForm({ token, days }: { token: string; days: BookingPageD
         <h2 className="text-lg font-semibold">Đã giữ chỗ thành công</h2>
         {state.slotLabel ? <p className="mt-2 text-sm font-medium">{state.slotLabel}</p> : null}
         <p className="mt-2 text-sm">
-          Thư xác nhận kèm thông tin người phỏng vấn đang được gửi tới email của anh/chị. Tải lại trang này để xem
+          Thư xác nhận kèm thông tin người trao đổi đang được gửi tới email của anh/chị. Tải lại trang này để xem
           chi tiết buổi hẹn.
         </p>
       </div>
