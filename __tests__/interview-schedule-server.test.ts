@@ -96,7 +96,7 @@ function seedBase() {
       season_id: SEASON,
       role_applied: "mentor",
       source: "vam_os_form",
-      status: "submitted",
+      status: "invited_to_interview",
       full_name: "Nguyễn Văn A",
       email_primary: "a@example.com",
       phone_primary: "0900000001"
@@ -106,7 +106,7 @@ function seedBase() {
       season_id: SEASON,
       role_applied: "mentor",
       source: "vam_os_form",
-      status: "screening_in_progress",
+      status: "screening_passed",
       full_name: "Trần Thị B",
       email_primary: "b@example.com",
       phone_primary: "0900000002"
@@ -298,10 +298,46 @@ describe("3. trang đặt lịch công khai", () => {
     }
   });
 
+  /**
+   * Chín mentor cầm link thật đứng đúng ở đây sáng 23/09/2026: thư đã gửi, rồi
+   * luật siết lại. Câu dành cho họ phải là "sẽ tới", không phải câu dành cho
+   * người đã có kết quả — nói nhầm là bảo một người còn cơ hội rằng họ trượt.
+   */
+  it("hồ sơ đang được chấm: chặn đặt lịch nhưng nói là thư sẽ tới, không nói đã có kết quả", async () => {
+    seedInvite();
+    db.tables.applications = db.tables.applications.map((row: Record<string, unknown>) =>
+      row.id === APP_A ? { ...row, status: "screening_assigned" } : row
+    );
+
+    const page = await getBookingPageData(TOKEN_A);
+
+    expect(page.state).toBe("ineligible");
+    if (page.ok && page.state === "ineligible") {
+      expect(page.message).toContain("đang được ban tổ chức xem");
+      expect(page.message).toContain("sẽ nhận thư mời chọn giờ trao đổi");
+      expect(page.message).not.toContain("đã có kết quả");
+    }
+  });
+
+  it("hồ sơ đã có kết quả: giữ nguyên câu cũ, không hứa hẹn thư nào", async () => {
+    seedInvite();
+    db.tables.applications = db.tables.applications.map((row: Record<string, unknown>) =>
+      row.id === APP_A ? { ...row, status: "rejected_or_not_fit" } : row
+    );
+
+    const page = await getBookingPageData(TOKEN_A);
+
+    expect(page.state).toBe("ineligible");
+    if (page.ok && page.state === "ineligible") {
+      expect(page.message).toContain("đã có kết quả");
+      expect(page.message).not.toContain("sẽ nhận thư mời");
+    }
+  });
+
   it("đã có lịch: còn hơn 24 giờ thì tự huỷ được", async () => {
     seedInvite();
     db.tables.interview_bookings = [
-      { id: "b1", application_id: APP_A, slot_id: "s1", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_26_15, status: "booked", previous_application_status: "submitted" }
+      { id: "b1", application_id: APP_A, slot_id: "s1", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_26_15, status: "booked", previous_application_status: "invited_to_interview" }
     ];
     seedProfile();
     const page = await getBookingPageData(TOKEN_A);
@@ -316,7 +352,7 @@ describe("3. trang đặt lịch công khai", () => {
   it("đã có lịch trong vòng 24 giờ tới: chỉ còn đường hotline", async () => {
     seedInvite();
     db.tables.interview_bookings = [
-      { id: "b1", application_id: APP_A, slot_id: "s1", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_TODAY_17, status: "booked", previous_application_status: "submitted" }
+      { id: "b1", application_id: APP_A, slot_id: "s1", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_TODAY_17, status: "booked", previous_application_status: "invited_to_interview" }
     ];
     const page = await getBookingPageData(TOKEN_A);
     expect(page.state).toBe("booked");
@@ -360,6 +396,50 @@ describe("4. bộ gửi thư mời/nhắc", () => {
     const invites = db.rows("interview_slot_invites");
     expect(invites).toHaveLength(2);
     expect(invites.every((row) => row.send_count === 1 && row.last_sent_at === NOW && row.claimed_at === null)).toBe(true);
+  });
+
+  /**
+   * Cái giá của luật cũ, viết thành ca test. Sáng 23/09/2026 có 9 mentor nhận
+   * thư mời trao đổi với core team trong khi hồ sơ còn đang trên bàn reviewer.
+   * B ở đây đứng đúng chỗ của họ: đơn mentor hợp lệ, chỉ thiếu mỗi quyết định.
+   */
+  it("hồ sơ chưa qua vòng chấm thì KHÔNG nhận thư — không cấp mã, không đếm vào việc còn lại", async () => {
+    seedOpenSlot();
+    db.tables.applications = db.tables.applications.map((row: Record<string, unknown>) =>
+      row.id === APP_B ? { ...row, status: "screening_assigned" } : row
+    );
+
+    const result = await runInterviewInviteDispatch({ source: "manual" });
+
+    expect(result.ok).toBe(true);
+    expect(result.sent).toBe(1);
+    expect(result.remaining).toBe(0);
+    expect(sendInterviewSlotInvite).toHaveBeenCalledTimes(1);
+    expect((sendInterviewSlotInvite as Mock).mock.calls[0][0].toEmail).toBe("a@example.com");
+    // Không cấp cả mã link: người chưa được duyệt không nên tồn tại một URL
+    // đặt lịch nào, kể cả khi chưa có thư nào mang nó đi.
+    const invites = db.rows("interview_slot_invites");
+    expect(invites).toHaveLength(1);
+    expect(invites[0].application_id).toBe(APP_A);
+  });
+
+  it("được duyệt thì thư đi ngay lượt sau — cửa mở lại chứ không khoá vĩnh viễn", async () => {
+    seedOpenSlot();
+    db.tables.applications = db.tables.applications.map((row: Record<string, unknown>) =>
+      row.id === APP_B ? { ...row, status: "screening_assigned" } : row
+    );
+    await runInterviewInviteDispatch({ source: "manual" });
+    expect(sendInterviewSlotInvite).toHaveBeenCalledTimes(1);
+
+    db.tables.applications = db.tables.applications.map((row: Record<string, unknown>) =>
+      row.id === APP_B ? { ...row, status: "invited_to_interview" } : row
+    );
+    const second = await runInterviewInviteDispatch({ source: "manual" });
+
+    expect(second.sent).toBe(1);
+    expect((sendInterviewSlotInvite as Mock).mock.calls[1][0].toEmail).toBe("b@example.com");
+    // A không bị gửi lại: nhịp 3 ngày vẫn tính riêng cho từng người.
+    expect(sendInterviewSlotInvite).toHaveBeenCalledTimes(2);
   });
 
   it("nhịp 3 ngày: mới 2 ngày thì im, đủ 3 ngày thì nhắc lần 1", async () => {
@@ -440,7 +520,7 @@ describe("4. bộ gửi thư mời/nhắc", () => {
       { id: "r1", application_id: APP_A, review_round: "interview", status: "assigned" }
     ];
     db.tables.interview_bookings = [
-      { id: "b1", application_id: APP_A, slot_id: "s9", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_26_15, status: "booked", previous_application_status: "submitted" }
+      { id: "b1", application_id: APP_A, slot_id: "s9", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_26_15, status: "booked", previous_application_status: "invited_to_interview" }
     ];
     const result = await runInterviewInviteDispatch({ source: "manual" });
     expect(result.sent).toBe(0);
@@ -476,7 +556,7 @@ describe("5. tổng quan ban tổ chức", () => {
       { id: "r1", application_id: APP_A, review_round: "interview", status: "assigned" }
     ];
     db.tables.interview_bookings = [
-      { id: "b1", application_id: APP_A, slot_id: "s3", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_24_09, status: "booked", previous_application_status: "submitted" }
+      { id: "b1", application_id: APP_A, slot_id: "s3", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_24_09, status: "booked", previous_application_status: "invited_to_interview" }
     ];
     const overview = await getBtcOverview();
     expect(overview.ok).toBe(true);
@@ -598,7 +678,7 @@ describe("8. interviewer nhìn thấy ai đang chờ", () => {
       season_id: SEASON,
       role_applied: "mentor",
       source: "vam_os_form",
-      status: "submitted",
+      status: "invited_to_interview",
       full_name: "Lê Văn C",
       email_primary: "c@example.com",
       phone_primary: "0900000003"
@@ -626,6 +706,66 @@ describe("8. interviewer nhìn thấy ai đang chờ", () => {
       ]);
     }
   });
+
+  /**
+   * Lưới phải nói đúng thứ cú bấm làm được. vam099_match_mentor_at_hour chỉ
+   * nhận đơn đã qua vòng hồ sơ, nên đếm người chưa được duyệt vào "N đang chờ"
+   * là mời interviewer bấm rồi nhận "không còn ai chờ" — và họ sẽ bấm lại,
+   * tưởng mạng lỗi.
+   */
+  it("người chưa qua vòng chấm hoặc đã bị từ chối không được đếm là đang chờ", async () => {
+    seedProfile();
+    db.tables.applications = db.tables.applications.map((row: Record<string, unknown>) =>
+      row.id === APP_B ? { ...row, status: "rejected_or_not_fit" } : row
+    );
+    const APP_D = "00000000-0000-4000-a000-000000000004";
+    db.tables.applications.push({
+      id: APP_D,
+      season_id: SEASON,
+      role_applied: "mentor",
+      source: "vam_os_form",
+      status: "screening_assigned",
+      full_name: "Phạm Thị D",
+      email_primary: "d@example.com",
+      phone_primary: "0900000004"
+    });
+    db.tables.interview_mentor_availability = [
+      { id: "av-1", application_id: APP_A, season_id: SEASON, slot_starts_at: H_26_15, status: "open" },
+      { id: "av-2", application_id: APP_B, season_id: SEASON, slot_starts_at: H_26_15, status: "open" },
+      { id: "av-3", application_id: APP_D, season_id: SEASON, slot_starts_at: H_24_09, status: "open" }
+    ];
+
+    const schedule = await getMyInterviewerSchedule();
+
+    expect(schedule.ok).toBe(true);
+    if (schedule.ok) {
+      expect(schedule.waitingTotal).toBe(1);
+      expect(schedule.waiting.flatMap((day) => day.hours)).toEqual([
+        { startsAtIso: H_26_15, hour: 15, waitingCount: 1 }
+      ]);
+    }
+  });
+
+  it("đã có phiếu phỏng vấn của người khác thì cũng không đếm — hàm ghép sẽ từ chối", async () => {
+    seedProfile();
+    db.tables.interview_mentor_availability = [
+      { id: "av-1", application_id: APP_A, season_id: SEASON, slot_starts_at: H_26_15, status: "open" },
+      { id: "av-2", application_id: APP_B, season_id: SEASON, slot_starts_at: H_26_15, status: "open" }
+    ];
+    db.tables.application_reviews = [
+      { id: "rv-cu", application_id: APP_B, review_round: "interview", status: "assigned", reviewer_admin_user_id: ADMIN_RV }
+    ];
+
+    const schedule = await getMyInterviewerSchedule();
+
+    expect(schedule.ok).toBe(true);
+    if (schedule.ok) {
+      expect(schedule.waitingTotal).toBe(1);
+      expect(schedule.waiting.flatMap((day) => day.hours)).toEqual([
+        { startsAtIso: H_26_15, hour: 15, waitingCount: 1 }
+      ]);
+    }
+  });
 });
 
 describe("9. interviewer bấm ghép", () => {
@@ -646,7 +786,7 @@ describe("9. interviewer bấm ghép", () => {
         booking_id: "bk-9",
         review_id: "rv-9",
         slot_starts_at: H_26_15,
-        previous_status: "submitted",
+        previous_status: "invited_to_interview",
         interviewer: {
           admin_user_id: ADMIN_CT,
           full_name: "Chị Core Team",

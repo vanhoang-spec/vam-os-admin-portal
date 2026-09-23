@@ -62,24 +62,57 @@ export const INVITE_INLINE_BUDGET_MS = 8_000;
 export const INVITE_STALE_CLAIM_MS = 10 * 60_000;
 
 /**
- * Đơn còn đứng ở đâu thì link đặt lịch còn hiệu lực — chủ dự án chốt
- * 22/09/2026: mọi đơn mentor qua form còn mở, kể cả đang giữa vòng hồ sơ.
- * `interview_scheduled` có mặt để người vừa được huỷ lịch đặt lại được.
- * `needs_more_review` KHÔNG có mặt: ca đó cần người thật xử lý trước.
- * Danh sách này phải khớp từng chữ với hàm vam098_book_interview_slot —
- * bài test tĩnh của migration canh điều đó.
+ * Đơn phải QUA vòng hồ sơ rồi mới được mời trao đổi với core team — chủ dự án
+ * chốt 23/09/2026.
+ *
+ * Luật cũ (22/09) nhận mọi đơn mentor còn mở, kể cả đơn chưa ai chấm. Cái giá
+ * hiện ra ngay trong dữ liệu ngày 23/09: 9 người nhận thư mời khi hồ sơ còn
+ * đang nằm trên bàn reviewer (5 `screening_assigned`, 3 `submitted`, 1
+ * `ready_for_screening`), và 12 người nhận thư xong mới bị đánh "không phù
+ * hợp". Giờ của core team là thứ đắt nhất trong đợt tuyển, nên vòng hồ sơ
+ * phải là CỬA chứ không phải một bước song song.
+ *
+ * `invited_to_interview` là quyết định thật mà core team bấm ("Mời phỏng vấn"
+ * trong lib/screening-decision.ts); `screening_passed` là hình thái cũ cùng
+ * nghĩa, còn sót lại từ luồng hai bước; `interview_scheduled` có mặt để người
+ * vừa bị huỷ lịch đặt lại được.
+ *
+ * Danh sách này phải khớp từng chữ với vam098_book_interview_slot và
+ * vam099_match_mentor_at_hour. Trước 23/09 không có bài test nào canh điều đó
+ * — giờ có: __tests__/interview-invite-after-screening-migration.test.ts đối
+ * chiếu hằng này với cả hai thân hàm SQL theo hai chiều.
  */
 export const BOOKING_ELIGIBLE_STATUSES: ReadonlySet<string> = new Set([
+  "screening_passed",
+  "invited_to_interview",
+  "interview_scheduled"
+]);
+
+/**
+ * Đơn còn đang trong vòng hồ sơ — chưa ai chấm xong, chưa có quyết định.
+ *
+ * Tách riêng vì hai lý do dẫn tới cùng một câu "chưa đặt lịch được" nhưng phải
+ * nói hai câu khác nhau: người đang chờ chấm thì thư mời sẽ tới sau, còn người
+ * đã có kết quả thì không. Đây là trạng thái CÓ THẬT với người cầm link: 9
+ * mentor đã nhận thư trước khi luật siết lại.
+ */
+export const PROFILE_ROUND_STATUSES: ReadonlySet<string> = new Set([
   "submitted",
   "under_data_check",
   "ready_for_screening",
   "screening_assigned",
   "screening_in_progress",
   "screening_completed",
-  "screening_passed",
-  "invited_to_interview",
-  "interview_scheduled"
+  "needs_admin_review",
+  "needs_more_review"
 ]);
+
+export type BookingBlockedReason = "pending_screening" | "closed";
+
+/** Vì sao đơn này chưa đặt lịch được — để trang nói đúng câu cho đúng người. */
+export function bookingBlockedReason(status: unknown): BookingBlockedReason {
+  return PROFILE_ROUND_STATUSES.has(String(status ?? "")) ? "pending_screening" : "closed";
+}
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
