@@ -17,7 +17,9 @@ import {
   INVITE_TIME_BUDGET_MS,
   InterviewerStats,
   MentorBucket,
+  WaitingDayGroup,
   buildSlotGrid,
+  buildWaitingGrid,
   canMentorCancel,
   classifyMentor,
   computeInterviewerStats,
@@ -194,6 +196,10 @@ export type MyInterviewerSchedule =
       phone: string;
       days: MyScheduleDay[];
       stats: InterviewerStats;
+      /** Chiều ngược: khung giờ nào đang có mentor tự khai rảnh mà chưa ai ghép. */
+      waiting: WaitingDayGroup[];
+      /** Số MENTOR đang chờ, không phải số lượt giờ — một người khai năm giờ vẫn là một người. */
+      waitingTotal: number;
     }
   | { ok: false; message: string };
 
@@ -269,6 +275,47 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
     }))
   }));
 
+  // Chiều ngược: mentor tự khai giờ rảnh và chờ được ghép. Đọc ở đây để
+  // interviewer mở trang là thấy ngay khung giờ nào đang tắc, thay vì đoán.
+  const waitingRows = await readAllPages<Json>(
+    "interview_mentor_availability",
+    "application_id,slot_starts_at",
+    (columns) =>
+      client
+        .from("interview_mentor_availability")
+        .select(columns)
+        .eq("season_id", actor.seasonId)
+        .eq("status", "open")
+        .gt("slot_starts_at", nowIso)
+  );
+  if (waitingRows.error) {
+    log("mentor availability read failed", waitingRows.error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  // Mentor đã tự giữ chỗ qua link riêng thì giờ họ khai không còn là nhu cầu —
+  // lọc ở lúc đọc chứ không dọn bảng, để huỷ lịch là họ chờ lại được ngay.
+  const alreadyBooked = new Set<string>();
+  const waitingAppIds = Array.from(new Set(waitingRows.data.map((row) => String(row.application_id))));
+  if (waitingAppIds.length > 0) {
+    const live = await readAllPagesIn<Json>(
+      client,
+      "interview_bookings",
+      "application_id",
+      waitingAppIds,
+      "application_id,status"
+    );
+    if (live.error) {
+      log("waiting bookings read failed", live.error);
+      return { ok: false, message: SAFE_ERROR };
+    }
+    for (const row of live.data) {
+      if (String(row.status) === "booked") alreadyBooked.add(String(row.application_id));
+    }
+  }
+
+  const stillWaiting = waitingRows.data.filter((row) => !alreadyBooked.has(String(row.application_id)));
+
   return {
     ok: true,
     isBtc: actor.isBtc,
@@ -278,7 +325,12 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
     stats: computeInterviewerStats(
       slots.data.map((slot) => ({ slot_starts_at: normIso(slot.slot_starts_at), status: String(slot.status) })),
       nowIso
-    )
+    ),
+    waiting: buildWaitingGrid(
+      countOpenSlotsByHour(stillWaiting.map((row) => ({ slot_starts_at: normIso(row.slot_starts_at) }))),
+      nowIso
+    ),
+    waitingTotal: new Set(stillWaiting.map((row) => String(row.application_id))).size
   };
 }
 
@@ -455,6 +507,16 @@ export type BookingPageData =
       totalOpen: number;
       windowEndLabel: string;
       hotlineZalo: string;
+      /**
+       * Chiều ngược: lưới để mentor chọn MỘT giờ mình rảnh. Luôn hiện song song
+       * với phần giữ chỗ (chủ dự án chốt 23/09/2026) — người bận đúng những giờ
+       * đang mở vẫn nói ra được thay vì đóng trang rồi thôi.
+       *
+       * `chosen` là một giá trị chứ không phải một danh sách: mỗi mentor chỉ giữ
+       * một lời ngỏ tại một thời điểm, và database canh điều đó bằng chỉ số bộ
+       * phận chứ không tin vào tầng này.
+       */
+      availability: { days: GridDay[]; chosen: string | null };
     };
 
 const INVALID_LINK: BookingPageData = {
@@ -596,6 +658,19 @@ export async function getBookingPageData(token: unknown): Promise<BookingPageDat
     }))
     .filter((day) => day.hours.length > 0);
 
+  // Giờ mentor này đang chờ — nhiều nhất một dòng, database canh bằng chỉ số.
+  const mine = await readAllPages<Json>("interview_mentor_availability", "slot_starts_at", (columns) =>
+    client
+      .from("interview_mentor_availability")
+      .select(columns)
+      .eq("application_id", String(app.id))
+      .eq("status", "open")
+  );
+  if (mine.error) {
+    log("mentor availability self read failed", mine.error);
+    return { ok: false, state: "invalid", message: SAFE_ERROR };
+  }
+
   return {
     ok: true,
     state: "eligible",
@@ -603,7 +678,11 @@ export async function getBookingPageData(token: unknown): Promise<BookingPageDat
     days,
     totalOpen,
     windowEndLabel: formatDate(slotInstant(INTERVIEW_WINDOW.lastDateKey, 7)),
-    hotlineZalo: HOTLINE_ZALO
+    hotlineZalo: HOTLINE_ZALO,
+    availability: {
+      days: buildSlotGrid(nowIso),
+      chosen: mine.data.length > 0 ? normIso(mine.data[0].slot_starts_at) : null
+    }
   };
 }
 
@@ -681,11 +760,29 @@ export async function bookInterviewSlot(input: {
     return { ok: false, message: BOOK_ERROR_MESSAGES[code] ?? SAFE_ERROR };
   }
 
+  const slotLabel = await sendBookingConfirmationEmails(payload, token);
+
+  return {
+    ok: true,
+    message: `Đã giữ chỗ ${slotLabel}. Thư xác nhận đang được gửi tới email của anh/chị.`,
+    slotLabel
+  };
+}
+
+/**
+ * Ba lá thư xác nhận một buổi hẹn vừa chốt: interviewer, mentor, ban tổ chức.
+ *
+ * Dùng chung cho CẢ HAI CHIỀU ghép — mentor tự giữ chỗ, và interviewer ghép
+ * vào giờ mentor tự khai. Hai chiều sinh ra cùng một buổi hẹn, nên chúng không
+ * được phép gửi hai bộ thư khác nhau; gom vào một cửa để sửa một chỗ là cả hai
+ * cùng đúng.
+ *
+ * Chỗ đã giữ xong rồi khi hàm này chạy, nên mọi lỗi gửi chỉ ghi log: một lá
+ * thư hỏng không được phép làm mentor tưởng mình chưa có lịch.
+ */
+async function sendBookingConfirmationEmails(payload: Json, bookingToken: string | null): Promise<string> {
   const info = parties(payload);
   const slotLabel = slotRangeLabel(info.slotIso);
-
-  // Ba lá thư xác nhận — chỗ đã giữ xong rồi, thư hỏng không được phép làm
-  // mentor tưởng mình chưa có lịch, nên mọi lỗi gửi chỉ ghi log.
   const requestOrigin = await getPublicOrigin();
   const seasonLabel = INTERVIEW_SEASON_CODE;
   try {
@@ -702,7 +799,7 @@ export async function bookInterviewSlot(input: {
         requestOrigin
       });
     }
-    if (info.candidate.email) {
+    if (info.candidate.email && bookingToken) {
       await sendInterviewInvite({
         toEmail: info.candidate.email,
         candidateName: info.candidate.name,
@@ -711,10 +808,14 @@ export async function bookInterviewSlot(input: {
         interviewerName: info.interviewer.name,
         interviewerEmail: info.interviewer.email,
         interviewerPhone: info.interviewer.phone,
-        bookingToken: token,
+        bookingToken,
         applicationId: info.candidate.applicationId,
         requestOrigin
       });
+    } else if (info.candidate.email) {
+      // Không có mã link riêng thì thư sẽ không mang được đường tự đổi lịch —
+      // thà báo to ở log còn hơn gửi một lá thư cụt cho ứng viên.
+      log("mentor confirmation email skipped: thiếu mã link riêng", info.candidate.applicationId);
     }
     await sendInterviewSchedule({
       toEmail: BTC_EMAIL,
@@ -730,10 +831,228 @@ export async function bookInterviewSlot(input: {
   } catch (error) {
     log("booking confirmation emails crashed", error);
   }
+  return slotLabel;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chiều ngược: mentor khai giờ mình rảnh, interviewer mở lưới ra ghép
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SaveMentorAvailabilityResult = { ok: boolean; message: string };
+
+/**
+ * Mentor chọn MỘT giờ mình rảnh, rồi chờ interviewer khớp vào đúng giờ đó.
+ *
+ * Không phải là giữ chỗ: không ai bị hẹn ở đây. Và chỉ một giờ tại một thời
+ * điểm (chủ dự án chốt 23/09/2026) — chọn giờ khác nghĩa là bỏ giờ cũ, chuỗi
+ * rỗng nghĩa là thôi không chờ nữa.
+ *
+ * Thứ tự ghi là phần đáng chú ý: bỏ lời ngỏ cũ TRƯỚC rồi mới mở lời ngỏ mới.
+ * Chỉ số bộ phận chỉ cho một dòng 'open' mỗi người, nên làm ngược lại sẽ vấp
+ * 23505 — và đó chính là tấm lưới đỡ khi hai tab của cùng một người bấm hai giờ
+ * khác nhau trong cùng một giây.
+ */
+export async function saveMentorAvailability(input: {
+  token: unknown;
+  slotStartsAt: unknown;
+}): Promise<SaveMentorAvailabilityResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const token = clean(input.token);
+  if (!token || !isValidUuid(token)) {
+    return { ok: false, message: BOOK_ERROR_MESSAGES.invalid_token };
+  }
+
+  const { data: invite, error: inviteError } = await client
+    .from("interview_slot_invites")
+    .select("application_id")
+    .eq("token", token)
+    .maybeSingle();
+  if (inviteError) {
+    log("invite lookup failed", inviteError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!invite?.application_id) {
+    return { ok: false, message: BOOK_ERROR_MESSAGES.invalid_token };
+  }
+  const applicationId = String(invite.application_id);
+
+  const { data: app, error: appError } = await client
+    .from("applications")
+    .select("id,status,role_applied,source,season_id")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (appError || !app) {
+    log("application read failed", appError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  // Đã có lịch rồi thì lời ngỏ không còn nghĩa gì. Kiểm lại ở máy chủ chứ
+  // không tin vào trang đã render — trang có thể mở từ nửa tiếng trước.
+  const { data: booked, error: bookedError } = await client
+    .from("interview_bookings")
+    .select("id")
+    .eq("application_id", applicationId)
+    .eq("status", "booked")
+    .limit(1);
+  if (bookedError) {
+    log("booking check failed", bookedError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if ((booked ?? []).length > 0) {
+    return { ok: false, message: BOOK_ERROR_MESSAGES.already_booked };
+  }
+
+  const reviews = await readAllPages<Json>("application_reviews", "id,status,review_round", (columns) =>
+    client
+      .from("application_reviews")
+      .select(columns)
+      .eq("application_id", applicationId)
+      .eq("review_round", "interview")
+      .neq("status", "cancelled")
+  );
+  if (reviews.error) {
+    log("reviews read failed", reviews.error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!isBookingEligibleApplication(app, reviews.data.map((row) => String(row.id)), null)) {
+    return { ok: false, message: BOOK_ERROR_MESSAGES.application_not_eligible };
+  }
+
+  const nowIso = new Date().toISOString();
+  const wanted = clean(input.slotStartsAt);
+
+  /**
+   * Gỡ mọi lời ngỏ đang mở, trừ giờ vừa chọn. Điều kiện status='open' giữ
+   * nguyên dòng đã ghép — dòng đó là bằng chứng của một buổi hẹn, không phải
+   * một lựa chọn đang chờ.
+   */
+  async function clearOpenExcept(except: string | null) {
+    let query = client!
+      .from("interview_mentor_availability")
+      .update({ status: "removed", removed_at: nowIso })
+      .eq("application_id", applicationId)
+      .eq("status", "open");
+    if (except) query = query.neq("slot_starts_at", except);
+    return query;
+  }
+
+  if (!wanted) {
+    const { error } = await clearOpenExcept(null);
+    if (error) {
+      log("mentor availability clear failed", error);
+      return { ok: false, message: SAFE_ERROR };
+    }
+    return { ok: true, message: "Đã bỏ giờ anh/chị khai. Lúc nào rảnh lại, anh/chị chọn giờ khác." };
+  }
+
+  const checked = isValidSlotInstant(wanted, nowIso);
+  if (!checked.ok) {
+    return { ok: false, message: "Khung giờ không hợp lệ hoặc đã qua — tải lại trang rồi chọn lại." };
+  }
+
+  const { error: clearError } = await clearOpenExcept(checked.startsAtIso);
+  if (clearError) {
+    log("mentor availability clear failed", clearError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  const { error: insertError } = await client.from("interview_mentor_availability").upsert(
+    [
+      {
+        application_id: applicationId,
+        season_id: String(app.season_id),
+        slot_starts_at: checked.startsAtIso,
+        status: "open"
+      }
+    ],
+    { onConflict: "application_id,slot_starts_at", ignoreDuplicates: true }
+  );
+  if (insertError) {
+    log("mentor availability upsert failed", insertError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  // Dòng cũ của đúng giờ này có thể đang 'removed' (từng bỏ rồi chọn lại) hoặc
+  // 'matched' (từng được ghép rồi huỷ lịch). Cả hai đều mở lại được — đến đây
+  // thì đã chắc người này không còn buổi hẹn nào đang hiệu lực. available_since
+  // reset: đã rút lời thì xếp lại cuối hàng FIFO.
+  const { error: reopenError } = await client
+    .from("interview_mentor_availability")
+    .update({ status: "open", available_since: nowIso, removed_at: null, matched_booking_id: null, matched_at: null })
+    .eq("application_id", applicationId)
+    .eq("slot_starts_at", checked.startsAtIso)
+    .in("status", ["removed", "matched"]);
+  if (reopenError) {
+    log("mentor availability reopen failed", reopenError);
+    return { ok: false, message: SAFE_ERROR };
+  }
 
   return {
     ok: true,
-    message: `Đã giữ chỗ ${slotLabel}. Thư xác nhận đang được gửi tới email của anh/chị.`,
+    message: `Đã ghi nhận anh/chị rảnh ${slotRangeLabel(checked.startsAtIso)}. Ban tổ chức sẽ ghép và gửi thư xác nhận.`
+  };
+}
+
+export type MatchResult = { ok: boolean; message: string; slotLabel?: string };
+
+const MATCH_ERROR_MESSAGES: Record<string, string> = {
+  missing_phone: "Anh/chị điền số điện thoại ở lưới giờ rảnh và bấm Lưu một lần trước đã — thư xác nhận gửi mentor cần số này.",
+  slot_in_past: "Khung giờ này đã qua — tải lại trang rồi chọn giờ khác.",
+  no_mentor_waiting: "Khung giờ này vừa hết người chờ — tải lại trang để xem danh sách mới nhất.",
+  mentor_already_booked: "Người đứng đầu hàng vừa có lịch khác — tải lại trang rồi ghép lại.",
+  interviewer_busy: "Anh/chị đã có một buổi hẹn đúng khung giờ này rồi."
+};
+
+/**
+ * Interviewer bấm ghép một khung giờ đang có mentor chờ.
+ *
+ * Toàn bộ phần tranh chấp nằm trong vam099_match_mentor_at_hour: chọn người
+ * khai sớm nhất, khoá đơn, mở giờ cho interviewer, tạo phiếu, đổi trạng thái —
+ * một transaction. Ở đây chỉ còn gác quyền, dịch mã lỗi, và gửi thư.
+ */
+export async function matchMentorAtHour(input: { slotStartsAt: unknown }): Promise<MatchResult> {
+  const access = await requireInterviewer();
+  if (!access.ok) return { ok: false, message: access.message };
+  const { client, actor } = access;
+
+  const nowIso = new Date().toISOString();
+  const checked = isValidSlotInstant(clean(input.slotStartsAt), nowIso);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      message:
+        checked.code === "in_past"
+          ? MATCH_ERROR_MESSAGES.slot_in_past
+          : "Khung giờ không hợp lệ — tải lại trang rồi chọn lại."
+    };
+  }
+
+  const { data, error } = await client.rpc("vam099_match_mentor_at_hour", {
+    p_actor: actor.adminUserId,
+    p_slot_starts_at: checked.startsAtIso
+  });
+  if (error) {
+    log("match rpc failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const payload = (data ?? {}) as Json;
+  if (payload.ok !== true) {
+    return { ok: false, message: MATCH_ERROR_MESSAGES[clean(payload.code)] ?? SAFE_ERROR };
+  }
+
+  // Thư gửi mentor mang đường tự đổi lịch, nên phải có mã link riêng. Người
+  // được ghép gần như luôn đã có mã (họ nhận thư mời mới khai được giờ), nhưng
+  // ban tổ chức cũng khai hộ được nên vẫn tạo nếu thiếu.
+  const applicationId = clean((payload.candidate as Json)?.application_id);
+  const bookingToken = applicationId ? await ensureInterviewInviteToken(applicationId) : null;
+  const slotLabel = await sendBookingConfirmationEmails(payload, bookingToken);
+  const candidateName = clean((payload.candidate as Json)?.full_name) || "mentor";
+
+  return {
+    ok: true,
+    message: `Đã ghép ${candidateName} vào ${slotLabel}. Thư xác nhận đang gửi cho cả hai bên.`,
     slotLabel
   };
 }

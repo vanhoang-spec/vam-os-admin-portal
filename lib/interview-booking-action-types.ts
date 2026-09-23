@@ -18,3 +18,17 @@ export const INITIAL_BOOKING_FORM_STATE: BookingFormState = {
   message: "",
   slotLabel: null
 };
+
+/**
+ * Trạng thái form "giờ tôi rảnh" — chiều ngược: mentor chọn MỘT giờ chứ không
+ * giữ chỗ, rồi chờ interviewer khớp vào đúng giờ đó.
+ */
+export type MentorAvailabilityState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export const INITIAL_MENTOR_AVAILABILITY_STATE: MentorAvailabilityState = {
+  status: "idle",
+  message: ""
+};

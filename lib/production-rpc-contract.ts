@@ -150,7 +150,17 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   // whitelist cũ và câu raise gốc còn nguyên, vẫn security invoker.
   "vam098_book_interview_slot",
   "vam098_cancel_interview_booking_mentor",
-  "vam098_cancel_interview_booking_btc"
+  "vam098_cancel_interview_booking_btc",
+  // Chiều ngược — migration 20260923040000_interview_mentor_availability.sql,
+  // chủ dự án dán 23/09/2026. Đã đọc catalog Production xác nhận: hàm có mặt,
+  // prosecdef = true, ACL đúng `postgres=X/postgres service_role=X/postgres`
+  // (không cấp cho anon/authenticated), thân hàm chứa vam063_trusted_api_role,
+  // `for update of av skip locked`, `av.available_since asc` và chặn thiếu SĐT,
+  // KHÔNG chứa lời gọi vam084_operator_for_season. Bảng đi kèm cũng đã xác
+  // minh: RLS bật, service_role đúng INSERT,SELECT,UPDATE (không DELETE),
+  // không rò quyền cho anon/authenticated, và có chỉ số bộ phận
+  // interview_mentor_availability_active_uidx canh luật một-mentor-một-lời-ngỏ.
+  "vam099_match_mentor_at_hour"
 ];
 
 /**

@@ -11,6 +11,7 @@ import {
   BOOKING_ELIGIBLE_STATUSES,
   bookingUrl,
   buildSlotGrid,
+  buildWaitingGrid,
   canMentorCancel,
   classifyMentor,
   computeInterviewerStats,
@@ -236,5 +237,37 @@ describe("6. mốc 24 giờ và link", () => {
     expect(bookingUrl("https://os.alumni-mentoring.edu.vn", "ma-rieng")).toBe(
       "https://os.alumni-mentoring.edu.vn/dat-lich/ma-rieng"
     );
+  });
+});
+
+describe("9. lưới mentor đang chờ (chiều ngược)", () => {
+  // 10:30 giờ Việt Nam ngày 24/09/2026.
+  const NOW = "2026-09-24T03:30:00.000Z";
+
+  it("bỏ giờ đã trôi qua, bỏ giờ không ai chờ, bỏ luôn ngày rỗng", () => {
+    const counts = new Map<string, number>([
+      [slotInstant("2026-09-24", 9), 3], // đã qua so với NOW
+      [slotInstant("2026-09-24", 15), 2],
+      [slotInstant("2026-09-25", 8), 0] // không ai chờ
+    ]);
+    const grid = buildWaitingGrid(counts, NOW);
+    expect(grid).toHaveLength(1);
+    expect(grid[0].dateKey).toBe("2026-09-24");
+    expect(grid[0].hours).toEqual([
+      { startsAtIso: slotInstant("2026-09-24", 15), hour: 15, waitingCount: 2 }
+    ]);
+  });
+
+  it("không có ai chờ thì lưới rỗng chứ không phải 14 ngày toàn số 0", () => {
+    expect(buildWaitingGrid(new Map(), NOW)).toEqual([]);
+  });
+
+  it("giữ nguyên con số đếm được, không cộng dồn nhầm sang giờ bên cạnh", () => {
+    const counts = new Map<string, number>([
+      [slotInstant("2026-09-25", 20), 18],
+      [slotInstant("2026-09-25", 21), 1]
+    ]);
+    const hours = buildWaitingGrid(counts, NOW).flatMap((day) => day.hours);
+    expect(hours.map((hour) => hour.waitingCount)).toEqual([18, 1]);
   });
 });

@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import {
   cancelInterviewBookingByBtc,
+  matchMentorAtHour,
   runInterviewInviteDispatch,
   saveInterviewerSlots
 } from "@/lib/interview-schedule";
 import type { DispatchResult } from "@/lib/interview-schedule-core";
-import type { AvailabilityFormState } from "@/lib/interview-schedule-action-types";
+import type { AvailabilityFormState, MatchFormState } from "@/lib/interview-schedule-action-types";
 
 /**
  * app/actions/interview-schedule.ts
@@ -30,6 +31,22 @@ function parseIsoList(formData: FormData, key: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Ghép một mentor đang chờ vào khung giờ này (chiều ngược).
+ *
+ * Người được ghép do database chọn — ai khai giờ đó sớm nhất — nên action
+ * không nhận id của ai cả, chỉ nhận khung giờ. Nhờ vậy hai interviewer bấm
+ * cùng lúc không thể cùng nhắm vào một người.
+ */
+export async function matchMentorAtHourAction(
+  _previousState: MatchFormState,
+  formData: FormData
+): Promise<MatchFormState> {
+  const result = await matchMentorAtHour({ slotStartsAt: String(formData.get("slotStartsAt") ?? "") });
+  if (result.ok) revalidateSchedule();
+  return { status: result.ok ? "success" : "error", message: result.message };
 }
 
 export async function saveInterviewerAvailabilityAction(

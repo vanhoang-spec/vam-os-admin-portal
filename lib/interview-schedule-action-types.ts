@@ -19,3 +19,11 @@ export const INITIAL_AVAILABILITY_STATE: AvailabilityFormState = {
   message: "",
   blockedRemovals: []
 };
+
+/** Trạng thái nút "Ghép ngay" trên bảng mentor đang chờ. */
+export type MatchFormState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export const INITIAL_MATCH_STATE: MatchFormState = { status: "idle", message: "" };

@@ -2,6 +2,7 @@ import { Card } from "@/components/ui";
 import { LiveRefresh } from "@/app/events/[id]/live-refresh";
 import { getBookingPageData } from "@/lib/interview-schedule";
 import { BookingForm, CancelBookingForm } from "./booking-form";
+import { MentorAvailabilityForm } from "./mentor-availability-form";
 
 /**
  * Trang đặt lịch phỏng vấn — công khai, không cần đăng nhập.
@@ -96,11 +97,30 @@ export default async function PublicInterviewBookingPage(props: { params: Promis
                 <BookingForm token={params.token} days={data.days} />
               ) : (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  Hiện chưa có khung giờ trống nào. Ban tổ chức đang bổ sung — anh/chị quay lại sau, hoặc chờ thư
-                  nhắc kèm chính đường dẫn này.
+                  Hiện chưa có khung giờ trống nào. Anh/chị khai giờ mình rảnh ở ngay bên dưới — ban tổ chức sẽ mở
+                  đúng những giờ đó và ghép cho anh/chị.
                 </p>
               )}
             </Card>
+
+            <Card className="mt-5">
+              <h2 className="mb-1 text-base font-semibold text-vam-ink">Giờ anh/chị rảnh</h2>
+              <p className="mb-1 text-sm text-vam-ink">
+                Không có khung giờ nào ở trên hợp với anh/chị? Chọn <strong>một</strong> khung giờ mình rảnh rồi
+                bấm lưu, và chờ ban tổ chức ghép người phỏng vấn vào đúng giờ đó.
+              </p>
+              <p className="mb-4 text-xs text-slate-500">
+                Lưu ở đây <strong>chưa phải là lịch hẹn</strong> — chỉ khi ban tổ chức ghép xong, anh/chị mới nhận
+                thư xác nhận kèm tên và số điện thoại người phỏng vấn. Trong lúc chờ, anh/chị đổi sang giờ khác
+                lúc nào cũng được.
+              </p>
+              <MentorAvailabilityForm
+                token={params.token}
+                days={data.availability.days}
+                chosen={data.availability.chosen}
+              />
+            </Card>
+
             <LiveRefresh />
           </>
         )}

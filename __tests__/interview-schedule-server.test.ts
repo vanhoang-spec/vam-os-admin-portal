@@ -28,13 +28,15 @@ vi.mock("@/lib/email", () => ({
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { sendInterviewSlotInvite } from "@/lib/email";
+import { sendInterviewInvite, sendInterviewSchedule, sendInterviewSlotInvite } from "@/lib/email";
 import {
   getBookingPageData,
   getBtcOverview,
   getMyInterviewerSchedule,
+  matchMentorAtHour,
   runInterviewInviteDispatch,
-  saveInterviewerSlots
+  saveInterviewerSlots,
+  saveMentorAvailability
 } from "@/lib/interview-schedule";
 import { FakeDb, clientFor } from "./support/interview-fake-db";
 
@@ -488,5 +490,202 @@ describe("5. tổng quan ban tổ chức", () => {
       expect(overview.upcomingBookings[0].candidateName).toBe("Nguyễn Văn A");
       expect(overview.upcomingBookings[0].interviewerName).toBe("Chị Core Team");
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chiều ngược: mentor khai giờ rảnh, interviewer ghép
+// ─────────────────────────────────────────────────────────────────────────────
+
+function seedInvite(applicationId = APP_A, token = TOKEN_A) {
+  db.tables.interview_slot_invites = [
+    { id: "inv-1", application_id: applicationId, token, send_count: 1, claimed_at: null }
+  ];
+}
+
+describe("7. mentor chọn một giờ rảnh", () => {
+  /** Các lời ngỏ đang mở của một đơn — đúng thứ interviewer sẽ nhìn thấy. */
+  function openHours(applicationId = APP_A) {
+    return db
+      .rows("interview_mentor_availability")
+      .filter((row) => row.application_id === applicationId && row.status === "open")
+      .map((row) => row.slot_starts_at);
+  }
+
+  it("ghi đúng mùa của đơn và để trạng thái mở — chưa phải là lịch hẹn", async () => {
+    seedInvite();
+    const result = await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: H_24_09 });
+    expect(result.ok).toBe(true);
+    const rows = db.rows("interview_mentor_availability");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("open");
+    expect(rows[0].season_id).toBe(SEASON);
+    expect(rows[0].application_id).toBe(APP_A);
+    // Không được đẻ ra dòng giữ chỗ nào — đây chỉ là lời ngỏ.
+    expect(db.rows("interview_bookings")).toHaveLength(0);
+  });
+
+  it("chọn giờ khác thì giờ cũ tự bỏ — một mentor chỉ giữ MỘT lời ngỏ", async () => {
+    // Luật do chủ dự án chốt 23/09/2026, và database canh bằng chỉ số bộ phận
+    // trên (application_id) where status='open'. Ca này giữ tầng ứng dụng không
+    // bao giờ cố ghi dòng thứ hai để rồi vấp 23505 trước mặt người dùng.
+    seedInvite();
+    await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: H_24_09 });
+    await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: H_26_15 });
+
+    expect(openHours()).toEqual([H_26_15]);
+    const old = db.rows("interview_mentor_availability").find((row) => row.slot_starts_at === H_24_09);
+    expect(old?.status).toBe("removed");
+  });
+
+  it("gửi chuỗi rỗng là thôi không chờ nữa", async () => {
+    seedInvite();
+    await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: H_24_09 });
+    const result = await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: "" });
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("Đã bỏ giờ");
+    expect(openHours()).toEqual([]);
+  });
+
+  it("chọn lại đúng giờ từng được ghép rồi huỷ thì mở lại được, và cắt liên kết buổi hẹn cũ", async () => {
+    seedInvite();
+    db.tables.interview_mentor_availability = [
+      {
+        id: "av-1",
+        application_id: APP_A,
+        season_id: SEASON,
+        slot_starts_at: H_24_09,
+        status: "matched",
+        matched_booking_id: "bk-cu"
+      }
+    ];
+    const result = await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: H_24_09 });
+    expect(result.ok).toBe(true);
+    const row = db.rows("interview_mentor_availability").find((item) => item.id === "av-1");
+    expect(row?.status).toBe("open");
+    // Ràng buộc của database: chỉ dòng 'matched' mới được trỏ về một buổi hẹn.
+    expect(row?.matched_booking_id).toBeNull();
+  });
+
+  it("người đã có lịch thì không khai được nữa", async () => {
+    seedInvite();
+    db.tables.interview_bookings = [
+      { id: "bk-1", application_id: APP_A, slot_id: "s1", status: "booked", slot_starts_at: H_24_10 }
+    ];
+    const result = await saveMentorAvailability({ token: TOKEN_A, slotStartsAt: H_24_09 });
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("đã có một lịch phỏng vấn");
+    expect(db.rows("interview_mentor_availability")).toHaveLength(0);
+  });
+
+  it("đường dẫn lạ thì không ghi gì cả", async () => {
+    seedInvite();
+    const result = await saveMentorAvailability({
+      token: "00000000-0000-4000-c000-000000009999",
+      slotStartsAt: H_24_09
+    });
+    expect(result.ok).toBe(false);
+    expect(db.rows("interview_mentor_availability")).toHaveLength(0);
+  });
+});
+
+describe("8. interviewer nhìn thấy ai đang chờ", () => {
+  it("đếm theo khung giờ, và người đã có lịch không còn là nhu cầu", async () => {
+    seedProfile();
+    const APP_C = "00000000-0000-4000-a000-000000000003";
+    db.tables.applications.push({
+      id: APP_C,
+      season_id: SEASON,
+      role_applied: "mentor",
+      source: "vam_os_form",
+      status: "submitted",
+      full_name: "Lê Văn C",
+      email_primary: "c@example.com",
+      phone_primary: "0900000003"
+    });
+    // Mỗi người đúng MỘT lời ngỏ — luật một-giờ-một-người.
+    db.tables.interview_mentor_availability = [
+      { id: "av-1", application_id: APP_A, season_id: SEASON, slot_starts_at: H_26_15, status: "open" },
+      { id: "av-2", application_id: APP_B, season_id: SEASON, slot_starts_at: H_26_15, status: "open" },
+      { id: "av-3", application_id: APP_C, season_id: SEASON, slot_starts_at: H_24_09, status: "open" }
+    ];
+    // APP_A đã tự giữ chỗ qua link riêng — giờ họ khai không được đếm nữa.
+    db.tables.interview_bookings = [
+      { id: "bk-1", application_id: APP_A, slot_id: "s1", status: "booked", slot_starts_at: H_24_10 }
+    ];
+
+    const schedule = await getMyInterviewerSchedule();
+    expect(schedule.ok).toBe(true);
+    if (schedule.ok) {
+      // Còn hai người chờ: APP_B ở 15:00 26/09, APP_C ở 09:00 24/09.
+      expect(schedule.waitingTotal).toBe(2);
+      const hours = schedule.waiting.flatMap((day) => day.hours);
+      expect(hours).toEqual([
+        { startsAtIso: H_24_09, hour: 9, waitingCount: 1 },
+        { startsAtIso: H_26_15, hour: 15, waitingCount: 1 }
+      ]);
+    }
+  });
+});
+
+describe("9. interviewer bấm ghép", () => {
+  it("mã lỗi của database được dịch thành câu người đọc hiểu", async () => {
+    seedProfile();
+    rpc.mockResolvedValue({ data: { ok: false, code: "no_mentor_waiting" }, error: null });
+    const result = await matchMentorAtHour({ slotStartsAt: H_26_15 });
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("vừa hết người chờ");
+  });
+
+  it("ghép xong gửi đúng ba lá thư: interviewer, mentor, ban tổ chức", async () => {
+    seedProfile();
+    seedInvite();
+    rpc.mockResolvedValue({
+      data: {
+        ok: true,
+        booking_id: "bk-9",
+        review_id: "rv-9",
+        slot_starts_at: H_26_15,
+        previous_status: "submitted",
+        interviewer: {
+          admin_user_id: ADMIN_CT,
+          full_name: "Chị Core Team",
+          email: "core@example.com",
+          phone: "0912345678"
+        },
+        candidate: {
+          application_id: APP_A,
+          full_name: "Nguyễn Văn A",
+          email: "a@example.com",
+          phone: "0900000001"
+        }
+      },
+      error: null
+    });
+
+    const result = await matchMentorAtHour({ slotStartsAt: H_26_15 });
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("Nguyễn Văn A");
+
+    expect(rpc).toHaveBeenCalledWith("vam099_match_mentor_at_hour", {
+      p_actor: ADMIN_CT,
+      p_slot_starts_at: H_26_15
+    });
+    // Hai lá qua sendInterviewSchedule (interviewer + ban tổ chức), một lá qua
+    // sendInterviewInvite (mentor, kèm đường tự đổi lịch).
+    expect((sendInterviewSchedule as Mock).mock.calls.map((call) => call[0].toEmail)).toEqual([
+      "core@example.com",
+      "hello@alumni-mentoring.edu.vn"
+    ]);
+    expect((sendInterviewInvite as Mock).mock.calls).toHaveLength(1);
+    expect((sendInterviewInvite as Mock).mock.calls[0][0].toEmail).toBe("a@example.com");
+    expect((sendInterviewInvite as Mock).mock.calls[0][0].bookingToken).toBe(TOKEN_A);
+  });
+
+  it("giờ đã trôi qua thì chặn ngay ở tầng ứng dụng, không phiền database", async () => {
+    seedProfile();
+    const result = await matchMentorAtHour({ slotStartsAt: "2026-09-22T02:00:00.000Z" });
+    expect(result.ok).toBe(false);
+    expect(rpc).not.toHaveBeenCalledWith("vam099_match_mentor_at_hour", expect.anything());
   });
 });
