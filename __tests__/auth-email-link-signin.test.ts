@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   setAuthCookies: vi.fn(),
   clearAuthCookies: vi.fn(),
   signInWithOtp: vi.fn(),
+  resetPasswordForEmail: vi.fn(),
   redirect: vi.fn()
 }));
 
@@ -57,9 +58,25 @@ vi.mock("@/lib/admin-auth", () => ({
 }));
 
 import { completeEmailLinkSignIn } from "@/app/auth/callback/actions";
-import { requestMagicLinkAction } from "@/app/login/actions";
+import { requestMagicLinkAction, requestPasswordResetAction } from "@/app/login/actions";
 
 const REVIEWER = { id: "auth-1", email: "mentor@example.com" };
+
+/**
+ * Chỉ giữ lại những dòng MÃ, bỏ mọi dòng chú thích.
+ *
+ * Lọc theo dòng chứ không bằng biểu thức chính quy: một biểu thức bắt chú thích
+ * cần nhiều dấu gạch chéo ngược, mà công cụ ghi file trên máy này từng nuốt mất
+ * một lớp — và một biểu thức hỏng lặng lẽ ở đây sẽ làm phép kiểm luôn xanh.
+ */
+function stripComments(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => !line.startsWith("*") && !line.startsWith("/*") && !line.startsWith("//"))
+    .join("\n");
+}
+
 
 function authClientReturning(user: unknown, error: unknown = null) {
   return { auth: { getUser: vi.fn(async () => ({ data: { user }, error })) } };
@@ -70,9 +87,13 @@ beforeEach(() => {
   mocks.getSupabaseAuthClientWithAccessToken.mockReturnValue(authClientReturning(REVIEWER));
   mocks.findAdminUserForAuthUser.mockResolvedValue({ id: "au-1", role: "reviewer", status: "active" });
   mocks.getSupabaseAuthClientForPasswordSignIn.mockReturnValue({
-    auth: { signInWithOtp: mocks.signInWithOtp }
+    auth: {
+      signInWithOtp: mocks.signInWithOtp,
+      resetPasswordForEmail: mocks.resetPasswordForEmail
+    }
   });
   mocks.signInWithOtp.mockResolvedValue({ error: null });
+  mocks.resetPasswordForEmail.mockResolvedValue({ error: null });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,6 +240,115 @@ describe("requestMagicLinkAction", () => {
     expect(mocks.signInWithOtp).toHaveBeenCalledWith(
       expect.objectContaining({ email: "mentor@example.com" })
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Tự đặt lại mật khẩu, không phải nhờ ban tổ chức bấm hộ.
+ *
+ * Ô này CÔNG KHAI: ai gõ địa chỉ nào vào cũng được. Nên ba thứ phải đúng, và
+ * cả ba đều là thứ hỏng lặng lẽ nếu sai — không cổng nào trong bốn cổng bắt được.
+ */
+describe("requestPasswordResetAction", () => {
+  function form(fields: Record<string, string>) {
+    const data = new FormData();
+    for (const [k, v] of Object.entries(fields)) data.set(k, v);
+    return data;
+  }
+
+  /**
+   * Trỏ vào /auth/callback thì người bấm được đăng nhập thẳng và KHÔNG BAO GIỜ
+   * đặt được mật khẩu mới — lần sau họ lại quên, lại xin link. Tính năng trông
+   * như đang chạy, và vẫn vô dụng đúng ở điều nó hứa.
+   */
+  it("đưa người dùng tới trang đặt mật khẩu, KHÔNG phải trang callback", async () => {
+    await requestPasswordResetAction(
+      { error: null, sent: false },
+      form({ email: "mentor@example.com" })
+    );
+
+    expect(mocks.resetPasswordForEmail).toHaveBeenCalledWith(
+      "mentor@example.com",
+      expect.objectContaining({
+        redirectTo: "https://os.alumni-mentoring.edu.vn/reset-password"
+      })
+    );
+    const options = mocks.resetPasswordForEmail.mock.calls[0][1];
+    expect(options.redirectTo).not.toContain("/auth/callback");
+    // Query string đòi một mục ký tự đại diện trong Redirect Allow List mà
+    // người cấu hình phải nhớ thêm — thiếu nó thì hỏng im lặng.
+    expect(options.redirectTo).not.toContain("?");
+  });
+
+  it("KHÔNG DÒ DANH BẠ: địa chỉ lạ nhận đúng câu trả lời của địa chỉ có thật", async () => {
+    const known = await requestPasswordResetAction(
+      { error: null, sent: false },
+      form({ email: "mentor@example.com" })
+    );
+
+    mocks.resetPasswordForEmail.mockResolvedValue({
+      error: { name: "AuthApiError", status: 400, message: "User not found" }
+    });
+    const unknown = await requestPasswordResetAction(
+      { error: null, sent: false },
+      form({ email: "stranger@example.com" })
+    );
+
+    expect(unknown).toEqual(known);
+  });
+
+  it("chạm trần tần suất cũng không lộ ra — Supabase là chỗ chặn, không phải màn hình", async () => {
+    mocks.resetPasswordForEmail.mockResolvedValue({
+      error: { name: "AuthApiError", status: 429, message: "Email rate limit exceeded" }
+    });
+
+    const result = await requestPasswordResetAction(
+      { error: null, sent: false },
+      form({ email: "mentor@example.com" })
+    );
+
+    expect(result).toEqual({ error: null, sent: true });
+  });
+
+  it("địa chỉ rỗng bị từ chối, không gửi gì cả", async () => {
+    const result = await requestPasswordResetAction({ error: null, sent: false }, form({ email: "  " }));
+
+    expect(result.sent).toBe(false);
+    expect(result.error).toBeTruthy();
+    expect(mocks.resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it("chuẩn hoá địa chỉ đúng như phép tra tài khoản", async () => {
+    await requestPasswordResetAction(
+      { error: null, sent: false },
+      form({ email: "  Mentor@Example.COM  " })
+    );
+
+    expect(mocks.resetPasswordForEmail).toHaveBeenCalledWith(
+      "mentor@example.com",
+      expect.anything()
+    );
+  });
+
+  /**
+   * Lối tự dựng link (`auth.admin.generateLink` rồi gửi Brevo) là lối đúng cho
+   * mọi thư mật khẩu khác của VAM OS — nhưng chúng đều nằm sau một cánh cửa đã
+   * xác thực. Đặt nó sau một ô công khai là biến khoá service_role thành máy
+   * phát thư cho bất kỳ địa chỉ nào, và đốt hạn mức Brevo dùng chung.
+   */
+  it("KHÔNG dùng khoá quản trị hay Brevo — ô công khai chỉ được dùng khoá công khai", () => {
+    const source = readFileSync(join(ROOT, "app", "login", "actions.ts"), "utf8");
+    // Soi MÃ, không soi chú thích: chính đoạn giải thích của file này gọi tên
+    // lối bị cấm để nói vì sao không chọn nó. Quét cả file sẽ đỏ vì đúng câu
+    // đang bảo vệ điều cần bảo vệ — một phép kiểm nói dối.
+    const code = stripComments(source);
+
+    expect(code).not.toContain("generateLink");
+    expect(code).not.toContain("auth.admin");
+    expect(code).not.toContain("getSupabaseServiceRoleClient");
+    expect(code).not.toContain("SERVICE_ROLE");
+    expect(code).toContain("resetPasswordForEmail");
   });
 });
 

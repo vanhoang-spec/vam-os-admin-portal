@@ -5,8 +5,10 @@ import { useFormState, useFormStatus } from "react-dom";
 import {
   loginAction,
   requestMagicLinkAction,
+  requestPasswordResetAction,
   type LoginActionState,
-  type MagicLinkActionState
+  type MagicLinkActionState,
+  type PasswordResetActionState
 } from "./actions";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
@@ -15,6 +17,11 @@ const initialState: LoginActionState = {
 };
 
 const initialMagicLinkState: MagicLinkActionState = {
+  error: null,
+  sent: false
+};
+
+const initialPasswordResetState: PasswordResetActionState = {
   error: null,
   sent: false
 };
@@ -39,6 +46,24 @@ function MagicLinkButton() {
   );
 }
 
+/**
+ * Nút xin link đặt lại mật khẩu. Cũng phải nằm trong <form> của riêng nó, cùng
+ * lý do với nút bên trên: useFormStatus chỉ báo về đúng form nó đứng trong.
+ */
+function PasswordResetButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="flex h-11 items-center justify-center gap-2 rounded-md border border-vam-green px-4 text-sm font-semibold text-vam-green hover:bg-vam-mint disabled:cursor-not-allowed disabled:opacity-70"
+    >
+      {pending && <Loader2 className="h-4 w-4 animate-spin" data-testid="password-reset-spinner" />}
+      {pending ? "Đang gửi..." : "Đặt lại mật khẩu"}
+    </button>
+  );
+}
+
 function SubmitButton() {
   const { pending } = useFormStatus();
 
@@ -59,6 +84,10 @@ export function LoginForm({ next }: { next: string }) {
   const [magicLinkState, magicLinkAction] = useFormState(
     requestMagicLinkAction,
     initialMagicLinkState
+  );
+  const [passwordResetState, passwordResetAction] = useFormState(
+    requestPasswordResetAction,
+    initialPasswordResetState
   );
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
@@ -146,7 +175,43 @@ export function LoginForm({ next }: { next: string }) {
       <p className="text-sm text-slate-600">
         Chưa đặt mật khẩu, hoặc không nhớ mật khẩu?
       </p>
-      <form action={magicLinkAction} className="mt-3 grid gap-3">
+
+      {/*
+        Đặt lại mật khẩu đứng TRƯỚC liên kết đăng nhập, và đó là chủ ý. Người
+        vào đây phần lớn muốn lấy lại quyền kiểm soát tài khoản chứ không chỉ
+        vào một lần: liên kết đăng nhập cho họ vào được hôm nay rồi để họ quên
+        y như cũ vào lần sau. Ai chỉ cần vào nhanh vẫn có nút thứ hai ngay dưới.
+      */}
+      <form action={passwordResetAction} className="mt-3 grid gap-3">
+        <input type="hidden" name="email" value={email} />
+        {passwordResetState.sent ? (
+          <div
+            className="rounded-md border border-vam-green bg-vam-mint/40 px-3 py-2 text-sm text-vam-ink"
+            role="status"
+          >
+            Nếu email này có tài khoản, chúng tôi đã gửi một liên kết đặt lại mật khẩu. Vui
+            lòng kiểm tra hộp thư, kể cả mục Spam.
+          </div>
+        ) : (
+          <>
+            {passwordResetState.error ? (
+              <div
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                role="alert"
+              >
+                {passwordResetState.error}
+              </div>
+            ) : null}
+            <PasswordResetButton />
+            <p className="text-xs leading-5 text-slate-500">
+              Chúng tôi gửi một liên kết tới email ở trên để anh/chị tự đặt mật khẩu mới.
+              Không cần nhờ ban tổ chức.
+            </p>
+          </>
+        )}
+      </form>
+
+      <form action={magicLinkAction} className="mt-4 grid gap-3 border-t border-dashed border-vam-line pt-4">
         <input type="hidden" name="next" value={next} />
         <input type="hidden" name="email" value={email} />
         {magicLinkState.sent ? (
@@ -169,8 +234,8 @@ export function LoginForm({ next }: { next: string }) {
             ) : null}
             <MagicLinkButton />
             <p className="text-xs leading-5 text-slate-500">
-              Chúng tôi gửi một liên kết tới email ở trên. Bấm vào liên kết đó là vào thẳng,
-              không cần mật khẩu.
+              Chỉ cần vào một lần? Chúng tôi gửi một liên kết tới email ở trên. Bấm vào liên
+              kết đó là vào thẳng, không cần mật khẩu.
             </p>
           </>
         )}
