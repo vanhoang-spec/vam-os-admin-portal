@@ -12,6 +12,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_CONG_CU_AI.pdf` | Super Admin, Admin, Core team, Support team | Một trang: sáu công cụ AI, các bước chạy và lưu kết quả, quy tắc không đưa dữ liệu cá nhân sang DeepSeek, các lỗi thường gặp |
 | `HUONG_DAN_LICH_PHONG_VAN.pdf` | Core team, Support team, BTC tuyển sinh | Một trang: lịch phỏng vấn mentor 1:1 — interviewer đăng giờ rảnh, ứng viên tự giữ chỗ qua link riêng, thư mời/nhắc tự động, huỷ và đổi lịch, các tình huống thường gặp |
 | `HUONG_DAN_CANVA_AI.pdf` | Support team, Core team | Một trang: dùng công cụ **Brief thiết kế cho Canva AI** trên app để soạn prompt tiếng Anh, rồi dán sang Canva AI ra key visual / poster / video — kèm ba thứ luôn phải sửa tay và quy tắc không đưa dữ liệu cá nhân ra ngoài |
+| `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
 
 ## Sửa và xuất lại bản PDF
 
@@ -96,3 +97,17 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   bằng cách chép tên nút hiện tại của Canva vào
 - Giữ **đúng một trang**: test tự đếm số trang trong PDF, nên sửa HTML xong phải
   dựng lại PDF bằng lệnh Chrome ở trên
+
+**Tự đặt lại mật khẩu (một trang):**
+
+- Nhãn hai nút trên `/login`, các câu trên `/reset-password`, và độ dài mật khẩu
+  tối thiểu — `__tests__/huong-dan-tu-dat-lai-mat-khau.test.ts` đối chiếu từng
+  câu với `app/login/login-form.tsx`, `app/login/page.tsx`,
+  `app/reset-password/page.tsx` và `lib/password-link-core.ts`
+- Mục "Hai nút, đừng nhầm" là phần dễ mất nhất khi ai đó gọn lại tài liệu. Giữ
+  nó: hai nút đứng cạnh nhau và chỉ khác nhau ở HẬU QUẢ, người bấm nhầm vẫn vào
+  được và vẫn kẹt y hệt vào lần sau
+- Người đọc tài liệu này đang KHÔNG vào được hệ thống, nên họ không đối chiếu
+  được với màn hình. Sai một nhãn ở đây tốn của họ một vòng nhắn ban tổ chức —
+  đúng thứ tính năng này sinh ra để xoá bỏ
+- Giữ **đúng một trang**: test tự đếm số trang trong PDF
