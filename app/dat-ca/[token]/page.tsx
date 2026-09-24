@@ -44,20 +44,50 @@ export default async function MenteeSessionBookingPage(props: {
             </div>
           </Card>
         ) : data.state === "booked" ? (
-          <Card>
-            <div className="rounded-lg border border-vam-green/40 bg-vam-mint/40 p-5 text-vam-ink">
-              <h2 className="text-lg font-semibold">Bạn đã có ca phỏng vấn</h2>
-              <p className="mt-2 text-sm font-medium">{data.booking.sessionLabel}</p>
-              <p className="mt-2 text-sm">
-                {data.booking.venue
-                  ? `Địa điểm: ${data.booking.venue}`
-                  : "Ban tổ chức sẽ gửi địa điểm cụ thể qua email trước ngày phỏng vấn."}
-              </p>
-              <p className="mt-2 text-sm">
-                Cần đổi ca, bạn nhắn Zalo ban tổ chức <strong>{data.hotlineZalo}</strong> giúp mình nhé.
-              </p>
-            </div>
-          </Card>
+          <>
+            <Card>
+              <div className="rounded-lg border border-vam-green/40 bg-vam-mint/40 p-5 text-vam-ink">
+                <h2 className="text-lg font-semibold">Bạn đã có ca phỏng vấn</h2>
+                <p className="mt-2 text-sm font-medium">{data.booking.sessionLabel}</p>
+                <p className="mt-2 text-sm">
+                  {data.booking.venue
+                    ? `Địa điểm: ${data.booking.venue}`
+                    : "Ban tổ chức sẽ gửi địa điểm cụ thể qua email trước ngày phỏng vấn."}
+                </p>
+              </div>
+            </Card>
+
+            {data.canChange ? (
+              <Card>
+                <h2 className="mb-1 text-base font-semibold text-vam-ink">Cần đổi sang ca khác?</h2>
+                <p className="mb-1 text-sm text-vam-ink">
+                  Bấm vào ca bạn muốn chuyển sang. Ca hiện tại chỉ được nhả ra khi ca mới chắc chắn
+                  còn chỗ — bạn <strong>không bị mất chỗ</strong> nếu ca mới vừa kín.
+                </p>
+                {data.deadlineLabel ? (
+                  <p className="mb-4 text-xs text-slate-500">
+                    Đổi được tới <strong>{data.deadlineLabel}</strong>. Sau đó cần đổi thì nhắn Zalo
+                    ban tổ chức {data.hotlineZalo}.
+                  </p>
+                ) : null}
+                <SessionForm
+                  token={params.token}
+                  days={data.days}
+                  mode="change"
+                  currentSessionId={data.booking.sessionId}
+                />
+              </Card>
+            ) : (
+              <Card>
+                <p className="text-sm text-slate-600">
+                  Hiện không còn ca nào khác để đổi sang. Cần đổi, bạn nhắn Zalo ban tổ chức{" "}
+                  <strong>{data.hotlineZalo}</strong> giúp mình nhé.
+                </p>
+              </Card>
+            )}
+
+            <LiveRefresh />
+          </>
         ) : data.state === "ineligible" ? (
           <Card>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-900">

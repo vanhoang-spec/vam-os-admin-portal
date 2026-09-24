@@ -70,7 +70,14 @@ export type MenteeSessionPageData =
       ok: true;
       state: "booked";
       candidateName: string;
-      booking: { sessionLabel: string; venue: string | null };
+      booking: { sessionId: string; sessionLabel: string; venue: string | null };
+      /**
+       * Lưới ca kèm theo ngay ở trạng thái đã đặt, để người bấm nhầm đổi được
+       * tại chỗ. Không kèm thì mỗi lần bấm nhầm là một cuộc gọi cho ban tổ chức.
+       */
+      days: MenteeSessionDay[];
+      canChange: boolean;
+      deadlineLabel: string | null;
       hotlineZalo: string;
       support: { name: string; phone: string };
     }
@@ -150,16 +157,26 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
       .select("starts_at,ends_at,venue")
       .eq("id", String(booking.session_id))
       .maybeSingle();
+
+    const grid = await readSessionDays(client, String(app.season_id));
+    if (!grid.ok) return { ok: false, state: "invalid", message: SAFE_ERROR };
+
     return {
       ok: true,
       state: "booked",
       candidateName,
       booking: {
+        sessionId: String(booking.session_id),
         sessionLabel: session
           ? sessionFullLabel(normIso(session.starts_at), normIso(session.ends_at))
           : "",
         venue: clean(session?.venue) || null
       },
+      days: grid.days,
+      // Còn ca nào mở thì mới có gì để đổi sang. Hết hạn đăng ký thì mọi ca đều
+      // đóng, nên câu này cũng tự khoá theo hạn — không cần luật thứ hai.
+      canChange: hasBookableSession(grid.days),
+      deadlineLabel: grid.deadlineLabel,
       hotlineZalo: HOTLINE_ZALO,
       support: SUPPORT
     };
@@ -177,14 +194,41 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
     };
   }
 
+  const grid = await readSessionDays(client, String(app.season_id));
+  if (!grid.ok) return { ok: false, state: "invalid", message: SAFE_ERROR };
+
+  return {
+    ok: true,
+    state: "eligible",
+    candidateName,
+    days: grid.days,
+    anyBookable: hasBookableSession(grid.days),
+    totalRemaining: totalRemaining(grid.days),
+    deadlineLabel: grid.deadlineLabel,
+    hotlineZalo: HOTLINE_ZALO,
+    support: SUPPORT
+  };
+}
+
+/**
+ * Lưới 12 ca kèm số chỗ đã giữ.
+ *
+ * Một cửa cho cả hai trạng thái của trang: người chưa đặt dùng nó để chọn,
+ * người đã đặt dùng nó để đổi. Hai lượt đọc riêng là hai cơ hội để hai nửa của
+ * cùng một trang hiện hai con số chỗ trống khác nhau.
+ */
+async function readSessionDays(
+  client: any,
+  seasonId: string
+): Promise<{ ok: true; days: MenteeSessionDay[]; deadlineLabel: string | null } | { ok: false }> {
   const sessions = await readAllPages<Json>(
     "interview_sessions",
     "id,starts_at,ends_at,seat_limit,venue,booking_closes_at,status",
-    (columns) => client.from("interview_sessions").select(columns).eq("season_id", String(app.season_id))
+    (columns) => client.from("interview_sessions").select(columns).eq("season_id", seasonId)
   );
   if (sessions.error) {
     log("sessions read failed", sessions.error);
-    return { ok: false, state: "invalid", message: SAFE_ERROR };
+    return { ok: false };
   }
 
   const rows: SessionRow[] = sessions.data.map((row) => ({
@@ -198,19 +242,19 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
   }));
 
   // Đếm chỗ đã giữ của TẤT CẢ các ca trong một lượt đọc. Con số này chỉ để vẽ
-  // màn hình; phép cưỡng chế thật nằm trong vam101, đếm lại dưới khoá hàng.
+  // màn hình; phép cưỡng chế thật nằm trong vam101/vam102, đếm lại dưới khoá hàng.
   const taken = new Map<string, number>();
   if (rows.length > 0) {
     const booked = await readAllPages<Json>("mentee_interview_bookings", "id,session_id", (columns) =>
       client
         .from("mentee_interview_bookings")
         .select(columns)
-        .eq("season_id", String(app.season_id))
+        .eq("season_id", seasonId)
         .eq("status", "booked")
     );
     if (booked.error) {
       log("booked count read failed", booked.error);
-      return { ok: false, state: "invalid", message: SAFE_ERROR };
+      return { ok: false };
     }
     for (const row of booked.data) {
       const key = String(row.session_id);
@@ -218,20 +262,11 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
     }
   }
 
-  const nowIso = new Date().toISOString();
-  const days = buildSessionDays(rows, taken, nowIso);
   const closesAt = bookingClosesAt(rows);
-
   return {
     ok: true,
-    state: "eligible",
-    candidateName,
-    days,
-    anyBookable: hasBookableSession(days),
-    totalRemaining: totalRemaining(days),
-    deadlineLabel: closesAt ? `${formatTime(closesAt)} ngày ${formatDate(closesAt)}` : null,
-    hotlineZalo: HOTLINE_ZALO,
-    support: SUPPORT
+    days: buildSessionDays(rows, taken, new Date().toISOString()),
+    deadlineLabel: closesAt ? `${formatTime(closesAt)} ngày ${formatDate(closesAt)}` : null
   };
 }
 
@@ -296,4 +331,55 @@ export async function bookMenteeSession(input: {
 
   const label = sessionFullLabel(normIso(payload.starts_at), normIso(payload.ends_at));
   return { ok: true, message: "Đã ghi nhận ca phỏng vấn của bạn.", sessionLabel: label };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Đổi ca — cũng qua RPC nguyên tử
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CHANGE_ERROR_MESSAGES: Record<string, string> = {
+  ...BOOK_ERROR_MESSAGES,
+  no_booking: "Bạn chưa chọn ca nào, nên chưa có gì để đổi. Bạn tải lại trang giúp mình nhé.",
+  same_session: "Đây đang là ca của bạn rồi.",
+  /**
+   * Câu này phải nói rõ chỗ CŨ vẫn còn. Người vừa bấm đổi mà đọc "ca này đã
+   * kín" sẽ tưởng mình vừa mất luôn chỗ đang có, rồi gọi ban tổ chức — đúng
+   * việc mà tính năng này sinh ra để khỏi phải làm.
+   */
+  session_full: "Ca này vừa kín chỗ. Ca cũ của bạn vẫn còn nguyên — bạn chọn ca khác nhé.",
+  deadline_passed:
+    "Đã quá hạn đổi ca. Ca hiện tại của bạn vẫn còn nguyên; cần đổi gấp, bạn liên hệ ban tổ chức."
+};
+
+export async function changeMenteeSession(input: {
+  token: unknown;
+  sessionId: unknown;
+}): Promise<BookSessionResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const token = clean(input.token);
+  const sessionId = clean(input.sessionId);
+  if (!token || !isValidUuid(token)) return { ok: false, message: CHANGE_ERROR_MESSAGES.invalid_token };
+  if (!sessionId || !isValidUuid(sessionId)) {
+    return { ok: false, message: CHANGE_ERROR_MESSAGES.session_not_found };
+  }
+
+  const { data, error } = await client.rpc("vam102_change_mentee_session", {
+    p_token: token,
+    p_session_id: sessionId
+  });
+  if (error) {
+    log("vam102 failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  const payload = (data ?? {}) as Json;
+  if (!payload.ok) {
+    const code = String(payload.code ?? "");
+    return { ok: false, message: CHANGE_ERROR_MESSAGES[code] ?? SAFE_ERROR };
+  }
+
+  const label = sessionFullLabel(normIso(payload.starts_at), normIso(payload.ends_at));
+  return { ok: true, message: "Đã đổi sang ca mới.", sessionLabel: label };
 }

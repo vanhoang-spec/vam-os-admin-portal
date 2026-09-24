@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { bookMenteeSession } from "@/lib/mentee-interview";
+import { bookMenteeSession, changeMenteeSession } from "@/lib/mentee-interview";
 import { MENTEE_BOOKING_PATH_PREFIX } from "@/lib/mentee-interview-core";
 import {
   type SessionBookingState
@@ -24,6 +24,31 @@ export async function bookSessionAction(
   }
 
   // Đọc lại trang để số chỗ còn lại của mọi ca khớp với thực tế vừa đổi.
+  revalidatePath(`${MENTEE_BOOKING_PATH_PREFIX}/${token}`);
+  return {
+    status: "success",
+    message: result.message,
+    sessionLabel: result.sessionLabel ?? null
+  };
+}
+
+/**
+ * Đổi sang ca khác. Dùng hàm RIÊNG chứ không gọi lại bookSessionAction: chỗ cũ
+ * chỉ được nhả sau khi database chắc chắn ca mới còn chỗ, và phép đảm bảo đó
+ * nằm trong vam102 chứ không ở đây.
+ */
+export async function changeSessionAction(
+  token: string,
+  _previousState: SessionBookingState,
+  formData: FormData
+): Promise<SessionBookingState> {
+  const sessionId = String(formData.get("sessionId") ?? "");
+  const result = await changeMenteeSession({ token, sessionId });
+
+  if (!result.ok) {
+    return { status: "error", message: result.message, sessionLabel: null };
+  }
+
   revalidatePath(`${MENTEE_BOOKING_PATH_PREFIX}/${token}`);
   return {
     status: "success",
