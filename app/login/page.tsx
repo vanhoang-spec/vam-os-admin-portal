@@ -20,8 +20,14 @@ export default async function LoginPage(props: { searchParams?: Promise<{ next?:
           </p>
         </div>
         <LoginForm next={safeNext(searchParams?.next)} />
+        {/*
+          Câu này từng nói "không đăng nhập được thì liên hệ người phụ trách".
+          Từ 24/09/2026 quên mật khẩu đã tự xử lý được ngay bên dưới, nên để
+          nguyên là chỉ người dùng đi hỏi một việc họ tự làm xong trong một phút.
+          Việc thật sự còn cần người phụ trách chỉ còn là chưa có tài khoản.
+        */}
         <p className="mt-4 text-xs leading-5 text-slate-500">
-          Nếu bạn chưa có tài khoản hoặc không đăng nhập được, vui lòng liên hệ người phụ trách.
+          Chưa có tài khoản? Vui lòng liên hệ người phụ trách để được cấp quyền.
         </p>
       </section>
     </main>

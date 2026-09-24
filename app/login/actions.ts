@@ -9,7 +9,7 @@ import {
   setAuthCookies
 } from "@/lib/admin-auth";
 import { getSafeAuthErrorType, mapAuthError, safeNext } from "@/lib/auth-error-messages";
-import { getAuthCallbackUrl } from "@/lib/public-url";
+import { getAuthCallbackUrl, getPasswordResetUrl } from "@/lib/public-url";
 import { recordParticipantActivation, resolveParticipantIdentity } from "@/lib/participant-auth";
 
 export type LoginActionState = {
@@ -17,6 +17,11 @@ export type LoginActionState = {
 };
 
 export type MagicLinkActionState = {
+  error: string | null;
+  sent: boolean;
+};
+
+export type PasswordResetActionState = {
   error: string | null;
   sent: boolean;
 };
@@ -172,6 +177,59 @@ export async function requestMagicLinkAction(
     // An unknown address and a rate limit both land here. Neither is reported
     // back in a way that would let the sender tell them apart.
     console.warn("[login] magic link request failed", {
+      errorName: error.name ?? null,
+      errorStatus: error.status ?? null
+    });
+  }
+
+  return { error: null, sent: true };
+}
+
+/**
+ * Tự xin link đặt lại mật khẩu — không phải nhờ ban tổ chức bấm hộ.
+ *
+ * Trước 24/09/2026, người quên mật khẩu chỉ có hai đường: xin một liên kết đăng
+ * nhập một lần (vào được, nhưng vẫn không đặt được mật khẩu nên lần sau lại
+ * quên), hoặc nhắn ban tổ chức vào /admin/users bấm hộ. Với hơn trăm người
+ * phỏng vấn dùng tài khoản vài lần một mùa, đường thứ hai biến ban tổ chức
+ * thành quầy trực mật khẩu.
+ *
+ * VÌ SAO NHỜ SUPABASE GỬI, KHÔNG TỰ DỰNG LINK RỒI GỬI QUA BREVO
+ * ---------------------------------------------------------------------------
+ * Mọi thư mật khẩu khác của VAM OS đi theo lối tự dựng link rồi gửi Brevo,
+ * nhưng những lối đó đều nằm sau một cánh cửa đã xác thực: người bấm là quản
+ * trị viên. Ô này thì công khai, ai gõ địa chỉ nào vào cũng được. Đặt một lời
+ * gọi mang khoá service_role sau một cánh cửa mở là biến nó thành máy phát thư
+ * cho bất kỳ địa chỉ nào, và đốt hạn mức Brevo 300 thư/ngày mà cả hệ thống đang
+ * dùng chung.
+ *
+ * Hàm này chạy bằng khoá công khai, và Supabase tự lo giới hạn tần suất — đúng
+ * thứ một ô công khai cần. Nút "gửi liên kết đăng nhập" ngay bên cạnh đã chọn
+ * lối này từ trước; hai nút cùng một ô phải cùng một lối.
+ */
+export async function requestPasswordResetAction(
+  _previousState: PasswordResetActionState,
+  formData: FormData
+): Promise<PasswordResetActionState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    return { error: "Vui lòng nhập email.", sent: false };
+  }
+
+  const client = getSupabaseAuthClientForPasswordSignIn();
+  if (!client) return { error: mapAuthError("network_unavailable"), sent: false };
+
+  const redirectTo = await getPasswordResetUrl();
+
+  const { error } = await client.auth.resetPasswordForEmail(
+    email,
+    redirectTo ? { redirectTo } : {}
+  );
+
+  if (error) {
+    // Địa chỉ không có tài khoản và chạm trần tần suất cùng rơi vào đây. Không
+    // cái nào được báo ra theo cách phân biệt được hai thứ đó.
+    console.warn("[login] password reset request failed", {
       errorName: error.name ?? null,
       errorStatus: error.status ?? null
     });

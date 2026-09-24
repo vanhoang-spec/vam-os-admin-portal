@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
 
+import { PASSWORD_LINK_PATH } from "@/lib/password-link-core";
+
 /**
  * The origin this deployment is being served from, for building absolute URLs
  * that must survive a round trip through Supabase Auth.
@@ -64,4 +66,26 @@ export async function getAuthCallbackUrl(): Promise<string | null> {
   const origin = await getPublicOrigin();
   if (!origin) return null;
   return `${origin}/auth/callback`;
+}
+
+/**
+ * Absolute URL của trang đặt lại mật khẩu, cho link khôi phục Supabase gửi.
+ *
+ * KHÁC /auth/callback, và cố ý: callback dựng phiên rồi đưa người ta thẳng vào
+ * ứng dụng, còn đường này phải dừng lại ở biểu mẫu "mật khẩu mới". Trỏ link
+ * khôi phục vào callback thì người bấm được đăng nhập ngay và KHÔNG BAO GIỜ đặt
+ * được mật khẩu — lần sau họ lại quên, lại xin link, mãi mãi. Tính năng trông
+ * như đang chạy và vẫn vô dụng đúng ở điều nó hứa.
+ *
+ * Không mang query string, cùng lý do đã viết ở trên: mục trong Redirect Allow
+ * List phải khớp chính xác.
+ *
+ * ĐIỀU KIỆN VẬN HÀNH: đường dẫn này phải có trong Supabase → Authentication →
+ * URL Configuration → Redirect URLs. Thiếu nó, Supabase từ chối chuyển hướng và
+ * người dùng rơi về Site URL — thư vẫn tới, nhưng đáp xuống sai chỗ.
+ */
+export async function getPasswordResetUrl(): Promise<string | null> {
+  const origin = await getPublicOrigin();
+  if (!origin) return null;
+  return `${origin}${PASSWORD_LINK_PATH}`;
 }
