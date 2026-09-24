@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
+import { keepFormValues } from "@/lib/keep-form-values";
 import { handleReviewFormAction } from "@/app/actions/application-reviews";
 import {
   initialReviewActionState
@@ -176,7 +177,7 @@ export function ReviewForm({
         </div>
       )}
 
-      <form action={action} className="space-y-4">
+      <form onReset={keepFormValues} action={action} className="space-y-4">
         <input type="hidden" name="review_id" value={reviewId} />
 
         {/* Score grid */}

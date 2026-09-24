@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
+import { keepFormValues } from "@/lib/keep-form-values";
 import { INITIAL_SURVEY_FORM_STATE } from "@/lib/event-survey-action-types";
 import {
   MAX_ANSWER,
@@ -73,7 +74,7 @@ export function SurveyForm({
   const failed = state.status !== "idle";
 
   return (
-    <form action={formAction} className="grid gap-4">
+    <form onReset={keepFormValues} action={formAction} className="grid gap-4">
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="source" value={source} />
 
