@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormState } from "react-dom";
 import { keepFormValues } from "@/lib/keep-form-values";
+import { ConfirmationPhraseField } from "./confirmation-phrase-field";
 import { acceptRenewalAction, declineRenewalAction } from "@/app/actions/renewals";
 import { SubmitButton } from "@/components/submit-button";
 import { initialRenewalPublicActionState, type RenewalPublicDisplayDto } from "@/lib/renewal-types";
@@ -284,7 +285,11 @@ export function RenewalForm({
           <p className="mb-3 text-sm italic text-slate-600">
             {CONFIRMATION_PHRASES.mentor}
           </p>
-          <input className={fieldClass()} name={ACTIVE_READING_KEYS.mentor} required />
+          <ConfirmationPhraseField
+            name={ACTIVE_READING_KEYS.mentor}
+            phrase={CONFIRMATION_PHRASES.mentor}
+            className={fieldClass()}
+          />
         </div>
 
         <div className="rounded-md border border-vam-line bg-slate-50 p-4">
