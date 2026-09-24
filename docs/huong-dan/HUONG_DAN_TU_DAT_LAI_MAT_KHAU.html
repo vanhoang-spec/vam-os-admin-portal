@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Tự đặt lại mật khẩu VAM OS — Hướng dẫn cho người dùng</title>
+<style>
+  @page { size: A4; margin: 10mm 12mm 9mm 12mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 9pt;
+    line-height: 1.42;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  /* ── Đầu trang ───────────────────────────────────────────────────── */
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.6mm; margin-bottom: 3.4mm;
+  }
+  .eyebrow {
+    font-size: 7.4pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  h1 { font-size: 19pt; line-height: 1.1; margin: 1.2mm 0 1mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 9.4pt; max-width: 128mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.6pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  /* ── Bố cục ──────────────────────────────────────────────────────── */
+  .grid { display: grid; grid-template-columns: 1.12fr 1fr; gap: 6mm; align-items: start; }
+  h2 {
+    font-size: 8.4pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin: 0 0 1.6mm; font-weight: 700;
+  }
+  .block + .block { margin-top: 3.2mm; }
+  p { margin: 0 0 1.6mm; }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.5mm; font-size: 8.4pt; font-weight: 600; white-space: nowrap;
+  }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 1.3mm; font-size: 8.4pt; white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  .prep {
+    background: var(--mint); border-left: 3px solid var(--green);
+    padding: 2.2mm 3.2mm; margin-bottom: 3.2mm;
+  }
+  .prep b.h { display: block; margin-bottom: .6mm; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 8mm; margin-bottom: 2.2mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5.6mm; height: 5.6mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 8.2pt; text-align: center; line-height: 5.6mm;
+  }
+  ol.steps b.t { display: block; font-size: 9.6pt; margin-bottom: .3mm; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-top: 1.4mm; }
+  th, td { border: 1px solid var(--line); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+
+  ul.tight { margin: 0; padding-left: 4.2mm; }
+  ul.tight li { margin: .6mm 0; }
+
+  /* Khối minh hoạ màn hình. */
+  .mock {
+    margin-top: 1.6mm; border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+    font-size: 7.9pt; background: #fff;
+  }
+  .mock .cap {
+    background: #f6f9f7; color: var(--muted); padding: .7mm 2mm;
+    font-size: 7pt; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .mock .body { padding: 1.6mm 2mm; }
+  .mock .field {
+    display: block; border: 1px solid var(--line); border-radius: 3px;
+    padding: .9mm 1.4mm; margin: .8mm 0; color: var(--muted); background: #fbfdfc;
+  }
+
+  .warn {
+    background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink);
+    padding: 2.2mm 3.2mm;
+  }
+  .warn b.h { display: block; margin-bottom: .5mm; }
+
+  footer {
+    margin-top: 3mm; border-top: 1px solid var(--line); padding-top: 1.6mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7.3pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho người dùng VAM OS</div>
+    <h1>Quên mật khẩu? Tự đặt lại</h1>
+    <p class="sub">Không cần nhắn ai. Anh/chị tự làm xong trong khoảng một phút, ngay trên trang
+      đăng nhập.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 24/09/2026</div>
+</header>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái: các bước ─────────────── -->
+  <div>
+    <div class="prep">
+      <b class="h">Dành cho ai</b>
+      Mọi tài khoản VAM OS: ban tổ chức, core team, support team, người phỏng vấn, reviewer, và
+      mentor/mentee đã có tài khoản. Điều kiện duy nhất là anh/chị <b>đã từng được cấp tài khoản</b>.
+      <b>Chưa có tài khoản?</b> Đặt lại mật khẩu không giúp được gì — phải liên hệ người phụ trách
+      để được cấp quyền trước.
+    </div>
+
+    <div class="block">
+      <h2>Bốn bước</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Mở trang đăng nhập</b>
+          Vào <span class="path">os.alumni-mentoring.edu.vn/login</span>.
+        </li>
+        <li>
+          <b class="t">Gõ email vào ô Email</b>
+          Đúng địa chỉ anh/chị vẫn dùng với VAM OS. <b>Bỏ trống ô Mật khẩu</b> — bước này không cần
+          tới nó.
+        </li>
+        <li>
+          <b class="t">Bấm “Đặt lại mật khẩu”</b>
+          Nút nằm ở phần dưới cùng, dưới dòng <i>“Chưa đặt mật khẩu, hoặc không nhớ mật khẩu?”</i>
+          <div class="mock">
+            <div class="cap">Phần dưới trang đăng nhập</div>
+            <div class="body">
+              Chưa đặt mật khẩu, hoặc không nhớ mật khẩu?
+              <span class="field"><span class="btn solid">Đặt lại mật khẩu</span> — nhận link để tự đặt mật khẩu mới</span>
+              <span class="field"><span class="btn">Gửi liên kết đăng nhập qua email</span> — chỉ cần vào một lần, không đổi mật khẩu</span>
+            </div>
+          </div>
+          Màn hình sẽ hiện: <i>“Nếu email này có tài khoản, chúng tôi đã gửi một liên kết đặt lại
+          mật khẩu.”</i>
+        </li>
+        <li>
+          <b class="t">Mở thư và đặt mật khẩu mới</b>
+          Bấm link trong thư. Đáp đúng trang thì thấy tiêu đề <b>Đặt lại mật khẩu</b> và dòng
+          <i>“Nhập mật khẩu mới cho tài khoản VAM OS của bạn.”</i> Nhập mật khẩu mới hai lần rồi bấm
+          <span class="btn solid">Đặt lại mật khẩu</span>. Thấy
+          <i>“Mật khẩu đã được cập nhật!”</i> là xong — bấm <span class="btn">Đăng nhập</span> và
+          vào bằng mật khẩu vừa đặt. Đổi ý giữa chừng thì bấm
+          <span class="ui">Quay lại đăng nhập</span>, mật khẩu cũ vẫn nguyên.
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải: lưu ý và lỗi ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>Mật khẩu mới cần gì</h2>
+      <ul class="tight">
+        <li>Ít nhất <b>8 ký tự</b>. Ngắn hơn, trang báo
+          <span class="err">Mật khẩu phải có ít nhất 8 ký tự.</span></li>
+        <li>Hai ô phải giống nhau. Lệch nhau, trang báo
+          <span class="err">Mật khẩu nhập lại không khớp.</span></li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Hai nút, đừng nhầm</h2>
+      <table>
+        <tr><th style="width:42%">Bấm nút này</th><th>Được gì</th></tr>
+        <tr>
+          <td><span class="btn solid">Đặt lại mật khẩu</span></td>
+          <td>Đặt <b>mật khẩu mới</b> và dùng được mãi về sau. Chọn nút này.</td>
+        </tr>
+        <tr>
+          <td><span class="btn">Gửi liên kết đăng nhập qua email</span></td>
+          <td>Vào thẳng <b>một lần</b>, mật khẩu cũ không đổi. Tiện khi đang vội, nhưng lần sau vẫn
+            phải xin link tiếp.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="block">
+      <h2>Khi gặp trục trặc</h2>
+      <table>
+        <tr><th style="width:44%">Tình huống</th><th>Làm gì</th></tr>
+        <tr><td>Chờ mãi không thấy thư</td>
+            <td>Xem mục <b>Spam</b> và <b>Quảng cáo</b>. Vẫn không có: kiểm lại email đã gõ đúng
+              chưa, rồi bấm lại một lần.</td></tr>
+        <tr><td class="err">Link không hợp lệ</td>
+            <td>Link cũ hoặc đã dùng rồi. Quay lại trang đăng nhập, bấm
+              <span class="btn">Đặt lại mật khẩu</span> để lấy link mới.</td></tr>
+        <tr><td>Bấm link nhưng không ra trang đặt mật khẩu</td>
+            <td>Thử mở link bằng trình duyệt khác, hoặc chép link dán thẳng vào thanh địa chỉ.</td></tr>
+        <tr><td>Bấm nút mà không thấy gì xảy ra</td>
+            <td>Kiểm tra ô Email đã có nội dung chưa — nút gửi thư tới đúng địa chỉ trong ô đó.</td></tr>
+        <tr><td>Đặt mật khẩu xong vẫn không đăng nhập được</td>
+            <td>Tài khoản có thể đang bị khoá. Liên hệ người phụ trách — đây là việc đặt lại mật
+              khẩu không xử lý được.</td></tr>
+      </table>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Một điều cần biết</b>
+      Màn hình luôn trả lời <i>“Nếu email này có tài khoản…”</i> — kể cả khi địa chỉ đó không có tài
+      khoản nào. Đó là cố ý, để người lạ không dùng ô này dò xem ai có tài khoản trong hệ thống. Nên
+      nếu chờ mãi không thấy thư, khả năng cao là <b>địa chỉ gõ chưa đúng</b>, chứ không phải hệ
+      thống hỏng.
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn cho người dùng · Tự đặt lại mật khẩu</span>
+  <span>Chưa có tài khoản thì đặt lại mật khẩu không giúp được — liên hệ người phụ trách.</span>
+</footer>
+
+</body>
+</html>
