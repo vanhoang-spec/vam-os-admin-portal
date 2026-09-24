@@ -398,6 +398,11 @@ const REVIEW_ROUTES = [
   // tự gate bằng canSelfClaimInterview, tài khoản reviewer còn phải được cấp
   // vai trò interviewer của mùa ở tầng lib.
   "/interviews/lich",
+  // Cấu hình 12 ca phỏng vấn mentee (24/09/2026). CỐ Ý nằm trong REVIEW_ROUTES
+  // chứ không phải HELPER_REVIEW_ROUTES: trang gate bằng canAssignReview, hẹp
+  // hơn nhóm nav chứa nó, nên reviewer không được mời vào một trang chỉ trả về
+  // câu từ chối.
+  "/interviews/ca-mentee",
 ];
 
 // S12 helper boundary: the browse routes in the base set are now gated on the
