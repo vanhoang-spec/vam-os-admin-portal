@@ -148,6 +148,9 @@ export type PageOrder =
  *   interview_bookings /
  *   interview_slot_invites        supabase/migrations/20260922100000 create table (id uuid primary key)
  *   interview_mentor_availability supabase/migrations/20260923040000 create table (id uuid primary key)
+ *   interview_sessions            supabase/migrations/20260924190000 create table (id uuid primary key)
+ *   mentee_interview_bookings     supabase/migrations/20260924190000 create table (id uuid primary key)
+ *   mentee_interview_invites      supabase/migrations/20260924190000 create table (id uuid primary key)
  *
  * The two `range` tables are the exception and the reason this registry is not
  * just `.order("id")`: `mentor_industries` and `mentor_function_areas` are
@@ -175,7 +178,10 @@ export const PAGE_ORDER = {
   intake_batches: { strategy: "keyset", key: "id" },
   interview_bookings: { strategy: "keyset", key: "id" },
   interview_mentor_availability: { strategy: "keyset", key: "id" },
+  interview_sessions: { strategy: "keyset", key: "id" },
   interview_slot_invites: { strategy: "keyset", key: "id" },
+  mentee_interview_bookings: { strategy: "keyset", key: "id" },
+  mentee_interview_invites: { strategy: "keyset", key: "id" },
   interview_slots: { strategy: "keyset", key: "id" },
   interviewer_profiles: { strategy: "keyset", key: "id" },
   matches: { strategy: "keyset", key: "id" },
