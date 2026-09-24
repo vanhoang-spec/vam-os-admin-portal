@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
+import { keepFormValues } from "@/lib/keep-form-values";
 import { initialPublicRegistrationActionState } from "@/lib/event-action-types";
 import { submitEventRegistrationAction } from "./actions";
 import type { SessionOption } from "@/lib/events";
@@ -108,7 +109,7 @@ export function RegistrationForm({
   }
 
   return (
-    <form action={formAction} className="grid gap-4">
+    <form onReset={keepFormValues} action={formAction} className="grid gap-4">
       <input type="hidden" name="token" value={token} />
 
       {state.message ? (

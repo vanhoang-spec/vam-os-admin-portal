@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFormState } from "react-dom";
+import { keepFormValues } from "@/lib/keep-form-values";
 import { acceptRenewalAction, declineRenewalAction } from "@/app/actions/renewals";
 import { SubmitButton } from "@/components/submit-button";
 import { initialRenewalPublicActionState, type RenewalPublicDisplayDto } from "@/lib/renewal-types";
@@ -110,7 +111,7 @@ export function RenewalForm({
         </p>
       </section>
 
-      <form action={acceptAction} className="grid gap-5 rounded-lg border border-vam-line bg-white p-5 shadow-soft">
+      <form onReset={keepFormValues} action={acceptAction} className="grid gap-5 rounded-lg border border-vam-line bg-white p-5 shadow-soft">
         <div>
           <h2 className="text-lg font-semibold text-vam-ink">Tiếp tục đồng hành — Season 12</h2>
           <p className="mt-1 text-sm text-slate-600">
@@ -317,7 +318,7 @@ export function RenewalForm({
 
       <MentorSupportContacts texts={texts} />
 
-      <form action={declineAction} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+      <form onReset={keepFormValues} action={declineAction} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
         <h2 className="text-base font-semibold text-vam-ink">Không tiếp tục Season 12</h2>
         <p className="mt-1 text-sm text-slate-600">
           Chọn mục này nếu anh/chị chưa thể tiếp tục đồng hành trong mùa này.

@@ -40,13 +40,14 @@ export function RunButton({ hasResult }: { hasResult: boolean }) {
 }
 
 /**
- * React 19 (bản Next dùng cho App Router) tự reset form sau khi action chạy xong — kể
- * cả khi action trả lỗi — nên brief vừa gõ biến mất đúng lúc người dùng muốn sửa một
- * chữ rồi bấm chạy lại. Chặn sự kiện reset giữ nguyên mọi ô nhập.
+ * Chuyển sang `lib/keep-form-values.ts` ngày 24/09/2026, khi hoá ra form gia hạn
+ * của mentor cũng cần đúng thứ này. Re-export để chỗ gọi cũ không phải đổi, và
+ * để chỉ còn MỘT định nghĩa — hai bản sao của một hàm chặn reset là hai cơ hội
+ * để một bản được sửa còn bản kia thì không.
+ *
+ * (Chú thích cũ ở đây ghi "React 19"; dự án thật ra chạy React 18.3.1.)
  */
-export function keepFormValues(event: React.FormEvent<HTMLFormElement>) {
-  event.preventDefault();
-}
+export { keepFormValues } from "@/lib/keep-form-values";
 
 const toolbarButton =
   "inline-flex min-h-9 items-center gap-1.5 rounded-md border border-vam-line bg-white px-2.5 py-1.5 text-xs font-medium text-vam-ink hover:bg-vam-mint";
