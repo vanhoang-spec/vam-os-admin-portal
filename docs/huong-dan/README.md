@@ -13,6 +13,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_LICH_PHONG_VAN.pdf` | Core team, Support team, BTC tuyển sinh | Một trang: lịch phỏng vấn mentor 1:1 — interviewer đăng giờ rảnh, ứng viên tự giữ chỗ qua link riêng, thư mời/nhắc tự động, huỷ và đổi lịch, các tình huống thường gặp |
 | `HUONG_DAN_CANVA_AI.pdf` | Support team, Core team | Một trang: dùng công cụ **Brief thiết kế cho Canva AI** trên app để soạn prompt tiếng Anh, rồi dán sang Canva AI ra key visual / poster / video — kèm ba thứ luôn phải sửa tay và quy tắc không đưa dữ liệu cá nhân ra ngoài |
 | `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
+| `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 17 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
 
 ## Sửa và xuất lại bản PDF
 
@@ -110,4 +111,21 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 - Người đọc tài liệu này đang KHÔNG vào được hệ thống, nên họ không đối chiếu
   được với màn hình. Sai một nhãn ở đây tốn của họ một vòng nhắn ban tổ chức —
   đúng thứ tính năng này sinh ra để xoá bỏ
+- Giữ **đúng một trang**: test tự đếm số trang trong PDF
+
+**Sửa thư tự động (một trang):**
+
+- Nhãn nút, lời báo thành công và MỌI lời báo từ chối —
+  `__tests__/huong-dan-sua-thu-tu-dong.test.ts` đối chiếu từng câu với
+  `lib/email-automation-core.ts`, `lib/email-automation.ts` và
+  `app/operations/mail/samples/automation-editor.tsx`
+- Số lá thư sửa được (`AUTOMATION_SLOTS`), tên ba nhóm (`AUTOMATION_GROUPS`) và
+  trần độ dài tiêu đề/nội dung (`lib/email-templates-core.ts`) — test đối chiếu
+  thẳng với hằng số, nên thêm một lá thư là tài liệu phải sửa theo
+- **Ô cảnh báo "Lưu là có hiệu lực ngay — không có bước ai duyệt" là phần không
+  được gọn lại.** Người quen tay với tab "Mẫu thư" sẽ mặc định ở đây cũng có
+  người duyệt, và sẽ bấm Lưu để "xem thử" — trong khi lá thư tiếp theo đã dùng
+  nội dung đó. Test canh đúng câu này
+- Mục "Bốn lá thư sự kiện chưa sửa được từ đây" phải sửa ngay khi thư sự kiện
+  được làm cho sửa được
 - Giữ **đúng một trang**: test tự đếm số trang trong PDF
