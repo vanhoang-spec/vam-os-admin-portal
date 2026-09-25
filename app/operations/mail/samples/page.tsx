@@ -1,9 +1,17 @@
 import { redirect } from "next/navigation";
-import { Card, PageHeader } from "@/components/ui";
+import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { AUTOMATION_GROUPS, AUTOMATION_SLOTS } from "@/lib/email-automation-core";
+import { listAutomationContent, listRecentHistory } from "@/lib/email-automation";
 import { emailSamplesByGroup, type EmailSample } from "@/lib/email-samples";
 import { canViewEmailSamples, canViewOutboundEmails } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/utils";
+import { AutomationEditor } from "./automation-editor";
 import { MailTabs } from "../mail-tabs";
+
+// Trang đọc nội dung đã lưu ở mỗi lần mở: sửa xong là thấy ngay, không chờ
+// vòng đời cache của Next.
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Thư tự động — VAM OS"
@@ -75,36 +83,117 @@ export default async function EmailSamplesPage() {
     );
   }
 
+  const [list, history] = await Promise.all([listAutomationContent(), listRecentHistory()]);
   const groups = emailSamplesByGroup();
+
+  // Những lá thư chưa sửa được từ đây vẫn hiện ở dưới, chỉ để đọc. Giấu chúng
+  // đi thì màn hình nói rằng hệ thống chỉ gửi 17 lá, và người trực support sẽ
+  // đi tìm lá thư sự kiện ở một chỗ không có nó.
+  const editableKinds = new Set(AUTOMATION_SLOTS.map((slot) => slot.kind));
+  const readOnlyGroups = groups
+    .map((group) => ({
+      group: group.group,
+      samples: group.samples.filter((sample) => !editableKinds.has(sample.kind))
+    }))
+    .filter((group) => group.samples.length > 0);
 
   return (
     <>
       <PageHeader
         title="Thư tự động"
-        description="Nội dung từng lá thư hệ thống tự gửi, dựng từ chính bộ tạo thư đang chạy."
+        description="Nội dung từng lá thư hệ thống tự gửi. Ban tổ chức sửa và lưu được; thư gửi sau đó dùng nội dung mới."
       />
 
       <MailTabs active="samples" canSeeLog={canViewOutboundEmails(adminUser.role)} canSeeSamples />
 
       <Card className="mb-6">
         <p className="text-sm text-slate-700">
-          Mọi tên, email, đường dẫn và mã vé dưới đây là dữ liệu ví dụ, không thuộc về ai. Thư thật
-          mang tên và đường dẫn riêng của từng người nhận; phần còn lại giữ nguyên như ở đây.
+          Sửa câu chữ của thư tự động ngay tại đây, không cần chờ bản cập nhật. Bấm{" "}
+          <strong>Xem và sửa</strong> ở lá thư cần đổi, sửa rồi bấm <strong>Lưu</strong> — mọi lá
+          thư hệ thống gửi từ lúc đó dùng nội dung mới.
         </p>
         <p className="mt-2 text-sm text-slate-700">
-          Muốn biết một người đã nhận thư nào và vào lúc nào thì xem tab &quot;Nhật ký gửi&quot;. Sổ thư ghi
-          người nhận, tiêu đề và trạng thái, nhưng không lưu nội dung từng lá.
+          Những phần trong dấu <code className="rounded bg-slate-100 px-1">{"{{ }}"}</code> là{" "}
+          <strong>ô điền</strong>: hệ thống thay bằng tên, đường dẫn riêng và mốc thời gian thật của
+          từng người lúc gửi. Giữ nguyên chúng — ô có dấu <span className="text-red-600">*</span> mà
+          bị xoá thì hệ thống từ chối lưu.
+        </p>
+        <p className="mt-2 text-sm text-slate-700">
+          Mỗi lần lưu đều ghi lại bản trước đó, nên sửa nhầm vẫn xem lại và quay về được.
+        </p>
+        <p className="mt-2 text-sm text-slate-700">
+          Muốn biết một người đã nhận thư nào và vào lúc nào thì xem tab &quot;Nhật ký gửi&quot;. Sổ
+          thư ghi người nhận, tiêu đề và trạng thái, nhưng <strong>không lưu nội dung</strong> từng
+          lá — nên nội dung đúng của một lá thư đã gửi là bản đang hiện ở đây.
         </p>
       </Card>
 
-      {groups.map((group) => (
-        <section key={group.group} className="mb-8">
-          <h2 className="mb-3 text-lg font-semibold text-vam-ink">{group.group}</h2>
-          {group.samples.map((sample) => (
-            <SampleCard key={`${sample.kind}-${sample.title}`} sample={sample} />
+      {!list.ok ? (
+        <ErrorBox message={list.message} />
+      ) : (
+        AUTOMATION_GROUPS.map((groupName) => {
+          const views = list.views.filter((view) => view.slot.group === groupName);
+          if (!views.length) return null;
+          return (
+            <section key={groupName} className="mb-8">
+              <h2 className="mb-3 text-lg font-semibold text-vam-ink">{groupName}</h2>
+              {views.map((view) => (
+                <AutomationEditor
+                  key={view.slot.id}
+                  slot={{
+                    id: view.slot.id,
+                    title: view.slot.title,
+                    audience: view.slot.audience,
+                    trigger: view.slot.trigger,
+                    kind: view.slot.kind,
+                    note: view.slot.note,
+                    placeholders: view.slot.placeholders.map((p) => ({
+                      key: p.key,
+                      label: p.label,
+                      required: p.required,
+                      hint: p.hint
+                    })),
+                    subject: view.content.subject,
+                    body: view.content.body,
+                    customised: view.customised,
+                    updatedLabel: view.updatedAt
+                      ? `${view.updatedByName || "—"} · ${formatDateTime(view.updatedAt)}`
+                      : null,
+                    previewHtml: view.preview?.html ?? null,
+                    history: (history.get(view.slot.id) ?? []).map((row) => ({
+                      id: row.id,
+                      action: row.action,
+                      changedByName: row.changedByName,
+                      changedAt: formatDateTime(row.changedAt),
+                      subjectBefore: row.subjectBefore,
+                      bodyBefore: row.bodyBefore
+                    }))
+                  }}
+                />
+              ))}
+            </section>
+          );
+        })
+      )}
+
+      {readOnlyGroups.length ? (
+        <section className="mt-10 border-t border-vam-line pt-6">
+          <h2 className="mb-2 text-lg font-semibold text-vam-ink">Chưa sửa được từ màn hình này</h2>
+          <p className="mb-4 text-sm text-slate-600">
+            Thư sự kiện mang mã QR và bảng buổi do hệ thống sinh ra, nên chúng cần một cách sửa khác
+            với một ô chữ. Thư thông báo do ban tổ chức tự soạn thì nội dung nằm ở tab{" "}
+            &quot;Mẫu thư&quot;. Dữ liệu trong các mẫu dưới đây là ví dụ, không thuộc về ai.
+          </p>
+          {readOnlyGroups.map((group) => (
+            <div key={group.group} className="mb-6">
+              <h3 className="mb-3 text-base font-medium text-slate-700">{group.group}</h3>
+              {group.samples.map((sample) => (
+                <SampleCard key={`${sample.kind}-${sample.title}`} sample={sample} />
+              ))}
+            </div>
           ))}
         </section>
-      ))}
+      ) : null}
     </>
   );
 }
