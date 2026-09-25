@@ -28,11 +28,45 @@ vi.mock("next/link", () => ({
   default: ({ children, href }: any) => <a href={href}>{children}</a>
 }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
+// Ô sửa là client component dùng useFormState của **react-dom** (React 18.3.1,
+// không phải useActionState của React 19 — xem CLAUDE.md).
+vi.mock("react-dom", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-dom")>()),
+  useFormState: (action: unknown, initial: unknown) => [initial, action],
+  useFormStatus: () => ({ pending: false })
+}));
+vi.mock("@/app/actions/email-automation", () => ({
+  saveAutomationContentAction: vi.fn(),
+  revertAutomationContentAction: vi.fn()
+}));
+// Trang giờ đọc nội dung đã lưu của thư tự động. Bản giả trả về đúng bản mặc
+// định — trạng thái thật của một hệ thống chưa ai sửa gì — nên trang vẫn phải
+// dựng ra đủ 17 lá.
+vi.mock("@/lib/email-automation", () => ({
+  listAutomationContent: vi.fn(async () => {
+    const { AUTOMATION_SLOTS } = await import("@/lib/email-automation-core");
+    const { defaultAutomationContent } = await import("@/lib/email-automation-defaults");
+    return {
+      ok: true as const,
+      views: AUTOMATION_SLOTS.map((slot) => ({
+        slot,
+        content: defaultAutomationContent(slot.id)!,
+        customised: false,
+        updatedAt: null,
+        updatedByName: null,
+        fallback: defaultAutomationContent(slot.id)!,
+        preview: null
+      }))
+    };
+  }),
+  listRecentHistory: vi.fn(async () => new Map())
+}));
 
 import EmailSamplesPage from "@/app/operations/mail/samples/page";
 import { MailTabs } from "@/app/operations/mail/mail-tabs";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { buildApplicationConfirmationEmail } from "@/lib/email-core";
+import { AUTOMATION_SLOTS } from "@/lib/email-automation-core";
 import { EMAIL_SAMPLES, emailSamplesByGroup } from "@/lib/email-samples";
 import { canViewEmailSamples, canViewOutboundEmails } from "@/lib/permissions";
 
@@ -173,12 +207,30 @@ describe("5. trang Thư tự động", () => {
     return render(await EmailSamplesPage());
   }
 
-  it("Support Team thấy nội dung thư, trong khung riêng không cho chạy script", async () => {
+  it("Support Team thấy và sửa được từng lá thư tự động", async () => {
     const { container } = await renderAs("support_team");
 
     expect(screen.getByText("Xác nhận đã nhận đơn mentee")).toBeTruthy();
+    // Mỗi lá sửa được có đúng một nút mở ô sửa.
+    const editButtons = Array.from(container.querySelectorAll("button")).filter(
+      (button) => button.textContent === "Xem và sửa"
+    );
+    expect(editButtons).toHaveLength(AUTOMATION_SLOTS.length);
+  });
+
+  it("những lá chưa sửa được vẫn hiện, trong khung riêng không cho chạy script", async () => {
+    const { container } = await renderAs("support_team");
+
+    const editableKinds = new Set(AUTOMATION_SLOTS.map((slot) => slot.kind));
+    const readOnly = EMAIL_SAMPLES.filter(
+      (sample) => sample.body && !editableKinds.has(sample.kind)
+    );
+    // Giấu chúng đi thì màn hình nói rằng hệ thống chỉ gửi 17 lá, và người trực
+    // support sẽ đi tìm lá thư sự kiện ở một chỗ không có nó.
+    expect(readOnly.length).toBeGreaterThan(0);
+
     const frames = Array.from(container.querySelectorAll("iframe"));
-    expect(frames.length).toBe(EMAIL_SAMPLES.filter((sample) => sample.body).length);
+    expect(frames).toHaveLength(readOnly.length);
     for (const frame of frames) {
       expect(frame.getAttribute("sandbox")).toBe("");
       expect(frame.getAttribute("srcdoc")).toContain("<");
@@ -187,8 +239,13 @@ describe("5. trang Thư tự động", () => {
 
   it("nói rõ dữ liệu là ví dụ và sổ thư không lưu nội dung", async () => {
     const { container } = await renderAs("core_team");
-    expect(container.textContent).toContain("dữ liệu ví dụ");
+    expect(container.textContent).toContain("là ví dụ");
     expect(container.textContent).toContain("không lưu nội dung");
+  });
+
+  it("nói rõ lưu xong là thư gửi sau đó dùng nội dung mới", async () => {
+    const { container } = await renderAs("core_team");
+    expect(container.textContent).toContain("dùng nội dung mới");
   });
 
   it("reviewer bị từ chối, và không có nội dung thư nào được dựng ra", async () => {
