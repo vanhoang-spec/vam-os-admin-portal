@@ -48,16 +48,24 @@ const DAYS = [
     dateKey: "2026-09-24",
     label: "Thứ Năm 24/09/2026",
     slots: [
-      { startsAtIso: "2026-09-24T00:00:00.000Z", hour: 7, isPast: true, mine: null, candidateName: null },
-      { startsAtIso: "2026-09-24T02:00:00.000Z", hour: 9, isPast: false, mine: "open" as const, candidateName: null },
+      { startsAtIso: "2026-09-24T00:00:00.000Z", hour: 7, isPast: true, mine: null, candidateName: null, reviewId: null },
+      {
+        startsAtIso: "2026-09-24T02:00:00.000Z",
+        hour: 9,
+        isPast: false,
+        mine: "open" as const,
+        candidateName: null,
+        reviewId: null
+      },
       {
         startsAtIso: "2026-09-24T03:00:00.000Z",
         hour: 10,
         isPast: false,
         mine: "booked" as const,
-        candidateName: "Nguyễn Văn A"
+        candidateName: "Nguyễn Văn A",
+        reviewId: "rv-1"
       },
-      { startsAtIso: "2026-09-24T04:00:00.000Z", hour: 11, isPast: false, mine: null, candidateName: null }
+      { startsAtIso: "2026-09-24T04:00:00.000Z", hour: 11, isPast: false, mine: null, candidateName: null, reviewId: null }
     ]
   }
 ];
@@ -112,6 +120,27 @@ describe("1. lưới giờ rảnh", () => {
     expect(screen.getByTitle(/Nguyễn Văn A/)).toBeTruthy();
     // SĐT bắt buộc lần đầu được nói rõ ngay trên nhãn.
     expect(screen.getByText(/bắt buộc trước lần lưu đầu/)).toBeTruthy();
+  });
+
+  it("ô đã đặt có phiếu phỏng vấn: huy hiệu là link mở thẳng /reviews/<id> ở tab mới", () => {
+    render(<AvailabilityGrid days={DAYS} phone="" needsPhone stats={STATS} />);
+    const badge = screen.getByTitle(/Nguyễn Văn A/) as HTMLAnchorElement;
+    expect(badge.tagName).toBe("A");
+    expect(badge.getAttribute("href")).toBe("/reviews/rv-1");
+    expect(badge.getAttribute("target")).toBe("_blank");
+    expect(badge.getAttribute("rel")).toContain("noopener");
+    expect(badge.textContent).toContain("Đặt");
+  });
+
+  it("ô đã đặt mà chưa có phiếu phỏng vấn (trường hợp phòng thủ): vẫn là huy hiệu tĩnh, không phải link", () => {
+    const daysWithoutReview = DAYS.map((day) => ({
+      ...day,
+      slots: day.slots.map((slot) => (slot.mine === "booked" ? { ...slot, reviewId: null } : slot))
+    }));
+    render(<AvailabilityGrid days={daysWithoutReview} phone="" needsPhone stats={STATS} />);
+    const badge = screen.getByTitle(/Nguyễn Văn A/);
+    expect(badge.tagName).toBe("SPAN");
+    expect(badge.hasAttribute("href")).toBe(false);
   });
 
   it("phần chênh add/remove nằm trong ô ẩn: tick giờ mới → add, bỏ giờ đang open → remove", () => {
@@ -174,7 +203,7 @@ describe("1. lưới giờ rảnh", () => {
     const days = freshDays().map((day) => ({
       ...day,
       slots: day.slots.map((slot) =>
-        slot.hour === 9 ? { ...slot, mine: "booked" as const, candidateName: "Trần Thị B" } : slot
+        slot.hour === 9 ? { ...slot, mine: "booked" as const, candidateName: "Trần Thị B", reviewId: "rv-2" } : slot
       )
     }));
     rerender(<AvailabilityGrid days={days} phone="0912345678" needsPhone={false} stats={STATS} />);

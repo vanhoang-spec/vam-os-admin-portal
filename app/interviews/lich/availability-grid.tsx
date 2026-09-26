@@ -21,6 +21,8 @@ type GridSlotProp = {
   isPast: boolean;
   mine: "open" | "removed" | "booked" | null;
   candidateName: string | null;
+  /** Phiếu phỏng vấn của buổi đã đặt — có thì huy hiệu "Đặt" mở thẳng hồ sơ ứng viên. */
+  reviewId: string | null;
 };
 type GridDayProp = { dateKey: string; label: string; slots: GridSlotProp[] };
 type StatsProp = { total: number; done: number; bookedUpcoming: number; open: number; expired: number };
@@ -191,12 +193,26 @@ export function AvailabilityGrid({
                 {day.slots.map((slot) => (
                   <td key={slot.startsAtIso} className="px-1 py-1">
                     {slot.mine === "booked" ? (
-                      <span
-                        title={`Đã có mentor đặt${slot.candidateName ? `: ${slot.candidateName}` : ""} — ${formatDateTime(slot.startsAtIso)}`}
-                        className="inline-block rounded bg-vam-green px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                      >
-                        Đặt
-                      </span>
+                      slot.reviewId ? (
+                        // Mở ngay từ khung của lịch phỏng vấn — không cần vòng qua
+                        // trang Đánh giá rồi tự tìm đúng ứng viên trong danh sách.
+                        <a
+                          href={`/reviews/${slot.reviewId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Đã có mentor đặt${slot.candidateName ? `: ${slot.candidateName}` : ""} — ${formatDateTime(slot.startsAtIso)}. Mở hồ sơ ứng viên.`}
+                          className="inline-block rounded bg-vam-green px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-vam-ink"
+                        >
+                          Đặt ↗
+                        </a>
+                      ) : (
+                        <span
+                          title={`Đã có mentor đặt${slot.candidateName ? `: ${slot.candidateName}` : ""} — ${formatDateTime(slot.startsAtIso)}`}
+                          className="inline-block rounded bg-vam-green px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                        >
+                          Đặt
+                        </span>
+                      )
                     ) : (
                       <input
                         type="checkbox"

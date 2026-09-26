@@ -726,6 +726,19 @@ export async function sendInterviewSchedule(input: {
     return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
   }
 
+  // Mở THẲNG vào phiếu phỏng vấn của đúng buổi hẹn này — không phải trang
+  // danh sách /reviews. `reviewId` là phiếu vam098/vam099 vừa tạo cho chính
+  // interviewer (luôn có với bản gửi interviewer); bản CC ban tổ chức không
+  // có phiếu đó nên mở thẳng trang đơn ứng tuyển. Cố ý tách khỏi logic
+  // related_table bên dưới: đổi target trong thân thư không được kéo theo đổi
+  // outbound_emails.related_table, nơi trang Vận hành → Mail chỉ vẽ nút "Mở
+  // đơn" cho related_table = 'applications'.
+  const applicationLink = input.reviewId
+    ? `${base}/reviews/${input.reviewId}`
+    : input.applicationId
+      ? `${base}/applications/${input.applicationId}`
+      : `${base}/reviews`;
+
   const built = buildInterviewScheduleEmail({
     interviewerName: input.interviewerName,
     seasonLabel: input.seasonLabel,
@@ -733,7 +746,7 @@ export async function sendInterviewSchedule(input: {
     candidateName: input.candidateName,
     candidateEmail: input.candidateEmail,
     candidatePhone: input.candidatePhone ?? null,
-    reviewsUrl: `${base}/reviews`,
+    applicationLink,
     hotlineZalo: HOTLINE_ZALO
   });
 
@@ -746,7 +759,7 @@ export async function sendInterviewSchedule(input: {
       ten_ung_vien: input.candidateName,
       email_ung_vien: input.candidateEmail,
       sdt_ung_vien: input.candidatePhone ?? null,
-      link_cham_diem: `${base}/reviews`,
+      link_cham_diem: applicationLink,
       zalo_ho_tro: HOTLINE_ZALO
     },
     fallback: built

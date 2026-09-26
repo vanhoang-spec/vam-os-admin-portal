@@ -817,6 +817,9 @@ describe("9. interviewer bấm ghép", () => {
       "core@example.com",
       "hello@alumni-mentoring.edu.vn"
     ]);
+    // Lá gửi interviewer mang review_id — sendInterviewSchedule dùng nó để mở
+    // thẳng hồ sơ ứng viên trong thân thư, cho cả chiều interviewer bấm ghép.
+    expect((sendInterviewSchedule as Mock).mock.calls[0][0].reviewId).toBe("rv-9");
     expect((sendInterviewInvite as Mock).mock.calls).toHaveLength(1);
     expect((sendInterviewInvite as Mock).mock.calls[0][0].toEmail).toBe("a@example.com");
     expect((sendInterviewInvite as Mock).mock.calls[0][0].bookingToken).toBe(TOKEN_A);
@@ -827,5 +830,38 @@ describe("9. interviewer bấm ghép", () => {
     const result = await matchMentorAtHour({ slotStartsAt: "2026-09-22T02:00:00.000Z" });
     expect(result.ok).toBe(false);
     expect(rpc).not.toHaveBeenCalledWith("vam099_match_mentor_at_hour", expect.anything());
+  });
+});
+
+describe("10. lưới của interviewer mang link hồ sơ ứng viên", () => {
+  /**
+   * `interview_bookings.review_id` đã có sẵn từ lúc giữ chỗ (vam098/vam099
+   * ghi nó cùng dòng). Lưới của interviewer phải mang nó ra tới tận ô, để
+   * trang chỉ việc dựng link — không phải hỏi thêm database nào khác.
+   */
+  it("ô đã đặt mang đúng review_id của buổi hẹn đó", async () => {
+    seedProfile();
+    db.tables.interview_slots = [{ id: "s1", admin_user_id: ADMIN_CT, season_id: SEASON, slot_starts_at: H_26_15, status: "booked" }];
+    db.tables.interview_bookings = [
+      { id: "bk-1", slot_id: "s1", application_id: APP_A, interviewer_admin_user_id: ADMIN_CT, review_id: "rv-slot-1", status: "booked", slot_starts_at: H_26_15 }
+    ];
+
+    const schedule = await getMyInterviewerSchedule();
+    expect(schedule.ok).toBe(true);
+    if (!schedule.ok) return;
+    const slot = schedule.days.flatMap((day) => day.slots).find((s) => s.startsAtIso === H_26_15);
+    expect(slot?.mine).toBe("booked");
+    expect(slot?.candidateName).toBe("Nguyễn Văn A");
+    expect(slot?.reviewId).toBe("rv-slot-1");
+  });
+
+  it("ô chưa ai đặt thì reviewId là null, không phải chuỗi rỗng hay undefined", async () => {
+    seedProfile();
+    const schedule = await getMyInterviewerSchedule();
+    expect(schedule.ok).toBe(true);
+    if (!schedule.ok) return;
+    const slot = schedule.days.flatMap((day) => day.slots).find((s) => s.startsAtIso === H_24_09);
+    expect(slot?.mine).toBeNull();
+    expect(slot?.reviewId).toBeNull();
   });
 });

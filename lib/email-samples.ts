@@ -186,7 +186,7 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         candidateName: MENTOR,
         candidateEmail: SAMPLE_EMAIL,
         candidatePhone: "0900000000",
-        reviewsUrl: `${ORIGIN}/reviews`,
+        applicationLink: `${ORIGIN}/reviews/ma-vi-du`,
         hotlineZalo: "0919144638"
       })
     )
