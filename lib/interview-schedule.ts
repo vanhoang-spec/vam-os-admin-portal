@@ -186,7 +186,14 @@ async function requireBtc(): Promise<
 export type MySlotState = "open" | "removed" | "booked";
 
 export type MyScheduleDay = GridDay & {
-  slots: Array<GridDay["slots"][number] & { mine: MySlotState | null; candidateName: string | null }>;
+  slots: Array<
+    GridDay["slots"][number] & {
+      mine: MySlotState | null;
+      candidateName: string | null;
+      /** Phiếu phỏng vấn của buổi đã đặt — mở thẳng `/reviews/<id>` từ khung giờ. */
+      reviewId: string | null;
+    }
+  >;
 };
 
 export type MyInterviewerSchedule =
@@ -227,10 +234,12 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
     return { ok: false, message: SAFE_ERROR };
   }
 
-  // Tên mentor cho các ô đã được đặt — đọc qua sổ giữ chỗ đang hiệu lực.
+  // Tên mentor và phiếu phỏng vấn cho các ô đã được đặt — đọc qua sổ giữ chỗ
+  // đang hiệu lực. `review_id` đã nằm sẵn trên chính dòng booking (vam098 ghi
+  // nó lúc tạo), nên không cần đọc thêm bảng nào để có nó.
   const bookings = await readAllPages<Json>(
     "interview_bookings",
-    "id,slot_id,application_id,slot_starts_at",
+    "id,slot_id,application_id,slot_starts_at,review_id",
     (columns) =>
       client
         .from("interview_bookings")
@@ -243,6 +252,7 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
     return { ok: false, message: SAFE_ERROR };
   }
   const candidateNames = new Map<string, string>();
+  const reviewIds = new Map<string, string | null>();
   if (bookings.data.length > 0) {
     const apps = await readAllPagesIn<Json>(
       client,
@@ -257,7 +267,9 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
     }
     const nameById = new Map(apps.data.map((row) => [String(row.id), String(row.full_name ?? "")]));
     for (const booking of bookings.data) {
-      candidateNames.set(normIso(booking.slot_starts_at), nameById.get(String(booking.application_id)) ?? "");
+      const iso = normIso(booking.slot_starts_at);
+      candidateNames.set(iso, nameById.get(String(booking.application_id)) ?? "");
+      reviewIds.set(iso, clean(booking.review_id) || null);
     }
   }
 
@@ -272,7 +284,8 @@ export async function getMyInterviewerSchedule(): Promise<MyInterviewerSchedule>
     slots: day.slots.map((slot) => ({
       ...slot,
       mine: mineByIso.get(slot.startsAtIso) ?? null,
-      candidateName: candidateNames.get(slot.startsAtIso) ?? null
+      candidateName: candidateNames.get(slot.startsAtIso) ?? null,
+      reviewId: reviewIds.get(slot.startsAtIso) ?? null
     }))
   }));
 

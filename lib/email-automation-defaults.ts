@@ -163,7 +163,7 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
         slotLabel: S("khung_gio"),
         candidateName: S("ten_ung_vien"),
         candidateEmail: S("email_ung_vien"),
-        reviewsUrl: S("link_cham_diem"),
+        applicationLink: S("link_cham_diem"),
         hotlineZalo: S("zalo_ho_tro")
       };
       return subjectFrom(

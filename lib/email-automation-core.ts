@@ -307,7 +307,12 @@ export const AUTOMATION_SLOTS: readonly AutomationSlot[] = [
         optional: true,
         hint: "Dòng chứa ô này biến mất khi ứng viên không khai số."
       },
-      { key: "link_cham_diem", label: "Đường dẫn chấm điểm", required: true, hint: "Trang phiếu đánh giá trong VAM OS." },
+      {
+        key: "link_cham_diem",
+        label: "Đường dẫn chấm điểm",
+        required: true,
+        hint: "Mở thẳng hồ sơ ứng viên của buổi hẹn này trong VAM OS, không phải trang danh sách."
+      },
       P_ZALO
     ]
   },

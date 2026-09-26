@@ -624,7 +624,13 @@ export function buildInterviewScheduleEmail(input: {
   candidateName: string;
   candidateEmail: string;
   candidatePhone?: string | null;
-  reviewsUrl: string;
+  /**
+   * Mở THẲNG vào hồ sơ ứng viên của buổi hẹn này — `/reviews/<id của phiếu
+   * phỏng vấn>` khi có, hoặc `/applications/<id>` cho bản CC ban tổ chức.
+   * Không phải đường dẫn tới một trang danh sách: người phỏng vấn bấm một
+   * cái là vào thẳng đúng người, không phải tự tìm giữa nhiều hồ sơ khác.
+   */
+  applicationLink: string;
   hotlineZalo: string;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.interviewerName);
@@ -648,8 +654,8 @@ export function buildInterviewScheduleEmail(input: {
   lines.push(
     "",
     "Anh/chị chủ động liên hệ ứng viên trước buổi để thống nhất kênh gọi online (Google Meet/Zoom/Zalo).",
-    "Sau buổi phỏng vấn, anh/chị đăng nhập VAM OS, vào mục “Đánh giá” để chấm điểm và ghi đề xuất:",
-    input.reviewsUrl,
+    "Anh/chị mở đường dẫn dưới đây để xem hồ sơ ứng viên; sau buổi phỏng vấn dùng đúng trang này để chấm điểm và ghi đề xuất:",
+    input.applicationLink,
     "",
     `Nếu giờ này không còn phù hợp, anh/chị báo ban tổ chức qua Zalo ${input.hotlineZalo} hoặc trả lời email này để sắp xếp lại.`,
     "",
@@ -671,7 +677,7 @@ export function buildInterviewScheduleEmail(input: {
       `<p>Một ứng viên mentor ${escapeHtml(season)} vừa đặt lịch phỏng vấn online 1:1 với anh/chị theo giờ anh/chị đã đăng ký rảnh:</p>`,
       `<ul>${detailRows}</ul>`,
       "<p>Anh/chị chủ động liên hệ ứng viên trước buổi để thống nhất kênh gọi online (Google Meet/Zoom/Zalo).</p>",
-      `<p style="margin:20px 0"><a href="${escapeHtml(input.reviewsUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chấm kết quả sau buổi phỏng vấn</a></p>`,
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.applicationLink)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Xem hồ sơ ứng viên & chấm điểm</a></p>`,
       `<p>Nếu giờ này không còn phù hợp, anh/chị báo ban tổ chức qua Zalo <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này để sắp xếp lại.</p>`
     ].join("")
   );

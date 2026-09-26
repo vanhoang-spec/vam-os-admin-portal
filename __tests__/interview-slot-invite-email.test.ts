@@ -102,7 +102,9 @@ describe("2. thư xác nhận buổi hẹn — đủ liên hệ hai bên và hot
     expect(mail.text).toContain(HOTLINE);
   });
 
-  it("bản gửi interviewer: liên hệ của mentor + đường vào chấm kết quả", () => {
+  it("bản gửi interviewer: liên hệ của mentor + đường mở THẲNG hồ sơ ứng viên", () => {
+    // Không phải /reviews (danh sách chung) — phải là phiếu của đúng buổi hẹn,
+    // vì sao xem ghi chú trên `sendInterviewSchedule` trong lib/email.ts.
     const mail = buildInterviewScheduleEmail({
       interviewerName: "Trần Thị B",
       seasonLabel: "UEH Mentoring Mùa 12",
@@ -110,13 +112,14 @@ describe("2. thư xác nhận buổi hẹn — đủ liên hệ hai bên và hot
       candidateName: "Nguyễn Văn A",
       candidateEmail: "a@example.com",
       candidatePhone: "0900000002",
-      reviewsUrl: `${ORIGIN}/reviews`,
+      applicationLink: `${ORIGIN}/reviews/rv-42`,
       hotlineZalo: HOTLINE
     });
     expect(mail.subject).toContain("Nguyễn Văn A");
     expect(mail.text).toContain("a@example.com");
     expect(mail.text).toContain("0900000002");
-    expect(mail.text).toContain(`${ORIGIN}/reviews`);
+    expect(mail.text).toContain(`${ORIGIN}/reviews/rv-42`);
+    expect(mail.html).toContain(`href="${ORIGIN}/reviews/rv-42"`);
     expect(mail.text).toContain(HOTLINE);
   });
 });

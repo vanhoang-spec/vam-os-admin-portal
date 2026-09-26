@@ -108,6 +108,9 @@ describe("1. giữ chỗ", () => {
     const scheduleCalls = (sendInterviewSchedule as Mock).mock.calls.map((call) => call[0]);
     expect(scheduleCalls[0].toEmail).toBe("core@example.com");
     expect(scheduleCalls[0].candidatePhone).toBe("0900000001");
+    // Mang review_id của phiếu vừa tạo, để sendInterviewSchedule dựng được
+    // đường link mở THẲNG hồ sơ ứng viên trong thân thư — không phải /reviews.
+    expect(scheduleCalls[0].reviewId).toBe(RPC_OK_PAYLOAD.review_id);
     expect(scheduleCalls[1].toEmail).toBe(BTC_EMAIL);
 
     expect(sendInterviewInvite).toHaveBeenCalledTimes(1);
