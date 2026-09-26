@@ -4,12 +4,14 @@ import { formatDate, formatTime } from "@/lib/utils";
 /**
  * lib/mentee-interview-core.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Phần thuần của vòng phỏng vấn mentee: 12 ca offline ngày 3 và 4/10/2026.
+ * Phần thuần của vòng phỏng vấn mentee: 24 ca offline 30 phút ngày 3 và
+ * 4/10/2026, 25 ghế mỗi ca (5 phòng × 5 mentor phỏng vấn song song).
  *
  * Khác hẳn vòng mentor. Ở đó ứng viên chọn GIỜ của một người cụ thể; ở đây ứng
  * viên chọn một CA, và ban tổ chức phân mentor tại chỗ trong ngày. Nên không có
- * lưới 14 ngày, không có FIFO, không có ai-khai-trước — chỉ có mười hai cái ca
- * và số ghế còn lại của từng cái.
+ * lưới 14 ngày, không có FIFO, không có ai-khai-trước — chỉ có các ca và số ghế
+ * còn lại của từng cái. Không có chỗ nào trong file đếm cố định số ca: lưới
+ * đọc từ database, nên giai đoạn 2 (10–11/10) chỉ là thêm dòng.
  *
  * MÚI GIỜ: mọi mốc là instant UTC; nhãn hiển thị đi qua formatDate/formatTime
  * của lib/utils, vốn đã ấn định giờ Việt Nam. Vitest chạy TZ=UTC đúng như Vercel.
@@ -24,6 +26,20 @@ export const MENTEE_BOOKING_PATH_PREFIX = "/dat-ca";
 export const HOTLINE_ZALO = "0919144638";
 export const SUPPORT_PHONE = "0777885674";
 export const SUPPORT_NAME = "Bảo Châu";
+
+/**
+ * Câu thay cho địa điểm khi ban tổ chức chưa điền.
+ *
+ * Thư xác nhận có thể đi TRƯỚC khi địa điểm được chốt — người đặt đầu tiên không
+ * chờ ai cả. Một dòng "Địa điểm:" bỏ trống là thứ khiến người nhận gọi điện; một
+ * câu hẹn báo sau thì không.
+ */
+export const MENTEE_VENUE_PENDING_LABEL = "Ban tổ chức sẽ báo địa điểm cụ thể trước ngày phỏng vấn";
+
+/** Đường dẫn riêng tới trang đặt ca — thư mời và thư xác nhận cùng dựng từ đây. */
+export function menteeBookingUrl(base: string, token: string): string {
+  return `${base.replace(/\/+$/, "")}${MENTEE_BOOKING_PATH_PREFIX}/${token}`;
+}
 
 /**
  * Trạng thái một ca, theo thứ tự ưu tiên khi hiển thị.
@@ -170,6 +186,21 @@ export function hasBookableSession(days: readonly MenteeSessionDay[]): boolean {
 export function bookingClosesAt(rows: readonly SessionRow[]): string | null {
   const stamps = rows.map((r) => r.bookingClosesAtIso).filter(Boolean).sort();
   return stamps.length > 0 ? stamps[stamps.length - 1] : null;
+}
+
+/**
+ * "Thứ Bảy 03/10/2026 và Chủ nhật 04/10/2026" — các ngày phỏng vấn, cho thư mời.
+ *
+ * Đọc từ chính các ca CÒN ĐẶT ĐƯỢC chứ không từ một hằng: giai đoạn 2 thêm ca
+ * 10–11/10 thì thư mời của giai đoạn 2 tự nói đúng ngày, còn ca 03–04/10 khi ấy
+ * đã quá hạn nên tự rơi khỏi câu.
+ */
+export function interviewDaysLabel(days: readonly MenteeSessionDay[]): string {
+  const labels = days
+    .filter((day) => day.sessions.some((s) => s.state === "open"))
+    .map((day) => day.label);
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} và ${labels[labels.length - 1]}`;
 }
 
 /** Tổng số chỗ còn lại của cả đợt — chỉ tính ca đã cấu hình và đang mở. */

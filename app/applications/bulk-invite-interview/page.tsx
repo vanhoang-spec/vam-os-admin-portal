@@ -13,7 +13,14 @@ import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/
 import { getStageRequirements } from "@/lib/recruitment-stage-requirements";
 import { applicationStatusLabel } from "@/lib/ui-labels";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
-import { BULK_INVITE_MAX, evaluateBulkInviteCandidate } from "@/lib/bulk-invite-interview";
+import {
+  BULK_INVITE_MAX,
+  PROFILE_RECOMMENDATION_FILTERS,
+  evaluateBulkInviteCandidate,
+  isProfileRecommendationFilter,
+  profileRecommendationLabel,
+  profileRecommendationOf
+} from "@/lib/bulk-invite-interview";
 import { DIRECT_INVITE_SOURCE_STATUSES } from "@/lib/direct-interview-eligibility";
 import { PROFILE_REVIEW_ROUND } from "@/lib/screening-decision";
 import { BulkInviteForm, type BulkInviteRow } from "./bulk-invite-form";
@@ -44,6 +51,7 @@ export default async function BulkInviteInterviewPage(props: {
     intake_batch_id?: string;
     role_applied?: string;
     q?: string;
+    recommendation?: string;
   }>;
 }) {
   const searchParams = await props.searchParams;
@@ -66,6 +74,10 @@ export default async function BulkInviteInterviewPage(props: {
   const intakeBatchId = searchParams.intake_batch_id?.trim() ?? "";
   const roleApplied = searchParams.role_applied?.trim() ?? "";
   const query = (searchParams.q ?? "").trim().toLowerCase();
+  // Giá trị lạ bị bỏ chứ không báo lỗi: một URL sửa tay không được làm hỏng
+  // trang — nhưng cũng không được âm thầm lọc ra danh sách rỗng trông như thật.
+  const recommendationRaw = searchParams.recommendation?.trim() ?? "";
+  const recommendation = isProfileRecommendationFilter(recommendationRaw) ? recommendationRaw : "";
 
   // Narrow by the operator's filters BEFORE the per-application reads, so the
   // decisions lookup is bounded by what is actually on screen.
@@ -105,6 +117,7 @@ export default async function BulkInviteInterviewPage(props: {
   const profileReviewers = new Map<string, Set<string>>();
   const interviewReviewers = new Map<string, Set<string>>();
   const latestProfileSubmission = new Map<string, string>();
+  const profileRecommendations = new Map<string, unknown[]>();
   for (const review of reviewsResult.data) {
     if (review.status !== "submitted" || !review.reviewer_admin_user_id) continue;
     const key = String(review.application_id);
@@ -112,6 +125,12 @@ export default async function BulkInviteInterviewPage(props: {
     const set = target.get(key) ?? new Set<string>();
     set.add(String(review.reviewer_admin_user_id));
     target.set(key, set);
+    if (review.review_round === PROFILE_REVIEW_ROUND) {
+      profileRecommendations.set(key, [
+        ...(profileRecommendations.get(key) ?? []),
+        (review as { recommendation?: unknown }).recommendation
+      ]);
+    }
     if (review.review_round === PROFILE_REVIEW_ROUND && review.submitted_at) {
       const at = String(review.submitted_at);
       const current = latestProfileSubmission.get(key);
@@ -134,13 +153,22 @@ export default async function BulkInviteInterviewPage(props: {
     }).eligible;
   });
 
-  const rows: BulkInviteRow[] = eligible.slice(0, BULK_INVITE_MAX).map((app) => ({
+  // Lọc theo đề xuất SAU khi đã lọc đủ điều kiện: bộ lọc này thu hẹp danh sách
+  // chứ không bao giờ mở rộng nó — một hồ sơ chưa đủ phiếu không vì đề xuất
+  // "mời" mà hiện ra.
+  const recommendationOf = (id: string) => profileRecommendationOf(profileRecommendations.get(id) ?? []);
+  const shown = recommendation
+    ? eligible.filter((app) => recommendationOf(String(app.id)) === recommendation)
+    : eligible;
+
+  const rows: BulkInviteRow[] = shown.slice(0, BULK_INVITE_MAX).map((app) => ({
     id: String(app.id),
     fullName: String(app.full_name ?? app.email_primary ?? app.id),
     role: String(app.role_applied ?? "-"),
     status: String(app.status ?? ""),
     statusLabel: applicationStatusLabel(app.status),
-    submittedReviews: profileReviewers.get(String(app.id))?.size ?? 0
+    submittedReviews: profileReviewers.get(String(app.id))?.size ?? 0,
+    recommendationLabel: profileRecommendationLabel(recommendationOf(String(app.id)))
   }));
 
   const readError =
@@ -209,6 +237,21 @@ export default async function BulkInviteInterviewPage(props: {
             </select>
           </label>
           <label className="text-sm">
+            Đề xuất của người chấm
+            <select
+              name="recommendation"
+              defaultValue={recommendation}
+              className="mt-1 block rounded-md border border-vam-line px-3 py-2"
+            >
+              <option value="">Tất cả</option>
+              {PROFILE_RECOMMENDATION_FILTERS.map((row) => (
+                <option key={row.value} value={row.value}>
+                  {row.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
             Tìm ứng viên
             <input
               name="q"
@@ -225,12 +268,20 @@ export default async function BulkInviteInterviewPage(props: {
       </Card>
 
       <p className="mb-3 text-sm text-slate-600">
-        {eligible.length} hồ sơ đủ điều kiện
-        {eligible.length > BULK_INVITE_MAX
+        {shown.length} hồ sơ đủ điều kiện
+        {recommendation ? ` với đề xuất "${profileRecommendationLabel(recommendation)}"` : ""}
+        {shown.length > BULK_INVITE_MAX
           ? ` — đang hiển thị ${BULK_INVITE_MAX} hồ sơ đầu tiên`
           : ""}
         . Chỉ hồ sơ đã hoàn tất vòng đánh giá và đủ số đánh giá tối thiểu mới xuất hiện ở đây.
       </p>
+      {!recommendation && roleApplied === "mentee" ? (
+        <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Danh sách đang gồm cả những bạn người chấm đề xuất <strong>danh sách chờ</strong> hoặc{" "}
+          <strong>không phù hợp</strong>. Muốn mời đúng những bạn được đề xuất mời phỏng vấn, chọn{" "}
+          <strong>Đề xuất của người chấm → Mời vào vòng phỏng vấn</strong> rồi bấm Lọc.
+        </p>
+      ) : null}
 
       <Card>
         <BulkInviteForm rows={rows} />

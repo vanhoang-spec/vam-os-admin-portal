@@ -1,7 +1,9 @@
 import "server-only";
 
+import { sendMenteeSessionConfirmed } from "@/lib/email";
 import {
   HOTLINE_ZALO,
+  MENTEE_VENUE_PENDING_LABEL,
   SUPPORT_NAME,
   SUPPORT_PHONE,
   type MenteeSessionDay,
@@ -14,6 +16,7 @@ import {
 } from "@/lib/mentee-interview-core";
 import { BOOKING_ELIGIBLE_STATUSES } from "@/lib/interview-schedule-core";
 import { readAllPages } from "@/lib/paged-read";
+import { getPublicOrigin } from "@/lib/public-url";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { formatDate, formatTime } from "@/lib/utils";
 
@@ -289,6 +292,44 @@ function isEligible(app: Json): boolean {
 
 export type BookSessionResult = { ok: boolean; message: string; sessionLabel?: string };
 
+/**
+ * Gửi thư xác nhận sau khi giữ chỗ hoặc đổi ca THÀNH CÔNG.
+ *
+ * KHÔNG BAO GIỜ ném lỗi và không đổi kết quả của phép giữ chỗ: chỗ đã giữ trong
+ * database rồi thì là đã giữ. Báo "đặt ca thất bại" chỉ vì nhà cung cấp thư
+ * không trả lời sẽ khiến người dùng bấm lại — và lần bấm thứ hai sẽ bị từ chối
+ * vì họ đã có chỗ, trông như hệ thống hỏng.
+ *
+ * Mọi dữ liệu lấy từ kết quả của vam101/vam102 — tên, email, giờ, địa điểm đều
+ * đọc dưới cùng khoá hàng đã giữ chỗ — nên không cần đọc lại database, và thư
+ * không bao giờ nói một ca khác với ca vừa được ghi.
+ *
+ * Trần thư trong ngày: gói miễn phí 300 thư/ngày. Nếu thư này chạm trần, nó
+ * được ghi `failed` vào sổ thư, và trang đặt ca vẫn là nguồn sự thật — mở lại
+ * đường dẫn là thấy thẻ xác nhận. Bộ gửi thư mời chừa sẵn một phần hạn mức cho
+ * chính những lá thư này (lib/mentee-invite-dispatch-core.ts).
+ */
+async function notifyBookingConfirmed(payload: Json, token: string): Promise<void> {
+  try {
+    const candidate = (payload.candidate ?? {}) as Json;
+    const toEmail = clean(candidate.email);
+    const applicationId = clean(candidate.application_id);
+    if (!toEmail || !applicationId) return;
+
+    await sendMenteeSessionConfirmed({
+      toEmail,
+      candidateName: clean(candidate.full_name) || "bạn",
+      sessionLabel: sessionFullLabel(normIso(payload.starts_at), normIso(payload.ends_at)),
+      venueLabel: clean(payload.venue) || MENTEE_VENUE_PENDING_LABEL,
+      bookingToken: token,
+      applicationId,
+      requestOrigin: await getPublicOrigin()
+    });
+  } catch (error) {
+    log("confirmation email crashed", error);
+  }
+}
+
 const BOOK_ERROR_MESSAGES: Record<string, string> = {
   invalid_token: "Đường dẫn không còn hiệu lực — bạn mở lại từ email của ban tổ chức.",
   application_not_eligible: `Hồ sơ của bạn hiện không ở bước đặt ca. Cần hỗ trợ, bạn liên hệ Zalo ban tổ chức ${HOTLINE_ZALO}.`,
@@ -328,6 +369,8 @@ export async function bookMenteeSession(input: {
     const code = String(payload.code ?? "");
     return { ok: false, message: BOOK_ERROR_MESSAGES[code] ?? SAFE_ERROR };
   }
+
+  await notifyBookingConfirmed(payload, token);
 
   const label = sessionFullLabel(normIso(payload.starts_at), normIso(payload.ends_at));
   return { ok: true, message: "Đã ghi nhận ca phỏng vấn của bạn.", sessionLabel: label };
@@ -379,6 +422,8 @@ export async function changeMenteeSession(input: {
     const code = String(payload.code ?? "");
     return { ok: false, message: CHANGE_ERROR_MESSAGES[code] ?? SAFE_ERROR };
   }
+
+  await notifyBookingConfirmed(payload, token);
 
   const label = sessionFullLabel(normIso(payload.starts_at), normIso(payload.ends_at));
   return { ok: true, message: "Đã đổi sang ca mới.", sessionLabel: label };

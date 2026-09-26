@@ -18,3 +18,14 @@ export const INITIAL_SESSION_CONFIG_STATE: SessionConfigState = {
   message: "",
   sessionId: null
 };
+
+/** Kết quả một lần bấm "Gửi thư mời chọn ca". */
+export type InviteDispatchState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export const INITIAL_INVITE_DISPATCH_STATE: InviteDispatchState = {
+  status: "idle",
+  message: ""
+};

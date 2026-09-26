@@ -87,7 +87,7 @@ export default async function EmailSamplesPage() {
   const groups = emailSamplesByGroup();
 
   // Những lá thư chưa sửa được từ đây vẫn hiện ở dưới, chỉ để đọc. Giấu chúng
-  // đi thì màn hình nói rằng hệ thống chỉ gửi 17 lá, và người trực support sẽ
+  // đi thì màn hình nói rằng hệ thống chỉ gửi những lá sửa được, và người trực support sẽ
   // đi tìm lá thư sự kiện ở một chỗ không có nó.
   const editableKinds = new Set(AUTOMATION_SLOTS.map((slot) => slot.kind));
   const readOnlyGroups = groups

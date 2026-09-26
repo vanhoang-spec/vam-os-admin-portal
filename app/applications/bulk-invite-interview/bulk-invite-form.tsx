@@ -26,6 +26,8 @@ export type BulkInviteRow = {
   status: string;
   statusLabel: string;
   submittedReviews: number;
+  /** Đề xuất chung của người chấm vòng hồ sơ — xem profileRecommendationOf. */
+  recommendationLabel: string;
 };
 
 export function BulkInviteForm({ rows }: { rows: BulkInviteRow[] }) {
@@ -150,6 +152,7 @@ export function BulkInviteForm({ rows }: { rows: BulkInviteRow[] }) {
                   <th className="px-3 py-2">Ứng viên</th>
                   <th className="px-3 py-2">Vai trò</th>
                   <th className="px-3 py-2">Đánh giá đã nộp</th>
+                  <th className="px-3 py-2">Đề xuất</th>
                   <th className="px-3 py-2">Trạng thái</th>
                 </tr>
               </thead>
@@ -188,6 +191,7 @@ export function BulkInviteForm({ rows }: { rows: BulkInviteRow[] }) {
                       <td className="px-3 py-2 text-slate-600 tabular-nums">
                         {row.submittedReviews}
                       </td>
+                      <td className="px-3 py-2 text-slate-600">{row.recommendationLabel}</td>
                       <td className="px-3 py-2 text-slate-600">{row.statusLabel}</td>
                     </tr>
                   );

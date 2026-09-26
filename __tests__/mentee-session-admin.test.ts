@@ -114,7 +114,7 @@ describe("1. cổng quyền", () => {
     expect(daGhi).toHaveLength(1);
   });
 
-  it("nút áp cho cả 12 ca cũng qua đúng cổng đó", async () => {
+  it("nút áp cho mọi ca cũng qua đúng cổng đó", async () => {
     mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role: "reviewer" });
     expect((await applySeatLimitToAllSessions({ seatLimit: "40" })).ok).toBe(false);
     expect((await applyVenueToAllSessions({ venue: "Phòng B2-208" })).ok).toBe(false);
@@ -156,7 +156,7 @@ describe("2. ô ghế để trống nghĩa là ĐÓNG", () => {
     expect(daGhi).toHaveLength(0);
   });
 
-  it("nút áp cho cả 12 ca KHÔNG nhận ô trống — đóng cả đợt phải là việc có chủ ý", async () => {
+  it("nút áp cho mọi ca KHÔNG nhận ô trống — đóng cả đợt phải là việc có chủ ý", async () => {
     const result = await applySeatLimitToAllSessions({ seatLimit: "" });
     expect(result.ok).toBe(false);
     expect(daGhi).toHaveLength(0);
@@ -198,7 +198,7 @@ describe("3. mọi câu ghi đều bị khoá trong mùa đang tuyển", () => {
 
 describe("4. mỗi nút chỉ đụng vào việc của nó", () => {
   /**
-   * Người bấm "áp số ghế cho cả 12 ca" đang nói về GHẾ. Nếu câu update ấy ghi
+   * Người bấm "áp số ghế cho mọi ca" đang nói về GHẾ. Nếu câu update ấy ghi
    * kèm venue hay status thì nó sẽ xoá sạch địa điểm riêng mà ban tổ chức vừa
    * điền cho từng ca — một mất mát im lặng.
    */

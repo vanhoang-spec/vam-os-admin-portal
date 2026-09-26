@@ -1,7 +1,7 @@
 /**
  * __tests__/mentee-interview-core.test.ts
  *
- * Phần thuần của vòng phỏng vấn mentee: 12 ca offline ngày 3–4/10/2026.
+ * Phần thuần của vòng phỏng vấn mentee: các ca offline ngày 3–4/10/2026.
  *
  * ---------------------------------------------------------------------------
  * CA QUAN TRỌNG NHẤT Ở ĐÂY
@@ -19,6 +19,9 @@ import {
   buildSessionDays,
   bookingClosesAt,
   hasBookableSession,
+  interviewDaysLabel,
+  MENTEE_VENUE_PENDING_LABEL,
+  menteeBookingUrl,
   sessionDayLabel,
   sessionFullLabel,
   sessionState,
@@ -42,6 +45,11 @@ const CA_1: SessionRow = {
 const CA_12: SessionRow = { ...CA_1, id: "ca-12", startsAtIso: "2026-10-04T09:00:00.000Z", endsAtIso: "2026-10-04T10:00:00.000Z" };
 
 const TRUOC_HAN = "2026-09-26T03:00:00.000Z";
+
+/** Một ca đã mở (có ghế, hạn trong tương lai), sửa từng trường khi cần. */
+function row(over: Partial<SessionRow>): SessionRow {
+  return { ...CA_1, seatLimit: 25, bookingClosesAtIso: "2026-09-30T16:59:59.000Z", ...over };
+}
 const SAU_HAN = "2026-09-29T03:00:00.000Z";
 
 describe("1. ghế chưa cấu hình là ĐÓNG, không phải vô hạn", () => {
@@ -153,6 +161,53 @@ describe("4. gom ca thành ngày", () => {
     const days = buildSessionDays([{ ...CA_1, seatLimit: 3 }], new Map([["ca-1", 5]]), TRUOC_HAN);
     expect(days[0].sessions[0].remaining).toBe(0);
     expect(days[0].sessions[0].state).toBe("full");
+  });
+});
+
+describe("4b. thư mời và thư xác nhận (giai đoạn 1, 26/09/2026)", () => {
+  it("đường dẫn đặt ca ghép đúng tiền tố, không nhân đôi dấu gạch chéo", () => {
+    expect(menteeBookingUrl("https://os.alumni-mentoring.edu.vn/", "abc")).toBe(
+      "https://os.alumni-mentoring.edu.vn/dat-ca/abc"
+    );
+    expect(menteeBookingUrl("https://os.alumni-mentoring.edu.vn", "abc")).toBe(
+      "https://os.alumni-mentoring.edu.vn/dat-ca/abc"
+    );
+  });
+
+  it("câu thay cho địa điểm chưa điền không bao giờ rỗng", () => {
+    expect(MENTEE_VENUE_PENDING_LABEL.trim().length).toBeGreaterThan(10);
+  });
+
+  it("ngày phỏng vấn: hai ngày nối bằng 'và', đọc từ các ca còn mở", () => {
+    const days = buildSessionDays(
+      [
+        row({ id: "a", startsAtIso: "2026-10-03T01:00:00.000Z", endsAtIso: "2026-10-03T01:30:00.000Z" }),
+        row({ id: "b", startsAtIso: "2026-10-04T01:00:00.000Z", endsAtIso: "2026-10-04T01:30:00.000Z" })
+      ],
+      new Map(),
+      "2026-09-26T00:00:00.000Z"
+    );
+    expect(interviewDaysLabel(days)).toBe("Thứ Bảy 03/10/2026 và Chủ nhật 04/10/2026");
+  });
+
+  /**
+   * Giai đoạn 2 thêm ca 10–11/10. Khi thư mời giai đoạn 2 đi, ca 03–04/10 đã
+   * quá hạn — câu ngày phỏng vấn KHÔNG được nhắc lại hai ngày đó.
+   */
+  it("ngày không còn ca nào mở thì rơi khỏi câu", () => {
+    const days = buildSessionDays(
+      [
+        row({ id: "old", startsAtIso: "2026-10-03T01:00:00.000Z", endsAtIso: "2026-10-03T01:30:00.000Z", bookingClosesAtIso: "2026-09-30T16:59:59.000Z" }),
+        row({ id: "new", startsAtIso: "2026-10-10T01:00:00.000Z", endsAtIso: "2026-10-10T01:30:00.000Z", bookingClosesAtIso: "2026-10-08T16:59:59.000Z" })
+      ],
+      new Map(),
+      "2026-10-02T00:00:00.000Z"
+    );
+    expect(interviewDaysLabel(days)).toBe("Thứ Bảy 10/10/2026");
+  });
+
+  it("không còn ngày nào mở thì câu rỗng — bộ gửi dựa vào đó để không gửi", () => {
+    expect(interviewDaysLabel([])).toBe("");
   });
 });
 

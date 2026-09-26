@@ -30,6 +30,8 @@ import {
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
   buildMentorConfirmationLinkEmail,
+  buildMenteeSessionConfirmedEmail,
+  buildMenteeSessionInviteEmail,
   buildParticipantInviteEmail,
   buildRecapPeriodReminderEmail,
   buildReviewBatchAssignedEmail,
@@ -204,6 +206,41 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         slotLabel: "Thứ Năm 24/09/2026, 19:30–20:30 (giờ Việt Nam)",
         cancelledByLabel: "ban tổ chức huỷ",
         rebookUrl: `${ORIGIN}/dat-lich/ma-vi-du`,
+        hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "mentee_session_invite",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Mời mentee chọn ca phỏng vấn trực tiếp",
+    audience: "Mentee đã được mời vào vòng phỏng vấn, chưa chọn ca",
+    trigger: 'Khi ban tổ chức bấm "Gửi thư mời chọn ca" ở mục Ca phỏng vấn mentee.',
+    note: "Mỗi mentee nhận một đường dẫn riêng. Ngày phỏng vấn và hạn chọn ca hệ thống tự đọc từ các ca đang mở.",
+    body: built(
+      buildMenteeSessionInviteEmail({
+        candidateName: MENTEE,
+        seasonLabel: SEASON,
+        interviewDaysLabel: "Thứ Bảy 03/10/2026 và Chủ nhật 04/10/2026",
+        bookingUrl: `${ORIGIN}/dat-ca/ma-vi-du`,
+        deadlineLabel: "23:59 ngày 30/09/2026",
+        hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "mentee_session_confirmed",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Xác nhận ca phỏng vấn của mentee",
+    audience: "Mentee vừa chọn hoặc vừa đổi ca phỏng vấn",
+    trigger: "Ngay khi mentee bấm chọn ca, hoặc đổi sang ca khác, trên trang đặt ca.",
+    note: "Ca chưa có địa điểm thì dòng địa điểm là câu hẹn báo sau, không để trống.",
+    body: built(
+      buildMenteeSessionConfirmedEmail({
+        candidateName: MENTEE,
+        sessionLabel: "Thứ Bảy 03/10/2026, 08:00 – 08:30 (giờ Việt Nam)",
+        venueLabel: "Phòng ví dụ, Cơ sở UEH (ví dụ)",
+        manageUrl: `${ORIGIN}/dat-ca/ma-vi-du`,
         hotlineZalo: "0919144638"
       })
     )

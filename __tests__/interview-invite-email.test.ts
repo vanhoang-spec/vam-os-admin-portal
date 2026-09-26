@@ -81,7 +81,7 @@ describe("buildInterviewRoundInviteEmail", () => {
 
 // ── Vòng gửi ──────────────────────────────────────────────────────────────────
 
-type Row = { id: string; full_name: string | null; email_primary: string | null };
+type Row = { id: string; full_name: string | null; email_primary: string | null; role_applied?: string | null };
 
 let rows: Row[];
 
@@ -126,6 +126,37 @@ describe("notifyInterviewRoundInvites", () => {
       toEmail: "a1@example.test",
       applicationId: "a1"
     });
+  });
+
+  /**
+   * Giai đoạn 1 (26/09/2026): mentee nhận thư mời KÈM LINK chọn ca từ bộ gửi
+   * riêng. Gửi thêm lá này là mỗi bạn nhận hai thư trong một buổi chiều, lá đầu
+   * không bấm được gì — và 334 lá thừa ăn vào đúng hạn mức 300 thư/ngày.
+   */
+  it("mentee KHÔNG nhận lá thư không-link này — chỉ mentor nhận", async () => {
+    rows = [
+      person("m1", { role_applied: "mentor" }),
+      person("e1", { role_applied: "mentee" }),
+      // Vai trò đọc từ đơn đã lưu: viết hoa hay dư khoảng trắng vẫn là mentee.
+      person("e2", { role_applied: " Mentee " })
+    ];
+
+    const result = await notifyInterviewRoundInvites({ applicationIds: ["m1", "e1", "e2"] });
+
+    expect(result.sent).toBe(1);
+    expect(result.menteeSkipped).toBe(2);
+    expect(sendInterviewRoundInvite).toHaveBeenCalledTimes(1);
+    expect((sendInterviewRoundInvite as unknown as Mock).mock.calls[0][0].applicationId).toBe("m1");
+  });
+
+  it("mentee bị bỏ qua không bị tính là lỗi hay 'chưa gửi'", async () => {
+    rows = [person("e1", { role_applied: "mentee" })];
+
+    const result = await notifyInterviewRoundInvites({ applicationIds: ["e1"] });
+
+    expect(result.failed).toBe(0);
+    expect(result.notAttempted).toBe(0);
+    expect(result.noEmail).toBe(0);
   });
 
   it("đơn thiếu email được đếm riêng, không tính là lỗi gửi", async () => {
@@ -194,10 +225,24 @@ describe("notifyInterviewRoundInvites", () => {
 // ── Câu thông báo cho người vận hành ─────────────────────────────────────────
 
 describe("interviewInviteNotifyMessage", () => {
-  const empty = { sent: 0, failed: 0, skipped: 0, noEmail: 0, notAttempted: 0, notAttemptedNames: [] };
+  const empty = {
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    noEmail: 0,
+    notAttempted: 0,
+    notAttemptedNames: [] as string[],
+    menteeSkipped: 0
+  };
 
   it("mọi thứ trôi chảy thì không làm loãng thông báo gốc", () => {
     expect(interviewInviteNotifyMessage(empty)).toBe("");
+  });
+
+  it("mentee không nhận thư ở bước này thì nói rõ họ nhận thư ở đâu", () => {
+    const message = interviewInviteNotifyMessage({ ...empty, menteeSkipped: 3 });
+    expect(message).toContain("3 mentee");
+    expect(message).toContain("Ca phỏng vấn mentee");
   });
 
   it("nói thẳng khi cổng gửi đang tắt", () => {

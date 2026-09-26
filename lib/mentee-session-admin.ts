@@ -16,9 +16,9 @@ import { formatDate, formatTime } from "@/lib/utils";
 /**
  * lib/mentee-session-admin.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Ban tổ chức điền số ghế và địa điểm cho 12 ca phỏng vấn mentee.
+ * Ban tổ chức điền số ghế và địa điểm cho các ca phỏng vấn mentee.
  *
- * 12 ca sinh ra với `seat_limit` NULL, và NULL nghĩa là ĐÓNG — không ai đặt
+ * Ca sinh ra với `seat_limit` NULL, và NULL nghĩa là ĐÓNG — không ai đặt
  * được cho tới khi có người điền số. Màn hình này là chỗ điền số đó; trước khi
  * có nó, việc ấy phải làm bằng một câu SQL.
  *
@@ -58,7 +58,7 @@ function serviceClient() {
   }
 }
 
-async function requireBtc(): Promise<
+export async function requireBtc(): Promise<
   { ok: true; client: any; seasonId: string } | { ok: false; message: string }
 > {
   const admin = await getCurrentAdminUser();
@@ -264,7 +264,7 @@ export async function saveSessionConfig(input: {
 }
 
 /**
- * Điền cùng một số ghế cho cả 12 ca.
+ * Điền cùng một số ghế cho mọi ca.
  *
  * Đây là thao tác thật của ban tổ chức: số mentor mỗi ca thường như nhau, nên
  * bắt họ gõ mười hai lần chỉ là mười hai cơ hội gõ lệch một ô.
@@ -279,7 +279,7 @@ export async function applySeatLimitToAllSessions(input: { seatLimit: unknown })
   const seats = parseSeatLimit(input.seatLimit);
   if (!seats.ok) return { ok: false, message: seats.message };
   if (seats.value === null) {
-    return { ok: false, message: "Nhập số ghế muốn áp cho cả 12 ca." };
+    return { ok: false, message: "Nhập số ghế muốn áp cho mọi ca." };
   }
 
   const { data, error } = await client
@@ -295,14 +295,14 @@ export async function applySeatLimitToAllSessions(input: { seatLimit: unknown })
   return { ok: true, message: `Đã đặt ${seats.value} ghế cho ${data?.length ?? 0} ca.` };
 }
 
-/** Điền cùng một địa điểm cho cả 12 ca — thư xác nhận nào cũng cần nó. */
+/** Điền cùng một địa điểm cho mọi ca — thư xác nhận nào cũng cần nó. */
 export async function applyVenueToAllSessions(input: { venue: unknown }): Promise<SaveResult> {
   const access = await requireBtc();
   if (!access.ok) return { ok: false, message: access.message };
   const { client, seasonId } = access;
 
   const venue = clean(input.venue);
-  if (!venue) return { ok: false, message: "Nhập địa điểm muốn áp cho cả 12 ca." };
+  if (!venue) return { ok: false, message: "Nhập địa điểm muốn áp cho mọi ca." };
 
   const { data, error } = await client
     .from("interview_sessions")

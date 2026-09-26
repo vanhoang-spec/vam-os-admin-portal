@@ -37,8 +37,8 @@ function sampleValues(slotId: string): Record<string, string> {
 }
 
 describe("1. danh mục", () => {
-  it("có đúng 17 lá thư và không id nào trùng", () => {
-    expect(AUTOMATION_SLOTS).toHaveLength(17);
+  it("có đúng 19 lá thư và không id nào trùng", () => {
+    expect(AUTOMATION_SLOTS).toHaveLength(19);
     const ids = AUTOMATION_SLOTS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
