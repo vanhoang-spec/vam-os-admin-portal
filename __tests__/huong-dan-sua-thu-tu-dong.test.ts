@@ -77,7 +77,7 @@ describe("1. mọi chữ trích trong hướng dẫn đều có thật trên mà
 
 describe("2. các con số khớp mã nguồn", () => {
   it("số lá thư sửa được", () => {
-    expect(AUTOMATION_SLOTS).toHaveLength(17);
+    expect(AUTOMATION_SLOTS).toHaveLength(19);
     expect(guideText).toContain(`${AUTOMATION_SLOTS.length} lá`);
   });
 
