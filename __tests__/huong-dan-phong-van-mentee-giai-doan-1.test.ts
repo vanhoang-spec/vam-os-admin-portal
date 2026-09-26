@@ -152,17 +152,32 @@ describe("3. hai lá thư in ra khớp từng dòng với hàm dựng thư thậ
 });
 
 describe("4. ai làm được bước nào — khớp cổng quyền thật", () => {
-  it("bước 1 và 3 (Ca phỏng vấn mentee): Core team, Admin — KHÔNG có Support team", () => {
+  /**
+   * Soi đúng ô "ai làm" của TỪNG bước. Tìm chung cả trang thì "Core team · Admin"
+   * khớp luôn vào "Core team · Admin · Support team" của bước 2, và hướng dẫn
+   * ghi nhầm Support team vào bước 3 vẫn xanh — người Support team sẽ đi tìm
+   * một nút mà họ không bao giờ thấy.
+   */
+  const whoOfStep = (title: string) => {
+    const match = html.match(
+      new RegExp(`<b class="t">${title}</b>\\s*<span class="who">([^<]+)</span>`)
+    );
+    return match?.[1].trim();
+  };
+
+  it("bước 1 và 3 nằm sau cổng canAssignReview — Core team, Admin, KHÔNG có Support team", () => {
+    expect(read("lib/mentee-session-admin.ts")).toContain("if (!canAssignReview(admin.role))");
     expect(canAssignReview("core_team")).toBe(true);
     expect(canAssignReview("admin")).toBe(true);
     expect(canAssignReview("support_team")).toBe(false);
-    // Hai dòng "ai làm" của bước 1 và 3 chỉ ghi Core team · Admin.
-    expect(guideText.split("Core team · Admin ").length - 1).toBeGreaterThanOrEqual(2);
+    expect(whoOfStep("Điền địa điểm")).toBe("Core team · Admin");
+    expect(whoOfStep("Gửi thư mời chọn ca")).toBe("Core team · Admin");
   });
 
-  it("bước 2 (mời hàng loạt): Support team làm được", () => {
+  it("bước 2 nằm sau cổng canDecideAnyApplicationResult — Support team làm được", () => {
+    expect(read(BULK_PAGE)).toContain("if (!canDecideAnyApplicationResult(actor.role))");
     expect(canDecideAnyApplicationResult("support_team")).toBe(true);
-    expect(guideText).toContain("Core team · Admin · Support team");
+    expect(whoOfStep("Mời đúng những bạn được đề xuất")).toBe("Core team · Admin · Support team");
   });
 });
 
