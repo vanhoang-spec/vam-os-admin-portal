@@ -14,6 +14,8 @@ import {
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
   buildMentorConfirmationLinkEmail,
+  buildMenteeSessionConfirmedEmail,
+  buildMenteeSessionInviteEmail,
   textToHtmlEmail,
   buildCrossInviteEmail,
   buildCrossNotSelectedEmail,
@@ -41,6 +43,7 @@ import {
 import { resolveAutomationEmail } from "@/lib/email-automation";
 import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib/participant-invite-core";
 import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/lib/interview-schedule-core";
+import { menteeBookingUrl } from "@/lib/mentee-interview-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
 /**
@@ -961,6 +964,104 @@ export async function sendInterviewRoundInvite(input: {
 
   return deliver(
     "interview_round_invite",
+    { ...built, ...message, to: input.toEmail },
+    { table: "applications", id: input.applicationId }
+  );
+}
+
+/**
+ * Thư mời mentee chọn ca phỏng vấn, kèm link riêng.
+ *
+ * Đường dẫn dựng TẠI ĐÂY từ base của chính app và mã của đơn — không nhận URL
+ * từ ngoài, nên một lá thư không thể bị dùng để mang một đường dẫn lạ.
+ *
+ * Người gọi duy nhất là bộ gửi thư mời (lib/mentee-invite-dispatch.ts), vốn
+ * chia lô và dừng khi chạm trần thư trong ngày. `providerStatus` được trả lên
+ * nguyên vẹn để nó biết khi nào phải dừng.
+ */
+export async function sendMenteeSessionInvite(input: {
+  toEmail: string;
+  candidateName: string;
+  seasonLabel: string;
+  interviewDaysLabel: string;
+  deadlineLabel: string;
+  bookingToken: string;
+  applicationId: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base) {
+    return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  }
+  const link = menteeBookingUrl(base, input.bookingToken);
+
+  const built = buildMenteeSessionInviteEmail({
+    candidateName: input.candidateName,
+    seasonLabel: input.seasonLabel,
+    interviewDaysLabel: input.interviewDaysLabel,
+    bookingUrl: link,
+    deadlineLabel: input.deadlineLabel,
+    hotlineZalo: HOTLINE_ZALO
+  });
+
+  const message = await resolveAutomationEmail({
+    slotId: "mentee_session_invite",
+    values: {
+      ten_nguoi_nhan: input.candidateName,
+      mua: input.seasonLabel,
+      ngay_phong_van: input.interviewDaysLabel,
+      link_dat_ca: link,
+      han_chon_ca: input.deadlineLabel,
+      zalo_ho_tro: HOTLINE_ZALO
+    },
+    fallback: built
+  });
+
+  return deliver(
+    "mentee_session_invite",
+    { ...built, ...message, to: input.toEmail },
+    { table: "applications", id: input.applicationId }
+  );
+}
+
+/** Thư xác nhận ca phỏng vấn của mentee — sau khi đặt, và sau khi đổi. */
+export async function sendMenteeSessionConfirmed(input: {
+  toEmail: string;
+  candidateName: string;
+  sessionLabel: string;
+  venueLabel: string;
+  bookingToken: string;
+  applicationId: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (!base) {
+    return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  }
+  const link = menteeBookingUrl(base, input.bookingToken);
+
+  const built = buildMenteeSessionConfirmedEmail({
+    candidateName: input.candidateName,
+    sessionLabel: input.sessionLabel,
+    venueLabel: input.venueLabel,
+    manageUrl: link,
+    hotlineZalo: HOTLINE_ZALO
+  });
+
+  const message = await resolveAutomationEmail({
+    slotId: "mentee_session_confirmed",
+    values: {
+      ten_nguoi_nhan: input.candidateName,
+      ca_phong_van: input.sessionLabel,
+      dia_diem: input.venueLabel,
+      link_doi_ca: link,
+      zalo_ho_tro: HOTLINE_ZALO
+    },
+    fallback: built
+  });
+
+  return deliver(
+    "mentee_session_confirmed",
     { ...built, ...message, to: input.toEmail },
     { table: "applications", id: input.applicationId }
   );

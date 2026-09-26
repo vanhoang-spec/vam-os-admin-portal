@@ -26,6 +26,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     publicRoute === "survey" ||
     // Trang đặt lịch phỏng vấn của mentor mới — mã riêng trong thư mời.
     publicRoute === "interview_booking" ||
+    // Trang chọn ca phỏng vấn của ứng viên mentee — mã riêng trong thư báo kết
+    // quả vòng đơn. Cùng loại với dòng trên: người mở chưa có tài khoản nào.
+    publicRoute === "mentee_session_booking" ||
     publicRoute === "renewal" ||
     publicRoute === "blog"
   ) {

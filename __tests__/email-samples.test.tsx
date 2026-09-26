@@ -41,7 +41,7 @@ vi.mock("@/app/actions/email-automation", () => ({
 }));
 // Trang giờ đọc nội dung đã lưu của thư tự động. Bản giả trả về đúng bản mặc
 // định — trạng thái thật của một hệ thống chưa ai sửa gì — nên trang vẫn phải
-// dựng ra đủ 17 lá.
+// dựng ra đủ mọi lá sửa được.
 vi.mock("@/lib/email-automation", () => ({
   listAutomationContent: vi.fn(async () => {
     const { AUTOMATION_SLOTS } = await import("@/lib/email-automation-core");
@@ -225,7 +225,7 @@ describe("5. trang Thư tự động", () => {
     const readOnly = EMAIL_SAMPLES.filter(
       (sample) => sample.body && !editableKinds.has(sample.kind)
     );
-    // Giấu chúng đi thì màn hình nói rằng hệ thống chỉ gửi 17 lá, và người trực
+    // Giấu chúng đi thì màn hình nói rằng hệ thống chỉ gửi những lá sửa được, và người trực
     // support sẽ đi tìm lá thư sự kiện ở một chỗ không có nó.
     expect(readOnly.length).toBeGreaterThan(0);
 

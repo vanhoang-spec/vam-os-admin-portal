@@ -73,7 +73,13 @@ export type EmailKind =
   | "interview_slot_invite"
   // Thư báo một buổi phỏng vấn đã bị huỷ (mentor tự huỷ khi còn >24h, hoặc ban
   // tổ chức huỷ), gửi cho cả interviewer lẫn mentor.
-  | "interview_slot_cancelled";
+  | "interview_slot_cancelled"
+  // Vòng phỏng vấn MENTEE (supabase/migrations/20260926100000_giai_doan_1_pv_mentee.sql).
+  // KHÁC 'interview_round_invite': thư này mang link chọn ca; thư kia không có
+  // link nào, và từ giai đoạn 1 mentee không còn nhận thư kia nữa.
+  | "mentee_session_invite"
+  // Xác nhận ca đã đặt — gửi cả khi đặt lần đầu lẫn khi đổi ca.
+  | "mentee_session_confirmed";
 
 /**
  * Một tệp đi kèm thư.
@@ -1759,6 +1765,123 @@ export function buildEventSurveyEmail(input: {
       `<p style="margin:0 0 16px;font-size:13px;color:#4f6b60">Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(url)}</p>`,
       deadline ? `<p>Vui lòng gửi trước <strong>${escapeHtml(deadline)}</strong>.</p>` : "",
       `<p style="color:#6b7c74;font-size:13px">${escapeHtml(String(input.trackingNotice ?? "").trim())}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư mời mentee chọn ca phỏng vấn trực tiếp — mang link riêng tới /dat-ca.
+ *
+ * KHÁC buildInterviewRoundInviteEmail: thư đó cố ý không có link, vì lúc viết
+ * nó ứng viên chưa có màn hình nào để tự chọn lịch. Với mentee thì màn hình ấy
+ * đã có, nên từ giai đoạn 1 mentee nhận ĐÚNG MỘT thư mời: thư này.
+ *
+ * Ngày phỏng vấn là THAM SỐ, không viết cứng: giai đoạn 2 (10–11/10) dùng lại
+ * đúng hàm này, và một thư viết cứng "03–04/10" sẽ nói sai với cả đợt đó.
+ */
+export function buildMenteeSessionInviteEmail(input: {
+  candidateName: string;
+  seasonLabel: string;
+  interviewDaysLabel: string;
+  bookingUrl: string;
+  deadlineLabel: string;
+  hotlineZalo: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.candidateName, "bạn");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const days = safeDisplayName(input.interviewDaysLabel, "");
+  const deadline = safeDisplayName(input.deadlineLabel, "");
+
+  const subject = `[UEH Mentoring] Mời bạn chọn ca phỏng vấn — ${season}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Chúc mừng bạn đã qua vòng hồ sơ ${season}. Ban tổ chức mời bạn tham gia vòng phỏng vấn trực tiếp vào ${days}.`,
+    "",
+    "Mỗi buổi phỏng vấn dài tối đa 30 phút, 1:1 với một mentor. Bạn mở đường dẫn riêng dưới đây và chọn MỘT ca phù hợp. Mỗi ca có số chỗ giới hạn, ca nào kín thì không chọn được nữa, nên bạn chọn sớm nhé:",
+    input.bookingUrl,
+    "",
+    `Hạn chọn ca: ${deadline}. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.`,
+    "",
+    "Chọn xong, bạn sẽ nhận một thư xác nhận ca và địa điểm. Cần đổi ca, bạn mở lại đúng đường dẫn này trước hạn.",
+    "",
+    `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
+    "",
+    "Hẹn gặp bạn!",
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Chúc mừng bạn đã qua vòng hồ sơ <strong>${escapeHtml(season)}</strong>. Ban tổ chức mời bạn tham gia vòng phỏng vấn trực tiếp vào <strong>${escapeHtml(days)}</strong>.</p>`,
+      "<p>Mỗi buổi phỏng vấn dài tối đa 30 phút, 1:1 với một mentor. Bạn mở đường dẫn riêng dưới đây và chọn <strong>một</strong> ca phù hợp. Mỗi ca có số chỗ giới hạn, ca nào kín thì không chọn được nữa, nên bạn chọn sớm nhé.</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn ca phỏng vấn</a></p>`,
+      `<p>Hạn chọn ca: <strong>${escapeHtml(deadline)}</strong>. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.</p>`,
+      "<p>Chọn xong, bạn sẽ nhận một thư xác nhận ca và địa điểm. Cần đổi ca, bạn mở lại đúng đường dẫn này trước hạn.</p>",
+      `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho bạn, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.bookingUrl)}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư xác nhận ca phỏng vấn của mentee — gửi cả lúc đặt lần đầu lẫn lúc đổi ca.
+ *
+ * MỘT lá cho hai thời điểm, có chủ ý: câu "ban tổ chức đã ghi nhận ca của bạn"
+ * đúng cho cả hai, và hai lá gần giống nhau là hai chỗ để câu chữ lệch nhau.
+ *
+ * `venueLabel` luôn có giá trị: địa điểm thật khi ban tổ chức đã điền, hoặc một
+ * câu hẹn báo sau. Dòng "Địa điểm:" đứng trơ là thứ khiến người nhận gọi điện.
+ */
+export function buildMenteeSessionConfirmedEmail(input: {
+  candidateName: string;
+  sessionLabel: string;
+  venueLabel: string;
+  manageUrl: string;
+  hotlineZalo: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.candidateName, "bạn");
+  const session = safeDisplayName(input.sessionLabel, "");
+  const venue = safeDisplayName(input.venueLabel, "");
+
+  const subject = `[UEH Mentoring] Xác nhận ca phỏng vấn — ${session}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    "Ban tổ chức đã ghi nhận ca phỏng vấn của bạn:",
+    "",
+    `- Thời gian: ${session}`,
+    `- Địa điểm: ${venue}`,
+    "",
+    "Buổi phỏng vấn dài tối đa 30 phút. Bạn đến trước giờ hẹn 10 phút để ban tổ chức kịp hướng dẫn vào phòng.",
+    "",
+    "Cần đổi ca? Bạn mở lại đường dẫn riêng của mình trước hạn chọn ca và chọn ca khác. Ca hiện tại chỉ được nhả khi ca mới còn chỗ, nên bạn không bao giờ bị mất chỗ vì đổi:",
+    input.manageUrl,
+    "",
+    `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
+    "",
+    "Hẹn gặp bạn!",
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      "<p>Ban tổ chức đã ghi nhận ca phỏng vấn của bạn:</p>",
+      `<ul><li>Thời gian: <strong>${escapeHtml(session)}</strong></li><li>Địa điểm: <strong>${escapeHtml(venue)}</strong></li></ul>`,
+      "<p>Buổi phỏng vấn dài tối đa 30 phút. Bạn đến trước giờ hẹn 10 phút để ban tổ chức kịp hướng dẫn vào phòng.</p>",
+      `<p>Cần đổi ca? Bạn mở lại <a href="${escapeHtml(input.manageUrl)}">đường dẫn riêng của mình</a> trước hạn chọn ca và chọn ca khác. Ca hiện tại chỉ được nhả khi ca mới còn chỗ, nên bạn không bao giờ bị mất chỗ vì đổi.</p>`,
+      `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Nếu đường dẫn trên không mở được: ${escapeHtml(input.manageUrl)}</p>`
     ].join("")
   );
 

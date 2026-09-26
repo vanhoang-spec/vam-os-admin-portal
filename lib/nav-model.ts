@@ -1,5 +1,6 @@
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import {
+  canAssignReview,
   canAssignReviewLots,
   canBrowseOperations,
   canComposeEmailTemplate,
@@ -178,6 +179,10 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // canSelfClaimInterview mà showReviews đại diện — nav không được
             // hứa một trang sẽ đá người bấm về trang chủ.
             { href: "/interviews/lich", label: "Lịch phỏng vấn" },
+            // Cấu hình 12 ca phỏng vấn mentee. Gate HẸP HƠN nhóm này: trang đòi
+            // canAssignReview, còn nhóm này mở cho cả reviewer. Hiện link cho
+            // reviewer là hứa một trang chỉ trả về câu từ chối.
+            ...(canAssignReview(role) ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
           ],
         }
       : showStaffingOnly

@@ -10,7 +10,7 @@ import {
  * ─────────────────────────────────────────────────────────────────────────────
  * Ban tổ chức tự sửa nội dung những lá thư HỆ THỐNG TỰ GỬI.
  *
- * Trước file này, câu chữ của 16 lá thư tự động nằm trong các hàm dựng thư ở
+ * Trước file này, câu chữ của những lá thư tự động nằm trong các hàm dựng thư ở
  * `lib/email-core.ts`, và đổi một câu là một lần deploy. Màn hình "Thư tự động"
  * giờ cho core team / support team sửa và lưu; từ sau lúc lưu, hệ thống gửi đi
  * nội dung mới.
@@ -145,7 +145,7 @@ const P_LINK_DANG_NHAP: AutomationPlaceholder = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Danh mục 16 lá thư
+// Danh mục thư sửa được
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -339,6 +339,69 @@ export const AUTOMATION_SLOTS: readonly AutomationSlot[] = [
       P_KHUNG_GIO,
       { key: "ten_ung_vien", label: "Tên ứng viên", required: true, hint: "Mentor của buổi bị huỷ." },
       { key: "nguoi_huy", label: "Ai huỷ", required: true, hint: "Ví dụ: do ứng viên huỷ, hoặc do ban tổ chức huỷ." },
+      P_ZALO
+    ]
+  },
+  {
+    id: "mentee_session_invite",
+    kind: "mentee_session_invite",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Mời mentee chọn ca phỏng vấn trực tiếp",
+    audience: "Mentee đã được mời vào vòng phỏng vấn, chưa chọn ca",
+    trigger: 'Khi ban tổ chức bấm "Gửi thư mời chọn ca" ở mục Ca phỏng vấn mentee.',
+    note: "Từ giai đoạn 1, mentee chỉ nhận lá thư này — không còn nhận thư mời vào vòng phỏng vấn không có link.",
+    placeholders: [
+      P_TEN_NGUOI_NHAN,
+      P_MUA,
+      {
+        key: "ngay_phong_van",
+        label: "Các ngày phỏng vấn",
+        required: true,
+        hint: "Hệ thống tự đọc từ các ca còn đặt được, ví dụ: Thứ Bảy 03/10/2026 và Chủ nhật 04/10/2026."
+      },
+      {
+        key: "link_dat_ca",
+        label: "Đường dẫn chọn ca",
+        required: true,
+        hint: "Đường dẫn riêng của từng mentee. Bỏ ô này là thư không còn tác dụng gì."
+      },
+      {
+        key: "han_chon_ca",
+        label: "Hạn chọn ca",
+        required: true,
+        hint: "Đọc từ cấu hình ca, ví dụ: 23:59 ngày 30/09/2026."
+      },
+      P_ZALO
+    ]
+  },
+  {
+    id: "mentee_session_confirmed",
+    kind: "mentee_session_confirmed",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Xác nhận ca phỏng vấn của mentee",
+    audience: "Mentee vừa chọn hoặc vừa đổi ca phỏng vấn",
+    trigger: "Ngay khi mentee bấm chọn ca, hoặc đổi sang ca khác, trên trang đặt ca.",
+    note: "Một lá cho cả đặt lần đầu lẫn đổi ca.",
+    placeholders: [
+      P_TEN_NGUOI_NHAN,
+      {
+        key: "ca_phong_van",
+        label: "Ca phỏng vấn",
+        required: true,
+        hint: "Ví dụ: Thứ Bảy 03/10/2026, 08:00 – 08:30 (giờ Việt Nam)."
+      },
+      {
+        key: "dia_diem",
+        label: "Địa điểm",
+        required: true,
+        hint: "Địa điểm ban tổ chức điền cho ca. Chưa điền thì hệ thống điền câu hẹn báo sau — ô này luôn có chữ."
+      },
+      {
+        key: "link_doi_ca",
+        label: "Đường dẫn đổi ca",
+        required: true,
+        hint: "Đường dẫn riêng để mentee tự đổi ca trước hạn."
+      },
       P_ZALO
     ]
   },

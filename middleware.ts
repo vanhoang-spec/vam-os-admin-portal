@@ -216,6 +216,9 @@ export async function middleware(request: NextRequest) {
     // Trang đặt lịch phỏng vấn của mentor mới. Công khai có chủ ý: người mở là
     // ứng viên chưa có tài khoản, mã riêng nằm trong hộp thư của chính họ.
     request.nextUrl.pathname.startsWith("/dat-lich/") ||
+    // Trang chọn ca phỏng vấn của ứng viên mentee. Cùng lý do với /dat-lich/:
+    // người mở chưa có tài khoản, mã riêng nằm trong hộp thư của chính họ.
+    request.nextUrl.pathname.startsWith("/dat-ca/") ||
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
@@ -233,6 +236,8 @@ export async function middleware(request: NextRequest) {
         ? "survey"
         : request.nextUrl.pathname.startsWith("/dat-lich/")
           ? "interview_booking"
+          : request.nextUrl.pathname.startsWith("/dat-ca/")
+          ? "mentee_session_booking"
           : request.nextUrl.pathname.startsWith("/renew/")
           ? "renewal"
           : request.nextUrl.pathname.startsWith("/ve/")
@@ -247,7 +252,12 @@ export async function middleware(request: NextRequest) {
     // trong cache dùng chung, và trang đích của bất kỳ đường dẫn nào trên đó
     // không cần biết mã là gì. Trang đặt lịch phỏng vấn cùng loại: URL mang mã
     // riêng của một ứng viên, ai cầm được mã là đặt/huỷ được lịch của họ.
-    if (publicRoute === "renewal" || publicRoute === "ticket" || publicRoute === "interview_booking") {
+    if (
+      publicRoute === "renewal" ||
+      publicRoute === "ticket" ||
+      publicRoute === "interview_booking" ||
+      publicRoute === "mentee_session_booking"
+    ) {
       response.headers.set("Referrer-Policy", "no-referrer");
       response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
       response.headers.set("Pragma", "no-cache");

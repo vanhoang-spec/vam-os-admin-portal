@@ -181,6 +181,12 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Giữ chỗ một ca phỏng vấn mentee — migration
+  // 20260924190000_mentee_interview_sessions.sql. Nằm ở đây cho tới khi chủ dự án
+  // dán migration lên Production và có bằng chứng đọc catalog.
+  "vam101_book_mentee_session",
+  // Đổi ca phỏng vấn mentee — migration 20260924210000_mentee_change_session.sql.
+  "vam102_change_mentee_session",
   // Ban tổ chức sửa nội dung bài chấm — migration
   // 20260918170000_review_content_override.sql. Nằm ở đây cho tới khi chủ dự án dán
   // migration lên Production và có bằng chứng đọc catalog.

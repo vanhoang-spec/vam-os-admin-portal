@@ -64,7 +64,9 @@ const KIND_LABELS: Record<string, string> = {
   interview_scheduled: "Lịch phỏng vấn",
   interview_slot_invite: "Mời đặt lịch phỏng vấn",
   interview_slot_cancelled: "Huỷ lịch phỏng vấn",
-  reviewer_invite: "Mời chấm hồ sơ"
+  reviewer_invite: "Mời chấm hồ sơ",
+  mentee_session_invite: "Mời mentee chọn ca phỏng vấn",
+  mentee_session_confirmed: "Xác nhận ca phỏng vấn mentee"
 };
 
 /** Nhãn tiếng Việt; loại lạ trả về nguyên mã để không giấu mất thông tin. */

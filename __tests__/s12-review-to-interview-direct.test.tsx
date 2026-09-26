@@ -378,8 +378,8 @@ describe("bulk invite", () => {
 
   it("sends every row's expected status so a stale row is blocked, not skipped", () => {
     const rows = [
-      { id: "app-1", fullName: "A", role: "mentor", status: "screening_completed", statusLabel: "x", submittedReviews: 1 },
-      { id: "app-2", fullName: "B", role: "mentee", status: "needs_admin_review", statusLabel: "y", submittedReviews: 2 }
+      { id: "app-1", fullName: "A", role: "mentor", status: "screening_completed", statusLabel: "x", submittedReviews: 1, recommendationLabel: "Mời vào vòng phỏng vấn" },
+      { id: "app-2", fullName: "B", role: "mentee", status: "needs_admin_review", statusLabel: "y", submittedReviews: 2, recommendationLabel: "Cần core team/admin xem thêm" }
     ];
     const { container } = render(<BulkInviteForm rows={rows} />);
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
@@ -429,7 +429,7 @@ describe("bulk invite", () => {
   it("mutates nothing when the confirmation is never completed", () => {
     render(
       <BulkInviteForm
-        rows={[{ id: "app-1", fullName: "A", role: "mentor", status: "screening_completed", statusLabel: "x", submittedReviews: 1 }]}
+        rows={[{ id: "app-1", fullName: "A", role: "mentor", status: "screening_completed", statusLabel: "x", submittedReviews: 1, recommendationLabel: "Mời vào vòng phỏng vấn" }]}
       />
     );
     expect(vi.mocked(applyApplicationDecisions)).not.toHaveBeenCalled();

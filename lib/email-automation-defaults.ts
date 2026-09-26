@@ -5,6 +5,8 @@ import {
   buildInterviewScheduleEmail,
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
+  buildMenteeSessionConfirmedEmail,
+  buildMenteeSessionInviteEmail,
   buildParticipantInviteEmail,
   buildReviewBatchAssignedEmail,
   buildReviewerInviteEmail,
@@ -192,6 +194,29 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
           slotLabel: S("khung_gio"),
           cancelledByLabel: S("nguoi_huy"),
           rebookUrl: null,
+          hotlineZalo: S("zalo_ho_tro")
+        })
+      );
+
+    case "mentee_session_invite":
+      return one(
+        buildMenteeSessionInviteEmail({
+          candidateName: S("ten_nguoi_nhan"),
+          seasonLabel: S("mua"),
+          interviewDaysLabel: S("ngay_phong_van"),
+          bookingUrl: S("link_dat_ca"),
+          deadlineLabel: S("han_chon_ca"),
+          hotlineZalo: S("zalo_ho_tro")
+        })
+      );
+
+    case "mentee_session_confirmed":
+      return one(
+        buildMenteeSessionConfirmedEmail({
+          candidateName: S("ten_nguoi_nhan"),
+          sessionLabel: S("ca_phong_van"),
+          venueLabel: S("dia_diem"),
+          manageUrl: S("link_doi_ca"),
           hotlineZalo: S("zalo_ho_tro")
         })
       );

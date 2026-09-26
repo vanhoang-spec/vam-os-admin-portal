@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Sửa nội dung thư tự động — Hướng dẫn cho ban tổ chức</title>
+<style>
+  @page { size: A4; margin: 9mm 11mm 8mm 11mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 8.4pt;
+    line-height: 1.36;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.2mm; margin-bottom: 2.8mm;
+  }
+  .eyebrow {
+    font-size: 7pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  h1 { font-size: 17pt; line-height: 1.08; margin: 1mm 0 .8mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 8.8pt; max-width: 132mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.2pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 5.4mm; align-items: start; }
+  h2 {
+    font-size: 8pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin: 0 0 1.4mm; font-weight: 700;
+  }
+  .block + .block { margin-top: 2.8mm; }
+  p { margin: 0 0 1.4mm; }
+
+  .btn {
+    display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.4mm; font-size: 8pt; font-weight: 600; white-space: nowrap;
+  }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 1.2mm; font-size: 8pt; white-space: nowrap;
+  }
+  .tok {
+    background: #eef4ff; border: 1px solid #c9d9f5; color: #1c3d7a; border-radius: 3px;
+    padding: 0 1.2mm; font-size: 8pt; font-weight: 600; white-space: nowrap;
+  }
+  .path { color: var(--green); font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+  .ok { color: var(--green); font-weight: 600; }
+
+  .prep {
+    background: var(--mint); border-left: 3px solid var(--green);
+    padding: 2mm 3mm; margin-bottom: 2.8mm;
+  }
+  .prep b.h { display: block; margin-bottom: .5mm; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.4mm; margin-bottom: 2mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5.2mm; height: 5.2mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 7.8pt; text-align: center; line-height: 5.2mm;
+  }
+  ol.steps b.t { display: block; font-size: 9pt; margin-bottom: .2mm; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 1.2mm; }
+  th, td { border: 1px solid var(--line); padding: 1mm 1.6mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+
+  ul.tight { margin: 0; padding-left: 4mm; }
+  ul.tight li { margin: .5mm 0; }
+
+  .mock {
+    margin-top: 1.4mm; border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+    font-size: 7.6pt; background: #fff;
+  }
+  .mock .cap {
+    background: #f6f9f7; color: var(--muted); padding: .6mm 2mm;
+    font-size: 6.8pt; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .mock .body { padding: 1.4mm 2mm; }
+  .mock .field {
+    display: block; border: 1px solid var(--line); border-radius: 3px;
+    padding: .8mm 1.3mm; margin: .7mm 0; color: var(--muted); background: #fbfdfc;
+  }
+
+  .warn {
+    background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink);
+    padding: 2mm 3mm;
+  }
+  .warn b.h { display: block; margin-bottom: .4mm; }
+
+  footer {
+    margin-top: 2.6mm; border-top: 1px solid var(--line); padding-top: 1.4mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho ban tổ chức</div>
+    <h1>Sửa nội dung thư tự động</h1>
+    <p class="sub">Đổi câu chữ của những lá thư hệ thống tự gửi — ngay trên app, không cần chờ bản
+      cập nhật. Lưu xong là thư gửi từ lúc đó dùng nội dung mới.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 26/09/2026</div>
+</header>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái ─────────────── -->
+  <div>
+    <div class="prep">
+      <b class="h">Ai làm được, và ở đâu</b>
+      <b>Core team, Support team, Admin, Super Admin.</b> Vào
+      <span class="path">Vận hành → Mail → tab &ldquo;Thư tự động&rdquo;</span>. Reviewer và Viewer
+      không mở được trang này.
+    </div>
+
+    <div class="block">
+      <h2>Bốn bước</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Tìm lá thư cần sửa</b>
+          19 lá, xếp theo ba nhóm: <b>Nộp đơn và tuyển chọn</b>, <b>Chấm hồ sơ</b>,
+          <b>Tài khoản đăng nhập</b>. Mỗi lá ghi rõ <i>Gửi cho ai</i> và <i>Khi nào gửi</i> — đọc hai
+          dòng đó trước để chắc đang sửa đúng lá.
+        </li>
+        <li>
+          <b class="t">Bấm <span class="btn">Xem và sửa</span></b>
+          Ô tiêu đề và ô nội dung hiện ra, mang sẵn câu chữ <b>đang gửi thật</b>.
+        </li>
+        <li>
+          <b class="t">Sửa chữ, giữ nguyên các ô điền</b>
+          Ô điền là những chỗ trong dấu <span class="tok">{{ }}</span>. Cần chèn thêm thì bấm đúng ô
+          đó ở hàng nút bên dưới — nó chèn vào chỗ con trỏ đang đứng.
+          <div class="mock">
+            <div class="cap">Ô nội dung, ví dụ</div>
+            <div class="body">
+              Chào <span class="tok">{{ten_nguoi_nhan}}</span>,<br>
+              <span class="field">Đơn đăng ký mentor <span class="tok">{{mua}}</span> của anh/chị đã sẵn sàng cho buổi trao đổi.</span>
+              <span class="field">Anh/chị chọn giờ tại: <span class="tok">{{link_dat_lich}}</span></span>
+            </div>
+          </div>
+        </li>
+        <li>
+          <b class="t">Bấm <span class="btn solid">Lưu</span></b>
+          Thấy <span class="ok">Đã lưu. Thư gửi từ bây giờ dùng nội dung này.</span> là xong. Nhãn
+          của lá thư đổi từ <span class="ui">Bản mặc định</span> thành
+          <span class="ui">Ban tổ chức đã sửa</span>, kèm tên người sửa và thời điểm.
+        </li>
+      </ol>
+    </div>
+
+    <div class="block">
+      <h2>Ô điền — thứ quan trọng nhất phải hiểu</h2>
+      <p>Ô điền không phải chữ trang trí. Lúc gửi, hệ thống thay nó bằng dữ liệu thật của
+        <b>từng người nhận</b>: tên của họ, đường dẫn riêng của họ, mốc thời gian của họ.</p>
+      <table>
+        <tr><th style="width:38%">Loại ô</th><th>Nghĩa</th></tr>
+        <tr>
+          <td>Có dấu <b>*</b></td>
+          <td><b>Bắt buộc.</b> Xoá nó đi thì hệ thống <b>từ chối lưu</b> và nói rõ thiếu ô nào.
+            Ví dụ thư mời đặt lịch mất <span class="tok">{{link_dat_lich}}</span> là lá thư người
+            nhận không làm gì được.</td>
+        </tr>
+        <tr>
+          <td>Không có dấu *</td>
+          <td>Có lần gửi không có dữ liệu — ví dụ ứng viên không khai số điện thoại. Khi đó
+            <b>cả dòng chứa ô ấy không xuất hiện</b> trong thư gửi đi.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="warn block">
+      <b class="h">Lưu là có hiệu lực ngay — không có bước ai duyệt</b>
+      Khác tab &ldquo;Mẫu thư&rdquo;, nơi phải có người duyệt trước khi gửi. Ở đây, lá thư tiếp theo
+      hệ thống gửi đã dùng nội dung vừa lưu. <b>Thư đã gửi thì không rút lại được</b> — nên đọc lại
+      một lượt trước khi bấm Lưu.
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>Sửa nhầm thì làm gì</h2>
+      <ul class="tight">
+        <li><b>Quay về câu chữ gốc:</b> bấm <span class="btn">Trả về bản mặc định</span>. Thấy
+          <span class="ok">Đã trả về bản mặc định của hệ thống.</span></li>
+        <li><b>Xem lại bản cũ:</b> mở <span class="ui">Lịch sử sửa</span> — mỗi lần lưu đều ghi ai
+          sửa, lúc nào, và nội dung trước đó. Bản vừa xoá vẫn nằm trong lịch sử.</li>
+        <li><b>Xem thử trước khi tin:</b> mở
+          <span class="ui">Xem trước bản đang lưu (dữ liệu ví dụ)</span> để thấy thư hiện ra thế nào.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Hệ thống từ chối lưu khi nào</h2>
+      <table>
+        <tr><th style="width:46%">Lời báo</th><th>Cách sửa</th></tr>
+        <tr>
+          <td><span class="err">Thư bắt buộc phải còn …</span></td>
+          <td>Chèn lại ô bắt buộc bị xoá. Lời báo gọi tên đúng ô đó.</td>
+        </tr>
+        <tr>
+          <td><span class="err">Thư đang dùng ô không có dữ liệu: …</span></td>
+          <td>Đã gõ tay một ô không có thật. Chỉ dùng các ô ở hàng nút bên dưới.</td>
+        </tr>
+        <tr>
+          <td><span class="err">Thư chỉ nhận văn bản thuần, không nhận thẻ HTML</span></td>
+          <td>Bỏ mọi dấu <b>&lt;</b> và <b>&gt;</b>. Phần in đậm, nút bấm, xuống dòng do hệ thống
+            tự dựng.</td>
+        </tr>
+        <tr>
+          <td><span class="err">Vui lòng nhập tiêu đề thư.</span></td>
+          <td>Tiêu đề và nội dung đều không được để trống.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="block">
+      <h2>Viết cho tốt</h2>
+      <ul class="tight">
+        <li><b>Đừng dán chữ từ Word.</b> Gõ thẳng, hoặc dán qua Notepad trước — Word mang theo ký
+          tự lạ.</li>
+        <li><b>Mỗi đoạn cách nhau một dòng trống.</b> Hệ thống dựa vào dòng trống để tách đoạn.</li>
+        <li><b>Đặt đường dẫn trên một dòng riêng.</b> Dễ đọc hơn, và hệ thống tự làm nó bấm được.</li>
+        <li><b>Đừng viết sẵn tên người vào thư</b> — dùng <span class="tok">{{ten_nguoi_nhan}}</span>,
+          nếu không mọi người đều nhận thư gửi cho một người.</li>
+        <li>Tiêu đề tối đa <b>200 ký tự</b>, nội dung tối đa <b>8.000 ký tự</b>.</li>
+      </ul>
+    </div>
+
+    <div class="block">
+      <h2>Bốn lá thư sự kiện chưa sửa được từ đây</h2>
+      <p>Thư xác nhận đăng ký, nhắc lịch, báo đổi giờ và khảo sát mang mã QR và bảng buổi do hệ
+        thống sinh ra, nên chúng cần cách sửa khác. Chúng vẫn hiện ở <b>cuối trang</b>, chỉ để đọc.
+        Thư thông báo do ban tổ chức tự soạn thì nội dung nằm ở tab
+        <span class="ui">Mẫu thư</span>.</p>
+    </div>
+
+    <div class="warn block">
+      <b class="h">Sổ thư không lưu nội dung từng lá</b>
+      Tab <span class="ui">Nhật ký gửi</span> ghi ai nhận, tiêu đề và trạng thái — nhưng không lưu
+      thân thư. Muốn biết một lá thư đã gửi viết gì thì đọc bản đang hiện ở màn hình này.
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>Sửa xong nhớ báo cả nhóm — lá thư tiếp theo hệ thống gửi đã dùng nội dung mới.</span>
+  <span>Ban tổ chức UEH Mentoring · Vietnam Alumni Mentoring</span>
+</footer>
+
+</body>
+</html>

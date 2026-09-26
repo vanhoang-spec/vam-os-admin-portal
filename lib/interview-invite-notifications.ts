@@ -54,10 +54,12 @@ export type InterviewInviteNotifyResult = {
   notAttempted: number;
   /** Tên những người chưa được gửi, để người vận hành biết còn nợ ai. */
   notAttemptedNames: string[];
+  /** Mentee — cố ý không gửi ở đây; họ nhận thư mời kèm link chọn ca từ bộ gửi riêng. */
+  menteeSkipped: number;
 };
 
 function emptyResult(): InterviewInviteNotifyResult {
-  return { sent: 0, failed: 0, skipped: 0, noEmail: 0, notAttempted: 0, notAttemptedNames: [] };
+  return { sent: 0, failed: 0, skipped: 0, noEmail: 0, notAttempted: 0, notAttemptedNames: [], menteeSkipped: 0 };
 }
 
 /**
@@ -83,7 +85,7 @@ export async function notifyInterviewRoundInvites(input: {
 
   const { data, error } = await client
     .from("applications")
-    .select("id, full_name, email_primary")
+    .select("id, full_name, email_primary, role_applied")
     .in("id", input.applicationIds);
 
   if (error) {
@@ -92,11 +94,23 @@ export async function notifyInterviewRoundInvites(input: {
     return result;
   }
 
-  const rows = (data ?? []) as Array<{
+  // MENTEE KHÔNG nhận lá thư này nữa (giai đoạn 1, 26/09/2026).
+  //
+  // Lá thư này không có link — nó ra đời khi ứng viên chưa có màn hình nào để
+  // tự chọn lịch. Mentee giờ có trang chọn ca, và nhận thư mời KÈM LINK từ bộ
+  // gửi riêng (lib/mentee-invite-dispatch.ts), vốn chia lô và biết dừng khi
+  // chạm trần thư trong ngày. Gửi cả hai là mỗi bạn nhận hai thư mời trong một
+  // buổi chiều, lá đầu không bấm được gì — và 334 lá thừa ấy ăn đúng vào hạn mức
+  // 300 thư/ngày mà thư có link đang cần.
+  //
+  // Đọc vai trò từ ĐƠN ĐÃ LƯU, không nhận từ người gọi.
+  const rows = ((data ?? []) as Array<{
     id: string;
     full_name: string | null;
     email_primary: string | null;
-  }>;
+    role_applied: string | null;
+  }>).filter((row) => String(row.role_applied ?? "").trim().toLowerCase() !== "mentee");
+  result.menteeSkipped = (data ?? []).length - rows.length;
 
   const now = input.now ?? Date.now;
   const startedAt = now();
@@ -147,6 +161,11 @@ export async function notifyInterviewRoundInvites(input: {
 export function interviewInviteNotifyMessage(result: InterviewInviteNotifyResult): string {
   const parts: string[] = [];
   if (result.sent > 0) parts.push(`Đã gửi ${result.sent} thư mời phỏng vấn.`);
+  if (result.menteeSkipped > 0) {
+    parts.push(
+      `${result.menteeSkipped} mentee chưa nhận thư ở bước này — thư mời kèm link chọn ca gửi riêng ở Ứng tuyển → Ca phỏng vấn mentee.`
+    );
+  }
   if (result.skipped > 0) {
     parts.push(`${result.skipped} thư chưa gửi được vì tính năng gửi email đang tắt.`);
   }
