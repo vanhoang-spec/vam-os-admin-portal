@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Phỏng vấn mentee giai đoạn 1 — Hướng dẫn cho ban tổ chức</title>
+<style>
+  @page { size: A4; margin: 9mm 11mm 8mm 11mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 8.3pt;
+    line-height: 1.36;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.2mm; margin-bottom: 2.8mm;
+  }
+  .eyebrow { font-size: 7pt; letter-spacing: .16em; text-transform: uppercase; color: var(--green); font-weight: 700; }
+  h1 { font-size: 17pt; line-height: 1.08; margin: 1mm 0 .8mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 8.8pt; max-width: 136mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.2pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 1.08fr 1fr; gap: 5.4mm; align-items: start; }
+  h2 { font-size: 8pt; letter-spacing: .1em; text-transform: uppercase; color: var(--green); margin: 0 0 1.4mm; font-weight: 700; }
+  .block + .block { margin-top: 2.8mm; }
+  p { margin: 0 0 1.4mm; }
+
+  .btn { display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.4mm; font-size: 7.9pt; font-weight: 600; white-space: nowrap; }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui { background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px; padding: 0 1.2mm; font-size: 7.9pt; white-space: nowrap; }
+  .ui.long { white-space: normal; }
+  .path { color: var(--green); font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-bottom: 2.8mm; }
+  .fact { border: 1px solid var(--line); border-radius: 3px; padding: 1.4mm 2mm; background: #fbfdfc; }
+  .fact b { display: block; font-size: 12.5pt; line-height: 1.1; color: var(--green); }
+  .fact span { font-size: 7.2pt; color: var(--muted); }
+
+  .prep { background: var(--mint); border-left: 3px solid var(--green); padding: 2mm 3mm; margin-bottom: 2.8mm; }
+  .prep b.h { display: block; margin-bottom: .5mm; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.4mm; margin-bottom: 2.1mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5.2mm; height: 5.2mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 7.8pt; text-align: center; line-height: 5.2mm;
+  }
+  ol.steps b.t { display: block; font-size: 9pt; margin-bottom: .2mm; }
+  .who { font-size: 7.3pt; color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 7.9pt; margin-top: 1.2mm; }
+  th, td { border: 1px solid var(--line); padding: .9mm 1.5mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+
+  ul.tight { margin: 0; padding-left: 4mm; }
+  ul.tight li { margin: .5mm 0; }
+
+  .warn { background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink); padding: 2mm 3mm; }
+  .warn b.h { display: block; margin-bottom: .4mm; }
+
+  /* ── Trang 2: hai lá thư ─────────────────────────────────────────── */
+  .page-break { break-before: page; }
+  .letters { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; align-items: start; }
+  .letter { border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .letter .meta { background: #f6f9f7; border-bottom: 1px solid var(--line); padding: 1.6mm 2.4mm; font-size: 7.6pt; }
+  .letter .meta b { color: var(--ink); }
+  .letter .meta .subj { display: block; margin-top: .6mm; font-weight: 600; color: var(--ink); font-size: 8.2pt; }
+  .letter .body { padding: 2.4mm 3mm; white-space: pre-wrap; font-size: 8.2pt; line-height: 1.42; }
+  .letter .body .lnk { color: var(--green); word-break: break-all; }
+  .when { font-size: 7.6pt; color: var(--muted); margin: 0 0 1.4mm; }
+
+  footer { margin-top: 2.6mm; border-top: 1px solid var(--line); padding-top: 1.4mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho ban tổ chức · Trang 1/2</div>
+    <h1>Phỏng vấn mentee giai đoạn 1 — 03 &amp; 04/10</h1>
+    <p class="sub">Từ lúc chọn người được mời tới lúc mentee có ca: ba bước của ban tổ chức, và mọi thứ còn lại
+      hệ thống tự làm — gửi thư, giữ chỗ, xác nhận, cho đổi ca.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 26/09/2026</div>
+</header>
+
+<div class="facts">
+  <div class="fact"><b>24 ca</b><span>30 phút · 12 ca mỗi ngày</span></div>
+  <div class="fact"><b>25 ghế</b><span>mỗi ca · 5 phòng × 5 mentor</span></div>
+  <div class="fact"><b>600 chỗ</b><span>cho 334 bạn được đề xuất mời</span></div>
+  <div class="fact"><b>30/09</b><span>hạn chọn ca, 23:59</span></div>
+</div>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái: ba bước ─────────────── -->
+  <div>
+    <div class="prep">
+      <b class="h">Khung giờ</b>
+      Mỗi ngày 03/10 và 04/10: <b>08:00 – 11:00</b> và <b>14:00 – 17:00</b>, chia ca 30 phút. Mỗi bạn chọn đúng
+      <b>một</b> ca và có đúng một giờ vào — không ai phải chờ tại chỗ. Ca nào đủ 25 bạn thì tự khoá.
+    </div>
+
+    <div class="block">
+      <h2>Ba bước của ban tổ chức</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Điền địa điểm</b>
+          <span class="who">Core team · Admin</span><br>
+          <span class="path">Ứng tuyển → Ca phỏng vấn mentee</span>, ô <span class="ui long">Áp địa điểm cho mọi ca</span>.
+          Ghế đã là 25 sẵn; ca nào cần khác số thì sửa riêng ở bảng bên dưới. Chưa điền địa điểm thì thư xác nhận
+          ghi <i>“Ban tổ chức sẽ báo địa điểm cụ thể trước ngày phỏng vấn”</i>.
+        </li>
+        <li>
+          <b class="t">Mời đúng những bạn được đề xuất</b>
+          <span class="who">Core team · Admin · Support team</span><br>
+          <span class="path">Ứng tuyển → Ứng tuyển (Tất cả)</span> → nút <span class="btn">Mời phỏng vấn hàng loạt</span>.
+          Lọc <span class="ui">Vai trò: Mentee</span> và <span class="ui long">Đề xuất của người chấm: Mời vào vòng phỏng vấn</span>
+          rồi bấm Lọc. Chọn 100, mời. Lặp lại tới khi danh sách trống.
+          <br><b>Đừng bỏ bộ lọc đề xuất</b> — không có nó, danh sách gồm cả những bạn bị đề xuất không phù hợp.
+        </li>
+        <li>
+          <b class="t">Gửi thư mời chọn ca</b>
+          <span class="who">Core team · Admin</span><br>
+          Quay lại <span class="path">Ca phỏng vấn mentee</span>, tích ô <span class="ui long">Tôi đã kiểm tra số ghế, địa điểm và hạn đặt ca</span>
+          rồi bấm <span class="btn solid">Gửi thư mời chọn ca</span>. Mỗi lần gửi tối đa 40 thư. Bấm lại cho tới khi ô
+          <span class="ui">Chờ thư mời</span> về 0.
+        </li>
+      </ol>
+    </div>
+
+    <div class="warn block">
+      <b class="h">Thư mời đã gửi thì không rút lại được</b>
+      Mỗi bạn chỉ nhận thư mời <b>một lần</b> — bấm lại nút không gửi trùng. Nhưng một bạn bị mời nhầm ở bước 2 sẽ nhận
+      thư ở bước 3. Kiểm danh sách ở bước 2 trước khi bấm mời.
+    </div>
+
+    <div class="block">
+      <h2>Hệ thống tự làm phần còn lại</h2>
+      <ul class="tight">
+        <li>Mentee mở link riêng, chọn ca. Chọn xong nhận ngay <b>thư xác nhận</b> ca và địa điểm.</li>
+        <li>Muốn đổi ca, mentee tự mở lại link trước hạn. <b>Chỗ cũ chỉ được nhả khi ca mới còn chỗ</b> — không ai mất
+          chỗ vì bấm đổi.</li>
+        <li>Mentee <b>không</b> tự huỷ được. Bạn nào không dự được thì liên hệ ban tổ chức — đó là quyết định về hồ sơ,
+          không phải về một cái ghế.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>Hạn mức thư — vì sao phải bấm nhiều lần</h2>
+      <p>Gói thư hiện tại cho <b>300 thư mỗi 24 giờ</b>, dùng chung cho cả hệ thống. Bộ gửi luôn <b>chừa 80 thư</b> cho thư
+        xác nhận ca — để bạn nào nhận thư mời rồi đặt ca ngay vẫn nhận được xác nhận.</p>
+      <p>Ngày đầu gửi được khoảng <b>200 thư mời</b>; phần còn lại gửi tiếp khi cửa sổ 24 giờ trôi qua. Ô
+        <span class="ui long">Thư đã gửi 24 giờ qua</span> cho biết đang ở đâu. Nên bắt đầu gửi <b>sớm nhất có thể</b>.</p>
+    </div>
+
+    <div class="block">
+      <h2>Nút gửi bị khoá — đọc dòng chữ bên dưới nút</h2>
+      <table>
+        <tr><th style="width:44%">Dòng báo</th><th>Làm gì</th></tr>
+        <tr><td><span class="err">Chưa có ca nào đặt được</span></td>
+            <td>Ca chưa có ghế, đã đóng, hoặc đã quá hạn. Kiểm bảng ca bên dưới.</td></tr>
+        <tr><td><span class="err">Đã chạm phần hạn mức của thư mời</span></td>
+            <td>Chờ vài giờ rồi bấm lại. Thư chưa gửi không mất đi đâu.</td></tr>
+        <tr><td><span class="err">Không còn ai chờ thư mời</span></td>
+            <td>Đã gửi hết. Người mới được mời ở bước 2 sẽ hiện ra ở đây.</td></tr>
+        <tr><td>Nút mờ, không có dòng báo</td>
+            <td>Chưa tích ô xác nhận.</td></tr>
+      </table>
+    </div>
+
+    <div class="block">
+      <h2>Mentee sẽ thấy ca ở trạng thái</h2>
+      <table>
+        <tr><th style="width:34%">Trạng thái</th><th>Nghĩa</th></tr>
+        <tr><td><span class="ui">Chưa mở</span></td><td>Ca chưa có số ghế. Điền ghế là ca mở ngay.</td></tr>
+        <tr><td><span class="ui">Đã kín chỗ</span></td><td>Đủ 25 bạn. Có người đổi đi thì tự mở lại.</td></tr>
+        <tr><td><span class="ui">Hết hạn đăng ký</span></td><td>Đã qua 23:59 ngày 30/09.</td></tr>
+      </table>
+    </div>
+
+    <div class="block">
+      <h2>Sửa câu chữ của thư</h2>
+      <p>Hai lá thư ở trang 2 nằm trong <span class="path">Vận hành → Mail → Thư tự động</span>, tên
+        <i>“Mời mentee chọn ca phỏng vấn trực tiếp”</i> và <i>“Xác nhận ca phỏng vấn của mentee”</i>. Sửa, bấm
+        Lưu là thư sau dùng nội dung mới — <b>không có bước ai duyệt</b>, nên sửa trước khi gửi thư mời.</p>
+    </div>
+
+    <div class="block">
+      <h2>Mentee nói không nhận được thư</h2>
+      <ul class="tight">
+        <li>Nhờ bạn ấy xem mục <b>Spam</b> và <b>Quảng cáo</b>.</li>
+        <li>Tra ở <span class="path">Vận hành → Mail → Nhật ký gửi</span>, lọc theo email của bạn ấy.</li>
+        <li>Lần gửi bị lỗi thì lần bấm gửi tiếp theo tự thử lại.</li>
+      </ul>
+    </div>
+
+    <div class="warn block">
+      <b class="h">Chưa nằm trong giai đoạn 1</b>
+      Các bạn còn đang chờ chấm hồ sơ → <b>giai đoạn 2, 10 &amp; 11/10</b>. Các bạn được đề xuất
+      <i>danh sách chờ</i> hoặc <i>cần core team xem thêm</i> chưa được xếp đợt — ban tổ chức quyết.
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>Cần lùi hạn chọn ca: nhờ người phụ trách kỹ thuật — màn hình chưa có ô đổi hạn.</span>
+  <span>Ban tổ chức UEH Mentoring · Vietnam Alumni Mentoring</span>
+</footer>
+
+<!-- ═══════════════════ TRANG 2: HAI LÁ THƯ MENTEE NHẬN ═══════════════════ -->
+<div class="page-break"></div>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho ban tổ chức · Trang 2/2</div>
+    <h1>Hai lá thư mentee nhận</h1>
+    <p class="sub">Nguyên văn bản mặc định của hệ thống, dựng từ chính hàm đang gửi thư thật. Tên và đường dẫn là ví dụ;
+      thư thật mang tên và đường dẫn riêng của từng bạn.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 26/09/2026</div>
+</header>
+
+<div class="letters">
+  <div>
+    <p class="when"><b>Thư 1 — Mời chọn ca.</b> Gửi khi ban tổ chức bấm <i>Gửi thư mời chọn ca</i> ở bước 3.</p>
+    <div class="letter">
+      <div class="meta">
+        <b>Từ:</b> hello@alumni-mentoring.edu.vn · <b>Loại thư:</b> mentee_session_invite
+        <span class="subj">[UEH Mentoring] Mời bạn chọn ca phỏng vấn — UEH Mentoring Mùa 12</span>
+      </div>
+<div class="body">Chào Nguyễn Văn A,
+
+Chúc mừng bạn đã qua vòng hồ sơ UEH Mentoring Mùa 12. Ban tổ chức mời bạn tham gia vòng phỏng vấn trực tiếp vào Thứ Bảy 03/10/2026 và Chủ nhật 04/10/2026.
+
+Mỗi buổi phỏng vấn dài tối đa 30 phút, 1:1 với một mentor. Bạn mở đường dẫn riêng dưới đây và chọn MỘT ca phù hợp. Mỗi ca có số chỗ giới hạn, ca nào kín thì không chọn được nữa, nên bạn chọn sớm nhé:
+<span class="lnk">https://os.alumni-mentoring.edu.vn/dat-ca/ma-rieng-cua-tung-ban</span>
+
+Hạn chọn ca: 23:59 ngày 30/09/2026. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.
+
+Chọn xong, bạn sẽ nhận một thư xác nhận ca và địa điểm. Cần đổi ca, bạn mở lại đúng đường dẫn này trước hạn.
+
+Cần hỗ trợ, bạn nhắn Zalo ban tổ chức 0919144638 hoặc trả lời email này.
+
+Hẹn gặp bạn!
+
+Ban tổ chức UEH Mentoring
+Vietnam Alumni Mentoring</div>
+    </div>
+  </div>
+
+  <div>
+    <p class="when"><b>Thư 2 — Xác nhận ca.</b> Tự gửi ngay khi mentee chọn ca, và gửi lại mỗi lần đổi ca.</p>
+    <div class="letter">
+      <div class="meta">
+        <b>Từ:</b> hello@alumni-mentoring.edu.vn · <b>Loại thư:</b> mentee_session_confirmed
+        <span class="subj">[UEH Mentoring] Xác nhận ca phỏng vấn — Thứ Bảy 03/10/2026, 08:00 – 08:30 (giờ Việt Nam)</span>
+      </div>
+<div class="body">Chào Nguyễn Văn A,
+
+Ban tổ chức đã ghi nhận ca phỏng vấn của bạn:
+
+- Thời gian: Thứ Bảy 03/10/2026, 08:00 – 08:30 (giờ Việt Nam)
+- Địa điểm: Ban tổ chức sẽ báo địa điểm cụ thể trước ngày phỏng vấn
+
+Buổi phỏng vấn dài tối đa 30 phút. Bạn đến trước giờ hẹn 10 phút để ban tổ chức kịp hướng dẫn vào phòng.
+
+Cần đổi ca? Bạn mở lại đường dẫn riêng của mình trước hạn chọn ca và chọn ca khác. Ca hiện tại chỉ được nhả khi ca mới còn chỗ, nên bạn không bao giờ bị mất chỗ vì đổi:
+<span class="lnk">https://os.alumni-mentoring.edu.vn/dat-ca/ma-rieng-cua-tung-ban</span>
+
+Cần hỗ trợ, bạn nhắn Zalo ban tổ chức 0919144638 hoặc trả lời email này.
+
+Hẹn gặp bạn!
+
+Ban tổ chức UEH Mentoring
+Vietnam Alumni Mentoring</div>
+    </div>
+    <p class="when" style="margin-top:2mm">Mẫu này là trường hợp ca <b>chưa có địa điểm</b>. Khi ban tổ chức đã điền ở bước 1, dòng
+      <i>Địa điểm</i> là tên phòng thật.</p>
+  </div>
+</div>
+
+<div class="warn" style="margin-top:3.2mm">
+  <b class="h">Nội dung đang gửi thật có thể khác bản mặc định này</b>
+  Nếu ai đó đã sửa hai lá thư trong <span class="path">Vận hành → Mail → Thư tự động</span>, thư thật dùng nội dung đã
+  sửa. Muốn biết chính xác mentee đang nhận gì, mở đúng lá thư ở tab đó và bấm <i>Xem trước bản đang lưu</i>.
+</div>
+
+<footer>
+  <span>Thư 1 chỉ gửi mỗi bạn một lần. Thư 2 gửi mỗi lần bạn ấy chọn hoặc đổi ca.</span>
+  <span>Ban tổ chức UEH Mentoring · Vietnam Alumni Mentoring</span>
+</footer>
+
+</body>
+</html>
