@@ -279,6 +279,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
             isCancelled={review.status === "cancelled"}
             allowReassign={!applicationWithdrawn}
             reviewers={reviewersResult.data}
+            currentDueAt={review.due_at ?? null}
           />
         </Card>
       )}

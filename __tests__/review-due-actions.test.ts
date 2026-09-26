@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getCurrentAdminUser: vi.fn(),
   assignSelectedApplicationReviews: vi.fn(),
-  assignApplicationReview: vi.fn()
+  assignApplicationReview: vi.fn(),
+  reassignApplicationReview: vi.fn()
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -30,13 +31,13 @@ vi.mock("@/lib/review-assignment-notice", () => ({
 vi.mock("@/lib/application-reviews", () => ({
   assignApplicationReview: mocks.assignApplicationReview,
   cancelApplicationReview: vi.fn(),
-  reassignApplicationReview: vi.fn(),
+  reassignApplicationReview: mocks.reassignApplicationReview,
   saveApplicationReviewDraft: vi.fn(),
   submitApplicationReview: vi.fn()
 }));
 
 import { bulkAssignApplicationReviewsAction } from "@/app/actions/bulk-assignment";
-import { assignApplicationReviewAction } from "@/app/actions/application-reviews";
+import { assignApplicationReviewAction, reassignApplicationReviewAction } from "@/app/actions/application-reviews";
 import { initialBulkAssignmentActionState } from "@/lib/bulk-assignment-action-types";
 import { initialReviewActionState } from "@/lib/review-action-types";
 
@@ -54,6 +55,7 @@ beforeEach(() => {
     batchId: "batch-1"
   });
   mocks.assignApplicationReview.mockResolvedValue({ ok: true, id: "review-1" });
+  mocks.reassignApplicationReview.mockResolvedValue({ ok: true, id: "review-2" });
 });
 
 afterEach(() => {
@@ -136,5 +138,65 @@ describe("giao từng hồ sơ", () => {
 
     expect(state.ok).toBe(false);
     expect(mocks.assignApplicationReview).not.toHaveBeenCalled();
+  });
+});
+
+function reassignForm(due?: string) {
+  const form = new FormData();
+  form.append("review_id", "review-1");
+  form.append("application_id", "app-1");
+  form.append("new_reviewer_admin_user_id", "rev-2");
+  form.append("reason", "Reviewer trễ hạn chấm");
+  if (due !== undefined) form.append("new_due_at", due);
+  return form;
+}
+
+describe("đổi người chấm — hạn mới", () => {
+  it("đọc hạn đúng như lúc giao việc, và gửi CÙNG lời gọi đổi người", async () => {
+    const state = await reassignApplicationReviewAction(initialReviewActionState, reassignForm("2026-09-20"));
+
+    expect(mocks.reassignApplicationReview).toHaveBeenCalledTimes(1);
+    expect(mocks.reassignApplicationReview.mock.calls[0][0]).toMatchObject({
+      reviewId: "review-1",
+      newReviewerAdminUserId: "rev-2",
+      adminUserId: "admin-1",
+      newDueAt: "2026-09-20T16:59:59.000Z"
+    });
+    expect(state.ok).toBe(true);
+    expect(state.message).toContain("Hạn mới: hết ngày 20/09/2026");
+  });
+
+  it("để trống: giữ hạn cũ (null), và lời báo không nhắc hạn mới", async () => {
+    const state = await reassignApplicationReviewAction(initialReviewActionState, reassignForm(""));
+
+    expect(mocks.reassignApplicationReview.mock.calls[0][0].newDueAt).toBeNull();
+    expect(state.message).not.toContain("Hạn mới");
+  });
+
+  it("form cũ không có ô hạn: vẫn đổi được, giữ hạn cũ", async () => {
+    await reassignApplicationReviewAction(initialReviewActionState, reassignForm());
+    expect(mocks.reassignApplicationReview.mock.calls[0][0].newDueAt).toBeNull();
+  });
+
+  it("hạn mới đã qua: từ chối, và KHÔNG đổi người", async () => {
+    const state = await reassignApplicationReviewAction(initialReviewActionState, reassignForm("2026-09-10"));
+
+    expect(state.ok).toBe(false);
+    expect(state.message).toMatch(/đã qua/);
+    expect(mocks.reassignApplicationReview).not.toHaveBeenCalled();
+  });
+
+  it("hạn không đọc được: từ chối, KHÔNG đổi người mà rơi mất hạn", async () => {
+    const state = await reassignApplicationReviewAction(initialReviewActionState, reassignForm("20/09/2026"));
+
+    expect(state.ok).toBe(false);
+    expect(mocks.reassignApplicationReview).not.toHaveBeenCalled();
+  });
+
+  it("database từ chối (hạn cũ đã qua mà để trống): đưa nguyên lời báo lên màn hình", async () => {
+    mocks.reassignApplicationReview.mockResolvedValue({ ok: false, message: "Hạn cũ đã qua. Đặt hạn mới." });
+    const state = await reassignApplicationReviewAction(initialReviewActionState, reassignForm(""));
+
+    expect(state).toEqual({ ok: false, message: "Hạn cũ đã qua. Đặt hạn mới." });
   });
 });

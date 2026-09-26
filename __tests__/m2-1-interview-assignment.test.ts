@@ -18,7 +18,15 @@ describe("M2.1 interview workflow compatibility after M090", () => {
     const source = readFileSync("lib/application-reviews.ts", "utf8");
     expect(source).toContain("export async function cancelApplicationReview");
     expect(source).toContain("export async function reassignApplicationReview");
-    expect(source.match(/vam084_change_review_assignment/g)?.length).toBe(2);
+    // Trả hồ sơ gọi thẳng vam084. Đổi người đi qua vam103 — hàm bọc gọi NGUYÊN
+    // vam084 rồi đặt hạn mới trong cùng transaction — nên vẫn một cửa ghi.
+    const calls = source.match(/\.rpc\("vam084_change_review_assignment"|\.rpc\("vam103_reassign_review_with_due"/g) ?? [];
+    expect(calls).toEqual([
+      '.rpc("vam084_change_review_assignment"',
+      '.rpc("vam103_reassign_review_with_due"'
+    ]);
+    const wrapper = readFileSync("supabase/migrations/20260926140000_reassign_review_new_due.sql", "utf8");
+    expect(wrapper).toContain("v_replacement := public.vam084_change_review_assignment(");
   });
 
   it("does not restore the unsafe self-claim insert path", () => {

@@ -77,6 +77,42 @@ export function parseReviewDueDate(raw: unknown, now: Date = new Date()): Review
 }
 
 /**
+ * Đổi người chấm khi hạn cũ đã qua mà không đặt hạn mới — database từ chối
+ * (`NEW_DUE_REQUIRED`), màn hình nhắc trước bằng đúng câu này.
+ *
+ * Hàm đổi người chép nguyên hạn của bài cũ sang bài mới. Người cũ trễ hạn là lý
+ * do hay gặp nhất để đổi người, nên giữ hạn cũ gần như luôn là giao cho người
+ * mới một việc đã trễ.
+ */
+export const REASSIGN_NEW_DUE_REQUIRED =
+  "Hạn cũ đã qua. Đặt hạn mới cho người chấm mới — giữ hạn cũ là họ bị tính trễ ngay khi nhận việc.";
+
+/** Hạn của một bài chấm đã qua chưa. Không có hạn thì không bao giờ qua. */
+export function reviewDueHasPassed(dueAt: string | null | undefined, now: Date = new Date()): boolean {
+  if (!dueAt) return false;
+  const time = new Date(dueAt).getTime();
+  return Number.isFinite(time) && time < now.getTime();
+}
+
+/**
+ * Lời nhắc dưới ô "Hạn chấm mới" khi đổi người — hoặc null nếu gửi đi được.
+ *
+ * Như `reviewDueInputProblem`, cộng thêm một luật: hạn hiện tại đã qua thì ô này
+ * bắt buộc. Để trống ở đây nghĩa là "giữ hạn cũ", không phải "không có hạn".
+ */
+export function reassignDueInputProblem(
+  text: string,
+  dueDate: string,
+  currentDueAt: string | null | undefined,
+  now: Date = new Date()
+): string | null {
+  const typed = reviewDueInputProblem(text, dueDate, now);
+  if (typed) return typed;
+  if (!dueDate && reviewDueHasPassed(currentDueAt, now)) return REASSIGN_NEW_DUE_REQUIRED;
+  return null;
+}
+
+/**
  * Lời nhắc dưới ô hạn trên màn hình — hoặc null nếu gửi đi được.
  *
  * Ô nhập ngày gửi chuỗi rỗng cả khi người ta chưa gõ gì LẪN khi gõ dở

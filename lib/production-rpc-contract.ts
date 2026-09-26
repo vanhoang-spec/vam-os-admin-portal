@@ -187,6 +187,9 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam101_book_mentee_session",
   // Đổi ca phỏng vấn mentee — migration 20260924210000_mentee_change_session.sql.
   "vam102_change_mentee_session",
+  // Đổi người chấm kèm hạn mới — migration 20260926140000_reassign_review_new_due.sql.
+  // Bọc nguyên vam084_change_review_assignment; chỉ THÊM hàm, không đổi hàm cũ.
+  "vam103_reassign_review_with_due",
   // Ban tổ chức sửa nội dung bài chấm — migration
   // 20260918170000_review_content_override.sql. Nằm ở đây cho tới khi chủ dự án dán
   // migration lên Production và có bằng chứng đọc catalog.
