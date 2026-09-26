@@ -35,6 +35,10 @@ import {
   type EmailMessage,
   type EmailProvider
 } from "@/lib/email-core";
+// Nội dung sửa được của thư tự động. Mọi hàm gửi ở dưới đi qua đây; không có
+// nội dung đã lưu, hoặc có mà dựng không được, thì nó trả lại đúng bản của hàm
+// dựng thư — thư vẫn đi. Xem đầu lib/email-automation.ts.
+import { resolveAutomationEmail } from "@/lib/email-automation";
 import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib/participant-invite-core";
 import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/lib/interview-schedule-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
@@ -487,19 +491,40 @@ export async function sendApplicationConfirmation(input: {
   requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
   const base = resolveEmailBaseUrl(input.requestOrigin);
+  const bookingLink =
+    input.role === "mentor" && input.bookingToken && base
+      ? interviewBookingUrl(base, input.bookingToken)
+      : null;
   const built = buildApplicationConfirmationEmail({
     applicantName: input.applicantName,
     role: input.role,
     seasonLabel: input.seasonLabel,
-    bookingUrl:
-      input.role === "mentor" && input.bookingToken && base
-        ? interviewBookingUrl(base, input.bookingToken)
-        : null
+    bookingUrl: bookingLink
+  });
+
+  // Ba lá thư khác nhau dùng chung một hàm dựng: mentee, mentor có nút chọn
+  // giờ, và mentor chưa mở đặt lịch. Thân thư của hai bản mentor khác hẳn nhau
+  // (nhánh `if (bookingUrl)`), nên chúng là hai mục sửa riêng.
+  const slotId =
+    input.role === "mentee"
+      ? "mentee_application_confirmation"
+      : bookingLink
+        ? "mentor_application_confirmation"
+        : "mentor_application_confirmation_no_booking";
+
+  const message = await resolveAutomationEmail({
+    slotId,
+    values: {
+      ten_nguoi_nhan: input.applicantName,
+      mua: input.seasonLabel,
+      link_dat_lich: bookingLink
+    },
+    fallback: built
   });
 
   return deliver(
     input.role === "mentor" ? "mentor_application_confirmation" : "mentee_application_confirmation",
-    { ...built, to: input.toEmail },
+    { ...built, ...message, to: input.toEmail },
     { table: "applications", id: input.applicationId },
     null,
     input.claimedRowId ?? null
@@ -550,7 +575,19 @@ export async function sendReviewerInvite(input: {
     loginEmail: input.toEmail
   });
 
-  return deliver("reviewer_invite", { ...built, to: input.toEmail }, relation);
+  const message = await resolveAutomationEmail({
+    slotId: input.linkType === "recovery" ? "reviewer_invite_recovery" : "reviewer_invite_new",
+    values: {
+      ten_nguoi_nhan: input.mentorName,
+      mua: input.seasonLabel,
+      link_dat_mat_khau: linkUrl,
+      link_dang_nhap: `${base}/login`,
+      email_dang_nhap: input.toEmail
+    },
+    fallback: built
+  });
+
+  return deliver("reviewer_invite", { ...built, ...message, to: input.toEmail }, relation);
 }
 
 /**
@@ -598,7 +635,19 @@ export async function sendStaffInvite(input: {
     loginEmail: input.toEmail
   });
 
-  return deliver("staff_invite", { ...built, to: input.toEmail }, relation);
+  const message = await resolveAutomationEmail({
+    slotId: input.linkType === "recovery" ? "staff_invite_recovery" : "staff_invite_new",
+    values: {
+      ten_nguoi_nhan: input.fullName,
+      vai_tro: input.roleLabel,
+      link_dat_mat_khau: linkUrl,
+      link_dang_nhap: `${base}/login`,
+      email_dang_nhap: input.toEmail
+    },
+    fallback: built
+  });
+
+  return deliver("staff_invite", { ...built, ...message, to: input.toEmail }, relation);
 }
 
 /** Tell a reviewer that a batch of applications is waiting for them. */
@@ -626,9 +675,25 @@ export async function sendReviewBatchAssigned(input: {
     roleApplied: input.roleApplied ?? null
   });
 
+  // Cùng phép chọn chữ với hàm dựng thư, không phải một bản đoán lại: gọi hồ sơ
+  // mentor là "hồ sơ mentee" thì sai với đúng người đang cầm chúng.
+  const role = String(input.roleApplied ?? "").trim().toLowerCase();
+  const message = await resolveAutomationEmail({
+    slotId: "review_batch_assigned",
+    values: {
+      ten_nguoi_nhan: input.reviewerName,
+      mua: input.seasonLabel,
+      so_ho_so: Math.max(0, Math.floor(Number(input.assignmentCount) || 0)),
+      loai_ho_so: role === "mentor" || role === "mentee" ? `hồ sơ ${role}` : "hồ sơ",
+      link_cham_diem: `${base}/reviews`,
+      han_cham: input.dueLabel ?? null
+    },
+    fallback: built
+  });
+
   return deliver(
     "review_batch_assigned",
-    { ...built, to: input.toEmail },
+    { ...built, ...message, to: input.toEmail },
     input.assignmentBatchId ? { table: "review_assignment_batches", id: input.assignmentBatchId } : null
   );
 }
@@ -669,9 +734,24 @@ export async function sendInterviewSchedule(input: {
     hotlineZalo: HOTLINE_ZALO
   });
 
+  const message = await resolveAutomationEmail({
+    slotId: "interview_scheduled_interviewer",
+    values: {
+      ten_nguoi_nhan: input.interviewerName,
+      mua: input.seasonLabel,
+      khung_gio: input.slotLabel,
+      ten_ung_vien: input.candidateName,
+      email_ung_vien: input.candidateEmail,
+      sdt_ung_vien: input.candidatePhone ?? null,
+      link_cham_diem: `${base}/reviews`,
+      zalo_ho_tro: HOTLINE_ZALO
+    },
+    fallback: built
+  });
+
   return deliver(
     "interview_scheduled",
-    { ...built, to: input.toEmail },
+    { ...built, ...message, to: input.toEmail },
     input.reviewId
       ? { table: "application_reviews", id: input.reviewId }
       : input.applicationId
@@ -710,9 +790,24 @@ export async function sendInterviewInvite(input: {
     hotlineZalo: HOTLINE_ZALO
   });
 
+  const message = await resolveAutomationEmail({
+    slotId: "interview_scheduled_candidate",
+    values: {
+      ten_nguoi_nhan: input.candidateName,
+      mua: input.seasonLabel,
+      khung_gio: input.slotLabel,
+      ten_nguoi_trao_doi: input.interviewerName,
+      email_nguoi_trao_doi: input.interviewerEmail,
+      sdt_nguoi_trao_doi: input.interviewerPhone ?? null,
+      link_doi_lich: interviewBookingUrl(base, input.bookingToken),
+      zalo_ho_tro: HOTLINE_ZALO
+    },
+    fallback: built
+  });
+
   return deliver(
     "interview_scheduled",
-    { ...built, to: input.toEmail },
+    { ...built, ...message, to: input.toEmail },
     { table: "applications", id: input.applicationId }
   );
 }
@@ -749,9 +844,26 @@ export async function sendInterviewSlotInvite(input: {
     hotlineZalo: HOTLINE_ZALO
   });
 
+  // Thư mời đầu và thư nhắc là hai mục sửa riêng: hàm dựng thư đổi cả tiêu đề
+  // lẫn đoạn mở theo `reminderNumber`, nên gộp chúng làm một là sửa bản này thì
+  // bản kia âm thầm vẫn là câu chữ cũ.
+  const reminder = Math.max(0, Math.floor(Number(input.reminderNumber) || 0));
+  const message = await resolveAutomationEmail({
+    slotId: reminder > 0 ? "interview_slot_reminder" : "interview_slot_invite",
+    values: {
+      ten_nguoi_nhan: input.candidateName,
+      mua: input.seasonLabel,
+      lan_nhac: reminder > 0 ? reminder : null,
+      link_dat_lich: interviewBookingUrl(base, input.bookingToken),
+      han_chot: input.windowEndLabel,
+      zalo_ho_tro: HOTLINE_ZALO
+    },
+    fallback: built
+  });
+
   return deliver(
     "interview_slot_invite",
-    { ...built, to: input.toEmail, ...(input.ccBtc ? { cc: [BTC_EMAIL] } : {}) },
+    { ...built, ...message, to: input.toEmail, ...(input.ccBtc ? { cc: [BTC_EMAIL] } : {}) },
     { table: "applications", id: input.applicationId }
   );
 }
@@ -771,22 +883,43 @@ export async function sendInterviewSlotCancelled(input: {
 }): Promise<SendEmailResult> {
   const base = resolveEmailBaseUrl(input.requestOrigin);
 
+  const rebookUrl =
+    input.audience === "candidate" && input.bookingToken && base
+      ? interviewBookingUrl(base, input.bookingToken)
+      : null;
+
   const built = buildInterviewSlotCancelledEmail({
     audience: input.audience,
     recipientName: input.recipientName,
     otherPartyName: input.otherPartyName,
     slotLabel: input.slotLabel,
     cancelledByLabel: input.cancelledByLabel,
-    rebookUrl:
-      input.audience === "candidate" && input.bookingToken && base
-        ? interviewBookingUrl(base, input.bookingToken)
-        : null,
+    rebookUrl,
     hotlineZalo: HOTLINE_ZALO
+  });
+
+  const message = await resolveAutomationEmail({
+    slotId:
+      input.audience === "candidate"
+        ? "interview_slot_cancelled_candidate"
+        : "interview_slot_cancelled_interviewer",
+    values: {
+      ten_nguoi_nhan: input.recipientName,
+      khung_gio: input.slotLabel,
+      nguoi_huy: input.cancelledByLabel,
+      zalo_ho_tro: HOTLINE_ZALO,
+      // Mỗi bản chỉ dùng một trong hai ô này; ô của bản kia để null cũng không
+      // sao, vì nội dung đã lưu của bản này không nhắc tới nó.
+      ten_nguoi_trao_doi: input.audience === "candidate" ? input.otherPartyName : null,
+      ten_ung_vien: input.audience === "interviewer" ? input.otherPartyName : null,
+      link_dat_lai: rebookUrl
+    },
+    fallback: built
   });
 
   return deliver(
     "interview_slot_cancelled",
-    { ...built, to: input.toEmail },
+    { ...built, ...message, to: input.toEmail },
     { table: "applications", id: input.applicationId }
   );
 }
@@ -819,9 +952,16 @@ export async function sendInterviewRoundInvite(input: {
     candidateName: input.candidateName,
     seasonLabel: input.seasonLabel
   });
+
+  const message = await resolveAutomationEmail({
+    slotId: "interview_round_invite",
+    values: { ten_nguoi_nhan: input.candidateName, mua: input.seasonLabel },
+    fallback: built
+  });
+
   return deliver(
     "interview_round_invite",
-    { ...built, to: input.toEmail },
+    { ...built, ...message, to: input.toEmail },
     { table: "applications", id: input.applicationId }
   );
 }
@@ -927,7 +1067,24 @@ export async function sendParticipantInvite(input: {
     loginEmail: input.toEmail
   });
 
-  return deliver(PARTICIPANT_INVITE_EMAIL_KIND, { ...built, to: input.toEmail }, relation, null, input.claimedRowId);
+  const message = await resolveAutomationEmail({
+    slotId: input.linkType === "recovery" ? "participant_invite_recovery" : "participant_invite_new",
+    values: {
+      ten_nguoi_nhan: input.recipientName,
+      link_dat_mat_khau: linkUrl,
+      link_dang_nhap: `${base}/login`,
+      email_dang_nhap: input.toEmail
+    },
+    fallback: built
+  });
+
+  return deliver(
+    PARTICIPANT_INVITE_EMAIL_KIND,
+    { ...built, ...message, to: input.toEmail },
+    relation,
+    null,
+    input.claimedRowId
+  );
 }
 
 export type ParticipantInviteClaim =
