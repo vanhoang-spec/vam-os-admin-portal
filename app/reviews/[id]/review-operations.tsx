@@ -1,12 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import {
   cancelApplicationReviewAction,
   reassignApplicationReviewAction
 } from "@/app/actions/application-reviews";
+import { VietnamDateField } from "@/app/events/vietnam-datetime-field";
 import { initialReviewActionState } from "@/lib/review-action-types";
+import { reassignDueInputProblem, reviewDueHasPassed } from "@/lib/review-due";
 import type { ReviewEligibleReviewer } from "@/lib/types";
+import { formatDate } from "@/lib/utils";
 
 function CancelButton() {
   const { pending } = useFormStatus();
@@ -21,12 +25,12 @@ function CancelButton() {
   );
 }
 
-function ReassignButton() {
+function ReassignButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       className="inline-flex h-9 items-center gap-2 rounded-md bg-vam-ink px-4 text-sm font-medium text-white hover:bg-vam-ink/90 disabled:opacity-50"
     >
       {pending ? "Đang đổi..." : "Đổi Người Review"}
@@ -40,7 +44,8 @@ export function ReviewOperations({
   isSubmitted,
   isCancelled,
   allowReassign,
-  reviewers
+  reviewers,
+  currentDueAt
 }: {
   reviewId: string;
   applicationId: string;
@@ -48,6 +53,8 @@ export function ReviewOperations({
   isCancelled: boolean;
   allowReassign: boolean;
   reviewers: ReviewEligibleReviewer[];
+  /** Hạn của bài chấm đang đổi người — người thay nhận lại hạn này nếu ô hạn mới để trống. */
+  currentDueAt: string | null;
 }) {
   const [cancelState, cancelAction] = useFormState(
     cancelApplicationReviewAction,
@@ -59,7 +66,21 @@ export function ReviewOperations({
     initialReviewActionState
   );
 
+  // Ô ngày gửi chuỗi rỗng cả khi chưa gõ lẫn khi gõ dở, nên phải nghe thêm chữ
+  // đang nằm trong ô — như ô hạn lúc giao việc.
+  const [dueDate, setDueDate] = useState("");
+  const [dueText, setDueText] = useState("");
+  const dueExpired = reviewDueHasPassed(currentDueAt);
+  const dueProblem = reassignDueInputProblem(dueText, dueDate, currentDueAt);
+
   if (isSubmitted || isCancelled) return null;
+
+  let dueHint = "Hết ngày này theo giờ Việt Nam.";
+  if (!dueDate) {
+    dueHint = currentDueAt
+      ? `Để trống thì người mới giữ hạn hiện tại: ${formatDate(currentDueAt)}.`
+      : "Để trống thì người mới không có hạn.";
+  }
 
   return (
     <div className="space-y-4">
@@ -94,8 +115,8 @@ export function ReviewOperations({
         <input type="hidden" name="review_id" value={reviewId} />
         <input type="hidden" name="application_id" value={applicationId} />
         <input required minLength={3} name="reason" placeholder="Lý do đổi người" className="block w-full rounded-md border border-vam-line px-3 py-2 text-sm" />
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-1 flex-col gap-1 min-w-[200px]">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-500">Người review mới</label>
             <select
               name="new_reviewer_admin_user_id"
@@ -110,7 +131,25 @@ export function ReviewOperations({
               ))}
             </select>
           </div>
-          <ReassignButton />
+          <div className="flex flex-col gap-1" data-testid="reassign-due">
+            <span className="text-xs font-medium text-slate-500">
+              Hạn chấm mới {dueExpired ? "(bắt buộc)" : "(tuỳ chọn)"}
+            </span>
+            {currentDueAt ? (
+              <span className={`text-xs ${dueExpired ? "font-medium text-red-700" : "text-slate-500"}`}>
+                Hạn hiện tại: {formatDate(currentDueAt)}{dueExpired ? " — đã quá hạn" : ""}
+              </span>
+            ) : null}
+            <VietnamDateField name="new_due_at" label="Hạn chấm mới" onChange={setDueDate} onTextChange={setDueText} />
+            {dueProblem ? (
+              <p className="text-xs font-medium text-amber-800">{dueProblem}</p>
+            ) : (
+              <p className="text-xs text-slate-500">{dueHint}</p>
+            )}
+          </div>
+        </div>
+        <div className="mt-3">
+          <ReassignButton disabled={Boolean(dueProblem)} />
         </div>
       </form> : null}
     </div>

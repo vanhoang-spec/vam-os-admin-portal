@@ -10,6 +10,7 @@ import {
   canReview
 } from "@/lib/permissions";
 import { canOperateSeason, canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { REASSIGN_NEW_DUE_REQUIRED } from "@/lib/review-due";
 import { isEditableReviewStatus } from "@/lib/review-status";
 import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -321,11 +322,22 @@ export async function cancelApplicationReview(input: {
   return { ok: true, id: String(data) };
 }
 
+/**
+ * Đổi người chấm, và đặt hạn mới cho người thay trong CÙNG transaction.
+ *
+ * `vam103_reassign_review_with_due` bọc nguyên `vam084_change_review_assignment`
+ * — mọi phép kiểm quyền, phạm vi mùa, người thay vẫn nằm ở hàm đó. Hàm cũ chép
+ * hạn của bài cũ sang bài mới; hàm bọc thay bằng hạn mới nếu có, và từ chối nếu
+ * không có hạn mới mà hạn cũ đã qua.
+ *
+ * `newDueAt` phải đi qua `parseReviewDueDate` trước. Null nghĩa là GIỮ hạn cũ.
+ */
 export async function reassignApplicationReview(input: {
   reviewId: string;
   newReviewerAdminUserId: string;
   adminUserId: string;
   reason?: string;
+  newDueAt?: string | null;
 }): Promise<ReviewActionResult> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
@@ -334,17 +346,25 @@ export async function reassignApplicationReview(input: {
   if (!actorAccess.ok) return actorAccess;
 
   const reason = input.reason?.trim() || "Operational reassignment";
-  const { data, error } = await client.rpc("vam084_change_review_assignment", {
+  const { data, error } = await client.rpc("vam103_reassign_review_with_due", {
     p_review_id: input.reviewId,
     p_actor: input.adminUserId,
     p_reason: reason,
-    p_new_reviewer: input.newReviewerAdminUserId
+    p_new_reviewer: input.newReviewerAdminUserId,
+    p_new_due_at: input.newDueAt ?? null
   });
   if (error || !data) {
     log("atomic reassign review failed", error);
-    return { ok: false, message: mutationErrorMessage(error) };
+    return { ok: false, message: reassignErrorMessage(error) };
   }
   return { ok: true, id: String(data) };
+}
+
+function reassignErrorMessage(error: unknown): string {
+  const message = String((error as { message?: string } | null)?.message ?? "");
+  if (message.includes("NEW_DUE_REQUIRED")) return REASSIGN_NEW_DUE_REQUIRED;
+  if (message.includes("NEW_DUE_IN_PAST")) return "Hạn chấm mới đã qua. Chọn một ngày từ hôm nay trở đi.";
+  return mutationErrorMessage(error);
 }
 
 /**

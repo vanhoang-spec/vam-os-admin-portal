@@ -17,6 +17,7 @@ import {
 } from "@/lib/permissions";
 import type { ReviewActionState } from "@/lib/review-action-types";
 import { parseReviewDueDate } from "@/lib/review-due";
+import { formatDate } from "@/lib/utils";
 
 function fail(message: string): ReviewActionState {
   return { ok: false, message };
@@ -209,22 +210,32 @@ export async function reassignApplicationReviewAction(
     if (!reviewId) return fail("Thiếu review_id.");
     if (!newReviewerAdminUserId) return fail("Vui lòng chọn người review mới.");
 
+    // Cùng cách đọc với ô hạn lúc giao việc: một NGÀY, hết ngày đó theo giờ Việt
+    // Nam. Để trống là giữ hạn cũ — database từ chối nếu hạn cũ đã qua.
+    const due = parseReviewDueDate(formData.get("new_due_at"));
+    if (!due.ok) return fail(due.message);
+
     const result = await reassignApplicationReview({
       reviewId,
       newReviewerAdminUserId,
       adminUserId: adminUser.id,
-      reason
+      reason,
+      newDueAt: due.dueAt
     });
 
     if (!result.ok) return fail(result.message);
 
     revalidatePath(`/reviews/${reviewId}`);
     revalidatePath("/reviews");
+    revalidatePath("/my-work");
     if (applicationId) {
       revalidatePath(`/applications/${applicationId}`);
       revalidatePath("/applications");
     }
-    return { ok: true, message: "Đã đổi người review thành công.", reviewId: result.id };
+    const message = due.dueAt
+      ? `Đã đổi người review thành công. Hạn mới: hết ngày ${formatDate(due.dueAt)}.`
+      : "Đã đổi người review thành công.";
+    return { ok: true, message, reviewId: result.id };
   } catch (err) {
     console.error("[reassignApplicationReviewAction]", err);
     return fail("Lỗi hệ thống. Vui lòng thử lại.");
