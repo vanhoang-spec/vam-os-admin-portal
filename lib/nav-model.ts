@@ -179,6 +179,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // canSelfClaimInterview mà showReviews đại diện — nav không được
             // hứa một trang sẽ đá người bấm về trang chủ.
             { href: "/interviews/lich", label: "Lịch phỏng vấn" },
+            { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" },
             { href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" },
             // Cấu hình 12 ca phỏng vấn mentee. Gate HẸP HƠN nhóm này: trang đòi
             // canAssignReview, còn nhóm này mở cho cả reviewer. Hiện link cho
@@ -192,6 +193,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             label: "Ứng tuyển",
             items: [
               ...(showApplicationOps ? [{ href: "/applications", label: "Ứng tuyển (Tất cả)" }] : []),
+              ...(role === "support_team" ? [{ href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" }] : []),
               ...(canAssignLots ? [{ href: "/reviews/assign-bulk", label: "Giao hồ sơ đánh giá" }] : []),
               ...(canStaffReviewers

@@ -172,7 +172,10 @@ describe("buildNavGroups — reviewer", () => {
   // score mentee applications was shown six links that bounced them back.
   it("is offered only its own recruitment surfaces", () => {
     expect(sortedRoutes(hrefs)).toEqual(
-      sortedRoutes(["/", "/my-work", "/reviews", "/interviews", "/interviews/lich", "/interviews/mentee-offline"])
+      sortedRoutes([
+        "/", "/my-work", "/reviews", "/interviews", "/interviews/lich",
+        "/interviews/ket-qua-mentor", "/interviews/mentee-offline"
+      ])
     );
   });
 
@@ -398,6 +401,7 @@ const REVIEW_ROUTES = [
   // tự gate bằng canSelfClaimInterview, tài khoản reviewer còn phải được cấp
   // vai trò interviewer của mùa ở tầng lib.
   "/interviews/lich",
+  "/interviews/ket-qua-mentor",
   "/interviews/mentee-offline",
   // Cấu hình 12 ca phỏng vấn mentee (24/09/2026). CỐ Ý nằm trong REVIEW_ROUTES
   // chứ không phải HELPER_REVIEW_ROUTES: trang gate bằng canAssignReview, hẹp
@@ -413,7 +417,10 @@ const REVIEW_ROUTES = [
 // reviewer satisfy none, so both keep only what they can actually open —
 // reviewer plus its recruitment surfaces. No route's access changed; only what
 // the nav offers.
-const HELPER_REVIEW_ROUTES = ["/my-work", "/reviews", "/interviews", "/interviews/lich", "/interviews/mentee-offline"];
+const HELPER_REVIEW_ROUTES = [
+  "/my-work", "/reviews", "/interviews", "/interviews/lich",
+  "/interviews/ket-qua-mentor", "/interviews/mentee-offline"
+];
 
 // Mời mentor/mentee lập tài khoản (11/09/2026). Bốn vai trò của
 // canInviteParticipants — support_team có mặt theo quyết định của chủ chương
@@ -439,7 +446,7 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   //
   // Từ 11/09/2026 support_team cũng mời reviewer và giao hồ sơ, nên thấy đúng
   // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
-  support_team: [...BASE_ROUTE_ARR, "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
+  support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
   admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],

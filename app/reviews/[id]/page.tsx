@@ -142,6 +142,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
       />
       <ErrorBox message={error} />
       {review.offline_managed && <p className="rounded border bg-amber-50 p-4">Phiếu thuộc buổi phỏng vấn trực tiếp. <Link className="underline" href={`/interviews/mentee-offline?application=${review.application_id}`}>Mở hồ sơ để chấm hoặc sửa kết quả</Link>.</p>}
+      {review.review_round === "interview" && app?.role_applied === "mentor" && <p className="mb-4 rounded border bg-vam-mint/30 p-3"><Link className="font-semibold text-vam-green underline" href="/interviews/ket-qua-mentor">Xem lại kết quả và nhận xét phỏng vấn mentor S12 sau khi lưu</Link></p>}
 
       {applicationWithdrawn ? (
         <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
