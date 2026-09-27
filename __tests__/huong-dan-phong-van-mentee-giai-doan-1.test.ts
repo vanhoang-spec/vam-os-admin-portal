@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { buildMenteeSessionConfirmedEmail, buildMenteeSessionInviteEmail } from "@/lib/email-core";
+import { buildMenteeSessionInviteEmail } from "@/lib/email-core";
 import { AUTOMATION_SLOTS } from "@/lib/email-automation-core";
 import {
   DAILY_EMAIL_LIMIT,
@@ -126,13 +126,6 @@ describe("3. hai lá thư in ra khớp từng dòng với hàm dựng thư thậ
     deadlineLabel: "23:59 ngày 30/09/2026",
     hotlineZalo: HOTLINE_ZALO
   });
-  const confirmed = buildMenteeSessionConfirmedEmail({
-    candidateName: "Nguyễn Văn A",
-    sessionLabel: "Thứ Bảy 03/10/2026, 08:00 – 08:30 (giờ Việt Nam)",
-    venueLabel: MENTEE_VENUE_PENDING_LABEL,
-    manageUrl: "https://os.alumni-mentoring.edu.vn/dat-ca/ma-rieng-cua-tung-ban",
-    hotlineZalo: HOTLINE_ZALO
-  });
 
   const lines = (text: string) => text.split("\n").map(collapse).filter(Boolean);
 
@@ -141,9 +134,10 @@ describe("3. hai lá thư in ra khớp từng dòng với hàm dựng thư thậ
     for (const line of lines(invite.text)) expect(guideText, line).toContain(line);
   });
 
-  it("thư xác nhận: tiêu đề và từng dòng thân thư", () => {
-    expect(guideText).toContain(collapse(confirmed.subject));
-    for (const line of lines(confirmed.text)) expect(guideText, line).toContain(line);
+  it("không gửi xác nhận thứ hai; có hướng dẫn QR và phỏng vấn", () => {
+    expect(guideText).toContain("không có email xác nhận riêng");
+    expect(guideText).toContain("5 phòng × 5 mentor mỗi phòng = 25 mentor cùng lúc");
+    expect(guideText).toContain("Sửa kết quả / lựa chọn mentee");
   });
 
   it("nói rõ nội dung đang gửi thật có thể đã được sửa khác bản mặc định", () => {

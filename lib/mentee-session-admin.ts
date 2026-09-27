@@ -33,8 +33,8 @@ const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Trần mềm cho một ô nhập: 300 ghế một ca là con số không ai gõ có chủ ý. */
-export const MAX_SEATS_PER_SESSION = 300;
+/** 5 phòng × 5 mentor cùng lúc, mỗi lượt 30 phút. */
+export const MAX_SEATS_PER_SESSION = 25;
 
 function log(message: string, error?: unknown) {
   console.error(`[mentee-session-admin] ${message}`, error ?? "");

@@ -385,8 +385,8 @@ export const AUTOMATION_SLOTS: readonly AutomationSlot[] = [
     group: "Nộp đơn và tuyển chọn",
     title: "Xác nhận ca phỏng vấn của mentee",
     audience: "Mentee vừa chọn hoặc vừa đổi ca phỏng vấn",
-    trigger: "Ngay khi mentee bấm chọn ca, hoặc đổi sang ca khác, trên trang đặt ca.",
-    note: "Một lá cho cả đặt lần đầu lẫn đổi ca.",
+    trigger: "Đã ngừng tự gửi: xác nhận và QR hiện ngay trên trang chọn ca.",
+    note: "Mẫu cũ được giữ để tra cứu. Chọn hoặc đổi ca không gửi email này.",
     placeholders: [
       P_TEN_NGUOI_NHAN,
       {

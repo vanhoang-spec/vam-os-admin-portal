@@ -1,6 +1,6 @@
 # Bàn giao AI — VAM OS
 
-**Cập nhật lần cuối: 27/09/2026, bởi Claude Code.** Càng xa ngày này càng nên tự
+**Cập nhật lần cuối: 27/09/2026, bởi Codex.** Càng xa ngày này càng nên tự
 kiểm lại bằng `git log` / `gh pr list` thay vì tin nguyên văn — xem bước 2 của
 `CODEX_BAT_DAU.md`.
 
@@ -12,6 +12,14 @@ kiểm lại bằng `git log` / `gh pr list` thay vì tin nguyên văn — xem b
   production. Migration liên quan đã dán tay và đã kiểm lại. PR #165 đã merge.
 
 ## PR đang mở, chờ chủ dự án
+
+**Cập nhật:** đã kiểm GitHub, #166, #167, #168 đều MERGED ngày 27/09 giờ Việt Nam.
+Bảng dưới là lịch sử bàn giao trước đó, không còn là danh sách PR mở.
+
+Luồng offline mới đang ở nhánh `feat/mentee-offline-interview-workflow`: QR tại trang,
+check-in/phân phòng, chốt kết quả và mentor nhận mentee. Migration
+`20260927090000_mentee_offline_workflow.sql` **CHƯA chạy production**; phải chạy trước
+merge. Chi tiết kiểm thử, UAT và triển khai: [bàn giao offline](docs/audits/MENTEE_OFFLINE_RELEASE_20260927.md).
 
 Kiểm lại bằng `gh pr list --state open` — dưới đây là ảnh chụp lúc viết file này,
 ba PR đều tách nhánh từ `origin/main`, độc lập nhau, không PR nào chặn PR nào:

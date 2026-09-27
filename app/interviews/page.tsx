@@ -48,6 +48,7 @@ export default async function InterviewsPage(props: { searchParams: Promise<{ in
       />
 
       {/* Nav */}
+      <Link href="/interviews/mentee-offline" className="mb-4 inline-block rounded-md bg-vam-green px-4 py-3 text-white">Phỏng vấn mentee trực tiếp · Check-in và chấm theo ca</Link>
       <div className="mb-4">
         <Link href="/reviews" className="text-sm text-vam-green hover:underline">
           ← Quay lại Reviews

@@ -42,7 +42,7 @@ import { formatDate, formatTime } from "@/lib/utils";
  *    với 334 người thì đó là 334 cuộc gọi.
  *
  * 2. KHÔNG VƯỢT PHẦN HẠN MỨC CỦA THƯ MỜI. Xem đầu lib/mentee-invite-dispatch-core.ts:
- *    thư xác nhận ca cần chỗ trong cùng hạn mức 300 thư/ngày.
+ *    các thư khác của hệ thống cần chỗ trong cùng hạn mức 300 thư/ngày.
  */
 
 type Json = Record<string, any>;
@@ -288,15 +288,15 @@ export async function runMenteeInviteDispatch(input: { now?: () => number } = {}
   }
   if (!context.deadlineLabel || !context.daysLabel) return fail(SAFE_ERROR);
 
-  // Chặn 2 — không ăn vào phần hạn mức chừa cho thư xác nhận.
+  // Chặn 2 — không ăn vào phần hạn mức chừa cho các thư khác.
   const sentInWindow = await countSentInWindow(client, startedMs);
   if (sentInWindow === null) {
-    return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi — gửi mù có thể làm thư xác nhận ca bị chặn.");
+    return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi — gửi mù có thể làm các thư khác của hệ thống bị chặn.");
   }
   const allowance = dispatchAllowance(sentInWindow);
   if (allowance === 0) {
     return done(
-      `Đã chạm phần hạn mức của thư mời: cả hệ thống đã gửi ${sentInWindow}/${DAILY_EMAIL_LIMIT} thư trong 24 giờ qua, ${DISPATCH_RESERVE} thư còn lại chừa cho thư xác nhận ca. Thử lại sau vài giờ.`
+      `Đã chạm phần hạn mức của thư mời: cả hệ thống đã gửi ${sentInWindow}/${DAILY_EMAIL_LIMIT} thư trong 24 giờ qua, ${DISPATCH_RESERVE} thư còn lại chừa cho các thư khác của hệ thống. Thử lại sau vài giờ.`
     );
   }
 

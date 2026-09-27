@@ -181,6 +181,10 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Offline mentee: 20260927090000_mentee_offline_workflow.sql; chưa áp production.
+  "vam104_lookup_offline_ticket",
+  "vam104_offline_dashboard",
+  "vam104_save_offline_interview",
   // Giữ chỗ một ca phỏng vấn mentee — migration
   // 20260924190000_mentee_interview_sessions.sql. Nằm ở đây cho tới khi chủ dự án
   // dán migration lên Production và có bằng chứng đọc catalog.

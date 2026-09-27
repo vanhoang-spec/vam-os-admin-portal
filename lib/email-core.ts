@@ -1812,7 +1812,7 @@ export function buildMenteeSessionInviteEmail(input: {
     "",
     `Hạn chọn ca: ${deadline}. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.`,
     "",
-    "Chọn xong, bạn sẽ nhận một thư xác nhận ca và địa điểm. Cần đổi ca, bạn mở lại đúng đường dẫn này trước hạn.",
+    "Chọn xong, trang sẽ xác nhận ca, địa điểm và hiện mã QR check-in ngay. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng. Cần xem vé hoặc đổi ca, mở lại đúng đường dẫn này trước hạn.",
     "",
     `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
     "",
@@ -1828,7 +1828,7 @@ export function buildMenteeSessionInviteEmail(input: {
       "<p>Mỗi buổi phỏng vấn dài tối đa 30 phút, 1:1 với một mentor. Bạn mở đường dẫn riêng dưới đây và chọn <strong>một</strong> ca phù hợp. Mỗi ca có số chỗ giới hạn, ca nào kín thì không chọn được nữa, nên bạn chọn sớm nhé.</p>",
       `<p style="margin:20px 0"><a href="${escapeHtml(input.bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn ca phỏng vấn</a></p>`,
       `<p>Hạn chọn ca: <strong>${escapeHtml(deadline)}</strong>. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.</p>`,
-      "<p>Chọn xong, bạn sẽ nhận một thư xác nhận ca và địa điểm. Cần đổi ca, bạn mở lại đúng đường dẫn này trước hạn.</p>",
+      "<p>Chọn xong, trang sẽ xác nhận ca, địa điểm và hiện mã QR check-in ngay. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng. Cần xem vé hoặc đổi ca, mở lại đúng đường dẫn này trước hạn.</p>",
       `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
       `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho bạn, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.bookingUrl)}</p>`
     ].join("")

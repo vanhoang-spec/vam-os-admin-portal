@@ -14,7 +14,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_CANVA_AI.pdf` | Support team, Core team | Một trang: dùng công cụ **Brief thiết kế cho Canva AI** trên app để soạn prompt tiếng Anh, rồi dán sang Canva AI ra key visual / poster / video — kèm ba thứ luôn phải sửa tay và quy tắc không đưa dữ liệu cá nhân ra ngoài |
 | `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
 | `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 19 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
-| `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Core team, Admin, Support team | Hai trang: phỏng vấn mentee trực tiếp 03 & 04/10 — ba bước (điền địa điểm, mời đúng người được đề xuất, gửi thư mời chọn ca), hạn mức thư, khi nào nút bị khoá; trang 2 in nguyên văn **thư mời** và **thư xác nhận** mentee nhận |
+| `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Core team, Admin, Support team | Hai trang: phỏng vấn mentee trực tiếp 03 & 04/10 — ba bước (điền địa điểm, mời đúng người được đề xuất, gửi thư mời chọn ca), hạn mức thư, khi nào nút bị khoá; trang 2 in **thư mời** và hướng dẫn QR, check-in, phân 5 phòng × 5 mentor, chấm và sửa kết quả |
 
 ## Sửa và xuất lại bản PDF
 

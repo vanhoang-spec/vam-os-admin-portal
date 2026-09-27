@@ -89,7 +89,7 @@ describe("1. cổng quyền", () => {
 
       const result = await saveSessionConfig({
         sessionId: SESSION_ID,
-        seatLimit: "40",
+        seatLimit: "25",
         venue: "",
         closed: ""
       });
@@ -102,21 +102,21 @@ describe("1. cổng quyền", () => {
 
   it("chưa đăng nhập thì cũng không ghi gì", async () => {
     mocks.getCurrentAdminUser.mockResolvedValue(null);
-    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "40", venue: "", closed: "" });
+    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "25", venue: "", closed: "" });
     expect(result.ok).toBe(false);
     expect(daGhi).toHaveLength(0);
   });
 
   it.each(["core_team", "admin", "super_admin"])("vai trò %s thì lưu được", async (role) => {
     mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role });
-    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "40", venue: "", closed: "" });
+    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "25", venue: "", closed: "" });
     expect(result.ok).toBe(true);
     expect(daGhi).toHaveLength(1);
   });
 
   it("nút áp cho mọi ca cũng qua đúng cổng đó", async () => {
     mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role: "reviewer" });
-    expect((await applySeatLimitToAllSessions({ seatLimit: "40" })).ok).toBe(false);
+    expect((await applySeatLimitToAllSessions({ seatLimit: "25" })).ok).toBe(false);
     expect((await applyVenueToAllSessions({ venue: "Phòng B2-208" })).ok).toBe(false);
     expect(daGhi).toHaveLength(0);
   });
@@ -149,10 +149,10 @@ describe("2. ô ghế để trống nghĩa là ĐÓNG", () => {
     expect(daGhi).toHaveLength(0);
   });
 
-  it("số quá lớn bị chặn — 300 ghế một ca là con số không ai gõ có chủ ý", async () => {
-    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "5000", venue: "", closed: "" });
+  it("số quá lớn bị chặn — 25 ghế một ca là con số không ai gõ có chủ ý", async () => {
+    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "26", venue: "", closed: "" });
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("tối đa 300");
+    expect(result.message).toContain("tối đa 25");
     expect(daGhi).toHaveLength(0);
   });
 
@@ -165,7 +165,7 @@ describe("2. ô ghế để trống nghĩa là ĐÓNG", () => {
 
 describe("3. mọi câu ghi đều bị khoá trong mùa đang tuyển", () => {
   it("lưu một ca: lọc theo cả id lẫn season_id", async () => {
-    await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "40", venue: "", closed: "" });
+    await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "25", venue: "", closed: "" });
 
     const loc = Object.fromEntries(daGhi[0].loc);
     expect(loc.id).toBe(SESSION_ID);
@@ -173,14 +173,14 @@ describe("3. mọi câu ghi đều bị khoá trong mùa đang tuyển", () => {
   });
 
   it("id ca không phải uuid thì từ chối trước khi chạm database", async () => {
-    const result = await saveSessionConfig({ sessionId: "'; drop table --", seatLimit: "40", venue: "", closed: "" });
+    const result = await saveSessionConfig({ sessionId: "'; drop table --", seatLimit: "25", venue: "", closed: "" });
     expect(result.ok).toBe(false);
     expect(daGhi).toHaveLength(0);
   });
 
   it("id ca của mùa khác: database không đổi dòng nào, và hàm nói thật", async () => {
     soDongTraVe = 0;
-    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "40", venue: "", closed: "" });
+    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "25", venue: "", closed: "" });
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Không tìm thấy ca này");
@@ -188,7 +188,7 @@ describe("3. mọi câu ghi đều bị khoá trong mùa đang tuyển", () => {
 
   it("áp hàng loạt cũng chỉ chạm mùa đang tuyển", async () => {
     soDongTraVe = 12;
-    const result = await applySeatLimitToAllSessions({ seatLimit: "40" });
+    const result = await applySeatLimitToAllSessions({ seatLimit: "25" });
 
     expect(result.ok).toBe(true);
     expect(result.message).toContain("12 ca");
@@ -203,9 +203,9 @@ describe("4. mỗi nút chỉ đụng vào việc của nó", () => {
    * điền cho từng ca — một mất mát im lặng.
    */
   it("áp số ghế không ghi đè địa điểm hay trạng thái", async () => {
-    await applySeatLimitToAllSessions({ seatLimit: "40" });
+    await applySeatLimitToAllSessions({ seatLimit: "25" });
 
-    expect(daGhi[0].payload).toHaveProperty("seat_limit", 40);
+    expect(daGhi[0].payload).toHaveProperty("seat_limit", 25);
     expect(daGhi[0].payload).not.toHaveProperty("venue");
     expect(daGhi[0].payload).not.toHaveProperty("status");
   });
@@ -218,17 +218,17 @@ describe("4. mỗi nút chỉ đụng vào việc của nó", () => {
   });
 
   it("lưu một ca thì ghi cả ba trường, vì biểu mẫu mang cả ba", async () => {
-    await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "40", venue: "Phòng A", closed: "yes" });
+    await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "25", venue: "Phòng A", closed: "yes" });
 
     expect(daGhi[0].payload).toMatchObject({
-      seat_limit: 40,
+      seat_limit: 25,
       venue: "Phòng A",
       status: "closed"
     });
   });
 
   it("bỏ tick Đóng thì ca mở lại", async () => {
-    await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "40", venue: "", closed: "" });
+    await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "25", venue: "", closed: "" });
     expect(daGhi[0].payload.status).toBe("open");
     expect(daGhi[0].payload.venue).toBeNull();
   });
