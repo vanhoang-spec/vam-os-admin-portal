@@ -14,7 +14,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_CANVA_AI.pdf` | Support team, Core team | Một trang: dùng công cụ **Brief thiết kế cho Canva AI** trên app để soạn prompt tiếng Anh, rồi dán sang Canva AI ra key visual / poster / video — kèm ba thứ luôn phải sửa tay và quy tắc không đưa dữ liệu cá nhân ra ngoài |
 | `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
 | `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 19 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
-| `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Core team, Admin, Support team | Hai trang: phỏng vấn mentee trực tiếp 03 & 04/10 — ba bước (điền địa điểm, mời đúng người được đề xuất, gửi thư mời chọn ca), hạn mức thư, khi nào nút bị khoá; trang 2 in **thư mời** và hướng dẫn QR, check-in, phân 5 phòng × 5 mentor, chấm và sửa kết quả |
+| `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Support team, Core team, BTC | Hai trang, cập nhật 27/09: chờ địa chỉ chính xác 28/09 để đưa vào email; chủ chương trình giao hệ thống gửi đồng loạt, Support không bấm gửi trong CRM; mẫu thư chờ điền địa chỉ và hướng dẫn QR/check-in/phân bàn/chấm/nhận mentee |
 
 ## Sửa và xuất lại bản PDF
 
@@ -133,14 +133,13 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 
 **Phỏng vấn mentee giai đoạn 1 (hai trang):**
 
-- **Trang 2 in nguyên văn hai lá thư, và đó là phần dễ lạc hậu nhất.** Người
-  đọc tài liệu là người sẽ nghe mentee gọi hỏi "thư nói gì".
-  `__tests__/huong-dan-phong-van-mentee-giai-doan-1.test.ts` gọi chính
-  `buildMenteeSessionInviteEmail` / `buildMenteeSessionConfirmedEmail` với đúng
-  dữ liệu ví dụ trong trang và đòi từng dòng có mặt — sửa câu chữ mặc định trong
-  `lib/email-core.ts` là phải dựng lại trang này
-- Sửa thư trong tab **Thư tự động** thì KHÔNG cần sửa tài liệu: trang 2 ghi rõ
-  đó là bản mặc định, bản đang gửi thật xem ở nút "Xem trước bản đang lưu"
+- Trang 1 là kế hoạch chốt cuối 27/09: chờ địa chỉ ngày 28/09 và lệnh chủ chương
+  trình giao hệ thống gửi; Support không bấm gửi trong CRM.
+- Trang 2 là **mẫu thư dự kiến chờ điền địa chỉ**, không khẳng định khớp email
+  đang chạy. Khi địa chỉ và nội dung được chốt, cập nhật cả bản thư gửi thật và
+  tài liệu. QR tại trang; không gửi email xác nhận thứ hai.
+- `__tests__/huong-dan-phong-van-mentee-giai-doan-1.test.ts` kiểm các điểm chốt,
+  trạng thái chưa triển khai/chưa lên lịch, hạn mức và số trang.
 - Số ca, số ghế, hạn đặt ca (migration `20260926100000_giai_doan_1_pv_mentee.sql`)
   và hạn mức thư (`lib/mentee-invite-dispatch-core.ts`) — test đối chiếu thẳng
 - Giai đoạn 2 (10 & 11/10) có migration riêng; khi đó viết tài liệu riêng, đừng

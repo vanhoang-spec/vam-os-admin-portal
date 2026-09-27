@@ -1,5 +1,17 @@
 # Phỏng vấn mentee offline — bàn giao 27/09/2026
 
+## Điều chỉnh kế hoạch gửi — chốt cuối 27/09
+
+Chờ ngày 28/09 có địa chỉ chính xác để đưa vào email mời và trang đặt ca. Ngày 28/09
+chủ chương trình sẽ giao lệnh cho hệ thống gửi đồng loạt đến danh sách đã duyệt;
+Support không cần vào CRM bấm gửi. Chưa lên lịch tự gửi và chưa gửi thật.
+Khi nhận lệnh cần hoàn tất triển khai, chuẩn bị đường gửi từ hệ thống, kiểm mẫu thư
+có địa chỉ và đối chiếu danh sách/hạn mức. Mã hiện có vẫn là bộ gửi theo lô trong CRM;
+việc sửa hướng dẫn này không đồng nghĩa đã triển khai một bộ gửi tự động mới.
+
+Bản PDF Support đã chuyển thành kế hoạch rà soát và mẫu thư dự kiến có ô chờ địa chỉ,
+không còn in hướng dẫn bấm gửi thủ công hay khẳng định đó là email đang gửi thật.
+
 ## Hành vi
 
 - 03–04/10, 24 ca × 30 phút × tối đa 25 mentee: 5 phòng × 5 mentor mỗi phòng.
