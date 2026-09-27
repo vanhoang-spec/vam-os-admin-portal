@@ -219,7 +219,7 @@ describe("2. không gửi vào một lưới ca rỗng", () => {
   });
 });
 
-describe("3. không ăn vào phần hạn mức chừa cho thư xác nhận", () => {
+describe("3. không ăn vào phần hạn mức chừa cho các thư khác", () => {
   it("đã chạm phần của thư mời → không gửi thư nào, và nói rõ vì sao", async () => {
     quotaCount = DAILY_EMAIL_LIMIT - DISPATCH_RESERVE;
     tables.applications = [mentee("a1")];
@@ -227,7 +227,7 @@ describe("3. không ăn vào phần hạn mức chừa cho thư xác nhận", ()
     const result = await runMenteeInviteDispatch();
 
     expect(result.sent).toBe(0);
-    expect(result.message).toContain("chừa cho thư xác nhận");
+    expect(result.message).toContain("chừa cho các thư khác");
     expect(mocks.sendMenteeSessionInvite).not.toHaveBeenCalled();
   });
 

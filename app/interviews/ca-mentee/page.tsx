@@ -2,6 +2,7 @@ import { Card, EmptyState, KpiCard, PageHeader } from "@/components/ui";
 import { getMenteeInviteStatus } from "@/lib/mentee-invite-dispatch";
 import { getSessionAdminData } from "@/lib/mentee-session-admin";
 import { BulkPanel, InviteDispatchPanel, SessionRowForm } from "./session-config-client";
+import Link from "next/link";
 
 /**
  * Ca phỏng vấn mentee — giai đoạn 1, ngày 3 và 4/10/2026.
@@ -55,6 +56,7 @@ export default async function MenteeSessionConfigPage() {
         <KpiCard label="Đã giữ chỗ" value={String(data.totals.booked)} />
         <KpiCard label="Còn trống" value={String(Math.max(0, data.totals.seats - data.totals.booked))} />
       </div>
+      <Link href="/interviews/mentee-offline" className="rounded-lg bg-vam-green px-4 py-3 font-semibold text-white">Mở danh sách theo ca, check-in và chấm phỏng vấn</Link>
 
       {chuaDienGhe > 0 ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

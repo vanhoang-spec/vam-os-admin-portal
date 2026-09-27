@@ -160,7 +160,21 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
   // minh: RLS bật, service_role đúng INSERT,SELECT,UPDATE (không DELETE),
   // không rò quyền cho anon/authenticated, và có chỉ số bộ phận
   // interview_mentor_availability_active_uidx canh luật một-mentor-một-lời-ngỏ.
-  "vam099_match_mentor_at_hour"
+  "vam099_match_mentor_at_hour",
+  // Đổi người chấm kèm hạn mới — migration 20260926140000_reassign_review_new_due.sql,
+  // chủ dự án dán lên Production 26/09/2026. Đọc lại catalog ngay sau khi dán xác nhận:
+  // ACL đúng `postgres=X/postgres service_role=X/postgres` (không anon/authenticated),
+  // security invoker, search_path rỗng, thân hàm gọi nguyên vam084_change_review_assignment
+  // (không định nghĩa lại). PR #167 merge cùng ngày.
+  "vam103_reassign_review_with_due",
+  // Phỏng vấn mentee trực tiếp — migration 20260927090000_mentee_offline_workflow.sql,
+  // chủ dự án dán lên Production 27/09/2026. Đọc lại catalog ngay sau khi dán xác nhận:
+  // 2 bảng mới bật RLS và không cấp quyền anon/authenticated, 4 trigger có mặt, 8 hàm
+  // vam104_*, checkin_token không còn dòng null, và vam104_save_offline_interview
+  // không gọi được từ anon (ACL chỉ postgres + service_role).
+  "vam104_lookup_offline_ticket",
+  "vam104_offline_dashboard",
+  "vam104_save_offline_interview"
 ];
 
 /**
@@ -187,9 +201,6 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam101_book_mentee_session",
   // Đổi ca phỏng vấn mentee — migration 20260924210000_mentee_change_session.sql.
   "vam102_change_mentee_session",
-  // Đổi người chấm kèm hạn mới — migration 20260926140000_reassign_review_new_due.sql.
-  // Bọc nguyên vam084_change_review_assignment; chỉ THÊM hàm, không đổi hàm cũ.
-  "vam103_reassign_review_with_due",
   // Ban tổ chức sửa nội dung bài chấm — migration
   // 20260918170000_review_content_override.sql. Nằm ở đây cho tới khi chủ dự án dán
   // migration lên Production và có bằng chứng đọc catalog.

@@ -7,14 +7,9 @@
  * ---------------------------------------------------------------------------
  * VÌ SAO CẦN "CHỪA HẠN MỨC"
  * ---------------------------------------------------------------------------
- * Chủ dự án chốt 26/09/2026: giữ gói Brevo miễn phí, 300 thư/ngày, dùng chung
- * cho CẢ hệ thống. Nếu bộ gửi thư mời tiêu hết 300 thư trong ngày, thì những
- * bạn vừa nhận thư và bấm đặt ca ngay sau đó sẽ không nhận được thư xác nhận —
- * đúng người vừa làm đúng việc lại là người bị thiệt.
- *
- * Nên một lần bấm chỉ gửi tới mức `DAILY_EMAIL_LIMIT - DISPATCH_RESERVE` trừ đi
- * số thư cả hệ thống đã gửi trong 24 giờ qua. Phần chừa lại là cho thư xác nhận
- * và mọi thư khác của hệ thống.
+ * Gói Brevo 300 thư/ngày dùng chung cả hệ thống. Chọn ca hiện QR trực tiếp,
+ * không gửi email xác nhận nữa. Vẫn chừa hạn mức cho đặt lại mật khẩu,
+ * thông báo sự kiện và các thư khác của hệ thống.
  *
  * Đếm theo 24 GIỜ TRƯỢT, không theo ngày lịch: không có gì bảo đảm Brevo đặt
  * lại hạn mức lúc nửa đêm giờ Việt Nam. Đếm trượt có thể dùng chưa hết hạn mức
@@ -27,10 +22,9 @@
 export const DAILY_EMAIL_LIMIT = 300;
 
 /**
- * Phần hạn mức để dành cho thư xác nhận ca và mọi thư khác của hệ thống.
+ * Phần hạn mức để dành cho mọi thư khác của hệ thống.
  *
- * Bộ gửi thư mời không bao giờ ăn vào phần này. Nó không phải trần cứng của thư
- * xác nhận — chỉ là khoảng trống bộ gửi thư mời cố ý chừa ra.
+ * Bộ gửi thư mời không bao giờ ăn vào phần này. Nó không phải trần cứng cho các thư khác — chỉ là khoảng trống bộ gửi thư mời cố ý chừa ra.
  */
 export const DISPATCH_RESERVE = 80;
 

@@ -128,9 +128,9 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   // is where those roles genuinely have authority.
   const isOwner = review.reviewer_admin_user_id === adminUser.id;
   const canEdit =
-    !applicationWithdrawn && isEditableReviewStatus(review.status) && isOwner;
+    !review.offline_managed && !applicationWithdrawn && isEditableReviewStatus(review.status) && isOwner;
   const canManageAssignment =
-    canAssignReview(adminUser.role) && isEditableReviewStatus(review.status);
+    !review.offline_managed && canAssignReview(adminUser.role) && isEditableReviewStatus(review.status);
 
   const error = reviewResult.error ?? appResult.error ?? personResult.error ?? seasons.error;
 
@@ -141,6 +141,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
         description={`${roundLabel(review.review_round)} • ${reviewStatusLabel(review.status)}`}
       />
       <ErrorBox message={error} />
+      {review.offline_managed && <p className="rounded border bg-amber-50 p-4">Phiếu thuộc buổi phỏng vấn trực tiếp. <Link className="underline" href={`/interviews/mentee-offline?application=${review.application_id}`}>Mở hồ sơ để chấm hoặc sửa kết quả</Link>.</p>}
       {review.review_round === "interview" && app?.role_applied === "mentor" && <p className="mb-4 rounded border bg-vam-mint/30 p-3"><Link className="font-semibold text-vam-green underline" href="/interviews/ket-qua-mentor">Xem lại kết quả và nhận xét phỏng vấn mentor S12 sau khi lưu</Link></p>}
 
       {applicationWithdrawn ? (

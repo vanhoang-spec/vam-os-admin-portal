@@ -1,24 +1,27 @@
 # Bàn giao AI — VAM OS
 
-## Việc mới của Codex — truy xuất kết quả mentor S12 (27/09)
+**Cập nhật lần cuối: 27/09/2026, bởi Claude Code** (nối tiếp bản Codex viết cùng
+ngày). Càng xa ngày này càng nên tự kiểm lại bằng `git log` / `gh pr list` thay
+vì tin nguyên văn — xem bước 2 của `CODEX_BAT_DAU.md`.
+
+## Việc của Codex — truy xuất kết quả mentor S12 (27/09) — ĐÃ MERGE
 
 Chủ dự án phản ánh hồ sơ phỏng vấn mentor biến mất sau lưu và không xem được
 nhận xét để soạn thư báo rớt. Đã bổ sung trang `/interviews/ket-qua-mentor`, nút
 xem application, điểm/nhận xét theo từng interviewer, ghi chú quyết định BTC và
 nút xuất PDF/Excel toàn bộ kết quả S12 ở cuối trang. Không gửi thư kết quả.
 
-Làm trên nhánh riêng `feat/mentor-interview-results`, đã tách độc lập trên `origin/main`; không sửa
-kế hoạch email mentee ngày 28/09 bên dưới. Phần mới không cần migration; bốn cổng
-đạt (7.963 test qua, 14 skipped). Chưa deploy. PR nền #170 còn OPEN khi kiểm lại.
-Chi tiết quyền, kiểm thử và cách đặt base PR:
-[bàn giao kết quả mentor](docs/audits/MENTOR_INTERVIEW_RESULTS_20260927.md).
+Làm trên nhánh riêng `feat/mentor-interview-results`, base `main`. Không cần
+migration; bốn cổng đạt (7.963 test qua, 14 skipped) lúc mở PR.
+**[PR #171](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/171) đã
+merge và deploy thành công 27/09** — không còn là việc đang dở. Chi tiết quyền,
+kiểm thử: [bàn giao kết quả mentor](docs/audits/MENTOR_INTERVIEW_RESULTS_20260927.md).
 
-Chủ dự án đã cho phép đẩy nhánh, mở PR và merge. PR mentor dùng base `main`;
-PR #170 của mentee vẫn riêng và chưa merge.
-
-**Cập nhật lần cuối: 27/09/2026, bởi Claude Code** (nối tiếp bản Codex viết cùng
-ngày). Càng xa ngày này càng nên tự kiểm lại bằng `git log` / `gh pr list` thay
-vì tin nguyên văn — xem bước 2 của `CODEX_BAT_DAU.md`.
+Nhánh mentee offline (`feat/mentee-offline-interview-workflow`) và nhánh này
+cùng sửa `lib/nav-model.ts` / `app/interviews/page.tsx` / `app/reviews/[id]/page.tsx`
+ở gần đúng một chỗ (mỗi bên thêm một link điều hướng) — xung đột git thuần văn
+bản, không xung đột thiết kế; Claude Code đã hợp nhất giữ cả hai link khi merge
+`main` vào nhánh mentee offline.
 
 ## Claude Code tiếp tục ngày 28/09 — gửi email mời mentee
 
@@ -49,7 +52,7 @@ thiện đợt gửi, không tự suy diễn thành lệnh gửi ngay nếu ch�
 ### Thứ tự làm tiếp khi nhận địa chỉ
 
 1. Đọc `CLAUDE.md`, kiểm lại branch/status và trạng thái triển khai. Đừng mất các
-   chỉnh sửa tài liệu chưa commit. Tra bàn giao kỹ thuật trong nhánh PR #170.
+   chỉnh sửa tài liệu chưa commit. Tra [bàn giao kỹ thuật](docs/audits/MENTEE_OFFLINE_RELEASE_20260927.md).
 2. Nhận địa chỉ chính xác: tên cơ sở/địa điểm, địa chỉ đầy đủ, nơi tập trung
    check-in, bản đồ nếu có. Đưa thẳng vào **email mời** và trang đặt ca; điền các
    ô chờ trong HTML/PDF hướng dẫn, xuất và kiểm PDF lại. Không gửi bản có placeholder
@@ -98,14 +101,32 @@ thiện đợt gửi, không tự suy diễn thành lệnh gửi ngay nếu ch�
 
 ## PR đang mở, chờ chủ dự án
 
-Kiểm lại bằng `gh pr list --state open` — dưới đây là ảnh chụp lúc viết file này,
-ba PR đều tách nhánh từ `origin/main`, độc lập nhau, không PR nào chặn PR nào:
+**Kế hoạch mới chốt cuối 27/09:** chờ địa chỉ chính xác ngày 28/09 để đưa vào email.
+Chủ chương trình sẽ giao hệ thống gửi đồng loạt ngày 28/09; Support không bấm gửi
+trong CRM. Chưa có lịch tự gửi. PDF Support đã cập nhật kế hoạch này, gồm mẫu thư
+chờ điền địa chỉ. Phần gửi từ hệ thống cần chuẩn bị/kiểm tra khi nhận lệnh; chưa
+được coi là đã triển khai chỉ vì tài liệu đã sửa.
 
-| PR | Nội dung | Có migration? | Đang chờ |
+**Cập nhật 27/09 (Claude Code):** #166, #167, #168, #171 đều MERGED và deploy
+thành công. **Chỉ còn [#170](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/170)
+đang mở** — luồng phỏng vấn mentee offline (QR tại trang, check-in/phân phòng,
+chốt kết quả, mentor nhận mentee). Migration `20260927090000_mentee_offline_workflow.sql`
+**đã dán và kiểm chứng trên Production trước khi mở PR**. Nhánh đã được hợp
+nhất với `main` mới nhất (giải xung đột với #171 ở `lib/nav-model.ts`,
+`app/interviews/page.tsx`, `app/reviews/[id]/page.tsx` và hai file test —
+đều là hai link điều hướng chèn cùng chỗ, giữ cả hai). Chi tiết kiểm thử, UAT
+và triển khai: [bàn giao offline](docs/audits/MENTEE_OFFLINE_RELEASE_20260927.md).
+
+Kiểm lại bằng `gh pr list --state open` trước khi tin bảng dưới — đây là ảnh
+chụp lúc viết file này:
+
+| PR | Nội dung | Có migration? | Trạng thái |
 |---|---|---|---|
-| [#166](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/166) | Hướng dẫn PDF hai trang cho BTC chạy phỏng vấn mentee giai đoạn 1 | Không | Chủ dự án đọc và cho merge |
-| [#167](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/167) | Đặt hạn chấm mới khi đổi người review (form "Đổi Người Review" thêm ô "Hạn chấm mới") | **Có** — `supabase/migrations/20260926140000_reassign_review_new_due.sql`, chỉ THÊM một hàm, chưa dán | **Dán migration vào Supabase SQL Editor (Production) trước**, rồi mới merge |
-| [#168](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/168) | Thư báo interviewer và lưới lịch phỏng vấn mang link mở thẳng hồ sơ ứng viên (`/reviews/<id>`) thay vì trang danh sách | Không | Chủ dự án đọc và cho merge |
+| [#166](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/166) | Hướng dẫn PDF hai trang cho BTC chạy phỏng vấn mentee giai đoạn 1 | Không | MERGED |
+| [#167](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/167) | Đặt hạn chấm mới khi đổi người review | Có — đã dán | MERGED |
+| [#168](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/168) | Link mở thẳng hồ sơ ứng viên trong thư và lưới lịch phỏng vấn | Không | MERGED |
+| [#171](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/171) | Xem lại application và kết quả phỏng vấn mentor S12, xuất PDF/Excel | Không | MERGED |
+| [#170](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/170) | Phỏng vấn mentee offline 03–04/10: QR, check-in, phân phòng, chấm, nhận mentee | Có — **đã dán và kiểm chứng** | **OPEN — chờ chủ dự án merge** |
 
 Mỗi PR đã qua đủ bốn cổng (typecheck/lint/vitest/build) và đã tiêm lỗi để chứng
 minh ca test mới bắt được — chi tiết nằm trong mô tả từng PR.

@@ -40,6 +40,7 @@ function log(scope: string, error: unknown) {
 
 function mutationErrorMessage(error: unknown): string {
   const message = String((error as { message?: string } | null)?.message ?? "");
+  if (message.includes("OFFLINE_REVIEW_USE_WORKFLOW")) return "Mở trang Phỏng vấn mentee trực tiếp để sửa phiếu này và lưu đầy đủ lịch sử.";
   return message.includes("APPLICATION_WITHDRAWN")
     ? WITHDRAWN_APPLICATION_REVIEW_MESSAGE
     : SAFE_ERROR;

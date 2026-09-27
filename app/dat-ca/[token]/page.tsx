@@ -2,6 +2,7 @@ import { Card } from "@/components/ui";
 import { LiveRefresh } from "@/app/events/[id]/live-refresh";
 import { getMenteeSessionPageData } from "@/lib/mentee-interview";
 import { SessionForm } from "./session-form";
+import { InterviewTicket } from "./interview-ticket";
 
 /**
  * Trang đặt ca phỏng vấn mentee — công khai, không cần đăng nhập.
@@ -54,6 +55,7 @@ export default async function MenteeSessionBookingPage(props: {
                     ? `Địa điểm: ${data.booking.venue}`
                     : "Ban tổ chức sẽ gửi địa điểm cụ thể qua email trước ngày phỏng vấn."}
                 </p>
+                <InterviewTicket code={data.booking.checkinToken} />
               </div>
             </Card>
 
