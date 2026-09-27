@@ -1,8 +1,8 @@
 # Bàn giao AI — VAM OS
 
-**Cập nhật lần cuối: 27/09/2026, bởi Codex.** Càng xa ngày này càng nên tự
-kiểm lại bằng `git log` / `gh pr list` thay vì tin nguyên văn — xem bước 2 của
-`CODEX_BAT_DAU.md`.
+**Cập nhật lần cuối: 27/09/2026, bởi Claude Code** (nối tiếp bản Codex viết cùng
+ngày). Càng xa ngày này càng nên tự kiểm lại bằng `git log` / `gh pr list` thay
+vì tin nguyên văn — xem bước 2 của `CODEX_BAT_DAU.md`.
 
 ## Claude Code tiếp tục ngày 28/09 — gửi email mời mentee
 
@@ -11,24 +11,24 @@ thì Claude Code làm tiếp phần gửi mail. Không yêu cầu Support vào C
 Chưa gửi email, chưa đặt lịch tự gửi; việc cung cấp địa chỉ là đầu vào để hoàn
 thiện đợt gửi, không tự suy diễn thành lệnh gửi ngay nếu chủ dự án chưa giao gửi.
 
-### Trạng thái nhận việc
+### Trạng thái nhận việc — cập nhật sau khi Claude Code đọc lại và mở PR
 
-- Làm tiếp tại `D:\AI_App_Embassy\VAM_Platform\vam-os-admin-portal`, nhánh
-  `feat/mentee-offline-interview-workflow`, commit tính năng `1e1e0cf`.
-- Commit đang ở máy local, **chưa push và chưa tạo PR**. Lệnh push trước đó bị bộ
-  duyệt tự động từ chối vì chưa có xác nhận rõ cho việc đưa mã nguồn riêng tư lên
-  GitHub. Chủ dự án chưa trả lời cho phép push; không coi lời nhờ ghi bàn giao này
-  là xác nhận push/merge. Giữ nguyên toàn bộ thay đổi đang có.
-- Các chỉnh sửa kế hoạch/PDF ngày 27/09 còn ở working tree, chưa commit, gồm file
-  bàn giao này, báo cáo offline, HTML/PDF hướng dẫn, README hướng dẫn và test tài liệu.
-  `tmp/` chứa log kiểm thử, ảnh render và bản nháp mô tả PR; không đưa vào commit.
-- Mã QR/check-in/chấm/nhận mentee đã qua bốn cổng tại commit tính năng: 7.963 test
-  đạt, 14 skipped, typecheck/lint/build đạt. Sau lần sửa kế hoạch chỉ chạy lại 8 test
-  hướng dẫn và kiểm trực quan PDF 2 trang; không coi số test cũ là lần chạy toàn bộ
-  trên working tree mới nhất.
-- Migration `supabase/migrations/20260927090000_mentee_offline_workflow.sql` chưa
-  chạy production. Chức năng mới chưa deploy; bộ gửi tự động không cần bấm CRM
-  **chưa được triển khai**. Cơ chế hiện có vẫn là bộ gửi theo lô có nút trong CRM.
+- Nhánh `feat/mentee-offline-interview-workflow`: **đã push, đã mở**
+  [PR #170](https://github.com/vanhoang-spec/vam-os-admin-portal/pull/170).
+  Ba commit: `1e1e0cf` (tính năng, của Codex), `417abb0` (cập nhật hướng dẫn theo
+  kế hoạch chờ địa chỉ), `79b62ef` (sửa khai báo RPC sai trong
+  `lib/production-rpc-contract.ts`, phát hiện lúc đọc lại).
+- **Migration `20260927090000_mentee_offline_workflow.sql` đã dán vào Supabase
+  Production và đã kiểm chứng** (đọc lại catalog: 2 bảng RLS đúng, 4 trigger,
+  8 hàm `vam104_*`, ACL hàm ghi chỉ `service_role`). Chức năng mới vẫn **chưa
+  deploy** — chỉ deploy khi PR #170 được merge.
+- Bốn cổng đã chạy lại TOÀN BỘ trên đúng cây sắp mở PR (không chỉ tin số cũ của
+  Codex): typecheck sạch, lint sạch, **vitest 7.939 ca qua, 0 hỏng**, build
+  thành công, route `/interviews/mentee-offline` biên dịch sạch.
+- Bộ gửi tự động "một lệnh là hệ thống gửi hết, Support không cần bấm CRM"
+  **vẫn chưa được xây** — mã hiện có là nút gửi theo lô thủ công trong CRM
+  (`lib/mentee-invite-dispatch.ts`). Đây là phần việc chính còn lại cho 28/09.
+- `tmp/` chứa log kiểm thử/ảnh render của Codex, không đưa vào commit.
 
 ### Thứ tự làm tiếp khi nhận địa chỉ
 
