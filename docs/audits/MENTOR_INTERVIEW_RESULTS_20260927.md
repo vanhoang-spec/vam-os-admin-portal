@@ -45,7 +45,7 @@ mentor thuộc `UEHM-S12`, không lọc trạng thái application. Không thay �
 
 - `npm run typecheck`: đạt.
 - `npm run lint`: đạt.
-- `npx vitest run`: 7.954 đạt, 14 skipped, không thất bại.
+- `npx vitest run`: 7.963 đạt, 14 skipped, không thất bại.
 - `npm run build`: đạt, gồm trang kết quả và route tải PDF/XLSX.
 - 15 test mới: hồi quy hồ sơ rớt/duyệt/waitlist, phân trang với cap 1, lọc đúng
   S12/mentor/interview, ownership, scope và lỗi đọc, link application, nút xuất

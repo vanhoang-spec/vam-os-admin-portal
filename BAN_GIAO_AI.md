@@ -9,7 +9,7 @@ nút xuất PDF/Excel toàn bộ kết quả S12 ở cuối trang. Không gửi 
 
 Làm trên nhánh riêng `feat/mentor-interview-results`, đã tách độc lập trên `origin/main`; không sửa
 kế hoạch email mentee ngày 28/09 bên dưới. Phần mới không cần migration; bốn cổng
-đạt (7.954 test qua, 14 skipped). Chưa deploy. PR nền #170 còn OPEN khi kiểm lại.
+đạt (7.963 test qua, 14 skipped). Chưa deploy. PR nền #170 còn OPEN khi kiểm lại.
 Chi tiết quyền, kiểm thử và cách đặt base PR:
 [bàn giao kết quả mentor](docs/audits/MENTOR_INTERVIEW_RESULTS_20260927.md).
 
