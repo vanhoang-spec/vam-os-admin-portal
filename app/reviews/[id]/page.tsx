@@ -141,6 +141,7 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
         description={`${roundLabel(review.review_round)} • ${reviewStatusLabel(review.status)}`}
       />
       <ErrorBox message={error} />
+      {review.review_round === "interview" && app?.role_applied === "mentor" && <p className="mb-4 rounded border bg-vam-mint/30 p-3"><Link className="font-semibold text-vam-green underline" href="/interviews/ket-qua-mentor">Xem lại kết quả và nhận xét phỏng vấn mentor S12 sau khi lưu</Link></p>}
 
       {applicationWithdrawn ? (
         <div className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">

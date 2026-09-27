@@ -41,6 +41,7 @@ export default async function InterviewSchedulePage() {
       />
 
       <div className="mb-4">
+        <Link href="/interviews/ket-qua-mentor" className="mb-3 block font-semibold text-vam-green underline">Xem lại kết quả và nhận xét phỏng vấn mentor S12</Link>
         <Link href="/interviews" className="text-sm text-vam-green hover:underline">
           ← Quay lại Phỏng vấn ứng viên
         </Link>

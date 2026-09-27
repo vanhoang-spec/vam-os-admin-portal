@@ -48,6 +48,7 @@ export default async function InterviewsPage(props: { searchParams: Promise<{ in
       />
 
       {/* Nav */}
+      <Link href="/interviews/ket-qua-mentor" className="mb-4 mr-3 inline-block rounded-md border border-vam-green px-4 py-3 text-vam-green">Xem lại application và kết quả phỏng vấn mentor S12</Link>
       <div className="mb-4">
         <Link href="/reviews" className="text-sm text-vam-green hover:underline">
           ← Quay lại Reviews

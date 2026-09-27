@@ -354,7 +354,7 @@ describe("reviewer navigation offers only the helper's own work surfaces", () =>
     // /interviews/lich (22/09/2026): trang gate bằng đúng canSelfClaimInterview
     // nên reviewer mở được; tầng lib còn đòi thêm vai trò interviewer của mùa,
     // nhưng đó là câu từ chối tử tế trên trang, không phải cú đá về trang chủ.
-    const helperAllowed = new Set(["/my-work", "/reviews", "/interviews", "/interviews/lich", "/"]);
+    const helperAllowed = new Set(["/my-work", "/reviews", "/interviews", "/interviews/lich", "/interviews/ket-qua-mentor", "/"]);
     for (const href of hrefs) expect(helperAllowed.has(href)).toBe(true);
   });
 });
