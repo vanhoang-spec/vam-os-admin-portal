@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Mentor phỏng vấn mentee trực tiếp 03–04/10 — Hướng dẫn cho Core Team</title>
+<style>
+  @page { size: A4; margin: 9mm 11mm 8mm 11mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+    --red-bg: #fbeae8;
+    --red-line: #e3a89f;
+    --red-ink: #7a2a1e;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 8.1pt;
+    line-height: 1.34;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.2mm; margin-bottom: 2.6mm;
+  }
+  .eyebrow { font-size: 7pt; letter-spacing: .16em; text-transform: uppercase; color: var(--green); font-weight: 700; }
+  h1 { font-size: 15.5pt; line-height: 1.08; margin: 1mm 0 .8mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 8.6pt; max-width: 145mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.2pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 1.08fr 1fr; gap: 5.4mm; align-items: start; }
+  h2 { font-size: 7.9pt; letter-spacing: .1em; text-transform: uppercase; color: var(--green); margin: 0 0 1.3mm; font-weight: 700; }
+  .block + .block { margin-top: 2.5mm; }
+  p { margin: 0 0 1.3mm; }
+
+  .btn { display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.4mm; font-size: 7.8pt; font-weight: 600; white-space: nowrap; }
+  .ui { background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px; padding: 0 1.2mm; font-size: 7.8pt; white-space: nowrap; }
+  .path { color: var(--green); font-weight: 600; }
+  .ok { color: #1c7a43; font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-bottom: 2.6mm; }
+  .fact { border: 1px solid var(--line); border-radius: 3px; padding: 1.3mm 2mm; background: #fbfdfc; }
+  .fact b { display: block; font-size: 11.5pt; line-height: 1.1; color: var(--green); }
+  .fact.bad b { color: var(--red-ink); }
+  .fact span { font-size: 7.1pt; color: var(--muted); }
+
+  .prep { background: var(--mint); border-left: 3px solid var(--green); padding: 1.8mm 3mm; margin-bottom: 2.6mm; }
+  .prep b.h { display: block; margin-bottom: .5mm; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.2mm; margin-bottom: 1.9mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .1mm;
+    width: 5mm; height: 5mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 7.6pt; text-align: center; line-height: 5mm;
+  }
+  ol.steps b.t { display: block; font-size: 8.8pt; margin-bottom: .2mm; }
+  .who { font-size: 7.2pt; color: var(--muted); }
+
+  ul.tight { margin: 0; padding-left: 4mm; }
+  ul.tight li { margin: .5mm 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 7.7pt; margin-top: 1.2mm; }
+  th, td { border: 1px solid var(--line); padding: 1mm 1.6mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+
+  .warn { background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink); padding: 1.8mm 3mm; }
+  .warn b.h { display: block; margin-bottom: .4mm; }
+  .crit { background: var(--red-bg); border-left: 3px solid var(--red-line); color: var(--red-ink); padding: 1.8mm 3mm; }
+  .crit b.h { display: block; margin-bottom: .4mm; font-size: 8.6pt; }
+
+  .page-break { break-before: page; }
+
+  .decide { border: 1px solid var(--line); border-radius: 3px; padding: 1.6mm 2.4mm; margin-bottom: 1.8mm; background: #fff; }
+  .decide .q { font-weight: 700; display: block; margin-bottom: .6mm; }
+  .decide .opts { display: grid; gap: .6mm; }
+  .decide .opt { display: flex; align-items: baseline; gap: 1.4mm; }
+  .decide .box { flex: none; width: 2.6mm; height: 2.6mm; border: 1.1px solid var(--muted); margin-top: .5mm; }
+
+  footer {
+    margin-top: 2.4mm; border-top: 1px solid var(--line); padding-top: 1.3mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7.1pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════ TRANG 1 ══════════════════════════ -->
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho Core Team · Phỏng vấn mentee trực tiếp 03–04/10</div>
+    <h1>Mentor vào hệ thống và phỏng vấn mentee</h1>
+    <p class="sub">Phần A (trang 1–2): nội dung Core Team dùng để soạn thông báo hoặc video hướng dẫn
+      gửi cho mentor. Phần B (trang 3): những chỗ chưa sẵn sàng, cần anh Hoàng chốt phương án trước 03/10.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 30/09/2026</div>
+</header>
+
+<div class="facts">
+  <div class="fact"><b>267</b><span>mentor đã duyệt Mùa 12</span></div>
+  <div class="fact bad"><b>67 / 267</b><span>đã có tài khoản đăng nhập</span></div>
+  <div class="fact bad"><b>5 / 267</b><span>đã có quyền phỏng vấn mùa này</span></div>
+  <div class="fact"><b>5 tiêu chí</b><span>／ 25 điểm tối đa</span></div>
+</div>
+
+<div class="crit">
+  <b class="h">Đọc trang 3 trước khi gửi thông báo cho mentor</b>
+  Đa số mentor <b>chưa</b> có quyền vào hệ thống phỏng vấn. Phải cấp quyền cho đúng người tham gia
+  03–04/10 trước — xem "Phần B" — nếu không thông báo này sẽ hướng dẫn mentor đăng nhập vào một tài
+  khoản chưa tồn tại.
+</div>
+
+<div class="grid">
+
+  <!-- ─────────────── Cột trái: mentor làm gì, theo thứ tự ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>PHẦN A · Bước 1 — Vào được hệ thống</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Nhận thư "Tài khoản chấm hồ sơ"</b>
+          Thư gửi từ <span class="ui">hello@alumni-mentoring.edu.vn</span> qua Brevo, tiêu đề bắt đầu
+          bằng <b>[UEH Mentoring] Tài khoản chấm hồ sơ…</b>. Nhắc mentor kiểm cả mục <b>Spam</b>.
+          <p class="who">Chỉ gửi được SAU KHI Core Team bấm "Cấp quyền phỏng vấn" cho đúng người — xem trang 3.</p>
+        </li>
+        <li>
+          <b class="t">Bấm link trong thư, đặt mật khẩu</b>
+          Link chỉ dùng được <b>một lần</b> và có hạn. Bấm xong, trang đưa mentor tới ô đặt mật khẩu,
+          rồi <b>tự đăng xuất</b> và đưa về trang đăng nhập — đây là thiết kế cố ý, không phải lỗi.
+        </li>
+        <li>
+          <b class="t">Đăng nhập</b>
+          Vào <span class="ui">os.alumni-mentoring.edu.vn/login</span>, nhập đúng <b>email đã nhận
+          thư mời</b> và mật khẩu vừa đặt.
+          <p class="who">Quên mật khẩu về sau: dùng nút "Đặt lại mật khẩu" ngay trên trang đăng nhập — tự
+            làm được, không cần nhờ Core Team. Có thể chọn "Gửi liên kết đăng nhập qua email" để vào
+            thẳng không cần gõ mật khẩu mỗi lần — nhưng nút này KHÔNG tạo tài khoản mới, chỉ dùng được
+            khi đã đặt mật khẩu ít nhất một lần.</p>
+        </li>
+        <li>
+          <b class="t">Vào đúng mục Phỏng vấn</b>
+          Trên thanh menu: <span class="path">Phỏng vấn → Phỏng vấn mentee trực tiếp</span>.
+        </li>
+      </ol>
+    </div>
+
+    <div class="block">
+      <h2>PHẦN A · Bước 2 — Tìm đúng mentee của mình</h2>
+      <ol class="steps" style="counter-reset: s 4;">
+        <li>
+          <b class="t">Tick ô lọc</b>
+          Tick <span class="ui">☑ Chỉ ứng viên được phân cho tôi</span> phía trên danh sách — màn hình
+          mặc định hiện TẤT CẢ mentee đã đặt ca trong mùa, không tự lọc theo người phỏng vấn.
+        </li>
+        <li>
+          <b class="t">Chờ Support check-in</b>
+          Mentor <b>không tự check-in</b> mentee và <b>không tự xếp phòng/bàn</b> — hai việc này chỉ
+          Support/BTC trực bàn làm được. Mentee xuất hiện trong danh sách của mentor ngay sau khi được
+          xếp vào đúng phòng/bàn của mình.
+        </li>
+        <li>
+          <b class="t">Mở hồ sơ</b>
+          Bấm vào tên mentee để mở hồ sơ — đọc mục <b>"Application đã nộp"</b> (đầy đủ câu trả lời
+          mentee đã nộp lúc ứng tuyển, <b>kể cả câu trả lời hai câu hỏi chuẩn bị</b> nếu mentee đã điền
+          trên trang đặt ca) và mục <b>"Điểm và nhận xét vòng hồ sơ"</b> (điểm reviewer đã chấm trước đó).
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ─────────────── Cột phải: chấm điểm ─────────────── -->
+  <div>
+    <div class="block">
+      <h2>PHẦN A · Bước 3 — Chấm và chốt kết quả</h2>
+      <ol class="steps" style="counter-reset: s 7;">
+        <li>
+          <b class="t">Chấm 5 tiêu chí, mỗi tiêu chí 1–5 điểm</b>
+          <table>
+            <tr><th>Tiêu chí</th><th style="width:20%">Thang</th></tr>
+            <tr><td>Động lực tham gia</td><td>1–5</td></tr>
+            <tr><td>Mục tiêu rõ ràng</td><td>1–5</td></tr>
+            <tr><td>Mức độ cam kết</td><td>1–5</td></tr>
+            <tr><td>Mức độ phù hợp</td><td>1–5</td></tr>
+            <tr><td>Giao tiếp</td><td>1–5</td></tr>
+          </table>
+        </li>
+        <li>
+          <b class="t">Viết nhận xét</b>
+          Ô nhận xét tự do — không bắt buộc theo khuôn mẫu.
+        </li>
+        <li>
+          <b class="t">Chọn kết quả</b>
+          <span class="ok">Đạt làm mentee</span> · <span class="err">Không chọn làm mentee</span> ·
+          <b>Cần BTC xem xét thêm</b>.
+        </li>
+        <li>
+          <b class="t">Nếu Đạt — tick nhận mentee ngay nếu muốn</b>
+          Ô <span class="ui">☐ Nhận làm mentee của tôi</span> — bị khoá nếu mentor đã đủ số mentee tối đa
+          (theo đúng chỉ tiêu mentor đã khai). Không tick vẫn được: hồ sơ "Đạt" sẽ về tay BTC ghép sau.
+        </li>
+        <li>
+          <b class="t">Bấm "Xác nhận kết quả"</b>
+          <b>Lưu là chốt ngay</b>, không có bước ai duyệt lại. Sau này vẫn sửa được (nút "Sửa kết quả /
+          lựa chọn mentee"), mọi lần sửa đều lưu lịch sử cho BTC — nhưng <b>hệ thống không tự gửi email
+          báo đậu/rớt</b> cho mentee.
+        </li>
+      </ol>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Chỗ mentor hay hỏi</b>
+      <ul class="tight">
+        <li><b>"Không thấy mentee nào cả"</b> — thường vì chưa được check-in/xếp bàn, hoặc quên bỏ tick
+          lọc "Chỉ ứng viên được phân cho tôi" trong khi mình chưa được phân ai.</li>
+        <li><b>"Bấm Nhận làm mentee bị khoá"</b> — đã đủ chỉ tiêu mentee. Vẫn chấm "Đạt" bình thường,
+          BTC sẽ ghép người khác sau.</li>
+        <li><b>"Sửa nhầm điểm"</b> — bấm "Sửa kết quả / lựa chọn mentee" trên chính hồ sơ đó, không cần
+          báo Core Team.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 1/3</span>
+  <span>Nội dung Phần A lấy đúng nhãn nút và bước thật trên màn hình — không đổi câu chữ khi soạn thông báo.</span>
+</footer>
+
+<!-- ══════════════════════════ TRANG 2 ══════════════════════════ -->
+<div class="page-break"></div>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho Core Team · Phần A (tiếp)</div>
+    <h1>Rubric chấm điểm — hiện trạng và khoảng trống</h1>
+    <p class="sub">Đây là toàn bộ những gì hệ thống có sẵn cho việc chấm điểm phỏng vấn mentee. Không có
+      thêm định nghĩa nào khác ở nơi khác trong mã nguồn.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 30/09/2026</div>
+</header>
+
+<div class="crit">
+  <b class="h">Khoảng trống — chưa có rubric chi tiết</b>
+  Hệ thống chỉ lưu <b>tên 5 tiêu chí</b> và <b>một con số 1–5</b> cho mỗi tiêu chí. Không có mô tả thế
+  nào là 1 điểm, thế nào là 5 điểm, cho bất kỳ tiêu chí nào, ở bất kỳ đâu trong hệ thống hay tài liệu đã
+  có. Nếu 60–70 mentor lần đầu chấm phỏng vấn cùng lúc trong 2 ngày mà mỗi người tự hiểu thang điểm theo
+  cách riêng, điểm số giữa các phòng sẽ không so sánh được với nhau. <b>Cần một trong hai lựa chọn ở
+  trang 3 trước khi gửi thông báo cho mentor.</b>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="block">
+      <h2>Nguyên văn 5 tiêu chí (đúng như màn hình chấm hiển thị)</h2>
+      <table>
+        <tr><th>Mã trong hệ thống</th><th>Nhãn hiển thị</th></tr>
+        <tr><td><code>score_motivation</code></td><td>Động lực tham gia</td></tr>
+        <tr><td><code>score_goal_clarity</code></td><td>Mục tiêu rõ ràng</td></tr>
+        <tr><td><code>score_commitment</code></td><td>Mức độ cam kết</td></tr>
+        <tr><td><code>score_fit</code></td><td>Mức độ phù hợp</td></tr>
+        <tr><td><code>score_communication</code></td><td>Giao tiếp</td></tr>
+      </table>
+      <p style="margin-top:1.6mm">Tổng tối đa <b>25 điểm</b>. Không có điểm liệt/điểm sàn riêng theo
+        từng tiêu chí — hệ thống chỉ cộng tổng và để mentor tự chọn kết quả (Đạt / Không chọn / Cần BTC
+        xem xét thêm) một cách độc lập với tổng điểm.</p>
+    </div>
+
+    <div class="block">
+      <h2>Những gì mentor thấy TRƯỚC khi chấm</h2>
+      <ul class="tight">
+        <li>Toàn bộ câu trả lời mentee nộp lúc ứng tuyển (mục "Application đã nộp") — kể cả hai câu hỏi
+          chuẩn bị nếu mentee đã điền trước trên trang đặt ca.</li>
+        <li>Điểm và nhận xét của reviewer đã chấm ở vòng hồ sơ (điểm sàng lọc trước đó, tối đa 25 điểm
+          theo 5 tiêu chí riêng của vòng đó — khác bộ tiêu chí phỏng vấn).</li>
+        <li>Không thấy điểm/nhận xét của mentor khác đã phỏng vấn mentee này trước đó trong cùng đợt
+          (nếu có) — mỗi lượt phỏng vấn độc lập.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div>
+    <div class="block">
+      <h2>Việc BTC nên chuẩn bị thêm (không phải việc của hệ thống)</h2>
+      <ul class="tight">
+        <li>Một đoạn hướng dẫn ngắn — bằng lời hoặc bằng video — mô tả 1 điểm/3 điểm/5 điểm nghĩa là gì
+          cho từng tiêu chí, để phát cho mentor đọc trước hôm phỏng vấn.</li>
+        <li>Thời lượng gợi ý mỗi lượt phỏng vấn (hệ thống không giới hạn hay nhắc giờ).</li>
+        <li>Cách xử lý khi hai mentor trong cùng phòng chấm lệch nhau nhiều — hệ thống không tự phát
+          hiện, chỉ BTC đọc lại mới thấy.</li>
+      </ul>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Không phải lỗi — chỉ là chưa thiết kế</b>
+      Đây không phải một chỗ hỏng cần sửa gấp bằng code. 5 tiêu chí + thang 1–5 là đủ để hệ thống vận
+      hành đúng (lưu điểm, cộng tổng, cho phép sửa có lịch sử). Phần còn thiếu là rubric bằng LỜI cho con
+      người đọc — việc này BTC làm bằng tài liệu, không cần chờ kỹ thuật.
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 2/3</span>
+  <span>Nguồn: <code>lib/mentee-offline-core.ts</code> (OFFLINE_SCORES, OFFLINE_OUTCOMES)</span>
+</footer>
+
+<!-- ══════════════════════════ TRANG 3 ══════════════════════════ -->
+<div class="page-break"></div>
+
+<header>
+  <div>
+    <div class="eyebrow">Phần B · Nội bộ — không gửi cho mentor</div>
+    <h1>Cần chốt trước 03/10: ai vào được hệ thống</h1>
+    <p class="sub">Số liệu thật trên production, đo ngày 30/09/2026. Phần này dành cho anh Hoàng và Core
+      Team quyết định — không phải nội dung thông báo cho mentor.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 30/09/2026</div>
+</header>
+
+<div class="facts">
+  <div class="fact"><b>267</b><span>mentor đã duyệt Mùa 12</span></div>
+  <div class="fact bad"><b>67</b><span>có tài khoản đăng nhập (bất kỳ vai trò)</span></div>
+  <div class="fact bad"><b>5</b><span>có quyền phỏng vấn mùa này ngay lúc này</span></div>
+  <div class="fact"><b>3–4</b><span>ngày còn lại tới 03/10</span></div>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="block">
+      <h2>Cách cấp quyền — đã có sẵn, không cần code mới</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Mở trang cấp quyền</b>
+          Menu <span class="path">Ứng tuyển → Danh sách nhân sự tuyển sinh</span>
+          (<span class="ui">/reviews/reviewer-pool</span>), chọn đúng đợt tuyển Mùa 12.
+        </li>
+        <li>
+          <b class="t">Tìm từng mentor, bấm "Cấp quyền phỏng vấn"</b>
+          <b>Không có nút cấp hàng loạt</b> — phải bấm từng dòng một. Một click:
+          <ul class="tight">
+            <li>Nếu mentor <b>chưa có tài khoản</b>: tạo tài khoản (vai trò "reviewer") + gửi ngay thư
+              mời đặt mật khẩu.</li>
+            <li>Luôn luôn: gán quyền "phỏng vấn" cho đúng mùa này — đây là quyền thật sự cần để vào xem
+              hồ sơ mentee.</li>
+            <li>Nếu mentor <b>đã có tài khoản từ trước</b> (61/67 đã sẵn vai trò reviewer): chỉ thêm
+              quyền, không gửi thêm thư.</li>
+          </ul>
+        </li>
+        <li>
+          <b class="t">Gán mentee cụ thể cho từng mentor</b>
+          Riêng biệt, ở <span class="path">Phỏng vấn → Chia hồ sơ Phỏng vấn</span>
+          (<span class="ui">/interviews/assign</span>) — chỉ chọn được trong số mentor đã có quyền ở
+          bước trên.
+        </li>
+      </ol>
+    </div>
+
+    <div class="block crit">
+      <b class="h">Rủi ro gấp nhất — trần thư Brevo là trần THẬT, không phải trần tự đặt</b>
+      Gói Brevo đang dùng giới hạn <b>300 thư/24 giờ cho toàn hệ thống</b> — tính theo cửa sổ trượt, dùng
+      chung cho mọi loại thư (mời mentee chọn ca, mời reviewer/interviewer, đặt lại mật khẩu, thông báo sự
+      kiện…). Bộ gửi thư mời mentee tự giới hạn ở 220/24h, cố ý <b>chừa 80/24h</b> cho tất cả thư còn lại.
+      <p style="margin-top:1mm">Nếu bấm "Cấp quyền phỏng vấn" cho ~200 mentor dồn trong một buổi, phần lớn
+      thư mời đặt mật khẩu <b>rất có thể gửi thất bại</b> vì vượt đúng trần thật đó — hệ thống chỉ ghi lại
+      lỗi (nhật ký gửi thư), <b>không tự động xếp hàng gửi lại</b>. Người bấm nút sẽ không thấy ngay là thư
+      đã gửi hay chưa nếu không mở lại nhật ký.</p>
+      <p style="margin-top:1mm"><b>Khuyến nghị:</b> rải việc cấp quyền ra ít nhất 2–3 ngày, ưu tiên đúng
+      danh sách mentor thật sự có mặt 03–04/10 (không cấp cho cả 267 người).</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="block">
+      <h2>Những câu cần anh Hoàng chốt</h2>
+
+      <div class="decide">
+        <span class="q">1. Danh sách mentor thật sự phỏng vấn 03–04/10 lấy từ đâu?</span>
+        <div class="opts">
+          <div class="opt"><span class="box"></span><span>Từ kết quả mentor đã xác nhận lịch rảnh 2 ngày này (nếu đã thu thập)</span></div>
+          <div class="opt"><span class="box"></span><span>BTC tự chốt danh sách tay, gửi cho Core Team cấp quyền</span></div>
+        </div>
+      </div>
+
+      <div class="decide">
+        <span class="q">2. Ai ngồi bấm "Cấp quyền phỏng vấn" và theo lịch nào?</span>
+        <div class="opts">
+          <div class="opt"><span class="box"></span><span>Bắt đầu ngay hôm nay (30/09), rải đều 2–3 ngày, có người trực theo dõi nhật ký gửi thư mỗi buổi</span></div>
+          <div class="opt"><span class="box"></span><span>Phương án khác — ghi rõ bên lề</span></div>
+        </div>
+      </div>
+
+      <div class="decide">
+        <span class="q">3. Rubric chi tiết cho 5 tiêu chí (trang 2)</span>
+        <div class="opts">
+          <div class="opt"><span class="box"></span><span>Viết thêm hướng dẫn 1–5 điểm cho từng tiêu chí trước khi gửi thông báo mentor</span></div>
+          <div class="opt"><span class="box"></span><span>Giữ nguyên 5 tên tiêu chí ngắn, để mentor tự hiểu</span></div>
+        </div>
+      </div>
+
+      <div class="decide">
+        <span class="q">4. Gán mentee cho từng mentor ở /interviews/assign</span>
+        <div class="opts">
+          <div class="opt"><span class="box"></span><span>Làm trước, xong danh sách trước ngày phỏng vấn</span></div>
+          <div class="opt"><span class="box"></span><span>Để BTC làm ngay tại chỗ trong lúc check-in</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block warn">
+      <b class="h">Không có bộ đếm sẵn sàng tổng</b>
+      Trang <span class="ui">/reviews/reviewer-pool</span> cho xem từng dòng mentor đã có quyền phỏng vấn
+      hay chưa, nhưng <b>không có ô "đã sẵn sàng X/267"</b>. Muốn biết số mentor đã cấp xong tại một thời
+      điểm, phải rà tay từng dòng hoặc nhờ kỹ thuật chạy một truy vấn nhanh.
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 3/3</span>
+  <span>Nguồn: reviewer-pool (lib/enable-reviewer.ts), RPC vam084_grant_recruitment_participation, DAILY_EMAIL_LIMIT (lib/mentee-invite-dispatch-core.ts)</span>
+</footer>
+
+</body>
+</html>
