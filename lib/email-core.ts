@@ -1836,9 +1836,12 @@ export function buildMenteeSessionInviteEmail(input: {
     "",
     "Địa điểm cụ thể có thể chưa hiện ngay lúc bạn chọn ca — ban tổ chức đang hoàn tất và sẽ cập nhật trước ngày phỏng vấn. Gần tới ngày, bạn mở lại ĐÚNG đường dẫn này (không cần chờ thêm email nào khác) để xem địa chỉ chính xác cho đúng ca của mình.",
     "",
-    "Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này. Bạn có thể gõ câu trả lời ngay tại trang đặt ca ở trên (không bắt buộc, nhưng giúp mentor chuẩn bị tốt hơn):",
+    "Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này. Không bắt buộc, nhưng giúp mentor chuẩn bị tốt hơn:",
     "",
     ...MENTEE_PREP_QUESTIONS.flatMap((q, i) => [`${i + 1}. ${q.question}`, `   (${q.hint})`]),
+    "",
+    "Điền câu trả lời tại đây (cùng một đường dẫn chọn ca ở trên):",
+    input.bookingUrl,
     "",
     `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
     "",
@@ -1856,7 +1859,7 @@ export function buildMenteeSessionInviteEmail(input: {
       `<p>Hạn chọn ca: <strong>${escapeHtml(deadline)}</strong>. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.</p>`,
       "<p>Chọn xong, trang sẽ xác nhận ca, địa điểm và hiện mã QR check-in ngay. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng. Cần xem vé hoặc đổi ca, mở lại đúng đường dẫn này trước hạn.</p>",
       "<p>Địa điểm cụ thể có thể chưa hiện ngay lúc bạn chọn ca — ban tổ chức đang hoàn tất và sẽ cập nhật trước ngày phỏng vấn. Gần tới ngày, bạn mở lại <strong>đúng đường dẫn này</strong> (không cần chờ thêm email nào khác) để xem địa chỉ chính xác cho đúng ca của mình.</p>",
-      "<p>Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này. Bạn có thể gõ câu trả lời ngay tại trang đặt ca ở trên (không bắt buộc, nhưng giúp mentor chuẩn bị tốt hơn):</p>",
+      "<p>Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này. Không bắt buộc, nhưng giúp mentor chuẩn bị tốt hơn:</p>",
       '<ol style="padding-left:20px;margin:0 0 16px">' +
         MENTEE_PREP_QUESTIONS.map(
           (q) =>
@@ -1864,6 +1867,7 @@ export function buildMenteeSessionInviteEmail(input: {
             `<span style="color:#4f6b60;font-size:13px">(${escapeHtml(q.hint)})</span></li>`
         ).join("") +
         "</ol>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Điền câu trả lời</a></p>`,
       `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
       `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho bạn, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.bookingUrl)}</p>`
     ].join("")
