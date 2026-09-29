@@ -259,7 +259,12 @@ export function ApplyMenteeForm({
           required
           options={YEAR_OF_STUDY_OPTIONS}
         />
-        <TextField name="mssv" label="MSSV (nếu là UEH)" placeholder="Optional" />
+        <TextField
+          name="mssv"
+          label="MSSV (nếu là UEH)"
+          placeholder="VD: 31231020001"
+          helpText="Không bắt buộc. Nếu điền, vui lòng gõ đầy đủ mã số sinh viên, không viết tắt."
+        />
         <TextField
           name="gpa_4"
           label="GPA hệ 4 (nếu sẵn sàng chia sẻ)"
