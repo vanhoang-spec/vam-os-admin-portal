@@ -7,8 +7,10 @@ import Link from "next/link";
 /**
  * Ca phỏng vấn mentee — giai đoạn 1, ngày 3 và 4/10/2026.
  *
- * 24 ca 30 phút, 25 ghế mỗi ca (5 phòng × 5 mentor phỏng vấn song song). Trang
- * này là chỗ ban tổ chức chỉnh ghế, điền địa điểm, và gửi thư mời chọn ca.
+ * 28 ca 30 phút (14 ca/ngày). Số ghế khác nhau theo ngày vì số phòng khác
+ * nhau: thứ Bảy 3 phòng × 6 mentor = 18 ghế/ca, Chủ nhật 6 phòng × 5 mentor
+ * = 28 ghế/ca (chừa buffer so với sức chứa phòng là 30). Trang này là chỗ
+ * ban tổ chức chỉnh ghế, điền địa điểm, và gửi thư mời chọn ca.
  *
  * Phép kiểm quyền nằm trong lib/mentee-session-admin.ts và
  * lib/mentee-invite-dispatch.ts, chạy cho cả lượt đọc lẫn mọi lượt ghi — trang

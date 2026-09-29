@@ -39,17 +39,30 @@ describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
     expect((await db.query("select revision from mentee_interview_operations")).rows).toEqual([{revision:1}]);
     await rejects(()=>db.exec("update mentee_interview_bookings set status='cancelled'"),"ALREADY_CHECKED_IN");
   }));
-  it("cấu hình không vượt 25 mentee mỗi ca",()=>isolated(async()=>{
-    await rejects(()=>db.exec("update interview_sessions set seat_limit=26"),"SESSION_MAX_25");
-    expect((await db.query("select seat_limit from interview_sessions")).rows).toEqual([{seat_limit:25}]);
+  it("cấu hình không vượt 30 mentee mỗi ca — trần vật lý cao nhất (Chủ nhật)",()=>isolated(async()=>{
+    await rejects(()=>db.exec(`update interview_sessions set seat_limit=31 where id='${ids.session}'`),"SESSION_MAX_30");
+    expect((await db.query("select seat_limit from interview_sessions where id=$1",[ids.session])).rows).toEqual([{seat_limit:18}]);
   }));
-  it("phải check-in; giới hạn đúng 5 phòng x 5 bàn; từ chối người chưa được cấp quyền",()=>isolated(async()=>{
+  it("phải check-in; giới hạn phòng/bàn đúng theo NGÀY của ca; từ chối người chưa được cấp quyền",()=>isolated(async()=>{
     await rejects(()=>save(db,"assign",0,{room:1,desk:1,interviewerId:ids.mentor}),"CHECKIN_REQUIRED");
     await save(db,"checkin",0);
-    await rejects(()=>save(db,"assign",1,{room:6,desk:1,interviewerId:ids.mentor}),"INVALID_ASSIGNMENT");
-    await rejects(()=>save(db,"assign",1,{room:5,desk:6,interviewerId:ids.mentor}),"INVALID_ASSIGNMENT");
+    // Thứ Bảy (ids.session): 3 phòng × 6 bàn.
+    // desk=7 vượt cận thô 1..6 của chính RPC — chặn trước khi chạm trigger.
+    await rejects(()=>save(db,"assign",1,{room:1,desk:7,interviewerId:ids.mentor}),"INVALID_ASSIGNMENT");
+    // room=4 vẫn trong cận thô 1..6, nhưng thứ Bảy chỉ có 3 phòng — trigger chặn.
+    await rejects(()=>save(db,"assign",1,{room:4,desk:1,interviewerId:ids.mentor}),"ROOM_DESK_OUT_OF_RANGE");
     await rejects(()=>save(db,"assign",1,{room:1,desk:1,interviewerId:ids.other}),"INVALID_ASSIGNMENT");
-    await save(db,"assign",1,{room:5,desk:5,interviewerId:ids.mentor});
+    await save(db,"assign",1,{room:3,desk:6,interviewerId:ids.mentor});
+  }));
+  it("Chủ nhật: 6 phòng × 5 bàn — trần khác hẳn thứ Bảy",()=>isolated(async()=>{
+    const menteeSun=uuid(21);
+    await addCandidate(db,menteeSun,ids.sessionSun);
+    await save(db,"checkin",0,{},ids.support,menteeSun);
+    // room=7 vượt cận thô 1..6 của RPC — chặn trước khi chạm trigger.
+    await rejects(()=>save(db,"assign",1,{room:7,desk:1,interviewerId:ids.mentor},ids.support,menteeSun),"INVALID_ASSIGNMENT");
+    // desk=6 vẫn trong cận thô 1..6, nhưng Chủ nhật chỉ có 5 bàn — trigger chặn.
+    await rejects(()=>save(db,"assign",1,{room:1,desk:6,interviewerId:ids.mentor},ids.support,menteeSun),"ROOM_DESK_OUT_OF_RANGE");
+    await save(db,"assign",1,{room:6,desk:5,interviewerId:ids.mentor},ids.support,menteeSun);
   }));
   it("không phân một interviewer hai ứng viên trong cùng ca",()=>isolated(async()=>{
     await assigned(db);await addCandidate(db,uuid(20));await save(db,"checkin",0,{},ids.support,uuid(20));

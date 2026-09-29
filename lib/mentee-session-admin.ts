@@ -33,8 +33,14 @@ const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** 5 phòng × 5 mentor cùng lúc, mỗi lượt 30 phút. */
-export const MAX_SEATS_PER_SESSION = 25;
+/**
+ * Trần vật lý cao nhất trong hai ngày: Chủ nhật 6 phòng × 5 mentor = 30.
+ * Thứ Bảy chỉ 3 phòng × 6 mentor = 18 — thấp hơn, nhưng trần ở đây là một
+ * chặn an toàn chung cho cả mùa, không phải số ghế thật của từng ngày; số
+ * ghế thật (18 / 28) do migration 20260929100000 seed và người vận hành
+ * chỉnh riêng từng ca ở màn hình này.
+ */
+export const MAX_SEATS_PER_SESSION = 30;
 
 function log(message: string, error?: unknown) {
   console.error(`[mentee-session-admin] ${message}`, error ?? "");

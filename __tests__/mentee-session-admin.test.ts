@@ -149,10 +149,10 @@ describe("2. ô ghế để trống nghĩa là ĐÓNG", () => {
     expect(daGhi).toHaveLength(0);
   });
 
-  it("số quá lớn bị chặn — 25 ghế một ca là con số không ai gõ có chủ ý", async () => {
-    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "26", venue: "", closed: "" });
+  it("số quá lớn bị chặn — 30 là trần vật lý cao nhất (Chủ nhật: 6 phòng × 5 mentor)", async () => {
+    const result = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "31", venue: "", closed: "" });
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("tối đa 25");
+    expect(result.message).toContain("tối đa 30");
     expect(daGhi).toHaveLength(0);
   });
 
