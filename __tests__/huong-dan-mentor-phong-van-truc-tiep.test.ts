@@ -65,9 +65,27 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain(`${DAILY_EMAIL_LIMIT - DISPATCH_RESERVE}/24h`);
   });
 
-  it("gọi đúng tên khoảng trống rubric — không giả vờ đã có rubric chi tiết", () => {
-    expect(text).toContain("chưa có rubric chi tiết");
+  it("câu hỏi gợi ý (tài liệu Mùa 11, BTC gửi 30/09) xếp đúng theo 5 tiêu chí đang chạy, không đổi thang điểm", () => {
+    expect(text).toContain("Câu hỏi gợi ý theo tiêu chí");
+    expect(text).toContain("tài liệu chấm Mùa 11");
+    expect(text).toContain("KHÔNG đổi cách chấm");
+    expect(text).toContain("vẫn 5 tiêu chí/25 điểm");
     expect(text).not.toContain("rubric chi tiết đã có sẵn");
+    // Hai tiêu chí chưa có câu hỏi gợi ý riêng — không được âm thầm bỏ qua.
+    expect(text).toContain("Mức độ phù hợp");
+    expect(text).toContain("chưa có câu hỏi riêng");
+  });
+
+  it("nêu rõ khoảng trống phân loại G/C/E/F chưa có chỗ ghi trong hệ thống", () => {
+    expect(text).toContain("G/C/E/F");
+    expect(text).toContain("KHÔNG có ô nào để mentor ghi phân loại này");
+    expect(text).toContain("lib/mentee-offline-core.ts");
+  });
+
+  it("danh sách mentor 03–04/10 dẫn đúng nguồn Google Sheet đã nhận, và nói rõ còn Đợt 2 chưa khớp", () => {
+    expect(text).toContain("ĐĂNG KÝ CHẤM VÒNG ĐƠN + PHỎNG VẤN");
+    expect(text).toContain("dùng lúc điền đơn trên hệ thống VAM OS");
+    expect(text).toContain("Đợt 2 (10–11/10)");
   });
 
   it("phần B tách rõ khỏi nội dung gửi mentor", () => {
