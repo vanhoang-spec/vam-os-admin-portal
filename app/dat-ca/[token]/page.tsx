@@ -3,6 +3,7 @@ import { LiveRefresh } from "@/app/events/[id]/live-refresh";
 import { getMenteeSessionPageData } from "@/lib/mentee-interview";
 import { SessionForm } from "./session-form";
 import { InterviewTicket } from "./interview-ticket";
+import { PrepAnswersForm } from "./prep-answers-form";
 
 /**
  * Trang đặt ca phỏng vấn mentee — công khai, không cần đăng nhập.
@@ -57,6 +58,11 @@ export default async function MenteeSessionBookingPage(props: {
                 </p>
                 <InterviewTicket code={data.booking.checkinToken} />
               </div>
+            </Card>
+
+            <Card>
+              <h2 className="mb-1 text-base font-semibold text-vam-ink">Chia sẻ trước với Mentor</h2>
+              <PrepAnswersForm token={params.token} answers={data.prepAnswers} />
             </Card>
 
             {data.canChange ? (
@@ -143,6 +149,11 @@ export default async function MenteeSessionBookingPage(props: {
                   </div>
                 </>
               )}
+            </Card>
+
+            <Card>
+              <h2 className="mb-1 text-base font-semibold text-vam-ink">Chia sẻ trước với Mentor</h2>
+              <PrepAnswersForm token={params.token} answers={data.prepAnswers} />
             </Card>
 
             <LiveRefresh />

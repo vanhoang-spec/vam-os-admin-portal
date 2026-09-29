@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { bookMenteeSession, changeMenteeSession } from "@/lib/mentee-interview";
+import { bookMenteeSession, changeMenteeSession, saveMenteePrepAnswers } from "@/lib/mentee-interview";
 import { MENTEE_BOOKING_PATH_PREFIX } from "@/lib/mentee-interview-core";
+import { MENTEE_PREP_QUESTIONS } from "@/lib/email-core";
 import {
+  type PrepAnswersState,
   type SessionBookingState
 } from "@/lib/mentee-interview-action-types";
 
@@ -55,4 +57,29 @@ export async function changeSessionAction(
     message: result.message,
     sessionLabel: result.sessionLabel ?? null
   };
+}
+
+/**
+ * Lưu hai câu trả lời chuẩn bị. Không bắt buộc — mentee bỏ trống ô nào thì ô
+ * đó lưu thành chuỗi rỗng, ghi đè đúng chuỗi rỗng đó, không phải "giữ nguyên
+ * giá trị cũ": người xoá hết chữ trong ô rồi bấm Lưu đang nói "xoá câu trả
+ * lời này", không phải bấm nhầm.
+ */
+export async function savePrepAnswersAction(
+  token: string,
+  _previousState: PrepAnswersState,
+  formData: FormData
+): Promise<PrepAnswersState> {
+  const answers: [string, string] = [
+    String(formData.get(MENTEE_PREP_QUESTIONS[0].rawPayloadKey) ?? ""),
+    String(formData.get(MENTEE_PREP_QUESTIONS[1].rawPayloadKey) ?? "")
+  ];
+  const result = await saveMenteePrepAnswers({ token, answers });
+
+  if (!result.ok) {
+    return { status: "error", message: result.message };
+  }
+
+  revalidatePath(`${MENTEE_BOOKING_PATH_PREFIX}/${token}`);
+  return { status: "success", message: result.message };
 }

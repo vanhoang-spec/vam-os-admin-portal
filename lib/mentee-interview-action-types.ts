@@ -18,3 +18,13 @@ export const INITIAL_SESSION_BOOKING_STATE: SessionBookingState = {
   message: "",
   sessionLabel: null
 };
+
+export type PrepAnswersState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+export const INITIAL_PREP_ANSWERS_STATE: PrepAnswersState = {
+  status: "idle",
+  message: ""
+};

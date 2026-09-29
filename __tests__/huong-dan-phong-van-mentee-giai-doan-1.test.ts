@@ -60,7 +60,8 @@ describe("Kế hoạch chốt 29/09 — gửi thư mời ngay, địa điểm b�
     expect(text).toContain("6 phòng × 5 mentor = 28 mentee/ca");
     expect(text).toContain("08:00 – 11:30");
     expect(text).toContain("13:30 – 17:00");
-    expect(text).toContain("23:59 ngày 30/09/2026");
+    expect(text).toContain("17:00 ngày 02/10/2026");
+    expect(text).not.toContain("30/09/2026");
     expect(text).toContain("hết ghế của ca đó thì khoá lại, không chọn được nữa");
     // Bản cũ đồng nhất cả hai ngày — không được sót lại con số đó.
     expect(text).not.toContain("25 mentor cùng lúc");
@@ -98,13 +99,18 @@ describe("Kế hoạch chốt 29/09 — gửi thư mời ngay, địa điểm b�
   it("thư mời trang 2 khớp nguyên văn hàm đang gửi thật (lib/email-core.ts)", () => {
     for (const line of [
       "Chúc mừng bạn đã qua vòng hồ sơ Mùa 12. Ban tổ chức mời bạn tham",
-      "Hạn chọn ca: 23:59 ngày 30/09/2026. Sau hạn này mà chưa chọn ca,",
+      "Hạn chọn ca: 17:00 ngày 02/10/2026. Sau hạn này mà chưa chọn ca,",
       "Địa điểm cụ thể có thể chưa hiện ngay lúc bạn chọn ca",
       "Bạn mong muốn được đồng hành cùng một Mentor như thế nào?",
       "Điều gì khiến bạn mong muốn có một Mentor đồng hành trong"
     ]) {
       expect(text).toContain(line);
     }
+  });
+
+  it("mentee điền câu trả lời ngay trên trang đặt ca; mentor thấy lại lúc chấm", () => {
+    expect(text).toContain("Bạn có thể gõ câu trả lời ngay tại trang đặt ca ở trên");
+    expect(text).toContain("kể cả câu trả lời hai câu hỏi chuẩn bị nếu mentee đã điền trên trang đặt ca");
   });
 
   it("PDF vẫn đủ hai trang", () => {
