@@ -206,6 +206,7 @@ describe("enable-reviewer Auth pagination", () => {
       seasonLabel: "Mùa 12",
       linkType: "invite",
       tokenHash: "hash-invite",
+      participationRole: "reviewer",
       adminUserId: "admin-user-1",
       requestOrigin: "https://os.alumni-mentoring.edu.vn"
     });

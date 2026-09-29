@@ -223,6 +223,9 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
 
     case "reviewer_invite_new":
     case "reviewer_invite_recovery":
+      // participationRole: "interviewer" cho bản mặc định — hiện đủ mọi dòng có
+      // thể xuất hiện (kể cả khối Training chỉ interviewer mới thấy), cùng
+      // nguyên tắc "thân thư lấy từ lượt gọi có đủ giá trị tuỳ chọn" ở trên.
       return one(
         buildReviewerInviteEmail({
           mentorName: S("ten_nguoi_nhan"),
@@ -230,7 +233,8 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
           linkUrl: S("link_dat_mat_khau"),
           linkType: slot.id === "reviewer_invite_recovery" ? "recovery" : "invite",
           loginUrl: S("link_dang_nhap"),
-          loginEmail: S("email_dang_nhap")
+          loginEmail: S("email_dang_nhap"),
+          participationRole: "interviewer"
         })
       );
 

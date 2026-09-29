@@ -268,6 +268,7 @@ export async function enableMentorAsReviewer(input: {
     seasonLabel: season ? seasonLabel(String(season.code ?? ""), season.name ?? null) : "",
     linkType: link.type,
     tokenHash: link.tokenHash,
+    participationRole: input.participationRole,
     adminUserId,
     requestOrigin: await getPublicOrigin()
   });

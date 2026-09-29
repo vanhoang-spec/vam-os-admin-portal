@@ -550,6 +550,7 @@ export async function sendReviewerInvite(input: {
   seasonLabel: string;
   linkType: PasswordLinkType;
   tokenHash: string;
+  participationRole: "reviewer" | "interviewer";
   adminUserId?: string | null;
   requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
@@ -575,7 +576,8 @@ export async function sendReviewerInvite(input: {
     linkUrl,
     linkType: input.linkType,
     loginUrl: `${base}/login`,
-    loginEmail: input.toEmail
+    loginEmail: input.toEmail,
+    participationRole: input.participationRole
   });
 
   const message = await resolveAutomationEmail({
