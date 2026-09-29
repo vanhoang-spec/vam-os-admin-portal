@@ -276,7 +276,8 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         linkUrl: SAMPLE_LINK,
         linkType: "invite",
         loginUrl: `${ORIGIN}/login`,
-        loginEmail: SAMPLE_EMAIL
+        loginEmail: SAMPLE_EMAIL,
+        participationRole: "interviewer"
       })
     )
   },

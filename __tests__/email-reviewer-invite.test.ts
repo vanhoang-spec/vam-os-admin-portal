@@ -66,14 +66,15 @@ afterEach(() => {
 });
 
 describe("lời thư", () => {
-  const letter = (linkType: "invite" | "recovery") =>
+  const letter = (linkType: "invite" | "recovery", participationRole: "reviewer" | "interviewer" = "reviewer") =>
     buildReviewerInviteEmail({
       mentorName: "Trần Văn B",
       seasonLabel: "Mùa 12",
       linkUrl: "https://os.example.org/reset-password#token_hash=abc&type=invite",
       linkType,
       loginUrl: "https://os.example.org/login",
-      loginEmail: "B@Example.com"
+      loginEmail: "B@Example.com",
+      participationRole
     });
 
   it("hai bước: đặt mật khẩu, rồi đăng nhập ở đâu bằng email nào, vào mục Đánh giá", () => {
@@ -89,6 +90,20 @@ describe("lời thư", () => {
     expect(letter("recovery").text).toContain("không còn dùng được");
     expect(letter("invite").text).not.toContain("không còn dùng được");
   });
+
+  it("interviewer nhận thêm thông tin buổi Training phỏng vấn; reviewer thì không", () => {
+    const interviewer = letter("invite", "interviewer");
+    expect(interviewer.text).toContain("Training Chấm phỏng vấn Tuyển Mentee Mùa 12");
+    expect(interviewer.text).toContain("20:00 - 20:30 ngày 2/10");
+    expect(interviewer.text).toContain("https://meet.google.com/kex-msfx-xva");
+    expect(interviewer.text).toContain("Hướng dẫn tiêu chí và cách thức đánh giá ứng viên");
+    expect(interviewer.html).toContain("meet.google.com/kex-msfx-xva");
+
+    const reviewer = letter("invite", "reviewer");
+    expect(reviewer.text).not.toContain("Training");
+    expect(reviewer.text).not.toContain("meet.google.com");
+    expect(reviewer.html).not.toContain("meet.google.com");
+  });
 });
 
 describe("gửi thư", () => {
@@ -98,6 +113,7 @@ describe("gửi thư", () => {
     seasonLabel: "Mùa 12",
     linkType: "invite" as const,
     tokenHash: "hash-1",
+    participationRole: "interviewer" as const,
     adminUserId: "admin-user-1"
   };
 

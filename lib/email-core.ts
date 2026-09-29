@@ -418,6 +418,24 @@ export function reviewerInviteSubject(seasonLabel: string): string {
 }
 
 /**
+ * Buổi Training chấm phỏng vấn Tuyển Mentee Mùa 12, chốt với BTC 30/09/2026.
+ * Chỉ một lần, gắn với đợt phỏng vấn 03–04/10 — XOÁ HẲN HẰNG SỐ NÀY VÀ KHỐI
+ * TRAINING TRONG buildReviewerInviteEmail SAU KHI BUỔI 02/10 ĐÃ DIỄN RA, đừng
+ * để lại cho mùa sau đọc nhầm là lịch cố định.
+ */
+const INTERVIEWER_TRAINING_NOTICE = {
+  time: "20:00 - 20:30 ngày 2/10",
+  format: "Online",
+  meetUrl: "https://meet.google.com/kex-msfx-xva",
+  agenda: [
+    "Giới thiệu quy trình Vòng phỏng vấn Tuyển Mentee",
+    "Hướng dẫn tiêu chí và cách thức đánh giá ứng viên",
+    "Làm rõ những điểm cần lưu ý trong quá trình phỏng vấn",
+    "Hướng dẫn quy trình lựa chọn Mentee sau phỏng vấn"
+  ]
+} as const;
+
+/**
  * Letter for a mentor who agreed to score applications or interview this
  * season — or, with `linkType: "recovery"`, a fresh password link for an
  * account that has never been signed into.
@@ -425,6 +443,10 @@ export function reviewerInviteSubject(seasonLabel: string): string {
  * The link only sets a password; it does not sign anyone in. So the letter
  * spells the login out as a second step, the same shape as the participant
  * letter.
+ *
+ * `participationRole` chọn có chèn khối Training phỏng vấn hay không — chỉ
+ * người được cấp quyền INTERVIEWER mới cần buổi đó; người chỉ chấm hồ sơ
+ * (reviewer) không liên quan tới vòng phỏng vấn.
  */
 export function buildReviewerInviteEmail(input: {
   mentorName: string;
@@ -433,11 +455,13 @@ export function buildReviewerInviteEmail(input: {
   linkType: "invite" | "recovery";
   loginUrl: string;
   loginEmail: string;
+  participationRole: "reviewer" | "interviewer";
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.mentorName);
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
   const loginEmail = normalizeEmailAddress(input.loginEmail) ?? safeDisplayName(input.loginEmail, "");
   const subject = reviewerInviteSubject(input.seasonLabel);
+  const isInterviewer = input.participationRole === "interviewer";
 
   const intro =
     input.linkType === "recovery"
@@ -446,6 +470,7 @@ export function buildReviewerInviteEmail(input: {
   const step2 = `Bước 2 — Đăng nhập tại ${input.loginUrl} bằng email ${loginEmail} và mật khẩu vừa đặt, rồi vào mục “Đánh giá” để xem các hồ sơ được phân công.`;
   const expiry =
     "Đường dẫn là riêng cho anh/chị, chỉ dùng được một lần và có hạn sử dụng — vui lòng không chuyển tiếp. Nếu đã hết hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.";
+  const trainingIntro = `Nhằm đảm bảo anh/chị có đầy đủ thông tin và thống nhất cách thức đánh giá trong quá trình phỏng vấn, ban tổ chức tổ chức buổi Training Chấm phỏng vấn Tuyển Mentee ${season} với thông tin như sau:`;
 
   const lines = [
     `Kính gửi ${name},`,
@@ -457,12 +482,40 @@ export function buildReviewerInviteEmail(input: {
     "",
     step2,
     "",
+    ...(isInterviewer
+      ? [
+          trainingIntro,
+          "",
+          "Thông tin buổi Training:",
+          `- Thời gian: ${INTERVIEWER_TRAINING_NOTICE.time}`,
+          `- Hình thức: ${INTERVIEWER_TRAINING_NOTICE.format}`,
+          `- Link tham dự: ${INTERVIEWER_TRAINING_NOTICE.meetUrl}`,
+          "- Nội dung chính:",
+          ...INTERVIEWER_TRAINING_NOTICE.agenda.map((item) => `  + ${item}`),
+          ""
+        ]
+      : []),
     expiry,
     "",
     "Trân trọng cảm ơn anh/chị.",
     "",
     SIGNATURE_TEXT
   ];
+
+  const trainingHtml = isInterviewer
+    ? [
+        `<p>${escapeHtml(trainingIntro)}</p>`,
+        '<p style="margin-bottom:4px"><strong>Thông tin buổi Training:</strong></p>',
+        '<ul style="margin-top:0">',
+        `<li>Thời gian: ${escapeHtml(INTERVIEWER_TRAINING_NOTICE.time)}</li>`,
+        `<li>Hình thức: ${escapeHtml(INTERVIEWER_TRAINING_NOTICE.format)}</li>`,
+        `<li>Link tham dự: <a href="${escapeHtml(INTERVIEWER_TRAINING_NOTICE.meetUrl)}">${escapeHtml(INTERVIEWER_TRAINING_NOTICE.meetUrl)}</a></li>`,
+        "<li>Nội dung chính:<ul>",
+        INTERVIEWER_TRAINING_NOTICE.agenda.map((item) => `<li>${escapeHtml(item)}</li>`).join(""),
+        "</ul></li>",
+        "</ul>"
+      ].join("")
+    : "";
 
   const html = wrapHtml(
     [
@@ -471,6 +524,7 @@ export function buildReviewerInviteEmail(input: {
       "<p><strong>Bước 1</strong> — Bấm nút dưới đây để đặt mật khẩu:</p>",
       `<p style="margin:20px 0"><a href="${escapeHtml(input.linkUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Đặt mật khẩu</a></p>`,
       `<p><strong>Bước 2</strong> — Đăng nhập tại <a href="${escapeHtml(input.loginUrl)}">${escapeHtml(input.loginUrl)}</a> bằng email <strong>${escapeHtml(loginEmail)}</strong> và mật khẩu vừa đặt, rồi vào mục <strong>Đánh giá</strong> để xem các hồ sơ được phân công.</p>`,
+      trainingHtml,
       `<p>${escapeHtml(expiry)}</p>`,
       `<p style="color:#4f6b60;font-size:13px">Nếu nút trên không hoạt động, anh/chị mở đường dẫn sau: ${escapeHtml(input.linkUrl)}</p>`
     ].join("")
