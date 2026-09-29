@@ -68,6 +68,8 @@ const RAW_PAYLOAD_LABELS: Record<string, string> = {
   referrer_or_source: "Kênh biết đến chương trình",
   referrer_or_source_other: "Kênh biết đến khác",
   additional_notes: "Thông tin bổ sung",
+  mentor_expectation_text: "Mong muốn về Mentor đồng hành",
+  mentor_reason_text: "Lý do muốn có Mentor đồng hành",
   mentor_total_work_years: "Tổng số năm kinh nghiệm làm việc",
   mentor_people_management_years: "Số năm quản lý con người / đội ngũ",
   mentor_largest_team_size: "Đội ngũ lớn nhất trực tiếp quản lý",

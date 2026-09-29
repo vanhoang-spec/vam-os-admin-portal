@@ -12,6 +12,7 @@ import {
   sessionFullLabel,
   totalRemaining
 } from "@/lib/mentee-interview-core";
+import { MENTEE_PREP_QUESTIONS } from "@/lib/email-core";
 import { BOOKING_ELIGIBLE_STATUSES } from "@/lib/interview-schedule-core";
 import { readAllPages } from "@/lib/paged-read";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -60,6 +61,25 @@ function serviceClient() {
   }
 }
 
+/** Trần độ dài một câu trả lời chuẩn bị — đủ rộng cho một đoạn văn, không phải một bài luận. */
+const PREP_ANSWER_MAX_LENGTH = 2000;
+
+export type PrepQuestion = { question: string; hint: string; value: string };
+
+/**
+ * Đọc hai câu trả lời chuẩn bị từ `raw_payload` — cùng khoá mà mentor thấy lại
+ * trong "Application đã nộp" lúc phỏng vấn (xem RAW_PAYLOAD_LABELS). Không có
+ * bảng riêng: hai câu này là một phần của hồ sơ, không phải dữ liệu vận hành.
+ */
+function readPrepAnswers(rawPayload: unknown): PrepQuestion[] {
+  const payload = (rawPayload ?? {}) as Record<string, unknown>;
+  return MENTEE_PREP_QUESTIONS.map((q) => ({
+    question: q.question,
+    hint: q.hint,
+    value: clean(payload[q.rawPayloadKey])
+  }));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Đọc trang
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +100,7 @@ export type MenteeSessionPageData =
       deadlineLabel: string | null;
       hotlineZalo: string;
       support: { name: string; phone: string };
+      prepAnswers: PrepQuestion[];
     }
   | {
       ok: true;
@@ -99,6 +120,7 @@ export type MenteeSessionPageData =
       deadlineLabel: string | null;
       hotlineZalo: string;
       support: { name: string; phone: string };
+      prepAnswers: PrepQuestion[];
     };
 
 const INVALID_LINK: MenteeSessionPageData = {
@@ -130,7 +152,7 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
 
   const { data: app, error: appError } = await client
     .from("applications")
-    .select("id,status,full_name,role_applied,source,season_id")
+    .select("id,status,full_name,role_applied,source,season_id,raw_payload")
     .eq("id", String(invite.application_id))
     .maybeSingle();
   if (appError || !app) {
@@ -138,6 +160,7 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
     return INVALID_LINK;
   }
   const candidateName = clean(app.full_name) || "bạn";
+  const prepAnswers = readPrepAnswers(app.raw_payload);
 
   // Đã có chỗ → trang trở thành thẻ xác nhận. Kiểm trước mọi thứ khác: một
   // người đã giữ chỗ không cần biết ca nào còn trống.
@@ -179,7 +202,8 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
       canChange: hasBookableSession(grid.days),
       deadlineLabel: grid.deadlineLabel,
       hotlineZalo: HOTLINE_ZALO,
-      support: SUPPORT
+      support: SUPPORT,
+      prepAnswers
     };
   }
 
@@ -207,7 +231,8 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
     totalRemaining: totalRemaining(grid.days),
     deadlineLabel: grid.deadlineLabel,
     hotlineZalo: HOTLINE_ZALO,
-    support: SUPPORT
+    support: SUPPORT,
+    prepAnswers
   };
 }
 
@@ -384,4 +409,88 @@ export async function changeMenteeSession(input: {
 
   const label = sessionFullLabel(normIso(payload.starts_at), normIso(payload.ends_at));
   return { ok: true, message: "Đã đổi sang ca mới.", sessionLabel: label };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Câu trả lời chuẩn bị — ghi thẳng vào raw_payload, không qua RPC
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Không có phép giữ chỗ nào ở đây — hai mentee không tranh nhau một ô chữ, chỉ
+// một người viết vào đúng hồ sơ của mình. Đường ghi hẹp: chỉ đụng đúng hai khoá
+// của MENTEE_PREP_QUESTIONS trong raw_payload, đọc lại ngay trước khi ghi để
+// không đè lên các trường khác đã có trong đơn.
+
+export type SavePrepAnswersResult = { ok: boolean; message: string };
+
+const PREP_ERROR_MESSAGES: Record<string, string> = {
+  invalid_token: "Đường dẫn không còn hiệu lực — bạn mở lại từ email của ban tổ chức.",
+  not_found: "Không tìm thấy hồ sơ — bạn tải lại trang rồi thử lại.",
+  application_not_eligible: `Hồ sơ của bạn hiện không ở bước này. Cần hỗ trợ, bạn liên hệ Zalo ban tổ chức ${HOTLINE_ZALO}.`
+};
+
+export async function saveMenteePrepAnswers(input: {
+  token: unknown;
+  answers: [unknown, unknown];
+}): Promise<SavePrepAnswersResult> {
+  const client = serviceClient();
+  if (!client) return { ok: false, message: SAFE_ERROR };
+
+  const token = clean(input.token);
+  if (!token || !isValidUuid(token)) return { ok: false, message: PREP_ERROR_MESSAGES.invalid_token };
+
+  const { data: invite, error: inviteError } = await client
+    .from("mentee_interview_invites")
+    .select("application_id")
+    .eq("token", token)
+    .maybeSingle();
+  if (inviteError) {
+    log("prep answers: invite lookup failed", inviteError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!invite?.application_id) return { ok: false, message: PREP_ERROR_MESSAGES.invalid_token };
+
+  const { data: app, error: appError } = await client
+    .from("applications")
+    .select("id,status,role_applied,source,raw_payload")
+    .eq("id", String(invite.application_id))
+    .maybeSingle();
+  if (appError) {
+    log("prep answers: application lookup failed", appError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!app) return { ok: false, message: PREP_ERROR_MESSAGES.not_found };
+
+  // Đủ điều kiện = đúng như lúc trang cho hiện form: đang ở bước đặt ca, hoặc
+  // đã đặt xong. Hồ sơ bị rút hay đổi hướng khác thì không ghi vào nữa.
+  const { data: booking, error: bookingError } = await client
+    .from("mentee_interview_bookings")
+    .select("id")
+    .eq("application_id", String(app.id))
+    .eq("status", "booked")
+    .maybeSingle();
+  if (bookingError) {
+    log("prep answers: booking lookup failed", bookingError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!booking && !isEligible(app)) {
+    return { ok: false, message: PREP_ERROR_MESSAGES.application_not_eligible };
+  }
+
+  const clip = (value: unknown) => clean(value).slice(0, PREP_ANSWER_MAX_LENGTH);
+  const patch: Record<string, string> = {};
+  MENTEE_PREP_QUESTIONS.forEach((q, index) => {
+    patch[q.rawPayloadKey] = clip(input.answers[index]);
+  });
+
+  const currentPayload = (app.raw_payload ?? {}) as Record<string, unknown>;
+  const { error: updateError } = await client
+    .from("applications")
+    .update({ raw_payload: { ...currentPayload, ...patch } })
+    .eq("id", String(app.id));
+  if (updateError) {
+    log("prep answers: update failed", updateError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+
+  return { ok: true, message: "Đã lưu câu trả lời." };
 }

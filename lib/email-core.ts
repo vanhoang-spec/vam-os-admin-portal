@@ -1787,6 +1787,26 @@ export function buildEventSurveyEmail(input: {
  * Ngày phỏng vấn là THAM SỐ, không viết cứng: giai đoạn 2 (10–11/10) dùng lại
  * đúng hàm này, và một thư viết cứng "03–04/10" sẽ nói sai với cả đợt đó.
  */
+/**
+ * Hai câu hỏi chuẩn bị trước phỏng vấn — MỘT nguồn cho cả thư mời và trang đặt
+ * ca (`app/dat-ca/[token]`), nơi mentee điền thẳng câu trả lời nếu muốn.
+ * `rawPayloadKey` là khoá ghi vào `applications.raw_payload`, và đúng khoá đó
+ * hiện lại cho mentor trong "Application đã nộp" lúc phỏng vấn — không cần
+ * đường đọc riêng, chỉ cần `RAW_PAYLOAD_LABELS` biết tên khoá này.
+ */
+export const MENTEE_PREP_QUESTIONS = [
+  {
+    rawPayloadKey: "mentor_expectation_text",
+    question: "Bạn mong muốn được đồng hành cùng một Mentor như thế nào?",
+    hint: "Ví dụ: về lĩnh vực chuyên môn, kinh nghiệm, tính cách, cách hỗ trợ hoặc những điều bạn kỳ vọng ở Mentor."
+  },
+  {
+    rawPayloadKey: "mentor_reason_text",
+    question: "Điều gì khiến bạn mong muốn có một Mentor đồng hành trong hành trình sắp tới?",
+    hint: "Bạn hy vọng Mentor có thể hỗ trợ, định hướng hoặc giúp bạn phát triển ở những khía cạnh nào?"
+  }
+] as const;
+
 export function buildMenteeSessionInviteEmail(input: {
   candidateName: string;
   seasonLabel: string;
@@ -1816,12 +1836,9 @@ export function buildMenteeSessionInviteEmail(input: {
     "",
     "Địa điểm cụ thể có thể chưa hiện ngay lúc bạn chọn ca — ban tổ chức đang hoàn tất và sẽ cập nhật trước ngày phỏng vấn. Gần tới ngày, bạn mở lại ĐÚNG đường dẫn này (không cần chờ thêm email nào khác) để xem địa chỉ chính xác cho đúng ca của mình.",
     "",
-    "Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này:",
+    "Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này. Bạn có thể gõ câu trả lời ngay tại trang đặt ca ở trên (không bắt buộc, nhưng giúp mentor chuẩn bị tốt hơn):",
     "",
-    "1. Bạn mong muốn được đồng hành cùng một Mentor như thế nào?",
-    "   (Ví dụ: về lĩnh vực chuyên môn, kinh nghiệm, tính cách, cách hỗ trợ hoặc những điều bạn kỳ vọng ở Mentor.)",
-    "2. Điều gì khiến bạn mong muốn có một Mentor đồng hành trong hành trình sắp tới?",
-    "   (Bạn hy vọng Mentor có thể hỗ trợ, định hướng hoặc giúp bạn phát triển ở những khía cạnh nào?)",
+    ...MENTEE_PREP_QUESTIONS.flatMap((q, i) => [`${i + 1}. ${q.question}`, `   (${q.hint})`]),
     "",
     `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
     "",
@@ -1839,12 +1856,13 @@ export function buildMenteeSessionInviteEmail(input: {
       `<p>Hạn chọn ca: <strong>${escapeHtml(deadline)}</strong>. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.</p>`,
       "<p>Chọn xong, trang sẽ xác nhận ca, địa điểm và hiện mã QR check-in ngay. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng. Cần xem vé hoặc đổi ca, mở lại đúng đường dẫn này trước hạn.</p>",
       "<p>Địa điểm cụ thể có thể chưa hiện ngay lúc bạn chọn ca — ban tổ chức đang hoàn tất và sẽ cập nhật trước ngày phỏng vấn. Gần tới ngày, bạn mở lại <strong>đúng đường dẫn này</strong> (không cần chờ thêm email nào khác) để xem địa chỉ chính xác cho đúng ca của mình.</p>",
-      "<p>Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này:</p>",
+      "<p>Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này. Bạn có thể gõ câu trả lời ngay tại trang đặt ca ở trên (không bắt buộc, nhưng giúp mentor chuẩn bị tốt hơn):</p>",
       '<ol style="padding-left:20px;margin:0 0 16px">' +
-        '<li style="margin-bottom:8px">Bạn mong muốn được đồng hành cùng một Mentor như thế nào?<br>' +
-        '<span style="color:#4f6b60;font-size:13px">(Ví dụ: về lĩnh vực chuyên môn, kinh nghiệm, tính cách, cách hỗ trợ hoặc những điều bạn kỳ vọng ở Mentor.)</span></li>' +
-        '<li>Điều gì khiến bạn mong muốn có một Mentor đồng hành trong hành trình sắp tới?<br>' +
-        '<span style="color:#4f6b60;font-size:13px">(Bạn hy vọng Mentor có thể hỗ trợ, định hướng hoặc giúp bạn phát triển ở những khía cạnh nào?)</span></li>' +
+        MENTEE_PREP_QUESTIONS.map(
+          (q) =>
+            `<li style="margin-bottom:8px">${escapeHtml(q.question)}<br>` +
+            `<span style="color:#4f6b60;font-size:13px">(${escapeHtml(q.hint)})</span></li>`
+        ).join("") +
         "</ol>",
       `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
       `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho bạn, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.bookingUrl)}</p>`

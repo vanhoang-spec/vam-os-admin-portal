@@ -108,6 +108,11 @@ describe("Kế hoạch chốt 29/09 — gửi thư mời ngay, địa điểm b�
     }
   });
 
+  it("mentee điền câu trả lời ngay trên trang đặt ca; mentor thấy lại lúc chấm", () => {
+    expect(text).toContain("Bạn có thể gõ câu trả lời ngay tại trang đặt ca ở trên");
+    expect(text).toContain("kể cả câu trả lời hai câu hỏi chuẩn bị nếu mentee đã điền trên trang đặt ca");
+  });
+
   it("PDF vẫn đủ hai trang", () => {
     const pdf = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf"), "latin1");
     expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(2);
