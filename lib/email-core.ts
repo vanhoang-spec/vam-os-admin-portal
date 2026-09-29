@@ -1814,6 +1814,13 @@ export function buildMenteeSessionInviteEmail(input: {
     "",
     "Chọn xong, trang sẽ xác nhận ca, địa điểm và hiện mã QR check-in ngay. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng. Cần xem vé hoặc đổi ca, mở lại đúng đường dẫn này trước hạn.",
     "",
+    "Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này:",
+    "",
+    "1. Bạn mong muốn được đồng hành cùng một Mentor như thế nào?",
+    "   (Ví dụ: về lĩnh vực chuyên môn, kinh nghiệm, tính cách, cách hỗ trợ hoặc những điều bạn kỳ vọng ở Mentor.)",
+    "2. Điều gì khiến bạn mong muốn có một Mentor đồng hành trong hành trình sắp tới?",
+    "   (Bạn hy vọng Mentor có thể hỗ trợ, định hướng hoặc giúp bạn phát triển ở những khía cạnh nào?)",
+    "",
     `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
     "",
     "Hẹn gặp bạn!",
@@ -1829,6 +1836,13 @@ export function buildMenteeSessionInviteEmail(input: {
       `<p style="margin:20px 0"><a href="${escapeHtml(input.bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn ca phỏng vấn</a></p>`,
       `<p>Hạn chọn ca: <strong>${escapeHtml(deadline)}</strong>. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.</p>`,
       "<p>Chọn xong, trang sẽ xác nhận ca, địa điểm và hiện mã QR check-in ngay. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng. Cần xem vé hoặc đổi ca, mở lại đúng đường dẫn này trước hạn.</p>",
+      "<p>Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này:</p>",
+      '<ol style="padding-left:20px;margin:0 0 16px">' +
+        '<li style="margin-bottom:8px">Bạn mong muốn được đồng hành cùng một Mentor như thế nào?<br>' +
+        '<span style="color:#4f6b60;font-size:13px">(Ví dụ: về lĩnh vực chuyên môn, kinh nghiệm, tính cách, cách hỗ trợ hoặc những điều bạn kỳ vọng ở Mentor.)</span></li>' +
+        '<li>Điều gì khiến bạn mong muốn có một Mentor đồng hành trong hành trình sắp tới?<br>' +
+        '<span style="color:#4f6b60;font-size:13px">(Bạn hy vọng Mentor có thể hỗ trợ, định hướng hoặc giúp bạn phát triển ở những khía cạnh nào?)</span></li>' +
+        "</ol>",
       `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
       `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho bạn, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.bookingUrl)}</p>`
     ].join("")
