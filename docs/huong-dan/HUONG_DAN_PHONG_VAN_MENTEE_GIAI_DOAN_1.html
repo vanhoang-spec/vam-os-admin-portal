@@ -22,183 +22,171 @@
 
   body {
     font-family: "Segoe UI", "Arial", sans-serif;
-    font-size: 8.3pt;
-    line-height: 1.36;
+    font-size: 8.1pt;
+    line-height: 1.34;
     color: var(--ink);
     margin: 0;
   }
 
   header {
     display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
-    border-bottom: 3px solid var(--green); padding-bottom: 2.2mm; margin-bottom: 2.8mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.2mm; margin-bottom: 2.6mm;
   }
   .eyebrow { font-size: 7pt; letter-spacing: .16em; text-transform: uppercase; color: var(--green); font-weight: 700; }
-  h1 { font-size: 17pt; line-height: 1.08; margin: 1mm 0 .8mm; font-weight: 700; }
-  .sub { color: var(--muted); font-size: 8.8pt; max-width: 136mm; margin: 0; }
+  h1 { font-size: 15.5pt; line-height: 1.08; margin: 1mm 0 .8mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 8.6pt; max-width: 140mm; margin: 0; }
   .stamp { text-align: right; font-size: 7.2pt; color: var(--muted); white-space: nowrap; }
   .stamp b { color: var(--ink); font-weight: 600; }
 
   .grid { display: grid; grid-template-columns: 1.08fr 1fr; gap: 5.4mm; align-items: start; }
-  h2 { font-size: 8pt; letter-spacing: .1em; text-transform: uppercase; color: var(--green); margin: 0 0 1.4mm; font-weight: 700; }
-  .block + .block { margin-top: 2.8mm; }
-  p { margin: 0 0 1.4mm; }
+  h2 { font-size: 7.9pt; letter-spacing: .1em; text-transform: uppercase; color: var(--green); margin: 0 0 1.3mm; font-weight: 700; }
+  .block + .block { margin-top: 2.5mm; }
+  p { margin: 0 0 1.3mm; }
 
   .btn { display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
-    border-radius: 3px; padding: 0 1.4mm; font-size: 7.9pt; font-weight: 600; white-space: nowrap; }
-  .btn.solid { background: var(--green); color: #fff; }
-  .ui { background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px; padding: 0 1.2mm; font-size: 7.9pt; white-space: nowrap; }
-  .ui.long { white-space: normal; }
+    border-radius: 3px; padding: 0 1.4mm; font-size: 7.8pt; font-weight: 600; white-space: nowrap; }
+  .ui { background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px; padding: 0 1.2mm; font-size: 7.8pt; white-space: nowrap; }
   .path { color: var(--green); font-weight: 600; }
-  .err { color: #9a2a22; font-weight: 600; }
 
-  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-bottom: 2.8mm; }
-  .fact { border: 1px solid var(--line); border-radius: 3px; padding: 1.4mm 2mm; background: #fbfdfc; }
-  .fact b { display: block; font-size: 12.5pt; line-height: 1.1; color: var(--green); }
-  .fact span { font-size: 7.2pt; color: var(--muted); }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-bottom: 2.6mm; }
+  .fact { border: 1px solid var(--line); border-radius: 3px; padding: 1.3mm 2mm; background: #fbfdfc; }
+  .fact b { display: block; font-size: 11.5pt; line-height: 1.1; color: var(--green); }
+  .fact span { font-size: 7.1pt; color: var(--muted); }
 
-  .prep { background: var(--mint); border-left: 3px solid var(--green); padding: 2mm 3mm; margin-bottom: 2.8mm; }
+  .prep { background: var(--mint); border-left: 3px solid var(--green); padding: 1.8mm 3mm; margin-bottom: 2.6mm; }
   .prep b.h { display: block; margin-bottom: .5mm; }
 
   ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
-  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.4mm; margin-bottom: 2.1mm; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.2mm; margin-bottom: 1.9mm; }
   ol.steps > li::before {
     content: counter(s); position: absolute; left: 0; top: .1mm;
-    width: 5.2mm; height: 5.2mm; border-radius: 50%; background: var(--green); color: #fff;
-    font-weight: 700; font-size: 7.8pt; text-align: center; line-height: 5.2mm;
+    width: 5mm; height: 5mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 7.6pt; text-align: center; line-height: 5mm;
   }
-  ol.steps b.t { display: block; font-size: 9pt; margin-bottom: .2mm; }
-  .who { font-size: 7.3pt; color: var(--muted); }
-
-  table { width: 100%; border-collapse: collapse; font-size: 7.9pt; margin-top: 1.2mm; }
-  th, td { border: 1px solid var(--line); padding: .9mm 1.5mm; text-align: left; vertical-align: top; }
-  th { background: var(--mint); font-weight: 600; }
+  ol.steps b.t { display: block; font-size: 8.8pt; margin-bottom: .2mm; }
+  .who { font-size: 7.2pt; color: var(--muted); }
 
   ul.tight { margin: 0; padding-left: 4mm; }
   ul.tight li { margin: .5mm 0; }
 
-  .warn { background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink); padding: 2mm 3mm; }
+  .warn { background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink); padding: 1.8mm 3mm; }
   .warn b.h { display: block; margin-bottom: .4mm; }
 
-  /* ── Trang 2: hai lá thư ─────────────────────────────────────────── */
+  /* ── Trang 2: thư mời + vận hành ─────────────────────────────────── */
   .page-break { break-before: page; }
   .letters { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; align-items: start; }
   .letter { border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
-  .letter .meta { background: #f6f9f7; border-bottom: 1px solid var(--line); padding: 1.6mm 2.4mm; font-size: 7.6pt; }
+  .letter .meta { background: #f6f9f7; border-bottom: 1px solid var(--line); padding: 1.6mm 2.4mm; font-size: 7.5pt; }
   .letter .meta b { color: var(--ink); }
-  .letter .meta .subj { display: block; margin-top: .6mm; font-weight: 600; color: var(--ink); font-size: 8.2pt; }
-  .letter .body { padding: 2.4mm 3mm; white-space: pre-wrap; font-size: 8.2pt; line-height: 1.42; }
+  .letter .meta .subj { display: block; margin-top: .6mm; font-weight: 600; color: var(--ink); font-size: 8.1pt; }
+  .letter .body { padding: 2.2mm 3mm; white-space: pre-wrap; font-size: 7.7pt; line-height: 1.38; }
   .letter .body .lnk { color: var(--green); word-break: break-all; }
-  .when { font-size: 7.6pt; color: var(--muted); margin: 0 0 1.4mm; }
+  .when { font-size: 7.5pt; color: var(--muted); margin: 0 0 1.3mm; }
 
-  footer { margin-top: 2.6mm; border-top: 1px solid var(--line); padding-top: 1.4mm;
+  footer { margin-top: 2.4mm; border-top: 1px solid var(--line); padding-top: 1.3mm;
     display: flex; justify-content: space-between; gap: 4mm; font-size: 7pt; color: var(--muted); }
 </style>
 </head>
 <body>
 <header>
-  <div><div class="eyebrow">Support team · Bản rà soát trước ngày gửi · Trang 1/2</div>
-  <h1>Phỏng vấn mentee — kế hoạch gửi thư mời</h1>
-  <p class="sub">Chuẩn bị ngày 28/09/2026 · Phỏng vấn trực tiếp 03 &amp; 04/10/2026</p></div>
-  <div class="stamp">VAM OS · UEH Mentoring<br>Cập nhật cuối: <b>27/09/2026</b></div>
+  <div><div class="eyebrow">Support team · Bản rà soát trước khi gửi · Trang 1/2</div>
+  <h1>Phỏng vấn mentee — gửi thư mời hôm nay, địa điểm bổ sung sau</h1>
+  <p class="sub">Cập nhật 29/09/2026 · Phỏng vấn trực tiếp 03 &amp; 04/10/2026</p></div>
+  <div class="stamp">VAM OS · UEH Mentoring<br>Cập nhật cuối: <b>29/09/2026</b></div>
 </header>
-<div class="warn" style="margin-bottom:3mm">
-  <b class="h">Ba điều chỉnh đã chốt</b>
-  <b>Chờ địa chỉ chính xác ngày 28/09</b> để đưa thẳng vào email mời mentee.
-  <b>Ngày 28/09, chủ chương trình sẽ giao lệnh cho hệ thống gửi đồng loạt</b> đến danh sách mentee được duyệt.
-  <b>Support không cần vào CRM để bấm gửi email.</b> Hiện chưa có lệnh gửi và chưa gửi thư theo kế hoạch này.
+<div class="warn" style="margin-bottom:2.8mm">
+  <b class="h">Quyết định chốt hôm nay 29/09</b>
+  <b>Gửi thư mời NGAY HÔM NAY</b>, dù chưa có địa chỉ chính xác. Thư và trang chọn ca không nhắc tới địa chỉ nào cả — điều này có chủ ý, không phải thiếu sót.
+  <b>Địa chỉ dự kiến có khoảng 01/10.</b> Điền riêng cho từng ngày (03/10 và 04/10 có thể ở hai địa điểm khác nhau) ngay tại màn hình <span class="path">Ca phỏng vấn mentee</span>.
+  <b>Mentee tự thấy địa chỉ khi mở lại đúng link trong thư mời</b>, bất cứ lúc nào kể cả sau ngày 01/10 — không gửi thêm thư nào khác.
 </div>
 <div class="facts">
-  <div class="fact"><b>24 ca</b><span>30 phút · 12 ca mỗi ngày</span></div>
-  <div class="fact"><b>25 mentee/ca</b><span>tối đa · ai đặt trước giữ chỗ trước</span></div>
-  <div class="fact"><b>25 mentor</b><span>5 phòng × 5 mentor mỗi phòng</span></div>
+  <div class="fact"><b>28 ca</b><span>30 phút · 14 ca mỗi ngày</span></div>
+  <div class="fact"><b>18 / 28</b><span>ghế mỗi ca — thứ Bảy / Chủ nhật, KHÁC nhau</span></div>
+  <div class="fact"><b>475</b><span>mentee đang chờ thư, 644 chỗ tổng hai ngày</span></div>
   <div class="fact"><b>30/09</b><span>hạn chọn ca hiện tại: 23:59</span></div>
 </div>
 <div class="grid">
   <div>
     <div class="block">
-      <h2>Từ hôm nay đến ngày gửi</h2>
+      <h2>Từ hôm nay đến ngày phỏng vấn</h2>
       <ol class="steps">
-        <li><b class="t">Hôm nay — Support rà soát</b><span class="who">Support team · Core team</span><br>
-          Kiểm danh sách mentee được duyệt mời phỏng vấn: đúng người, đúng email, không trùng và không có hồ sơ đã rút.
-          Kiểm tên, SĐT liên hệ và dữ liệu hồ sơ để hỗ trợ khi có thắc mắc. Báo các trường hợp cần BTC quyết định; chưa tự gửi thư.</li>
-        <li><b class="t">Ngày 28/09 — chốt địa chỉ và nội dung</b><span class="who">Chủ chương trình · BTC</span><br>
-          Cung cấp tên địa điểm, địa chỉ đầy đủ, cơ sở/tòa nhà và nơi tập trung check-in; thêm đường dẫn bản đồ nếu có.
-          Đưa thông tin chính xác vào <b>email mời</b> và trang đặt ca. Không gửi bản còn ô trống hoặc câu “sẽ báo địa điểm sau”.</li>
-        <li><b class="t">Ngày 28/09 — giao hệ thống gửi</b><span class="who">Chủ chương trình ra lệnh · Hệ thống thực hiện</span><br>
-          Chỉ bắt đầu sau khi địa chỉ, nội dung và danh sách nhận đã chốt. Hệ thống gửi đồng loạt theo danh sách được duyệt,
-          theo dõi đã gửi/lỗi/chờ gửi và tránh gửi trùng. <b>Không cần thao tác gửi trong CRM.</b></li>
-        <li><b class="t">Sau gửi — Support theo dõi</b><span class="who">Support team</span><br>
-          Nhận báo cáo gửi; đối chiếu các trường hợp lỗi hoặc chưa nhận. Hướng dẫn mentee kiểm Spam/Quảng cáo,
-          mở link riêng và lưu ảnh QR. Báo lại trường hợp cần sửa email hoặc gửi lại; không tự mở đợt gửi khác.</li>
+        <li><b class="t">Hôm nay 29/09 — Bấm gửi thư mời</b><span class="who">Chủ dự án hoặc Support có quyền</span><br>
+          Mở <span class="path">Ca phỏng vấn mentee</span> → mục <span class="btn">Gửi thư mời chọn ca</span>. Tích ô xác nhận rồi bấm nút.
+          Mỗi lần bấm gửi <b>tối đa 40 thư</b>; còn 475 người chờ nên phải <b>bấm lại nhiều lần</b> cho tới khi số "Chờ thư mời" về 0.</li>
+        <li><b class="t">Có thể kéo dài vài ngày — không phải lỗi</b><span class="who">Trần hạn mức</span><br>
+          Gói thư dùng chung toàn hệ thống 300 thư/24 giờ, chừa 80 thư cho thư khác — còn khoảng <b>220 thư/24 giờ</b> cho đợt này.
+          475 người chia làm hơn hai cửa sổ 24 giờ. Hết hạn mức thì nút tự khoá, quay lại bấm tiếp sau; không phải chỉnh gì.</li>
+        <li><b class="t">Khoảng 01/10 — Điền địa chỉ</b><span class="who">Chủ dự án</span><br>
+          Điền địa điểm cho các ca <b>03/10</b> và các ca <b>04/10</b> — có thể khác nhau, điền riêng từng ngày ở đúng màn hình đó.
+          Không cần thao tác gì thêm: mentee mở lại link cũ sẽ tự thấy.</li>
+        <li><b class="t">Trước 02/10 — Support rà soát</b><span class="who">Support team</span><br>
+          Kiểm còn ca nào thiếu địa điểm ở màn hình <span class="path">Ca phỏng vấn mentee</span>; báo chủ dự án nếu còn sót.
+          Hỗ trợ mentee kiểm Spam/Quảng cáo nếu báo chưa nhận thư, và nhắc mở lại đúng link để xem địa chỉ.</li>
       </ol>
     </div>
-    <div class="warn block"><b class="h">Lưu ý hạn mức gửi</b>
-      Gói hiện tại có <b>300 thư mỗi 24 giờ</b>, dùng chung cả hệ thống. Bộ gửi hiện có chừa 80 thư cho các thư khác.
-      “Gửi đồng loạt” là giao một đợt cho hệ thống xử lý; có thể phải chia lô hoặc chờ hạn mức, không có nghĩa mọi thư đến cùng lúc.
-      Trước khi gửi cần đối chiếu số người nhận với hạn mức còn lại để kịp hạn chọn ca.
+    <div class="warn block"><b class="h">Nút "Áp địa điểm cho mọi ca" — cẩn thận</b>
+      Nút này ghi đè <b>CẢ HAI NGÀY cùng một địa chỉ</b>. Hai ngày khác địa điểm thì KHÔNG dùng nút này —
+      sửa riêng từng ca theo từng ngày ở bảng danh sách ca bên dưới cùng màn hình.
     </div>
   </div>
   <div>
-    <div class="prep"><b class="h">Support kiểm trước khi báo sẵn sàng</b>
+    <div class="prep"><b class="h">Trước khi bấm gửi</b>
       <ul class="tight">
-        <li>Đã có địa chỉ chính xác và hướng dẫn đến điểm check-in.</li>
-        <li>Email và trang đặt ca ghi cùng địa điểm, ngày giờ, hạn đăng ký.</li>
-        <li>Danh sách được duyệt chỉ gồm mentee của đợt này; không tự thêm danh sách chờ hoặc hồ sơ cần xem thêm.</li>
-        <li>Mỗi mentee nhận link riêng đúng hồ sơ; nội dung không còn hứa gửi email xác nhận thứ hai.</li>
-        <li>Bản xem trước email đã được chốt; hệ thống gửi và báo cáo được kiểm tra trước khi nhận lệnh.</li>
+        <li>475 mentee đủ điều kiện, 0 người đã nhận thư — số này tự cập nhật trên màn hình.</li>
+        <li>Nội dung thư đã chốt (xem trang 2) — không có ô trống, cố ý không có địa chỉ.</li>
+        <li>Mỗi mentee nhận link riêng đúng hồ sơ; mở lại bất cứ lúc nào để xem ca và địa điểm khi có.</li>
+        <li>Không có thư xác nhận thứ hai — chọn xong, trang xác nhận và hiện QR ngay tại chỗ.</li>
       </ul>
     </div>
     <div class="block"><h2>Mentee chọn ca và giữ vé</h2>
-      <p>Mở link riêng trong thư, chọn <b>một ca 30 phút</b>. Ai đăng ký trước được giữ chỗ trước; đủ <b>25 bạn</b> thì ca khóa mờ, không chọn được.</p>
+      <p>Mở link riêng trong thư, chọn <b>một ca 30 phút</b>. Ai đăng ký trước được giữ chỗ trước;
+      hết ghế của ca đó thì khoá lại, không chọn được nữa. Ghế mỗi ca <b>khác nhau theo ngày</b> (xem ô sự kiện phía trên).</p>
       <p>Chọn xong, <b>xác nhận và QR hiện ngay trên trang</b>. Mentee tải ảnh QR về điện thoại hoặc nhấn giữ ảnh để lưu.
-      <b>Không gửi thêm email xác nhận.</b> Mở lại link trong thư mời để xem ca và QR.</p>
+      <b>Không gửi thêm email xác nhận.</b> Mở lại link trong thư mời để xem ca, địa điểm (khi có) và QR.</p>
       <p>Đổi ca trước hạn: chỗ cũ chỉ nhả khi ca mới còn chỗ. Sau check-in không tự đổi ca; cần hỗ trợ thì gặp Support.</p>
     </div>
     <div class="block"><h2>Ngày phỏng vấn</h2>
-      <p>03/10 và 04/10: <b>08:00 – 11:00</b> và <b>14:00 – 17:00</b>. Tổng 600 chỗ, mỗi ca 30 phút.
+      <p>03/10 và 04/10: <b>08:00 – 11:30</b> và <b>13:30 – 17:00</b>, mỗi ca 30 phút, 14 ca/ngày.
       Nhắc mentee đến trước giờ hẹn 10 phút, mang QR đã lưu.</p>
-      <p><b>5 phòng × 5 mentor mỗi phòng = 25 mentor cùng lúc.</b> Support tự phân phòng, bàn và điều phối tại mỗi phòng.</p>
-    </div>
-    <div class="warn block"><b class="h">Kế hoạch và trạng thái hệ thống</b>
-      Đây là bản kế hoạch cập nhật để team rà soát. Chức năng QR/check-in/chấm và nhận mentee mới đã được kiểm thử cục bộ,
-      <b>chưa triển khai production</b>. Cần hoàn tất triển khai và kiểm tra trước khi gửi link cho mentee.
-      Việc gửi ngày 28/09 chờ lệnh của chủ chương trình, chưa đặt lịch tự gửi.
+      <p><b>Thứ Bảy 03/10:</b> 3 phòng × 6 mentor = 18 mentee/ca.
+      <b>Chủ nhật 04/10:</b> 6 phòng × 5 mentor = 28 mentee/ca (phòng chứa được 30, chừa buffer 2). Support tự phân phòng, bàn theo đúng ngày.</p>
     </div>
   </div>
 </div>
-<footer><span>Support rà soát và báo điểm cần sửa; chủ chương trình chốt lệnh gửi.</span><span>Ban tổ chức UEH Mentoring</span></footer>
+<footer><span>Support rà soát trước khi bấm gửi; chủ dự án điền địa chỉ khi có.</span><span>Ban tổ chức UEH Mentoring</span></footer>
 <div class="page-break"></div>
 <header>
-  <div><div class="eyebrow">Support team · Nội dung thư và vận hành · Trang 2/2</div>
+  <div><div class="eyebrow">Support team · Nội dung thư đang gửi thật · Trang 2/2</div>
   <h1>Email mời và quy trình tại buổi phỏng vấn</h1>
-  <p class="sub">Bản nội dung để rà soát; điền địa chỉ chính xác trước khi giao hệ thống gửi.</p></div>
-  <div class="stamp">Cập nhật cuối: <b>27/09/2026</b></div>
+  <p class="sub">Nguyên văn thư hệ thống gửi — không phải bản dự kiến. Sửa mã nguồn thì tài liệu này phải sửa theo.</p></div>
+  <div class="stamp">Cập nhật cuối: <b>29/09/2026</b></div>
 </header>
 <div class="letters">
   <div>
-    <p class="when"><b>Bản dự kiến — chưa gửi.</b> Các ô trong ngoặc vuông phải được điền đúng trước khi gửi thật.</p>
-    <div class="letter"><div class="meta"><span class="subj">[UEH Mentoring] Mời bạn chọn ca phỏng vấn trực tiếp — Mùa 12</span></div>
+    <p class="when"><b>Thư mời chọn ca — nguyên văn đang gửi thật hôm nay.</b> Cố ý không có địa chỉ; xem trang 1 vì sao.</p>
+    <div class="letter"><div class="meta"><span class="subj">[UEH Mentoring] Mời bạn chọn ca phỏng vấn — Mùa 12</span></div>
 <div class="body">Chào [Tên mentee],
 
-Chúc mừng bạn đã qua vòng hồ sơ UEH Mentoring Mùa 12. Ban tổ chức mời bạn tham gia phỏng vấn trực tiếp vào Thứ Bảy 03/10/2026 hoặc Chủ nhật 04/10/2026.
+Chúc mừng bạn đã qua vòng hồ sơ Mùa 12. Ban tổ chức mời bạn tham gia vòng phỏng vấn trực tiếp vào Thứ Bảy 03/10/2026 và Chủ nhật 04/10/2026.
 
-Địa điểm: [Tên địa điểm/cơ sở]
-Địa chỉ: [Địa chỉ đầy đủ được chốt ngày 28/09]
-Nơi tập trung check-in: [Tòa nhà/tầng/khu vực]
-Bản đồ: [Đường dẫn, nếu có]
+Mỗi buổi phỏng vấn dài tối đa 30 phút, 1:1 với một mentor. Bạn mở đường dẫn riêng dưới đây và chọn MỘT ca phù hợp. Mỗi ca có số chỗ giới hạn, ca nào kín thì không chọn được nữa, nên bạn chọn sớm nhé:
+[Link chọn ca riêng của bạn]
 
-Mỗi buổi phỏng vấn dài tối đa 30 phút, 1:1 với một mentor. Bạn mở đường dẫn riêng dưới đây và chọn MỘT ca phù hợp:
-[Link chọn ca riêng của mentee]
+Hạn chọn ca: 23:59 ngày 30/09/2026. Sau hạn này mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn.
 
-Mỗi ca tối đa 25 bạn. Ai đăng ký trước được giữ chỗ trước; ca đủ chỗ sẽ không chọn được nữa.
+Chọn xong, trang sẽ xác nhận ca, địa điểm và hiện mã QR check-in ngay. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng. Cần xem vé hoặc đổi ca, mở lại đúng đường dẫn này trước hạn.
 
-Hạn chọn ca: 23:59 ngày 30/09/2026. Bạn vui lòng hoàn tất trước hạn để ban tổ chức sắp xếp phỏng vấn.
+Địa điểm cụ thể có thể chưa hiện ngay lúc bạn chọn ca — ban tổ chức đang hoàn tất và sẽ cập nhật trước ngày phỏng vấn. Gần tới ngày, bạn mở lại ĐÚNG đường dẫn này (không cần chờ thêm email nào khác) để xem địa chỉ chính xác cho đúng ca của mình.
 
-Chọn xong, trang sẽ xác nhận ca và hiện QR check-in ngay. Bạn lưu ảnh QR vào điện thoại; không có email xác nhận riêng. Mở lại link này để xem vé. Nếu cần đổi ca, thực hiện trước hạn đăng ký.
+Trước buổi phỏng vấn, mời bạn dành chút thời gian suy nghĩ trước hai câu hỏi sau — mentor sẽ trò chuyện cùng bạn về điều này:
 
-Bạn đến trước giờ hẹn 10 phút, xuất trình QR cho Support để check-in và được hướng dẫn vào phòng.
+1. Bạn mong muốn được đồng hành cùng một Mentor như thế nào?
+   (Ví dụ: về lĩnh vực chuyên môn, kinh nghiệm, tính cách, cách hỗ trợ hoặc những điều bạn kỳ vọng ở Mentor.)
+2. Điều gì khiến bạn mong muốn có một Mentor đồng hành trong hành trình sắp tới?
+   (Bạn hy vọng Mentor có thể hỗ trợ, định hướng hoặc giúp bạn phát triển ở những khía cạnh nào?)
 
-Cần hỗ trợ, nhắn Zalo ban tổ chức 0919144638 hoặc trả lời email này.
+Cần hỗ trợ, bạn nhắn Zalo ban tổ chức 0919144638 hoặc trả lời email này.
 
 Hẹn gặp bạn!
 Ban tổ chức UEH Mentoring
@@ -208,7 +196,12 @@ Vietnam Alumni Mentoring</div></div>
     <div class="block"><h2>1 · Đón và điều phối mentee</h2>
       <p>Mở <b>Phỏng vấn mentee trực tiếp</b>, lọc đúng ca. Bấm <b>Quét QR bằng camera</b>, kiểm tra tên và ca rồi <b>Xác nhận check-in</b>.</p>
       <p>Không có QR hoặc camera không dùng được: tìm bằng <b>số điện thoại</b>, đối chiếu danh tính rồi check-in thủ công.</p>
-      <p>Chọn <b>phòng 1–5, bàn 1–5 và người phỏng vấn có mặt</b>, bấm <b>Lưu phân bàn</b>. Không phân một bàn hoặc một mentor cho hai bạn trong cùng ca.</p>
+      <p>Chọn <b>phòng và bàn ĐÚNG THEO NGÀY</b> của ca đang xử lý, rồi chọn người phỏng vấn có mặt, bấm <b>Lưu phân bàn</b>:</p>
+      <table><tr><th>Ngày</th><th>Phòng</th><th>Bàn</th></tr>
+        <tr><td>Thứ Bảy 03/10</td><td>1 – 3</td><td>1 – 6</td></tr>
+        <tr><td>Chủ nhật 04/10</td><td>1 – 6</td><td>1 – 5</td></tr>
+      </table>
+      <p style="margin-top:1mm">Chọn sai phòng/bàn của ngày khác, hệ thống tự chặn lại — không phân một bàn hoặc một mentor cho hai bạn trong cùng ca.</p>
     </div>
     <div class="block"><h2>2 · Xem hồ sơ và chấm</h2>
       <p>Support, Core team và người phỏng vấn có quyền mùa xem đầy đủ application, điểm và nhận xét vòng hồ sơ.</p>
@@ -224,13 +217,9 @@ Vietnam Alumni Mentoring</div></div>
       <p>BTC xem lịch sử người sửa, lý do và nội dung trước/sau. Bấm <b>Làm mới danh sách</b> để thấy cập nhật từ thiết bị khác.</p>
     </div>
     <div class="warn block"><b class="h">Thư kết quả là đợt riêng</b>
-      Chốt kết quả trên hệ thống <b>chưa gửi email đậu/rớt</b>. Chủ chương trình sẽ giao thực hiện sau.
-    </div>
-    <div class="prep" style="margin-top:3mm"><b class="h">Trước khi gửi ngày 28/09</b>
-      Team báo lại điểm cần sửa trong bản này. Khi có địa chỉ chính xác, cập nhật bản thư và bản hướng dẫn sử dụng thực tế;
-      không gửi cho mentee bản còn ô [chờ điền].
+      Chốt kết quả trên hệ thống <b>chưa gửi email đậu/rớt</b>. Chủ dự án sẽ giao thực hiện sau, riêng biệt với đợt mời chọn ca này.
     </div>
   </div>
 </div>
-<footer><span>Chỉ gửi sau khi có địa chỉ chính xác và lệnh của chủ chương trình.</span><span>Không cần bấm gửi email trong CRM.</span></footer>
+<footer><span>Bản thư và quy trình trên đây khớp đúng hệ thống đang chạy — không phải kế hoạch.</span><span>Cần hỗ trợ: Zalo 0919144638</span></footer>
 </body></html>

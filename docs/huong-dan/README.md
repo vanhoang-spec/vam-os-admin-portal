@@ -14,7 +14,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_CANVA_AI.pdf` | Support team, Core team | Một trang: dùng công cụ **Brief thiết kế cho Canva AI** trên app để soạn prompt tiếng Anh, rồi dán sang Canva AI ra key visual / poster / video — kèm ba thứ luôn phải sửa tay và quy tắc không đưa dữ liệu cá nhân ra ngoài |
 | `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
 | `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 19 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
-| `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Support team, Core team, BTC | Hai trang, cập nhật 27/09: chờ địa chỉ chính xác 28/09 để đưa vào email; chủ chương trình giao hệ thống gửi đồng loạt, Support không bấm gửi trong CRM; mẫu thư chờ điền địa chỉ và hướng dẫn QR/check-in/phân bàn/chấm/nhận mentee |
+| `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Support team, Core team, BTC | Hai trang, cập nhật 29/09: gửi thư mời NGAY, cố ý không có địa chỉ — mentee mở lại đúng link để xem khi có; ai bấm nút gửi và cần bấm lại nhiều lần; 28 ca, ghế và phòng/bàn khác nhau theo ngày; thư mời nguyên văn và hướng dẫn QR/check-in/phân bàn/chấm/nhận mentee |
 
 ## Sửa và xuất lại bản PDF
 
@@ -133,15 +133,21 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 
 **Phỏng vấn mentee giai đoạn 1 (hai trang):**
 
-- Trang 1 là kế hoạch chốt cuối 27/09: chờ địa chỉ ngày 28/09 và lệnh chủ chương
-  trình giao hệ thống gửi; Support không bấm gửi trong CRM.
-- Trang 2 là **mẫu thư dự kiến chờ điền địa chỉ**, không khẳng định khớp email
-  đang chạy. Khi địa chỉ và nội dung được chốt, cập nhật cả bản thư gửi thật và
-  tài liệu. QR tại trang; không gửi email xác nhận thứ hai.
+- Trang 1 là kế hoạch chốt 29/09: gửi thư mời **ngay**, cố ý không có địa chỉ;
+  chủ dự án hoặc Support có quyền tự bấm nút "Gửi thư mời chọn ca" — có thể phải
+  bấm nhiều lần vì trần 40 thư/lượt và trần ngày chung hệ thống. Đây là lần cập
+  nhật thứ hai; bản 27/09 (chờ địa chỉ trước khi gửi) đã lỗi thời khi chủ dự án
+  đổi quyết định.
+- Trang 2 là **nguyên văn thư đang gửi thật**, chép từ `buildMenteeSessionInviteEmail`
+  trong `lib/email-core.ts` — không phải bản dự kiến. Sửa hàm đó (kể cả chỉ đổi
+  một câu) thì phải chép lại đúng câu đó vào tài liệu trong cùng lần sửa.
 - `__tests__/huong-dan-phong-van-mentee-giai-doan-1.test.ts` kiểm các điểm chốt,
-  trạng thái chưa triển khai/chưa lên lịch, hạn mức và số trang.
-- Số ca, số ghế, hạn đặt ca (migration `20260926100000_giai_doan_1_pv_mentee.sql`)
-  và hạn mức thư (`lib/mentee-invite-dispatch-core.ts`) — test đối chiếu thẳng
+  đối chiếu số liệu với `lib/mentee-invite-dispatch-core.ts` (`DAILY_EMAIL_LIMIT`,
+  `DISPATCH_RESERVE`, `DISPATCH_MAX_PER_RUN`) và vài dòng thư nguyên văn.
+- Số ca, số ghế theo từng ngày, phòng/bàn theo từng ngày và hạn đặt ca
+  (migration `20260929100000_dieu_chinh_lich_pv_mentee.sql`) — hiện là số liệu
+  gõ tay trong test, không import hằng số (những con số đó chỉ nằm trong SQL
+  migration, không có hằng số TypeScript tương ứng)
 - Giai đoạn 2 (10 & 11/10) có migration riêng; khi đó viết tài liệu riêng, đừng
   sửa đè tài liệu này
 - Giữ **đúng hai trang**: test tự đếm số trang trong PDF

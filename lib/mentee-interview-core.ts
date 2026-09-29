@@ -4,8 +4,10 @@ import { formatDate, formatTime } from "@/lib/utils";
 /**
  * lib/mentee-interview-core.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Phần thuần của vòng phỏng vấn mentee: 24 ca offline 30 phút ngày 3 và
- * 4/10/2026, 25 ghế mỗi ca (5 phòng × 5 mentor phỏng vấn song song).
+ * Phần thuần của vòng phỏng vấn mentee: 28 ca offline 30 phút ngày 3 và
+ * 4/10/2026 (14 ca/ngày), ghế mỗi ca khác nhau theo ngày — 18 thứ Bảy (3 phòng
+ * × 6 mentor), 28 Chủ nhật (6 phòng × 5 mentor, chừa buffer so với sức chứa
+ * phòng thật 30). Xem migration 20260929100000_dieu_chinh_lich_pv_mentee.sql.
  *
  * Khác hẳn vòng mentor. Ở đó ứng viên chọn GIỜ của một người cụ thể; ở đây ứng
  * viên chọn một CA, và ban tổ chức phân mentor tại chỗ trong ngày. Nên không có
