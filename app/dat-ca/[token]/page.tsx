@@ -53,7 +53,7 @@ export default async function MenteeSessionBookingPage(props: {
                 <p className="mt-2 text-sm">
                   {data.booking.venue
                     ? `Địa điểm: ${data.booking.venue}`
-                    : "Ban tổ chức sẽ gửi địa điểm cụ thể qua email trước ngày phỏng vấn."}
+                    : "Địa điểm đang được ban tổ chức hoàn tất. Gần tới ngày phỏng vấn, bạn mở lại đúng đường dẫn này (trong email mời) để xem địa chỉ chính xác — không có email xác nhận riêng."}
                 </p>
                 <InterviewTicket code={data.booking.checkinToken} />
               </div>
