@@ -5,6 +5,7 @@ import { getIntakeBatches, getReviewerPool, getReviewEligibleReviewers } from "@
 import { canManageReviewers, canManageUsers, canReview } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
+import { BulkGrantForm } from "./bulk-grant-form";
 import { ReviewerPoolClient } from "./reviewer-pool-client";
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,18 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
       </div>
 
       <ErrorBox message={intakeBatches.error || pool.error || activeReviewers.error || activeInterviewers.error} />
+
+      {/* Bulk grant — dán một danh sách email, xử lý nhiều người trong một lượt bấm */}
+      <Card className="mb-5">
+        <details>
+          <summary className="cursor-pointer text-sm font-medium text-slate-700">
+            Cấp quyền hàng loạt (dán danh sách email)
+          </summary>
+          <div className="mt-3">
+            <BulkGrantForm intakeBatchId={intakeBatchId} />
+          </div>
+        </details>
+      </Card>
 
       {/* Batch filter */}
       <Card className="mb-5">

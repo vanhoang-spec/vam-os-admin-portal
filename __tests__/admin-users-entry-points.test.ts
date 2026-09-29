@@ -39,6 +39,9 @@ vi.mock("@/app/admin/admin-correction-forms", () => ({
 vi.mock("@/app/reviews/reviewer-pool/reviewer-pool-client", () => ({
   ReviewerPoolClient: () => React.createElement("div", null, "Reviewer pool client remains available")
 }));
+vi.mock("@/app/reviews/reviewer-pool/bulk-grant-form", () => ({
+  BulkGrantForm: () => React.createElement("div", null, "Bulk grant form remains available")
+}));
 
 import AdminCorrectionPage from "../app/admin/page";
 import ReviewerGuidePage from "../app/reviews/guide/page";
