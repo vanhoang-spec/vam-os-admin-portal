@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 export const uuid=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
-export const ids={season:uuid(1),program:uuid(2),support:uuid(3),mentor:uuid(4),other:uuid(5),person:uuid(6),session:uuid(7),app:uuid(8)};
+// session/sessionSun bị GÁN LẠI trong offlineDb(): giá trị thật do migration
+// 20260929100000 sinh ra (gen_random_uuid()), không phải hai hằng số này.
+export const ids={season:uuid(1),program:uuid(2),support:uuid(3),mentor:uuid(4),other:uuid(5),person:uuid(6),session:uuid(7),sessionSun:uuid(9),app:uuid(8)};
 const read=(file:string)=>readFileSync(path.resolve(file),"utf8");
 function table(file:string,name:string) {
   const text=read(file);
@@ -59,9 +61,26 @@ export async function offlineDb() {
     insert into applications(season_id,person_id,role_applied,status) values('${ids.season}','${ids.person}','mentor','approved_as_mentor');
     insert into person_season_memberships(person_id,program_id,season_id,role,status)
       values('${ids.person}','${ids.program}','${ids.season}','interviewer','active');
-    insert into interview_sessions(id,season_id,starts_at,ends_at,seat_limit,booking_closes_at)
-      values('${ids.session}','${ids.season}','2026-10-03 01:00Z','2026-10-03 01:30Z',25,'2026-10-02 16:59Z');
   `);
+  // Mùa UEHM-S12 đã có: migration này tự seed 28 ca thật (14/ngày, 18 ghế
+  // thứ Bảy, 28 ghế Chủ nhật) — KHÔNG insert tay interview_sessions nữa, để
+  // bài test chạy trên đúng lưới ca migration sinh ra, không phải bản giả lập.
+  await db.exec(read("supabase/migrations/20260929100000_dieu_chinh_lich_pv_mentee.sql"));
+  const {rows:[satSession]}=await db.query<{id:string}>(
+    `select id from interview_sessions where season_id=$1
+       and (starts_at at time zone 'Asia/Ho_Chi_Minh')::date=date '2026-10-03'
+       and (starts_at at time zone 'Asia/Ho_Chi_Minh')::time='08:00:00' limit 1`,
+    [ids.season]
+  );
+  const {rows:[sunSession]}=await db.query<{id:string}>(
+    `select id from interview_sessions where season_id=$1
+       and (starts_at at time zone 'Asia/Ho_Chi_Minh')::date=date '2026-10-04'
+       and (starts_at at time zone 'Asia/Ho_Chi_Minh')::time='08:00:00' limit 1`,
+    [ids.season]
+  );
+  if(!satSession || !sunSession) throw new Error("migration 20260929100000 không sinh ra ca 08:00 của cả hai ngày");
+  ids.session=satSession.id;
+  ids.sessionSun=sunSession.id;
   await addCandidate(db,ids.app);
   await db.exec("set role service_role;");
   return db;

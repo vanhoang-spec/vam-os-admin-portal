@@ -78,13 +78,15 @@ export function BulkPanel() {
             id="bulk-seats"
             name="seatLimit"
             inputMode="numeric"
-            placeholder="tối đa 25"
+            placeholder="tối đa 30"
             className={inputClass}
           />
           <SaveButton label="Áp" />
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Mỗi ca 30 phút: 5 phòng × 5 mentor mỗi phòng = tối đa 25 mentee.
+          Thứ Bảy 3 phòng × 6 mentor = 18 ghế/ca. Chủ nhật 6 phòng × 5 mentor = 28 ghế/ca. Hai ngày
+          KHÔNG cùng số ghế — nút này áp một số cho MỌI ca cả hai ngày, dùng cẩn thận; sửa riêng
+          từng ca ở bảng bên dưới nếu chỉ muốn đổi một ngày.
         </p>
         <Banner state={seatState} />
       </form>
