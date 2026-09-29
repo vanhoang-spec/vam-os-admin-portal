@@ -599,6 +599,22 @@ export async function submitPilotApplication(
     if (submittedStudentId) {
       const studentIdPattern = subsequenceIlikePattern(submittedStudentId);
 
+      // Trần QUÉT, không phải trần TRÙNG. Mẫu subsequence chỉ để chịu được
+      // khoảng trắng nằm giữa các ký tự MSSV đã lưu — nhưng một tiền tố
+      // khoá/ngành dùng chung (ví dụ 6 số đầu của một khoá UEH) khớp mẫu với
+      // HÀNG TRĂM dòng không liên quan, vì subsequence chỉ đòi các ký tự xuất
+      // hiện đúng thứ tự, không đòi liền nhau hay gần đủ độ dài. Sự cố thật
+      // 29/09/2026: một mentee gõ MSSV ngắn hơn 11 số thật, mẫu khớp 74–233
+      // dòng trong 601 hồ sơ, và trần cũ (đếm số dòng KHỚP MẪU trước khi lọc
+      // lại) hiểu nhầm đó là trùng thật rồi từ chối đơn suốt hơn một tuần.
+      //
+      // Sửa: đếm trùng THẬT sau khi lọc lại bằng studentIdsEqual — số đó gần
+      // như luôn là 0 hoặc 1 trong dữ liệu lành. Trần STUDENT_ID_SCAN_LIMIT chỉ
+      // chặn một lượt quét bất thường (bảng hiện dưới 700 hồ sơ); trần
+      // IDENTITY_LOOKUP_MAX_CANDIDATES vẫn giữ nguyên vai trò cũ — báo dữ liệu
+      // hỏng thật sự nếu có hơn 25 hồ sơ CÙNG một MSSV.
+      const STUDENT_ID_SCAN_LIMIT = 1000;
+
       // `mssv` is canonical everywhere. `mssv_raw` carries the pre-backfill
       // spelling and exists ONLY in Production — elsewhere PostgREST answers
       // 42703 (undefined column). That one schema condition degrades to "no
@@ -610,23 +626,28 @@ export async function submitPilotApplication(
           .select(`id,${column}`)
           .ilike(column, studentIdPattern)
           .order("id")
-          .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+          .limit(STUDENT_ID_SCAN_LIMIT + 1);
 
         if (profileErr) {
           if (column === "mssv_raw" && (profileErr as { code?: string }).code === "42703") continue;
           log("mentee student id lookup failed", profileErr);
           return { ok: false, code: "db", message: SAFE_ERROR };
         }
-        if ((profileRows ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+        if ((profileRows ?? []).length > STUDENT_ID_SCAN_LIMIT) {
+          log("mentee student id scan limit exceeded", { column, limit: STUDENT_ID_SCAN_LIMIT });
+          return { ok: false, code: "db", message: SAFE_ERROR };
+        }
+        // The pattern only narrowed the window; canonical equality decides —
+        // both WHETHER there is a duplicate and HOW MANY, so the count below
+        // reflects true duplicates, not rows the loose pattern merely touched.
+        const trueMatches = (profileRows ?? []).filter((row) =>
+          studentIdsEqual((row as Record<string, unknown> | null)?.[column], submittedStudentId)
+        );
+        if (trueMatches.length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
           log("mentee student id lookup limit exceeded", { column, limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
           return { ok: false, code: "db", message: SAFE_ERROR };
         }
-        // The pattern only narrowed the window; canonical equality decides.
-        if (
-          (profileRows ?? []).some((row) =>
-            studentIdsEqual((row as Record<string, unknown> | null)?.[column], submittedStudentId)
-          )
-        ) {
+        if (trueMatches.length > 0) {
           log("mentee intake refused on canonical student id", { column });
           return { ok: false, code: "validation", message: existingProfileMessage("student_id") };
         }
@@ -641,17 +662,24 @@ export async function submitPilotApplication(
         .eq("role_applied", "mentee")
         .ilike("raw_payload->>mssv", studentIdPattern)
         .order("id")
-        .limit(IDENTITY_LOOKUP_MAX_CANDIDATES + 1);
+        .limit(STUDENT_ID_SCAN_LIMIT + 1);
 
       if (studentIdDupErr) {
         log("mentee student id duplicate check failed", studentIdDupErr);
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
-      if ((studentIdDupRows ?? []).length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
+      if ((studentIdDupRows ?? []).length > STUDENT_ID_SCAN_LIMIT) {
+        log("mentee student id duplicate scan limit exceeded", { limit: STUDENT_ID_SCAN_LIMIT });
+        return { ok: false, code: "db", message: SAFE_ERROR };
+      }
+      const trueStudentIdDups = (studentIdDupRows ?? []).filter((row) =>
+        studentIdsEqual(row?.raw_payload?.mssv, submittedStudentId)
+      );
+      if (trueStudentIdDups.length > IDENTITY_LOOKUP_MAX_CANDIDATES) {
         log("mentee student id duplicate check limit exceeded", { limit: IDENTITY_LOOKUP_MAX_CANDIDATES });
         return { ok: false, code: "db", message: SAFE_ERROR };
       }
-      if ((studentIdDupRows ?? []).some((row) => studentIdsEqual(row?.raw_payload?.mssv, submittedStudentId))) {
+      if (trueStudentIdDups.length > 0) {
         // Duplicate semantics, generic wording: the applicant is not told which
         // of their identifiers collided.
         return { ok: false, code: "duplicate", message: sameSeasonDuplicateMessage("student_id") };

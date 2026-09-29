@@ -409,6 +409,48 @@ describe("P1-A Mentee 3-key intake guard", () => {
     expectNoWrites();
   });
 
+  // ── Sự cố 29/09/2026: tiền tố MSSV dùng chung làm nổ cửa sổ ứng viên ──────
+  //
+  // Một mentee gõ MSSV ngắn hơn thật, mẫu subsequence khớp hàng trăm hồ sơ
+  // KHÔNG liên quan (mọi hồ sơ có chung tiền tố khoá/ngành), và trần cũ đếm
+  // số dòng khớp MẪU (trước khi lọc lại bằng studentIdsEqual) — hiểu nhầm số
+  // đó là trùng thật rồi từ chối đơn suốt hơn một tuần. Sửa: trần bây giờ đếm
+  // trùng THẬT, sau khi lọc lại.
+  it("một tiền tố MSSV dùng chung với nhiều hồ sơ KHÔNG bị coi là trùng thật", async () => {
+    // 26 hồ sơ cùng tiền tố "3123102" — mẫu subsequence của MSSV nộp khớp cả
+    // 26 dòng, nhưng KHÔNG dòng nào bằng canonical với giá trị nộp.
+    seed({
+      mentee_profiles: Array.from({ length: 26 }).map((_, index) => ({
+        id: `mp-${index}`,
+        person_id: `person-${index}`,
+        mssv: `3123102${String(index).padStart(4, "0")}`
+      }))
+    });
+
+    // Gõ ngắn hơn thật — đúng cách sự cố thật xảy ra: mẫu subsequence của
+    // "3123102" khớp cả 26 dòng (đều bắt đầu bằng tiền tố này), nhưng không
+    // dòng nào DÀI BẰNG nên không dòng nào canonical-bằng giá trị nộp.
+    const result = await submitPilotApplication(menteeInput({ mssv: "3123102" }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(insertsFor(db, "applications")).toHaveLength(1);
+  });
+
+  it("vẫn chặn cứng khi có THẬT hơn 25 hồ sơ cùng một MSSV — hỏng dữ liệu thật", async () => {
+    seed({
+      mentee_profiles: Array.from({ length: 26 }).map((_, index) => ({
+        id: `mp-${index}`,
+        person_id: `person-${index}`,
+        mssv: MSSV
+      }))
+    });
+
+    const result = await submitPilotApplication(menteeInput());
+
+    expect(result).toMatchObject({ ok: false, code: "db" });
+    expectNoWrites();
+  });
+
   // ── §21/§22 — write invariants ────────────────────────────────────────────
   it("writes answers for an allowed applicant and touches no identity table", async () => {
     seed({});
