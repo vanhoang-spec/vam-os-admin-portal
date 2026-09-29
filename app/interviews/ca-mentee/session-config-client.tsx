@@ -105,7 +105,9 @@ export function BulkPanel() {
           <SaveButton label="Áp" />
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Trang xác nhận và vé của ứng viên hiện đúng dòng này.
+          Trang xác nhận và vé của ứng viên hiện đúng dòng này. Nếu thứ Bảy và Chủ nhật ở hai địa
+          điểm khác nhau, nút này KHÔNG dùng được — áp cùng một địa điểm cho mọi ca cả hai ngày;
+          sửa riêng từng ca theo từng ngày ở bảng bên dưới.
         </p>
         <Banner state={venueState} />
       </form>
