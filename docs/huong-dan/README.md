@@ -15,7 +15,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
 | `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 19 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
 | `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Support team, Core team, BTC | Hai trang, cập nhật 29/09: gửi thư mời NGAY, cố ý không có địa chỉ — mentee mở lại đúng link để xem khi có; ai bấm nút gửi và cần bấm lại nhiều lần; 28 ca, ghế và phòng/bàn khác nhau theo ngày; thư mời nguyên văn và hướng dẫn QR/check-in/phân bàn/chấm/nhận mentee |
-| `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` | Core Team (soạn thông báo/video cho mentor), BTC | Ba trang, dựng 30/09: trang 1–2 là nội dung cho mentor — đăng nhập lần đầu, tìm đúng mentee được phân, chấm 5 tiêu chí/25 điểm, khoảng trống rubric chi tiết; trang 3 (nội bộ, không gửi mentor) là con số sẵn sàng thật (267 mentor duyệt / 67 có tài khoản / 5 có quyền phỏng vấn), luồng cấp quyền ở `/reviews/reviewer-pool`, rủi ro trần thư Brevo khi cấp dồn một lúc, và các câu cần anh Hoàng chốt trước 03/10 |
+| `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` | Core Team (soạn thông báo/video cho mentor) | Hai trang, dựng 30/09, thu hẹp lại 30/09 chỉ còn nội dung dành cho MENTOR (phần cấp quyền/danh sách nội bộ anh Hoàng làm riêng, không thuộc tài liệu này): đăng nhập lần đầu, tìm đúng mentee được phân, chấm 5 tiêu chí/25 điểm, câu hỏi gợi ý cho 3/5 tiêu chí (từ tài liệu Mùa 11 BTC gửi), khoảng trống phân loại G/C/E/F |
 
 ## Sửa và xuất lại bản PDF
 
@@ -153,20 +153,22 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   sửa đè tài liệu này
 - Giữ **đúng hai trang**: test tự đếm số trang trong PDF
 
-**Mentor phỏng vấn mentee trực tiếp (ba trang):**
+**Mentor phỏng vấn mentee trực tiếp (hai trang):**
 
-- Trang 1–2 mô tả bước thật trên màn hình cho MENTOR (đăng nhập, tìm mentee, chấm
-  điểm) — `__tests__/huong-dan-mentor-phong-van-truc-tiep.test.ts` đối chiếu nhãn nút
-  và đường dẫn với mã nguồn thật (`app/login`, `app/interviews/mentee-offline/workflow.tsx`),
-  và 5 tiêu chí/kết quả với `lib/mentee-offline-core.ts` (`OFFLINE_SCORES`,
-  `OFFLINE_OUTCOMES`)
-- Trang 3 là **bản chụp một thời điểm** (30/09/2026: 267 mentor duyệt / 67 có tài
-  khoản / 5 có quyền phỏng vấn) — đây là số liệu sống, đổi theo ngày Core Team cấp
-  quyền thêm. Đừng coi trang 3 là đúng mãi; hỏi lại số liệu mới nếu dùng tài liệu này
-  sau 03/10/2026
-- Cảnh báo trần thư Brevo ở trang 3 đối chiếu với `DAILY_EMAIL_LIMIT` và
-  `DISPATCH_RESERVE` (`lib/mentee-invite-dispatch-core.ts`) — đổi gói Brevo hay đổi
-  mức chừa thì sửa cả hai chỗ
-- Trang 3 là **nội bộ, không gửi cho mentor** — chỉ trang 1–2 mới đưa vào thông báo
-  hay video hướng dẫn
-- Giữ **đúng ba trang**: test tự đếm số trang trong PDF
+- Toàn bộ tài liệu mô tả bước thật trên màn hình cho MENTOR (đăng nhập, tìm mentee,
+  chấm điểm) — `__tests__/huong-dan-mentor-phong-van-truc-tiep.test.ts` đối chiếu
+  nhãn nút và đường dẫn với mã nguồn thật (`app/login`,
+  `app/interviews/mentee-offline/workflow.tsx`), và 5 tiêu chí/kết quả với
+  `lib/mentee-offline-core.ts` (`OFFLINE_SCORES`, `OFFLINE_OUTCOMES`)
+- **Không còn phần "nội bộ" về cấp quyền/danh sách mentor** (bản 30/09 ban đầu có
+  trang 3 cho việc này) — anh Hoàng chủ động tách ra làm riêng 30/09, tài liệu này
+  từ nay CHỈ còn nội dung gửi được cho mentor. Đừng thêm lại số liệu sống (bao nhiêu
+  mentor đã có quyền, trần thư Brevo…) vào đây — thứ đó đổi theo ngày và không phải
+  thứ mentor cần đọc
+- Câu hỏi gợi ý lấy từ tài liệu chấm Mùa 11 anh Hoàng gửi 30/09 — chỉ khớp được 3/5
+  tiêu chí đang chạy thật cho Mùa 12 (thang điểm hai bên KHÁC NHAU: Mùa 11 là 3 tiêu
+  chí/10đ, Mùa 12 là 5 tiêu chí/25đ — đã CHỐT giữ nguyên 5 tiêu chí/25đ, chỉ mượn câu
+  hỏi làm gợi ý). Tài liệu Mùa 11 còn khoản phân loại G/C/E/F không có chỗ ghi trong
+  hệ thống — nêu trong ô cảnh báo, đừng âm thầm thêm ô mới vào form chấm mà không có
+  migration
+- Giữ **đúng hai trang**: test tự đếm số trang trong PDF
