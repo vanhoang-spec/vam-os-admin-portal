@@ -153,30 +153,37 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   sửa đè tài liệu này
 - Giữ **đúng hai trang**: test tự đếm số trang trong PDF
 
-**Mentor phỏng vấn mentee trực tiếp (ba trang):**
+**Mentor phỏng vấn mentee trực tiếp (bốn trang):**
 
-- Trang 1–2 mô tả bước thật trên màn hình cho MENTOR (đăng nhập, tìm mentee, chấm
-  điểm) — `__tests__/huong-dan-mentor-phong-van-truc-tiep.test.ts` đối chiếu nhãn nút
-  và đường dẫn với mã nguồn thật (`app/login`,
+- Trang 1–3 mô tả bước thật trên màn hình cho MENTOR (đăng nhập, tìm mentee, khung
+  điểm, chấm điểm) — `__tests__/huong-dan-mentor-phong-van-truc-tiep.test.ts` đối
+  chiếu nhãn nút và đường dẫn với mã nguồn thật (`app/login`,
   `app/interviews/mentee-offline/workflow.tsx`), và 5 tiêu chí/kết quả với
   `lib/mentee-offline-core.ts` (`OFFLINE_SCORES`, `OFFLINE_OUTCOMES`)
-- **Không có phần "nội bộ" về cấp quyền/danh sách mentor** (bản 30/09 ban đầu có
-  trang 3 cho việc này) — anh Hoàng chủ động tách ra làm riêng 30/09, trang 1–2 CHỈ
-  còn nội dung gửi được cho mentor. Đừng thêm lại số liệu sống (bao nhiêu mentor đã
-  có quyền, trần thư Brevo…) vào trang 1–2 — thứ đó đổi theo ngày và không phải thứ
+- **Không có phần "nội bộ" về cấp quyền/danh sách mentor** trong trang 1–3 — anh
+  Hoàng chủ động tách ra làm riêng 30/09. Đừng thêm lại số liệu sống (bao nhiêu
+  mentor đã có quyền, trần thư Brevo…) — thứ đó đổi theo ngày và không phải thứ
   mentor cần đọc
-- Câu hỏi gợi ý ở trang 2 lấy từ tài liệu chấm Mùa 11 anh Hoàng gửi 30/09 — chỉ khớp
-  được 3/5 tiêu chí đang chạy thật cho Mùa 12 (thang điểm hai bên KHÁC NHAU: Mùa 11
-  là 3 tiêu chí/10đ, Mùa 12 là 5 tiêu chí/25đ — đã CHỐT giữ nguyên 5 tiêu chí/25đ,
-  chỉ mượn câu hỏi làm gợi ý). **Phân loại nhóm mentee G/C/E/F của tài liệu Mùa 11
-  đã BỎ HẲN** theo chốt của anh Hoàng 30/09 — đừng thêm lại, kể cả dạng cảnh báo
-- **Trang 3 (thêm 30/09)** là quy trình check-in → phân công cho **Support/BTC trực
+- **Trang 2 (mở rộng 30/09)** có bảng "Thang điểm gợi ý theo tiêu chí" — mô tả 1/3/5
+  điểm nghĩa là gì cho từng tiêu chí trong 5 tiêu chí Mùa 12, do Core Team tự dựng
+  (KHÔNG có trong mã nguồn, phần mềm chỉ lưu một con số 1–5). Đây là nội dung ảnh
+  hưởng trực tiếp tới việc chấm đậu/rớt mentee thật — BTC nên đọc lại và chỉnh nếu
+  thấy mốc nào chưa đúng, trước khi gửi cho mentor. Bảng full-width, KHÔNG đặt trong
+  `.grid` hai cột — nhét vào cột hẹp làm chữ tự xuống dòng nhiều, tràn quá 1 trang
+- Câu hỏi gợi ý ở trang 3 lấy từ tài liệu chấm Mùa 11 anh Hoàng gửi 30/09 — CHỈ mượn
+  phần câu hỏi, KHÔNG mượn thang điểm (thang điểm hai bên KHÁC NHAU: Mùa 11 là 3
+  tiêu chí/10đ, Mùa 12 là 5 tiêu chí/25đ — đã CHỐT giữ nguyên 5 tiêu chí/25đ). Nay đã
+  có câu hỏi gợi ý cho đủ cả 5/5 tiêu chí (kể cả Mức độ phù hợp, Giao tiếp — Core
+  Team tự viết thêm vì tài liệu Mùa 11 không có). **Phân loại nhóm mentee G/C/E/F
+  của tài liệu Mùa 11 đã BỎ HẲN** theo chốt của anh Hoàng 30/09 — đừng thêm lại, kể
+  cả dạng cảnh báo
+- **Trang 4 (thêm 30/09)** là quy trình check-in → phân công cho **Support/BTC trực
   bàn**, không phải nội dung gửi mentor — vai trò/bước/nhãn nút đối chiếu thẳng với
   `app/interviews/mentee-offline/workflow.tsx` (`canOperate`-gated: "Xác nhận
   check-in", ba ô Phòng/Bàn/Người phỏng vấn, "Lưu phân bàn", "Lý do đổi phân công"
   bắt buộc khi đổi người). Đổi nhãn nút hay luồng ở màn hình đó thì phải sửa trang
-  3 trong cùng lần đổi
-- **Khối "Trước tiên" (thêm 30/09, cuối buổi)** ở đầu trang 3 — mentor tới xác nhận
+  4 trong cùng lần đổi
+- **Khối "Trước tiên" (thêm 30/09, cuối buổi)** ở đầu trang 4 — mentor tới xác nhận
   tên/SĐT, được Support hỗ trợ đăng nhập trên máy cá nhân, rồi Support tự ghi tên
   mentor vào sổ riêng. Bước ghi sổ này BẮT BUỘC vì ô "Người phỏng vấn" ở Bước B liệt
   kê **TOÀN BỘ interviewer đủ điều kiện của mùa** (RPC `vam104_offline_dashboard` →
@@ -188,4 +195,13 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   ("Mong muốn về Mentor đồng hành", "Lý do muốn có Mentor đồng hành") — đối chiếu
   `RAW_PAYLOAD_LABELS` trong `lib/application-export.ts`; đổi nhãn ở đó thì sửa
   luôn câu này
-- Giữ **đúng ba trang**: test tự đếm số trang trong PDF
+- Giữ **đúng bốn trang**: test tự đếm số trang trong PDF. Thêm nội dung mà tràn
+  trang thì tách trang mới (`page-break`) thay vì thu nhỏ font tới mức khó đọc khi
+  in — xem cách trang 2/3 đã tách ở lần sửa 30/09
+- **Chưa có ảnh chụp màn hình CRM thật trong tài liệu** (yêu cầu 30/09, chưa xong) —
+  nút "Xác nhận check-in" mở `window.confirm()` gốc của trình duyệt, công cụ tự động
+  của Claude Code không thao tác được; ghi trực tiếp vào Supabase production để dựng
+  trạng thái "đã check-in" cũng bị lớp an toàn của Claude Code chặn. Cách khả thi:
+  anh Hoàng tự bấm qua luồng thật trên UI (hoặc dán SQL dựng sẵn vào Supabase SQL
+  Editor) rồi Claude Code chụp lại, hoặc chấp nhận ảnh mockup dựng từ mã nguồn thay
+  ảnh chụp thật
