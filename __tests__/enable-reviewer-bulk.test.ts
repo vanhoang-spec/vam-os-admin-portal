@@ -24,6 +24,7 @@ import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { BULK_GRANT_MAX_PER_RUN } from "@/lib/reviewer-invite-dispatch-core";
+import { DAILY_EMAIL_LIMIT } from "@/lib/mentee-invite-dispatch-core";
 
 const BATCH_ID = "batch-1";
 const SEASON_ID = "season-1";
@@ -139,7 +140,7 @@ describe("hạn mức thư — không bao giờ vượt", () => {
   });
 
   it("hạn mức chỉ còn 1: xử lý đúng 1 người, người còn lại vào skippedDueToQuota — không gọi enableMentorAsReviewer cho họ", async () => {
-    vi.mocked(countSentInWindow).mockResolvedValue(300 - 1);
+    vi.mocked(countSentInWindow).mockResolvedValue(DAILY_EMAIL_LIMIT - 1);
     const result = await grant({ rawEmails: "a@example.com\nb@example.com" });
     expect(enableMentorAsReviewer).toHaveBeenCalledTimes(1);
     expect(enableMentorAsReviewer).toHaveBeenCalledWith({ personId: "p1", seasonId: SEASON_ID, participationRole: "interviewer" });
@@ -147,8 +148,8 @@ describe("hạn mức thư — không bao giờ vượt", () => {
     expect(result.skippedDueToQuota).toEqual(["b@example.com"]);
   });
 
-  it("hạn mức đã hết (đã gửi đủ 300): không gọi enableMentorAsReviewer cho ai, tất cả vào skippedDueToQuota", async () => {
-    vi.mocked(countSentInWindow).mockResolvedValue(300);
+  it("hạn mức đã hết (đã gửi đủ DAILY_EMAIL_LIMIT): không gọi enableMentorAsReviewer cho ai, tất cả vào skippedDueToQuota", async () => {
+    vi.mocked(countSentInWindow).mockResolvedValue(DAILY_EMAIL_LIMIT);
     const result = await grant({ rawEmails: "a@example.com\nb@example.com" });
     expect(enableMentorAsReviewer).not.toHaveBeenCalled();
     expect(result.skippedDueToQuota).toEqual(["a@example.com", "b@example.com"]);

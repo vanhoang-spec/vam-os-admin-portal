@@ -7,9 +7,9 @@
  * ---------------------------------------------------------------------------
  * VÌ SAO CẦN "CHỪA HẠN MỨC"
  * ---------------------------------------------------------------------------
- * Gói Brevo 300 thư/ngày dùng chung cả hệ thống. Chọn ca hiện QR trực tiếp,
- * không gửi email xác nhận nữa. Vẫn chừa hạn mức cho đặt lại mật khẩu,
- * thông báo sự kiện và các thư khác của hệ thống.
+ * Brevo dùng chung cả hệ thống. Chọn ca hiện QR trực tiếp, không gửi email
+ * xác nhận nữa. Vẫn chừa hạn mức cho đặt lại mật khẩu, thông báo sự kiện và
+ * các thư khác của hệ thống.
  *
  * Đếm theo 24 GIỜ TRƯỢT, không theo ngày lịch: không có gì bảo đảm Brevo đặt
  * lại hạn mức lúc nửa đêm giờ Việt Nam. Đếm trượt có thể dùng chưa hết hạn mức
@@ -18,8 +18,16 @@
  * Module thuần, không I/O.
  */
 
-/** Trần thư trong 24 giờ của gói Brevo đang dùng. Đổi gói thì đổi con số này. */
-export const DAILY_EMAIL_LIMIT = 300;
+/**
+ * Trần thư trong 24 giờ trượt — KHÔNG phải trần thật của gói Brevo, vì gói trả
+ * phí (Starter, từ 01/10/2026) giới hạn theo THÁNG (5.000 thư/tháng), không
+ * còn giới hạn theo ngày. Con số này là mức tự đặt để dồn một đợt gửi lớn
+ * trong ngày (474 mentee chờ ca phỏng vấn 03–04/10) vẫn còn dư ngân sách cho
+ * phần còn lại của tháng (~4.400 thư cho ~30 ngày còn lại). Hết đợt phỏng vấn
+ * 04/10 thì có thể hạ số này lại nếu muốn giữ ngân sách tháng rộng rãi hơn.
+ * Đổi gói thì đổi con số này.
+ */
+export const DAILY_EMAIL_LIMIT = 600;
 
 /**
  * Phần hạn mức để dành cho mọi thư khác của hệ thống.
