@@ -176,6 +176,14 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   check-in", ba ô Phòng/Bàn/Người phỏng vấn, "Lưu phân bàn", "Lý do đổi phân công"
   bắt buộc khi đổi người). Đổi nhãn nút hay luồng ở màn hình đó thì phải sửa trang
   3 trong cùng lần đổi
+- **Khối "Trước tiên" (thêm 30/09, cuối buổi)** ở đầu trang 3 — mentor tới xác nhận
+  tên/SĐT, được Support hỗ trợ đăng nhập trên máy cá nhân, rồi Support tự ghi tên
+  mentor vào sổ riêng. Bước ghi sổ này BẮT BUỘC vì ô "Người phỏng vấn" ở Bước B liệt
+  kê **TOÀN BỘ interviewer đủ điều kiện của mùa** (RPC `vam104_offline_dashboard` →
+  `vam084_list_recruitment_participants`), KHÔNG lọc theo ai đang thật sự có mặt —
+  đây là sự thật đã xác minh lại từ mã nguồn 30/09, thay cho câu mô tả sai trước đó
+  ("chỉ hiện người đang có mặt"). Đổi cách RPC lọc participants thì phải sửa lại câu
+  này ở cả khối "Trước tiên" lẫn Bước B
 - Bước "Mở hồ sơ" ở trang 1 nêu ĐÚNG hai nhãn hiển thị của câu trả lời chuẩn bị
   ("Mong muốn về Mentor đồng hành", "Lý do muốn có Mentor đồng hành") — đối chiếu
   `RAW_PAYLOAD_LABELS` trong `lib/application-export.ts`; đổi nhãn ở đó thì sửa
