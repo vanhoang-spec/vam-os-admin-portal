@@ -88,6 +88,23 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain("BẮT BUỘC phải điền");
   });
 
+  it("có bước mentor tới xác nhận danh tính và được hỗ trợ đăng nhập, trước cả bước check-in mentee", () => {
+    expect(text).toContain("Trước tiên — Mentor tới, xác nhận và hỗ trợ đăng nhập");
+    expect(text).toContain("Hỏi tên và số điện thoại mentor");
+    expect(text).toContain("Ghi tên mentor vào sổ/note riêng của Support");
+    const idxMentorArrival = text.indexOf("Trước tiên — Mentor tới");
+    const idxCheckinMentee = text.indexOf("Bước A — Check-in mentee");
+    expect(idxMentorArrival).toBeGreaterThan(-1);
+    expect(idxCheckinMentee).toBeGreaterThan(idxMentorArrival);
+  });
+
+  it("nói đúng sự thật: ô \"Người phỏng vấn\" liệt kê TOÀN BỘ interviewer của mùa, không lọc theo ai đang có mặt", () => {
+    // Đây là bản sửa lại — trước đó tài liệu ghi nhầm là "danh sách người đang có mặt",
+    // trong khi RPC nguồn (vam084_list_recruitment_participants) không lọc theo hiện diện.
+    expect(text).toContain("TOÀN BỘ interviewer đủ điều kiện của mùa");
+    expect(text).not.toContain("danh sách người đang có mặt, không phải toàn bộ interviewer");
+  });
+
   it("PDF đủ ba trang", () => {
     const pdf = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf"), "latin1");
     expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(3);
