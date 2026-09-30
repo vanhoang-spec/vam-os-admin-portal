@@ -1,8 +1,9 @@
 /**
  * Hướng dẫn cho Core Team, dựng 30/09/2026: mentor vào hệ thống và phỏng vấn
- * mentee 03–04/10. Trang 1–2 dành cho mentor (đăng nhập, chấm điểm) — anh
- * Hoàng xử lý riêng phần cấp quyền/danh sách nội bộ, không thuộc tài liệu này.
- * Trang 3 (thêm 30/09) là quy trình check-in → phân công cho Support/BTC.
+ * mentee 03–04/10. Trang 1–3 dành cho mentor (đăng nhập, khung điểm, chấm
+ * điểm) — anh Hoàng xử lý riêng phần cấp quyền/danh sách nội bộ, không thuộc
+ * tài liệu này. Trang 4 (thêm 30/09) là quy trình check-in → phân công cho
+ * Support/BTC.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,15 +46,21 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain("không tự gửi email báo đậu/rớt");
   });
 
-  it("câu hỏi gợi ý (tài liệu Mùa 11, BTC gửi 30/09) xếp đúng theo 5 tiêu chí đang chạy, không đổi thang điểm", () => {
+  it("câu hỏi gợi ý (tài liệu chấm Mùa 11) chỉ mượn câu hỏi, KHÔNG mượn thang điểm 3 tiêu chí/10 điểm của Mùa 11", () => {
     expect(text).toContain("Câu hỏi gợi ý theo tiêu chí");
     expect(text).toContain("tài liệu chấm Mùa 11");
-    expect(text).toContain("KHÔNG đổi cách chấm");
-    expect(text).toContain("vẫn 5 tiêu chí/25 điểm");
+    expect(text).toContain("KHÔNG mượn thang điểm 3 tiêu chí/10 điểm của Mùa 11");
+    expect(text).toContain("Mùa 12 giữ nguyên 5 tiêu chí/25 điểm");
     expect(text).not.toContain("rubric chi tiết đã có sẵn");
-    // Hai tiêu chí chưa có câu hỏi gợi ý riêng — không được âm thầm bỏ qua.
-    expect(text).toContain("Mức độ phù hợp");
-    expect(text).toContain("chưa có câu hỏi riêng");
+  });
+
+  it("có thang điểm gợi ý 1/3/5 riêng cho từng tiêu chí Mùa 12 — không còn để trống khoảng trống rubric", () => {
+    expect(text).toContain("Thang điểm gợi ý theo tiêu chí");
+    // Cả 5 tiêu chí đều phải có mô tả — không được âm thầm bỏ sót tiêu chí nào.
+    for (const [, label] of OFFLINE_SCORES) {
+      expect(text.split(label).length - 1).toBeGreaterThanOrEqual(2); // xuất hiện ở bảng nhãn VÀ bảng thang điểm
+    }
+    expect(text).toContain("Mong muốn về mentor/ngành lệch hẳn so với mảng mentor hiện có");
   });
 
   it("đã bỏ hẳn phân loại nhóm mentee G/C/E/F — anh Hoàng chốt không dùng cho Mùa 12", () => {
@@ -105,8 +112,8 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).not.toContain("danh sách người đang có mặt, không phải toàn bộ interviewer");
   });
 
-  it("PDF đủ ba trang", () => {
+  it("PDF đủ bốn trang", () => {
     const pdf = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf"), "latin1");
-    expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(3);
+    expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(4);
   });
 });

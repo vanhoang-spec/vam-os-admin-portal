@@ -232,7 +232,7 @@
 </div>
 
 <footer>
-  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 1/3</span>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 1/4</span>
   <span>Nội dung lấy đúng nhãn nút và bước thật trên màn hình — không đổi câu chữ khi soạn thông báo.</span>
 </footer>
 
@@ -242,49 +242,105 @@
 <header>
   <div>
     <div class="eyebrow">Hướng dẫn cho Core Team · Phỏng vấn mentee trực tiếp 03–04/10 (tiếp)</div>
-    <h1>Rubric chấm điểm — hiện trạng và khoảng trống</h1>
-    <p class="sub">Đây là toàn bộ những gì hệ thống có sẵn cho việc chấm điểm phỏng vấn mentee. Không có
-      thêm định nghĩa nào khác ở nơi khác trong mã nguồn.</p>
+    <h1>Rubric chấm điểm — 5 tiêu chí và khung điểm dành riêng cho Mùa 12</h1>
+    <p class="sub">Phần mềm chỉ lưu tên tiêu chí và một con số 1–5; khung điểm và câu hỏi gợi ý dưới đây là
+      nội dung Core Team dựng thêm để mentor có mốc chung khi chấm, không nằm trong mã nguồn.</p>
   </div>
   <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 30/09/2026</div>
 </header>
 
-<div class="crit">
-  <b class="h">Khoảng trống rubric — một phần đã có, một phần chưa</b>
-  Hệ thống chỉ lưu <b>tên 5 tiêu chí</b> và <b>một con số 1–5</b> cho mỗi tiêu chí, không có mô tả thế nào
-  là 1 điểm, thế nào là 5 điểm. Anh Hoàng đã gửi bổ sung câu hỏi gợi ý (từ tài liệu chấm Mùa 11, 30/09) —
-  đã xếp lại theo đúng <b>5 tiêu chí đang chạy thật cho Mùa 12</b> ở bảng bên dưới, KHÔNG đổi cách chấm
-  (vẫn 5 tiêu chí/25 điểm — tài liệu gốc dùng thang 3 tiêu chí/10 điểm khác, chỉ mượn câu hỏi làm gợi ý).
-  Hai tiêu chí <b>Mức độ phù hợp</b> và <b>Giao tiếp</b> chưa có câu hỏi gợi ý riêng từ tài liệu này.
+<div class="prep">
+  <b class="h">Khung điểm 5 tiêu chí/25 điểm — dựng riêng cho Mùa 12, không dùng lại thang Mùa 11</b>
+  Hệ thống chỉ lưu <b>tên 5 tiêu chí</b> và <b>một con số 1–5</b> — bản thân phần mềm không mô tả thế nào
+  là 1 điểm, thế nào là 5 điểm. Bảng "Thang điểm gợi ý" bên dưới là khung Core Team dựng RIÊNG cho đúng 5
+  tiêu chí Mùa 12 đang chạy, để mentor có mốc so sánh khi chấm — BTC xem và chỉnh trước khi gửi mentor
+  nếu thấy cần. Câu hỏi gợi ý (nguồn: tài liệu chấm Mùa 11) chỉ mượn PHẦN CÂU HỎI, KHÔNG mượn thang điểm
+  3 tiêu chí/10 điểm của Mùa 11 — thang đó không còn áp dụng, Mùa 12 giữ nguyên 5 tiêu chí/25 điểm.
 </div>
+
+<div class="block">
+  <h2>Nguyên văn 5 tiêu chí (đúng như màn hình chấm hiển thị)</h2>
+  <table>
+    <tr><th>Mã trong hệ thống</th><th>Nhãn hiển thị</th><th>Mã trong hệ thống</th><th>Nhãn hiển thị</th></tr>
+    <tr><td><code>score_motivation</code></td><td>Động lực tham gia</td><td><code>score_fit</code></td><td>Mức độ phù hợp</td></tr>
+    <tr><td><code>score_goal_clarity</code></td><td>Mục tiêu rõ ràng</td><td><code>score_communication</code></td><td>Giao tiếp</td></tr>
+    <tr><td><code>score_commitment</code></td><td>Mức độ cam kết</td><td></td><td></td></tr>
+  </table>
+  <p style="margin-top:1.6mm">Tổng tối đa <b>25 điểm</b>. Không có điểm liệt/điểm sàn riêng theo từng
+    tiêu chí — hệ thống chỉ cộng tổng và để mentor tự chọn kết quả (Đạt / Không chọn / Cần BTC xem xét
+    thêm) một cách độc lập với tổng điểm.</p>
+</div>
+
+<div class="block">
+  <h2>Thang điểm gợi ý theo tiêu chí (1 / 3 / 5 điểm nghĩa là gì)</h2>
+  <table>
+    <tr><th style="width:14%">Tiêu chí</th><th>1 điểm</th><th>3 điểm</th><th>5 điểm</th></tr>
+    <tr>
+      <td><b>Động lực tham gia</b></td>
+      <td>Trả lời chung chung, không rõ vì sao ứng tuyển, như đang tham gia vì được rủ.</td>
+      <td>Có lý do cụ thể nhưng phải hỏi thêm mới nói rõ ra.</td>
+      <td>Tự nêu rõ khó khăn/mong muốn thật, chủ động gắn với điều chương trình có thể mang lại.</td>
+    </tr>
+    <tr>
+      <td><b>Mục tiêu rõ ràng</b></td>
+      <td>Không nêu được mục tiêu cụ thể, hoặc mơ hồ kiểu "muốn giỏi hơn".</td>
+      <td>Có mục tiêu nhưng chưa gắn với hành động cụ thể nào.</td>
+      <td>Mục tiêu cụ thể, đo được, đi kèm kế hoạch hành động rõ.</td>
+    </tr>
+    <tr>
+      <td><b>Mức độ cam kết</b></td>
+      <td>Không biết chương trình kéo dài bao lâu, chưa nghĩ tới việc sắp xếp thời gian.</td>
+      <td>Có ý thức về cam kết nhưng chưa chắc sắp xếp được thời gian.</td>
+      <td>Có kế hoạch cụ thể (recap, gặp mentor, đánh giá giữa/cuối mùa) và hiểu rõ trách nhiệm 9 tháng.</td>
+    </tr>
+    <tr>
+      <td><b>Mức độ phù hợp</b></td>
+      <td>Mong muốn về mentor/ngành lệch hẳn so với mảng mentor hiện có.</td>
+      <td>Phù hợp một phần — ghép được nhưng không tối ưu.</td>
+      <td>Mong muốn rõ, khớp tốt với hồ sơ ứng tuyển và định hướng ngành nghề.</td>
+    </tr>
+    <tr>
+      <td><b>Giao tiếp</b></td>
+      <td>Trả lời rời rạc, khó theo dõi, gần như không tương tác qua lại.</td>
+      <td>Diễn đạt được ý chính nhưng chưa mạch lạc, cần gợi ý nhiều.</td>
+      <td>Trình bày rõ ràng, mạch lạc, chủ động hỏi ngược lại mentor.</td>
+    </tr>
+  </table>
+  <p style="margin-top:1.2mm;font-size:7.1pt;color:var(--muted)">2 và 4 điểm là mức trung gian giữa hai
+    mốc liền kề — mentor tự cân nhắc, không có mô tả riêng cho hai mức này.</p>
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 2/4</span>
+  <span>Nguồn: <code>lib/mentee-offline-core.ts</code> (OFFLINE_SCORES, OFFLINE_OUTCOMES)</span>
+</footer>
+
+<!-- ══════════════════════════ TRANG 3 ══════════════════════════ -->
+<div class="page-break"></div>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho Core Team · Phỏng vấn mentee trực tiếp 03–04/10 (tiếp)</div>
+    <h1>Câu hỏi gợi ý và những gì mentor nhìn thấy khi chấm</h1>
+    <p class="sub">Nối tiếp khung điểm ở trang trước — câu hỏi khơi gợi theo từng tiêu chí, và đúng những
+      gì hiện ra trên màn hình trước khi mentor bắt đầu chấm.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 30/09/2026</div>
+</header>
 
 <div class="grid">
   <div>
     <div class="block">
-      <h2>Nguyên văn 5 tiêu chí (đúng như màn hình chấm hiển thị)</h2>
-      <table>
-        <tr><th>Mã trong hệ thống</th><th>Nhãn hiển thị</th></tr>
-        <tr><td><code>score_motivation</code></td><td>Động lực tham gia</td></tr>
-        <tr><td><code>score_goal_clarity</code></td><td>Mục tiêu rõ ràng</td></tr>
-        <tr><td><code>score_commitment</code></td><td>Mức độ cam kết</td></tr>
-        <tr><td><code>score_fit</code></td><td>Mức độ phù hợp</td></tr>
-        <tr><td><code>score_communication</code></td><td>Giao tiếp</td></tr>
-      </table>
-      <p style="margin-top:1.6mm">Tổng tối đa <b>25 điểm</b>. Không có điểm liệt/điểm sàn riêng theo
-        từng tiêu chí — hệ thống chỉ cộng tổng và để mentor tự chọn kết quả (Đạt / Không chọn / Cần BTC
-        xem xét thêm) một cách độc lập với tổng điểm.</p>
-    </div>
-
-    <div class="block">
-      <h2>Câu hỏi gợi ý theo tiêu chí (nguồn: tài liệu Mùa 11, BTC gửi 30/09)</h2>
+      <h2>Câu hỏi gợi ý theo tiêu chí (nguồn: tài liệu Mùa 11, chỉ mượn câu hỏi)</h2>
       <ul class="tight">
         <li><b>Động lực tham gia / Mục tiêu rõ ràng</b> — Hiện tại bạn đang gặp khó khăn gì? Tại sao bạn
           quyết định ứng tuyển làm Mentee? Chương trình có thể giúp bạn những gì, bằng cách nào?</li>
         <li><b>Mức độ cam kết</b> — Kế hoạch của bạn trong 9 tháng tham gia chương trình là gì? Bạn cam
           kết viết recap, gặp mentor, tham gia đánh giá giữa/cuối mùa thế nào?</li>
-        <li><b>Mức độ phù hợp</b> và <b>Giao tiếp</b> — tài liệu chưa có câu hỏi riêng. "Giao tiếp" vốn
-          quan sát xuyên suốt buổi (cách trình bày), không cần một câu hỏi riêng; "Mức độ phù hợp" mentor
-          tự đối chiếu với hồ sơ ứng tuyển và mảng mentor của mình.</li>
+        <li><b>Mức độ phù hợp</b> — Mentee tự mô tả mong muốn về mentor (ngành, tính cách, kinh nghiệm)
+          thế nào? Có khớp với mảng mentor Mùa 12 đang có không?</li>
+        <li><b>Giao tiếp</b> — không cần một câu hỏi riêng, quan sát xuyên suốt buổi: mentee trả lời có
+          mạch lạc không, có chủ động hỏi lại không.</li>
         <li>Câu mở đầu/kết thúc gợi ý (không tính điểm): "Bạn hãy giới thiệu tóm tắt về bản thân và gia
           đình?" / "Vì sao bạn nghĩ chương trình nên chọn bạn?"</li>
       </ul>
@@ -292,7 +348,9 @@
         bằng màu đỏ là BẮT BUỘC hỏi — màu không giữ được khi trích xuất, Core Team xem lại đúng file PDF
         gốc nếu cần biết chính xác câu nào bắt buộc.</p>
     </div>
+  </div>
 
+  <div>
     <div class="block">
       <h2>Những gì mentor thấy TRƯỚC khi chấm</h2>
       <ul class="tight">
@@ -304,28 +362,25 @@
           (nếu có) — mỗi lượt phỏng vấn độc lập.</li>
       </ul>
     </div>
-  </div>
 
-  <div>
     <div class="block">
       <h2>Việc BTC nên chuẩn bị thêm (không phải việc của hệ thống)</h2>
       <ul class="tight">
         <li>Thời lượng gợi ý mỗi lượt phỏng vấn (hệ thống không giới hạn hay nhắc giờ).</li>
         <li>Cách xử lý khi hai mentor trong cùng phòng chấm lệch nhau nhiều — hệ thống không tự phát
           hiện, chỉ BTC đọc lại mới thấy.</li>
-        <li>Câu hỏi gợi ý riêng cho hai tiêu chí còn thiếu (Mức độ phù hợp, Giao tiếp) nếu BTC muốn thống
-          nhất thêm trước 03/10.</li>
+        <li>Duyệt lại bảng "Thang điểm gợi ý" bên trên trước 03/10 nếu BTC muốn chỉnh mốc nào.</li>
       </ul>
     </div>
   </div>
 </div>
 
 <footer>
-  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 2/3</span>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 3/4</span>
   <span>Nguồn: <code>lib/mentee-offline-core.ts</code> (OFFLINE_SCORES, OFFLINE_OUTCOMES)</span>
 </footer>
 
-<!-- ══════════════════════════ TRANG 3 ══════════════════════════ -->
+<!-- ══════════════════════════ TRANG 4 ══════════════════════════ -->
 <div class="page-break"></div>
 
 <header>
@@ -433,7 +488,7 @@
 </div>
 
 <footer>
-  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 3/3</span>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 4/4</span>
   <span>Nguồn: <code>app/interviews/mentee-offline/workflow.tsx</code></span>
 </footer>
 
