@@ -1,7 +1,8 @@
 /**
  * Hướng dẫn cho Core Team, dựng 30/09/2026: mentor vào hệ thống và phỏng vấn
- * mentee 03–04/10. Chỉ nội dung dành cho mentor (đăng nhập, chấm điểm) — anh
+ * mentee 03–04/10. Trang 1–2 dành cho mentor (đăng nhập, chấm điểm) — anh
  * Hoàng xử lý riêng phần cấp quyền/danh sách nội bộ, không thuộc tài liệu này.
+ * Trang 3 (thêm 30/09) là quy trình check-in → phân công cho Support/BTC.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,14 +56,13 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain("chưa có câu hỏi riêng");
   });
 
-  it("nêu rõ khoảng trống phân loại G/C/E/F chưa có chỗ ghi trong hệ thống", () => {
-    expect(text).toContain("G/C/E/F");
-    expect(text).toContain("KHÔNG có ô nào để mentor ghi phân loại này");
-    expect(text).toContain("lib/mentee-offline-core.ts");
+  it("đã bỏ hẳn phân loại nhóm mentee G/C/E/F — anh Hoàng chốt không dùng cho Mùa 12", () => {
+    expect(text).not.toContain("G/C/E/F");
+    expect(text).not.toContain("General/Career/Elite/Focus");
+    expect(text).not.toContain("phân loại nhóm mentee");
   });
 
   it("không còn phần B nội bộ về cấp quyền — anh Hoàng xử lý riêng", () => {
-    expect(text).not.toContain("Phần B");
     expect(text).not.toContain("Những câu cần anh Hoàng chốt");
     expect(text).not.toContain("Rủi ro gấp nhất");
     expect(text).not.toContain("/reviews/reviewer-pool");
@@ -72,8 +72,24 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain("Chỉ gửi thông báo này SAU KHI mentor đã được cấp quyền phỏng vấn");
   });
 
-  it("PDF đủ hai trang", () => {
+  it("nêu chính xác hai nhãn câu trả lời chuẩn bị, đúng RAW_PAYLOAD_LABELS (lib/application-export.ts)", () => {
+    expect(text).toContain("Mong muốn về Mentor đồng hành");
+    expect(text).toContain("Lý do muốn có Mentor đồng hành");
+    expect(text).toContain("nằm CHUNG danh sách này");
+  });
+
+  it("quy trình check-in → phân công nêu rõ vai trò Support/BTC và đúng đường dẫn/nhãn nút thật (app/interviews/mentee-offline/workflow.tsx)", () => {
+    expect(text).toContain("Phân công phỏng vấn");
+    expect(text).toContain("Support/BTC trực bàn");
+    expect(text).toContain("/interviews/mentee-offline");
+    expect(text).toContain("Xác nhận check-in");
+    expect(text).toContain("Lưu phân bàn");
+    expect(text).toContain("Lý do đổi phân công");
+    expect(text).toContain("BẮT BUỘC phải điền");
+  });
+
+  it("PDF đủ ba trang", () => {
     const pdf = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf"), "latin1");
-    expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(2);
+    expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(3);
   });
 });

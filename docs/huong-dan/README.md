@@ -15,7 +15,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
 | `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 19 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
 | `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Support team, Core team, BTC | Hai trang, cập nhật 29/09: gửi thư mời NGAY, cố ý không có địa chỉ — mentee mở lại đúng link để xem khi có; ai bấm nút gửi và cần bấm lại nhiều lần; 28 ca, ghế và phòng/bàn khác nhau theo ngày; thư mời nguyên văn và hướng dẫn QR/check-in/phân bàn/chấm/nhận mentee |
-| `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` | Core Team (soạn thông báo/video cho mentor) | Hai trang, dựng 30/09, thu hẹp lại 30/09 chỉ còn nội dung dành cho MENTOR (phần cấp quyền/danh sách nội bộ anh Hoàng làm riêng, không thuộc tài liệu này): đăng nhập lần đầu, tìm đúng mentee được phân, chấm 5 tiêu chí/25 điểm, câu hỏi gợi ý cho 3/5 tiêu chí (từ tài liệu Mùa 11 BTC gửi), khoảng trống phân loại G/C/E/F |
+| `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` | Trang 1–2: Core Team (soạn thông báo/video cho mentor). Trang 3: Support/BTC trực bàn | Ba trang, dựng 30/09. Trang 1–2 CHỈ nội dung dành cho MENTOR (phần cấp quyền/danh sách nội bộ anh Hoàng làm riêng, không thuộc tài liệu này): đăng nhập lần đầu, tìm đúng mentee được phân, chấm 5 tiêu chí/25 điểm, câu hỏi gợi ý cho 3/5 tiêu chí (từ tài liệu Mùa 11 BTC gửi) — đã bỏ hẳn phần phân loại nhóm mentee G/C/E/F theo chốt của anh Hoàng. Trang 3 (thêm 30/09) là quy trình check-in → phân công phòng/bàn/người phỏng vấn cho Support/BTC, cùng màn hình `/interviews/mentee-offline` mentor dùng nhưng khác nút thao tác |
 
 ## Sửa và xuất lại bản PDF
 
@@ -153,22 +153,31 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   sửa đè tài liệu này
 - Giữ **đúng hai trang**: test tự đếm số trang trong PDF
 
-**Mentor phỏng vấn mentee trực tiếp (hai trang):**
+**Mentor phỏng vấn mentee trực tiếp (ba trang):**
 
-- Toàn bộ tài liệu mô tả bước thật trên màn hình cho MENTOR (đăng nhập, tìm mentee,
-  chấm điểm) — `__tests__/huong-dan-mentor-phong-van-truc-tiep.test.ts` đối chiếu
-  nhãn nút và đường dẫn với mã nguồn thật (`app/login`,
+- Trang 1–2 mô tả bước thật trên màn hình cho MENTOR (đăng nhập, tìm mentee, chấm
+  điểm) — `__tests__/huong-dan-mentor-phong-van-truc-tiep.test.ts` đối chiếu nhãn nút
+  và đường dẫn với mã nguồn thật (`app/login`,
   `app/interviews/mentee-offline/workflow.tsx`), và 5 tiêu chí/kết quả với
   `lib/mentee-offline-core.ts` (`OFFLINE_SCORES`, `OFFLINE_OUTCOMES`)
-- **Không còn phần "nội bộ" về cấp quyền/danh sách mentor** (bản 30/09 ban đầu có
-  trang 3 cho việc này) — anh Hoàng chủ động tách ra làm riêng 30/09, tài liệu này
-  từ nay CHỈ còn nội dung gửi được cho mentor. Đừng thêm lại số liệu sống (bao nhiêu
-  mentor đã có quyền, trần thư Brevo…) vào đây — thứ đó đổi theo ngày và không phải
-  thứ mentor cần đọc
-- Câu hỏi gợi ý lấy từ tài liệu chấm Mùa 11 anh Hoàng gửi 30/09 — chỉ khớp được 3/5
-  tiêu chí đang chạy thật cho Mùa 12 (thang điểm hai bên KHÁC NHAU: Mùa 11 là 3 tiêu
-  chí/10đ, Mùa 12 là 5 tiêu chí/25đ — đã CHỐT giữ nguyên 5 tiêu chí/25đ, chỉ mượn câu
-  hỏi làm gợi ý). Tài liệu Mùa 11 còn khoản phân loại G/C/E/F không có chỗ ghi trong
-  hệ thống — nêu trong ô cảnh báo, đừng âm thầm thêm ô mới vào form chấm mà không có
-  migration
-- Giữ **đúng hai trang**: test tự đếm số trang trong PDF
+- **Không có phần "nội bộ" về cấp quyền/danh sách mentor** (bản 30/09 ban đầu có
+  trang 3 cho việc này) — anh Hoàng chủ động tách ra làm riêng 30/09, trang 1–2 CHỈ
+  còn nội dung gửi được cho mentor. Đừng thêm lại số liệu sống (bao nhiêu mentor đã
+  có quyền, trần thư Brevo…) vào trang 1–2 — thứ đó đổi theo ngày và không phải thứ
+  mentor cần đọc
+- Câu hỏi gợi ý ở trang 2 lấy từ tài liệu chấm Mùa 11 anh Hoàng gửi 30/09 — chỉ khớp
+  được 3/5 tiêu chí đang chạy thật cho Mùa 12 (thang điểm hai bên KHÁC NHAU: Mùa 11
+  là 3 tiêu chí/10đ, Mùa 12 là 5 tiêu chí/25đ — đã CHỐT giữ nguyên 5 tiêu chí/25đ,
+  chỉ mượn câu hỏi làm gợi ý). **Phân loại nhóm mentee G/C/E/F của tài liệu Mùa 11
+  đã BỎ HẲN** theo chốt của anh Hoàng 30/09 — đừng thêm lại, kể cả dạng cảnh báo
+- **Trang 3 (thêm 30/09)** là quy trình check-in → phân công cho **Support/BTC trực
+  bàn**, không phải nội dung gửi mentor — vai trò/bước/nhãn nút đối chiếu thẳng với
+  `app/interviews/mentee-offline/workflow.tsx` (`canOperate`-gated: "Xác nhận
+  check-in", ba ô Phòng/Bàn/Người phỏng vấn, "Lưu phân bàn", "Lý do đổi phân công"
+  bắt buộc khi đổi người). Đổi nhãn nút hay luồng ở màn hình đó thì phải sửa trang
+  3 trong cùng lần đổi
+- Bước "Mở hồ sơ" ở trang 1 nêu ĐÚNG hai nhãn hiển thị của câu trả lời chuẩn bị
+  ("Mong muốn về Mentor đồng hành", "Lý do muốn có Mentor đồng hành") — đối chiếu
+  `RAW_PAYLOAD_LABELS` trong `lib/application-export.ts`; đổi nhãn ở đó thì sửa
+  luôn câu này
+- Giữ **đúng ba trang**: test tự đếm số trang trong PDF
