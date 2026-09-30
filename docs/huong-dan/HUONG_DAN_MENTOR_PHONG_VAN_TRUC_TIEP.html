@@ -163,14 +163,16 @@
         <li>
           <b class="t">Chờ Support check-in</b>
           Mentor <b>không tự check-in</b> mentee và <b>không tự xếp phòng/bàn</b> — hai việc này chỉ
-          Support/BTC trực bàn làm được. Mentee xuất hiện trong danh sách của mentor ngay sau khi được
-          xếp vào đúng phòng/bàn của mình.
+          Support/BTC trực bàn làm được (quy trình chi tiết ở trang sau). Mentee xuất hiện trong danh
+          sách của mentor ngay sau khi được xếp vào đúng phòng/bàn của mình.
         </li>
         <li>
           <b class="t">Mở hồ sơ</b>
-          Bấm vào tên mentee để mở hồ sơ — đọc mục <b>"Application đã nộp"</b> (đầy đủ câu trả lời
-          mentee đã nộp lúc ứng tuyển, <b>kể cả câu trả lời hai câu hỏi chuẩn bị</b> nếu mentee đã điền
-          trên trang đặt ca) và mục <b>"Điểm và nhận xét vòng hồ sơ"</b> (điểm reviewer đã chấm trước đó).
+          Bấm vào tên mentee để mở hồ sơ — đọc mục <b>"Application đã nộp"</b>: toàn bộ câu trả lời
+          mentee nộp lúc ứng tuyển, gồm cả hai câu trả lời chuẩn bị nếu mentee đã điền trên trang đặt ca —
+          nằm CHUNG danh sách này, đúng hai dòng nhãn <b>"Mong muốn về Mentor đồng hành"</b> và
+          <b>"Lý do muốn có Mentor đồng hành"</b>. Và mục <b>"Điểm và nhận xét vòng hồ sơ"</b> (điểm
+          reviewer đã chấm trước đó).
         </li>
       </ol>
     </div>
@@ -230,7 +232,7 @@
 </div>
 
 <footer>
-  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 1/2</span>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 1/3</span>
   <span>Nội dung lấy đúng nhãn nút và bước thật trên màn hình — không đổi câu chữ khi soạn thông báo.</span>
 </footer>
 
@@ -315,21 +317,99 @@
           nhất thêm trước 03/10.</li>
       </ul>
     </div>
+  </div>
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 2/3</span>
+  <span>Nguồn: <code>lib/mentee-offline-core.ts</code> (OFFLINE_SCORES, OFFLINE_OUTCOMES)</span>
+</footer>
+
+<!-- ══════════════════════════ TRANG 3 ══════════════════════════ -->
+<div class="page-break"></div>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho Core Team · Phỏng vấn mentee trực tiếp 03–04/10 (tiếp)</div>
+    <h1>Phân công phỏng vấn — check-in đến giao mentee cho mentor</h1>
+    <p class="sub">Vai trò <b>Support/BTC trực bàn</b>, không phải việc mentor tự làm. Cùng một màn hình
+      mentor dùng, nhưng chỉ tài khoản có quyền vận hành mùa mới thấy các nút thao tác dưới đây.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 30/09/2026</div>
+</header>
+
+<div class="prep">
+  <b class="h">Màn hình dùng suốt quy trình</b>
+  Menu <span class="path">Phỏng vấn → Phỏng vấn mentee trực tiếp</span>
+  (<span class="ui">/interviews/mentee-offline</span>) — đúng trang mentor đăng nhập vào ở Bước 1. Support/
+  BTC KHÔNG cần đăng nhập ở trang nào khác riêng để làm việc phân công.
+</div>
+
+<div class="grid">
+  <div>
+    <div class="block">
+      <h2>Bước A — Check-in mentee</h2>
+      <ol class="steps">
+        <li>
+          <b class="t">Tìm đúng mentee</b>
+          Quét mã QR mentee đưa ra bằng máy quét ngay trên màn hình, hoặc gõ tên/số điện thoại vào ô
+          tìm rồi bấm vào đúng dòng để mở hồ sơ.
+        </li>
+        <li>
+          <b class="t">Bấm "Xác nhận check-in"</b>
+          Màn hình hỏi lại tên và giờ ca trước khi lưu — bấm xác nhận trong hộp thoại đó. Mentee đã
+          check-in rồi thì nút này đổi thành dòng chữ báo giờ đã check-in, không bấm lại được.
+        </li>
+      </ol>
+    </div>
+
+    <div class="block">
+      <h2>Bước B — Phân phòng, bàn, người phỏng vấn</h2>
+      <ol class="steps" style="counter-reset: s 2;">
+        <li>
+          <b class="t">Chỉ hiện SAU KHI đã check-in ở Bước A</b>
+          Ba ô chọn hiện ra ngay dưới nút check-in: <span class="ui">Phòng</span>,
+          <span class="ui">Bàn</span>, <span class="ui">Người phỏng vấn</span> (danh sách người đang có
+          mặt, không phải toàn bộ interviewer của mùa).
+        </li>
+        <li>
+          <b class="t">Bấm "Lưu phân bàn"</b>
+          Chọn đủ cả ba ô rồi bấm lưu. Đổi người phỏng vấn khác với lần phân trước thì ô
+          <span class="ui">Lý do đổi phân công</span> BẮT BUỘC phải điền — hệ thống từ chối lưu nếu bỏ
+          trống.
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <div>
+    <div class="block">
+      <h2>Kết quả — mentee về đúng danh sách của mentor</h2>
+      <ul class="tight">
+        <li>Ngay sau khi <b>Lưu phân bàn</b> ở Bước B, mentee xuất hiện trong danh sách của ĐÚNG mentor
+          vừa chọn ở ô "Người phỏng vấn" — không cần thêm thao tác nào khác.</li>
+        <li>Mentor chỉ thấy mentee đó nếu đang tick <b>"Chỉ ứng viên được phân cho tôi"</b> (Bước 2 của
+          mentor). Bỏ tick thì mentor thấy TẤT CẢ mentee trong mùa, không riêng người được phân.</li>
+        <li>Phân nhầm phòng/bàn: sửa lại đúng ba ô ở Bước B rồi bấm Lưu phân bàn lại — không cần huỷ
+          check-in.</li>
+      </ul>
+    </div>
 
     <div class="block warn">
-      <b class="h">Tài liệu Mùa 11 còn một phần KHÔNG đưa vào được — phân loại nhóm mentee (G/C/E/F)</b>
-      Tài liệu BTC gửi có thêm bảng phân 4 nhóm mentee (General/Career/Elite/Focus) để phục vụ ghép cặp
-      sau này. <b>Hệ thống hiện KHÔNG có ô nào để mentor ghi phân loại này</b> — không có trong
-      <code>lib/mentee-offline-core.ts</code> hay bất kỳ đâu khác. Muốn dùng cho Mùa 12, cần chốt: thêm ô
-      mới vào form chấm (cần code + migration, không kịp trước 03/10), hay tạm để mentor ghi vào ô
-      "Nhận xét" tự do (không lọc/báo cáo được), hay bỏ cho mùa này.
+      <b class="h">Việc KHÔNG làm được ở màn hình này</b>
+      <ul class="tight">
+        <li>Không đổi được ca/giờ phỏng vấn của mentee — chỉ đổi được phòng, bàn, người phỏng vấn.</li>
+        <li>Không có nút "check-in hàng loạt" — mỗi mentee một lượt quét/tìm và một lượt xác nhận riêng.</li>
+        <li>Ai KHÔNG có quyền vận hành mùa (tài khoản mentor thường) sẽ không thấy nút check-in hay ba ô
+          phân công — chỉ thấy đúng phần chấm điểm của mình.</li>
+      </ul>
     </div>
   </div>
 </div>
 
 <footer>
-  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 2/2</span>
-  <span>Nguồn: <code>lib/mentee-offline-core.ts</code> (OFFLINE_SCORES, OFFLINE_OUTCOMES)</span>
+  <span>VAM OS · Hướng dẫn Core Team · Phỏng vấn mentee trực tiếp 03–04/10 · Trang 3/3</span>
+  <span>Nguồn: <code>app/interviews/mentee-offline/workflow.tsx</code></span>
 </footer>
 
 </body>
