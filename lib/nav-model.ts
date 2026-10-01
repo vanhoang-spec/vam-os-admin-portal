@@ -1,13 +1,13 @@
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import {
-  canAssignReview,
   canAssignReviewLots,
   canBrowseOperations,
   canComposeEmailTemplate,
   canInviteParticipants,
   canManageReviewers,
   canManageSubmissionBonus,
-  canUseAiTools
+  canUseAiTools,
+  canViewMenteeSessionStatus
 } from "@/lib/permissions";
 import {
   canBrowseApplications,
@@ -181,10 +181,13 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/interviews/lich", label: "Lịch phỏng vấn" },
             { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" },
             { href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" },
-            // Cấu hình 12 ca phỏng vấn mentee. Gate HẸP HƠN nhóm này: trang đòi
-            // canAssignReview, còn nhóm này mở cho cả reviewer. Hiện link cho
-            // reviewer là hứa một trang chỉ trả về câu từ chối.
-            ...(canAssignReview(role) ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
+            // Cấu hình 28 ca phỏng vấn mentee. Gate HẸP HƠN nhóm này: trang đòi
+            // canViewMenteeSessionStatus (super_admin/admin/core_team/support_team,
+            // từ 01/10/2026), còn nhóm này mở cho cả reviewer. Hiện link cho
+            // reviewer là hứa một trang chỉ trả về câu từ chối. Sửa ghế/địa điểm/
+            // gửi thư mời vẫn hẹp hơn nữa (canAssignReview) — trang tự ẩn các nút
+            // đó cho support_team, không phải việc của nav.
+            ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
           ],
         }
       : showStaffingOnly
@@ -195,6 +198,10 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
               ...(showApplicationOps ? [{ href: "/applications", label: "Ứng tuyển (Tất cả)" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" }] : []),
+              // support_team đi theo nhánh "Ứng tuyển" này, không phải nhánh
+              // showReviews ở trên — cùng đích (canViewMenteeSessionStatus đã cho
+              // phép), chỉ khác chỗ chèn vì support_team không thuộc showReviews.
+              ...(role === "support_team" ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
               ...(canAssignLots ? [{ href: "/reviews/assign-bulk", label: "Giao hồ sơ đánh giá" }] : []),
               ...(canStaffReviewers
                 ? [{ href: "/reviews/reviewer-pool", label: "Danh sách nhân sự tuyển sinh" }]

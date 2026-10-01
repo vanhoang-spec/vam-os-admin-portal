@@ -18,7 +18,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getCurrentAdminUser: vi.fn(),
-  getSupabaseServiceRoleClient: vi.fn()
+  getSupabaseServiceRoleClient: vi.fn(),
+  readAllPages: vi.fn()
 }));
 
 vi.mock("server-only", () => ({}));
@@ -26,10 +27,12 @@ vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: mocks.getCurrentAdminU
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleClient: mocks.getSupabaseServiceRoleClient
 }));
+vi.mock("@/lib/paged-read", () => ({ readAllPages: mocks.readAllPages }));
 
 import {
   applySeatLimitToAllSessions,
   applyVenueToAllSessions,
+  getSessionAdminData,
   saveSessionConfig
 } from "@/lib/mentee-session-admin";
 
@@ -79,6 +82,49 @@ beforeEach(() => {
   soDongTraVe = 1;
   mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role: "core_team" });
   mocks.getSupabaseServiceRoleClient.mockReturnValue(fakeClient());
+  mocks.readAllPages.mockResolvedValue({ data: [], error: null });
+});
+
+describe("5. cổng đọc — xem tình hình rộng hơn cổng ghi (01/10/2026)", () => {
+  it.each(["super_admin", "admin", "core_team"])(
+    "vai trò %s xem được VÀ sửa được (canOperate=true)",
+    async (role) => {
+      mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role });
+      const result = await getSessionAdminData();
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.canOperate).toBe(true);
+    }
+  );
+
+  it("support_team xem được nhưng KHÔNG sửa được (canOperate=false)", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role: "support_team" });
+    const result = await getSessionAdminData();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.canOperate).toBe(false);
+  });
+
+  it.each(["reviewer", "viewer", "mentor"])("vai trò %s vẫn không xem được trang này", async (role) => {
+    mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role });
+    const result = await getSessionAdminData();
+    expect(result.ok).toBe(false);
+  });
+
+  it("chưa đăng nhập thì cũng không xem được", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue(null);
+    const result = await getSessionAdminData();
+    expect(result.ok).toBe(false);
+  });
+
+  it("support_team đọc được nhưng vẫn bị cổng ghi saveSessionConfig chặn — canOperate không tự mở khoá ghi", async () => {
+    mocks.getCurrentAdminUser.mockResolvedValue({ id: "au-1", role: "support_team" });
+    const read = await getSessionAdminData();
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.canOperate).toBe(false);
+
+    const write = await saveSessionConfig({ sessionId: SESSION_ID, seatLimit: "25", venue: "", closed: "" });
+    expect(write.ok).toBe(false);
+    expect(daGhi).toHaveLength(0);
+  });
 });
 
 describe("1. cổng quyền", () => {

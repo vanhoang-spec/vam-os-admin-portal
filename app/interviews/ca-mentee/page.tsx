@@ -14,7 +14,10 @@ import Link from "next/link";
  *
  * Phép kiểm quyền nằm trong lib/mentee-session-admin.ts và
  * lib/mentee-invite-dispatch.ts, chạy cho cả lượt đọc lẫn mọi lượt ghi — trang
- * chỉ vẽ lại câu từ chối.
+ * chỉ vẽ lại câu từ chối. Từ 01/10/2026: đọc (xem tình hình) rộng hơn ghi
+ * (sửa ghế/địa điểm/gửi thư) — support_team qua được cổng đọc nhưng không qua
+ * cổng ghi, nên trang dùng data.canOperate để ẩn các ô sửa/nút lưu/nút gửi
+ * cho đúng nhóm đó thay vì hiện ra rồi để máy chủ từ chối.
  */
 
 export const dynamic = "force-dynamic";
@@ -83,16 +86,19 @@ export default async function MenteeSessionConfigPage() {
             anyBookable={invite.anyBookable}
             deadlineLabel={invite.deadlineLabel}
             sessionsWithoutVenue={sessionsWithoutVenue}
+            canOperate={data.canOperate}
           />
         ) : (
           <EmptyState message={invite.message} />
         )}
       </Card>
 
-      <Card>
-        <h2 className="mb-3 text-base font-semibold text-vam-ink">Điền nhanh cho mọi ca</h2>
-        <BulkPanel />
-      </Card>
+      {data.canOperate ? (
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Điền nhanh cho mọi ca</h2>
+          <BulkPanel />
+        </Card>
+      ) : null}
 
       {data.deadlineLabel ? (
         <p className="text-xs text-slate-500">
@@ -107,7 +113,7 @@ export default async function MenteeSessionConfigPage() {
           <h2 className="text-base font-semibold text-vam-ink">{day.label}</h2>
           <div className="mt-1">
             {day.rows.map((row) => (
-              <SessionRowForm key={row.id} row={row} />
+              <SessionRowForm key={row.id} row={row} canOperate={data.canOperate} />
             ))}
           </div>
         </Card>
