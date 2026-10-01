@@ -403,12 +403,16 @@ const REVIEW_ROUTES = [
   "/interviews/lich",
   "/interviews/ket-qua-mentor",
   "/interviews/mentee-offline",
-  // Cấu hình 12 ca phỏng vấn mentee (24/09/2026). CỐ Ý nằm trong REVIEW_ROUTES
-  // chứ không phải HELPER_REVIEW_ROUTES: trang gate bằng canAssignReview, hẹp
-  // hơn nhóm nav chứa nó, nên reviewer không được mời vào một trang chỉ trả về
-  // câu từ chối.
-  "/interviews/ca-mentee",
 ];
+
+// Xem tình hình 28 ca phỏng vấn mentee (24/09, mở rộng đọc cho support_team
+// 01/10/2026). CỐ Ý tách khỏi REVIEW_ROUTES: trang gate bằng
+// canViewMenteeSessionStatus, hẹp hơn nhóm nav REVIEW_ROUTES (reviewer không
+// được mời vào một trang chỉ trả về câu từ chối) nhưng RỘNG hơn canAssignReview
+// theo chiều khác — support_team thấy link này dù không thuộc REVIEW_ROUTES.
+// Sửa ghế/địa điểm/gửi thư mời vẫn hẹp hơn nữa (canAssignReview); trang tự ẩn
+// các nút đó cho support_team, không phải việc của nav.
+const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee"];
 
 // S12 helper boundary: the browse routes in the base set are now gated on the
 // SAME predicates their pages enforce (lib/read-access for the community and
@@ -446,11 +450,11 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   //
   // Từ 11/09/2026 support_team cũng mời reviewer và giao hồ sơ, nên thấy đúng
   // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
-  support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
+  support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
 };
 
 function sortedRoutes(arr: string[]) {

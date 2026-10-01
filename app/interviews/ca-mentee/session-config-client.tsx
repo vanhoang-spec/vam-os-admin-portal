@@ -115,13 +115,49 @@ export function BulkPanel() {
   );
 }
 
-/** Một ca: số ghế, địa điểm riêng, và nút đóng ca. */
-export function SessionRowForm({ row }: { row: SessionAdminRow }) {
+/** Huy hiệu còn chỗ/đã đầy — tính thẳng từ seatLimit/taken, không cần cột riêng. */
+function SeatBadge({ seatLimit, taken }: { seatLimit: number | null; taken: number }) {
+  if (seatLimit === null) return null;
+  const remaining = seatLimit - taken;
+  return remaining <= 0 ? (
+    <span className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-800">Đã đầy</span>
+  ) : (
+    <span className="rounded bg-vam-mint/60 px-1.5 py-0.5 font-medium text-vam-ink">Còn {remaining} chỗ</span>
+  );
+}
+
+/** Một ca: số ghế, địa điểm riêng, và nút đóng ca. Chỉ xem (support_team) thì không có ô sửa/nút lưu. */
+export function SessionRowForm({ row, canOperate }: { row: SessionAdminRow; canOperate: boolean }) {
   const [state, action] = useFormState<SessionConfigState, FormData>(
     saveSessionConfigAction,
     INITIAL_SESSION_CONFIG_STATE
   );
   const moiBao = state.sessionId === row.id ? state : INITIAL_SESSION_CONFIG_STATE;
+
+  if (!canOperate) {
+    return (
+      <div className="border-t border-vam-line py-3">
+        <div className="grid gap-2 sm:grid-cols-[7rem_1fr_auto] sm:items-center">
+          <div className="text-sm font-semibold text-vam-ink">{row.timeLabel}</div>
+          <div className="text-sm text-vam-ink">
+            {row.venue || <span className="text-slate-500">Chưa điền địa điểm</span>}
+          </div>
+          <div className="text-xs text-slate-600">
+            {row.status === "closed" ? "Đã đóng" : row.seatLimit === null ? "Chưa mở" : `${row.seatLimit} ghế`}
+          </div>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
+          <span className={row.taken > 0 ? "font-medium text-vam-ink" : "text-slate-500"}>
+            Đã giữ chỗ: {row.taken}
+          </span>
+          <SeatBadge seatLimit={row.seatLimit} taken={row.taken} />
+          {row.seatLimit === null ? (
+            <span className="text-amber-700">Chưa điền ghế — ứng viên không đặt được ca này</span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form action={action} onReset={keepFormValues} className="border-t border-vam-line py-3">
@@ -169,6 +205,7 @@ export function SessionRowForm({ row }: { row: SessionAdminRow }) {
         <span className={row.taken > 0 ? "font-medium text-vam-ink" : "text-slate-500"}>
           Đã giữ chỗ: {row.taken}
         </span>
+        <SeatBadge seatLimit={row.seatLimit} taken={row.taken} />
         {row.seatLimit === null ? (
           <span className="text-amber-700">Chưa điền ghế — ứng viên không đặt được ca này</span>
         ) : null}
@@ -214,6 +251,8 @@ export type InviteDispatchPanelProps = {
   anyBookable: boolean;
   deadlineLabel: string;
   sessionsWithoutVenue: number;
+  /** support_team xem được bốn số này nhưng không gửi thư — nút gửi chỉ hiện khi true. */
+  canOperate: boolean;
 };
 
 /**
@@ -279,45 +318,49 @@ export function InviteDispatchPanel(props: InviteDispatchPanelProps) {
         </p>
       ) : null}
 
-      {props.sessionsWithoutVenue > 0 && props.anyBookable ? (
+      {props.canOperate && props.sessionsWithoutVenue > 0 && props.anyBookable ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {props.sessionsWithoutVenue} ca chưa có địa điểm. Bạn nào đặt vào các ca đó sẽ thấy trên trang vé câu
           “Ban tổ chức sẽ báo địa điểm cụ thể trước ngày phỏng vấn”. Nên điền địa điểm trước khi gửi thư mời.
         </p>
       ) : null}
 
-      <form action={action} className="grid gap-3">
-        <label className="flex items-start gap-2 text-sm text-vam-ink">
-          <input
-            type="checkbox"
-            name="confirmed"
-            value="yes"
-            checked={confirmed}
-            onChange={(event) => setConfirmed(event.target.checked)}
-            className="mt-1"
-          />
-          <span>
-            Tôi đã kiểm tra <strong>số ghế</strong>, <strong>địa điểm</strong> và <strong>hạn đặt ca
-            {props.deadlineLabel ? ` (${props.deadlineLabel})` : ""}</strong>. Thư mời đã gửi thì không rút lại được.
-          </span>
-        </label>
-        <div>
-          <SendButton disabled={!confirmed || blockedReason !== null} allowance={props.allowance} />
-        </div>
-        {blockedReason ? <p className="text-sm text-slate-600">{blockedReason}</p> : null}
-        {state.status !== "idle" && state.message ? (
-          <p
-            role={state.status === "success" ? "status" : "alert"}
-            className={
-              state.status === "success"
-                ? "rounded-md border border-vam-green bg-vam-mint/40 px-3 py-2 text-sm text-vam-ink"
-                : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-            }
-          >
-            {state.message}
-          </p>
-        ) : null}
-      </form>
+      {props.canOperate ? (
+        <form action={action} className="grid gap-3">
+          <label className="flex items-start gap-2 text-sm text-vam-ink">
+            <input
+              type="checkbox"
+              name="confirmed"
+              value="yes"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              Tôi đã kiểm tra <strong>số ghế</strong>, <strong>địa điểm</strong> và <strong>hạn đặt ca
+              {props.deadlineLabel ? ` (${props.deadlineLabel})` : ""}</strong>. Thư mời đã gửi thì không rút lại được.
+            </span>
+          </label>
+          <div>
+            <SendButton disabled={!confirmed || blockedReason !== null} allowance={props.allowance} />
+          </div>
+          {blockedReason ? <p className="text-sm text-slate-600">{blockedReason}</p> : null}
+          {state.status !== "idle" && state.message ? (
+            <p
+              role={state.status === "success" ? "status" : "alert"}
+              className={
+                state.status === "success"
+                  ? "rounded-md border border-vam-green bg-vam-mint/40 px-3 py-2 text-sm text-vam-ink"
+                  : "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              }
+            >
+              {state.message}
+            </p>
+          ) : null}
+        </form>
+      ) : (
+        <p className="text-sm text-slate-500">Chỉ Core Team/Admin gửi được thư mời.</p>
+      )}
     </div>
   );
 }

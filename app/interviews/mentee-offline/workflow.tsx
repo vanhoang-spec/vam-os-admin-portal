@@ -35,10 +35,20 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
   const [mine,setMine]=useState(false);
   const chooseCode=useCallback(async (code:string)=>{
     try {
-      const result=await lookupOfflineTicketAction(code);setMessage(result.message);
-      if (result.ok && result.applicationId) {setSelected(result.applicationId);setSession("");setQuery("");}
+      const result=await lookupOfflineTicketAction(code);
+      if (!result.ok || !result.applicationId) {setMessage(result.message);return;}
+      setSelected(result.applicationId);setSession("");setQuery("");
+      const found=data.candidates.find(c=>c.id===result.applicationId);
+      if (!found) {setMessage(result.message);return;}
+      if (found.status==="withdrawn") {setMessage(`Đã tìm thấy vé — hồ sơ ${found.name} đã rút, không check-in được.`);return;}
+      if (found.operation?.checked_in_at) {setMessage(`Đã tìm thấy vé — ${found.name} đã check-in trước đó lúc ${formatDateTime(found.operation.checked_in_at)}.`);return;}
+      try {
+        const checkin=await saveOfflineInterviewAction({applicationId:found.id,action:"checkin",revision:found.operation?.revision??0,values:{}});
+        setMessage(checkin.ok ? `Đã tự động check-in ${found.name}.` : checkin.message);
+        if (checkin.ok) router.refresh();
+      } catch {setMessage(`Đã tìm thấy vé ${found.name} nhưng check-in tự động thất bại — bấm "Xác nhận check-in" thủ công bên dưới.`);}
     } catch {setMessage("Không tra được vé, kiểm tra kết nối rồi thử lại.");}
-  },[]);
+  },[data.candidates,router]);
   const visible=data.candidates.filter(c=>(!session || c.sessionId===session) && (!mine || c.operation?.interviewer_id===data.actorId) &&
     (!query || c.name.toLocaleLowerCase("vi").includes(query.toLocaleLowerCase("vi")) ||
       (normalizedPhone(query).length>=3 && normalizedPhone(c.phone??"").includes(normalizedPhone(query)))));

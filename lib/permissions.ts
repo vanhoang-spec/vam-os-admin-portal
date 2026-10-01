@@ -20,6 +20,21 @@ export function canAssignReview(role?: string | null) {
 }
 
 /**
+ * Can VIEW the mentee interview session dashboard on /interviews/ca-mentee —
+ * invite funnel counts and seat/venue status per ca. Owner decision
+ * 01/10/2026: Support team needs to self-check progress without asking Core
+ * Team every time.
+ *
+ * Deliberately NOT canAssignReview widened: editing seats/venue, closing a
+ * ca, and sending invite batches stay on canAssignReview — those are
+ * operational decisions, not status-checking. The page itself hides the
+ * edit controls when this is true but canAssignReview is false.
+ */
+export function canViewMenteeSessionStatus(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
  * Can access /reviews and submit scoring.
  * Includes reviewer role in addition to admin tiers.
  */
