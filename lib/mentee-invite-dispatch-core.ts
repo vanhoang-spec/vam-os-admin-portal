@@ -21,13 +21,16 @@
 /**
  * Trần thư trong 24 giờ trượt — KHÔNG phải trần thật của gói Brevo, vì gói trả
  * phí (Starter, từ 01/10/2026) giới hạn theo THÁNG (5.000 thư/tháng), không
- * còn giới hạn theo ngày. Con số này là mức tự đặt để dồn một đợt gửi lớn
- * trong ngày (474 mentee chờ ca phỏng vấn 03–04/10) vẫn còn dư ngân sách cho
- * phần còn lại của tháng (~4.400 thư cho ~30 ngày còn lại). Hết đợt phỏng vấn
- * 04/10 thì có thể hạ số này lại nếu muốn giữ ngân sách tháng rộng rãi hơn.
- * Đổi gói thì đổi con số này.
+ * còn giới hạn theo ngày. Con số này là mức tự đặt.
+ *
+ * Nâng 600 → 1000 ngày 01/10/2026: anh Hoàng cần dồn xong trong đúng hôm nay
+ * cả hai việc — gửi hết thư mời mentee còn lại VÀ gửi thư cho mentor tham gia
+ * phỏng vấn — trước ngày 03–04/10. Chủ ý tiêu đậm ngân sách tháng trong vài
+ * ngày đầu (budget 5.000, dùng tập trung 3 ngày đầu trước 03–04/10), vì sau
+ * 04/10 nhu cầu gửi giảm hẳn. Hạ số này lại sau 04/10 nếu muốn giữ ngân sách
+ * tháng rộng rãi hơn cho phần còn lại. Đổi gói thì đổi con số này.
  */
-export const DAILY_EMAIL_LIMIT = 600;
+export const DAILY_EMAIL_LIMIT = 1000;
 
 /**
  * Phần hạn mức để dành cho mọi thư khác của hệ thống.
