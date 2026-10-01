@@ -19,7 +19,7 @@ import {
   hasBookableSession,
   interviewDaysLabel
 } from "@/lib/mentee-interview-core";
-import { requireBtc } from "@/lib/mentee-session-admin";
+import { requireBtc, requireSessionViewer } from "@/lib/mentee-session-admin";
 import { readAllPages, readAllPagesIn } from "@/lib/paged-read";
 import { getPublicOrigin } from "@/lib/public-url";
 import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
@@ -228,7 +228,7 @@ export type MenteeInviteStatus =
     };
 
 export async function getMenteeInviteStatus(): Promise<MenteeInviteStatus> {
-  const access = await requireBtc();
+  const access = await requireSessionViewer();
   if (!access.ok) return { ok: false, message: access.message };
   const { client, seasonId } = access;
 

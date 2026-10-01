@@ -8,7 +8,7 @@ import {
   sessionTimeLabel
 } from "@/lib/mentee-interview-core";
 import { readAllPages } from "@/lib/paged-read";
-import { canAssignReview } from "@/lib/permissions";
+import { canAssignReview, canViewMenteeSessionStatus } from "@/lib/permissions";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { formatDate, formatTime } from "@/lib/utils";
@@ -64,14 +64,9 @@ function serviceClient() {
   }
 }
 
-export async function requireBtc(): Promise<
-  { ok: true; client: any; seasonId: string } | { ok: false; message: string }
-> {
-  const admin = await getCurrentAdminUser();
-  if (!admin) return { ok: false, message: "Cần đăng nhập." };
-  if (!canAssignReview(admin.role)) {
-    return { ok: false, message: "Bạn không có quyền cấu hình ca phỏng vấn." };
-  }
+type SeasonContext = { ok: true; client: any; seasonId: string } | { ok: false; message: string };
+
+async function seasonContext(): Promise<SeasonContext> {
   const client = serviceClient();
   if (!client) return { ok: false, message: SAFE_ERROR };
 
@@ -91,6 +86,26 @@ export async function requireBtc(): Promise<
     };
   }
   return { ok: true, client, seasonId: String(data.id) };
+}
+
+/** Cổng ghi — sửa ghế/địa điểm, đóng ca, gửi thư mời. */
+export async function requireBtc(): Promise<SeasonContext> {
+  const admin = await getCurrentAdminUser();
+  if (!admin) return { ok: false, message: "Cần đăng nhập." };
+  if (!canAssignReview(admin.role)) {
+    return { ok: false, message: "Bạn không có quyền cấu hình ca phỏng vấn." };
+  }
+  return seasonContext();
+}
+
+/** Cổng đọc — chỉ xem tình hình, rộng hơn requireBtc (thêm support_team). */
+export async function requireSessionViewer(): Promise<SeasonContext> {
+  const admin = await getCurrentAdminUser();
+  if (!admin) return { ok: false, message: "Cần đăng nhập." };
+  if (!canViewMenteeSessionStatus(admin.role)) {
+    return { ok: false, message: "Bạn không có quyền xem tình hình ca phỏng vấn." };
+  }
+  return seasonContext();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,12 +131,16 @@ export type SessionAdminData =
       days: Array<{ dateKey: string; label: string; rows: SessionAdminRow[] }>;
       totals: { sessions: number; configured: number; seats: number; booked: number };
       deadlineLabel: string | null;
+      /** Sửa ghế/địa điểm, đóng ca — support_team xem được nhưng không sửa. */
+      canOperate: boolean;
     };
 
 export async function getSessionAdminData(): Promise<SessionAdminData> {
-  const access = await requireBtc();
+  const access = await requireSessionViewer();
   if (!access.ok) return { ok: false, message: access.message };
   const { client, seasonId } = access;
+  const admin = await getCurrentAdminUser();
+  const canOperate = canAssignReview(admin?.role);
 
   const sessions = await readAllPages<Json>(
     "interview_sessions",
@@ -195,7 +214,8 @@ export async function getSessionAdminData(): Promise<SessionAdminData> {
       seats: rows.reduce((sum, r) => sum + (r.seatLimit ?? 0), 0),
       booked: booked.data.length
     },
-    deadlineLabel: closesAt ? `${formatTime(closesAt)} ngày ${formatDate(closesAt)}` : null
+    deadlineLabel: closesAt ? `${formatTime(closesAt)} ngày ${formatDate(closesAt)}` : null,
+    canOperate
   };
 }
 
