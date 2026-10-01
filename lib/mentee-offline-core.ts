@@ -1,10 +1,10 @@
 export const OFFLINE_PATH = "/interviews/mentee-offline";
 export const OFFLINE_SCORES = [
-  ["score_motivation", "Động lực tham gia"],
-  ["score_goal_clarity", "Mục tiêu rõ ràng"],
-  ["score_commitment", "Mức độ cam kết"],
-  ["score_fit", "Mức độ phù hợp"],
-  ["score_communication", "Giao tiếp"]
+  ["score_motivation", "Động lực tham gia", "note_motivation"],
+  ["score_goal_clarity", "Mục tiêu rõ ràng", "note_goal_clarity"],
+  ["score_commitment", "Mức độ cam kết", "note_commitment"],
+  ["score_fit", "Mức độ phù hợp", "note_fit"],
+  ["score_communication", "Giao tiếp", "note_communication"]
 ] as const;
 export const OFFLINE_OUTCOMES = { passed: "Đạt làm mentee", rejected: "Không chọn làm mentee", needs_review: "Cần BTC xem xét thêm" };
 export type OfflineOutcome = keyof typeof OFFLINE_OUTCOMES;
@@ -13,12 +13,15 @@ export type OfflineReview = {
   score_motivation: number | null; score_goal_clarity: number | null; score_commitment: number | null;
   score_fit: number | null; score_communication: number | null; total_score: number | null;
   recommendation: string | null; reviewer_note: string | null;
+  note_motivation: string | null; note_goal_clarity: string | null; note_commitment: string | null;
+  note_fit: string | null; note_communication: string | null;
 };
 export type OfflineOperation = {
   checked_in_at: string | null; room: number | null; desk: number | null;
   interviewer_id: string | null; review_id: string | null; outcome: OfflineOutcome | null;
   match_id: string | null; revision: number;
   outcome_reason?: string | null;
+  is_online: boolean; online_note: string | null;
 };
 export type OfflineCandidate = {
   id: string; name: string; phone: string | null; email: string | null; status: string;
@@ -55,6 +58,8 @@ export function offlineError(message: string): string {
     EXISTING_SUBMITTED_REVIEW: "Đã có phiếu phỏng vấn nộp ở luồng cũ. Nhờ BTC kiểm tra trước khi phân lại.",
     REASON_REQUIRED: "Nhập lý do sửa kết quả hoặc lý do không chọn/cần xem thêm.",
     INVALID_SCORES: "Cần đủ 5 tiêu chí, mỗi tiêu chí từ 1 đến 5.",
+    INVALID_NOTES: "Thiếu ô ghi chú cho một trong 5 tiêu chí. Để trống được, nhưng không được bỏ hẳn ô.",
+    ALREADY_CHECKED_IN: "Đã check-in rồi, không huỷ lịch đăng ký được nữa — nhờ BTC xử lý trực tiếp.",
     INVALID_RESULT: "Kiểm tra kết quả và lựa chọn nhận mentee.",
     MENTOR_FULL: "Mentor đã đủ số mentee đăng ký nhận. Kết quả chưa được lưu.",
     MENTOR_NOT_APPROVED: "Tài khoản này chưa liên kết duy nhất với mentor đã được duyệt trong mùa.",

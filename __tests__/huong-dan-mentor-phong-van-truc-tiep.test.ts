@@ -116,4 +116,22 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     const pdf = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf"), "latin1");
     expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(4);
   });
+
+  it("ghi chú riêng từng tiêu chí (01/10) — tách biệt với ô Nhận xét chung", () => {
+    expect(text).toContain("mỗi tiêu chí trong 5 tiêu chí");
+    expect(text).toContain("tách biệt với ô \"Nhận xét\" chung");
+  });
+
+  it("đánh dấu phỏng vấn ONLINE (01/10) — chỉ Support/BTC, ứng viên không thấy và không tự chọn", () => {
+    expect(text).toContain("Phỏng vấn ONLINE");
+    expect(text).toContain("Chỉ Support/BTC thấy và đánh dấu được");
+    expect(text).toContain("ứng viên không thấy ô này và không tự chọn được");
+  });
+
+  it("huỷ lịch đăng ký (01/10) — chỉ Support/BTC, bắt buộc lý do, chỉ còn trước check-in", () => {
+    expect(text).toContain("Huỷ lịch đăng ký");
+    expect(text).toContain("Chỉ Support/BTC (không phải ứng viên) huỷ được");
+    expect(text).toContain("chỉ hiện khi mentee CHƯA check-in");
+    expect(text).toContain("bắt buộc điền");
+  });
 });

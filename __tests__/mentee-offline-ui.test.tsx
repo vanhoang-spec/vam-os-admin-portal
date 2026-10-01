@@ -3,26 +3,28 @@ import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {OfflineDashboardClient} from "@/app/interviews/mentee-offline/workflow";
 import {OFFLINE_SCORES,type OfflineDashboard} from "@/lib/mentee-offline-core";
-const mocks=vi.hoisted(()=>({save:vi.fn(),refresh:vi.fn()}));
+const mocks=vi.hoisted(()=>({save:vi.fn(),cancel:vi.fn(),refresh:vi.fn()}));
 vi.mock("next/navigation",()=>({useRouter:()=>({refresh:mocks.refresh})}));
-vi.mock("@/app/actions/mentee-offline",()=>({saveOfflineInterviewAction:mocks.save,lookupOfflineTicketAction:vi.fn()}));
+vi.mock("@/app/actions/mentee-offline",()=>({saveOfflineInterviewAction:mocks.save,lookupOfflineTicketAction:vi.fn(),cancelMenteeBookingAction:mocks.cancel}));
 vi.mock("@/app/interviews/mentee-offline/qr-camera",()=>({InterviewQrCamera:()=>null}));
 function data():OfflineDashboard {return {
   actorId:"mentor",seasonId:"season",canOperate:false,logs:[],
   sessions:[{id:"session",starts_at:"2026-10-03T01:00:00Z",ends_at:"2026-10-03T01:30:00Z",venue:"UEH",seat_limit:25}],
   participants:[{id:"mentor",full_name:"Mentor A",email:"mentor@example.test",capacity:1,activeMatches:0}],
   candidates:[{id:"app",name:"Mentee A",phone:"0901234567",email:"a@example.test",status:"interview_in_progress",sessionId:"session",bookedAt:"2026-09-27T01:00Z",rawPayload:null,answers:[["Mục tiêu","Học kỹ năng"]],reviews:[],
-    operation:{checked_in_at:"2026-10-03T00:50Z",room:5,desk:5,interviewer_id:"mentor",review_id:"review",outcome:null,match_id:null,revision:2}}]
+    operation:{checked_in_at:"2026-10-03T00:50Z",room:5,desk:5,interviewer_id:"mentor",review_id:"review",outcome:null,match_id:null,revision:2,is_online:false,online_note:null}}]
 };}
-beforeEach(()=>{vi.clearAllMocks();vi.spyOn(window,"confirm").mockReturnValue(true);mocks.save.mockResolvedValue({ok:true,message:"Đã lưu"});});
+beforeEach(()=>{vi.clearAllMocks();vi.spyOn(window,"confirm").mockReturnValue(true);mocks.save.mockResolvedValue({ok:true,message:"Đã lưu"});mocks.cancel.mockResolvedValue({ok:true,message:"Đã huỷ"});});
 afterEach(cleanup);
-it("mentor nhận mentee xác nhận đạt cùng 5 điểm và phiên bản đang xem",async()=>{
+it("mentor nhận mentee xác nhận đạt cùng 5 điểm, 5 ghi chú riêng và phiên bản đang xem",async()=>{
   render(<OfflineDashboardClient data={data()} initialApplication="app"/>);
   for(const [,label] of OFFLINE_SCORES) fireEvent.change(screen.getByLabelText(label),{target:{value:"4"}});
+  fireEvent.change(screen.getByLabelText("Ghi chú — Động lực tham gia"),{target:{value:"Rất chủ động"}});
   fireEvent.change(screen.getByLabelText("Nhận xét"),{target:{value:"Phù hợp"}});
   fireEvent.click(screen.getByLabelText(/Nhận làm mentee của tôi/));
   fireEvent.click(screen.getByRole("button",{name:"Xác nhận kết quả"}));
-  await waitFor(()=>expect(mocks.save).toHaveBeenCalledWith({applicationId:"app",action:"result",revision:2,values:{outcome:"passed",takeMentee:true,scores:[4,4,4,4,4],note:"Phù hợp",reason:""}}));
+  await waitFor(()=>expect(mocks.save).toHaveBeenCalledWith({applicationId:"app",action:"result",revision:2,
+    values:{outcome:"passed",takeMentee:true,scores:[4,4,4,4,4],notes:["Rất chủ động","","","",""],note:"Phù hợp",reason:""}}));
   expect(mocks.refresh).toHaveBeenCalled();
 });
 it("đổi sang không chọn tự bỏ nhận mentee và bắt buộc lý do",()=>{
@@ -55,4 +57,35 @@ it("sửa kết quả cũ cần bấm edit và nhập lý do",()=>{
   expect(screen.queryByLabelText("Nhận xét")).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:"Sửa kết quả / lựa chọn mentee"}));
   expect((screen.getByLabelText("Lý do sửa kết quả") as HTMLTextAreaElement).required).toBe(true);
+});
+it("Support lưu phân bàn kèm đánh dấu phỏng vấn ONLINE và ghi chú",async()=>{
+  const support=data();support.actorId="support";support.canOperate=true;
+  render(<OfflineDashboardClient data={support} initialApplication="app"/>);
+  fireEvent.change(screen.getByLabelText("Phòng"),{target:{value:"1"}});
+  fireEvent.change(screen.getByLabelText("Bàn"),{target:{value:"1"}});
+  fireEvent.change(screen.getByLabelText("Người phỏng vấn"),{target:{value:"mentor"}});
+  fireEvent.click(screen.getByLabelText(/Phỏng vấn ONLINE/));
+  fireEvent.change(screen.getByLabelText(/Ghi chú online/),{target:{value:"Link Zoom ABC"}});
+  fireEvent.click(screen.getByRole("button",{name:"Lưu phân bàn"}));
+  await waitFor(()=>expect(mocks.save).toHaveBeenCalledWith({applicationId:"app",action:"assign",revision:2,
+    values:{room:1,desk:1,interviewerId:"mentor",reason:"",isOnline:true,onlineNote:"Link Zoom ABC"}}));
+});
+it("huy hiệu ONLINE và ghi chú hiện khi op.is_online — ứng viên offline thì không",()=>{
+  const online=data();online.candidates[0].operation!.is_online=true;online.candidates[0].operation!.online_note="Link Zoom ABC";
+  render(<OfflineDashboardClient data={online} initialApplication="app"/>);
+  expect(screen.getByText("Phỏng vấn ONLINE")).toBeTruthy();
+  expect(screen.getByText(/Ghi chú online: Link Zoom ABC/)).toBeTruthy();
+});
+it("Support huỷ lịch đăng ký khi chưa check-in — bắt buộc nhập lý do qua prompt",async()=>{
+  const notYet=data();notYet.actorId="support";notYet.canOperate=true;notYet.candidates[0].operation!.checked_in_at=null;
+  vi.spyOn(window,"prompt").mockReturnValue("Trùng lịch phỏng vấn khác");
+  render(<OfflineDashboardClient data={notYet} initialApplication="app"/>);
+  fireEvent.click(screen.getByRole("button",{name:"Huỷ lịch đăng ký"}));
+  await waitFor(()=>expect(mocks.cancel).toHaveBeenCalledWith({applicationId:"app",reason:"Trùng lịch phỏng vấn khác"}));
+  expect(mocks.refresh).toHaveBeenCalled();
+});
+it("đã check-in thì không còn nút huỷ lịch đăng ký",()=>{
+  const support=data();support.actorId="support";support.canOperate=true;
+  render(<OfflineDashboardClient data={support} initialApplication="app"/>);
+  expect(screen.queryByRole("button",{name:"Huỷ lịch đăng ký"})).toBeNull();
 });

@@ -61,3 +61,17 @@ export async function lookupOfflineTicket(scanned: string): Promise<OfflineActio
       : {ok:false,message:"Không tìm thấy vé đang hiệu lực. Có thể tìm bằng số điện thoại."};
   } catch (error) { return {ok:false,message:offlineError(error instanceof Error ? error.message : "")}; }
 }
+
+export async function cancelMenteeBooking(input: {applicationId: string; reason: string}): Promise<OfflineActionResult> {
+  try {
+    const {actor,client} = await context();
+    const {data,error} = await client.rpc("vam105_cancel_mentee_booking",{
+      p_actor:actor.id,p_application:input.applicationId,p_reason:input.reason
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error("WRITE_FAILED");
+    return {ok:true,message:String(data.message)};
+  } catch (error) {
+    return {ok:false,message:offlineError(error instanceof Error ? error.message : "")};
+  }
+}

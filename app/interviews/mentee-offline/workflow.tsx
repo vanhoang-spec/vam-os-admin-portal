@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveOfflineInterviewAction, lookupOfflineTicketAction } from "@/app/actions/mentee-offline";
+import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction } from "@/app/actions/mentee-offline";
 import { normalizedPhone, OFFLINE_OUTCOMES, OFFLINE_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
 import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
@@ -115,20 +115,38 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
     } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra kết quả trước khi thử lại."});}
     finally {setBusy(false);}
   }
+  async function cancelBooking(reason:string) {
+    if(busy) return;
+    setBusy(true);
+    try {
+      const result=await cancelMenteeBookingAction({applicationId:c.id,reason});
+      setState(result);
+      if(result.ok) router.refresh();
+    } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra trước khi thử lại."});}
+    finally {setBusy(false);}
+  }
   return <section className="grid gap-4 rounded-lg border-2 border-vam-green bg-white p-4" aria-label={`Hồ sơ ${c.name}`}>
-    <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">{c.name}</h2><p>{c.phone} · {c.email}</p><p>{formatDateTime(session?.starts_at??"")} – {formatTime(session?.ends_at??"")} · {session?.venue??"Chưa điền địa điểm"}</p></div><button onClick={close} className="rounded border px-3 py-2">Đóng hồ sơ</button></div>
+    <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">{c.name}{op?.is_online && <span className="ml-2 rounded bg-sky-100 px-2 py-0.5 text-sm font-semibold text-sky-800">Phỏng vấn ONLINE</span>}</h2><p>{c.phone} · {c.email}</p><p>{formatDateTime(session?.starts_at??"")} – {formatTime(session?.ends_at??"")} · {session?.venue??"Chưa điền địa điểm"}</p>{op?.is_online && op.online_note && <p className="text-sm text-sky-800">Ghi chú online: {op.online_note}</p>}</div><button onClick={close} className="rounded border px-3 py-2">Đóng hồ sơ</button></div>
     {state && <p role={state.ok ? "status" : "alert"} className={state.ok ? "text-vam-green" : "text-red-700"}>{state.message}</p>}
     {data.canOperate && <div className="grid gap-3 rounded-lg bg-slate-50 p-3">
       {!op?.checked_in_at ? <button disabled={busy || c.status==="withdrawn"} className={button} onClick={()=>{
         if(window.confirm(`Check-in ${c.name}, ca ${formatDateTime(session?.starts_at??"")}?`)) void save("checkin",{});
       }}>Xác nhận check-in</button> : <p>Đã check-in lúc {formatDateTime(op.checked_in_at)}</p>}
+      {!op?.checked_in_at && c.status!=="withdrawn" ? <button disabled={busy} className="rounded border border-red-700 px-4 py-2 text-red-700 disabled:opacity-50" onClick={()=>{
+        const reason=window.prompt(`Nhập lý do huỷ lịch đăng ký của ${c.name}:`);
+        if(reason===null) return;
+        if(!reason.trim()) {setState({ok:false,message:"Cần nhập lý do huỷ."});return;}
+        void cancelBooking(reason);
+      }}>Huỷ lịch đăng ký</button> : !op?.checked_in_at ? null : <p className="text-sm text-slate-600">Đã check-in — không huỷ lịch đăng ký được nữa.</p>}
       {op?.checked_in_at && !op.outcome && <form className="grid gap-3 sm:grid-cols-3" onSubmit={e=>{
-        e.preventDefault();const f=new FormData(e.currentTarget);void save("assign",{room:Number(f.get("room")),desk:Number(f.get("desk")),interviewerId:String(f.get("interviewer")),reason:String(f.get("reason")??"")});
+        e.preventDefault();const f=new FormData(e.currentTarget);void save("assign",{room:Number(f.get("room")),desk:Number(f.get("desk")),interviewerId:String(f.get("interviewer")),reason:String(f.get("reason")??""),isOnline:f.get("isOnline")==="on",onlineNote:String(f.get("onlineNote")??"")});
       }}>
         <label>Phòng<select name="room" required defaultValue={op.room??""} className={field}><option value="">Chọn phòng</option>{roomDeskOptions(session?.starts_at).rooms.map(n=><option key={n}>{n}</option>)}</select></label>
         <label>Bàn<select name="desk" required defaultValue={op.desk??""} className={field}><option value="">Chọn bàn</option>{roomDeskOptions(session?.starts_at).desks.map(n=><option key={n}>{n}</option>)}</select></label>
         <label>Người phỏng vấn<select required name="interviewer" defaultValue={op.interviewer_id??""} className={field}><option value="">Chọn người có mặt</option>{data.participants.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
         <label className="sm:col-span-2">Lý do đổi phân công<input name="reason" className={field} placeholder="Bắt buộc khi đổi người phỏng vấn" /></label>
+        <label className="flex items-center gap-2 sm:col-span-3"><input type="checkbox" name="isOnline" defaultChecked={op.is_online} />Phỏng vấn ONLINE — chỉ BTC đánh dấu, ứng viên không thấy ô này</label>
+        <label className="sm:col-span-3">Ghi chú online (link gặp, ghi chú riêng của BTC)<input name="onlineNote" defaultValue={op.online_note??""} className={field} /></label>
         <button className={button} disabled={busy}>Lưu phân bàn</button>
       </form>}
     </div>}
@@ -141,10 +159,13 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
     {own && editing && <form className="grid gap-3 rounded-lg border p-3" onSubmit={e=>{
       e.preventDefault(); const f=new FormData(e.currentTarget);
       if(!window.confirm(`Xác nhận ${OFFLINE_OUTCOMES[outcome]} cho ${c.name}${take ? " và nhận làm mentee của bạn" : ""}?${op?.match_id && !take ? " Cặp hiện tại sẽ được hủy và hoàn lại chỗ." : ""}`)) return;
-      void save("result",{outcome,takeMentee:take,scores:OFFLINE_SCORES.map(([key])=>Number(f.get(key))),note:String(f.get("note")??""),reason:String(f.get("reason")??"")});
+      void save("result",{outcome,takeMentee:take,scores:OFFLINE_SCORES.map(([key])=>Number(f.get(key))),notes:OFFLINE_SCORES.map(([,,noteKey])=>String(f.get(noteKey)??"")),note:String(f.get("note")??""),reason:String(f.get("reason")??"")});
     }}>
       <h3 className="font-semibold">Chấm phỏng vấn · 5 tiêu chí / 25 điểm</h3>
-      <div className="grid gap-3 sm:grid-cols-2">{OFFLINE_SCORES.map(([key,label])=><label key={key}>{label}<select required name={key} defaultValue={review?.[key]??""} className={field}><option value="">Chọn điểm</option>{[1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label>)}</div>
+      <div className="grid gap-3 sm:grid-cols-2">{OFFLINE_SCORES.map(([key,label,noteKey])=><div key={key} className="grid gap-1">
+        <label>{label}<select required name={key} defaultValue={review?.[key]??""} className={field}><option value="">Chọn điểm</option>{[1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label>
+        <label>Ghi chú — {label}<textarea name={noteKey} rows={2} defaultValue={review?.[noteKey]??""} className={field} /></label>
+      </div>)}</div>
       <label>Nhận xét<textarea name="note" rows={4} defaultValue={review?.reviewer_note??""} className={field} /></label>
       <label>Kết quả<select className={field} value={outcome} onChange={e=>{setOutcome(e.target.value as OfflineOutcome);if(e.target.value!=="passed")setTake(false);}}>{Object.entries(OFFLINE_OUTCOMES).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
       <label className="flex items-start gap-2"><input type="checkbox" checked={take} disabled={outcome!=="passed" || full} onChange={e=>setTake(e.target.checked)} /><span>Nhận làm mentee của tôi — {me?.full_name??"tài khoản hiện tại"}{me?.capacity!=null ? ` (${me.activeMatches}/${me.capacity})` : " (chưa có hồ sơ mentor hợp lệ)"}</span></label>

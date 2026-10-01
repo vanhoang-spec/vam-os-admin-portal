@@ -199,6 +199,13 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 - Giữ **đúng bốn trang**: test tự đếm số trang trong PDF. Thêm nội dung mà tràn
   trang thì tách trang mới (`page-break`) thay vì thu nhỏ font tới mức khó đọc khi
   in — xem cách trang 2/3 đã tách ở lần sửa 30/09
+- **Ba việc thêm 01/10** (migration
+  `20261001120000_mentee_offline_ghi_chu_online_huy_dat_ca.sql`): trang 1 Bước 3
+  nhắc có thêm ô ghi chú riêng từng tiêu chí (ngoài ô "Nhận xét" chung); trang 4
+  Bước B thêm bullet cờ "Phỏng vấn ONLINE" (chỉ Support/BTC đặt, ứng viên không
+  thấy — trang công khai `/dat-ca/[token]` không đọc bảng này nên tự động không
+  lộ); trang 4 thêm mục "Huỷ lịch đăng ký" (chỉ Support/BTC, bắt buộc lý do, chỉ
+  còn trước check-in — tái dùng trigger `vam104_booking_guard` có sẵn)
 - **Chưa có ảnh chụp màn hình CRM thật trong tài liệu** (yêu cầu 30/09, chưa xong) —
   nút "Xác nhận check-in" mở `window.confirm()` gốc của trình duyệt, công cụ tự động
   của Claude Code không thao tác được; ghi trực tiếp vào Supabase production để dựng
