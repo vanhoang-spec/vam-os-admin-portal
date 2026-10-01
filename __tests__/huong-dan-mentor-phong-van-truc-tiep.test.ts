@@ -95,6 +95,12 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain("BẮT BUỘC phải điền");
   });
 
+  it("quét QR tự động check-in ngay (01/10) — chỉ đường tìm tay mới còn hộp thoại xác nhận", () => {
+    expect(text).toContain("tự động check-in");
+    expect(text).toContain("Không quét được thì tìm tay");
+    expect(text).toContain("lúc đó vẫn cần bấm xác nhận");
+  });
+
   it("có bước mentor tới xác nhận danh tính và được hỗ trợ đăng nhập, trước cả bước check-in mentee", () => {
     expect(text).toContain("Trước tiên — Mentor tới, xác nhận và hỗ trợ đăng nhập");
     expect(text).toContain("Hỏi tên và số điện thoại mentor");

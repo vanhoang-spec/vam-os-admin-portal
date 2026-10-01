@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
+import {act,cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {OfflineDashboardClient} from "@/app/interviews/mentee-offline/workflow";
 import {OFFLINE_SCORES,type OfflineDashboard} from "@/lib/mentee-offline-core";
-const mocks=vi.hoisted(()=>({save:vi.fn(),refresh:vi.fn()}));
+const mocks=vi.hoisted(()=>({save:vi.fn(),lookup:vi.fn(),refresh:vi.fn(),onCode:undefined as undefined|((code:string)=>void)}));
 vi.mock("next/navigation",()=>({useRouter:()=>({refresh:mocks.refresh})}));
-vi.mock("@/app/actions/mentee-offline",()=>({saveOfflineInterviewAction:mocks.save,lookupOfflineTicketAction:vi.fn()}));
-vi.mock("@/app/interviews/mentee-offline/qr-camera",()=>({InterviewQrCamera:()=>null}));
+vi.mock("@/app/actions/mentee-offline",()=>({saveOfflineInterviewAction:mocks.save,lookupOfflineTicketAction:mocks.lookup}));
+vi.mock("@/app/interviews/mentee-offline/qr-camera",()=>({InterviewQrCamera:({onCode}:{onCode:(code:string)=>void})=>{mocks.onCode=onCode;return null;}}));
 function data():OfflineDashboard {return {
   actorId:"mentor",seasonId:"season",canOperate:false,logs:[],
   sessions:[{id:"session",starts_at:"2026-10-03T01:00:00Z",ends_at:"2026-10-03T01:30:00Z",venue:"UEH",seat_limit:25}],
@@ -14,7 +14,7 @@ function data():OfflineDashboard {return {
   candidates:[{id:"app",name:"Mentee A",phone:"0901234567",email:"a@example.test",status:"interview_in_progress",sessionId:"session",bookedAt:"2026-09-27T01:00Z",rawPayload:null,answers:[["Mục tiêu","Học kỹ năng"]],reviews:[],
     operation:{checked_in_at:"2026-10-03T00:50Z",room:5,desk:5,interviewer_id:"mentor",review_id:"review",outcome:null,match_id:null,revision:2}}]
 };}
-beforeEach(()=>{vi.clearAllMocks();vi.spyOn(window,"confirm").mockReturnValue(true);mocks.save.mockResolvedValue({ok:true,message:"Đã lưu"});});
+beforeEach(()=>{vi.clearAllMocks();mocks.onCode=undefined;vi.spyOn(window,"confirm").mockReturnValue(true);mocks.save.mockResolvedValue({ok:true,message:"Đã lưu"});});
 afterEach(cleanup);
 it("mentor nhận mentee xác nhận đạt cùng 5 điểm và phiên bản đang xem",async()=>{
   render(<OfflineDashboardClient data={data()} initialApplication="app"/>);
@@ -55,4 +55,39 @@ it("sửa kết quả cũ cần bấm edit và nhập lý do",()=>{
   expect(screen.queryByLabelText("Nhận xét")).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:"Sửa kết quả / lựa chọn mentee"}));
   expect((screen.getByLabelText("Lý do sửa kết quả") as HTMLTextAreaElement).required).toBe(true);
+});
+it("quét QR ứng viên chưa check-in: tự động check-in, KHÔNG qua window.confirm",async()=>{
+  const confirmSpy=vi.spyOn(window,"confirm");
+  const unchecked=data();unchecked.canOperate=true;unchecked.candidates[0].operation!.checked_in_at=null as never;
+  mocks.lookup.mockResolvedValue({ok:true,message:"Đã tìm thấy vé. Kiểm tra thông tin rồi check-in.",applicationId:"app"});
+  render(<OfflineDashboardClient data={unchecked}/>);
+  await act(async()=>{await mocks.onCode!("VAM-PV:token");});
+  await waitFor(()=>expect(mocks.save).toHaveBeenCalledWith({applicationId:"app",action:"checkin",revision:2,values:{}}));
+  expect(confirmSpy).not.toHaveBeenCalled();
+  expect(mocks.refresh).toHaveBeenCalled();
+  expect(await screen.findByText("Đã tự động check-in Mentee A.")).toBeTruthy();
+});
+it("quét QR ứng viên đã check-in rồi: không gọi lại checkin",async()=>{
+  const checked=data();checked.canOperate=true;
+  mocks.lookup.mockResolvedValue({ok:true,message:"Đã tìm thấy vé. Kiểm tra thông tin rồi check-in.",applicationId:"app"});
+  render(<OfflineDashboardClient data={checked}/>);
+  await act(async()=>{await mocks.onCode!("VAM-PV:token");});
+  expect(mocks.save).not.toHaveBeenCalled();
+  expect(await screen.findByText(/đã check-in trước đó lúc/)).toBeTruthy();
+});
+it("quét QR ứng viên đã rút hồ sơ: không tự động check-in",async()=>{
+  const withdrawn=data();withdrawn.canOperate=true;withdrawn.candidates[0].status="withdrawn";withdrawn.candidates[0].operation!.checked_in_at=null as never;
+  mocks.lookup.mockResolvedValue({ok:true,message:"Đã tìm thấy vé. Kiểm tra thông tin rồi check-in.",applicationId:"app"});
+  render(<OfflineDashboardClient data={withdrawn}/>);
+  await act(async()=>{await mocks.onCode!("VAM-PV:token");});
+  expect(mocks.save).not.toHaveBeenCalled();
+  expect(await screen.findByText(/đã rút, không check-in được/)).toBeTruthy();
+});
+it("nút Xác nhận check-in thủ công vẫn qua window.confirm — không bị đổi bởi luồng QR",()=>{
+  const confirmSpy=vi.spyOn(window,"confirm").mockReturnValue(true);
+  const unchecked=data();unchecked.canOperate=true;unchecked.candidates[0].operation!.checked_in_at=null as never;
+  render(<OfflineDashboardClient data={unchecked} initialApplication="app"/>);
+  fireEvent.click(screen.getByRole("button",{name:"Xác nhận check-in"}));
+  expect(confirmSpy).toHaveBeenCalled();
+  expect(mocks.save).toHaveBeenCalledWith({applicationId:"app",action:"checkin",revision:2,values:{}});
 });
