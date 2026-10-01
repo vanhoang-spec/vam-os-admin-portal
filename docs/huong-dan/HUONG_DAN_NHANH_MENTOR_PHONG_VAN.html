@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Mentor phỏng vấn mentee 03–04/10 — Hướng dẫn nhanh</title>
+<style>
+  @page { size: A4; margin: 12mm 14mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 10.3pt;
+    line-height: 1.42;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 3mm; margin-bottom: 4mm;
+  }
+  .eyebrow { font-size: 8pt; letter-spacing: .14em; text-transform: uppercase; color: var(--green); font-weight: 700; }
+  h1 { font-size: 19pt; line-height: 1.1; margin: 1.5mm 0 1mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 9.6pt; max-width: 150mm; margin: 0; }
+  .stamp { text-align: right; font-size: 8pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  h2 { font-size: 10pt; letter-spacing: .08em; text-transform: uppercase; color: var(--green); margin: 0 0 2mm; font-weight: 700; }
+
+  .ui { background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px; padding: 0 1.4mm; font-size: 9.8pt; white-space: nowrap; }
+  .path { color: var(--green); font-weight: 600; }
+  .ok { color: #1c7a43; font-weight: 700; }
+  .err { color: #9a2a22; font-weight: 700; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.8mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: 0;
+    width: 6.2mm; height: 6.2mm; border-radius: 50%; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 9.4pt; text-align: center; line-height: 6.2mm;
+  }
+  ol.steps b.t { display: block; font-size: 10.6pt; margin-bottom: .3mm; }
+
+  .block + .block { margin-top: 4.5mm; }
+
+  table.crit { width: 100%; border-collapse: collapse; font-size: 9.6pt; margin-top: 1.5mm; }
+  table.crit td { border: 1px solid var(--line); padding: 1.4mm 2.2mm; }
+  table.crit td.n { background: var(--mint); font-weight: 700; color: var(--green); width: 6mm; text-align: center; }
+
+  .prep { background: var(--mint); border-left: 3px solid var(--green); padding: 2.4mm 3.6mm; margin-bottom: 4mm; font-size: 9.8pt; }
+  .prep b { display: block; margin-bottom: .5mm; font-size: 10.2pt; }
+
+  .warn { background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink); padding: 2.4mm 3.6mm; font-size: 9.4pt; }
+  .warn b { display: block; margin-bottom: .5mm; color: var(--amber-ink); }
+
+  footer {
+    margin-top: 5mm; border-top: 1px solid var(--line); padding-top: 2.4mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 8.6pt; color: var(--muted);
+  }
+  footer b { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn nhanh cho Mentor</div>
+    <h1>Phỏng vấn mentee trực tiếp — 03 & 04/10/2026</h1>
+    <p class="sub">Những gì cần biết trước khi tới buổi phỏng vấn — đọc một lần là đủ, không cần nhớ hết.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>UEH Mentoring Mùa 12</div>
+</header>
+
+<div class="prep">
+  <b>Mỗi lượt phỏng vấn 30 phút, 1:1 với một mentee</b>
+  Tới đúng giờ ca được phân. Đưa tên/SĐT cho bàn Support để được hỗ trợ đăng nhập và nhận mentee.
+</div>
+
+<div class="block">
+  <h2>Bước 1 — Vào hệ thống</h2>
+  <ol class="steps">
+    <li>
+      <b class="t">Mở thư "Tài khoản chấm hồ sơ"</b>
+      Từ <span class="ui">hello@alumni-mentoring.edu.vn</span> — bấm link, đặt mật khẩu (kiểm cả mục Spam nếu chưa thấy).
+    </li>
+    <li>
+      <b class="t">Đăng nhập</b>
+      Vào <span class="ui">os.alumni-mentoring.edu.vn/login</span> bằng đúng email nhận thư. Quên mật khẩu thì bấm "Đặt lại mật khẩu" ngay trên trang đăng nhập.
+    </li>
+    <li>
+      <b class="t">Vào đúng mục</b>
+      Trên menu: <span class="path">Phỏng vấn → Phỏng vấn mentee trực tiếp</span>.
+    </li>
+  </ol>
+</div>
+
+<div class="block">
+  <h2>Bước 2 — Nhận đúng mentee của mình</h2>
+  <ol class="steps" style="counter-reset: s 3;">
+    <li>
+      <b class="t">Tick ô lọc</b>
+      Tick <span class="ui">☑ Chỉ ứng viên được phân cho tôi</span> phía trên danh sách.
+    </li>
+    <li>
+      <b class="t">Chờ Support xếp bàn</b>
+      Mentor không tự check-in hay tự nhận mentee — Support làm việc đó. Mentee hiện ra trong danh sách ngay sau khi được xếp vào đúng bàn của mình. Bấm vào tên để mở hồ sơ, đọc mục "Application đã nộp".
+    </li>
+  </ol>
+</div>
+
+<div class="block">
+  <h2>Bước 3 — Chấm và chốt kết quả</h2>
+  <ol class="steps" style="counter-reset: s 5;">
+    <li>
+      <b class="t">Chấm 5 tiêu chí, mỗi tiêu chí 1–5 điểm</b>
+      <table class="crit">
+        <tr><td class="n">1</td><td>Động lực tham gia</td><td class="n">2</td><td>Mục tiêu rõ ràng</td></tr>
+        <tr><td class="n">3</td><td>Mức độ cam kết</td><td class="n">4</td><td>Mức độ phù hợp</td></tr>
+        <tr><td class="n">5</td><td>Giao tiếp</td><td></td><td></td></tr>
+      </table>
+    </li>
+    <li>
+      <b class="t">Viết nhận xét ngắn</b>
+      Ô tự do, không bắt buộc theo khuôn mẫu.
+    </li>
+    <li>
+      <b class="t">Chọn kết quả, rồi bấm "Xác nhận kết quả"</b>
+      <span class="ok">Đạt làm mentee</span> · <span class="err">Không chọn làm mentee</span> · <b>Cần BTC xem xét thêm</b>.
+      Muốn nhận luôn thì tick <span class="ui">☐ Nhận làm mentee của tôi</span> trước khi xác nhận — không tick vẫn được, BTC sẽ ghép sau.
+    </li>
+  </ol>
+</div>
+
+<div class="warn">
+  <b>Lưu ý — bấm "Xác nhận kết quả" là CHỐT NGAY</b>
+  Không có bước ai duyệt lại. Sửa nhầm thì bấm "Sửa kết quả / lựa chọn mentee" trên chính hồ sơ đó. Hệ thống không tự gửi email báo đậu/rớt cho mentee.
+</div>
+
+<footer>
+  <span>VAM OS · Hướng dẫn nhanh · Phỏng vấn mentee trực tiếp 03–04/10</span>
+  <span>Cần hỗ trợ tại chỗ: tìm bàn Support/BTC · Zalo ban tổ chức <b>0919144638</b></span>
+</footer>
+
+</body>
+</html>
