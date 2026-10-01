@@ -26,7 +26,7 @@ export type ExtractOptions = {
   /**
    * "html" chỉ có nghĩa với .docx (Handbook phỏng vấn): giữ bảng/tiêu đề thay vì
    * chữ trơn. Ảnh KHÔNG bao giờ được đọc — bộ chuyển ảnh trả src rỗng mà không
-   * gọi image.read(), và lib/handbook-html.ts bỏ thẻ img. HTML ra vẫn là CHỮ.
+   * động tới byte ảnh, và lib/handbook-html.ts bỏ thẻ img. HTML ra vẫn là CHỮ.
    */
   format?: "text" | "html";
 };

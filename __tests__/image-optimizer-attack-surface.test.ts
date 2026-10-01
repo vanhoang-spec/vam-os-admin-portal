@@ -48,6 +48,26 @@
  *
  * Section 3b pins each of those. Widening any of them is a new
  * re-classification, not a test update.
+ *
+ * RE-CLASSIFIED 02/10/2026 for the mentee interview Handbook upload
+ * (/interviews/phieu-cham-mentee), by the programme owner's decision that each
+ * season's interviewer Handbook is uploaded as a Word file. It is the second
+ * binary upload, and it stays outside every image decoder because:
+ *
+ *   - Only super_admin/admin/core_team with an operations scope on the season
+ *     can reach it (canEditInterviewRubric + canOperateSeason, re-checked by
+ *     vam084_operator_for_season in vam106_save_interview_handbook).
+ *   - Only .docx is accepted, decided from the bytes by the same sniffAiUpload
+ *     (ZIP signature; image signatures refused under any name).
+ *   - The bytes go through the SAME single reader in lib/ai/uploads.ts — still
+ *     exactly one arrayBuffer() and one Buffer.from — into the text extractor.
+ *   - mammoth is asked for HTML with an image converter that returns an empty
+ *     src and never calls image.read(): embedded image bytes are never read.
+ *   - The HTML is filtered to text/table tags with NO <img> (lib/handbook-html.ts)
+ *     and stored as text in Postgres. Nothing is written to storage or served
+ *     under an image content type.
+ *
+ * Conditions 1–4 above are unchanged. Section 3 and 3b pin the new path.
  */
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -157,7 +177,7 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
     expect(offenders).toEqual([]);
   });
 
-  it("file uploads are the two CSV importers plus the AI tools' single input", () => {
+  it("file uploads are the two CSV importers, the AI tools' single input and the interview Handbook input", () => {
     const fileInputs = sourceFiles()
       .filter((file) => /type=["']file["']/.test(readFileSync(file, "utf8")))
       .map(relative)
@@ -165,11 +185,12 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
     // An upload only matters to the sharp advisory if its bytes can be handed
     // back out under an image content type, or fed to a decoder. The CSV
     // importers are neither: both are admin-only, decoded as UTF-8 text and
-    // parsed as CSV. The AI input is pinned separately in 3b.
+    // parsed as CSV. The AI input and the Handbook input are pinned in 3b.
     expect(fileInputs).toEqual([
       "app/admin/renewals/legacy/legacy-client.tsx",
       "app/admin/users/import/import-client.tsx",
-      "app/ai/ai-file-input.tsx"
+      "app/ai/ai-file-input.tsx",
+      "app/interviews/phieu-cham-mentee/handbook-upload.tsx"
     ]);
 
     const client = readFileSync(join(repoRoot, "app/admin/users/import/import-client.tsx"), "utf8");
@@ -234,6 +255,29 @@ describe("3b. AI tool uploads never reach an image decoder", () => {
     const extractor = readFileSync(join(repoRoot, "lib/ai/extract-text.ts"), "utf8");
     expect(extractor).toMatch(/\.getText\(/);
     expect(extractor).not.toMatch(/getScreenshot|getImage|CanvasFactory|createCanvas|\.render\(/);
+  });
+
+  it("the Handbook input accepts only .docx and its action reads bytes only through readHandbookDocx", () => {
+    const input = readFileSync(join(repoRoot, "app/interviews/phieu-cham-mentee/handbook-upload.tsx"), "utf8");
+    expect(input).toContain('accept=".docx"');
+    expect(input.match(/accept=/g)).toHaveLength(1);
+    const server = readFileSync(join(repoRoot, "lib/mentee-interview-rubric.ts"), "utf8");
+    expect(server).toContain('readHandbookDocx(formData, "handbook")');
+    expect(server).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|Buffer\.from\(/);
+    const uploads = readFileSync(join(repoRoot, "lib/ai/uploads.ts"), "utf8");
+    // The Handbook reader goes through the shared verified reader, restricted to DOCX, in HTML mode.
+    expect(uploads).toMatch(/readVerifiedUpload\(file, \{\s*format: "html",[\s\S]*?onlyMime: AI_UPLOAD_KINDS\.docx/);
+    expect(uploads).toContain("sanitizeHandbookHtml(read.text)");
+  });
+
+  it("the HTML mode never reads embedded images, and the Handbook filter allows no <img>", async () => {
+    const extractor = readFileSync(join(repoRoot, "lib/ai/extract-text.ts"), "utf8");
+    expect(extractor).toContain('convertImage: mammoth.images.imgElement(() => Promise.resolve({ src: "" }))');
+    expect(extractor).not.toMatch(/images\.inline|image\.read\(|dataUri|toBase64/);
+    const { HANDBOOK_ALLOWED_TAGS, sanitizeHandbookHtml } = await import("../lib/handbook-html");
+    expect(HANDBOOK_ALLOWED_TAGS).not.toContain("img");
+    expect(HANDBOOK_ALLOWED_TAGS.filter((tag) => /^(svg|image|picture|source|video|object|embed|iframe)$/.test(tag))).toEqual([]);
+    expect(sanitizeHandbookHtml('<p>a<img src="data:image/png;base64,AAAA"></p>')).toBe("<p>a</p>");
   });
 
   it("no application source touches @napi-rs/canvas directly", () => {

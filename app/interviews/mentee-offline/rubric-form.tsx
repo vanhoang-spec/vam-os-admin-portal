@@ -192,7 +192,7 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
             </label>
           ))}
           {full && !op?.match_id ? <p className="text-sm text-slate-600">Chưa thể nhận thêm mentee. Vẫn có thể chốt Đạt để BTC/mentor khác ghép sau.</p> : null}
-          <p className="text-xs text-slate-500">Chọn "Có" là tạo cặp ghép ngay khi lưu.</p>
+          <p className="text-xs text-slate-500">Chọn &quot;Có&quot; là tạo cặp ghép ngay khi lưu.</p>
         </div>
         <label>
           Chân dung Mentor phù hợp

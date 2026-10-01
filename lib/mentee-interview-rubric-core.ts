@@ -83,6 +83,37 @@ export function formatWeightedScore(value: number | string | null | undefined): 
   return Number.isFinite(n) ? `${n.toFixed(2)}/5` : "—";
 }
 
+/**
+ * 8 ô cuối của file xuất điểm review cho một dòng phỏng vấn theo phiếu. Dòng vòng
+ * hồ sơ (hoặc phiếu phỏng vấn cũ) để trống — không bịa giá trị cho thứ không có.
+ */
+export function interviewRubricExportCells(review: {
+  interview_scores?: unknown;
+  weighted_score?: number | string | null;
+  key_development_need?: string | null;
+  expectation_alignment?: string | null;
+  alignment_note?: string | null;
+  take_choice?: string | null;
+  desired_mentor_profile?: string | null;
+  additional_note?: string | null;
+}): string[] {
+  const scores = Array.isArray(review.interview_scores) ? (review.interview_scores as InterviewScore[]) : [];
+  const alignment = review.expectation_alignment as ExpectationAlignment | null | undefined;
+  const take = review.take_choice as TakeChoice | null | undefined;
+  const weighted = review.weighted_score === null || review.weighted_score === undefined || review.weighted_score === ""
+    ? "" : Number(review.weighted_score).toFixed(2);
+  return [
+    scores.map((s) => `${s.label}: ${s.score}`).join("; "),
+    weighted,
+    review.key_development_need ?? "",
+    alignment && alignment in EXPECTATION_ALIGNMENTS ? EXPECTATION_ALIGNMENTS[alignment] : "",
+    review.alignment_note ?? "",
+    take && take in TAKE_CHOICES ? TAKE_CHOICES[take] : "",
+    review.desired_mentor_profile ?? "",
+    review.additional_note ?? ""
+  ];
+}
+
 // Dải dấu kết hợp U+0300–U+036F dựng bằng mã số: công cụ ghi file của máy này
 // đổi escape Unicode thành ký tự thật (CLAUDE.md, 14/09/2026).
 const COMBINING_MARKS = new RegExp(`[${String.fromCharCode(0x300)}-${String.fromCharCode(0x36f)}]`, "g");

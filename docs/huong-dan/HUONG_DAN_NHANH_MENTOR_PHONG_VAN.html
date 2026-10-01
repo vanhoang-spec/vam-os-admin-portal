@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Mentor phỏng vấn mentee 03–04/10 — Hướng dẫn nhanh</title>
 <style>
-  @page { size: A4; margin: 12mm 14mm; }
+  @page { size: A4; margin: 10mm 13mm; }
 
   :root {
     --green: #16834c;
@@ -22,8 +22,8 @@
 
   body {
     font-family: "Segoe UI", "Arial", sans-serif;
-    font-size: 10.3pt;
-    line-height: 1.42;
+    font-size: 9.7pt;
+    line-height: 1.38;
     color: var(--ink);
     margin: 0;
   }
@@ -46,7 +46,7 @@
   .err { color: #9a2a22; font-weight: 700; }
 
   ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
-  ol.steps > li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.8mm; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.2mm; }
   ol.steps > li::before {
     content: counter(s); position: absolute; left: 0; top: 0;
     width: 6.2mm; height: 6.2mm; border-radius: 50%; background: var(--green); color: #fff;
@@ -54,7 +54,7 @@
   }
   ol.steps b.t { display: block; font-size: 10.6pt; margin-bottom: .3mm; }
 
-  .block + .block { margin-top: 4.5mm; }
+  .block + .block { margin-top: 3.4mm; }
 
   table.crit { width: 100%; border-collapse: collapse; font-size: 9.6pt; margin-top: 1.5mm; }
   table.crit td { border: 1px solid var(--line); padding: 1.4mm 2.2mm; }
@@ -122,24 +122,29 @@
 </div>
 
 <div class="block">
-  <h2>Bước 3 — Chấm và chốt kết quả</h2>
+  <h2>Bước 3 — Chấm theo phiếu Mùa 12 và chốt kết quả</h2>
   <ol class="steps" style="counter-reset: s 5;">
     <li>
-      <b class="t">Chấm 5 tiêu chí, mỗi tiêu chí 1–5 điểm</b>
+      <b class="t">Chấm 4 tiêu chí, mỗi tiêu chí 1–5 điểm — KHÔNG cộng tổng, không có điểm sàn</b>
       <table class="crit">
-        <tr><td class="n">1</td><td>Động lực tham gia</td><td class="n">2</td><td>Mục tiêu rõ ràng</td></tr>
-        <tr><td class="n">3</td><td>Mức độ cam kết</td><td class="n">4</td><td>Mức độ phù hợp</td></tr>
-        <tr><td class="n">5</td><td>Giao tiếp</td><td></td><td></td></tr>
+        <tr><td class="n">1</td><td>Nhu cầu Mentoring &amp; Giá trị phát triển <b>30%</b></td><td class="n">2</td><td>Sẵn sàng học hỏi <b>20%</b></td></tr>
+        <tr><td class="n">3</td><td>Chủ động &amp; Chịu trách nhiệm <b>25%</b></td><td class="n">4</td><td>Cam kết &amp; Theo đến cùng <b>25%</b></td></tr>
       </table>
+      Form hiện sẵn mô tả mức 1/3/5, câu hỏi gợi ý và ô "Evidence / Note" cho từng tiêu chí. Đọc kỹ hơn:
+      nút <span class="ui">Hướng dẫn phỏng vấn mùa này</span> đầu trang (Handbook Mùa 12).
     </li>
     <li>
-      <b class="t">Viết nhận xét ngắn</b>
-      Ô tự do, không bắt buộc theo khuôn mẫu — có thêm một ô ghi chú nhỏ riêng dưới mỗi tiêu chí nếu muốn.
+      <b class="t">Điền mục A – B – C</b>
+      <b>A (bắt buộc):</b> kết quả <span class="ok">Đạt làm mentee</span> · <span class="err">Không chọn làm mentee</span> ·
+      <b>Cần BTC xem xét thêm</b>, kèm "Lý do chọn / không chọn" và "Nhu cầu phát triển chính".
+      <b>B:</b> "Mức độ alignment" sau khi brief lại chương trình.
+      <b>C (tách khỏi quyết định):</b> mentor có muốn nhận bạn này không — chọn
+      <span class="ui">Có – Tôi muốn nhận bạn này</span> (chỉ khi Đạt, tạo cặp ghép ngay),
+      "Không – nhưng đề xuất Đạt để Mentor khác lựa chọn" hoặc "Chưa quyết định"; rồi ghi
+      "Chân dung Mentor phù hợp" (bắt buộc).
     </li>
     <li>
-      <b class="t">Chọn kết quả, rồi bấm "Xác nhận kết quả"</b>
-      <span class="ok">Đạt làm mentee</span> · <span class="err">Không chọn làm mentee</span> · <b>Cần BTC xem xét thêm</b>.
-      Muốn nhận luôn thì tick <span class="ui">☐ Nhận làm mentee của tôi</span> trước khi xác nhận — không tick vẫn được, BTC sẽ ghép sau.
+      <b class="t">Bấm "Xác nhận kết quả"</b>
     </li>
   </ol>
 </div>
@@ -147,6 +152,7 @@
 <div class="warn">
   <b>Lưu ý — bấm "Xác nhận kết quả" là CHỐT NGAY</b>
   Không có bước ai duyệt lại. Sửa nhầm thì bấm "Sửa kết quả / lựa chọn mentee" trên chính hồ sơ đó. Hệ thống không tự gửi email báo đậu/rớt cho mentee.
+  Chưa định hướng, chưa nhiều kỹ năng hay chưa tự tin KHÔNG phải lý do để loại.
 </div>
 
 <footer>

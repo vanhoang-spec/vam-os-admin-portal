@@ -15,6 +15,7 @@ import {
 import { bonusForApplication, readApplicationBonusRules } from "@/lib/submission-bonus";
 import { addSubmissionBonus } from "@/lib/submission-bonus-core";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { interviewRubricExportCells as interviewRubricCells } from "@/lib/mentee-interview-rubric-core";
 
 export const dynamic = "force-dynamic";
 
@@ -112,6 +113,14 @@ export async function GET(request: Request) {
       recommendation,
       reviewer_note,
       submitted_at,
+      interview_scores,
+      weighted_score,
+      key_development_need,
+      expectation_alignment,
+      alignment_note,
+      take_choice,
+      desired_mentor_profile,
+      additional_note,
       reviewer:admin_users!application_reviews_reviewer_admin_user_id_fkey(
         email,
         full_name
@@ -163,7 +172,17 @@ export async function GET(request: Request) {
     // Hai cột điểm cộng nối vào CUỐI, không chen sau "Tổng điểm": bảng tính nào đang
     // đọc cột theo vị trí vẫn đọc đúng cột cũ.
     "Điểm cộng theo ngày nộp (của đơn)",
-    "Tổng điểm sau cộng"
+    "Tổng điểm sau cộng",
+    // Phỏng vấn trực tiếp theo phiếu của mùa (02/10/2026) — cũng nối vào CUỐI. Phiếu
+    // không cộng tổng; điểm quy đổi chỉ để BTC tham khảo, không phải điểm sàn.
+    "Điểm phỏng vấn theo phiếu (tiêu chí: điểm)",
+    "Điểm quy đổi tham khảo (thang 5)",
+    "Nhu cầu phát triển chính",
+    "Mức độ alignment",
+    "Ghi chú alignment",
+    "Mentor có muốn nhận",
+    "Chân dung Mentor phù hợp",
+    "Ghi chú thêm"
   ];
 
   // Không đọc được mốc thì ghi rõ vào ô, không để trống: ô trống trong cột điểm cộng
@@ -193,7 +212,8 @@ export async function GET(request: Request) {
       review.reviewer_note,
       review.submitted_at,
       bonus.kind === "unknown" ? "Không đọc được" : bonus.kind === "bonus" ? bonus.points : 0,
-      bonus.kind === "unknown" ? "" : addSubmissionBonus(review.total_score, bonus)
+      bonus.kind === "unknown" ? "" : addSubmissionBonus(review.total_score, bonus),
+      ...interviewRubricCells(review)
     ];
   });
 
