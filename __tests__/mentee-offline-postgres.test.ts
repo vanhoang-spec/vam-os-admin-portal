@@ -1,6 +1,9 @@
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import type {PGlite} from "@electric-sql/pglite";
-import {offlineDb,ids,uuid,save,assigned,pass,addCandidate,cancelBooking} from "./support/offline-postgres";
+import {offlineDb,ids,uuid,save,assigned,pass,addCandidate,cancelBooking,guide,saveRubric,saveHandbook} from "./support/offline-postgres";
+import {S12_INTERVIEW_CRITERIA} from "@/lib/mentee-interview-rubric-s12";
+
+const crit=(over:Record<string,unknown>)=>({...(pass.criteria as Record<string,unknown>),...over});
 
 describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
   let db:PGlite;
@@ -72,18 +75,21 @@ describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
     await assigned(db);
     await rejects(()=>save(db,"result",2,pass),"NOT_ASSIGNED");
     await rejects(()=>save(db,"result",1,pass,ids.mentor),"STALE_REVISION");
-    await rejects(()=>save(db,"result",2,{...pass,scores:[5,5,5,5,6]},ids.mentor),"INVALID_SCORES");
-    await rejects(()=>save(db,"result",2,{...pass,outcome:"rejected",takeMentee:false},ids.mentor),"REASON_REQUIRED");
+    await rejects(()=>save(db,"result",2,{...pass,criteria:crit({need:{score:6}})},ids.mentor),"INVALID_SCORES");
+    // "Có – nhận" chỉ đi cùng Đạt; Không chọn mà vẫn "nhận" là phiếu mâu thuẫn.
+    await rejects(()=>save(db,"result",2,{...pass,outcome:"rejected"},ids.mentor),"INVALID_RESULT");
     expect((await db.query("select count(*)::int as n from matches")).rows[0]).toEqual({n:0});
+    expect((await db.query("select status from application_reviews")).rows).toEqual([{status:"assigned"}]);
   }));
   it("nhận mentee chốt đạt + membership + match + điểm + audit; sửa nhầm hoàn slot",()=>isolated(async()=>{
     await assigned(db);await save(db,"result",2,pass,ids.mentor);
     expect((await db.query("select outcome,revision from mentee_interview_operations")).rows).toEqual([{outcome:"passed",revision:3}]);
     expect((await db.query("select status from applications where id=$1",[ids.app])).rows).toEqual([{status:"approved_as_mentee"}]);
-    expect((await db.query("select status,total_score from application_reviews")).rows).toEqual([{status:"submitted",total_score:22}]);
+    expect((await db.query("select status,total_score from application_reviews")).rows).toEqual([{status:"submitted",total_score:null}]);
     expect((await db.query("select status from matches")).rows).toEqual([{status:"active"}]);
-    await rejects(()=>save(db,"result",3,{...pass,takeMentee:false},ids.mentor),"REASON_REQUIRED");
-    await save(db,"result",3,{...pass,outcome:"rejected",takeMentee:false,reason:"Chọn nhầm"},ids.mentor);
+    // Kết quả đã chốt thì đổi gì cũng phải có lý do SỬA, kể cả chỉ đổi lựa chọn mục C.
+    await rejects(()=>save(db,"result",3,{...pass,takeChoice:"recommend_other"},ids.mentor),"REASON_REQUIRED");
+    await save(db,"result",3,{...pass,outcome:"rejected",takeChoice:"undecided",reason:"Chọn nhầm"},ids.mentor);
     expect((await db.query("select status from matches")).rows).toEqual([{status:"dropped"}]);
     expect((await db.query("select status from person_season_memberships where role='mentee'")).rows).toEqual([{status:"withdrawn"}]);
     const {rows:[log]}=await db.query<any>("select before_data,after_data,reason from mentee_interview_operation_log where action='result' order by (after_data->'operation'->>'revision')::int desc limit 1");
@@ -99,7 +105,7 @@ describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
     expect((await db.query("select outcome,revision from mentee_interview_operations")).rows).toEqual([{outcome:null,revision:2}]);
     expect((await db.query("select status from application_reviews")).rows).toEqual([{status:"assigned"}]);
     await rejects(()=>db.exec(`insert into matches(season_id,mentor_person_id,mentee_person_id,status) values('${ids.season}','${ids.person}','${ids.person}','active')`),"MENTOR_FULL");
-    await save(db,"result",2,{...pass,takeMentee:false},ids.mentor);
+    await save(db,"result",2,{...pass,takeChoice:"recommend_other"},ids.mentor);
     expect((await db.query("select outcome from mentee_interview_operations")).rows).toEqual([{outcome:"passed"}]);
   }));
   it("không sửa điểm offline từ đường cũ; đổi bàn giữ cùng review",()=>isolated(async()=>{
@@ -121,16 +127,144 @@ describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
       await rejects(()=>db.exec("select * from mentee_interview_operations"),"permission denied");
       await rejects(()=>db.query("select vam104_offline_dashboard($1,$2)",[ids.support,ids.season]),"permission denied");
       await rejects(()=>cancelBooking(db,"Thử quyền"),"permission denied");
+      await rejects(()=>db.exec("select * from mentee_interview_rubrics"),"permission denied");
+      await rejects(()=>db.exec("select * from mentee_interview_rubric_log"),"permission denied");
+      await rejects(()=>guide(db,ids.btc),"permission denied");
+      await rejects(()=>saveRubric(db,1,S12_INTERVIEW_CRITERIA),"permission denied");
+      await rejects(()=>saveHandbook(db,0,"<p>x</p>"),"permission denied");
       await db.exec("set local role service_role");
     }
   }));
-  it("ghi chú riêng từng tiêu chí lưu đúng cột, chuỗi rỗng thành null; sai số lượng → INVALID_NOTES",()=>isolated(async()=>{
+  it("seed phiếu Mùa 12: đúng 4 tiêu chí, trọng số 30/20/25/25, trùng khít bản TS",()=>isolated(async()=>{
+    const data=await guide(db,ids.btc);
+    expect(data.rubric.own).toBe(true);
+    expect(data.rubric.seasonCode).toBe("UEHM-S12");
+    expect(data.rubric.version).toBe(1);
+    expect(data.rubric.criteria).toEqual(S12_INTERVIEW_CRITERIA);
+    expect(data.rubric.criteria.map((c:{weight:number})=>c.weight)).toEqual([30,20,25,25]);
+    expect(data.rubric.hasHandbook).toBe(false);
+  }));
+  it("lưu theo phiếu: ảnh chụp từng tiêu chí, điểm quy đổi tham khảo, KHÔNG có tổng, đủ mục A/B/C",()=>isolated(async()=>{
+    await assigned(db);await save(db,"result",2,pass,ids.mentor);
+    const {rows:[r]}=await db.query<any>(`select interview_scores,rubric_version,weighted_score::text as weighted,total_score,score_motivation,
+      reviewer_note,recommendation,key_development_need,expectation_alignment,alignment_note,take_choice,desired_mentor_profile,additional_note
+      from application_reviews`);
+    expect(r.interview_scores).toEqual([
+      {key:"need",label:"Nhu cầu Mentoring & Giá trị phát triển",weight:30,score:5,note:"Có development need thật"},
+      {key:"readiness",label:"Sẵn sàng học hỏi",weight:20,score:3,note:null},
+      {key:"ownership",label:"Chủ động & Chịu trách nhiệm",weight:25,score:4,note:null},
+      {key:"follow_through",label:"Cam kết & Theo đến cùng",weight:25,score:2,note:"Kế hoạch còn chung"}
+    ]);
+    // (5×30 + 3×20 + 4×25 + 2×25) / 100 = 3.60
+    expect(r.weighted).toBe("3.60");
+    expect(r).toMatchObject({rubric_version:1,total_score:null,score_motivation:null,reviewer_note:"Có động lực",
+      recommendation:"approve_recommended",key_development_need:"Khám phá hướng nghề",expectation_alignment:"aligned",
+      alignment_note:null,take_choice:"take",desired_mentor_profile:"Thiên về coaching, từng chuyển ngành",additional_note:null});
+    const {rows:[decision]}=await db.query<any>("select decision_note from application_decisions");
+    expect(decision.decision_note).toBe("Có động lực");
+  }));
+  it("điểm phải khớp ĐÚNG các tiêu chí của phiếu, mỗi điểm 1–5",()=>isolated(async()=>{
     await assigned(db);
-    await rejects(()=>save(db,"result",2,{...pass,notes:["chỉ một"]},ids.mentor),"INVALID_NOTES");
-    await save(db,"result",2,{...pass,notes:["Rất chủ động","","Cam kết cao","",""]},ids.mentor);
-    expect((await db.query(
-      "select note_motivation,note_goal_clarity,note_commitment,note_fit,note_communication from application_reviews"
-    )).rows).toEqual([{note_motivation:"Rất chủ động",note_goal_clarity:null,note_commitment:"Cam kết cao",note_fit:null,note_communication:null}]);
+    const {follow_through:_dropped,...missing}=pass.criteria as Record<string,unknown>;
+    await rejects(()=>save(db,"result",2,{...pass,criteria:missing},ids.mentor),"INVALID_SCORES");
+    await rejects(()=>save(db,"result",2,{...pass,criteria:crit({motivation:{score:3}})},ids.mentor),"INVALID_SCORES");
+    await rejects(()=>save(db,"result",2,{...pass,criteria:crit({need:{score:"4.5"}})},ids.mentor),"INVALID_SCORES");
+    await rejects(()=>save(db,"result",2,{...pass,criteria:crit({need:{score:0}})},ids.mentor),"INVALID_SCORES");
+    await rejects(()=>save(db,"result",2,{...pass,criteria:[5,3,4,2]},ids.mentor),"INVALID_SCORES");
+    expect((await db.query("select status from application_reviews")).rows).toEqual([{status:"assigned"}]);
+  }));
+  it("mục A/C bắt buộc: lý do chọn/không chọn, nhu cầu phát triển, chân dung mentor, alignment và lựa chọn hợp lệ",()=>isolated(async()=>{
+    await assigned(db);
+    await rejects(()=>save(db,"result",2,{...pass,rationale:"  "},ids.mentor),"RATIONALE_REQUIRED");
+    await rejects(()=>save(db,"result",2,{...pass,keyNeed:""},ids.mentor),"KEY_NEED_REQUIRED");
+    await rejects(()=>save(db,"result",2,{...pass,desiredMentor:""},ids.mentor),"DESIRED_MENTOR_REQUIRED");
+    await rejects(()=>save(db,"result",2,{...pass,alignment:"ok"},ids.mentor),"INVALID_ALIGNMENT");
+    await rejects(()=>save(db,"result",2,{...pass,takeChoice:"yes"},ids.mentor),"INVALID_TAKE_CHOICE");
+    await rejects(()=>save(db,"result",2,{...pass,rationale:"x".repeat(4001)},ids.mentor),"TEXT_TOO_LONG");
+    expect((await db.query("select status from application_reviews")).rows).toEqual([{status:"assigned"}]);
+  }));
+  it("Không chọn ghi đúng lý do vào lịch sử; Chưa quyết định / đề xuất mentor khác không tạo cặp",()=>isolated(async()=>{
+    await assigned(db);
+    await save(db,"result",2,{...pass,outcome:"rejected",takeChoice:"undecided",rationale:"Chưa thấy nhu cầu mentoring rõ"},ids.mentor);
+    expect((await db.query("select count(*)::int as n from matches")).rows[0]).toEqual({n:0});
+    expect((await db.query("select status from applications where id=$1",[ids.app])).rows).toEqual([{status:"rejected_or_not_fit"}]);
+    const {rows:[op]}=await db.query<any>("select outcome_reason from mentee_interview_operations");
+    expect(op.outcome_reason).toBe("Chưa thấy nhu cầu mentoring rõ");
+  }));
+  it("BTC sửa phiếu giữa chừng: form đang mở bị từ chối RUBRIC_CHANGED, không ghi điểm lệch phiếu",()=>isolated(async()=>{
+    await assigned(db);
+    await rejects(()=>save(db,"result",2,{...pass,rubricVersion:2},ids.mentor),"RUBRIC_CHANGED");
+    await rejects(()=>save(db,"result",2,{...pass,rubricId:uuid(99)},ids.mentor),"RUBRIC_CHANGED");
+    await saveRubric(db,1,S12_INTERVIEW_CRITERIA,{motto:"Đổi kim chỉ nam"});
+    await rejects(()=>save(db,"result",2,pass,ids.mentor),"RUBRIC_CHANGED");
+    await save(db,"result",2,{...pass,rubricVersion:2},ids.mentor);
+    expect((await db.query("select rubric_version from application_reviews")).rows).toEqual([{rubric_version:2}]);
+  }));
+  it("điểm đã nộp giữ nguyên nhãn/trọng số lúc chấm dù phiếu bị sửa sau đó",()=>isolated(async()=>{
+    await assigned(db);await save(db,"result",2,pass,ids.mentor);
+    const renamed=S12_INTERVIEW_CRITERIA.map((c,i)=>i===0?{...c,label:"Nhu cầu (đổi tên)",weight:40}:i===1?{...c,weight:10}:c);
+    await saveRubric(db,1,renamed);
+    const {rows:[r]}=await db.query<any>("select interview_scores->0 as first from application_reviews");
+    expect(r.first).toMatchObject({label:"Nhu cầu Mentoring & Giá trị phát triển",weight:30,score:5});
+  }));
+  it("lưu phiếu: chỉ BTC vận hành mùa; chống ghi đè; hình dạng sai bị chặn; có log trước/sau",()=>isolated(async()=>{
+    await rejects(()=>saveRubric(db,1,S12_INTERVIEW_CRITERIA,{},ids.support),"ACCESS_DENIED");
+    await rejects(()=>saveRubric(db,1,S12_INTERVIEW_CRITERIA,{},ids.mentor),"ACCESS_DENIED");
+    await rejects(()=>saveRubric(db,0,S12_INTERVIEW_CRITERIA),"STALE_VERSION");
+    const heavy=S12_INTERVIEW_CRITERIA.map((c,i)=>i===0?{...c,weight:35}:c);
+    await rejects(()=>saveRubric(db,1,heavy),"INVALID_RUBRIC");
+    const dup=S12_INTERVIEW_CRITERIA.map((c,i)=>i===1?{...c,key:"need"}:c);
+    await rejects(()=>saveRubric(db,1,dup),"INVALID_RUBRIC");
+    const badKey=S12_INTERVIEW_CRITERIA.map((c,i)=>i===0?{...c,key:"Nhu cầu"}:c);
+    await rejects(()=>saveRubric(db,1,badKey),"INVALID_RUBRIC");
+    await rejects(()=>saveRubric(db,1,[]),"INVALID_RUBRIC");
+    await rejects(()=>saveRubric(db,1,S12_INTERVIEW_CRITERIA,{extra:"x"}),"INVALID_RUBRIC");
+    const three=[{...S12_INTERVIEW_CRITERIA[0],weight:50},{...S12_INTERVIEW_CRITERIA[1],weight:25},{...S12_INTERVIEW_CRITERIA[2],weight:25}];
+    await saveRubric(db,1,three,{motto:"Ba tiêu chí"});
+    const data=await guide(db,ids.btc);
+    expect(data.rubric.version).toBe(2);
+    expect(data.rubric.criteria.map((c:{key:string})=>c.key)).toEqual(["need","readiness","ownership"]);
+    const {rows:[log]}=await db.query<any>("select action,before_data,after_data,actor_id from mentee_interview_rubric_log");
+    expect(log.action).toBe("save_rubric");expect(log.actor_id).toBe(ids.btc);
+    expect(log.before_data.version).toBe(1);expect(log.after_data.version).toBe(2);
+    expect(log.before_data.criteria).toHaveLength(4);expect(log.after_data.criteria).toHaveLength(3);
+  }));
+  it("Handbook: tăng handbook_version nhưng KHÔNG tăng version — form chấm đang mở không bị hỏng",()=>isolated(async()=>{
+    await rejects(()=>saveHandbook(db,0,"   "),"INVALID_HANDBOOK");
+    await rejects(()=>saveHandbook(db,0,"<p>x</p>","Handbook.docx",ids.support),"ACCESS_DENIED");
+    await saveHandbook(db,0,"<h1>VAM MENTEE INTERVIEW GUIDE</h1>","VAM_Handbook_S12.docx");
+    await rejects(()=>saveHandbook(db,0,"<p>bản cũ</p>"),"STALE_VERSION");
+    const data=await guide(db,ids.btc,ids.season,true);
+    expect(data.rubric).toMatchObject({version:1,handbookVersion:1,hasHandbook:true,handbookFileName:"VAM_Handbook_S12.docx",
+      handbookHtml:"<h1>VAM MENTEE INTERVIEW GUIDE</h1>"});
+    expect((await guide(db,ids.btc)).rubric.handbookHtml).toBeNull();
+    await assigned(db);await save(db,"result",2,pass,ids.mentor);
+  }));
+  it("mùa chưa có phiếu riêng dùng phiếu lưu gần nhất; lưu lần đầu tạo phiếu riêng mang theo cả Handbook",()=>isolated(async()=>{
+    await saveHandbook(db,0,"<p>Handbook S12</p>","VAM_Handbook_S12.docx");
+    const inherited=await guide(db,ids.btc,ids.seasonNext,true);
+    expect(inherited.rubric).toMatchObject({own:false,seasonCode:"UEHM-S12",handbookHtml:"<p>Handbook S12</p>"});
+    await rejects(()=>saveRubric(db,1,S12_INTERVIEW_CRITERIA,{},ids.btc,ids.seasonNext),"STALE_VERSION");
+    await saveRubric(db,0,S12_INTERVIEW_CRITERIA,{motto:"Mùa 13"},ids.btc,ids.seasonNext);
+    const own=await guide(db,ids.btc,ids.seasonNext,true);
+    expect(own.rubric).toMatchObject({own:true,seasonCode:"UEHM-S13",copiedFromSeasonCode:"UEHM-S12",version:1,
+      handbookHtml:"<p>Handbook S12</p>",guidance:{motto:"Mùa 13"}});
+    // Mùa 12 vẫn là phiếu riêng của Mùa 12, không bị kéo sang Mùa 13.
+    expect((await guide(db,ids.btc)).rubric.seasonCode).toBe("UEHM-S12");
+    const {rows:[log]}=await db.query<any>("select action from mentee_interview_rubric_log where season_id=$1",[ids.seasonNext]);
+    expect(log.action).toBe("create");
+  }));
+  it("không có phiếu nào thì chấm bị từ chối RUBRIC_MISSING, không ghi dở",()=>isolated(async()=>{
+    // service_role cố ý không có quyền DELETE trên bảng phiếu — xoá bằng chủ database.
+    await db.exec("set local role postgres; delete from mentee_interview_rubrics; set local role service_role;");
+    await assigned(db);
+    await rejects(()=>save(db,"result",2,pass,ids.mentor),"RUBRIC_MISSING");
+    expect((await guide(db,ids.btc)).rubric).toBeNull();
+  }));
+  it("mentor được phân đọc được phiếu/Handbook; người ngoài phạm vi thì không",()=>isolated(async()=>{
+    expect((await guide(db,ids.mentor)).rubric.seasonCode).toBe("UEHM-S12");
+    expect((await guide(db,ids.support)).rubric.seasonCode).toBe("UEHM-S12");
+    await rejects(()=>guide(db,ids.other),"ACCESS_DENIED");
   }));
   it("cờ phỏng vấn ONLINE mặc định false khi không gửi; lưu đúng kèm ghi chú khi assign",()=>isolated(async()=>{
     await save(db,"checkin",0);
@@ -139,15 +273,17 @@ describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
     await save(db,"assign",2,{room:1,desk:1,interviewerId:ids.mentor,isOnline:true,onlineNote:"Link Zoom ABC"});
     expect((await db.query("select is_online,online_note from mentee_interview_operations")).rows).toEqual([{is_online:true,online_note:"Link Zoom ABC"}]);
   }));
-  it("vam104_offline_dashboard tự trả về is_online/online_note/note_* — không cần sửa code (to_jsonb từ bảng)",()=>isolated(async()=>{
+  it("vam104_offline_dashboard tự trả về cờ online + điểm theo phiếu — không cần sửa hàm (to_jsonb từ bảng)",()=>isolated(async()=>{
     await assigned(db);
     await save(db,"assign",2,{room:1,desk:1,interviewerId:ids.mentor,isOnline:true,onlineNote:"Link Zoom ABC"});
-    await save(db,"result",3,{...pass,notes:["Chủ động cao","","","",""]},ids.mentor);
+    await save(db,"result",3,pass,ids.mentor);
     const {rows:[row]}=await db.query<any>("select vam104_offline_dashboard($1,$2) as data",[ids.support,ids.season]);
     const candidate=row.data.candidates[0];
     expect(candidate.operation.is_online).toBe(true);
     expect(candidate.operation.online_note).toBe("Link Zoom ABC");
-    expect(candidate.reviews[0].note_motivation).toBe("Chủ động cao");
+    expect(candidate.reviews[0].interview_scores).toHaveLength(4);
+    expect(candidate.reviews[0].weighted_score).toBe(3.6);
+    expect(candidate.reviews[0].take_choice).toBe("take");
   }));
   it("vam105: huỷ lịch trước check-in nhả ghế + lưu lý do; bắt buộc lý do; không còn booking thì NO_BOOKING",()=>isolated(async()=>{
     await rejects(()=>cancelBooking(db,""),"REASON_REQUIRED");

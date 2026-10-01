@@ -1,11 +1,13 @@
 "use client";
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction } from "@/app/actions/mentee-offline";
-import { normalizedPhone, OFFLINE_OUTCOMES, OFFLINE_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
+import { normalizedPhone, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
 import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
+import { InterviewResultForm, InterviewResultSummary } from "./rubric-form";
 
 const field="w-full rounded-md border border-slate-300 bg-white p-2";
 const button="rounded-md bg-vam-green px-4 py-2 text-white disabled:opacity-50";
@@ -60,6 +62,10 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
       <button className="rounded border px-3 py-2" onClick={()=>router.refresh()}>Làm mới danh sách</button>
       <span>{data.candidates.length} đã đặt · {count(c=>!!c.operation?.checked_in_at)} đã đến trong bộ lọc · {count(c=>!!c.operation?.outcome)} đã có kết quả</span>
       {currentMentor?.capacity!=null && <strong>Chỗ mentee của tôi: {currentMentor.activeMatches}/{currentMentor.capacity}</strong>}
+      <Link href={OFFLINE_GUIDE_PATH} className="rounded border border-vam-green px-3 py-2 text-vam-green">Hướng dẫn phỏng vấn mùa này</Link>
+      <span className="text-sm text-slate-600">{data.rubric
+        ? `Phiếu chấm: ${data.rubric.seasonCode} · phiên bản ${data.rubric.version}${data.rubric.own ? "" : " (đang dùng phiếu gần nhất)"}`
+        : "Mùa này chưa có phiếu chấm — nhờ BTC cài phiếu"}</span>
     </div>
     {data.canOperate && <InterviewQrCamera onCode={chooseCode} />}
     {message && <p role="status" className="rounded border bg-amber-50 p-3">{message}</p>}
@@ -90,13 +96,21 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
   </div>;
 }
 
+type LoggedScore = {key?:string;label?:string;score?:number};
+/** Điểm trong log: phiếu theo mùa ghi ảnh chụp/criteria; log cũ ghi mảng 5 điểm. */
+function loggedScores(review?:{interview_scores?:LoggedScore[];total_score?:number}|null, values?:{criteria?:Record<string,{score?:number}>;scores?:number[]}|null) {
+  if (review?.interview_scores?.length) return review.interview_scores.map(s=>`${s.label??s.key}: ${s.score??"—"}`).join(" · ");
+  if (values?.criteria) return Object.entries(values.criteria).map(([key,v])=>`${key}: ${v?.score??"—"}`).join(" · ");
+  if (values?.scores) return String(values.scores.reduce((sum,n)=>sum+n,0));
+  return review?.total_score!=null ? String(review.total_score) : "—";
+}
 function AuditChange({before,after}:{before:unknown;after:unknown}) {
-  const old=before as {operation?: {outcome?:OfflineOutcome;room?:number;desk?:number;match_id?:string};review?:{total_score?:number;reviewer_note?:string}} | null;
-  const next=after as {operation?: {outcome?:OfflineOutcome;room?:number;desk?:number;match_id?:string};values?:{scores?:number[];note?:string}} | null;
+  const old=before as {operation?: {outcome?:OfflineOutcome;room?:number;desk?:number;match_id?:string};review?:{total_score?:number;reviewer_note?:string;interview_scores?:LoggedScore[]}} | null;
+  const next=after as {operation?: {outcome?:OfflineOutcome;room?:number;desk?:number;match_id?:string};values?:{scores?:number[];criteria?:Record<string,{score?:number}>;note?:string;rationale?:string}} | null;
   return <dl className="grid gap-1 text-sm text-slate-600">
     <div>Kết quả: {old?.operation?.outcome ? OFFLINE_OUTCOMES[old.operation.outcome] : "Chưa có"} → {next?.operation?.outcome ? OFFLINE_OUTCOMES[next.operation.outcome] : "Chưa có"}</div>
-    <div>Điểm: {old?.review?.total_score??"—"} → {next?.values?.scores?.reduce((sum,n)=>sum+n,0)??"—"}</div>
-    <div>Nhận xét trước: {old?.review?.reviewer_note??"—"}</div><div>Nhận xét sau: {next?.values?.note??"—"}</div>
+    <div>Điểm: {loggedScores(old?.review,null)} → {loggedScores(null,next?.values)}</div>
+    <div>Nhận xét trước: {old?.review?.reviewer_note??"—"}</div><div>Nhận xét sau: {next?.values?.rationale??next?.values?.note??"—"}</div>
     <div>Phòng/bàn: {old?.operation?.room??"—"}/{old?.operation?.desk??"—"} → {next?.operation?.room??"—"}/{next?.operation?.desk??"—"}</div>
     <div>Ghép cặp: {old?.operation?.match_id ? "Có" : "Không"} → {next?.operation?.match_id ? "Có" : "Không"}</div>
   </dl>;
@@ -111,8 +125,6 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
   const own=op?.interviewer_id===data.actorId;
   const [editing,setEditing]=useState(!op?.outcome);
   const review=c.reviews.find(r=>r.id===op?.review_id);
-  const [outcome,setOutcome]=useState<OfflineOutcome>(op?.outcome??"passed");
-  const [take,setTake]=useState(!!op?.match_id);
   const me=data.participants.find(p=>p.id===data.actorId);
   const full=me?.capacity==null || (me.activeMatches>=me.capacity && !op?.match_id);
   async function save(action:string,values:Record<string,unknown>) {
@@ -163,26 +175,16 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
     <details open className="rounded border p-3"><summary className="cursor-pointer font-semibold">Application đã nộp</summary><dl className="mt-3 grid gap-4">{c.answers.map(([key,value],i)=><div key={`${key}-${i}`}><dt className="font-semibold text-slate-600">{key}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{value}</dd></div>)}</dl></details>
     <details open className="rounded border p-3"><summary className="cursor-pointer font-semibold">Điểm và nhận xét vòng hồ sơ</summary>{c.reviews.filter(r=>r.review_round==="profile_screening").map(r=><div key={r.id} className="mt-3 border-t pt-3">
       <p className="font-semibold">{r.reviewerName} · {r.total_score??"—"}/25 · {recommendationLabel(r.recommendation)}</p>
-      <p className="text-sm">{OFFLINE_SCORES.map(([key,label])=>`${label}: ${r[key]??"—"}`).join(" · ")}</p><p className="whitespace-pre-wrap">{r.reviewer_note??"Chưa có nhận xét"}</p>
+      <p className="text-sm">{PROFILE_SCREENING_SCORES.map(([key,label])=>`${label}: ${r[key]??"—"}`).join(" · ")}</p><p className="whitespace-pre-wrap">{r.reviewer_note??"Chưa có nhận xét"}</p>
     </div>)}</details>
-    {op?.outcome && <div className="rounded bg-vam-mint/40 p-3"><strong>{OFFLINE_OUTCOMES[op.outcome]}</strong><p>Điểm phỏng vấn: {review?.total_score??"—"}/25</p><p className="whitespace-pre-wrap">{review?.reviewer_note}</p>{op.outcome_reason && <p className="whitespace-pre-wrap">Lý do: {op.outcome_reason}</p>}{own && !editing && <button className="mt-2 rounded border px-3 py-2" onClick={()=>setEditing(true)}>Sửa kết quả / lựa chọn mentee</button>}</div>}
-    {own && editing && <form className="grid gap-3 rounded-lg border p-3" onSubmit={e=>{
-      e.preventDefault(); const f=new FormData(e.currentTarget);
-      if(!window.confirm(`Xác nhận ${OFFLINE_OUTCOMES[outcome]} cho ${c.name}${take ? " và nhận làm mentee của bạn" : ""}?${op?.match_id && !take ? " Cặp hiện tại sẽ được hủy và hoàn lại chỗ." : ""}`)) return;
-      void save("result",{outcome,takeMentee:take,scores:OFFLINE_SCORES.map(([key])=>Number(f.get(key))),notes:OFFLINE_SCORES.map(([,,noteKey])=>String(f.get(noteKey)??"")),note:String(f.get("note")??""),reason:String(f.get("reason")??"")});
-    }}>
-      <h3 className="font-semibold">Chấm phỏng vấn · 5 tiêu chí / 25 điểm</h3>
-      <div className="grid gap-3 sm:grid-cols-2">{OFFLINE_SCORES.map(([key,label,noteKey])=><div key={key} className="grid gap-1">
-        <label>{label}<select required name={key} defaultValue={review?.[key]??""} className={field}><option value="">Chọn điểm</option>{[1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label>
-        <label>Ghi chú — {label}<textarea name={noteKey} rows={2} defaultValue={review?.[noteKey]??""} className={field} /></label>
-      </div>)}</div>
-      <label>Nhận xét<textarea name="note" rows={4} defaultValue={review?.reviewer_note??""} className={field} /></label>
-      <label>Kết quả<select className={field} value={outcome} onChange={e=>{setOutcome(e.target.value as OfflineOutcome);if(e.target.value!=="passed")setTake(false);}}>{Object.entries(OFFLINE_OUTCOMES).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
-      <label className="flex items-start gap-2"><input type="checkbox" checked={take} disabled={outcome!=="passed" || full} onChange={e=>setTake(e.target.checked)} /><span>Nhận làm mentee của tôi — {me?.full_name??"tài khoản hiện tại"}{me?.capacity!=null ? ` (${me.activeMatches}/${me.capacity})` : " (chưa có hồ sơ mentor hợp lệ)"}</span></label>
-      {full && !op?.match_id && <p className="text-sm text-slate-600">Chưa thể nhận thêm mentee. Vẫn có thể chốt đạt để BTC ghép sau.</p>}
-      <label>Lý do {op?.outcome ? "sửa kết quả" : "không chọn / cần xem thêm"}<textarea name="reason" required={!!op?.outcome || outcome!=="passed"} rows={2} className={field} /></label>
-      <p className="text-sm text-slate-600">Lưu sẽ chốt kết quả ngay. Mọi lần sửa đều có lịch sử cho BTC; chưa gửi email kết quả.</p>
-      <button className={button} disabled={busy}>{busy ? "Đang lưu…" : "Xác nhận kết quả"}</button>
-    </form>}
+    {op?.outcome && <div className="rounded bg-vam-mint/40 p-3">
+      <InterviewResultSummary review={review} operation={op} showWeighted={data.canOperate} />
+      {own && !editing && <button className="mt-2 rounded border px-3 py-2" onClick={()=>setEditing(true)}>Sửa kết quả / lựa chọn mentee</button>}
+    </div>}
+    {own && editing && (data.rubric
+      ? <InterviewResultForm rubric={data.rubric} review={review} operation={op} candidateName={c.name}
+          mentorLabel={`${me?.full_name??"tài khoản hiện tại"}${me?.capacity!=null ? ` · ${me.activeMatches}/${me.capacity}` : " · chưa có hồ sơ mentor hợp lệ"}`}
+          full={full} busy={busy} onSubmit={values=>void save("result",values)} />
+      : <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">Mùa này chưa có phiếu chấm phỏng vấn. Nhờ BTC cài phiếu ở mục &quot;Phiếu chấm &amp; hướng dẫn mentee&quot; rồi tải lại trang.</p>)}
   </section>;
 }
