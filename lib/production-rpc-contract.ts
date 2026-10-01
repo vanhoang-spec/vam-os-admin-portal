@@ -211,7 +211,12 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam095_application_review_assignability",
   "vam095_assign_application_review",
   "vam095_restore_withdrawn_application",
-  "vam095_save_application_review_draft"
+  "vam095_save_application_review_draft",
+  // Huỷ một lượt đặt ca phỏng vấn mentee trực tiếp (Support/BTC, có lý do) —
+  // migration 20261001120000_mentee_offline_ghi_chu_online_huy_dat_ca.sql.
+  // Nằm ở đây cho tới khi chủ dự án dán migration lên Production và có bằng
+  // chứng đọc catalog.
+  "vam105_cancel_mentee_booking"
 ];
 
 /**

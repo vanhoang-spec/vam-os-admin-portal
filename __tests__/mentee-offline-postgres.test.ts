@@ -1,6 +1,6 @@
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import type {PGlite} from "@electric-sql/pglite";
-import {offlineDb,ids,uuid,save,assigned,pass,addCandidate} from "./support/offline-postgres";
+import {offlineDb,ids,uuid,save,assigned,pass,addCandidate,cancelBooking} from "./support/offline-postgres";
 
 describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
   let db:PGlite;
@@ -120,7 +120,44 @@ describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
       await db.exec(`set local role ${role}`);
       await rejects(()=>db.exec("select * from mentee_interview_operations"),"permission denied");
       await rejects(()=>db.query("select vam104_offline_dashboard($1,$2)",[ids.support,ids.season]),"permission denied");
+      await rejects(()=>cancelBooking(db,"Thử quyền"),"permission denied");
       await db.exec("set local role service_role");
     }
+  }));
+  it("ghi chú riêng từng tiêu chí lưu đúng cột, chuỗi rỗng thành null; sai số lượng → INVALID_NOTES",()=>isolated(async()=>{
+    await assigned(db);
+    await rejects(()=>save(db,"result",2,{...pass,notes:["chỉ một"]},ids.mentor),"INVALID_NOTES");
+    await save(db,"result",2,{...pass,notes:["Rất chủ động","","Cam kết cao","",""]},ids.mentor);
+    expect((await db.query(
+      "select note_motivation,note_goal_clarity,note_commitment,note_fit,note_communication from application_reviews"
+    )).rows).toEqual([{note_motivation:"Rất chủ động",note_goal_clarity:null,note_commitment:"Cam kết cao",note_fit:null,note_communication:null}]);
+  }));
+  it("cờ phỏng vấn ONLINE mặc định false khi không gửi; lưu đúng kèm ghi chú khi assign",()=>isolated(async()=>{
+    await save(db,"checkin",0);
+    await save(db,"assign",1,{room:1,desk:1,interviewerId:ids.mentor});
+    expect((await db.query("select is_online,online_note from mentee_interview_operations")).rows).toEqual([{is_online:false,online_note:null}]);
+    await save(db,"assign",2,{room:1,desk:1,interviewerId:ids.mentor,isOnline:true,onlineNote:"Link Zoom ABC"});
+    expect((await db.query("select is_online,online_note from mentee_interview_operations")).rows).toEqual([{is_online:true,online_note:"Link Zoom ABC"}]);
+  }));
+  it("vam104_offline_dashboard tự trả về is_online/online_note/note_* — không cần sửa code (to_jsonb từ bảng)",()=>isolated(async()=>{
+    await assigned(db);
+    await save(db,"assign",2,{room:1,desk:1,interviewerId:ids.mentor,isOnline:true,onlineNote:"Link Zoom ABC"});
+    await save(db,"result",3,{...pass,notes:["Chủ động cao","","","",""]},ids.mentor);
+    const {rows:[row]}=await db.query<any>("select vam104_offline_dashboard($1,$2) as data",[ids.support,ids.season]);
+    const candidate=row.data.candidates[0];
+    expect(candidate.operation.is_online).toBe(true);
+    expect(candidate.operation.online_note).toBe("Link Zoom ABC");
+    expect(candidate.reviews[0].note_motivation).toBe("Chủ động cao");
+  }));
+  it("vam105: huỷ lịch trước check-in nhả ghế + lưu lý do; bắt buộc lý do; không còn booking thì NO_BOOKING",()=>isolated(async()=>{
+    await rejects(()=>cancelBooking(db,""),"REASON_REQUIRED");
+    await cancelBooking(db,"Trùng lịch phỏng vấn khác");
+    expect((await db.query("select status,cancelled_by,cancel_note from mentee_interview_bookings where application_id=$1",[ids.app])).rows)
+      .toEqual([{status:"cancelled",cancelled_by:ids.support,cancel_note:"Trùng lịch phỏng vấn khác"}]);
+    await rejects(()=>cancelBooking(db,"Lý do khác"),"NO_BOOKING");
+  }));
+  it("vam105: đã check-in thì không huỷ được — tái dùng trigger vam104_booking_guard sẵn có",()=>isolated(async()=>{
+    await save(db,"checkin",0);
+    await rejects(()=>cancelBooking(db,"Muốn huỷ sau khi đến"),"ALREADY_CHECKED_IN");
   }));
 });

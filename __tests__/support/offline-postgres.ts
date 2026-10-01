@@ -81,6 +81,7 @@ export async function offlineDb() {
   if(!satSession || !sunSession) throw new Error("migration 20260929100000 không sinh ra ca 08:00 của cả hai ngày");
   ids.session=satSession.id;
   ids.sessionSun=sunSession.id;
+  await db.exec(read("supabase/migrations/20261001120000_mentee_offline_ghi_chu_online_huy_dat_ca.sql"));
   await addCandidate(db,ids.app);
   await db.exec("set role service_role;");
   return db;
@@ -98,4 +99,7 @@ export async function assigned(db:PGlite,app=ids.app,room=1,desk=1) {
   await save(db,"checkin",0,{},ids.support,app);
   await save(db,"assign",1,{room,desk,interviewerId:ids.mentor},ids.support,app);
 }
-export const pass={outcome:"passed",scores:[4,4,5,4,5],note:"Có động lực",takeMentee:true};
+export async function cancelBooking(db:PGlite,reason:string,actor=ids.support,app=ids.app) {
+  return db.query("select vam105_cancel_mentee_booking($1,$2,$3) as result",[actor,app,reason]);
+}
+export const pass={outcome:"passed",scores:[4,4,5,4,5],notes:["","","","",""],note:"Có động lực",takeMentee:true};
