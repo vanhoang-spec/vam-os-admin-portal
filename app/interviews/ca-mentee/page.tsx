@@ -1,6 +1,8 @@
 import { Card, EmptyState, KpiCard, PageHeader } from "@/components/ui";
 import { getMenteeInviteStatus } from "@/lib/mentee-invite-dispatch";
+import { getReopenNoticeStatus } from "@/lib/mentee-reopen-notice";
 import { getSessionAdminData } from "@/lib/mentee-session-admin";
+import { ReopenNoticePanel } from "./reopen-notice-panel";
 import { BulkPanel, InviteDispatchPanel, SessionRowForm } from "./session-config-client";
 import Link from "next/link";
 
@@ -29,7 +31,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export default async function MenteeSessionConfigPage() {
-  const [data, invite] = await Promise.all([getSessionAdminData(), getMenteeInviteStatus()]);
+  const [data, invite, reopen] = await Promise.all([
+    getSessionAdminData(),
+    getMenteeInviteStatus(),
+    getReopenNoticeStatus()
+  ]);
 
   if (!data.ok) {
     return (
@@ -92,6 +98,23 @@ export default async function MenteeSessionConfigPage() {
           <EmptyState message={invite.message} />
         )}
       </Card>
+
+      {reopen.ok && reopen.total > 0 ? (
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Mở lại chọn ca cho bạn chưa chọn</h2>
+          <ReopenNoticePanel
+            total={reopen.total}
+            pending={reopen.pending}
+            notified={reopen.notified}
+            deadlineLabel={reopen.deadlineLabel}
+            anyBookable={reopen.anyBookable}
+            sentInWindow={reopen.sentInWindow}
+            allowance={reopen.allowance}
+            preview={reopen.preview}
+            canOperate={data.canOperate}
+          />
+        </Card>
+      ) : null}
 
       {data.canOperate ? (
         <Card>

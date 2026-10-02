@@ -48,10 +48,12 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Xem số liệu tổng: “Đã mời phỏng vấn”, “Đã nhận thư, chưa chọn ca”, “Đã chọn ca”, “Chờ thư mời”; từng ca hiện số chỗ đã đặt / số ghế, “Đã đầy” khi kín.",
       "BTC: “Điền nhanh cho mọi ca” để đặt cùng số ghế/địa điểm cho tất cả ca; hoặc sửa số ghế, địa điểm, tick “Đã đóng” trên dòng của từng ca rồi “Lưu”.",
       "BTC: bấm “Gửi thư mời chọn ca” để gửi cho những người còn “Chờ thư mời” (hệ thống tôn trọng hạn mức thư 24 giờ).",
+      "Khi BTC mở lại chọn ca cho bạn chưa chọn (hạn riêng): khung “Mở lại chọn ca cho bạn chưa chọn” hiện số bạn được mở lại và hạn mới. “Xem thư mẫu”, bấm “Gửi thử cho tôi”, rồi “Gửi thư cho … bạn” → “Xác nhận gửi”. Bấm lại nếu còn người chờ thư.",
       "Bấm “Mở danh sách theo ca, check-in và chấm phỏng vấn” để sang màn hình phỏng vấn trực tiếp."
     ],
     notes: [
       "Support team xem được tình hình nhưng không sửa ca, không gửi thư mời.",
+      "Mở lại chọn ca chỉ áp dụng cho người được BTC gia hạn riêng; người đã chọn ca vẫn theo hạn cũ (cần đổi thì Support/BTC dùng “Đổi ca phỏng vấn” ở màn hình phỏng vấn trực tiếp). Thư gửi thử không chứa link thật của ai.",
       "Gửi lại thư mời cho MỘT ứng viên (vd. gõ sai email): mở hồ sơ mentee ở “Ứng tuyển”, dùng bảng “Thư mời chọn ca phỏng vấn”."
     ],
     updated: "02/10/2026"
