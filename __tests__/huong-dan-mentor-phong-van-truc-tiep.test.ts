@@ -181,4 +181,11 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain("chỉ hiện khi mentee CHƯA check-in");
     expect(text).toContain("bắt buộc điền");
   });
+  it("đổi ca cho mentee sau hạn (02/10) — Support/BTC, trước check-in, bắt buộc lý do; chỉ chỗ icon cuốn sách", () => {
+    expect(text).toContain("Đổi ca phỏng vấn");
+    expect(text).toContain("chỉ khi mentee CHƯA check-in");
+    expect(text).toContain("lý do (bắt buộc)");
+    expect(text).toContain("biểu tượng cuốn sách");
+    expect(text).not.toContain("Không đổi được ca/giờ phỏng vấn của mentee");
+  });
 });
