@@ -2,12 +2,13 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction } from "@/app/actions/mentee-offline";
+import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction } from "@/app/actions/mentee-offline";
 import { normalizedPhone, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
 import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
 import { InterviewResultForm, InterviewResultSummary } from "./rubric-form";
+import { MoveBookingForm } from "./move-booking-form";
 import { MAX_TAKES_PER_INTERVIEWER } from "@/lib/mentee-interview-rubric-core";
 
 const field="w-full rounded-md border border-slate-300 bg-white p-2";
@@ -143,6 +144,16 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
     } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra kết quả trước khi thử lại."});}
     finally {setBusy(false);}
   }
+  async function moveBooking(sessionId:string,reason:string) {
+    if(busy) return;
+    setBusy(true);
+    try {
+      const result=await moveMenteeBookingAction({applicationId:c.id,sessionId,reason});
+      setState(result);
+      if(result.ok) router.refresh();
+    } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra trước khi thử lại."});}
+    finally {setBusy(false);}
+  }
   async function cancelBooking(reason:string) {
     if(busy) return;
     setBusy(true);
@@ -166,6 +177,9 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
         if(!reason.trim()) {setState({ok:false,message:"Cần nhập lý do huỷ."});return;}
         void cancelBooking(reason);
       }}>Huỷ lịch đăng ký</button> : !op?.checked_in_at ? null : <p className="text-sm text-slate-600">Đã check-in — không huỷ lịch đăng ký được nữa.</p>}
+      {!op?.checked_in_at && c.status!=="withdrawn" && <MoveBookingForm sessions={data.sessions} currentSessionId={c.sessionId}
+        takenBySession={data.candidates.reduce((m,x)=>x.sessionId ? m.set(x.sessionId,(m.get(x.sessionId)??0)+1) : m,new Map<string,number>())}
+        candidateName={c.name} busy={busy} nowIso={new Date().toISOString()} onMove={(sessionId,reason)=>void moveBooking(sessionId,reason)} />}
       {op?.checked_in_at && !op.outcome && <form className="grid gap-3 sm:grid-cols-3" onSubmit={e=>{
         e.preventDefault();const f=new FormData(e.currentTarget);void save("assign",{room:Number(f.get("room")),desk:Number(f.get("desk")),interviewerId:String(f.get("interviewer")),reason:String(f.get("reason")??""),isOnline:f.get("isOnline")==="on",onlineNote:String(f.get("onlineNote")??"")});
       }}>

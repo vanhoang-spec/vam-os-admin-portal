@@ -87,6 +87,24 @@ export async function lookupOfflineTicket(scanned: string): Promise<OfflineActio
   } catch (error) { return {ok:false,message:offlineError(error instanceof Error ? error.message : "")}; }
 }
 
+/**
+ * BTC/Support đổi ca cho một mentee — kể cả sau hạn tự đổi ca. Mọi chặn (còn chỗ,
+ * ca chưa bắt đầu, chưa check-in, bắt buộc lý do) nằm trong vam107, chạy nguyên tử.
+ */
+export async function moveMenteeBooking(input: {applicationId: string; sessionId: string; reason: string}): Promise<OfflineActionResult> {
+  try {
+    const {actor,client} = await context();
+    const {data,error} = await client.rpc("vam107_move_mentee_booking",{
+      p_actor:actor.id,p_application:input.applicationId,p_session:input.sessionId,p_reason:input.reason
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error("WRITE_FAILED");
+    return {ok:true,message:String(data.message)};
+  } catch (error) {
+    return {ok:false,message:offlineError(error instanceof Error ? error.message : "")};
+  }
+}
+
 export async function cancelMenteeBooking(input: {applicationId: string; reason: string}): Promise<OfflineActionResult> {
   try {
     const {actor,client} = await context();

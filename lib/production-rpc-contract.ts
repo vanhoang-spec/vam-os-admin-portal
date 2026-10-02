@@ -220,7 +220,10 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam105_cancel_mentee_booking",
   "vam106_interview_guide",
   "vam106_save_interview_rubric",
-  "vam106_save_interview_handbook"
+  "vam106_save_interview_handbook",
+  // BTC/Support đổi ca cho mentee, kể cả sau hạn tự đổi — migration
+  // 20261002200000_mentee_doi_ca_btc.sql.
+  "vam107_move_mentee_booking"
 ];
 
 /**

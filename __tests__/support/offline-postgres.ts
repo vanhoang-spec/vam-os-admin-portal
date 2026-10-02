@@ -86,6 +86,8 @@ export async function offlineDb() {
   // Ô ghi chú bắt buộc, khoá mục C khi Không chọn, tối đa 2 lần "Có – Tôi muốn nhận";
   // phiếu S12 lên phiên bản 2 (BTC 02/10/2026).
   await db.exec(read("supabase/migrations/20261002150000_mentee_phieu_cham_bat_buoc_ghi_chu.sql"));
+  // BTC/Support đổi ca cho mentee, kể cả sau hạn tự đổi (vam107).
+  await db.exec(read("supabase/migrations/20261002200000_mentee_doi_ca_btc.sql"));
   // BTC vận hành mùa (core_team + scope operations) để thử màn hình sửa phiếu,
   // và một mùa thứ hai CHƯA có phiếu riêng để thử luật kế thừa.
   await db.exec(`
@@ -114,6 +116,9 @@ export async function save(db:PGlite,action:string,revision:number,values:Record
 export async function assigned(db:PGlite,app=ids.app,room=1,desk=1) {
   await save(db,"checkin",0,{},ids.support,app);
   await save(db,"assign",1,{room,desk,interviewerId:ids.mentor},ids.support,app);
+}
+export async function moveBooking(db:PGlite,session:string,reason:string,actor=ids.support,app=ids.app) {
+  return db.query("select vam107_move_mentee_booking($1,$2,$3,$4) as result",[actor,app,session,reason]);
 }
 export async function cancelBooking(db:PGlite,reason:string,actor=ids.support,app=ids.app) {
   return db.query("select vam105_cancel_mentee_booking($1,$2,$3) as result",[actor,app,reason]);

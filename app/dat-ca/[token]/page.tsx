@@ -122,7 +122,7 @@ export default async function MenteeSessionBookingPage(props: {
               ) : null}
 
               {data.anyBookable ? (
-                <SessionForm token={params.token} days={data.days} />
+                <SessionForm token={params.token} days={data.days} prepAnswers={data.prepAnswers.map((a) => a.value)} />
               ) : (
                 <>
                   <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -149,11 +149,6 @@ export default async function MenteeSessionBookingPage(props: {
                   </div>
                 </>
               )}
-            </Card>
-
-            <Card>
-              <h2 className="mb-1 text-base font-semibold text-vam-ink">Chia sẻ trước với Mentor</h2>
-              <PrepAnswersForm token={params.token} answers={data.prepAnswers} />
             </Card>
 
             <LiveRefresh />
