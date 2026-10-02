@@ -109,16 +109,33 @@ export function vietnamDateKeyOf(iso: string): string {
 }
 
 /**
+ * Hạn đặt ca thật của MỘT người: hạn của ca, nới ra nếu BTC đã mở lại riêng cho
+ * người đó (mentee_interview_invites.booking_open_until). Chỉ nới, không bao giờ
+ * siết — đúng như GREATEST trong vam101/vam102, để trang không bao giờ hiện "hết
+ * hạn" cho một ca mà database vẫn cho đặt, hay ngược lại.
+ */
+export function effectiveDeadlineMs(bookingClosesAtIso: string, openUntilIso: string | null = null): number {
+  const base = new Date(bookingClosesAtIso).getTime();
+  const own = openUntilIso ? new Date(openUntilIso).getTime() : NaN;
+  return Number.isFinite(own) && own > base ? own : base;
+}
+
+/**
  * Ca này đang ở trạng thái nào.
  *
  * Thứ tự kiểm là thứ tự sự thật, không phải thứ tự tiện tay: một ca đã qua giờ
  * thì nói "đã qua" chứ không nói "hết chỗ", và hạn đăng ký chung đóng trước mọi
  * lý do riêng của từng ca. Đổi thứ tự là đổi câu người dùng đọc được.
  */
-export function sessionState(row: SessionRow, taken: number, nowIso: string): SessionState {
+export function sessionState(
+  row: SessionRow,
+  taken: number,
+  nowIso: string,
+  openUntilIso: string | null = null
+): SessionState {
   const now = new Date(nowIso).getTime();
   if (new Date(row.startsAtIso).getTime() <= now) return "past";
-  if (now > new Date(row.bookingClosesAtIso).getTime()) return "deadline_passed";
+  if (now > effectiveDeadlineMs(row.bookingClosesAtIso, openUntilIso)) return "deadline_passed";
   if (row.status !== "open") return "closed";
   if (row.seatLimit === null) return "not_configured";
   if (taken >= row.seatLimit) return "full";
@@ -144,13 +161,14 @@ const STATE_NOTE: Record<SessionState, string | null> = {
 export function buildSessionDays(
   rows: readonly SessionRow[],
   takenBySession: ReadonlyMap<string, number>,
-  nowIso: string
+  nowIso: string,
+  openUntilIso: string | null = null
 ): MenteeSessionDay[] {
   const byDay = new Map<string, MenteeSessionView[]>();
 
   for (const row of [...rows].sort((a, b) => a.startsAtIso.localeCompare(b.startsAtIso))) {
     const taken = takenBySession.get(row.id) ?? 0;
-    const state = sessionState(row, taken, nowIso);
+    const state = sessionState(row, taken, nowIso, openUntilIso);
     const view: MenteeSessionView = {
       id: row.id,
       startsAtIso: row.startsAtIso,
@@ -186,9 +204,15 @@ export function hasBookableSession(days: readonly MenteeSessionDay[]): boolean {
  * update, không phải sửa mã rồi deploy — xem đầu file migration. Nên tầng này
  * cũng phải đọc từ dữ liệu, nếu không hai nơi sẽ nói hai hạn khác nhau.
  */
-export function bookingClosesAt(rows: readonly SessionRow[]): string | null {
+export function bookingClosesAt(rows: readonly SessionRow[], openUntilIso: string | null = null): string | null {
   const stamps = rows.map((r) => r.bookingClosesAtIso).filter(Boolean).sort();
-  return stamps.length > 0 ? stamps[stamps.length - 1] : null;
+  const shared = stamps.length > 0 ? stamps[stamps.length - 1] : null;
+  // Người được mở lại thấy hạn của CHÍNH mình — "Hạn đăng ký: 17:00 02/10" trên
+  // một trang vẫn đặt được là câu sai.
+  if (shared && openUntilIso && effectiveDeadlineMs(shared, openUntilIso) > new Date(shared).getTime()) {
+    return new Date(openUntilIso).toISOString();
+  }
+  return shared;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
   buildMenteeSessionInviteEmail,
+  buildMenteeSessionReopenEmail,
   textToHtmlEmail,
   buildCrossInviteEmail,
   buildCrossNotSelectedEmail,
@@ -1048,6 +1049,48 @@ export async function sendMenteeSessionInvite(input: {
     "mentee_session_invite",
     { ...built, ...message, to: input.toEmail },
     { table: "applications", id: input.applicationId }
+  );
+}
+
+/**
+ * Thư báo mở lại chọn ca (xem buildMenteeSessionReopenEmail). Cùng loại sổ thư với
+ * thư mời — cùng một việc "mời chọn ca", và không phải nới ràng buộc loại thư.
+ *
+ * bookingToken = null là bản GỬI THỬ cho BTC: đường dẫn thay bằng một câu giữ chỗ,
+ * để link riêng của một mentee thật không nằm trong hộp thư người khác.
+ */
+export async function sendMenteeSessionReopen(input: {
+  toEmail: string;
+  candidateName: string;
+  seasonLabel: string;
+  interviewDaysLabel: string;
+  deadlineLabel: string;
+  bookingToken: string | null;
+  applicationId: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  let link = "(đường dẫn riêng của từng bạn — chỉ có trong thư thật)";
+  if (input.bookingToken) {
+    const base = resolveEmailBaseUrl(input.requestOrigin);
+    if (!base) {
+      return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+    }
+    link = menteeBookingUrl(base, input.bookingToken);
+  }
+
+  const built = buildMenteeSessionReopenEmail({
+    candidateName: input.candidateName,
+    seasonLabel: input.seasonLabel,
+    interviewDaysLabel: input.interviewDaysLabel,
+    bookingUrl: link,
+    deadlineLabel: input.deadlineLabel,
+    hotlineZalo: HOTLINE_ZALO
+  });
+
+  return deliver(
+    "mentee_session_invite",
+    { ...built, to: input.toEmail },
+    input.applicationId ? { table: "applications", id: input.applicationId } : null
   );
 }
 

@@ -1931,6 +1931,67 @@ export function buildMenteeSessionInviteEmail(input: {
 }
 
 /**
+ * Thư báo MỞ LẠI chọn ca — cho mentee đã nhận thư mời nhưng chưa chọn ca trước
+ * hạn chung (BTC 02/10/2026: 72 bạn, hạn mới 20:00 ngày 03/10).
+ *
+ * Lá riêng thay vì gửi lại thư mời: thư mời nói "hạn 17:00 02/10, quá hạn coi như
+ * không tham gia" — người đã lỡ hạn đọc lại câu đó sẽ không bấm. Câu mở đầu ở đây
+ * nói thẳng: bạn chưa chọn ca, BTC mở lại cho bạn tới hạn mới. Hai câu hỏi chuẩn
+ * bị nay BẮT BUỘC trước khi chọn ca — thư phải nói, nếu không trang sẽ chặn một
+ * người không hiểu vì sao.
+ */
+export function buildMenteeSessionReopenEmail(input: {
+  candidateName: string;
+  seasonLabel: string;
+  interviewDaysLabel: string;
+  bookingUrl: string;
+  deadlineLabel: string;
+  hotlineZalo: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.candidateName, "bạn");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const days = safeDisplayName(input.interviewDaysLabel, "");
+  const deadline = safeDisplayName(input.deadlineLabel, "");
+
+  const subject = `[UEH Mentoring] Mở lại chọn ca phỏng vấn đến ${deadline} — ${season}`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Ban tổ chức thấy bạn chưa chọn ca phỏng vấn ${season}. Ban tổ chức MỞ LẠI cho bạn chọn ca đến ${deadline}.`,
+    "",
+    `Phỏng vấn trực tiếp vào ${days}, mỗi buổi tối đa 30 phút, 1:1 với một mentor. Ca đã kín hoặc đã bắt đầu thì không chọn được nữa — bạn chọn sớm để còn nhiều ca.`,
+    "",
+    "Bước 1 — trả lời 2 câu hỏi chuẩn bị (bắt buộc, ngay trên trang). Bước 2 — chọn MỘT ca. Mở đường dẫn riêng của bạn:",
+    input.bookingUrl,
+    "",
+    "Chọn xong, trang hiện ngay ca, địa điểm và mã QR check-in. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng.",
+    "",
+    `Sau ${deadline} mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn mùa này.`,
+    "",
+    `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
+    "",
+    SIGNATURE_TEXT
+  ];
+
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Ban tổ chức thấy bạn chưa chọn ca phỏng vấn <strong>${escapeHtml(season)}</strong>. Ban tổ chức <strong>mở lại</strong> cho bạn chọn ca đến <strong>${escapeHtml(deadline)}</strong>.</p>`,
+      `<p>Phỏng vấn trực tiếp vào <strong>${escapeHtml(days)}</strong>, mỗi buổi tối đa 30 phút, 1:1 với một mentor. Ca đã kín hoặc đã bắt đầu thì không chọn được nữa — bạn chọn sớm để còn nhiều ca.</p>`,
+      "<p><strong>Bước 1</strong> — trả lời 2 câu hỏi chuẩn bị (bắt buộc, ngay trên trang). <strong>Bước 2</strong> — chọn <strong>một</strong> ca.</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn ca phỏng vấn</a></p>`,
+      "<p>Chọn xong, trang hiện ngay ca, địa điểm và mã QR check-in. Bạn lưu ảnh QR vào điện thoại để mang theo; không có email xác nhận riêng.</p>",
+      `<p>Sau <strong>${escapeHtml(deadline)}</strong> mà chưa chọn ca, bạn được xem như không tham gia vòng phỏng vấn mùa này.</p>`,
+      `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho bạn, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.bookingUrl)}</p>`
+    ].join("")
+  );
+
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
  * Thư xác nhận ca phỏng vấn của mentee — gửi cả lúc đặt lần đầu lẫn lúc đổi ca.
  *
  * MỘT lá cho hai thời điểm, có chủ ý: câu "ban tổ chức đã ghi nhận ca của bạn"

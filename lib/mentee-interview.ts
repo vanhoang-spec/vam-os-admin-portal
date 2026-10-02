@@ -143,7 +143,7 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
 
   const { data: invite, error: inviteError } = await client
     .from("mentee_interview_invites")
-    .select("id,application_id,checkin_token")
+    .select("id,application_id,checkin_token,booking_open_until")
     .eq("token", cleanToken)
     .maybeSingle();
   if (inviteError) {
@@ -163,6 +163,8 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
   }
   const candidateName = clean(app.full_name) || "bạn";
   const prepAnswers = readPrepAnswers(app.raw_payload);
+  // Hạn riêng khi BTC mở lại chọn ca cho người này — xem effectiveDeadlineMs.
+  const openUntil = invite.booking_open_until ? normIso(invite.booking_open_until) : null;
 
   // Đã có chỗ → trang trở thành thẻ xác nhận. Kiểm trước mọi thứ khác: một
   // người đã giữ chỗ không cần biết ca nào còn trống.
@@ -183,7 +185,7 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
       .eq("id", String(booking.session_id))
       .maybeSingle();
 
-    const grid = await readSessionDays(client, String(app.season_id));
+    const grid = await readSessionDays(client, String(app.season_id), openUntil);
     if (!grid.ok) return { ok: false, state: "invalid", message: SAFE_ERROR };
 
     return {
@@ -221,7 +223,7 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
     };
   }
 
-  const grid = await readSessionDays(client, String(app.season_id));
+  const grid = await readSessionDays(client, String(app.season_id), openUntil);
   if (!grid.ok) return { ok: false, state: "invalid", message: SAFE_ERROR };
 
   return {
@@ -247,7 +249,8 @@ export async function getMenteeSessionPageData(token: unknown): Promise<MenteeSe
  */
 async function readSessionDays(
   client: any,
-  seasonId: string
+  seasonId: string,
+  openUntilIso: string | null = null
 ): Promise<{ ok: true; days: MenteeSessionDay[]; deadlineLabel: string | null } | { ok: false }> {
   const sessions = await readAllPages<Json>(
     "interview_sessions",
@@ -290,10 +293,10 @@ async function readSessionDays(
     }
   }
 
-  const closesAt = bookingClosesAt(rows);
+  const closesAt = bookingClosesAt(rows, openUntilIso);
   return {
     ok: true,
-    days: buildSessionDays(rows, taken, new Date().toISOString()),
+    days: buildSessionDays(rows, taken, new Date().toISOString(), openUntilIso),
     deadlineLabel: closesAt ? `${formatTime(closesAt)} ngày ${formatDate(closesAt)}` : null
   };
 }

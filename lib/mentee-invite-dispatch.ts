@@ -166,7 +166,15 @@ export async function countSentInWindow(client: any, nowMs: number): Promise<num
 
 type SessionContext = { anyBookable: boolean; deadlineLabel: string; daysLabel: string };
 
-export async function readSessionContext(client: any, seasonId: string): Promise<SessionContext | null> {
+/**
+ * `openUntilIso`: hạn riêng khi BTC mở lại chọn ca — ngày/hạn trong thư mở lại phải
+ * tính theo hạn của người nhận, không theo hạn chung đã qua.
+ */
+export async function readSessionContext(
+  client: any,
+  seasonId: string,
+  openUntilIso: string | null = null
+): Promise<SessionContext | null> {
   const sessions = await readAllPages<Json>(
     "interview_sessions",
     "id,starts_at,ends_at,seat_limit,venue,booking_closes_at,status",
@@ -202,8 +210,8 @@ export async function readSessionContext(client: any, seasonId: string): Promise
     taken.set(key, (taken.get(key) ?? 0) + 1);
   }
 
-  const days = buildSessionDays(rows, taken, new Date().toISOString());
-  const closesAt = bookingClosesAt(rows);
+  const days = buildSessionDays(rows, taken, new Date().toISOString(), openUntilIso);
+  const closesAt = bookingClosesAt(rows, openUntilIso);
   return {
     anyBookable: hasBookableSession(days),
     deadlineLabel: closesAt ? `${formatTime(closesAt)} ngày ${formatDate(closesAt)}` : "",
