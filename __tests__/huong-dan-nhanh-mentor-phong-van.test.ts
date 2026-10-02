@@ -78,4 +78,7 @@ describe("Hướng dẫn nhanh 1 trang — Mentor phỏng vấn mentee trực ti
     const pdf = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_NHANH_MENTOR_PHONG_VAN.pdf"), "latin1");
     expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(1);
   });
+  it("chỉ chỗ hướng dẫn sử dụng ngay trên màn hình (biểu tượng cuốn sách)", () => {
+    expect(text).toContain("biểu tượng cuốn sách");
+  });
 });

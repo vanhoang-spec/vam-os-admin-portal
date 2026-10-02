@@ -32,6 +32,7 @@ import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
 import { cn } from "@/lib/utils";
 import { buildNavGroups, isActiveRoute, type NavGroupDef } from "@/lib/nav-model";
+import { HelpGuideButton } from "@/components/help-guide-button";
 import { SeasonSelector } from "@/components/season-selector";
 import { isSeasonAwarePath } from "@/lib/season-labels";
 
@@ -431,6 +432,8 @@ export function AppShell({
                   >
                     <Menu className="h-5 w-5" aria-hidden="true" />
                   </button>
+                  {/* Hướng dẫn sử dụng của đúng trang đang xem — cạnh menu chính (BTC 02/10/2026). */}
+                  <HelpGuideButton pathname={pathname} navGroups={navGroups} />
                   <div>
                     <div className="text-xl font-semibold text-vam-ink">VAM OS</div>
                     <div className="text-sm text-slate-500">
