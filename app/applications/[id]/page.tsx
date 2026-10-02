@@ -48,6 +48,7 @@ import { DecisionForm } from "./decision-form";
 import { ScreeningDecisionPanel } from "./screening-decision-panel";
 import { ApprovalForm } from "./approval-form";
 import { RestoreWithdrawnForm } from "./restore-withdrawn-form";
+import { ResendInvitePanel } from "./resend-invite-panel";
 import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
 import { isEditableReviewStatus } from "@/lib/review-status";
 
@@ -821,6 +822,14 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           ]}
         />
       </Card>
+
+      {canAssign && application.data.role_applied === "mentee" ? (
+        <Card className="mb-4">
+          <h2 className="mb-2 text-base font-semibold text-vam-ink">Thư mời chọn ca phỏng vấn</h2>
+          {/* Hồ sơ không đủ điều kiện (đã đặt ca, không ở bước mời…) thì server tự từ chối và nói lý do. */}
+          <ResendInvitePanel applicationId={application.data.id} currentEmail={String(application.data.email_primary ?? "")} />
+        </Card>
+      ) : null}
 
       {/* ── Detailed info ── */}
       <div className="grid gap-4 xl:grid-cols-2">
