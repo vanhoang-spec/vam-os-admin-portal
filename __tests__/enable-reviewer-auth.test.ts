@@ -297,6 +297,27 @@ describe("enable-reviewer Auth pagination", () => {
   });
 });
 
+describe("notify:false — cấp quyền, KHÔNG gửi thư riêng (thư xác nhận lịch mang thông tin đăng nhập)", () => {
+  it("tài khoản mới: vẫn tạo tài khoản + cấp quyền đúng mùa, nhưng không gửi thư mời", async () => {
+    const { client, rpc, generateLink } = buildClient({ listUsers: makeAuthDirectory([]) });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as any);
+
+    const result = await enableMentorAsReviewer({ personId: PERSON_ID, seasonId: SEASON_ID, participationRole: "interviewer", notify: false });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("Đã cấp quyền Interviewer cho đúng mùa.");
+    expect(inviteCalls(generateLink)).toHaveLength(1);
+    expect(rpc).toHaveBeenCalledWith("vam084_grant_recruitment_participation", expect.objectContaining({ p_participation_role: "interviewer", p_season_id: SEASON_ID }));
+    expect(sendReviewerInvite).not.toHaveBeenCalled();
+  });
+  it("không truyền notify: gửi thư mời như cũ", async () => {
+    const { client } = buildClient({ listUsers: makeAuthDirectory([]) });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as any);
+    await enableMentorAsReviewer({ personId: PERSON_ID, seasonId: SEASON_ID, participationRole: "interviewer" });
+    expect(sendReviewerInvite).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("thư đặt mật khẩu đi qua Brevo, không qua thư của Supabase", () => {
   it("tài khoản mới: báo đã gửi thư tới đúng địa chỉ", async () => {
     const { client } = buildClient({ listUsers: makeAuthDirectory([]) });

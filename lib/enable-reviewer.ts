@@ -82,7 +82,7 @@ export class AuthLookupIncomplete extends Error {
  * the caller invite an account that may already exist, creating a duplicate
  * identity. We fail closed instead.
  */
-type AuthUserEntry = { id: string; email?: string | null };
+type AuthUserEntry = { id: string; email?: string | null; last_sign_in_at?: string | null };
 
 /**
  * Đi qua từng trang danh bạ Auth cho tới một trang RỖNG.
@@ -167,6 +167,12 @@ export async function enableMentorAsReviewer(input: {
   personId: string;
   seasonId: string;
   participationRole: "reviewer" | "interviewer";
+  /**
+   * false: chỉ cấp quyền, KHÔNG gửi thư đặt mật khẩu riêng. Dùng khi một thư khác
+   * mang luôn thông tin đăng nhập (thư xác nhận lịch phỏng vấn cho mentor, 02/10/2026)
+   * — BTC muốn mỗi người nhận đúng một thư. Mặc định vẫn gửi như cũ.
+   */
+  notify?: boolean;
 }): Promise<EnableReviewerResult> {
   const actor = await getCurrentAdminUser();
   if (!actor?.id) return { ok: false, message: "Bạn chưa đăng nhập." };
@@ -236,6 +242,7 @@ export async function enableMentorAsReviewer(input: {
   const adminUserId = String(data);
   const label = input.participationRole === "reviewer" ? "Reviewer hồ sơ" : "Interviewer";
   const granted = { ok: true, message: `Đã cấp quyền ${label} cho đúng mùa.`, adminUserId, authInvited: createdAccount };
+  if (input.notify === false) return granted;
   const notSent = (why: string) => ({
     ...granted,
     message: `Đã cấp quyền ${label} nhưng CHƯA gửi được thư đặt mật khẩu${why}. Gửi lại: bấm Thu hồi rồi Cấp lại.`
@@ -355,4 +362,26 @@ export async function revokeMentorRecruitmentParticipation(input: {
   }
   const label = input.participationRole === "reviewer" ? "Reviewer hồ sơ" : "Interviewer";
   return { ok: true, message: `Đã thu hồi quyền ${label} trong đúng mùa.`, adminUserId: String(data) };
+}
+
+/**
+ * Email → tài khoản Auth + đã từng đăng nhập chưa, đọc MỘT lượt cho cả danh sách.
+ * Thư xác nhận lịch dùng để biết ai cần link đặt mật khẩu trong thư.
+ */
+export async function loadAuthSignInIndex(client: any): Promise<Map<string, { id: string; signedIn: boolean }>> {
+  const index = new Map<string, { id: string; signedIn: boolean }>();
+  await walkAuthUserPages(client, (users) => {
+    for (const user of users) {
+      const email = String(user.email ?? "").trim().toLowerCase();
+      if (email && user.id) index.set(email, { id: String(user.id), signedIn: Boolean(user.last_sign_in_at) });
+    }
+    return false;
+  });
+  return index;
+}
+
+/** Link đặt mật khẩu (recovery) cho ĐÚNG tài khoản này — null nếu Supabase trả link của tài khoản khác. */
+export async function createRecoveryToken(client: any, email: string, userId: string): Promise<string | null> {
+  const generated = await generatePasswordLink(client, "recovery", email.trim().toLowerCase(), userId);
+  return generated.ok ? generated.tokenHash : null;
 }

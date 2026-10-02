@@ -1,5 +1,6 @@
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import {
+  canSendBulkEmail,
   canAssignReviewLots,
   canBrowseOperations,
   canComposeEmailTemplate,
@@ -193,6 +194,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // canEditInterviewRubric + vận hành mùa; reviewer/support không được
             // mời vào một trang chỉ trả về câu từ chối.
             ...(canEditInterviewRubric(role) ? [{ href: "/interviews/phieu-cham-mentee", label: "Phiếu chấm & hướng dẫn mentee" }] : []),
+            // Thư tới hàng chục mentor một lúc: cùng cổng với gửi thư hàng loạt.
+            ...(canSendBulkEmail(role) ? [{ href: "/interviews/thu-xac-nhan-mentor", label: "Thư xác nhận lịch PV cho mentor" }] : []),
           ],
         }
       : showStaffingOnly
