@@ -166,7 +166,7 @@ export async function countSentInWindow(client: any, nowMs: number): Promise<num
 
 type SessionContext = { anyBookable: boolean; deadlineLabel: string; daysLabel: string };
 
-async function readSessionContext(client: any, seasonId: string): Promise<SessionContext | null> {
+export async function readSessionContext(client: any, seasonId: string): Promise<SessionContext | null> {
   const sessions = await readAllPages<Json>(
     "interview_sessions",
     "id,starts_at,ends_at,seat_limit,venue,booking_closes_at,status",
