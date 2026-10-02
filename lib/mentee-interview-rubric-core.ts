@@ -49,16 +49,27 @@ export type InterviewScore = { key: string; label: string; weight: number; score
 export const EXPECTATION_ALIGNMENTS = {
   aligned: "Kỳ vọng phù hợp",
   needs_clarification: "Cần làm rõ thêm",
-  concern: "Có concern"
+  concern: "Kỳ vọng không phù hợp"
 } as const;
 export type ExpectationAlignment = keyof typeof EXPECTATION_ALIGNMENTS;
 
 export const TAKE_CHOICES = {
   take: "Có – Tôi muốn nhận bạn này",
-  recommend_other: "Không – nhưng đề xuất Đạt để Mentor khác lựa chọn",
+  recommend_other: "Không – Nhưng đề xuất bạn này trở thành Mentee và Mentor khác nhận bạn",
   undecided: "Chưa quyết định"
 } as const;
 export type TakeChoice = keyof typeof TAKE_CHOICES;
+
+/**
+ * Mỗi mentor phỏng vấn chọn "Có – Tôi muốn nhận bạn này" cho tối đa chừng này hồ
+ * sơ trong một mùa (BTC 02/10/2026). Database kiểm lại đúng con số này trong
+ * vam104_save_offline_interview (TAKE_LIMIT_REACHED) — sửa một nơi phải sửa cả hai.
+ */
+export const MAX_TAKES_PER_INTERVIEWER = 2;
+
+/** Lưu ý BTC đặt dưới mục B của form chấm. */
+export const EXPECTATION_BRIEF_NOTE =
+  "Lưu ý: Mentor có trách nhiệm mô tả ngắn gọn các cam kết của Mentor và Mentee, còn Mentee cần xác nhận và làm rõ kỳ vọng để hai bên thống nhất nhằm đảm bảo cả Mentor, Mentee hiểu rõ nội dung, phạm vi và vai trò, trách nhiệm trước khi bắt đầu quá trình mentoring.";
 
 export const DESCRIPTOR_LEVELS: RubricDescriptorLevel[] = ["1", "3", "5"];
 export const MAX_CRITERIA = 8;

@@ -8,6 +8,7 @@ import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
 import { InterviewResultForm, InterviewResultSummary } from "./rubric-form";
+import { MAX_TAKES_PER_INTERVIEWER } from "@/lib/mentee-interview-rubric-core";
 
 const field="w-full rounded-md border border-slate-300 bg-white p-2";
 const button="rounded-md bg-vam-green px-4 py-2 text-white disabled:opacity-50";
@@ -127,6 +128,11 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
   const review=c.reviews.find(r=>r.id===op?.review_id);
   const me=data.participants.find(p=>p.id===data.actorId);
   const full=me?.capacity==null || (me.activeMatches>=me.capacity && !op?.match_id);
+  // Số hồ sơ KHÁC mà chính mentor này đã chọn "Có – Tôi muốn nhận" trong mùa — database
+  // kiểm lại cùng con số (TAKE_LIMIT_REACHED); ở đây chỉ để khoá nút trước khi bấm.
+  const takesElsewhere=data.candidates.filter(x=>x.id!==c.id && x.operation?.interviewer_id===data.actorId &&
+    x.reviews.some(r=>r.id===x.operation?.review_id && r.status==="submitted" && r.take_choice==="take")).length;
+  const takeLimitReached=takesElsewhere>=MAX_TAKES_PER_INTERVIEWER;
   async function save(action:string,values:Record<string,unknown>) {
     if(busy) return;
     setBusy(true);
@@ -184,7 +190,7 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
     {own && editing && (data.rubric
       ? <InterviewResultForm rubric={data.rubric} review={review} operation={op} candidateName={c.name}
           mentorLabel={`${me?.full_name??"tài khoản hiện tại"}${me?.capacity!=null ? ` · ${me.activeMatches}/${me.capacity}` : " · chưa có hồ sơ mentor hợp lệ"}`}
-          full={full} busy={busy} onSubmit={values=>void save("result",values)} />
+          full={full} takeLimitReached={takeLimitReached} busy={busy} onSubmit={values=>void save("result",values)} />
       : <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">Mùa này chưa có phiếu chấm phỏng vấn. Nhờ BTC cài phiếu ở mục &quot;Phiếu chấm &amp; hướng dẫn mentee&quot; rồi tải lại trang.</p>)}
   </section>;
 }

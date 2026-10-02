@@ -3,7 +3,7 @@ import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {act,cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {OfflineDashboardClient} from "@/app/interviews/mentee-offline/workflow";
 import {type OfflineDashboard,type OfflineReview} from "@/lib/mentee-offline-core";
-import {TAKE_CHOICES,type InterviewRubric} from "@/lib/mentee-interview-rubric-core";
+import {EXPECTATION_BRIEF_NOTE,TAKE_CHOICES,type InterviewRubric} from "@/lib/mentee-interview-rubric-core";
 import {S12_INTERVIEW_CRITERIA,S12_INTERVIEW_GUIDANCE} from "@/lib/mentee-interview-rubric-s12";
 const RUBRIC:InterviewRubric={id:"rubric-1",seasonId:"season",seasonCode:"UEHM-S12",own:true,version:3,handbookVersion:0,
   criteria:S12_INTERVIEW_CRITERIA,guidance:S12_INTERVIEW_GUIDANCE,copiedFromSeasonCode:null,updatedAt:"2026-10-02T00:00:00Z",updatedByName:"BTC",
@@ -13,10 +13,13 @@ const BLANK_REVIEW:OfflineReview={id:"review",review_round:"interview",reviewerN
 function fillRubricForm() {
   const scores=[5,3,4,2];
   S12_INTERVIEW_CRITERIA.forEach((c,i)=>fireEvent.change(screen.getByLabelText(c.label),{target:{value:String(scores[i])}}));
-  fireEvent.change(screen.getByLabelText("Evidence / Note — Nhu cầu Mentoring & Giá trị phát triển"),{target:{value:"Có development need thật"}});
+  // Evidence / Note của mọi tiêu chí bắt buộc (BTC 02/10/2026).
+  const notes=["Có development need thật","Nghe góp ý tốt","Tự đặt lịch","Kế hoạch còn chung"];
+  S12_INTERVIEW_CRITERIA.forEach((c,i)=>fireEvent.change(screen.getByLabelText(`Evidence / Note — ${c.label}`),{target:{value:notes[i]}}));
   fireEvent.change(screen.getByLabelText("Lý do chọn / không chọn"),{target:{value:"Có động lực"}});
   fireEvent.change(screen.getByLabelText("Nhu cầu phát triển chính"),{target:{value:"Khám phá hướng nghề"}});
-  fireEvent.change(screen.getByLabelText("Mức độ alignment"),{target:{value:"aligned"}});
+  fireEvent.change(screen.getByLabelText("Mức độ phù hợp về kỳ vọng của Mentee"),{target:{value:"aligned"}});
+  fireEvent.change(screen.getByLabelText("Concern / Note"),{target:{value:"Đã thống nhất lịch gặp"}});
   fireEvent.change(screen.getByLabelText("Chân dung Mentor phù hợp"),{target:{value:"Thiên về coaching"}});
 }
 const mocks=vi.hoisted(()=>({save:vi.fn(),lookup:vi.fn(),cancel:vi.fn(),refresh:vi.fn(),onCode:undefined as undefined|((code:string)=>void)}));
@@ -39,8 +42,8 @@ it("mentor chấm theo phiếu của mùa: gửi đủ điểm từng tiêu chí
   fireEvent.click(screen.getByRole("button",{name:"Xác nhận kết quả"}));
   await waitFor(()=>expect(mocks.save).toHaveBeenCalledWith({applicationId:"app",action:"result",revision:2,values:{
     outcome:"passed",rubricId:"rubric-1",rubricVersion:3,
-    criteria:{need:{score:5,note:"Có development need thật"},readiness:{score:3,note:""},ownership:{score:4,note:""},follow_through:{score:2,note:""}},
-    rationale:"Có động lực",keyNeed:"Khám phá hướng nghề",alignment:"aligned",alignmentNote:"",
+    criteria:{need:{score:5,note:"Có development need thật"},readiness:{score:3,note:"Nghe góp ý tốt"},ownership:{score:4,note:"Tự đặt lịch"},follow_through:{score:2,note:"Kế hoạch còn chung"}},
+    rationale:"Có động lực",keyNeed:"Khám phá hướng nghề",alignment:"aligned",alignmentNote:"Đã thống nhất lịch gặp",
     takeChoice:"take",desiredMentor:"Thiên về coaching",additionalNote:"",reason:""}}));
   expect(mocks.refresh).toHaveBeenCalled();
 });
@@ -65,14 +68,61 @@ it("chưa chọn mục C thì không gửi và nói rõ thiếu gì",()=>{
   expect(mocks.save).not.toHaveBeenCalled();
   expect(screen.getByRole("alert").textContent).toContain("mục C");
 });
-it("đổi sang Không chọn tự bỏ và khoá lựa chọn \"Có – nhận\"",()=>{
+it("đổi sang Không chọn: khoá CẢ 3 lựa chọn mục C và ô chân dung mentor; gửi không kèm lựa chọn",async()=>{
   render(<OfflineDashboardClient data={data()} initialApplication="app"/>);
   const take=screen.getByLabelText(TAKE_CHOICES.take) as HTMLInputElement;
   fireEvent.click(take);expect(take.checked).toBe(true);
   fireEvent.change(screen.getByLabelText("Kết quả"),{target:{value:"rejected"}});
-  expect(take.checked).toBe(false);expect(take.disabled).toBe(true);
-  expect((screen.getByLabelText(TAKE_CHOICES.recommend_other) as HTMLInputElement).disabled).toBe(false);
+  expect(take.checked).toBe(false);
+  for (const label of Object.values(TAKE_CHOICES)) expect((screen.getByLabelText(label) as HTMLInputElement).disabled).toBe(true);
+  const desired=screen.getByLabelText("Chân dung Mentor phù hợp") as HTMLTextAreaElement;
+  expect(desired.disabled).toBe(true);expect(desired.required).toBe(false);
   expect((screen.getByLabelText("Lý do chọn / không chọn") as HTMLTextAreaElement).required).toBe(true);
+  // Đổi lại Đạt thì mục C mở lại.
+  fireEvent.change(screen.getByLabelText("Kết quả"),{target:{value:"passed"}});
+  expect((screen.getByLabelText(TAKE_CHOICES.recommend_other) as HTMLInputElement).disabled).toBe(false);
+  fireEvent.change(screen.getByLabelText("Kết quả"),{target:{value:"rejected"}});
+  fillRubricForm();
+  fireEvent.click(screen.getByRole("button",{name:"Xác nhận kết quả"}));
+  await waitFor(()=>expect(mocks.save).toHaveBeenCalledTimes(1));
+  expect(mocks.save.mock.calls[0][0].values).toMatchObject({outcome:"rejected",takeChoice:null,desiredMentor:""});
+});
+it("sửa phiếu Không chọn cũ (lưu trước 02/10, còn lựa chọn mục C): gửi lại KHÔNG mang lựa chọn đó",async()=>{
+  const d=data();
+  d.candidates[0].operation={...d.candidates[0].operation!,outcome:"rejected"};
+  d.candidates[0].reviews=[{...BLANK_REVIEW,take_choice:"undecided"}];
+  render(<OfflineDashboardClient data={d} initialApplication="app"/>);
+  fireEvent.click(screen.getByRole("button",{name:"Sửa kết quả / lựa chọn mentee"}));
+  fillRubricForm();
+  fireEvent.change(screen.getByLabelText("Lý do sửa kết quả"),{target:{value:"Bổ sung ghi chú"}});
+  fireEvent.click(screen.getByRole("button",{name:"Xác nhận kết quả"}));
+  await waitFor(()=>expect(mocks.save).toHaveBeenCalledTimes(1));
+  expect(mocks.save.mock.calls[0][0].values).toMatchObject({outcome:"rejected",takeChoice:null,desiredMentor:""});
+});
+it("Evidence / Note của mọi tiêu chí và Concern / Note là ô bắt buộc; mục B có lưu ý của BTC",()=>{
+  render(<OfflineDashboardClient data={data()} initialApplication="app"/>);
+  for (const c of S12_INTERVIEW_CRITERIA) expect((screen.getByLabelText(`Evidence / Note — ${c.label}`) as HTMLTextAreaElement).required).toBe(true);
+  expect((screen.getByLabelText("Concern / Note") as HTMLTextAreaElement).required).toBe(true);
+  const legends=Array.from(document.querySelectorAll("legend")).map(l=>l.textContent);
+  expect(legends).toContain("A. Quyết định chọn mentee");
+  expect(legends).toContain("B. Sự phù hợp về kỳ vọng của Mentee");
+  const form=screen.getByRole("button",{name:"Xác nhận kết quả"}).closest("form")!;
+  expect(form.textContent).toContain(EXPECTATION_BRIEF_NOTE);
+});
+it("đã chọn \"Có – Tôi muốn nhận\" cho 2 hồ sơ khác thì khoá lựa chọn này ở hồ sơ thứ ba",()=>{
+  const d=data();
+  const taken=(id:string)=>({...d.candidates[0],id,name:`Đã nhận ${id}`,operation:{...d.candidates[0].operation!,review_id:`rv-${id}`,outcome:"passed" as const},
+    reviews:[{...BLANK_REVIEW,id:`rv-${id}`,take_choice:"take" as const}]});
+  d.candidates.push(taken("x1"));
+  // Hồ sơ thứ hai: chỉ một lần nhận → vẫn chọn được.
+  const one=render(<OfflineDashboardClient data={d} initialApplication="app"/>);
+  expect((screen.getByLabelText(TAKE_CHOICES.take) as HTMLInputElement).disabled).toBe(false);
+  one.unmount();
+  d.candidates.push(taken("x2"));
+  render(<OfflineDashboardClient data={d} initialApplication="app"/>);
+  expect((screen.getByLabelText(TAKE_CHOICES.take) as HTMLInputElement).disabled).toBe(true);
+  expect((screen.getByLabelText(TAKE_CHOICES.recommend_other) as HTMLInputElement).disabled).toBe(false);
+  expect(screen.getByText(/cho đủ 2 hồ sơ/)).toBeTruthy();
 });
 it("mentor đầy không nhận thêm; Support xem application nhưng không chấm thay",()=>{
   const full=data();full.participants[0].activeMatches=1;
