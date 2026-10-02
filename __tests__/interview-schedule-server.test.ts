@@ -162,7 +162,7 @@ describe("1. cổng quyền interviewer", () => {
     expect(result.ok).toBe(true);
     expect(rpc).not.toHaveBeenCalled();
     if (result.ok) {
-      expect(result.days).toHaveLength(14);
+      expect(result.days).toHaveLength(20);
       expect(result.needsPhone).toBe(true);
     }
   });
@@ -195,7 +195,7 @@ describe("2. lưu giờ rảnh", () => {
     seedProfile();
     const past = await saveInterviewerSlots({ phone: "", add: ["2026-09-22T02:00:00.000Z"], remove: [] });
     expect(past.ok).toBe(false);
-    const outside = await saveInterviewerSlots({ phone: "", add: ["2026-10-06T02:00:00.000Z"], remove: [] });
+    const outside = await saveInterviewerSlots({ phone: "", add: ["2026-10-12T02:00:00.000Z"], remove: [] });
     expect(outside.ok).toBe(false);
     expect(db.rows("interview_slots")).toHaveLength(0);
   });

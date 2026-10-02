@@ -17,14 +17,29 @@ import { formatDate, formatTime } from "@/lib/utils";
 export const INTERVIEW_SEASON_CODE = "UEHM-S12";
 
 /**
- * Đợt phỏng vấn: 22/09–05/10/2026 theo lời chủ dự án 22/09/2026. Biên ngày
- * nằm ở đây chứ không nằm trong CHECK của database, để mùa sau nới đợt chỉ
+ * Đợt phỏng vấn: 22/09–05/10/2026 theo lời chủ dự án 22/09/2026; GIA HẠN đến
+ * 11/10/2026 ngày 02/10 (còn 25 mentor mới chưa đặt được lịch với core team).
+ * Biên ngày nằm ở đây chứ không nằm trong CHECK của database, để nới đợt chỉ
  * cần sửa TypeScript; database chỉ giữ luật bất biến (tròn giờ, 07..21).
+ * Mọi nhãn ngày trên giao diện/thư đọc từ hằng này (windowRangeLabel,
+ * windowEndShortLabel) — gia hạn mà còn sót một chữ "05/10" là một câu sai.
  */
 export const INTERVIEW_WINDOW = {
   firstDateKey: "2026-09-22",
-  lastDateKey: "2026-10-05"
+  lastDateKey: "2026-10-11"
 } as const;
+
+/** "22/09–11/10/2026" — nhãn đợt cho đầu trang. */
+export function windowRangeLabel(): string {
+  const first = formatDate(slotInstant(INTERVIEW_WINDOW.firstDateKey, SLOT_FIRST_HOUR));
+  const last = formatDate(slotInstant(INTERVIEW_WINDOW.lastDateKey, SLOT_FIRST_HOUR));
+  return `${first.slice(0, 5)}–${last}`;
+}
+
+/** "11/10" — ngày cuối đợt, dạng ngắn cho ô số liệu. */
+export function windowEndShortLabel(): string {
+  return formatDate(slotInstant(INTERVIEW_WINDOW.lastDateKey, SLOT_FIRST_HOUR)).slice(0, 5);
+}
 
 /** Slot bắt đầu 07:00..21:00, mỗi slot tròn 60 phút → kết thúc muộn nhất 22:00. */
 export const SLOT_FIRST_HOUR = 7;

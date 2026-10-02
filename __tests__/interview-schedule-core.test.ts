@@ -24,7 +24,9 @@ import {
   isValidSlotInstant,
   slotInstant,
   slotRangeLabel,
-  windowDateKeys
+  windowDateKeys,
+  windowEndShortLabel,
+  windowRangeLabel
 } from "@/lib/interview-schedule-core";
 
 describe("1. lưới giờ và múi giờ", () => {
@@ -36,19 +38,20 @@ describe("1. lưới giờ và múi giờ", () => {
     expect(slotInstant("2026-10-05", 21)).toBe("2026-10-05T14:00:00.000Z");
   });
 
-  it("đợt có đúng 14 ngày, từ 22/09 đến 05/10", () => {
+  // Gia hạn 02/10/2026: đợt kéo từ 05/10 tới 11/10 (còn 25 mentor mới chưa đặt lịch).
+  it("đợt có đúng 20 ngày, từ 22/09 đến 11/10", () => {
     const keys = windowDateKeys();
-    expect(keys).toHaveLength(14);
+    expect(keys).toHaveLength(20);
     expect(keys[0]).toBe("2026-09-22");
-    expect(keys[13]).toBe("2026-10-05");
+    expect(keys[19]).toBe("2026-10-11");
     // Biên tháng 9→10 không được nuốt ngày nào.
     expect(keys).toContain("2026-09-30");
     expect(keys).toContain("2026-10-01");
   });
 
-  it("lưới 14 ngày × 15 giờ, giờ đầu 07:00 giờ cuối 21:00", () => {
+  it("lưới 20 ngày × 15 giờ, giờ đầu 07:00 giờ cuối 21:00", () => {
     const grid = buildSlotGrid("2026-09-21T00:00:00.000Z");
-    expect(grid).toHaveLength(14);
+    expect(grid).toHaveLength(20);
     for (const day of grid) {
       expect(day.slots).toHaveLength(15);
       expect(day.slots[0].hour).toBe(7);
@@ -96,9 +99,19 @@ describe("2. kiểm một instant có phải ô lưới hợp lệ", () => {
     expect(isValidSlotInstant("2026-09-22T08:30:00.000Z", now)).toEqual({ ok: false, code: "bad_hour" });
   });
 
-  it("từ chối ngoài đợt — 21/09 và 06/10", () => {
+  it("từ chối ngoài đợt — 21/09 và 12/10", () => {
     expect(isValidSlotInstant("2026-09-21T08:00:00.000Z", now)).toEqual({ ok: false, code: "outside_window" });
-    expect(isValidSlotInstant("2026-10-06T08:00:00.000Z", now)).toEqual({ ok: false, code: "outside_window" });
+    expect(isValidSlotInstant("2026-10-12T00:00:00.000Z", now)).toEqual({ ok: false, code: "outside_window" });
+  });
+
+  it("sau gia hạn: 06/10 và 21:00 ngày 11/10 (slot cuối) nhận được", () => {
+    expect(isValidSlotInstant("2026-10-06T08:00:00.000Z", now)).toEqual({ ok: true, startsAtIso: "2026-10-06T08:00:00.000Z" });
+    expect(isValidSlotInstant("2026-10-11T14:00:00.000Z", now)).toEqual({ ok: true, startsAtIso: "2026-10-11T14:00:00.000Z" });
+  });
+
+  it("nhãn đợt đọc từ hằng số", () => {
+    expect(windowRangeLabel()).toBe("22/09–11/10/2026");
+    expect(windowEndShortLabel()).toBe("11/10");
   });
 
   it("từ chối slot đã bắt đầu", () => {

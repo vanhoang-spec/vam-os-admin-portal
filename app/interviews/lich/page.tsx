@@ -4,13 +4,14 @@ import { LiveRefresh } from "@/app/events/[id]/live-refresh";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getBtcOverview, getMyInterviewerSchedule } from "@/lib/interview-schedule";
+import { windowRangeLabel } from "@/lib/interview-schedule-core";
 import { canAssignReview, canSelfClaimInterview } from "@/lib/permissions";
 import { AvailabilityGrid } from "./availability-grid";
 import { BtcPanel } from "./btc-panel";
 import { WaitingPanel } from "./waiting-panel";
 
 /**
- * /interviews/lich — lịch phỏng vấn mentor 1:1 (đợt 22/09–05/10/2026).
+ * /interviews/lich — lịch phỏng vấn mentor 1:1 (đợt 22/09–11/10/2026, gia hạn 02/10).
  *
  * Hai khán giả trên một trang:
  *   * Interviewer (core team + mentor được bật quyền người phỏng vấn): tick
@@ -37,7 +38,7 @@ export default async function InterviewSchedulePage() {
     <>
       <PageHeader
         title="Lịch phỏng vấn mentor"
-        description="Đợt 22/09–05/10/2026, mỗi buổi online 1:1 tròn 60 phút trong khung 07:00–22:00. Anh/chị tick giờ rảnh; mentor tự chọn slot qua link riêng, ai giữ trước được trước."
+        description={`Đợt ${windowRangeLabel()}, mỗi buổi online 1:1 tròn 60 phút trong khung 07:00–22:00. Anh/chị tick giờ rảnh; mentor tự chọn slot qua link riêng, ai giữ trước được trước.`}
       />
 
       <div className="mb-4">
