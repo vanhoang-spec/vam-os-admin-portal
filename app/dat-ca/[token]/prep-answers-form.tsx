@@ -11,8 +11,8 @@ import { MENTEE_PREP_QUESTIONS } from "@/lib/email-core";
 import type { PrepQuestion } from "@/lib/mentee-interview";
 
 /**
- * Hai câu hỏi chuẩn bị — không bắt buộc, mentee điền được bất cứ lúc nào sau
- * khi nhận thư mời, không cần chờ tới ngày phỏng vấn. Câu trả lời lưu thẳng
+ * Hai câu hỏi chuẩn bị — SAU khi đã giữ chỗ, mentee sửa lại câu trả lời ở đây.
+ * Lúc chọn ca thì hai câu này bắt buộc và nằm ngay trong lưới ca (session-form). Câu trả lời lưu thẳng
  * vào hồ sơ và mentor thấy lại trong lúc phỏng vấn — không cần một trang riêng.
  */
 export function PrepAnswersForm({ token, answers }: { token: string; answers: PrepQuestion[] }) {
@@ -24,8 +24,8 @@ export function PrepAnswersForm({ token, answers }: { token: string; answers: Pr
   return (
     <form action={action} onReset={keepFormValues} className="grid gap-4">
       <p className="text-sm text-slate-600">
-        Không bắt buộc, nhưng giúp mentor chuẩn bị tốt hơn cho buổi trò chuyện với bạn. Bạn có thể
-        điền ngay bây giờ hoặc quay lại điền sau — lưu lại là ghi đè câu trả lời cũ (nếu có).
+        Mentor đọc trước hai câu trả lời này để chuẩn bị cho buổi trò chuyện với bạn. Bạn sửa được
+        tới trước buổi phỏng vấn — lưu lại là ghi đè câu trả lời cũ.
       </p>
       {MENTEE_PREP_QUESTIONS.map((q, index) => (
         <label key={q.rawPayloadKey} className="grid gap-1 text-sm">

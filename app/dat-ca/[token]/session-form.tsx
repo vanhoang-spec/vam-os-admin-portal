@@ -8,6 +8,7 @@ import {
   type SessionBookingState
 } from "@/lib/mentee-interview-action-types";
 import type { MenteeSessionDay } from "@/lib/mentee-interview-core";
+import { MENTEE_PREP_QUESTIONS } from "@/lib/email-core";
 
 /**
  * Lưới 12 ca, dùng cho cả hai việc: chọn ca lần đầu và đổi sang ca khác.
@@ -23,12 +24,15 @@ export function SessionForm({
   token,
   days,
   mode = "book",
-  currentSessionId = null
+  currentSessionId = null,
+  prepAnswers = null
 }: {
   token: string;
   days: MenteeSessionDay[];
   mode?: "book" | "change";
   currentSessionId?: string | null;
+  /** Chế độ chọn ca lần đầu: hai câu hỏi chuẩn bị bắt buộc nằm ngay trong form (BTC 02/10/2026). */
+  prepAnswers?: string[] | null;
 }) {
   const [state, action] = useFormState<SessionBookingState, FormData>(
     (mode === "change" ? changeSessionAction : bookSessionAction).bind(null, token),
@@ -43,6 +47,21 @@ export function SessionForm({
         <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {state.message}
         </p>
+      ) : null}
+
+      {prepAnswers ? (
+        <fieldset className="grid gap-3 rounded-md border border-vam-line p-3">
+          <legend className="px-1 text-sm font-semibold text-vam-ink">Bước 1 — Trả lời 2 câu hỏi (bắt buộc)</legend>
+          {MENTEE_PREP_QUESTIONS.map((q, index) => (
+            <label key={q.rawPayloadKey} className="grid gap-1 text-sm">
+              <span className="font-medium text-vam-ink">{index + 1}. {q.question}</span>
+              <span className="text-xs text-slate-500">{q.hint}</span>
+              <textarea name={q.rawPayloadKey} required rows={3} maxLength={2000} defaultValue={prepAnswers[index] ?? ""}
+                className="rounded-md border border-slate-300 bg-white p-2 text-sm" />
+            </label>
+          ))}
+          <p className="text-xs text-slate-500">Bước 2 — bấm vào ca bạn chọn bên dưới. Câu trả lời được lưu cùng lúc giữ chỗ.</p>
+        </fieldset>
       ) : null}
 
       {days.map((day) => (

@@ -10,7 +10,9 @@ import {
   buildSessionDays,
   hasBookableSession,
   sessionFullLabel,
-  totalRemaining
+  totalRemaining,
+  PREP_REQUIRED_MESSAGE,
+  prepAnswersComplete
 } from "@/lib/mentee-interview-core";
 import { MENTEE_PREP_QUESTIONS } from "@/lib/email-core";
 import { BOOKING_ELIGIBLE_STATUSES } from "@/lib/interview-schedule-core";
@@ -339,6 +341,29 @@ export async function bookMenteeSession(input: {
   if (!sessionId || !isValidUuid(sessionId)) {
     return { ok: false, message: BOOK_ERROR_MESSAGES.session_not_found };
   }
+
+  // Hai câu hỏi chuẩn bị bắt buộc trước khi giữ chỗ — kiểm ở đây chứ không chỉ ở
+  // trang: cái đến từ biểu mẫu là thứ người gửi tự đặt được.
+  const { data: invite, error: inviteError } = await client
+    .from("mentee_interview_invites")
+    .select("application_id")
+    .eq("token", token)
+    .maybeSingle();
+  if (inviteError) {
+    log("book: invite lookup failed", inviteError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!invite?.application_id) return { ok: false, message: BOOK_ERROR_MESSAGES.invalid_token };
+  const { data: prepApp, error: prepError } = await client
+    .from("applications")
+    .select("raw_payload")
+    .eq("id", String(invite.application_id))
+    .maybeSingle();
+  if (prepError || !prepApp) {
+    if (prepError) log("book: application lookup failed", prepError);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  if (!prepAnswersComplete(prepApp.raw_payload)) return { ok: false, message: PREP_REQUIRED_MESSAGE };
 
   const { data, error } = await client.rpc("vam101_book_mentee_session", {
     p_token: token,

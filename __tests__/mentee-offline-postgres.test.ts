@@ -1,6 +1,6 @@
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import type {PGlite} from "@electric-sql/pglite";
-import {offlineDb,ids,uuid,save,assigned,pass,addCandidate,cancelBooking,guide,saveRubric,saveHandbook} from "./support/offline-postgres";
+import {offlineDb,ids,uuid,save,assigned,pass,addCandidate,cancelBooking,moveBooking,guide,saveRubric,saveHandbook} from "./support/offline-postgres";
 import {S12_INTERVIEW_CRITERIA,S12_INTERVIEW_GUIDANCE} from "@/lib/mentee-interview-rubric-s12";
 
 const crit=(over:Record<string,unknown>)=>({...(pass.criteria as Record<string,unknown>),...over});
@@ -337,5 +337,50 @@ describe("offline workflow — thực thi PostgreSQL, không mock RPC",()=>{
   it("vam105: đã check-in thì không huỷ được — tái dùng trigger vam104_booking_guard sẵn có",()=>isolated(async()=>{
     await save(db,"checkin",0);
     await rejects(()=>cancelBooking(db,"Muốn huỷ sau khi đến"),"ALREADY_CHECKED_IN");
+  }));
+  // Ca đích dời ra "ngày mai so với lúc chạy test": các ca seed mang ngày thật
+  // 03–04/10/2026, chạy test sau ngày đó thì mọi ca đều đã qua.
+  async function futureSession(id:string,seat=25) {
+    await db.exec(`set local role postgres;
+      update interview_sessions set starts_at=now()+interval '1 day',ends_at=now()+interval '1 day 30 minutes',
+        booking_closes_at=now()-interval '1 hour',seat_limit=${seat},status='open' where id='${id}';
+      set local role service_role;`);
+  }
+  it("vam107: BTC/Support đổi ca SAU hạn tự đổi; nhả ca cũ có lý do, ghi ca mới, dòng vận hành theo ca mới, có lịch sử",()=>isolated(async()=>{
+    await futureSession(ids.sessionSun);
+    // Dòng vận hành đã có (đã mở hồ sơ) nhưng CHƯA check-in.
+    await db.exec(`set local role postgres; insert into mentee_interview_operations(id,session_id) values('${ids.app}','${ids.session}'); set local role service_role;`);
+    const {rows:[r]}=await moveBooking(db,ids.sessionSun,"Mentee bận đột xuất");
+    expect((r as any).result.ok).toBe(true);
+    const {rows:bookings}=await db.query<any>("select session_id,status,cancelled_by,cancel_note from mentee_interview_bookings where application_id=$1 order by booked_at",[ids.app]);
+    expect(bookings).toEqual([
+      {session_id:ids.session,status:"cancelled",cancelled_by:ids.support,cancel_note:"BTC đổi ca: Mentee bận đột xuất"},
+      {session_id:ids.sessionSun,status:"booked",cancelled_by:null,cancel_note:null}
+    ]);
+    expect((await db.query<any>("select session_id from mentee_interview_operations where id=$1",[ids.app])).rows).toEqual([{session_id:ids.sessionSun}]);
+    const {rows:[d]}=await db.query<any>("select decided_by,decision_note from application_decisions where application_id=$1",[ids.app]);
+    expect(d.decided_by).toBe(ids.support);
+    expect(d.decision_note).toContain("Lý do: Mentee bận đột xuất");
+    const {rows:[log]}=await db.query<any>("select action,actor_id,reason from mentee_interview_operation_log where application_id=$1",[ids.app]);
+    expect(log).toEqual({action:"move_booking",actor_id:ids.support,reason:"Mentee bận đột xuất"});
+  }));
+  it("vam107: chặn — không quyền vận hành, thiếu lý do, cùng ca, ca kín, ca đã qua, ca mùa khác, đã check-in; ca cũ giữ nguyên",()=>isolated(async()=>{
+    await futureSession(ids.sessionSun);
+    await rejects(()=>moveBooking(db,ids.sessionSun,"Lý do",ids.mentor),"ACCESS_DENIED");
+    await rejects(()=>moveBooking(db,ids.sessionSun,"   "),"REASON_REQUIRED");
+    await rejects(()=>moveBooking(db,ids.session,"Lý do"),"SAME_SESSION");
+    await rejects(()=>moveBooking(db,uuid(77),"Lý do"),"SESSION_NOT_FOUND");
+    // Ca kín thật: 1 ghế, đã có người khác giữ.
+    await db.exec("set local role postgres;");
+    await addCandidate(db,uuid(51),ids.sessionSun);
+    await db.exec("set local role service_role;");
+    await futureSession(ids.sessionSun,1);
+    await rejects(()=>moveBooking(db,ids.sessionSun,"Lý do"),"SESSION_FULL");
+    await db.exec(`set local role postgres; update interview_sessions set starts_at=now()-interval '1 minute',seat_limit=25 where id='${ids.sessionSun}'; set local role service_role;`);
+    await rejects(()=>moveBooking(db,ids.sessionSun,"Lý do"),"SESSION_IN_PAST");
+    await futureSession(ids.sessionSun);
+    await save(db,"checkin",0,{});
+    await rejects(()=>moveBooking(db,ids.sessionSun,"Lý do"),"ALREADY_CHECKED_IN");
+    expect((await db.query<any>("select session_id from mentee_interview_bookings where application_id=$1 and status='booked'",[ids.app])).rows).toEqual([{session_id:ids.session}]);
   }));
 });

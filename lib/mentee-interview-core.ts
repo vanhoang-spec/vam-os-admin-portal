@@ -1,5 +1,6 @@
 import { WEEKDAY_LABELS, weekdayOf } from "@/lib/event-recurrence";
 import { formatDate, formatTime } from "@/lib/utils";
+import { MENTEE_PREP_QUESTIONS } from "@/lib/email-core";
 
 /**
  * lib/mentee-interview-core.ts
@@ -215,3 +216,15 @@ export function totalRemaining(days: readonly MenteeSessionDay[]): number {
   }
   return total;
 }
+
+/**
+ * Đủ hai câu trả lời chuẩn bị chưa — điều kiện để GIỮ CHỖ một ca (BTC 02/10/2026:
+ * mentee phải trả lời trước khi chọn ca, để mentor có gì đọc trước buổi phỏng vấn).
+ * Một cửa cho cả trang đặt ca lẫn hàm giữ chỗ.
+ */
+export function prepAnswersComplete(rawPayload: unknown): boolean {
+  const payload = (rawPayload ?? {}) as Record<string, unknown>;
+  return MENTEE_PREP_QUESTIONS.every((q) => String(payload[q.rawPayloadKey] ?? "").trim().length > 0);
+}
+
+export const PREP_REQUIRED_MESSAGE = "Bạn cần trả lời đủ 2 câu hỏi chuẩn bị trước khi chọn ca phỏng vấn.";

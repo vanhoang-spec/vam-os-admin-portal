@@ -19,6 +19,17 @@ export async function bookSessionAction(
   formData: FormData
 ): Promise<SessionBookingState> {
   const sessionId = String(formData.get("sessionId") ?? "");
+  // Hai câu trả lời đi cùng lần bấm chọn ca: lưu trước, rồi bookMenteeSession tự
+  // kiểm lại đủ chưa (không tin trang). Lưu được mà giữ chỗ hỏng thì câu trả lời
+  // vẫn còn — bấm ca khác không phải gõ lại.
+  if (MENTEE_PREP_QUESTIONS.some((q) => formData.has(q.rawPayloadKey))) {
+    const answers: [string, string] = [
+      String(formData.get(MENTEE_PREP_QUESTIONS[0].rawPayloadKey) ?? ""),
+      String(formData.get(MENTEE_PREP_QUESTIONS[1].rawPayloadKey) ?? "")
+    ];
+    const saved = await saveMenteePrepAnswers({ token, answers });
+    if (!saved.ok) return { status: "error", message: saved.message, sessionLabel: null };
+  }
   const result = await bookMenteeSession({ token, sessionId });
 
   if (!result.ok) {
@@ -60,8 +71,8 @@ export async function changeSessionAction(
 }
 
 /**
- * Lưu hai câu trả lời chuẩn bị. Không bắt buộc — mentee bỏ trống ô nào thì ô
- * đó lưu thành chuỗi rỗng, ghi đè đúng chuỗi rỗng đó, không phải "giữ nguyên
+ * Lưu (sửa) hai câu trả lời chuẩn bị sau khi đã giữ chỗ. Bắt buộc lúc CHỌN CA
+ * (xem bookSessionAction); ở đây mentee bỏ trống ô nào thì ô đó lưu thành chuỗi rỗng, ghi đè đúng chuỗi rỗng đó, không phải "giữ nguyên
  * giá trị cũ": người xoá hết chữ trong ô rồi bấm Lưu đang nói "xoá câu trả
  * lời này", không phải bấm nhầm.
  */
