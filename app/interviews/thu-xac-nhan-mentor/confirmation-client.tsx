@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import {
+  grantInterviewAccessAction,
   previewMentorConfirmationsAction,
   sendMentorConfirmationsAction,
   sendMentorConfirmationTestAction
@@ -32,6 +33,7 @@ export function ConfirmationClient() {
 
   const plan = state?.ok ? state.plan : null;
   const ready = plan ? plan.recipients.filter((r) => r.status === "ready").length : 0;
+  const noAccess = plan ? plan.recipients.filter((r) => r.status === "no_access").length : 0;
   const blockLabel = (key: string) => plan?.blocks.find((b) => b.key === key)?.label ?? key;
 
   return (
@@ -71,7 +73,7 @@ export function ConfirmationClient() {
                   {[...plan.recipients].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)).map((r) => (
                     <tr key={r.email} className="border-b align-top" data-status={r.status}>
                       <td className="p-2">{r.name}<div className="text-xs text-slate-500">{r.email}</div></td>
-                      <td className="p-2">{r.loginEmail ?? "—"}{r.matchedBy === "phone_and_name" ? <div className="text-xs text-amber-800">Khác email trên sheet — khớp theo SĐT + tên</div> : null}</td>
+                      <td className="p-2">{r.loginEmail ?? "—"}{r.needsPasswordLink ? <div className="text-xs text-slate-500">Chưa từng đăng nhập — thư kèm link đặt mật khẩu</div> : null}{r.matchedBy === "phone_and_name" ? <div className="text-xs text-amber-800">Khác email trên sheet — khớp theo SĐT + tên</div> : null}</td>
                       <td className="p-2">{r.blockKeys.map(blockLabel).join("; ") || "—"}{r.note ? <div className="text-xs text-slate-500">Ghi chú: {r.note}</div> : null}</td>
                       <td className="p-2">{RECIPIENT_STATUS_LABELS[r.status]}</td>
                     </tr>
@@ -92,6 +94,21 @@ export function ConfirmationClient() {
           <Card>
             <h2 className="font-semibold">Gửi</h2>
             <div className="mt-2 grid gap-3">
+              {noAccess > 0 ? (
+                <div className="grid gap-1 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+                  <p>{noAccess} người đăng ký chưa có quyền phỏng vấn nên chưa nhận thư. Cấp quyền ở đây KHÔNG gửi thư mời riêng — thông tin đăng nhập đi chung trong thư xác nhận. Chỉ mentor của đợt tuyển được cấp.</p>
+                  <button type="button" disabled={pending} className="w-fit rounded-md border border-amber-700 px-4 py-2 text-amber-900 disabled:opacity-50"
+                    onClick={() => {
+                      if (!window.confirm(`Cấp quyền phỏng vấn mùa này cho ${noAccess} người chưa có quyền?`)) return;
+                      startTransition(async () => {
+                        const r = await grantInterviewAccessAction(link);
+                        setResult({ ok: r.ok, text: `${r.message} Bấm “Đọc danh sách” để xem lại.` });
+                      });
+                    }}>
+                    Cấp quyền phỏng vấn cho {noAccess} người (không gửi thư riêng)
+                  </button>
+                </div>
+              ) : null}
               <button type="button" disabled={pending || ready === 0} className="w-fit rounded-md border px-4 py-2 text-sm disabled:opacity-50"
                 onClick={() => startTransition(async () => {
                   const r = await sendMentorConfirmationTestAction(link);

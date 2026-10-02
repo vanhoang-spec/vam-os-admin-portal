@@ -17,6 +17,11 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   quota: vi.fn(),
   rpc: vi.fn(),
+  authIndex: vi.fn(),
+  recovery: vi.fn(),
+  setupUrl: vi.fn(),
+  grant: vi.fn(),
+  pool: vi.fn(),
   tables: {} as Record<string, { data: unknown; error: unknown }>,
   queries: [] as Array<{ table: string; filters: Array<[string, string, unknown]> }>
 }));
@@ -29,7 +34,13 @@ vi.mock("@/lib/program-scope", () => ({
   canOperateSeason: mocks.canOperate
 }));
 vi.mock("@/lib/public-url", () => ({ getPublicOrigin: async () => "https://os.alumni-mentoring.edu.vn" }));
-vi.mock("@/lib/email", () => ({ sendTemplatedEmail: mocks.send }));
+vi.mock("@/lib/email", () => ({ sendTemplatedEmail: mocks.send, passwordSetupUrl: mocks.setupUrl }));
+vi.mock("@/lib/enable-reviewer", () => ({
+  loadAuthSignInIndex: mocks.authIndex,
+  createRecoveryToken: mocks.recovery,
+  enableMentorAsReviewer: mocks.grant
+}));
+vi.mock("@/lib/data", () => ({ getReviewerPool: mocks.pool }));
 vi.mock("@/lib/mentee-invite-dispatch", () => ({ countSentInWindow: mocks.quota }));
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServiceRoleClient: () => ({
@@ -49,6 +60,7 @@ vi.mock("@/lib/supabase-server", () => ({
 }));
 
 import {
+  grantInterviewAccessFromSheet,
   previewMentorConfirmations,
   sendMentorConfirmations,
   sendMentorConfirmationTest
@@ -92,12 +104,30 @@ beforeEach(() => {
     ],
     error: null
   });
+  // ready2 có tài khoản nhưng CHƯA từng đăng nhập → thư thật mang link đặt mật khẩu.
+  mocks.authIndex.mockResolvedValue(new Map([
+    ["ready@example.test", { id: "auth-ready", signedIn: true }],
+    ["sent@example.test", { id: "auth-sent", signedIn: true }],
+    ["ready2@example.test", { id: "auth-ready2", signedIn: false }]
+  ]));
+  mocks.recovery.mockResolvedValue("tok-ready2");
+  mocks.setupUrl.mockImplementation(({ tokenHash }: { tokenHash: string }) => `https://os.alumni-mentoring.edu.vn/reset-password#token_hash=${tokenHash}&type=recovery`);
+  mocks.grant.mockResolvedValue({ ok: true, message: "Đã cấp quyền Interviewer cho đúng mùa." });
+  mocks.pool.mockResolvedValue({
+    data: [
+      { person_id: "p-noaccess", email_primary: "noaccess@example.test", full_name: "Chưa Quyền" },
+      { person_id: "p-other", email_primary: "other@example.test", full_name: "Người Khác" }
+    ],
+    error: null
+  });
   mocks.tables = {
+    intake_batches: { data: [{ id: "batch-s12" }], error: null },
     interview_sessions: { data: SESSIONS, error: null },
     people: { data: [], error: null },
     outbound_emails: { data: [{ to_email: "sent@example.test" }], error: null }
   };
-  fetchMock.mockResolvedValue(new Response(CSV, { status: 200, headers: { "content-type": "text/csv; charset=utf-8" } }));
+  // Mỗi lần gọi một Response mới: body chỉ đọc được một lần.
+  fetchMock.mockImplementation(async () => new Response(CSV, { status: 200, headers: { "content-type": "text/csv; charset=utf-8" } }));
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
@@ -162,7 +192,7 @@ describe("2. đọc — hỏng chỗ nào thì dừng, không đoán", () => {
 });
 
 describe("3. xem trước", () => {
-  it("phân loại đúng từng người; thư mẫu là của người sẵn sàng đầu tiên", async () => {
+  it("phân loại đúng từng người; thư mẫu ưu tiên người cần link đặt mật khẩu (dạng thư cần soát kỹ nhất)", async () => {
     const res = await previewMentorConfirmations(LINK);
     if (!res.ok) throw new Error(res.message);
     const status = Object.fromEntries(res.plan.recipients.map((r) => [r.email, r.status]));
@@ -173,8 +203,8 @@ describe("3. xem trước", () => {
       "ready2@example.test": "ready",
       "none@example.test": "no_blocks"
     });
-    expect(res.sample?.to).toBe("ready@example.test");
-    expect(res.sample?.body).toContain("Kính gửi Anh/Chị Mentor Sẵn Sàng,");
+    expect(res.sample?.to).toBe("ready2@example.test");
+    expect(res.sample?.body).toContain("Kính gửi Anh/Chị Mentor Thứ Hai,");
   });
 });
 
@@ -238,5 +268,65 @@ describe("5. bản thử", () => {
     expect(arg.toEmail).toBe("admin@example.test");
     expect(arg.subject.startsWith("[THỬ] ")).toBe(true);
     expect(arg.relation).toBeUndefined();
+  });
+});
+
+describe("6. link đặt mật khẩu — chỉ trong thư THẬT gửi chính mentor", () => {
+  it("người chưa từng đăng nhập: thư thật có link của đúng tài khoản đó; người đã đăng nhập: không có dòng link", async () => {
+    await sendMentorConfirmations(LINK, "2");
+    expect(mocks.recovery).toHaveBeenCalledTimes(1);
+    expect(mocks.recovery).toHaveBeenCalledWith(expect.anything(), "ready2@example.test", "auth-ready2");
+    const bodies = Object.fromEntries(mocks.send.mock.calls.map(([a]) => [a.toEmail, a.body]));
+    expect(bodies["ready2@example.test"]).toContain("- Đặt mật khẩu lần đầu: https://os.alumni-mentoring.edu.vn/reset-password#token_hash=tok-ready2&type=recovery");
+    expect(bodies["ready@example.test"]).not.toContain("Đặt mật khẩu lần đầu");
+  });
+  it("xem trước và bản thử: chữ giữ chỗ, KHÔNG tạo link thật (bản thử đi tới hộp thư người bấm)", async () => {
+    const preview = await previewMentorConfirmations(LINK);
+    expect(preview.ok && preview.sample?.to).toBe("ready2@example.test");
+    expect(preview.ok && preview.sample?.body).toContain("[link đặt mật khẩu riêng của mentor — chỉ có trong thư gửi thật]");
+    await sendMentorConfirmationTest(LINK);
+    expect(mocks.send.mock.calls[0][0].toEmail).toBe("admin@example.test");
+    expect(mocks.send.mock.calls[0][0].body).not.toContain("token_hash");
+    expect(mocks.recovery).not.toHaveBeenCalled();
+  });
+  it("không tạo được link: vẫn gửi (thư đã hướng dẫn Đặt lại mật khẩu) và báo lại", async () => {
+    mocks.recovery.mockResolvedValue(null);
+    const res = await sendMentorConfirmations(LINK, "2");
+    expect(res.sent).toBe(2);
+    expect(res.message).toContain("không kèm được link");
+  });
+  it("không đọc được danh bạ đăng nhập: dừng, không thư nào đi", async () => {
+    mocks.authIndex.mockRejectedValue(new Error("auth down"));
+    const res = await sendMentorConfirmations(LINK, "2");
+    expect(res.ok).toBe(false);
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("7. cấp quyền từ sheet — không gửi thư riêng, chỉ mentor của đợt tuyển", () => {
+  it("chỉ người chưa có quyền VÀ là mentor của đợt; notify:false; đúng mùa, đúng vai trò", async () => {
+    const res = await grantInterviewAccessFromSheet(LINK);
+    expect(mocks.grant).toHaveBeenCalledTimes(1);
+    expect(mocks.grant).toHaveBeenCalledWith({ personId: "p-noaccess", seasonId: SEASON, participationRole: "interviewer", notify: false });
+    expect(mocks.pool).toHaveBeenCalledWith({ intakeBatchId: "batch-s12" });
+    expect(res.granted).toEqual(["noaccess@example.test"]);
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  it("không phải mentor của đợt: không cấp, báo tên", async () => {
+    mocks.pool.mockResolvedValue({ data: [{ person_id: "p-other", email_primary: "other@example.test", full_name: "Người Khác" }], error: null });
+    const res = await grantInterviewAccessFromSheet(LINK);
+    expect(mocks.grant).not.toHaveBeenCalled();
+    expect(res.notMentor).toEqual(["Chưa Quyền <noaccess@example.test>"]);
+  });
+  it("không đọc được danh sách mentor của đợt: không cấp ai", async () => {
+    mocks.pool.mockResolvedValue({ data: [], error: "boom" });
+    expect((await grantInterviewAccessFromSheet(LINK)).ok).toBe(false);
+    expect(mocks.grant).not.toHaveBeenCalled();
+  });
+  it("vai trò không phải quản trị viên: không đọc sheet, không cấp", async () => {
+    mocks.actor.mockResolvedValue({ id: "x", role: "core_team", email: "x@example.test" });
+    expect((await grantInterviewAccessFromSheet(LINK)).ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.grant).not.toHaveBeenCalled();
   });
 });

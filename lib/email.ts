@@ -544,6 +544,18 @@ export async function sendApplicationConfirmation(input: {
  * when it sent the reviewer invite itself, a refusal left the operator with a
  * generic message and no trace of the reason.
  */
+/**
+ * Link đặt mật khẩu để đặt VÀO một thư khác (thư xác nhận lịch phỏng vấn cho mentor).
+ * Cùng một cửa dựng link với thư mời reviewer: base URL thật của môi trường và
+ * isSafeAppLink. Không dựng được link an toàn thì trả null — người gọi bỏ dòng link,
+ * không gửi một link hỏng.
+ */
+export function passwordSetupUrl(input: { tokenHash: string; type: PasswordLinkType; requestOrigin?: string | null }): string | null {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  const url = base ? buildPasswordLinkUrl(base, { tokenHash: input.tokenHash, type: input.type }) : null;
+  return base && url && isSafeAppLink(url, base) ? url : null;
+}
+
 export async function sendReviewerInvite(input: {
   toEmail: string;
   mentorName: string;

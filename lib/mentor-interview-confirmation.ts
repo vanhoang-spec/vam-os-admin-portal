@@ -2,14 +2,17 @@ import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { BULK_TIME_BUDGET_MS } from "@/lib/bulk-mail-core";
-import { sendTemplatedEmail } from "@/lib/email";
+import { getReviewerPool } from "@/lib/data";
+import { passwordSetupUrl, sendTemplatedEmail } from "@/lib/email";
 import { getMailSeason } from "@/lib/email-templates";
+import { createRecoveryToken, enableMentorAsReviewer, loadAuthSignInIndex } from "@/lib/enable-reviewer";
 import { DAILY_EMAIL_LIMIT, DISPATCH_RESERVE } from "@/lib/mentee-invite-dispatch-core";
 import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import {
   CONFIRMATION_EMAIL_KIND,
   MAX_SHEET_BYTES,
   buildInterviewBlocks,
+  matchSignup,
   parseSignupSheet,
   planRecipients,
   renderConfirmation,
@@ -22,18 +25,23 @@ import {
 import { canSendBulkEmail } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getPublicOrigin } from "@/lib/public-url";
+import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 /**
  * lib/mentor-interview-confirmation.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Đọc sheet đăng ký + ca + quyền phỏng vấn + sổ thư, và gửi thư xác nhận lịch cho
- * mentor. Cùng cổng với gửi thư hàng loạt (quản trị viên, vận hành đúng mùa):
- * đây là thư tới hàng chục người thật một lúc.
+ * Thư xác nhận lịch phỏng vấn cho mentor — MỘT thư mỗi người: lịch, địa điểm,
+ * tài khoản, và với ai chưa từng đăng nhập thì cả link đặt mật khẩu (BTC chốt
+ * 02/10/2026: không gửi thư mời tài khoản riêng).
  *
- * Mỗi lần xem và mỗi lần gửi đều đọc lại sheet và sổ thư từ đầu — không tin danh
- * sách lấy từ trình duyệt gửi lên. Người đã nhận thư của đợt này (ghi sổ theo ca
- * đầu tiên của đợt) không nhận lần hai.
+ * Hai bước, cùng cổng với gửi thư hàng loạt (quản trị viên, vận hành đúng mùa):
+ * 1. Cấp quyền phỏng vấn cho người đăng ký chưa có quyền — chỉ mentor của đợt
+ *    tuyển (cùng nguồn với công cụ cấp quyền hàng loạt), KHÔNG gửi thư mời.
+ * 2. Gửi thư cho người đã có quyền và chưa nhận thư đợt này.
+ *
+ * Mỗi bước đọc lại sheet, quyền và sổ thư từ đầu — không tin danh sách trình
+ * duyệt gửi lên.
  */
 
 const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
@@ -86,8 +94,10 @@ async function readSheet(link: unknown): Promise<{ ok: true; csv: string } | { o
   }
 }
 
-/** Người có quyền vào vòng phỏng vấn mùa này (cùng nguồn với ô "Người phỏng vấn"), kèm SĐT để khớp dự phòng. */
-async function readParticipants(client: any, seasonId: string): Promise<Participant[] | null> {
+type AuthIndex = Map<string, { id: string; signedIn: boolean }>;
+
+/** Người có quyền vào vòng phỏng vấn mùa này (cùng nguồn với ô "Người phỏng vấn"), kèm SĐT và đã đăng nhập chưa. */
+async function readParticipants(client: any, seasonId: string, auth: AuthIndex): Promise<Participant[] | null> {
   const { data, error } = await client.rpc("vam084_list_recruitment_participants", {
     p_season_id: seasonId,
     p_review_stage: "interview"
@@ -114,7 +124,7 @@ async function readParticipants(client: any, seasonId: string): Promise<Particip
       String(p.phone_primary ?? "")
     ])
   );
-  return rows.map((r) => ({ ...r, phone: phoneByEmail.get(r.email) ?? "" }));
+  return rows.map((r) => ({ ...r, phone: phoneByEmail.get(r.email) ?? "", signedIn: auth.get(r.email)?.signedIn }));
 }
 
 async function readAlreadySent(client: any, anchorSessionId: string): Promise<Set<string> | null> {
@@ -132,7 +142,9 @@ async function readAlreadySent(client: any, anchorSessionId: string): Promise<Se
   return new Set(((data ?? []) as Array<{ to_email?: string | null }>).map((r) => String(r.to_email ?? "").trim().toLowerCase()));
 }
 
-async function buildPlan(gate: Extract<Gate, { ok: true }>, link: unknown): Promise<{ ok: true; plan: ConfirmationPlan } | { ok: false; message: string }> {
+type Built = { ok: true; plan: ConfirmationPlan; auth: AuthIndex } | { ok: false; message: string };
+
+async function buildPlan(gate: Extract<Gate, { ok: true }>, link: unknown): Promise<Built> {
   const sheet = await readSheet(link);
   if (!sheet.ok) return sheet;
 
@@ -156,9 +168,16 @@ async function buildPlan(gate: Extract<Gate, { ok: true }>, link: unknown): Prom
   const parsed = parseSignupSheet(sheet.csv, blocks);
   if (!parsed.ok) return parsed;
 
-  // Không đọc được quyền hay sổ thư thì dừng: đoán "chưa ai nhận" là gửi trùng,
-  // đoán "ai cũng có quyền" là gửi tài khoản không vào được.
-  const participants = await readParticipants(gate.client, gate.seasonId);
+  // Không đọc được quyền, danh bạ đăng nhập hay sổ thư thì dừng: đoán "chưa ai
+  // nhận" là gửi trùng, đoán "ai cũng có quyền" là gửi tài khoản không vào được.
+  let auth: AuthIndex;
+  try {
+    auth = await loadAuthSignInIndex(gate.client);
+  } catch (error) {
+    console.error("[mentor-interview-confirmation] auth index", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+  const participants = await readParticipants(gate.client, gate.seasonId, auth);
   if (!participants) return { ok: false, message: SAFE_ERROR };
   const sent = await readAlreadySent(gate.client, anchor.sessionId);
   if (!sent) return { ok: false, message: SAFE_ERROR };
@@ -166,6 +185,7 @@ async function buildPlan(gate: Extract<Gate, { ok: true }>, link: unknown): Prom
   const origin = (await getPublicOrigin()) ?? "https://os.alumni-mentoring.edu.vn";
   return {
     ok: true,
+    auth,
     plan: {
       seasonId: gate.seasonId,
       seasonCode: gate.seasonCode,
@@ -178,14 +198,15 @@ async function buildPlan(gate: Extract<Gate, { ok: true }>, link: unknown): Prom
   };
 }
 
-function render(plan: ConfirmationPlan, r: PlannedRecipient) {
+function render(plan: ConfirmationPlan, r: PlannedRecipient, passwordLink: string | "placeholder" | null) {
   return renderConfirmation({
     name: r.name,
     loginEmail: r.loginEmail ?? r.email,
     matchedBy: r.matchedBy,
     note: r.note,
     blocks: plan.blocks.filter((b) => r.blockKeys.includes(b.key)),
-    origin: plan.origin
+    origin: plan.origin,
+    passwordLink
   });
 }
 
@@ -198,21 +219,30 @@ export async function previewMentorConfirmations(link: unknown): Promise<Preview
   if (!gate.ok) return gate;
   const built = await buildPlan(gate, link);
   if (!built.ok) return built;
-  const first = built.plan.recipients.find((r) => r.status === "ready") ?? built.plan.recipients.find((r) => r.loginEmail);
-  const sample = first ? { to: first.loginEmail ?? first.email, ...render(built.plan, first) } : null;
+  const ready = built.plan.recipients.filter((r) => r.status === "ready");
+  // Ưu tiên thư mẫu có dòng link đặt mật khẩu: đó là dạng thư BTC cần soát kỹ nhất.
+  const first = ready.find((r) => r.needsPasswordLink) ?? ready[0];
+  const sample = first
+    ? { to: first.loginEmail ?? first.email, ...render(built.plan, first, first.needsPasswordLink ? "placeholder" : null) }
+    : null;
   return { ok: true, plan: built.plan, sample };
 }
 
-/** Bản thử: thư của người đầu tiên sẵn sàng, gửi cho CHÍNH người bấm. Không ghi theo mốc đợt nên không tính là đã gửi. */
+/**
+ * Bản thử: thư của một người sẵn sàng, gửi cho CHÍNH người bấm. Link đặt mật khẩu
+ * thay bằng chữ giữ chỗ — link thật trong hộp thư người bấm là chìa khoá tài khoản
+ * của mentor. Không ghi theo mốc đợt nên không tính là đã gửi.
+ */
 export async function sendMentorConfirmationTest(link: unknown): Promise<{ ok: boolean; message: string }> {
   const gate = await authorize();
   if (!gate.ok) return gate;
   if (!gate.actorEmail.includes("@")) return { ok: false, message: "Tài khoản của bạn chưa có email để nhận bản thử." };
   const built = await buildPlan(gate, link);
   if (!built.ok) return built;
-  const first = built.plan.recipients.find((r) => r.status === "ready");
+  const ready = built.plan.recipients.filter((r) => r.status === "ready");
+  const first = ready.find((r) => r.needsPasswordLink) ?? ready[0];
   if (!first) return { ok: false, message: "Chưa có mentor nào sẵn sàng để làm bản thử." };
-  const mail = render(built.plan, first);
+  const mail = render(built.plan, first, first.needsPasswordLink ? "placeholder" : null);
   const result = await sendTemplatedEmail({
     kind: CONFIRMATION_EMAIL_KIND,
     toEmail: gate.actorEmail,
@@ -222,6 +252,84 @@ export async function sendMentorConfirmationTest(link: unknown): Promise<{ ok: b
   if (result.skipped) return { ok: false, message: "Môi trường này đang tắt gửi thư — bản thử không đi." };
   if (!result.ok) return { ok: false, message: "Gửi bản thử không thành công. Xem sổ thư để biết lý do." };
   return { ok: true, message: `Đã gửi bản thử (thư của ${first.name}) tới ${gate.actorEmail}.` };
+}
+
+export type GrantResult = {
+  ok: boolean;
+  message: string;
+  granted: string[];
+  failed: string[];
+  notMentor: string[];
+  remaining: number;
+};
+
+/**
+ * Cấp quyền phỏng vấn cho người đăng ký buổi đợt này mà CHƯA có quyền — không
+ * gửi thư mời riêng (thông tin đăng nhập đi trong thư xác nhận).
+ *
+ * Chỉ người là mentor của đợt tuyển hiện hành (getReviewerPool — cùng nguồn với
+ * công cụ cấp quyền hàng loạt): hàm cấp quyền ở database không tự kiểm điều đó,
+ * nên một email lạ trên sheet không được trở thành tài khoản chấm.
+ */
+export async function grantInterviewAccessFromSheet(link: unknown): Promise<GrantResult> {
+  const empty = (message: string): GrantResult => ({ ok: false, message, granted: [], failed: [], notMentor: [], remaining: 0 });
+  const gate = await authorize();
+  if (!gate.ok) return empty(gate.message);
+  const built = await buildPlan(gate, link);
+  if (!built.ok) return empty(built.message);
+  const targets = built.plan.recipients.filter((r) => r.status === "no_access");
+  if (!targets.length) return { ok: true, message: "Mọi người đăng ký đợt này đã có quyền phỏng vấn.", granted: [], failed: [], notMentor: [], remaining: 0 };
+
+  const { data: batches, error: batchError } = await gate.client
+    .from("intake_batches")
+    .select("id")
+    .eq("season_id", gate.seasonId)
+    .eq("code", SEASON_CONFIG.CURRENT_APPLICATION_BATCH_CODE);
+  const batchId = String((batches as Array<{ id?: string }> | null)?.[0]?.id ?? "");
+  if (batchError || !batchId) return empty(SAFE_ERROR);
+  const pool = await getReviewerPool({ intakeBatchId: batchId });
+  if (pool.error) return empty(SAFE_ERROR);
+  const poolRows = pool.data.filter((p) => p.person_id && p.email_primary);
+  const { data: people, error: peopleError } = await gate.client
+    .from("people")
+    .select("id,phone_primary")
+    .in("id", poolRows.map((p) => p.person_id));
+  if (peopleError) return empty(SAFE_ERROR);
+  const phoneById = new Map(((people ?? []) as Array<{ id: string; phone_primary?: string | null }>).map((p) => [p.id, String(p.phone_primary ?? "")]));
+  const candidates = poolRows.map((p) => ({
+    personId: String(p.person_id),
+    email: String(p.email_primary).trim().toLowerCase(),
+    fullName: String(p.full_name ?? ""),
+    phone: phoneById.get(String(p.person_id)) ?? ""
+  }));
+
+  const granted: string[] = [];
+  const failed: string[] = [];
+  const notMentor: string[] = [];
+  const started = Date.now();
+  let processed = 0;
+  for (const row of targets) {
+    if (Date.now() - started > BULK_TIME_BUDGET_MS) break;
+    processed++;
+    const match = matchSignup(row, candidates);
+    if (!match) {
+      notMentor.push(`${row.name} <${row.email}>`);
+      continue;
+    }
+    const result = await enableMentorAsReviewer({
+      personId: match.candidate.personId,
+      seasonId: gate.seasonId,
+      participationRole: "interviewer",
+      notify: false
+    });
+    (result.ok ? granted : failed).push(match.candidate.email);
+  }
+  const remaining = targets.length - processed;
+  const parts = [`Đã cấp quyền phỏng vấn cho ${granted.length} người (không gửi thư riêng).`];
+  if (failed.length) parts.push(`${failed.length} người lỗi: ${failed.join(", ")}.`);
+  if (notMentor.length) parts.push(`${notMentor.length} người không phải mentor của đợt tuyển này nên chưa cấp: ${notMentor.join(", ")}.`);
+  if (remaining > 0) parts.push(`Còn ${remaining} người chưa xử lý (hết thời gian một lượt) — bấm lại.`);
+  return { ok: true, message: parts.join(" "), granted, failed, notMentor, remaining };
 }
 
 export type SendResult = {
@@ -256,13 +364,24 @@ export async function sendMentorConfirmations(link: unknown, typedCount: unknown
 
   const started = Date.now();
   let sent = 0;
+  let withoutLink = 0;
   const failed: string[] = [];
   for (const r of ready.slice(0, allowance)) {
     if (Date.now() - started > BULK_TIME_BUDGET_MS) break;
-    const mail = render(built.plan, r);
+    const to = r.loginEmail!;
+    let passwordLink: string | null = null;
+    if (r.needsPasswordLink) {
+      // Link mới làm link cũ hết hiệu lực — tạo ngay trước khi gửi, cho đúng người nhận.
+      const account = built.auth.get(to);
+      const token = account ? await createRecoveryToken(gate.client, to, account.id) : null;
+      passwordLink = token ? passwordSetupUrl({ tokenHash: token, type: "recovery", requestOrigin: built.plan.origin }) : null;
+      // Không dựng được link: vẫn gửi — thư đã chỉ cách bấm "Đặt lại mật khẩu".
+      if (!passwordLink) withoutLink++;
+    }
+    const mail = render(built.plan, r, passwordLink);
     const result = await sendTemplatedEmail({
       kind: CONFIRMATION_EMAIL_KIND,
-      toEmail: r.loginEmail!,
+      toEmail: to,
       subject: mail.subject,
       body: mail.body,
       relation: { table: "interview_sessions", id: built.plan.anchorSessionId }
@@ -270,13 +389,14 @@ export async function sendMentorConfirmations(link: unknown, typedCount: unknown
     if (result.skipped) return { ok: false, message: "Môi trường này đang tắt gửi thư — không thư nào đi.", sent, failed, remaining: ready.length - sent };
     if (result.ok) sent++;
     else {
-      failed.push(r.loginEmail!);
+      failed.push(to);
       // 429: Brevo báo hết hạn mức ngày — dừng ngay, đừng đốt phần còn lại từng lỗi một.
       if (result.providerStatus === 429) break;
     }
   }
   const remaining = ready.length - sent - failed.length;
   const parts = [`Đã gửi ${sent}/${ready.length} thư.`];
+  if (withoutLink) parts.push(`${withoutLink} thư không kèm được link đặt mật khẩu (thư vẫn hướng dẫn bấm "Đặt lại mật khẩu").`);
   if (failed.length) parts.push(`${failed.length} thư lỗi — bấm gửi lại để thử tiếp đúng những người này.`);
   if (remaining > 0) parts.push(`Còn ${remaining} người chưa gửi (hết thời gian một lượt) — bấm gửi tiếp.`);
   return { ok: true, message: parts.join(" "), sent, failed, remaining };

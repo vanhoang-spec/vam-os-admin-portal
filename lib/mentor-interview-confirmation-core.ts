@@ -227,7 +227,38 @@ export function nameKey(value: string | null | undefined): string {
     .trim();
 }
 
-export type Participant = { email: string; fullName: string; phone: string };
+export type Participant = {
+  email: string;
+  fullName: string;
+  phone: string;
+  /** false = có tài khoản nhưng CHƯA từng đăng nhập → thư mang link đặt mật khẩu. */
+  signedIn?: boolean;
+};
+
+export type MatchedBy = "email" | "phone_and_name";
+
+/**
+ * Dòng đăng ký này là ai trong danh sách `candidates`.
+ *
+ * Email trên sheet khớp thẳng là cách chính. Không khớp thì thử số điện thoại —
+ * nhưng chỉ nhận khi số trùng ĐÚNG MỘT người VÀ tên cũng trùng: một số gõ nhầm
+ * không được trao lịch, hay quyền chấm, của người này cho người khác. Một luật cho
+ * cả bước cấp quyền lẫn bước gửi thư: hai luật là hai cơ hội để người được cấp
+ * quyền khác người nhận thư.
+ */
+export function matchSignup<T extends { email: string; fullName: string; phone: string }>(
+  row: Pick<SignupRow, "email" | "name" | "phone">,
+  candidates: readonly T[]
+): { candidate: T; matchedBy: MatchedBy } | null {
+  const byEmail = candidates.find((c) => c.email.trim().toLowerCase() === row.email);
+  if (byEmail) return { candidate: byEmail, matchedBy: "email" };
+  const key = phoneKey(row.phone);
+  const samePhone = key ? candidates.filter((c) => phoneKey(c.phone) === key) : [];
+  if (samePhone.length === 1 && nameKey(row.name) && nameKey(samePhone[0].fullName) === nameKey(row.name)) {
+    return { candidate: samePhone[0], matchedBy: "phone_and_name" };
+  }
+  return null;
+}
 
 export type RecipientStatus = "ready" | "already_sent" | "no_access" | "no_blocks";
 
@@ -235,7 +266,9 @@ export type PlannedRecipient = SignupRow & {
   status: RecipientStatus;
   /** Email tài khoản chấm — cũng là nơi nhận thư. */
   loginEmail: string | null;
-  matchedBy: "email" | "phone_and_name" | null;
+  matchedBy: MatchedBy | null;
+  /** Có tài khoản nhưng chưa từng đăng nhập: thư thật mang link đặt mật khẩu riêng. */
+  needsPasswordLink: boolean;
 };
 
 /**
@@ -243,28 +276,15 @@ export type PlannedRecipient = SignupRow & {
  *
  * Chỉ người ĐÃ có quyền phỏng vấn mùa này mới nhận: thư nói "đây là tài khoản
  * của anh/chị", nên gửi cho người chưa vào được màn hình chấm là gửi một câu sai.
- *
- * Email trên sheet khớp thẳng tài khoản là cách chính. Không khớp thì thử số điện
- * thoại — nhưng chỉ nhận khi số trùng ĐÚNG MỘT tài khoản VÀ tên cũng trùng: một
- * số gõ nhầm không được trao lịch của người này cho hộp thư người khác.
  */
 export function planRecipients(
   rows: readonly SignupRow[],
   participants: readonly Participant[],
   alreadySent: ReadonlySet<string>
 ): PlannedRecipient[] {
-  const byEmail = new Map(participants.map((p) => [p.email.trim().toLowerCase(), p]));
   return rows.map((row) => {
-    let loginEmail: string | null = byEmail.has(row.email) ? row.email : null;
-    let matchedBy: PlannedRecipient["matchedBy"] = loginEmail ? "email" : null;
-    if (!loginEmail) {
-      const key = phoneKey(row.phone);
-      const samePhone = key ? participants.filter((p) => phoneKey(p.phone) === key) : [];
-      if (samePhone.length === 1 && nameKey(samePhone[0].fullName) === nameKey(row.name) && nameKey(row.name)) {
-        loginEmail = samePhone[0].email.trim().toLowerCase();
-        matchedBy = "phone_and_name";
-      }
-    }
+    const match = matchSignup(row, participants);
+    const loginEmail = match ? match.candidate.email.trim().toLowerCase() : null;
     const status: RecipientStatus = row.blockKeys.length === 0
       ? "no_blocks"
       : !loginEmail
@@ -272,7 +292,13 @@ export function planRecipients(
         : alreadySent.has(loginEmail)
           ? "already_sent"
           : "ready";
-    return { ...row, status, loginEmail, matchedBy };
+    return {
+      ...row,
+      status,
+      loginEmail,
+      matchedBy: match?.matchedBy ?? null,
+      needsPasswordLink: Boolean(match && match.candidate.signedIn === false)
+    };
   });
 }
 
@@ -289,7 +315,15 @@ export type ConfirmationInput = {
   note: string;
   blocks: readonly InterviewBlock[];
   origin: string;
+  /**
+   * Link đặt mật khẩu riêng (chỉ có trong thư THẬT gửi cho chính mentor), hoặc
+   * "placeholder" cho bản xem trước / bản thử — bản thử đi tới người bấm, nên
+   * không bao giờ được mang link mở tài khoản của mentor.
+   */
+  passwordLink?: string | "placeholder" | null;
 };
+
+export const PASSWORD_LINK_PLACEHOLDER = "[link đặt mật khẩu riêng của mentor — chỉ có trong thư gửi thật]";
 
 /**
  * Nội dung thư — giữ đúng 5 mục và lời văn của mẫu BTC. Văn bản thuần: sổ thư
@@ -323,6 +357,9 @@ export function renderConfirmation(input: ConfirmationInput): { subject: string;
     [
       "3. Tài khoản chấm & Hướng dẫn đăng nhập",
       `- Tài khoản: ${input.loginEmail}`,
+      input.passwordLink
+        ? `- Đặt mật khẩu lần đầu: ${input.passwordLink === "placeholder" ? PASSWORD_LINK_PLACEHOLDER : input.passwordLink} (link dùng một lần và có hạn)`
+        : null,
       `- Hướng dẫn đăng nhập: vào ${origin}/login và đăng nhập bằng email trên. Chưa có hoặc quên mật khẩu thì bấm "Đặt lại mật khẩu" ngay trên trang đăng nhập — link đặt mật khẩu gửi về đúng email này. Đăng nhập xong, vào menu Phỏng vấn → Phỏng vấn mentee trực tiếp.`,
       input.matchedBy === "phone_and_name"
         ? "- Lưu ý: tài khoản dùng email Anh/Chị đã nộp đơn mentor trên VAM OS, khác email điền trong form đăng ký phỏng vấn."
@@ -348,6 +385,6 @@ export function renderConfirmation(input: ConfirmationInput): { subject: string;
 export const RECIPIENT_STATUS_LABELS: Record<RecipientStatus, string> = {
   ready: "Sẵn sàng gửi",
   already_sent: "Đã gửi thư đợt này",
-  no_access: "Chưa có quyền phỏng vấn — cấp quyền trước rồi đọc lại",
+  no_access: "Chưa có quyền phỏng vấn",
   no_blocks: "Không đăng ký buổi nào của đợt này"
 };
