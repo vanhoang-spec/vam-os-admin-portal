@@ -416,6 +416,11 @@ const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee"];
 // Chỉ quản trị viên (canSendBulkEmail) — core_team/support_team không thấy.
 const MENTOR_CONFIRMATION_ROUTES = ["/interviews/thu-xac-nhan-mentor"];
 
+// Phiếu chấm + Handbook phỏng vấn mentee theo mùa (02/10/2026). Ba vai trò của
+// canEditInterviewRubric — support_team xem phiếu trên màn hình phỏng vấn nhưng
+// không sửa, nên KHÔNG thấy link này; reviewer và viewer cũng không.
+const INTERVIEW_RUBRIC_ROUTES = ["/interviews/phieu-cham-mentee"];
+
 // S12 helper boundary: the browse routes in the base set are now gated on the
 // SAME predicates their pages enforce (lib/read-access for the community and
 // application directories, canBrowseOperations for /events and /data-issues).
@@ -454,9 +459,9 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
   support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
 };
 
 function sortedRoutes(arr: string[]) {

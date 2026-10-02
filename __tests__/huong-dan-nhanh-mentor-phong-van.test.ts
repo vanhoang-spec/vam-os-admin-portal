@@ -7,8 +7,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { OFFLINE_SCORES } from "@/lib/mentee-offline-core";
+import { OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES } from "@/lib/mentee-offline-core";
 import { HOTLINE_ZALO } from "@/lib/mentee-interview-core";
+import { TAKE_CHOICES } from "@/lib/mentee-interview-rubric-core";
+import { S12_INTERVIEW_CRITERIA } from "@/lib/mentee-interview-rubric-s12";
 
 const root = join(__dirname, "..");
 const html = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_NHANH_MENTOR_PHONG_VAN.html"), "utf8");
@@ -25,19 +27,30 @@ describe("Hướng dẫn nhanh 1 trang — Mentor phỏng vấn mentee trực ti
     expect(text).toContain("Phỏng vấn → Phỏng vấn mentee trực tiếp");
   });
 
-  it("5 tiêu chí khớp đúng hằng số nguồn (lib/mentee-offline-core.ts)", () => {
-    for (const [, label] of OFFLINE_SCORES) {
-      expect(text).toContain(label);
+  it("4 tiêu chí + trọng số khớp đúng phiếu Mùa 12 (lib/mentee-interview-rubric-s12.ts)", () => {
+    expect(S12_INTERVIEW_CRITERIA).toHaveLength(4);
+    for (const c of S12_INTERVIEW_CRITERIA) {
+      expect(text).toContain(`${c.label} ${c.weight}%`);
     }
+    expect(text).toContain("KHÔNG cộng tổng, không có điểm sàn");
   });
 
-  it("nêu đúng nhãn luồng tìm mentee và chốt kết quả", () => {
+  it("không còn 5 tiêu chí cũ (giờ chỉ là tiêu chí vòng hồ sơ) và ô tick nhận mentee đã bỏ", () => {
+    for (const [, label] of PROFILE_SCREENING_SCORES) {
+      expect(text).not.toContain(label);
+    }
+    expect(text).not.toContain("Nhận làm mentee của tôi");
+  });
+
+  it("nêu đúng nhãn luồng tìm mentee, mục A/B/C và chốt kết quả", () => {
     expect(text).toContain("Chỉ ứng viên được phân cho tôi");
     expect(text).toContain("Application đã nộp");
-    expect(text).toContain("Đạt làm mentee");
-    expect(text).toContain("Không chọn làm mentee");
-    expect(text).toContain("Cần BTC xem xét thêm");
-    expect(text).toContain("Nhận làm mentee của tôi");
+    for (const label of Object.values(OFFLINE_OUTCOMES)) expect(text).toContain(label);
+    for (const label of Object.values(TAKE_CHOICES)) expect(text).toContain(label);
+    expect(text).toContain("Lý do chọn / không chọn");
+    expect(text).toContain("Nhu cầu phát triển chính");
+    expect(text).toContain("Chân dung Mentor phù hợp");
+    expect(text).toContain("Hướng dẫn phỏng vấn mùa này");
     expect(text).toContain("Xác nhận kết quả");
   });
 

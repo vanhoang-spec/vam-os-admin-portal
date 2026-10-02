@@ -15,8 +15,8 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_TU_DAT_LAI_MAT_KHAU.pdf` | **Mọi người dùng VAM OS** | Một trang: tự đặt lại mật khẩu trên trang đăng nhập, không cần nhờ ban tổ chức — bốn bước, phân biệt hai nút dễ nhầm, và các trục trặc thường gặp |
 | `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 19 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
 | `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Support team, Core team, BTC | Hai trang, cập nhật 29/09: gửi thư mời NGAY, cố ý không có địa chỉ — mentee mở lại đúng link để xem khi có; ai bấm nút gửi và cần bấm lại nhiều lần; 28 ca, ghế và phòng/bàn khác nhau theo ngày; thư mời nguyên văn và hướng dẫn QR/check-in/phân bàn/chấm/nhận mentee |
-| `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` | Trang 1–3: Core Team (soạn thông báo/video cho mentor). Trang 4: Support/BTC trực bàn | Bốn trang, dựng 30/09, mở rộng 01/10. Trang 1–3 CHỈ nội dung dành cho MENTOR (phần cấp quyền/danh sách nội bộ anh Hoàng làm riêng, không thuộc tài liệu này): đăng nhập lần đầu, tìm đúng mentee được phân, khung điểm + thang điểm gợi ý 1/3/5 riêng cho Mùa 12, câu hỏi gợi ý đủ 5/5 tiêu chí (từ tài liệu Mùa 11 BTC gửi, chỉ mượn câu hỏi) — đã bỏ hẳn phần phân loại nhóm mentee G/C/E/F theo chốt của anh Hoàng. Trang 4 (thêm 30/09) là quy trình check-in → phân công phòng/bàn/người phỏng vấn cho Support/BTC, cùng màn hình `/interviews/mentee-offline` mentor dùng nhưng khác nút thao tác. Đây là bản ĐẦY ĐỦ — xem `HUONG_DAN_NHANH_MENTOR_PHONG_VAN.pdf` để có bản rút gọn 1 trang |
-| `HUONG_DAN_NHANH_MENTOR_PHONG_VAN.pdf` | **Mentor** — gửi kèm email confirm phỏng vấn | Một trang A4 duy nhất, dựng 01/10 theo yêu cầu anh Hoàng: CHỈ phần cơ bản nhất mentor cần biết trước buổi 03–04/10 — đăng nhập, tìm đúng mentee (tick ô lọc, chờ Support xếp bàn), chấm 5 tiêu chí, chọn kết quả và xác nhận. Cố ý KHÔNG mang theo khung điểm chi tiết/câu hỏi gợi ý/quy trình Support-BTC của bản 4 trang — ai cần sâu hơn thì đọc `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` |
+| `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` | Trang 1–3: Core Team (soạn thông báo/video cho mentor). Trang 4: Support/BTC trực bàn | Bốn trang, dựng 30/09, mở rộng 01/10, trang 1–3 dựng lại 02/10 theo phiếu Mùa 12. Trang 1–3 CHỈ nội dung dành cho MENTOR (phần cấp quyền/danh sách nội bộ anh Hoàng làm riêng, không thuộc tài liệu này): đăng nhập lần đầu, tìm đúng mentee được phân, phiếu chấm Mùa 12 nguyên văn (4 tiêu chí có trọng số, mô tả 1/3/5, mục A/B/C), câu hỏi gợi ý Handbook Mùa 12 mục 6, chỗ đọc Handbook trong hệ thống và chỗ BTC cập nhật phiếu theo mùa — đã bỏ hẳn phần phân loại nhóm mentee G/C/E/F theo chốt của anh Hoàng. Trang 4 (thêm 30/09) là quy trình check-in → phân công phòng/bàn/người phỏng vấn cho Support/BTC, cùng màn hình `/interviews/mentee-offline` mentor dùng nhưng khác nút thao tác. Đây là bản ĐẦY ĐỦ — xem `HUONG_DAN_NHANH_MENTOR_PHONG_VAN.pdf` để có bản rút gọn 1 trang |
+| `HUONG_DAN_NHANH_MENTOR_PHONG_VAN.pdf` | **Mentor** — gửi kèm email confirm phỏng vấn | Một trang A4 duy nhất, dựng 01/10 theo yêu cầu anh Hoàng: CHỈ phần cơ bản nhất mentor cần biết trước buổi 03–04/10 — đăng nhập, tìm đúng mentee (tick ô lọc, chờ Support xếp bàn), chấm 4 tiêu chí phiếu Mùa 12, điền mục A/B/C và xác nhận. Cố ý KHÔNG mang theo khung điểm chi tiết/câu hỏi gợi ý/quy trình Support-BTC của bản 4 trang — ai cần sâu hơn thì đọc `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` |
 
 ## Sửa và xuất lại bản PDF
 
@@ -199,6 +199,20 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
 - Giữ **đúng bốn trang**: test tự đếm số trang trong PDF. Thêm nội dung mà tràn
   trang thì tách trang mới (`page-break`) thay vì thu nhỏ font tới mức khó đọc khi
   in — xem cách trang 2/3 đã tách ở lần sửa 30/09
+- **Hai việc thêm 01/10** (nay nằm trong migration
+  `20261002100000_mentee_phong_van_theo_mua.sql`): trang 4 Bước B thêm bullet cờ
+  "Phỏng vấn ONLINE" (chỉ Support/BTC đặt, ứng viên không thấy — trang công khai
+  `/dat-ca/[token]` không đọc bảng này nên tự động không lộ); trang 4 thêm mục
+  "Huỷ lịch đăng ký" (chỉ Support/BTC, bắt buộc lý do, chỉ còn trước check-in —
+  tái dùng trigger `vam104_booking_guard` có sẵn)
+- **Dựng lại trang 1–3 ngày 02/10 theo phiếu Mùa 12** (VAM_Mentee_Evaluation_Season12_Final.xlsx
+  + VAM_Handbook_S12.docx, cùng migration trên): 4 tiêu chí có trọng số thay 5 tiêu
+  chí/25 điểm, mục A/B/C, câu hỏi gợi ý Handbook mục 6 thay câu hỏi mượn Mùa 11,
+  và chỗ BTC cập nhật phiếu/Handbook theo mùa (`/interviews/phieu-cham-mentee`).
+  Test đối chiếu từng nhãn, trọng số, mô tả 1/3/5 và câu hỏi với
+  `lib/mentee-interview-rubric-s12.ts` — bản seed mà test Postgres khoá bằng với
+  seed SQL. Mùa sau đổi phiếu trên màn hình thì tài liệu này thành tài liệu của
+  Mùa 12: dựng bản mới cho mùa đó thay vì sửa seed cho test xanh
 - **Chưa có ảnh chụp màn hình CRM thật trong tài liệu** (yêu cầu 30/09, chưa xong) —
   nút "Xác nhận check-in" mở `window.confirm()` gốc của trình duyệt, công cụ tự động
   của Claude Code không thao tác được; ghi trực tiếp vào Supabase production để dựng

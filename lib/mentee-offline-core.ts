@@ -1,5 +1,16 @@
+import type { ExpectationAlignment, InterviewRubric, InterviewScore, TakeChoice } from "@/lib/mentee-interview-rubric-core";
+
 export const OFFLINE_PATH = "/interviews/mentee-offline";
-export const OFFLINE_SCORES = [
+export const OFFLINE_GUIDE_PATH = "/interviews/mentee-offline/huong-dan";
+export const RUBRIC_EDITOR_PATH = "/interviews/phieu-cham-mentee";
+
+/**
+ * 5 tiêu chí của VÒNG HỒ SƠ (profile_screening) — chỉ còn dùng để hiện điểm vòng
+ * hồ sơ trong màn hình phỏng vấn, và để đọc phiếu phỏng vấn trực tiếp cũ nộp trước
+ * khi có phiếu theo mùa (interview_scores null, điểm nằm ở 5 cột score_*).
+ * Phiếu phỏng vấn hiện hành là dữ liệu theo mùa (mentee_interview_rubrics).
+ */
+export const PROFILE_SCREENING_SCORES = [
   ["score_motivation", "Động lực tham gia"],
   ["score_goal_clarity", "Mục tiêu rõ ràng"],
   ["score_commitment", "Mức độ cam kết"],
@@ -13,12 +24,16 @@ export type OfflineReview = {
   score_motivation: number | null; score_goal_clarity: number | null; score_commitment: number | null;
   score_fit: number | null; score_communication: number | null; total_score: number | null;
   recommendation: string | null; reviewer_note: string | null;
+  interview_scores?: InterviewScore[] | null; rubric_version?: number | null; weighted_score?: number | string | null;
+  key_development_need?: string | null; expectation_alignment?: ExpectationAlignment | null; alignment_note?: string | null;
+  take_choice?: TakeChoice | null; desired_mentor_profile?: string | null; additional_note?: string | null;
 };
 export type OfflineOperation = {
   checked_in_at: string | null; room: number | null; desk: number | null;
   interviewer_id: string | null; review_id: string | null; outcome: OfflineOutcome | null;
   match_id: string | null; revision: number;
   outcome_reason?: string | null;
+  is_online: boolean; online_note: string | null;
 };
 export type OfflineCandidate = {
   id: string; name: string; phone: string | null; email: string | null; status: string;
@@ -27,6 +42,8 @@ export type OfflineCandidate = {
 };
 export type OfflineDashboard = {
   actorId: string; seasonId: string; canOperate: boolean;
+  /** Phiếu chấm hiệu lực của mùa (riêng, hoặc kế thừa phiếu lưu gần nhất). null = chưa có phiếu nào. */
+  rubric: InterviewRubric | null;
   sessions: Array<{id: string; starts_at: string; ends_at: string; venue: string | null; seat_limit: number | null}>;
   participants: Array<{id: string; full_name: string; email: string; capacity: number | null; activeMatches: number}>;
   candidates: OfflineCandidate[];
@@ -53,9 +70,21 @@ export function offlineError(message: string): string {
     INVALID_ASSIGNMENT: "Chọn phòng, bàn và người phỏng vấn hợp lệ.",
     ALREADY_SCORED: "Đã có kết quả, không thể đổi người phỏng vấn tại đây.",
     EXISTING_SUBMITTED_REVIEW: "Đã có phiếu phỏng vấn nộp ở luồng cũ. Nhờ BTC kiểm tra trước khi phân lại.",
-    REASON_REQUIRED: "Nhập lý do sửa kết quả hoặc lý do không chọn/cần xem thêm.",
-    INVALID_SCORES: "Cần đủ 5 tiêu chí, mỗi tiêu chí từ 1 đến 5.",
-    INVALID_RESULT: "Kiểm tra kết quả và lựa chọn nhận mentee.",
+    REASON_REQUIRED: "Nhập lý do trước khi lưu — bắt buộc khi đổi người phỏng vấn, sửa kết quả đã chốt hoặc huỷ lịch.",
+    RUBRIC_MISSING: "Mùa này chưa có phiếu chấm. Nhờ BTC cài phiếu ở mục Phiếu chấm & hướng dẫn mentee.",
+    RUBRIC_CHANGED: "BTC vừa sửa phiếu chấm. Tải lại trang rồi chấm lại theo phiếu mới — điểm chưa được lưu.",
+    INVALID_SCORES: "Cần chấm đủ mọi tiêu chí của phiếu, mỗi tiêu chí từ 1 đến 5.",
+    RATIONALE_REQUIRED: "Nhập lý do chọn / không chọn (mục A, bắt buộc).",
+    KEY_NEED_REQUIRED: "Nhập nhu cầu phát triển chính (mục A, bắt buộc).",
+    DESIRED_MENTOR_REQUIRED: "Nhập chân dung Mentor phù hợp (mục C, bắt buộc).",
+    INVALID_ALIGNMENT: "Chọn mức độ alignment (mục B).",
+    INVALID_TAKE_CHOICE: "Chọn mentor có muốn nhận bạn này không (mục C).",
+    TEXT_TOO_LONG: "Một ô ghi chú quá dài. Rút gọn rồi lưu lại.",
+    INVALID_RUBRIC: "Phiếu chưa hợp lệ: kiểm tên tiêu chí, độ dài, và tổng trọng số phải đúng 100%.",
+    STALE_VERSION: "Phiếu vừa được người khác lưu. Tải lại trang để xem bản mới rồi sửa tiếp.",
+    INVALID_HANDBOOK: "File Handbook rỗng hoặc quá lớn sau khi chuyển đổi.",
+    ALREADY_CHECKED_IN: "Đã check-in rồi, không huỷ lịch đăng ký được nữa — nhờ BTC xử lý trực tiếp.",
+    INVALID_RESULT: "Kiểm tra kết quả: \"Có – Tôi muốn nhận bạn này\" chỉ chọn được khi kết quả là Đạt.",
     MENTOR_FULL: "Mentor đã đủ số mentee đăng ký nhận. Kết quả chưa được lưu.",
     MENTOR_NOT_APPROVED: "Tài khoản này chưa liên kết duy nhất với mentor đã được duyệt trong mùa.",
     MENTOR_IDENTITY_AMBIGUOUS: "Hồ sơ mentor chưa xác định duy nhất. Nhờ BTC kiểm tra.",

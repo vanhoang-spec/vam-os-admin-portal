@@ -21,7 +21,15 @@ const MAX_CHARS_PER_FILE = 6000; // chặn một file quá dài nuốt hết ng�
  * Trần ký tự cho MỘT lần đọc. Mặc định 6000; công cụ soạn thảo truyền trần riêng cho
  * file mẫu tham chiếu. `.slice()` phía sau KHÔNG lấy lại được phần đã bị cắt ở đây.
  */
-export type ExtractOptions = { maxChars?: number };
+export type ExtractOptions = {
+  maxChars?: number;
+  /**
+   * "html" chỉ có nghĩa với .docx (Handbook phỏng vấn): giữ bảng/tiêu đề thay vì
+   * chữ trơn. Ảnh KHÔNG bao giờ được đọc — bộ chuyển ảnh trả src rỗng mà không
+   * động tới byte ảnh, và lib/handbook-html.ts bỏ thẻ img. HTML ra vẫn là CHỮ.
+   */
+  format?: "text" | "html";
+};
 export type ExtractedText = { text: string; truncated: boolean };
 
 function truncate(text: string, maxChars: number = MAX_CHARS_PER_FILE): ExtractedText {
@@ -235,6 +243,17 @@ export async function extractTextFromFile(
     }
     if (mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
       const mammoth = await import("mammoth");
+      if (opts?.format === "html") {
+        const html = await mammoth.convertToHtml(
+          { buffer },
+          { convertImage: mammoth.images.imgElement(() => Promise.resolve({ src: "" })), ignoreEmptyParagraphs: true }
+        );
+        const value = html.value.trim();
+        if (!value) return null;
+        // Không cắt HTML giữa chừng: thẻ mở dở dang là tài liệu hỏng. Quá trần thì
+        // báo truncated để nơi gọi từ chối cả file.
+        return value.length <= maxChars ? { text: value, truncated: false } : { text: "", truncated: true };
+      }
       const result = await mammoth.extractRawText({ buffer });
       return nonEmpty(result.value);
     }

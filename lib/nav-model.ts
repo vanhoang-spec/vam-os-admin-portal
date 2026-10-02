@@ -8,6 +8,7 @@ import {
   canManageReviewers,
   canManageSubmissionBonus,
   canUseAiTools,
+  canEditInterviewRubric,
   canViewMenteeSessionStatus
 } from "@/lib/permissions";
 import {
@@ -189,6 +190,10 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // gửi thư mời vẫn hẹp hơn nữa (canAssignReview) — trang tự ẩn các nút
             // đó cho support_team, không phải việc của nav.
             ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
+            // Phiếu chấm + Handbook theo mùa (02/10/2026). Trang tự gate bằng
+            // canEditInterviewRubric + vận hành mùa; reviewer/support không được
+            // mời vào một trang chỉ trả về câu từ chối.
+            ...(canEditInterviewRubric(role) ? [{ href: "/interviews/phieu-cham-mentee", label: "Phiếu chấm & hướng dẫn mentee" }] : []),
             // Thư tới hàng chục mentor một lúc: cùng cổng với gửi thư hàng loạt.
             ...(canSendBulkEmail(role) ? [{ href: "/interviews/thu-xac-nhan-mentor", label: "Thư xác nhận lịch PV cho mentor" }] : []),
           ],
