@@ -205,6 +205,12 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   `/dat-ca/[token]` không đọc bảng này nên tự động không lộ); trang 4 thêm mục
   "Huỷ lịch đăng ký" (chỉ Support/BTC, bắt buộc lý do, chỉ còn trước check-in —
   tái dùng trigger `vam104_booking_guard` có sẵn)
+- **Phiếu S12 phiên bản 2 (chiều 02/10)** — "Điều chỉnh mục Phỏng vấn Mentee trực tiếp.docx",
+  migration `20261002150000_mentee_phieu_cham_bat_buoc_ghi_chu.sql`: câu chữ thuần Việt của câu hỏi
+  cốt lõi / mô tả 1/3/5 / lưu ý điểm số; mục A "Quyết định chọn mentee", mục B "Sự phù hợp về kỳ
+  vọng của Mentee"; ô Evidence / Note mọi tiêu chí và Concern / Note bắt buộc; Không chọn làm
+  mentee thì khoá mục C; mỗi mentor "Có – Tôi muốn nhận" tối đa 2 hồ sơ. Cả hai bản hướng dẫn
+  (1 trang, 4 trang) đã sửa theo — test đối chiếu với `lib/mentee-interview-rubric-s12.ts` (bản v2)
 - **Dựng lại trang 1–3 ngày 02/10 theo phiếu Mùa 12** (VAM_Mentee_Evaluation_Season12_Final.xlsx
   + VAM_Handbook_S12.docx, cùng migration trên): 4 tiêu chí có trọng số thay 5 tiêu
   chí/25 điểm, mục A/B/C, câu hỏi gợi ý Handbook mục 6 thay câu hỏi mượn Mùa 11,

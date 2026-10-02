@@ -5,9 +5,14 @@ import type { RubricCriterion, RubricGuidance } from "@/lib/mentee-interview-rub
  * (tiêu chí, trọng số, câu hỏi cốt lõi, mô tả 1/3/5) và VAM_Handbook_S12.docx
  * mục 6 (câu hỏi phỏng vấn).
  *
- * Bản ở database do migration 20261002100000 seed; file này là bản TS của ĐÚNG
- * nội dung đó để test đối chiếu. Sửa một bên mà quên bên kia thì test đỏ — hai
- * bản lệch nhau nghĩa là test đang kiểm một phiếu không ai dùng.
+ * PHIÊN BẢN 2 (02/10/2026): câu chữ thuần Việt theo "Điều chỉnh mục Phỏng vấn
+ * Mentee trực tiếp.docx" của BTC — câu hỏi cốt lõi, mô tả 1/3/5 và lưu ý điểm số.
+ * Tên tiêu chí, trọng số và câu hỏi gợi ý không đổi. Sửa vài lỗi gõ hiển nhiên của
+ * bản gốc ("tâm quan trong" → "tầm quan trọng", "mentoiring" → "mentoring").
+ *
+ * Bản ở database: migration 20261002100000 seed phiên bản 1, migration
+ * 20261002150000 nâng lên phiên bản 2. File này là bản TS của phiên bản HIỆN HÀNH
+ * để test đối chiếu — sửa một bên mà quên bên kia thì test đỏ.
  */
 export const S12_INTERVIEW_CRITERIA: RubricCriterion[] = [
   {
@@ -18,8 +23,8 @@ export const S12_INTERVIEW_CRITERIA: RubricCriterion[] = [
     question: "Mentoring có thể tạo ra giá trị thực sự cho bạn này không?",
     descriptors: {
       "1": "Chưa thấy nhu cầu mentoring rõ; tham gia chủ yếu vì networking/CV/cơ hội chung.",
-      "3": "Có nhu cầu thật nhưng còn chung; cần probing thêm để làm rõ.",
-      "5": "Có development need thật; hiểu mình đang cần khám phá/phát triển gì và mentoring phù hợp."
+      "3": "Có nhu cầu thật nhưng còn chung chung; cần tìm hiểu thêm để làm rõ.",
+      "5": "Có nhu cầu phát triển thật sự; nhận thức được bản thân đang cần khám phá và phát triển ở lĩnh vực nào; thấy rõ mentoring có thể mang lại giá trị cho bản thân."
     },
     interview_questions: [
       "Hiện tại điều gì trong học tập, nghề nghiệp hoặc phát triển bản thân khiến em băn khoăn nhất?",
@@ -33,11 +38,11 @@ export const S12_INTERVIEW_CRITERIA: RubricCriterion[] = [
     label: "Sẵn sàng học hỏi",
     label_en: "Learning Readiness / Coachability",
     weight: 20,
-    question: "Bạn này có chịu học, reflect và thử cách mới không?",
+    question: "Bạn này có tinh thần học hỏi; biết tự phản tỉnh và chủ động thử cách tiếp cận mới không?",
     descriptors: {
-      "1": "Muốn Mentor cho đáp án; defensive trước feedback; ít reflection.",
-      "3": "Sẵn sàng nghe và học nhưng evidence chuyển thành hành động còn hạn chế.",
-      "5": "Biết lắng nghe, reflect, thử cách khác và điều chỉnh; sẵn sàng bị challenge."
+      "1": "Kỳ vọng Mentor đưa sẵn đáp án; phản ứng phòng thủ khi nhận feedback; ít tự phản tỉnh.",
+      "3": "Sẵn sàng lắng nghe và học hỏi. Tuy nhiên, bằng chứng về việc chuyển hóa thành hành động thực tế còn hạn chế.",
+      "5": "Biết lắng nghe; có khả năng tự phản tỉnh; chủ động thử cách tiếp cận khác và linh hoạt thay đổi khi cần cũng như sẵn sàng đón nhận thử thách."
     },
     interview_questions: [
       "Behavioral: Hãy kể một feedback em từng nhận mà lúc đầu em thấy khó nghe hoặc chưa đồng ý. Sau đó em đã làm gì?",
@@ -53,9 +58,9 @@ export const S12_INTERVIEW_CRITERIA: RubricCriterion[] = [
     weight: 25,
     question: "Bạn này có tự làm phần của mình hay chờ Mentor dẫn dắt?",
     descriptors: {
-      "1": "Kỳ vọng Mentor lên lịch, nhắc nhở, xây roadmap hoặc tìm cơ hội giúp.",
+      "1": "Kỳ vọng Mentor chủ động lên lịch và nhắc nhở; mong Mentor xây dựng lộ trình phát triển để định hướng rõ ràng; kỳ vọng Mentor tìm kiếm và giới thiệu các cơ hội phù hợp.",
       "3": "Hiểu mình phải chủ động nhưng vẫn cần khá nhiều hướng dẫn.",
-      "5": "Chủ động chuẩn bị, đặt lịch, follow-up và thực hiện action sau mentoring."
+      "5": "Chủ động chuẩn bị trước buổi mentoring; tự sắp xếp và đặt lịch hẹn; thực hiện follow-up và triển khai hành động cụ thể sau buổi mentoring."
     },
     interview_questions: [
       "Theo em, trong một mối quan hệ mentoring, phần việc nào thuộc trách nhiệm của Mentee?",
@@ -71,9 +76,9 @@ export const S12_INTERVIEW_CRITERIA: RubricCriterion[] = [
     weight: 25,
     question: "Bạn này có khả năng duy trì hành trình 9 tháng không?",
     descriptors: {
-      "1": "Chưa hiểu workload; chỉ nói “em sẽ cố gắng”; chưa có cách xử lý khi bận.",
-      "3": "Hiểu commitment nhưng kế hoạch duy trì còn khá chung.",
-      "5": "Có evidence về follow-through; biết ưu tiên, báo sớm và xử lý conflict thay vì ghost/drop."
+      "1": "Chưa hiểu rõ hành trình mentoring bản thân cần cam kết những gì nên khó ước lượng khả năng thực hiện; thường chỉ phản hồi chung chung kiểu “em sẽ cố gắng” thay vì đưa ra kế hoạch cụ thể; chưa có cách xử lý khi bận rộn.",
+      "3": "Hiểu được ý nghĩa và tầm quan trọng của sự cam kết trong quá trình mentoring nhưng kế hoạch duy trì cam kết còn khá chung chung.",
+      "5": "Có minh chứng rõ ràng về khả năng thực hiện cam kết; biết cách quản lý công việc/học việc để đảm bảo tiến độ mentoring; chủ động báo sớm khi có vấn đề phát sinh thay vì để đến phút cuối; có khả năng xử lý xung đột thay vì im lặng hoặc bỏ ngang."
     },
     interview_questions: [
       "Tình huống: 9 tháng khá dài và chắc chắn sẽ có lúc em thi, đi làm hoặc rất bận. Khi đó em sẽ xử lý hành trình mentoring thế nào?",
@@ -86,6 +91,6 @@ export const S12_INTERVIEW_CRITERIA: RubricCriterion[] = [
 
 export const S12_INTERVIEW_GUIDANCE: RubricGuidance = {
   motto: "Có cần không? • Có chịu học không? • Có tự làm phần của mình không? • Có đi đến cùng không?",
-  note: "Điểm số chỉ hỗ trợ Mentor đánh giá có cấu trúc – KHÔNG dùng làm điểm sàn quyết định Đạt/Không chọn. Không cộng điểm thành tổng. Mentor dùng 4 tiêu chí để hỗ trợ judgment, không dùng công thức để quyết định Đạt/Không chọn.",
+  note: "Điểm số chỉ mang tính tham khảo để Mentor đánh giá mức độ ở từng thành phần. KHÔNG sử dụng điểm số như ngưỡng sàn để quyết định Mentee “Đạt/Không đạt”. Không cộng điểm thành tổng số để đưa ra kết luận. Mentor dựa trên 4 tiêu chí chính để hỗ trợ đánh giá, chứ không áp dụng công thức tính điểm để quyết định việc trở thành Mentee.",
   reminder: "Chưa có định hướng, chưa nhiều kỹ năng hoặc chưa tự tin KHÔNG phải lý do để loại. Hãy đánh giá liệu mentoring có tạo giá trị cho bạn ấy và bạn ấy có sẵn sàng học, chủ động và đi đến cùng hay không."
 };

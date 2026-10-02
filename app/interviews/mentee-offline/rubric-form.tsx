@@ -3,6 +3,8 @@ import { useState } from "react";
 import {
   DESCRIPTOR_LEVELS,
   EXPECTATION_ALIGNMENTS,
+  EXPECTATION_BRIEF_NOTE,
+  MAX_TAKES_PER_INTERVIEWER,
   TAKE_CHOICES,
   formatWeightedScore,
   type ExpectationAlignment,
@@ -28,6 +30,8 @@ export type ResultFormProps = {
   mentorLabel: string;
   /** Mentor đã đủ chỗ (hoặc chưa có hồ sơ mentor hợp lệ) và cặp hiện tại không phải của lượt này. */
   full: boolean;
+  /** Mentor đã chọn "Có – Tôi muốn nhận" cho đủ MAX_TAKES_PER_INTERVIEWER hồ sơ KHÁC trong mùa. */
+  takeLimitReached: boolean;
   busy: boolean;
   onSubmit: (values: Record<string, unknown>) => void;
 };
@@ -39,12 +43,14 @@ export type ResultFormProps = {
  * KHÔNG hiện tổng điểm: phiếu ghi rõ không cộng tổng và không có điểm sàn. Điểm
  * quy đổi chỉ BTC thấy, ở thẻ kết quả sau khi lưu.
  */
-export function InterviewResultForm({ rubric, review, operation: op, candidateName, mentorLabel, full, busy, onSubmit }: ResultFormProps) {
+export function InterviewResultForm({ rubric, review, operation: op, candidateName, mentorLabel, full, takeLimitReached, busy, onSubmit }: ResultFormProps) {
   const [outcome, setOutcome] = useState<OfflineOutcome>(op?.outcome ?? "passed");
   const [takeChoice, setTakeChoice] = useState<TakeChoice | "">(review?.take_choice ?? "");
   const [error, setError] = useState("");
   const previous = new Map((review?.interview_scores ?? []).map((s) => [s.key, s]));
-  const takeLocked = outcome !== "passed" || full;
+  // "Không chọn làm mentee" khoá cả mục C (BTC 02/10): không còn câu hỏi ai nhận bạn này.
+  const rejected = outcome === "rejected";
+  const takeLocked = outcome !== "passed" || full || takeLimitReached;
 
   return (
     <form
@@ -52,7 +58,7 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
       onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
-        if (!takeChoice) {
+        if (!rejected && !takeChoice) {
           setError("Chọn mentor có muốn nhận bạn này không (mục C).");
           return;
         }
@@ -61,7 +67,7 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
         for (const c of rubric.criteria) {
           criteria[c.key] = { score: Number(f.get(`score:${c.key}`)), note: String(f.get(`note:${c.key}`) ?? "") };
         }
-        const willTake = takeChoice === "take";
+        const willTake = !rejected && takeChoice === "take";
         if (!window.confirm(
           `Xác nhận ${OFFLINE_OUTCOMES[outcome]} cho ${candidateName}${willTake ? " và nhận làm mentee của bạn" : ""}?` +
           `${op?.match_id && !willTake ? " Cặp hiện tại sẽ được hủy và hoàn lại chỗ." : ""}`
@@ -75,8 +81,8 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
           keyNeed: String(f.get("keyNeed") ?? ""),
           alignment: String(f.get("alignment") ?? ""),
           alignmentNote: String(f.get("alignmentNote") ?? ""),
-          takeChoice,
-          desiredMentor: String(f.get("desiredMentor") ?? ""),
+          takeChoice: rejected ? null : takeChoice,
+          desiredMentor: rejected ? "" : String(f.get("desiredMentor") ?? ""),
           additionalNote: String(f.get("additionalNote") ?? ""),
           reason: String(f.get("reason") ?? "")
         });
@@ -123,7 +129,7 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
               </label>
               <label>
                 Evidence / Note — {c.label}
-                <textarea name={`note:${c.key}`} rows={2} defaultValue={prev?.note ?? ""} className={field} />
+                <textarea name={`note:${c.key}`} required rows={2} defaultValue={prev?.note ?? ""} className={field} />
               </label>
             </div>
           </fieldset>
@@ -131,7 +137,7 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
       })}
 
       <fieldset className="grid gap-2 rounded-md border border-slate-200 p-3">
-        <legend className="px-1 text-sm font-semibold">A. Quyết định tuyển mentee — bắt buộc</legend>
+        <legend className="px-1 text-sm font-semibold">A. Quyết định chọn mentee</legend>
         <label>
           Kết quả
           <select
@@ -140,7 +146,7 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
             onChange={(e) => {
               const next = e.target.value as OfflineOutcome;
               setOutcome(next);
-              if (next !== "passed" && takeChoice === "take") setTakeChoice("");
+              if (next === "rejected" || (next !== "passed" && takeChoice === "take")) setTakeChoice("");
             }}
           >
             {Object.entries(OFFLINE_OUTCOMES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -158,9 +164,10 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
       </fieldset>
 
       <fieldset className="grid gap-2 rounded-md border border-slate-200 p-3">
-        <legend className="px-1 text-sm font-semibold">B. Expectation alignment — sau khi Mentor brief lại chương trình</legend>
+        <legend className="px-1 text-sm font-semibold">B. Sự phù hợp về kỳ vọng của Mentee</legend>
+        <p className="text-xs text-slate-600">{EXPECTATION_BRIEF_NOTE}</p>
         <label>
-          Mức độ alignment
+          Mức độ phù hợp về kỳ vọng của Mentee
           <select name="alignment" required defaultValue={review?.expectation_alignment ?? ""} className={field}>
             <option value="">Chọn mức độ</option>
             {(Object.entries(EXPECTATION_ALIGNMENTS) as Array<[ExpectationAlignment, string]>).map(([key, label]) => (
@@ -169,8 +176,8 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
           </select>
         </label>
         <label>
-          Concern / Note nếu có
-          <textarea name="alignmentNote" rows={2} defaultValue={review?.alignment_note ?? ""} className={field} />
+          Concern / Note
+          <textarea name="alignmentNote" required rows={2} defaultValue={review?.alignment_note ?? ""} className={field} />
         </label>
       </fieldset>
 
@@ -185,18 +192,22 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
                 name="takeChoice"
                 value={key}
                 checked={takeChoice === key}
-                disabled={key === "take" && takeLocked}
+                disabled={rejected || (key === "take" && takeLocked)}
                 onChange={() => setTakeChoice(key)}
               />
               <span>{label}</span>
             </label>
           ))}
-          {full && !op?.match_id ? <p className="text-sm text-slate-600">Chưa thể nhận thêm mentee. Vẫn có thể chốt Đạt để BTC/mentor khác ghép sau.</p> : null}
+          {rejected ? <p className="text-sm text-slate-600">Không chọn làm mentee — mục C khoá lại.</p> : null}
+          {!rejected && takeLimitReached ? (
+            <p className="text-sm text-slate-600">Bạn đã chọn &quot;Có – Tôi muốn nhận bạn này&quot; cho đủ {MAX_TAKES_PER_INTERVIEWER} hồ sơ. Vẫn có thể chốt Đạt để Mentor khác nhận bạn.</p>
+          ) : null}
+          {!rejected && !takeLimitReached && full && !op?.match_id ? <p className="text-sm text-slate-600">Chưa thể nhận thêm mentee. Vẫn có thể chốt Đạt để BTC/mentor khác ghép sau.</p> : null}
           <p className="text-xs text-slate-500">Chọn &quot;Có&quot; là tạo cặp ghép ngay khi lưu.</p>
         </div>
         <label>
           Chân dung Mentor phù hợp
-          <textarea name="desiredMentor" required rows={2} defaultValue={review?.desired_mentor_profile ?? ""} className={field}
+          <textarea name="desiredMentor" required={!rejected} disabled={rejected} rows={2} defaultValue={review?.desired_mentor_profile ?? ""} className={field}
             placeholder="Background / experience / mentoring style phù hợp" />
         </label>
         <label>
@@ -251,7 +262,7 @@ export function InterviewResultSummary({ review, operation: op, showWeighted }: 
           {review?.key_development_need ? <p className="whitespace-pre-wrap text-sm">Nhu cầu phát triển chính: {review.key_development_need}</p> : null}
           {review?.expectation_alignment ? (
             <p className="text-sm">
-              Alignment: {EXPECTATION_ALIGNMENTS[review.expectation_alignment]}
+              Phù hợp về kỳ vọng: {EXPECTATION_ALIGNMENTS[review.expectation_alignment]}
               {review.alignment_note ? ` — ${review.alignment_note}` : ""}
             </p>
           ) : null}

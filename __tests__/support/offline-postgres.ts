@@ -83,6 +83,9 @@ export async function offlineDb() {
   ids.session=satSession.id;
   ids.sessionSun=sunSession.id;
   await db.exec(read("supabase/migrations/20261002100000_mentee_phong_van_theo_mua.sql"));
+  // Ô ghi chú bắt buộc, khoá mục C khi Không chọn, tối đa 2 lần "Có – Tôi muốn nhận";
+  // phiếu S12 lên phiên bản 2 (BTC 02/10/2026).
+  await db.exec(read("supabase/migrations/20261002150000_mentee_phieu_cham_bat_buoc_ghi_chu.sql"));
   // BTC vận hành mùa (core_team + scope operations) để thử màn hình sửa phiếu,
   // và một mùa thứ hai CHƯA có phiếu riêng để thử luật kế thừa.
   await db.exec(`
@@ -128,7 +131,7 @@ export async function saveHandbook(db:PGlite,expected:number,html:string,fileNam
 /** Kết quả hợp lệ theo phiếu Mùa 12 (4 tiêu chí). rubricId/rubricVersion điền lúc dựng database. */
 export const pass:Record<string,unknown>={
   outcome:"passed",rubricId:"",rubricVersion:0,
-  criteria:{need:{score:5,note:"Có development need thật"},readiness:{score:3},ownership:{score:4},follow_through:{score:2,note:"Kế hoạch còn chung"}},
-  rationale:"Có động lực",keyNeed:"Khám phá hướng nghề",alignment:"aligned",alignmentNote:"",
+  criteria:{need:{score:5,note:"Có development need thật"},readiness:{score:3,note:"Nghe góp ý tốt"},ownership:{score:4,note:"Tự đặt lịch"},follow_through:{score:2,note:"Kế hoạch còn chung"}},
+  rationale:"Có động lực",keyNeed:"Khám phá hướng nghề",alignment:"aligned",alignmentNote:"Đã thống nhất lịch gặp",
   takeChoice:"take",desiredMentor:"Thiên về coaching, từng chuyển ngành",additionalNote:""
 };

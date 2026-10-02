@@ -101,8 +101,8 @@ describe("5. ô xuất CSV cho dòng phỏng vấn theo phiếu", () => {
       weighted_score: "3.6", key_development_need: "Khám phá hướng nghề", expectation_alignment: "concern",
       alignment_note: "Lo bận", take_choice: "recommend_other", desired_mentor_profile: "Coaching", additional_note: null
     })).toEqual([
-      "Nhu cầu Mentoring & Giá trị phát triển: 5; Sẵn sàng học hỏi: 3", "3.60", "Khám phá hướng nghề", "Có concern",
-      "Lo bận", "Không – nhưng đề xuất Đạt để Mentor khác lựa chọn", "Coaching", ""
+      "Nhu cầu Mentoring & Giá trị phát triển: 5; Sẵn sàng học hỏi: 3", "3.60", "Khám phá hướng nghề", "Kỳ vọng không phù hợp",
+      "Lo bận", "Không – Nhưng đề xuất bạn này trở thành Mentee và Mentor khác nhận bạn", "Coaching", ""
     ]);
   });
   it("dòng vòng hồ sơ để trống cả 8 ô, không bịa", () => {

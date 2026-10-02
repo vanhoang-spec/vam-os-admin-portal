@@ -45,8 +45,8 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
   it("kim chỉ nam, lưu ý điểm số và nhắc mentor đúng phiếu; không cộng tổng, không điểm sàn", () => {
     expect(text).toContain(S12_INTERVIEW_GUIDANCE.reminder!);
     expect(text).toContain("Kim chỉ nam: " + S12_INTERVIEW_GUIDANCE.motto);
-    expect(text).toContain("KHÔNG dùng làm điểm sàn");
-    expect(text).toContain("Không cộng điểm thành tổng");
+    // Lưu ý điểm số nguyên văn phiếu phiên bản 2 (thuần Việt, 02/10/2026).
+    expect(text).toContain(S12_INTERVIEW_GUIDANCE.note!);
     expect(text).toContain("không hiện tổng điểm");
   });
 
@@ -61,16 +61,24 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     for (const label of Object.values(OFFLINE_OUTCOMES)) expect(table).toContain(label);
     for (const label of Object.values(EXPECTATION_ALIGNMENTS)) expect(table).toContain(label);
     for (const label of Object.values(TAKE_CHOICES)) expect(table).toContain(label);
-    for (const label of ["Lý do chọn / không chọn", "Nhu cầu phát triển chính", "Mức độ alignment",
-      "Concern / Note nếu có", "Chân dung Mentor phù hợp"]) {
+    for (const label of ["A. Quyết định chọn mentee", "B. Sự phù hợp về kỳ vọng của Mentee", "Lý do chọn / không chọn",
+      "Nhu cầu phát triển chính", "Mức độ phù hợp về kỳ vọng của Mentee", "Ô bắt buộc \"Concern / Note\"", "Chân dung Mentor phù hợp"]) {
       expect(table).toContain(label);
     }
     expect(table).toContain("tạo cặp ghép ngay");
+    // Luật 02/10/2026: tối đa 2 hồ sơ "Có – nhận" mỗi mentor; Không chọn thì khoá mục C.
+    expect(table).toContain("tối đa 2 hồ sơ");
+    expect(table).toContain("mục C khoá lại");
+    expect(text).not.toContain("Expectation alignment");
+    expect(text).not.toContain("Mức độ alignment");
     expect(text).toContain("Evidence / Note");
   });
 
   it("đã bỏ hẳn khung 5 tiêu chí/25 điểm cũ và câu hỏi mượn từ Mùa 11", () => {
-    for (const [, label] of PROFILE_SCREENING_SCORES) expect(text).not.toContain(label);
+    // "Mức độ phù hợp" (nhãn cũ vòng hồ sơ) nằm gọn trong nhãn mới "Mức độ phù hợp về kỳ vọng
+    // của Mentee" (02/10/2026) — bỏ đúng cụm nhãn mới rồi mới soát, không nới phép kiểm.
+    const withoutNewLabel = text.split("Mức độ phù hợp về kỳ vọng của Mentee").join(" ");
+    for (const [, label] of PROFILE_SCREENING_SCORES) expect(withoutNewLabel).not.toContain(label);
     expect(text).not.toContain("25 điểm");
     expect(text).not.toContain("Mùa 11");
     expect(text).not.toContain("Nhận làm mentee của tôi");

@@ -36,8 +36,11 @@ describe("Hướng dẫn nhanh 1 trang — Mentor phỏng vấn mentee trực ti
   });
 
   it("không còn 5 tiêu chí cũ (giờ chỉ là tiêu chí vòng hồ sơ) và ô tick nhận mentee đã bỏ", () => {
+    // "Mức độ phù hợp" (nhãn cũ vòng hồ sơ) nằm gọn trong nhãn mới "Mức độ phù hợp về kỳ vọng
+    // của Mentee" (02/10/2026) — bỏ đúng cụm nhãn mới rồi mới soát, không nới phép kiểm.
+    const withoutNewLabel = text.split("Mức độ phù hợp về kỳ vọng của Mentee").join(" ");
     for (const [, label] of PROFILE_SCREENING_SCORES) {
-      expect(text).not.toContain(label);
+      expect(withoutNewLabel).not.toContain(label);
     }
     expect(text).not.toContain("Nhận làm mentee của tôi");
   });
@@ -51,6 +54,11 @@ describe("Hướng dẫn nhanh 1 trang — Mentor phỏng vấn mentee trực ti
     expect(text).toContain("Nhu cầu phát triển chính");
     expect(text).toContain("Chân dung Mentor phù hợp");
     expect(text).toContain("Hướng dẫn phỏng vấn mùa này");
+    expect(text).toContain("Mức độ phù hợp về kỳ vọng của Mentee");
+    expect(text).toContain("Concern / Note");
+    expect(text).toContain("tối đa 2 hồ sơ");
+    expect(text).toContain("mục C khoá lại");
+    expect(text).not.toContain("Mức độ alignment");
     expect(text).toContain("Xác nhận kết quả");
   });
 
