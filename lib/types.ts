@@ -126,6 +126,12 @@ export type ApplicationReview = JsonRecord & {
   total_score: number | null;
   recommendation: string | null;
   reviewer_note: string | null;
+  /**
+   * Phỏng vấn trực tiếp theo phiếu của mùa (20261002100000): điểm quy đổi thang
+   * 1–5, CHỈ để BTC tham khảo. total_score của các review này là null — phiếu
+   * ghi rõ không cộng tổng.
+   */
+  weighted_score?: number | string | null;
   submitted_at: string | null;
   created_at: string;
   updated_at: string;

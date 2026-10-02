@@ -5,7 +5,8 @@ import path from "node:path";
 export const uuid=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
 // session/sessionSun bị GÁN LẠI trong offlineDb(): giá trị thật do migration
 // 20260929100000 sinh ra (gen_random_uuid()), không phải hai hằng số này.
-export const ids={season:uuid(1),program:uuid(2),support:uuid(3),mentor:uuid(4),other:uuid(5),person:uuid(6),session:uuid(7),sessionSun:uuid(9),app:uuid(8)};
+export const ids={season:uuid(1),program:uuid(2),support:uuid(3),mentor:uuid(4),other:uuid(5),person:uuid(6),session:uuid(7),sessionSun:uuid(9),app:uuid(8),
+  btc:uuid(10),seasonNext:uuid(11),rubric:""};
 const read=(file:string)=>readFileSync(path.resolve(file),"utf8");
 function table(file:string,name:string) {
   const text=read(file);
@@ -81,6 +82,19 @@ export async function offlineDb() {
   if(!satSession || !sunSession) throw new Error("migration 20260929100000 không sinh ra ca 08:00 của cả hai ngày");
   ids.session=satSession.id;
   ids.sessionSun=sunSession.id;
+  await db.exec(read("supabase/migrations/20261002100000_mentee_phong_van_theo_mua.sql"));
+  // BTC vận hành mùa (core_team + scope operations) để thử màn hình sửa phiếu,
+  // và một mùa thứ hai CHƯA có phiếu riêng để thử luật kế thừa.
+  await db.exec(`
+    insert into admin_users values ('${ids.btc}','${ids.btc}','btc@example.test','BTC','active','core_team');
+    insert into admin_scope_access values ('${ids.btc}','active','${ids.season}','operations'),('${ids.btc}','active','${ids.seasonNext}','operations');
+    insert into seasons values('${ids.seasonNext}','${ids.program}','UEHM-S13');
+  `);
+  const {rows:[rubric]}=await db.query<{id:string;version:number}>("select id,version from mentee_interview_rubrics where season_id=$1",[ids.season]);
+  if(!rubric) throw new Error("migration 20261002100000 không seed phiếu Mùa 12");
+  ids.rubric=rubric.id;
+  pass.rubricId=rubric.id;
+  pass.rubricVersion=rubric.version;
   await addCandidate(db,ids.app);
   await db.exec("set role service_role;");
   return db;
@@ -98,4 +112,23 @@ export async function assigned(db:PGlite,app=ids.app,room=1,desk=1) {
   await save(db,"checkin",0,{},ids.support,app);
   await save(db,"assign",1,{room,desk,interviewerId:ids.mentor},ids.support,app);
 }
-export const pass={outcome:"passed",scores:[4,4,5,4,5],note:"Có động lực",takeMentee:true};
+export async function cancelBooking(db:PGlite,reason:string,actor=ids.support,app=ids.app) {
+  return db.query("select vam105_cancel_mentee_booking($1,$2,$3) as result",[actor,app,reason]);
+}
+export async function guide(db:PGlite,actor:string,season=ids.season,includeHandbook=false) {
+  const {rows:[row]}=await db.query<{data:any}>("select vam106_interview_guide($1,$2,$3) as data",[actor,season,includeHandbook]);
+  return row.data;
+}
+export async function saveRubric(db:PGlite,expected:number,criteria:unknown,guidance:unknown={},actor=ids.btc,season=ids.season) {
+  return db.query("select vam106_save_interview_rubric($1,$2,$3,$4::jsonb,$5::jsonb) as result",[actor,season,expected,JSON.stringify(criteria),JSON.stringify(guidance)]);
+}
+export async function saveHandbook(db:PGlite,expected:number,html:string,fileName="Handbook.docx",actor=ids.btc,season=ids.season) {
+  return db.query("select vam106_save_interview_handbook($1,$2,$3,$4,$5) as result",[actor,season,expected,html,fileName]);
+}
+/** Kết quả hợp lệ theo phiếu Mùa 12 (4 tiêu chí). rubricId/rubricVersion điền lúc dựng database. */
+export const pass:Record<string,unknown>={
+  outcome:"passed",rubricId:"",rubricVersion:0,
+  criteria:{need:{score:5,note:"Có development need thật"},readiness:{score:3},ownership:{score:4},follow_through:{score:2,note:"Kế hoạch còn chung"}},
+  rationale:"Có động lực",keyNeed:"Khám phá hướng nghề",alignment:"aligned",alignmentNote:"",
+  takeChoice:"take",desiredMentor:"Thiên về coaching, từng chuyển ngành",additionalNote:""
+};

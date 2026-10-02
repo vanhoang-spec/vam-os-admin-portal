@@ -1,6 +1,6 @@
 /**
  * Hướng dẫn cho Core Team, dựng 30/09/2026: mentor vào hệ thống và phỏng vấn
- * mentee 03–04/10. Trang 1–3 dành cho mentor (đăng nhập, khung điểm, chấm
+ * mentee 03–04/10. Trang 1–3 dành cho mentor (đăng nhập, phiếu chấm Mùa 12, chấm
  * điểm) — anh Hoàng xử lý riêng phần cấp quyền/danh sách nội bộ, không thuộc
  * tài liệu này. Trang 4 (thêm 30/09) là quy trình check-in → phân công cho
  * Support/BTC.
@@ -8,7 +8,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { OFFLINE_SCORES, OFFLINE_OUTCOMES } from "@/lib/mentee-offline-core";
+import { OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES } from "@/lib/mentee-offline-core";
+import { EXPECTATION_ALIGNMENTS, TAKE_CHOICES } from "@/lib/mentee-interview-rubric-core";
+import { S12_INTERVIEW_CRITERIA, S12_INTERVIEW_GUIDANCE } from "@/lib/mentee-interview-rubric-s12";
 
 const root = join(__dirname, "..");
 const html = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.html"), "utf8");
@@ -19,14 +21,68 @@ const text = html
   .replace(/\s+/g, " ");
 
 describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫn Core Team", () => {
-  it("5 tiêu chí và tổng điểm khớp đúng hằng số nguồn (lib/mentee-offline-core.ts)", () => {
-    for (const [, label] of OFFLINE_SCORES) {
-      expect(text).toContain(label);
+  // Trang 1–3 dựng lại 02/10 theo phiếu Mùa 12 (VAM_Mentee_Evaluation_Season12_Final.xlsx +
+  // Handbook S12). Đối chiếu với bản seed TS — chính bản test Postgres khoá bằng với seed SQL —
+  // nên tài liệu, form chấm và database không thể lệch nhau một chữ mà không có test đỏ.
+  it("phiếu Mùa 12: đủ 4 tiêu chí, trọng số, câu hỏi cốt lõi và mô tả 1/3/5 nguyên văn", () => {
+    expect(S12_INTERVIEW_CRITERIA).toHaveLength(4);
+    for (const c of S12_INTERVIEW_CRITERIA) {
+      expect(text).toContain(`${c.label} · ${c.weight}%`);
+      expect(text).toContain(c.question!);
+      for (const level of ["1", "3", "5"] as const) {
+        expect(text).toContain(c.descriptors![level]!);
+      }
     }
-    expect(text).toContain("25 điểm");
-    for (const label of Object.values(OFFLINE_OUTCOMES)) {
-      expect(text).toContain(label);
+  });
+
+  it("câu hỏi phỏng vấn gợi ý của cả 4 tiêu chí, nguyên văn Handbook mục 6", () => {
+    for (const c of S12_INTERVIEW_CRITERIA) {
+      expect(c.interview_questions!.length).toBeGreaterThan(0);
+      for (const q of c.interview_questions!) expect(text).toContain(q);
     }
+  });
+
+  it("kim chỉ nam, lưu ý điểm số và nhắc mentor đúng phiếu; không cộng tổng, không điểm sàn", () => {
+    expect(text).toContain(S12_INTERVIEW_GUIDANCE.reminder!);
+    expect(text).toContain("Kim chỉ nam: " + S12_INTERVIEW_GUIDANCE.motto);
+    expect(text).toContain("KHÔNG dùng làm điểm sàn");
+    expect(text).toContain("Không cộng điểm thành tổng");
+    expect(text).toContain("không hiện tổng điểm");
+  });
+
+  it("bảng mục A/B/C ở trang 2 mang đúng nhãn lựa chọn của form chấm", () => {
+    // Soi riêng bảng A/B/C: các nhãn này cũng xuất hiện ở trang 1 (Bước 3, "Chỗ mentor hay hỏi"),
+    // tìm chung cả tài liệu thì bảng trang 2 viết sai nhãn vẫn xanh.
+    const start = text.indexOf("Sau 4 tiêu chí — mục A, B, C");
+    const end = text.indexOf("Nhắc Mentor (cuối phiếu)");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const table = text.slice(start, end);
+    for (const label of Object.values(OFFLINE_OUTCOMES)) expect(table).toContain(label);
+    for (const label of Object.values(EXPECTATION_ALIGNMENTS)) expect(table).toContain(label);
+    for (const label of Object.values(TAKE_CHOICES)) expect(table).toContain(label);
+    for (const label of ["Lý do chọn / không chọn", "Nhu cầu phát triển chính", "Mức độ alignment",
+      "Concern / Note nếu có", "Chân dung Mentor phù hợp"]) {
+      expect(table).toContain(label);
+    }
+    expect(table).toContain("tạo cặp ghép ngay");
+    expect(text).toContain("Evidence / Note");
+  });
+
+  it("đã bỏ hẳn khung 5 tiêu chí/25 điểm cũ và câu hỏi mượn từ Mùa 11", () => {
+    for (const [, label] of PROFILE_SCREENING_SCORES) expect(text).not.toContain(label);
+    expect(text).not.toContain("25 điểm");
+    expect(text).not.toContain("Mùa 11");
+    expect(text).not.toContain("Nhận làm mentee của tôi");
+    expect(text).not.toContain("Thang điểm gợi ý theo tiêu chí");
+  });
+
+  it("chỉ đúng chỗ đọc Handbook và chỗ BTC cập nhật phiếu mỗi mùa (nhãn thật trên menu/nút)", () => {
+    expect(text).toContain("Hướng dẫn phỏng vấn mùa này");
+    expect(text).toContain("Phỏng vấn → Phiếu chấm & hướng dẫn mentee");
+    expect(text).toContain("lần cài đặt gần nhất");
+    expect(text).toContain("Điểm đã chấm giữ nguyên nội dung phiếu lúc chấm");
+    expect(text).toContain("điểm quy đổi tham khảo");
   });
 
   it("nêu đúng đường dẫn và nhãn thật của luồng đăng nhập lần đầu", () => {
@@ -40,27 +96,9 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
     expect(text).toContain("Phỏng vấn mentee trực tiếp");
     expect(text).toContain("Chỉ ứng viên được phân cho tôi");
     expect(text).toContain("Application đã nộp");
-    expect(text).toContain("Nhận làm mentee của tôi");
     expect(text).toContain("Sửa kết quả / lựa chọn mentee");
     expect(text).toContain("Xác nhận kết quả");
     expect(text).toContain("không tự gửi email báo đậu/rớt");
-  });
-
-  it("câu hỏi gợi ý (tài liệu chấm Mùa 11) chỉ mượn câu hỏi, KHÔNG mượn thang điểm 3 tiêu chí/10 điểm của Mùa 11", () => {
-    expect(text).toContain("Câu hỏi gợi ý theo tiêu chí");
-    expect(text).toContain("tài liệu chấm Mùa 11");
-    expect(text).toContain("KHÔNG mượn thang điểm 3 tiêu chí/10 điểm của Mùa 11");
-    expect(text).toContain("Mùa 12 giữ nguyên 5 tiêu chí/25 điểm");
-    expect(text).not.toContain("rubric chi tiết đã có sẵn");
-  });
-
-  it("có thang điểm gợi ý 1/3/5 riêng cho từng tiêu chí Mùa 12 — không còn để trống khoảng trống rubric", () => {
-    expect(text).toContain("Thang điểm gợi ý theo tiêu chí");
-    // Cả 5 tiêu chí đều phải có mô tả — không được âm thầm bỏ sót tiêu chí nào.
-    for (const [, label] of OFFLINE_SCORES) {
-      expect(text.split(label).length - 1).toBeGreaterThanOrEqual(2); // xuất hiện ở bảng nhãn VÀ bảng thang điểm
-    }
-    expect(text).toContain("Mong muốn về mentor/ngành lệch hẳn so với mảng mentor hiện có");
   });
 
   it("đã bỏ hẳn phân loại nhóm mentee G/C/E/F — anh Hoàng chốt không dùng cho Mùa 12", () => {
@@ -121,5 +159,18 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
   it("PDF đủ bốn trang", () => {
     const pdf = readFileSync(join(root, "docs/huong-dan/HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf"), "latin1");
     expect(pdf.match(/\/Type\s*\/Page[^s]/g)).toHaveLength(4);
+  });
+
+  it("đánh dấu phỏng vấn ONLINE (01/10) — chỉ Support/BTC, ứng viên không thấy và không tự chọn", () => {
+    expect(text).toContain("Phỏng vấn ONLINE");
+    expect(text).toContain("Chỉ Support/BTC thấy và đánh dấu được");
+    expect(text).toContain("ứng viên không thấy ô này và không tự chọn được");
+  });
+
+  it("huỷ lịch đăng ký (01/10) — chỉ Support/BTC, bắt buộc lý do, chỉ còn trước check-in", () => {
+    expect(text).toContain("Huỷ lịch đăng ký");
+    expect(text).toContain("Chỉ Support/BTC (không phải ứng viên) huỷ được");
+    expect(text).toContain("chỉ hiện khi mentee CHƯA check-in");
+    expect(text).toContain("bắt buộc điền");
   });
 });

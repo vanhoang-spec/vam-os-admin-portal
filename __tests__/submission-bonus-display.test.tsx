@@ -2,7 +2,8 @@
 /**
  * Điểm cộng theo ngày nộp — nơi người xếp hạng nhìn thấy nó.
  *
- * Canh: file CSV điểm review có đúng hai cột mới ở CUỐI (cột cũ không dịch chỗ),
+ * Canh: file CSV điểm review có hai cột điểm cộng ở vị trí cố định 17–18 (cột cũ không
+ * dịch chỗ; cột mới về sau chỉ được nối thêm SAU chúng),
  * đơn trong mốc được cộng vào tổng của từng reviewer, và khi không đọc được mốc
  * thì màn hình / file nói "không đọc được" chứ không in thành 0. Khung đánh giá của
  * Core Team in tổng sau cộng.
@@ -109,39 +110,45 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+const BONUS_HEADERS = ["Điểm cộng theo ngày nộp (của đơn)", "Tổng điểm sau cộng"];
+
 describe("1. file CSV điểm review", () => {
-  it("hai cột mới nằm ở cuối; cột Tổng điểm không dịch chỗ", async () => {
+  it("hai cột điểm cộng giữ vị trí 17–18; cột Tổng điểm không dịch chỗ; cột mới chỉ nối thêm sau", async () => {
     db.tables.application_reviews = [review("aaaaaaaa-0000-4000-8000-0000000000a1", "2026-09-09T03:00:00Z")];
     const [headers] = await exportRows();
     expect(headers[13]).toBe("Tổng điểm");
     expect(headers[16]).toBe("Thời điểm gửi");
-    expect(headers.slice(-2)).toEqual(["Điểm cộng theo ngày nộp (của đơn)", "Tổng điểm sau cộng"]);
+    expect(headers.slice(17, 19)).toEqual(BONUS_HEADERS);
+    // 02/10: 8 cột phiếu phỏng vấn theo mùa nối SAU cột điểm cộng — file người dùng đã
+    // lập công thức theo vị trí cột vẫn đọc đúng.
+    expect(headers[19]).toBe("Điểm phỏng vấn theo phiếu (tiêu chí: điểm)");
+    expect(headers).toHaveLength(27);
   });
 
   it("đơn nộp trong mốc: +3, tổng sau cộng 23", async () => {
     db.tables.application_reviews = [review("aaaaaaaa-0000-4000-8000-0000000000a1", "2026-09-10T16:59:00Z")];
     const [, row] = await exportRows();
     expect(row[13]).toBe("20");
-    expect(row.slice(-2)).toEqual(["3", "23"]);
+    expect(row.slice(17, 19)).toEqual(["3", "23"]);
   });
 
   it("đơn nộp 00:30 sáng 11/09 giờ Việt Nam: ngoài mốc 'đến hết 10/09' — 0 điểm cộng", async () => {
     db.tables.application_reviews = [review("aaaaaaaa-0000-4000-8000-0000000000a1", "2026-09-10T17:30:00Z")];
     const [, row] = await exportRows();
-    expect(row.slice(-2)).toEqual(["0", "20"]);
+    expect(row.slice(17, 19)).toEqual(["0", "20"]);
   });
 
   it("mốc của form mentee không cộng cho đơn mentor cùng đợt", async () => {
     db.tables.application_reviews = [review("aaaaaaaa-0000-4000-8000-0000000000a1", "2026-09-09T03:00:00Z", "mentor")];
     const [, row] = await exportRows();
-    expect(row.slice(-2)).toEqual(["0", "20"]);
+    expect(row.slice(17, 19)).toEqual(["0", "20"]);
   });
 
   it("không đọc được bảng mốc: ghi rõ 'Không đọc được', không ghi 0", async () => {
     db.errors.submission_bonus_rules = { code: "42P01", message: "relation does not exist" };
     db.tables.application_reviews = [review("aaaaaaaa-0000-4000-8000-0000000000a1", "2026-09-09T03:00:00Z")];
     const [, row] = await exportRows();
-    expect(row.slice(-2)).toEqual(["Không đọc được", ""]);
+    expect(row.slice(17, 19)).toEqual(["Không đọc được", ""]);
     expect(row[13]).toBe("20");
   });
 });

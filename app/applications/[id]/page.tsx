@@ -27,6 +27,7 @@ import { displayText, formatDate, formatDateTime } from "@/lib/utils";
 import { bonusForApplication, readApplicationBonusRules, rulesForTarget } from "@/lib/submission-bonus";
 import { describeBonusWindow } from "@/lib/submission-bonus-core";
 import { scoreWithBonusText } from "@/components/submission-bonus-badge";
+import { formatWeightedScore } from "@/lib/mentee-interview-rubric-core";
 import { canBrowseApplications } from "@/lib/read-access";
 import { getStageRequirements, type StageRequirement } from "@/lib/recruitment-stage-requirements";
 import {
@@ -540,7 +541,11 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
                         {review.due_at ? formatDate(review.due_at) : "-"}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
-                        {review.total_score !== null ? scoreWithBonusText(review.total_score, submissionBonus) : "-"}
+                        {review.total_score !== null
+                          ? scoreWithBonusText(review.total_score, submissionBonus)
+                          : review.weighted_score != null
+                            ? `${formatWeightedScore(review.weighted_score)} · quy đổi, tham khảo`
+                            : "-"}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
                         {displayText(review.recommendation)}
@@ -648,6 +653,8 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             latestRecommendation={latestSubmittedReview?.recommendation}
             latestTotalScore={latestSubmittedReview?.total_score}
             latestScoreText={scoreWithBonusText(latestSubmittedReview?.total_score, submissionBonus)}
+            latestWeightedText={latestSubmittedReview?.total_score == null && latestSubmittedReview?.weighted_score != null
+              ? formatWeightedScore(latestSubmittedReview.weighted_score) : null}
           />
           )
         ) : (

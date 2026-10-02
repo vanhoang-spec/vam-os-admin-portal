@@ -35,6 +35,18 @@ export function canViewMenteeSessionStatus(role?: string | null) {
 }
 
 /**
+ * Can edit a season's mentee interview rubric and upload its Handbook on
+ * /interviews/phieu-cham-mentee. Owner decision 02/10/2026. The phiếu decides
+ * how hundreds of mentees are scored, so it stays with the tier that owns
+ * recruitment decisions; support_team reads it on the interview screen but does
+ * not change it. This is only the role half — the caller must also prove
+ * canOperateSeason, and vam106_save_* re-check vam084_operator_for_season.
+ */
+export function canEditInterviewRubric(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}
+
+/**
  * Can access /reviews and submit scoring.
  * Includes reviewer role in addition to admin tiers.
  */

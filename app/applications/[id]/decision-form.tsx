@@ -58,6 +58,8 @@ export type DecisionFormProps = {
   latestTotalScore?: number | null;
   /** Chữ điểm đã gồm điểm cộng theo ngày nộp, ví dụ `18 + 3 = 21`. Không có thì hiện `latestTotalScore`. */
   latestScoreText?: string | null;
+  /** Phỏng vấn theo phiếu của mùa không có tổng — điểm quy đổi thang 5, chỉ để tham khảo. */
+  latestWeightedText?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -70,7 +72,8 @@ export function DecisionForm({
   hasSubmittedReview,
   latestRecommendation,
   latestTotalScore,
-  latestScoreText
+  latestScoreText,
+  latestWeightedText
 }: DecisionFormProps) {
   const [state, action] = useFormState(
     updateApplicationDecisionAction,
@@ -113,7 +116,9 @@ export function DecisionForm({
                 {latestRecommendation ?? "-"}
                 {latestTotalScore !== null && latestTotalScore !== undefined
                   ? ` · Điểm: ${latestScoreText ?? latestTotalScore}`
-                  : ""}
+                  : latestWeightedText
+                    ? ` · Điểm phỏng vấn quy đổi: ${latestWeightedText} (tham khảo, không phải điểm sàn)`
+                    : ""}
               </>
             ) : (
               <span className="text-slate-400 italic">Chưa có review được nộp</span>
