@@ -147,7 +147,7 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         seasonLabel: SEASON,
         bookingUrl: `${ORIGIN}/dat-lich/ma-vi-du`,
         reminderNumber: 0,
-        windowEndLabel: "05/10/2026",
+        windowEndLabel: "11/10/2026",
         hotlineZalo: "0919144638"
       })
     )

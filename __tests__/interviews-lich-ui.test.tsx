@@ -226,7 +226,7 @@ describe("2. bảng điều hành ban tổ chức", () => {
 
   it("tile và nút gửi mang đúng con số realtime", async () => {
     render(<BtcPanel overview={OVERVIEW} />);
-    expect(screen.getByText("Giờ còn trống đến hết 05/10").previousSibling?.textContent).toBe("5");
+    expect(screen.getByText("Giờ còn trống đến hết 11/10").previousSibling?.textContent).toBe("5");
     expect(screen.getByText("Chưa đặt lịch").previousSibling?.textContent).toBe("80");
     // Nhịp tự gửi lúc mở tab đổi nhãn nút thành "Đang gửi..." trong chốc lát —
     // chờ nó xong rồi mới đọc nhãn thật.

@@ -6,7 +6,8 @@ import { cancelBookingByBtcAction, runInterviewDispatchAction } from "@/app/acti
 import {
   DispatchResult,
   dispatchMaxRounds,
-  shouldContinueDispatch
+  shouldContinueDispatch,
+  windowEndShortLabel
 } from "@/lib/interview-schedule-core";
 
 /**
@@ -136,7 +137,7 @@ export function BtcPanel({ overview }: { overview: OverviewProp }) {
   return (
     <section className="grid gap-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Tile label="Giờ còn trống đến hết 05/10" value={overview.openFutureHours} />
+        <Tile label={`Giờ còn trống đến hết ${windowEndShortLabel()}`} value={overview.openFutureHours} />
         <Tile label="Mentor sẵn sàng phỏng vấn" value={overview.mentors.eligibleTotal} />
         <Tile label="Chưa đặt lịch" value={overview.mentors.notBooked} />
         <Tile label="Đã đặt, sắp diễn ra" value={overview.mentors.bookedUpcoming} />

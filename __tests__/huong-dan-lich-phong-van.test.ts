@@ -4,7 +4,7 @@
  * Người đọc tin hướng dẫn và đi tìm đúng chữ trên màn hình. Mỗi câu hướng dẫn
  * trích — tên menu, nhãn nút, lời báo — phải có thật trong mã nguồn, và mỗi
  * con số hướng dẫn khẳng định (nhịp nhắc 3 ngày, mốc 24 giờ, khung 07:00–22:00,
- * đợt 22/09–05/10) phải khớp hằng số thật. Đổi một nhãn hay một hằng mà quên
+ * đợt 22/09–11/10 sau gia hạn 02/10) phải khớp hằng số thật. Đổi một nhãn hay một hằng mà quên
  * sửa hướng dẫn thì test này đỏ.
  */
 import { readFileSync } from "node:fs";
@@ -21,7 +21,8 @@ import {
   REMINDER_INTERVAL_MS,
   SLOT_FIRST_HOUR,
   SLOT_LAST_HOUR,
-  windowDateKeys
+  windowDateKeys,
+  windowEndShortLabel
 } from "@/lib/interview-schedule-core";
 
 const ROOT = join(__dirname, "..");
@@ -65,12 +66,18 @@ describe("mỗi câu hướng dẫn trích đều có thật trên màn hình", 
 });
 
 describe("mỗi con số hướng dẫn khẳng định đều khớp hằng số thật", () => {
-  it("đợt 22/09 – 05/10/2026, đúng 14 ngày", () => {
-    expect(guideText).toContain("22/09 – 05/10/2026");
+  // Gia hạn 02/10/2026: đợt kéo tới 11/10 (20 ngày). Hướng dẫn đọc ngày từ hằng
+  // số — gia hạn mà quên sửa một chỗ "05/10" trong hướng dẫn thì đỏ ở đây.
+  it("đợt 22/09 – 11/10/2026, đúng 20 ngày, và hướng dẫn nói đúng ngày cuối ở mọi chỗ", () => {
     expect(INTERVIEW_WINDOW.firstDateKey).toBe("2026-09-22");
-    expect(INTERVIEW_WINDOW.lastDateKey).toBe("2026-10-05");
-    expect(guideText).toContain("14 ngày × 15 giờ");
-    expect(windowDateKeys()).toHaveLength(14);
+    expect(INTERVIEW_WINDOW.lastDateKey).toBe("2026-10-11");
+    expect(windowDateKeys()).toHaveLength(20);
+    const end = windowEndShortLabel();
+    expect(end).toBe("11/10");
+    expect(guideText).toContain(`22/09 – ${end}/2026`);
+    expect(guideText).toContain(`${windowDateKeys().length} ngày × 15 giờ`);
+    expect(guideText).toContain(`giờ còn trống đến hết ${end}`);
+    expect(guideText).not.toContain("05/10");
     expect(SLOT_LAST_HOUR - SLOT_FIRST_HOUR + 1).toBe(15);
   });
 
