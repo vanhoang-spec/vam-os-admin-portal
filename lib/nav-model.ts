@@ -1,5 +1,6 @@
 import type { AdminRole, CurrentAdminUser } from "@/lib/auth-constants";
 import {
+  canSendBulkEmail,
   canAssignReviewLots,
   canBrowseOperations,
   canComposeEmailTemplate,
@@ -188,6 +189,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // gửi thư mời vẫn hẹp hơn nữa (canAssignReview) — trang tự ẩn các nút
             // đó cho support_team, không phải việc của nav.
             ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
+            // Thư tới hàng chục mentor một lúc: cùng cổng với gửi thư hàng loạt.
+            ...(canSendBulkEmail(role) ? [{ href: "/interviews/thu-xac-nhan-mentor", label: "Thư xác nhận lịch PV cho mentor" }] : []),
           ],
         }
       : showStaffingOnly

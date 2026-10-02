@@ -413,6 +413,8 @@ const REVIEW_ROUTES = [
 // Sửa ghế/địa điểm/gửi thư mời vẫn hẹp hơn nữa (canAssignReview); trang tự ẩn
 // các nút đó cho support_team, không phải việc của nav.
 const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee"];
+// Chỉ quản trị viên (canSendBulkEmail) — core_team/support_team không thấy.
+const MENTOR_CONFIRMATION_ROUTES = ["/interviews/thu-xac-nhan-mentor"];
 
 // S12 helper boundary: the browse routes in the base set are now gated on the
 // SAME predicates their pages enforce (lib/read-access for the community and
@@ -453,8 +455,8 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
 };
 
 function sortedRoutes(arr: string[]) {

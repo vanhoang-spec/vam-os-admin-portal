@@ -1,0 +1,353 @@
+import { sessionDayLabel, sessionTimeLabel, vietnamDateKeyOf } from "@/lib/mentee-interview-core";
+import { formatTime } from "@/lib/utils";
+
+/**
+ * Thư xác nhận lịch phỏng vấn cho MENTOR tham gia chấm vòng phỏng vấn mentee
+ * (mẫu "MENTOR_MAIL XÁC NHẬN LỊCH PV" của BTC, 02/10/2026).
+ *
+ * Phần thuần, không I/O: đọc CSV của Google Sheet đăng ký, ghép buổi của từng
+ * mentor với ca phỏng vấn trong hệ thống (giờ, phòng, cơ sở, bản đồ), và dựng
+ * nội dung thư. Ai được gửi do lib/mentor-interview-confirmation.ts quyết định.
+ *
+ * Giờ và địa điểm đọc từ chính các ca (`interview_sessions`), không gõ lại vào
+ * đây: BTC đổi phòng trên màn hình ca thì thư gửi sau đó tự nói phòng mới. Hai
+ * nơi cùng giữ địa chỉ là hai cơ hội để một nơi nói sai.
+ */
+
+export const CONFIRMATION_SUBJECT = "UEH MENTORING | THƯ XÁC NHẬN ĐĂNG KÝ LỊCH PHỎNG VẤN MENTEE MÙA 12";
+export const ZALO_GROUP_URL = "https://zalo.me/g/vk1tvjxrvycq3rnk8k3s";
+export const HOTLINE_LINE = "Hotline: Mỹ Anh (0394983679), Hoàng Vy (0936359670)";
+/** Thư đi qua sổ thư với loại này — loại đã có trong outbound_emails_kind_check, không cần migration. */
+export const CONFIRMATION_EMAIL_KIND = "general_announcement" as const;
+/** Sheet lớn hơn thế này thì không phải sheet đăng ký — đừng đọc tiếp. */
+export const MAX_SHEET_BYTES = 2_000_000;
+
+export type SessionInput = { id: string; startsAtIso: string; endsAtIso: string; venue: string | null };
+
+export type InterviewBlock = {
+  /** "2026-10-03:sang" */
+  key: string;
+  dateKey: string;
+  period: "sang" | "chieu";
+  /** Đúng chữ trên tiêu đề cột của sheet: "Sáng 3/10", "Chiều 4/10". */
+  headerLabel: string;
+  /** "Thứ Bảy 03/10/2026 — buổi sáng" */
+  label: string;
+  /** "08:00 – 11:30" */
+  timeLabel: string;
+  rooms: string;
+  place: string;
+  mapUrl: string;
+  firstStartIso: string;
+  firstSessionId: string;
+};
+
+const PERIOD_WORD = { sang: "Sáng", chieu: "Chiều" } as const;
+const PERIOD_LABEL = { sang: "buổi sáng", chieu: "buổi chiều" } as const;
+
+/**
+ * Tách chuỗi địa điểm của ca — dạng BTC nhập trên màn hình ca:
+ * "Phòng H101, H104 — Cơ sở H, 1A Hoàng Diệu, ... . Bản đồ: https://..."
+ * Không đúng dạng thì giữ nguyên cả chuỗi ở ô cơ sở: thư nói thừa còn hơn nói thiếu.
+ */
+export function splitVenue(venue: string | null): { rooms: string; place: string; mapUrl: string } {
+  let rest = String(venue ?? "").replace(/\s+/g, " ").trim();
+  let mapUrl = "";
+  const map = /\s*\.?\s*Bản đồ:\s*(https?:\/\/\S+)\s*$/i.exec(rest);
+  if (map) {
+    mapUrl = map[1].replace(/[.,;]+$/, "");
+    rest = rest.slice(0, map.index).trim();
+  }
+  const dash = rest.indexOf(" — ");
+  if (dash > 0 && /^phòng\s/i.test(rest)) {
+    return { rooms: rest.slice(0, dash).replace(/^phòng\s+/i, "").trim(), place: rest.slice(dash + 3).trim(), mapUrl };
+  }
+  return { rooms: "", place: rest, mapUrl };
+}
+
+function periodOf(iso: string): "sang" | "chieu" {
+  const hour = Number(formatTime(iso).slice(0, 2));
+  return hour < 12 ? "sang" : "chieu";
+}
+
+/**
+ * Gom các ca CHƯA KẾT THÚC thành từng buổi (ngày × sáng/chiều). Ca đã qua tự rơi
+ * khỏi danh sách: thư gửi lúc đợt 2 mở sẽ không nhắc lại buổi của đợt 1.
+ */
+export function buildInterviewBlocks(sessions: readonly SessionInput[], nowIso: string): InterviewBlock[] {
+  const groups = new Map<string, SessionInput[]>();
+  for (const s of sessions) {
+    if (!s.startsAtIso || !s.endsAtIso || s.endsAtIso <= nowIso) continue;
+    const dateKey = vietnamDateKeyOf(s.startsAtIso);
+    if (!dateKey) continue;
+    const key = `${dateKey}:${periodOf(s.startsAtIso)}`;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  // Xếp theo giờ bắt đầu, KHÔNG theo khoá: "…:chieu" < "…:sang" theo bảng chữ cái,
+  // và thư sẽ kể buổi chiều trước buổi sáng của cùng một ngày.
+  const earliest = (list: SessionInput[]) => list.map((s) => s.startsAtIso).sort()[0];
+  return Array.from(groups.entries())
+    .sort((a, b) => earliest(a[1]).localeCompare(earliest(b[1])))
+    .map(([key, list]) => {
+      const sorted = [...list].sort((a, b) => a.startsAtIso.localeCompare(b.startsAtIso));
+      const first = sorted[0];
+      const lastEnd = sorted.map((s) => s.endsAtIso).sort().at(-1) ?? first.endsAtIso;
+      const [dateKey, period] = key.split(":") as [string, "sang" | "chieu"];
+      const [, month, day] = dateKey.split("-");
+      const venues = Array.from(new Set(sorted.map((s) => String(s.venue ?? "").trim()).filter(Boolean)));
+      const parts = venues.map(splitVenue);
+      return {
+        key,
+        dateKey,
+        period,
+        headerLabel: `${PERIOD_WORD[period]} ${Number(day)}/${Number(month)}`,
+        label: `${sessionDayLabel(first.startsAtIso)} — ${PERIOD_LABEL[period]}`,
+        timeLabel: sessionTimeLabel(first.startsAtIso, lastEnd),
+        rooms: Array.from(new Set(parts.map((p) => p.rooms).filter(Boolean))).join("; "),
+        place: Array.from(new Set(parts.map((p) => p.place).filter(Boolean))).join("; "),
+        mapUrl: parts.map((p) => p.mapUrl).find(Boolean) ?? "",
+        firstStartIso: first.startsAtIso,
+        firstSessionId: first.id
+      };
+    });
+}
+
+/**
+ * Link sheet BTC dán → địa chỉ xuất CSV. Chỉ nhận đúng dạng link Google Sheets và
+ * TỰ dựng địa chỉ đọc: server không bao giờ gọi một địa chỉ do người dùng gõ.
+ */
+export function sheetCsvUrl(link: unknown): string | null {
+  const text = String(link ?? "").trim();
+  const match = /^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,100})(?:[/?#][^\s]*)?$/.exec(text);
+  if (!match) return null;
+  const gid = /[?#&]gid=(\d{1,12})(?!\d)/.exec(text)?.[1] ?? "0";
+  return `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?tqx=out:csv&gid=${gid}`;
+}
+
+/** CSV theo RFC 4180 — ô có xuống dòng và dấu nháy kép (tiêu đề cột của sheet có cả hai). */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") { row.push(cell); cell = ""; }
+    else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (ch !== "\r") cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+const norm = (value: string) => value.replace(/\s+/g, " ").trim();
+
+export type SignupRow = {
+  name: string;
+  email: string;
+  phone: string;
+  note: string;
+  blockKeys: string[];
+};
+
+export type SheetParse =
+  | { ok: true; rows: SignupRow[]; duplicates: string[] }
+  | { ok: false; message: string };
+
+/**
+ * Đọc sheet đăng ký theo TIÊU ĐỀ cột, không theo vị trí: BTC chèn thêm cột thì
+ * vẫn đọc đúng. Thiếu cột của một buổi đang có ca thì từ chối cả sheet — đọc
+ * nhầm cột là gửi nhầm lịch cho người thật.
+ */
+export function parseSignupSheet(csv: string, blocks: readonly InterviewBlock[]): SheetParse {
+  const table = parseCsv(csv);
+  const headerIndex = table.findIndex(
+    (r) => r.some((c) => /họ và tên/i.test(c)) && r.some((c) => /^email/i.test(norm(c)))
+  );
+  if (headerIndex < 0) return { ok: false, message: "Không tìm thấy hàng tiêu đề (cần cột \"Họ và tên\" và \"Email\")." };
+  const header = table[headerIndex].map(norm);
+  const find = (test: (h: string) => boolean) => header.findIndex(test);
+  const nameCol = find((h) => /họ và tên/i.test(h));
+  const emailCol = find((h) => /^email/i.test(h));
+  const phoneCol = find((h) => /số điện thoại/i.test(h));
+  const noteCol = find((h) => /^note/i.test(h) || /\snote\b/i.test(h));
+  const blockCols = blocks.map((b) => ({
+    key: b.key,
+    col: find((h) => h === b.headerLabel || h.endsWith(` ${b.headerLabel}`))
+  }));
+  const missing = blocks.filter((_, i) => blockCols[i].col < 0).map((b) => b.headerLabel);
+  if (missing.length) return { ok: false, message: `Sheet không có cột cho buổi: ${missing.join(", ")}.` };
+
+  const byEmail = new Map<string, SignupRow>();
+  const duplicates: string[] = [];
+  for (const r of table.slice(headerIndex + 1)) {
+    const email = norm(r[emailCol] ?? "").toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+    const blockKeys = blockCols.filter(({ col }) => norm(r[col] ?? "").toUpperCase() === "TRUE").map(({ key }) => key);
+    const row: SignupRow = {
+      name: norm(r[nameCol] ?? ""),
+      email,
+      phone: phoneCol >= 0 ? norm(r[phoneCol] ?? "") : "",
+      note: noteCol >= 0 ? norm(r[noteCol] ?? "") : "",
+      blockKeys
+    };
+    const prev = byEmail.get(email);
+    if (prev) {
+      // Một người điền hai dòng: gộp buổi, không gửi hai thư.
+      duplicates.push(email);
+      prev.blockKeys = Array.from(new Set([...prev.blockKeys, ...blockKeys]));
+      if (!prev.note && row.note) prev.note = row.note;
+    } else {
+      byEmail.set(email, row);
+    }
+  }
+  return { ok: true, rows: Array.from(byEmail.values()), duplicates };
+}
+
+/** Chín số cuối — sheet ghi "093 9067841", "915767858", "0938...": cùng một số. */
+export function phoneKey(value: string | null | undefined): string {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.length >= 9 ? digits.slice(-9) : "";
+}
+
+const COMBINING = new RegExp(`[${String.fromCharCode(0x300)}-${String.fromCharCode(0x36f)}]`, "g");
+/** "Nguyễn Viết Tuấn" → "nguyen viet tuan" — so tên mà không vấp dấu. */
+export function nameKey(value: string | null | undefined): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(COMBINING, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export type Participant = { email: string; fullName: string; phone: string };
+
+export type RecipientStatus = "ready" | "already_sent" | "no_access" | "no_blocks";
+
+export type PlannedRecipient = SignupRow & {
+  status: RecipientStatus;
+  /** Email tài khoản chấm — cũng là nơi nhận thư. */
+  loginEmail: string | null;
+  matchedBy: "email" | "phone_and_name" | null;
+};
+
+/**
+ * Ai được nhận thư, gửi tới đâu.
+ *
+ * Chỉ người ĐÃ có quyền phỏng vấn mùa này mới nhận: thư nói "đây là tài khoản
+ * của anh/chị", nên gửi cho người chưa vào được màn hình chấm là gửi một câu sai.
+ *
+ * Email trên sheet khớp thẳng tài khoản là cách chính. Không khớp thì thử số điện
+ * thoại — nhưng chỉ nhận khi số trùng ĐÚNG MỘT tài khoản VÀ tên cũng trùng: một
+ * số gõ nhầm không được trao lịch của người này cho hộp thư người khác.
+ */
+export function planRecipients(
+  rows: readonly SignupRow[],
+  participants: readonly Participant[],
+  alreadySent: ReadonlySet<string>
+): PlannedRecipient[] {
+  const byEmail = new Map(participants.map((p) => [p.email.trim().toLowerCase(), p]));
+  return rows.map((row) => {
+    let loginEmail: string | null = byEmail.has(row.email) ? row.email : null;
+    let matchedBy: PlannedRecipient["matchedBy"] = loginEmail ? "email" : null;
+    if (!loginEmail) {
+      const key = phoneKey(row.phone);
+      const samePhone = key ? participants.filter((p) => phoneKey(p.phone) === key) : [];
+      if (samePhone.length === 1 && nameKey(samePhone[0].fullName) === nameKey(row.name) && nameKey(row.name)) {
+        loginEmail = samePhone[0].email.trim().toLowerCase();
+        matchedBy = "phone_and_name";
+      }
+    }
+    const status: RecipientStatus = row.blockKeys.length === 0
+      ? "no_blocks"
+      : !loginEmail
+        ? "no_access"
+        : alreadySent.has(loginEmail)
+          ? "already_sent"
+          : "ready";
+    return { ...row, status, loginEmail, matchedBy };
+  });
+}
+
+/** Mốc của đợt: ca sớm nhất còn chưa kết thúc. Thư của đợt nào ghi sổ theo mốc đợt đó. */
+export function roundAnchor(blocks: readonly InterviewBlock[]): { sessionId: string; startsAtIso: string } | null {
+  const first = [...blocks].sort((a, b) => a.firstStartIso.localeCompare(b.firstStartIso))[0];
+  return first ? { sessionId: first.firstSessionId, startsAtIso: first.firstStartIso } : null;
+}
+
+export type ConfirmationInput = {
+  name: string;
+  loginEmail: string;
+  matchedBy: PlannedRecipient["matchedBy"];
+  note: string;
+  blocks: readonly InterviewBlock[];
+  origin: string;
+};
+
+/**
+ * Nội dung thư — giữ đúng 5 mục và lời văn của mẫu BTC. Văn bản thuần: sổ thư
+ * dựng HTML từ đây (textToHtmlEmail tự thoát ký tự và tự gắn link), nên tên hay
+ * ghi chú người đăng ký tự gõ không chèn được thẻ nào vào thư.
+ */
+export function renderConfirmation(input: ConfirmationInput): { subject: string; body: string } {
+  const origin = input.origin.replace(/\/+$/, "");
+  const name = input.name || input.loginEmail;
+  const time = input.blocks.map((b) => `- ${b.label}: ${b.timeLabel}`);
+  const places = input.blocks.map((b) =>
+    [
+      b.label,
+      b.rooms ? `- Phòng: ${b.rooms}` : null,
+      `- Cơ sở: ${b.place || "BTC sẽ thông báo trong Group Zalo"}`,
+      b.mapUrl ? `- Link maps: ${b.mapUrl}` : null
+    ].filter(Boolean).join("\n")
+  );
+  const lines = [
+    `Kính gửi Anh/Chị Mentor ${name},`,
+    "BTC UEH Mentoring Mùa 12 xin xác nhận lịch tham gia Vòng phỏng vấn Tuyển Mentee của Anh/Chị như sau:",
+    [
+      "1. Thời gian",
+      ...time,
+      "- Anh/Chị vui lòng có mặt trước 15 phút để check-in và chuẩn bị trước khi bắt đầu phỏng vấn.",
+      input.note ? `- Ghi chú Anh/Chị đã đăng ký: ${input.note}` : null
+    ].filter(Boolean).join("\n"),
+    "2. Địa điểm",
+    ...places,
+    "Phòng và bàn phỏng vấn cụ thể BTC sẽ xếp khi Anh/Chị check-in.",
+    [
+      "3. Tài khoản chấm & Hướng dẫn đăng nhập",
+      `- Tài khoản: ${input.loginEmail}`,
+      `- Hướng dẫn đăng nhập: vào ${origin}/login và đăng nhập bằng email trên. Chưa có hoặc quên mật khẩu thì bấm "Đặt lại mật khẩu" ngay trên trang đăng nhập — link đặt mật khẩu gửi về đúng email này. Đăng nhập xong, vào menu Phỏng vấn → Phỏng vấn mentee trực tiếp.`,
+      input.matchedBy === "phone_and_name"
+        ? "- Lưu ý: tài khoản dùng email Anh/Chị đã nộp đơn mentor trên VAM OS, khác email điền trong form đăng ký phỏng vấn."
+        : null
+    ].filter(Boolean).join("\n"),
+    [
+      "4. Bảng tiêu chí & Hướng dẫn chấm",
+      "- Bảng tiêu chí chấm: hiện ngay trên màn hình chấm của từng mentee sau khi đăng nhập.",
+      `- Hướng dẫn chấm: ${origin}/interviews/mentee-offline/huong-dan (bấm nút "Hướng dẫn phỏng vấn mùa này" ở đầu màn hình phỏng vấn).`
+    ].join("\n"),
+    [
+      "5. Group Zalo hỗ trợ",
+      "Anh/Chị vui lòng tham gia Group Zalo Mentor - Vòng phỏng vấn để nhận các thông tin cập nhật và được BTC hỗ trợ trong suốt quá trình phỏng vấn:",
+      ZALO_GROUP_URL
+    ].join("\n"),
+    "Anh/Chị vui lòng dành ít phút xem trước tài khoản, tiêu chí và hướng dẫn chấm để quá trình phỏng vấn diễn ra thuận lợi nhất.",
+    "BTC rất mong được gặp Anh/Chị tại Vòng phỏng vấn.\nCảm ơn Anh/Chị đã đồng hành cùng UEH Mentoring Mùa 12!",
+    `Trân trọng,\nBTC UEH Mentoring Mùa 12\n${HOTLINE_LINE}`
+  ];
+  return { subject: CONFIRMATION_SUBJECT, body: lines.join("\n\n") };
+}
+
+export const RECIPIENT_STATUS_LABELS: Record<RecipientStatus, string> = {
+  ready: "Sẵn sàng gửi",
+  already_sent: "Đã gửi thư đợt này",
+  no_access: "Chưa có quyền phỏng vấn — cấp quyền trước rồi đọc lại",
+  no_blocks: "Không đăng ký buổi nào của đợt này"
+};
