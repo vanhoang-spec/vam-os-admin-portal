@@ -61,9 +61,24 @@ export async function getInterviewGuide(): Promise<{ok: true; data: InterviewGui
 export async function saveOfflineInterview(input: {applicationId: string; action: string; revision: number; values: Record<string, unknown>}): Promise<OfflineActionResult> {
   try {
     const {actor,client} = await context();
-    const {data,error} = await client.rpc("vam104_save_offline_interview",{
-      p_actor:actor.id,p_application:input.applicationId,p_action:input.action,p_revision:input.revision,p_values:input.values
+    const call = (revision: number) => client.rpc("vam104_save_offline_interview",{
+      p_actor:actor.id,p_application:input.applicationId,p_action:input.action,p_revision:revision,p_values:input.values
     });
+    let {data,error} = await call(input.revision);
+    // Lưu KẾT QUẢ bị STALE_REVISION (sự cố 03/10/2026): mentor chấm 15–20 phút, trong
+    // lúc đó Support đổi phòng/bàn/online của chính hồ sơ này → phiên bản tăng, phiếu
+    // bị từ chối, mentor tải lại và mất hết. Gửi lại MỘT lần với phiên bản mới nhất,
+    // chỉ khi vẫn an toàn: hồ sơ còn phân cho đúng mentor này, đã check-in và CHƯA có
+    // kết quả — tức không có kết quả nào của ai bị đè. Database vẫn tự kiểm mọi luật.
+    if (error && input.action === "result" && String(error.message).includes("STALE_REVISION")) {
+      const {data:fresh} = await client.from("mentee_interview_operations")
+        .select("revision,interviewer_id,outcome,checked_in_at").eq("id",input.applicationId).maybeSingle();
+      if (fresh && fresh.interviewer_id===actor.id && fresh.checked_in_at && fresh.outcome==null) {
+        ({data,error} = await call(Number(fresh.revision)));
+      } else if (fresh && fresh.interviewer_id===actor.id && fresh.outcome!=null) {
+        return {ok:false,message:"Kết quả của bạn cho mentee này đã được lưu trước đó. Tải lại trang để xem — muốn sửa thì bấm “Sửa kết quả”."};
+      }
+    }
     if (error) {
       if (error.code==="23505") return {ok:false,message:"Bàn/người phỏng vấn đã được phân trong ca, hoặc mentee đã có mentor. Tải lại để kiểm tra."};
       throw new Error(error.message);

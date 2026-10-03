@@ -145,16 +145,20 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
   const takesElsewhere=data.candidates.filter(x=>x.id!==c.id && x.operation?.interviewer_id===data.actorId &&
     x.reviews.some(r=>r.id===x.operation?.review_id && r.status==="submitted" && r.take_choice==="take")).length;
   const takeLimitReached=takesElsewhere>=MAX_TAKES_PER_INTERVIEWER;
-  // Trả true khi máy chủ đã lưu — form chấm dùng để biết lúc nào được xoá bản nháp.
-  async function save(action:string,values:Record<string,unknown>):Promise<boolean> {
-    if(busy) return false;
+  // Trả kết quả cho form chấm: ok → xoá bản nháp; lỗi → hiện NGAY cạnh nút gửi (đầu
+  // hồ sơ cách nút gửi cả màn hình — sự cố 03/10: mentor không thấy lỗi, tải lại, mất phiếu).
+  async function save(action:string,values:Record<string,unknown>):Promise<OfflineActionResult> {
+    if(busy) return {ok:false,message:"Đang lưu, chờ một chút."};
     setBusy(true);
     try {
       const result=await saveOfflineInterviewAction({applicationId:c.id,action,revision:op?.revision??0,values});
       setState(result);
       if(result.ok) router.refresh();
-      return result.ok;
-    } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra kết quả trước khi thử lại."});return false;}
+      return result;
+    } catch {
+      const failed={ok:false,message:"Mất kết nối. Phiếu vẫn còn trong bản nháp — kiểm tra mạng rồi bấm gửi lại."};
+      setState(failed);return failed;
+    }
     finally {setBusy(false);}
   }
   async function moveBooking(sessionId:string,reason:string) {

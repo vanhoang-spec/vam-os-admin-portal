@@ -4,7 +4,7 @@
  * giữa chừng thì không phải nhập lại từ đầu.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { OfflineDashboardClient } from "@/app/interviews/mentee-offline/workflow";
 import { type OfflineDashboard } from "@/lib/mentee-offline-core";
 import { TAKE_CHOICES, type InterviewRubric } from "@/lib/mentee-interview-rubric-core";
@@ -132,11 +132,15 @@ describe("form chấm tự lưu và khôi phục nháp", () => {
     await waitFor(() => expect(mocks.save).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText("Lỗi")).toBeTruthy());
     expect(stored().fields["rationale"]).toBe("Có động lực");
+    // Lỗi phải hiện NGAY cạnh nút gửi — đầu hồ sơ cách nút gửi cả màn hình (sự cố 03/10).
+    const form = screen.getByRole("button", { name: "Xác nhận kết quả" }).closest("form")!;
+    expect(within(form).getByRole("alert").textContent).toContain("Chưa lưu được: Lỗi");
+    expect(within(form).getByRole("alert").textContent).toContain("không cần nhập lại");
 
     mocks.save.mockRejectedValueOnce(new Error("offline"));
     fireEvent.click(screen.getByRole("button", { name: "Xác nhận kết quả" }));
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByText(/Mất kết nối/)).toBeTruthy());
+    await waitFor(() => expect(within(form).getByRole("alert").textContent).toContain("Mất kết nối"));
     expect(window.localStorage.getItem(KEY)).not.toBeNull();
   });
 
