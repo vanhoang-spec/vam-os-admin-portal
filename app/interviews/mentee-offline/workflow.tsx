@@ -8,6 +8,7 @@ import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
 import { InterviewResultForm, InterviewResultSummary } from "./rubric-form";
+import { draftKey } from "@/lib/interview-draft-core";
 import { MoveBookingForm } from "./move-booking-form";
 import { MAX_TAKES_PER_INTERVIEWER } from "@/lib/mentee-interview-rubric-core";
 
@@ -34,7 +35,17 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
   const router=useRouter();
   const [session,setSession]=useState("");
   const [query,setQuery]=useState("");
-  const [selected,setSelected]=useState<string | null>(initialApplication??null);
+  const [selected,setSelectedState]=useState<string | null>(initialApplication??null);
+  // Hồ sơ đang mở nằm trên đường dẫn (?application=): điện thoại chuyển app rồi tải
+  // lại trang thì mở lại ĐÚNG hồ sơ đó — cùng bản nháp phiếu đang chấm (BTC 03/10).
+  const setSelected=useCallback((id:string|null)=>{
+    setSelectedState(id);
+    try {
+      const url=new URL(window.location.href);
+      if(id) url.searchParams.set("application",id); else url.searchParams.delete("application");
+      window.history.replaceState(window.history.state,"",url.toString());
+    } catch {/* không đổi được đường dẫn thì thôi — chọn hồ sơ vẫn chạy */}
+  },[]);
   const [message,setMessage]=useState("");
   const [mine,setMine]=useState(false);
   const chooseCode=useCallback(async (code:string)=>{
@@ -52,7 +63,7 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
         if (checkin.ok) router.refresh();
       } catch {setMessage(`Đã tìm thấy vé ${found.name} nhưng check-in tự động thất bại — bấm "Xác nhận check-in" thủ công bên dưới.`);}
     } catch {setMessage("Không tra được vé, kiểm tra kết nối rồi thử lại.");}
-  },[data.candidates,router]);
+  },[data.candidates,router,setSelected]);
   const visible=data.candidates.filter(c=>(!session || c.sessionId===session) && (!mine || c.operation?.interviewer_id===data.actorId) &&
     (!query || c.name.toLocaleLowerCase("vi").includes(query.toLocaleLowerCase("vi")) ||
       (normalizedPhone(query).length>=3 && normalizedPhone(c.phone??"").includes(normalizedPhone(query)))));
@@ -134,14 +145,16 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
   const takesElsewhere=data.candidates.filter(x=>x.id!==c.id && x.operation?.interviewer_id===data.actorId &&
     x.reviews.some(r=>r.id===x.operation?.review_id && r.status==="submitted" && r.take_choice==="take")).length;
   const takeLimitReached=takesElsewhere>=MAX_TAKES_PER_INTERVIEWER;
-  async function save(action:string,values:Record<string,unknown>) {
-    if(busy) return;
+  // Trả true khi máy chủ đã lưu — form chấm dùng để biết lúc nào được xoá bản nháp.
+  async function save(action:string,values:Record<string,unknown>):Promise<boolean> {
+    if(busy) return false;
     setBusy(true);
     try {
       const result=await saveOfflineInterviewAction({applicationId:c.id,action,revision:op?.revision??0,values});
       setState(result);
       if(result.ok) router.refresh();
-    } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra kết quả trước khi thử lại."});}
+      return result.ok;
+    } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra kết quả trước khi thử lại."});return false;}
     finally {setBusy(false);}
   }
   async function moveBooking(sessionId:string,reason:string) {
@@ -204,7 +217,8 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
     {own && editing && (data.rubric
       ? <InterviewResultForm rubric={data.rubric} review={review} operation={op} candidateName={c.name}
           mentorLabel={`${me?.full_name??"tài khoản hiện tại"}${me?.capacity!=null ? ` · ${me.activeMatches}/${me.capacity}` : " · chưa có hồ sơ mentor hợp lệ"}`}
-          full={full} takeLimitReached={takeLimitReached} busy={busy} onSubmit={values=>void save("result",values)} />
+          full={full} takeLimitReached={takeLimitReached} busy={busy}
+          draftKey={data.actorId ? draftKey(data.actorId,c.id) : null} onSubmit={values=>save("result",values)} />
       : <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">Mùa này chưa có phiếu chấm phỏng vấn. Nhờ BTC cài phiếu ở mục &quot;Phiếu chấm &amp; hướng dẫn mentee&quot; rồi tải lại trang.</p>)}
   </section>;
 }

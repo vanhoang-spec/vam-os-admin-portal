@@ -1,5 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  DRAFT_PREFIX,
+  draftExpired,
+  draftHasContent,
+  parseDraft,
+  type InterviewDraft
+} from "@/lib/interview-draft-core";
+import { formatDateTime } from "@/lib/utils";
 import {
   DESCRIPTOR_LEVELS,
   EXPECTATION_ALIGNMENTS,
@@ -33,8 +41,41 @@ export type ResultFormProps = {
   /** Mentor đã chọn "Có – Tôi muốn nhận" cho đủ MAX_TAKES_PER_INTERVIEWER hồ sơ KHÁC trong mùa. */
   takeLimitReached: boolean;
   busy: boolean;
-  onSubmit: (values: Record<string, unknown>) => void;
+  /** Khoá localStorage của nháp (draftKey(mentor, hồ sơ)); null = không lưu nháp. */
+  draftKey?: string | null;
+  /** Trả true khi máy chủ đã lưu — chỉ khi đó nháp mới bị xoá. */
+  onSubmit: (values: Record<string, unknown>) => Promise<boolean> | void;
 };
+
+const DRAFT_DEBOUNCE_MS = 400;
+
+function storage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Giá trị mọi ô select/textarea có tên (radio mục C giữ bằng state, không lấy ở đây). */
+function collectFields(form: HTMLFormElement): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const el of Array.from(form.elements)) {
+    if ((el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) && el.name) fields[el.name] = el.value;
+  }
+  return fields;
+}
+
+function applyFields(form: HTMLFormElement, fields: Record<string, string>) {
+  for (const el of Array.from(form.elements)) {
+    if (!(el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) || !el.name) continue;
+    if (!(el.name in fields)) continue;
+    const value = fields[el.name];
+    // Ô chọn chỉ nhận giá trị còn có trong danh sách — phiếu có thể đã bớt lựa chọn.
+    if (el instanceof HTMLSelectElement && !Array.from(el.options).some((o) => o.value === value)) continue;
+    el.value = value;
+  }
+}
 
 /**
  * Form chấm phỏng vấn vẽ từ phiếu của mùa — tiêu chí, trọng số, câu hỏi và mô tả
@@ -43,18 +84,122 @@ export type ResultFormProps = {
  * KHÔNG hiện tổng điểm: phiếu ghi rõ không cộng tổng và không có điểm sàn. Điểm
  * quy đổi chỉ BTC thấy, ở thẻ kết quả sau khi lưu.
  */
-export function InterviewResultForm({ rubric, review, operation: op, candidateName, mentorLabel, full, takeLimitReached, busy, onSubmit }: ResultFormProps) {
-  const [outcome, setOutcome] = useState<OfflineOutcome>(op?.outcome ?? "passed");
-  const [takeChoice, setTakeChoice] = useState<TakeChoice | "">(review?.take_choice ?? "");
+export function InterviewResultForm({ rubric, review, operation: op, candidateName, mentorLabel, full, takeLimitReached, busy, draftKey = null, onSubmit }: ResultFormProps) {
+  const initialOutcome: OfflineOutcome = op?.outcome ?? "passed";
+  const initialTake: TakeChoice | "" = review?.take_choice ?? "";
+  const [outcome, setOutcome] = useState<OfflineOutcome>(initialOutcome);
+  const [takeChoice, setTakeChoice] = useState<TakeChoice | "">(initialTake);
   const [error, setError] = useState("");
+  const [restoredAt, setRestoredAt] = useState<number | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const previous = new Map((review?.interview_scores ?? []).map((s) => [s.key, s]));
   // "Không chọn làm mentee" khoá cả mục C (BTC 02/10): không còn câu hỏi ai nhận bạn này.
   const rejected = outcome === "rejected";
   const takeLocked = outcome !== "passed" || full || takeLimitReached;
 
+  // ── Bản nháp (BTC 03/10/2026) ────────────────────────────────────────────────
+  // Lưu khi gõ (trễ DRAFT_DEBOUNCE_MS) và lưu NGAY khi trang bị ẩn — điện thoại
+  // chuyển app là lúc trang có thể bị huỷ. Chỉ ghi sau khi người dùng thật sự sửa
+  // (dirty), để lần mở form đầu tiên không đè lên nháp cũ.
+  const formRef = useRef<HTMLFormElement>(null);
+  const dirty = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef({ outcome, takeChoice });
+  latest.current = { outcome, takeChoice };
+
+  const persist = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const store = storage();
+    if (!draftKey || !dirty.current || !formRef.current || !store) return;
+    const draft: InterviewDraft = {
+      savedAt: Date.now(),
+      rubricVersion: rubric.version,
+      outcome: latest.current.outcome,
+      takeChoice: latest.current.takeChoice,
+      fields: collectFields(formRef.current)
+    };
+    try {
+      if (draftHasContent(draft)) {
+        store.setItem(draftKey, JSON.stringify(draft));
+        setSavedAt(draft.savedAt);
+      }
+    } catch {
+      // Hết chỗ / trình duyệt chặn: form vẫn dùng được, chỉ không có nháp.
+    }
+  }, [draftKey, rubric.version]);
+
+  const schedule = useCallback(() => {
+    dirty.current = true;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(persist, DRAFT_DEBOUNCE_MS);
+  }, [persist]);
+
+  const discardDraft = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    dirty.current = false;
+    try {
+      if (draftKey) storage()?.removeItem(draftKey);
+    } catch {
+      // bỏ qua
+    }
+    setSavedAt(null);
+  }, [draftKey]);
+
+  // Khôi phục một lần khi mở form; dọn luôn mọi nháp quá hạn trên máy này.
+  useEffect(() => {
+    const store = storage();
+    if (!draftKey || !store || !formRef.current) return;
+    const now = Date.now();
+    try {
+      for (let i = store.length - 1; i >= 0; i -= 1) {
+        const key = store.key(i);
+        if (key?.startsWith(DRAFT_PREFIX) && key !== draftKey && draftExpired(store.getItem(key), now)) store.removeItem(key);
+      }
+      const raw = store.getItem(draftKey);
+      const updatedAt = (op as { updated_at?: string | null } | null)?.updated_at;
+      const draft = parseDraft(raw, {
+        rubricVersion: rubric.version,
+        nowMs: now,
+        savedResultAtMs: op?.outcome && updatedAt ? Date.parse(updatedAt) : null
+      });
+      if (!draft) {
+        if (raw) store.removeItem(draftKey);
+        return;
+      }
+      applyFields(formRef.current, draft.fields);
+      if (draft.outcome in OFFLINE_OUTCOMES) setOutcome(draft.outcome as OfflineOutcome);
+      if (draft.takeChoice === "" || draft.takeChoice in TAKE_CHOICES) setTakeChoice(draft.takeChoice as TakeChoice | "");
+      setRestoredAt(draft.savedAt);
+    } catch {
+      // localStorage hỏng/bị chặn: mở form trống như cũ.
+    }
+    // Chỉ chạy lúc mở form — chạy lại sẽ đè lên những gì người dùng vừa gõ.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const flush = () => persist();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") persist();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+      // Đóng hồ sơ / form bị gỡ khi còn chờ lưu: lưu nốt, đừng để mất mấy chữ cuối.
+      if (timer.current) persist();
+    };
+  }, [persist]);
+
   return (
     <form
+      ref={formRef}
       className="grid gap-4 rounded-lg border p-3"
+      onInput={schedule}
+      onChange={schedule}
       onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
@@ -72,7 +217,9 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
           `Xác nhận ${OFFLINE_OUTCOMES[outcome]} cho ${candidateName}${willTake ? " và nhận làm mentee của bạn" : ""}?` +
           `${op?.match_id && !willTake ? " Cặp hiện tại sẽ được hủy và hoàn lại chỗ." : ""}`
         )) return;
-        onSubmit({
+        // Lưu nháp lần cuối trước khi gửi: gửi hỏng (mất mạng) thì vẫn còn nguyên.
+        persist();
+        const sent = onSubmit({
           outcome,
           rubricId: rubric.id,
           rubricVersion: rubric.version,
@@ -86,8 +233,32 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
           additionalNote: String(f.get("additionalNote") ?? ""),
           reason: String(f.get("reason") ?? "")
         });
+        // Chỉ xoá nháp khi máy chủ đã lưu thật — lỗi mạng/lỗi kiểm tra thì giữ.
+        if (sent && typeof sent.then === "function") {
+          void sent.then((ok) => {
+            if (ok) discardDraft();
+          });
+        }
       }}
     >
+      {restoredAt ? (
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded border border-sky-300 bg-sky-50 p-2 text-sm text-sky-900">
+          <span>Đã khôi phục bản nháp lưu lúc {formatDateTime(new Date(restoredAt).toISOString())}. Kiểm tra lại rồi bấm &quot;Xác nhận kết quả&quot;.</span>
+          <button
+            type="button"
+            className="rounded border border-sky-400 px-2 py-1"
+            onClick={() => {
+              discardDraft();
+              formRef.current?.reset();
+              setOutcome(initialOutcome);
+              setTakeChoice(initialTake);
+              setRestoredAt(null);
+            }}
+          >
+            Bỏ bản nháp
+          </button>
+        </div>
+      ) : null}
       <div className="grid gap-1">
         <h3 className="font-semibold">Chấm phỏng vấn · {rubric.criteria.length} tiêu chí · phiếu {rubric.seasonCode} (phiên bản {rubric.version})</h3>
         {rubric.guidance.motto ? <p className="text-sm text-vam-ink">Kim chỉ nam: {rubric.guidance.motto}</p> : null}
@@ -225,6 +396,13 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
       {rubric.guidance.reminder ? <p className="rounded bg-amber-50 p-2 text-sm text-amber-900">Nhắc Mentor: {rubric.guidance.reminder}</p> : null}
       {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
       <p className="text-sm text-slate-600">Lưu sẽ chốt kết quả ngay. Mọi lần sửa đều có lịch sử cho BTC; chưa gửi email kết quả.</p>
+      {draftKey ? (
+        <p className="text-xs text-slate-500" data-testid="draft-status">
+          {savedAt
+            ? `Đã lưu nháp trên máy này lúc ${formatDateTime(new Date(savedAt).toISOString())} — chuyển tab/app vẫn không mất.`
+            : "Phiếu đang chấm tự lưu nháp trên máy này — chuyển tab/app vẫn không mất."}
+        </p>
+      ) : null}
       <button className={button} disabled={busy}>{busy ? "Đang lưu…" : "Xác nhận kết quả"}</button>
     </form>
   );

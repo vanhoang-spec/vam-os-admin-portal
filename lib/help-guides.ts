@@ -25,9 +25,10 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     notes: [
       "Kết quả “Không chọn làm mentee” khoá cả mục C. Mỗi mentor chọn “Có – Tôi muốn nhận bạn này” cho tối đa 2 hồ sơ trong mùa.",
       "Màn hình mentor không hiện tổng điểm — phiếu không cộng tổng, không có điểm sàn. Điểm quy đổi tham khảo chỉ BTC thấy.",
-      "Nút “Hướng dẫn phỏng vấn mùa này” đầu trang mở Handbook và toàn bộ phiếu chấm của mùa."
+      "Nút “Hướng dẫn phỏng vấn mùa này” đầu trang mở Handbook và toàn bộ phiếu chấm của mùa.",
+      "Phiếu đang chấm tự lưu nháp trên máy (điện thoại/laptop) của mentor: lỡ chuyển tab, chuyển app hay tải lại trang thì mở lại hồ sơ là thấy “Đã khôi phục bản nháp”. Nháp chỉ là bản tạm — phải bấm “Xác nhận kết quả” mới lưu; lưu thành công thì nháp tự xoá, nháp quá 24 giờ cũng tự xoá."
     ],
-    updated: "02/10/2026"
+    updated: "03/10/2026"
   },
   "/interviews/mentee-offline/huong-dan": {
     title: "Hướng dẫn phỏng vấn mùa này",
