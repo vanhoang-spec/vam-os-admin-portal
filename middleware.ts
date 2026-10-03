@@ -170,7 +170,13 @@ async function resolveSession(request: NextRequest): Promise<SessionState> {
   if (!verdict.conclusive) return { kind: "none" };
   const kind = verdict.allowed ? "admin" : "signed_in";
 
-  const response = NextResponse.next();
+  // Mã mới phải tới CẢ request đang chạy, không chỉ trình duyệt (sự cố 03/10/2026):
+  // trước đây chỉ gắn vào phản hồi, nên trang / server action đang xử lý vẫn đọc mã
+  // cũ đã hết hạn và coi người dùng là chưa đăng nhập. Mentor mở trang chấm quá 1 giờ
+  // bấm "Xác nhận kết quả" → hỏng lần đầu; tải lại (mã mới đã về trình duyệt) → được.
+  request.cookies.set(AUTH_ACCESS_COOKIE, refreshed.access_token);
+  if (refreshed.refresh_token) request.cookies.set(AUTH_REFRESH_COOKIE, refreshed.refresh_token);
+  const response = NextResponse.next({ request: { headers: request.headers } });
   response.cookies.set(AUTH_ACCESS_COOKIE, refreshed.access_token, {
     httpOnly: true,
     sameSite: "lax",
@@ -289,7 +295,11 @@ export async function middleware(request: NextRequest) {
     // tự chọn khung của mình.
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-vam-participant-route", "1");
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    // Phiên vừa làm mới: giữ cookie mã mới cho trình duyệt — tạo phản hồi mới ở đây
+    // trước đây làm rơi chúng, nên mọi request sau lại phải làm mới từ đầu.
+    for (const cookie of session.response.cookies.getAll()) response.cookies.set(cookie);
+    return response;
   }
 
   return redirectToLogin(request);
