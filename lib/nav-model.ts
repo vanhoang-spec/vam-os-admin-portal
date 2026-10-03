@@ -182,6 +182,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // hứa một trang sẽ đá người bấm về trang chủ.
             { href: "/interviews/lich", label: "Lịch phỏng vấn" },
             { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" },
+            // Tiến độ phỏng vấn mentor cho BTC (03/10/2026) — cùng khán giả với tiến độ mentee.
+            ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/tien-do-mentor", label: "Tiến độ phỏng vấn mentor" }] : []),
             { href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" },
             // Tiến độ phỏng vấn mentee cho BTC (03/10/2026): cùng khán giả với trang ca
             // (canViewMenteeSessionStatus) — mentor phỏng vấn không xem kết quả của người khác.
@@ -208,6 +210,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             items: [
               ...(showApplicationOps ? [{ href: "/applications", label: "Ứng tuyển (Tất cả)" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" }] : []),
+              ...(role === "support_team" ? [{ href: "/interviews/tien-do-mentor", label: "Tiến độ phỏng vấn mentor" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }] : []),
               // support_team đi theo nhánh "Ứng tuyển" này, không phải nhánh

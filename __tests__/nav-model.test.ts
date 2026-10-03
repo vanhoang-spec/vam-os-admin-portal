@@ -414,7 +414,7 @@ const REVIEW_ROUTES = [
 // các nút đó cho support_team, không phải việc của nav.
 // Tiến độ phỏng vấn mentee (03/10/2026) đi cùng cổng: BTC xem kết quả mọi bạn,
 // mentor phỏng vấn (reviewer) thì không.
-const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee", "/interviews/tien-do-mentee"];
+const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee", "/interviews/tien-do-mentee", "/interviews/tien-do-mentor"];
 // Chỉ quản trị viên (canSendBulkEmail) — core_team/support_team không thấy.
 const MENTOR_CONFIRMATION_ROUTES = ["/interviews/thu-xac-nhan-mentor"];
 
