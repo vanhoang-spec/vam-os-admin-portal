@@ -42,6 +42,22 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     notes: ["Nội dung đọc từ phiếu chấm và Handbook hiện hành của mùa — BTC sửa ở “Phiếu chấm & hướng dẫn mentee”."],
     updated: "02/10/2026"
   },
+  "/interviews/tien-do-mentor": {
+    title: "Tiến độ phỏng vấn mentor",
+    summary: "BTC theo dõi vòng trao đổi 1:1 của mentor mới Mùa 12 với core team: lịch hẹn theo ngày, ai đã phỏng vấn xong và kết quả, ai đang phỏng vấn, ai qua giờ hẹn mà chưa có phiếu, ai chưa đặt lịch.",
+    steps: [
+      "Đọc các ô số đầu trang: đã xong, đang phỏng vấn, qua giờ chưa có phiếu, đã đặt lịch, chưa phỏng vấn; dòng “Kết quả đã có” tách theo trạng thái đơn.",
+      "Chọn “Ngày hẹn” để xem lịch hẹn của một ngày; nhóm “Không có lịch hẹn” gồm mentor được core team nhận phỏng vấn trực tiếp, mentor chưa đặt lịch, và mentor đã dừng.",
+      "Bấm nút trạng thái để lọc (vd. “Qua giờ, chưa có phiếu” để nhắc người phỏng vấn nộp phiếu; “Chưa phỏng vấn” để nhắc mentor đặt lịch); gõ tên/email/SĐT của mentor hoặc tên người phỏng vấn để tìm.",
+      "Bấm tên mentor để mở hồ sơ ứng tuyển."
+    ],
+    notes: [
+      "Không tính mentor gia hạn (không qua phỏng vấn). Cột “Ghi chú” cho biết số thư mời/nhắc đã nhận (tối đa 4), giờ nộp phiếu, số lần huỷ/đổi lịch.",
+      "“Đang phỏng vấn” = đang trong giờ hẹn 60 phút hoặc phiếu đang làm dở; quá giờ hẹn mà chưa có phiếu thì chuyển sang “Qua giờ, chưa có phiếu”.",
+      "Chỉ Core team / Support team có quyền vận hành mùa xem được."
+    ],
+    updated: "03/10/2026"
+  },
   "/interviews/tien-do-mentee": {
     title: "Tiến độ phỏng vấn mentee",
     summary: "BTC theo dõi buổi phỏng vấn mentee: danh sách đăng ký theo ngày, buổi sáng/chiều và từng ca; ai đã phỏng vấn xong và kết quả, ai đang phỏng vấn, ai đã đến chờ phân bàn, ai chưa đến.",
