@@ -183,6 +183,9 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             { href: "/interviews/lich", label: "Lịch phỏng vấn" },
             { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" },
             { href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" },
+            // Tiến độ phỏng vấn mentee cho BTC (03/10/2026): cùng khán giả với trang ca
+            // (canViewMenteeSessionStatus) — mentor phỏng vấn không xem kết quả của người khác.
+            ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }] : []),
             // Cấu hình 28 ca phỏng vấn mentee. Gate HẸP HƠN nhóm này: trang đòi
             // canViewMenteeSessionStatus (super_admin/admin/core_team/support_team,
             // từ 01/10/2026), còn nhóm này mở cho cả reviewer. Hiện link cho
@@ -206,6 +209,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
               ...(showApplicationOps ? [{ href: "/applications", label: "Ứng tuyển (Tất cả)" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" }] : []),
               ...(role === "support_team" ? [{ href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" }] : []),
+              ...(role === "support_team" ? [{ href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }] : []),
               // support_team đi theo nhánh "Ứng tuyển" này, không phải nhánh
               // showReviews ở trên — cùng đích (canViewMenteeSessionStatus đã cho
               // phép), chỉ khác chỗ chèn vì support_team không thuộc showReviews.

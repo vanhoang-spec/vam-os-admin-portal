@@ -412,7 +412,9 @@ const REVIEW_ROUTES = [
 // theo chiều khác — support_team thấy link này dù không thuộc REVIEW_ROUTES.
 // Sửa ghế/địa điểm/gửi thư mời vẫn hẹp hơn nữa (canAssignReview); trang tự ẩn
 // các nút đó cho support_team, không phải việc của nav.
-const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee"];
+// Tiến độ phỏng vấn mentee (03/10/2026) đi cùng cổng: BTC xem kết quả mọi bạn,
+// mentor phỏng vấn (reviewer) thì không.
+const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee", "/interviews/tien-do-mentee"];
 // Chỉ quản trị viên (canSendBulkEmail) — core_team/support_team không thấy.
 const MENTOR_CONFIRMATION_ROUTES = ["/interviews/thu-xac-nhan-mentor"];
 
