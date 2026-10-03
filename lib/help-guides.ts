@@ -42,6 +42,22 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     notes: ["Nội dung đọc từ phiếu chấm và Handbook hiện hành của mùa — BTC sửa ở “Phiếu chấm & hướng dẫn mentee”."],
     updated: "02/10/2026"
   },
+  "/interviews/tien-do-mentee": {
+    title: "Tiến độ phỏng vấn mentee",
+    summary: "BTC theo dõi buổi phỏng vấn mentee: danh sách đăng ký theo ngày, buổi sáng/chiều và từng ca; ai đã phỏng vấn xong và kết quả, ai đang phỏng vấn, ai đã đến chờ phân bàn, ai chưa đến.",
+    steps: [
+      "Chọn “Ngày” và “Buổi” (sáng: ca bắt đầu trước 12:00). Các ô số đầu trang tính theo ngày + buổi đang chọn.",
+      "Bấm nút trạng thái (“Chưa đến”, “Chờ phân bàn”, “Đang phỏng vấn”, “Đã xong”) để lọc; gõ tên hoặc số điện thoại vào “Tìm mentee”.",
+      "Mỗi ca hiện số bạn đã xong (Đạt / Không chọn / Cần xem xét), đang phỏng vấn, chờ phân bàn, chưa đến; từng bạn có phòng/bàn, người phỏng vấn, kết quả, giờ check-in.",
+      "Bấm tên mentee để mở đúng hồ sơ ở màn hình check-in / phân bàn / chấm phỏng vấn."
+    ],
+    notes: [
+      "Trang tự làm mới theo chu kỳ — số liệu theo kịp thao tác check-in, phân bàn, chấm điểm ở màn hình phỏng vấn.",
+      "Chỉ Core team / Support team có quyền vận hành mùa xem được; mentor phỏng vấn không xem kết quả của người khác qua trang này.",
+      "“Chờ phân bàn” là việc cần Support xử lý trước — các bạn này đứng đầu mỗi ca."
+    ],
+    updated: "03/10/2026"
+  },
   "/interviews/ca-mentee": {
     title: "Ca phỏng vấn mentee",
     summary: "Tình hình các ca phỏng vấn mentee: số chỗ, số người đã đặt, ca còn trống/đã kín; BTC cấu hình ghế, địa điểm và gửi thư mời chọn ca.",
