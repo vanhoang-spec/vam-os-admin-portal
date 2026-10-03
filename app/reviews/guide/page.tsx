@@ -385,12 +385,16 @@ export default async function ReviewerGuidePage() {
             />
             <Callout variant="info" >
               <p className="mt-3">
-                <strong>Quản lý nhiều reviewer:</strong> Tất cả reviewer active sẽ xuất hiện tự động
-                trong danh sách checklist tại{" "}
+                <strong>Để reviewer nhận được hồ sơ:</strong> ô chọn người phụ trách tại{" "}
                 <Link href="/reviews/assign-bulk" className="text-blue-700 underline">
                   /reviews/assign-bulk
-                </Link>
-                . Không cần cấu hình thêm.
+                </Link>{" "}
+                chỉ liệt kê người có quyền đánh giá hoặc phỏng vấn trong mùa của đợt tuyển. Tạo tài khoản
+                xong mà chưa thấy tên, vào{" "}
+                <Link href="/reviews/reviewer-pool" className="text-blue-700 underline">
+                  Danh sách nhân sự tuyển sinh
+                </Link>{" "}
+                để cấp quyền.
               </p>
             </Callout>
           </SectionCard>
@@ -399,6 +403,14 @@ export default async function ReviewerGuidePage() {
         {/* ── 3. Bulk assignment checklist ─────────────────────── */}
         {isAdmin && (
           <SectionCard number={3} title="Danh sách công việc — Chia hồ sơ" accent="green">
+            {/*
+              Tả đúng màn hình giao tay đang có: mỗi lần giao, một người nhận.
+              Bản trước vẫn tả luồng chia tự động (tick nhiều reviewer, cân khối
+              lượng, mục D đặt hạn, mục E soát bảng phân bổ) sau khi màn hình đã
+              bỏ nó, và người vận hành đi tìm những ô không tồn tại. Mọi nhãn
+              trích ở đây được đối chiếu với màn hình thật trong
+              __tests__/reviews-guide-assign-steps.test.tsx.
+            */}
             <Checklist
               items={[
                 {
@@ -413,42 +425,51 @@ export default async function ReviewerGuidePage() {
                   )
                 },
                 {
-                  label: "Chọn Đợt tuyển và Vai trò ứng tuyển (mentee hoặc mentor) → nhấn Tiếp tục.",
-                  sub: "Trang sẽ load danh sách hồ sơ và reviewer khả dụng."
-                },
-                {
                   label: (
                     <>
-                      Mục A — Chọn trạng thái đơn cần giao. Mặc định bao gồm{" "}
-                      <Code>submitted</Code>, <Code>under_data_check</Code>,{" "}
-                      <Code>ready_for_screening</Code>.
+                      Chọn <strong>Đợt tuyển</strong>, <strong>Role ứng tuyển</strong> (Mentor hoặc Mentee) và{" "}
+                      <strong>Vòng phân công</strong> (Đánh giá hồ sơ hoặc Phỏng vấn), rồi nhấn{" "}
+                      <strong>Tiếp tục</strong>.
                     </>
                   ),
-                  sub: "Không chọn screening_assigned trừ khi bạn muốn giao lại hồ sơ đã có reviewer."
+                  sub: "Muốn đổi sang đợt, vai trò hay vòng khác thì bấm “← Chọn batch / role khác” ở đầu trang."
                 },
                 {
                   label: (
                     <>
-                      Giữ nguyên tuỳ chọn{" "}
-                      <strong>&ldquo;Bỏ qua hồ sơ đã có reviewer&rdquo;</strong> (mặc định bật). Điều này
-                      tránh tạo duplicate review row.
+                      Danh sách mở sẵn ở tab <strong>Chưa giao</strong> — những hồ sơ chưa có ai phụ trách. Mỗi
+                      trang 10 hồ sơ, ai nộp trước đứng trước.
                     </>
-                  )
+                  ),
+                  sub: "Tab “Đã giao” là hồ sơ đã có người nhận, tên người đó nằm ở cột “Người phụ trách”. Tab “Tất cả” gộp cả hai."
                 },
                 {
-                  label: "Mục C — Tick chọn các reviewer sẽ nhận hồ sơ. Xem workload hiện tại để cân đối.",
-                  sub: "Thuật toán sẽ ưu tiên giao nhiều hơn cho reviewer ít việc nhất (workload thấp nhất)."
+                  label: (
+                    <>
+                      Tick ô đầu dòng những hồ sơ muốn giao, hoặc nhấn <strong>Chọn cả trang</strong> để lấy
+                      nguyên lô đang hiện.
+                    </>
+                  ),
+                  sub: "“Chọn cả trang” chỉ chọn những hồ sơ đang hiện trên trang, không chọn cả đợt. Dấu tick vẫn giữ khi sang lô khác, đổi tab hay tìm kiếm, nên có thể chọn dần rồi giao một lần — số “Đang chọn” cho biết tổng cộng bao nhiêu. Nhấn “Bỏ chọn” để chọn lại từ đầu."
                 },
                 {
-                  label: "Mục D — Đặt hạn nộp (due_at) và ghi chú phân công nếu cần.",
-                  sub: 'Ví dụ ghi chú: "S12 B1 — lần 1 — 50 mentee".'
+                  label: (
+                    <>
+                      Ở khung <strong>Giao cho người phụ trách</strong>, chọn đúng một người. Mỗi lần giao chỉ
+                      cho một người; muốn chia cho nhiều người thì giao từng lượt, mỗi lượt một lô.
+                    </>
+                  ),
+                  sub: "Ô này chỉ liệt kê người có quyền đánh giá (hoặc phỏng vấn) trong mùa của đợt tuyển. Không thấy tên ai thì vào Danh sách nhân sự tuyển sinh (/reviews/reviewer-pool) để cấp quyền cho người đó."
                 },
                 {
-                  label: "Mục E — Kiểm tra bảng phân bổ: số hồ sơ min/max giữa các reviewer chênh không quá 1.",
-                  sub: "Sau đó tick ô xác nhận để mở nút submit."
-                },
-                {
-                  label: 'Nhấn "Xác nhận giao hồ sơ". Hệ thống sẽ tạo review row và cập nhật trạng thái đơn.'
+                  label: (
+                    <>
+                      Đọc lại câu <strong>Bạn sắp giao … cho …</strong>, rồi nhấn{" "}
+                      <strong>Xác nhận giao hồ sơ</strong> (ở vòng phỏng vấn, nút này là{" "}
+                      <strong>Xác nhận giao phỏng vấn</strong>).
+                    </>
+                  ),
+                  sub: "Con số trong câu là số hồ sơ sẽ thật sự được giao. Hồ sơ đã có người phụ trách không bị giao thêm dù đang được tick, nên số này có thể nhỏ hơn số “Đang chọn”. Nút chỉ bấm được khi đã chọn người và tick ít nhất một hồ sơ chưa giao."
                 },
                 {
                   label: (
@@ -457,17 +478,60 @@ export default async function ReviewerGuidePage() {
                       <Link href="/reviews/progress" className="text-vam-green hover:underline">
                         /reviews/progress
                       </Link>{" "}
-                      — cột &ldquo;Chưa bắt đầu&rdquo; phải tăng đúng số hồ sơ vừa giao.
+                      — ở dòng của người vừa nhận, cột &ldquo;Chưa bắt đầu&rdquo; phải tăng đúng số hồ sơ vừa giao.
                     </>
-                  )
+                  ),
+                  sub: "Trên trang chia hồ sơ, các hồ sơ vừa giao cũng đã chuyển sang tab “Đã giao”."
                 }
               ]}
             />
-            <div className="mt-4">
+
+            <h3 className="mb-2 mt-6 text-xs font-semibold uppercase text-slate-500">
+              Lấy lại hồ sơ đã giao — Huỷ phân công
+            </h3>
+            <Checklist
+              items={[
+                {
+                  label: (
+                    <>
+                      Cũng trên trang đó, mở tab <strong>Đã giao</strong> và tick những hồ sơ muốn lấy lại. Cột{" "}
+                      <strong>Người phụ trách</strong> cho biết hồ sơ đang ở chỗ ai.
+                    </>
+                  )
+                },
+                {
+                  label: (
+                    <>
+                      Ở khung <strong>Huỷ phân công</strong> cuối trang, ghi <strong>Lý do huỷ</strong>, rồi nhấn{" "}
+                      <strong>Huỷ phân công đã chọn</strong>.
+                    </>
+                  ),
+                  sub: "Lý do là bắt buộc (ít nhất 3 ký tự) và được lưu vào lịch sử của từng hồ sơ. Câu “Sắp trả … về hàng chờ” cho biết số hồ sơ sẽ được trả. Mỗi lần huỷ tối đa 25 hồ sơ."
+                },
+                {
+                  label: (
+                    <>
+                      Hồ sơ quay về tab <strong>Chưa giao</strong> và giao lại được cho người khác theo các bước ở
+                      trên.
+                    </>
+                  ),
+                  sub: "Điểm và ghi chú người cũ đã nhập không bị xoá, vẫn nằm trong lịch sử của hồ sơ."
+                }
+              ]}
+            />
+            <div className="mt-4 space-y-2">
+              <Callout variant="info">
+                <strong>Không lo giao trùng:</strong> hồ sơ đã có người phụ trách chỉ nằm ở tab Đã giao và
+                không được giao thêm lần nữa. Muốn đổi người thì huỷ phân công trước, rồi giao lại.
+              </Callout>
               <Callout variant="warning">
-                <strong>Tránh chia 2 lần cùng một pool:</strong> Nếu cần chia thêm (batch 2, đợt bổ sung),
-                giữ nguyên &ldquo;Bỏ qua hồ sơ đã có reviewer&rdquo; để hệ thống tự bỏ qua các đơn đã được giao,
-                chỉ giao phần mới.
+                <strong>Không thấy hồ sơ trong tab Đã giao?</strong> Ở vòng Đánh giá hồ sơ, hồ sơ rời khỏi
+                trang này ngay khi người chấm bắt đầu chấm. Muốn lấy lại hồ sơ đang chấm dở, mở hồ sơ đó
+                trong mục{" "}
+                <Link href="/applications" className="underline">
+                  Ứng tuyển
+                </Link>{" "}
+                và bấm Huỷ phân công ở khung Giao Review.
               </Callout>
             </div>
           </SectionCard>
@@ -597,10 +661,10 @@ export default async function ReviewerGuidePage() {
             <li className="flex items-start gap-2">
               <span className="mt-0.5 shrink-0 text-amber-500">⚠</span>
               <span>
-                <strong>Reviewer rời giữa mùa.</strong> Cancel các review chưa submit của họ
-                (update <Code>status = cancelled</Code> trong database), sau đó chia lại các đơn đó
-                qua /reviews/assign-bulk với tuỳ chọn &ldquo;Bỏ qua hồ sơ đã có reviewer&rdquo; tắt — hoặc chỉ giao
-                đơn <Code>status = submitted</Code> (chưa re-assign).
+                <strong>Reviewer rời giữa mùa.</strong> Không sửa tay trong database. Vào
+                /reviews/assign-bulk, mở tab Đã giao, tick các hồ sơ đang ghi tên người đó, ghi lý do rồi
+                bấm Huỷ phân công đã chọn — hồ sơ về lại tab Chưa giao để giao cho người khác. Hồ sơ họ
+                đang chấm dở thì huỷ trên trang của từng hồ sơ (xem mục 3).
               </span>
             </li>
             <li className="flex items-start gap-2">
@@ -654,8 +718,8 @@ INSERT INTO public.applications (
                 <Link href="/reviews/assign-bulk" className="text-blue-700 underline">
                   /reviews/assign-bulk
                 </Link>
-                , chọn batch, role = mentee, status = submitted → các đơn test sẽ xuất hiện trong
-                phần &ldquo;Hồ sơ sẽ được giao&rdquo;.
+                , chọn đợt tuyển vừa dùng, Role ứng tuyển = Mentee, Vòng phân công = Đánh giá hồ sơ → các
+                đơn test sẽ xuất hiện ở tab &ldquo;Chưa giao&rdquo;.
               </Callout>
             </div>
           </SectionCard>
