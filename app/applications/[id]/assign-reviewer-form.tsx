@@ -6,6 +6,7 @@ import { assignApplicationReviewAction, cancelApplicationReviewAction } from "@/
 import { VietnamDateField } from "@/app/events/vietnam-datetime-field";
 import { initialReviewActionState } from "@/lib/review-action-types";
 import { reviewDueInputProblem } from "@/lib/review-due";
+import { sortStaffForAssignment } from "@/lib/staff-order";
 import type { AdminUserPublic, ApplicationReview } from "@/lib/types";
 import { staffDisplayLabel } from "@/lib/ui-labels";
 import { formatDate } from "@/lib/utils";
@@ -179,6 +180,9 @@ export function AssignmentControls({
   profileAssignable: boolean;
   interviewAssignable: boolean;
 }) {
+  // Quản trị viên → Ban Điều hành → Người đánh giá hồ sơ, mỗi nhóm A → Z (BTC 03/10/2026).
+  profileReviewers = sortStaffForAssignment(profileReviewers);
+  interviewers = sortStaffForAssignment(interviewers);
   return (
     <div className="space-y-6">
       <div>
