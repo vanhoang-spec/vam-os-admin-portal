@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction } from "@/app/actions/mentee-offline";
-import { normalizedPhone, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
+import { normalizedPhone, sortCandidatesByArrival, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
 import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
@@ -64,9 +64,10 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
       } catch {setMessage(`Đã tìm thấy vé ${found.name} nhưng check-in tự động thất bại — bấm "Xác nhận check-in" thủ công bên dưới.`);}
     } catch {setMessage("Không tra được vé, kiểm tra kết nối rồi thử lại.");}
   },[data.candidates,router,setSelected]);
-  const visible=data.candidates.filter(c=>(!session || c.sessionId===session) && (!mine || c.operation?.interviewer_id===data.actorId) &&
+  // Ca sớm trước; trong ca, ai check-in trước đứng trước (BTC 04/10/2026).
+  const visible=sortCandidatesByArrival(data.candidates.filter(c=>(!session || c.sessionId===session) && (!mine || c.operation?.interviewer_id===data.actorId) &&
     (!query || c.name.toLocaleLowerCase("vi").includes(query.toLocaleLowerCase("vi")) ||
-      (normalizedPhone(query).length>=3 && normalizedPhone(c.phone??"").includes(normalizedPhone(query)))));
+      (normalizedPhone(query).length>=3 && normalizedPhone(c.phone??"").includes(normalizedPhone(query))))),data.sessions);
   const candidate=data.candidates.find(c=>c.id===selected);
   const currentMentor=data.participants.find(p=>p.id===data.actorId);
   const count=(predicate:(c:OfflineCandidate)=>boolean)=>visible.filter(predicate).length;
@@ -94,7 +95,9 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
       <tbody>{visible.map(c=><tr key={c.id} className="border-t align-top">
         <td className="p-3"><button onClick={()=>setSelected(c.id)} className="text-left font-semibold text-vam-green underline">{c.name}</button><div>{c.phone}</div></td>
         <td className="p-3">{formatDateTime(data.sessions.find(s=>s.id===c.sessionId)?.starts_at??"")}</td>
-        <td className="p-3">{c.operation?.checked_in_at ? "Đã đến" : "Chưa đến"}{c.operation?.room && <div>Phòng {c.operation.room} · Bàn {c.operation.desk}</div>}</td>
+        <td className="p-3">{c.operation?.checked_in_at ? `Đã đến ${formatTime(c.operation.checked_in_at)}` : "Chưa đến"}
+          {c.operation?.checked_in_at && c.operation.checked_in_by_name ? <div className="text-xs text-slate-500">Check-in: {c.operation.checked_in_by_name}</div> : null}
+          {c.operation?.room && <div>Phòng {c.operation.room} · Bàn {c.operation.desk}</div>}</td>
         <td className="p-3">{data.participants.find(p=>p.id===c.operation?.interviewer_id)?.full_name??"Chưa phân"}</td>
         <td className="p-3">{c.operation?.outcome ? OFFLINE_OUTCOMES[c.operation.outcome] : "Chưa chấm"}{c.operation?.match_id && <div className="text-vam-green">Đã ghép mentor</div>}</td>
       </tr>)}</tbody>
@@ -187,7 +190,7 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
     {data.canOperate && <div className="grid gap-3 rounded-lg bg-slate-50 p-3">
       {!op?.checked_in_at ? <button disabled={busy || c.status==="withdrawn"} className={button} onClick={()=>{
         if(window.confirm(`Check-in ${c.name}, ca ${formatDateTime(session?.starts_at??"")}?`)) void save("checkin",{});
-      }}>Xác nhận check-in</button> : <p>Đã check-in lúc {formatDateTime(op.checked_in_at)}</p>}
+      }}>Xác nhận check-in</button> : <p>Đã check-in lúc {formatDateTime(op.checked_in_at)}{op.checked_in_by_name ? ` · bởi ${op.checked_in_by_name}` : ""}</p>}
       {!op?.checked_in_at && c.status!=="withdrawn" ? <button disabled={busy} className="rounded border border-red-700 px-4 py-2 text-red-700 disabled:opacity-50" onClick={()=>{
         const reason=window.prompt(`Nhập lý do huỷ lịch đăng ký của ${c.name}:`);
         if(reason===null) return;

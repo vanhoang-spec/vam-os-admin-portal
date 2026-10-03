@@ -33,6 +33,9 @@ export type OfflineOperation = {
   interviewer_id: string | null; review_id: string | null; outcome: OfflineOutcome | null;
   match_id: string | null; revision: number;
   outcome_reason?: string | null;
+  /** Tài khoản Support/BTC đã check-in (admin_users.id) và tên hiển thị — gắn ở máy chủ. */
+  checked_in_by?: string | null;
+  checked_in_by_name?: string | null;
   is_online: boolean; online_note: string | null;
 };
 export type OfflineCandidate = {
@@ -51,6 +54,39 @@ export type OfflineDashboard = {
     created_at: string; before_data: unknown; after_data: unknown}>;
 };
 export type OfflineActionResult = { ok: boolean; message: string; applicationId?: string };
+
+/**
+ * Thứ tự trong MỘT ca (BTC 04/10/2026): ai check-in trước đứng trước — Support phân
+ * bàn theo thứ tự đến; cùng thời điểm thì theo tên A → Z. Bạn chưa đến đứng sau,
+ * theo tên. Một hàm cho cả màn hình phỏng vấn lẫn trang tiến độ, để hai nơi cùng thứ tự.
+ */
+export function compareByArrival(
+  a: { name: string; checkedInAt: string | null | undefined },
+  b: { name: string; checkedInAt: string | null | undefined }
+): number {
+  const at = a.checkedInAt ? Date.parse(a.checkedInAt) : NaN;
+  const bt = b.checkedInAt ? Date.parse(b.checkedInAt) : NaN;
+  const aIn = Number.isFinite(at);
+  const bIn = Number.isFinite(bt);
+  if (aIn !== bIn) return aIn ? -1 : 1;
+  if (aIn && bIn && at !== bt) return at - bt;
+  return a.name.localeCompare(b.name, "vi", { sensitivity: "base" });
+}
+
+/** Danh sách mentee: ca sớm trước, trong ca theo thứ tự check-in (compareByArrival). */
+export function sortCandidatesByArrival<T extends { name: string; sessionId: string; operation: { checked_in_at: string | null } | null }>(
+  candidates: readonly T[],
+  sessions: ReadonlyArray<{ id: string; starts_at: string }>
+): T[] {
+  const start = new Map(sessions.map((s) => [s.id, Date.parse(s.starts_at)]));
+  const startOf = (c: T) => start.get(c.sessionId) ?? Number.POSITIVE_INFINITY;
+  return [...candidates].sort(
+    (a, b) =>
+      startOf(a) - startOf(b) ||
+      compareByArrival({ name: a.name, checkedInAt: a.operation?.checked_in_at }, { name: b.name, checkedInAt: b.operation?.checked_in_at })
+  );
+}
+
 export function normalizedPhone(value: string) {
   const digits = value.replace(/\D/g, "");
   return digits.startsWith("84") ? `0${digits.slice(2)}` : digits;

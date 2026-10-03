@@ -166,7 +166,7 @@ export function ProgressBoard({ progress, todayKey }: { progress: MenteeProgress
                                 <td className="p-2 tabular-nums">{r.room ? `Phòng ${r.room} · bàn ${r.desk}` : "—"}</td>
                                 <td className="p-2">{r.interviewer || "—"}</td>
                                 <td className="p-2">{r.outcomeLabel || "—"}</td>
-                                <td className="p-2 tabular-nums">{r.checkedInAt ? formatTime(r.checkedInAt) : "—"}</td>
+                                <td className="p-2 tabular-nums">{r.checkedInAt ? formatTime(r.checkedInAt) : "—"}{r.checkedInBy ? <div className="text-xs text-slate-500">bởi {r.checkedInBy}</div> : null}</td>
                               </tr>
                             ))}
                           </tbody>

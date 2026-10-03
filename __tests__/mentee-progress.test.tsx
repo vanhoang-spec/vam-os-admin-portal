@@ -32,8 +32,9 @@ const DATA: Pick<OfflineDashboard, "sessions" | "participants" | "candidates"> =
   ],
   participants: [{ id: "m1", full_name: "Mentor Một", email: "m1@example.test", capacity: 1, activeMatches: 0 }],
   candidates: [
-    candidate("1", "An Đạt", "s0800", op({ checked_in_at: "2026-10-03T00:55:00Z", room: 1, desk: 1, interviewer_id: "m1", outcome: "passed" })),
-    candidate("2", "Bình Đang", "s0800", op({ checked_in_at: "2026-10-03T01:02:00Z", room: 1, desk: 2, interviewer_id: "m1" })),
+    // An đến MUỘN nhất dù tên đứng đầu A→Z: thứ tự theo giờ đến phải khác thứ tự theo tên.
+    candidate("1", "An Đạt", "s0800", op({ checked_in_at: "2026-10-03T01:10:00Z", room: 1, desk: 1, interviewer_id: "m1", outcome: "passed" })),
+    candidate("2", "Bình Đang", "s0800", op({ checked_in_at: "2026-10-03T01:02:00Z", room: 1, desk: 2, interviewer_id: "m1", checked_in_by: "sup-1", checked_in_by_name: "Support Lan" })),
     candidate("3", "Chi Chờ", "s0800", op({ checked_in_at: "2026-10-03T01:05:00Z" })),
     candidate("4", "Dũng Chưa", "s0800", null),
     candidate("5", "Én Rút", "s0800", null, "withdrawn"),
@@ -62,7 +63,7 @@ describe("phần thuần", () => {
     expect(halfOf("2026-10-03T05:00:00Z")).toBe("chieu"); // 12:00
   });
 
-  it("gom theo ngày → buổi → ca; đếm đúng; chờ phân bàn đứng đầu ca; tên người phỏng vấn", () => {
+  it("gom theo ngày → buổi → ca; đếm đúng; trong ca xếp theo giờ check-in (BTC 04/10), chưa đến sau, rút cuối", () => {
     const p = buildMenteeProgress(DATA);
     expect(p.days.map((d) => d.dateKey)).toEqual(["2026-10-03", "2026-10-04"]);
     const sat = p.days[0];
@@ -71,7 +72,10 @@ describe("phần thuần", () => {
     expect(sat.halves[1].counts).toMatchObject({ total: 1, done: 1, rejected: 1 });
     expect(p.counts).toMatchObject({ total: 7, done: 2, passed: 1, rejected: 1, in_progress: 1, waiting: 1, not_arrived: 2 });
     const rows = sat.halves[0].sessions[0].rows;
-    expect(rows.map((r) => r.name)).toEqual(["Chi Chờ", "Bình Đang", "Dũng Chưa", "An Đạt", "Én Rút"]);
+    // Bình 08:02 → Chi 08:05 → An 08:10 → chưa đến (Dũng) → đã rút (Én).
+    expect(rows.map((r) => r.name)).toEqual(["Bình Đang", "Chi Chờ", "An Đạt", "Dũng Chưa", "Én Rút"]);
+    expect(rows.find((r) => r.name === "Bình Đang")?.checkedInBy).toBe("Support Lan");
+    expect(rows.find((r) => r.name === "Dũng Chưa")?.checkedInBy).toBe("");
     expect(rows.find((r) => r.name === "Bình Đang")).toMatchObject({ interviewer: "Mentor Một", room: 1, desk: 2 });
     expect(rows.find((r) => r.name === "An Đạt")?.outcomeLabel).toBe("Đạt làm mentee");
     expect(sat.halves[1].sessions[0].rows[0].interviewer).toBe("Người phỏng vấn khác");

@@ -26,6 +26,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Kết quả “Không chọn làm mentee” khoá cả mục C. Mỗi mentor chọn “Có – Tôi muốn nhận bạn này” cho tối đa 2 hồ sơ trong mùa.",
       "Màn hình mentor không hiện tổng điểm — phiếu không cộng tổng, không có điểm sàn. Điểm quy đổi tham khảo chỉ BTC thấy.",
       "Nút “Hướng dẫn phỏng vấn mùa này” đầu trang mở Handbook và toàn bộ phiếu chấm của mùa.",
+      "Danh sách xếp theo ca; trong mỗi ca ai check-in trước đứng trước (cùng giờ theo tên), bạn chưa đến đứng sau. Cột “Check-in / Bàn” hiện giờ đến và tài khoản Support/BTC đã check-in.",
       "Phiếu đang chấm tự lưu nháp trên máy (điện thoại/laptop) của mentor: lỡ chuyển tab, chuyển app hay tải lại trang thì mở lại hồ sơ là thấy “Đã khôi phục bản nháp”. Nháp chỉ là bản tạm — phải bấm “Xác nhận kết quả” mới lưu; lưu thành công thì nháp tự xoá, nháp quá 24 giờ cũng tự xoá."
     ],
     updated: "03/10/2026"
@@ -70,9 +71,9 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     notes: [
       "Trang tự làm mới theo chu kỳ — số liệu theo kịp thao tác check-in, phân bàn, chấm điểm ở màn hình phỏng vấn.",
       "Chỉ Core team / Support team có quyền vận hành mùa xem được; mentor phỏng vấn không xem kết quả của người khác qua trang này.",
-      "“Chờ phân bàn” là việc cần Support xử lý trước — các bạn này đứng đầu mỗi ca."
+      "Trong mỗi ca, các bạn xếp theo giờ check-in — ai đến trước đứng trước (cùng giờ thì theo tên), kèm tài khoản Support/BTC đã check-in; bạn chưa đến đứng sau, bạn đã rút hồ sơ ở cuối. Bấm “Chờ phân bàn” để lọc riêng các bạn cần phân bàn."
     ],
-    updated: "03/10/2026"
+    updated: "04/10/2026"
   },
   "/interviews/ca-mentee": {
     title: "Ca phỏng vấn mentee",
