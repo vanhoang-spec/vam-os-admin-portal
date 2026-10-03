@@ -533,6 +533,40 @@ describe("middleware end-to-end against the post-T2 DB posture", () => {
     expect(response.cookies.get(AUTH_ACCESS_COOKIE)?.value).toBe(REFRESHED_ACCESS_TOKEN);
   });
 
+  // Sự cố 03/10/2026: mã mới chỉ về trình duyệt, còn trang / server action ĐANG chạy
+  // vẫn đọc mã cũ đã hết hạn → mentor mở trang chấm quá 1 giờ, bấm gửi lần đầu hỏng.
+  it("mã vừa làm mới tới CẢ request đang chạy (trang / server action), không chỉ trình duyệt", async () => {
+    const { fetchImpl } = createFakeSupabase([activeLinkedAdmin]);
+    globalThis.fetch = fetchImpl;
+    const { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE } = await authCookies();
+
+    const response = await runMiddleware({
+      [AUTH_ACCESS_COOKIE]: EXPIRED_ACCESS_TOKEN,
+      [AUTH_REFRESH_COOKIE]: VALID_REFRESH_TOKEN
+    });
+
+    // Next chuyển request đã sửa xuống trang qua tiêu đề x-middleware-request-cookie.
+    const forwarded = response.headers.get("x-middleware-request-cookie") ?? "";
+    expect(forwarded).toContain(`${AUTH_ACCESS_COOKIE}=${REFRESHED_ACCESS_TOKEN}`);
+    expect(forwarded).not.toContain(EXPIRED_ACCESS_TOKEN);
+    expect(forwarded).toContain(`${AUTH_REFRESH_COOKIE}=rotated-refresh-token`);
+  });
+
+  it("người tham gia: phiên vừa làm mới vẫn gửi cookie mã mới về trình duyệt", async () => {
+    const { fetchImpl } = createFakeSupabase([]);
+    globalThis.fetch = fetchImpl;
+    const { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE } = await authCookies();
+
+    const response = await runMiddleware(
+      { [AUTH_ACCESS_COOKIE]: EXPIRED_ACCESS_TOKEN, [AUTH_REFRESH_COOKIE]: VALID_REFRESH_TOKEN },
+      "/ct"
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.cookies.get(AUTH_ACCESS_COOKIE)?.value).toBe(REFRESHED_ACCESS_TOKEN);
+    expect(response.headers.get("x-middleware-request-cookie") ?? "").toContain(REFRESHED_ACCESS_TOKEN);
+  });
+
   it("phiên vừa làm mới mà không phải nhân sự cũng KHÔNG vào được /operations", async () => {
     const { fetchImpl } = createFakeSupabase([]);
     globalThis.fetch = fetchImpl;
