@@ -1,5 +1,5 @@
 import { sessionDayLabel, sessionTimeLabel, vietnamDateKeyOf } from "@/lib/mentee-interview-core";
-import { OFFLINE_OUTCOMES, type OfflineDashboard, type OfflineOutcome } from "@/lib/mentee-offline-core";
+import { OFFLINE_OUTCOMES, compareByArrival, type OfflineDashboard, type OfflineOutcome } from "@/lib/mentee-offline-core";
 import { formatTime } from "@/lib/utils";
 
 /**
@@ -29,9 +29,6 @@ export const PROGRESS_LABELS: Record<ProgressStatus, string> = {
   withdrawn: "Đã rút hồ sơ"
 };
 
-/** Thứ tự trong một ca: việc cần BTC để mắt tới đứng trước. */
-const STATUS_ORDER: ProgressStatus[] = ["waiting", "in_progress", "not_arrived", "done", "withdrawn"];
-
 export type ProgressCounts = Record<ProgressStatus, number> & { total: number } & Record<OfflineOutcome, number>;
 
 export type ProgressRow = {
@@ -45,6 +42,8 @@ export type ProgressRow = {
   desk: number | null;
   interviewer: string;
   checkedInAt: string | null;
+  /** Tài khoản Support/BTC đã check-in (BTC 04/10/2026). */
+  checkedInBy: string;
   isOnline: boolean;
 };
 
@@ -98,6 +97,7 @@ export function buildMenteeProgress(data: Pick<OfflineDashboard, "sessions" | "p
       desk: op?.desk ?? null,
       interviewer: op?.interviewer_id ? names.get(op.interviewer_id) ?? "Người phỏng vấn khác" : "",
       checkedInAt: op?.checked_in_at ?? null,
+      checkedInBy: op?.checked_in_at ? op?.checked_in_by_name ?? "" : "",
       isOnline: Boolean(op?.is_online)
     };
     bySession.set(c.sessionId, [...(bySession.get(c.sessionId) ?? []), row]);
@@ -107,8 +107,12 @@ export function buildMenteeProgress(data: Pick<OfflineDashboard, "sessions" | "p
   const days = new Map<string, ProgressDay>();
   const sessions = [...data.sessions].sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
   for (const s of sessions) {
+    // Trong ca: ai check-in trước đứng trước (BTC 04/10/2026) — cùng thứ tự với màn
+    // hình phỏng vấn; người đã rút hồ sơ xuống cuối.
     const rows = (bySession.get(s.id) ?? []).sort(
-      (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || a.name.localeCompare(b.name, "vi")
+      (a, b) =>
+        Number(a.status === "withdrawn") - Number(b.status === "withdrawn") ||
+        compareByArrival({ name: a.name, checkedInAt: a.checkedInAt }, { name: b.name, checkedInAt: b.checkedInAt })
     );
     const sessionCounts = emptyCounts();
     for (const row of rows) add(sessionCounts, row);

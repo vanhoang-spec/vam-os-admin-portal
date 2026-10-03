@@ -6,6 +6,7 @@ import { flattenRawPayload, humanizeKey } from "@/lib/application-export";
 import { offlineError, parseOfflineQr, type OfflineActionResult, type OfflineDashboard } from "@/lib/mentee-offline-core";
 import { sanitizeHandbookHtml } from "@/lib/handbook-html";
 import type { InterviewGuide } from "@/lib/mentee-interview-rubric-core";
+import { readAllPagesIn } from "@/lib/paged-read";
 
 async function context() {
   const actor = await getCurrentAdminUser();
@@ -32,9 +33,19 @@ export async function getOfflineDashboard(): Promise<{ok: true; data: OfflineDas
     dashboard.actorId=actor.id!;
     dashboard.seasonId=seasonId;
     dashboard.rubric=(guide.data as InterviewGuide | null)?.rubric ?? null;
+    // Ai đã check-in cho từng bạn (BTC 04/10/2026): tên tài khoản Support/BTC. Danh sách
+    // người phỏng vấn không chứa Support, nên đọc riêng đúng các tài khoản xuất hiện.
+    const checkinIds = Array.from(new Set(dashboard.candidates.map(c => String(c.operation?.checked_in_by ?? "")).filter(Boolean)));
+    const names = new Map<string,string>();
+    if (checkinIds.length) {
+      const staff = await readAllPagesIn<{id:string;full_name:string|null;email:string|null}>(client,"admin_users","id",checkinIds,"id,full_name,email");
+      // Không đọc được tên thì vẫn mở màn hình — chỉ thiếu tên người check-in, không chặn ca phỏng vấn.
+      if (!staff.error) for (const s of staff.data) names.set(String(s.id), String(s.full_name || s.email || ""));
+    }
     dashboard.candidates=dashboard.candidates.map(c => ({...c,
       answers:flattenRawPayload(c.rawPayload ?? {}).map(({key,value}) => [humanizeKey(key),value]),
-      rawPayload:null
+      rawPayload:null,
+      operation: c.operation ? {...c.operation, checked_in_by_name: c.operation.checked_in_by ? names.get(String(c.operation.checked_in_by)) ?? null : null} : null
     }));
     return {ok:true,data:dashboard};
   } catch (error) {
