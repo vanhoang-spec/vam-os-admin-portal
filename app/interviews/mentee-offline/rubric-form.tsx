@@ -43,8 +43,8 @@ export type ResultFormProps = {
   busy: boolean;
   /** Khoá localStorage của nháp (draftKey(mentor, hồ sơ)); null = không lưu nháp. */
   draftKey?: string | null;
-  /** Trả true khi máy chủ đã lưu — chỉ khi đó nháp mới bị xoá. */
-  onSubmit: (values: Record<string, unknown>) => Promise<boolean> | void;
+  /** Kết quả lưu của máy chủ: ok → xoá nháp; lỗi → hiện ngay cạnh nút gửi, giữ nháp. */
+  onSubmit: (values: Record<string, unknown>) => Promise<boolean | { ok: boolean; message?: string }> | void;
 };
 
 const DRAFT_DEBOUNCE_MS = 400;
@@ -235,8 +235,14 @@ export function InterviewResultForm({ rubric, review, operation: op, candidateNa
         });
         // Chỉ xoá nháp khi máy chủ đã lưu thật — lỗi mạng/lỗi kiểm tra thì giữ.
         if (sent && typeof sent.then === "function") {
-          void sent.then((ok) => {
-            if (ok) discardDraft();
+          void sent.then((result) => {
+            const ok = typeof result === "boolean" ? result : result.ok;
+            if (ok) {
+              discardDraft();
+              return;
+            }
+            const message = typeof result === "boolean" ? "" : result.message ?? "";
+            setError(`Chưa lưu được: ${message || "thử lại sau ít giây."} Phiếu vẫn còn nguyên — không cần nhập lại.`);
           });
         }
       }}
