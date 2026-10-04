@@ -94,6 +94,10 @@ const OVERVIEW = {
       candidatePhone: "0901111222",
       applicationId: "app-a",
       reviewId: "rv-a",
+      applicationAnswers: [
+        { label: "Vì sao anh/chị muốn làm mentor?", value: "Muốn trả ơn trường.\nVà chia sẻ kinh nghiệm." },
+        { label: "Lĩnh vực chuyên môn", value: "Tài chính" }
+      ],
       interviewerName: "Chị Core Team",
       interviewerEmail: "ct@example.com",
       interviewerPhone: "0912345678"
@@ -107,6 +111,7 @@ const OVERVIEW = {
       candidatePhone: null,
       applicationId: "app-c",
       reviewId: null,
+      applicationAnswers: [],
       interviewerName: "Anh Phỏng Vấn",
       interviewerEmail: null,
       interviewerPhone: null
@@ -248,6 +253,21 @@ describe("2b. bấm vào buổi hẹn thấy đủ hai người (BTC 04/10/2026)
     expect(interviewer.textContent).toContain("Chị Core Team");
     expect(within(interviewer).getByRole("link", { name: "ct@example.com" }).getAttribute("href")).toBe("mailto:ct@example.com");
     expect(within(interviewer).getByRole("link", { name: "0912345678" }).getAttribute("href")).toBe("tel:0912345678");
+  });
+
+  it("'Xem application' mở câu trả lời ngay trong thẻ ứng viên, đúng nhãn câu hỏi, giữ xuống dòng", () => {
+    render(<BtcPanel overview={OVERVIEW} />);
+    const [first, second] = screen.getAllByTestId("upcoming-booking");
+    const app = within(within(first).getByTestId("booking-candidate")).getByTestId("booking-application");
+    expect(app.querySelector("summary")?.textContent).toBe("Xem application (2 câu trả lời)");
+    const pairs = Array.from(app.querySelectorAll("dl > div")).map((d) => [d.querySelector("dt")?.textContent, d.querySelector("dd")?.textContent]);
+    expect(pairs).toEqual([
+      ["Vì sao anh/chị muốn làm mentor?", "Muốn trả ơn trường.\nVà chia sẻ kinh nghiệm."],
+      ["Lĩnh vực chuyên môn", "Tài chính"]
+    ]);
+    // Người phỏng vấn không có application; buổi không có câu trả lời thì không hứa nút.
+    expect(within(first).getByTestId("booking-interviewer").querySelector('[data-testid="booking-application"]')).toBeNull();
+    expect(within(second).queryByTestId("booking-application")).toBeNull();
   });
 
   it("thiếu SĐT thì ghi 'chưa có'; chưa có phiếu thì không hứa link phiếu", () => {

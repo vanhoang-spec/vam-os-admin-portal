@@ -40,6 +40,7 @@ import {
   saveMentorAvailability
 } from "@/lib/interview-schedule";
 import { FakeDb, clientFor } from "./support/interview-fake-db";
+import { humanizeKey } from "@/lib/application-export";
 
 // ── Hằng mẫu (đều đúng khuôn uuid vì mã thật kiểm isValidUuid) ───────────────
 
@@ -586,16 +587,32 @@ describe("5. tổng quan ban tổ chức", () => {
 
   it("buổi hẹn mang đủ thông tin hai người: hồ sơ, phiếu, SĐT ứng viên, email + SĐT người phỏng vấn", async () => {
     seedProfile();
+    db.tables.applications[0].raw_payload = { motivation: "Muốn trả ơn trường", expertise: "Tài chính" };
+    // Buổi thứ hai, người khác, application khác: mỗi buổi phải mang ĐÚNG application của mình.
+    db.tables.applications[1].raw_payload = { motivation: "Muốn học thêm từ mentee" };
     db.tables.interview_slots = [
-      { id: "s3", season_id: SEASON, admin_user_id: ADMIN_CT, slot_starts_at: H_24_09, status: "booked", available_since: "x", booked_application_id: APP_A }
+      { id: "s3", season_id: SEASON, admin_user_id: ADMIN_CT, slot_starts_at: H_24_09, status: "booked", available_since: "x", booked_application_id: APP_A },
+      { id: "s4", season_id: SEASON, admin_user_id: ADMIN_CT, slot_starts_at: H_24_10, status: "booked", available_since: "x", booked_application_id: APP_B }
     ];
-    db.tables.application_reviews = [{ id: "r1", application_id: APP_A, review_round: "interview", status: "assigned" }];
+    db.tables.application_reviews = [
+      { id: "r1", application_id: APP_A, review_round: "interview", status: "assigned" },
+      { id: "r2", application_id: APP_B, review_round: "interview", status: "assigned" }
+    ];
     db.tables.interview_bookings = [
-      { id: "b1", application_id: APP_A, slot_id: "s3", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_24_09, status: "booked", previous_application_status: "invited_to_interview" }
+      { id: "b1", application_id: APP_A, slot_id: "s3", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_24_09, status: "booked", previous_application_status: "invited_to_interview" },
+      { id: "b2", application_id: APP_B, slot_id: "s4", interviewer_admin_user_id: ADMIN_CT, review_id: "r2", slot_starts_at: H_24_10, status: "booked", previous_application_status: "invited_to_interview" }
     ];
     const overview = await getBtcOverview();
     expect(overview.ok).toBe(true);
     if (overview.ok) {
+      expect(overview.upcomingBookings.map((b) => b.applicationId)).toEqual([APP_A, APP_B]);
+      expect(overview.upcomingBookings[1].applicationAnswers).toEqual([{ label: humanizeKey("motivation"), value: "Muốn học thêm từ mentee" }]);
+      // Câu trả lời application đi kèm buổi hẹn, nhãn đúng câu hỏi (humanizeKey).
+      expect(overview.upcomingBookings[0].applicationAnswers).toEqual([
+        // Cùng thứ tự với mục "Nội dung đơn" trên phiếu chấm (flattenRawPayload tự sắp).
+        { label: humanizeKey("expertise"), value: "Tài chính" },
+        { label: humanizeKey("motivation"), value: "Muốn trả ơn trường" }
+      ]);
       expect(overview.upcomingBookings[0]).toMatchObject({
         applicationId: APP_A,
         reviewId: "r1",
