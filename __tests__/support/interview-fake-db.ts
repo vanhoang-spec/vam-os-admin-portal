@@ -100,14 +100,22 @@ export class Query {
   private max: number | null = null;
   private ignoreDuplicates = false;
   private onConflictMerge = false;
+  /** Cột câu đọc xin — null là mọi cột. */
+  private columns: string[] | null = null;
 
   constructor(
     private db: FakeDb,
     private table: string
   ) {}
 
-  select() {
+  select(columns?: string) {
     if (this.op !== "select") this.returning = true;
+    // Trả ĐÚNG các cột được xin, như Supabase thật (04/10/2026): bản giả trả cả dòng thì
+    // quên xin một cột (vd. phone_primary) vẫn xanh. Chỉ chiếu khi danh sách là tên cột
+    // trơn; cú pháp nhúng bảng / đổi tên thì trả cả dòng như trước.
+    if (this.op === "select" && typeof columns === "string" && /^[a-z0-9_,\s]+$/i.test(columns) && columns.trim() !== "") {
+      this.columns = columns.split(",").map((c) => c.trim()).filter(Boolean);
+    }
     return this;
   }
   insert(values: any) {
@@ -237,6 +245,10 @@ export class Query {
       });
     }
     if (this.max !== null) result = result.slice(0, this.max);
+    if (this.columns) {
+      const cols = this.columns;
+      result = result.map((row) => Object.fromEntries(cols.filter((c) => c in row).map((c) => [c, row[c]])));
+    }
     return { data: result, error: null };
   }
 }

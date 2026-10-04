@@ -4,6 +4,7 @@ import { getApplications, getMyApplicationReviews } from "@/lib/data";
 import { canReview } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { buildMyWorkItems, type MyWorkSourceApplication } from "@/lib/my-work";
+import { getBookedInterviewTimes } from "@/lib/interview-schedule";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { MyWorkClient } from "./my-work-client";
 
@@ -69,11 +70,17 @@ export default async function MyWorkPage() {
     }
   }
 
+  // Lịch phỏng vấn mentor 1:1 của các phiếu Phỏng vấn — chỉ phiếu của chính người xem.
+  const interviewTimes = await getBookedInterviewTimes(
+    reviews.filter((review) => review.review_round === "interview" && review.reviewer_admin_user_id === adminUser.id).map((review) => review.id)
+  );
+
   const items = buildMyWorkItems({
     reviews,
     applications,
     assigneeAdminUserId: adminUser.id,
-    now: new Date()
+    now: new Date(),
+    interviewTimes
   });
 
   return (

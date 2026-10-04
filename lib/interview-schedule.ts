@@ -1250,8 +1250,9 @@ type EligibleMentor = {
   applicationId: string;
   fullName: string;
   email: string;
+  phone: string;
   bucket: MentorBucket;
-  activeBooking: { bookingId: string; slotStartsAtIso: string; interviewerAdminUserId: string } | null;
+  activeBooking: { bookingId: string; slotStartsAtIso: string; interviewerAdminUserId: string; reviewId: string | null } | null;
 };
 
 /**
@@ -1268,7 +1269,7 @@ async function listEligibleMentors(
   const statuses = [...Array.from(BOOKING_ELIGIBLE_STATUSES), "interview_in_progress"];
   const apps = await readAllPages<Json>(
     "applications",
-    "id,status,full_name,email_primary,role_applied,source",
+    "id,status,full_name,email_primary,phone_primary,role_applied,source",
     (columns) =>
       client
         .from("applications")
@@ -1348,17 +1349,41 @@ async function listEligibleMentors(
       applicationId: id,
       fullName: clean(app.full_name),
       email: clean(app.email_primary),
+      phone: clean(app.phone_primary),
       bucket: classifyMentor(booking ? { slot_starts_at: normIso(booking.slot_starts_at) } : null, nowIso),
       activeBooking: booking
         ? {
             bookingId: String(booking.id),
             slotStartsAtIso: normIso(booking.slot_starts_at),
-            interviewerAdminUserId: String(booking.interviewer_admin_user_id)
+            interviewerAdminUserId: String(booking.interviewer_admin_user_id),
+            reviewId: ownReviewId
           }
         : null
     });
   }
   return { ok: true, mentors };
+}
+
+/**
+ * Giờ buổi phỏng vấn mentor 1:1 đã đặt, theo phiếu phỏng vấn (BTC 04/10/2026: "Công việc
+ * của tôi" phải thấy ngay lịch phỏng vấn từng người, không phải mở từng phiếu).
+ * Chỉ trả giờ cho đúng các phiếu được hỏi — trang gọi bằng phiếu của chính người xem.
+ * Lỗi đọc thì trả rỗng: đây là thông tin kèm, không được làm hỏng cả hộp việc.
+ */
+export async function getBookedInterviewTimes(reviewIds: readonly string[]): Promise<Map<string, string>> {
+  const times = new Map<string, string>();
+  const ids = Array.from(new Set(reviewIds.map((id) => clean(id)).filter(Boolean)));
+  if (ids.length === 0) return times;
+  const client = serviceClient();
+  if (!client) return times;
+  const rows = await readAllPagesIn<Json>(client, "interview_bookings", "review_id", ids, "review_id,slot_starts_at,status",
+    (query: any) => query.eq("status", "booked"));
+  if (rows.error) {
+    log("booked interview times read failed", rows.error);
+    return times;
+  }
+  for (const row of rows.data) times.set(String(row.review_id), normIso(row.slot_starts_at));
+  return times;
 }
 
 export type BtcOverview =
@@ -1375,6 +1400,11 @@ export type BtcOverview =
         candidateName: string;
         candidateEmail: string;
         interviewerName: string;
+        interviewerEmail: string | null;
+        interviewerPhone: string | null;
+        candidatePhone: string | null;
+        applicationId: string;
+        reviewId: string | null;
       }>;
     }
   | { ok: false; message: string };
@@ -1433,6 +1463,7 @@ export async function getBtcOverview(): Promise<BtcOverview> {
   }
   const interviewerIds = Array.from(slotsByInterviewer.keys());
   const nameById = new Map<string, string>();
+  const emailById = new Map<string, string>();
   const phoneById = new Map<string, string>();
   if (interviewerIds.length > 0) {
     const admins = await readAllPagesIn<Json>(client, "admin_users", "id", interviewerIds, "id,full_name,email");
@@ -1442,6 +1473,7 @@ export async function getBtcOverview(): Promise<BtcOverview> {
     }
     for (const row of admins.data) {
       nameById.set(String(row.id), clean(row.full_name) || clean(row.email));
+      emailById.set(String(row.id), clean(row.email));
     }
     const profiles = await readAllPagesIn<Json>(
       client,
@@ -1484,7 +1516,13 @@ export async function getBtcOverview(): Promise<BtcOverview> {
       slotLabel: slotRangeLabel(mentor.activeBooking!.slotStartsAtIso),
       candidateName: mentor.fullName,
       candidateEmail: mentor.email,
-      interviewerName: nameById.get(mentor.activeBooking!.interviewerAdminUserId) || "(không rõ)"
+      // Bấm vào buổi hẹn thấy đủ hai người: hồ sơ, phiếu, SĐT (BTC 04/10/2026).
+      candidatePhone: mentor.phone || null,
+      applicationId: mentor.applicationId,
+      reviewId: mentor.activeBooking!.reviewId,
+      interviewerName: nameById.get(mentor.activeBooking!.interviewerAdminUserId) || "(không rõ)",
+      interviewerEmail: emailById.get(mentor.activeBooking!.interviewerAdminUserId) || null,
+      interviewerPhone: phoneById.get(mentor.activeBooking!.interviewerAdminUserId) || null
     }))
     .sort((a, b) => a.slotStartsAtIso.localeCompare(b.slotStartsAtIso));
 

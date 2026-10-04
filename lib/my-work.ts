@@ -100,6 +100,11 @@ export type MyWorkItem = {
   /** "Mở" | "Tiếp tục" | "Xem lại" */
   actionLabel: string;
   href: string;
+  /**
+   * Giờ bắt đầu buổi phỏng vấn mentor 1:1 đã đặt (ISO), chỉ cho việc Phỏng vấn — BTC
+   * 04/10/2026: thấy lịch ngay trên hộp việc, không phải mở từng phiếu.
+   */
+  interviewAt: string | null;
 };
 
 export type MyWorkSummary = {
@@ -207,8 +212,10 @@ export function buildMyWorkItems(input: {
   applications: Map<string, MyWorkSourceApplication>;
   assigneeAdminUserId: string;
   now: Date;
+  /** reviewId → giờ bắt đầu buổi phỏng vấn đã đặt. Không truyền thì không hiện lịch. */
+  interviewTimes?: ReadonlyMap<string, string>;
 }): MyWorkItem[] {
-  const { reviews, applications, assigneeAdminUserId, now } = input;
+  const { reviews, applications, assigneeAdminUserId, now, interviewTimes } = input;
   if (!assigneeAdminUserId) return [];
   // guard removed
 
@@ -241,7 +248,8 @@ export function buildMyWorkItems(input: {
       overdue: isOverdue(review.due_at, review.status, now),
       dueSoon: isDueSoon(review.due_at, review.status, now),
       actionLabel: actionLabel(review.status),
-      href: `/reviews/${review.id}`
+      href: `/reviews/${review.id}`,
+      interviewAt: kind === "interview" ? interviewTimes?.get(review.id) ?? null : null
     });
   }
 
