@@ -163,7 +163,7 @@ export function ProgressBoard({ progress, todayKey }: { progress: MenteeProgress
                                   <span className={`rounded px-2 py-0.5 text-xs font-semibold ${BADGE[r.status]}`}>{PROGRESS_LABELS[r.status]}</span>
                                   {r.isOnline ? <span className="ml-1 rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-800">Online</span> : null}
                                 </td>
-                                <td className="p-2 tabular-nums">{r.room ? `Phòng ${r.room} · bàn ${r.desk}` : "—"}</td>
+                                <td className="p-2 tabular-nums">{r.place || "—"}</td>
                                 <td className="p-2">{r.interviewer || "—"}</td>
                                 <td className="p-2">{r.outcomeLabel || "—"}</td>
                                 <td className="p-2 tabular-nums">{r.checkedInAt ? formatTime(r.checkedInAt) : "—"}{r.checkedInBy ? <div className="text-xs text-slate-500">bởi {r.checkedInBy}</div> : null}</td>

@@ -87,6 +87,36 @@ export function sortCandidatesByArrival<T extends { name: string; sessionId: str
   );
 }
 
+/**
+ * Tên phòng của một ca (BTC 04/10/2026: "chưa thấy ghi rõ tên phòng"). Database lưu
+ * phòng bằng SỐ 1..n — trigger vam104_room_desk_bounds_guard chặn cận theo số — còn
+ * tên thật nằm trong địa điểm của ca, đúng câu đã gửi trong thư cho mentee:
+ * "Phòng B1.503, B1.504, … — Cơ sở B, …". Phòng số n = tên thứ n trong danh sách đó.
+ * Đổi phòng của một ngày chỉ cần sửa địa điểm ca, không cần migration.
+ * Địa điểm không theo khuôn "Phòng …" thì trả rỗng — nơi hiển thị lùi về số phòng,
+ * thà hiện "Phòng 2" còn hơn hiện một mẩu địa chỉ như thể là tên phòng.
+ */
+export function roomNamesFromVenue(venue: string | null | undefined): string[] {
+  // NFC: địa điểm gõ từ máy khác có thể mang "ò" dạng tổ hợp, khi đó chữ "Phòng" không khớp.
+  const head = String(venue ?? "").normalize("NFC").split(/\s[—–-]\s/)[0] ?? "";
+  const match = /^\s*phòng\s+(.+)$/i.exec(head);
+  if (!match) return [];
+  const names = match[1].split(",").map((s) => s.trim()).filter(Boolean);
+  return names.every((n) => n.length <= 20) ? names : [];
+}
+
+/** "B1.504" cho phòng số 2 của ca Cơ sở B; không có tên thì chính con số. */
+export function roomLabel(room: number | null | undefined, venue: string | null | undefined): string {
+  if (room == null) return "—";
+  return roomNamesFromVenue(venue)[room - 1] ?? String(room);
+}
+
+/** "Phòng B1.504 · Bàn 2" — một cách viết cho danh sách, hồ sơ và trang tiến độ. */
+export function roomDeskLabel(room: number | null | undefined, desk: number | null | undefined, venue: string | null | undefined): string {
+  if (room == null) return "—";
+  return `Phòng ${roomLabel(room, venue)} · Bàn ${desk ?? "—"}`;
+}
+
 export function normalizedPhone(value: string) {
   const digits = value.replace(/\D/g, "");
   return digits.startsWith("84") ? `0${digits.slice(2)}` : digits;
