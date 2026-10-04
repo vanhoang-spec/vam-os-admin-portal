@@ -1,4 +1,5 @@
 import type { ExpectationAlignment, InterviewRubric, InterviewScore, TakeChoice } from "@/lib/mentee-interview-rubric-core";
+import { vietnamDateKey } from "@/lib/utils";
 
 export const OFFLINE_PATH = "/interviews/mentee-offline";
 export const OFFLINE_GUIDE_PATH = "/interviews/mentee-offline/huong-dan";
@@ -115,6 +116,33 @@ export function roomLabel(room: number | null | undefined, venue: string | null 
 export function roomDeskLabel(room: number | null | undefined, desk: number | null | undefined, venue: string | null | undefined): string {
   if (room == null) return "—";
   return `Phòng ${roomLabel(room, venue)} · Bàn ${desk ?? "—"}`;
+}
+
+/**
+ * Ai đang ở bàn này / với mentor này mà CHƯA có kết quả, trong cùng NGÀY (BTC 04/10/2026).
+ * Database không còn khoá bàn / người phỏng vấn (migration 20261004110000): mentor nhận
+ * bạn kế tiếp trong lúc còn viết phiếu bạn trước, khoá cứng đã chặn ~90 lần một buổi
+ * sáng. Đây chỉ là lời nhắc để Support không xếp nhầm — không chặn lưu.
+ * Theo NGÀY chứ không theo ca: bàn và mentor là chỗ ngồi thật, ca trễ dồn sang ca sau.
+ */
+export function openAtDeskAndMentor(
+  data: Pick<OfflineDashboard, "candidates" | "sessions">,
+  selfId: string,
+  pick: { room: number | null; desk: number | null; interviewerId: string | null }
+): { atDesk: string[]; withMentor: string[] } {
+  const dayOf = new Map(data.sessions.map((s) => [s.id, vietnamDateKey(s.starts_at)]));
+  const self = data.candidates.find((c) => c.id === selfId);
+  const day = self ? dayOf.get(self.sessionId) : undefined;
+  if (!day) return { atDesk: [], withMentor: [] };
+  const open = data.candidates.filter(
+    (c) => c.id !== selfId && c.status !== "withdrawn" && c.operation && !c.operation.outcome && dayOf.get(c.sessionId) === day
+  );
+  return {
+    atDesk: pick.room != null && pick.desk != null
+      ? open.filter((c) => c.operation?.room === pick.room && c.operation?.desk === pick.desk).map((c) => c.name)
+      : [],
+    withMentor: pick.interviewerId ? open.filter((c) => c.operation?.interviewer_id === pick.interviewerId).map((c) => c.name) : []
+  };
 }
 
 export function normalizedPhone(value: string) {

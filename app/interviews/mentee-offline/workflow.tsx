@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction } from "@/app/actions/mentee-offline";
-import { normalizedPhone, roomDeskLabel, roomLabel, sortCandidatesByArrival, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
+import { normalizedPhone, openAtDeskAndMentor, roomDeskLabel, roomLabel, sortCandidatesByArrival, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
 import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
@@ -140,6 +140,9 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
   const session=data.sessions.find(s=>s.id===c.sessionId);
   const own=op?.interviewer_id===data.actorId;
   const [editing,setEditing]=useState(!op?.outcome);
+  // Bàn / mentor đang chọn trong form phân bàn — chỉ để nhắc ai đang ở đó chưa có kết quả.
+  const [pick,setPick]=useState<{room:number|null;desk:number|null;interviewerId:string|null}>({room:op?.room??null,desk:op?.desk??null,interviewerId:op?.interviewer_id??null});
+  const busyHere=openAtDeskAndMentor(data,c.id,pick);
   const review=c.reviews.find(r=>r.id===op?.review_id);
   const me=data.participants.find(p=>p.id===data.actorId);
   const full=me?.capacity==null || (me.activeMatches>=me.capacity && !op?.match_id);
@@ -203,9 +206,14 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
       {op?.checked_in_at && !op.outcome && <form className="grid gap-3 sm:grid-cols-3" onSubmit={e=>{
         e.preventDefault();const f=new FormData(e.currentTarget);void save("assign",{room:Number(f.get("room")),desk:Number(f.get("desk")),interviewerId:String(f.get("interviewer")),reason:String(f.get("reason")??""),isOnline:f.get("isOnline")==="on",onlineNote:String(f.get("onlineNote")??"")});
       }}>
-        <label>Phòng<select name="room" required defaultValue={op.room??""} className={field}><option value="">Chọn phòng</option>{roomDeskOptions(session?.starts_at).rooms.map(n=><option key={n} value={n}>{roomLabel(n,session?.venue)}</option>)}</select></label>
-        <label>Bàn<select name="desk" required defaultValue={op.desk??""} className={field}><option value="">Chọn bàn</option>{roomDeskOptions(session?.starts_at).desks.map(n=><option key={n}>{n}</option>)}</select></label>
-        <label>Người phỏng vấn<select required name="interviewer" defaultValue={op.interviewer_id??""} className={field}><option value="">Chọn người có mặt</option>{data.participants.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
+        <label>Phòng<select name="room" required defaultValue={op.room??""} className={field} onChange={e=>{const v=Number(e.target.value)||null;setPick(p=>({...p,room:v}));}}><option value="">Chọn phòng</option>{roomDeskOptions(session?.starts_at).rooms.map(n=><option key={n} value={n}>{roomLabel(n,session?.venue)}</option>)}</select></label>
+        <label>Bàn<select name="desk" required defaultValue={op.desk??""} className={field} onChange={e=>{const v=Number(e.target.value)||null;setPick(p=>({...p,desk:v}));}}><option value="">Chọn bàn</option>{roomDeskOptions(session?.starts_at).desks.map(n=><option key={n}>{n}</option>)}</select></label>
+        <label>Người phỏng vấn<select required name="interviewer" defaultValue={op.interviewer_id??""} className={field} onChange={e=>{const v=e.target.value||null;setPick(p=>({...p,interviewerId:v}));}}><option value="">Chọn người có mặt</option>{data.participants.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
+        {(busyHere.atDesk.length>0 || busyHere.withMentor.length>0) && <div role="note" data-testid="assign-busy-note" className="grid gap-1 rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 sm:col-span-3">
+          {busyHere.atDesk.length>0 && <p>Bàn này đang có {busyHere.atDesk.length} bạn chưa có kết quả: {busyHere.atDesk.join(", ")}.</p>}
+          {busyHere.withMentor.length>0 && <p>Mentor này đang có {busyHere.withMentor.length} bạn chưa có kết quả: {busyHere.withMentor.join(", ")}.</p>}
+          <p>Vẫn lưu được — mentor thường nhận bạn kế tiếp rồi mới viết xong phiếu bạn trước. Chỉ kiểm lại cho chắc không xếp nhầm.</p>
+        </div>}
         <label className="sm:col-span-2">Lý do đổi phân công<input name="reason" className={field} placeholder="Bắt buộc khi đổi người phỏng vấn" /></label>
         <label className="flex items-center gap-2 sm:col-span-3"><input type="checkbox" name="isOnline" defaultChecked={op.is_online} />Phỏng vấn ONLINE — chỉ BTC đánh dấu, ứng viên không thấy ô này</label>
         <label className="sm:col-span-3">Ghi chú online (link gặp, ghi chú riêng của BTC)<input name="onlineNote" defaultValue={op.online_note??""} className={field} /></label>

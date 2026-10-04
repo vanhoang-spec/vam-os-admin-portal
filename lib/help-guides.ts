@@ -19,7 +19,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Mentor: chấm từng tiêu chí 1–5 và ghi “Evidence / Note” (bắt buộc) cho mọi tiêu chí; mục A chọn kết quả, ghi lý do và nhu cầu phát triển chính.",
       "Mentor: mục B chọn “Mức độ phù hợp về kỳ vọng của Mentee” và ghi “Concern / Note” (bắt buộc); mục C chọn có muốn nhận bạn này không và ghi chân dung Mentor phù hợp.",
       "Mentor: bấm “Xác nhận kết quả” — lưu là chốt ngay; sửa sau bằng “Sửa kết quả / lựa chọn mentee” (cần lý do sửa).",
-      "Support/BTC: quét mã QR (tự check-in) hoặc tìm theo tên/SĐT rồi “Xác nhận check-in”; sau đó chọn Phòng (theo tên phòng của ca, ví dụ B1.504), Bàn, Người phỏng vấn và “Lưu phân bàn”. Mentor thấy tên phòng ngay trên danh sách và trong hồ sơ.",
+      "Support/BTC: quét mã QR (tự check-in) hoặc tìm theo tên/SĐT rồi “Xác nhận check-in”; sau đó chọn Phòng (theo tên phòng của ca, ví dụ B1.504), Bàn, Người phỏng vấn và “Lưu phân bàn”. Mentor thấy tên phòng ngay trên danh sách và trong hồ sơ. Bàn / mentor đang có bạn chưa có kết quả thì hệ thống chỉ nhắc tên bạn đó, vẫn lưu được.",
       "Support/BTC: trước check-in có thể “Đổi ca phỏng vấn” (kể cả sau hạn tự đổi ca, bắt buộc lý do) hoặc “Huỷ lịch đăng ký”; tick “Phỏng vấn ONLINE” khi mentee không có mặt trực tiếp."
     ],
     notes: [
