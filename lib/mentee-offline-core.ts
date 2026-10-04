@@ -1,4 +1,5 @@
 import type { ExpectationAlignment, InterviewRubric, InterviewScore, TakeChoice } from "@/lib/mentee-interview-rubric-core";
+import { vietnamDateKey } from "@/lib/utils";
 
 export const OFFLINE_PATH = "/interviews/mentee-offline";
 export const OFFLINE_GUIDE_PATH = "/interviews/mentee-offline/huong-dan";
@@ -85,6 +86,63 @@ export function sortCandidatesByArrival<T extends { name: string; sessionId: str
       startOf(a) - startOf(b) ||
       compareByArrival({ name: a.name, checkedInAt: a.operation?.checked_in_at }, { name: b.name, checkedInAt: b.operation?.checked_in_at })
   );
+}
+
+/**
+ * Tên phòng của một ca (BTC 04/10/2026: "chưa thấy ghi rõ tên phòng"). Database lưu
+ * phòng bằng SỐ 1..n — trigger vam104_room_desk_bounds_guard chặn cận theo số — còn
+ * tên thật nằm trong địa điểm của ca, đúng câu đã gửi trong thư cho mentee:
+ * "Phòng B1.503, B1.504, … — Cơ sở B, …". Phòng số n = tên thứ n trong danh sách đó.
+ * Đổi phòng của một ngày chỉ cần sửa địa điểm ca, không cần migration.
+ * Địa điểm không theo khuôn "Phòng …" thì trả rỗng — nơi hiển thị lùi về số phòng,
+ * thà hiện "Phòng 2" còn hơn hiện một mẩu địa chỉ như thể là tên phòng.
+ */
+export function roomNamesFromVenue(venue: string | null | undefined): string[] {
+  // NFC: địa điểm gõ từ máy khác có thể mang "ò" dạng tổ hợp, khi đó chữ "Phòng" không khớp.
+  const head = String(venue ?? "").normalize("NFC").split(/\s[—–-]\s/)[0] ?? "";
+  const match = /^\s*phòng\s+(.+)$/i.exec(head);
+  if (!match) return [];
+  const names = match[1].split(",").map((s) => s.trim()).filter(Boolean);
+  return names.every((n) => n.length <= 20) ? names : [];
+}
+
+/** "B1.504" cho phòng số 2 của ca Cơ sở B; không có tên thì chính con số. */
+export function roomLabel(room: number | null | undefined, venue: string | null | undefined): string {
+  if (room == null) return "—";
+  return roomNamesFromVenue(venue)[room - 1] ?? String(room);
+}
+
+/** "Phòng B1.504 · Bàn 2" — một cách viết cho danh sách, hồ sơ và trang tiến độ. */
+export function roomDeskLabel(room: number | null | undefined, desk: number | null | undefined, venue: string | null | undefined): string {
+  if (room == null) return "—";
+  return `Phòng ${roomLabel(room, venue)} · Bàn ${desk ?? "—"}`;
+}
+
+/**
+ * Ai đang ở bàn này / với mentor này mà CHƯA có kết quả, trong cùng NGÀY (BTC 04/10/2026).
+ * Database không còn khoá bàn / người phỏng vấn (migration 20261004110000): mentor nhận
+ * bạn kế tiếp trong lúc còn viết phiếu bạn trước, khoá cứng đã chặn ~90 lần một buổi
+ * sáng. Đây chỉ là lời nhắc để Support không xếp nhầm — không chặn lưu.
+ * Theo NGÀY chứ không theo ca: bàn và mentor là chỗ ngồi thật, ca trễ dồn sang ca sau.
+ */
+export function openAtDeskAndMentor(
+  data: Pick<OfflineDashboard, "candidates" | "sessions">,
+  selfId: string,
+  pick: { room: number | null; desk: number | null; interviewerId: string | null }
+): { atDesk: string[]; withMentor: string[] } {
+  const dayOf = new Map(data.sessions.map((s) => [s.id, vietnamDateKey(s.starts_at)]));
+  const self = data.candidates.find((c) => c.id === selfId);
+  const day = self ? dayOf.get(self.sessionId) : undefined;
+  if (!day) return { atDesk: [], withMentor: [] };
+  const open = data.candidates.filter(
+    (c) => c.id !== selfId && c.status !== "withdrawn" && c.operation && !c.operation.outcome && dayOf.get(c.sessionId) === day
+  );
+  return {
+    atDesk: pick.room != null && pick.desk != null
+      ? open.filter((c) => c.operation?.room === pick.room && c.operation?.desk === pick.desk).map((c) => c.name)
+      : [],
+    withMentor: pick.interviewerId ? open.filter((c) => c.operation?.interviewer_id === pick.interviewerId).map((c) => c.name) : []
+  };
 }
 
 export function normalizedPhone(value: string) {

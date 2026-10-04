@@ -91,7 +91,7 @@ export async function saveOfflineInterview(input: {applicationId: string; action
       }
     }
     if (error) {
-      if (error.code==="23505") return {ok:false,message:"Bàn/người phỏng vấn đã được phân trong ca, hoặc mentee đã có mentor. Tải lại để kiểm tra."};
+      if (error.code==="23505") return {ok:false,message:"Mentee đã có mentor, hoặc hồ sơ vừa được cập nhật ở thiết bị khác. Tải lại để kiểm tra."};
       throw new Error(error.message);
     }
     if (!data?.ok) throw new Error("WRITE_FAILED");
