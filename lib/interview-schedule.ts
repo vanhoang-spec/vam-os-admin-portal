@@ -118,9 +118,11 @@ type InterviewerActor = {
 
 /**
  * Ai được đứng vào lưới giờ: đúng tập vai trò của trang /interviews, và với
- * tài khoản `reviewer` phải thêm phép "interviewer của mùa" do database trả
- * lời (vam084_participant_for_stage) — một reviewer chấm hồ sơ KHÔNG tự nhiên
- * thành người phỏng vấn.
+ * tài khoản `reviewer` phải được BTC bật quyền PHỎNG VẤN MENTOR do database trả
+ * lời (vam109_mentor_interview_host). Không dùng vam084_participant_for_stage
+ * như trước: tư cách "interviewer của mùa" cũng là quyền CHẤM MENTEE, nên 04/10/2026
+ * cả 86 mentor được cấp để chấm mentee đều mở được lịch phỏng vấn mentor mới
+ * (migration 20261004120000). Database còn chặn lại trên interview_slots.
  */
 async function requireInterviewer(): Promise<
   { ok: true; actor: InterviewerActor; client: any } | { ok: false; message: string }
@@ -139,13 +141,17 @@ async function requireInterviewer(): Promise<
   if (!season.ok) return { ok: false, message: season.message };
 
   if (admin.role === "reviewer") {
-    const { data, error } = await client.rpc("vam084_participant_for_stage", {
-      p_admin_user_id: admin.id,
-      p_season_id: season.id,
-      p_review_stage: "interview"
+    const { data, error } = await client.rpc("vam109_mentor_interview_host", {
+      p_admin: admin.id,
+      p_season: season.id
     });
     if (error || data !== true) {
-      return { ok: false, message: "Bạn chưa được cấp vai trò người phỏng vấn cho mùa này." };
+      return {
+        ok: false,
+        message:
+          "Lịch phỏng vấn mentor chỉ dành cho core team và mentor được BTC bật quyền phỏng vấn mentor. " +
+          "Quyền chấm phỏng vấn mentee của anh/chị không bị ảnh hưởng."
+      };
     }
   }
 
@@ -1461,6 +1467,9 @@ export async function getBtcOverview(): Promise<BtcOverview> {
         nowIso
       )
     }))
+    // Người đã gỡ hết giờ (chưa từng có buổi) không còn gì để BTC theo dõi — hiện
+    // một dòng toàn số 0 chỉ khiến BTC tưởng họ vẫn đang mở lịch (BTC 04/10/2026).
+    .filter((row) => row.stats.total > 0)
     .sort((a, b) => a.name.localeCompare(b.name, "vi"));
 
   const openFutureHours = slots.data.filter(

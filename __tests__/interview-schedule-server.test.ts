@@ -137,17 +137,28 @@ afterEach(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("1. cổng quyền interviewer", () => {
-  it("reviewer chưa được cấp vai trò interviewer thì bị chặn — và phép hỏi đi qua database", async () => {
+  it("reviewer chưa được BTC bật quyền phỏng vấn MENTOR thì bị chặn — và phép hỏi đi qua database", async () => {
     reviewerActor();
     rpc.mockResolvedValue({ data: false, error: null });
     const result = await getMyInterviewerSchedule();
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toContain("người phỏng vấn");
-    expect(rpc).toHaveBeenCalledWith("vam084_participant_for_stage", {
-      p_admin_user_id: ADMIN_RV,
-      p_season_id: SEASON,
-      p_review_stage: "interview"
-    });
+    if (!result.ok) {
+      expect(result.message).toContain("mentor được BTC bật quyền phỏng vấn mentor");
+      expect(result.message).toContain("chấm phỏng vấn mentee");
+    }
+    // 04/10/2026: KHÔNG hỏi tư cách "interviewer của mùa" — đó cũng là quyền chấm mentee,
+    // hỏi nó là mở lịch phỏng vấn mentor cho cả 86 mentor chấm mentee.
+    expect(rpc).toHaveBeenCalledWith("vam109_mentor_interview_host", { p_admin: ADMIN_RV, p_season: SEASON });
+    expect(rpc).not.toHaveBeenCalledWith("vam084_participant_for_stage", expect.anything());
+  });
+
+  it("lỗi khi hỏi database thì chặn (fail-closed), không lưu giờ nào", async () => {
+    reviewerActor();
+    rpc.mockResolvedValue({ data: null, error: { message: "boom" } });
+    expect((await getMyInterviewerSchedule()).ok).toBe(false);
+    const saved = await saveInterviewerSlots({ phone: "0912345678", add: [H_24_09], remove: [] });
+    expect(saved.ok).toBe(false);
+    expect(db.rows("interview_slots")).toHaveLength(0);
   });
 
   it("reviewer đã được cấp thì vào được lưới", async () => {
@@ -570,6 +581,16 @@ describe("5. tổng quan ban tổ chức", () => {
       expect(overview.upcomingBookings[0].candidateName).toBe("Nguyễn Văn A");
       expect(overview.upcomingBookings[0].interviewerName).toBe("Chị Core Team");
     }
+  });
+
+  it("người đã gỡ hết giờ (chưa có buổi nào) không còn hiện trong bảng interviewer", async () => {
+    db.tables.interview_slots = [
+      { id: "s1", season_id: SEASON, admin_user_id: ADMIN_CT, slot_starts_at: H_26_15, status: "open", available_since: "x", booked_application_id: null },
+      { id: "s2", season_id: SEASON, admin_user_id: ADMIN_RV, slot_starts_at: H_24_10, status: "removed", available_since: "x", booked_application_id: null }
+    ];
+    const overview = await getBtcOverview();
+    expect(overview.ok).toBe(true);
+    if (overview.ok) expect(overview.perInterviewer.map((row) => row.adminUserId)).toEqual([ADMIN_CT]);
   });
 });
 
