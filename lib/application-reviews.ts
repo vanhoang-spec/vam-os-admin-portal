@@ -10,6 +10,7 @@ import {
   canReview
 } from "@/lib/permissions";
 import { canOperateSeason, canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { normalizeAppliedRole } from "@/lib/recruitment-permissions-core";
 import { REASSIGN_NEW_DUE_REQUIRED } from "@/lib/review-due";
 import { isEditableReviewStatus } from "@/lib/review-status";
 import { validateReviewEligibleReviewers } from "@/lib/reviewer-eligibility";
@@ -49,7 +50,7 @@ function mutationErrorMessage(error: unknown): string {
 async function canWriteReviewWorkflowForApplication(client: any, applicationId: string) {
   const { data: application, error } = await client
     .from("applications")
-    .select("id,season_id,status")
+    .select("id,season_id,status,role_applied")
     .eq("id", applicationId)
     .maybeSingle();
   if (error) {
@@ -141,11 +142,14 @@ export async function assignApplicationReview(input: AssignReviewInput): Promise
     };
   }
 
+  const roleApplied = normalizeAppliedRole(scopeAccess.application.role_applied);
+  if (!roleApplied) return { ok: false, message: "Đơn ứng tuyển chưa rõ là mentor hay mentee." };
   const reviewerValidation = await validateReviewEligibleReviewers(
     client,
     [input.reviewerAdminUserId],
     String(scopeAccess.application.season_id),
-    input.reviewRound
+    input.reviewRound,
+    roleApplied
   );
   if (!reviewerValidation.ok) {
     if (reviewerValidation.error) log("validate target reviewer failed", reviewerValidation.error);

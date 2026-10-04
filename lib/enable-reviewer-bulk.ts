@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canGrantParticipation, isParticipationRole, type ParticipationRole } from "@/lib/recruitment-permissions-core";
 import { enableMentorAsReviewer } from "@/lib/enable-reviewer";
 import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import { canManageReviewers } from "@/lib/permissions";
@@ -52,13 +53,16 @@ export async function bulkEnableMentorsAsReviewers(input: {
   /** Nguyên văn nội dung ô nhập — có thể là nhiều dòng, dấu phẩy, khoảng trắng. */
   rawEmails: string;
   intakeBatchId: string;
-  participationRole: "reviewer" | "interviewer";
+  participationRole: ParticipationRole;
 }): Promise<BulkGrantResult> {
   const actor = await getCurrentAdminUser();
   if (!actor?.id) return fail("Bạn chưa đăng nhập.");
   if (!canManageReviewers(actor.role)) return fail("Bạn không có quyền quản lý reviewer/interviewer.");
-  if (input.participationRole !== "reviewer" && input.participationRole !== "interviewer") {
+  if (!isParticipationRole(input.participationRole)) {
     return fail("Vai trò tham gia không hợp lệ.");
+  }
+  if (!canGrantParticipation(actor.role, input.participationRole)) {
+    return fail("Chỉ Ban điều hành cấp / thu quyền chấm hồ sơ và phỏng vấn mentor.");
   }
 
   const intakeBatchId = String(input.intakeBatchId ?? "").trim();

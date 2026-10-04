@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
 import { canSelfClaimInterview } from "@/lib/permissions";
 import { canReviewSeason, getAdminScopeContext } from "@/lib/program-scope";
+import { normalizeAppliedRole } from "@/lib/recruitment-permissions-core";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 // ---------------------------------------------------------------------------
@@ -75,7 +76,7 @@ export async function claimInterviewReview(input: {
   // --- Load and validate application
   const { data: app, error: appErr } = await client
     .from("applications")
-    .select("id,status,full_name,email_primary,season_id")
+    .select("id,status,full_name,email_primary,season_id,role_applied")
     .eq("id", appId)
     .maybeSingle();
 
@@ -89,12 +90,20 @@ export async function claimInterviewReview(input: {
   if (!(await canReviewSeason(scopeContext, app.season_id as string | null))) {
     return { ok: false, message: "Ban khong co quyen review trong mua cua don nay." };
   }
+  // Đúng nhóm phỏng vấn của hồ sơ (mentor / mentee) — 04/10/2026 tách 4 nhóm quyền.
+  const roleApplied = normalizeAppliedRole(app.role_applied);
+  if (!roleApplied) return { ok: false, message: "Đơn ứng tuyển chưa rõ là mentor hay mentee." };
   const { data: participant, error: participantError } = await client.rpc(
-    "vam084_participant_for_stage",
-    { p_admin_user_id: actor.id, p_season_id: app.season_id, p_review_stage: "interview" }
+    "vam110_eligible_for",
+    { p_admin_user_id: actor.id, p_season_id: app.season_id, p_review_stage: "interview", p_role_applied: roleApplied }
   );
   if (participantError || participant !== true) {
-    return { ok: false, message: "Bạn không phải interviewer được cấp quyền cho mùa này." };
+    return {
+      ok: false,
+      message: roleApplied === "mentor"
+        ? "Bạn chưa được cấp quyền phỏng vấn mentor cho mùa này."
+        : "Bạn chưa được cấp quyền phỏng vấn mentee cho mùa này."
+    };
   }
 
   const appStatus = String(app.status ?? "").trim();

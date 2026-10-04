@@ -305,7 +305,7 @@ describe("notify:false — cấp quyền, KHÔNG gửi thư riêng (thư xác nh
     const result = await enableMentorAsReviewer({ personId: PERSON_ID, seasonId: SEASON_ID, participationRole: "interviewer", notify: false });
 
     expect(result.ok).toBe(true);
-    expect(result.message).toBe("Đã cấp quyền Interviewer cho đúng mùa.");
+    expect(result.message).toBe("Đã cấp quyền phỏng vấn mentee cho đúng mùa.");
     expect(inviteCalls(generateLink)).toHaveLength(1);
     expect(rpc).toHaveBeenCalledWith("vam084_grant_recruitment_participation", expect.objectContaining({ p_participation_role: "interviewer", p_season_id: SEASON_ID }));
     expect(sendReviewerInvite).not.toHaveBeenCalled();
@@ -327,7 +327,7 @@ describe("thư đặt mật khẩu đi qua Brevo, không qua thư của Supabase
 
     expect(result.ok).toBe(true);
     expect(result.message).toBe(
-      `Đã cấp quyền Reviewer hồ sơ cho đúng mùa. Đã gửi thư đặt mật khẩu tới ${TARGET_EMAIL} — nhắc họ xem cả mục Spam.`
+      `Đã cấp quyền chấm hồ sơ mentee cho đúng mùa. Đã gửi thư đặt mật khẩu tới ${TARGET_EMAIL} — nhắc họ xem cả mục Spam.`
     );
   });
 
@@ -399,7 +399,7 @@ describe("thư đặt mật khẩu đi qua Brevo, không qua thư của Supabase
 
     const result = await grantReviewer();
 
-    expect(result.message).toBe("Đã cấp quyền Reviewer hồ sơ cho đúng mùa.");
+    expect(result.message).toBe("Đã cấp quyền chấm hồ sơ mentee cho đúng mùa.");
     expect(generateLink).not.toHaveBeenCalled();
     expect(sendReviewerInvite).not.toHaveBeenCalled();
     expect(hasRecentSentEmail).toHaveBeenCalledWith(
@@ -415,7 +415,7 @@ describe("thư đặt mật khẩu đi qua Brevo, không qua thư của Supabase
 
     const result = await grantReviewer();
 
-    expect(result.message).toBe("Đã cấp quyền Reviewer hồ sơ cho đúng mùa.");
+    expect(result.message).toBe("Đã cấp quyền chấm hồ sơ mentee cho đúng mùa.");
     expect(generateLink).not.toHaveBeenCalled();
     expect(hasRecentSentEmail).not.toHaveBeenCalled();
     expect(sendReviewerInvite).not.toHaveBeenCalled();

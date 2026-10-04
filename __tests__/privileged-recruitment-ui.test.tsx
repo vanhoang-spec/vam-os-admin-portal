@@ -62,8 +62,8 @@ function row(over: Partial<ReviewerPoolRow>): ReviewerPoolRow {
 }
 
 /**
- * `activeReviewerIds` / `activeInterviewerIds` are what the page loads from
- * vam084_list_recruitment_participants — the SAME canonical source the
+ * `activeIds` is what the page loads from vam110_list_recruitment_participants
+ * (one list per permission group, 04/10/2026) — the SAME canonical source the
  * assignment dropdowns read. Passing them explicitly is what makes these tests
  * about parity rather than about role strings.
  */
@@ -75,8 +75,13 @@ function renderPool(
     <ReviewerPoolClient
       rows={rows}
       seasonId={opts.seasonId === undefined ? SEASON : opts.seasonId}
-      activeReviewerIds={opts.reviewerIds ?? []}
-      activeInterviewerIds={opts.interviewerIds ?? []}
+      activeIds={{
+        reviewer: opts.reviewerIds ?? [],
+        interviewer: opts.interviewerIds ?? [],
+        mentor_reviewer: opts.reviewerIds ?? [],
+        mentor_interviewer: opts.interviewerIds ?? []
+      }}
+      canGrantMentor
     />
   );
 }
@@ -234,8 +239,11 @@ describe("F. no English recruitment vocabulary survives in the pool", () => {
       expect(text, forbidden).not.toContain(forbidden);
     }
 
-    expect(text).toContain("Cấp quyền đánh giá");
-    expect(text).toContain("Cấp quyền phỏng vấn");
+    // Bốn nhóm quyền (04/10/2026), mỗi nhóm một nút, nói rõ mentee hay mentor.
+    expect(text).toContain("Cấp quyền chấm hồ sơ mentee");
+    expect(text).toContain("Cấp quyền phỏng vấn mentee");
+    expect(text).toContain("Cấp quyền chấm hồ sơ mentor");
+    expect(text).toContain("Cấp quyền phỏng vấn mentor");
     expect(text).toContain("Mã Mentor");
     expect(text).toContain("Đang có quyền đánh giá");
     expect(text).toContain("Đã thu hồi quyền đánh giá");

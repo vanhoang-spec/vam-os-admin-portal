@@ -6,6 +6,7 @@ import {
   revokeMentorRecruitmentParticipation
 } from "@/lib/enable-reviewer";
 import type { EnableReviewerActionState } from "@/lib/enable-reviewer-action-types";
+import { isParticipationRole } from "@/lib/recruitment-permissions-core";
 
 export async function enableMentorAsReviewerAction(
   _prev: EnableReviewerActionState,
@@ -18,7 +19,7 @@ export async function enableMentorAsReviewerAction(
     const operation = String(formData.get("operation") ?? "grant").trim();
     if (!personId) return { ok: false, message: "Thiếu person_id." };
     if (!seasonId) return { ok: false, message: "Vui lòng chọn batch có mùa." };
-    if (participationRole !== "reviewer" && participationRole !== "interviewer") {
+    if (!isParticipationRole(participationRole)) {
       return { ok: false, message: "Vai trò tham gia không hợp lệ." };
     }
 

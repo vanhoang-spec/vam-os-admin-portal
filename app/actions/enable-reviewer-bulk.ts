@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { bulkEnableMentorsAsReviewers } from "@/lib/enable-reviewer-bulk";
 import type { BulkGrantActionState } from "@/lib/enable-reviewer-bulk-action-types";
+import { isParticipationRole } from "@/lib/recruitment-permissions-core";
 
 export async function bulkEnableMentorsAsReviewersAction(
   _prev: BulkGrantActionState,
@@ -12,7 +13,7 @@ export async function bulkEnableMentorsAsReviewersAction(
     const rawEmails = String(formData.get("emails") ?? "");
     const intakeBatchId = String(formData.get("intake_batch_id") ?? "").trim();
     const participationRole = String(formData.get("participation_role") ?? "").trim();
-    if (participationRole !== "reviewer" && participationRole !== "interviewer") {
+    if (!isParticipationRole(participationRole)) {
       return { ok: false, message: "Vai trò tham gia không hợp lệ.", granted: [], failed: [], notFound: [], skippedDueToQuota: [] };
     }
 

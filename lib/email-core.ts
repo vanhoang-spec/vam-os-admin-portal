@@ -12,6 +12,7 @@
  * code, a link this application generated). Applicant free text is never echoed
  * into an email body, so a public form can never be used to compose a message.
  */
+import type { ParticipationRole } from "@/lib/recruitment-permissions-core";
 
 export type EmailKind =
   | "mentor_confirmation_link"
@@ -455,7 +456,7 @@ export function buildReviewerInviteEmail(input: {
   linkType: "invite" | "recovery";
   loginUrl: string;
   loginEmail: string;
-  participationRole: "reviewer" | "interviewer";
+  participationRole: ParticipationRole;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.mentorName);
   const season = safeDisplayName(input.seasonLabel, "mùa mới");

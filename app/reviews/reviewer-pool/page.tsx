@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getReviewerPool, getReviewEligibleReviewers } from "@/lib/data";
-import { canManageReviewers, canManageUsers, canReview } from "@/lib/permissions";
+import { canAssignReview, canManageReviewers, canManageUsers, canReview } from "@/lib/permissions";
+import { PARTICIPATION_GROUPS, type ParticipationRole } from "@/lib/recruitment-permissions-core";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
 import { BulkGrantForm } from "./bulk-grant-form";
@@ -35,18 +36,21 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
   const seasonId = intakeBatchId
     ? String(intakeBatches.data.find((batch) => batch.id === intakeBatchId)?.season_id ?? "") || null
     : null;
-  const [activeReviewers, activeInterviewers] = seasonId
-    ? await Promise.all([
-        getReviewEligibleReviewers(seasonId, "profile_screening"),
-        getReviewEligibleReviewers(seasonId, "interview")
-      ])
-    : [{ data: [], error: null }, { data: [], error: null }];
+  // Bốn nhóm quyền độc lập (BTC 04/10/2026) — mỗi nhóm một danh sách từ database (vam110).
+  const groupLists = seasonId
+    ? await Promise.all(PARTICIPATION_GROUPS.map((g) => getReviewEligibleReviewers(seasonId, g.stage, g.applied)))
+    : PARTICIPATION_GROUPS.map(() => ({ data: [] as Array<{ id: string }>, error: null as string | null }));
+  const activeIds = Object.fromEntries(
+    PARTICIPATION_GROUPS.map((g, i) => [g.role, groupLists[i].data.map((row) => row.id)])
+  ) as Record<ParticipationRole, string[]>;
+  const listError = groupLists.find((r) => r.error)?.error ?? null;
+  const canGrantMentor = canAssignReview(adminUser.role);
 
   return (
     <>
       <PageHeader
         title="Danh sách nhân sự tuyển sinh"
-        description="Ban Điều hành và Quản trị viên đang hoạt động có quyền đánh giá hồ sơ và phỏng vấn theo vai trò, không cần cấp thủ công. Chỉ người đánh giá/phỏng vấn độc lập bên ngoài mới cần cấp quyền."
+        description="Bốn nhóm quyền độc lập theo mùa: Chấm hồ sơ mentee, Phỏng vấn mentee (BTC và Support cấp), Chấm hồ sơ mentor, Phỏng vấn mentor (chỉ Ban điều hành cấp). Có quyền nhóm này không kéo theo nhóm khác. Ban Điều hành và Quản trị viên có cả bốn theo vai trò."
       />
 
       {/* Back nav */}
@@ -74,7 +78,7 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
         )}
       </div>
 
-      <ErrorBox message={intakeBatches.error || pool.error || activeReviewers.error || activeInterviewers.error} />
+      <ErrorBox message={intakeBatches.error || pool.error || listError} />
 
       {/* Bulk grant — dán một danh sách email, xử lý nhiều người trong một lượt bấm */}
       <Card className="mb-5">
@@ -83,7 +87,7 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
             Cấp quyền hàng loạt (dán danh sách email)
           </summary>
           <div className="mt-3">
-            <BulkGrantForm intakeBatchId={intakeBatchId} />
+            <BulkGrantForm intakeBatchId={intakeBatchId} canGrantMentor={canGrantMentor} />
           </div>
         </details>
       </Card>
@@ -138,8 +142,8 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
       <ReviewerPoolClient
         rows={pool.data ?? []}
         seasonId={seasonId}
-        activeReviewerIds={activeReviewers.data.map((row) => row.id)}
-        activeInterviewerIds={activeInterviewers.data.map((row) => row.id)}
+        activeIds={activeIds}
+        canGrantMentor={canGrantMentor}
       />
     </>
   );

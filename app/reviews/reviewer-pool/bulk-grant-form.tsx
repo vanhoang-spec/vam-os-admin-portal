@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
+import { PARTICIPATION_GROUPS, type ParticipationRole } from "@/lib/recruitment-permissions-core";
 import { useRouter } from "next/navigation";
 import { bulkEnableMentorsAsReviewersAction } from "@/app/actions/enable-reviewer-bulk";
 import {
@@ -79,13 +80,15 @@ function ResultSummary({ state }: { state: BulkGrantActionState }) {
   );
 }
 
-export function BulkGrantForm({ intakeBatchId }: { intakeBatchId: string | null }) {
+export function BulkGrantForm({ intakeBatchId, canGrantMentor }: { intakeBatchId: string | null; canGrantMentor: boolean }) {
   const router = useRouter();
   const [state, formAction] = useFormState<BulkGrantActionState, FormData>(
     bulkEnableMentorsAsReviewersAction,
     initialBulkGrantActionState
   );
-  const [participationRole, setParticipationRole] = useState<"" | "reviewer" | "interviewer">("");
+  const [participationRole, setParticipationRole] = useState<"" | ParticipationRole>("");
+  // Support chỉ cấp được hai nhóm mentee; database cũng chặn lại (vam084_grant…).
+  const groups = PARTICIPATION_GROUPS.filter((g) => canGrantMentor || !g.coreOnly);
 
   const lastMsg = useRef("");
   useEffect(() => {
@@ -129,8 +132,9 @@ export function BulkGrantForm({ intakeBatchId }: { intakeBatchId: string | null 
             className="rounded-md border border-vam-line px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
           >
             <option value="">-- Chọn --</option>
-            <option value="reviewer">Chấm hồ sơ (reviewer)</option>
-            <option value="interviewer">Phỏng vấn (interviewer)</option>
+            {groups.map((g) => (
+              <option key={g.role} value={g.role}>{g.label}</option>
+            ))}
           </select>
         </div>
         <SubmitButton />

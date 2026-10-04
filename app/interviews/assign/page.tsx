@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { normalizeAppliedRole } from "@/lib/recruitment-permissions-core";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
   getIntakeBatches,
@@ -101,9 +102,9 @@ export default async function AssignInterviewPage(props: { searchParams: Promise
       scope,
       actor: { role: adminUser.role, adminUserId: adminUser.id }
     }),
-    seasonId
-      ? getReviewEligibleReviewers(String(seasonId), "interview")
-      : Promise.resolve({ data: [], error: "Batch chưa gắn mùa." })
+    seasonId && normalizeAppliedRole(roleApplied)
+      ? getReviewEligibleReviewers(String(seasonId), "interview", normalizeAppliedRole(roleApplied)!)
+      : Promise.resolve({ data: [], error: seasonId ? "Chọn vai trò mentor hoặc mentee." : "Batch chưa gắn mùa." })
   ]);
 
   const batchName =

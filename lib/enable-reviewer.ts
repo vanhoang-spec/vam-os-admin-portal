@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { sendReviewerInvite } from "@/lib/email";
 import { hasRecentSentEmail } from "@/lib/outbound-emails";
 import { canManageReviewers } from "@/lib/permissions";
+import { canGrantParticipation, participationLabel, type ParticipationRole } from "@/lib/recruitment-permissions-core";
 import { getPublicOrigin } from "@/lib/public-url";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { seasonLabel } from "@/lib/season-labels";
@@ -44,11 +45,19 @@ const GRANT_FAILURE_MESSAGES: ReadonlyArray<readonly [string, string]> = [
     "Tài khoản này thuộc nhóm quản trị và đang bị khoá. Cần super admin mở lại trước."
   ],
   ["Recruitment participation grant rejected", "Bạn không có quyền vận hành mùa này."],
+  ["Mentor recruitment participation requires core team", "Chỉ Ban điều hành cấp / thu quyền chấm hồ sơ và phỏng vấn mentor."],
+  [
+    "Support team account cannot join recruitment",
+    "Email này đang là tài khoản Support. Cấp quyền chấm / phỏng vấn trên tài khoản này sẽ làm mất quyền Support — dùng một email khác cho việc chấm / phỏng vấn."
+  ],
   [
     "identity or season is invalid",
     "Email trong hồ sơ và email của tài khoản không khớp. Nhờ admin kiểm tra lại email của người này."
   ]
 ];
+
+/** Hai nhóm quyền mentor chỉ ban điều hành cấp / thu (BTC 04/10/2026) — database chặn lại lần nữa. */
+const CORE_ONLY_MESSAGE = "Chỉ Ban điều hành cấp / thu quyền chấm hồ sơ và phỏng vấn mentor.";
 
 function grantFailureMessage(error: unknown) {
   const text = String((error as { message?: string })?.message ?? "");
@@ -166,7 +175,7 @@ export type EnableReviewerResult = {
 export async function enableMentorAsReviewer(input: {
   personId: string;
   seasonId: string;
-  participationRole: "reviewer" | "interviewer";
+  participationRole: ParticipationRole;
   /**
    * false: chỉ cấp quyền, KHÔNG gửi thư đặt mật khẩu riêng. Dùng khi một thư khác
    * mang luôn thông tin đăng nhập (thư xác nhận lịch phỏng vấn cho mentor, 02/10/2026)
@@ -177,6 +186,7 @@ export async function enableMentorAsReviewer(input: {
   const actor = await getCurrentAdminUser();
   if (!actor?.id) return { ok: false, message: "Bạn chưa đăng nhập." };
   if (!canManageReviewers(actor.role)) return { ok: false, message: "Bạn không có quyền quản lý reviewer/interviewer." };
+  if (!canGrantParticipation(actor.role, input.participationRole)) return { ok: false, message: CORE_ONLY_MESSAGE };
   if (!(await canOperateSeason(await getAdminScopeContext(), input.seasonId))) {
     return { ok: false, message: "Bạn không có quyền vận hành mùa này." };
   }
@@ -240,7 +250,7 @@ export async function enableMentorAsReviewer(input: {
   }
 
   const adminUserId = String(data);
-  const label = input.participationRole === "reviewer" ? "Reviewer hồ sơ" : "Interviewer";
+  const label = participationLabel(input.participationRole).toLowerCase();
   const granted = { ok: true, message: `Đã cấp quyền ${label} cho đúng mùa.`, adminUserId, authInvited: createdAccount };
   if (input.notify === false) return granted;
   const notSent = (why: string) => ({
@@ -338,13 +348,14 @@ async function generatePasswordLink(
 export async function revokeMentorRecruitmentParticipation(input: {
   personId: string;
   seasonId: string;
-  participationRole: "reviewer" | "interviewer";
+  participationRole: ParticipationRole;
 }): Promise<EnableReviewerResult> {
   const actor = await getCurrentAdminUser();
   if (!actor?.id) return { ok: false, message: "Bạn chưa đăng nhập." };
   if (!canManageReviewers(actor.role)) {
     return { ok: false, message: "Bạn không có quyền quản lý reviewer/interviewer." };
   }
+  if (!canGrantParticipation(actor.role, input.participationRole)) return { ok: false, message: CORE_ONLY_MESSAGE };
   if (!(await canOperateSeason(await getAdminScopeContext(), input.seasonId))) {
     return { ok: false, message: "Bạn không có quyền vận hành mùa này." };
   }
@@ -358,9 +369,10 @@ export async function revokeMentorRecruitmentParticipation(input: {
   });
   if (error || !data) {
     console.error("[enable-reviewer] atomic revoke failed", error);
-    return { ok: false, message: "Không thể thu hồi quyền tham gia tuyển sinh. Vui lòng thử lại hoặc liên hệ admin." };
+    const mapped = grantFailureMessage(error);
+    return { ok: false, message: mapped === SAFE_ERROR ? "Không thể thu hồi quyền tham gia tuyển sinh. Vui lòng thử lại hoặc liên hệ admin." : mapped };
   }
-  const label = input.participationRole === "reviewer" ? "Reviewer hồ sơ" : "Interviewer";
+  const label = participationLabel(input.participationRole).toLowerCase();
   return { ok: true, message: `Đã thu hồi quyền ${label} trong đúng mùa.`, adminUserId: String(data) };
 }
 

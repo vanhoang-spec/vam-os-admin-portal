@@ -226,7 +226,11 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam107_move_mentee_booking",
   // Quyền tạo lịch phỏng vấn mentor tách khỏi quyền chấm mentee — migration
   // 20261004120000_lich_pv_mentor_tach_quyen.sql.
-  "vam109_mentor_interview_host"
+  "vam109_mentor_interview_host",
+  // Bốn nhóm quyền tuyển sinh độc lập (chấm hồ sơ / phỏng vấn × mentee / mentor) —
+  // migration 20261004170000_tach_4_nhom_quyen_tuyen_sinh.sql.
+  "vam110_eligible_for",
+  "vam110_list_recruitment_participants"
 ];
 
 /**

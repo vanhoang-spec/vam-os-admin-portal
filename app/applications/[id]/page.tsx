@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ApplicationAnswerCard } from "@/components/application-answer-card";
+import { normalizeAppliedRole } from "@/lib/recruitment-permissions-core";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader, SimpleTable } from "@/components/ui";
 import {
   getApplication,
@@ -129,10 +130,12 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       getApplicationDecisions(params.id, scope),
       getActiveAdminUsers()
     ]);
-  const [profileReviewersResult, interviewersResult, stageRequirementsResult] = application.data?.season_id
+  // Ô chọn chỉ gồm người có ĐÚNG nhóm quyền của hồ sơ này (mentor / mentee) — 04/10/2026.
+  const appliedRole = normalizeAppliedRole(application.data?.role_applied);
+  const [profileReviewersResult, interviewersResult, stageRequirementsResult] = application.data?.season_id && appliedRole
     ? await Promise.all([
-        getReviewEligibleReviewers(application.data.season_id, "profile_screening"),
-        getReviewEligibleReviewers(application.data.season_id, "interview"),
+        getReviewEligibleReviewers(application.data.season_id, "profile_screening", appliedRole),
+        getReviewEligibleReviewers(application.data.season_id, "interview", appliedRole),
         getStageRequirements([application.data.season_id])
       ])
     : [

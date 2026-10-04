@@ -92,11 +92,12 @@ describe("M090 participant list contract", () => {
       data: [{ id: "reviewer-a", email: "a@example.test", full_name: "A", role: "reviewer" }],
       error: null
     });
-    const result = await validateReviewEligibleReviewers({ rpc }, ["reviewer-a"], "season-s12", "interview");
+    const result = await validateReviewEligibleReviewers({ rpc }, ["reviewer-a"], "season-s12", "interview", "mentee");
     expect(result.ok).toBe(true);
-    expect(rpc).toHaveBeenCalledWith("vam084_list_recruitment_participants", {
+    expect(rpc).toHaveBeenCalledWith("vam110_list_recruitment_participants", {
       p_season_id: "season-s12",
-      p_review_stage: "interview"
+      p_review_stage: "interview",
+      p_role_applied: "mentee"
     });
   });
 
@@ -104,7 +105,7 @@ describe("M090 participant list contract", () => {
     const { validateReviewEligibleReviewers } = await import("@/lib/reviewer-eligibility");
     const result = await validateReviewEligibleReviewers(
       { rpc: vi.fn().mockResolvedValue({ data: [], error: null }) },
-      ["reviewer-b"], "season-s12", "interview"
+      ["reviewer-b"], "season-s12", "interview", "mentee"
     );
     expect(result.ok).toBe(false);
   });

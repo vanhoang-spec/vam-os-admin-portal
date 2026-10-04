@@ -133,12 +133,13 @@ describe("P0.1 application boundary — the RPC result is the whole policy", () 
       client,
       ["admin-1", "core-1", "super-1"],
       SEASON,
-      "profile_screening"
+      "profile_screening", "mentee"
     );
     expect(result.ok).toBe(true);
-    expect(client.rpc).toHaveBeenCalledWith("vam084_list_recruitment_participants", {
+    expect(client.rpc).toHaveBeenCalledWith("vam110_list_recruitment_participants", {
       p_season_id: SEASON,
-      p_review_stage: "profile_screening"
+      p_review_stage: "profile_screening",
+      p_role_applied: "mentee"
     });
   });
 
@@ -148,7 +149,7 @@ describe("P0.1 application boundary — the RPC result is the whole policy", () 
       client,
       ["admin-1", "not-eligible-1"],
       SEASON,
-      "profile_screening"
+      "profile_screening", "mentee"
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.message).toMatch(/không tồn tại|không hoạt động|vai trò/i);
@@ -156,22 +157,23 @@ describe("P0.1 application boundary — the RPC result is the whole policy", () 
 
   it("refuses an ineligible admin role even if the RPC somehow returned it", async () => {
     const client = rpcClient([adminRow("viewer-1", "viewer")]);
-    const result = await validateReviewEligibleReviewers(client, ["viewer-1"], SEASON, "profile_screening");
+    const result = await validateReviewEligibleReviewers(client, ["viewer-1"], SEASON, "profile_screening", "mentee");
     expect(result.ok).toBe(false);
   });
 
   it("passes the review round through, so interview keeps its own policy", async () => {
     const client = rpcClient([adminRow("core-1", "core_team")]);
-    await validateReviewEligibleReviewers(client, ["core-1"], SEASON, "interview");
-    expect(client.rpc).toHaveBeenCalledWith("vam084_list_recruitment_participants", {
+    await validateReviewEligibleReviewers(client, ["core-1"], SEASON, "interview", "mentee");
+    expect(client.rpc).toHaveBeenCalledWith("vam110_list_recruitment_participants", {
       p_season_id: SEASON,
-      p_review_stage: "interview"
+      p_review_stage: "interview",
+      p_role_applied: "mentee"
     });
   });
 
   it("fails closed when the RPC errors rather than allowing the assignment", async () => {
     const client = rpcClient([], { message: "boom" });
-    const result = await validateReviewEligibleReviewers(client, ["admin-1"], SEASON, "profile_screening");
+    const result = await validateReviewEligibleReviewers(client, ["admin-1"], SEASON, "profile_screening", "mentee");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.message).not.toContain("boom");
   });
@@ -189,12 +191,12 @@ describe("P0.1 — one canonical eligibility boundary, no UI-only filtering", ()
   const ELIGIBILITY = readFileSync("lib/reviewer-eligibility.ts", "utf8");
 
   it("sources the dropdown from the same RPC", () => {
-    expect(DATA).toContain('"vam084_list_recruitment_participants"');
+    expect(DATA).toContain('"vam110_list_recruitment_participants"');
   });
 
   it("validates individual and bulk assignment through the same helper", () => {
     expect(REVIEWS).toContain("validateReviewEligibleReviewers");
-    expect(ELIGIBILITY).toContain('client.rpc("vam084_list_recruitment_participants"');
+    expect(ELIGIBILITY).toContain('client.rpc("vam110_list_recruitment_participants"');
   });
 
   it("does not re-derive eligibility from people or memberships in the app layer", () => {

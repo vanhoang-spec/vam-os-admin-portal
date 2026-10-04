@@ -41,8 +41,9 @@ const QUOTED: Array<[string, string, string]> = [
   ["Lịch phỏng vấn", "lib/nav-model.ts", 'label: "Lịch phỏng vấn"'],
   ["Đánh giá", "lib/nav-model.ts", 'label: "Đánh giá"'],
   ["Danh sách nhân sự tuyển sinh", "lib/nav-model.ts", '"Danh sách nhân sự tuyển sinh"'],
-  // Nhãn nút dựng bằng `Cấp ${rightLabel}` trên trang nhân sự tuyển sinh.
-  ["Cấp quyền phỏng vấn", "app/reviews/reviewer-pool/reviewer-pool-client.tsx", '"quyền phỏng vấn"'],
+  // Nhãn nút dựng bằng `Cấp ${rightLabel}` trên trang nhân sự tuyển sinh; nhãn nhóm ở
+  // lib/recruitment-permissions-core.ts. Lịch này chỉ mở cho nhóm phỏng vấn MENTOR (04/10/2026).
+  ["Cấp quyền phỏng vấn mentor", "lib/recruitment-permissions-core.ts", 'label: "Phỏng vấn mentor"'],
   ["Lưu giờ rảnh", GRID, "Lưu giờ rảnh"],
   ["cả ngày", GRID, "cả ngày"],
   ["Đã đăng ký", GRID, "Đã đăng ký"],

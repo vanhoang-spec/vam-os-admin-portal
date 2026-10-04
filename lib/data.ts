@@ -9,6 +9,7 @@ import { evaluateMentorClassifications } from "@/lib/classification";
 import { intersectAuthorizedAndCohort } from "@/lib/season-cohort";
 import { resolveSeasonContext } from "@/lib/season-context";
 import { REVIEW_ELIGIBLE_ROLES } from "@/lib/reviewer-eligibility";
+import type { AppliedRole } from "@/lib/recruitment-permissions-core";
 import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
 import {
   isCurrentWorkloadStatus,
@@ -2020,15 +2021,18 @@ export async function getReviewAssignableApplications(filters: {
  */
 export async function getReviewEligibleReviewers(
   seasonId: string,
-  reviewRound: "profile_screening" | "interview"
+  reviewRound: "profile_screening" | "interview",
+  // Bắt buộc từ 04/10/2026: bốn nhóm quyền tách theo hồ sơ mentor / mentee
+  // (vam110) — người chấm hồ sơ mentee không được hiện trong ô chọn của hồ sơ mentor.
+  roleApplied: AppliedRole
 ): Promise<QueryResult<ReviewEligibleReviewer[]>> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return envError<ReviewEligibleReviewer[]>([]);
 
   // Class B: staff accounts.
   const { data: adminRows, error: adminErr } = await client.rpc(
-    "vam084_list_recruitment_participants",
-    { p_season_id: seasonId, p_review_stage: reviewRound }
+    "vam110_list_recruitment_participants",
+    { p_season_id: seasonId, p_review_stage: reviewRound, p_role_applied: roleApplied }
   );
 
   if (adminErr) {
