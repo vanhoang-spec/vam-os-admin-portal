@@ -1,5 +1,5 @@
 import { sessionDayLabel, sessionTimeLabel, vietnamDateKeyOf } from "@/lib/mentee-interview-core";
-import { OFFLINE_OUTCOMES, compareByArrival, type OfflineDashboard, type OfflineOutcome } from "@/lib/mentee-offline-core";
+import { OFFLINE_OUTCOMES, compareByArrival, roomDeskLabel, type OfflineDashboard, type OfflineOutcome } from "@/lib/mentee-offline-core";
 import { formatTime } from "@/lib/utils";
 
 /**
@@ -40,6 +40,8 @@ export type ProgressRow = {
   outcomeLabel: string;
   room: number | null;
   desk: number | null;
+  /** "Phòng B1.504 · Bàn 2" — tên phòng lấy từ địa điểm của ca; chưa phân bàn thì rỗng. */
+  place: string;
   interviewer: string;
   checkedInAt: string | null;
   /** Tài khoản Support/BTC đã check-in (BTC 04/10/2026). */
@@ -81,6 +83,7 @@ export function halfOf(startsAtIso: string): "sang" | "chieu" {
 
 export function buildMenteeProgress(data: Pick<OfflineDashboard, "sessions" | "participants" | "candidates">): MenteeProgress {
   const names = new Map(data.participants.map((p) => [p.id, p.full_name || p.email]));
+  const venues = new Map(data.sessions.map((s) => [s.id, s.venue]));
   const bySession = new Map<string, ProgressRow[]>();
   for (const c of data.candidates) {
     const op = c.operation;
@@ -95,6 +98,7 @@ export function buildMenteeProgress(data: Pick<OfflineDashboard, "sessions" | "p
       outcomeLabel: outcome ? OFFLINE_OUTCOMES[outcome] : "",
       room: op?.room ?? null,
       desk: op?.desk ?? null,
+      place: op?.room ? roomDeskLabel(op.room, op.desk, venues.get(c.sessionId)) : "",
       interviewer: op?.interviewer_id ? names.get(op.interviewer_id) ?? "Người phỏng vấn khác" : "",
       checkedInAt: op?.checked_in_at ?? null,
       checkedInBy: op?.checked_in_at ? op?.checked_in_by_name ?? "" : "",

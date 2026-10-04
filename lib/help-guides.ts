@@ -19,7 +19,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Mentor: chấm từng tiêu chí 1–5 và ghi “Evidence / Note” (bắt buộc) cho mọi tiêu chí; mục A chọn kết quả, ghi lý do và nhu cầu phát triển chính.",
       "Mentor: mục B chọn “Mức độ phù hợp về kỳ vọng của Mentee” và ghi “Concern / Note” (bắt buộc); mục C chọn có muốn nhận bạn này không và ghi chân dung Mentor phù hợp.",
       "Mentor: bấm “Xác nhận kết quả” — lưu là chốt ngay; sửa sau bằng “Sửa kết quả / lựa chọn mentee” (cần lý do sửa).",
-      "Support/BTC: quét mã QR (tự check-in) hoặc tìm theo tên/SĐT rồi “Xác nhận check-in”; sau đó chọn Phòng, Bàn, Người phỏng vấn và “Lưu phân bàn”.",
+      "Support/BTC: quét mã QR (tự check-in) hoặc tìm theo tên/SĐT rồi “Xác nhận check-in”; sau đó chọn Phòng (theo tên phòng của ca, ví dụ B1.504), Bàn, Người phỏng vấn và “Lưu phân bàn”. Mentor thấy tên phòng ngay trên danh sách và trong hồ sơ.",
       "Support/BTC: trước check-in có thể “Đổi ca phỏng vấn” (kể cả sau hạn tự đổi ca, bắt buộc lý do) hoặc “Huỷ lịch đăng ký”; tick “Phỏng vấn ONLINE” khi mentee không có mặt trực tiếp."
     ],
     notes: [
@@ -65,7 +65,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     steps: [
       "Chọn “Ngày” và “Buổi” (sáng: ca bắt đầu trước 12:00). Các ô số đầu trang tính theo ngày + buổi đang chọn.",
       "Bấm nút trạng thái (“Chưa đến”, “Chờ phân bàn”, “Đang phỏng vấn”, “Đã xong”) để lọc; gõ tên hoặc số điện thoại vào “Tìm mentee”.",
-      "Mỗi ca hiện số bạn đã xong (Đạt / Không chọn / Cần xem xét), đang phỏng vấn, chờ phân bàn, chưa đến; từng bạn có phòng/bàn, người phỏng vấn, kết quả, giờ check-in.",
+      "Mỗi ca hiện số bạn đã xong (Đạt / Không chọn / Cần xem xét), đang phỏng vấn, chờ phân bàn, chưa đến; từng bạn có phòng (tên phòng, ví dụ B1.504) / bàn, người phỏng vấn, kết quả, giờ check-in.",
       "Bấm tên mentee để mở đúng hồ sơ ở màn hình check-in / phân bàn / chấm phỏng vấn."
     ],
     notes: [
