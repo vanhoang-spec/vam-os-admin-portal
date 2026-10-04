@@ -34,6 +34,7 @@ vi.mock("@/lib/data", () => ({
   getMyApplicationReviews: vi.fn(),
   getApplications: vi.fn()
 }));
+vi.mock("@/lib/interview-schedule", () => ({ getBookedInterviewTimes: vi.fn(async () => new Map()) }));
 vi.mock("@/lib/program-scope", () => ({
   getAdminScopeContext: vi.fn(async () => ({ scopeError: null, globalRole: "reviewer" })),
   getScopeFilter: vi.fn(async () => SCOPE)
@@ -59,6 +60,7 @@ import MyWorkPage from "@/app/my-work/page";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getMyApplicationReviews, getApplications } from "@/lib/data";
 import { getScopeFilter } from "@/lib/program-scope";
+import { getBookedInterviewTimes } from "@/lib/interview-schedule";
 
 const SCOPE = { seasonIds: ["season-s12"], programIds: ["prog-uehm"] } as never;
 
@@ -536,5 +538,44 @@ describe("10. My Work adds no persistence of its own", () => {
     // same canonical rows must be identical.
     const rows = [review({ id: "rev-1" }), review({ id: "rev-2", review_round: "interview" })];
     expect(build(rows)).toEqual(build(rows));
+  });
+});
+
+// ── 9. lịch phỏng vấn ngay trên hộp việc (BTC 04/10/2026) ─────────────────────
+describe("9. lịch phỏng vấn hiện ngay trên danh sách", () => {
+  const AT = "2026-10-05T06:00:00.000Z"; // 13:00 giờ Việt Nam, Thứ Hai
+  test("chỉ việc Phỏng vấn mang giờ hẹn; việc chấm hồ sơ trùng mã cũng không nhận", () => {
+    const items = buildMyWorkItems({
+      reviews: [
+        review({ id: "rev-iv", application_id: "app-2", review_round: "interview", status: "assigned" }),
+        review({ id: "rev-ps", application_id: "app-1", review_round: "profile_screening", status: "assigned" }),
+        review({ id: "rev-iv2", application_id: "app-2", review_round: "interview", status: "submitted" })
+      ],
+      applications: apps(APP_MENTEE, APP_MENTOR),
+      assigneeAdminUserId: USER_A,
+      now: NOW,
+      interviewTimes: new Map([["rev-iv", AT], ["rev-ps", AT]])
+    });
+    const at = Object.fromEntries(items.map((item) => [item.reviewId, item.interviewAt]));
+    expect(at).toEqual({ "rev-iv": AT, "rev-ps": null, "rev-iv2": null });
+  });
+
+  test("trang hỏi giờ hẹn đúng các phiếu Phỏng vấn của chính mình và hiện ngay trên dòng", async () => {
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: USER_A, role: "core_team" } as never);
+    vi.mocked(getMyApplicationReviews).mockResolvedValue({
+      data: [
+        review({ id: "rev-iv", application_id: "app-2", review_round: "interview", status: "assigned" }),
+        review({ id: "rev-ps", application_id: "app-1", review_round: "profile_screening", status: "assigned" }),
+        review({ id: "rev-other", application_id: "app-2", review_round: "interview", reviewer_admin_user_id: "someone-else" })
+      ],
+      error: null
+    } as never);
+    vi.mocked(getApplications).mockResolvedValue({ data: [APP_MENTEE, APP_MENTOR], error: null } as never);
+    vi.mocked(getBookedInterviewTimes).mockResolvedValue(new Map([["rev-iv", AT]]));
+    render(await MyWorkPage());
+    expect(vi.mocked(getBookedInterviewTimes)).toHaveBeenCalledWith(["rev-iv"]);
+    const lines = screen.getAllByTestId("my-work-item-interview-at");
+    expect(lines.map((line) => line.textContent)).toEqual(["Lịch phỏng vấn: Thứ Hai 05/10/2026, 13:00–14:00 (giờ Việt Nam)"]);
+    expect(lines[0].closest("[data-review-id]")?.getAttribute("data-review-id")).toBe("rev-iv");
   });
 });

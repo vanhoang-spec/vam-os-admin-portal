@@ -8,7 +8,7 @@
  * lịch phải qua hộp thoại xác nhận).
  */
 import { readFileSync } from "node:fs";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 const availabilityState: { value: { status: string; message: string; blockedRemovals: string[] } } = {
@@ -91,7 +91,25 @@ const OVERVIEW = {
       slotLabel: "Thứ Bảy 26/09/2026, 15:00–16:00 (giờ Việt Nam)",
       candidateName: "Nguyễn Văn A",
       candidateEmail: "a@example.com",
-      interviewerName: "Chị Core Team"
+      candidatePhone: "0901111222",
+      applicationId: "app-a",
+      reviewId: "rv-a",
+      interviewerName: "Chị Core Team",
+      interviewerEmail: "ct@example.com",
+      interviewerPhone: "0912345678"
+    },
+    {
+      bookingId: "b2",
+      slotStartsAtIso: "2026-09-26T09:00:00.000Z",
+      slotLabel: "Thứ Bảy 26/09/2026, 16:00–17:00 (giờ Việt Nam)",
+      candidateName: "Trần Văn C",
+      candidateEmail: "c@example.com",
+      candidatePhone: null,
+      applicationId: "app-c",
+      reviewId: null,
+      interviewerName: "Anh Phỏng Vấn",
+      interviewerEmail: null,
+      interviewerPhone: null
     }
   ]
 };
@@ -217,6 +235,32 @@ describe("1. lưới giờ rảnh", () => {
   });
 });
 
+describe("2b. bấm vào buổi hẹn thấy đủ hai người (BTC 04/10/2026)", () => {
+  it("ứng viên: email, SĐT gọi được, mở hồ sơ, mở phiếu; người phỏng vấn: email, SĐT", () => {
+    render(<BtcPanel overview={OVERVIEW} />);
+    const [first] = screen.getAllByTestId("upcoming-booking");
+    const candidate = within(first).getByTestId("booking-candidate");
+    expect(candidate.textContent).toContain("Nguyễn Văn A");
+    expect(within(candidate).getByRole("link", { name: "0901111222" }).getAttribute("href")).toBe("tel:0901111222");
+    expect(within(candidate).getByRole("link", { name: "Mở hồ sơ ứng tuyển" }).getAttribute("href")).toBe("/applications/app-a");
+    expect(within(candidate).getByRole("link", { name: "Mở phiếu phỏng vấn" }).getAttribute("href")).toBe("/reviews/rv-a");
+    const interviewer = within(first).getByTestId("booking-interviewer");
+    expect(interviewer.textContent).toContain("Chị Core Team");
+    expect(within(interviewer).getByRole("link", { name: "ct@example.com" }).getAttribute("href")).toBe("mailto:ct@example.com");
+    expect(within(interviewer).getByRole("link", { name: "0912345678" }).getAttribute("href")).toBe("tel:0912345678");
+  });
+
+  it("thiếu SĐT thì ghi 'chưa có'; chưa có phiếu thì không hứa link phiếu", () => {
+    render(<BtcPanel overview={OVERVIEW} />);
+    const second = screen.getAllByTestId("upcoming-booking")[1];
+    const candidate = within(second).getByTestId("booking-candidate");
+    expect(candidate.textContent).toContain("SĐT: chưa có");
+    expect(within(candidate).queryByRole("link", { name: "Mở phiếu phỏng vấn" })).toBeNull();
+    expect(within(candidate).getByRole("link", { name: "Mở hồ sơ ứng tuyển" }).getAttribute("href")).toBe("/applications/app-c");
+    expect(within(second).getByTestId("booking-interviewer").textContent).toContain("SĐT: chưa có");
+  });
+});
+
 describe("2. bảng điều hành ban tổ chức", () => {
   it("vòng tự gửi chạy ngay khi mở tab — không chờ ai bấm", async () => {
     render(<BtcPanel overview={OVERVIEW} />);
@@ -240,14 +284,14 @@ describe("2. bảng điều hành ban tổ chức", () => {
     render(<BtcPanel overview={OVERVIEW} />);
     // Chờ nhịp tự gửi lúc mở tab xong — trong lúc busy, nút Huỷ bị khoá có chủ ý.
     await vi.waitFor(() =>
-      expect((screen.getByRole("button", { name: "Huỷ lịch" }) as HTMLButtonElement).disabled).toBe(false)
+      expect((screen.getAllByRole("button", { name: "Huỷ lịch" })[0] as HTMLButtonElement).disabled).toBe(false)
     );
-    fireEvent.click(screen.getByRole("button", { name: "Huỷ lịch" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Huỷ lịch" })[0]);
     expect(promptSpy).toHaveBeenCalled();
     expect(cancelBookingByBtcAction).not.toHaveBeenCalled();
 
     promptSpy.mockReturnValue("Interviewer bận");
-    fireEvent.click(screen.getByRole("button", { name: "Huỷ lịch" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Huỷ lịch" })[0]);
     await vi.waitFor(() =>
       expect(cancelBookingByBtcAction).toHaveBeenCalledWith({ bookingId: "b1", note: "Interviewer bận" })
     );

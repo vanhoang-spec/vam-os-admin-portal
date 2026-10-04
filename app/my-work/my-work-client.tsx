@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { filterMyWorkItems, summarize, type MyWorkFilter, type MyWorkItem } from "@/lib/my-work";
 import { formatDate } from "@/lib/utils";
+import { slotRangeLabel } from "@/lib/interview-schedule-core";
 import { Card, EmptyState } from "@/components/ui";
 
 /**
@@ -147,6 +148,11 @@ export function MyWorkClient({ items }: { items: MyWorkItem[] }) {
                       </span>
                     ) : null}
                   </div>
+                  {item.interviewAt ? (
+                    <p className="mt-1 text-sm font-medium text-vam-green" data-testid="my-work-item-interview-at">
+                      Lịch phỏng vấn: {slotRangeLabel(item.interviewAt)}
+                    </p>
+                  ) : null}
                 </div>
 
                 {/*

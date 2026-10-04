@@ -32,6 +32,7 @@ import { sendInterviewInvite, sendInterviewSchedule, sendInterviewSlotInvite } f
 import {
   getBookingPageData,
   getBtcOverview,
+  getBookedInterviewTimes,
   getMyInterviewerSchedule,
   matchMentorAtHour,
   runInterviewInviteDispatch,
@@ -581,6 +582,39 @@ describe("5. tổng quan ban tổ chức", () => {
       expect(overview.upcomingBookings[0].candidateName).toBe("Nguyễn Văn A");
       expect(overview.upcomingBookings[0].interviewerName).toBe("Chị Core Team");
     }
+  });
+
+  it("buổi hẹn mang đủ thông tin hai người: hồ sơ, phiếu, SĐT ứng viên, email + SĐT người phỏng vấn", async () => {
+    seedProfile();
+    db.tables.interview_slots = [
+      { id: "s3", season_id: SEASON, admin_user_id: ADMIN_CT, slot_starts_at: H_24_09, status: "booked", available_since: "x", booked_application_id: APP_A }
+    ];
+    db.tables.application_reviews = [{ id: "r1", application_id: APP_A, review_round: "interview", status: "assigned" }];
+    db.tables.interview_bookings = [
+      { id: "b1", application_id: APP_A, slot_id: "s3", interviewer_admin_user_id: ADMIN_CT, review_id: "r1", slot_starts_at: H_24_09, status: "booked", previous_application_status: "invited_to_interview" }
+    ];
+    const overview = await getBtcOverview();
+    expect(overview.ok).toBe(true);
+    if (overview.ok) {
+      expect(overview.upcomingBookings[0]).toMatchObject({
+        applicationId: APP_A,
+        reviewId: "r1",
+        candidatePhone: "0900000001",
+        interviewerEmail: "core@example.com",
+        interviewerPhone: "0912345678"
+      });
+    }
+  });
+
+  it("giờ phỏng vấn theo phiếu: chỉ buổi còn hiệu lực, chỉ phiếu được hỏi", async () => {
+    db.tables.interview_bookings = [
+      { id: "b1", application_id: APP_A, review_id: "r1", slot_starts_at: H_24_09, status: "booked" },
+      { id: "b2", application_id: APP_B, review_id: "r2", slot_starts_at: H_24_10, status: "cancelled_by_mentor" },
+      { id: "b3", application_id: APP_B, review_id: "r3", slot_starts_at: H_26_15, status: "booked" }
+    ];
+    const times = await getBookedInterviewTimes(["r1", "r2", "r1"]);
+    expect(Object.fromEntries(times)).toEqual({ r1: H_24_09 });
+    expect((await getBookedInterviewTimes([])).size).toBe(0);
   });
 
   it("người đã gỡ hết giờ (chưa có buổi nào) không còn hiện trong bảng interviewer", async () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cancelBookingByBtcAction, runInterviewDispatchAction } from "@/app/actions/interview-schedule";
 import {
@@ -33,7 +34,12 @@ type UpcomingBooking = {
   slotLabel: string;
   candidateName: string;
   candidateEmail: string;
+  candidatePhone: string | null;
+  applicationId: string;
+  reviewId: string | null;
   interviewerName: string;
+  interviewerEmail: string | null;
+  interviewerPhone: string | null;
 };
 type OverviewProp = {
   openFutureHours: number;
@@ -216,13 +222,38 @@ export function BtcPanel({ overview }: { overview: OverviewProp }) {
         ) : (
           <ul className="divide-y divide-vam-line">
             {overview.upcomingBookings.map((booking) => (
-              <li key={booking.bookingId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-vam-ink">{booking.slotLabel}</p>
-                  <p className="text-xs text-slate-600">
-                    {booking.candidateName} ({booking.candidateEmail}) × {booking.interviewerName}
-                  </p>
-                </div>
+              <li key={booking.bookingId} className="flex flex-wrap items-start justify-between gap-2 px-3 py-2" data-testid="upcoming-booking">
+                {/* Bấm vào buổi hẹn: hiện đủ ứng viên và người phỏng vấn — hồ sơ, phiếu, SĐT (BTC 04/10/2026). */}
+                <details className="min-w-0 flex-1">
+                  <summary className="cursor-pointer list-none">
+                    <p className="text-sm font-medium text-vam-ink">{booking.slotLabel}</p>
+                    <p className="text-xs text-slate-600">
+                      {booking.candidateName} ({booking.candidateEmail}) × {booking.interviewerName}
+                      <span className="ml-1 text-vam-green underline">Xem hai người</span>
+                    </p>
+                  </summary>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <PersonCard
+                      testId="booking-candidate"
+                      title="Ứng viên (mentor mới)"
+                      name={booking.candidateName}
+                      email={booking.candidateEmail}
+                      phone={booking.candidatePhone}
+                      links={[
+                        { href: `/applications/${booking.applicationId}`, label: "Mở hồ sơ ứng tuyển" },
+                        ...(booking.reviewId ? [{ href: `/reviews/${booking.reviewId}`, label: "Mở phiếu phỏng vấn" }] : [])
+                      ]}
+                    />
+                    <PersonCard
+                      testId="booking-interviewer"
+                      title="Người phỏng vấn"
+                      name={booking.interviewerName}
+                      email={booking.interviewerEmail}
+                      phone={booking.interviewerPhone}
+                      links={[]}
+                    />
+                  </div>
+                </details>
                 <button
                   type="button"
                   onClick={() => void cancelBooking(booking)}
@@ -237,5 +268,31 @@ export function BtcPanel({ overview }: { overview: OverviewProp }) {
         )}
       </div>
     </section>
+  );
+}
+
+/** Một người trong buổi hẹn: tên, email, SĐT (bấm gọi được trên điện thoại), đường dẫn mở hồ sơ. */
+function PersonCard({ testId, title, name, email, phone, links }: {
+  testId: string;
+  title: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  links: Array<{ href: string; label: string }>;
+}) {
+  return (
+    <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-700" data-testid={testId}>
+      <p className="font-semibold uppercase text-slate-500">{title}</p>
+      <p className="mt-1 text-sm font-medium text-vam-ink">{name}</p>
+      {email ? <p>Email: <a href={`mailto:${email}`} className="text-vam-green underline">{email}</a></p> : null}
+      <p>SĐT: {phone ? <a href={`tel:${phone}`} className="text-vam-green underline">{phone}</a> : <span className="text-slate-400">chưa có</span>}</p>
+      {links.length ? (
+        <p className="mt-1 flex flex-wrap gap-3">
+          {links.map((link) => (
+            <Link key={link.href} href={link.href} className="font-medium text-vam-green underline">{link.label}</Link>
+          ))}
+        </p>
+      ) : null}
+    </div>
   );
 }

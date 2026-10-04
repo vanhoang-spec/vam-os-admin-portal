@@ -164,6 +164,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Xem dải tóm tắt “Cần làm”, “Đang làm”, “Quá hạn”, “Hoàn tất” để biết khối lượng việc của mình.",
       "Bấm “Tất cả”, “Đánh giá hồ sơ” hoặc “Phỏng vấn” để lọc theo loại việc; việc quá hạn tô đỏ và luôn nằm đầu danh sách.",
       "Bấm “Mở” (việc mới), “Tiếp tục” (đang làm) hoặc “Xem lại” (đã nộp) để mở chi tiết ngay trên danh sách.",
+      "Việc “Phỏng vấn” mentor đã đặt lịch hiện dòng “Lịch phỏng vấn: …” (ngày, giờ Việt Nam) ngay trên danh sách.",
       "Chấm điểm trong khung chi tiết, bấm “Lưu nháp” để lưu tạm hoặc “Nộp Review” khi đã chấm xong.",
       "Bấm “Mở toàn màn hình” nếu cần chỗ đọc đơn rộng hơn; bấm “Đóng” hoặc phím Esc để quay về đúng chỗ cũ trong danh sách."
     ],
@@ -515,7 +516,8 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Tick các ô giờ mình rảnh trong lưới (nút “cả ngày” chọn hoặc bỏ cả hàng), rồi bấm “Lưu giờ rảnh”. Dòng “Đang chờ lưu” cho biết số giờ sắp thêm và gỡ.",
       "Ô “Đặt” là buổi đã có mentor giữ; bấm “Đặt ↗” để mở hồ sơ ứng viên của buổi đó.",
       "Ở “Mentor đang chờ được ghép”, bấm một khung giờ (vd. “09h · 2 chờ”) rồi xác nhận: người khai giờ đó sớm nhất được ghép, buổi hẹn chốt ngay và thư gửi cho cả hai bên.",
-      "Ban tổ chức: theo dõi các ô số liệu và bảng interviewer, bấm “Gửi thư mời/nhắc ngay” để gửi thư đến hạn; ở “Lịch hẹn sắp diễn ra”, bấm “Huỷ lịch”, ghi lý do (không bắt buộc) rồi OK."
+      "Ban tổ chức: theo dõi các ô số liệu và bảng interviewer, bấm “Gửi thư mời/nhắc ngay” để gửi thư đến hạn; ở “Lịch hẹn sắp diễn ra”, bấm “Huỷ lịch”, ghi lý do (không bắt buộc) rồi OK.",
+      "Ban tổ chức: bấm vào một buổi ở “Lịch hẹn sắp diễn ra” (“Xem hai người”) để thấy ứng viên và người phỏng vấn — email, SĐT, “Mở hồ sơ ứng tuyển”, “Mở phiếu phỏng vấn”."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, và Reviewer được BTC bật quyền PHỎNG VẤN MENTOR (từ 04/10/2026 tách riêng: quyền chấm phỏng vấn mentee không mở trang này). Phần điều hành (gửi thư, huỷ lịch) chỉ Super admin, Admin, Core team thấy.",
