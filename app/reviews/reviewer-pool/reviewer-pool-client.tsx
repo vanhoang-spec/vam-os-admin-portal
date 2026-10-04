@@ -10,6 +10,7 @@ import {
 } from "@/lib/enable-reviewer-action-types";
 import type { ReviewerPoolRow } from "@/lib/types";
 import { adminRoleLabel, hasIntrinsicRecruitmentRights } from "@/lib/ui-labels";
+import { PARTICIPATION_GROUPS, participationLabel, type ParticipationRole } from "@/lib/recruitment-permissions-core";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -163,7 +164,7 @@ function EnableReviewerButton({
   personId: string;
   accountStatus: AccountStatus;
   seasonId: string | null;
-  participationRole: "reviewer" | "interviewer";
+  participationRole: ParticipationRole;
   active: boolean;
 }) {
   const router = useRouter();
@@ -183,9 +184,8 @@ function EnableReviewerButton({
 
   // Derive button label + disabled state from current account status
   const isDisabled = !seasonId;
-  // "quyền đánh giá" / "quyền phỏng vấn" — the participation being granted,
-  // not the English role noun.
-  const rightLabel = participationRole === "reviewer" ? "quyền đánh giá" : "quyền phỏng vấn";
+  // "quyền chấm hồ sơ mentee" … — đúng nhóm đang cấp, không dùng từ tiếng Anh.
+  const rightLabel = `quyền ${participationLabel(participationRole).toLowerCase()}`;
   const buttonLabel = active ? `Thu hồi ${rightLabel}` : `Cấp ${rightLabel}`;
 
   return (
@@ -218,18 +218,23 @@ function EnableReviewerButton({
 export function ReviewerPoolClient({
   rows,
   seasonId,
-  activeReviewerIds,
-  activeInterviewerIds
+  activeIds,
+  canGrantMentor
 }: {
   rows: ReviewerPoolRow[];
   seasonId: string | null;
-  activeReviewerIds: string[];
-  activeInterviewerIds: string[];
+  /** Người đang có từng nhóm quyền trong mùa — cùng nguồn với ô chọn người chấm (vam110). */
+  activeIds: Record<ParticipationRole, string[]>;
+  /** Ban điều hành: cấp / thu được hai nhóm mentor. Support chỉ thấy trạng thái. */
+  canGrantMentor: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterOption>("all");
-  const activeReviewerSet = new Set(activeReviewerIds);
-  const activeInterviewerSet = new Set(activeInterviewerIds);
+  const activeSets = Object.fromEntries(
+    PARTICIPATION_GROUPS.map((g) => [g.role, new Set(activeIds[g.role] ?? [])])
+  ) as Record<ParticipationRole, Set<string>>;
+  const has = (role: ParticipationRole, adminUserId: string | null | undefined) =>
+    Boolean(adminUserId && activeSets[role].has(adminUserId));
 
   // --- Client-side filter
   const filtered = rows.filter((row) => {
@@ -343,8 +348,9 @@ export function ReviewerPoolClient({
                 // vai trò" for an account the Interview dropdown did not list —
                 // a privileged account with no ACTIVE scope for the target
                 // season is eligible for neither round.
-                const canonicalProfile = Boolean(row.admin_user_id && activeReviewerSet.has(row.admin_user_id));
-                const canonicalInterview = Boolean(row.admin_user_id && activeInterviewerSet.has(row.admin_user_id));
+                // Ban điều hành có cả bốn nhóm theo vai trò — đọc nhóm mentee là đủ cho nhãn.
+                const canonicalProfile = has("reviewer", row.admin_user_id);
+                const canonicalInterview = has("interviewer", row.admin_user_id);
                 return (
                   <tr key={row.person_id ?? row.mentor_profile_id ?? row.email_primary ?? row.admin_user_id} className="hover:bg-vam-mint/30">
                     <td className="px-4 py-3 font-medium text-vam-ink">
@@ -370,9 +376,21 @@ export function ReviewerPoolClient({
                           interviewEligible={canonicalInterview}
                         />
                       ) : row.person_id ? (
-                        <div className="flex flex-col gap-2">
-                          <EnableReviewerButton personId={row.person_id} accountStatus={bucket} seasonId={seasonId} participationRole="reviewer" active={Boolean(row.admin_user_id && activeReviewerSet.has(row.admin_user_id))} />
-                          <EnableReviewerButton personId={row.person_id} accountStatus={bucket} seasonId={seasonId} participationRole="interviewer" active={Boolean(row.admin_user_id && activeInterviewerSet.has(row.admin_user_id))} />
+                        <div className="grid gap-3 sm:grid-cols-2" data-testid="participation-groups">
+                          {(["mentee", "mentor"] as const).map((applied) => (
+                            <div key={applied} className="flex flex-col gap-1.5" data-testid={`participation-${applied}`}>
+                              <span className="text-[11px] font-semibold uppercase text-slate-500">{applied === "mentee" ? "Mentee" : "Mentor"}</span>
+                              {PARTICIPATION_GROUPS.filter((g) => g.applied === applied).map((g) =>
+                                g.coreOnly && !canGrantMentor ? (
+                                  <span key={g.role} data-testid={`state-${g.role}`} className="text-xs text-slate-500">
+                                    {g.label}: {has(g.role, row.admin_user_id) ? "Có" : "Chưa"} · Ban điều hành cấp
+                                  </span>
+                                ) : (
+                                  <EnableReviewerButton key={g.role} personId={row.person_id!} accountStatus={bucket} seasonId={seasonId} participationRole={g.role} active={has(g.role, row.admin_user_id)} />
+                                )
+                              )}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <span className="text-xs text-slate-300">Thiếu person_id</span>

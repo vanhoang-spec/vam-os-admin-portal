@@ -1,3 +1,5 @@
+import type { AppliedRole } from "@/lib/recruitment-permissions-core";
+
 /** Matches the production policy used by getReviewEligibleReviewers(). */
 export const REVIEW_ELIGIBLE_ROLES = Object.freeze([
   "super_admin",
@@ -28,16 +30,18 @@ export async function validateReviewEligibleReviewers(
   client: any,
   reviewerIds: readonly string[],
   seasonId: string,
-  reviewRound: "profile_screening" | "interview"
+  reviewRound: "profile_screening" | "interview",
+  roleApplied: AppliedRole
 ): Promise<ReviewerEligibilityResult> {
   const uniqueIds = Array.from(
     new Set(reviewerIds.map((id) => String(id).trim()).filter(Boolean))
   );
   if (!uniqueIds.length) return { ok: false, message: "Vui lòng chọn ít nhất một reviewer." };
 
-  const { data, error } = await client.rpc("vam084_list_recruitment_participants", {
+  const { data, error } = await client.rpc("vam110_list_recruitment_participants", {
     p_season_id: seasonId,
-    p_review_stage: reviewRound
+    p_review_stage: reviewRound,
+    p_role_applied: roleApplied
   });
   if (error) {
     return {

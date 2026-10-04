@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { normalizeAppliedRole } from "@/lib/recruitment-permissions-core";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
   getIntakeBatches,
@@ -121,9 +122,9 @@ export default async function AssignBulkPage(props: { searchParams: Promise<{ in
   const seasonId = intakeBatches.data.find((batch) => batch.id === intakeBatchId)?.season_id;
   const [appsResult, reviewersResult] = await Promise.all([
     getReviewAssignableApplications({ intakeBatchId, roleApplied, reviewRound, scope }),
-    seasonId
-      ? getReviewEligibleReviewers(String(seasonId), reviewRound)
-      : Promise.resolve({ data: [], error: "Batch chưa gắn mùa." })
+    seasonId && normalizeAppliedRole(roleApplied)
+      ? getReviewEligibleReviewers(String(seasonId), reviewRound, normalizeAppliedRole(roleApplied)!)
+      : Promise.resolve({ data: [], error: seasonId ? "Chọn vai trò mentor hoặc mentee." : "Batch chưa gắn mùa." })
   ]);
 
   const batchName =

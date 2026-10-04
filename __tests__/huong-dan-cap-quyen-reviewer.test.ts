@@ -17,6 +17,7 @@ const html = read("docs/huong-dan/HUONG_DAN_CAP_QUYEN_REVIEWER.html");
 const guideText = html.replace(/<style[\s\S]*?<\/style>/i, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
 const POOL_CLIENT = "app/reviews/reviewer-pool/reviewer-pool-client.tsx";
+const CORE = "lib/recruitment-permissions-core.ts";
 
 // [câu hướng dẫn trích, file nguồn, chuỗi phải có trong file nguồn]
 const QUOTED: Array<[string, string, string]> = [
@@ -24,14 +25,19 @@ const QUOTED: Array<[string, string, string]> = [
   ["Giao hồ sơ đánh giá", "lib/nav-model.ts", '"Giao hồ sơ đánh giá"'],
   ["Đợt tuyển", "app/reviews/reviewer-pool/page.tsx", ">Đợt tuyển<"],
   ["Tìm theo tên, email, mentor code…", POOL_CLIENT, 'placeholder="Tìm theo tên, email, mentor code…"'],
-  // Nhãn nút dựng bằng `Cấp ${rightLabel}` / `Thu hồi ${rightLabel}`.
-  ["Cấp quyền đánh giá", POOL_CLIENT, '"quyền đánh giá"'],
-  ["Cấp quyền phỏng vấn", POOL_CLIENT, '"quyền phỏng vấn"'],
+  // Nhãn nút dựng bằng `Cấp ${rightLabel}`, rightLabel = `quyền ${nhãn nhóm viết thường}`;
+  // nhãn bốn nhóm nằm một chỗ ở lib/recruitment-permissions-core.ts (04/10/2026).
+  ["Cấp quyền chấm hồ sơ mentee", CORE, 'label: "Chấm hồ sơ mentee"'],
+  ["Cấp quyền phỏng vấn mentee", CORE, 'label: "Phỏng vấn mentee"'],
+  ["Cấp quyền chấm hồ sơ mentor", CORE, 'label: "Chấm hồ sơ mentor"'],
+  ["Cấp quyền phỏng vấn mentor", CORE, 'label: "Phỏng vấn mentor"'],
+  ["Cấp quyền", POOL_CLIENT, "`quyền ${participationLabel(participationRole).toLowerCase()}`"],
+  ["Chỉ Ban điều hành cấp / thu quyền chấm hồ sơ và phỏng vấn mentor.", "lib/enable-reviewer.ts", "Chỉ Ban điều hành cấp / thu quyền chấm hồ sơ và phỏng vấn mentor."],
   ["Thu hồi quyền", POOL_CLIENT, "`Thu hồi ${rightLabel}`"],
   ["Chưa có tài khoản", POOL_CLIENT, 'no_account: "Chưa có tài khoản"'],
   ["Đang có quyền đánh giá", POOL_CLIENT, 'reviewer_active: "Đang có quyền đánh giá"'],
   ["Tài khoản hiện tại", POOL_CLIENT, ">Tài khoản hiện tại<"],
-  ["Đã cấp quyền Reviewer hồ sơ cho đúng mùa.", "lib/enable-reviewer.ts", "Đã cấp quyền ${label} cho đúng mùa."],
+  ["Đã cấp quyền chấm hồ sơ mentee cho đúng mùa.", "lib/enable-reviewer.ts", "Đã cấp quyền ${label} cho đúng mùa."],
   ["CHƯA gửi được thư đặt mật khẩu", "lib/enable-reviewer.ts", "CHƯA gửi được thư đặt mật khẩu"],
   ["Bạn không có quyền vận hành mùa này.", "lib/enable-reviewer.ts", "Bạn không có quyền vận hành mùa này."],
   ["Không thể tạo lời mời đăng nhập cá nhân.", "lib/enable-reviewer.ts", "Không thể tạo lời mời đăng nhập cá nhân."],
@@ -49,8 +55,8 @@ describe("mỗi câu hướng dẫn trích đều có thật trên màn hình", 
     });
   }
 
-  it("dòng báo cấp quyền đánh giá dùng đúng nhãn Reviewer hồ sơ", () => {
-    expect(read("lib/enable-reviewer.ts")).toContain('"Reviewer hồ sơ"');
+  it("dòng báo cấp quyền dùng đúng nhãn nhóm (viết thường), từ cùng một nguồn với nút", () => {
+    expect(read("lib/enable-reviewer.ts")).toContain("const label = participationLabel(input.participationRole).toLowerCase();");
   });
 });
 

@@ -43,7 +43,9 @@
   .stamp b { color: var(--ink); font-weight: 600; }
 
   /* ── Bố cục ──────────────────────────────────────────────────────── */
-  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 6mm; align-items: start; }
+  /* minmax(0,…): bảng 4 nhóm quyền có nút dài không được đẩy cột trái phình, ép cột phải tràn trang. */
+  .grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 6mm; align-items: start; }
+  .steps table .btn { white-space: normal; font-size: 7.8pt; }
   h2 {
     font-size: 8.4pt; letter-spacing: .1em; text-transform: uppercase;
     color: var(--green); margin: 0 0 1.6mm; font-weight: 700;
@@ -92,11 +94,11 @@
     font-size: 7.8pt; background: #fff;
   }
   .mock .cap { background: #f6f9f7; color: var(--muted); padding: .7mm 2mm; font-size: 7pt; letter-spacing: .06em; text-transform: uppercase; }
-  .mock .row { display: grid; grid-template-columns: 0.95fr 1.1fr 1fr 1.25fr; gap: 1.6mm; padding: 1.4mm 2mm; align-items: center; }
+  .mock .row { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1.35fr); gap: 1.6mm; padding: 1.4mm 2mm; align-items: center; }
   .mock .row > span:first-child { white-space: nowrap; }
   .mock .badge { display: inline-block; border: 1px solid var(--line); background: #f6f9f7; color: var(--muted); border-radius: 3px; padding: 0 1.2mm; white-space: nowrap; }
   .mock .acts { display: flex; flex-direction: column; gap: .8mm; }
-  .mock .acts .btn { text-align: center; font-size: 7.8pt; }
+  .mock .acts .btn { text-align: center; font-size: 7.2pt; white-space: normal; }
 
   ul.tight { margin: 0; padding-left: 4.2mm; }
   ul.tight li { margin: .6mm 0; }
@@ -119,10 +121,10 @@
   <div>
     <div class="eyebrow">Hướng dẫn cho Support team · Tuyển sinh</div>
     <h1>Mời reviewer vào VAM OS</h1>
-    <p class="sub">Cấp quyền chấm hồ sơ và phỏng vấn cho mentor trong mùa. Hệ thống tự tạo tài khoản
-      và gửi thư mời — bạn không phải tạo tài khoản ở đâu khác.</p>
+    <p class="sub">Bốn nhóm quyền độc lập trong mùa — có nhóm này không kéo theo nhóm khác. Hệ thống tự tạo
+      tài khoản và gửi thư mời — bạn không phải tạo tài khoản ở đâu khác.</p>
   </div>
-  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 11/09/2026</div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Cập nhật 04/10/2026</div>
 </header>
 
 <div class="grid">
@@ -134,8 +136,7 @@
       <ul>
         <li>Tài khoản của bạn cần <b>quyền vận hành (Operations)</b> cho mùa đang tuyển. Nếu bấm nút mà
           thấy <span class="err">Bạn không có quyền vận hành mùa này</span>, nhờ Super Admin cấp.</li>
-        <li>Có sẵn danh sách reviewer, ghi rõ mỗi người <b>chỉ chấm hồ sơ</b>, <b>chỉ phỏng vấn</b> hay
-          <b>cả hai</b>.</li>
+        <li>Có sẵn danh sách, ghi rõ mỗi người được nhóm nào trong bốn nhóm — mỗi nhóm cấp và thu hồi riêng.</li>
       </ul>
     </div>
 
@@ -156,27 +157,25 @@
           Gõ tên, email hoặc mã mentor vào ô <span class="ui">Tìm theo tên, email, mentor code…</span>
         </li>
         <li>
-          <b class="t">Bấm theo vai trò của người đó</b>
+          <b class="t">Bấm đúng nhóm quyền của người đó</b>
           <table>
-            <tr><th style="width:38%">Người này</th><th>Bấm</th></tr>
-            <tr><td>Chỉ chấm hồ sơ</td><td><span class="btn">Cấp quyền đánh giá</span></td></tr>
-            <tr><td>Chỉ phỏng vấn</td><td><span class="btn">Cấp quyền phỏng vấn</span></td></tr>
-            <tr><td>Cả hai</td><td><span class="btn">Cấp quyền đánh giá</span> rồi <span class="btn">Cấp quyền phỏng vấn</span></td></tr>
+            <tr><th style="width:20%"></th><th>Mentee — BTC, Support cấp</th><th>Mentor — Ban điều hành cấp</th></tr>
+            <tr><td>Chấm hồ sơ</td><td><span class="btn">Cấp quyền chấm hồ sơ mentee</span></td><td><span class="btn">Cấp quyền chấm hồ sơ mentor</span></td></tr>
+            <tr><td>Phỏng vấn</td><td><span class="btn">Cấp quyền phỏng vấn mentee</span></td><td><span class="btn">Cấp quyền phỏng vấn mentor</span></td></tr>
           </table>
           <div class="mock">
             <div class="cap">Minh hoạ một dòng trên màn hình</div>
             <div class="row">
-              <span><b>Nguyễn Văn A</b></span>
-              <span>vana@example.com</span>
+              <span><b>Nguyễn Văn A</b><br>vana@example.com</span>
               <span class="badge">Chưa có tài khoản</span>
-              <span class="acts"><span class="btn">Cấp quyền đánh giá</span><span class="btn">Cấp quyền phỏng vấn</span></span>
+              <span class="acts"><span class="btn">Cấp quyền chấm hồ sơ mentee</span><span class="btn">Cấp quyền phỏng vấn mentee</span></span>
             </div>
           </div>
         </li>
         <li>
           <b class="t">Kiểm dòng báo</b>
-          Thấy <span class="ok">✓ Đã cấp quyền Reviewer hồ sơ cho đúng mùa.</span> (hoặc
-          <span class="ok">Interviewer</span>) và nút đổi thành <span class="btn">Thu hồi quyền…</span> là xong.
+          Thấy <span class="ok">✓ Đã cấp quyền chấm hồ sơ mentee cho đúng mùa.</span> (đúng nhóm vừa bấm)
+          và nút đổi thành <span class="btn">Thu hồi quyền…</span> là xong.
         </li>
       </ol>
     </div>
@@ -224,9 +223,10 @@
     </div>
 
     <div class="block warn">
-      <b class="h">Lưu ý khi giao hồ sơ</b>
-      Người <b>chỉ phỏng vấn</b> vẫn hiện trong ô chọn người khi giao hồ sơ chấm. Khi giao hồ sơ ở
-      <span class="path">Ứng tuyển → Giao hồ sơ đánh giá</span>, đừng chọn họ.
+      <b class="h">Lưu ý</b>
+      Ô chọn người ở <span class="path">Ứng tuyển → Giao hồ sơ đánh giá</span> chỉ gồm người có <b>đúng nhóm</b>
+      của hồ sơ (chấm / phỏng vấn, mentee / mentor). Support bấm nhóm mentor sẽ thấy
+      <span class="err">Chỉ Ban điều hành cấp / thu quyền chấm hồ sơ và phỏng vấn mentor.</span>
     </div>
   </div>
 

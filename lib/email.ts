@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import type { ParticipationRole } from "@/lib/recruitment-permissions-core";
 import {
   buildApplicationConfirmationEmail,
   buildEventRegistrationConfirmationEmail,
@@ -563,7 +564,7 @@ export async function sendReviewerInvite(input: {
   seasonLabel: string;
   linkType: PasswordLinkType;
   tokenHash: string;
-  participationRole: "reviewer" | "interviewer";
+  participationRole: ParticipationRole;
   adminUserId?: string | null;
   requestOrigin?: string | null;
 }): Promise<SendEmailResult> {

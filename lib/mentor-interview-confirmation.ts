@@ -98,9 +98,11 @@ type AuthIndex = Map<string, { id: string; signedIn: boolean }>;
 
 /** Người có quyền vào vòng phỏng vấn mùa này (cùng nguồn với ô "Người phỏng vấn"), kèm SĐT và đã đăng nhập chưa. */
 async function readParticipants(client: any, seasonId: string, auth: AuthIndex): Promise<Participant[] | null> {
-  const { data, error } = await client.rpc("vam084_list_recruitment_participants", {
+  const { data, error } = await client.rpc("vam110_list_recruitment_participants", {
     p_season_id: seasonId,
-    p_review_stage: "interview"
+    p_review_stage: "interview",
+    // Thư xác nhận lịch chấm phỏng vấn MENTEE trực tiếp — nhóm 'interviewer'.
+    p_role_applied: "mentee"
   });
   if (error || !Array.isArray(data)) {
     console.error("[mentor-interview-confirmation] participants", error);

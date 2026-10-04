@@ -69,7 +69,7 @@ const ADMIN_ID    = "admin-review-1";
 const SENSITIVE_MSG = "INTERNAL: permission denied for table application_reviews in schema public";
 
 function scopeApp() {
-  return { id: APP_UUID, season_id: SEASON_UUID };
+  return { id: APP_UUID, season_id: SEASON_UUID, role_applied: "mentee" };
 }
 
 function existingReview(overrides: Record<string, unknown> = {}) {
@@ -126,6 +126,43 @@ describe("assignApplicationReview — DB error safety", () => {
     expect(rpc).not.toHaveBeenCalledWith("vam095_assign_application_review", expect.anything());
   });
 
+  it("hồ sơ không rõ mentor hay mentee: từ chối, không hỏi danh sách người chấm, không giao (04/10/2026)", async () => {
+    const rpc = vi.fn(async (name: string) => {
+      if (name === "vam095_application_review_assignability") return { data: [{ assignable: true, reason: "assignable" }], error: null };
+      throw new Error(`unexpected RPC ${name}`);
+    });
+    const client = makeClient([makeChain({ data: { ...scopeApp(), role_applied: null } })], rpc);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+    const result = await assignApplicationReview({
+      applicationId: APP_UUID,
+      reviewerAdminUserId: "reviewer-1",
+      assignedByAdminUserId: ADMIN_ID,
+      reviewRound: "profile_screening",
+    });
+    expect(result).toEqual({ ok: false, message: "Đơn ứng tuyển chưa rõ là mentor hay mentee." });
+    expect(rpc).not.toHaveBeenCalledWith("vam110_list_recruitment_participants", expect.anything());
+    expect(rpc).not.toHaveBeenCalledWith("vam095_assign_application_review", expect.anything());
+  });
+
+  it("hồ sơ MENTOR: kiểm người chấm theo đúng nhóm mentor", async () => {
+    const rpc = vi.fn(async (name: string) => {
+      if (name === "vam095_application_review_assignability") return { data: [{ assignable: true, reason: "assignable" }], error: null };
+      if (name === "vam110_list_recruitment_participants") return { data: [], error: null };
+      throw new Error(`unexpected RPC ${name}`);
+    });
+    const client = makeClient([makeChain({ data: { ...scopeApp(), role_applied: "mentor" } })], rpc);
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
+    const result = await assignApplicationReview({
+      applicationId: APP_UUID,
+      reviewerAdminUserId: "reviewer-1",
+      assignedByAdminUserId: ADMIN_ID,
+      reviewRound: "profile_screening",
+    });
+    expect(result.ok).toBe(false);
+    expect(rpc).toHaveBeenCalledWith("vam110_list_recruitment_participants", expect.objectContaining({ p_review_stage: "profile_screening", p_role_applied: "mentor" }));
+    expect(rpc).not.toHaveBeenCalledWith("vam095_assign_application_review", expect.anything());
+  });
+
   it("insert failure: raw DB message is not returned to caller", async () => {
     // Call sequence:
     // 1. from("applications") → scopeApp (canWriteReviewWorkflowForApplication)
@@ -136,7 +173,7 @@ describe("assignApplicationReview — DB error safety", () => {
       if (name === "vam095_application_review_assignability") {
         return { data: [{ assignable: true, reason: "assignable" }], error: null };
       }
-      if (name === "vam084_list_recruitment_participants") {
+      if (name === "vam110_list_recruitment_participants") {
         return { data: [{ id: "reviewer-1", role: "reviewer" }], error: null };
       }
       if (name === "vam095_assign_application_review") {

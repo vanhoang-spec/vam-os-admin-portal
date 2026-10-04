@@ -474,16 +474,17 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
   },
   "/reviews/reviewer-pool": {
     title: "Danh sách nhân sự tuyển sinh",
-    summary: "Cấp hoặc thu hồi quyền chấm hồ sơ và phỏng vấn theo mùa cho mentor của đợt tuyển. Người chưa có tài khoản sẽ được tạo tài khoản và nhận thư đặt mật khẩu.",
+    summary: "Cấp hoặc thu hồi bốn nhóm quyền độc lập theo mùa cho mentor của đợt tuyển: chấm hồ sơ mentee, phỏng vấn mentee, chấm hồ sơ mentor, phỏng vấn mentor. Người chưa có tài khoản sẽ được tạo tài khoản và nhận thư đặt mật khẩu.",
     steps: [
       "Chọn “Đợt tuyển” rồi bấm “Lọc”; chưa chọn đợt thì các nút cấp quyền bị khoá.",
       "Lọc nhanh bằng các nút “Tất cả”, “Chưa có tài khoản”, “Đang có quyền đánh giá”, “Đã thu hồi quyền đánh giá”, “Admin / Core team”, hoặc tìm theo tên, email, mentor code.",
-      "Ở cột “Thao tác”, bấm “Cấp quyền đánh giá” hoặc “Cấp quyền phỏng vấn”; bấm “Thu hồi quyền đánh giá” hoặc “Thu hồi quyền phỏng vấn” để gỡ.",
+      "Ở cột “Thao tác”, nhóm Mentee có “Cấp quyền chấm hồ sơ mentee”, “Cấp quyền phỏng vấn mentee”; nhóm Mentor có “Cấp quyền chấm hồ sơ mentor”, “Cấp quyền phỏng vấn mentor”. Mỗi nhóm cấp / thu hồi riêng — có nhóm này không kéo theo nhóm khác.",
       "Cấp cho nhiều người: mở “Cấp quyền hàng loạt (dán danh sách email)”, dán mỗi dòng một email, chọn “Cấp quyền gì” rồi bấm “Cấp quyền + gửi thư cho danh sách này”.",
       "Đọc kết quả bên dưới: người đã xử lý, người thất bại, email không khớp mentor của đợt, và người “CHƯA xử lý” vì chạm hạn mức thư."
     ],
     notes: [
-      "Dùng được: Super admin, Admin, Core team, Support team, và phải có quyền vận hành mùa đó. Tài khoản Admin/Core team đang hoạt động có quyền theo vai trò, không cần cấp.",
+      "Dùng được: Super admin, Admin, Core team, Support team, và phải có quyền vận hành mùa đó. Hai nhóm mentor chỉ Ban điều hành (Super admin, Admin, Core team) cấp / thu — Support thấy trạng thái “Có / Chưa”. Tài khoản Admin/Core team đang hoạt động có cả bốn nhóm theo vai trò, không cần cấp.",
+      "Ô chọn người khi giao hồ sơ / phỏng vấn chỉ gồm người có đúng nhóm của hồ sơ đó (mentee hay mentor). Không cấp được trên tài khoản Support — dùng một email khác cho việc chấm / phỏng vấn.",
       "Người chưa có tài khoản sẽ được tạo tài khoản và nhận thư đặt mật khẩu; nhắc họ xem cả mục Spam. Thư chưa gửi được thì bấm Thu hồi rồi Cấp lại.",
       "Hạn mức thư Brevo dùng chung 300 thư/24 giờ: người chưa xử lý thì dán lại đúng danh sách và bấm lượt sau, cách vài giờ. Email phải đúng email mentor dùng khi nộp đơn."
     ],

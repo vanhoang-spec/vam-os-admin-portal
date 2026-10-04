@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, InternalLinkButton, PageHeader, SimpleTable, TruncatedText } from "@/components/ui";
+import { isParticipationRole, participationLabel } from "@/lib/recruitment-permissions-core";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { recapStatusLabel } from "@/lib/ui-labels";
@@ -163,8 +164,8 @@ function membershipRoleLabel(value: unknown) {
   const normalized = normalizeStatus(value);
   if (isMembershipRole(normalized)) return MEMBERSHIP_ROLE_LABELS[normalized];
   if (normalized === "supporter") return "Supporter";
-  if (normalized === "reviewer") return "Reviewer";
-  if (normalized === "interviewer") return "Interviewer";
+  // Bốn nhóm quyền tuyển sinh (04/10/2026): nhãn từ một nguồn với trang cấp quyền.
+  if (isParticipationRole(normalized)) return participationLabel(normalized);
   if (normalized === "coreteam") return "Coreteam";
   if (normalized === "advisor") return "Advisor";
   if (normalized === "alumni_mentee") return "Alumni mentee";

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { normalizeAppliedRole } from "@/lib/recruitment-permissions-core";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import {
@@ -76,10 +77,12 @@ export default async function ReviewDetailPage(props: { params: Promise<{ id: st
   // Fetch application for this review
   const appResult = await getApplication(review.application_id, scope);
   const app = appResult.data;
-  const reviewersResult = adminUser.role !== "reviewer" && app?.season_id
+  const appliedRole = normalizeAppliedRole(app?.role_applied);
+  const reviewersResult = adminUser.role !== "reviewer" && app?.season_id && appliedRole
     ? await getReviewEligibleReviewers(
         app.season_id,
-        review.review_round as "profile_screening" | "interview"
+        review.review_round as "profile_screening" | "interview",
+        appliedRole
       )
     : { data: [], error: null };
   const personResult = app?.person_id ? await getPerson(app.person_id, scope) : { data: null, error: null };
