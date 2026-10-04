@@ -517,7 +517,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Ban tổ chức: theo dõi các ô số liệu và bảng interviewer, bấm “Gửi thư mời/nhắc ngay” để gửi thư đến hạn; ở “Lịch hẹn sắp diễn ra”, bấm “Huỷ lịch”, ghi lý do (không bắt buộc) rồi OK."
     ],
     notes: [
-      "Mở được: Super admin, Admin, Core team, Reviewer; Reviewer phải được cấp vai trò người phỏng vấn cho mùa. Phần điều hành (gửi thư, huỷ lịch) chỉ Super admin, Admin, Core team thấy.",
+      "Mở được: Super admin, Admin, Core team, và Reviewer được BTC bật quyền PHỎNG VẤN MENTOR (từ 04/10/2026 tách riêng: quyền chấm phỏng vấn mentee không mở trang này). Phần điều hành (gửi thư, huỷ lịch) chỉ Super admin, Admin, Core team thấy.",
       "Không tự bỏ được ô đã có mentor đặt: muốn trả giờ đó thì nhờ Ban tổ chức huỷ lịch. Huỷ lịch mở lại khung giờ và gửi thư báo huỷ cho hai bên.",
       "Thư mời/nhắc chỉ tự gửi khi có một tab đang mở trang này (khoảng 20 giây một lượt); đóng tab thì đợt gửi kế tiếp chờ người mở lại trang hoặc cron sáng nếu đã bật."
     ],
