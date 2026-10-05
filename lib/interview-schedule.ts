@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { flattenRawPayload, humanizeKey } from "@/lib/application-export";
 import { sendInterviewInvite, sendInterviewSchedule, sendInterviewSlotCancelled, sendInterviewSlotInvite } from "@/lib/email";
 import {
   BOOKING_ELIGIBLE_STATUSES,
@@ -1405,6 +1406,8 @@ export type BtcOverview =
         candidatePhone: string | null;
         applicationId: string;
         reviewId: string | null;
+        /** Câu trả lời application, nhãn đúng câu hỏi ứng viên đã thấy — rỗng nếu đơn không có. */
+        applicationAnswers: Array<{ label: string; value: string }>;
       }>;
     }
   | { ok: false; message: string };
@@ -1508,6 +1511,28 @@ export async function getBtcOverview(): Promise<BtcOverview> {
     (slot) => String(slot.status) === "open" && new Date(normIso(slot.slot_starts_at)).getTime() > nowMs
   ).length;
 
+  // "Xem application" ngay trong buổi hẹn (BTC 04/10/2026): đọc raw_payload CHỈ cho các
+  // buổi sắp diễn ra — đọc cho mọi mentor đủ điều kiện là chở cả trăm đơn theo mỗi lần
+  // làm mới 20 giây. Lỗi đọc thì buổi hẹn vẫn hiện, chỉ thiếu nút xem application.
+  const upcomingAppIds = mentors
+    .filter((mentor) => mentor.bucket === "booked_upcoming" && mentor.activeBooking)
+    .map((mentor) => mentor.applicationId);
+  const answersByApp = new Map<string, Array<{ label: string; value: string }>>();
+  if (upcomingAppIds.length > 0) {
+    const payloads = await readAllPagesIn<Json>(client, "applications", "id", upcomingAppIds, "id,raw_payload");
+    if (payloads.error) {
+      log("upcoming application answers read failed", payloads.error);
+    } else {
+      for (const row of payloads.data) {
+        const payload = row.raw_payload && typeof row.raw_payload === "object" ? (row.raw_payload as Record<string, unknown>) : null;
+        answersByApp.set(
+          String(row.id),
+          flattenRawPayload(payload).map(({ key, value }) => ({ label: humanizeKey(key), value }))
+        );
+      }
+    }
+  }
+
   const upcomingBookings = mentors
     .filter((mentor) => mentor.bucket === "booked_upcoming" && mentor.activeBooking)
     .map((mentor) => ({
@@ -1520,6 +1545,7 @@ export async function getBtcOverview(): Promise<BtcOverview> {
       candidatePhone: mentor.phone || null,
       applicationId: mentor.applicationId,
       reviewId: mentor.activeBooking!.reviewId,
+      applicationAnswers: answersByApp.get(mentor.applicationId) ?? [],
       interviewerName: nameById.get(mentor.activeBooking!.interviewerAdminUserId) || "(không rõ)",
       interviewerEmail: emailById.get(mentor.activeBooking!.interviewerAdminUserId) || null,
       interviewerPhone: phoneById.get(mentor.activeBooking!.interviewerAdminUserId) || null

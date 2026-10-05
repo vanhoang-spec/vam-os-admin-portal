@@ -37,6 +37,7 @@ type UpcomingBooking = {
   candidatePhone: string | null;
   applicationId: string;
   reviewId: string | null;
+  applicationAnswers: Array<{ label: string; value: string }>;
   interviewerName: string;
   interviewerEmail: string | null;
   interviewerPhone: string | null;
@@ -243,6 +244,7 @@ export function BtcPanel({ overview }: { overview: OverviewProp }) {
                         { href: `/applications/${booking.applicationId}`, label: "Mở hồ sơ ứng tuyển" },
                         ...(booking.reviewId ? [{ href: `/reviews/${booking.reviewId}`, label: "Mở phiếu phỏng vấn" }] : [])
                       ]}
+                      answers={booking.applicationAnswers}
                     />
                     <PersonCard
                       testId="booking-interviewer"
@@ -272,13 +274,15 @@ export function BtcPanel({ overview }: { overview: OverviewProp }) {
 }
 
 /** Một người trong buổi hẹn: tên, email, SĐT (bấm gọi được trên điện thoại), đường dẫn mở hồ sơ. */
-function PersonCard({ testId, title, name, email, phone, links }: {
+function PersonCard({ testId, title, name, email, phone, links, answers }: {
   testId: string;
   title: string;
   name: string;
   email: string | null;
   phone: string | null;
   links: Array<{ href: string; label: string }>;
+  /** Câu trả lời application — có thì hiện nút "Xem application" mở ngay tại chỗ. */
+  answers?: Array<{ label: string; value: string }>;
 }) {
   return (
     <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-700" data-testid={testId}>
@@ -292,6 +296,21 @@ function PersonCard({ testId, title, name, email, phone, links }: {
             <Link key={link.href} href={link.href} className="font-medium text-vam-green underline">{link.label}</Link>
           ))}
         </p>
+      ) : null}
+      {answers && answers.length > 0 ? (
+        // Xem application ngay trong buổi hẹn, không rời trang (BTC 04/10/2026) — cùng nhãn câu
+        // hỏi và cách hiển thị với mục "Nội dung đơn" trên phiếu chấm.
+        <details className="mt-2" data-testid="booking-application">
+          <summary className="cursor-pointer font-medium text-vam-green underline">Xem application ({answers.length} câu trả lời)</summary>
+          <dl className="mt-2 grid gap-2">
+            {answers.map((answer, index) => (
+              <div key={`${answer.label}-${index}`} className="rounded-md border border-vam-line bg-white px-3 py-2">
+                <dt className="text-xs font-semibold text-slate-500">{answer.label}</dt>
+                <dd className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-vam-ink">{answer.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       ) : null}
     </div>
   );

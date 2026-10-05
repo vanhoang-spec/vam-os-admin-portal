@@ -517,7 +517,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Ô “Đặt” là buổi đã có mentor giữ; bấm “Đặt ↗” để mở hồ sơ ứng viên của buổi đó.",
       "Ở “Mentor đang chờ được ghép”, bấm một khung giờ (vd. “09h · 2 chờ”) rồi xác nhận: người khai giờ đó sớm nhất được ghép, buổi hẹn chốt ngay và thư gửi cho cả hai bên.",
       "Ban tổ chức: theo dõi các ô số liệu và bảng interviewer, bấm “Gửi thư mời/nhắc ngay” để gửi thư đến hạn; ở “Lịch hẹn sắp diễn ra”, bấm “Huỷ lịch”, ghi lý do (không bắt buộc) rồi OK.",
-      "Ban tổ chức: bấm vào một buổi ở “Lịch hẹn sắp diễn ra” (“Xem hai người”) để thấy ứng viên và người phỏng vấn — email, SĐT, “Mở hồ sơ ứng tuyển”, “Mở phiếu phỏng vấn”."
+      "Ban tổ chức: bấm vào một buổi ở “Lịch hẹn sắp diễn ra” (“Xem hai người”) để thấy ứng viên và người phỏng vấn — email, SĐT, “Mở hồ sơ ứng tuyển”, “Mở phiếu phỏng vấn”; bấm “Xem application” để đọc câu trả lời của ứng viên ngay tại chỗ."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, và Reviewer được BTC bật quyền PHỎNG VẤN MENTOR (từ 04/10/2026 tách riêng: quyền chấm phỏng vấn mentee không mở trang này). Phần điều hành (gửi thư, huỷ lịch) chỉ Super admin, Admin, Core team thấy.",
