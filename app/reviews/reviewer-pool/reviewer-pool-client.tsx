@@ -11,6 +11,7 @@ import {
 import type { ReviewerPoolRow } from "@/lib/types";
 import { adminRoleLabel, hasIntrinsicRecruitmentRights } from "@/lib/ui-labels";
 import { PARTICIPATION_GROUPS, participationLabel, type ParticipationRole } from "@/lib/recruitment-permissions-core";
+import { matchesTableQuery } from "@/lib/table-search-core";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -240,14 +241,8 @@ export function ReviewerPoolClient({
   const filtered = rows.filter((row) => {
     const bucket = getAccountStatus(row);
     if (statusFilter !== "all" && bucket !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (
-        !row.full_name?.toLowerCase().includes(q) &&
-        !row.email_primary?.toLowerCase().includes(q) &&
-        !row.mentor_code?.toLowerCase().includes(q)
-      ) return false;
-    }
+    // Bỏ dấu, đủ mọi từ — cùng phép tìm với mọi bảng khác của CRM.
+    if (!matchesTableQuery([row.full_name, row.email_primary, row.mentor_code], search)) return false;
     return true;
   });
 
@@ -318,7 +313,7 @@ export function ReviewerPoolClient({
               : "Không có tài khoản nào khớp bộ lọc."}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-vam-line">
+        <div className="vam-table-frame rounded-lg border border-vam-line">
           <table className="min-w-full divide-y divide-vam-line text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>

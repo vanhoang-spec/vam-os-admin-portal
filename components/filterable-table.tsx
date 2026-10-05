@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { FilterBar, SimpleTable } from "@/components/ui";
-import { includesQuery } from "@/lib/utils";
+import { matchesTableQuery } from "@/lib/table-search-core";
 
 type Option = { label: string; value: string };
 type Column = {
@@ -76,9 +76,23 @@ export function FilterableTable<T>({
     [filters, rows]
   );
 
+  // Tìm trên mọi cột đang hiện cộng các khoá riêng của trang (BTC 05/10/2026: tìm
+  // theo BẤT KỲ thông tin nào trên dòng), bỏ dấu, đủ mọi từ — cùng phép khớp với
+  // TableSearch. Trước đây chỉ searchKeys và phải gõ đúng dấu.
+  const allSearchKeys = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...searchKeys,
+          ...columns.flatMap((column) => [column.displayKey ?? column.key, column.secondaryKey].filter((key): key is string => Boolean(key)))
+        ])
+      ),
+    [searchKeys, columns]
+  );
+
   const sortedRows = useMemo(() => {
     const filtered = rows.filter((row) => {
-      if (!includesQuery(searchKeys.map((key) => (row as any)[key]), query)) return false;
+      if (!matchesTableQuery(allSearchKeys.map((key) => (row as any)[key]), query)) return false;
       return resolvedFilters.every((filter) => {
         const selected = filterValues[filter.key];
         if (!selected) return true;
@@ -107,7 +121,7 @@ export function FilterableTable<T>({
       if (textResult !== 0 || !selectedSort.secondaryKey) return textResult;
       return String((a as any)[selectedSort.secondaryKey] ?? "").localeCompare(String((b as any)[selectedSort.secondaryKey] ?? ""), "vi", { sensitivity: "base" });
     });
-  }, [rows, query, filterValues, resolvedFilters, searchKeys, sortKey, sortOptions]);
+  }, [rows, query, filterValues, resolvedFilters, allSearchKeys, sortKey, sortOptions]);
 
   useEffect(() => {
     setPage(1);

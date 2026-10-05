@@ -11,6 +11,7 @@ import { InterviewResultForm, InterviewResultSummary } from "./rubric-form";
 import { draftKey } from "@/lib/interview-draft-core";
 import { MoveBookingForm } from "./move-booking-form";
 import { MAX_TAKES_PER_INTERVIEWER } from "@/lib/mentee-interview-rubric-core";
+import { matchesTableQuery } from "@/lib/table-search-core";
 
 const field="w-full rounded-md border border-slate-300 bg-white p-2";
 const button="rounded-md bg-vam-green px-4 py-2 text-white disabled:opacity-50";
@@ -66,8 +67,7 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
   },[data.candidates,router,setSelected]);
   // Ca sớm trước; trong ca, ai check-in trước đứng trước (BTC 04/10/2026).
   const visible=sortCandidatesByArrival(data.candidates.filter(c=>(!session || c.sessionId===session) && (!mine || c.operation?.interviewer_id===data.actorId) &&
-    (!query || c.name.toLocaleLowerCase("vi").includes(query.toLocaleLowerCase("vi")) ||
-      (normalizedPhone(query).length>=3 && normalizedPhone(c.phone??"").includes(normalizedPhone(query))))),data.sessions);
+    matchesTableQuery([c.name, c.phone, normalizedPhone(c.phone??"")], query)),data.sessions);
   const candidate=data.candidates.find(c=>c.id===selected);
   const currentMentor=data.participants.find(p=>p.id===data.actorId);
   const count=(predicate:(c:OfflineCandidate)=>boolean)=>visible.filter(predicate).length;
@@ -90,7 +90,7 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
       <label>Tìm tên hoặc số điện thoại<input className={field} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nhập tên hoặc SĐT" /></label>
     </div>
     <label className="flex items-center gap-2"><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)} />Chỉ ứng viên được phân cho tôi</label>
-    <div className="overflow-x-auto rounded-lg border bg-white"><table className="w-full text-left text-sm">
+    <div className="vam-table-frame rounded-lg border bg-white"><table className="w-full text-left text-sm">
       <thead><tr className="bg-slate-100"><th className="p-3">Mentee / SĐT</th><th>Ca</th><th>Check-in / Bàn</th><th>Người phỏng vấn</th><th>Kết quả</th></tr></thead>
       <tbody>{visible.map(c=><tr key={c.id} className="border-t align-top">
         <td className="p-3"><button onClick={()=>setSelected(c.id)} className="text-left font-semibold text-vam-green underline">{c.name}</button><div>{c.phone}</div></td>

@@ -15,6 +15,7 @@ import type { IntakeBatch, ReviewAssignableApplication, ReviewEligibleReviewer, 
 import { ErrorBox } from "@/components/ui";
 import { applicationStatusLabel, staffDisplayLabel } from "@/lib/ui-labels";
 import { formatDate } from "@/lib/utils";
+import { matchesTableQuery } from "@/lib/table-search-core";
 
 /**
  * One page is one lot.
@@ -116,13 +117,8 @@ export function AssignBulkForm({
   }, [validApps, tab]);
 
   const filteredApps = useMemo(() => {
-    if (!searchQuery) return tabbedApps;
-    const q = searchQuery.toLowerCase();
-    return tabbedApps.filter((a) => (
-      (a.full_name || "").toLowerCase().includes(q) ||
-      (a.email_primary || "").toLowerCase().includes(q) ||
-      (a.id || "").toLowerCase().includes(q)
-    ));
+    // Bỏ dấu, đủ mọi từ — cùng phép tìm với mọi bảng khác của CRM.
+    return tabbedApps.filter((a) => matchesTableQuery([a.full_name, a.email_primary, a.id], searchQuery));
   }, [tabbedApps, searchQuery]);
 
   const pageCount = Math.max(1, Math.ceil(filteredApps.length / LOT_SIZE));
@@ -300,7 +296,7 @@ export function AssignBulkForm({
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-md border border-slate-200">
+        <div className="vam-table-frame rounded-md border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>

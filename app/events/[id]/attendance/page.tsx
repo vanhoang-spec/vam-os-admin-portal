@@ -6,6 +6,7 @@ import { getEventDetailData, isEventAbsenceStatus, isEventAttendedStatus, isVali
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayText, formatDateTime } from "@/lib/utils";
 import { AddParticipantForm, BulkAddForm, ParticipationRow } from "./attendance-forms";
+import { TableSearch } from "@/components/table-search";
 
 export default async function EventAttendancePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -160,8 +161,8 @@ export default async function EventAttendancePage(props: { params: Promise<{ id:
           {sortedRows.length === 0 ? (
             <EmptyState message="Chưa có người nào được thêm vào sự kiện." />
           ) : (
-            <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
-              <div className="overflow-x-auto">
+            <TableSearch>
+              <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
                 <table className="min-w-full divide-y divide-vam-line text-sm">
                   <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                     <tr>
@@ -183,7 +184,7 @@ export default async function EventAttendancePage(props: { params: Promise<{ id:
                   </tbody>
                 </table>
               </div>
-            </div>
+            </TableSearch>
           )}
         </Card>
       </div>

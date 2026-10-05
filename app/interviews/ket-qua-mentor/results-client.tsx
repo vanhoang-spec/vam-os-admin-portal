@@ -6,12 +6,12 @@ import {type MentorResultsData,RESULT_SCORE_FIELDS,decisionText} from "@/lib/men
 import {applicationStatusLabel} from "@/lib/ui-labels";
 import {recommendationLabel,reviewStatusLabel} from "@/lib/screening-decision";
 import {formatDateTime} from "@/lib/utils";
+import { matchesTableQuery } from "@/lib/table-search-core";
 export function MentorResultsClient({data}:{data:MentorResultsData}) {
   const [search,setSearch]=useState("");
   const [status,setStatus]=useState("");
   const router=useRouter();
-  const q=search.trim().toLocaleLowerCase("vi");
-  const rows=data.rows.filter(r=>(!status||r.application.status===status)&&(!q||[r.application.full_name,r.application.email_primary,r.application.phone_primary,r.reviewer?.full_name].some(v=>v?.toLocaleLowerCase("vi").includes(q))));
+  const rows=data.rows.filter(r=>(!status||r.application.status===status)&&matchesTableQuery([r.application.full_name,r.application.email_primary,r.application.phone_primary,r.reviewer?.full_name,r.reviewer?.email],search));
   const total=new Set(data.rows.map(r=>r.application_id)).size;
   return <div className="grid gap-4">
     <p>{data.isReviewer?"Các phiếu phỏng vấn bạn đã lưu":"Tất cả phiếu phỏng vấn mentor đã lưu trong mùa 12"}: <strong>{total} mentor · {data.rows.length} phiếu</strong>. Bao gồm phiếu đang lưu nháp; không gồm phân công chưa bắt đầu hoặc đã hủy.</p>

@@ -23,6 +23,7 @@ import {
 } from "@/lib/review-oversight";
 import { formatDate } from "@/lib/utils";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
+import { TableSearch } from "@/components/table-search";
 
 // ---------------------------------------------------------------------------
 // Page: /reviews/progress
@@ -323,136 +324,138 @@ export default async function ReviewProgressPage(props: {
               : "Chưa có review nào được giao trong bộ lọc này."}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-vam-line text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Reviewer / Interviewer</th>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3 text-right">Đang phụ trách</th>
-                  <th className="px-4 py-3 text-right">Đã nộp</th>
-                  <th className="px-4 py-3 text-right">Đang làm</th>
-                  <th className="px-4 py-3 text-right">Chưa bắt đầu</th>
-                  <th className="px-4 py-3 text-right">Cần làm rõ</th>
-                  <th className="px-4 py-3 text-right">Đã huỷ</th>
-                  <th className="px-4 py-3 text-right">Hoàn thành</th>
-                  <th className="px-4 py-3">Nộp gần nhất</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-vam-line">
-                {rows.map((row: ReviewOversightReviewerStats, idx: number) => {
-                  const reviewerId = row.reviewer_admin_user_id;
-                  const label = reviewerIdentityLabel(
-                    reviewerId,
-                    row.reviewer_full_name,
-                    row.reviewer_email
-                  );
-                  const key = reviewerId ?? `__unassigned__${idx}`;
-                  // The unassigned row filters by the sentinel, not by the
-                  // absence of a reviewer parameter — absent means "everyone",
-                  // which would list rows this row never counted.
-                  const reviewerFilter = reviewerFilterForRow(reviewerId);
-                  const operationalHref = (reviewStatus: string | null) =>
-                    buildReviewOversightHref("/reviews", filters, {
+          <TableSearch>
+            <div className="vam-table-frame">
+              <table className="min-w-full divide-y divide-vam-line text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Reviewer / Interviewer</th>
+                    <th className="px-4 py-3">Email</th>
+                    <th className="px-4 py-3 text-right">Đang phụ trách</th>
+                    <th className="px-4 py-3 text-right">Đã nộp</th>
+                    <th className="px-4 py-3 text-right">Đang làm</th>
+                    <th className="px-4 py-3 text-right">Chưa bắt đầu</th>
+                    <th className="px-4 py-3 text-right">Cần làm rõ</th>
+                    <th className="px-4 py-3 text-right">Đã huỷ</th>
+                    <th className="px-4 py-3 text-right">Hoàn thành</th>
+                    <th className="px-4 py-3">Nộp gần nhất</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-vam-line">
+                  {rows.map((row: ReviewOversightReviewerStats, idx: number) => {
+                    const reviewerId = row.reviewer_admin_user_id;
+                    const label = reviewerIdentityLabel(
+                      reviewerId,
+                      row.reviewer_full_name,
+                      row.reviewer_email
+                    );
+                    const key = reviewerId ?? `__unassigned__${idx}`;
+                    // The unassigned row filters by the sentinel, not by the
+                    // absence of a reviewer parameter — absent means "everyone",
+                    // which would list rows this row never counted.
+                    const reviewerFilter = reviewerFilterForRow(reviewerId);
+                    const operationalHref = (reviewStatus: string | null) =>
+                      buildReviewOversightHref("/reviews", filters, {
+                        ...drilldownBase,
+                        reviewerId: reviewerFilter,
+                        reviewStatus,
+                        scopeMode: "operational"
+                      });
+                    const cancelledHref = buildReviewOversightHref("/reviews", filters, {
                       ...drilldownBase,
                       reviewerId: reviewerFilter,
-                      reviewStatus,
-                      scopeMode: "operational"
+                      reviewStatus: BUCKET_DRILLDOWN_STATUS.cancelled,
+                      scopeMode: "all"
                     });
-                  const cancelledHref = buildReviewOversightHref("/reviews", filters, {
-                    ...drilldownBase,
-                    reviewerId: reviewerFilter,
-                    reviewStatus: BUCKET_DRILLDOWN_STATUS.cancelled,
-                    scopeMode: "all"
-                  });
 
-                  return (
-                    <tr key={key} className="hover:bg-vam-mint/40">
-                      <td className="px-4 py-3 font-medium text-vam-ink">
-                        <Link
+                    return (
+                      <tr key={key} className="hover:bg-vam-mint/40">
+                        <td className="px-4 py-3 font-medium text-vam-ink">
+                          <Link
+                            href={operationalHref(null)}
+                            data-testid="progress-reviewer-link"
+                            className={`hover:text-vam-green hover:underline ${
+                              reviewerId ? "" : "text-slate-400"
+                            }`}
+                          >
+                            {label}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{row.reviewer_email ?? "—"}</td>
+                        <CountCell
+                          testId="progress-current-total"
+                          value={row.current_total}
                           href={operationalHref(null)}
-                          data-testid="progress-reviewer-link"
-                          className={`hover:text-vam-green hover:underline ${
-                            reviewerId ? "" : "text-slate-400"
-                          }`}
-                        >
-                          {label}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{row.reviewer_email ?? "—"}</td>
-                      <CountCell
-                        testId="progress-current-total"
-                        value={row.current_total}
-                        href={operationalHref(null)}
-                      />
-                      <CountCell
-                        testId="progress-submitted"
-                        value={row.submitted_count}
-                        href={operationalHref(BUCKET_DRILLDOWN_STATUS.submitted)}
-                        className="font-semibold text-green-700"
-                      />
-                      <CountCell
-                        testId="progress-in-progress"
-                        value={row.in_progress_count}
-                        href={operationalHref(BUCKET_DRILLDOWN_STATUS.in_progress)}
-                        className="text-amber-600"
-                      />
-                      <CountCell
-                        testId="progress-pending"
-                        value={row.pending_count}
-                        href={operationalHref(BUCKET_DRILLDOWN_STATUS.pending)}
-                        className="text-slate-500"
-                      />
-                      <CountCell
-                        testId="progress-returned"
-                        value={row.returned_count}
-                        href={operationalHref(BUCKET_DRILLDOWN_STATUS.returned)}
-                        className="text-orange-600"
-                      />
-                      <CountCell
-                        testId="progress-cancelled"
-                        value={row.cancelled_count}
-                        href={cancelledHref}
-                        className="text-slate-400"
-                      />
-                      <td className="px-4 py-3 text-right">
-                        <span
-                          className={
-                            row.submitted_count === row.current_total && row.current_total > 0
-                              ? "font-semibold text-green-700"
-                              : "text-slate-600"
-                          }
-                        >
-                          {pct(row.submitted_count, row.current_total)}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                        {row.latest_submitted_at ? formatDate(row.latest_submitted_at) : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              {/* Totals footer */}
-              <tfoot className="bg-slate-50 text-xs font-semibold text-slate-600">
-                <tr>
-                  <td className="px-4 py-3" colSpan={2}>
-                    Tổng cộng
-                  </td>
-                  <td className="px-4 py-3 text-right">{totals.current_total}</td>
-                  <td className="px-4 py-3 text-right text-green-700">{totals.submitted_count}</td>
-                  <td className="px-4 py-3 text-right text-amber-600">{totals.in_progress_count}</td>
-                  <td className="px-4 py-3 text-right">{totals.pending_count}</td>
-                  <td className="px-4 py-3 text-right text-orange-600">{totals.returned_count}</td>
-                  <td className="px-4 py-3 text-right text-slate-400">{totals.cancelled_count}</td>
-                  <td className="px-4 py-3 text-right">
-                    {pct(totals.submitted_count, totals.current_total)}
-                  </td>
-                  <td className="px-4 py-3" />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                        />
+                        <CountCell
+                          testId="progress-submitted"
+                          value={row.submitted_count}
+                          href={operationalHref(BUCKET_DRILLDOWN_STATUS.submitted)}
+                          className="font-semibold text-green-700"
+                        />
+                        <CountCell
+                          testId="progress-in-progress"
+                          value={row.in_progress_count}
+                          href={operationalHref(BUCKET_DRILLDOWN_STATUS.in_progress)}
+                          className="text-amber-600"
+                        />
+                        <CountCell
+                          testId="progress-pending"
+                          value={row.pending_count}
+                          href={operationalHref(BUCKET_DRILLDOWN_STATUS.pending)}
+                          className="text-slate-500"
+                        />
+                        <CountCell
+                          testId="progress-returned"
+                          value={row.returned_count}
+                          href={operationalHref(BUCKET_DRILLDOWN_STATUS.returned)}
+                          className="text-orange-600"
+                        />
+                        <CountCell
+                          testId="progress-cancelled"
+                          value={row.cancelled_count}
+                          href={cancelledHref}
+                          className="text-slate-400"
+                        />
+                        <td className="px-4 py-3 text-right">
+                          <span
+                            className={
+                              row.submitted_count === row.current_total && row.current_total > 0
+                                ? "font-semibold text-green-700"
+                                : "text-slate-600"
+                            }
+                          >
+                            {pct(row.submitted_count, row.current_total)}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                          {row.latest_submitted_at ? formatDate(row.latest_submitted_at) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {/* Totals footer */}
+                <tfoot className="bg-slate-50 text-xs font-semibold text-slate-600">
+                  <tr>
+                    <td className="px-4 py-3" colSpan={2}>
+                      Tổng cộng
+                    </td>
+                    <td className="px-4 py-3 text-right">{totals.current_total}</td>
+                    <td className="px-4 py-3 text-right text-green-700">{totals.submitted_count}</td>
+                    <td className="px-4 py-3 text-right text-amber-600">{totals.in_progress_count}</td>
+                    <td className="px-4 py-3 text-right">{totals.pending_count}</td>
+                    <td className="px-4 py-3 text-right text-orange-600">{totals.returned_count}</td>
+                    <td className="px-4 py-3 text-right text-slate-400">{totals.cancelled_count}</td>
+                    <td className="px-4 py-3 text-right">
+                      {pct(totals.submitted_count, totals.current_total)}
+                    </td>
+                    <td className="px-4 py-3" />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </TableSearch>
         )}
       </Card>
     </>

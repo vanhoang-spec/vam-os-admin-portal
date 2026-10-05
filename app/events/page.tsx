@@ -248,6 +248,7 @@ export default async function EventsPage(props: { searchParams?: Promise<{
         <EmptyState message="Chưa có sự kiện nào phù hợp với bộ lọc." />
       ) : (
         <SimpleTable
+          search
           rows={filteredRows}
           columns={[
             {

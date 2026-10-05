@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Eye } from "lucide-react";
+import { TableSearch } from "@/components/table-search";
 import { cn, displayText, externalUrl } from "@/lib/utils";
 
 export function PageHeader({ title, description }: { title: string; description?: string }) {
@@ -52,6 +53,7 @@ export function ExternalLinkButton({ href, label }: { href: unknown; label: stri
       target="_blank"
       rel="noopener noreferrer"
       title={label}
+      data-search-skip
       className="inline-flex items-center gap-1 rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
     >
       <Eye className="h-3.5 w-3.5" aria-hidden="true" />
@@ -64,7 +66,7 @@ export function InternalLinkButton({ href, label }: { href: unknown; label: stri
   const resolvedHref = String(href ?? "").trim();
   if (!resolvedHref) return <span>-</span>;
   return (
-    <Link href={resolvedHref} title={label} className="inline-flex items-center gap-1 rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
+    <Link href={resolvedHref} title={label} data-search-skip className="inline-flex items-center gap-1 rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint">
       <Eye className="h-3.5 w-3.5" aria-hidden="true" />
       <span>Xem</span>
     </Link>
@@ -124,14 +126,27 @@ export function TruncatedText({ value, truncate, className }: { value: unknown; 
   );
 }
 
+/**
+ * Ô tìm kiếm của bảng: true = câu gợi ý mặc định, chuỗi = câu gợi ý riêng.
+ * Bảng liệt kê người/đơn/cặp của cả mùa nên bật; bảng vài dòng cố định thì không.
+ */
+export type TableSearchOption = boolean | string;
+
+function withTableSearch(search: TableSearchOption | undefined, table: React.ReactElement) {
+  if (!search) return table;
+  return <TableSearch placeholder={typeof search === "string" ? search : undefined}>{table}</TableSearch>;
+}
+
 export function SimpleTable<T>({
   rows,
   columns,
-  getHref
+  getHref,
+  search
 }: {
   rows: T[];
   columns: Array<SimpleTableColumn<T>>;
   getHref?: (row: T) => string;
+  search?: TableSearchOption;
 }) {
   if (!rows.length) return <EmptyState />;
   const renderCell = (row: T, column: SimpleTableColumn<T>, href?: string) => {
@@ -177,44 +192,43 @@ export function SimpleTable<T>({
     }
     return <TruncatedText value={value} truncate={truncate} className={column.nowrap ? "whitespace-nowrap" : undefined} />;
   };
-  return (
-    <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-vam-line text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-            <tr>
-              {columns.map((column) => (
-                <th key={column.key} className="px-4 py-3">{column.label}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-vam-line">
-            {rows.map((row, index) => {
-              const href = getHref?.(row);
-              if (href) {
-                return (
-                  <tr key={href} className="hover:bg-vam-mint/50">
-                    {columns.map((column) => (
-                      <td key={column.key} className="max-w-xs break-words px-4 py-3 text-slate-700">
-                        {renderCell(row, column, href)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              }
+  return withTableSearch(
+    search,
+    <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
+      <table className="min-w-full divide-y divide-vam-line text-sm">
+        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key} className="px-4 py-3">{column.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-vam-line">
+          {rows.map((row, index) => {
+            const href = getHref?.(row);
+            if (href) {
               return (
-                <tr key={index}>
+                <tr key={href} className="hover:bg-vam-mint/50">
                   {columns.map((column) => (
                     <td key={column.key} className="max-w-xs break-words px-4 py-3 text-slate-700">
-                      {renderCell(row, column)}
+                      {renderCell(row, column, href)}
                     </td>
                   ))}
                 </tr>
               );
-            })}
-          </tbody>
-        </table>
-      </div>
+            }
+            return (
+              <tr key={index}>
+                {columns.map((column) => (
+                  <td key={column.key} className="max-w-xs break-words px-4 py-3 text-slate-700">
+                    {renderCell(row, column)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -224,18 +238,23 @@ export function ProgressiveTable<T>({
   columns,
   getHref,
   initialCount = 20,
-  summaryLabel
+  summaryLabel,
+  search
 }: {
   rows: T[];
   columns: Array<SimpleTableColumn<T>>;
   getHref?: (row: T) => string;
   initialCount?: number;
   summaryLabel?: string;
+  search?: TableSearchOption;
 }) {
-  if (rows.length <= initialCount) return <SimpleTable rows={rows} columns={columns} getHref={getHref} />;
+  if (rows.length <= initialCount) return <SimpleTable rows={rows} columns={columns} getHref={getHref} search={search} />;
   const firstRows = rows.slice(0, initialCount);
   const remainingRows = rows.slice(initialCount);
-  return (
+  // Một ô tìm cho cả hai phần: dòng khớp nằm trong phần "Xem thêm" vẫn hiện ra
+  // (TableSearch tự mở phần đang gập khi có chữ tìm).
+  return withTableSearch(
+    search,
     <div className="grid gap-3">
       <SimpleTable rows={firstRows} columns={columns} getHref={getHref} />
       <details className="rounded-lg border border-dashed border-vam-line bg-white px-4 py-3">

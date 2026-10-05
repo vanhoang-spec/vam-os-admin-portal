@@ -435,6 +435,7 @@ export default async function EventDetailPage(props: { params: Promise<{ id: str
             <EmptyState message="Chưa có đăng ký nào cho sự kiện này." />
           ) : (
             <SimpleTable
+              search
               rows={activeRegistrations}
               columns={[
                 {

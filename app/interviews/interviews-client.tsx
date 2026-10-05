@@ -10,6 +10,7 @@ import {
   type ClaimInterviewActionState
 } from "@/lib/interview-claim-action-types";
 import type { InterviewCandidateRow } from "@/lib/types";
+import { matchesTableQuery } from "@/lib/table-search-core";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -144,14 +145,8 @@ export function InterviewsClient({
   const filtered = rows.filter((row) => {
     const s = row.status ?? "";
     if (statusFilter !== "all" && s !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const matchName = row.full_name?.toLowerCase().includes(q);
-      const matchEmail = row.email_primary?.toLowerCase().includes(q);
-      const matchPhone = row.phone_primary?.toLowerCase().includes(q);
-      const matchSbd = row.sbd?.toLowerCase().includes(q);
-      if (!matchName && !matchEmail && !matchPhone && !matchSbd) return false;
-    }
+    // Bỏ dấu, đủ mọi từ, SĐT gõ liền — cùng phép tìm với mọi bảng khác của CRM.
+    if (!matchesTableQuery([row.full_name, row.email_primary, row.phone_primary, row.sbd], search)) return false;
     return true;
   });
 
@@ -239,7 +234,7 @@ export function InterviewsClient({
             : "Không có ứng viên nào khớp bộ lọc."}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-vam-line">
+        <div className="vam-table-frame rounded-lg border border-vam-line">
           <table className="min-w-full divide-y divide-vam-line text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>

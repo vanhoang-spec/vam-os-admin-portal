@@ -147,9 +147,9 @@ export function BulkApprovalForm({ rows }: { rows: Row[] }) {
         )}
       </div>
 
-      <div className="max-h-[28rem] overflow-auto rounded-md border border-vam-line">
+      <div className="vam-table-frame max-h-[28rem] rounded-md border border-vam-line">
         <table className="min-w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50">
+          <thead className="bg-slate-50">
             <tr>
               <th className="px-3 py-2 text-left">Chọn</th>
               <th className="px-3 py-2 text-left">Ứng viên</th>
@@ -216,9 +216,9 @@ export function BulkApprovalForm({ rows }: { rows: Row[] }) {
       {resultRows.length > 0 && (
         <div className="mt-6">
           <h3 className="mb-2 text-sm font-semibold text-vam-ink">Kết quả theo từng đơn</h3>
-          <div className="max-h-[24rem] overflow-auto rounded-md border border-vam-line">
+          <div className="vam-table-frame max-h-[24rem] rounded-md border border-vam-line">
             <table className="min-w-full text-sm">
-              <thead className="sticky top-0 bg-slate-50">
+              <thead className="bg-slate-50">
                 <tr>
                   <th className="px-3 py-2 text-left">Application ID</th>
                   <th className="px-3 py-2 text-left">Vai trò</th>

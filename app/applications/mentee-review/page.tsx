@@ -101,65 +101,63 @@ export default async function MenteeReviewQueuePage(props: {
           <BulkScreeningToolbar key={`mentee:${page}:${q}`} role="mentee" />
         )}
 
-      <div className="mb-4 bg-white rounded shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm text-left divide-y divide-vam-line">
-            <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
-              <tr>
-                {canBulkDecide && <th className="px-3 py-3 font-semibold">Chọn</th>}
-                <th className="px-4 py-3 font-semibold">SBD</th>
-                <th className="px-4 py-3 font-semibold">Mã đơn</th>
-                <th className="px-4 py-3 font-semibold">Họ tên</th>
-                <th className="px-4 py-3 font-semibold">Email</th>
-                <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                <th className="px-4 py-3 font-semibold">Ngày nộp</th>
-                <th className="px-4 py-3 font-semibold" title="Điểm cộng theo ngày nộp, cộng vào tổng điểm của từng reviewer">Điểm cộng</th>
-                <th className="px-4 py-3 font-semibold text-right">Hành động</th>
+      <div className="vam-table-frame mb-4 bg-white rounded shadow">
+        <table className="min-w-full text-sm text-left divide-y divide-vam-line">
+          <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
+            <tr>
+              {canBulkDecide && <th className="px-3 py-3 font-semibold">Chọn</th>}
+              <th className="px-4 py-3 font-semibold">SBD</th>
+              <th className="px-4 py-3 font-semibold">Mã đơn</th>
+              <th className="px-4 py-3 font-semibold">Họ tên</th>
+              <th className="px-4 py-3 font-semibold">Email</th>
+              <th className="px-4 py-3 font-semibold">Trạng thái</th>
+              <th className="px-4 py-3 font-semibold">Ngày nộp</th>
+              <th className="px-4 py-3 font-semibold" title="Điểm cộng theo ngày nộp, cộng vào tổng điểm của từng reviewer">Điểm cộng</th>
+              <th className="px-4 py-3 font-semibold text-right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-vam-line">
+            {rows.map((row: any) => (
+              <tr key={row.id} className="hover:bg-slate-50">
+                {canBulkDecide && (
+                  <td className="px-3 py-3">
+                    <BulkScreeningRowCheckbox
+                      role="mentee"
+                      applicationId={row.id}
+                      expectedStatus={row.status_raw}
+                    />
+                  </td>
+                )}
+                <td className="px-4 py-3 text-slate-700">{row.sbd}</td>
+                <td className="px-4 py-3 text-slate-500 font-mono text-xs">{row.short_application_id}</td>
+                <td className="px-4 py-3 font-medium text-vam-ink">{row.full_name}</td>
+                <td className="px-4 py-3 text-slate-600 truncate max-w-xs">{row.email_primary}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
+                    {row.status_display}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.submitted_at_display}</td>
+                <td className="px-4 py-3"><SubmissionBonusBadge bonus={row.bonus} /></td>
+                <td className="px-4 py-3 text-right">
+                  <Link
+                    href={`/applications/${row.id}?queue=mentee-review&page=${page}${queryStrWithAmp}`}
+                    className="inline-flex rounded-md border border-vam-green px-3 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                  >
+                    Duyệt
+                  </Link>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-vam-line">
-              {rows.map((row: any) => (
-                <tr key={row.id} className="hover:bg-slate-50">
-                  {canBulkDecide && (
-                    <td className="px-3 py-3">
-                      <BulkScreeningRowCheckbox
-                        role="mentee"
-                        applicationId={row.id}
-                        expectedStatus={row.status_raw}
-                      />
-                    </td>
-                  )}
-                  <td className="px-4 py-3 text-slate-700">{row.sbd}</td>
-                  <td className="px-4 py-3 text-slate-500 font-mono text-xs">{row.short_application_id}</td>
-                  <td className="px-4 py-3 font-medium text-vam-ink">{row.full_name}</td>
-                  <td className="px-4 py-3 text-slate-600 truncate max-w-xs">{row.email_primary}</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
-                      {row.status_display}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.submitted_at_display}</td>
-                  <td className="px-4 py-3"><SubmissionBonusBadge bonus={row.bonus} /></td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/applications/${row.id}?queue=mentee-review&page=${page}${queryStrWithAmp}`}
-                      className="inline-flex rounded-md border border-vam-green px-3 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
-                    >
-                      Duyệt
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {queue.data.length === 0 && (
-                <tr>
-                  <td colSpan={canBulkDecide ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
-                    Không tìm thấy đơn nào.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {queue.data.length === 0 && (
+              <tr>
+                <td colSpan={canBulkDecide ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
+                  Không tìm thấy đơn nào.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
       </form>
 

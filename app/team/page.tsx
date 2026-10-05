@@ -319,6 +319,7 @@ export default async function TeamViewPage(props: { searchParams?: Promise<{ q?:
           <EmptyState message="Không có thành viên core team phù hợp với bộ lọc." />
         ) : (
           <SimpleTable
+            search
             rows={coreSorted}
             columns={[
               {
@@ -391,6 +392,7 @@ export default async function TeamViewPage(props: { searchParams?: Promise<{ q?:
           <EmptyState message="Không có thành viên support team phù hợp với bộ lọc." />
         ) : (
           <SimpleTable
+            search
             rows={supportSorted}
             columns={[
               {
@@ -465,6 +467,7 @@ export default async function TeamViewPage(props: { searchParams?: Promise<{ q?:
             Các dòng dưới đây có source_role_group không phải coreteam/support_team. Cần rà soát và cập nhật.
           </p>
           <SimpleTable
+            search
             rows={otherSorted}
             columns={[
               {

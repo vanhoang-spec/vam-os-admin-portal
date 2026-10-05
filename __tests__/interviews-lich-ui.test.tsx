@@ -160,8 +160,10 @@ describe("1. lưới giờ rảnh", () => {
     // jsdom không vẽ, nên phải khoá điều kiện để sticky có tác dụng: khung bao
     // quanh bảng tự cuộn dọc với chiều cao giới hạn. Khung cao bằng bảng thì
     // sticky top-0 bám vào một khung không bao giờ cuộn — hàng giờ trôi mất y như cũ.
+    // Khung chung vam-table-frame (cuộn + cô lập z-index, luật CSS khoá ở
+    // __tests__/table-search.test.tsx) cộng chiều cao riêng của lưới.
     const frame = table.parentElement as HTMLElement;
-    expect(frame.className.split(/\s+/)).toContain("overflow-auto");
+    expect(frame.className.split(/\s+/)).toContain("vam-table-frame");
     expect(frame.className).toMatch(/\bmax-h-\[\d+vh\]/);
     // Ô góc nằm trên cả hàng giờ (cuộn ngang) lẫn cột ngày (cuộn dọc).
     const z = (el: Element) => Number(/\bz-(\d+)\b/.exec(el.className)?.[1] ?? 0);

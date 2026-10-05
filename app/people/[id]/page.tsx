@@ -626,6 +626,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
         ) : null}
         {crmNoteRows.length > 0 ? (
           <SimpleTable
+            search
             rows={crmNoteRows}
             columns={[
               { key: "created_at", label: "Ngày", render: (row) => formatDate(row.created_at) },
@@ -875,6 +876,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
             </div>
             {menteeActivityRows.length > 0 ? (
               <SimpleTable
+                search
                 rows={menteeActivityRows}
                 columns={[
                   { key: "meeting_month", label: "Tháng", render: (row) => displayText(row.meeting_month) },
@@ -903,6 +905,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
             </div>
             {mentorActivityRows.length > 0 ? (
               <SimpleTable
+                search
                 rows={mentorActivityRows}
                 columns={[
                   { key: "meeting_month", label: "Tháng", render: (row) => displayText(row.meeting_month) },
@@ -930,6 +933,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
             </div>
             {eventActivityRows.length > 0 ? (
               <SimpleTable
+                search
                 rows={eventActivityRows}
                 columns={[
                   { key: "event", label: "Sự kiện", render: (row) => eventName(row) },

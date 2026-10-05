@@ -8,6 +8,7 @@ import { getApplications, getMatches, getMenteeProfiles, getMentorProfiles, getP
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Application, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
+import { TableSearch } from "@/components/table-search";
 
 function statusKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -93,7 +94,7 @@ function IssueSection<T>({
         <span className="rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">{rows.length} vấn đề</span>
       </summary>
       <div className="mt-3">
-        {rows.length ? <SimpleTable rows={rows} columns={columns} /> : <EmptyState message="Không có vấn đề cần rà soát." />}
+        {rows.length ? <SimpleTable rows={rows} columns={columns} search /> : <EmptyState message="Không có vấn đề cần rà soát." />}
       </div>
     </details>
   );
@@ -376,8 +377,8 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
             <span className="rounded-md border border-vam-line bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">{duplicateEmails.length} vấn đề</span>
           </summary>
           {duplicateEmails.length ? (
-            <div className="mt-3 overflow-hidden rounded-lg border border-vam-line bg-white">
-              <div className="overflow-x-auto">
+            <TableSearch>
+              <div className="vam-table-frame mt-3 rounded-lg border border-vam-line bg-white">
                 <table className="min-w-full divide-y divide-vam-line text-sm">
                   <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                     <tr>
@@ -405,7 +406,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
                   </tbody>
                 </table>
               </div>
-            </div>
+            </TableSearch>
           ) : (
             <div className="mt-3">
               <EmptyState message="Không có vấn đề cần rà soát." />

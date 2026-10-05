@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { matchesTableQuery } from "@/lib/table-search-core";
 import {
   MENTOR_PROGRESS_LABELS,
   type MentorProgress,
@@ -39,16 +40,9 @@ function inFilter(row: MentorProgressRow, filter: Filter) {
   return row.status === filter;
 }
 
+/** Bỏ dấu, đủ mọi từ, SĐT gõ liền — cùng phép tìm với mọi bảng khác của CRM. */
 function matches(row: MentorProgressRow, query: string) {
-  if (!query) return true;
-  const q = query.toLocaleLowerCase("vi");
-  const digits = query.replace(/\D/g, "");
-  return (
-    row.name.toLocaleLowerCase("vi").includes(q) ||
-    row.email.toLocaleLowerCase("vi").includes(q) ||
-    row.interviewer.toLocaleLowerCase("vi").includes(q) ||
-    (digits.length >= 3 && row.phone.replace(/\D/g, "").includes(digits))
-  );
+  return matchesTableQuery([row.name, row.email, row.interviewer, row.phone], query);
 }
 
 function Tile({ label, value, tone }: { label: string; value: number; tone?: string }) {
@@ -114,7 +108,7 @@ export function MentorProgressBoard({ progress }: { progress: MentorProgress }) 
             <h2 className="font-semibold text-vam-ink">
               {g.label} <span className="font-normal text-slate-500">· {rows.length}/{g.counts.total} mentor</span>
             </h2>
-            <div className="mt-2 overflow-x-auto">
+            <div className="vam-table-frame mt-2">
               <table className="w-full min-w-[820px] text-sm">
                 <thead className="text-left text-xs uppercase text-slate-500">
                   <tr>

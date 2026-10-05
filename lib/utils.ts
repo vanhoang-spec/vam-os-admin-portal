@@ -194,12 +194,6 @@ export function formatTimeRange(startsAt: unknown, endsAt: unknown) {
   return sameDay ? `${start} – ${formatTime(endsAt)}` : `${start} – ${formatDateTime(endsAt)}`;
 }
 
-export function includesQuery(values: unknown[], query: string) {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return values.some((value) => String(value ?? "").toLowerCase().includes(q));
-}
-
 const VN_INT_FORMAT = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 
 export function formatInt(value: number): string {

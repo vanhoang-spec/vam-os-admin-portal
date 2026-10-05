@@ -546,6 +546,7 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Mentee cần follow-up</h2>
         <ProgressiveTable
+          search
           rows={followUpTwoMonthRows}
           initialCount={20}
           summaryLabel={`Xem thêm ${Math.max(0, followUpTwoMonthRows.length - 20)} mentee cần follow-up`}
@@ -564,6 +565,7 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Recap gần đây trong tháng</h2>
         <ProgressiveTable
+          search
           rows={recentRecapRows}
           initialCount={20}
           summaryLabel={`Xem thêm ${Math.max(0, recentRecapRows.length - 20)} recap`}
@@ -583,6 +585,7 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
         <section className="mt-6">
           <h2 className="mb-3 text-lg font-semibold text-vam-ink">Recap cần rà soát ngày/tháng</h2>
           <ProgressiveTable
+            search
             rows={outlierRecapRows}
             initialCount={20}
             summaryLabel={`Xem thêm ${Math.max(0, outlierRecapRows.length - 20)} recap cần rà soát`}

@@ -36,8 +36,8 @@ export function BulkDecisionForm({ rows }: { rows: Row[] }) {
         <input name="decision_note" className="mt-1 block w-full rounded-md border border-vam-line px-3 py-2" />
       </label>
     </div>
-    <div className="max-h-[34rem] overflow-auto rounded-md border border-vam-line">
-      <table className="min-w-full text-sm"><thead className="sticky top-0 bg-slate-50"><tr><th className="px-3 py-2 text-left">Chọn</th><th className="px-3 py-2 text-left">Ứng viên</th><th className="px-3 py-2 text-left">Vai trò</th><th className="px-3 py-2 text-left">Trạng thái</th></tr></thead>
+    <div className="vam-table-frame max-h-[34rem] rounded-md border border-vam-line">
+      <table className="min-w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-2 text-left">Chọn</th><th className="px-3 py-2 text-left">Ứng viên</th><th className="px-3 py-2 text-left">Vai trò</th><th className="px-3 py-2 text-left">Trạng thái</th></tr></thead>
       <tbody>{rows.map(row => <tr key={row.id} className="border-t border-vam-line">
         <td className="px-3 py-2"><input type="checkbox" name="application_id" value={row.id} /><input type="hidden" name={`expected_status_${row.id}`} value={row.status} /></td>
         <td className="px-3 py-2">{row.fullName}</td><td className="px-3 py-2">{row.role}</td><td className="px-3 py-2">{row.status}</td>

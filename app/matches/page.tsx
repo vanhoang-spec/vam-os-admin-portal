@@ -11,6 +11,7 @@ import { seasonLabel } from "@/lib/season-labels";
 import { matchStatusLabel } from "@/lib/ui-labels";
 import { displayText, formatDate } from "@/lib/utils";
 import { ManualMatchForm, MatchCancelForm } from "./matches-client";
+import { TableSearch } from "@/components/table-search";
 
 function selectedParam(v: string | string[] | undefined) {
   return (Array.isArray(v) ? v[0] : v) ?? "";
@@ -238,8 +239,8 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
           {matchListRes.data.length === 0 ? (
             <EmptyState message="Chưa có match nào phù hợp với bộ lọc." />
           ) : (
-            <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
-              <div className="overflow-x-auto">
+            <TableSearch placeholder="Tìm mentor, mentee, email, đợt, trạng thái… không cần dấu">
+              <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
                 <table className="min-w-full table-fixed divide-y divide-vam-line text-sm">
                   <colgroup>
                     <col className="w-[24%]" />
@@ -292,7 +293,8 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                             <div className="text-red-500">Kết thúc: {formatDate(row.ended_at)}</div>
                           ) : null}
                         </td>
-                        <td className="px-4 py-3 align-top">
+                        {/* Ô thao tác không bị tìm: "Chi tiết" ở mọi dòng thì gõ "chi" khớp cả bảng. */}
+                        <td className="px-4 py-3 align-top" data-search-skip>
                           <div className="flex flex-col gap-2 2xl:flex-row 2xl:flex-wrap">
                             {!viewerSafe ? (
                               <Link
@@ -312,7 +314,7 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                   </tbody>
                 </table>
               </div>
-            </div>
+            </TableSearch>
           )}
         </Card>
       </div>

@@ -6,6 +6,7 @@ import { displayText, formatDate } from "@/lib/utils";
 import { loadProgramContextCatalog, resolveAuthorizedProgramContext } from "@/lib/program-context";
 import { ProgramContextError } from "@/lib/program-context-core";
 import { CreateAdminUserForm, DeleteAccountForm, EditAdminUserForm, RemoveAccessForm, ResendInviteForm, StatusToggleForm, SyncAuthForm, type ScopeCatalogOptions } from "./user-management-forms";
+import { TableSearch } from "@/components/table-search";
 
 export const dynamic = "force-dynamic";
 
@@ -119,8 +120,8 @@ function UserManagementTable({
           <p className="mt-4 text-xs text-slate-500">Tài khoản của chính bạn — không tự thao tác trên dòng này.</p>
         )}
       </article>)}
-    </div><div className="hidden overflow-hidden rounded-lg border border-vam-line bg-white md:block">
-      <div className="overflow-x-auto">
+    </div><TableSearch className="hidden gap-3 md:grid">
+      <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
         <table className="min-w-[1280px] divide-y divide-vam-line text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
@@ -130,7 +131,7 @@ function UserManagementTable({
               <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Auth ID</th>
               <th className="px-4 py-3">Scope hiện tại</th>
-              <th className="sticky right-0 z-10 w-64 border-l border-vam-line bg-slate-50 px-4 py-3">Thao tác</th>
+              <th className="sticky right-0 z-30 w-64 border-l border-vam-line bg-slate-50 px-4 py-3">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-vam-line">
@@ -167,7 +168,7 @@ function UserManagementTable({
           </tbody>
         </table>
       </div>
-    </div></>
+    </TableSearch></>
   );
 }
 
@@ -268,6 +269,7 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
       <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Nhật ký thay đổi quyền</h2>
         <SimpleTable
+          search
           rows={auditResult.data}
           columns={[
             { key: "created_at", label: "Thời gian", render: (row) => formatDate(row.created_at) },
