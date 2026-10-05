@@ -1,4 +1,5 @@
 import { APPLICATION_ACKNOWLEDGEMENTS } from "@/lib/application-commitments";
+import { applicationOptionLabel } from "@/lib/application-form-options";
 import { applicationStatusLabel, applicationAcquisitionChannelLabel } from "@/lib/ui-labels";
 import type { Application, JsonRecord, MenteeProfile, MentorProfile, Person, Season } from "@/lib/types";
 import { formatDate as formatDateOnly, formatDateTime as formatTimestamp } from "@/lib/utils";
@@ -191,6 +192,9 @@ function text(value: unknown, key: unknown = ""): string {
   if (Array.isArray(value)) {
     return value.map((item) => text(item, key)).filter((item) => item !== MISSING).join("; ") || MISSING;
   }
+  // Câu hỏi có lựa chọn: đơn lưu MÃ ("training_sharing"), người đọc cần chữ của form
+  // ("Training / chia sẻ chuyên đề") — BTC 05/10/2026. Mã lạ thì giữ nguyên.
+  if (typeof value === "string" && key) return applicationOptionLabel(String(key), value);
   return String(value);
 }
 

@@ -49,7 +49,9 @@ describe("S12-M1 mentor form content", () => {
   it("contains UEH Alumni, approved mentor portrait, and all support contacts", () => {
     const newForm = fs.readFileSync("app/apply/mentor/apply-mentor-form.tsx", "utf8");
     const renewal = fs.readFileSync("app/renew/[token]/renewal-form.tsx", "utf8");
-    expect(newForm).toContain('value: "ueh_alumni", label: "UEH Alumni"');
+    // Danh sách lựa chọn ở lib/application-form-options.ts (05/10/2026); form lấy từ đó.
+    expect(fs.readFileSync("lib/application-form-options.ts", "utf8")).toContain('value: "ueh_alumni", label: "UEH Alumni"');
+    expect(newForm).toMatch(/REFERRER_OPTIONS\s*\}\s*=\s*MENTOR_FORM_OPTION_LISTS;/);
     // Chữ chân dung giờ nằm trong danh mục admin sửa được; mặc định vẫn là bản đã duyệt.
     expect(DEFAULT_APPLICATION_FORM_TEXTS["mentor.profile.heading"]).toBe("Chân dung Mentor mà UEH Mentoring đang tìm kiếm");
     expect(newForm).toContain("<MentorProfileIntro texts={texts} />");

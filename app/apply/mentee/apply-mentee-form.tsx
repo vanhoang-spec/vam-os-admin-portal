@@ -23,128 +23,26 @@ import {
   APPLICATION_ACKNOWLEDGEMENTS as ACK,
   MENTEE_CONFIRMATION_PHRASE
 } from "@/lib/application-commitments";
+import { MENTEE_FORM_OPTION_LISTS } from "@/lib/application-form-options";
 
-const EMAIL_NOTIF_OPTIONS = [
-  { value: "email", label: "Email" },
-  { value: "zalo", label: "Zalo" }
-];
-
-const GENDER_OPTIONS = [
-  { value: "male", label: "Nam" },
-  { value: "female", label: "Nữ" },
-  { value: "other", label: "Khác" },
-  { value: "prefer_not_say", label: "Không muốn chia sẻ" }
-];
-
-const UNIVERSITY_OPTIONS = [
-  { value: "UEH", label: "Đại học Kinh tế TP. Hồ Chí Minh (UEH)" },
-  { value: "OTHER", label: "Trường khác" }
-];
-
-const FACULTY_OPTIONS = [
-  { value: "tai_chinh", label: "Tài chính" },
-  { value: "ke_toan", label: "Kế toán" },
-  { value: "marketing", label: "Marketing" },
-  { value: "kinh_doanh_quoc_te", label: "Kinh doanh quốc tế" },
-  { value: "quan_tri", label: "Quản trị" },
-  { value: "he_thong_thong_tin", label: "Hệ thống thông tin" },
-  { value: "other", label: "Khác" }
-];
-
-const YEAR_OF_STUDY_OPTIONS = [
-  { value: "1", label: "Năm 1" },
-  { value: "2", label: "Năm 2" },
-  { value: "3", label: "Năm 3" },
-  { value: "4", label: "Năm 4" },
-  { value: "graduated", label: "Đã tốt nghiệp" }
-];
-
-const TARGET_INDUSTRY_OPTIONS = [
-  { value: "fmcg", label: "FMCG / Bán lẻ" },
-  { value: "tech", label: "Công nghệ / Phần mềm" },
-  { value: "finance_banking", label: "Tài chính / Ngân hàng" },
-  { value: "consulting", label: "Tư vấn / Chiến lược" },
-  { value: "manufacturing", label: "Sản xuất / Công nghiệp" },
-  { value: "education", label: "Giáo dục / Đào tạo" },
-  { value: "healthcare", label: "Y tế / Dược" },
-  { value: "media_creative", label: "Truyền thông / Sáng tạo" },
-  { value: "logistics", label: "Logistics / Vận chuyển" },
-  { value: "real_estate", label: "Bất động sản / Xây dựng" },
-  { value: "energy_environment", label: "Năng lượng / Môi trường" },
-  { value: "public_nonprofit", label: "Khu vực công / Phi lợi nhuận" },
-  { value: "undecided", label: "Chưa xác định rõ" },
-  { value: "other", label: "Khác" }
-];
-
-const TARGET_FUNCTION_OPTIONS = [
-  { value: "marketing", label: "Marketing / Brand" },
-  { value: "sales_bd", label: "Sales / Business Development" },
-  { value: "finance_accounting", label: "Tài chính / Kế toán" },
-  { value: "hr_people", label: "Nhân sự / People" },
-  { value: "operations", label: "Vận hành / Operations" },
-  { value: "tech_engineering", label: "Tech / Engineering" },
-  { value: "data_analytics", label: "Data / Analytics" },
-  { value: "product", label: "Product Management" },
-  { value: "strategy_consulting", label: "Strategy / Consulting" },
-  { value: "supply_chain", label: "Supply Chain / Logistics" },
-  { value: "general_management", label: "Quản trị tổng hợp" },
-  { value: "undecided", label: "Chưa xác định rõ" },
-  { value: "other", label: "Khác" }
-];
-
-const SOFT_SKILL_OPTIONS = [
-  { value: "communication", label: "Communication" },
-  { value: "leadership", label: "Leadership" },
-  { value: "critical_thinking", label: "Critical thinking" },
-  { value: "time_management", label: "Time management" },
-  { value: "negotiation", label: "Negotiation" },
-  { value: "public_speaking", label: "Public speaking" },
-  { value: "other", label: "Khác" }
-];
-
-const MEETING_FORMAT_OPTIONS = [
-  { value: "online", label: "Online" },
-  { value: "offline", label: "Offline" },
-  { value: "both", label: "Cả hai" }
-];
-
-const MENTOR_GENDER_PREF_OPTIONS = [
-  { value: "no_preference", label: "Không quan trọng" },
-  { value: "male", label: "Nam" },
-  { value: "female", label: "Nữ" }
-];
-
-const TRAINING_TOPIC_OPTIONS = [
-  { value: "cv_interview", label: "CV / Interview" },
-  { value: "data_skills", label: "Excel / Power BI / Data skills" },
-  { value: "communication_presentation", label: "Communication / Presentation" },
-  { value: "personal_branding", label: "Personal branding / LinkedIn" },
-  { value: "problem_solving", label: "Problem solving / Critical thinking" },
-  { value: "career_orientation", label: "Career orientation" },
-  { value: "networking", label: "Networking" },
-  { value: "wellbeing", label: "Mental well-being / emotional management" },
-  { value: "other", label: "Khác" }
-];
-
-const INTERVIEW_WINDOW_OPTIONS = [
-  { value: "week_1", label: "Đợt 1: 03–04/10" },
-  { value: "week_2", label: "Đợt 2: 10–11/10" },
-  { value: "both_weeks", label: "Cả hai đợt đều được" }
-];
-
-const KICKOFF_OPTIONS = [
-  { value: "yes", label: "Có" },
-  { value: "if_scheduled_well", label: "Có nếu xếp lịch hợp lý" },
-  { value: "no", label: "Không" }
-];
-
-const REFERRER_OPTIONS = [
-  { value: "friend", label: "Bạn bè" },
-  { value: "social_media", label: "Mạng xã hội" },
-  { value: "school_referral", label: "Khoa / trường giới thiệu" },
-  { value: "email", label: "Email từ chương trình" },
-  { value: "other", label: "Khác" }
-];
+// Danh sách lựa chọn nằm ở lib/application-form-options.ts — form và nơi hiển thị
+// đơn (phiếu chấm, xem application, file xuất) đọc chung một nguồn.
+const {
+  EMAIL_NOTIF_OPTIONS,
+  GENDER_OPTIONS,
+  UNIVERSITY_OPTIONS,
+  FACULTY_OPTIONS,
+  YEAR_OF_STUDY_OPTIONS,
+  TARGET_INDUSTRY_OPTIONS,
+  TARGET_FUNCTION_OPTIONS,
+  SOFT_SKILL_OPTIONS,
+  MEETING_FORMAT_OPTIONS,
+  MENTOR_GENDER_PREF_OPTIONS,
+  TRAINING_TOPIC_OPTIONS,
+  INTERVIEW_WINDOW_OPTIONS,
+  KICKOFF_OPTIONS,
+  REFERRER_OPTIONS
+} = MENTEE_FORM_OPTION_LISTS;
 
 export function ApplyMenteeForm({
   applyToken,

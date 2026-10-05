@@ -29,108 +29,26 @@ import {
   APPLICATION_ACKNOWLEDGEMENTS as ACK,
   MENTOR_CONFIRMATION_PHRASE
 } from "@/lib/application-commitments";
+import { MENTOR_FORM_OPTION_LISTS } from "@/lib/application-form-options";
 
-const CONTACT_METHOD_OPTIONS = [
-  { value: "email", label: "Email" },
-  { value: "zalo", label: "Zalo" },
-  { value: "sms", label: "SMS" }
-];
-
-const GENDER_OPTIONS = [
-  { value: "male", label: "Nam" },
-  { value: "female", label: "Nữ" },
-  { value: "other", label: "Khác" },
-  { value: "prefer_not_say", label: "Không muốn chia sẻ" }
-];
-
-const CITY_OPTIONS = [
-  { value: "hcm", label: "TP. Hồ Chí Minh" },
-  { value: "hanoi", label: "Hà Nội" },
-  { value: "danang", label: "Đà Nẵng" },
-  { value: "other_vn", label: "Tỉnh thành khác (Việt Nam)" },
-  { value: "overseas", label: "Nước ngoài" }
-];
-
-const YEARS_EXPERIENCE_OPTIONS = [
-  { value: "1-3", label: "1-3 năm" },
-  { value: "4-6", label: "4-6 năm" },
-  { value: "7-10", label: "7-10 năm" },
-  { value: "11-15", label: "11-15 năm" },
-  { value: "16+", label: "16+ năm" }
-];
-
-
-
-
-const HIGHEST_DEGREE_OPTIONS = [
-  { value: "bachelor", label: "Cử nhân" },
-  { value: "master", label: "Thạc sĩ" },
-  { value: "phd", label: "Tiến sĩ" },
-  { value: "other", label: "Khác" }
-];
-
-const PRIOR_VAM_OPTIONS = [
-  { value: "none", label: "Chưa từng" },
-  { value: "1_season", label: "Đã từng (1 mùa)" },
-  { value: "2_3_seasons", label: "Đã từng (2-3 mùa)" },
-  { value: "4_plus_seasons", label: "Đã từng (4+ mùa)" }
-];
-
-const SME_OPTIONS = [
-  { value: "yes", label: "Có" },
-  { value: "no", label: "Không" },
-  { value: "currently_doing", label: "Đang làm" }
-];
-
-const ATTEND_ORIENTATION_OPTIONS = [
-  { value: "yes", label: "Có" },
-  { value: "if_scheduled_well", label: "Có nếu xếp lịch hợp lý" },
-  { value: "no", label: "Không" }
-];
-
-const INTRO_CALL_OPTIONS = [
-  { value: "yes", label: "Có" },
-  { value: "depends_on_schedule", label: "Tùy lịch" },
-  { value: "no", label: "Không" }
-];
-
-const CAPACITY_OPTIONS = [
-  { value: "1", label: "1 mentee" },
-  { value: "2", label: "2 mentee" },
-  { value: "3", label: "3 mentee" }
-];
-
-const MEETING_FREQUENCY_OPTIONS = [
-  { value: "twice_per_month", label: "2 lần/tháng" },
-  { value: "once_per_month", label: "1 lần/tháng" },
-  { value: "once_per_two_months", label: "1 lần/2 tháng" },
-  { value: "depends_on_mentee", label: "Tùy mentee" }
-];
-
-const LANGUAGE_OPTIONS = [
-  { value: "vi", label: "Tiếng Việt" },
-  { value: "en", label: "English" }
-];
-
-const ACTIVITY_OPTIONS = [
-  { value: "training_sharing", label: "Training / chia sẻ chuyên đề" },
-  { value: "cross_mentoring", label: "Cross mentoring" },
-  { value: "english_mentoring", label: "Mentoring bằng tiếng Anh" },
-  { value: "mentor_gathering", label: "Mentor gathering" },
-  { value: "company_visit", label: "Kết nối tham quan doanh nghiệp" },
-  { value: "internship_referral", label: "Kết nối cơ hội thực tập" },
-  { value: "scholarship_sponsorship", label: "Học bổng / tài trợ khoá học / hiện vật" },
-  { value: "other", label: "Khác" }
-];
-
-const REFERRER_OPTIONS = [
-  { value: "friend", label: "Bạn bè" },
-  { value: "social_media", label: "Mạng xã hội" },
-  { value: "website", label: "Website chương trình" },
-  { value: "ueh_alumni", label: "UEH Alumni" },
-  { value: "alumni_referral", label: "Cựu mentor giới thiệu" },
-  { value: "other", label: "Khác" }
-];
+// Danh sách lựa chọn nằm ở lib/application-form-options.ts — form và nơi hiển thị
+// đơn (phiếu chấm, xem application, file xuất) đọc chung một nguồn.
+const {
+  CONTACT_METHOD_OPTIONS,
+  GENDER_OPTIONS,
+  CITY_OPTIONS,
+  YEARS_EXPERIENCE_OPTIONS,
+  HIGHEST_DEGREE_OPTIONS,
+  PRIOR_VAM_OPTIONS,
+  SME_OPTIONS,
+  ATTEND_ORIENTATION_OPTIONS,
+  INTRO_CALL_OPTIONS,
+  CAPACITY_OPTIONS,
+  MEETING_FREQUENCY_OPTIONS,
+  LANGUAGE_OPTIONS,
+  ACTIVITY_OPTIONS,
+  REFERRER_OPTIONS
+} = MENTOR_FORM_OPTION_LISTS;
 
 export function ApplyMentorForm({
   applyToken,
