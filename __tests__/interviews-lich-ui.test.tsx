@@ -145,6 +145,32 @@ describe("1. lưới giờ rảnh", () => {
     expect(screen.getByText(/bắt buộc trước lần lưu đầu/)).toBeTruthy();
   });
 
+  it("hàng giờ dính ở đầu khung khi kéo xuống (BTC 05/10/2026)", () => {
+    const { container } = render(<AvailabilityGrid days={DAYS} phone="" needsPhone stats={STATS} />);
+    const table = container.querySelector("table") as HTMLTableElement;
+    const headerCells = Array.from(table.querySelectorAll("thead th"));
+    // Ô góc + mỗi giờ + ô "cả ngày": ô nào thiếu sticky thì hàng tiêu đề bị rách
+    // đúng ở cột đó khi cuộn.
+    expect(headerCells).toHaveLength(DAYS[0].slots.length + 2);
+    for (const cell of headerCells) {
+      expect(cell.className.split(/\s+/)).toEqual(expect.arrayContaining(["sticky", "top-0"]));
+      // Nền đặc, không thì các dòng ngày lộ xuyên qua hàng giờ.
+      expect(cell.className).toMatch(/\bbg-slate-50\b/);
+    }
+    // jsdom không vẽ, nên phải khoá điều kiện để sticky có tác dụng: khung bao
+    // quanh bảng tự cuộn dọc với chiều cao giới hạn. Khung cao bằng bảng thì
+    // sticky top-0 bám vào một khung không bao giờ cuộn — hàng giờ trôi mất y như cũ.
+    const frame = table.parentElement as HTMLElement;
+    expect(frame.className.split(/\s+/)).toContain("overflow-auto");
+    expect(frame.className).toMatch(/\bmax-h-\[\d+vh\]/);
+    // Ô góc nằm trên cả hàng giờ (cuộn ngang) lẫn cột ngày (cuộn dọc).
+    const z = (el: Element) => Number(/\bz-(\d+)\b/.exec(el.className)?.[1] ?? 0);
+    const corner = headerCells[0];
+    const firstDayCell = table.querySelector("tbody th") as HTMLElement;
+    expect(z(corner)).toBeGreaterThan(Math.max(...headerCells.slice(1).map(z)));
+    expect(Math.min(...headerCells.slice(1).map(z))).toBeGreaterThan(z(firstDayCell));
+  });
+
   it("ô đã đặt có phiếu phỏng vấn: huy hiệu là link mở thẳng /reviews/<id> ở tab mới", () => {
     render(<AvailabilityGrid days={DAYS} phone="" needsPhone stats={STATS} />);
     const badge = screen.getByTitle(/Nguyễn Văn A/) as HTMLAnchorElement;

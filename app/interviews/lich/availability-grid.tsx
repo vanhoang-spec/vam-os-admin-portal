@@ -171,17 +171,27 @@ export function AvailabilityGrid({
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-vam-line bg-white">
+      {/* Hàng giờ dính ở đầu khung khi kéo xuống (BTC 05/10/2026): đợt dài ra
+          hơn hai tuần thì xuống tới cuối là không còn biết ô nào là mấy giờ.
+          Khung phải tự cuộn dọc với chiều cao giới hạn — overflow-x-auto đã biến
+          nó thành khung cuộn, nên sticky top-0 bám vào khung này chứ không bám
+          vào trang; thiếu max-h thì khung cao bằng bảng và hàng giờ trôi mất. */}
+      <div className="max-h-[70vh] overflow-auto rounded-lg border border-vam-line bg-white">
         <table className="min-w-[900px] border-collapse text-center text-xs">
           <thead>
             <tr className="bg-slate-50">
-              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left text-vam-ink">Ngày \ Giờ</th>
+              <th className="sticky left-0 top-0 z-30 bg-slate-50 px-3 py-2 text-left text-vam-ink shadow-[0_1px_0_0_#dce9e2]">
+                Ngày \ Giờ
+              </th>
               {days[0]?.slots.map((slot) => (
-                <th key={slot.hour} className="px-1 py-2 font-medium text-vam-ink">
+                <th
+                  key={slot.hour}
+                  className="sticky top-0 z-20 bg-slate-50 px-1 py-2 font-medium text-vam-ink shadow-[0_1px_0_0_#dce9e2]"
+                >
                   {String(slot.hour).padStart(2, "0")}h
                 </th>
               ))}
-              <th className="px-2 py-2" aria-label="Chọn cả ngày" />
+              <th className="sticky top-0 z-20 bg-slate-50 px-2 py-2 shadow-[0_1px_0_0_#dce9e2]" aria-label="Chọn cả ngày" />
             </tr>
           </thead>
           <tbody>
