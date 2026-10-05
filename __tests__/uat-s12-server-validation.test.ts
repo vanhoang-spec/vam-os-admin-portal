@@ -94,8 +94,10 @@ describe("S12 UAT — every applicable Other detail is enforced server-side", ()
   it("uses the uppercase OTHER trigger for the mentee university list", () => {
     const rule = MENTEE_OTHER_DETAIL_RULES.find((r) => r.parentKey === "university");
     expect(rule?.triggerValue).toBe("OTHER");
-    // and that trigger is the value the form actually renders
-    expect(read(MENTEE_FORM)).toContain('{ value: "OTHER", label: "Trường khác" }');
+    // and that trigger is the value the form actually renders — danh sách ở
+    // lib/application-form-options.ts (05/10/2026), form lấy đúng danh sách đó.
+    expect(read("lib/application-form-options.ts")).toContain('{ value: "OTHER", label: "Trường khác" }');
+    expect(read(MENTEE_FORM)).toMatch(/UNIVERSITY_OPTIONS,[\s\S]*\}\s*=\s*MENTEE_FORM_OPTION_LISTS;/);
   });
 
   const allRules: Array<[string, string, OtherDetailRule]> = [
