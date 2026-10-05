@@ -59,7 +59,7 @@ export function BulkInviteForm({ rows }: { rows: BulkInviteRow[] }) {
       ) : null}
 
       {state.rows.length ? (
-        <div className="overflow-x-auto rounded-lg border border-vam-line" data-testid="bulk-invite-rows">
+        <div className="vam-table-frame rounded-lg border border-vam-line" data-testid="bulk-invite-rows">
           <table className="min-w-full divide-y divide-vam-line text-sm">
             <caption className="px-3 py-2 text-left text-xs text-slate-600">
               Kết quả từng hồ sơ — thành công {state.appliedCount}, bị chặn {state.blockedCount}.
@@ -144,7 +144,7 @@ export function BulkInviteForm({ rows }: { rows: BulkInviteRow[] }) {
             />
           </label>
 
-          <div className="overflow-x-auto rounded-lg border border-vam-line">
+          <div className="vam-table-frame rounded-lg border border-vam-line">
             <table className="min-w-full divide-y divide-vam-line text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                 <tr>

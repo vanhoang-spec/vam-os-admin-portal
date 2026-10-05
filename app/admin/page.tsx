@@ -250,6 +250,7 @@ export default async function AdminCorrectionPage(props: { searchParams?: Promis
       <section className="mt-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Lịch sử việc cần xử lý</h2>
         <SimpleTable
+          search
           rows={data.actionItems.slice(0, 20)}
           columns={[
             { key: "updated_at", label: "Cập nhật", render: (row) => formatDate(row.updated_at) },

@@ -4,6 +4,7 @@ import { useFormState } from "react-dom";
 import { SubmitButton } from "@/components/submit-button";
 import { applyLegacyImportAction, createLegacyMentorManualAction, previewLegacyImportAction } from "./actions";
 import { initialLegacyImportState, initialLegacyManualState } from "./state";
+import { TableSearch } from "@/components/table-search";
 
 const field = "mt-1 min-h-11 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm";
 
@@ -26,12 +27,14 @@ export function LegacyMentorClient() {
         </form>
         {state.message ? <p role="status" className={`mt-4 rounded-md border p-3 text-sm ${state.ok ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"}`}>{state.message}</p> : null}
         {preview.phase === "preview" && preview.rows.length ? (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-vam-line text-sm">
-              <thead className="bg-slate-50 text-left"><tr><th className="px-3 py-2">Dòng</th><th className="px-3 py-2">Họ tên</th><th className="px-3 py-2">Email canonical</th><th className="px-3 py-2">Kết quả</th><th className="px-3 py-2">Giải thích</th></tr></thead>
-              <tbody className="divide-y divide-vam-line">{preview.rows.map((row) => <tr key={row.rowNumber}><td className="px-3 py-2">{row.rowNumber}</td><td className="px-3 py-2">{row.fullName}</td><td className="px-3 py-2">{row.email}</td><td className="px-3 py-2 font-medium">{row.status}</td><td className="px-3 py-2 text-slate-600">{row.reason}</td></tr>)}</tbody>
-            </table>
-          </div>
+          <TableSearch>
+            <div className="vam-table-frame mt-4">
+              <table className="min-w-full divide-y divide-vam-line text-sm">
+                <thead className="bg-slate-50 text-left"><tr><th className="px-3 py-2">Dòng</th><th className="px-3 py-2">Họ tên</th><th className="px-3 py-2">Email canonical</th><th className="px-3 py-2">Kết quả</th><th className="px-3 py-2">Giải thích</th></tr></thead>
+                <tbody className="divide-y divide-vam-line">{preview.rows.map((row) => <tr key={row.rowNumber}><td className="px-3 py-2">{row.rowNumber}</td><td className="px-3 py-2">{row.fullName}</td><td className="px-3 py-2">{row.email}</td><td className="px-3 py-2 font-medium">{row.status}</td><td className="px-3 py-2 text-slate-600">{row.reason}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </TableSearch>
         ) : null}
         {preview.ok && preview.previewId && preview.previewIntegrity ? (
           <form action={applyAction} className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4">

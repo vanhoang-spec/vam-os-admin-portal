@@ -11,6 +11,7 @@ import {
 import { Card } from "@/components/ui";
 import { RECIPIENT_STATUS_LABELS, type RecipientStatus } from "@/lib/mentor-interview-confirmation-core";
 import type { PreviewResult } from "@/lib/mentor-interview-confirmation";
+import { TableSearch } from "@/components/table-search";
 
 const field = "w-full rounded-md border border-slate-300 bg-white p-2 text-sm";
 const STATUS_ORDER: RecipientStatus[] = ["ready", "no_access", "already_sent", "no_blocks"];
@@ -66,21 +67,23 @@ export function ConfirmationClient() {
 
           <Card>
             <h2 className="font-semibold">Danh sách</h2>
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead><tr className="border-b"><th className="p-2">Mentor</th><th className="p-2">Gửi tới (tài khoản)</th><th className="p-2">Buổi</th><th className="p-2">Trạng thái</th></tr></thead>
-                <tbody>
-                  {[...plan.recipients].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)).map((r) => (
-                    <tr key={r.email} className="border-b align-top" data-status={r.status}>
-                      <td className="p-2">{r.name}<div className="text-xs text-slate-500">{r.email}</div></td>
-                      <td className="p-2">{r.loginEmail ?? "—"}{r.needsPasswordLink ? <div className="text-xs text-slate-500">Chưa từng đăng nhập — thư kèm link đặt mật khẩu</div> : null}{r.matchedBy === "phone_and_name" ? <div className="text-xs text-amber-800">Khác email trên sheet — khớp theo SĐT + tên</div> : null}</td>
-                      <td className="p-2">{r.blockKeys.map(blockLabel).join("; ") || "—"}{r.note ? <div className="text-xs text-slate-500">Ghi chú: {r.note}</div> : null}</td>
-                      <td className="p-2">{RECIPIENT_STATUS_LABELS[r.status]}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TableSearch>
+              <div className="vam-table-frame mt-2">
+                <table className="w-full text-left text-sm">
+                  <thead><tr className="border-b"><th className="p-2">Mentor</th><th className="p-2">Gửi tới (tài khoản)</th><th className="p-2">Buổi</th><th className="p-2">Trạng thái</th></tr></thead>
+                  <tbody>
+                    {[...plan.recipients].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)).map((r) => (
+                      <tr key={r.email} className="border-b align-top" data-status={r.status}>
+                        <td className="p-2">{r.name}<div className="text-xs text-slate-500">{r.email}</div></td>
+                        <td className="p-2">{r.loginEmail ?? "—"}{r.needsPasswordLink ? <div className="text-xs text-slate-500">Chưa từng đăng nhập — thư kèm link đặt mật khẩu</div> : null}{r.matchedBy === "phone_and_name" ? <div className="text-xs text-amber-800">Khác email trên sheet — khớp theo SĐT + tên</div> : null}</td>
+                        <td className="p-2">{r.blockKeys.map(blockLabel).join("; ") || "—"}{r.note ? <div className="text-xs text-slate-500">Ghi chú: {r.note}</div> : null}</td>
+                        <td className="p-2">{RECIPIENT_STATUS_LABELS[r.status]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TableSearch>
           </Card>
 
           {state?.ok && state.sample ? (

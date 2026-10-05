@@ -263,7 +263,7 @@ export function AssignInterviewForm({
             Không có ứng viên nào khớp bộ lọc.
           </p>
         ) : (
-          <div className="max-h-64 overflow-y-auto rounded-md border border-vam-line">
+          <div className="vam-table-frame max-h-64 rounded-md border border-vam-line">
             <table className="min-w-full divide-y divide-vam-line text-xs">
               <thead className="bg-slate-50 text-left font-semibold uppercase text-slate-500">
                 <tr>
@@ -405,7 +405,7 @@ export function AssignInterviewForm({
               </span>
             </div>
 
-            <div className="overflow-x-auto rounded-md border border-vam-line">
+            <div className="vam-table-frame rounded-md border border-vam-line">
               <table className="min-w-full divide-y divide-vam-line text-xs">
                 <thead className="bg-slate-50 text-left font-semibold uppercase text-slate-500">
                   <tr>

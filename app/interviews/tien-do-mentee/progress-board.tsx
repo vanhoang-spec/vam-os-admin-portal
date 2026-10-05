@@ -11,6 +11,7 @@ import {
   type ProgressStatus
 } from "@/lib/mentee-progress-core";
 import { formatTime } from "@/lib/utils";
+import { matchesTableQuery } from "@/lib/table-search-core";
 
 type StatusFilter = "all" | ProgressStatus;
 const STATUS_FILTERS: Array<[StatusFilter, string]> = [
@@ -49,10 +50,8 @@ function CountsLine({ counts }: { counts: ProgressCounts }) {
 
 function matches(row: ProgressRow, status: StatusFilter, query: string) {
   if (status !== "all" && row.status !== status) return false;
-  if (!query) return true;
-  const q = query.toLocaleLowerCase("vi");
-  const digits = query.replace(/\D/g, "");
-  return row.name.toLocaleLowerCase("vi").includes(q) || (digits.length >= 3 && row.phone.replace(/\D/g, "").includes(digits));
+  // Bỏ dấu, đủ mọi từ, SĐT gõ liền — cùng phép tìm với mọi bảng khác của CRM.
+  return matchesTableQuery([row.name, row.phone], query);
 }
 
 /**
@@ -140,7 +139,7 @@ export function ProgressBoard({ progress, todayKey }: { progress: MenteeProgress
                     {rows.length === 0 ? (
                       <p className="mt-2 text-sm text-slate-500">Chưa có mentee đăng ký ca này.</p>
                     ) : (
-                      <div className="mt-2 overflow-x-auto">
+                      <div className="vam-table-frame mt-2">
                         <table className="w-full min-w-[720px] text-sm">
                           <thead className="text-left text-xs uppercase text-slate-500">
                             <tr>

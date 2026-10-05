@@ -233,7 +233,7 @@ export function RosterClient({ rows, seasonId }: { rows: RosterViewRow[]; season
           {rows.length === 0 ? "Mùa này chưa có mentor hay mentee chính thức nào." : "Không có ai khớp bộ lọc."}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-vam-line">
+        <div className="vam-table-frame rounded-lg border border-vam-line">
           <table className="min-w-full divide-y divide-vam-line text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>

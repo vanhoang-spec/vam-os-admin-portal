@@ -169,6 +169,7 @@ function WorkflowTable({
   return (
     <div className="grid gap-4">
       <SimpleTable
+        search
         rows={rows}
         columns={[
           {
@@ -332,6 +333,7 @@ export default async function OperationsTasksPage(props: { searchParams?: Promis
       <section className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-vam-ink">Nhật ký chỉnh sửa</h2>
         <SimpleTable
+          search
           rows={data?.correctionLog ?? []}
           columns={[
             { key: "entity_type", label: "Đối tượng", render: (row) => displayText(row.entity_type) },

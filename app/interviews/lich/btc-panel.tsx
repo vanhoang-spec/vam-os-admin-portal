@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cancelBookingByBtcAction, runInterviewDispatchAction } from "@/app/actions/interview-schedule";
+import { TableSearch } from "@/components/table-search";
 import {
   DispatchResult,
   dispatchMaxRounds,
@@ -179,40 +180,42 @@ export function BtcPanel({ overview }: { overview: OverviewProp }) {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-vam-line bg-white">
-        <table className="min-w-[640px] w-full text-left text-sm">
-          <thead>
-            <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
-              <th className="px-3 py-2">Interviewer</th>
-              <th className="px-3 py-2">SĐT</th>
-              <th className="px-3 py-2 text-right">Đăng ký</th>
-              <th className="px-3 py-2 text-right">Đã xong</th>
-              <th className="px-3 py-2 text-right">Sắp tới</th>
-              <th className="px-3 py-2 text-right">Còn trống</th>
-            </tr>
-          </thead>
-          <tbody>
-            {overview.perInterviewer.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-4 text-sm text-slate-500">
-                  Chưa interviewer nào đăng giờ rảnh.
-                </td>
+      <TableSearch>
+        <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
+          <table className="min-w-[640px] w-full text-left text-sm">
+            <thead>
+              <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                <th className="px-3 py-2">Interviewer</th>
+                <th className="px-3 py-2">SĐT</th>
+                <th className="px-3 py-2 text-right">Đăng ký</th>
+                <th className="px-3 py-2 text-right">Đã xong</th>
+                <th className="px-3 py-2 text-right">Sắp tới</th>
+                <th className="px-3 py-2 text-right">Còn trống</th>
               </tr>
-            ) : (
-              overview.perInterviewer.map((row) => (
-                <tr key={row.adminUserId} className="border-t border-vam-line">
-                  <td className="px-3 py-2 font-medium text-vam-ink">{row.name}</td>
-                  <td className="px-3 py-2 text-slate-600">{row.phone ?? "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{row.stats.total}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{row.stats.done}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{row.stats.bookedUpcoming}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{row.stats.open}</td>
+            </thead>
+            <tbody>
+              {overview.perInterviewer.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-sm text-slate-500">
+                    Chưa interviewer nào đăng giờ rảnh.
+                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                overview.perInterviewer.map((row) => (
+                  <tr key={row.adminUserId} className="border-t border-vam-line">
+                    <td className="px-3 py-2 font-medium text-vam-ink">{row.name}</td>
+                    <td className="px-3 py-2 text-slate-600">{row.phone ?? "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{row.stats.total}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{row.stats.done}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{row.stats.bookedUpcoming}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{row.stats.open}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </TableSearch>
 
       <div className="rounded-lg border border-vam-line bg-white">
         <h3 className="border-b border-vam-line px-3 py-2 text-sm font-semibold text-vam-ink">

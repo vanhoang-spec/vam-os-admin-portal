@@ -439,106 +439,104 @@ export default async function ReviewsPage(props: {
         {rows.length === 0 ? (
           <EmptyState message="Không có review nào khớp bộ lọc hiện tại." />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-vam-line bg-white">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-vam-line text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Ứng viên</th>
-                    <th className="px-4 py-3">Reviewer / Interviewer</th>
-                    <th className="px-4 py-3">Vòng</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3">Hạn nộp</th>
-                    <th className="px-4 py-3">Nộp lúc</th>
-                    <th className="px-4 py-3">Điểm tổng</th>
-                    <th className="px-4 py-3">Đề xuất</th>
-                    <th className="px-4 py-3">Hành động</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-vam-line">
-                  {rows.map((row: ReviewOversightRow) => {
-                    const application = row.application;
-                    const parentStatus = application?.status ?? application?.final_status ?? null;
-                    const actionability = reviewOversightActionability({
-                      reviewStatus: row.status,
-                      parentStatus: application?.status ?? null
-                    });
-                    const overdue = actionability.actionable && isOverdue(row.due_at, row.status);
-                    const dueSoon =
-                      actionability.actionable && !overdue && isDueSoon(row.due_at, row.status);
-                    const applicantName =
-                      application?.full_name ?? application?.person_id ?? row.application_id;
+          <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
+            <table className="min-w-full divide-y divide-vam-line text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Ứng viên</th>
+                  <th className="px-4 py-3">Reviewer / Interviewer</th>
+                  <th className="px-4 py-3">Vòng</th>
+                  <th className="px-4 py-3">Trạng thái</th>
+                  <th className="px-4 py-3">Hạn nộp</th>
+                  <th className="px-4 py-3">Nộp lúc</th>
+                  <th className="px-4 py-3">Điểm tổng</th>
+                  <th className="px-4 py-3">Đề xuất</th>
+                  <th className="px-4 py-3">Hành động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-vam-line">
+                {rows.map((row: ReviewOversightRow) => {
+                  const application = row.application;
+                  const parentStatus = application?.status ?? application?.final_status ?? null;
+                  const actionability = reviewOversightActionability({
+                    reviewStatus: row.status,
+                    parentStatus: application?.status ?? null
+                  });
+                  const overdue = actionability.actionable && isOverdue(row.due_at, row.status);
+                  const dueSoon =
+                    actionability.actionable && !overdue && isDueSoon(row.due_at, row.status);
+                  const applicantName =
+                    application?.full_name ?? application?.person_id ?? row.application_id;
 
-                    return (
-                      <tr
-                        key={row.id}
-                        className={`hover:bg-vam-mint/40 ${overdue ? "bg-red-50/60" : ""}`}
-                      >
-                        <td className="px-4 py-3 font-medium text-vam-ink">
-                          <Link
-                            href={
-                              reviewerOnly ? `/reviews/${row.id}` : `/applications/${row.application_id}`
-                            }
-                            className="hover:text-vam-green hover:underline"
-                          >
-                            {displayText(applicantName)}
-                          </Link>
-                          {actionability.readOnlyReason === "terminal_parent" ? (
-                            <span className="mt-1 block text-[11px] font-normal text-slate-500">
-                              Hồ sơ đã kết thúc quy trình ({displayText(parentStatus)})
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`hover:bg-vam-mint/40 ${overdue ? "bg-red-50/60" : ""}`}
+                    >
+                      <td className="px-4 py-3 font-medium text-vam-ink">
+                        <Link
+                          href={
+                            reviewerOnly ? `/reviews/${row.id}` : `/applications/${row.application_id}`
+                          }
+                          className="hover:text-vam-green hover:underline"
+                        >
+                          {displayText(applicantName)}
+                        </Link>
+                        {actionability.readOnlyReason === "terminal_parent" ? (
+                          <span className="mt-1 block text-[11px] font-normal text-slate-500">
+                            Hồ sơ đã kết thúc quy trình ({displayText(parentStatus)})
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700" data-testid="reviewer-cell">
+                        {reviewerIdentityLabel(
+                          row.reviewer_admin_user_id,
+                          row.reviewer?.full_name,
+                          row.reviewer?.email
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{roundLabel(row.review_round)}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
+                        >
+                          {reviewStatusLabel(row.status)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        <div className="flex flex-col gap-1">
+                          <span>{row.due_at ? formatDate(row.due_at) : "-"}</span>
+                          {overdue ? (
+                            <span className="inline-flex w-fit rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                              Quá hạn
+                            </span>
+                          ) : dueSoon ? (
+                            <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                              Sắp đến hạn
                             </span>
                           ) : null}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700" data-testid="reviewer-cell">
-                          {reviewerIdentityLabel(
-                            row.reviewer_admin_user_id,
-                            row.reviewer?.full_name,
-                            row.reviewer?.email
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">{roundLabel(row.review_round)}</td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
-                          >
-                            {reviewStatusLabel(row.status)}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                          <div className="flex flex-col gap-1">
-                            <span>{row.due_at ? formatDate(row.due_at) : "-"}</span>
-                            {overdue ? (
-                              <span className="inline-flex w-fit rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                                Quá hạn
-                              </span>
-                            ) : dueSoon ? (
-                              <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                                Sắp đến hạn
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                          {row.submitted_at ? formatDate(row.submitted_at) : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {row.total_score !== null ? row.total_score : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">{displayText(row.recommendation)}</td>
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/reviews/${row.id}`}
-                            className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
-                          >
-                            {actionability.actionable ? "Làm review" : "Xem"}
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                        {row.submitted_at ? formatDate(row.submitted_at) : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {row.total_score !== null ? row.total_score : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{displayText(row.recommendation)}</td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/reviews/${row.id}`}
+                          className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                        >
+                          {actionability.actionable ? "Làm review" : "Xem"}
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
 

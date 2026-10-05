@@ -513,92 +513,90 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
         {reviews.length === 0 ? (
           <EmptyState message="Chưa có review nào cho đơn này." />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-vam-line">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-vam-line text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Vòng</th>
-                    <th className="px-4 py-3">Người phụ trách</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3">Hạn nộp</th>
-                    <th className="px-4 py-3">Điểm tổng</th>
-                    <th className="px-4 py-3">Đề xuất</th>
-                    <th className="px-4 py-3">Hành động</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-vam-line">
-                  {reviews.map((review) => {
-                    const user = review.reviewer_admin_user_id ? adminUserMap.get(review.reviewer_admin_user_id) : null;
-                    const identity = user ? (user.full_name || user.email) : "-";
-                    return (
-                    <tr key={review.id} className="hover:bg-vam-mint/40">
-                      <td className="px-4 py-3 text-slate-700">{roundLabel(review.review_round)}</td>
-                      <td className="px-4 py-3 text-slate-700">{identity}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
-                          {reviewStatusLabel(review.status)}
-                          {isWithdrawn && isEditableReviewStatus(review.status) ? " · Cần huỷ phân công" : ""}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {review.due_at ? formatDate(review.due_at) : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {review.total_score !== null
-                          ? scoreWithBonusText(review.total_score, submissionBonus)
-                          : review.weighted_score != null
-                            ? `${formatWeightedScore(review.weighted_score)} · quy đổi, tham khảo`
-                            : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {displayText(review.recommendation)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {(() => {
-                          // An unfinished review belongs to exactly one person.
-                          // Offering "Thực hiện đánh giá" on somebody else's row
-                          // walked Core Team into an editor the server always
-                          // refuses; the row is read-only for everyone but its
-                          // owner. Cancel and reassign stay on the assignment
-                          // surface, where they are authorized.
-                          const isOpen = isEditableReviewStatus(review.status);
-                          const isMine = review.reviewer_admin_user_id === adminUser?.id;
-                          if (isWithdrawn && isOpen) {
-                            return (
-                              <Link
-                                href={`/reviews/${review.id}`}
-                                className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
-                              >
-                                Huỷ phân công
-                              </Link>
-                            );
-                          }
-                          if (isOpen && !isMine) {
-                            return (
-                              <span
-                                data-testid="review-owned-by-other"
-                                className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2.5 py-1 text-xs text-slate-500"
-                              >
-                                {identity} đang thực hiện
-                              </span>
-                            );
-                          }
+          <div className="vam-table-frame rounded-lg border border-vam-line">
+            <table className="min-w-full divide-y divide-vam-line text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Vòng</th>
+                  <th className="px-4 py-3">Người phụ trách</th>
+                  <th className="px-4 py-3">Trạng thái</th>
+                  <th className="px-4 py-3">Hạn nộp</th>
+                  <th className="px-4 py-3">Điểm tổng</th>
+                  <th className="px-4 py-3">Đề xuất</th>
+                  <th className="px-4 py-3">Hành động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-vam-line">
+                {reviews.map((review) => {
+                  const user = review.reviewer_admin_user_id ? adminUserMap.get(review.reviewer_admin_user_id) : null;
+                  const identity = user ? (user.full_name || user.email) : "-";
+                  return (
+                  <tr key={review.id} className="hover:bg-vam-mint/40">
+                    <td className="px-4 py-3 text-slate-700">{roundLabel(review.review_round)}</td>
+                    <td className="px-4 py-3 text-slate-700">{identity}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
+                        {reviewStatusLabel(review.status)}
+                        {isWithdrawn && isEditableReviewStatus(review.status) ? " · Cần huỷ phân công" : ""}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {review.due_at ? formatDate(review.due_at) : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {review.total_score !== null
+                        ? scoreWithBonusText(review.total_score, submissionBonus)
+                        : review.weighted_score != null
+                          ? `${formatWeightedScore(review.weighted_score)} · quy đổi, tham khảo`
+                          : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {displayText(review.recommendation)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        // An unfinished review belongs to exactly one person.
+                        // Offering "Thực hiện đánh giá" on somebody else's row
+                        // walked Core Team into an editor the server always
+                        // refuses; the row is read-only for everyone but its
+                        // owner. Cancel and reassign stay on the assignment
+                        // surface, where they are authorized.
+                        const isOpen = isEditableReviewStatus(review.status);
+                        const isMine = review.reviewer_admin_user_id === adminUser?.id;
+                        if (isWithdrawn && isOpen) {
                           return (
                             <Link
                               href={`/reviews/${review.id}`}
                               className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
                             >
-                              {isOpen ? "Mở đánh giá của tôi" : "Xem"}
+                              Huỷ phân công
                             </Link>
                           );
-                        })()}
-                      </td>
-                    </tr>
-                  )})}
-                </tbody>
-              </table>
-            </div>
+                        }
+                        if (isOpen && !isMine) {
+                          return (
+                            <span
+                              data-testid="review-owned-by-other"
+                              className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2.5 py-1 text-xs text-slate-500"
+                            >
+                              {identity} đang thực hiện
+                            </span>
+                          );
+                        }
+                        return (
+                          <Link
+                            href={`/reviews/${review.id}`}
+                            className="inline-flex rounded-md border border-vam-line px-2.5 py-1 text-xs font-medium text-vam-green hover:bg-vam-mint"
+                          >
+                            {isOpen ? "Mở đánh giá của tôi" : "Xem"}
+                          </Link>
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                )})}
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -676,43 +674,41 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
         {decisions.length === 0 ? (
           <EmptyState message="Chưa có quyết định nào được ghi nhận." />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-vam-line">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-vam-line text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Thời gian</th>
-                    <th className="px-4 py-3">Người quyết định</th>
-                    <th className="px-4 py-3">Trước</th>
-                    <th className="px-4 py-3">Sau</th>
-                    <th className="px-4 py-3">Ghi chú</th>
+          <div className="vam-table-frame rounded-lg border border-vam-line">
+            <table className="min-w-full divide-y divide-vam-line text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Thời gian</th>
+                  <th className="px-4 py-3">Người quyết định</th>
+                  <th className="px-4 py-3">Trước</th>
+                  <th className="px-4 py-3">Sau</th>
+                  <th className="px-4 py-3">Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-vam-line">
+                {decisions.map((d) => (
+                  <tr key={d.id} className="hover:bg-vam-mint/40">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {formatDate(d.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {displayText(d.decided_by_name)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 italic">
+                      {displayText(d.previous_status)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
+                        {d.new_status}
+                      </span>
+                    </td>
+                    <td className="max-w-xs break-words px-4 py-3 text-slate-600">
+                      {displayText(d.decision_note)}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-vam-line">
-                  {decisions.map((d) => (
-                    <tr key={d.id} className="hover:bg-vam-mint/40">
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {formatDate(d.created_at)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {displayText(d.decided_by_name)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 italic">
-                        {displayText(d.previous_status)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex rounded-md border border-vam-line bg-slate-50 px-2 py-0.5 text-xs font-medium text-vam-ink">
-                          {d.new_status}
-                        </span>
-                      </td>
-                      <td className="max-w-xs break-words px-4 py-3 text-slate-600">
-                        {displayText(d.decision_note)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>

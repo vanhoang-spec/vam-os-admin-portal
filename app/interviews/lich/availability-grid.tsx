@@ -173,10 +173,9 @@ export function AvailabilityGrid({
 
       {/* Hàng giờ dính ở đầu khung khi kéo xuống (BTC 05/10/2026): đợt dài ra
           hơn hai tuần thì xuống tới cuối là không còn biết ô nào là mấy giờ.
-          Khung phải tự cuộn dọc với chiều cao giới hạn — overflow-x-auto đã biến
-          nó thành khung cuộn, nên sticky top-0 bám vào khung này chứ không bám
-          vào trang; thiếu max-h thì khung cao bằng bảng và hàng giờ trôi mất. */}
-      <div className="max-h-[70vh] overflow-auto rounded-lg border border-vam-line bg-white">
+          Khung chung vam-table-frame (app/globals.css) tự cuộn và cô lập z-index
+          của ô dính; ô tiêu đề vẫn đặt lớp riêng vì ô góc phải dính cả hai chiều. */}
+      <div className="vam-table-frame max-h-[70vh] rounded-lg border border-vam-line bg-white">
         <table className="min-w-[900px] border-collapse text-center text-xs">
           <thead>
             <tr className="bg-slate-50">

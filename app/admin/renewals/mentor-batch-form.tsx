@@ -431,7 +431,7 @@ export function BatchRenewalInviteForm({
               Tải CSV
             </button>
           </div>
-          <div className="overflow-x-auto rounded-md border border-amber-200 bg-white">
+          <div className="vam-table-frame rounded-md border border-amber-200 bg-white">
             <table className="min-w-full divide-y divide-vam-line text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>

@@ -22,6 +22,60 @@ a {
 }
 
 /*
+ * Khung bảng dữ liệu (BTC 05/10/2026): bảng dài thì kéo xuống vẫn thấy tiêu đề cột.
+ *
+ * Khung tự cuộn với chiều cao giới hạn, tiêu đề dính ở đỉnh KHUNG. Không bám vào
+ * trang được: khung nào cũng phải cuộn ngang trên điện thoại, mà overflow-x đã
+ * biến nó thành khung cuộn — sticky top-0 bám vào khung đó, và khung cao bằng
+ * bảng thì không bao giờ cuộn, tiêu đề trôi mất y như cũ.
+ *
+ * Luật ô tiêu đề viết trong :where() để độ ưu tiên bằng 0, và khung nằm trong
+ * @layer components: lớp Tailwind đặt riêng trên một bảng (max-h-64, nền khác, ô góc
+ * sticky left-0 z-30, …) luôn thắng luật chung.
+ *
+ * isolation: isolate giữ z-index của ô dính BÊN TRONG khung. Thanh đầu trang của
+ * AppShell dính ở z-10; không cô lập thì ô tiêu đề z-20 vẽ đè lên thanh đó khi cả
+ * trang cuộn qua bảng.
+ */
+@layer components {
+  .vam-table-frame {
+    max-height: 75vh;
+    overflow: auto;
+    isolation: isolate;
+  }
+}
+:where(.vam-table-frame) thead {
+  background-color: #f8fafc;
+}
+:where(.vam-table-frame) thead tr {
+  background-color: inherit;
+}
+:where(.vam-table-frame) thead th {
+  position: sticky;
+  top: 0;
+  /* Trên cột dính trái của thân bảng (z-10), dưới ô góc dính hai chiều (z-30). */
+  z-index: 20;
+  /* Nền đặc lấy từ thead: ô trong suốt thì các dòng lộ xuyên qua tiêu đề khi cuộn. */
+  background-color: inherit;
+  /* Viền dưới trôi theo bảng khi tách khỏi ô dính; bóng 1px đi cùng ô. */
+  box-shadow: inset 0 -1px 0 #dce9e2;
+}
+
+/* Ô tìm kiếm của bảng (components/table-search.tsx) ẩn dòng không khớp bằng thuộc
+   tính riêng — không đụng vào hidden/style mà React đang quản lý trên dòng. */
+tr[data-search-hidden] {
+  display: none !important;
+}
+
+@media print {
+  /* In ra giấy thì in cả bảng, không chỉ phần đang thấy trong khung. */
+  .vam-table-frame {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/*
  * Công cụ AI — nút "Tải PDF" chỉ in đúng khối kết quả đang chọn (app/ai/ai-shared.tsx).
  * Mọi luật nằm dưới body.ai-printing, lớp chỉ được gắn trong lúc in từ Công cụ AI, để
  * cách in của mọi trang khác giữ nguyên.
