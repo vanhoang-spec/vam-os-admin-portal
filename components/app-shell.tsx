@@ -37,6 +37,7 @@ import {
   isNavSubGroup,
   navItemsOf,
   navPath,
+  withChildren,
   type NavGroupDef,
   type NavItemDef,
   type NavSubGroupDef
@@ -100,7 +101,7 @@ function getDefaultOpenGroups(activeHref: string | null, groups: NavGroupDef[]):
     if (!g.items || !groupContains(g, activeHref)) continue;
     open.add(g.key);
     for (const entry of g.items) {
-      if (isNavSubGroup(entry) && entry.items.some((item) => item.href === activeHref)) open.add(subGroupKey(g, entry));
+      if (isNavSubGroup(entry) && withChildren(entry.items).some((item) => item.href === activeHref)) open.add(subGroupKey(g, entry));
     }
   }
   return open;
@@ -124,7 +125,7 @@ function NavLinkItem({
   // Tầng 3 không có biểu tượng: cả chục biểu tượng giống nhau dưới một nhánh là
   // thứ làm menu cũ trông rối; đường kẻ dọc bên trái đã cho biết mục thuộc nhánh nào.
   const ItemIcon = depth === 2 ? getItemIcon(item.href) : null;
-  return (
+  const link = (
     <Link
       href={item.href}
       onClick={onNavigate}
@@ -138,6 +139,33 @@ function NavLinkItem({
       {ItemIcon ? <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
       {item.label}
     </Link>
+  );
+  if (!item.children?.length) return link;
+  // Mục con (mỗi đợt phỏng vấn một mục) luôn hiện ngay dưới mục cha, thụt vào thêm một bậc.
+  return (
+    <div>
+      {link}
+      <div className="ml-3 mt-0.5 space-y-0.5 border-l border-vam-line pl-1">
+        {item.children.map((child) => {
+          const childActive = child.href === activeHref;
+          return (
+            <Link
+              key={child.href}
+              href={child.href}
+              onClick={onNavigate}
+              aria-current={childActive ? "page" : undefined}
+              className={cn(
+                NAV_LINK_BASE,
+                "py-1 text-xs font-normal",
+                childActive ? "bg-vam-mint text-vam-ink" : "text-slate-500 hover:bg-slate-50 hover:text-vam-ink"
+              )}
+            >
+              {child.label}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -237,7 +265,7 @@ function SidebarNav({
                   const key = subGroupKey(group, entry);
                   const subPanelId = `${navId}-panel-${group.key}-${entry.key}`;
                   const subOpen = openGroups.has(key);
-                  const subActive = entry.items.some((item) => item.href === activeHref);
+                  const subActive = withChildren(entry.items).some((item) => item.href === activeHref);
                   const SubIcon = ICON_MAP[`sub:${entry.key}`] ?? Settings2;
                   return (
                     <div key={key}>

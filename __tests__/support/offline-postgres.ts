@@ -88,6 +88,18 @@ export async function offlineDb() {
   await db.exec(read("supabase/migrations/20261002150000_mentee_phieu_cham_bat_buoc_ghi_chu.sql"));
   // BTC/Support đổi ca cho mentee, kể cả sau hạn tự đổi (vam107).
   await db.exec(read("supabase/migrations/20261002200000_mentee_doi_ca_btc.sql"));
+  // Cận phòng/bàn suy từ địa điểm + số chỗ của ca (07/10/2026), thay cho hai ngày ghi
+  // cứng. Địa điểm dưới đây là đúng câu BTC đã điền cho đợt 1 trên production: thứ Bảy
+  // 3 phòng (18 chỗ → 6 bàn), Chủ nhật 6 phòng (28 chỗ → 5 bàn).
+  await db.exec(read("supabase/migrations/20261007090000_phong_ban_theo_dia_diem_ca.sql"));
+  await db.query(
+    `update interview_sessions set venue=$2 where season_id=$1 and (starts_at at time zone 'Asia/Ho_Chi_Minh')::date=date '2026-10-03'`,
+    [ids.season, "Phòng H101, H104, H201 — Cơ sở H, 1A Hoàng Diệu, Phường Phú Nhuận, Thành phố Hồ Chí Minh. Bản đồ: https://maps.app.goo.gl/ydfX6wHU3eKVPgnp6"]
+  );
+  await db.query(
+    `update interview_sessions set venue=$2 where season_id=$1 and (starts_at at time zone 'Asia/Ho_Chi_Minh')::date=date '2026-10-04'`,
+    [ids.season, "Phòng B1.503, B1.504, B1.506, B1.803, B1.805, B1.808 — Cơ sở B, 279 Nguyễn Tri Phương, Phường Diên Hồng, Thành phố Hồ Chí Minh. Bản đồ: https://maps.app.goo.gl/Cne2WL3a6LfXNZ2fA"]
+  );
   // BTC vận hành mùa (core_team + scope operations) để thử màn hình sửa phiếu,
   // và một mùa thứ hai CHƯA có phiếu riêng để thử luật kế thừa.
   await db.exec(`

@@ -24,13 +24,15 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Support/BTC: trước check-in có thể “Đổi ca phỏng vấn” (kể cả sau hạn tự đổi ca, bắt buộc lý do) hoặc “Huỷ lịch đăng ký”; tick “Phỏng vấn ONLINE” khi mentee không có mặt trực tiếp."
     ],
     notes: [
+      "Mỗi lần màn hình hiện MỘT đợt phỏng vấn (đợt 1 · 03–04/10, đợt 2 · 10–11/10): mặc định là đợt đang diễn ra hoặc sắp tới; chọn đợt khác bằng các nút đầu trang hoặc mục con dưới “Phỏng vấn mentee trực tiếp” trên menu. “Đổi ca phỏng vấn” vẫn chọn được ca của đợt khác.",
+      "Ô chọn Phòng / Bàn theo chính ca: phòng lấy từ địa điểm của ca (“Phòng a, b, c — …”), số bàn mỗi phòng = số chỗ của ca chia đều. Ca chưa có địa điểm thì tạm 6 phòng — BTC điền địa điểm ở “Ca phỏng vấn mentee” trước ngày phỏng vấn.",
       "Kết quả “Không chọn làm mentee” khoá cả mục C. Mỗi mentor chọn “Có – Tôi muốn nhận bạn này” cho tối đa 2 hồ sơ trong mùa.",
       "Màn hình mentor không hiện tổng điểm — phiếu không cộng tổng, không có điểm sàn. Điểm quy đổi tham khảo chỉ BTC thấy.",
       "Nút “Hướng dẫn phỏng vấn mùa này” đầu trang mở Handbook và toàn bộ phiếu chấm của mùa.",
       "Danh sách xếp theo ca; trong mỗi ca ai check-in trước đứng trước (cùng giờ theo tên), bạn chưa đến đứng sau. Cột “Check-in / Bàn” hiện giờ đến và tài khoản Support/BTC đã check-in.",
       "Phiếu đang chấm tự lưu nháp trên máy (điện thoại/laptop) của mentor: lỡ chuyển tab, chuyển app hay tải lại trang thì mở lại hồ sơ là thấy “Đã khôi phục bản nháp”. Nháp chỉ là bản tạm — phải bấm “Xác nhận kết quả” mới lưu; lưu thành công thì nháp tự xoá, nháp quá 24 giờ cũng tự xoá."
     ],
-    updated: "03/10/2026"
+    updated: "07/10/2026"
   },
   "/interviews/mentee-offline/huong-dan": {
     title: "Hướng dẫn phỏng vấn mùa này",

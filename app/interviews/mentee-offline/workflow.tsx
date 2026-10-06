@@ -3,8 +3,8 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction } from "@/app/actions/mentee-offline";
-import { normalizedPhone, openAtDeskAndMentor, roomDeskLabel, roomLabel, sortCandidatesByArrival, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
-import { formatDateTime, formatTime, vietnamDateKey } from "@/lib/utils";
+import { normalizedPhone, openAtDeskAndMentor, roomDeskBounds, roomDeskLabel, roomLabel, sortCandidatesByArrival, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
+import { formatDateTime, formatTime } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
 import { InterviewResultForm, InterviewResultSummary } from "./rubric-form";
@@ -17,19 +17,14 @@ const field="w-full rounded-md border border-slate-300 bg-white p-2";
 const button="rounded-md bg-vam-green px-4 py-2 text-white disabled:opacity-50";
 
 /**
- * Thứ Bảy 03/10 chỉ có 3 phòng (6 bàn/phòng); Chủ nhật 04/10 đủ 6 phòng (5
- * bàn/phòng) — chốt 29/09/2026. Danh sách dropdown chỉ là tiện dụng; cận thật
- * được database cưỡng chế lại trong trigger vam104_room_desk_bounds_guard,
- * vì ô chọn đã lọc trên màn hình không phải một phép kiểm.
+ * Ô chọn phòng/bàn theo CHÍNH CA (roomDeskBounds): danh sách phòng trong địa điểm và
+ * số chỗ của ca. Chỉ là tiện dụng — cận thật do trigger vam104_room_desk_bounds_guard
+ * cưỡng chế lại, vì ô chọn đã lọc trên màn hình không phải một phép kiểm.
  */
-const ROOM_DESK_BY_DAY: Record<string, { rooms: number[]; desks: number[] }> = {
-  "2026-10-03": { rooms: [1, 2, 3], desks: [1, 2, 3, 4, 5, 6] },
-  "2026-10-04": { rooms: [1, 2, 3, 4, 5, 6], desks: [1, 2, 3, 4, 5] }
-};
-const DEFAULT_ROOM_DESK = { rooms: [1, 2, 3, 4, 5, 6], desks: [1, 2, 3, 4, 5, 6] };
-function roomDeskOptions(sessionStartsAtIso: string | undefined) {
-  const dayKey = sessionStartsAtIso ? vietnamDateKey(sessionStartsAtIso) : null;
-  return (dayKey && ROOM_DESK_BY_DAY[dayKey]) || DEFAULT_ROOM_DESK;
+function roomDeskOptions(session: { venue: string | null; seat_limit: number | null } | undefined) {
+  const { rooms, desks } = roomDeskBounds(session?.venue, session?.seat_limit);
+  const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+  return { rooms: range(rooms), desks: range(desks) };
 }
 
 export function OfflineDashboardClient({ data, initialApplication }: { data: OfflineDashboard; initialApplication?:string }) {
@@ -200,14 +195,14 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
         if(!reason.trim()) {setState({ok:false,message:"Cần nhập lý do huỷ."});return;}
         void cancelBooking(reason);
       }}>Huỷ lịch đăng ký</button> : !op?.checked_in_at ? null : <p className="text-sm text-slate-600">Đã check-in — không huỷ lịch đăng ký được nữa.</p>}
-      {!op?.checked_in_at && c.status!=="withdrawn" && <MoveBookingForm sessions={data.sessions} currentSessionId={c.sessionId}
+      {!op?.checked_in_at && c.status!=="withdrawn" && <MoveBookingForm sessions={data.moveTargets ?? data.sessions} currentSessionId={c.sessionId}
         takenBySession={data.candidates.reduce((m,x)=>x.sessionId ? m.set(x.sessionId,(m.get(x.sessionId)??0)+1) : m,new Map<string,number>())}
         candidateName={c.name} busy={busy} nowIso={new Date().toISOString()} onMove={(sessionId,reason)=>void moveBooking(sessionId,reason)} />}
       {op?.checked_in_at && !op.outcome && <form className="grid gap-3 sm:grid-cols-3" onSubmit={e=>{
         e.preventDefault();const f=new FormData(e.currentTarget);void save("assign",{room:Number(f.get("room")),desk:Number(f.get("desk")),interviewerId:String(f.get("interviewer")),reason:String(f.get("reason")??""),isOnline:f.get("isOnline")==="on",onlineNote:String(f.get("onlineNote")??"")});
       }}>
-        <label>Phòng<select name="room" required defaultValue={op.room??""} className={field} onChange={e=>{const v=Number(e.target.value)||null;setPick(p=>({...p,room:v}));}}><option value="">Chọn phòng</option>{roomDeskOptions(session?.starts_at).rooms.map(n=><option key={n} value={n}>{roomLabel(n,session?.venue)}</option>)}</select></label>
-        <label>Bàn<select name="desk" required defaultValue={op.desk??""} className={field} onChange={e=>{const v=Number(e.target.value)||null;setPick(p=>({...p,desk:v}));}}><option value="">Chọn bàn</option>{roomDeskOptions(session?.starts_at).desks.map(n=><option key={n}>{n}</option>)}</select></label>
+        <label>Phòng<select name="room" required defaultValue={op.room??""} className={field} onChange={e=>{const v=Number(e.target.value)||null;setPick(p=>({...p,room:v}));}}><option value="">Chọn phòng</option>{roomDeskOptions(session).rooms.map(n=><option key={n} value={n}>{roomLabel(n,session?.venue)}</option>)}</select></label>
+        <label>Bàn<select name="desk" required defaultValue={op.desk??""} className={field} onChange={e=>{const v=Number(e.target.value)||null;setPick(p=>({...p,desk:v}));}}><option value="">Chọn bàn</option>{roomDeskOptions(session).desks.map(n=><option key={n}>{n}</option>)}</select></label>
         <label>Người phỏng vấn<select required name="interviewer" defaultValue={op.interviewer_id??""} className={field} onChange={e=>{const v=e.target.value||null;setPick(p=>({...p,interviewerId:v}));}}><option value="">Chọn người có mặt</option>{data.participants.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></label>
         {(busyHere.atDesk.length>0 || busyHere.withMentor.length>0) && <div role="note" data-testid="assign-busy-note" className="grid gap-1 rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 sm:col-span-3">
           {busyHere.atDesk.length>0 && <p>Bàn này đang có {busyHere.atDesk.length} bạn chưa có kết quả: {busyHere.atDesk.join(", ")}.</p>}

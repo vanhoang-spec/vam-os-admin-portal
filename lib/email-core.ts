@@ -1956,6 +1956,9 @@ export function buildMenteeSessionInviteEmail(input: {
  * bị nay BẮT BUỘC trước khi chọn ca — thư phải nói, nếu không trang sẽ chặn một
  * người không hiểu vì sao.
  */
+// Đợt 2 (10–11/10/2026) gửi thư này cho hai nhóm: người có thư mời mà chưa từng chọn
+// ca, và người đã chọn ca đợt 1 nhưng không đến (chỗ cũ đã huỷ). Câu mở đầu nói đúng
+// cả hai — “bạn chưa chọn ca” gửi cho người đã chọn mà vắng là câu sai.
 export function buildMenteeSessionReopenEmail(input: {
   candidateName: string;
   seasonLabel: string;
@@ -1974,7 +1977,7 @@ export function buildMenteeSessionReopenEmail(input: {
   const lines = [
     `Chào ${name},`,
     "",
-    `Ban tổ chức thấy bạn chưa chọn ca phỏng vấn ${season}. Ban tổ chức MỞ LẠI cho bạn chọn ca đến ${deadline}.`,
+    `Bạn chưa có ca phỏng vấn ${season} — chưa kịp chọn ca, hoặc chưa tham dự được ca đã chọn. Ban tổ chức MỞ LẠI cho bạn chọn ca đến ${deadline}.`,
     "",
     `Phỏng vấn trực tiếp vào ${days}, mỗi buổi tối đa 30 phút, 1:1 với một mentor. Ca đã kín hoặc đã bắt đầu thì không chọn được nữa — bạn chọn sớm để còn nhiều ca.`,
     "",
@@ -1993,7 +1996,7 @@ export function buildMenteeSessionReopenEmail(input: {
   const html = wrapHtml(
     [
       `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
-      `<p>Ban tổ chức thấy bạn chưa chọn ca phỏng vấn <strong>${escapeHtml(season)}</strong>. Ban tổ chức <strong>mở lại</strong> cho bạn chọn ca đến <strong>${escapeHtml(deadline)}</strong>.</p>`,
+      `<p>Bạn chưa có ca phỏng vấn <strong>${escapeHtml(season)}</strong> — chưa kịp chọn ca, hoặc chưa tham dự được ca đã chọn. Ban tổ chức <strong>mở lại</strong> cho bạn chọn ca đến <strong>${escapeHtml(deadline)}</strong>.</p>`,
       `<p>Phỏng vấn trực tiếp vào <strong>${escapeHtml(days)}</strong>, mỗi buổi tối đa 30 phút, 1:1 với một mentor. Ca đã kín hoặc đã bắt đầu thì không chọn được nữa — bạn chọn sớm để còn nhiều ca.</p>`,
       "<p><strong>Bước 1</strong> — trả lời 2 câu hỏi chuẩn bị (bắt buộc, ngay trên trang). <strong>Bước 2</strong> — chọn <strong>một</strong> ca.</p>",
       `<p style="margin:20px 0"><a href="${escapeHtml(input.bookingUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn ca phỏng vấn</a></p>`,

@@ -51,6 +51,8 @@ export type OfflineDashboard = {
   /** Phiếu chấm hiệu lực của mùa (riêng, hoặc kế thừa phiếu lưu gần nhất). null = chưa có phiếu nào. */
   rubric: InterviewRubric | null;
   sessions: Array<{id: string; starts_at: string; ends_at: string; venue: string | null; seat_limit: number | null}>;
+  /** Mọi ca của mùa cho form “Đổi ca” khi `sessions` đã lọc theo một đợt (dashboardForWave). Không có thì dùng `sessions`. */
+  moveTargets?: Array<{id: string; starts_at: string; ends_at: string; venue: string | null; seat_limit: number | null}>;
   participants: Array<{id: string; full_name: string; email: string; capacity: number | null; activeMatches: number}>;
   candidates: OfflineCandidate[];
   logs: Array<{id: string; application_id: string; actor_name: string; candidate_name: string; action: string; reason: string | null;
@@ -106,6 +108,24 @@ export function roomNamesFromVenue(venue: string | null | undefined): string[] {
   if (!match) return [];
   const names = match[1].split(",").map((s) => s.trim()).filter(Boolean);
   return names.every((n) => n.length <= 20) ? names : [];
+}
+
+/**
+ * Số phòng và số bàn mỗi phòng của một ca (BTC 07/10/2026) — thay cho bảng ghi cứng
+ * theo hai ngày 03/10 và 04/10. Phòng = số tên trong địa điểm (“Phòng a, b, c — …”);
+ * bàn mỗi phòng = số chỗ chia đều, làm tròn lên. Đợt 1 ra đúng như cũ: 03/10 3 phòng
+ * × 6 bàn (18 chỗ), 04/10 6 phòng × 5 bàn (28 chỗ). Chưa có địa điểm → 6 phòng; chưa
+ * có số chỗ → 6 bàn.
+ *
+ * CÙNG LUẬT với trigger vam104_room_desk_bounds_guard (migration 20261007090000): ô
+ * chọn trên màn hình chỉ là tiện dụng, database mới là nơi chặn thật — hai bên lệch
+ * nhau thì Support chọn được một bàn rồi bị từ chối lúc lưu.
+ */
+export function roomDeskBounds(venue: string | null | undefined, seatLimit: number | null | undefined): { rooms: number; desks: number } {
+  const named = roomNamesFromVenue(venue).length;
+  const rooms = named > 0 ? named : 6;
+  const seats = typeof seatLimit === "number" && Number.isFinite(seatLimit) && seatLimit >= 1 ? seatLimit : null;
+  return { rooms, desks: seats === null ? 6 : Math.max(1, Math.ceil(seats / rooms)) };
 }
 
 /** "B1.504" cho phòng số 2 của ca Cơ sở B; không có tên thì chính con số. */

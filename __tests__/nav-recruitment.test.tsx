@@ -61,11 +61,20 @@ describe("cấu trúc theo vai trò", () => {
         "Kết quả phỏng vấn Mentor S12"
       ]],
       [MENTEE_RECRUITMENT_LABEL, [
-        "Báo cáo", "Hồ sơ mentee", "Điểm cộng theo ngày nộp", "Giao hồ sơ mentee", "Đánh giá mentee",
+        "Báo cáo", "Hồ sơ mentee", "Giao hồ sơ mentee", "Đánh giá mentee",
         "Phiếu chấm & hướng dẫn mentee", "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee",
-        "Phỏng vấn mentee trực tiếp", "Duyệt Mentee S12"
+        "Phỏng vấn mentee trực tiếp", "Duyệt Mentee S12", "Điểm cộng theo ngày nộp"
       ]],
       "Ghép cặp"
+    ]);
+  });
+
+  it("“Phỏng vấn mentee trực tiếp” có mục con cho từng đợt (?dot= ngày đầu đợt)", () => {
+    const mentee = (recruitment("support_team")?.items ?? []).find((e) => isNavSubGroup(e) && e.key === "mentee");
+    const live = mentee && isNavSubGroup(mentee) ? mentee.items.find((i) => i.href === "/interviews/mentee-offline") : undefined;
+    expect(live?.children).toEqual([
+      { href: "/interviews/mentee-offline?dot=2026-10-03", label: "Đợt 1 · 03–04/10" },
+      { href: "/interviews/mentee-offline?dot=2026-10-10", label: "Đợt 2 · 10–11/10" }
     ]);
   });
 
@@ -113,8 +122,8 @@ describe("cấu trúc theo vai trò", () => {
       "Danh sách nhân sự tuyển sinh",
       [MENTOR_RECRUITMENT_LABEL, ["Hồ sơ mentor", "Giao hồ sơ mentor", "Tiến độ phỏng vấn mentor", "Kết quả phỏng vấn Mentor S12"]],
       [MENTEE_RECRUITMENT_LABEL, [
-        "Báo cáo", "Hồ sơ mentee", "Điểm cộng theo ngày nộp", "Giao hồ sơ mentee",
-        "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee", "Phỏng vấn mentee trực tiếp"
+        "Báo cáo", "Hồ sơ mentee", "Giao hồ sơ mentee",
+        "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee", "Phỏng vấn mentee trực tiếp", "Điểm cộng theo ngày nộp"
       ]],
       "Ghép cặp"
     ]);
@@ -150,6 +159,13 @@ describe("mục đang mở: một mục, mục cụ thể nhất", () => {
     expect(active("/admin/seasons-forms/bonus-points")).toBe("/admin/seasons-forms/bonus-points");
     expect(active("/interviews/lich", "x=1")).toBe("/interviews/lich");
     expect(active("/reviews/assign-bulk", "intake_batch_id=b1&role_applied=mentee")).toBe("/reviews/assign-bulk?role_applied=mentee");
+  });
+
+  it("mục con theo đợt sáng khi URL có đúng ?dot=; không có thì mục cha sáng", () => {
+    expect(active("/interviews/mentee-offline", "dot=2026-10-10")).toBe("/interviews/mentee-offline?dot=2026-10-10");
+    expect(active("/interviews/mentee-offline", "dot=2026-10-03&application=x")).toBe("/interviews/mentee-offline?dot=2026-10-03");
+    expect(active("/interviews/mentee-offline")).toBe("/interviews/mentee-offline");
+    expect(navModuleFor(groups, "/interviews/mentee-offline?dot=2026-10-10")?.label).toBe(MENTEE_RECRUITMENT_LABEL);
   });
 
   it("hộp Hướng dẫn liệt kê trang của đúng nhánh", () => {
@@ -194,6 +210,14 @@ describe("thanh menu vẽ ba tầng", () => {
     const sidebar = renderAt("/applications/mentor-review", "");
     const current = sidebar.getAllByRole("link").filter((a) => a.getAttribute("aria-current") === "page");
     expect(current.map((a) => a.textContent)).toEqual(["Duyệt Mentor S12"]);
+  });
+
+  it("ở Đợt 2 của Phỏng vấn mentee trực tiếp: nhánh Mentee mở, đúng mục con sáng", () => {
+    const sidebar = renderAt("/interviews/mentee-offline", "dot=2026-10-10", "support_team");
+    expect(sidebar.getByRole("button", { name: MENTEE_RECRUITMENT_LABEL }).getAttribute("aria-expanded")).toBe("true");
+    const current = sidebar.getAllByRole("link").filter((a) => a.getAttribute("aria-current") === "page");
+    expect(current.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([["Đợt 2 · 10–11/10", "/interviews/mentee-offline?dot=2026-10-10"]]);
+    expect(sidebar.getByRole("link", { name: "Đợt 1 · 03–04/10" })).toBeTruthy();
   });
 
   it("menu chính không còn “Ứng tuyển”", () => {

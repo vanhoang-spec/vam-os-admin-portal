@@ -51,7 +51,7 @@ export default async function MenteeProgressPage() {
     <div className="grid gap-4">
       <PageHeader
         title={TITLE}
-        description="Danh sách mentee theo từng ca, buổi sáng / chiều ngày 03–04/10: ai đã phỏng vấn xong và kết quả, ai đang phỏng vấn, ai đã đến chờ phân bàn, ai chưa đến."
+        description="Danh sách mentee theo từng ca, buổi sáng / chiều của mọi đợt phỏng vấn: ai đã phỏng vấn xong và kết quả, ai đang phỏng vấn, ai đã đến chờ phân bàn, ai chưa đến."
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <LiveRefresh />

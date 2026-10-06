@@ -16,6 +16,18 @@ import { PrepAnswersForm } from "./prep-answers-form";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * “Phỏng vấn trực tiếp tại UEH, ngày Thứ Bảy 10/10/2026 và Chủ nhật 11/10/2026.” — đọc
+ * từ chính các ngày còn ca (lưới đã bỏ ngày đã qua). Trước đây ghi cứng 03 và 04/10,
+ * nên người mở link ở đợt 2 đọc thấy ngày của đợt 1.
+ */
+function interviewDaysText(data: { ok: boolean } & Partial<{ days: Array<{ label: string }> }>): string {
+  const labels = data.ok && Array.isArray(data.days) ? data.days.map((d) => d.label) : [];
+  if (!labels.length) return "Phỏng vấn trực tiếp tại UEH.";
+  const joined = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} và ${labels[labels.length - 1]}`;
+  return `Phỏng vấn trực tiếp tại UEH, ngày ${joined}.`;
+}
+
 export default async function MenteeSessionBookingPage(props: {
   params: Promise<{ token: string }>;
 }) {
@@ -33,8 +45,7 @@ export default async function MenteeSessionBookingPage(props: {
             {data.ok ? data.candidateName : "Chọn ca phỏng vấn"}
           </h1>
           <p className="mt-2 text-sm text-slate-200">
-            Phỏng vấn trực tiếp tại UEH, ngày 03 và 04/10/2026. Bạn chọn một ca phù hợp với lịch
-            của mình.
+            {interviewDaysText(data)} Bạn chọn một ca phù hợp với lịch của mình.
           </p>
         </div>
 

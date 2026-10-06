@@ -17,8 +17,13 @@ import {
   canBrowsePeople
 } from "@/lib/read-access";
 import { SUBMISSION_BONUS_PATH } from "@/lib/submission-bonus-core";
+import { MENTEE_INTERVIEW_WAVE_LINKS } from "@/lib/mentee-interview-waves";
 
-export type NavItemDef = { href: string; label: string };
+/**
+ * Một mục link. `children`: các mục con thụt vào ngay dưới nó (tầng 4) — hiện chỉ
+ * “Phỏng vấn mentee trực tiếp” có, mỗi đợt một mục (BTC 07/10/2026).
+ */
+export type NavItemDef = { href: string; label: string; children?: NavItemDef[] };
 
 /** Nhánh con trong một nhóm — tầng thứ ba của menu (BTC 06/10/2026: Tuyển Mentor / Tuyển Mentee). */
 export type NavSubGroupDef = { key: string; label: string; items: NavItemDef[] };
@@ -43,7 +48,12 @@ export function isNavSubGroup(entry: NavEntryDef): entry is NavSubGroupDef {
 
 /** Mọi mục link của một nhóm, kể cả mục nằm trong nhánh con. */
 export function navItemsOf(group: Pick<NavGroupDef, "items">): NavItemDef[] {
-  return (group.items ?? []).flatMap((entry) => (isNavSubGroup(entry) ? entry.items : [entry]));
+  return (group.items ?? []).flatMap((entry) => withChildren(isNavSubGroup(entry) ? entry.items : [entry]));
+}
+
+/** Mục cùng các mục con của nó, phẳng. */
+export function withChildren(items: readonly NavItemDef[]): NavItemDef[] {
+  return items.flatMap((item) => [item, ...(item.children ?? [])]);
 }
 
 /** Phần đường dẫn của một href, bỏ ?query — hướng dẫn và biểu tượng theo trang, không theo bộ lọc. */
@@ -109,10 +119,10 @@ export function navModuleFor(groups: readonly NavGroupDef[], activeHref: string 
   for (const group of groups) {
     if (group.href === activeHref) return { label: group.label, items: [{ href: group.href, label: group.label }] };
     for (const entry of group.items ?? []) {
-      if (isNavSubGroup(entry) && entry.items.some((i) => i.href === activeHref)) return { label: entry.label, items: entry.items };
+      if (isNavSubGroup(entry) && withChildren(entry.items).some((i) => i.href === activeHref)) return { label: entry.label, items: entry.items };
     }
     const direct = (group.items ?? []).filter((e): e is NavItemDef => !isNavSubGroup(e));
-    if (direct.some((i) => i.href === activeHref)) return { label: group.label, items: direct };
+    if (withChildren(direct).some((i) => i.href === activeHref)) return { label: group.label, items: direct };
   }
   return null;
 }
@@ -178,16 +188,21 @@ function buildRecruitmentGroup(
     // vấn nên mentor phỏng vấn (reviewer) không xem.
     ...when(sessionStatus, { href: "/interviews/bao-cao-mentee", label: "Báo cáo" }),
     ...when(showApplicationOps, { href: "/applications?role_applied=mentee", label: "Hồ sơ mentee" }),
-    // Điểm cộng theo ngày nộp chỉ áp cho đơn mentee (BTC 06/10/2026).
-    ...when(canManageSubmissionBonus(role), { href: SUBMISSION_BONUS_PATH, label: "Điểm cộng theo ngày nộp" }),
     ...when(assignLots, { href: "/reviews/assign-bulk?role_applied=mentee", label: "Giao hồ sơ mentee" }),
     ...when(showReviews, { href: "/reviews?role_applied=mentee", label: "Đánh giá mentee" }),
     // Phiếu chấm + Handbook theo mùa: trang tự gate bằng canEditInterviewRubric.
     ...when(canEditInterviewRubric(role), { href: "/interviews/phieu-cham-mentee", label: "Phiếu chấm & hướng dẫn mentee" }),
     ...when(sessionStatus, { href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }),
     ...when(sessionStatus, { href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }),
-    ...when(showReviews || isSupport, { href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" }),
-    ...when(decisionLists, { href: "/applications/mentee-review", label: "Duyệt Mentee S12" })
+    // Mỗi đợt một mục con (?dot= ngày đầu đợt); bấm mục cha là đợt đang diễn ra / sắp tới.
+    ...when(showReviews || isSupport, {
+      href: "/interviews/mentee-offline",
+      label: "Phỏng vấn mentee trực tiếp",
+      children: MENTEE_INTERVIEW_WAVE_LINKS.map((w) => ({ href: `/interviews/mentee-offline?dot=${w.key}`, label: w.label }))
+    }),
+    ...when(decisionLists, { href: "/applications/mentee-review", label: "Duyệt Mentee S12" }),
+    // Điểm cộng theo ngày nộp chỉ áp cho đơn mentee; BTC xếp xuống cuối nhánh (07/10/2026).
+    ...when(canManageSubmissionBonus(role), { href: SUBMISSION_BONUS_PATH, label: "Điểm cộng theo ngày nộp" })
   ];
 
   const entries: NavEntryDef[] = [

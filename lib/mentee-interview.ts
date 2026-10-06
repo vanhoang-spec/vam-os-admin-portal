@@ -12,7 +12,8 @@ import {
   sessionFullLabel,
   totalRemaining,
   PREP_REQUIRED_MESSAGE,
-  prepAnswersComplete
+  prepAnswersComplete,
+  upcomingDays
 } from "@/lib/mentee-interview-core";
 import { MENTEE_PREP_QUESTIONS } from "@/lib/email-core";
 import { BOOKING_ELIGIBLE_STATUSES } from "@/lib/interview-schedule-core";
@@ -296,7 +297,7 @@ async function readSessionDays(
   const closesAt = bookingClosesAt(rows, openUntilIso);
   return {
     ok: true,
-    days: buildSessionDays(rows, taken, new Date().toISOString(), openUntilIso),
+    days: upcomingDays(buildSessionDays(rows, taken, new Date().toISOString(), openUntilIso)),
     deadlineLabel: closesAt ? `${formatTime(closesAt)} ngày ${formatDate(closesAt)}` : null
   };
 }
