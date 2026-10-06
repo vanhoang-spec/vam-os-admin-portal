@@ -7,30 +7,17 @@
  * ---------------------------------------------------------------------------
  * VÌ SAO CẦN "CHỪA HẠN MỨC"
  * ---------------------------------------------------------------------------
- * Brevo dùng chung cả hệ thống. Chọn ca hiện QR trực tiếp, không gửi email
- * xác nhận nữa. Vẫn chừa hạn mức cho đặt lại mật khẩu, thông báo sự kiện và
- * các thư khác của hệ thống.
- *
- * Đếm theo 24 GIỜ TRƯỢT, không theo ngày lịch: không có gì bảo đảm Brevo đặt
- * lại hạn mức lúc nửa đêm giờ Việt Nam. Đếm trượt có thể dùng chưa hết hạn mức
- * một chút, nhưng không bao giờ gửi vượt.
+ * Trần thư dùng chung cả hệ thống (lib/email-quota-core.ts). Chọn ca hiện QR
+ * trực tiếp, không gửi email xác nhận nữa. Vẫn chừa hạn mức cho đặt lại mật
+ * khẩu, thông báo sự kiện và các thư khác của hệ thống.
  *
  * Module thuần, không I/O.
  */
 
-/**
- * Trần thư trong 24 giờ trượt — KHÔNG phải trần thật của gói Brevo, vì gói trả
- * phí (Starter, từ 01/10/2026) giới hạn theo THÁNG (5.000 thư/tháng), không
- * còn giới hạn theo ngày. Con số này là mức tự đặt.
- *
- * Nâng 600 → 1000 ngày 01/10/2026: anh Hoàng cần dồn xong trong đúng hôm nay
- * cả hai việc — gửi hết thư mời mentee còn lại VÀ gửi thư cho mentor tham gia
- * phỏng vấn — trước ngày 03–04/10. Chủ ý tiêu đậm ngân sách tháng trong vài
- * ngày đầu (budget 5.000, dùng tập trung 3 ngày đầu trước 03–04/10), vì sau
- * 04/10 nhu cầu gửi giảm hẳn. Hạ số này lại sau 04/10 nếu muốn giữ ngân sách
- * tháng rộng rãi hơn cho phần còn lại. Đổi gói thì đổi con số này.
- */
-export const DAILY_EMAIL_LIMIT = 1000;
+// Trần và cửa sổ đếm định nghĩa MỘT chỗ; xuất lại ở đây vì các bộ gửi và test
+// vẫn lấy từ module này.
+export { DAILY_EMAIL_LIMIT, QUOTA_WINDOW_MS } from "@/lib/email-quota-core";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 
 /**
  * Phần hạn mức để dành cho mọi thư khác của hệ thống.
@@ -47,9 +34,6 @@ export const DISPATCH_TIME_BUDGET_MS = 45_000;
 
 /** Claim bị bỏ dở (tab đóng giữa chừng, request chết) quá lâu thì thu hồi. */
 export const DISPATCH_STALE_CLAIM_MS = 10 * 60_000;
-
-/** Cửa sổ đếm thư đã gửi. */
-export const QUOTA_WINDOW_MS = 24 * 60 * 60_000;
 
 /**
  * Trạng thái đơn được nhận thư mời chọn ca.
@@ -90,7 +74,7 @@ export type InviteCandidate = {
  *
  * Giai đoạn 1 chỉ gửi thư mời ĐẦU — `sendCount` 0 hoặc chưa có dòng. Một người
  * đã nhận thư mời thì bấm lại nút không gửi thêm lần nữa: bấm hai lần là hai
- * thư, và hạn mức 300 thư/ngày không chịu nổi một lần bấm nhầm như thế.
+ * thư, và trần thư trong ngày không nên phải gánh một lần bấm nhầm như thế.
  */
 export function isInviteRecipient(candidate: InviteCandidate): boolean {
   if (String(candidate.roleApplied ?? "").trim().toLowerCase() !== "mentee") return false;

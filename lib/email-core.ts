@@ -122,8 +122,14 @@ export type EmailMessage = {
 export const EMAIL_PROVIDERS = ["brevo", "resend"] as const;
 export type EmailProvider = (typeof EMAIL_PROVIDERS)[number];
 
-/** Brevo unless told otherwise: 300 emails a day on the free plan, against 100. */
-export const DEFAULT_EMAIL_PROVIDER: EmailProvider = "brevo";
+/**
+ * Resend unless told otherwise: from 06/10/2026 the program pays for Resend Pro
+ * (50.000 thư/tháng, không trần theo ngày) and the Brevo plan is being wound
+ * down. A missing or mistyped VAM_OS_EMAIL_PROVIDER must therefore fall to the
+ * provider that is paid for, not to one that may no longer accept the key.
+ * Brevo stays selectable by name as the way back.
+ */
+export const DEFAULT_EMAIL_PROVIDER: EmailProvider = "resend";
 
 export type EmailGateEnv = {
   VAM_OS_EMAIL_ENABLED?: string;
@@ -145,6 +151,15 @@ export function resolveEmailProvider(value: unknown): EmailProvider {
   return (EMAIL_PROVIDERS as readonly string[]).includes(text)
     ? (text as EmailProvider)
     : DEFAULT_EMAIL_PROVIDER;
+}
+
+/**
+ * Nhà cung cấp đang cấu hình — cho dòng sổ chưa qua nhà cung cấp nào (giữ chỗ
+ * trước khi gửi, cổng gửi đang đóng). Ghi cứng một tên thì sau một lần đổi nhà
+ * cung cấp, sổ thư nói sai về chính những dòng đó.
+ */
+export function configuredEmailProvider(env: Record<string, string | undefined> = process.env): EmailProvider {
+  return resolveEmailProvider(env.VAM_OS_EMAIL_PROVIDER);
 }
 
 export type SenderAddress = { name: string | null; email: string };

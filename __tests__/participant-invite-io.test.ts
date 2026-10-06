@@ -93,6 +93,8 @@ vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn() 
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { inviteParticipantAccount, inviteParticipantsInSeason } from "@/lib/participant-invites";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
+import { INVITE_DAILY_RESERVE } from "@/lib/participant-invite-core";
 
 const SEASON = "11111111-1111-4111-8111-111111111111";
 const OTHER_SEASON = "22222222-2222-4222-8222-222222222222";
@@ -560,7 +562,7 @@ describe("mời hàng loạt", () => {
 
   it("đã chạm hạn mức: dừng trước khi giữ chỗ cho ai", async () => {
     threePeople();
-    h.countResult = { ok: true, count: 240 };
+    h.countResult = { ok: true, count: DAILY_EMAIL_LIMIT - INVITE_DAILY_RESERVE };
 
     const batch = await inviteParticipantsInSeason({ seasonId: SEASON, personIds: [P1, P2] });
 
@@ -569,7 +571,7 @@ describe("mời hàng loạt", () => {
     expect(writes()).toEqual([]);
   });
 
-  it("Brevo báo hết hạn mức giữa lượt: dừng ngay", async () => {
+  it("nhà cung cấp thư báo chạm giới hạn (429) giữa lượt: dừng ngay", async () => {
     threePeople();
     h.sendResult = { ok: false, skipped: false, providerStatus: 429 };
 

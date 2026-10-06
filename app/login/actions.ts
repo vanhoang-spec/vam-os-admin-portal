@@ -194,14 +194,14 @@ export async function requestMagicLinkAction(
  * phỏng vấn dùng tài khoản vài lần một mùa, đường thứ hai biến ban tổ chức
  * thành quầy trực mật khẩu.
  *
- * VÌ SAO NHỜ SUPABASE GỬI, KHÔNG TỰ DỰNG LINK RỒI GỬI QUA BREVO
+ * VÌ SAO NHỜ SUPABASE GỬI, KHÔNG TỰ DỰNG LINK RỒI GỬI QUA BỘ GỬI THƯ CỦA VAM OS
  * ---------------------------------------------------------------------------
- * Mọi thư mật khẩu khác của VAM OS đi theo lối tự dựng link rồi gửi Brevo,
+ * Mọi thư mật khẩu khác của VAM OS đi theo lối tự dựng link rồi gửi qua lib/email.ts,
  * nhưng những lối đó đều nằm sau một cánh cửa đã xác thực: người bấm là quản
  * trị viên. Ô này thì công khai, ai gõ địa chỉ nào vào cũng được. Đặt một lời
  * gọi mang khoá service_role sau một cánh cửa mở là biến nó thành máy phát thư
- * cho bất kỳ địa chỉ nào, và đốt hạn mức Brevo 300 thư/ngày mà cả hệ thống đang
- * dùng chung.
+ * cho bất kỳ địa chỉ nào, và đốt trần thư trong ngày mà cả hệ thống đang dùng
+ * chung (lib/email-quota-core.ts).
  *
  * Hàm này chạy bằng khoá công khai, và Supabase tự lo giới hạn tần suất — đúng
  * thứ một ô công khai cần. Nút "gửi liên kết đăng nhập" ngay bên cạnh đã chọn

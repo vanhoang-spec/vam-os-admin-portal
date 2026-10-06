@@ -211,6 +211,16 @@ describe("chỗ giữ", () => {
     });
   });
 
+  it("dòng giữ chỗ ghi nhà cung cấp ĐANG cấu hình — đổi sang Resend thì sổ ghi resend, không ghi cứng brevo", async () => {
+    process.env.VAM_OS_EMAIL_PROVIDER = "resend";
+    const db = recordingClient({ insertData: { id: CLAIM_ID } });
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(db.client as never);
+
+    await claimParticipantInviteSend({ personId: PERSON_ID, toEmail: "an@example.com" });
+
+    expect(db.inserts[0]?.payload.provider).toBe("resend");
+  });
+
   it("23505 là một lượt khác đang gửi", async () => {
     const db = recordingClient({ insertError: { code: "23505", message: "trùng" } });
     vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(db.client as never);

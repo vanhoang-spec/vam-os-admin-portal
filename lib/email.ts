@@ -28,6 +28,7 @@ import {
   buildReviewBatchAssignedEmail,
   buildReviewerInviteEmail,
   buildStaffInviteEmail,
+  configuredEmailProvider,
   evaluateEmailGate,
   isSafeAppLink,
   normalizeEmailAddress,
@@ -53,12 +54,11 @@ import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link
  * ─────────────────────────────────────────────────────────────────────────────
  * The single outbound-email path for the whole application.
  *
- * The provider is Brevo by default and Resend on request — both are called over
- * plain fetch with the same request shape, so `VAM_OS_EMAIL_PROVIDER` moves the
- * whole application between them without touching code. Brevo is the default
- * because its free plan allows 300 emails a day against 100, and a season sends
- * ~2.700 in bursts: the daily ceiling, not the monthly one, is what decides how
- * many days a round of letters takes.
+ * The provider is Resend (from 06/10/2026) with Brevo selectable as the way
+ * back — both are called over plain fetch with the same request shape, so
+ * `VAM_OS_EMAIL_PROVIDER` moves the whole application between them without
+ * touching code. The daily ceiling every sender respects is our own
+ * (lib/email-quota-core.ts), not the provider's.
  *
  * Design rules:
  *   * Sending is gated twice — VAM_OS_EMAIL_ENABLED=true AND a production
@@ -82,8 +82,8 @@ export type SendEmailResult = {
   reason?: string;
   providerMessageId?: string | null;
   /**
-   * HTTP status the provider answered a rejection with. 429 is how Brevo says
-   * the day's allowance is gone — a caller sending in runs must stop there
+   * HTTP status the provider answered a rejection with. 429 is how both providers
+   * say a limit is hit (Brevo: the day's allowance; Resend: rate or monthly quota) — a caller sending in runs must stop there
    * instead of burning through the rest of its list one failure at a time.
    */
   providerStatus?: number | null;
@@ -144,7 +144,7 @@ async function logOutboundEmail(row: {
         to_email: row.toEmail,
         subject: row.subject,
         status: row.status,
-        provider: row.provider ?? "brevo",
+        provider: row.provider ?? configuredEmailProvider(),
         provider_message_id: row.providerMessageId ?? null,
         error: row.error ? row.error.slice(0, 500) : null
       })
@@ -166,7 +166,7 @@ async function logOutboundEmail(row: {
     to_email: row.toEmail,
     subject: row.subject,
     status: row.status,
-    provider: row.provider ?? "brevo",
+    provider: row.provider ?? configuredEmailProvider(),
     provider_message_id: row.providerMessageId ?? null,
     error: row.error ? row.error.slice(0, 500) : null,
     related_table: row.relation?.table ?? null,
@@ -1285,7 +1285,7 @@ export async function claimParticipantInviteSend(input: {
       to_email: input.toEmail,
       subject: null,
       status: "queued",
-      provider: "brevo",
+      provider: configuredEmailProvider(),
       related_table: "people",
       related_id: input.personId
     })

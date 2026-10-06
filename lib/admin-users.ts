@@ -526,7 +526,7 @@ export async function upsertScope(client: any, input: {
  * nên người nhận bấm vào là rơi vào ngõ cụt.
  *
  * `generateLink` tạo đúng tài khoản ấy nhưng KHÔNG gửi gì, và trả về
- * `hashed_token` để mình tự dựng đường dẫn về /reset-password rồi gửi qua Brevo.
+ * `hashed_token` để mình tự dựng đường dẫn về /reset-password rồi gửi qua bộ gửi thư chung (lib/email.ts).
  *
  * Ba phép kiểm trước khi tin kết quả, chép khuôn đã chạy thật ở
  * `lib/enable-reviewer.ts`. Phép thứ ba là phép quan trọng: Supabase trả về

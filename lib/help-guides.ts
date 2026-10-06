@@ -1,4 +1,5 @@
 import type { HelpGuide } from "@/lib/help-guides-core";
+import { EMAIL_PROVIDER_NAME, dailyEmailLimitLabel } from "@/lib/email-quota-core";
 
 /**
  * Nội dung "Hướng dẫn sử dụng" cho từng trang của VAM OS.
@@ -364,7 +365,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     notes: [
       "Dùng được: Super admin, Admin, Core team, Support team — và phải có quyền vận hành đúng mùa đang chọn.",
       "Mỗi lượt hàng loạt gửi tối đa 20 thư và không bao giờ gửi lại cho người đã nhận thư. Gửi lại trên từng dòng phải chờ 10 phút (“Gửi lại được sau …”).",
-      "Hạn mức Brevo 300 thư/24 giờ dùng chung cho mọi loại thư; chạm hạn mức thì tiếp tục vào hôm sau. Người “Không tham dự” không được mời."
+      `Hạn mức ${dailyEmailLimitLabel()} (gửi qua ${EMAIL_PROVIDER_NAME}) dùng chung cho mọi loại thư; chạm hạn mức thì tiếp tục vào hôm sau. Người “Không tham dự” không được mời.`
     ],
     updated: "02/10/2026"
   },
@@ -487,7 +488,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Dùng được: Super admin, Admin, Core team, Support team, và phải có quyền vận hành mùa đó. Hai nhóm mentor chỉ Ban điều hành (Super admin, Admin, Core team) cấp / thu — Support thấy trạng thái “Có / Chưa”. Tài khoản Admin/Core team đang hoạt động có cả bốn nhóm theo vai trò, không cần cấp.",
       "Ô chọn người khi giao hồ sơ / phỏng vấn chỉ gồm người có đúng nhóm của hồ sơ đó (mentee hay mentor). Không cấp được trên tài khoản Support — dùng một email khác cho việc chấm / phỏng vấn.",
       "Người chưa có tài khoản sẽ được tạo tài khoản và nhận thư đặt mật khẩu; nhắc họ xem cả mục Spam. Thư chưa gửi được thì bấm Thu hồi rồi Cấp lại.",
-      "Hạn mức thư Brevo dùng chung 300 thư/24 giờ: người chưa xử lý thì dán lại đúng danh sách và bấm lượt sau, cách vài giờ. Email phải đúng email mentor dùng khi nộp đơn."
+      `Hạn mức thư dùng chung ${dailyEmailLimitLabel()} (gửi qua ${EMAIL_PROVIDER_NAME}): người chưa xử lý thì dán lại đúng danh sách và bấm lượt sau, cách vài giờ. Email phải đúng email mentor dùng khi nộp đơn.`
     ],
     updated: "02/10/2026"
   },

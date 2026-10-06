@@ -9,12 +9,12 @@
  * DÙNG CHUNG MỘT HẠN MỨC THẬT VỚI BỘ GỬI THƯ MỜI MENTEE
  * ---------------------------------------------------------------------------
  * `lib/mentee-invite-dispatch-core.ts` tự giới hạn ở
- * `DAILY_EMAIL_LIMIT - DISPATCH_RESERVE` (220/300) để CHỪA phần còn lại (80)
+ * `DAILY_EMAIL_LIMIT - DISPATCH_RESERVE` (920/1.000) để CHỪA phần còn lại (80)
  * cho đúng loại thư này — thư mời reviewer/interviewer. Vì vậy bộ này KHÔNG
  * trừ thêm một lần chừa nữa; nó nhìn thẳng vào phần hạn mức THẬT còn trống
  * trong `DAILY_EMAIL_LIMIT`, đọc từ cùng một số "đã gửi trong 24 giờ trượt"
  * (mọi loại thư, không riêng loại nào). Trừ hai lần cùng một khoảng chừa sẽ
- * làm bộ này báo hết hạn mức trong khi Brevo vẫn còn chỗ gửi thật.
+ * làm bộ này báo hết hạn mức trong khi trần chung vẫn còn chỗ gửi thật.
  *
  * ---------------------------------------------------------------------------
  * MỘT NGƯỜI ĐƯỢC XỬ LÝ = MỘT THƯ CÓ THỂ PHẢI GỬI, DÙ CHƯA CHẮC
@@ -22,7 +22,7 @@
  * Không biết trước ai trong danh sách đã có tài khoản VÀ đã từng đăng nhập
  * (trường hợp đó `enableMentorAsReviewer` không gửi thư) cho tới khi xử lý
  * xong người đó. Coi mỗi người là một thư — an toàn hơn là đúng: thà xử lý ít
- * hơn mức Brevo thật sự cho phép, còn hơn vượt trần vì đếm nhầm.
+ * hơn mức trần chung thật sự cho phép, còn hơn vượt trần vì đếm nhầm.
  *
  * Module thuần, không I/O.
  */

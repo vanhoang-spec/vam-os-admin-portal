@@ -100,8 +100,8 @@ export async function notifyInterviewRoundInvites(input: {
   // tự chọn lịch. Mentee giờ có trang chọn ca, và nhận thư mời KÈM LINK từ bộ
   // gửi riêng (lib/mentee-invite-dispatch.ts), vốn chia lô và biết dừng khi
   // chạm trần thư trong ngày. Gửi cả hai là mỗi bạn nhận hai thư mời trong một
-  // buổi chiều, lá đầu không bấm được gì — và 334 lá thừa ấy ăn đúng vào hạn mức
-  // 300 thư/ngày mà thư có link đang cần.
+  // buổi chiều, lá đầu không bấm được gì — và 334 lá thừa ấy ăn đúng vào trần thư
+  // trong ngày mà thư có link đang cần.
   //
   // Đọc vai trò từ ĐƠN ĐÃ LƯU, không nhận từ người gọi.
   const rows = ((data ?? []) as Array<{

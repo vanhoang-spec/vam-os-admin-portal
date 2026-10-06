@@ -208,7 +208,7 @@ export async function enableMentorAsReviewer(input: {
   }
 
   // Tài khoản mới: tạo bằng generateLink, KHÔNG nhờ Supabase gửi thư. Link đặt
-  // mật khẩu đi qua Brevo ở cuối hàm, sau khi quyền đã được cấp.
+  // mật khẩu đi qua bộ gửi thư chung ở cuối hàm, sau khi quyền đã được cấp.
   let link: { type: "invite" | "recovery"; tokenHash: string } | null = null;
   let createdAccount = false;
   if (!authUser) {

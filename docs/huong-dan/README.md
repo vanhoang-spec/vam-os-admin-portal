@@ -8,7 +8,7 @@ gì, và điều gì xảy ra sau khi bấm.
 |---|---|---|
 | `HUONG_DAN_MODULE_SU_KIEN.pdf` | Core team, Support team, BTC sự kiện | Toàn bộ module Sự kiện: tạo sự kiện, chuỗi nhiều buổi, link đăng ký, thư xác nhận kèm QR, quét mã tại cửa, theo dõi số liệu |
 | `HUONG_DAN_MODULE_MAIL.pdf` | Core team, Support team, Admin | Toàn bộ module Mail: soạn mẫu thư và ô điền, duyệt, gửi hàng loạt theo lô, nhật ký gửi, cách viết để không rơi vào hộp thư rác |
-| `HUONG_DAN_CAP_QUYEN_REVIEWER.pdf` | Support team, Core team | Một trang: mời reviewer — bốn nhóm quyền độc lập (chấm hồ sơ / phỏng vấn × mentee / mentor), thư đặt mật khẩu qua Brevo, reviewer đăng nhập bằng mật khẩu, các lỗi thường gặp |
+| `HUONG_DAN_CAP_QUYEN_REVIEWER.pdf` | Support team, Core team | Một trang: mời reviewer — bốn nhóm quyền độc lập (chấm hồ sơ / phỏng vấn × mentee / mentor), thư đặt mật khẩu qua Resend, reviewer đăng nhập bằng mật khẩu, các lỗi thường gặp |
 | `HUONG_DAN_CONG_CU_AI.pdf` | Super Admin, Admin, Core team, Support team | Một trang: sáu công cụ AI, các bước chạy và lưu kết quả, quy tắc không đưa dữ liệu cá nhân sang DeepSeek, các lỗi thường gặp |
 | `HUONG_DAN_LICH_PHONG_VAN.pdf` | Core team, Support team, BTC tuyển sinh | Một trang: lịch phỏng vấn mentor 1:1 — interviewer đăng giờ rảnh, ứng viên tự giữ chỗ qua link riêng, thư mời/nhắc tự động, huỷ và đổi lịch, các tình huống thường gặp |
 | `HUONG_DAN_CANVA_AI.pdf` | Support team, Core team | Một trang: dùng công cụ **Brief thiết kế cho Canva AI** trên app để soạn prompt tiếng Anh, rồi dán sang Canva AI ra key visual / poster / video — kèm ba thứ luôn phải sửa tay và quy tắc không đưa dữ liệu cá nhân ra ngoài |
@@ -16,6 +16,7 @@ gì, và điều gì xảy ra sau khi bấm.
 | `HUONG_DAN_SUA_THU_TU_DONG.pdf` | Core team, Support team, Admin | Một trang: sửa câu chữ của 19 lá thư hệ thống tự gửi — bốn bước, cách dùng ô điền, vì sao hệ thống từ chối lưu, và cảnh báo lưu là có hiệu lực ngay (không có bước duyệt) |
 | `HUONG_DAN_PHONG_VAN_MENTEE_GIAI_DOAN_1.pdf` | Support team, Core team, BTC | Hai trang, cập nhật 29/09: gửi thư mời NGAY, cố ý không có địa chỉ — mentee mở lại đúng link để xem khi có; ai bấm nút gửi và cần bấm lại nhiều lần; 28 ca, ghế và phòng/bàn khác nhau theo ngày; thư mời nguyên văn và hướng dẫn QR/check-in/phân bàn/chấm/nhận mentee |
 | `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` | Trang 1–3: Core Team (soạn thông báo/video cho mentor). Trang 4: Support/BTC trực bàn | Bốn trang, dựng 30/09, mở rộng 01/10, trang 1–3 dựng lại 02/10 theo phiếu Mùa 12. Trang 1–3 CHỈ nội dung dành cho MENTOR (phần cấp quyền/danh sách nội bộ anh Hoàng làm riêng, không thuộc tài liệu này): đăng nhập lần đầu, tìm đúng mentee được phân, phiếu chấm Mùa 12 nguyên văn (4 tiêu chí có trọng số, mô tả 1/3/5, mục A/B/C), câu hỏi gợi ý Handbook Mùa 12 mục 6, chỗ đọc Handbook trong hệ thống và chỗ BTC cập nhật phiếu theo mùa — đã bỏ hẳn phần phân loại nhóm mentee G/C/E/F theo chốt của anh Hoàng. Trang 4 (thêm 30/09) là quy trình check-in → phân công phòng/bàn/người phỏng vấn cho Support/BTC, cùng màn hình `/interviews/mentee-offline` mentor dùng nhưng khác nút thao tác. Đây là bản ĐẦY ĐỦ — xem `HUONG_DAN_NHANH_MENTOR_PHONG_VAN.pdf` để có bản rút gọn 1 trang |
+| `HUONG_DAN_CHUYEN_EMAIL_SANG_RESEND.pdf` | Chủ chương trình (làm một lần) | Năm trang, soạn 05/10/2026: chuyển thư tự động từ Brevo sang Resend gói Pro — A thêm tên miền ở Resend (khu vực Tokyo, giữ địa chỉ hello@) · B thêm đúng 3 dòng DNS ở PA Vietnam (không đụng MX/SPF/DMARC của hộp thư hello@) · C chờ Verified · D tạo khoá Sending access · E đổi `VAM_OS_EMAIL_PROVIDER` + thêm `RESEND_API_KEY` trên Vercel · F đổi SMTP thư đăng nhập của Supabase · G gửi thử · H huỷ Brevo sau 7 ngày; kèm đường lui và trục trặc thường gặp |
 | `HUONG_DAN_NHANH_MENTOR_PHONG_VAN.pdf` | **Mentor** — gửi kèm email confirm phỏng vấn | Một trang A4 duy nhất, dựng 01/10 theo yêu cầu anh Hoàng: CHỈ phần cơ bản nhất mentor cần biết trước buổi 03–04/10 — đăng nhập, tìm đúng mentee (tick ô lọc, chờ Support xếp bàn), chấm 4 tiêu chí phiếu Mùa 12, điền mục A/B/C và xác nhận. Cố ý KHÔNG mang theo khung điểm chi tiết/câu hỏi gợi ý/quy trình Support-BTC của bản 4 trang — ai cần sâu hơn thì đọc `HUONG_DAN_MENTOR_PHONG_VAN_TRUC_TIEP.pdf` |
 
 ## Sửa và xuất lại bản PDF
@@ -163,7 +164,7 @@ Phần dễ lạc hậu nhất, kiểm lại trước tiên.
   `lib/mentee-offline-core.ts` (`OFFLINE_SCORES`, `OFFLINE_OUTCOMES`)
 - **Không có phần "nội bộ" về cấp quyền/danh sách mentor** trong trang 1–3 — anh
   Hoàng chủ động tách ra làm riêng 30/09. Đừng thêm lại số liệu sống (bao nhiêu
-  mentor đã có quyền, trần thư Brevo…) — thứ đó đổi theo ngày và không phải thứ
+  mentor đã có quyền, trần thư trong ngày…) — thứ đó đổi theo ngày và không phải thứ
   mentor cần đọc
 - **Trang 2 (mở rộng 30/09)** có bảng "Thang điểm gợi ý theo tiêu chí" — mô tả 1/3/5
   điểm nghĩa là gì cho từng tiêu chí trong 5 tiêu chí Mùa 12, do Core Team tự dựng

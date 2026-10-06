@@ -28,7 +28,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
  * thử rồi thấy nội dung cũ.
  *
  * Một select theo khoá duy nhất rẻ hơn nhiều so với chính lời gọi HTTP sang
- * Brevo đứng ngay sau nó.
+ * nhà cung cấp thư đứng ngay sau nó.
  *
  * ---------------------------------------------------------------------------
  * HỎNG THÌ GỬI BẢN MẶC ĐỊNH, KHÔNG PHẢI KHÔNG GỬI

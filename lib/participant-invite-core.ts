@@ -14,8 +14,9 @@
  * Không có I/O, nên dùng được trong client component và thử được mà không phải
  * dựng database giả.
  */
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 import { isValidEmail, normalizeEmail } from "@/lib/identity";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatInt } from "@/lib/utils";
 
 export const INVITE_MEMBERSHIP_STATUSES = ["active", "completed"] as const;
 export const INVITABLE_ROLES = ["mentor", "mentee"] as const;
@@ -36,14 +37,12 @@ export const INVITE_CLAIM_STALE_MINUTES = 15;
 export const INVITE_BULK_RETRY_AFTER_MINUTES = 30;
 export const INVITE_BATCH_MAX = 20;
 /**
- * Ngắn hơn `maxDuration = 60` của trang một quãng rộng: một lời gọi Brevo có
- * thể treo tới 20 giây, và bị cắt giữa chừng nghĩa là dòng ghi sổ của lá thư
- * cuối không kịp chốt.
+ * Ngắn hơn `maxDuration = 60` của trang một quãng rộng: một lời gọi tới nhà
+ * cung cấp thư có thể treo tới 20 giây, và bị cắt giữa chừng nghĩa là dòng ghi
+ * sổ của lá thư cuối không kịp chốt.
  */
 export const INVITE_BATCH_TIME_BUDGET_MS = 35_000;
-/** Gói miễn phí của Brevo, dùng chung cho MỌI thư của hệ thống. */
-export const BREVO_DAILY_LIMIT = 300;
-/** Chừa lại cho thư xác nhận đơn và thư sự kiện trong cùng 24 giờ. */
+/** Chừa lại cho thư xác nhận đơn và thư sự kiện trong cùng 24 giờ (trên trần chung DAILY_EMAIL_LIMIT). */
 export const INVITE_DAILY_RESERVE = 60;
 export const INVITE_MAX_CONSECUTIVE_SEND_FAILURES = 3;
 export const PARTICIPANT_INVITE_AUDIT_ACTION = "participant_account_invite";
@@ -350,8 +349,8 @@ export function linkStateAfterUniqueViolation(
 
 /** Số thư lời mời còn được gửi, sau khi đã chừa chỗ cho các thư khác. */
 export function inviteBudgetRemaining(sentOrQueuedLast24h: number): number {
-  const used = Number.isFinite(sentOrQueuedLast24h) ? Math.max(0, sentOrQueuedLast24h) : BREVO_DAILY_LIMIT;
-  return Math.max(0, BREVO_DAILY_LIMIT - INVITE_DAILY_RESERVE - used);
+  const used = Number.isFinite(sentOrQueuedLast24h) ? Math.max(0, sentOrQueuedLast24h) : DAILY_EMAIL_LIMIT;
+  return Math.max(0, DAILY_EMAIL_LIMIT - INVITE_DAILY_RESERVE - used);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -391,7 +390,7 @@ export function inviteRefusalMessage(reason: InviteRefusalReason, extra?: { last
         ? `Vừa gửi lời mời lúc ${formatDateTime(extra.lastSentAt)}. Chờ ít nhất ${INVITE_RESEND_COOLDOWN_MINUTES} phút rồi hãy gửi lại: mỗi lần gửi làm đường dẫn trong thư trước hết hiệu lực.`
         : `Vừa gửi lời mời. Chờ ít nhất ${INVITE_RESEND_COOLDOWN_MINUTES} phút rồi hãy gửi lại: mỗi lần gửi làm đường dẫn trong thư trước hết hiệu lực.`;
     case "daily_budget":
-      return `Đã chạm hạn mức thư trong 24 giờ qua (chừa ${INVITE_DAILY_RESERVE} trên ${BREVO_DAILY_LIMIT} thư cho các thư khác). Tiếp tục vào ngày mai.`;
+      return `Đã chạm hạn mức thư trong 24 giờ qua (chừa ${INVITE_DAILY_RESERVE} trên ${formatInt(DAILY_EMAIL_LIMIT)} thư cho các thư khác). Tiếp tục vào ngày mai.`;
   }
 }
 

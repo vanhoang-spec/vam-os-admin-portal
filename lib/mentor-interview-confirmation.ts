@@ -392,7 +392,7 @@ export async function sendMentorConfirmations(link: unknown, typedCount: unknown
     if (result.ok) sent++;
     else {
       failed.push(to);
-      // 429: Brevo báo hết hạn mức ngày — dừng ngay, đừng đốt phần còn lại từng lỗi một.
+      // 429: nhà cung cấp thư báo chạm giới hạn — dừng ngay, đừng đốt phần còn lại từng lỗi một.
       if (result.providerStatus === 429) break;
     }
   }

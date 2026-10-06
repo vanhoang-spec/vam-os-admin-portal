@@ -31,7 +31,7 @@ import { formatDate, formatTime } from "@/lib/utils";
  * Cùng cổng với gửi thư mời (requireBtc để gửi, requireSessionViewer để xem),
  * cùng hạn mức chung (dispatchAllowance), cùng nhịp lượt (tối đa
  * DISPATCH_MAX_PER_RUN thư, DISPATCH_TIME_BUDGET_MS) — thư này ăn vào cùng một
- * hạn mức Brevo với mọi thư khác.
+ * trần thư chung với mọi thư khác.
  *
  * Không gửi trùng: mỗi người được ĐÁNH DẤU reopen_notified_at ngay TRƯỚC khi gửi,
  * từng người một, với điều kiện cột đang trống — hai lượt bấm chồng nhau thì

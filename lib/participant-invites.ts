@@ -53,7 +53,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
  * ---------------------------------------------------------------------------
  * `auth.admin.generateLink` tạo tài khoản (hoặc mã khôi phục) và trả về mã băm,
  * KHÔNG gửi thư. Link trỏ về `/reset-password` của chính VAM OS, và thư đi qua
- * Brevo như mọi thư khác. Ba lý do, không cái nào phụ thuộc cấu hình SMTP:
+ * bộ gửi thư chung (lib/email.ts) như mọi thư khác. Ba lý do, không cái nào phụ thuộc cấu hình SMTP:
  *   * Link của Supabase bị tiêu ngay lúc được mở, và máy quét thư của công ty
  *     mở thử mọi link. Trang của VAM OS phải bấm "Tiếp tục" mới dùng tới mã.
  *   * Thư của Supabase không vào sổ `outbound_emails`: không ai trả lời được

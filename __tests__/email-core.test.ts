@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildApplicationConfirmationEmail,
   buildMentorConfirmationLinkEmail,
+  configuredEmailProvider,
   DEFAULT_EMAIL_PROVIDER,
   escapeHtml,
   evaluateEmailGate,
@@ -270,11 +271,17 @@ describe("buildApplicationConfirmationEmail", () => {
 });
 
 describe("resolveEmailProvider", () => {
-  it("defaults to Brevo, the provider with the higher daily allowance", () => {
-    expect(DEFAULT_EMAIL_PROVIDER).toBe("brevo");
+  it("defaults to Resend, the provider paid for from 06/10/2026", () => {
+    expect(DEFAULT_EMAIL_PROVIDER).toBe("resend");
     for (const value of [undefined, "", "   ", "mailgun", "postmark"]) {
-      expect(resolveEmailProvider(value), String(value)).toBe("brevo");
+      expect(resolveEmailProvider(value), String(value)).toBe("resend");
     }
+  });
+
+  it("configuredEmailProvider reads the deployment setting, falling back to the default", () => {
+    expect(configuredEmailProvider({ VAM_OS_EMAIL_PROVIDER: "brevo" })).toBe("brevo");
+    expect(configuredEmailProvider({ VAM_OS_EMAIL_PROVIDER: "resend" })).toBe("resend");
+    expect(configuredEmailProvider({})).toBe("resend");
   });
 
   it("accepts either provider, however it was typed", () => {
