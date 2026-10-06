@@ -14,7 +14,7 @@ vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: str
 import { HelpGuideButton } from "@/components/help-guide-button";
 import { HELP_GUIDES } from "@/lib/help-guides";
 import { helpGuideFor } from "@/lib/help-guides-core";
-import { buildNavGroups } from "@/lib/nav-model";
+import { buildNavGroups, navItemsOf, navPath } from "@/lib/nav-model";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 
 const ROLES = ["super_admin", "admin", "core_team", "support_team", "reviewer", "viewer"] as const;
@@ -24,7 +24,7 @@ const navHrefs = () => {
   for (const role of ROLES) {
     for (const g of buildNavGroups(user(role))) {
       if (g.href) all.add(g.href);
-      for (const i of g.items ?? []) all.add(i.href);
+      for (const i of navItemsOf(g)) all.add(navPath(i.href));
     }
   }
   return Array.from(all).sort();

@@ -24,8 +24,13 @@ gì, và điều gì xảy ra sau khi bấm.
 Bản PDF được dựng từ file HTML cùng tên — **sửa file HTML, đừng sửa PDF**.
 
 ```bash
-"/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --disable-gpu --no-pdf-header-footer --print-to-pdf="docs/huong-dan/HUONG_DAN_MODULE_SU_KIEN.pdf" "file:///<đường dẫn tuyệt đối>/docs/huong-dan/HUONG_DAN_MODULE_SU_KIEN.html"
+"/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --disable-gpu --no-pdf-header-footer --print-to-pdf="<đường dẫn tuyệt đối>/docs/huong-dan/HUONG_DAN_MODULE_SU_KIEN.pdf" "file:///<đường dẫn tuyệt đối>/docs/huong-dan/HUONG_DAN_MODULE_SU_KIEN.html"
 ```
+
+**Cả hai đường dẫn đều phải tuyệt đối** (ví dụ `D:/AI_App_Embassy/VAM_Platform/vam-os-admin-portal/docs/huong-dan/...`).
+Đường dẫn tương đối ở `--print-to-pdf` bị Chrome bỏ qua mà không báo lỗi: lệnh
+chạy xong, file PDF cũ nằm nguyên (06/10/2026). Xuất xong, kiểm ngày sửa của file
+PDF hoặc `git status` phải thấy file `.pdf` đổi.
 
 Dùng Chrome vì tài liệu đặt chữ bằng CSS in ấn (khổ A4, ngắt trang, không cho
 bảng bị cắt đôi) và Chrome là thứ đọc đúng những quy tắc đó. Font là Segoe UI —

@@ -58,7 +58,7 @@ export default async function MenteeSessionConfigPage() {
     <div className="grid gap-4">
       <PageHeader
         title="Ca phỏng vấn mentee"
-        description={`${data.totals.sessions} ca 30 phút ngày 03 và 04/10/2026. Ứng viên chọn một ca; ban tổ chức phân mentor tại chỗ.`}
+        description={`${data.totals.sessions} ca 30 phút: ${data.days.map((day) => day.label).join(", ")}. Ứng viên chọn một ca; ban tổ chức phân mentor tại chỗ.`}
       />
 
       <div className="grid gap-3 sm:grid-cols-4">

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { CurrentAdminUser } from "../lib/auth-constants";
-import { buildNavGroups, isActiveRoute, allNavHrefs } from "../lib/nav-model";
+import { buildNavGroups, isActiveRoute, allNavHrefs, navItemsOf } from "../lib/nav-model";
 
 function makeUser(role: CurrentAdminUser["role"]): CurrentAdminUser {
   return { id: "u1", email: "test@vam.org", full_name: null, role, status: "active", auth_user_id: null };
@@ -76,12 +76,14 @@ describe("buildNavGroups — super_admin", () => {
   it("includes admin group with user management sub-item", () => {
     const admin = groups.find((g) => g.key === "admin");
     expect(admin).toBeDefined();
-    expect(admin!.items?.map((i) => i.href)).toContain("/admin/users");
+    expect(navItemsOf(admin!).map((i) => i.href)).toContain("/admin/users");
   });
 
+  // Nhóm “Tuyển Mentor/Mentee” (06/10/2026): các trang nằm trong hai nhánh con,
+  // allNavHrefs gom cả tầng ba và bỏ bộ lọc ?role_applied=.
   it("applications group has reviews and interviews sub-items", () => {
     const apps = groups.find((g) => g.key === "applications");
-    const subHrefs = apps!.items?.map((i) => i.href) ?? [];
+    const subHrefs = allNavHrefs(apps ? [apps] : []);
     expect(subHrefs).toContain("/reviews");
     expect(subHrefs).toContain("/interviews");
     expect(subHrefs).toContain("/applications");
@@ -90,7 +92,7 @@ describe("buildNavGroups — super_admin", () => {
   it("operations group is an accordion with all 6 sub-items for super_admin", () => {
     const ops = groups.find((g) => g.key === "operations");
     expect(ops!.items).toBeDefined();
-    const opHrefs = ops!.items?.map((i) => i.href) ?? [];
+    const opHrefs = navItemsOf(ops!).map((i) => i.href);
     expect(opHrefs).toContain("/operations");
     expect(opHrefs).toContain("/operations/tasks");
     expect(opHrefs).toContain("/operations/monthly");
@@ -132,9 +134,9 @@ describe("buildNavGroups — core_team", () => {
   it("includes admin group but without user management", () => {
     const admin = groups.find((g) => g.key === "admin");
     expect(admin).toBeDefined();
-    expect(admin!.items?.map((i) => i.href)).not.toContain("/admin/users");
-    expect(admin!.items?.map((i) => i.href)).toContain("/admin");
-    expect(admin!.items?.map((i) => i.href)).toContain("/team");
+    expect(navItemsOf(admin!).map((i) => i.href)).not.toContain("/admin/users");
+    expect(navItemsOf(admin!).map((i) => i.href)).toContain("/admin");
+    expect(navItemsOf(admin!).map((i) => i.href)).toContain("/team");
   });
 
   it("includes /reviews and /interviews", () => {
@@ -419,6 +421,11 @@ const MENTEE_SESSION_STATUS_ROUTES = ["/interviews/ca-mentee", "/interviews/tien
 // Chỉ quản trị viên (canSendBulkEmail) — core_team/support_team không thấy.
 const MENTOR_CONFIRMATION_ROUTES = ["/interviews/thu-xac-nhan-mentor"];
 
+// Menu Tuyển Mentor/Mentee (06/10/2026): “Danh sách nhân sự tuyển sinh” đứng đầu nhóm và
+// “Giao hồ sơ mentor / mentee” trong hai nhánh — Ban điều hành giờ cũng thấy hai màn hình
+// này trên menu (trước chỉ vào từ nút trên trang Đánh giá). support_team đã thấy từ trước.
+const STAFFING_ROUTES = ["/reviews/assign-bulk", "/reviews/reviewer-pool"];
+
 // Phiếu chấm + Handbook phỏng vấn mentee theo mùa (02/10/2026). Ba vai trò của
 // canEditInterviewRubric — support_team xem phiếu trên màn hình phỏng vấn nhưng
 // không sửa, nên KHÔNG thấy link này; reviewer và viewer cũng không.
@@ -462,9 +469,9 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
   support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
 };
 
 function sortedRoutes(arr: string[]) {

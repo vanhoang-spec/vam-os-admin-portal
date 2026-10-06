@@ -5,7 +5,7 @@ import { BookOpen, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HELP_GUIDES } from "@/lib/help-guides";
 import { helpGuideFor } from "@/lib/help-guides-core";
-import { isActiveRoute, type NavGroupDef } from "@/lib/nav-model";
+import { activeNavHref, navModuleFor, navPath, type NavGroupDef } from "@/lib/nav-model";
 
 /**
  * Biểu tượng cuốn sách cạnh menu chính (góc trên bên trái): rê chuột hiện “Hướng
@@ -15,7 +15,16 @@ import { isActiveRoute, type NavGroupDef } from "@/lib/nav-model";
  * Màu hổ phách cho khác hẳn màu xanh của menu — người dùng cần nhận ra ngay đây
  * là chỗ đọc hướng dẫn, không phải một mục điều hướng.
  */
-export function HelpGuideButton({ pathname, navGroups }: { pathname: string; navGroups: NavGroupDef[] }) {
+export function HelpGuideButton({
+  pathname,
+  navGroups,
+  activeHref
+}: {
+  pathname: string;
+  navGroups: NavGroupDef[];
+  /** Mục menu đang mở (activeNavHref) — AppShell tính sẵn vì cần cả ?query của URL. */
+  activeHref?: string | null;
+}) {
   const [open, setOpen] = useState(false);
 
   // Đổi trang thì đóng — hướng dẫn đang mở là của trang cũ.
@@ -28,10 +37,10 @@ export function HelpGuideButton({ pathname, navGroups }: { pathname: string; nav
   }, [open]);
 
   const match = helpGuideFor(pathname, HELP_GUIDES);
-  const group = navGroups.find((g) =>
-    g.items?.length ? g.items.some((i) => isActiveRoute(pathname, i.href)) : g.href ? isActiveRoute(pathname, g.href) : false
-  );
-  const moduleItems = group?.items?.length ? group.items : group?.href ? [{ href: group.href, label: group.label }] : [];
+  const current = activeHref === undefined ? activeNavHref(navGroups, pathname, "") : activeHref;
+  // Module = nhánh con chứa trang (Tuyển Mentor / Tuyển Mentee), không thì cả nhóm.
+  const group = navModuleFor(navGroups, current);
+  const moduleItems = group?.items ?? [];
 
   return (
     <div className="relative">
@@ -99,19 +108,19 @@ export function HelpGuideButton({ pathname, navGroups }: { pathname: string; nav
               <h3 className="mb-1 font-semibold text-vam-ink">Các trang trong module {group?.label}</h3>
               <ul className="grid gap-1">
                 {moduleItems.map((item) => {
-                  const current = isActiveRoute(pathname, item.href);
+                  const isCurrent = item.href === current;
+                  // Hướng dẫn theo trang: “Đánh giá mentor” và “Đánh giá mentee” dùng chung hướng dẫn của /reviews.
+                  const summary = HELP_GUIDES[navPath(item.href)]?.summary;
                   return (
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        aria-current={current ? "page" : undefined}
-                        className={current ? "font-semibold text-vam-green" : "text-slate-700 hover:text-vam-green hover:underline"}
+                        aria-current={isCurrent ? "page" : undefined}
+                        className={isCurrent ? "font-semibold text-vam-green" : "text-slate-700 hover:text-vam-green hover:underline"}
                       >
                         {item.label}
                       </Link>
-                      {HELP_GUIDES[item.href]?.summary ? (
-                        <p className="text-xs text-slate-500">{HELP_GUIDES[item.href].summary}</p>
-                      ) : null}
+                      {summary ? <p className="text-xs text-slate-500">{summary}</p> : null}
                     </li>
                   );
                 })}

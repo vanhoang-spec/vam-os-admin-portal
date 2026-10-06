@@ -24,13 +24,15 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Support/BTC: trước check-in có thể “Đổi ca phỏng vấn” (kể cả sau hạn tự đổi ca, bắt buộc lý do) hoặc “Huỷ lịch đăng ký”; tick “Phỏng vấn ONLINE” khi mentee không có mặt trực tiếp."
     ],
     notes: [
+      "Mỗi lần màn hình hiện MỘT đợt phỏng vấn (đợt 1 · 03–04/10, đợt 2 · 10–11/10): mặc định là đợt đang diễn ra hoặc sắp tới; chọn đợt khác bằng các nút đầu trang hoặc mục con dưới “Phỏng vấn mentee trực tiếp” trên menu. “Đổi ca phỏng vấn” vẫn chọn được ca của đợt khác.",
+      "Ô chọn Phòng / Bàn theo chính ca: phòng lấy từ địa điểm của ca (“Phòng a, b, c — …”), số bàn mỗi phòng = số chỗ của ca chia đều. Ca chưa có địa điểm thì tạm 6 phòng — BTC điền địa điểm ở “Ca phỏng vấn mentee” trước ngày phỏng vấn.",
       "Kết quả “Không chọn làm mentee” khoá cả mục C. Mỗi mentor chọn “Có – Tôi muốn nhận bạn này” cho tối đa 2 hồ sơ trong mùa.",
       "Màn hình mentor không hiện tổng điểm — phiếu không cộng tổng, không có điểm sàn. Điểm quy đổi tham khảo chỉ BTC thấy.",
       "Nút “Hướng dẫn phỏng vấn mùa này” đầu trang mở Handbook và toàn bộ phiếu chấm của mùa.",
       "Danh sách xếp theo ca; trong mỗi ca ai check-in trước đứng trước (cùng giờ theo tên), bạn chưa đến đứng sau. Cột “Check-in / Bàn” hiện giờ đến và tài khoản Support/BTC đã check-in.",
       "Phiếu đang chấm tự lưu nháp trên máy (điện thoại/laptop) của mentor: lỡ chuyển tab, chuyển app hay tải lại trang thì mở lại hồ sơ là thấy “Đã khôi phục bản nháp”. Nháp chỉ là bản tạm — phải bấm “Xác nhận kết quả” mới lưu; lưu thành công thì nháp tự xoá, nháp quá 24 giờ cũng tự xoá."
     ],
-    updated: "03/10/2026"
+    updated: "07/10/2026"
   },
   "/interviews/mentee-offline/huong-dan": {
     title: "Hướng dẫn phỏng vấn mùa này",
@@ -86,6 +88,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Bảng “Theo từng người phỏng vấn”: gõ tên vào ô tìm để lọc. Ô in nhạt là người đó chấm dưới 3 phiếu trong nhóm — chưa đủ để nói chấm chặt hay rộng."
     ],
     notes: [
+      "Trên menu: Tuyển Mentor/Mentee → Tuyển Mentee → Báo cáo (mục đầu tiên của nhánh). Các báo cáo khác của tuyển mentee sẽ được thêm vào cùng mục này.",
       "Mỗi đợt một báo cáo, không cộng dồn: đợt sau tự xuất hiện khi BTC tạo ca cho các ngày mới.",
       "Số liệu ở các bảng đọc trực tiếp mỗi lần mở trang. Phần mẫu hình nhận xét là bản phân tích viết sau đợt, ghi rõ ngày viết và số phiếu đã đọc; nếu sau đó có thêm phiếu, trang hiện câu báo.",
       "Chỉ Core team / Support team có quyền vận hành mùa xem được; mentor phỏng vấn không xem được vì trang có điểm theo từng người phỏng vấn."
@@ -105,7 +108,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     notes: [
       "Support team xem được tình hình nhưng không sửa ca, không gửi thư mời.",
       "Mở lại chọn ca chỉ áp dụng cho người được BTC gia hạn riêng; người đã chọn ca vẫn theo hạn cũ (cần đổi thì Support/BTC dùng “Đổi ca phỏng vấn” ở màn hình phỏng vấn trực tiếp). Thư gửi thử không chứa link thật của ai.",
-      "Gửi lại thư mời cho MỘT ứng viên (vd. gõ sai email): mở hồ sơ mentee ở “Ứng tuyển”, dùng bảng “Thư mời chọn ca phỏng vấn”."
+      "Gửi lại thư mời cho MỘT ứng viên (vd. gõ sai email): mở hồ sơ ở Tuyển Mentor/Mentee → Tuyển Mentee → Hồ sơ mentee, dùng bảng “Thư mời chọn ca phỏng vấn”."
     ],
     updated: "02/10/2026"
   },
@@ -386,7 +389,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     updated: "02/10/2026"
   },
   "/applications": {
-    title: "Ứng tuyển (Tất cả)",
+    title: "Hồ sơ ứng tuyển",
     summary: "Danh sách mọi đơn ứng tuyển mentor/mentee trong phạm vi bạn được xem, kèm trạng thái xử lý. Dùng để tra cứu, lọc, mở chi tiết từng đơn và đi tới các màn hình xử lý hàng loạt.",
     steps: [
       "Gõ tên, email, SBD hoặc mã đơn vào ô tìm kiếm phía trên bảng để tìm nhanh một ứng viên.",
@@ -396,6 +399,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Cần xử lý theo lô thì dùng các nút phía trên bảng: “Xuất kết quả tuyển / điểm review”, “Mời phỏng vấn hàng loạt”, “Duyệt chính thức hàng loạt”."
     ],
     notes: [
+      "Trên menu, trang này có hai lối trong “Tuyển Mentor/Mentee”: “Hồ sơ mentor” (nhánh Tuyển Mentor) và “Hồ sơ mentee” (nhánh Tuyển Mentee) — mỗi lối lọc sẵn “Vai trò ứng tuyển”; đổi ô lọc đó để xem vai trò khác.",
       "Mở được: Super admin, Admin, Core team, Support team. Reviewer được chuyển sang trang “Đánh giá”.",
       "Cột “Người đánh giá hồ sơ”, “Người phỏng vấn” và nút “Xuất kết quả tuyển / điểm review” chỉ hiện cho Super admin, Admin, Core team.",
       "“Mời phỏng vấn hàng loạt” và “Duyệt chính thức hàng loạt” hiện cho cả Support team, nhưng Support team chỉ quyết định được hồ sơ Mentee; hồ sơ Mentor do Core team trở lên.",
@@ -467,7 +471,8 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Ban điều hành dùng các nút “Chia hồ sơ review”, “Tiến độ review”, “Danh sách reviewer”, “Cấu hình số review” ở đầu trang."
     ],
     notes: [
-      "Mở được: Super admin, Admin, Core team, Reviewer. Support team không vào trang này mà giao hồ sơ ở “Giao hồ sơ đánh giá”.",
+      "Trên menu: “Đánh giá mentor” (nhánh Tuyển Mentor) và “Đánh giá mentee” (nhánh Tuyển Mentee) mở trang này đã lọc sẵn vai trò.",
+      "Mở được: Super admin, Admin, Core team, Reviewer. Support team không vào trang này mà giao hồ sơ ở “Giao hồ sơ mentor” / “Giao hồ sơ mentee”.",
       "Chỉ người được giao mới sửa và nộp được phiếu. Ban điều hành mở phiếu của người khác chỉ để xem, “Huỷ Review này” hoặc “Đổi Người Review”.",
       "Tick “Hiện cả lịch sử” để xem cả phân công đã huỷ và hồ sơ đã kết thúc quy trình; các dòng này chỉ để xem lại."
     ],
@@ -484,7 +489,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Trả hồ sơ về hàng chờ: chọn hồ sơ ở tab “Đã giao”, nhập “Lý do huỷ” rồi bấm “Huỷ phân công đã chọn”."
     ],
     notes: [
-      "Dùng được: Super admin, Admin, Core team, Support team, và phải có quyền vận hành mùa của đợt tuyển. Core team vào từ nút “Chia hồ sơ review” trên trang “Đánh giá”.",
+      "Dùng được: Super admin, Admin, Core team, Support team, và phải có quyền vận hành mùa của đợt tuyển. Trên menu: “Giao hồ sơ mentor” (nhánh Tuyển Mentor) và “Giao hồ sơ mentee” (nhánh Tuyển Mentee) mở trang này đã chọn sẵn vai trò; Core team cũng vào được từ nút “Chia hồ sơ review” trên trang “Đánh giá”.",
       "Chỉ hồ sơ chưa giao mới giao được. Hạn tính hết ngày theo giờ Việt Nam, không được là ngày đã qua. Huỷ tối đa 25 hồ sơ mỗi lần; điểm và ghi chú cũ vẫn giữ trong lịch sử.",
       "Ô chọn người phụ trách trống thì vào “Danh sách nhân sự tuyển sinh” để cấp quyền trước. Thư báo gửi lỗi thì hồ sơ vẫn đã được giao, không cần giao lại."
     ],
@@ -519,6 +524,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Dùng hai nút trên đầu trang để sang “Xem lại application và kết quả phỏng vấn mentor S12” hoặc “Phỏng vấn mentee trực tiếp · Check-in và chấm theo ca”."
     ],
     notes: [
+      "Trên menu: “Phỏng vấn mentor” (nhánh Tuyển Mentor) mở trang này đã chọn sẵn vai trò Mentor. Phỏng vấn mentee làm ở “Phỏng vấn mentee trực tiếp” (nhánh Tuyển Mentee).",
       "Mở được: Super admin, Admin, Core team, Reviewer; tài khoản còn phải được cấp vai trò người phỏng vấn của mùa. Support team và Viewer không vào được trang này.",
       "Nút không tự tạo phân công mới: ứng viên chưa được Core team giao cho mình sẽ báo “Bạn chưa được phân công phỏng vấn ứng viên này.”",
       "Reviewer chỉ tìm được theo tên hoặc SBD, tên ứng viên không bấm mở được, và email/SĐT chỉ hiện sau khi đã có phiếu phỏng vấn của chính mình."
@@ -571,6 +577,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Huỷ cặp: bấm “Hủy match” trên dòng đang đồng hành, ghi lý do (tuỳ chọn), bấm “Xác nhận hủy”. Bấm “Chi tiết” để xem thông tin match."
     ],
     notes: [
+      "Trên menu: Tuyển Mentor/Mentee → Ghép cặp — bước cuối của tuyển sinh mỗi mùa (trước 06/10/2026 là mục riêng ở menu chính).",
       "Xem: Super admin, Admin, Core team, Support team. Tạo và huỷ match: chỉ Super admin, Admin, Core team.",
       "Mentor và mentee phải được duyệt chính thức trong mùa của đợt tuyển. Mỗi mentee chỉ có một mentor đang active; mentor đã đủ sức nhận hiện “FULL” và không chọn được.",
       "Huỷ match chuyển cặp sang “Đã dừng”, lịch sử không bị xoá. Muốn đổi mentor cho một mentee: huỷ match cũ trước rồi tạo match mới."
@@ -638,6 +645,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Mentor đã “Đồng ý”: đọc “Thay đổi hồ sơ chờ xác nhận” và cam kết, rồi bấm “Xác nhận & hoàn tất” để duyệt gia hạn."
     ],
     notes: [
+      "Trên menu: Tuyển Mentor/Mentee → Tuyển Mentor → Gia hạn mentor S12 (trước 06/10/2026 nằm ở “Quản trị”).",
       "Dùng được: Super admin, Admin, Core team có quyền vận hành (operations) mùa UEHM-S12. Mỗi lượt hàng loạt tối đa 25 mentor.",
       "Hệ thống không tự gửi email. Link chỉ hiển thị một lần: tải lại trang là mất link thô, khi đó phải bấm “Tạo lại” (link cũ bị thu hồi).",
       "Khung đỏ “Cần operator xử lý membership” báo phản hồi từ chối chưa được đối soát tự động. Mentor cũ chưa có trong danh sách thì dùng “Import / thêm legacy mentor”."

@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
-import { allNavHrefs, buildNavGroups } from "@/lib/nav-model";
+import { allNavHrefs, allNavLinks, buildNavGroups } from "@/lib/nav-model";
 import {
   canAssignReview,
   canAssignReviewLots,
@@ -81,9 +81,9 @@ describe("những việc bên cạnh KHÔNG bị mở theo", () => {
 describe("nav mở đúng hai màn hình, không hơn", () => {
   const supportHrefs = allNavHrefs(buildNavGroups(makeUser("support_team")));
 
-  it("support_team thấy hai màn hình dưới Ứng tuyển", () => {
+  it("support_team thấy hai màn hình trong Tuyển Mentor/Mentee", () => {
     const group = buildNavGroups(makeUser("support_team")).find((g) => g.key === "applications");
-    const hrefs = (group?.items ?? []).map((item) => item.href);
+    const hrefs = allNavHrefs(group ? [group] : []);
     expect(hrefs).toContain("/reviews/assign-bulk");
     expect(hrefs).toContain("/reviews/reviewer-pool");
   });
@@ -93,12 +93,18 @@ describe("nav mở đúng hai màn hình, không hơn", () => {
     expect(supportHrefs).not.toContain("/interviews");
   });
 
-  it("vai trò đã thấy Đánh giá giữ nguyên nav, không có mục trùng", () => {
+  // BTC 06/10/2026: menu Tuyển Mentor/Mentee đưa “Danh sách nhân sự tuyển sinh” lên đầu
+  // và tách “Giao hồ sơ” theo vai trò — Ban điều hành giờ cũng vào thẳng từ menu, thay
+  // vì chỉ qua nút trên trang Đánh giá. Mỗi link vẫn xuất hiện đúng một lần.
+  it("Ban điều hành thấy cả hai màn hình trên menu, không có link trùng", () => {
     for (const role of ["super_admin", "admin", "core_team"]) {
-      const hrefs = allNavHrefs(buildNavGroups(makeUser(role)));
+      const groups = buildNavGroups(makeUser(role));
+      const hrefs = allNavHrefs(groups);
       expect(hrefs).toContain("/reviews");
-      expect(hrefs).not.toContain("/reviews/assign-bulk");
-      expect(hrefs).not.toContain("/reviews/reviewer-pool");
+      expect(hrefs).toContain("/reviews/assign-bulk");
+      expect(hrefs).toContain("/reviews/reviewer-pool");
+      const links = allNavLinks(groups);
+      expect(new Set(links).size).toBe(links.length);
     }
   });
 

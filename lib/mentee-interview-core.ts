@@ -192,6 +192,14 @@ export function buildSessionDays(
     }));
 }
 
+/**
+ * Bỏ những ngày mà mọi ca đã bắt đầu. Có đợt 2 (10–11/10) thì lưới không còn kéo theo
+ * hai ngày 03–04/10 toàn chữ “Đã qua” phía trên các ca bạn ấy thật sự chọn được.
+ */
+export function upcomingDays(days: readonly MenteeSessionDay[]): MenteeSessionDay[] {
+  return days.filter((day) => day.sessions.some((s) => s.state !== "past"));
+}
+
 /** Còn ca nào bấm được không — quyết định trang hiện lưới hay hiện lời giải thích. */
 export function hasBookableSession(days: readonly MenteeSessionDay[]): boolean {
   return days.some((day) => day.sessions.some((s) => s.state === "open"));

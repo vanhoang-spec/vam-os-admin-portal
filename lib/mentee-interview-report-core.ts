@@ -1,5 +1,5 @@
 import { MENTEE_FORM_OPTION_LISTS, type FormOption } from "@/lib/application-form-options";
-import { vietnamDateKeyOf } from "@/lib/mentee-interview-core";
+import type { InterviewWave } from "@/lib/mentee-interview-waves";
 import {
   EXPECTATION_ALIGNMENTS,
   TAKE_CHOICES,
@@ -110,67 +110,9 @@ export function reportRowsFrom(candidates: readonly Candidate[], activeMatchIds:
 }
 
 // ---------------------------------------------------------------------------
-// Đợt phỏng vấn
+// Đợt phỏng vấn — logic chung ở lib/mentee-interview-waves.ts
 
-export type InterviewWave = {
-  /** Ngày đầu đợt, YYYY-MM-DD giờ Việt Nam — dùng làm ?dot= trên đường dẫn. */
-  key: string;
-  number: number;
-  /** "03–04/10/2026" */
-  dateLabel: string;
-  /** "Đợt 1 · 03–04/10/2026" */
-  label: string;
-  dateKeys: string[];
-  sessionIds: string[];
-};
-
-function dayNumber(dateKey: string): number {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  return Date.UTC(y, m - 1, d) / 86_400_000;
-}
-
-export function waveDateLabel(dateKeys: readonly string[]): string {
-  if (!dateKeys.length) return "";
-  const [y1, m1, d1] = dateKeys[0].split("-");
-  const [y2, m2, d2] = dateKeys[dateKeys.length - 1].split("-");
-  if (dateKeys.length === 1) return `${d1}/${m1}/${y1}`;
-  if (y1 === y2 && m1 === m2) return `${d1}–${d2}/${m2}/${y2}`;
-  if (y1 === y2) return `${d1}/${m1}–${d2}/${m2}/${y2}`;
-  return `${d1}/${m1}/${y1}–${d2}/${m2}/${y2}`;
-}
-
-/**
- * Gom ca thành đợt: các ngày phỏng vấn liền nhau (cách nhau ≤ 1 ngày) là một đợt.
- * Thứ Bảy + Chủ nhật là một đợt; cuối tuần sau là đợt kế tiếp — tự xuất hiện khi
- * BTC tạo ca, không phải sửa mã.
- */
-export function interviewWaves(sessions: ReadonlyArray<{ id: string; starts_at: string }>): InterviewWave[] {
-  const byDate = new Map<string, string[]>();
-  for (const s of sessions) {
-    const key = vietnamDateKeyOf(s.starts_at);
-    if (!key) continue;
-    const ids = byDate.get(key) ?? [];
-    ids.push(s.id);
-    byDate.set(key, ids);
-  }
-  const groups: string[][] = [];
-  for (const date of Array.from(byDate.keys()).sort()) {
-    const last = groups[groups.length - 1];
-    if (last && dayNumber(date) - dayNumber(last[last.length - 1]) <= 1) last.push(date);
-    else groups.push([date]);
-  }
-  return groups.map((dateKeys, index) => {
-    const dateLabel = waveDateLabel(dateKeys);
-    return {
-      key: dateKeys[0],
-      number: index + 1,
-      dateLabel,
-      label: `Đợt ${index + 1} · ${dateLabel}`,
-      dateKeys,
-      sessionIds: dateKeys.flatMap((d) => byDate.get(d) ?? [])
-    };
-  });
-}
+export { interviewWaves, waveDateLabel, type InterviewWave } from "@/lib/mentee-interview-waves";
 
 /** Đợt được hỏi trên đường dẫn; không có thì đợt gần nhất đã có kết quả. */
 export function pickWave(waves: readonly InterviewWave[], rows: readonly ReportRow[], requested?: string | null): InterviewWave | null {

@@ -24,7 +24,9 @@ describe("Hướng dẫn nhanh 1 trang — Mentor phỏng vấn mentee trực ti
   it("nêu đúng đường dẫn và nhãn thật của luồng đăng nhập", () => {
     expect(text).toContain("os.alumni-mentoring.edu.vn/login");
     expect(text).toContain("Đặt lại mật khẩu");
-    expect(text).toContain("Phỏng vấn → Phỏng vấn mentee trực tiếp");
+    // Menu Tuyển Mentor/Mentee (06/10/2026) — đường dẫn ba tầng.
+    expect(text).toContain("Tuyển Mentor/Mentee → Tuyển Mentee → Phỏng vấn mentee trực tiếp");
+    expect(text).not.toContain("Phỏng vấn → Phỏng vấn mentee trực tiếp");
   });
 
   it("4 tiêu chí + trọng số khớp đúng phiếu Mùa 12 (lib/mentee-interview-rubric-s12.ts)", () => {

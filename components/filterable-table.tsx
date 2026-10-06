@@ -59,9 +59,20 @@ export function FilterableTable<T>({
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState(sortOptions[0]?.label ?? "");
-  const [filterValues, setFilterValues] = useState<Record<string, string>>(
-    Object.fromEntries(filters.map((filter) => [filter.key, searchParams.get(filter.key) ?? filter.defaultValue ?? ""]))
-  );
+  const filtersFromUrl = () =>
+    Object.fromEntries(filters.map((filter) => [filter.key, searchParams.get(filter.key) ?? filter.defaultValue ?? ""]));
+  const [filterValues, setFilterValues] = useState<Record<string, string>>(filtersFromUrl);
+
+  // Menu mở cùng một trang với bộ lọc khác nhau (Hồ sơ mentor / Hồ sơ mentee =
+  // /applications?role_applied=…, BTC 06/10/2026). Chuyển giữa hai mục không dựng
+  // lại bảng, nên bộ lọc phải theo URL mới — không thì bấm “Hồ sơ mentee” vẫn thấy
+  // danh sách mentor. Bộ lọc người dùng tự chọn không đổi URL nên không bị ghi đè.
+  const urlKey = searchParams.toString();
+  useEffect(() => {
+    setFilterValues(filtersFromUrl());
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlKey]);
 
   const resolvedFilters = useMemo(
     () =>

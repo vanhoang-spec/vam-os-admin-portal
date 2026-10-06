@@ -17,15 +17,50 @@ import {
   canBrowsePeople
 } from "@/lib/read-access";
 import { SUBMISSION_BONUS_PATH } from "@/lib/submission-bonus-core";
+import { MENTEE_INTERVIEW_WAVE_LINKS } from "@/lib/mentee-interview-waves";
 
-export type NavItemDef = { href: string; label: string };
+/**
+ * Một mục link. `children`: các mục con thụt vào ngay dưới nó (tầng 4) — hiện chỉ
+ * “Phỏng vấn mentee trực tiếp” có, mỗi đợt một mục (BTC 07/10/2026).
+ */
+export type NavItemDef = { href: string; label: string; children?: NavItemDef[] };
+
+/** Nhánh con trong một nhóm — tầng thứ ba của menu (BTC 06/10/2026: Tuyển Mentor / Tuyển Mentee). */
+export type NavSubGroupDef = { key: string; label: string; items: NavItemDef[] };
+
+export type NavEntryDef = NavItemDef | NavSubGroupDef;
 
 export type NavGroupDef = {
   key: string;
   label: string;
   href?: string;
-  items?: NavItemDef[];
+  items?: NavEntryDef[];
 };
+
+/** Nhãn của nhóm tuyển sinh và hai nhánh — tài liệu hướng dẫn trích đúng các chữ này. */
+export const RECRUITMENT_NAV_LABEL = "Tuyển Mentor/Mentee";
+export const MENTOR_RECRUITMENT_LABEL = "Tuyển Mentor";
+export const MENTEE_RECRUITMENT_LABEL = "Tuyển Mentee";
+
+export function isNavSubGroup(entry: NavEntryDef): entry is NavSubGroupDef {
+  return "items" in entry;
+}
+
+/** Mọi mục link của một nhóm, kể cả mục nằm trong nhánh con. */
+export function navItemsOf(group: Pick<NavGroupDef, "items">): NavItemDef[] {
+  return (group.items ?? []).flatMap((entry) => withChildren(isNavSubGroup(entry) ? entry.items : [entry]));
+}
+
+/** Mục cùng các mục con của nó, phẳng. */
+export function withChildren(items: readonly NavItemDef[]): NavItemDef[] {
+  return items.flatMap((item) => [item, ...(item.children ?? [])]);
+}
+
+/** Phần đường dẫn của một href, bỏ ?query — hướng dẫn và biểu tượng theo trang, không theo bộ lọc. */
+export function navPath(href: string): string {
+  const at = href.indexOf("?");
+  return at < 0 ? href : href.slice(0, at);
+}
 
 export function isActiveRoute(pathname: string, href: string): boolean {
   if (pathname === href) return true;
@@ -35,8 +70,150 @@ export function isActiveRoute(pathname: string, href: string): boolean {
   return pathname.startsWith(href) && (next === "/" || next === "?" || next === "#");
 }
 
+/**
+ * Mục menu ứng với trang đang mở — MỘT mục, mục cụ thể nhất.
+ *
+ * Trước đây mỗi mục tự so tiền tố, nên ở /applications/mentor-review cả “Duyệt
+ * Mentor S12” lẫn “Ứng tuyển (Tất cả)” cùng sáng, và ở /admin/renewals cả “Quản
+ * trị” lẫn “Gia hạn mentor”. Giờ mục có đường dẫn dài nhất thắng.
+ *
+ * Mục mang ?query (Đánh giá mentor = /reviews?role_applied=mentor) chỉ sáng khi
+ * URL hiện tại có đúng các tham số đó — cùng một trang /reviews là hai mục khác
+ * nhau ở hai nhánh. Trang không mang tham số nào thì không mục nào trong hai mục
+ * đó sáng, thay vì sáng cả hai.
+ */
+export function activeNavHref(groups: readonly NavGroupDef[], pathname: string, search: string): string | null {
+  const current = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  let best: string | null = null;
+  let bestScore = -1;
+  const consider = (href: string) => {
+    const path = navPath(href);
+    if (!isActiveRoute(pathname, path)) return;
+    const wanted = new URLSearchParams(href.slice(path.length + 1));
+    let params = 0;
+    let matches = true;
+    wanted.forEach((value, key) => {
+      params += 1;
+      if (current.get(key) !== value) matches = false;
+    });
+    if (!matches) return;
+    const score = path.length * 10 + params;
+    if (score > bestScore) {
+      best = href;
+      bestScore = score;
+    }
+  };
+  for (const group of groups) {
+    if (group.href) consider(group.href);
+    for (const item of navItemsOf(group)) consider(item.href);
+  }
+  return best;
+}
+
+/**
+ * “Module” chứa trang đang mở, cho hộp Hướng dẫn: nhánh con nếu trang nằm trong
+ * nhánh con, không thì cả nhóm. Nhóm chỉ có một link thì là chính link đó.
+ */
+export function navModuleFor(groups: readonly NavGroupDef[], activeHref: string | null): { label: string; items: NavItemDef[] } | null {
+  if (!activeHref) return null;
+  for (const group of groups) {
+    if (group.href === activeHref) return { label: group.label, items: [{ href: group.href, label: group.label }] };
+    for (const entry of group.items ?? []) {
+      if (isNavSubGroup(entry) && withChildren(entry.items).some((i) => i.href === activeHref)) return { label: entry.label, items: entry.items };
+    }
+    const direct = (group.items ?? []).filter((e): e is NavItemDef => !isNavSubGroup(e));
+    if (withChildren(direct).some((i) => i.href === activeHref)) return { label: group.label, items: direct };
+  }
+  return null;
+}
+
 function roleIn(role: string | undefined, allowed: string[]) {
   return allowed.includes(role ?? "");
+}
+
+/**
+ * Nhóm “Tuyển Mentor/Mentee” (BTC 06/10/2026). Trước đây là nhóm “Ứng tuyển” mở
+ * thêm từng mục một, cộng “Ghép cặp” đứng riêng ở menu chính. Giờ theo đúng quy
+ * trình mỗi mùa:
+ *
+ *   Danh sách nhân sự tuyển sinh   — dùng chung, đứng đầu, không gom nhánh
+ *   ▸ Tuyển Mentor                 — mọi trang chỉ về mentor
+ *   ▸ Tuyển Mentee                 — mọi trang chỉ về mentee
+ *   Ghép cặp                       — bước cuối của cả quá trình
+ *
+ * Trang dùng chung cho cả hai vai trò (hồ sơ, đánh giá, giao hồ sơ, phỏng vấn) được
+ * tách thành hai mục, mỗi mục mở sẵn bộ lọc ?role_applied= của chính trang đó.
+ *
+ * Ai thấy mục nào KHÔNG đổi: mỗi mục giữ đúng predicate trước đây của nó, trùng với
+ * cổng trang tự kiểm. Thêm có chủ ý: Ban điều hành giờ thấy cả “Danh sách nhân sự
+ * tuyển sinh” và “Giao hồ sơ” trên menu (trước chỉ vào được từ trang Đánh giá).
+ * “Gia hạn mentor S12” chuyển từ “Quản trị” sang nhánh Mentor, cùng người xem.
+ */
+function buildRecruitmentGroup(
+  role: string | undefined,
+  gates: { showReviews: boolean; showAdminTier: boolean; showApplicationOps: boolean; showOperations: boolean }
+): NavGroupDef | null {
+  const { showReviews, showAdminTier, showApplicationOps, showOperations } = gates;
+  const isSupport = role === "support_team";
+  // Trang tiến độ / ca / báo cáo phỏng vấn: BTC xem kết quả của mọi người.
+  const sessionStatus = canViewMenteeSessionStatus(role);
+  // Hai danh sách duyệt S12 vẫn chỉ cho nhóm thấy “Đánh giá” như trước — support_team
+  // không được mời vào bước quyết định cuối qua menu.
+  const decisionLists = showApplicationOps && showReviews;
+  const assignLots = canAssignReviewLots(role);
+  const when = (ok: boolean, item: NavItemDef): NavItemDef[] => (ok ? [item] : []);
+
+  // Thứ tự trong hai nhánh do BTC đọc từng mục (07/10/2026) — đừng xếp lại theo ý riêng.
+  // Nhánh Mentor sẽ có mục “Báo cáo” đứng đầu khi BTC chốt nội dung.
+  const mentor: NavItemDef[] = [
+    ...when(showApplicationOps, { href: "/applications?role_applied=mentor", label: "Hồ sơ mentor" }),
+    ...when(showAdminTier, { href: "/admin/renewals", label: "Gia hạn mentor S12" }),
+    ...when(decisionLists, { href: "/applications/mentor-review", label: "Duyệt Mentor S12" }),
+    ...when(assignLots, { href: "/reviews/assign-bulk?role_applied=mentor", label: "Giao hồ sơ mentor" }),
+    ...when(showReviews, { href: "/reviews?role_applied=mentor", label: "Đánh giá mentor" }),
+    // Lịch 1:1 cùng khán giả với trang Phỏng vấn: trang tự gate bằng canSelfClaimInterview.
+    ...when(showReviews, { href: "/interviews/lich", label: "Lịch phỏng vấn" }),
+    // Thư tới hàng chục mentor một lúc: cùng cổng với gửi thư hàng loạt.
+    ...when(canSendBulkEmail(role), { href: "/interviews/thu-xac-nhan-mentor", label: "Thư xác nhận lịch PV cho mentor" }),
+    ...when(showReviews, { href: "/interviews?role_applied=mentor", label: "Phỏng vấn mentor" }),
+    ...when(sessionStatus, { href: "/interviews/tien-do-mentor", label: "Tiến độ phỏng vấn mentor" }),
+    ...when(showReviews || isSupport, { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" })
+  ];
+
+  // Phỏng vấn mentee làm tại màn hình trực tiếp theo ca, không qua trang Phỏng vấn
+  // chung — nên nhánh Mentee không có mục “Phỏng vấn mentee” thứ hai.
+  const mentee: NavItemDef[] = [
+    // “Báo cáo” chứ không “Báo cáo phỏng vấn mentee”: BTC sẽ thêm các báo cáo khác
+    // của tuyển mentee vào cùng mục này (07/10/2026). Có điểm theo từng người phỏng
+    // vấn nên mentor phỏng vấn (reviewer) không xem.
+    ...when(sessionStatus, { href: "/interviews/bao-cao-mentee", label: "Báo cáo" }),
+    ...when(showApplicationOps, { href: "/applications?role_applied=mentee", label: "Hồ sơ mentee" }),
+    ...when(assignLots, { href: "/reviews/assign-bulk?role_applied=mentee", label: "Giao hồ sơ mentee" }),
+    ...when(showReviews, { href: "/reviews?role_applied=mentee", label: "Đánh giá mentee" }),
+    // Phiếu chấm + Handbook theo mùa: trang tự gate bằng canEditInterviewRubric.
+    ...when(canEditInterviewRubric(role), { href: "/interviews/phieu-cham-mentee", label: "Phiếu chấm & hướng dẫn mentee" }),
+    ...when(sessionStatus, { href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }),
+    ...when(sessionStatus, { href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }),
+    // Mỗi đợt một mục con (?dot= ngày đầu đợt); bấm mục cha là đợt đang diễn ra / sắp tới.
+    ...when(showReviews || isSupport, {
+      href: "/interviews/mentee-offline",
+      label: "Phỏng vấn mentee trực tiếp",
+      children: MENTEE_INTERVIEW_WAVE_LINKS.map((w) => ({ href: `/interviews/mentee-offline?dot=${w.key}`, label: w.label }))
+    }),
+    ...when(decisionLists, { href: "/applications/mentee-review", label: "Duyệt Mentee S12" }),
+    // Điểm cộng theo ngày nộp chỉ áp cho đơn mentee; BTC xếp xuống cuối nhánh (07/10/2026).
+    ...when(canManageSubmissionBonus(role), { href: SUBMISSION_BONUS_PATH, label: "Điểm cộng theo ngày nộp" })
+  ];
+
+  const entries: NavEntryDef[] = [
+    ...when(canManageReviewers(role), { href: "/reviews/reviewer-pool", label: "Danh sách nhân sự tuyển sinh" }),
+    ...(mentor.length ? [{ key: "mentor", label: MENTOR_RECRUITMENT_LABEL, items: mentor }] : []),
+    ...(mentee.length ? [{ key: "mentee", label: MENTEE_RECRUITMENT_LABEL, items: mentee }] : []),
+    // Ghép cặp là bước cuối của tuyển sinh, không còn là mục riêng ở menu chính.
+    // Cùng predicate canBrowseOperations như trang /matches.
+    ...when(showOperations, { href: "/matches", label: "Ghép cặp" })
+  ];
+  return entries.length ? { key: "applications", label: RECRUITMENT_NAV_LABEL, items: entries } : null;
 }
 
 export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[] {
@@ -73,20 +250,7 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const showEvents = canBrowseOperations(role);
   const showDataIssues = canBrowseOperations(role);
 
-  // Support team mời reviewer và giao hồ sơ (quyết định 11/09/2026) nhưng không
-  // vào được trang Đánh giá — trang đó dành cho người chấm và ban điều hành. Nav
-  // mở đúng hai màn hình họ dùng, bằng chính hai predicate mà hai trang đó kiểm.
-  // Vai trò đã thấy "Đánh giá" thì vào hai màn hình này từ đó, nav giữ nguyên.
-  const canAssignLots = canAssignReviewLots(role);
-  const canStaffReviewers = canManageReviewers(role);
-  const showStaffingOnly = !showReviews && (canAssignLots || canStaffReviewers);
-
-  // Điểm cộng theo ngày nộp (16/09/2026): team support là nhóm được giao đặt mốc,
-  // nên mục này nằm trong "Ứng tuyển" — nhóm support_team đã thấy — chứ không chỉ
-  // trong "Quản trị", nơi support_team không vào. Gate theo đúng predicate trang tự kiểm.
-  const bonusItems = canManageSubmissionBonus(role)
-    ? [{ href: SUBMISSION_BONUS_PATH, label: "Điểm cộng theo ngày nộp" }]
-    : [];
+  const recruitment = buildRecruitmentGroup(role, { showReviews, showAdminTier, showApplicationOps, showOperations });
 
   const groups: (NavGroupDef | null)[] = [
     // "Công việc của tôi" sits at the very top, above Tổng quan, for everyone
@@ -158,80 +322,9 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
           ],
         }
       : null,
-    // A recruitment helper gets only their own work surfaces here. The three
-    // directory-style entries are gated on canBrowseApplications, which is the
-    // predicate /applications and both S12 review lists already enforce, so a
-    // reviewer sees "Đánh giá" and "Phỏng vấn" and nothing that would bounce.
-    showReviews
-      ? {
-          key: "applications",
-          label: "Ứng tuyển",
-          items: [
-            ...(showApplicationOps
-              ? [
-                  { href: "/applications/mentor-review", label: "Duyệt Mentor S12" },
-                  { href: "/applications/mentee-review", label: "Duyệt Mentee S12" },
-                  { href: "/applications", label: "Ứng tuyển (Tất cả)" },
-                ]
-              : []),
-            ...bonusItems,
-            { href: "/reviews", label: "Đánh giá" },
-            { href: "/interviews", label: "Phỏng vấn" },
-            // Cùng khán giả với /interviews: trang tự gate bằng đúng
-            // canSelfClaimInterview mà showReviews đại diện — nav không được
-            // hứa một trang sẽ đá người bấm về trang chủ.
-            { href: "/interviews/lich", label: "Lịch phỏng vấn" },
-            { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" },
-            // Tiến độ phỏng vấn mentor cho BTC (03/10/2026) — cùng khán giả với tiến độ mentee.
-            ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/tien-do-mentor", label: "Tiến độ phỏng vấn mentor" }] : []),
-            { href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" },
-            // Tiến độ phỏng vấn mentee cho BTC (03/10/2026): cùng khán giả với trang ca
-            // (canViewMenteeSessionStatus) — mentor phỏng vấn không xem kết quả của người khác.
-            ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }] : []),
-            // Báo cáo kết quả theo đợt (06/10/2026): cùng khán giả với tiến độ — có điểm theo
-            // từng người phỏng vấn, mentor phỏng vấn (reviewer) không xem.
-            ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/bao-cao-mentee", label: "Báo cáo phỏng vấn mentee" }] : []),
-            // Cấu hình 28 ca phỏng vấn mentee. Gate HẸP HƠN nhóm này: trang đòi
-            // canViewMenteeSessionStatus (super_admin/admin/core_team/support_team,
-            // từ 01/10/2026), còn nhóm này mở cho cả reviewer. Hiện link cho
-            // reviewer là hứa một trang chỉ trả về câu từ chối. Sửa ghế/địa điểm/
-            // gửi thư mời vẫn hẹp hơn nữa (canAssignReview) — trang tự ẩn các nút
-            // đó cho support_team, không phải việc của nav.
-            ...(canViewMenteeSessionStatus(role) ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
-            // Phiếu chấm + Handbook theo mùa (02/10/2026). Trang tự gate bằng
-            // canEditInterviewRubric + vận hành mùa; reviewer/support không được
-            // mời vào một trang chỉ trả về câu từ chối.
-            ...(canEditInterviewRubric(role) ? [{ href: "/interviews/phieu-cham-mentee", label: "Phiếu chấm & hướng dẫn mentee" }] : []),
-            // Thư tới hàng chục mentor một lúc: cùng cổng với gửi thư hàng loạt.
-            ...(canSendBulkEmail(role) ? [{ href: "/interviews/thu-xac-nhan-mentor", label: "Thư xác nhận lịch PV cho mentor" }] : []),
-          ],
-        }
-      : showStaffingOnly
-        ? {
-            key: "applications",
-            label: "Ứng tuyển",
-            items: [
-              ...(showApplicationOps ? [{ href: "/applications", label: "Ứng tuyển (Tất cả)" }] : []),
-              ...(role === "support_team" ? [{ href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" }] : []),
-              ...(role === "support_team" ? [{ href: "/interviews/tien-do-mentor", label: "Tiến độ phỏng vấn mentor" }] : []),
-              ...(role === "support_team" ? [{ href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" }] : []),
-              ...(role === "support_team" ? [{ href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }] : []),
-              ...(role === "support_team" ? [{ href: "/interviews/bao-cao-mentee", label: "Báo cáo phỏng vấn mentee" }] : []),
-              // support_team đi theo nhánh "Ứng tuyển" này, không phải nhánh
-              // showReviews ở trên — cùng đích (canViewMenteeSessionStatus đã cho
-              // phép), chỉ khác chỗ chèn vì support_team không thuộc showReviews.
-              ...(role === "support_team" ? [{ href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }] : []),
-              ...(canAssignLots ? [{ href: "/reviews/assign-bulk", label: "Giao hồ sơ đánh giá" }] : []),
-              ...(canStaffReviewers
-                ? [{ href: "/reviews/reviewer-pool", label: "Danh sách nhân sự tuyển sinh" }]
-                : []),
-              ...bonusItems,
-            ],
-          }
-        : showApplicationOps
-          ? { key: "applications", label: "Ứng tuyển", href: "/applications" }
-          : null,
-    showOperations ? { key: "matches", label: "Ghép cặp", href: "/matches" } : null,
+    // Tuyển Mentor/Mentee (BTC 06/10/2026) — thay nhóm “Ứng tuyển” và mục “Ghép cặp”
+    // riêng lẻ. Xem buildRecruitmentGroup.
+    recruitment,
     showEvents ? { key: "events", label: "Sự kiện", href: "/events" } : null,
     showDataIssues ? { key: "data", label: "Rà soát dữ liệu", href: "/data-issues" } : null,
   ];
@@ -242,7 +335,6 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
       label: "Quản trị",
       items: [
         { href: "/admin", label: "Quản trị" },
-        { href: "/admin/renewals", label: "Gia hạn mentor S12" },
         // M069. Visible to the admin tier (core_team included) because the
         // screen is useful read-only; the toggle itself is gated separately
         // by canToggleApplicationForm + season scope.
@@ -256,8 +348,16 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   return groups.filter((g): g is NavGroupDef => g !== null);
 }
 
+/** Mọi link trên menu, nguyên văn (kể cả ?role_applied=). */
+export function allNavLinks(groups: NavGroupDef[]): string[] {
+  return groups.flatMap((g) => (g.href ? [g.href] : navItemsOf(g).map((i) => i.href)));
+}
+
+/**
+ * Các TRANG menu dẫn tới — đường dẫn không kèm bộ lọc, mỗi trang một lần. Đây là
+ * thứ các phép kiểm quyền cần: “Đánh giá mentor” và “Đánh giá mentee” cùng dẫn tới
+ * trang /reviews, và trang đó tự gác cổng bất kể bộ lọc.
+ */
 export function allNavHrefs(groups: NavGroupDef[]): string[] {
-  return groups.flatMap((g) =>
-    g.href ? [g.href] : (g.items ?? []).map((i) => i.href)
-  );
+  return Array.from(new Set(allNavLinks(groups).map(navPath)));
 }
