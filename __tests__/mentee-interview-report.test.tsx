@@ -250,6 +250,21 @@ describe("trang", () => {
     expect(screen.getByTestId("notes-missing")).toBeTruthy();
   });
 
+  it("lưới một cột không rộng hơn khung chứa — bảng nhiều cột không đẩy cả trang tràn ngang (06/10/2026)", () => {
+    render(<ReportView report={buildInterviewReport(ROWS, WAVE1)} waves={WAVES} notes={null} generatedAt="2026-10-06T03:00:00Z" />);
+    const root = screen.getByTestId("report-root");
+    expect(root.className).toContain("grid-cols-[minmax(0,1fr)]");
+    // Sáu mục báo cáo là con trực tiếp của trang; ô số liệu (KpiCard) cũng là <section> nhưng nằm sâu hơn.
+    const sections = Array.from(root.querySelectorAll(":scope > section"));
+    expect(sections.length).toBe(6);
+    for (const section of sections) expect(section.className).toContain("grid-cols-[minmax(0,1fr)]");
+    // Ô tìm của bảng người phỏng vấn nằm trong một lưới con — lưới đó cũng phải khoá cột.
+    const table = screen.getByTestId("interviewer-table");
+    let el: HTMLElement | null = table.parentElement;
+    while (el && el !== root && !el.className.includes("gap-2")) el = el.parentElement;
+    expect(el?.className).toContain("grid-cols-[minmax(0,1fr)]");
+  });
+
   it("bảng người phỏng vấn: một dòng mỗi người, điểm theo nhóm; không hiện tên mentee", () => {
     const { container } = render(<ReportView report={buildInterviewReport(ROWS, WAVE1)} waves={WAVES} notes={null} generatedAt="2026-10-06T03:00:00Z" />);
     const rows = within(screen.getByTestId("interviewer-table")).getAllByRole("row").slice(1);
