@@ -209,10 +209,24 @@ describe("migration đợt 2", () => {
     ]);
   });
 
-  it("chạy lại lần hai không sinh trùng ca, không ghi quyết định lần hai", async () => {
+  it("chạy lại lần hai không sinh trùng ca, không ghi quyết định lần hai, không xoá dấu “đã gửi thư báo”", async () => {
+    // BTC đã gửi thư mở lại cho một người, rồi file bị chạy lại (07/10/2026: SQL Editor
+    // chạy lại sau lần đầu đã xong) — người đó không được nhận thư lần hai.
+    await db.query("update mentee_interview_invites set reopen_notified_at=now() where application_id=$1", [P.notChosen]);
+    const cancelLogs = () => one<{ n: number }>("select count(*)::int n from mentee_interview_operation_log where action='cancel_booking'");
+    const logsBefore = (await cancelLogs()).n;
     await db.exec(read(DATA));
     expect((await one<{ n: number }>("select count(*)::int n from interview_sessions where starts_at >= '2026-10-10 00:00+07'")).n).toBe(28);
     expect((await one<{ n: number }>("select count(*)::int n from application_decisions where new_status='invited_to_interview'")).n).toBe(2);
+    expect((await cancelLogs()).n).toBe(logsBefore);
+    const notified = await one<{ at: string | null }>("select reopen_notified_at at from mentee_interview_invites where application_id=$1", [P.notChosen]);
+    expect(notified.at).not.toBeNull();
+  });
+
+  it("mỗi bước chạy riêng được — không dựa vào bảng tạm của câu lệnh trước", () => {
+    // 07/10/2026: chạy lại một đoạn file trên SQL Editor báo "relation dot2_vang does not
+    // exist" vì bảng tạm chỉ sống trong lần chạy đã tạo nó.
+    expect(read(DATA)).not.toMatch(/create\s+temp/i);
   });
 
   it("đợt 2 phân được bàn: Chủ nhật 6 phòng × 5 bàn theo địa điểm; Thứ Bảy chưa có địa điểm → 6 phòng × 3 bàn", async () => {

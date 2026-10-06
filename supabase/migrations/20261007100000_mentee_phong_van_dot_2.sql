@@ -68,37 +68,41 @@ on conflict (season_id, starts_at) do nothing;
 -- ------------------------------------------------------------
 -- Chỉ người CHƯA check-in (trigger vam104_booking_guard cũng tự chặn người đã check-in).
 -- Trạng thái đơn giữ nguyên như khi BTC huỷ lịch ở màn hình phỏng vấn (vam105).
-create temp table dot2_vang on commit drop as
-select b.id as booking_id, b.application_id, b.session_id
-from public.mentee_interview_bookings b
-join public.interview_sessions s on s.id = b.session_id
-join public.seasons se on se.id = b.season_id and se.code = 'UEHM-S12'
-left join public.mentee_interview_operations o on o.id = b.application_id
-where b.status = 'booked'
-  and s.starts_at < '2026-10-05 00:00:00+07:00'
-  and o.checked_in_at is null
-  and o.outcome is null;
-
-update public.mentee_interview_bookings b
-   set status = 'cancelled',
-       cancelled_at = now(),
-       cancelled_by = 'a3f45586-8747-49d9-860a-4b903cfdc7bc',
-       cancel_note = 'Vắng buổi phỏng vấn 03–04/10 — mở lại chọn ca đợt 2 (10–11/10)'
-  from dot2_vang v
- where b.id = v.booking_id and b.status = 'booked';
-
-insert into public.mentee_interview_operation_log (application_id, actor_id, action, reason, before_data, after_data)
-select v.application_id, 'a3f45586-8747-49d9-860a-4b903cfdc7bc', 'cancel_booking',
-       'Vắng buổi phỏng vấn 03–04/10 — mở lại chọn ca đợt 2 (10–11/10)',
-       jsonb_build_object('booking', jsonb_build_object('id', v.booking_id, 'session_id', v.session_id, 'status', 'booked')),
-       jsonb_build_object('booking', jsonb_build_object('id', v.booking_id, 'status', 'cancelled'))
-from dot2_vang v;
-
+-- MỘT câu lệnh (không bảng tạm): chạy lại riêng đoạn này cũng được, và lần chạy lại
+-- không còn ai ở trạng thái 'booked' nên không ghi gì thêm.
+with vang as (
+  select b.id as booking_id, b.application_id, b.session_id
+  from public.mentee_interview_bookings b
+  join public.interview_sessions s on s.id = b.session_id
+  join public.seasons se on se.id = b.season_id and se.code = 'UEHM-S12'
+  left join public.mentee_interview_operations o on o.id = b.application_id
+  where b.status = 'booked'
+    and s.starts_at < '2026-10-05 00:00:00+07:00'
+    and o.checked_in_at is null
+    and o.outcome is null
+), huy as (
+  update public.mentee_interview_bookings b
+     set status = 'cancelled',
+         cancelled_at = now(),
+         cancelled_by = 'a3f45586-8747-49d9-860a-4b903cfdc7bc',
+         cancel_note = 'Vắng buổi phỏng vấn 03–04/10 — mở lại chọn ca đợt 2 (10–11/10)'
+    from vang v
+   where b.id = v.booking_id and b.status = 'booked'
+  returning b.id as booking_id, b.application_id, b.session_id
+), nhat_ky as (
+  insert into public.mentee_interview_operation_log (application_id, actor_id, action, reason, before_data, after_data)
+  select h.application_id, 'a3f45586-8747-49d9-860a-4b903cfdc7bc', 'cancel_booking',
+         'Vắng buổi phỏng vấn 03–04/10 — mở lại chọn ca đợt 2 (10–11/10)',
+         jsonb_build_object('booking', jsonb_build_object('id', h.booking_id, 'session_id', h.session_id, 'status', 'booked')),
+         jsonb_build_object('booking', jsonb_build_object('id', h.booking_id, 'status', 'cancelled'))
+  from huy h
+  returning 1
+)
 -- Dòng điều phối trống còn sót của ca cũ (đã tạo nhưng chưa check-in, chưa có người
 -- phỏng vấn, chưa có phiếu): bỏ đi để ngày đợt 2 dựng dòng mới đúng ca mới.
 delete from public.mentee_interview_operations o
- using dot2_vang v
- where o.id = v.application_id
+ using huy h
+ where o.id = h.application_id
    and o.checked_in_at is null and o.outcome is null
    and o.interviewer_id is null and o.review_id is null and o.match_id is null;
 
@@ -106,13 +110,16 @@ delete from public.mentee_interview_operations o
 -- 4. Mở lại chọn ca đến 17:00 09/10 cho người có thư mời mà chưa giữ ca
 -- ------------------------------------------------------------
 -- reopen_notified_at = null để trang Ca phỏng vấn mentee liệt kê họ vào lượt thư
--- báo đợt 2 (kể cả người đã nhận thư mở lại hồi đợt 1).
+-- báo đợt 2 (kể cả người đã nhận thư mở lại hồi đợt 1). Chỉ chạm người CHƯA mang
+-- hạn đợt 2: chạy lại file sau khi BTC đã gửi thư báo không được xoá dấu "đã gửi",
+-- không thì cùng một người nhận thư hai lần.
 update public.mentee_interview_invites i
    set booking_open_until = '2026-10-09 17:00:00+07:00',
        reopen_notified_at = null
   from public.applications a
   join public.seasons se on se.id = a.season_id and se.code = 'UEHM-S12'
  where a.id = i.application_id
+   and i.booking_open_until is distinct from '2026-10-09 17:00:00+07:00'::timestamptz
    and a.role_applied = 'mentee'
    and a.source = 'vam_os_form'
    and a.status in ('invited_to_interview', 'interview_scheduled')
@@ -124,39 +131,42 @@ update public.mentee_interview_invites i
 -- ------------------------------------------------------------
 -- 5. Hồ sơ mới sau mốc chốt đợt 1 → Mời phỏng vấn
 -- ------------------------------------------------------------
-create temp table dot2_moi on commit drop as
-select a.id
-from public.applications a
-join public.seasons se on se.id = a.season_id and se.code = 'UEHM-S12'
-where a.role_applied = 'mentee'
-  and a.source = 'vam_os_form'
-  and a.status = 'screening_completed'
-  and a.created_at >= '2026-09-27 00:00:00+07:00'
-  and exists (
-    select 1 from public.application_reviews r
-    where r.application_id = a.id
-      and r.review_round = 'profile_screening'
-      and r.status = 'submitted'
-      and (r.recommendation = 'pass_to_interview' or r.total_score >= 13)
-  )
-  -- Cùng cổng điều kiện với nút "Mời phỏng vấn hàng loạt" (vam084).
-  and exists (
-    select 1 from public.vam084_application_decision_eligibility(a.id, 'invited_to_interview') g
-    where g.eligible
-  );
-
-update public.applications a
-   set status = 'invited_to_interview'
-  from dot2_moi m
- where a.id = m.id and a.status = 'screening_completed';
-
+-- MỘT câu lệnh: đổi trạng thái và ghi quyết định cho đúng những đơn vừa đổi. Chạy lại
+-- thì không còn đơn nào ở 'screening_completed' khớp điều kiện — không ghi gì thêm.
+with moi as (
+  select a.id
+  from public.applications a
+  join public.seasons se on se.id = a.season_id and se.code = 'UEHM-S12'
+  where a.role_applied = 'mentee'
+    and a.source = 'vam_os_form'
+    and a.status = 'screening_completed'
+    and a.created_at >= '2026-09-27 00:00:00+07:00'
+    and exists (
+      select 1 from public.application_reviews r
+      where r.application_id = a.id
+        and r.review_round = 'profile_screening'
+        and r.status = 'submitted'
+        and (r.recommendation = 'pass_to_interview' or r.total_score >= 13)
+    )
+    -- Cùng cổng điều kiện với nút "Mời phỏng vấn hàng loạt" (vam084).
+    and exists (
+      select 1 from public.vam084_application_decision_eligibility(a.id, 'invited_to_interview') g
+      where g.eligible
+    )
+), doi as (
+  update public.applications a
+     set status = 'invited_to_interview'
+    from moi m
+   where a.id = m.id and a.status = 'screening_completed'
+  returning a.id
+)
 insert into public.application_decisions (
   application_id, decided_by, decided_by_name, decision, previous_status, new_status, decision_note
 )
-select m.id, au.id, coalesce(nullif(btrim(au.full_name), ''), au.email), 'invited_to_interview',
+select d.id, au.id, coalesce(nullif(btrim(au.full_name), ''), au.email), 'invited_to_interview',
        'screening_completed', 'invited_to_interview',
        'Mời phỏng vấn đợt 2 (10–11/10/2026): nộp từ 27/09, đề xuất Pass to interview hoặc điểm CV >= 13 — BTC chốt 07/10/2026'
-from dot2_moi m
+from doi d
 cross join public.admin_users au
 where au.id = 'a3f45586-8747-49d9-860a-4b903cfdc7bc';
 
