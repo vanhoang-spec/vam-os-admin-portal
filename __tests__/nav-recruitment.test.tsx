@@ -49,23 +49,30 @@ function shape(group: NavGroupDef | undefined) {
 afterEach(cleanup);
 
 describe("cấu trúc theo vai trò", () => {
-  it("Ban điều hành (admin): nhân sự chung ở đầu, hai nhánh theo quy trình, Ghép cặp ở cuối", () => {
+  // Thứ tự do BTC đọc từng mục (07/10/2026).
+  it("Ban điều hành (admin): nhân sự chung ở đầu, hai nhánh theo thứ tự BTC chốt, Ghép cặp ở cuối", () => {
     const group = recruitment("admin");
     expect(group?.label).toBe(RECRUITMENT_NAV_LABEL);
     expect(shape(group)).toEqual([
       "Danh sách nhân sự tuyển sinh",
       [MENTOR_RECRUITMENT_LABEL, [
-        "Hồ sơ mentor", "Gia hạn mentor S12", "Giao hồ sơ mentor", "Đánh giá mentor", "Lịch phỏng vấn",
-        "Thư xác nhận lịch PV cho mentor", "Phỏng vấn mentor", "Tiến độ phỏng vấn mentor",
-        "Kết quả phỏng vấn Mentor S12", "Duyệt Mentor S12"
+        "Hồ sơ mentor", "Gia hạn mentor S12", "Duyệt Mentor S12", "Giao hồ sơ mentor", "Đánh giá mentor",
+        "Lịch phỏng vấn", "Thư xác nhận lịch PV cho mentor", "Phỏng vấn mentor", "Tiến độ phỏng vấn mentor",
+        "Kết quả phỏng vấn Mentor S12"
       ]],
       [MENTEE_RECRUITMENT_LABEL, [
-        "Hồ sơ mentee", "Điểm cộng theo ngày nộp", "Giao hồ sơ mentee", "Đánh giá mentee",
-        "Phiếu chấm & hướng dẫn mentee", "Ca phỏng vấn mentee", "Phỏng vấn mentee trực tiếp",
-        "Tiến độ phỏng vấn mentee", "Báo cáo phỏng vấn mentee", "Duyệt Mentee S12"
+        "Báo cáo", "Hồ sơ mentee", "Điểm cộng theo ngày nộp", "Giao hồ sơ mentee", "Đánh giá mentee",
+        "Phiếu chấm & hướng dẫn mentee", "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee",
+        "Phỏng vấn mentee trực tiếp", "Duyệt Mentee S12"
       ]],
       "Ghép cặp"
     ]);
+  });
+
+  it("“Báo cáo” của nhánh Mentee là trang báo cáo phỏng vấn theo đợt", () => {
+    const mentee = (recruitment("core_team")?.items ?? []).find((e) => isNavSubGroup(e) && e.key === "mentee");
+    const report = mentee && isNavSubGroup(mentee) ? mentee.items[0] : undefined;
+    expect(report).toEqual({ href: "/interviews/bao-cao-mentee", label: "Báo cáo" });
   });
 
   it("mục dùng chung mở đúng bộ lọc vai trò của nhánh chứa nó", () => {
@@ -106,8 +113,8 @@ describe("cấu trúc theo vai trò", () => {
       "Danh sách nhân sự tuyển sinh",
       [MENTOR_RECRUITMENT_LABEL, ["Hồ sơ mentor", "Giao hồ sơ mentor", "Tiến độ phỏng vấn mentor", "Kết quả phỏng vấn Mentor S12"]],
       [MENTEE_RECRUITMENT_LABEL, [
-        "Hồ sơ mentee", "Điểm cộng theo ngày nộp", "Giao hồ sơ mentee", "Ca phỏng vấn mentee",
-        "Phỏng vấn mentee trực tiếp", "Tiến độ phỏng vấn mentee", "Báo cáo phỏng vấn mentee"
+        "Báo cáo", "Hồ sơ mentee", "Điểm cộng theo ngày nộp", "Giao hồ sơ mentee",
+        "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee", "Phỏng vấn mentee trực tiếp"
       ]],
       "Ghép cặp"
     ]);

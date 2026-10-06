@@ -86,6 +86,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Bảng “Theo từng người phỏng vấn”: gõ tên vào ô tìm để lọc. Ô in nhạt là người đó chấm dưới 3 phiếu trong nhóm — chưa đủ để nói chấm chặt hay rộng."
     ],
     notes: [
+      "Trên menu: Tuyển Mentor/Mentee → Tuyển Mentee → Báo cáo (mục đầu tiên của nhánh). Các báo cáo khác của tuyển mentee sẽ được thêm vào cùng mục này.",
       "Mỗi đợt một báo cáo, không cộng dồn: đợt sau tự xuất hiện khi BTC tạo ca cho các ngày mới.",
       "Số liệu ở các bảng đọc trực tiếp mỗi lần mở trang. Phần mẫu hình nhận xét là bản phân tích viết sau đợt, ghi rõ ngày viết và số phiếu đã đọc; nếu sau đó có thêm phiếu, trang hiện câu báo.",
       "Chỉ Core team / Support team có quyền vận hành mùa xem được; mentor phỏng vấn không xem được vì trang có điểm theo từng người phỏng vấn."

@@ -153,9 +153,12 @@ function buildRecruitmentGroup(
   const assignLots = canAssignReviewLots(role);
   const when = (ok: boolean, item: NavItemDef): NavItemDef[] => (ok ? [item] : []);
 
+  // Thứ tự trong hai nhánh do BTC đọc từng mục (07/10/2026) — đừng xếp lại theo ý riêng.
+  // Nhánh Mentor sẽ có mục “Báo cáo” đứng đầu khi BTC chốt nội dung.
   const mentor: NavItemDef[] = [
     ...when(showApplicationOps, { href: "/applications?role_applied=mentor", label: "Hồ sơ mentor" }),
     ...when(showAdminTier, { href: "/admin/renewals", label: "Gia hạn mentor S12" }),
+    ...when(decisionLists, { href: "/applications/mentor-review", label: "Duyệt Mentor S12" }),
     ...when(assignLots, { href: "/reviews/assign-bulk?role_applied=mentor", label: "Giao hồ sơ mentor" }),
     ...when(showReviews, { href: "/reviews?role_applied=mentor", label: "Đánh giá mentor" }),
     // Lịch 1:1 cùng khán giả với trang Phỏng vấn: trang tự gate bằng canSelfClaimInterview.
@@ -164,13 +167,16 @@ function buildRecruitmentGroup(
     ...when(canSendBulkEmail(role), { href: "/interviews/thu-xac-nhan-mentor", label: "Thư xác nhận lịch PV cho mentor" }),
     ...when(showReviews, { href: "/interviews?role_applied=mentor", label: "Phỏng vấn mentor" }),
     ...when(sessionStatus, { href: "/interviews/tien-do-mentor", label: "Tiến độ phỏng vấn mentor" }),
-    ...when(showReviews || isSupport, { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" }),
-    ...when(decisionLists, { href: "/applications/mentor-review", label: "Duyệt Mentor S12" })
+    ...when(showReviews || isSupport, { href: "/interviews/ket-qua-mentor", label: "Kết quả phỏng vấn Mentor S12" })
   ];
 
   // Phỏng vấn mentee làm tại màn hình trực tiếp theo ca, không qua trang Phỏng vấn
   // chung — nên nhánh Mentee không có mục “Phỏng vấn mentee” thứ hai.
   const mentee: NavItemDef[] = [
+    // “Báo cáo” chứ không “Báo cáo phỏng vấn mentee”: BTC sẽ thêm các báo cáo khác
+    // của tuyển mentee vào cùng mục này (07/10/2026). Có điểm theo từng người phỏng
+    // vấn nên mentor phỏng vấn (reviewer) không xem.
+    ...when(sessionStatus, { href: "/interviews/bao-cao-mentee", label: "Báo cáo" }),
     ...when(showApplicationOps, { href: "/applications?role_applied=mentee", label: "Hồ sơ mentee" }),
     // Điểm cộng theo ngày nộp chỉ áp cho đơn mentee (BTC 06/10/2026).
     ...when(canManageSubmissionBonus(role), { href: SUBMISSION_BONUS_PATH, label: "Điểm cộng theo ngày nộp" }),
@@ -178,11 +184,9 @@ function buildRecruitmentGroup(
     ...when(showReviews, { href: "/reviews?role_applied=mentee", label: "Đánh giá mentee" }),
     // Phiếu chấm + Handbook theo mùa: trang tự gate bằng canEditInterviewRubric.
     ...when(canEditInterviewRubric(role), { href: "/interviews/phieu-cham-mentee", label: "Phiếu chấm & hướng dẫn mentee" }),
+    ...when(sessionStatus, { href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }),
     ...when(sessionStatus, { href: "/interviews/ca-mentee", label: "Ca phỏng vấn mentee" }),
     ...when(showReviews || isSupport, { href: "/interviews/mentee-offline", label: "Phỏng vấn mentee trực tiếp" }),
-    ...when(sessionStatus, { href: "/interviews/tien-do-mentee", label: "Tiến độ phỏng vấn mentee" }),
-    // Có điểm theo từng người phỏng vấn: mentor phỏng vấn (reviewer) không xem.
-    ...when(sessionStatus, { href: "/interviews/bao-cao-mentee", label: "Báo cáo phỏng vấn mentee" }),
     ...when(decisionLists, { href: "/applications/mentee-review", label: "Duyệt Mentee S12" })
   ];
 
