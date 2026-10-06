@@ -7,6 +7,7 @@ import { offlineError, parseOfflineQr, type OfflineActionResult, type OfflineDas
 import { sanitizeHandbookHtml } from "@/lib/handbook-html";
 import type { InterviewGuide } from "@/lib/mentee-interview-rubric-core";
 import { readAllPagesIn } from "@/lib/paged-read";
+import { reportRowsFrom, type ReportRow } from "@/lib/mentee-interview-report-core";
 
 async function context() {
   const actor = await getCurrentAdminUser();
@@ -142,5 +143,41 @@ export async function cancelMenteeBooking(input: {applicationId: string; reason:
     return {ok:true,message:String(data.message)};
   } catch (error) {
     return {ok:false,message:offlineError(error instanceof Error ? error.message : "")};
+  }
+}
+
+/**
+ * Dữ liệu cho báo cáo phỏng vấn mentee theo đợt (BTC 06/10/2026). Cùng RPC, cùng
+ * cổng với màn hình phỏng vấn và trang tiến độ; chỉ trả về dòng đã rút gọn — không
+ * tên, không SĐT, không câu trả lời đơn của mentee.
+ *
+ * Trạng thái cặp ghép đọc riêng: màn hình phỏng vấn giữ match_id cả khi BTC đã huỷ
+ * cặp. Không đọc được thì báo lỗi chứ không đoán — "bao nhiêu bạn được mentor chọn
+ * ngay" là đúng con số BTC hỏi, đếm nhầm là sai cả mục so sánh.
+ */
+export async function getInterviewReportData(): Promise<
+  {ok: true; data: {canOperate: boolean; sessions: OfflineDashboard["sessions"]; rows: ReportRow[]}} | {ok: false; message: string}
+> {
+  try {
+    const { actor, client, seasonId } = await context();
+    const board = await client.rpc("vam104_offline_dashboard",{p_actor:actor.id,p_season:seasonId});
+    if (board.error || !board.data) throw new Error(board.error?.message ?? "READ_FAILED");
+    const dashboard = board.data as OfflineDashboard;
+    const matchIds = (dashboard.candidates ?? []).map(c => String(c.operation?.match_id ?? "")).filter(Boolean);
+    const active = new Set<string>();
+    if (matchIds.length) {
+      const matches = await readAllPagesIn<{id:string;status:string}>(client,"matches","id",matchIds,"id,status");
+      if (matches.error) throw new Error("READ_FAILED");
+      for (const m of matches.data) if (m.status === "active") active.add(String(m.id));
+    }
+    return {ok:true,data:{
+      canOperate:Boolean(dashboard.canOperate),
+      sessions:dashboard.sessions ?? [],
+      rows:reportRowsFrom(dashboard.candidates ?? [],active)
+    }};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    // offlineError nói "Chưa lưu được" cho lỗi lạ — đúng cho thao tác ghi, sai cho một trang chỉ đọc.
+    return {ok:false,message:message.includes("ACCESS_DENIED") ? offlineError(message) : "Chưa đọc được dữ liệu phỏng vấn. Tải lại trang sau ít phút."};
   }
 }

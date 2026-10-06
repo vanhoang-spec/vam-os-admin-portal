@@ -22,6 +22,8 @@ export const OFFLINE_OUTCOMES = { passed: "Đạt làm mentee", rejected: "Khôn
 export type OfflineOutcome = keyof typeof OFFLINE_OUTCOMES;
 export type OfflineReview = {
   id: string; review_round: string; reviewerName: string; status: string;
+  /** admin_users.id của người chấm — báo cáo gom điểm theo người, tên có thể trùng. */
+  reviewer_admin_user_id?: string | null;
   score_motivation: number | null; score_goal_clarity: number | null; score_commitment: number | null;
   score_fit: number | null; score_communication: number | null; total_score: number | null;
   recommendation: string | null; reviewer_note: string | null;
