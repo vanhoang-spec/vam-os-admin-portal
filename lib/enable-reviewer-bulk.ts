@@ -24,7 +24,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
  * KHÔNG viết lại logic cấp quyền — gọi lại đúng `enableMentorAsReviewer` cho
  * từng người, y hệt một lần bấm tay trên màn hình đó. Phần MỚI duy nhất ở đây
  * là: khớp email với đúng mentor của mùa, và giới hạn một lượt xử lý bao
- * nhiêu người để không vượt hạn mức thư Brevo thật (xem
+ * nhiêu người để không vượt trần thư chung của hệ thống (xem
  * lib/reviewer-invite-dispatch-core.ts).
  *
  * Xử lý TUẦN TỰ, không song song — mỗi người đụng tới Supabase Auth API và

@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Chuyển gửi thư tự động từ Brevo sang Resend — Hướng dẫn từng bước</title>
+<style>
+  @page { size: A4; margin: 11mm 13mm 10mm 13mm; }
+
+  :root {
+    --green: #16834c;
+    --mint: #e8f6ee;
+    --ink: #14352a;
+    --line: #dce9e2;
+    --muted: #5d7169;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e6d08a;
+    --amber-ink: #6b4e0a;
+    --red-bg: #fbeceb;
+    --red-line: #e3a29c;
+    --red-ink: #8a231b;
+  }
+
+  * { box-sizing: border-box; }
+  body, body * { font-family: inherit; }
+
+  body {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 9.4pt;
+    line-height: 1.45;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  /* ── Đầu trang ───────────────────────────────────────────────────── */
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+    border-bottom: 3px solid var(--green); padding-bottom: 2.6mm; margin-bottom: 3.6mm;
+  }
+  .eyebrow {
+    font-size: 7.4pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--green); font-weight: 700;
+  }
+  h1 { font-size: 19pt; line-height: 1.1; margin: 1.2mm 0 1mm; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 9.6pt; max-width: 130mm; margin: 0; }
+  .stamp { text-align: right; font-size: 7.6pt; color: var(--muted); white-space: nowrap; }
+  .stamp b { color: var(--ink); font-weight: 600; }
+
+  /* ── Bố cục ──────────────────────────────────────────────────────── */
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 5mm; align-items: start; }
+  .page-break { break-before: page; }
+  p { margin: 0 0 1.6mm; }
+
+  /* Một phần lớn (A, B, C…): thanh chữ cái bên trái, nội dung bên phải. */
+  section.part { display: grid; grid-template-columns: 9mm minmax(0, 1fr); gap: 3mm; margin-top: 4mm; break-inside: avoid; }
+  section.part.flow { break-inside: auto; }
+  .letter {
+    width: 9mm; height: 9mm; border-radius: 2mm; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 13pt; text-align: center; line-height: 9mm;
+  }
+  h2 { font-size: 11.6pt; margin: .8mm 0 .4mm; font-weight: 700; }
+  .meta { font-size: 8pt; color: var(--muted); margin-bottom: 1.6mm; }
+  h3 {
+    font-size: 8.2pt; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin: 0 0 1.4mm; font-weight: 700;
+  }
+
+  /* ── Thành phần ──────────────────────────────────────────────────── */
+  .btn {
+    display: inline-block; border: 1px solid var(--green); color: var(--green); background: #fff;
+    border-radius: 3px; padding: 0 1.5mm; font-size: 8.6pt; font-weight: 600; white-space: nowrap;
+  }
+  .btn.solid { background: var(--green); color: #fff; }
+  .ui {
+    background: #f1f5f3; border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 1.3mm; font-size: 8.6pt; white-space: nowrap;
+  }
+  /* Chữ phải gõ/dán đúng từng ký tự. */
+  code, .type {
+    font-family: Consolas, "Courier New", monospace; font-size: 8.6pt;
+    background: #fff; border: 1px dashed #9cc4ad; border-radius: 3px; padding: 0 1.2mm;
+    color: #0d4f2d; font-weight: 600; overflow-wrap: anywhere;
+  }
+  .path { color: var(--green); font-weight: 600; }
+  .ok { color: #1c7a43; font-weight: 600; }
+  .err { color: #9a2a22; font-weight: 600; }
+
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 7.4mm; margin-bottom: 2.1mm; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: .2mm;
+    width: 5.2mm; height: 5.2mm; border-radius: 50%; border: 1.5px solid var(--green); color: var(--green);
+    font-weight: 700; font-size: 7.8pt; text-align: center; line-height: 4.9mm; background: #fff;
+  }
+  ol.steps b.t { display: block; margin-bottom: .2mm; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 1.2mm 0 1.4mm; }
+  th, td { border: 1px solid var(--line); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--mint); font-weight: 600; }
+  tr { break-inside: avoid; }
+
+  ul.tight { margin: 0; padding-left: 4.4mm; }
+  ul.tight li { margin: .6mm 0; }
+
+  .box { padding: 2.4mm 3.4mm; border-radius: 0 2mm 2mm 0; }
+  .box b.h { display: block; margin-bottom: .6mm; }
+  .prep { background: var(--mint); border-left: 3px solid var(--green); }
+  .warn { background: var(--amber-bg); border-left: 3px solid var(--amber-line); color: var(--amber-ink); }
+  .stop { background: var(--red-bg); border-left: 3px solid var(--red-line); color: var(--red-ink); }
+  .note { font-size: 8.4pt; color: var(--muted); }
+
+  /* Lộ trình 8 phần trên trang đầu. */
+  .route { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.6mm; margin: 1.6mm 0 0; }
+  .route div { border: 1px solid var(--line); border-radius: 2mm; padding: 1.4mm 2mm; background: #fff; font-size: 8.2pt; }
+  .route b { color: var(--green); font-size: 10pt; margin-right: 1mm; }
+  .route span { display: block; color: var(--muted); font-size: 7.6pt; }
+
+  footer {
+    margin-top: 4mm; border-top: 1px solid var(--line); padding-top: 1.6mm;
+    display: flex; justify-content: space-between; gap: 4mm; font-size: 7.3pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow">Hướng dẫn cho chủ chương trình · Làm một lần</div>
+    <h1>Chuyển gửi thư tự động từ Brevo sang Resend</h1>
+    <p class="sub">Làm theo đúng thứ tự từ A tới H, không cần biết lập trình. Khoảng 45 phút làm tay,
+      cộng thời gian chờ tên miền được xác minh (thường 15 phút, có khi vài giờ).
+      Trong suốt quá trình, thư vẫn gửi bình thường — không có lúc nào ngừng gửi.</p>
+  </div>
+  <div class="stamp">VAM OS · <b>os.alumni-mentoring.edu.vn</b><br>Soạn 05/10/2026</div>
+</header>
+
+<div class="two">
+  <div class="box prep">
+    <b class="h">Chuẩn bị trước — mở sẵn 4 trang, đăng nhập sẵn</b>
+    <ul class="tight">
+      <li><b>Resend</b> (resend.com) — đúng tài khoản <b>đang trả gói Pro</b> của anh.</li>
+      <li><b>PA Vietnam</b> (access.pavietnam.vn) — nơi quản lý tên miền <code>alumni-mentoring.edu.vn</code>.</li>
+      <li><b>Vercel</b> (vercel.com) — team <b>Hoang_Nguyen</b>, dự án <b>vam-os-admin-portal</b>.</li>
+      <li><b>Supabase</b> (supabase.com/dashboard) — dự án của VAM OS.</li>
+      <li>Mở <b>Notepad</b> để dán tạm khoá ở bước D — xoá ngay khi xong bước F.</li>
+      <li>Chọn lúc vắng: <b>ngoài giờ phỏng vấn</b>, không đang gửi thư hàng loạt.</li>
+    </ul>
+  </div>
+  <div class="box warn">
+    <b class="h">Những thứ GIỮ NGUYÊN — đừng đụng vào</b>
+    <ul class="tight">
+      <li>Địa chỉ gửi vẫn là <b>hello@alumni-mentoring.edu.vn</b>. Hộp thư hello@ vẫn nhận thư như cũ.</li>
+      <li>Ở PA Vietnam chỉ <b>THÊM 3 dòng</b>. Không sửa, không xoá dòng nào đang có.
+        Không đổi nameserver (làm hỏng hộp thư hello@).</li>
+      <li>Brevo để nguyên, chưa huỷ, cho tới khi Resend chạy ổn 7 ngày — đó là đường lui.</li>
+      <li>Khoá Resend (bắt đầu bằng <code>re_</code>) chỉ dán vào Vercel và Supabase.
+        <b>Không</b> gửi qua chat, Zalo, email, không chụp màn hình.</li>
+    </ul>
+  </div>
+</div>
+
+<h3 style="margin-top:3.6mm">Lộ trình</h3>
+<div class="route">
+  <div><b>A</b>Resend: thêm tên miền<span>5 phút</span></div>
+  <div><b>B</b>PA Vietnam: thêm 3 dòng DNS<span>15 phút</span></div>
+  <div><b>C</b>Resend: chờ “Verified”<span>15 phút – vài giờ</span></div>
+  <div><b>D</b>Resend: tạo khoá gửi thư<span>3 phút</span></div>
+  <div><b>E</b>Vercel: bật Resend cho VAM OS<span>5 phút · rồi báo Claude</span></div>
+  <div><b>F</b>Supabase: đổi SMTP thư đăng nhập<span>5 phút</span></div>
+  <div><b>G</b>Gửi thử và kiểm tra<span>10 phút</span></div>
+  <div><b>H</b>Sau 7 ngày: huỷ Brevo<span>khi đã chạy ổn</span></div>
+</div>
+
+<!-- ───────────────────────── A ───────────────────────── -->
+<section class="part">
+  <div class="letter">A</div>
+  <div>
+    <h2>Resend: thêm tên miền</h2>
+    <div class="meta">Chưa ảnh hưởng gì tới thư đang gửi.</div>
+    <ol class="steps">
+      <li><b class="t">Kiểm đúng tài khoản trả tiền</b>
+        Vào Resend. Góc trên bên trái là tên nhóm (team) — tài khoản nào cũng có sẵn một nhóm, thường mang tên tài khoản
+        (ví dụ <b>vanhoang.nguyen</b>). Không cần tạo nhóm mới: dùng luôn nhóm đang có các tên miền khác của anh.
+        Kiểm ở <span class="path">Settings → Billing</span>: thấy chữ <b>Pro</b> là đúng. Còn ghi <b>Free</b> thì nâng lên Pro
+        trước bước E — gói Free chỉ 100 thư/ngày, không đủ cho một đợt thư của VAM.</li>
+      <li><b class="t">Mở trang tên miền</b>
+        Menu bên trái bấm <span class="ui">Domains</span> → bấm <span class="btn solid">Add Domain</span>.</li>
+      <li><b class="t">Điền tên miền</b>
+        Ô tên miền gõ đúng: <code>alumni-mentoring.edu.vn</code> — không có <i>www</i>, không có <i>hello@</i>.</li>
+      <li><b class="t">Chọn khu vực (Region)</b>
+        Chọn <b>Tokyo (ap-northeast-1)</b> — gần Việt Nam nhất, thư tới nhanh hơn.
+        Nếu có ô <span class="ui">Custom return path</span> thì <b>để trống</b>. Bấm nút thêm (<span class="btn solid">Add</span>).</li>
+      <li><b class="t">Giữ nguyên tab này</b>
+        Resend hiện một bảng <b>DNS Records</b> khoảng 3 dòng, trạng thái “Pending”. Để tab này mở — bước B chép từ đây.</li>
+    </ol>
+    <p class="note">Resend có gợi ý dùng tên miền phụ (kiểu mail.alumni-mentoring.edu.vn). Ở đây cố ý dùng tên miền
+      chính để giữ địa chỉ hello@ mà mentor, mentee đã quen. An toàn: Resend chỉ thêm bản ghi ở
+      <code>send</code> và <code>resend._domainkey</code>, không đụng tới hộp thư hello@.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── B ───────────────────────── -->
+<section class="part flow page-break">
+  <div class="letter">B</div>
+  <div>
+    <h2>PA Vietnam: thêm đúng 3 dòng DNS</h2>
+    <div class="meta">DNS là “danh bạ” của tên miền — 3 dòng này chứng minh với Gmail, Outlook rằng Resend được phép gửi thư thay hello@.</div>
+
+    <p>Ba dòng Resend đưa cho <code>alumni-mentoring.edu.vn</code> (06/10/2026) là bảng dưới — đã lên DNS và đã kiểm.
+      <b>Giá trị thật luôn chép từ Resend</b> (bấm biểu tượng copy cạnh từng ô): dòng DKIM là chuỗi rất dài, riêng cho từng tên miền.</p>
+    <table>
+      <tr><th style="width:10%">Loại</th><th style="width:22%">Host / Name</th><th>Giá trị / Value</th><th style="width:11%">Ưu tiên</th></tr>
+      <tr><td><b>TXT</b></td><td><code>resend._domainkey</code></td><td><code>p=MIGfMA0GCSqGSIb3DQEB…</code> (chuỗi dài khoảng 200 ký tự)</td><td>—</td></tr>
+      <tr><td><b>CNAME</b></td><td><code>send</code></td><td><code>send.forge.rmta.net</code></td><td>—</td></tr>
+      <tr><td><b>CNAME</b></td><td><code>rsend</code></td><td><code>rsend-apne1.forge.rmta.net</code> (apne1 = khu vực Tokyo)</td><td>—</td></tr>
+    </table>
+    <p class="note">Tên miền thêm vào Resend từ trước (như embassy.edu.vn) có thể ra kiểu cũ: MX + TXT ở <code>send</code>
+      (<i>feedback-smtp….amazonses.com</i>, <i>v=spf1 include:amazonses.com ~all</i>). Kiểu nào cũng được — chép đúng loại và giá trị Resend hiện,
+      không trộn hai kiểu: một Host đã là CNAME thì không thêm MX/TXT cho Host đó nữa.</p>
+    <div class="box warn" style="margin-bottom:2mm">
+      <b class="h">Nếu Resend hiện thêm dòng thứ 4 tên <code>_dmarc</code>: BỎ QUA.</b>
+      Tên miền đã có sẵn DMARC (<code>v=DMARC1; p=none; rua=mailto:hello@…</code>). Thêm cái thứ hai là làm hỏng cả hai.
+    </div>
+
+    <ol class="steps">
+      <li><b class="t">Đăng nhập PA Vietnam</b>
+        Vào <b>access.pavietnam.vn</b>, đăng nhập bằng tên miền <code>alumni-mentoring.edu.vn</code> và mật khẩu quản lý tên miền
+        (mật khẩu PA Vietnam cấp — không phải mật khẩu hộp thư hello@).</li>
+      <li><b class="t">Mở bảng bản ghi DNS</b>
+        Bấm mục cấu hình tên miền — thường tên là <span class="ui">Cấu hình</span> hoặc <span class="ui">Quản lý DNS</span>.
+        Anh sẽ thấy một bảng có các cột <b>Host</b>, <b>Loại Record</b>, <b>Giá trị</b> (và cột ưu tiên cho MX).
+        Tên nút trên trang PA Vietnam có thể hơi khác một chút — tìm chỗ có bảng đó.</li>
+      <li><b class="t">Chụp màn hình bảng hiện tại</b>
+        Để có cái đối chiếu nếu cần. Bảng hiện có (không đụng): MX <i>mail93155.maychuemail.com</i>,
+        MX <i>mx93155.maychuemail.net</i>, TXT <i>v=spf1 a mx include:spf.maychuemail.com -all</i>,
+        TXT <i>brevo-code:…</i>, TXT <i>_dmarc</i>.</li>
+      <li><b class="t">Thêm dòng 1 — DKIM (chữ ký)</b>
+        Bấm thêm dòng mới (thường là <span class="btn">Thêm Record</span>).
+        Host: <code>resend._domainkey</code> · Loại: <b>TXT</b> · Giá trị: dán chuỗi dài vừa copy ở Resend.
+        Dán trọn, không thêm dấu cách, không thêm dấu ngoặc kép.</li>
+      <li><b class="t">Thêm dòng 2 — send</b>
+        Host: <code>send</code> · Loại: <b>CNAME</b> · Giá trị: <code>send.forge.rmta.net</code> (chép từ Resend).</li>
+      <li><b class="t">Thêm dòng 3 — rsend</b>
+        Host: <code>rsend</code> · Loại: <b>CNAME</b> · Giá trị: <code>rsend-apne1.forge.rmta.net</code> (chép từ Resend).</li>
+      <li><b class="t">Lưu</b>
+        Bấm nút lưu của trang (thường là <span class="btn solid">Lưu cấu hình</span>). Nhìn lại bảng: có thêm <b>đúng 3 dòng</b>,
+        các dòng cũ còn nguyên.</li>
+    </ol>
+
+    <div class="box stop">
+      <b class="h">Ba lỗi làm hỏng hộp thư hello@ — kiểm kỹ trước khi lưu</b>
+      <ul class="tight">
+        <li>Host của mọi dòng mới phải là <code>send</code>, <code>rsend</code> hoặc <code>resend._domainkey</code>.
+          Để trống hoặc <code>@</code> là đè lên tên miền chính → thư gửi tới hello@ đi lạc.</li>
+        <li><b>Không sửa</b> dòng TXT <i>v=spf1 a mx include:spf.maychuemail.com -all</i> của tên miền chính — đó là của hộp thư hello@.
+          Phần của Resend nằm riêng ở <code>send</code>/<code>rsend</code>.</li>
+        <li>Ô Host chỉ gõ phần đầu (<code>send</code>, <code>resend._domainkey</code>). Nếu gõ cả đuôi thì thành
+          <i>send.alumni-mentoring.edu.vn.alumni-mentoring.edu.vn</i> và Resend không tìm thấy.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── C ───────────────────────── -->
+<section class="part">
+  <div class="letter">C</div>
+  <div>
+    <h2>Resend: chờ tên miền “Verified”</h2>
+    <ol class="steps">
+      <li><b class="t">Bấm kiểm tra</b>
+        Quay lại tab Resend ở bước A, bấm nút kiểm tra bản ghi (<span class="btn solid">Verify DNS Records</span>
+        hoặc <span class="btn">Restart verification</span>).</li>
+      <li><b class="t">Chờ</b>
+        Thường 15 phút thì cả 3 dòng chuyển sang <span class="ok">Verified</span>. Có khi vài giờ.
+        Không cần ngồi chờ — làm việc khác rồi quay lại.</li>
+      <li><b class="t">Sau 1 giờ vẫn có dòng “Pending” hoặc “Failed”</b>
+        Nhắn Claude: <i>“Resend chưa verify”</i>. Claude tra được DNS công khai của tên miền, chỉ ra đúng dòng nào sai,
+        không cần mật khẩu của anh.</li>
+      <li><b class="t">Tắt theo dõi (nếu đang bật)</b>
+        Trong trang tên miền, mục cấu hình: để <b>tắt</b> <span class="ui">Click tracking</span> và
+        <span class="ui">Open tracking</span> (mặc định đã tắt). Theo dõi bấm link sẽ đổi link riêng của từng người
+        (link xác nhận lịch, đặt mật khẩu) — dễ bị bộ lọc thư công ty chặn.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ───────────────────────── D ───────────────────────── -->
+<section class="part">
+  <div class="letter">D</div>
+  <div>
+    <h2>Resend: tạo khoá gửi thư</h2>
+    <div class="meta">Làm sau khi tên miền đã Verified ở bước C.</div>
+    <ol class="steps">
+      <li><b class="t">Mở trang khoá</b>
+        Menu trái <span class="ui">API Keys</span> → <span class="btn solid">Create API Key</span>.</li>
+      <li><b class="t">Điền</b>
+        Name: <code>vam-os-production</code> · Permission: <b>Sending access</b> (chỉ được gửi thư, không xoá được gì)
+        · Domain: chọn <code>alumni-mentoring.edu.vn</code>. Bấm nút tạo.</li>
+      <li><b class="t">Chép khoá — chỉ hiện MỘT lần</b>
+        Resend hiện một chuỗi bắt đầu bằng <code>re_</code>. Bấm copy, dán vào Notepad.
+        Lỡ đóng mất thì không sao: xoá khoá đó, tạo khoá mới.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ───────────────────────── E ───────────────────────── -->
+<section class="part">
+  <div class="letter">E</div>
+  <div>
+    <h2>Vercel: bật Resend cho VAM OS</h2>
+    <ol class="steps">
+      <li><b class="t">Mở cài đặt dự án</b>
+        Vercel → team <b>Hoang_Nguyen</b> → dự án <b>vam-os-admin-portal</b> →
+        <span class="path">Settings → Environment Variables</span>.</li>
+      <li><b class="t">Thêm khoá Resend</b>
+        Bấm thêm biến mới (<span class="btn solid">Add Environment Variable</span> hoặc <span class="btn">Add New</span>).
+        <table>
+          <tr><th style="width:26%">Ô</th><th>Điền</th></tr>
+          <tr><td>Key</td><td><code>RESEND_API_KEY</code></td></tr>
+          <tr><td>Value</td><td>dán khoá <code>re_…</code> từ Notepad</td></tr>
+          <tr><td>Environments</td><td>chỉ tick <b>Production</b></td></tr>
+          <tr><td>Sensitive</td><td><b>bật</b></td></tr>
+        </table>
+        Bấm <span class="btn solid">Save</span>.</li>
+      <li><b class="t">Đổi nhà gửi thư</b>
+        Tìm dòng <code>VAM_OS_EMAIL_PROVIDER</code> → bấm dấu <b>⋯</b> bên phải → <span class="btn">Edit</span> →
+        đổi giá trị <code>brevo</code> thành <code>resend</code> (chữ thường, không dấu cách) → <span class="btn solid">Save</span>.</li>
+      <li><b class="t">Không đụng các dòng khác</b>
+        Giữ nguyên <code>BREVO_API_KEY</code> (đường lui), <code>VAM_OS_EMAIL_FROM</code> (địa chỉ gửi hello@),
+        <code>VAM_OS_EMAIL_ENABLED</code>.</li>
+      <li><b class="t">Nhắn Claude: “đã đổi biến Vercel”</b>
+        Vercel chỉ đọc biến mới khi chạy bản mới. Claude sẽ chạy lại bản production và kiểm thư đầu tiên đi qua Resend.
+        Trước lúc đó hệ thống vẫn gửi bằng Brevo — không mất thư nào.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ───────────────────────── F ───────────────────────── -->
+<section class="part">
+  <div class="letter">F</div>
+  <div>
+    <h2>Supabase: đổi SMTP của thư đăng nhập</h2>
+    <div class="meta">Thư mời reviewer và thư “Quên mật khẩu” do Supabase tự gửi qua một đường riêng (SMTP), hiện vẫn là Brevo.
+      Bỏ qua bước này mà huỷ Brevo thì những thư đó ngừng tới.</div>
+    <ol class="steps">
+      <li><b class="t">Mở cài đặt SMTP</b>
+        supabase.com/dashboard → dự án VAM OS → <span class="path">Authentication → Email → SMTP Settings</span>
+        (có khi nằm dưới mục <i>Notifications</i>).</li>
+      <li><b class="t">Chụp màn hình cấu hình đang có</b>
+        Host, Port, Username, Sender email, Sender name — để quay lại Brevo nếu cần. Mật khẩu không hiện, không sao.</li>
+      <li><b class="t">Sửa 4 ô, giữ nguyên 2 ô</b>
+        <table>
+          <tr><th style="width:26%">Ô</th><th>Điền</th></tr>
+          <tr><td>Host</td><td><code>smtp.resend.com</code></td></tr>
+          <tr><td>Port</td><td><code>465</code></td></tr>
+          <tr><td>Username</td><td><code>resend</code></td></tr>
+          <tr><td>Password</td><td>dán <b>cùng khoá</b> <code>re_…</code> đã dán vào Vercel</td></tr>
+          <tr><td>Sender email · Sender name</td><td><b>giữ nguyên</b> (phải là địa chỉ @alumni-mentoring.edu.vn)</td></tr>
+        </table>
+        Bấm <span class="btn solid">Save</span>.</li>
+      <li><b class="t">Xoá khoá khỏi Notepad</b>
+        Đóng Notepad, chọn <b>Don’t Save</b>. Từ đây khoá chỉ còn trong Vercel và Supabase.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ───────────────────────── G ───────────────────────── -->
+<section class="part">
+  <div class="letter">G</div>
+  <div>
+    <h2>Gửi thử và kiểm tra</h2>
+    <div class="meta">Làm sau khi Claude báo đã chạy lại bản production (sau bước E).</div>
+    <ol class="steps">
+      <li><b class="t">Thư của VAM OS</b>
+        Vào <b>os.alumni-mentoring.edu.vn/operations/mail</b> → chọn một mẫu thư bất kỳ → bấm
+        <span class="btn">Gửi thử cho tôi</span>. Thư chỉ tới hộp thư của chính anh, không ai khác nhận.</li>
+      <li><b class="t">Thư của Supabase</b>
+        Mở một cửa sổ ẩn danh → trang đăng nhập VAM OS → <span class="btn">Quên mật khẩu</span> → nhập email của anh.
+        Thư tới là phần SMTP ở bước F đã chạy. (Không cần đổi mật khẩu thật — bỏ qua thư đó.)</li>
+      <li><b class="t">Xem thư có qua kiểm tra không</b>
+        Mở thư trong Gmail → dấu <b>⋮</b> → <span class="ui">Hiển thị bản gốc</span> (Show original):
+        ba dòng <b>SPF</b>, <b>DKIM</b>, <b>DMARC</b> đều ghi <span class="ok">PASS</span>. Kiểm cả hộp <b>Spam</b> nếu chưa thấy thư.</li>
+      <li><b class="t">Xem trong Resend</b>
+        Menu <span class="ui">Emails</span>: thấy hai thư vừa gửi, trạng thái <span class="ok">Delivered</span>.</li>
+      <li><b class="t">Claude kiểm phía hệ thống</b>
+        Sổ thư của VAM OS ghi nhà gửi là <b>resend</b> cho các thư mới.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ───────────────────────── H ───────────────────────── -->
+<section class="part">
+  <div class="letter">H</div>
+  <div>
+    <h2>Sau 7 ngày chạy ổn: huỷ Brevo</h2>
+    <ul class="tight">
+      <li>Mở Resend → <span class="ui">Emails</span>: thư đều Delivered, không có cảnh báo “bounce” hay “complaint” bất thường.</li>
+      <li>Hạ gói Brevo về Free hoặc huỷ gói trả tiền ở Brevo (mục thanh toán của Brevo).</li>
+      <li>Vercel: có thể xoá dòng <code>BREVO_API_KEY</code>. Các dòng DNS của Brevo ở PA Vietnam (có chữ <i>brevo</i>)
+        để nguyên cũng không sao.</li>
+      <li>Phần trên màn hình đã sửa ngày 06/10/2026: mọi chỗ ghi “Brevo 300 thư/ngày” nay ghi trần chung
+        <b>1.000 thư/24 giờ, gửi qua Resend</b> — một trần duy nhất cho mọi loại thư (trước đó trang lời mời tài khoản còn dừng ở 300).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Trang cuối tự đứng một mình: gói, đường lui, trục trặc — không bị cắt ngang giữa hai trang. -->
+<div class="two page-break">
+  <div>
+    <h3>Gói Resend Pro dùng được gì</h3>
+    <table>
+      <tr><td>Giá</td><td>20 USD/tháng</td></tr>
+      <tr><td>Số thư</td><td>50.000 thư/tháng, <b>không giới hạn theo ngày</b>. VAM OS tự đặt trần <b>1.000 thư/24 giờ</b> để một lần bấm nhầm không đốt ngân sách tháng chung</td></tr>
+      <tr><td>Tên miền</td><td>tối đa 10 — dùng chung được với dự án khác của anh</td></tr>
+      <tr><td>Tốc độ</td><td>10 thư/giây cho cả nhóm — VAM OS gửi lần lượt, không chạm</td></tr>
+    </table>
+    <p class="note">Một mùa VAM gửi khoảng 2.700 thư, dồn vào vài đợt — còn dư rất nhiều.
+      Nếu dự án khác dùng chung nhóm Resend thì hạn mức 50.000 là cộng chung.</p>
+  </div>
+  <div>
+    <h3>Đường lui nếu có trục trặc</h3>
+    <ol class="steps">
+      <li><b class="t">Thư của VAM OS</b>Vercel: sửa <code>VAM_OS_EMAIL_PROVIDER</code> về <code>brevo</code>, nhắn Claude chạy lại bản production.</li>
+      <li><b class="t">Thư của Supabase</b>Supabase SMTP: nhập lại theo ảnh chụp ở bước F. Mật khẩu SMTP lấy ở Brevo:
+        <span class="path">SMTP &amp; API → SMTP</span>, tạo khoá SMTP mới.</li>
+    </ol>
+  </div>
+</div>
+
+<h3 style="margin-top:3.6mm">Trục trặc thường gặp</h3>
+<table>
+  <tr><th style="width:34%">Thấy gì</th><th>Làm gì</th></tr>
+  <tr><td>Resend báo <span class="err">Failed</span> ở dòng <code>resend._domainkey</code></td>
+      <td>Giá trị bị thiếu hoặc thừa ký tự. Xoá dòng đó ở PA Vietnam, copy lại từ Resend, dán lại. Nếu PA Vietnam tự thêm
+        dấu ngoặc kép thì để nguyên.</td></tr>
+  <tr><td>Resend báo Failed ở dòng <code>send</code> hoặc <code>rsend</code></td>
+      <td>Host gõ thừa đuôi tên miền, hoặc trộn kiểu (CNAME cùng Host với MX/TXT). Sửa Host về đúng <code>send</code>/<code>rsend</code>,
+        giữ đúng loại Resend hiện. Nhắn Claude — Claude tra DNS và chỉ ra dòng lệch.</td></tr>
+  <tr><td>Sau bước E, thư không đi, trang báo lỗi gửi thư</td>
+      <td>Khoá dán thiếu ký tự hoặc tên miền chưa Verified. Nhắn Claude — Claude xem lý do trong sổ thư; trong lúc chờ có thể làm
+        “Đường lui” để gửi lại bằng Brevo.</td></tr>
+  <tr><td>Thư vào hộp Spam</td>
+      <td>Kiểm “Hiển thị bản gốc”: có dòng nào không PASS thì nhắn Claude kèm ảnh chụp đúng phần đó (không chụp khoá).</td></tr>
+  <tr><td>“Quên mật khẩu” không ra thư</td>
+      <td>Kiểm lại bước F: Port <code>465</code>, Username <code>resend</code> (chữ thường), Sender email đúng
+        @alumni-mentoring.edu.vn. Supabase không gửi lại cho cùng một địa chỉ ngay lập tức — chờ vài phút rồi thử lại.</td></tr>
+</table>
+
+<footer>
+  <span>Nguồn: tài liệu Resend (thêm tên miền, khoá API, SMTP cho Supabase, khu vực gửi, bảng giá) — tra 05/10/2026.
+    DNS hiện tại của tên miền tra công khai cùng ngày.</span>
+  <span>docs/huong-dan/HUONG_DAN_CHUYEN_EMAIL_SANG_RESEND.html</span>
+</footer>
+
+</body>
+</html>

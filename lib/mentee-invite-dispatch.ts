@@ -42,7 +42,7 @@ import { formatDate, formatTime } from "@/lib/utils";
  *    với 334 người thì đó là 334 cuộc gọi.
  *
  * 2. KHÔNG VƯỢT PHẦN HẠN MỨC CỦA THƯ MỜI. Xem đầu lib/mentee-invite-dispatch-core.ts:
- *    các thư khác của hệ thống cần chỗ trong cùng hạn mức 300 thư/ngày.
+ *    các thư khác của hệ thống cần chỗ trong cùng trần thư trong ngày.
  */
 
 type Json = Record<string, any>;
@@ -148,7 +148,7 @@ async function readAudience(
  * Số thư CẢ HỆ THỐNG đã gửi trong 24 giờ trượt — mọi loại, không riêng thư
  * mời. Xuất ra vì đây là nguồn duy nhất cho con số này; bộ cấp quyền hàng loạt
  * (lib/enable-reviewer-bulk.ts) đọc lại đúng hàm này thay vì tự đếm riêng —
- * đếm hai nơi khác nhau là hai cơ hội để lệch số với hạn mức Brevo thật.
+ * đếm hai nơi khác nhau là hai cơ hội để lệch số với trần thư chung.
  */
 export async function countSentInWindow(client: any, nowMs: number): Promise<number | null> {
   const sinceIso = new Date(nowMs - QUOTA_WINDOW_MS).toISOString();

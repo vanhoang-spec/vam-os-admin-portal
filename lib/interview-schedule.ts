@@ -1804,7 +1804,7 @@ async function runDispatchCore(client: any, seasonId: string, budgetMs: number):
 
   const remaining = stopped429 ? 0 : Math.max(0, due.length - sent - failed);
   const note = stopped429
-    ? `Đã gửi ${sent} thư rồi chạm trần thư trong ngày của Brevo — phần còn lại tự gửi ở lượt sau.`
+    ? `Đã gửi ${sent} thư rồi nhà cung cấp thư báo chạm giới hạn — phần còn lại tự gửi ở lượt sau.`
     : `Đã gửi ${sent} thư${failed > 0 ? `, ${failed} thư lỗi` : ""}${remaining > 0 ? `, còn ${remaining} người trong hàng đợi` : ""}.`;
   return { ok: true, message: note, sent, failed, remaining, stopped429 };
 }

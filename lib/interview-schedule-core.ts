@@ -386,7 +386,7 @@ export type DispatchResult = {
   sent: number;
   failed: number;
   remaining: number;
-  /** Brevo báo hết hạn mức ngày — dừng, mai gửi tiếp. */
+  /** Nhà cung cấp thư báo chạm giới hạn (HTTP 429) — dừng, lượt sau gửi tiếp. */
   stopped429: boolean;
 };
 

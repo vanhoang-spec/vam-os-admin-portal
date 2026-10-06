@@ -4,7 +4,6 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { loadLoginInviteRoster } from "@/lib/login-invite-roster";
 import {
   ACCOUNT_STATUS_LABELS,
-  BREVO_DAILY_LIMIT,
   INVITE_BATCH_MAX,
   INVITE_DAILY_RESERVE,
   ROSTER_BLOCK_LABELS,
@@ -26,10 +25,12 @@ import { seasonLabel } from "@/lib/season-labels";
 import { formatDateTime, formatTime } from "@/lib/utils";
 import { BulkInvitePanel } from "./bulk-invite-panel";
 import { RosterClient, type RosterViewRow } from "./roster-client";
+import { DAILY_EMAIL_LIMIT, EMAIL_PROVIDER_NAME, dailyEmailLimitLabel } from "@/lib/email-quota-core";
+import { formatInt } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 // Lượt mời hàng loạt chạy trong function của trang này. Ngân sách một lượt là
-// 35 giây, và một lời gọi Brevo có thể treo tới 20 giây — trần mặc định không
+// 35 giây, và một lời gọi tới nhà cung cấp thư có thể treo tới 20 giây — trần mặc định không
 // đủ rộng.
 export const maxDuration = 60;
 
@@ -135,9 +136,9 @@ export default async function ParticipantAccountsPage(props: {
   const sentTone =
     sent === null
       ? "warning"
-      : sent >= BREVO_DAILY_LIMIT - 10
+      : sent >= DAILY_EMAIL_LIMIT - 10
         ? "danger"
-        : sent >= BREVO_DAILY_LIMIT - INVITE_DAILY_RESERVE
+        : sent >= DAILY_EMAIL_LIMIT - INVITE_DAILY_RESERVE
           ? "warning"
           : "default";
 
@@ -156,9 +157,9 @@ export default async function ParticipantAccountsPage(props: {
         <KpiCard label="Không mời được" value={summary.blocked} tone={summary.blocked > 0 ? "danger" : "default"} />
         <KpiCard
           label="Thư đã gửi trong 24 giờ"
-          value={sent === null ? "Không đếm được" : `${sent}/${BREVO_DAILY_LIMIT}`}
+          value={sent === null ? "Không đếm được" : `${sent}/${formatInt(DAILY_EMAIL_LIMIT)}`}
           tone={sentTone}
-          helper="Hạn mức Brevo, dùng chung mọi loại thư"
+          helper={`Hạn mức ${dailyEmailLimitLabel()} qua ${EMAIL_PROVIDER_NAME}, dùng chung mọi loại thư`}
         />
       </div>
 

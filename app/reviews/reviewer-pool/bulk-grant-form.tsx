@@ -9,6 +9,7 @@ import {
   initialBulkGrantActionState,
   type BulkGrantActionState
 } from "@/lib/enable-reviewer-bulk-action-types";
+import { EMAIL_PROVIDER_NAME, dailyEmailLimitLabel } from "@/lib/email-quota-core";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -141,9 +142,9 @@ export function BulkGrantForm({ intakeBatchId, canGrantMentor }: { intakeBatchId
       </div>
 
       <p className="text-xs text-slate-500">
-        Mỗi lượt bấm xử lý tối đa một số người nhất định — hạn mức thư Brevo dùng chung cả hệ thống
-        (300/24 giờ). Còn người chưa xử lý thì dán lại đúng danh sách này và bấm tiếp lượt sau, cách
-        nhau ít nhất vài giờ.
+        Mỗi lượt bấm xử lý tối đa một số người nhất định — hạn mức thư dùng chung cả hệ thống
+        ({dailyEmailLimitLabel()}, gửi qua {EMAIL_PROVIDER_NAME}). Còn người chưa xử lý thì dán lại đúng danh sách
+        này và bấm tiếp lượt sau, cách nhau ít nhất vài giờ.
       </p>
 
       <ResultSummary state={state} />

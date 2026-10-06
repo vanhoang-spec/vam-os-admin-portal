@@ -17,6 +17,7 @@ import {
   INVITE_BULK_RETRY_AFTER_MINUTES,
   INVITE_CLAIM_STALE_MINUTES,
   INVITE_MEMBERSHIP_STATUSES,
+  INVITE_DAILY_RESERVE,
   INVITE_RESEND_COOLDOWN_MINUTES,
   ROSTER_BLOCK_LABELS,
   checkGeneratedLink,
@@ -37,6 +38,7 @@ import {
   type RosterRow,
   type SendDecision
 } from "@/lib/participant-invite-core";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 
 const NOW = Date.parse("2026-09-11T03:00:00.000Z");
 const SEASON = "11111111-1111-4111-8111-111111111111";
@@ -363,11 +365,12 @@ describe("ghi mối nối gặp 23505", () => {
 });
 
 describe("hạn mức", () => {
-  it("chừa chỗ cho thư khác, và không bao giờ âm", () => {
-    expect(inviteBudgetRemaining(0)).toBe(240);
-    expect(inviteBudgetRemaining(239)).toBe(1);
-    expect(inviteBudgetRemaining(240)).toBe(0);
-    expect(inviteBudgetRemaining(900)).toBe(0);
+  it("chừa chỗ cho thư khác trên trần CHUNG của hệ thống, và không bao giờ âm", () => {
+    const room = DAILY_EMAIL_LIMIT - INVITE_DAILY_RESERVE;
+    expect(inviteBudgetRemaining(0)).toBe(room);
+    expect(inviteBudgetRemaining(room - 1)).toBe(1);
+    expect(inviteBudgetRemaining(room)).toBe(0);
+    expect(inviteBudgetRemaining(DAILY_EMAIL_LIMIT + 100)).toBe(0);
     expect(inviteBudgetRemaining(Number.NaN)).toBe(0);
   });
 });

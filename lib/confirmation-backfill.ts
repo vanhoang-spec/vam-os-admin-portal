@@ -15,7 +15,7 @@ import {
   summarizeBackfillOutcomes,
   type BackfillApplicationRow
 } from "@/lib/confirmation-backfill-core";
-import { evaluateEmailGate } from "@/lib/email-core";
+import { configuredEmailProvider, evaluateEmailGate } from "@/lib/email-core";
 import { sendApplicationConfirmation } from "@/lib/email";
 import { MAIN_OUTBOUND_EMAIL_KINDS } from "@/lib/outbound-emails-core";
 import { SEASON_CONFIG } from "@/lib/season-config";
@@ -28,7 +28,7 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
  * Gửi bù thư xác nhận cho những đơn đã nộp trước khi hệ thống có tầng email.
  *
  * Nguyên tắc đặt-chỗ-trước-khi-gửi: chèn một dòng `queued` vào outbound_emails
- * TRƯỚC khi gọi Brevo, rồi chốt kết quả lên chính dòng đó. Index unique
+ * TRƯỚC khi gọi nhà cung cấp thư, rồi chốt kết quả lên chính dòng đó. Index unique
  * outbound_emails_application_confirmation_once_idx khiến người thứ hai va
  * 23505 ngay lúc đặt chỗ, tức là trước khi kịp gửi. Nếu đọc trước rồi mới gửi
  * thì hai người bấm cách nhau vài giây sẽ cùng nhìn thấy một ảnh chụp cũ và
@@ -249,7 +249,7 @@ export async function runConfirmationBackfill(input: {
         to_email: candidate.emailPrimary,
         subject: null,
         status: "queued",
-        provider: "brevo",
+        provider: configuredEmailProvider(),
         related_table: "applications",
         related_id: candidate.applicationId
       })

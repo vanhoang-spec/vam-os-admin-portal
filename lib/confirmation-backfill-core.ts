@@ -18,9 +18,9 @@ export const CONFIRMATION_BACKFILL_SINCE = "2026-08-15";
 /**
  * Số thư tối đa mỗi lần bấm.
  *
- * Gửi là tuần tự và mỗi lời gọi Brevo có thể treo tới 20 giây, nên trần này là
- * trần thời gian chứ không phải trần lịch sự. Gói Brevo miễn phí cho 300 thư
- * mỗi ngày, nên chia nhiều lượt không mất gì.
+ * Gửi là tuần tự và mỗi lời gọi tới nhà cung cấp thư có thể treo tới 20 giây, nên
+ * trần này là trần thời gian chứ không phải trần lịch sự. Trần thư trong ngày
+ * rộng hơn nhiều (lib/email-quota-core.ts), nên chia nhiều lượt không mất gì.
  */
 export const CONFIRMATION_BACKFILL_MAX_PER_RUN = 25;
 
@@ -90,7 +90,7 @@ export type BackfillSelection = {
  * Thứ tự vào là thứ tự nộp tăng dần, nên người chờ lâu nhất được gửi trước.
  * `alreadyLiveIds` là những đơn đã có thư còn sống (queued hoặc sent) — index
  * unique dưới database mới là trọng tài cuối cùng, chỗ này chỉ để không gọi
- * Brevo một cách vô ích.
+ * nhà cung cấp thư một cách vô ích.
  */
 export function selectBackfillCandidates(input: {
   applications: BackfillApplicationRow[];

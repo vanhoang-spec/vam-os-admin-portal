@@ -33,8 +33,8 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
  * ---------------------------------------------------------------------------
  * VÌ SAO MỘT LÔ KHÔNG GỬI XONG TRONG MỘT LẦN
  * ---------------------------------------------------------------------------
- * Gói Brevo đang dùng cho khoảng 300 thư một ngày, mà một mùa có hơn số đó
- * giữa mentor và mentee. Các lời gọi lại chạy tuần tự, nên một request cũng
+ * Cả hệ thống dùng chung một trần thư trong ngày (lib/email-quota-core.ts), mà một
+ * mùa có thể vượt số đó giữa mentor và mentee. Các lời gọi lại chạy tuần tự, nên một request cũng
  * không đủ dài để đi hết danh sách.
  *
  * Nên một lô là một BẢN GHI, không phải một tiến trình: `email_batches` giữ nó

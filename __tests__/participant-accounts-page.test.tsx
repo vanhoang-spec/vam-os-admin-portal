@@ -151,7 +151,10 @@ describe("dữ liệu", () => {
     const html = await renderPage();
 
     expect(html).toContain("Đã gửi thư, chưa vào");
-    expect(html).toContain("12/300");
+    // Trần chung của cả hệ thống (lib/email-quota-core.ts), không còn 300 riêng của gói Brevo.
+    expect(html).toContain("12/1.000");
+    expect(html).toContain("Hạn mức 1.000 thư/24 giờ qua Resend");
+    expect(html).not.toContain("Brevo");
     expect(html).toContain('data-eligible="2"');
     expect(html).toContain('data-rows="3"');
   });

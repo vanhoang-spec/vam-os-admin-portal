@@ -7,7 +7,7 @@ import { AI_TIMEOUT_MS, AiError, parseAiJson, type AiMessage, type AiResult, typ
  * Client gọi DeepSeek API.
  *
  * DeepSeek dùng giao thức tương thích OpenAI nên chỉ cần `fetch` thuần — không
- * thêm SDK nào, cùng lối với lib/email.ts gọi Brevo.
+ * thêm SDK nào, cùng lối với lib/email.ts gọi nhà cung cấp thư.
  *
  * Khoá API CHỈ tồn tại phía server (`process.env.DEEPSEEK_API_KEY`). `import
  * "server-only"` ở trên khiến build LỖI ngay nếu ai đó lỡ import file này vào

@@ -141,8 +141,8 @@ export async function countOutboundEmailsByStatus(): Promise<OutboundEmailStatus
 /**
  * Số thư đã gửi hoặc đang gửi kể từ `sinceIso`, của MỌI loại thư.
  *
- * Không lọc theo loại: hạn mức 300 thư một ngày của Brevo tính trên cả tài
- * khoản, nên thư xác nhận đơn và thư sự kiện ăn vào cùng một hạn mức với thư
+ * Không lọc theo loại: trần thư trong ngày (lib/email-quota-core.ts) tính trên cả
+ * hệ thống, nên thư xác nhận đơn và thư sự kiện ăn vào cùng một hạn mức với thư
  * mời. Đếm riêng thư mời là để lượt mời hàng loạt tiêu hết phần của người khác.
  *
  * Đọc hỏng thì trả `ok: false`, không trả 0: đoán là 0 nghĩa là mở cửa cho
