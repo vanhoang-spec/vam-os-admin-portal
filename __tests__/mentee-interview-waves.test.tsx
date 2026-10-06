@@ -17,8 +17,22 @@ import {
   waveOfSession
 } from "@/lib/mentee-interview-waves";
 
-const mocks = vi.hoisted(() => ({ dashboard: null as any, clientProps: null as any }));
+const mocks = vi.hoisted(() => ({ dashboard: null as any, clientProps: null as any, bookingPage: null as any }));
 vi.mock("@/lib/mentee-offline", () => ({ getOfflineDashboard: async () => mocks.dashboard }));
+vi.mock("@/lib/mentee-interview", () => ({
+  getMenteeSessionPageData: async () => mocks.bookingPage,
+  bookMenteeSession: vi.fn(),
+  changeMenteeSession: vi.fn(),
+  saveMenteePrepAnswers: vi.fn()
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// useFormState cần Server Action thật — cùng cách các bộ test form khác của dự án.
+vi.mock("react-dom", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-dom")>()),
+  useFormState: (action: unknown, initial: unknown) => [initial, action],
+  useFormStatus: () => ({ pending: false })
+}));
 vi.mock("@/app/interviews/mentee-offline/workflow", () => ({
   OfflineDashboardClient: (props: any) => {
     mocks.clientProps = props;
@@ -27,6 +41,7 @@ vi.mock("@/app/interviews/mentee-offline/workflow", () => ({
 }));
 
 import OfflineInterviewPage from "@/app/interviews/mentee-offline/page";
+import MenteeSessionBookingPage from "@/app/dat-ca/[token]/page";
 
 const SAT_VENUE_1 = "Phòng H101, H104, H201 — Cơ sở H, 1A Hoàng Diệu, Phường Phú Nhuận, Thành phố Hồ Chí Minh. Bản đồ: https://maps.app.goo.gl/x";
 const SUN_VENUE_1 = "Phòng B1.503, B1.504, B1.506, B1.803, B1.805, B1.808 — Cơ sở B, 279 Nguyễn Tri Phương, Phường Diên Hồng, Thành phố Hồ Chí Minh.";
@@ -113,6 +128,29 @@ describe("trang chọn ca của mentee", () => {
       ({ dateKey, label: dateKey, sessions: states.map((state, i) => ({ id: `${dateKey}-${i}`, state })) }) as unknown as MenteeSessionDay;
     const days = [day("2026-10-03", ["past", "past"]), day("2026-10-10", ["past", "open"]), day("2026-10-11", ["full", "open"])];
     expect(upcomingDays(days).map((d) => d.dateKey)).toEqual(["2026-10-10", "2026-10-11"]);
+  });
+});
+
+describe("câu đầu trang chọn ca", () => {
+  const view = (id: string, state: string) => ({
+    id, startsAtIso: "2026-10-11T01:00:00Z", timeLabel: "08:00 – 08:30", seatLimit: state === "open" ? 28 : null,
+    taken: 0, remaining: state === "open" ? 28 : null, state, note: null
+  });
+
+  it("chỉ nêu ngày còn ca đặt được — Thứ Bảy đang tạm khoá (chưa có số chỗ) không được nêu", async () => {
+    mocks.bookingPage = {
+      ok: true, state: "eligible", candidateName: "Lan", anyBookable: true, totalRemaining: 28,
+      deadlineLabel: "17:00 ngày 09/10/2026", hotlineZalo: "0919144638", support: { name: "BTC", phone: "0" }, prepAnswers: [],
+      days: [
+        { dateKey: "2026-10-10", label: "Thứ Bảy 10/10/2026", sessions: [view("s10", "not_configured")] },
+        { dateKey: "2026-10-11", label: "Chủ nhật 11/10/2026", sessions: [view("s11", "open")] }
+      ]
+    };
+    render(await MenteeSessionBookingPage({ params: Promise.resolve({ token: "tok" }) }));
+    const intro = screen.getByText(/Phỏng vấn trực tiếp tại UEH/);
+    expect(intro.textContent).toContain("ngày Chủ nhật 11/10/2026.");
+    expect(intro.textContent).not.toContain("Thứ Bảy 10/10");
+    expect(intro.textContent).not.toContain("03 và 04/10");
   });
 });
 

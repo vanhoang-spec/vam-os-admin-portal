@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui";
 import { LiveRefresh } from "@/app/events/[id]/live-refresh";
 import { getMenteeSessionPageData } from "@/lib/mentee-interview";
+import { interviewDaysLabel, type MenteeSessionDay } from "@/lib/mentee-interview-core";
 import { SessionForm } from "./session-form";
 import { InterviewTicket } from "./interview-ticket";
 import { PrepAnswersForm } from "./prep-answers-form";
@@ -17,15 +18,14 @@ import { PrepAnswersForm } from "./prep-answers-form";
 export const dynamic = "force-dynamic";
 
 /**
- * “Phỏng vấn trực tiếp tại UEH, ngày Thứ Bảy 10/10/2026 và Chủ nhật 11/10/2026.” — đọc
- * từ chính các ngày còn ca (lưới đã bỏ ngày đã qua). Trước đây ghi cứng 03 và 04/10,
- * nên người mở link ở đợt 2 đọc thấy ngày của đợt 1.
+ * “Phỏng vấn trực tiếp tại UEH, ngày Chủ nhật 11/10/2026.” — CÙNG câu ngày với thư mời
+ * (interviewDaysLabel: chỉ những ngày còn ca đặt được). Trước đây ghi cứng 03 và 04/10,
+ * nên người mở link ở đợt 2 đọc thấy ngày của đợt 1; và ngày có ca nhưng chưa mở (Thứ
+ * Bảy 10/10 chưa chốt địa điểm) không được nêu như thể chọn được.
  */
-function interviewDaysText(data: { ok: boolean } & Partial<{ days: Array<{ label: string }> }>): string {
-  const labels = data.ok && Array.isArray(data.days) ? data.days.map((d) => d.label) : [];
-  if (!labels.length) return "Phỏng vấn trực tiếp tại UEH.";
-  const joined = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} và ${labels[labels.length - 1]}`;
-  return `Phỏng vấn trực tiếp tại UEH, ngày ${joined}.`;
+function interviewDaysText(data: { ok: boolean } & Partial<{ days: MenteeSessionDay[] }>): string {
+  const label = data.ok && Array.isArray(data.days) ? interviewDaysLabel(data.days) : "";
+  return label ? `Phỏng vấn trực tiếp tại UEH, ngày ${label}.` : "Phỏng vấn trực tiếp tại UEH.";
 }
 
 export default async function MenteeSessionBookingPage(props: {
