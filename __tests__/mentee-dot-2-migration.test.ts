@@ -223,45 +223,13 @@ describe("migration đợt 2", () => {
     expect(notified.at).not.toBeNull();
   });
 
-  it("tạm khoá Thứ Bảy 10/10: bỏ số chỗ 14 ca, Chủ nhật giữ nguyên; có người giữ chỗ Thứ Bảy thì dừng", async () => {
-    const LOCK = "supabase/migrations/20261007110000_tam_khoa_ca_thu_bay_dot_2.sql";
-    // Có người giữ chỗ Thứ Bảy → file phải dừng, không bỏ số chỗ dưới chân người đó.
-    const sat = await sessionOn("2026-10-10");
-    await db.exec("begin");
-    try {
-      await db.query(
-        "insert into mentee_interview_bookings(application_id,session_id,season_id,previous_application_status) values($1,$2,$3,'invited_to_interview')",
-        [P.newLow, sat, ids.season]
-      );
-      await db.exec("savepoint lock_attempt");
-      await expect(db.exec(read(LOCK).replace(/^begin;$/m, "").replace(/^commit;$/m, ""))).rejects.toThrow("Đã có người giữ chỗ ca Thứ Bảy");
-      await db.exec("rollback to savepoint lock_attempt");
-    } finally {
-      await db.exec("rollback");
-    }
-    await db.exec(read(LOCK));
-    await db.exec(read(LOCK));
-    const days = (
-      await db.query<{ d: string; with_seats: number; total: number }>(
-        `select to_char((starts_at at time zone 'Asia/Ho_Chi_Minh')::date,'DD/MM') d, count(seat_limit)::int with_seats, count(*)::int total
-           from interview_sessions where starts_at >= '2026-10-10 00:00+07' group by 1 order by 1`
-      )
-    ).rows;
-    expect(days).toEqual([
-      { d: "10/10", with_seats: 0, total: 14 },
-      { d: "11/10", with_seats: 14, total: 14 }
-    ]);
-    // Ca đợt 1 không bị chạm.
-    expect((await one<{ n: number }>("select count(*)::int n from interview_sessions where starts_at < '2026-10-05 00:00+07' and seat_limit is null")).n).toBe(0);
-  });
-
   it("mỗi bước chạy riêng được — không dựa vào bảng tạm của câu lệnh trước", () => {
     // 07/10/2026: chạy lại một đoạn file trên SQL Editor báo "relation dot2_vang does not
     // exist" vì bảng tạm chỉ sống trong lần chạy đã tạo nó.
     expect(read(DATA)).not.toMatch(/create\s+temp/i);
   });
 
-  it("đợt 2 phân được bàn: Chủ nhật 6 phòng × 5 bàn theo địa điểm; Thứ Bảy theo địa điểm BTC điền sau", async () => {
+  it("đợt 2 phân được bàn: Chủ nhật 6 phòng × 5 bàn theo địa điểm; Thứ Bảy chưa có địa điểm → 6 phòng × 3 bàn, BTC điền địa điểm thì theo địa điểm", async () => {
     const sun = await sessionOn("2026-10-11");
     const sat = await sessionOn("2026-10-10");
     // Dòng điều phối trỏ vào hồ sơ có thật (khoá ngoại); mọi thứ rollback sau đó.
@@ -274,12 +242,19 @@ describe("migration đợt 2", () => {
     } finally {
       await db.exec("rollback");
     }
-    // Thứ Bảy đang tạm khoá (chưa địa điểm, chưa số chỗ) → tạm 6 phòng × 6 bàn. BTC điền
-    // địa điểm 3 phòng + 18 chỗ ở trang Ca → cận đổi theo ngay, không cần migration.
+    // Thứ Bảy mở đăng ký khi CHƯA có địa điểm (BTC 07/10/2026: địa chỉ bổ sung sau vào
+    // link) → tạm 6 phòng × 3 bàn (18 chỗ). BTC điền địa điểm 3 phòng ở trang Ca → cận
+    // đổi theo ngay, không cần migration.
     await db.exec("begin");
     try {
-      await assign(P.newLow, sat, 6, 6);
-      await db.query("update interview_sessions set venue=$2, seat_limit=18 where id=$1", [sat, "Phòng H101, H104, H201 — Cơ sở H, 1A Hoàng Diệu"]);
+      await assign(P.newLow, sat, 6, 3);
+      await expect(assign(P.oldPass, sat, 1, 4)).rejects.toThrow("ROOM_DESK_OUT_OF_RANGE");
+    } finally {
+      await db.exec("rollback");
+    }
+    await db.exec("begin");
+    try {
+      await db.query("update interview_sessions set venue=$2 where id=$1", [sat, "Phòng H101, H104, H201 — Cơ sở H, 1A Hoàng Diệu"]);
       await assign(P.newPass, sat, 3, 6);
       await expect(assign(P.oldPass, sat, 4, 1)).rejects.toThrow("ROOM_DESK_OUT_OF_RANGE");
     } finally {
