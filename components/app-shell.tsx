@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   BarChart3,
   CalendarRange,
@@ -31,7 +31,16 @@ import { logoutAction } from "@/app/login/actions";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import { roleLabel } from "@/lib/auth-constants";
 import { cn } from "@/lib/utils";
-import { buildNavGroups, isActiveRoute, type NavGroupDef } from "@/lib/nav-model";
+import {
+  activeNavHref,
+  buildNavGroups,
+  isNavSubGroup,
+  navItemsOf,
+  navPath,
+  type NavGroupDef,
+  type NavItemDef,
+  type NavSubGroupDef
+} from "@/lib/nav-model";
 import { HelpGuideButton } from "@/components/help-guide-button";
 import { SeasonSelector } from "@/components/season-selector";
 import { isSeasonAwarePath } from "@/lib/season-labels";
@@ -59,6 +68,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "/team": ShieldCheck,
   "/admin/users": UserCog,
   community: Users,
+  applications: ClipboardList,
+  "sub:mentor": UserRoundCheck,
+  "sub:mentee": UserRoundSearch,
   admin: Settings2,
   operations: LineChart,
 };
@@ -68,15 +80,28 @@ function getGroupIcon(group: NavGroupDef): LucideIcon {
   return ICON_MAP[group.key] ?? Settings2;
 }
 
-function isGroupActive(pathname: string, group: NavGroupDef): boolean {
-  if (group.href) return isActiveRoute(pathname, group.href);
-  return (group.items ?? []).some((item) => isActiveRoute(pathname, item.href));
+/** Biểu tượng của mục link: theo trang, không theo bộ lọc ?role_applied=. */
+function getItemIcon(href: string): LucideIcon {
+  return ICON_MAP[navPath(href)] ?? Home;
 }
 
-function getDefaultOpenGroups(pathname: string, groups: NavGroupDef[]): Set<string> {
+function groupContains(group: NavGroupDef, activeHref: string | null): boolean {
+  if (!activeHref) return false;
+  if (group.href) return group.href === activeHref;
+  return navItemsOf(group).some((item) => item.href === activeHref);
+}
+
+const subGroupKey = (group: NavGroupDef, sub: NavSubGroupDef) => `${group.key}/${sub.key}`;
+
+/** Nhóm và nhánh con đang chứa trang hiện tại thì mở sẵn. */
+function getDefaultOpenGroups(activeHref: string | null, groups: NavGroupDef[]): Set<string> {
   const open = new Set<string>();
   for (const g of groups) {
-    if (g.items && isGroupActive(pathname, g)) open.add(g.key);
+    if (!g.items || !groupContains(g, activeHref)) continue;
+    open.add(g.key);
+    for (const entry of g.items) {
+      if (isNavSubGroup(entry) && entry.items.some((item) => item.href === activeHref)) open.add(subGroupKey(g, entry));
+    }
   }
   return open;
 }
@@ -84,26 +109,60 @@ function getDefaultOpenGroups(pathname: string, groups: NavGroupDef[]): Set<stri
 const NAV_LINK_BASE =
   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-vam-green focus-visible:ring-offset-1 focus-visible:outline-none";
 
+function NavLinkItem({
+  item,
+  activeHref,
+  onNavigate,
+  depth,
+}: {
+  item: NavItemDef;
+  activeHref: string | null;
+  onNavigate?: () => void;
+  depth: 2 | 3;
+}) {
+  const active = item.href === activeHref;
+  // Tầng 3 không có biểu tượng: cả chục biểu tượng giống nhau dưới một nhánh là
+  // thứ làm menu cũ trông rối; đường kẻ dọc bên trái đã cho biết mục thuộc nhánh nào.
+  const ItemIcon = depth === 2 ? getItemIcon(item.href) : null;
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        NAV_LINK_BASE,
+        depth === 2 ? "pl-9" : "py-1.5 font-normal",
+        active ? "bg-vam-mint text-vam-ink" : "text-slate-500 hover:bg-slate-50 hover:text-vam-ink"
+      )}
+    >
+      {ItemIcon ? <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
+      {item.label}
+    </Link>
+  );
+}
+
 function SidebarNav({
   groups,
   pathname,
+  activeHref,
   navId,
   onNavigate,
 }: {
   groups: NavGroupDef[];
   pathname: string;
+  activeHref: string | null;
   navId: string;
   onNavigate?: () => void;
 }) {
   const [openGroups, setOpenGroups] = useState<Set<string>>(() =>
-    getDefaultOpenGroups(pathname, groups)
+    getDefaultOpenGroups(activeHref, groups)
   );
 
   useEffect(() => {
-    setOpenGroups(getDefaultOpenGroups(pathname, groups));
+    setOpenGroups(getDefaultOpenGroups(activeHref, groups));
     // groups is derived from adminUser.role, which is stable for the session
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  }, [pathname, activeHref]);
 
   function toggleGroup(key: string) {
     setOpenGroups((prev) => {
@@ -121,7 +180,7 @@ function SidebarNav({
         const panelId = `${navId}-panel-${group.key}`;
 
         if (group.href) {
-          const active = isActiveRoute(pathname, group.href);
+          const active = group.href === activeHref;
           return (
             <Link
               key={group.key}
@@ -142,7 +201,7 @@ function SidebarNav({
         }
 
         const isOpen = openGroups.has(group.key);
-        const groupActive = isGroupActive(pathname, group);
+        const groupActive = groupContains(group, activeHref);
 
         return (
           <div key={group.key}>
@@ -171,26 +230,45 @@ function SidebarNav({
             </button>
             {isOpen && (
               <div id={panelId} className="mt-0.5 space-y-0.5">
-                {(group.items ?? []).map((item) => {
-                  const ItemIcon = ICON_MAP[item.href] ?? Home;
-                  const active = isActiveRoute(pathname, item.href);
+                {(group.items ?? []).map((entry) => {
+                  if (!isNavSubGroup(entry)) {
+                    return <NavLinkItem key={entry.href} item={entry} activeHref={activeHref} onNavigate={onNavigate} depth={2} />;
+                  }
+                  const key = subGroupKey(group, entry);
+                  const subPanelId = `${navId}-panel-${group.key}-${entry.key}`;
+                  const subOpen = openGroups.has(key);
+                  const subActive = entry.items.some((item) => item.href === activeHref);
+                  const SubIcon = ICON_MAP[`sub:${entry.key}`] ?? Settings2;
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={onNavigate}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        NAV_LINK_BASE,
-                        "pl-9",
-                        active
-                          ? "bg-vam-mint text-vam-ink"
-                          : "text-slate-500 hover:bg-slate-50 hover:text-vam-ink"
+                    <div key={key}>
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(key)}
+                        aria-expanded={subOpen}
+                        aria-controls={subPanelId}
+                        className={cn(
+                          NAV_LINK_BASE,
+                          "w-full pl-9",
+                          subActive && !subOpen
+                            ? "font-semibold text-vam-ink"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-vam-ink"
+                        )}
+                      >
+                        <SubIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="flex-1 text-left">{entry.label}</span>
+                        <ChevronDown
+                          className={cn("h-3.5 w-3.5 transition-transform duration-150", subOpen && "rotate-180")}
+                          aria-hidden="true"
+                        />
+                      </button>
+                      {subOpen && (
+                        <div id={subPanelId} className="ml-11 mt-0.5 space-y-0.5 border-l border-vam-line pl-1">
+                          {entry.items.map((item) => (
+                            <NavLinkItem key={item.href} item={item} activeHref={activeHref} onNavigate={onNavigate} depth={3} />
+                          ))}
+                        </div>
                       )}
-                    >
-                      <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      {item.label}
-                    </Link>
+                    </div>
                   );
                 })}
               </div>
@@ -218,12 +296,14 @@ function MobileDrawer({
   id,
   groups,
   pathname,
+  activeHref,
   adminUser,
   onClose,
 }: {
   id: string;
   groups: NavGroupDef[];
   pathname: string;
+  activeHref: string | null;
   adminUser: CurrentAdminUser;
   onClose: () => void;
 }) {
@@ -308,7 +388,7 @@ function MobileDrawer({
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        <SidebarNav groups={groups} pathname={pathname} navId="mobile-nav" onNavigate={onClose} />
+        <SidebarNav groups={groups} pathname={pathname} activeHref={activeHref} navId="mobile-nav" onNavigate={onClose} />
         <SidebarFooter adminUser={adminUser} />
       </div>
     </div>
@@ -325,8 +405,11 @@ export function AppShell({
   adminUser: CurrentAdminUser | null;
 }) {
   const pathname = usePathname();
+  // Bộ lọc trên URL phân biệt hai mục cùng một trang (Đánh giá mentor / mentee = /reviews?role_applied=…).
+  const search = useSearchParams()?.toString() ?? "";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navGroups = useMemo(() => buildNavGroups(adminUser), [adminUser]);
+  const activeHref = useMemo(() => activeNavHref(navGroups, pathname, search), [navGroups, pathname, search]);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const prevDrawerOpenRef = useRef(false);
 
@@ -398,7 +481,7 @@ export function AppShell({
             <div className="text-lg font-bold text-vam-ink">VAM OS</div>
             <div className="text-sm text-slate-500">Cổng quản trị</div>
           </div>
-          <SidebarNav groups={navGroups} pathname={pathname} navId="desktop-nav" />
+          <SidebarNav groups={navGroups} pathname={pathname} activeHref={activeHref} navId="desktop-nav" />
           <SidebarFooter adminUser={adminUser} />
         </aside>
 
@@ -408,6 +491,7 @@ export function AppShell({
             id={DRAWER_ID}
             groups={navGroups}
             pathname={pathname}
+            activeHref={activeHref}
             adminUser={adminUser}
             onClose={() => setDrawerOpen(false)}
           />
@@ -433,7 +517,7 @@ export function AppShell({
                     <Menu className="h-5 w-5" aria-hidden="true" />
                   </button>
                   {/* Hướng dẫn sử dụng của đúng trang đang xem — cạnh menu chính (BTC 02/10/2026). */}
-                  <HelpGuideButton pathname={pathname} navGroups={navGroups} />
+                  <HelpGuideButton pathname={pathname} navGroups={navGroups} activeHref={activeHref} />
                   <div>
                     <div className="text-xl font-semibold text-vam-ink">VAM OS</div>
                     <div className="text-sm text-slate-500">

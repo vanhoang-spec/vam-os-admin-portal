@@ -77,13 +77,15 @@ describe("lời thư", () => {
       participationRole
     });
 
-  it("hai bước: đặt mật khẩu, rồi đăng nhập ở đâu bằng email nào, vào mục Đánh giá", () => {
+  it("hai bước: đặt mật khẩu, rồi đăng nhập ở đâu bằng email nào, vào mục Công việc của tôi", () => {
     const { subject, text } = letter("invite");
     expect(subject).toBe("[UEH Mentoring] Tài khoản chấm hồ sơ Mùa 12");
     expect(text).toContain("Bước 1");
     expect(text).toContain("https://os.example.org/reset-password#token_hash=abc&type=invite");
     expect(text).toContain("Bước 2 — Đăng nhập tại https://os.example.org/login bằng email b@example.com và mật khẩu vừa đặt");
-    expect(text).toContain("“Đánh giá”");
+    // Menu không còn mục tên đúng “Đánh giá” (06/10/2026) — “Công việc của tôi” đứng đầu menu.
+    expect(text).toContain("“Công việc của tôi”");
+    expect(text).not.toContain("“Đánh giá”");
   });
 
   it("thư gửi lại nói link cũ đã hết dùng", () => {

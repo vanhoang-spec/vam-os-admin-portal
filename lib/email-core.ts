@@ -483,7 +483,7 @@ export function buildReviewerInviteEmail(input: {
     input.linkType === "recovery"
       ? `Ban tổ chức gửi lại đường dẫn đặt mật khẩu cho tài khoản VAM OS mà anh/chị dùng để tham gia tuyển sinh ${season}. Đường dẫn trong các thư trước (nếu có) không còn dùng được.`
       : `Cảm ơn anh/chị đã nhận lời tham gia tuyển sinh ${season}. Ban tổ chức đã tạo tài khoản trên VAM OS cho anh/chị.`;
-  const step2 = `Bước 2 — Đăng nhập tại ${input.loginUrl} bằng email ${loginEmail} và mật khẩu vừa đặt, rồi vào mục “Đánh giá” để xem các hồ sơ được phân công.`;
+  const step2 = `Bước 2 — Đăng nhập tại ${input.loginUrl} bằng email ${loginEmail} và mật khẩu vừa đặt, rồi vào mục “Công việc của tôi” (đầu menu) để xem các hồ sơ được phân công.`;
   const expiry =
     "Đường dẫn là riêng cho anh/chị, chỉ dùng được một lần và có hạn sử dụng — vui lòng không chuyển tiếp. Nếu đã hết hạn, vui lòng liên hệ ban tổ chức để nhận đường dẫn mới.";
   const trainingIntro = `Nhằm đảm bảo anh/chị có đầy đủ thông tin và thống nhất cách thức đánh giá trong quá trình phỏng vấn, ban tổ chức tổ chức buổi Training Chấm phỏng vấn Tuyển Mentee ${season} với thông tin như sau:`;
@@ -654,7 +654,7 @@ export function buildReviewBatchAssignedEmail(input: {
   ];
   if (due) lines.push(`Hạn hoàn tất: hết ngày ${due} (giờ Việt Nam).`, "");
   lines.push(
-    "Anh/chị đăng nhập VAM OS và vào mục “Đánh giá” để bắt đầu:",
+    "Anh/chị đăng nhập VAM OS và vào mục “Công việc của tôi” (đầu menu) để bắt đầu, hoặc mở thẳng link:",
     input.reviewsUrl,
     "",
     "Mỗi hồ sơ được chấm theo 5 tiêu chí (thang điểm 1–5) kèm một đề xuất.",

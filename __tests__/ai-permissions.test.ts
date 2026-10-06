@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
-import { allNavHrefs, buildNavGroups } from "@/lib/nav-model";
+import { allNavHrefs, buildNavGroups, navItemsOf } from "@/lib/nav-model";
 import { canRunAiExecutiveReport, canUseAiTools, canViewAiStatus } from "@/lib/permissions";
 
 const ROOT = join(__dirname, "..");
@@ -42,7 +42,7 @@ describe("nav chỉ chào đúng người trang cho vào", () => {
     expect(allNavHrefs(groups).includes("/ai")).toBe(canUseAiTools(role));
     if (canUseAiTools(role)) {
       // Nằm trong nhóm Vận hành, không thành nhóm riêng (trần 9 nhóm của sidebar).
-      const holders = groups.filter((group) => (group.items ?? []).some((item) => item.href === "/ai"));
+      const holders = groups.filter((group) => navItemsOf(group).some((item) => item.href === "/ai"));
       expect(holders.map((group) => group.key)).toEqual(["operations"]);
     }
   });

@@ -27,7 +27,7 @@ vi.mock("react-dom", async (importOriginal) => {
 
 import { AddBonusRuleForm, DeleteBonusRuleButton } from "@/app/admin/seasons-forms/bonus-points/bonus-rules-editor";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
-import { allNavHrefs, buildNavGroups } from "@/lib/nav-model";
+import { allNavHrefs, buildNavGroups, isNavSubGroup } from "@/lib/nav-model";
 import { canManageSubmissionBonus } from "@/lib/permissions";
 import { SUBMISSION_BONUS_PATH } from "@/lib/submission-bonus-core";
 
@@ -67,10 +67,11 @@ describe("1. vai trò", () => {
     expect(hrefs.includes(SUBMISSION_BONUS_PATH)).toBe(canManageSubmissionBonus(role));
   });
 
-  it("support_team thấy mục trong nhóm Ứng tuyển — nhóm nó vào được, không phải Quản trị", () => {
+  it("support_team thấy mục trong nhánh Tuyển Mentee — chỉ áp cho đơn mentee, không nằm ở Quản trị", () => {
     const groups = buildNavGroups(makeUser("support_team"));
     const applications = groups.find((group) => group.key === "applications");
-    expect(applications?.items?.map((item) => item.href)).toContain(SUBMISSION_BONUS_PATH);
+    const mentee = (applications?.items ?? []).find((entry) => isNavSubGroup(entry) && entry.key === "mentee");
+    expect(mentee && isNavSubGroup(mentee) ? mentee.items.map((item) => item.href) : []).toContain(SUBMISSION_BONUS_PATH);
     expect(groups.find((group) => group.key === "admin")).toBeUndefined();
   });
 });

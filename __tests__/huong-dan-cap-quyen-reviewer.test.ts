@@ -22,7 +22,10 @@ const CORE = "lib/recruitment-permissions-core.ts";
 // [câu hướng dẫn trích, file nguồn, chuỗi phải có trong file nguồn]
 const QUOTED: Array<[string, string, string]> = [
   ["Danh sách nhân sự tuyển sinh", "lib/nav-model.ts", '"Danh sách nhân sự tuyển sinh"'],
-  ["Giao hồ sơ đánh giá", "lib/nav-model.ts", '"Giao hồ sơ đánh giá"'],
+  ["Giao hồ sơ mentor", "lib/nav-model.ts", '"Giao hồ sơ mentor"'],
+  ["Giao hồ sơ mentee", "lib/nav-model.ts", '"Giao hồ sơ mentee"'],
+  ["Tuyển Mentor/Mentee", "lib/nav-model.ts", 'RECRUITMENT_NAV_LABEL = "Tuyển Mentor/Mentee"'],
+  ["Công việc của tôi", "lib/nav-model.ts", 'label: "Công việc của tôi"'],
   ["Đợt tuyển", "app/reviews/reviewer-pool/page.tsx", ">Đợt tuyển<"],
   ["Tìm theo tên, email, mentor code…", POOL_CLIENT, 'placeholder="Tìm theo tên, email, mentor code…"'],
   // Nhãn nút dựng bằng `Cấp ${rightLabel}`, rightLabel = `quyền ${nhãn nhóm viết thường}`;
@@ -61,11 +64,11 @@ describe("mỗi câu hướng dẫn trích đều có thật trên màn hình", 
 });
 
 describe("những điều hướng dẫn khẳng định về cách hệ thống chạy", () => {
-  it("thư mời dẫn tới trang đặt mật khẩu của chính hệ thống, rồi đăng nhập bằng mật khẩu và vào mục Đánh giá", () => {
+  it("thư mời dẫn tới trang đặt mật khẩu của chính hệ thống, rồi đăng nhập bằng mật khẩu và vào mục Công việc của tôi", () => {
     expect(guideText).toContain("email và mật khẩu vừa đặt");
-    expect(guideText).toContain("Đánh giá");
+    expect(guideText).toContain("vào mục Công việc của tôi");
     expect(read("lib/email.ts")).toMatch(/export async function sendReviewerInvite[\s\S]*?buildPasswordLinkUrl\(/);
-    expect(read("lib/email-core.ts")).toContain("rồi vào mục “Đánh giá”");
+    expect(read("lib/email-core.ts")).toContain("rồi vào mục “Công việc của tôi”");
   });
 
   it("hướng dẫn không còn dạy đăng nhập bằng liên kết qua email", () => {

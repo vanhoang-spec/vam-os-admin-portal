@@ -39,7 +39,9 @@ const BOOKING = "app/dat-lich/[token]/booking-form.tsx";
 // [câu hướng dẫn trích, file nguồn, chuỗi phải có trong file nguồn]
 const QUOTED: Array<[string, string, string]> = [
   ["Lịch phỏng vấn", "lib/nav-model.ts", 'label: "Lịch phỏng vấn"'],
-  ["Đánh giá", "lib/nav-model.ts", 'label: "Đánh giá"'],
+  ["Đánh giá mentor", "lib/nav-model.ts", 'label: "Đánh giá mentor"'],
+  ["Tuyển Mentor/Mentee", "lib/nav-model.ts", 'RECRUITMENT_NAV_LABEL = "Tuyển Mentor/Mentee"'],
+  ["Tuyển Mentor", "lib/nav-model.ts", 'MENTOR_RECRUITMENT_LABEL = "Tuyển Mentor"'],
   ["Danh sách nhân sự tuyển sinh", "lib/nav-model.ts", '"Danh sách nhân sự tuyển sinh"'],
   // Nhãn nút dựng bằng `Cấp ${rightLabel}` trên trang nhân sự tuyển sinh; nhãn nhóm ở
   // lib/recruitment-permissions-core.ts. Lịch này chỉ mở cho nhóm phỏng vấn MENTOR (04/10/2026).

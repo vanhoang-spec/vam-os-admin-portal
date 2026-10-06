@@ -87,7 +87,8 @@ describe("Mentor phỏng vấn mentee trực tiếp 03–04/10 — hướng dẫ
 
   it("chỉ đúng chỗ đọc Handbook và chỗ BTC cập nhật phiếu mỗi mùa (nhãn thật trên menu/nút)", () => {
     expect(text).toContain("Hướng dẫn phỏng vấn mùa này");
-    expect(text).toContain("Phỏng vấn → Phiếu chấm & hướng dẫn mentee");
+    expect(text).toContain("Tuyển Mentor/Mentee → Tuyển Mentee → Phiếu chấm & hướng dẫn mentee");
+    expect(text).toContain("Tuyển Mentor/Mentee → Tuyển Mentee → Phỏng vấn mentee trực tiếp");
     expect(text).toContain("lần cài đặt gần nhất");
     expect(text).toContain("Điểm đã chấm giữ nguyên nội dung phiếu lúc chấm");
     expect(text).toContain("điểm quy đổi tham khảo");

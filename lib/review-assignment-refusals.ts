@@ -80,13 +80,13 @@ export const ASSIGNMENT_REFUSAL_RULES: readonly AssignmentRefusalRule[] = [
     match: "Target assignee is not an active participant for this season and stage",
     refreshList: true,
     message: (work) =>
-      `Người được chọn chưa đủ điều kiện ${work} trong mùa này. Kiểm quyền của họ ở Ứng tuyển → Danh sách nhân sự tuyển sinh.`
+      `Người được chọn chưa đủ điều kiện ${work} trong mùa này. Kiểm quyền của họ ở Tuyển Mentor/Mentee → Danh sách nhân sự tuyển sinh.`
   },
   {
     match: "Reviewer is not an active participant for this season and stage",
     refreshList: true,
     message: (work) =>
-      `Có người được chọn chưa đủ điều kiện ${work} trong mùa này. Kiểm quyền của họ ở Ứng tuyển → Danh sách nhân sự tuyển sinh.`
+      `Có người được chọn chưa đủ điều kiện ${work} trong mùa này. Kiểm quyền của họ ở Tuyển Mentor/Mentee → Danh sách nhân sự tuyển sinh.`
   },
   {
     match: "One or more reviewers are not active",
