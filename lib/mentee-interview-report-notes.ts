@@ -60,7 +60,7 @@ const WAVE1_PASSED: NoteSection[] = [
         detail:
           "Kiểu Đạt phổ biến nhất. Mentee đang phân vân giữa các ngành, chuyên ngành, chưa biết mình hợp với gì; mentor cho Đạt chính vì thấy một người đồng hành sẽ giúp bạn bớt mông lung. Chưa rõ hướng không bị coi là điểm trừ.",
         quotes: [
-          "Mentor cần giúp em chuyển từ “tìm hiểu và suy nghĩ” sang “trải nghiệm, kiểm chứng, lựa chọn”",
+          "Mentor cần giúp em chuyển từ ‘tìm hiểu và suy nghĩ’ sang ‘trải nghiệm, kiểm chứng, lựa chọn’",
           "Bạn có định hướng cho công việc nhưng chưa thực sự rõ ràng, chưa biết mình thực sự cần gì"
         ]
       },

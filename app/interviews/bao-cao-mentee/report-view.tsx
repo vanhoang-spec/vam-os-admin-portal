@@ -32,6 +32,14 @@ const TH = "px-3 py-2";
 const TD = "px-3 py-2 text-slate-700";
 const NUM = "px-3 py-2 text-right tabular-nums text-slate-700";
 
+/**
+ * Lưới một cột mà cột KHÔNG được rộng hơn khung chứa. Lưới thường để cột co theo
+ * nội dung rộng nhất, nên một bảng nhiều cột đẩy cả trang tràn ngang trên màn hình
+ * hẹp (06/10/2026: khung 478px, trang rộng 620px). Có minmax(0,1fr), bảng tự cuộn
+ * trong khung vam-table-frame của nó.
+ */
+const COLUMN = "grid grid-cols-[minmax(0,1fr)]";
+
 function dayLabel(dateKey: string): string {
   // Giữa trưa giờ Việt Nam — không ca nào lệch sang ngày khác vì múi giờ.
   return sessionDayLabel(`${dateKey}T05:00:00.000Z`);
@@ -48,7 +56,7 @@ function ratio(part: number, whole: number): string {
 
 function Section({ id, title, intro, children }: { id: string; title: string; intro?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <Card id={id} className="grid gap-3 scroll-mt-20">
+    <Card id={id} className={`${COLUMN} gap-3 scroll-mt-20`}>
       <div>
         <h2 className="text-lg font-semibold text-vam-ink">{title}</h2>
         {intro ? <div className="mt-1 text-sm text-slate-600">{intro}</div> : null}
@@ -61,7 +69,7 @@ function Section({ id, title, intro, children }: { id: string; title: string; in
 function WaveBanner({ report, waves, generatedAt }: { report: InterviewReport; waves: InterviewWave[]; generatedAt: string }) {
   const { wave } = report;
   return (
-    <div className="grid gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" data-testid="wave-banner">
+    <div className={`${COLUMN} gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950`} data-testid="wave-banner">
       <p className="text-base font-semibold">{wave.label}</p>
       <p>
         Báo cáo này <strong>chỉ tính hồ sơ đặt lịch vào các ca phỏng vấn ngày {joinVi(wave.dateKeys.map(dayLabel))}</strong>.
@@ -214,7 +222,7 @@ function GroupCell({ score }: { score: GroupScore }) {
 function InterviewerTable({ report }: { report: InterviewReport }) {
   const { rows, all } = report.interviewers;
   return (
-    <div className="grid gap-2">
+    <div className={`${COLUMN} gap-2`}>
       <p className="text-sm text-slate-600">
         Trung bình chung của {formatInt(all.forms)} phiếu: <strong>{formatScore(all.avg)}</strong>
         {REPORT_GROUPS.map((g) => ` · ${REPORT_GROUP_LABELS[g]}: ${formatScore(all.byGroup[g].avg)}`).join("")}.
@@ -256,13 +264,13 @@ function InterviewerTable({ report }: { report: InterviewReport }) {
 
 function NotesBlock({ sections }: { sections: NoteSection[] }) {
   return (
-    <div className="grid gap-4">
+    <div className={`${COLUMN} gap-4`}>
       {sections.map((section) => (
-        <div key={section.title} className="grid gap-2">
+        <div key={section.title} className={`${COLUMN} gap-2`}>
           <h4 className="font-semibold text-vam-ink">{section.title}</h4>
           {section.intro ? <p className="text-sm text-slate-600">{section.intro}</p> : null}
           {section.patterns?.length ? (
-            <ol className="grid gap-2">
+            <ol className={`${COLUMN} gap-2`}>
               {section.patterns.map((p) => (
                 <li key={p.title} className="rounded-md border border-vam-line p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -325,7 +333,7 @@ export function ReportView({
   ];
 
   return (
-    <div className="grid gap-4">
+    <div className={`${COLUMN} gap-4`} data-testid="report-root">
       <PageHeader
         title="Báo cáo phỏng vấn mentee"
         description="Kết quả phỏng vấn trực tiếp theo từng đợt: phân loại hồ sơ, năm học, ngành nghề mục tiêu, điểm theo người phỏng vấn và mẫu hình trong nhận xét của mentor."
@@ -398,9 +406,9 @@ export function ReportView({
           <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="notes-drift">{drift}</p>
         ) : null}
         {notes ? (
-          <div className="grid gap-6">
+          <div className={`${COLUMN} gap-6`}>
             {REPORT_GROUPS.map((g) => (
-              <div key={g} className="grid gap-3">
+              <div key={g} className={`${COLUMN} gap-3`}>
                 <h3 className="border-b border-vam-line pb-1 text-base font-semibold text-vam-ink">
                   {REPORT_GROUP_LABELS[g]} — {formatInt(notes.basis[g])} phiếu
                 </h3>
@@ -408,7 +416,7 @@ export function ReportView({
               </div>
             ))}
             {notes.dataQuality?.length ? (
-              <div className="grid gap-1">
+              <div className={`${COLUMN} gap-1`}>
                 <h3 className="font-semibold text-vam-ink">Chất lượng ghi chép trên phiếu</h3>
                 <ul className="list-disc pl-5 text-sm text-slate-700">
                   {notes.dataQuality.map((d) => <li key={d}>{d}</li>)}
