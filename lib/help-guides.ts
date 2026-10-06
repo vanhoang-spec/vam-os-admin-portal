@@ -76,6 +76,22 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     ],
     updated: "04/10/2026"
   },
+  "/interviews/bao-cao-mentee": {
+    title: "Báo cáo phỏng vấn mentee",
+    summary: "Kết quả phỏng vấn mentee theo TỪNG ĐỢT: (a) Đạt / (b) Không đạt / (c) Cần BTC xem xét theo năm học và ngành nghề mục tiêu, điểm quy đổi theo người phỏng vấn, mẫu hình trong nhận xét của mentor, và nhóm được mentor chọn ngay so với nhóm còn lại.",
+    steps: [
+      "Đọc băng màu vàng đầu trang trước: báo cáo đang xem thuộc đợt nào, gồm những ngày phỏng vấn nào, số liệu đọc lúc mấy giờ. Có từ hai đợt trở lên thì bấm tên đợt để chuyển.",
+      "Dùng mục lục để nhảy tới phần cần xem: tổng quan, năm học, ngành nghề, điểm, mẫu hình nhận xét, được chọn ngay so với còn lại.",
+      "Bảng năm học và ngành: mỗi ô là số hồ sơ kèm tỷ lệ trong cột; cột cuối là tỷ lệ Đạt của dòng.",
+      "Bảng “Theo từng người phỏng vấn”: gõ tên vào ô tìm để lọc. Ô in nhạt là người đó chấm dưới 3 phiếu trong nhóm — chưa đủ để nói chấm chặt hay rộng."
+    ],
+    notes: [
+      "Mỗi đợt một báo cáo, không cộng dồn: đợt sau tự xuất hiện khi BTC tạo ca cho các ngày mới.",
+      "Số liệu ở các bảng đọc trực tiếp mỗi lần mở trang. Phần mẫu hình nhận xét là bản phân tích viết sau đợt, ghi rõ ngày viết và số phiếu đã đọc; nếu sau đó có thêm phiếu, trang hiện câu báo.",
+      "Chỉ Core team / Support team có quyền vận hành mùa xem được; mentor phỏng vấn không xem được vì trang có điểm theo từng người phỏng vấn."
+    ],
+    updated: "06/10/2026"
+  },
   "/interviews/ca-mentee": {
     title: "Ca phỏng vấn mentee",
     summary: "Tình hình các ca phỏng vấn mentee: số chỗ, số người đã đặt, ca còn trống/đã kín; BTC cấu hình ghế, địa điểm và gửi thư mời chọn ca.",
