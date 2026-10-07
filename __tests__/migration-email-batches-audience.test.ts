@@ -56,16 +56,19 @@ describe("cột", () => {
     const initial = Array.from(String(block?.[1] ?? "").matchAll(/'([a-z_]+)'/g), (m) => m[1]);
     expect(initial).toEqual(["mentee", "mentor", "both"]);
 
-    const widening = readFileSync(
-      join(ROOT, "supabase", "migrations", "20260913210000_email_batches_audience_groups.sql"),
-      "utf8"
-    );
-    // Đối số thứ ba của regexp_replace là một chuỗi SQL, trong đó dấu nháy đơn
-    // được viết đôi — nên đọc cả `''` như một phần của chuỗi.
-    const appended = widening.match(/regexp_replace\(\s*existing,\s*'[^']*',\s*'((?:[^']|'')*)'/);
-    expect(appended).not.toBeNull();
-    const added = Array.from(String(appended?.[1] ?? "").matchAll(/''([a-z_]+)''/g), (m) => m[1]);
-    expect(added.length).toBeGreaterThan(0);
+    // Mỗi lần thêm nhóm là một migration nới tiếp: 20260913210000 (staff,
+    // returning_mentor, event), 20261007234500 (mentee_cv_rejected).
+    const added: string[] = [];
+    for (const file of ["20260913210000_email_batches_audience_groups.sql", "20261007234500_nhom_nhan_thu_mentee_rot_ho_so.sql"]) {
+      const widening = readFileSync(join(ROOT, "supabase", "migrations", file), "utf8");
+      // Đối số thứ ba của regexp_replace là một chuỗi SQL, trong đó dấu nháy đơn
+      // được viết đôi — nên đọc cả `''` như một phần của chuỗi.
+      const appended = widening.match(/regexp_replace\(\s*existing,\s*'[^']*',\s*'((?:[^']|'')*)'/);
+      expect(appended, file).not.toBeNull();
+      const values = Array.from(String(appended?.[1] ?? "").matchAll(/''([a-z_]+)''/g), (m) => m[1]);
+      expect(values.length, file).toBeGreaterThan(0);
+      added.push(...values);
+    }
 
     expect([...initial, ...added].sort()).toEqual([...BULK_AUDIENCES].sort());
   });

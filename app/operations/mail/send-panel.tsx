@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import {
+  BULK_AUDIENCE_HINTS,
   BULK_AUDIENCE_LABELS,
   BULK_SEND_CHUNK,
   FIXED_BULK_AUDIENCES,
@@ -21,6 +22,11 @@ import {
 } from "@/app/actions/bulk-mail";
 
 export type SendableTemplate = { id: string; name: string; subject: string };
+
+/** Chỉ hạ chữ đầu: hạ cả câu thì "(CV)" thành "(cv)", "BTC" thành "btc". */
+function lowerFirst(label: string): string {
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
 
 export type BatchSummary = {
   id: string;
@@ -187,7 +193,7 @@ export function SendPanel({
       ? selectedEvent
         ? `người đã đăng ký ${selectedEvent.label}${useSeries ? " (cả chuỗi)" : ""}`
         : "người đã đăng ký sự kiện"
-      : BULK_AUDIENCE_LABELS[audience].toLowerCase();
+      : lowerFirst(BULK_AUDIENCE_LABELS[audience]);
 
   const runningBatches = batches.filter((row) => row.status === "running");
 
@@ -265,6 +271,11 @@ export function SendPanel({
               <option value="event">{BULK_AUDIENCE_LABELS.event}…</option>
             ) : null}
           </select>
+          {audience !== "event" ? (
+            <p className="mt-1 text-xs text-slate-600" data-testid="send-audience-hint">
+              {BULK_AUDIENCE_HINTS[audience]}
+            </p>
+          ) : null}
           {target.unreachable > 0 ? (
             <p className="mt-1 text-xs text-amber-800">
               {target.unreachable} người không nhận được: thiếu email hoặc thiếu họ tên.

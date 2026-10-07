@@ -182,6 +182,7 @@ export const PAGE_ORDER = {
   interview_slot_invites: { strategy: "keyset", key: "id" },
   mentee_interview_bookings: { strategy: "keyset", key: "id" },
   mentee_interview_invites: { strategy: "keyset", key: "id" },
+  mentee_interview_operations: { strategy: "keyset", key: "id" },
   interview_slots: { strategy: "keyset", key: "id" },
   interviewer_profiles: { strategy: "keyset", key: "id" },
   matches: { strategy: "keyset", key: "id" },
@@ -301,7 +302,7 @@ export async function readAllPages<T extends Record<string, any>>(
         // De-duplication would collapse distinct rows onto one key. Refuse.
         return { data: rows, error: pagingError(table, `ordering column missing or null in the result (${keys.join(",")})`) };
       }
-      const identity = keys.map((column) => String(row[column])).join(" ");
+      const identity = keys.map((column) => String(row[column])).join(String.fromCharCode(0));
       if (seen.has(identity)) continue;
       seen.add(identity);
       rows.push(row);

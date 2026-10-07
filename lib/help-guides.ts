@@ -274,6 +274,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Bấm “Tạo bản nháp” (hoặc “Lưu thay đổi” khi sửa) rồi báo quản trị viên duyệt. Bấm vào tên một mẫu trong danh sách để mở ra sửa.",
       "Quản trị viên: mở mẫu đang là “Bản nháp”, gõ lại đúng tiêu đề vào ô “Gõ lại tiêu đề ở trên” rồi bấm “Duyệt mẫu thư”.",
       "Quản trị viên: ở “Gửi hàng loạt”, chọn “Mẫu thư” và “Gửi cho” (có cả người đã đăng ký một sự kiện), bấm “Gửi thử cho tôi” và kiểm hộp thư của mình trước.",
+      "Đọc dòng mô tả ngay dưới ô “Gửi cho” trước khi gửi: “Mentee đang tham gia mùa này” là các bạn ĐÃ ĐẬU; thư báo rớt vòng hồ sơ thì chọn “Mentee rớt vòng hồ sơ (CV)”.",
       "Gõ lại đúng số người nhận vào ô “Gõ lại số … để xác nhận”, bấm “Bắt đầu gửi”. Mỗi lần chạy gửi tối đa 25 thư; phần còn lại bấm “Gửi tiếp” ở “Lô đang gửi dở”."
     ],
     notes: [
