@@ -5,7 +5,7 @@ import { TableSearch } from "@/components/table-search";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getRound2Data } from "@/lib/matching-round2";
 import { REVIEW_FLAG } from "@/lib/matching-round2-classify-core";
-import type { Round2Row } from "@/lib/matching-round2-core";
+import { byGroupThenName, type Round2Row } from "@/lib/matching-round2-core";
 import { INDUSTRY_GROUPS, industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canBrowseOperations } from "@/lib/permissions";
 import { ClassifyPanel, GroupEditForm } from "./round2-forms";
@@ -109,7 +109,7 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
   const drift = board.rows.filter((r) => r.assignment?.driftGroup).length;
   const pendingMentors = board.pending.filter((r) => r.person.role === "mentor").length;
   const pendingMentees = board.pending.filter((r) => r.person.role === "mentee").length;
-  const rows = filterRows(board.rows, search);
+  const rows = filterRows(board.rows, search).sort(byGroupThenName);
   const proposalByGroup = INDUSTRY_GROUPS.map((g) => ({
     label: industryGroupLabel(g.code),
     mentors: board.pending.filter((r) => r.person.role === "mentor" && r.proposal.group === g.code).length,

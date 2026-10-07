@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { CSV_UTF8_BOM, toCsv } from "@/lib/csv-export";
+import { newestFirst } from "@/lib/list-order";
 import { readAllPages } from "@/lib/paged-read";
 import { canAssignReview } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
@@ -160,6 +161,7 @@ export async function GET(request: Request) {
       intake_batch_id,
       status,
       submitted_at,
+      created_at,
       raw_payload,
       acquisition_channel
     `,
@@ -269,7 +271,9 @@ export async function GET(request: Request) {
   const yesNo = (value: boolean) => (value ? "có" : "không");
 
   const body: unknown[][] = [];
-  for (const app of applications ?? []) {
+  // Đơn mới nhất trước, cùng thứ tự với trang Hồ sơ (BTC 07/10/2026). Đọc phân
+  // trang trả về theo id ngẫu nhiên, nên không xếp là file không theo thứ tự nào.
+  for (const app of newestFirst(applications ?? [], (row) => row.created_at, (row) => row.submitted_at)) {
     const derived = deriveDecisions(decisionsByApplication.get(String(app.id)) ?? []);
     const stage = currentStage(app.status, derived);
 

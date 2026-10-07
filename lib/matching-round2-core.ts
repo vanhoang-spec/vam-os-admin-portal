@@ -20,6 +20,7 @@ import {
   type MentorInput
 } from "@/lib/matching-round2-classify-core";
 import { INDUSTRY_GROUPS, industryGroupLabel } from "@/lib/matching-round2-groups-core";
+import { compareNewest } from "@/lib/list-order";
 import { effectiveMentorCapacity } from "@/lib/mentor-capacity";
 
 export const ROUND2_MENTOR_CAP = 2;
@@ -158,6 +159,16 @@ function byName(a: Round2Row, b: Round2Row): number {
   return a.person.personId < b.person.personId ? -1 : a.person.personId > b.person.personId ? 1 : 0;
 }
 
+/**
+ * Thứ tự hiển thị danh sách người của Vòng 2: nhóm 1→9, chưa phân nhóm cuối,
+ * trong nhóm theo tên. `board.rows` giữ thứ tự person_id để phân loại tất định;
+ * trang, báo cáo và file CSV đều xếp lại qua hàm này cho cùng một thứ tự.
+ */
+export function byGroupThenName(a: Round2Row, b: Round2Row): number {
+  const g = (a.group ?? 99) - (b.group ?? 99);
+  return g !== 0 ? g : byName(a, b);
+}
+
 export function buildRound2Board(input: {
   people: Round2Person[];
   assignments: Round2Assignment[];
@@ -240,7 +251,8 @@ export function buildRound2Board(input: {
       mentor: (match.mentorPersonId && mentorRows.get(match.mentorPersonId)) || null,
       mentee: (match.menteePersonId && menteeRows.get(match.menteePersonId)) || null
     }))
-    .sort((a, b) => String(a.match.createdAt ?? "").localeCompare(String(b.match.createdAt ?? "")));
+    // Cặp vừa chọn lên đầu — BTC 07/10/2026: mọi danh sách bản ghi xếp mới nhất trước.
+    .sort((a, b) => compareNewest(a.match.createdAt, b.match.createdAt) || (a.match.id < b.match.id ? -1 : a.match.id > b.match.id ? 1 : 0));
 
   const anomalies: Round2Anomaly[] = [];
   for (const row of [...rows].sort(byName)) {

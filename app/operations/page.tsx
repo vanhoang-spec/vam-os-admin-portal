@@ -8,6 +8,7 @@ import { getOperationsData, keyById } from "@/lib/data";
 import { computeProgramOperationsKpis } from "@/lib/operations-kpis";
 import { currentMonthVN, isOperationalMonth, operationalMonthRange, resolveOperationsMonth } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import { newestFirst } from "@/lib/list-order";
 import { canBrowseOperations } from "@/lib/permissions";
 import { canOperateAnyScope, canReadSeason, getAdminScopeContext } from "@/lib/program-scope";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
@@ -370,8 +371,9 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
     .sort((a, b) => String(b.meeting_date ?? "").localeCompare(String(a.meeting_date ?? "")))
     .slice(0, 30);
 
-  const outlierRecapRows: OutlierRecapRow[] = outlierRecaps
-    .map((recap) => {
+  // Mới nhất trước như mọi danh sách bản ghi (BTC 07/10/2026); trước đó xếp tháng tăng dần.
+  const outlierRecapRows: OutlierRecapRow[] = newestFirst(
+    outlierRecaps.map((recap) => {
       const mentee = recap.mentee_person_id ? peopleById.get(recap.mentee_person_id) : undefined;
       const mentor = recap.mentor_person_id ? peopleById.get(recap.mentor_person_id) : undefined;
       return {
@@ -380,9 +382,10 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
         mentor,
         profilePersonId: recap.mentee_person_id ?? recap.mentor_person_id ?? null
       };
-    })
-    .sort((a, b) => String(a.meeting_month ?? "").localeCompare(String(b.meeting_month ?? "")) || String(b.meeting_date ?? "").localeCompare(String(a.meeting_date ?? "")))
-    .slice(0, OUTLIER_RECAP_LIMIT);
+    }),
+    (recap) => recap.meeting_date,
+    (recap) => recap.meeting_month
+  ).slice(0, OUTLIER_RECAP_LIMIT);
 
   const healthData = [
     { name: "Mentee active tháng đã chốt", value: activeClosedMonthCount },

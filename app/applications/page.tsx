@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { canAssignReview, canDecideAnyApplicationResult } from "@/lib/permissions";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import { newestFirst } from "@/lib/list-order";
 
 
 // ── Row type ──────────────────────────────────────────────────────────────────
@@ -79,7 +80,10 @@ export default async function ApplicationsPage() {
     reviewsByAppId.get(review.application_id)!.push(review);
   }
 
-  const rows: Row[] = applications.data.map((application) => {
+  // Xếp trước theo giờ nộp thật: bảng xếp "Ngày nộp mới nhất" theo cột DATE, và
+  // phép xếp giữ nguyên thứ tự các đơn cùng ngày — nên trong một ngày, đơn nộp
+  // sau cũng phải đứng trước (BTC 07/10/2026).
+  const rows: Row[] = newestFirst(applications.data, (application) => application.created_at, (application) => application.submitted_at).map((application) => {
     const person = application.person_id ? peopleById.get(application.person_id) : undefined;
     const season = application.season_id ? seasonsById.get(application.season_id) : undefined;
     const seasonCode = season?.code ?? season?.name ?? null;

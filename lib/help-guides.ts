@@ -182,7 +182,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     summary: "Hộp việc cá nhân: liệt kê các phân công đánh giá hồ sơ và phỏng vấn đang giao cho chính tài khoản của bạn, kèm trạng thái và hạn hoàn tất.",
     steps: [
       "Xem dải tóm tắt “Cần làm”, “Đang làm”, “Quá hạn”, “Hoàn tất” để biết khối lượng việc của mình.",
-      "Bấm “Tất cả”, “Đánh giá hồ sơ” hoặc “Phỏng vấn” để lọc theo loại việc; việc quá hạn tô đỏ và luôn nằm đầu danh sách.",
+      "Bấm “Tất cả”, “Đánh giá hồ sơ” hoặc “Phỏng vấn” để lọc theo loại việc. Việc còn phải làm luôn nằm trên cùng (việc quá hạn tô đỏ đứng đầu, rồi đến hạn gần nhất); việc đã nộp xếp bên dưới, mới nhất trước.",
       "Bấm “Mở” (việc mới), “Tiếp tục” (đang làm) hoặc “Xem lại” (đã nộp) để mở chi tiết ngay trên danh sách.",
       "Việc “Phỏng vấn” mentor đã đặt lịch hiện dòng “Lịch phỏng vấn: …” (ngày, giờ Việt Nam) ngay trên danh sách.",
       "Chấm điểm trong khung chi tiết, bấm “Lưu nháp” để lưu tạm hoặc “Nộp Review” khi đã chấm xong.",
@@ -323,7 +323,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     summary: "Danh bạ hồ sơ người tham gia trong hệ thống, gồm mentor và mentee của các mùa. Dùng để tra cứu một người và mở hồ sơ CRM đầy đủ của họ.",
     steps: [
       "Gõ tên, email hoặc số điện thoại vào ô “Tìm theo tên, email hoặc số điện thoại”.",
-      "Thu hẹp bằng ô “Giới tính”; bấm “Xoá bộ lọc” để xem lại toàn bộ. Dùng “Trước” / “Sau” cuối bảng để chuyển trang.",
+      "Thu hẹp bằng ô “Giới tính”; bấm “Xoá bộ lọc” để xem lại toàn bộ. Mặc định người mới thêm gần đây đứng đầu; chọn “Tên A-Z” ở ô sắp xếp để xem theo tên. Dùng “Trước” / “Sau” cuối bảng để chuyển trang.",
       "Bấm vào một dòng để mở hồ sơ: “Trạng thái tham gia”, “Lịch sử VAM”, “Ghi chú CRM”, các match và hoạt động sự kiện của người đó.",
       "Trong hồ sơ, ghi lại liên hệ bằng “Thêm ghi chú CRM”; người nghỉ mùa này thì dùng “Chuyển sang Không tham dự” ở khung “Trạng thái tham gia”.",
       "Hồ sơ trùng, nhập sai hoặc thử nghiệm: bấm “Xoá khỏi hệ thống”, gõ lại họ tên, ghi “Lý do xoá” rồi bấm “Xoá hẳn khỏi hệ thống”."

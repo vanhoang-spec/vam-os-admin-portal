@@ -9,6 +9,7 @@ import {
   getSeasons
 } from "@/lib/data";
 import { canDecideAnyApplicationResult } from "@/lib/permissions";
+import { newestFirst } from "@/lib/list-order";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getStageRequirements } from "@/lib/recruitment-stage-requirements";
 import { applicationStatusLabel } from "@/lib/ui-labels";
@@ -161,7 +162,9 @@ export default async function BulkInviteInterviewPage(props: {
     ? eligible.filter((app) => recommendationOf(String(app.id)) === recommendation)
     : eligible;
 
-  const rows: BulkInviteRow[] = shown.slice(0, BULK_INVITE_MAX).map((app) => ({
+  // Đơn mới nhất trước, như trang Hồ sơ (BTC 07/10/2026). Không xếp thì
+  // BULK_INVITE_MAX dòng cắt ra là các dòng bất kỳ theo id ngẫu nhiên.
+  const rows: BulkInviteRow[] = newestFirst(shown, (app) => app.created_at, (app) => app.submitted_at).slice(0, BULK_INVITE_MAX).map((app) => ({
     id: String(app.id),
     fullName: String(app.full_name ?? app.email_primary ?? app.id),
     role: String(app.role_applied ?? "-"),

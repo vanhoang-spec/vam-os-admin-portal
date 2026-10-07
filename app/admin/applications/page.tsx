@@ -8,6 +8,7 @@ import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Application, Season } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import { newestFirst } from "@/lib/list-order";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +83,8 @@ export default async function AdminApplicationsPage() {
     return isPilotSeason;
   });
 
-  const rows: Row[] = pilotApplications.map((app) => {
+  // Đơn cùng ngày nộp: nộp sau đứng trước (phép xếp theo ngày giữ thứ tự này).
+  const rows: Row[] = newestFirst(pilotApplications, (app) => app.created_at, (app) => app.submitted_at).map((app) => {
     const season = app.season_id ? seasonsById.get(app.season_id) : undefined;
     const seasonCode = season?.code ?? null;
     const phonePrimary = (app as Record<string, unknown>).phone_primary as string | null | undefined;

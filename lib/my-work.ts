@@ -37,6 +37,7 @@
  * testable at an exact instant rather than "whatever the clock said".
  */
 import { isApplicationRecruitmentOperational } from "@/lib/application-review-assignability";
+import { parseInstant } from "@/lib/list-order";
 
 /** Canonical review rounds that surface as My Work items in v1. */
 export const MY_WORK_PROFILE_ROUND = "profile_screening";
@@ -95,6 +96,8 @@ export type MyWorkItem = {
   bucket: MyWorkBucket;
   /** ISO string, surfaced in the UI as "Hạn hoàn tất". */
   dueAt: string | null;
+  /** Lúc nộp phiếu (ISO) — mốc dự phòng để xếp việc đã nộp khi không có lịch lẫn hạn. */
+  submittedAt: string | null;
   overdue: boolean;
   dueSoon: boolean;
   /** "Mở" | "Tiếp tục" | "Xem lại" */
@@ -245,6 +248,7 @@ export function buildMyWorkItems(input: {
       statusLabel: statusLabel(review.status),
       bucket: bucketFor(review.status),
       dueAt: review.due_at ?? null,
+      submittedAt: review.submitted_at ?? null,
       overdue: isOverdue(review.due_at, review.status, now),
       dueSoon: isDueSoon(review.due_at, review.status, now),
       actionLabel: actionLabel(review.status),
@@ -256,17 +260,47 @@ export function buildMyWorkItems(input: {
   return sortMyWorkItems(items);
 }
 
+const instant = parseInstant;
+
+/** Mốc giờ hiện trên dòng của một việc đã nộp: lịch phỏng vấn, không có thì hạn, không có nữa thì lúc nộp. */
+function doneInstant(item: MyWorkItem): number | null {
+  return instant(item.interviewAt) ?? instant(item.dueAt) ?? instant(item.submittedAt);
+}
+
+/** Hai mốc có thể vắng; dòng không có mốc luôn xuống cuối, bất kể chiều xếp. */
+function compareInstants(a: number | null, b: number | null, direction: 1 | -1): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return (a - b) * direction;
+}
+
 /**
- * Most urgent first: overdue, then soonest deadline, then undated work last.
- * `reviewId` breaks ties so the order is stable across renders.
+ * Việc còn nợ lên trên cùng, việc đã nộp xuống dưới.
+ *
+ * BTC 07/10/2026: cả danh sách từng xếp chung theo hạn tăng dần, nên phiếu đã
+ * nộp từ 29/09 đứng đầu và hai buổi phỏng vấn ngày mai bị chôn dưới tám phiếu
+ * đã xong.
+ *
+ * - Việc còn nợ (Cần làm, Đang làm, Cần làm rõ): quá hạn trước, rồi hạn gần
+ *   nhất. Đây là hàng việc phải làm, nên cái gấp nhất đứng đầu.
+ * - Việc đã nộp: mới nhất trước, theo đúng mốc giờ hiện trên dòng. Xếp theo lúc
+ *   nộp thì một buổi 13:00 nộp muộn sẽ đứng trên buổi 14:00 nộp sớm, và người
+ *   đọc thấy ngày giờ trên màn hình không theo thứ tự nào.
+ *
+ * So bằng Date.parse chứ không so chuỗi: lịch và hạn đến từ hai nguồn, không
+ * chắc cùng một dạng ISO. `reviewId` phá hoà để thứ tự không nhảy giữa hai lần vẽ.
  */
 export function sortMyWorkItems(items: MyWorkItem[]): MyWorkItem[] {
   return [...items].sort((a, b) => {
+    const aDone = a.bucket === "done";
+    const bDone = b.bucket === "done";
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    if (aDone) {
+      return compareInstants(doneInstant(a), doneInstant(b), -1) || a.reviewId.localeCompare(b.reviewId);
+    }
     if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
-    if (a.dueAt === null && b.dueAt === null) return a.reviewId.localeCompare(b.reviewId);
-    if (a.dueAt === null) return 1;
-    if (b.dueAt === null) return -1;
-    return a.dueAt.localeCompare(b.dueAt) || a.reviewId.localeCompare(b.reviewId);
+    return compareInstants(instant(a.dueAt), instant(b.dueAt), 1) || a.reviewId.localeCompare(b.reviewId);
   });
 }
 

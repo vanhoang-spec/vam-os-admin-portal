@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getApplications, getIntakeBatches } from "@/lib/data";
+import { newestFirst } from "@/lib/list-order";
 import { canDecideAnyApplicationResult } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
@@ -28,7 +29,8 @@ export default async function BulkDecisionPage(props: { searchParams: Promise<{ 
     (!roleApplied || app.role_applied === roleApplied) &&
     (!status || app.status === status)
   );
-  const rows = filtered.slice(0, 500).map(app => ({
+  // Đơn mới nhất trước, như trang Hồ sơ (BTC 07/10/2026).
+  const rows = newestFirst(filtered, app => app.created_at, app => app.submitted_at).slice(0, 500).map(app => ({
     id: app.id,
     fullName: String(app.full_name ?? app.email_primary ?? app.id),
     role: String(app.role_applied ?? "-"),

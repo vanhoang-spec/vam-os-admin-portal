@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches, getReviewerPool, getReviewEligibleReviewers } from "@/lib/data";
+import { byVietnameseName } from "@/lib/list-order";
 import { canAssignReview, canManageReviewers, canManageUsers, canReview } from "@/lib/permissions";
 import { PARTICIPATION_GROUPS, type ParticipationRole } from "@/lib/recruitment-permissions-core";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
@@ -140,7 +141,9 @@ export default async function ReviewerPoolPage(props: { searchParams: Promise<{ 
 
       {/* Pool table */}
       <ReviewerPoolClient
-        rows={pool.data ?? []}
+        // Danh sách người: theo tên. Dữ liệu đọc theo id ngẫu nhiên, và phần tài khoản
+        // BTC được nối vào cuối, nên không xếp thì bảng không theo thứ tự nào.
+        rows={byVietnameseName(pool.data ?? [], (row) => row.full_name)}
         seasonId={seasonId}
         activeIds={activeIds}
         canGrantMentor={canGrantMentor}

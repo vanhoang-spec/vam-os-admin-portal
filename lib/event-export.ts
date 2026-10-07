@@ -4,6 +4,7 @@ import { csvCell } from "@/lib/csv-export";
 import { formatDateTime, formatTime } from "@/lib/utils";
 import { attendanceStatusLabel, eventRegistrationStatusLabel } from "@/lib/event-constants";
 import { collectBadges, type CheckinStep } from "@/lib/event-checkin-steps";
+import { compareNewest, parseInstant, type Instant } from "@/lib/list-order";
 
 /**
  * lib/event-export.ts
@@ -161,6 +162,28 @@ function scanHistory(scans: ExportScan[], steps?: readonly CheckinStep[]): strin
   return collectBadges(scans, steps)
     .map((badge) => `${badge.label} ${formatTime(badge.scannedAt)}`)
     .join("; ");
+}
+
+/**
+ * Thứ tự dòng của file: buổi theo thứ tự diễn ra (số buổi, rồi giờ bắt đầu),
+ * trong mỗi buổi đăng ký mới nhất trước — cùng thứ tự với trang sự kiện (BTC
+ * 07/10/2026).
+ *
+ * Trước đó database sắp theo event_id rồi giờ đăng ký tăng dần. event_id là UUID
+ * ngẫu nhiên, nên file chỉ gom được theo buổi chứ không đúng thứ tự buổi.
+ */
+export function orderRegistrationsForExport(rows: readonly ExportRegistration[], sessions: Map<string, ExportSession>): ExportRegistration[] {
+  const sessionOf = (row: ExportRegistration) => sessions.get(String(row.event_id ?? ""));
+  const last = Number.MAX_SAFE_INTEGER;
+  return [...rows].sort((a, b) => {
+    const x = sessionOf(a);
+    const y = sessionOf(b);
+    const bySeries = (x?.seriesIndex ?? last) - (y?.seriesIndex ?? last);
+    if (bySeries !== 0) return bySeries;
+    const byStart = (parseInstant(x?.startsAt) ?? last) - (parseInstant(y?.startsAt) ?? last);
+    if (byStart !== 0) return byStart;
+    return compareNewest(a.registered_at as Instant, b.registered_at as Instant);
+  });
 }
 
 /** Bảng hoàn chỉnh, kèm dòng tiêu đề. `scans` tra theo mã dòng đăng ký. */

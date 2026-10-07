@@ -3,7 +3,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { privateExportHeaders } from "@/lib/application-export-access";
 import { CSV_UTF8_BOM, toCsv } from "@/lib/csv-export";
 import { getRound2Data } from "@/lib/matching-round2";
-import type { Round2Row } from "@/lib/matching-round2-core";
+import { byGroupThenName, type Round2Row } from "@/lib/matching-round2-core";
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canAssignReview } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/utils";
@@ -57,6 +57,7 @@ export async function GET(request: Request) {
       ["Nhóm", "Mentor", "Email", "Chức danh", "Đăng ký", "Đang có", "Còn"],
       ...board.rows
         .filter((r) => r.person.role === "mentor" && r.receivesList)
+        .sort(byGroupThenName)
         .map((r) => [industryGroupLabel(r.group), r.person.name, r.person.email ?? "", detail(r, "Chức danh"), r.capacity, r.activeMatches.length, r.slots])
     ];
   } else if (list === "mentee") {
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
       ["Nhóm", "Mentee", "Email", "Chức năng mục tiêu", "Ngành mục tiêu", "Ngành học", "Năm học"],
       ...board.rows
         .filter((r) => r.person.role === "mentee" && r.menteeState === "visible" && r.group !== null)
+        .sort(byGroupThenName)
         .map((r) => [
           industryGroupLabel(r.group),
           r.person.name,

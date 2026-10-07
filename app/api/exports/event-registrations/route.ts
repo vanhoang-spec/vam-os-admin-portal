@@ -7,6 +7,7 @@ import { buildCheckinSteps, checkinStepsOf } from "@/lib/event-checkin-steps";
 import {
   buildEventRegistrationCsv,
   exportFileName,
+  orderRegistrationsForExport,
   type ExportScan,
   type ExportSession,
   type ExportSurvey
@@ -114,10 +115,7 @@ export async function GET(request: Request) {
     .from("event_registrations")
     .select("*")
     .in("event_id", ids)
-    // Buổi trước, rồi tới thứ tự đăng ký: mở file ra là đọc được ngay theo
-    // buổi, không phải tự sắp lại trong Excel.
-    .order("event_id", { ascending: true })
-    .order("registered_at", { ascending: true });
+    .order("registered_at", { ascending: false });
 
   if (registrationError) {
     return NextResponse.json({ error: "Không đọc được danh sách đăng ký." }, { status: 500 });
@@ -160,7 +158,7 @@ export async function GET(request: Request) {
   }
 
   const csv = buildEventRegistrationCsv(
-    (registrations ?? []) as Array<Record<string, unknown>>,
+    orderRegistrationsForExport((registrations ?? []) as Array<Record<string, unknown>>, sessions),
     sessions,
     scans,
     surveys

@@ -403,6 +403,31 @@ describe("recruitment results — source fields projection", () => {
   });
 });
 
+// ── Thứ tự dòng: mới nhất trước (BTC 07/10/2026) ────────────────────────────────
+
+describe("thứ tự dòng trong file xuất — mới nhất trước", () => {
+  it("kết quả tuyển chọn: đơn nộp sau đứng trước, theo giờ nộp thật chứ không theo id", async () => {
+    db.tables.applications = [
+      application({ id: uuid(1), created_at: "2026-08-01T10:00:00+00:00" }),
+      application({ id: uuid(2), created_at: "2026-08-05T09:00:00.000Z" }),
+      application({ id: uuid(3), created_at: "2026-08-03T22:00:00+07:00" })
+    ];
+    const rows = parseCsv(await (await resultsGet(req("/x", `season_id=${SEASON}`))).text());
+    expect(rows.slice(1).map((row) => row[0])).toEqual([uuid(2), uuid(3), uuid(1)]);
+  });
+
+  it("điểm chấm: phiếu nộp gần nhất trước, phiếu chưa nộp xuống cuối", async () => {
+    db.tables.applications = [application({ id: uuid(1) }), application({ id: uuid(2) }), application({ id: uuid(3) })];
+    db.tables.application_reviews = [
+      review({ id: uuid(1), application_id: uuid(1), submitted_at: "2026-08-02T00:00:00Z" }),
+      review({ id: uuid(2), application_id: uuid(2), status: "assigned", submitted_at: null }),
+      review({ id: uuid(3), application_id: uuid(3), submitted_at: "2026-08-09T00:00:00Z" })
+    ];
+    const rows = parseCsv(await (await scoresGet(req("/x", `season_id=${SEASON}`))).text());
+    expect(rows.slice(1).map((row) => row[0])).toEqual([uuid(3), uuid(1), uuid(2)]);
+  });
+});
+
 // ── Paged read tests end ────────────────────────────────────────────────────────
 
 // ── Scores: filtering ────────────────────────────────────────────────────────
