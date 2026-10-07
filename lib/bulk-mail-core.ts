@@ -25,21 +25,68 @@ import { TEMPLATE_SPECS, type TemplateKind } from "@/lib/email-templates-core";
  * không — để một nhóm phủ được mọi buổi: orientation của mentor, của mentee, và
  * mọi sự kiện sau này, mà không phải thêm mã cho từng buổi.
  */
-export const BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "event"] as const;
+export const BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected", "event"] as const;
 export type BulkAudience = (typeof BULK_AUDIENCES)[number];
 
 /** Nhóm cố định: không mang tham số, nên đếm sẵn được để hiện ngay trong ô chọn. */
-export const FIXED_BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor"] as const;
+export const FIXED_BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected"] as const;
 export type FixedBulkAudience = (typeof FIXED_BULK_AUDIENCES)[number];
 
+/**
+ * Ba nhóm đầu nói rõ "đang tham gia": BTC 07/10/2026 suýt gửi thư rớt vòng hồ sơ
+ * cho nhóm "Mentee" — tức 286 mentee ĐÃ ĐẬU — vì cái tên không nói đó là ai.
+ */
 export const BULK_AUDIENCE_LABELS: Record<BulkAudience, string> = {
-  mentee: "Mentee",
-  mentor: "Mentor",
-  both: "Cả mentor và mentee",
+  mentee: "Mentee đang tham gia mùa này",
+  mentor: "Mentor đang tham gia mùa này",
+  both: "Cả mentor và mentee đang tham gia mùa này",
   staff: "Ban tổ chức (admin, core team, support team)",
   returning_mentor: "Mentor đã xác nhận quay lại mùa này",
+  mentee_cv_rejected: "Mentee rớt vòng hồ sơ (CV)",
   event: "Người đã đăng ký một sự kiện"
 };
+
+/** Một câu nói rõ nhóm đang chọn là ai — hiện ngay dưới ô "Gửi cho". */
+export const BULK_AUDIENCE_HINTS: Record<FixedBulkAudience, string> = {
+  mentee: "Mentee ĐÃ ĐẬU, đang tham gia mùa này. Không gồm người rớt hay đang chờ kết quả.",
+  mentor: "Mentor đã duyệt, đang tham gia mùa này.",
+  both: "Mentor và mentee đang tham gia mùa này; người mang cả hai vai trò chỉ nhận một lá.",
+  staff: "Tài khoản admin, super admin, core team, support team đang hoạt động.",
+  returning_mentor: "Mentor đã chấp nhận lời mời quay lại và vẫn đang tham gia mùa này.",
+  mentee_cv_rejected:
+    "Đơn mentee bị reviewer đề xuất reject, hoặc đề xuất khác dưới 13 điểm, và chưa từng được mời phỏng vấn. Không gồm người đã được mời, đã đậu, đang là mentor hay BTC."
+};
+
+/**
+ * Luật rớt vòng hồ sơ mentee (BTC 07/10/2026): reviewer đề xuất reject → rớt;
+ * đề xuất khác mà tổng điểm dưới 13 → rớt.
+ *
+ * Hàm này chỉ trả lời "phiếu chấm nói rớt không". Ai thật sự nhận thư còn phải
+ * qua các phép loại ở `lib/bulk-mail.ts` (đã được mời phỏng vấn, đã đậu, đang là
+ * mentor/BTC…).
+ *
+ * Nghiêng về KHÔNG rớt khi phiếu chưa rõ: chưa có phiếu đã nộp, còn phiếu đang
+ * chấm, hoặc có một reviewer đề xuất mời phỏng vấn → không tính là rớt. Một lá thư
+ * rớt gửi nhầm không rút lại được; một người bị sót thì còn đợt gửi sau.
+ */
+export const CV_REJECT_SCORE_BELOW = 13;
+
+export type ProfileReviewVerdict = {
+  status: string | null;
+  recommendation: string | null;
+  total_score: number | null;
+};
+
+export function isCvRejected(reviews: readonly ProfileReviewVerdict[]): boolean {
+  const submitted = reviews.filter((review) => review.status === "submitted");
+  if (!submitted.length) return false;
+  if (reviews.some((review) => review.status !== "submitted" && review.status !== "cancelled")) return false;
+  return submitted.every((review) => {
+    if (review.recommendation === "pass_to_interview") return false;
+    if (review.recommendation === "reject") return true;
+    return typeof review.total_score === "number" && review.total_score < CV_REJECT_SCORE_BELOW;
+  });
+}
 
 export function isBulkAudience(value: unknown): value is BulkAudience {
   return typeof value === "string" && (BULK_AUDIENCES as readonly string[]).includes(value);
@@ -143,7 +190,7 @@ export const BULK_SEND_CHUNK = 25;
 export const BULK_TIME_BUDGET_MS = 40_000;
 
 /** Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ. */
-export type RecipientSource = "people" | "admin_users" | "event_registrations";
+export type RecipientSource = "people" | "admin_users" | "event_registrations" | "applications";
 
 /**
  * Vai trò của người nhận trong lô, dùng để điền ô {{vai_tro}}.

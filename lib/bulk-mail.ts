@@ -7,6 +7,7 @@ import {
   FIXED_BULK_AUDIENCES,
   STAFF_ROLES,
   buildRecipientValues,
+  isCvRejected,
   isMembershipAudience,
   partitionRecipients,
   remainingRecipients,
@@ -16,6 +17,7 @@ import {
   type BulkEventOption,
   type BulkRecipient,
   type FixedBulkAudience,
+  type ProfileReviewVerdict,
   type RecipientPartition
 } from "@/lib/bulk-mail-core";
 import { escapeIlikePattern } from "@/lib/identity";
@@ -83,6 +85,8 @@ export async function listBulkRecipients(input: {
     result = await staffRecipients(client);
   } else if (input.audience === "returning_mentor") {
     result = await returningMentorRecipients(client, input.seasonId);
+  } else if (input.audience === "mentee_cv_rejected") {
+    result = await cvRejectedMenteeRecipients(client, input.seasonId);
   } else {
     result = await eventRecipients(client, input.seasonId, input.eventId ?? null, input.coversSeries === true);
   }
@@ -293,6 +297,123 @@ async function returningMentorRecipients(client: any, seasonId: string): Promise
   }
 
   return peopleRecipients(client, roleByPerson);
+}
+
+/** Đơn đã dừng ở vòng hồ sơ. Đơn ở mọi trạng thái khác là đơn "còn sống". */
+const CV_STAGE_END_STATUSES = new Set(["screening_completed", "rejected_or_not_fit"]);
+const DEAD_APPLICATION_STATUSES = new Set(["screening_completed", "rejected_or_not_fit", "withdrawn"]);
+
+/**
+ * Mentee rớt vòng hồ sơ (CV) của mùa — BTC 07/10/2026.
+ *
+ * Một lá thư rớt gửi nhầm không rút lại được, nên nhóm này loại theo lối
+ * fail-closed — mỗi phép loại dưới đây đều đã có người thật khớp vào lúc viết:
+ *   - phiếu chấm phải nói rớt (`isCvRejected`): reject, hoặc đề xuất khác dưới 13;
+ *   - đơn đang ở `screening_completed` / `rejected_or_not_fit` — đơn đã được mời,
+ *     đã phỏng vấn hay đã đậu thì không ở hai trạng thái này;
+ *   - chưa từng có thư mời chọn ca, chưa từng giữ chỗ, chưa từng check-in — kể cả
+ *     khi trạng thái đơn đã bị đổi ngược (15 bạn bị tạm khoá link ngày 07/10 đang
+ *     ở `screening_completed` nhưng đã nhận thư mời: BTC quyết riêng cho họ);
+ *   - người đó không có tư cách đang hoạt động nào trong mùa, không có tài khoản
+ *     BTC, và không có đơn nào khác của mùa còn sống (vd. đơn mentor đã duyệt).
+ *
+ * Đọc hỏng bất kỳ bảng nào thì trả lỗi chứ không trả danh sách thiếu phép loại.
+ *
+ * Họ tên và email lấy từ ĐƠN, nối thư về `applications`: phần lớn người rớt vòng
+ * hồ sơ chưa có trong danh bạ (07/10: 144/146 bạn không có person_id).
+ */
+async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promise<RecipientRows> {
+  type AppRow = {
+    id: string;
+    person_id: string | null;
+    full_name: string | null;
+    email_primary: string | null;
+    role_applied: string | null;
+    status: string | null;
+  };
+  const apps = await readAllPages<AppRow>(
+    "applications",
+    "id, person_id, full_name, email_primary, role_applied, status",
+    (projection) => client.from("applications").select(projection).eq("season_id", seasonId)
+  );
+  if (apps.error) {
+    log("listBulkRecipients:cv-rejected-applications", apps.error);
+    return { rows: [], error: VI_ERROR };
+  }
+
+  const candidates = apps.data.filter(
+    (app) => String(app.role_applied ?? "") === "mentee" && CV_STAGE_END_STATUSES.has(String(app.status ?? ""))
+  );
+  if (!candidates.length) return { rows: [], error: null };
+  const ids = candidates.map((app) => String(app.id));
+
+  const [reviews, invites, bookings, operations, memberships, accounts] = await Promise.all([
+    readAllPagesIn<{ id: string; application_id: string } & ProfileReviewVerdict>(
+      client,
+      "application_reviews",
+      "application_id",
+      ids,
+      "id, application_id, status, recommendation, total_score",
+      (query) => query.eq("review_round", "profile_screening")
+    ),
+    readAllPagesIn<{ id: string; application_id: string }>(client, "mentee_interview_invites", "application_id", ids, "id, application_id"),
+    readAllPagesIn<{ id: string; application_id: string }>(client, "mentee_interview_bookings", "application_id", ids, "id, application_id"),
+    readAllPagesIn<{ id: string }>(client, "mentee_interview_operations", "id", ids, "id"),
+    readAllPages<{ id: string; person_id: string | null }>(
+      "person_season_memberships",
+      "id, person_id",
+      (projection) => client.from("person_season_memberships").select(projection).eq("season_id", seasonId).eq("status", "active")
+    ),
+    readAllPages<{ id: string; email: string | null }>("admin_users", "id, email", (projection) =>
+      client.from("admin_users").select(projection)
+    )
+  ]);
+  const failed = [reviews, invites, bookings, operations, memberships, accounts].find((result) => result.error);
+  if (failed) {
+    log("listBulkRecipients:cv-rejected-exclusions", failed.error);
+    return { rows: [], error: VI_ERROR };
+  }
+
+  const reviewsByApp = new Map<string, ProfileReviewVerdict[]>();
+  for (const review of reviews.data) {
+    const key = String(review.application_id);
+    reviewsByApp.set(key, [...(reviewsByApp.get(key) ?? []), review]);
+  }
+  const touchedInterview = new Set<string>([
+    ...invites.data.map((row) => String(row.application_id)),
+    ...bookings.data.map((row) => String(row.application_id)),
+    ...operations.data.map((row) => String(row.id))
+  ]);
+  const normalizeEmail = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  const activePeople = new Set(memberships.data.map((row) => String(row.person_id ?? "")).filter(Boolean));
+  const staffEmails = new Set(accounts.data.map((row) => normalizeEmail(row.email)).filter(Boolean));
+  const livePeople = new Set<string>();
+  const liveEmails = new Set<string>();
+  for (const app of apps.data) {
+    if (DEAD_APPLICATION_STATUSES.has(String(app.status ?? ""))) continue;
+    if (app.person_id) livePeople.add(String(app.person_id));
+    const email = normalizeEmail(app.email_primary);
+    if (email) liveEmails.add(email);
+  }
+
+  const rows: BulkRecipient[] = [];
+  for (const app of candidates) {
+    const id = String(app.id);
+    if (!isCvRejected(reviewsByApp.get(id) ?? [])) continue;
+    if (touchedInterview.has(id)) continue;
+    const personId = String(app.person_id ?? "");
+    const email = normalizeEmail(app.email_primary);
+    if (personId && (activePeople.has(personId) || livePeople.has(personId))) continue;
+    if (email && (staffEmails.has(email) || liveEmails.has(email))) continue;
+    rows.push({
+      personId: id,
+      fullName: String(app.full_name ?? "").trim(),
+      email: String(app.email_primary ?? "").trim(),
+      role: "mentee",
+      relationTable: "applications"
+    });
+  }
+  return { rows, error: null };
 }
 
 /**
