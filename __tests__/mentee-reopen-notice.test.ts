@@ -151,7 +151,7 @@ describe("thư mở lại", () => {
       expect(part).not.toContain("17:00");
       // Đợt 2 gửi cả cho người đã chọn ca đợt 1 mà vắng (07/10/2026): câu mở đầu không
       // được khẳng định “bạn chưa chọn ca”.
-      expect(part).toContain("chưa kịp chọn ca, hoặc chưa tham dự được ca đã chọn");
+      expect(part).toContain("chưa kịp chọn ca, chưa tham dự được ca đã chọn, hoặc ca bạn đã chọn vừa bị ban tổ chức đóng do thay đổi phòng");
       expect(part).not.toContain("thấy bạn chưa chọn ca");
     }
   });
