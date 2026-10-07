@@ -211,7 +211,15 @@ function buildRecruitmentGroup(
     ...(mentee.length ? [{ key: "mentee", label: MENTEE_RECRUITMENT_LABEL, items: mentee }] : []),
     // Ghép cặp là bước cuối của tuyển sinh, không còn là mục riêng ở menu chính.
     // Cùng predicate canBrowseOperations như trang /matches.
-    ...when(showOperations, { href: "/matches", label: "Ghép cặp" })
+    ...when(showOperations, {
+      href: "/matches",
+      label: "Ghép cặp",
+      // Vòng 2 (BTC 07/10/2026): mentor tự chọn mentee cùng nhóm ngành.
+      children: [
+        { href: "/matches/vong-2", label: "Vòng 2 · Phân nhóm ngành" },
+        { href: "/matches/vong-2/bao-cao", label: "Vòng 2 · Báo cáo" }
+      ]
+    })
   ];
   return entries.length ? { key: "applications", label: RECRUITMENT_NAV_LABEL, items: entries } : null;
 }

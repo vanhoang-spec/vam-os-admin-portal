@@ -364,12 +364,14 @@ describe("allNavHrefs", () => {
 const BASE_ROUTE_ARR = [
   "/", "/operations", "/people", "/mentors", "/mentees",
   "/applications", "/matches", "/events", "/data-issues",
+  // Ghép cặp Vòng 2 (07/10/2026): mục con của "Ghép cặp", cùng cổng canBrowseOperations.
+  "/matches/vong-2", "/matches/vong-2/bao-cao",
 ];
 
 // H2 fix: /operations and /matches are gated by canBrowseOperations
 // (super_admin/admin/core_team/support_team). viewer and reviewer no
 // longer receive either link.
-const BASE_ROUTE_ARR_NO_OPS_MATCHES = BASE_ROUTE_ARR.filter((r) => r !== "/operations" && r !== "/matches");
+const BASE_ROUTE_ARR_NO_OPS_MATCHES = BASE_ROUTE_ARR.filter((r) => r !== "/operations" && !r.startsWith("/matches"));
 
 const SUPER_ADMIN_BASE_ROUTES = ["/portfolio", ...BASE_ROUTE_ARR];
 
