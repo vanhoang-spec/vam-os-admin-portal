@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getApplications, getIntakeBatches } from "@/lib/data";
+import { newestFirst } from "@/lib/list-order";
 import { canDecideAnyApplicationResult } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { Card, ErrorBox, PageHeader } from "@/components/ui";
@@ -42,7 +43,9 @@ export default async function BulkApprovalPage(props: {
       (includeRenewals || app.source !== "s12_mentor_renewal")
   );
 
-  const rows = candidates.slice(0, 500).map((app) => ({
+  // Đơn mới nhất trước, như trang Hồ sơ (BTC 07/10/2026). Không xếp thì 500 dòng
+  // cắt ra là 500 dòng bất kỳ theo id ngẫu nhiên.
+  const rows = newestFirst(candidates, (app) => app.created_at, (app) => app.submitted_at).slice(0, 500).map((app) => ({
     id: app.id,
     fullName: String(app.full_name ?? app.email_primary ?? app.id),
     email: app.email_primary ?? "",

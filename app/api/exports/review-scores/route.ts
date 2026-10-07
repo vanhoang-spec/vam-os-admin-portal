@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { CSV_UTF8_BOM, toCsv } from "@/lib/csv-export";
+import { newestFirst } from "@/lib/list-order";
 import { readAllPages } from "@/lib/paged-read";
 import { canAssignReview } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
@@ -191,7 +192,8 @@ export async function GET(request: Request) {
     (reviews ?? []).map((review: any) => review.application?.intake_batch_id)
   );
 
-  const body = (reviews ?? []).map((review: any) => {
+  // Phiếu nộp gần nhất trước (BTC 07/10/2026); phiếu chưa nộp xuống cuối.
+  const body = newestFirst(reviews ?? [], (review) => review.submitted_at).map((review: any) => {
     const bonus = bonusForApplication(bonusLookup, review.application ?? {});
     return [
       review.application_id,

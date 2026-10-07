@@ -347,7 +347,8 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
   // Season 11 Official Recap Reconciliation — live from opsData (includes admin_notes, recap_source)
   const s11AllRecaps = opsData.recaps.data.filter((r) => !opsSeason?.id || r.season_id === opsSeason.id);
   const s11Rec = computeS11RecapReconciliation(s11AllRecaps);
-  const s11MonthlyRows = seasonMonths.map((month) => ({
+  // Bảng tháng mới nhất trước như mọi danh sách (BTC 07/10/2026); biểu đồ vẫn đi trái → phải theo thời gian.
+  const s11MonthlyRows = [...seasonMonths].reverse().map((month) => ({
     month,
     count: s11Rec.monthlyCounted[month] ?? 0
   }));

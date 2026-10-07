@@ -35,6 +35,7 @@ import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteePr
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 import { SubmitButton } from "@/components/submit-button";
 import { canBrowsePeople } from "@/lib/read-access";
+import { createdAtOf, newestFirst } from "@/lib/list-order";
 import { redirect } from "next/navigation";
 
 type MentorMenteeRow = Match & {
@@ -286,7 +287,13 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
     getCrmNotesByPerson(params.id, scopeContext, scope)
   ]);
   const allowRecapEdit = canEditRecaps(adminUser);
-  const personApplications = applications.data.filter((application) => application.person_id === params.id);
+  // Đơn và cặp ghép của một người: mới nhất trước (BTC 07/10/2026). Đọc phân trang
+  // trả về theo id ngẫu nhiên, nên không xếp ở đây là không có thứ tự nào cả.
+  const personApplications = newestFirst(
+    applications.data.filter((application) => application.person_id === params.id),
+    (application) => application.created_at,
+    (application) => application.submitted_at
+  );
   const peopleById = keyById(people.data);
   const seasonsById = keyById(seasons.data);
   const eventsById = keyById(events.data);
@@ -318,8 +325,9 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
         .filter((row): row is FunctionArea => Boolean(row))
         .sort((a, b) => a.name.localeCompare(b.name, "vi"))
     : [];
-  const mentorMatches = matches.data.filter((match) => match.mentor_person_id === params.id);
-  const menteeMatches = matches.data.filter((match) => match.mentee_person_id === params.id);
+  const matchInstants = [(match: Match) => match.matched_at, createdAtOf];
+  const mentorMatches = newestFirst(matches.data.filter((match) => match.mentor_person_id === params.id), ...matchInstants);
+  const menteeMatches = newestFirst(matches.data.filter((match) => match.mentee_person_id === params.id), ...matchInstants);
   const matchesById = keyById(matches.data);
   const menteesForMentor: MentorMenteeRow[] = mentorMatches.map((match) => ({
     ...match,

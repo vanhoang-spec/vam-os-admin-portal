@@ -6,6 +6,7 @@ import { canEditRecaps } from "@/lib/auth-constants";
 import { canBrowseOperations } from "@/lib/permissions";
 import { getApplications, getMatches, getMenteeProfiles, getMentorProfiles, getPeople, keyById } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { createdAtOf, newestFirst } from "@/lib/list-order";
 import type { Application, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
 import { TableSearch } from "@/components/table-search";
@@ -135,7 +136,11 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
   const activeMatches = matches.data.filter((match) => statusKey(match.status) === "active");
   const activeMenteeIds = new Set(activeMatches.map((match) => match.mentee_person_id).filter(Boolean));
 
-  const peopleMissingPhone = people.data
+  // Mọi bảng dưới đây: bản ghi mới nhất trước (BTC 07/10/2026). Đọc phân trang trả
+  // về theo id ngẫu nhiên, nên không xếp là các bảng không theo thứ tự nào.
+  const createdAt = createdAtOf;
+
+  const peopleMissingPhone = newestFirst(people.data, createdAt)
     .filter((person) => isPlaceholder(person.phone_primary))
     .map((person) => ({
       ...person,
@@ -145,7 +150,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
       source_sheets_display: displayText(person.source_sheets)
     }));
 
-  const applicationsMissingIdentity = applications.data
+  const applicationsMissingIdentity = newestFirst(applications.data, (application) => application.created_at, (application) => application.submitted_at)
     .map((application) => {
       const person = application.person_id ? peopleById.get(application.person_id) : undefined;
       return {
@@ -161,7 +166,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
     })
     .filter((row) => isPlaceholder(row.person?.full_name) || isPlaceholder(row.person?.email_primary));
 
-  const menteesMissingSchool = mentees.data
+  const menteesMissingSchool = newestFirst(mentees.data, createdAt)
     .filter((mentee) => isMissingSchool(mentee.school_code))
     .map((mentee) => {
       const person = mentee.person_id ? peopleById.get(mentee.person_id) : undefined;
@@ -176,7 +181,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
       };
     });
 
-  const mentorsMissingBio = mentors.data
+  const mentorsMissingBio = newestFirst(mentors.data, createdAt)
     .filter((mentor) => isPlaceholder(mentor.bio_url))
     .map((mentor) => {
       const person = mentor.person_id ? peopleById.get(mentor.person_id) : undefined;
@@ -190,7 +195,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
       };
     });
 
-  const menteesWithoutActiveMentor = mentees.data
+  const menteesWithoutActiveMentor = newestFirst(mentees.data, createdAt)
     .filter((mentee) => !mentee.person_id || !activeMenteeIds.has(mentee.person_id))
     .map((mentee) => {
       const person = mentee.person_id ? peopleById.get(mentee.person_id) : undefined;
@@ -204,7 +209,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
       };
     });
 
-  const activeMatchMissingPerson = activeMatches
+  const activeMatchMissingPerson = newestFirst(activeMatches, (match) => match.matched_at, createdAt)
     .filter((match) => !match.mentor_person_id || !match.mentee_person_id)
     .map((match) => ({
       ...match,

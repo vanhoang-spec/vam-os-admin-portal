@@ -6,7 +6,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getRound2Data } from "@/lib/matching-round2";
 import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
 import { Round2DispatchPanel } from "./dispatch-panel";
-import type { GroupSummary, Round2Row } from "@/lib/matching-round2-core";
+import { byGroupThenName, type GroupSummary, type Round2Row } from "@/lib/matching-round2-core";
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canAssignReview, canBrowseOperations } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/utils";
@@ -17,11 +17,6 @@ const COLUMN = "grid grid-cols-[minmax(0,1fr)] gap-4";
 
 function detail(row: Round2Row, label: string): string {
   return row.person.details.find(([l]) => l === label)?.[1] ?? "—";
-}
-
-function byGroupThenName(a: Round2Row, b: Round2Row) {
-  const g = (a.group ?? 99) - (b.group ?? 99);
-  return g !== 0 ? g : a.person.name.localeCompare(b.person.name, "vi");
 }
 
 function GroupTable({ groups, unclassified }: { groups: GroupSummary[]; unclassified: GroupSummary }) {

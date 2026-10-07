@@ -5,6 +5,7 @@ import { canManageWorkflow } from "@/lib/auth-constants";
 import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
+import { compareNewest, newestFirst } from "@/lib/list-order";
 import type { JsonRecord, MentoringRecap, Person, Season } from "@/lib/types";
 import { normalizeMeetingType } from "./normalizers";
 
@@ -293,7 +294,14 @@ function buildIssues(input: {
     }
   }
 
-  return issues.sort((a, b) => a.severity.localeCompare(b.severity) || a.type.localeCompare(b.type));
+  // Cùng mức và cùng loại thì buổi gặp mới nhất trước; trang chỉ hiện 30 dòng đầu.
+  return issues.sort(
+    (a, b) =>
+      a.severity.localeCompare(b.severity) ||
+      a.type.localeCompare(b.type) ||
+      compareNewest(a.meeting_date, b.meeting_date) ||
+      a.key.localeCompare(b.key)
+  );
 }
 
 export async function getAdminCorrectionData(): Promise<AdminCorrectionData> {
@@ -313,9 +321,16 @@ export async function getAdminCorrectionData(): Promise<AdminCorrectionData> {
   const scopedRecaps = allowedSeasonIds ? recaps.data.filter((recap) => recap.season_id && allowedSeasonIds.includes(recap.season_id)) : recaps.data;
   const scopedPersonIds = new Set(scopedRecaps.flatMap((recap) => [recap.mentor_person_id, recap.mentee_person_id]).filter(Boolean) as string[]);
   const scopedPeople = allowedSeasonIds ? people.data.filter((person) => scopedPersonIds.has(person.id)) : people.data;
-  const scopedActionItems = allowedSeasonIds
-    ? actionItems.data.filter((item) => item.season_code && scopedSeasonCodes.has(item.season_code))
-    : actionItems.data;
+  // Mới cập nhật trước: "Lịch sử việc cần xử lý" cắt 20 dòng đầu và hướng dẫn
+  // hứa "20 việc mới nhất" — đọc phân trang không có thứ tự thì 20 dòng đó là
+  // 20 dòng bất kỳ. Tab "Hỗ trợ follow-up" lọc từ cùng danh sách này.
+  const scopedActionItems = newestFirst(
+    allowedSeasonIds
+      ? actionItems.data.filter((item) => item.season_code && scopedSeasonCodes.has(item.season_code))
+      : actionItems.data,
+    (item) => item.updated_at,
+    (item) => item.created_at
+  );
 
   const errors = [recaps.error, people.error, seasons.error, actionItems.error].filter(Boolean);
   const issues = buildIssues({

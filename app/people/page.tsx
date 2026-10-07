@@ -19,6 +19,12 @@ export default async function PeoplePage() {
         searchPlaceholder="Tìm theo tên, email hoặc số điện thoại"
         searchKeys={["full_name", "email_primary", "phone_primary"]}
         filters={[{ key: "gender", label: "Giới tính", valueKey: "gender" }]}
+        // Mặc định người mới vào hệ thống trước, như mọi danh sách (BTC 07/10/2026).
+        // Trước đó bảng không có thứ tự: đọc phân trang trả về theo id ngẫu nhiên.
+        sortOptions={[
+          { label: "Mới thêm gần đây", key: "created_at", direction: "desc", type: "text", emptyLast: true, secondaryKey: "full_name" },
+          { label: "Tên A-Z", key: "full_name", direction: "asc", type: "text", emptyLast: true }
+        ]}
         getHref={{ prefix: "/people/", key: "id" }}
         columns={[
           { key: "full_name", label: "Họ và tên" },

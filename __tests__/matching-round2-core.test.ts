@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   assignmentRowsForSave,
   buildRound2Board,
+  byGroupThenName,
   round2Slots,
   type Round2Assignment,
   type Round2Match,
@@ -62,6 +63,35 @@ const match = (mentorId: string, menteeId: string, over: Partial<Round2Match> = 
   endedAt: null,
   endReason: null,
   ...over
+});
+
+describe("thứ tự hiển thị (BTC 07/10/2026: mới nhất trước)", () => {
+  it("cặp vòng 2 vừa chọn lên đầu danh sách 'Đã ghép ở vòng 2'", () => {
+    const board = buildRound2Board({
+      people: [mentor("a", { capacityTarget: 3 }), mentee("x"), mentee("y"), mentee("z")],
+      assignments: [assign("mentor", "a", 4), assign("mentee", "x", 4), assign("mentee", "y", 4), assign("mentee", "z", 4)],
+      matches: [
+        match("a", "x", { round: 2, createdAt: "2026-10-08T02:00:00Z" }),
+        match("a", "y", { round: 2, createdAt: "2026-10-08T09:15:00+07:00" }), // 02:15Z
+        match("a", "z", { round: 2, createdAt: "2026-10-08T01:00:00Z" })
+      ]
+    });
+    expect(board.round2Matches.map((m) => m.mentee?.person.personId)).toEqual(["y", "x", "z"]);
+  });
+
+  it("byGroupThenName: nhóm 1→9, chưa phân nhóm cuối, trong nhóm theo tên", () => {
+    const board = buildRound2Board({
+      people: [
+        mentee("p1", { name: "Trần B" }),
+        mentee("p2", { name: "Lê A" }),
+        mentee("p3", { name: "An C" }),
+        mentee("p4", { name: "Bùi D" })
+      ],
+      assignments: [assign("mentee", "p1", 4), assign("mentee", "p2", 4), assign("mentee", "p3", 6)],
+      matches: []
+    });
+    expect([...board.rows].sort(byGroupThenName).map((r) => r.person.personId)).toEqual(["p2", "p1", "p3", "p4"]);
+  });
 });
 
 describe("round2Slots", () => {

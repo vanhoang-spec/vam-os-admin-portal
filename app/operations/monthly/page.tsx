@@ -6,6 +6,7 @@ import { canEditRecaps } from "@/lib/auth-constants";
 import { getOperationsData } from "@/lib/data";
 import { currentMonthVN, operationalMonthRange, VALID_RECAP_STATUSES } from "@/lib/dashboard-month";
 import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
+import { newestFirst } from "@/lib/list-order";
 import { canBrowseOperations } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
@@ -110,8 +111,9 @@ export default async function MonthlyOperationsPage(props: { searchParams?: Prom
   const totalAttendance = participationsInMonth.length;
   const attendanceRate = percent(attendedCount, attendedCount + absentCount);
 
-  const eventRows: EventRow[] = eventsInMonth
-    .map((event) => {
+  // Mới nhất trước, cùng thứ tự với trang /events (BTC 07/10/2026).
+  const eventRows: EventRow[] = newestFirst(
+    eventsInMonth.map((event) => {
       const rows = participationsInMonth.filter((row) => row.event_id === event.id);
       return {
         ...event,
@@ -119,8 +121,9 @@ export default async function MonthlyOperationsPage(props: { searchParams?: Prom
         absent: rows.filter((row) => isEventAbsenceStatus(row.attendance_status)).length,
         total: rows.length
       };
-    })
-    .sort((a, b) => String(a.starts_at ?? "").localeCompare(String(b.starts_at ?? "")));
+    }),
+    (event) => event.starts_at
+  );
 
   return (
     <>

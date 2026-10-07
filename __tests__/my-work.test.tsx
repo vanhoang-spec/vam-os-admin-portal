@@ -362,6 +362,86 @@ describe("7. due_at drives overdue state", () => {
   });
 });
 
+// ── 7b. thứ tự: việc còn nợ trên cùng, việc đã nộp mới nhất trước ─────────────
+describe("7b. việc còn nợ lên đầu, việc đã nộp xếp mới nhất trước", () => {
+  const ivReview = (overrides: Partial<MyWorkSourceReview>) =>
+    review({ review_round: "interview", application_id: "app-2", ...overrides });
+  const buildWithTimes = (reviews: MyWorkSourceReview[], times: Array<[string, string]> = []) =>
+    buildMyWorkItems({
+      reviews,
+      applications: apps(APP_MENTEE, APP_MENTOR),
+      assigneeAdminUserId: USER_A,
+      now: NOW,
+      interviewTimes: new Map(times)
+    }).map((item) => item.reviewId);
+
+  test("buổi chưa làm đứng trên phiếu đã nộp dù hạn của phiếu đã nộp cũ hơn (đúng ca BTC báo 07/10)", () => {
+    const order = buildWithTimes([
+      ivReview({ id: "rev-done-old", status: "submitted", due_at: "2026-09-29T10:00:00.000Z" }),
+      ivReview({ id: "rev-done-new", status: "submitted", due_at: "2026-10-07T14:00:00.000Z" }),
+      ivReview({ id: "rev-todo", status: "assigned", due_at: "2026-10-08T13:00:00.000Z" }),
+      ivReview({ id: "rev-doing", status: "in_progress", due_at: "2026-10-08T14:00:00.000Z" })
+    ]);
+    expect(order).toEqual(["rev-todo", "rev-doing", "rev-done-new", "rev-done-old"]);
+  });
+
+  test("việc cần làm rõ vẫn là việc còn nợ, không bị xếp xuống chung với việc đã nộp", () => {
+    const order = buildWithTimes([
+      ivReview({ id: "rev-done", status: "submitted", due_at: "2026-10-07T14:00:00.000Z" }),
+      ivReview({ id: "rev-back", status: "returned_for_clarification", due_at: "2026-10-09T14:00:00.000Z" })
+    ]);
+    expect(order).toEqual(["rev-back", "rev-done"]);
+  });
+
+  test("việc đã nộp xếp theo lịch phỏng vấn hiện trên dòng, không theo lúc nộp", () => {
+    // Buổi 13:00 nộp muộn hơn buổi 14:00 — xếp theo lúc nộp sẽ đảo hai dòng.
+    const order = buildWithTimes(
+      [
+        ivReview({ id: "rev-13h", status: "submitted", due_at: "2026-10-05T07:00:00.000Z", submitted_at: "2026-10-05T13:59:00.000Z" }),
+        ivReview({ id: "rev-14h", status: "submitted", due_at: "2026-10-05T08:00:00.000Z", submitted_at: "2026-10-05T13:58:00.000Z" })
+      ],
+      [
+        ["rev-13h", "2026-10-05T06:00:00.000Z"],
+        ["rev-14h", "2026-10-05T07:00:00.000Z"]
+      ]
+    );
+    expect(order).toEqual(["rev-14h", "rev-13h"]);
+  });
+
+  test("lịch phỏng vấn thắng hạn khi hai mốc chỉ hai hướng khác nhau", () => {
+    const order = buildWithTimes(
+      [
+        ivReview({ id: "rev-a", status: "submitted", due_at: "2026-10-10T00:00:00.000Z" }),
+        ivReview({ id: "rev-b", status: "submitted", due_at: "2026-10-01T00:00:00.000Z" })
+      ],
+      [
+        ["rev-a", "2026-09-29T09:00:00.000Z"],
+        ["rev-b", "2026-10-05T06:00:00.000Z"]
+      ]
+    );
+    expect(order).toEqual(["rev-b", "rev-a"]);
+  });
+
+  test("phiếu đã nộp không có lịch lẫn hạn dùng lúc nộp, nên phiếu cũ từ tháng 9 nằm dưới cùng", () => {
+    const order = buildWithTimes([
+      ivReview({ id: "rev-sep", status: "submitted", due_at: null, submitted_at: "2026-09-23T12:03:00.000Z" }),
+      ivReview({ id: "rev-oct", status: "submitted", due_at: "2026-09-29T10:00:00.000Z" }),
+      ivReview({ id: "rev-blank", status: "submitted", due_at: null, submitted_at: null })
+    ]);
+    expect(order).toEqual(["rev-oct", "rev-sep", "rev-blank"]);
+  });
+
+  test("so theo thời điểm, không theo chuỗi: hai dạng ISO khác múi vẫn xếp đúng", () => {
+    // 15:00+07:00 là 08:00Z, sớm hơn 09:30Z. So chuỗi thì "T15" > "T09" và
+    // dòng +07:00 sẽ đứng đầu — sai.
+    const order = buildWithTimes([
+      ivReview({ id: "rev-plus7", status: "submitted", due_at: "2026-10-05T15:00:00+07:00" }),
+      ivReview({ id: "rev-z", status: "submitted", due_at: "2026-10-05T09:30:00.000Z" })
+    ]);
+    expect(order).toEqual(["rev-z", "rev-plus7"]);
+  });
+});
+
 // ── 8. program/season scoping ───────────────────────────────────────────────
 describe("8. program/season scoping is preserved", () => {
   beforeEach(() => {
