@@ -411,6 +411,35 @@ export const AUTOMATION_SLOTS: readonly AutomationSlot[] = [
     ]
   },
   {
+    id: "matching_round2_invite",
+    kind: "matching_round2_invite",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Mời mentor chọn mentee — Ghép cặp Vòng 2",
+    audience: "Mentor còn chỗ nhận mentee, đã có nhóm ngành",
+    trigger: 'Khi ban tổ chức bấm "Gửi link chọn mentee" ở mục Ghép cặp → Vòng 2 · Báo cáo.',
+    note: "Mỗi mentor một đường dẫn riêng, dùng chung cho mọi đợt gửi. Đợt sau chỉ gửi cho mentor lúc đó vẫn còn chỗ.",
+    placeholders: [
+      P_TEN_NGUOI_NHAN,
+      P_MUA,
+      {
+        key: "ghi_chu_dot",
+        label: "Câu mở đầu theo đợt",
+        required: true,
+        hint: "Hệ thống tự điền: đợt 1 là lời mời chọn mentee; đợt sau báo danh sách vừa có thêm hồ sơ mới."
+      },
+      { key: "nhom_nganh", label: "Nhóm ngành", required: true, hint: "Ví dụ: 4. Marketing - Kinh doanh." },
+      { key: "so_cho", label: "Số mentee còn nhận được", required: true, hint: "Ví dụ: 2." },
+      {
+        key: "link_chon_mentee",
+        label: "Đường dẫn chọn mentee",
+        required: true,
+        hint: "Đường dẫn riêng của từng mentor. Bỏ ô này là thư không còn tác dụng gì."
+      },
+      { key: "han_chon", label: "Hạn chọn", required: true, hint: "Đọc từ giờ đóng vòng 2 ban tổ chức đặt." },
+      P_ZALO
+    ]
+  },
+  {
     id: "reviewer_invite_new",
     kind: "reviewer_invite",
     group: "Chấm hồ sơ",

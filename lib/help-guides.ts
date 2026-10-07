@@ -613,10 +613,14 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Đọc bảng “Đối soát theo nhóm”: mỗi nhóm phải “Khớp” (Mentee = ghép vòng 1 + vòng 2 + khác + chưa có mentor). Cột “Chỗ − mentee chờ” âm nghĩa là nhóm thiếu mentor.",
       "Xem ba danh sách “Đã ghép ở vòng 2”, “Mentor còn nhận”, “Mentee chưa có mentor”; gõ vào ô tìm để lọc nhanh.",
       "Đọc mục “Bất thường”: mentor vượt trần, cặp khác nhóm, mentee hiện lại sau khi cặp bị huỷ, người chưa phân nhóm.",
-      "Bấm “Tải CSV” ở từng phần để lấy file."
+      "Bấm “Tải CSV” ở từng phần để lấy file.",
+      "Mở vòng và gửi link (Super admin, Admin, Core team): ở khung “Mở vòng 2 và gửi link chọn mentee”, nhập giờ mở/đóng, chọn “Đợt gửi thư” rồi bấm “Lưu giờ và đợt”. Tới giờ mở, bấm “Gửi thử cho tôi” để xem thư, rồi “Gửi link chọn mentee” → “Xác nhận gửi”; mỗi lần tối đa 40 thư, bấm lại tới khi hết người chờ.",
+      "Sau đợt phỏng vấn kế tiếp: phân loại người mới ở trang Phân nhóm, đổi “Đợt gửi thư” sang Đợt 2, lưu, rồi gửi — chỉ mentor lúc đó còn chỗ mới nhận thư."
     ],
     notes: [
       "Chỗ còn của mentor = tối đa 2 mentee, không vượt số đã đăng ký, trừ số cặp đang hoạt động (tính cả vòng 1). Mentor có nhiều hơn một hồ sơ mentor không được tính cho tới khi gộp hồ sơ.",
+      "Mỗi mentor một đường dẫn riêng (/chon-mentee/…), dùng cho mọi đợt. Mentor thấy họ tên, hồ sơ học tập, mục tiêu, tự luận, CV, GPA của mentee — không thấy email, SĐT, MSSV. Chọn trước được trước; bỏ chọn được trong 30 phút, quá 30 phút thì BTC huỷ cặp ở trang Ghép cặp.",
+      "Chưa lưu giờ mở thì vòng 2 đang đóng: link mở ra chỉ báo “chưa mở”, không ai chọn được.",
       "Tải CSV: Super admin, Admin, Core team có quyền vận hành mùa. File có họ tên và email."
     ],
     updated: "07/10/2026"
