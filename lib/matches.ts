@@ -6,6 +6,7 @@ import { canBrowseOperations, canManageMatches } from "@/lib/permissions";
 import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { MatchingRoundFilter } from "@/lib/matching-round";
+import { effectiveMentorCapacity } from "@/lib/mentor-capacity";
 import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { vietnamDateKey } from "@/lib/utils";
 
@@ -13,36 +14,13 @@ import { vietnamDateKey } from "@/lib/utils";
 
 const SAFE_ERROR = "Không thể thực hiện tác vụ. Vui lòng kiểm tra cấu hình Supabase và server logs.";
 
-/**
- * Fallback mentor capacity, used only when the mentor's own
- * `mentor_profiles.capacity_target` is absent or not a positive integer.
- *
- * This was previously the cap for EVERY mentor. On UEHM-S12 that is wrong for
- * most of them: of 142 approved mentors, 65 declared a capacity of 1 and 57
- * declared 2. Applying 3 to all of them let an operator assign three mentees to
- * a mentor who agreed to one. `capacity_target` is written at approval time by
- * vam092 from the applicant's own answer, so the number the mentor gave is
- * already in the database — it was simply never read here.
- */
-const DEFAULT_MENTOR_CAPACITY = 3;
-
 /** Application statuses that make a person eligible to be matched. */
 const APPROVED_MENTOR_STATUS = "approved_as_mentor";
 const APPROVED_MENTEE_STATUS = "approved_as_mentee";
 
-/**
- * The capacity to enforce for one mentor.
- *
- * Exported because the mutation guard, the candidate list and the load bar must
- * all agree: a UI that shows `1/2` while the mutation enforces 3 is worse than
- * either rule on its own, because the operator cannot tell which one is real.
- */
-export function effectiveMentorCapacity(capacityTarget: unknown): number {
-  const value = typeof capacityTarget === "number" ? capacityTarget : Number(capacityTarget);
-  if (!Number.isFinite(value)) return DEFAULT_MENTOR_CAPACITY;
-  if (!Number.isInteger(value) || value < 1) return DEFAULT_MENTOR_CAPACITY;
-  return value;
-}
+// Sức nhận nằm ở lib/mentor-capacity.ts (thuần) để Vòng 2 dùng chung đúng một luật;
+// xuất lại ở đây cho các chỗ gọi cũ.
+export { effectiveMentorCapacity } from "@/lib/mentor-capacity";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

@@ -582,7 +582,42 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Mentor và mentee phải được duyệt chính thức trong mùa của đợt tuyển. Mỗi mentee chỉ có một mentor đang active; mentor đã đủ sức nhận hiện “FULL” và không chọn được.",
       "Huỷ match chuyển cặp sang “Đã dừng”, lịch sử không bị xoá. Muốn đổi mentor cho một mentee: huỷ match cũ trước rồi tạo match mới.",
       "Vòng 1 = mentee được người phỏng vấn nhận ngay tại buổi phỏng vấn, ở mọi đợt (03–04/10, 10–11/10, …). Hệ thống tự gắn nhãn lúc người phỏng vấn nộp phiếu “Có – Tôi muốn nhận”; không ai phải gắn tay.",
-      "Cặp tạo bằng “Tạo matching thủ công” hiện “Chưa gắn vòng” cho tới khi BTC chốt cách ghép vòng 2."
+      "Cặp tạo bằng “Tạo matching thủ công” hiện “Chưa gắn vòng”.",
+      "Vòng 2: mentor tự chọn mentee cùng nhóm ngành — xem hai mục con “Vòng 2 · Phân nhóm ngành” và “Vòng 2 · Báo cáo”."
+    ],
+    updated: "07/10/2026"
+  },
+  "/matches/vong-2": {
+    title: "Vòng 2 · Phân nhóm ngành",
+    summary:
+      "Xếp mỗi mentor và mentee đã duyệt vào đúng 1 trong 9 nhóm ngành. Ở vòng 2, mentor chỉ thấy mentee cùng nhóm; nhóm đã lưu bị khoá tới hết mùa.",
+    steps: [
+      "Xem bảng “Nhóm đề xuất” trong khung “Phân loại người mới”: số mentor/mentee chưa có nhóm sẽ vào mỗi nhóm nếu lưu ngay bây giờ. Mở trang không ghi gì.",
+      "Bấm “Phân loại … người mới” để lưu. Người đã có nhóm không bị đổi; nếu dữ liệu hôm nay cho ra nhóm khác, dòng đó hiện “Dữ liệu hôm nay: …” và được đếm ở “Dữ liệu đổi nhóm”.",
+      "Lọc “Cần BTC xem” để duyệt người hệ thống không đủ căn cứ (tin cậy thấp, thường là nhóm 9 hoặc khối Tài chính còn hoà). Đọc cột “Căn cứ” và “Hồ sơ”.",
+      "Mở “Đổi / xác nhận nhóm”, chọn nhóm, ghi lý do rồi bấm “Lưu nhóm”. Giữ nguyên nhóm + ghi lý do = xác nhận (gỡ cờ “Cần BTC xem”).",
+      "Sau mỗi đợt phỏng vấn có thêm mentee đạt, quay lại bấm “Phân loại … người mới” để họ vào danh sách."
+    ],
+    notes: [
+      "Luật xếp: mentor — chức danh quyết định trước, rồi chức năng, ngành, chức năng khác. Mentee — chức năng mục tiêu, ngành mục tiêu tinh chỉnh; ngành học/khoa là bằng chứng phụ. “Chưa xác định” coi như để trống; “Khác” chỉ về nhóm 9 khi trường còn lại cũng không rõ (BTC 07/10/2026).",
+      "Xem: Super admin, Admin, Core team, Support team. Lưu và đổi nhóm: Super admin, Admin, Core team có quyền vận hành mùa.",
+      "Người đã rút khỏi mùa không được phân loại và không vào danh sách."
+    ],
+    updated: "07/10/2026"
+  },
+  "/matches/vong-2/bao-cao": {
+    title: "Vòng 2 · Báo cáo",
+    summary:
+      "Số liệu trực tiếp của vòng 2 theo 9 nhóm ngành: cặp đã ghép ở vòng 2, chỗ mentor còn nhận, mentee chưa có mentor, kèm danh sách chi tiết và bất thường.",
+    steps: [
+      "Đọc bảng “Đối soát theo nhóm”: mỗi nhóm phải “Khớp” (Mentee = ghép vòng 1 + vòng 2 + khác + chưa có mentor). Cột “Chỗ − mentee chờ” âm nghĩa là nhóm thiếu mentor.",
+      "Xem ba danh sách “Đã ghép ở vòng 2”, “Mentor còn nhận”, “Mentee chưa có mentor”; gõ vào ô tìm để lọc nhanh.",
+      "Đọc mục “Bất thường”: mentor vượt trần, cặp khác nhóm, mentee hiện lại sau khi cặp bị huỷ, người chưa phân nhóm.",
+      "Bấm “Tải CSV” ở từng phần để lấy file."
+    ],
+    notes: [
+      "Chỗ còn của mentor = tối đa 2 mentee, không vượt số đã đăng ký, trừ số cặp đang hoạt động (tính cả vòng 1). Mentor có nhiều hơn một hồ sơ mentor không được tính cho tới khi gộp hồ sơ.",
+      "Tải CSV: Super admin, Admin, Core team có quyền vận hành mùa. File có họ tên và email."
     ],
     updated: "07/10/2026"
   },

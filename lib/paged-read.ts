@@ -185,6 +185,7 @@ export const PAGE_ORDER = {
   interview_slots: { strategy: "keyset", key: "id" },
   interviewer_profiles: { strategy: "keyset", key: "id" },
   matches: { strategy: "keyset", key: "id" },
+  matching_industry_assignments: { strategy: "keyset", key: "id" },
   mentee_profiles: { strategy: "keyset", key: "id" },
   mentor_function_areas: { strategy: "range", key: ["mentor_profile_id", "function_area_id"] },
   mentor_industries: { strategy: "range", key: ["mentor_profile_id", "industry_id"] },
