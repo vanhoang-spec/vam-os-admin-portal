@@ -362,7 +362,7 @@ export function ReportView({
           <KpiCard label={REPORT_GROUP_LABELS.passed} value={t.passed} tone="success" helper={`${ratio(t.passed, t.results)} · ${formatInt(t.taken)} bạn được mentor chọn ngay`} />
           <KpiCard label={REPORT_GROUP_LABELS.rejected} value={t.rejected} tone="danger" helper={ratio(t.rejected, t.results)} />
           <KpiCard label={REPORT_GROUP_LABELS.needs_review} value={t.needs_review} tone="warning" helper={ratio(t.needs_review, t.results)} />
-          <KpiCard label="Đạt, chờ vòng matching" value={rest} helper={`${formatInt(t.taken)} bạn đạt khác đã có mentor (${formatInt(t.mentorsTaking)} mentor nhận)`} />
+          <KpiCard label="Đạt, chờ vòng ghép cặp sau" value={rest} helper={`${formatInt(t.taken)} bạn đạt khác đã có mentor ở vòng 1 (${formatInt(t.mentorsTaking)} mentor nhận)`} />
         </div>
       </Section>
 
@@ -437,7 +437,8 @@ export function ReportView({
         intro={
           <>
             {formatInt(t.taken)}/{formatInt(t.passed)} bạn đạt ({ratio(t.taken, t.passed)}) được chính mentor phỏng vấn nhận ngay tại buổi,
-            do {formatInt(t.mentorsTaking)} mentor nhận. {formatInt(rest)} bạn đạt còn lại chờ vòng matching. Cặp bấm nhầm đã huỷ không tính.
+            do {formatInt(t.mentorsTaking)} mentor nhận — đây là ghép cặp vòng 1. {formatInt(rest)} bạn đạt còn lại chờ các vòng ghép cặp sau.
+            Cặp bấm nhầm đã huỷ không tính.
           </>
         }
       >

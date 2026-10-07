@@ -570,7 +570,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     title: "Ghép cặp",
     summary: "Tạo và quản lý ghép cặp mentor – mentee thủ công trong mùa đang chọn: xem danh sách match, tạo cặp mới theo đợt tuyển và huỷ cặp khi cần.",
     steps: [
-      "Chọn mùa ở ô “Mùa vận hành”; chọn “Đợt tuyển”, “Trạng thái” rồi bấm “Lọc”. Mặc định chỉ hiện match “Đang đồng hành”; “Xoá lọc” để về mặc định.",
+      "Chọn mùa ở ô “Mùa vận hành”; chọn “Đợt tuyển”, “Trạng thái”, “Vòng ghép cặp” rồi bấm “Lọc”. Mặc định chỉ hiện match “Đang đồng hành”, mọi vòng; “Xoá lọc” để về mặc định.",
       "Tạo cặp: chọn một đợt tuyển và bấm “Lọc” để mở khung “Tạo matching thủ công”, rồi tìm và chọn “Mentor (*)” và “Mentee (*)”.",
       "Bấm “Xem hồ sơ” để đọc nhanh hồ sơ ứng tuyển mà không mất lựa chọn; ghi “Ghi chú nội bộ” nếu cần rồi bấm “Tạo matching”.",
       "Xem khung “Tải mentor trong batch” để biết mỗi mentor đã nhận bao nhiêu mentee so với sức nhận.",
@@ -580,9 +580,11 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Trên menu: Tuyển Mentor/Mentee → Ghép cặp — bước cuối của tuyển sinh mỗi mùa (trước 06/10/2026 là mục riêng ở menu chính).",
       "Xem: Super admin, Admin, Core team, Support team. Tạo và huỷ match: chỉ Super admin, Admin, Core team.",
       "Mentor và mentee phải được duyệt chính thức trong mùa của đợt tuyển. Mỗi mentee chỉ có một mentor đang active; mentor đã đủ sức nhận hiện “FULL” và không chọn được.",
-      "Huỷ match chuyển cặp sang “Đã dừng”, lịch sử không bị xoá. Muốn đổi mentor cho một mentee: huỷ match cũ trước rồi tạo match mới."
+      "Huỷ match chuyển cặp sang “Đã dừng”, lịch sử không bị xoá. Muốn đổi mentor cho một mentee: huỷ match cũ trước rồi tạo match mới.",
+      "Vòng 1 = mentee được người phỏng vấn nhận ngay tại buổi phỏng vấn, ở mọi đợt (03–04/10, 10–11/10, …). Hệ thống tự gắn nhãn lúc người phỏng vấn nộp phiếu “Có – Tôi muốn nhận”; không ai phải gắn tay.",
+      "Cặp tạo bằng “Tạo matching thủ công” hiện “Chưa gắn vòng” cho tới khi BTC chốt cách ghép vòng 2."
     ],
-    updated: "02/10/2026"
+    updated: "07/10/2026"
   },
   "/events": {
     title: "Sự kiện",

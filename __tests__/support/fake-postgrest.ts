@@ -51,6 +51,7 @@ type Filter =
   | { kind: "lt"; column: string; value: unknown }
   | { kind: "ilike"; column: string; pattern: string }
   | { kind: "notNull"; column: string }
+  | { kind: "isNull"; column: string }
   | { kind: "or"; expression: string };
 
 /**
@@ -184,6 +185,11 @@ function applyFilter(rows: any[], filter: Filter) {
       return rows.filter((row) => {
         const value = resolveFilterPath(row, filter.column);
         return value !== null && value !== undefined;
+      });
+    case "isNull":
+      return rows.filter((row) => {
+        const value = resolveFilterPath(row, filter.column);
+        return value === null || value === undefined;
       });
     case "or": {
       const terms = splitOrExpression(filter.expression);
@@ -357,6 +363,12 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
       not: (column: string, operator: string, value: unknown) => {
         if (operator !== "is" || value !== null) throw new Error(`fake-postgrest: unsupported not(${operator})`);
         return withFilter({ kind: "notNull", column });
+      },
+      is: (column: string, value: unknown) => {
+        // PostgREST `is` cũng nhận true/false; bản giả chỉ mô phỏng `is null`, thứ mã
+        // đang dùng — giá trị khác phải vỡ to, không lặng lẽ lọc sai.
+        if (value !== null) throw new Error(`fake-postgrest: unsupported is(${String(value)})`);
+        return withFilter({ kind: "isNull", column });
       },
       or: (expression: string) => withFilter({ kind: "or", expression }),
       order: (column: string, opts?: { ascending?: boolean }) =>

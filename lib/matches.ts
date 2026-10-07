@@ -5,6 +5,7 @@ import { readAllPages, type PagedTable } from "@/lib/paged-read";
 import { canBrowseOperations, canManageMatches } from "@/lib/permissions";
 import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSeasonIds, type ScopeFilter } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import type { MatchingRoundFilter } from "@/lib/matching-round";
 import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { vietnamDateKey } from "@/lib/utils";
 
@@ -318,6 +319,7 @@ async function writeAdminAudit(client: ReturnType<typeof getSupabaseServiceRoleC
 export async function getMatchList(filters?: {
   intakeBatchId?: string | null;
   status?: string | null;
+  round?: MatchingRoundFilter;
   scope?: ScopeFilter;
   audienceRole?: string | null;
 }): Promise<MatchListResult> {
@@ -349,9 +351,9 @@ export async function getMatchList(filters?: {
   // viewer, null, or an unrecognized value) is redacted by default.
   const viewerSafe = !canBrowseOperations(filters?.audienceRole);
   const matchProjection = viewerSafe
-    ? "id,season_id,status,match_type,match_source_raw,matched_at"
+    ? "id,season_id,status,match_type,match_source_raw,matched_at,matching_round"
     : "id,season_id,mentor_person_id,mentee_person_id,status,match_type," +
-      "match_source_raw,matched_at,notes,match_confidence";
+      "match_source_raw,matched_at,notes,match_confidence,matching_round";
   let query = client.from("matches").select(matchProjection)
     .order("matched_at", { ascending: false }).order("id", { ascending: false });
 
@@ -360,6 +362,11 @@ export async function getMatchList(filters?: {
   }
   if (filters?.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
+  }
+  if (filters?.round?.kind === "round") {
+    query = query.eq("matching_round", filters.round.round);
+  } else if (filters?.round?.kind === "none") {
+    query = query.is("matching_round", null);
   }
   if (filters?.scope?.allowedSeasonIds) {
     if (!filters.scope.allowedSeasonIds.length) return { ok: true, error: null, data: [] };
@@ -394,6 +401,7 @@ export async function getMatchList(filters?: {
         match_type: match.match_type,
         match_source_raw: match.match_source_raw,
         matched_at: match.matched_at ?? null,
+        matching_round: match.matching_round ?? null,
         batch_code: match.season_id
           ? (batchBySeasonId.get(match.season_id)?.code as string | null) ?? null
           : null

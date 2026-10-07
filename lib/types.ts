@@ -97,6 +97,8 @@ export type Match = JsonRecord & {
   ended_at?: string | null;
   end_reason?: string | null;
   admin_notes?: string | null;
+  /** Vòng ghép cặp; 1 = nhận tại buổi phỏng vấn (lib/matching-round.ts). Trống = chưa gắn. */
+  matching_round?: number | null;
 };
 
 /** Lightweight admin_users projection used for reviewer assignment dropdowns. */
