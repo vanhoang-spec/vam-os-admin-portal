@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { classifyNewPeople, setIndustryGroup } from "@/lib/matching-round2";
+import { classifyNewPeople, setIndustryGroup, setRound2Window } from "@/lib/matching-round2";
+import { runRound2Dispatch, sendRound2InviteTest } from "@/lib/matching-round2-dispatch";
+import { parseVietnamDateTime } from "@/lib/event-datetime";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
 
 const PATHS = ["/matches/vong-2", "/matches/vong-2/bao-cao"];
@@ -30,5 +32,32 @@ export async function setGroupAction(_prev: Round2ActionState, formData: FormDat
   if (!reason) return { status: "error", message: "Cần ghi lý do." };
   const result = await setIndustryGroup({ assignmentId, expectedGroup, newGroup, reason });
   if (result.ok) for (const path of PATHS) revalidatePath(path);
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/** BTC đặt giờ mở/đóng vòng 2 và đợt gửi thư hiện hành. Giờ nhập theo giờ Việt Nam. */
+export async function setRound2WindowAction(_prev: Round2ActionState, formData: FormData): Promise<Round2ActionState> {
+  const opensAt = parseVietnamDateTime(formData.get("opensAt"));
+  const closesRaw = String(formData.get("closesAt") ?? "").trim();
+  const closesAt = closesRaw ? parseVietnamDateTime(closesRaw) : null;
+  const wave = Number(String(formData.get("wave") ?? "").trim());
+  if (!opensAt) return { status: "error", message: "Cần giờ mở vòng 2 (ngày + giờ)." };
+  if (closesRaw && !closesAt) return { status: "error", message: "Giờ đóng không đọc được — nhập đủ ngày và giờ, hoặc để trống." };
+  if (!Number.isInteger(wave) || wave < 1 || wave > 9) return { status: "error", message: "Đợt gửi không hợp lệ." };
+  const result = await setRound2Window({ opensAt, closesAt, wave });
+  if (result.ok) for (const path of PATHS) revalidatePath(path);
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+export async function sendRound2TestAction(_prev: Round2ActionState, _formData: FormData): Promise<Round2ActionState> {
+  const result = await sendRound2InviteTest();
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/** Gửi thật. Chỉ chạy khi form mang đúng dấu xác nhận của bước thứ hai trên trang. */
+export async function sendRound2InvitesAction(_prev: Round2ActionState, formData: FormData): Promise<Round2ActionState> {
+  if (formData.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước khi gửi." };
+  const result = await runRound2Dispatch();
+  for (const path of PATHS) revalidatePath(path);
   return { status: result.ok ? "ok" : "error", message: result.message };
 }

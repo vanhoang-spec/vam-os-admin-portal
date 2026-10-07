@@ -16,6 +16,7 @@ import {
   buildInterviewSlotInviteEmail,
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
+  buildMatchingRound2InviteEmail,
   buildMenteeSessionInviteEmail,
   buildMenteeSessionReopenEmail,
   textToHtmlEmail,
@@ -47,6 +48,7 @@ import { resolveAutomationEmail } from "@/lib/email-automation";
 import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib/participant-invite-core";
 import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/lib/interview-schedule-core";
 import { menteeBookingUrl } from "@/lib/mentee-interview-core";
+import { mentorPickUrl } from "@/lib/matching-round2-link-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
 /**
@@ -1092,6 +1094,59 @@ export async function sendMenteeSessionReopen(input: {
     "mentee_session_invite",
     { ...built, to: input.toEmail },
     input.applicationId ? { table: "applications", id: input.applicationId } : null
+  );
+}
+
+/**
+ * Thư mời mentor chọn mentee ở Vòng 2 (BTC 07/10/2026). Đường dẫn dựng từ token ở máy chủ.
+ * `token = null` là bản GỬI THỬ cho BTC: đường dẫn thay bằng một câu giữ chỗ, không link
+ * thật nào rời khỏi hệ thống.
+ */
+export async function sendMatchingRound2Invite(input: {
+  toEmail: string;
+  mentorName: string;
+  seasonLabel: string;
+  groupLabel: string;
+  slots: number;
+  deadlineLabel: string;
+  waveNote: string;
+  token: string | null;
+  linkId: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  let link = "(đường dẫn riêng của từng mentor — chỉ có trong thư thật)";
+  if (input.token) {
+    const base = resolveEmailBaseUrl(input.requestOrigin);
+    if (!base) {
+      return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+    }
+    link = mentorPickUrl(base, input.token);
+  }
+  const values = {
+    ten_nguoi_nhan: input.mentorName,
+    mua: input.seasonLabel,
+    ghi_chu_dot: input.waveNote,
+    nhom_nganh: input.groupLabel,
+    so_cho: String(input.slots),
+    link_chon_mentee: link,
+    han_chon: input.deadlineLabel,
+    zalo_ho_tro: HOTLINE_ZALO
+  };
+  const built = buildMatchingRound2InviteEmail({
+    mentorName: values.ten_nguoi_nhan,
+    seasonLabel: values.mua,
+    waveNote: values.ghi_chu_dot,
+    groupLabel: values.nhom_nganh,
+    slotsLabel: values.so_cho,
+    pickUrl: link,
+    deadlineLabel: values.han_chon,
+    hotlineZalo: HOTLINE_ZALO
+  });
+  const message = await resolveAutomationEmail({ slotId: "matching_round2_invite", values, fallback: built });
+  return deliver(
+    "matching_round2_invite",
+    { ...built, ...message, to: input.toEmail },
+    input.linkId ? { table: "matching_round2_links", id: input.linkId } : null
   );
 }
 

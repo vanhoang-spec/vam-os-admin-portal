@@ -5,6 +5,7 @@ import {
   buildInterviewScheduleEmail,
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
+  buildMatchingRound2InviteEmail,
   buildMenteeSessionConfirmedEmail,
   buildMenteeSessionInviteEmail,
   buildParticipantInviteEmail,
@@ -217,6 +218,20 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
           sessionLabel: S("ca_phong_van"),
           venueLabel: S("dia_diem"),
           manageUrl: S("link_doi_ca"),
+          hotlineZalo: S("zalo_ho_tro")
+        })
+      );
+
+    case "matching_round2_invite":
+      return one(
+        buildMatchingRound2InviteEmail({
+          mentorName: S("ten_nguoi_nhan"),
+          seasonLabel: S("mua"),
+          waveNote: S("ghi_chu_dot"),
+          groupLabel: S("nhom_nganh"),
+          slotsLabel: S("so_cho"),
+          pickUrl: S("link_chon_mentee"),
+          deadlineLabel: S("han_chon"),
           hotlineZalo: S("zalo_ho_tro")
         })
       );

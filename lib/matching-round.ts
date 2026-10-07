@@ -7,8 +7,8 @@
  * Cặp BTC ghép tay để trống cho tới khi BTC chốt cách ghép vòng 2.
  */
 
-/** Các vòng hiện có trong ô lọc. BTC chốt vòng 2 thì thêm 2 vào đây. */
-export const KNOWN_MATCHING_ROUNDS = [1] as const;
+/** Các vòng hiện có trong ô lọc. Vòng 2 = mentor tự chọn qua link riêng (BTC 07/10/2026). */
+export const KNOWN_MATCHING_ROUNDS = [1, 2] as const;
 
 export type MatchingRoundFilter = { kind: "all" } | { kind: "round"; round: number } | { kind: "none" };
 

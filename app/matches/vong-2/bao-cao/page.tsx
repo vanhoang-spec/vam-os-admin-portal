@@ -4,6 +4,8 @@ import { Card, EmptyState, ErrorBox, KpiCard, PageHeader } from "@/components/ui
 import { TableSearch } from "@/components/table-search";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getRound2Data } from "@/lib/matching-round2";
+import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
+import { Round2DispatchPanel } from "./dispatch-panel";
 import type { GroupSummary, Round2Row } from "@/lib/matching-round2-core";
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canAssignReview, canBrowseOperations } from "@/lib/permissions";
@@ -97,7 +99,17 @@ export default async function Round2ReportPage() {
       </>
     );
   }
-  const { board } = result.data;
+  const { board, canManage } = result.data;
+  const dispatch = canManage ? await getRound2DispatchStatus() : null;
+  const windowLabel = !dispatch
+    ? ""
+    : dispatch.window === "open"
+      ? `Đang mở${dispatch.closesAt ? `, đóng ${formatDateTime(dispatch.closesAt)}` : ""}`
+      : dispatch.window === "closed"
+        ? `Đã đóng lúc ${formatDateTime(dispatch.closesAt)}`
+        : dispatch.opensAt
+          ? `Chưa mở — mở lúc ${formatDateTime(dispatch.opensAt)}`
+          : "Chưa đặt giờ mở";
   const mentorsWithSlots = board.rows.filter((r) => r.person.role === "mentor" && r.receivesList).sort(byGroupThenName);
   const waitingMentees = board.rows
     .filter((r) => r.person.role === "mentee" && r.menteeState === "visible" && r.group !== null)
@@ -125,6 +137,17 @@ export default async function Round2ReportPage() {
         <KpiCard label="Mentee chưa có mentor" value={waitingMentees.length} />
         <KpiCard label="Cảnh báo" value={warnings.length} tone={warnings.length ? "warning" : "default"} />
       </div>
+
+      {canManage ? (
+        <Card>
+          <h2 className="mb-2 text-base font-semibold text-vam-ink">Mở vòng 2 và gửi link chọn mentee</h2>
+          {dispatch ? (
+            <Round2DispatchPanel {...dispatch} windowLabel={windowLabel} />
+          ) : (
+            <ErrorBox message="Không đọc được trạng thái gửi thư. Tải lại trang." />
+          )}
+        </Card>
+      ) : null}
 
       <Card>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

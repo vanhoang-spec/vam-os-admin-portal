@@ -225,6 +225,9 @@ export async function middleware(request: NextRequest) {
     // Trang chọn ca phỏng vấn của ứng viên mentee. Cùng lý do với /dat-lich/:
     // người mở chưa có tài khoản, mã riêng nằm trong hộp thư của chính họ.
     request.nextUrl.pathname.startsWith("/dat-ca/") ||
+    // Trang mentor chọn mentee ở Vòng 2 (BTC 07/10/2026). Mentor không có tài khoản;
+    // mã riêng nằm trong thư mời gửi tới hộp thư của chính họ.
+    request.nextUrl.pathname.startsWith("/chon-mentee/") ||
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
@@ -244,6 +247,8 @@ export async function middleware(request: NextRequest) {
           ? "interview_booking"
           : request.nextUrl.pathname.startsWith("/dat-ca/")
           ? "mentee_session_booking"
+          : request.nextUrl.pathname.startsWith("/chon-mentee/")
+          ? "mentor_mentee_pick"
           : request.nextUrl.pathname.startsWith("/renew/")
           ? "renewal"
           : request.nextUrl.pathname.startsWith("/ve/")
@@ -262,7 +267,9 @@ export async function middleware(request: NextRequest) {
       publicRoute === "renewal" ||
       publicRoute === "ticket" ||
       publicRoute === "interview_booking" ||
-      publicRoute === "mentee_session_booking"
+      publicRoute === "mentee_session_booking" ||
+      // Ai cầm mã là chọn/bỏ chọn mentee thay mentor đó; trang còn mang hồ sơ mentee.
+      publicRoute === "mentor_mentee_pick"
     ) {
       response.headers.set("Referrer-Policy", "no-referrer");
       response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");

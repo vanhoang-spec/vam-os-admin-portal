@@ -29,6 +29,7 @@ import {
   buildInterviewScheduleEmail,
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
+  buildMatchingRound2InviteEmail,
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
   buildMenteeSessionInviteEmail,
@@ -241,6 +242,26 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         sessionLabel: "Thứ Bảy 03/10/2026, 08:00 – 08:30 (giờ Việt Nam)",
         venueLabel: "Phòng ví dụ, Cơ sở UEH (ví dụ)",
         manageUrl: `${ORIGIN}/dat-ca/ma-vi-du`,
+        hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "matching_round2_invite",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Mời mentor chọn mentee — Ghép cặp Vòng 2",
+    audience: "Mentor còn chỗ nhận mentee, đã có nhóm ngành",
+    trigger: 'Khi ban tổ chức bấm "Gửi link chọn mentee" ở mục Vòng 2 · Báo cáo.',
+    note: "Mỗi mentor một đường dẫn riêng. Đợt sau chỉ gửi cho mentor lúc đó vẫn còn chỗ, với câu mở đầu báo có thêm hồ sơ.",
+    body: built(
+      buildMatchingRound2InviteEmail({
+        mentorName: MENTOR,
+        seasonLabel: SEASON,
+        waveNote: "Ban tổ chức mời anh/chị chọn mentee ở Vòng 2 ghép cặp: các bạn mentee đã đạt phỏng vấn, cùng nhóm ngành với anh/chị.",
+        groupLabel: "4. Marketing - Kinh doanh",
+        slotsLabel: "2",
+        pickUrl: `${ORIGIN}/chon-mentee/ma-vi-du`,
+        deadlineLabel: "23:59 ngày 12/10/2026",
         hotlineZalo: "0919144638"
       })
     )

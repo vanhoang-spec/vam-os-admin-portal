@@ -80,7 +80,10 @@ export type EmailKind =
   // link nào, và từ giai đoạn 1 mentee không còn nhận thư kia nữa.
   | "mentee_session_invite"
   // Xác nhận ca đã đặt — gửi cả khi đặt lần đầu lẫn khi đổi ca.
-  | "mentee_session_confirmed";
+  | "mentee_session_confirmed"
+  // Ghép cặp Vòng 2: mời mentor mở link riêng chọn mentee cùng nhóm ngành
+  // (supabase/migrations/20261008080000_vong_2_mentor_chon_mentee.sql).
+  | "matching_round2_invite";
 
 /**
  * Một tệp đi kèm thư.
@@ -1943,6 +1946,60 @@ export function buildMenteeSessionInviteEmail(input: {
     ].join("")
   );
 
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư mời mentor chọn mentee ở Vòng 2 (BTC 07/10/2026). Một link riêng cho mỗi mentor,
+ * dùng cho mọi đợt gửi; `waveNote` là câu mở đầu theo đợt ("mời chọn" ở đợt 1, "danh
+ * sách vừa có thêm hồ sơ" ở đợt sau).
+ */
+export function buildMatchingRound2InviteEmail(input: {
+  mentorName: string;
+  seasonLabel: string;
+  groupLabel: string;
+  slotsLabel: string;
+  pickUrl: string;
+  deadlineLabel: string;
+  waveNote: string;
+  hotlineZalo: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName, "anh/chị");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const group = safeDisplayName(input.groupLabel, "");
+  const slots = safeDisplayName(input.slotsLabel, "");
+  const deadline = safeDisplayName(input.deadlineLabel, "");
+  const waveNote = safeDisplayName(input.waveNote, "");
+
+  const subject = `[UEH Mentoring] Mời anh/chị chọn mentee — ${season}`;
+  const lines = [
+    `Chào ${name},`,
+    "",
+    waveNote,
+    "",
+    `Nhóm ngành của anh/chị: ${group}. Anh/chị còn nhận được ${slots} mentee ở vòng này. Mở đường dẫn riêng dưới đây để đọc hồ sơ các bạn mentee cùng nhóm chưa có mentor và bấm "Chọn bạn này":`,
+    input.pickUrl,
+    "",
+    `Hạn chọn: ${deadline}. Bạn nào đã được mentor khác chọn sẽ biến khỏi danh sách, nên anh/chị chọn sớm giúp ban tổ chức. Chọn nhầm thì bỏ chọn được trong 30 phút.`,
+    "",
+    "Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.",
+    "",
+    `Cần hỗ trợ, anh/chị nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
+    "",
+    SIGNATURE_TEXT
+  ];
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>${escapeHtml(waveNote)}</p>`,
+      `<p>Nhóm ngành của anh/chị: <strong>${escapeHtml(group)}</strong>. Anh/chị còn nhận được <strong>${escapeHtml(slots)}</strong> mentee ở vòng này. Mở đường dẫn riêng dưới đây để đọc hồ sơ các bạn mentee cùng nhóm chưa có mentor và bấm “Chọn bạn này”.</p>`,
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.pickUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn mentee</a></p>`,
+      `<p>Hạn chọn: <strong>${escapeHtml(deadline)}</strong>. Bạn nào đã được mentor khác chọn sẽ biến khỏi danh sách, nên anh/chị chọn sớm giúp ban tổ chức. Chọn nhầm thì bỏ chọn được trong 30 phút.</p>`,
+      "<p>Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.</p>",
+      `<p>Cần hỗ trợ, anh/chị nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho anh/chị, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.pickUrl)}</p>`
+    ].join("")
+  );
   return { to: "", subject, text: lines.join("\n"), html };
 }
 

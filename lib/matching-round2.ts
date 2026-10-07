@@ -49,7 +49,7 @@ function optionLabel(options: ReadonlyArray<{ value: string; label: string }>, v
   return options.find((o) => o.value === v)?.label ?? v;
 }
 
-async function seasonContext() {
+export async function round2SeasonContext() {
   const client = getSupabaseServiceRoleClient();
   if (!client) throw new Error("DATABASE_UNAVAILABLE");
   const code = SEASON_CONFIG.CURRENT_APPLICATION_SEASON_CODE;
@@ -59,7 +59,7 @@ async function seasonContext() {
 }
 
 /** Đọc toàn bộ dữ liệu vòng 2 của mùa và dựng bảng. Không ghi gì. */
-async function loadBoard(client: any, seasonId: string): Promise<Round2Board> {
+export async function loadRound2Board(client: any, seasonId: string): Promise<Round2Board> {
   const apps = await readAllPages<Row>(
     "applications",
     "id,person_id,role_applied,status,source,submitted_at,raw_payload",
@@ -199,7 +199,7 @@ async function loadBoard(client: any, seasonId: string): Promise<Round2Board> {
   return buildRound2Board({ people: persons, assignments: assignmentRows, matches: matchRows });
 }
 
-async function operatorFor(seasonId: string) {
+export async function round2Operator(seasonId: string) {
   const actor = await getCurrentAdminUser();
   if (!actor?.id || !canManageMatches(actor.role)) return null;
   const ctx = await getAdminScopeContext();
@@ -208,8 +208,8 @@ async function operatorFor(seasonId: string) {
 
 export async function getRound2Data(): Promise<{ ok: true; data: Round2Data } | { ok: false; message: string }> {
   try {
-    const { client, seasonId, seasonCode } = await seasonContext();
-    const [board, actor] = await Promise.all([loadBoard(client, seasonId), operatorFor(seasonId)]);
+    const { client, seasonId, seasonCode } = await round2SeasonContext();
+    const [board, actor] = await Promise.all([loadRound2Board(client, seasonId), round2Operator(seasonId)]);
     return { ok: true, data: { seasonId, seasonCode, board, canManage: Boolean(actor) } };
   } catch (error) {
     console.error("[matching-round2] load failed", { message: error instanceof Error ? error.message : String(error) });
@@ -239,11 +239,11 @@ function rpcMessage(error: { message?: string } | null | undefined): string {
 /** BTC bấm "Phân loại người mới": người chưa có nhóm được gán; người cũ chỉ ghi drift. */
 export async function classifyNewPeople(): Promise<{ ok: boolean; message: string }> {
   try {
-    const { client, seasonId } = await seasonContext();
-    const actor = await operatorFor(seasonId);
+    const { client, seasonId } = await round2SeasonContext();
+    const actor = await round2Operator(seasonId);
     if (!actor) return { ok: false, message: RPC_MESSAGES.ACCESS_DENIED };
     // Tính lại trên máy chủ từ dữ liệu hiện tại — không tin bất cứ gì gửi lên từ form.
-    const board = await loadBoard(client, seasonId);
+    const board = await loadRound2Board(client, seasonId);
     const rows = assignmentRowsForSave(board);
     if (!rows.length) return { ok: true, message: "Chưa có ai đủ điều kiện để phân loại." };
     const { data, error } = await client.rpc("vam112_save_industry_assignments", {
@@ -263,6 +263,31 @@ export async function classifyNewPeople(): Promise<{ ok: boolean; message: strin
   }
 }
 
+/** BTC đặt giờ mở/đóng vòng 2 và đợt gửi thư hiện hành (vam113_set_round2_window). */
+export async function setRound2Window(input: { opensAt: string; closesAt: string | null; wave: number }): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { client, seasonId } = await round2SeasonContext();
+    const actor = await round2Operator(seasonId);
+    if (!actor) return { ok: false, message: RPC_MESSAGES.ACCESS_DENIED };
+    const { error } = await client.rpc("vam113_set_round2_window", {
+      p_actor: actor.id,
+      p_season: seasonId,
+      p_opens_at: input.opensAt,
+      p_closes_at: input.closesAt,
+      p_send_wave: input.wave
+    });
+    if (error) {
+      const raw = String(error.message ?? "");
+      if (raw.includes("WINDOW_ORDER")) return { ok: false, message: "Giờ đóng phải sau giờ mở." };
+      return { ok: false, message: rpcMessage(error) };
+    }
+    return { ok: true, message: "Đã lưu giờ mở/đóng và đợt gửi." };
+  } catch (error) {
+    console.error("[matching-round2] set window failed", { message: error instanceof Error ? error.message : String(error) });
+    return { ok: false, message: "Không lưu được. Thử lại; nếu vẫn lỗi, báo quản trị viên." };
+  }
+}
+
 /** BTC đổi hoặc xác nhận nhóm của một người. Chỉ chạm đúng nhóm và lý do. */
 export async function setIndustryGroup(input: {
   assignmentId: string;
@@ -271,8 +296,8 @@ export async function setIndustryGroup(input: {
   reason: string;
 }): Promise<{ ok: boolean; message: string }> {
   try {
-    const { client, seasonId } = await seasonContext();
-    const actor = await operatorFor(seasonId);
+    const { client, seasonId } = await round2SeasonContext();
+    const actor = await round2Operator(seasonId);
     if (!actor) return { ok: false, message: RPC_MESSAGES.ACCESS_DENIED };
     const { error } = await client.rpc("vam112_set_industry_group", {
       p_actor: actor.id,

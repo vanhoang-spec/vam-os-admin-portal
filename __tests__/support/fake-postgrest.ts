@@ -61,7 +61,7 @@ type Filter =
  */
 export type RecordedWrite = {
   table: string;
-  kind: "insert" | "delete";
+  kind: "insert" | "delete" | "update" | "upsert";
   /** Rows handed to `insert()`, normalised to an array. Empty for a delete. */
   rows: any[];
   /** Serialised predicate set for a delete. */
@@ -446,10 +446,89 @@ export function fakeClient(db: FakeDb, options?: { rpc?: (...args: any[]) => any
     };
   }
 
+  /**
+   * update(patch) với eq / in / is(null) / lt, có .select() trả các dòng vừa sửa. Ghi lại
+   * lệnh vào db.writes (kind "update") để test khẳng định CHÍNH lệnh ghi, kể cả điều kiện.
+   */
+  function updater(table: string, patch: Record<string, unknown>, filters: Filter[]): any {
+    const run = () => {
+      db.writes.push({ table, kind: "update", rows: [patch], filters: JSON.stringify(filters) });
+      const error = db.errors[`update:${table}`] ?? null;
+      if (error) return { data: null, error };
+      let hit = (db.tables[table] ?? []).slice();
+      for (const filter of filters) hit = applyFilter(hit, filter);
+      for (const row of hit) Object.assign(row, patch);
+      return { data: hit, error: null };
+    };
+    const next = (filter: Filter) => updater(table, patch, [...filters, filter]);
+    return {
+      eq: (column: string, value: unknown) => next({ kind: "eq", column, value }),
+      in: (column: string, values: unknown[]) => next({ kind: "in", column, values }),
+      lt: (column: string, value: unknown) => next({ kind: "lt", column, value }),
+      is: (column: string, value: unknown) => {
+        if (value !== null) throw new Error(`fake-postgrest: unsupported is(${String(value)})`);
+        return next({ kind: "isNull", column });
+      },
+      select: (columns = "*") => ({
+        then: (resolve: any, reject?: any) => {
+          const { data, error } = run();
+          return Promise.resolve(
+            error ? { data: null, error } : { data: (data as any[]).map((row) => projectColumns(row, columns)), error: null }
+          ).then(resolve, reject);
+        }
+      }),
+      then: (resolve: any, reject?: any) => {
+        const { error } = run();
+        return Promise.resolve({ data: null, error }).then(resolve, reject);
+      }
+    };
+  }
+
+  /** upsert với onConflict (cột, ngăn bởi dấu phẩy) và ignoreDuplicates. */
+  function upserter(table: string, payload: any, options?: { onConflict?: string; ignoreDuplicates?: boolean }) {
+    const rows = Array.isArray(payload) ? payload : [payload];
+    db.writes.push({ table, kind: "upsert", rows, filters: JSON.stringify(options ?? {}) });
+    const error = db.errors[`upsert:${table}`] ?? null;
+    if (!error) {
+      const stored = (db.tables[table] ??= []);
+      const keys = String(options?.onConflict ?? "id").split(",").map((k) => k.trim());
+      rows.forEach((row, index) => {
+        const existing = stored.find((s) => keys.every((k) => s[k] === row[k]));
+        if (existing) {
+          if (!options?.ignoreDuplicates) Object.assign(existing, row);
+        } else {
+          stored.push(row && row.id === undefined ? { ...row, id: `${table}-upserted-${db.writes.length}-${index}` } : row);
+        }
+      });
+    }
+    return { then: (resolve: any, reject?: any) => Promise.resolve({ data: null, error }).then(resolve, reject) };
+  }
+
+  /** select(…, { count: "exact", head: true }): chỉ trả số dòng khớp. */
+  function counter(table: string, filters: Filter[]): any {
+    const next = (filter: Filter) => counter(table, [...filters, filter]);
+    return {
+      eq: (column: string, value: unknown) => next({ kind: "eq", column, value }),
+      in: (column: string, values: unknown[]) => next({ kind: "in", column, values }),
+      gte: (column: string, value: unknown) => next({ kind: "gte", column, value }),
+      then: (resolve: any, reject?: any) => {
+        db.requests.push({ table, columns: "count", filters: JSON.stringify(filters), order: [], from: null, to: null, limit: null, returned: 0 });
+        const error = db.errors[table] ?? null;
+        if (error) return Promise.resolve({ data: null, count: null, error }).then(resolve, reject);
+        let rows = (db.tables[table] ?? []).slice();
+        for (const filter of filters) rows = applyFilter(rows, filter);
+        return Promise.resolve({ data: null, count: rows.length, error: null }).then(resolve, reject);
+      }
+    };
+  }
+
   return {
     from: (table: string) => ({
-      select: (columns = "*") => builder(table, columns, [], [], { from: null, to: null, limit: null }),
+      select: (columns = "*", options?: { count?: string; head?: boolean }) =>
+        options?.head ? counter(table, []) : builder(table, columns, [], [], { from: null, to: null, limit: null }),
       insert: (payload: any) => inserter(table, payload),
+      update: (patch: Record<string, unknown>) => updater(table, patch, []),
+      upsert: (payload: any, options?: { onConflict?: string; ignoreDuplicates?: boolean }) => upserter(table, payload, options),
       delete: () => deleter(table, [])
     }),
     rpc: (...args: any[]) =>
