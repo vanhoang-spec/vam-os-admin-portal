@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, DetailGrid, EmptyState, ErrorBox, ExternalLinkButton, PageHeader } from "@/components/ui";
 import { getMatch, getSeasons, keyById } from "@/lib/data";
 import { getMatchRelatedDisplayData } from "@/lib/matches";
+import { matchingRoundLabel } from "@/lib/matching-round";
 import { canBrowseOperations } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { displayCode, displayText } from "@/lib/utils";
@@ -54,6 +55,7 @@ export default async function MatchDetailPage(props: { params: Promise<{ id: str
             rows={[
               ["Mùa", season?.code ?? season?.name],
               ["Trạng thái", match.data.status],
+              ["Vòng ghép cặp", matchingRoundLabel(match.data.matching_round) ?? "Chưa gắn vòng"],
               ["Loại ghép", match.data.match_type],
               ["Nguồn", match.data.match_source_raw],
               ["Độ tin cậy", match.data.match_confidence],

@@ -4,6 +4,13 @@ import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getIntakeBatches } from "@/lib/data";
 import { getManualMatchingCandidates, getMatchList } from "@/lib/matches";
+import {
+  KNOWN_MATCHING_ROUNDS,
+  UNASSIGNED_ROUND_PARAM,
+  matchingRoundFilterLabel,
+  matchingRoundLabel,
+  parseMatchingRoundFilter
+} from "@/lib/matching-round";
 import { canBrowseOperations, canManageMatches } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
@@ -30,9 +37,20 @@ function StatusBadge({ status }: { status: string | null }) {
   return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{matchStatusLabel(s)}</span>;
 }
 
+function RoundBadge({ round }: { round: unknown }) {
+  const label = matchingRoundLabel(round);
+  if (!label) return <span className="text-[11px] text-slate-400">Chưa gắn vòng</span>;
+  return (
+    <span data-testid="match-round" className="rounded-full bg-vam-mint px-2 py-0.5 text-[11px] font-semibold text-vam-green">
+      {label}
+    </span>
+  );
+}
+
 export default async function MatchesPage(props: { searchParams?: Promise<{
     batch?: string | string[];
     status?: string | string[];
+    round?: string | string[];
     season?: string | string[];
   }> }) {
   const searchParams = await props.searchParams;
@@ -79,11 +97,16 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
   const batchFilter = selectedParam(searchParams?.batch).trim();
   const rawStatus = selectedParam(searchParams?.status).trim();
   const statusFilter = rawStatus || "active"; // default to showing active matches
+  const roundFilter = parseMatchingRoundFilter(selectedParam(searchParams?.round));
+  const roundParam =
+    roundFilter.kind === "round" ? String(roundFilter.round) : roundFilter.kind === "none" ? UNASSIGNED_ROUND_PARAM : "";
+  const roundFilterLabel = matchingRoundFilterLabel(roundFilter);
 
-  // Always load matches (filtered by batch/status if provided)
+  // Always load matches (filtered by batch/status/round if provided)
   const matchListRes = await getMatchList({
     intakeBatchId: batchFilter || null,
     status: statusFilter !== "all" ? statusFilter : null,
+    round: roundFilter,
     scope,
     audienceRole: matchAudienceRole
   });
@@ -135,6 +158,21 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
               <option value="dropped">{matchStatusLabel("dropped")}</option>
               <option value="completed">{matchStatusLabel("completed")}</option>
               <option value="unmatched_review">{matchStatusLabel("unmatched_review")}</option>
+            </select>
+          </label>
+
+          <label className="block min-w-[160px] flex-1">
+            <span className="text-xs font-medium uppercase text-slate-500">Vòng ghép cặp</span>
+            <select
+              name="round"
+              defaultValue={roundParam}
+              className="mt-1 w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint"
+            >
+              <option value="">Tất cả vòng</option>
+              {KNOWN_MATCHING_ROUNDS.map((n) => (
+                <option key={n} value={String(n)}>{matchingRoundLabel(n)}</option>
+              ))}
+              <option value={UNASSIGNED_ROUND_PARAM}>Chưa gắn vòng</option>
             </select>
           </label>
 
@@ -229,12 +267,16 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
 
         {/* ── Right: matches table ── */}
         <Card>
-          <h2 className="mb-3 text-base font-semibold text-vam-ink">
+          <h2 className="mb-1 text-base font-semibold text-vam-ink">
             Danh sách matching{" "}
             <span className="text-sm font-normal text-slate-500">
-              ({matchListRes.data.length} {statusFilter !== "all" ? matchStatusLabel(statusFilter) : "tổng cộng"})
+              ({matchListRes.data.length} {statusFilter !== "all" ? matchStatusLabel(statusFilter) : "tổng cộng"}
+              {roundFilterLabel ? ` · ${roundFilterLabel}` : ""})
             </span>
           </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Vòng 1 = mentee được người phỏng vấn nhận ngay tại buổi phỏng vấn, ở mọi đợt — hệ thống tự gắn lúc nhận.
+          </p>
 
           {matchListRes.data.length === 0 ? (
             <EmptyState message="Chưa có match nào phù hợp với bộ lọc." />
@@ -254,7 +296,7 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                     <tr>
                       <th className="w-[24%] px-4 py-3">Mentor</th>
                       <th className="w-[24%] px-4 py-3">Mentee</th>
-                      <th className="px-4 py-3">Đợt / Nguồn</th>
+                      <th className="px-4 py-3">Vòng / Đợt / Nguồn</th>
                       <th className="px-4 py-3">Trạng thái</th>
                       <th className="px-4 py-3">Thời điểm</th>
                       <th className="px-4 py-3">Hành động</th>
@@ -276,6 +318,7 @@ export default async function MatchesPage(props: { searchParams?: Promise<{
                           {!viewerSafe ? <div className="mt-0.5 break-all text-xs leading-4 text-slate-500">{displayText(row.mentee_email)}</div> : null}
                         </td>
                         <td className="px-4 py-3 align-top text-xs text-slate-600">
+                          <div className="mb-1"><RoundBadge round={row.matching_round} /></div>
                           <div>{row.batch_code ?? row.match_type ?? "—"}</div>
                           <div className="text-slate-400">
                             {row.match_source ?? row.match_source_raw ?? "—"}
