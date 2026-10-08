@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CrossTabTable } from "@/components/cross-tab-table";
 import { TableSearch } from "@/components/table-search";
 import { Card, KpiCard, PageHeader } from "@/components/ui";
 import {
@@ -6,7 +7,6 @@ import {
   REPORT_GROUP_LABELS,
   formatScore,
   formatShare,
-  type CrossTab,
   type CrossTabRow,
   type GroupScore,
   type InterviewReport,
@@ -106,67 +106,6 @@ const TOC: Array<[string, string]> = [
   ["nhan-xet", "5. Mẫu hình trong nhận xét của mentor"],
   ["chon-ngay", "6. Được mentor chọn ngay so với còn lại"]
 ];
-
-function CrossTabTable({
-  tab,
-  firstLabel,
-  extra
-}: {
-  tab: CrossTab;
-  firstLabel: string;
-  extra?: { label: string; value: (row: CrossTabRow) => string; total: string };
-}) {
-  const grand = tab.columns.reduce((sum, c) => sum + c.total, 0);
-  return (
-    <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
-      <table className="min-w-full divide-y divide-vam-line text-sm">
-        <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
-          <tr>
-            <th className={TH}>{firstLabel}</th>
-            {tab.columns.map((c) => (
-              <th key={c.key} className={`${TH} text-right`}>
-                {c.label}
-                <span className="block font-normal text-slate-400">{formatInt(c.total)} hồ sơ</span>
-              </th>
-            ))}
-            <th className={`${TH} text-right`}>Tổng</th>
-            {extra ? <th className={`${TH} text-right`}>{extra.label}</th> : null}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-vam-line">
-          {tab.rows.map((row) => (
-            <tr key={row.key}>
-              <td className={`${TD} font-medium text-vam-ink`}>{row.label}</td>
-              {row.cells.map((cell, i) => (
-                <td key={tab.columns[i].key} className={NUM}>
-                  {cell.count ? (
-                    <>
-                      {formatInt(cell.count)} <span className="text-xs text-slate-500">({formatShare(cell.share)})</span>
-                    </>
-                  ) : (
-                    <span className="text-slate-300">0</span>
-                  )}
-                </td>
-              ))}
-              <td className={`${NUM} font-medium`}>{formatInt(row.total)}</td>
-              {extra ? <td className={`${NUM} font-medium`}>{extra.value(row)}</td> : null}
-            </tr>
-          ))}
-        </tbody>
-        <tfoot className="border-t-2 border-vam-line bg-slate-50 font-semibold">
-          <tr>
-            <td className={`${TD} text-vam-ink`}>Tổng</td>
-            {tab.columns.map((c) => (
-              <td key={c.key} className={NUM}>{formatInt(c.total)}</td>
-            ))}
-            <td className={NUM}>{formatInt(grand)}</td>
-            {extra ? <td className={NUM}>{extra.total}</td> : null}
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  );
-}
 
 function ScoreTable({ columns }: { columns: Array<{ key: string; label: string; summary: ScoreSummary }> }) {
   const criteria = columns.find((c) => c.summary.criteria.length)?.summary.criteria ?? [];

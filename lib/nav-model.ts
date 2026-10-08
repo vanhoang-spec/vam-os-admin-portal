@@ -164,8 +164,10 @@ function buildRecruitmentGroup(
   const when = (ok: boolean, item: NavItemDef): NavItemDef[] => (ok ? [item] : []);
 
   // Thứ tự trong hai nhánh do BTC đọc từng mục (07/10/2026) — đừng xếp lại theo ý riêng.
-  // Nhánh Mentor sẽ có mục “Báo cáo” đứng đầu khi BTC chốt nội dung.
   const mentor: NavItemDef[] = [
+    // “Báo cáo” đứng đầu như nhánh Mentee (BTC 08/10/2026). Có tên và kết quả của mọi
+    // người nộp đơn nên mentor phỏng vấn (reviewer) không xem; cùng khán giả với Tiến độ.
+    ...when(sessionStatus, { href: "/interviews/bao-cao-mentor", label: "Báo cáo" }),
     ...when(showApplicationOps, { href: "/applications?role_applied=mentor", label: "Hồ sơ mentor" }),
     ...when(showAdminTier, { href: "/admin/renewals", label: "Gia hạn mentor S12" }),
     ...when(decisionLists, { href: "/applications/mentor-review", label: "Duyệt Mentor S12" }),

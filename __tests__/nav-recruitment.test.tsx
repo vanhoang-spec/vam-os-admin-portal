@@ -56,7 +56,7 @@ describe("cấu trúc theo vai trò", () => {
     expect(shape(group)).toEqual([
       "Danh sách nhân sự tuyển sinh",
       [MENTOR_RECRUITMENT_LABEL, [
-        "Hồ sơ mentor", "Gia hạn mentor S12", "Duyệt Mentor S12", "Giao hồ sơ mentor", "Đánh giá mentor",
+        "Báo cáo", "Hồ sơ mentor", "Gia hạn mentor S12", "Duyệt Mentor S12", "Giao hồ sơ mentor", "Đánh giá mentor",
         "Lịch phỏng vấn", "Thư xác nhận lịch PV cho mentor", "Phỏng vấn mentor", "Tiến độ phỏng vấn mentor",
         "Kết quả phỏng vấn Mentor S12"
       ]],
@@ -82,6 +82,14 @@ describe("cấu trúc theo vai trò", () => {
     const mentee = (recruitment("core_team")?.items ?? []).find((e) => isNavSubGroup(e) && e.key === "mentee");
     const report = mentee && isNavSubGroup(mentee) ? mentee.items[0] : undefined;
     expect(report).toEqual({ href: "/interviews/bao-cao-mentee", label: "Báo cáo" });
+  });
+
+  it("“Báo cáo” của nhánh Mentor là trang báo cáo tuyển mentor, đứng đầu nhánh (BTC 08/10/2026)", () => {
+    for (const role of ["support_team", "core_team", "admin", "super_admin"] as const) {
+      const mentor = (recruitment(role)?.items ?? []).find((e) => isNavSubGroup(e) && e.key === "mentor");
+      const report = mentor && isNavSubGroup(mentor) ? mentor.items[0] : undefined;
+      expect(report).toEqual({ href: "/interviews/bao-cao-mentor", label: "Báo cáo" });
+    }
   });
 
   it("mục dùng chung mở đúng bộ lọc vai trò của nhánh chứa nó", () => {
@@ -120,7 +128,7 @@ describe("cấu trúc theo vai trò", () => {
   it("support_team: không Đánh giá, không Phỏng vấn chung, không danh sách duyệt — như trước", () => {
     expect(shape(recruitment("support_team"))).toEqual([
       "Danh sách nhân sự tuyển sinh",
-      [MENTOR_RECRUITMENT_LABEL, ["Hồ sơ mentor", "Giao hồ sơ mentor", "Tiến độ phỏng vấn mentor", "Kết quả phỏng vấn Mentor S12"]],
+      [MENTOR_RECRUITMENT_LABEL, ["Báo cáo", "Hồ sơ mentor", "Giao hồ sơ mentor", "Tiến độ phỏng vấn mentor", "Kết quả phỏng vấn Mentor S12"]],
       [MENTEE_RECRUITMENT_LABEL, [
         "Báo cáo", "Hồ sơ mentee", "Giao hồ sơ mentee",
         "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee", "Phỏng vấn mentee trực tiếp", "Điểm cộng theo ngày nộp"
