@@ -8,6 +8,7 @@ import { getFounderIntelligenceDashboard } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import type { FounderIntelligenceDashboard, JsonRecord } from "@/lib/types";
+import { percentOneDecimal, sumBy } from "@/lib/report-totals-core";
 import { displayText } from "@/lib/utils";
 import { CsvExportButton } from "./export-buttons";
 
@@ -39,6 +40,20 @@ function priorityLabel(priority: string) {
 function rateText(value: unknown) {
   if (value === null || value === undefined) return "-";
   return `${value}%`;
+}
+
+/**
+ * Dòng tổng chỉ khi bảng có từ hai dòng: tổng của một dòng là chính dòng đó, in lại
+ * chỉ thêm nhiễu. Các nhóm ở đây không chồng nhau (mỗi người một ngành / một nhóm) —
+ * đã đối chiếu 09/10/2026: tổng theo ngành học = 933 mentee, theo ngành = 571 mentor,
+ * đúng bằng số KPI ở đầu trang.
+ */
+function totalRow(rows: readonly unknown[], cells: Partial<Record<string, React.ReactNode>>) {
+  return rows.length > 1 ? cells : undefined;
+}
+
+function sumKey(rows: readonly JsonRecord[], key: string) {
+  return sumBy(rows, (row) => row[key]);
 }
 
 function Snapshot({ data }: { data: FounderIntelligenceDashboard }) {
@@ -136,6 +151,12 @@ export default async function FounderIntelligencePage() {
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor quá tải</h3>
                 <SimpleTable
                   rows={data.mentorProfile.overloadedMentors}
+                  footer={totalRow(data.mentorProfile.overloadedMentors, {
+                    mentorName: `Tổng ${data.mentorProfile.overloadedMentors.length} mentor`,
+                    menteeCount: sumKey(data.mentorProfile.overloadedMentors, "menteeCount"),
+                    capacityTarget: sumKey(data.mentorProfile.overloadedMentors, "capacityTarget"),
+                    recapCountCurrentMonth: sumKey(data.mentorProfile.overloadedMentors, "recapCountCurrentMonth")
+                  })}
                   columns={[
                     { key: "mentorName", label: "Mentor", render: (row) => displayText(row.mentorName) },
                     { key: "industry", label: "Ngành", render: (row) => displayText(row.industry) },
@@ -150,6 +171,11 @@ export default async function FounderIntelligencePage() {
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Mentor inactive nhưng có mentee</h3>
                 <SimpleTable
                   rows={data.mentorProfile.inactiveMentorsWithMentees}
+                  footer={totalRow(data.mentorProfile.inactiveMentorsWithMentees, {
+                    mentorName: `Tổng ${data.mentorProfile.inactiveMentorsWithMentees.length} mentor`,
+                    menteeCount: sumKey(data.mentorProfile.inactiveMentorsWithMentees, "menteeCount"),
+                    recapCountCurrentMonth: sumKey(data.mentorProfile.inactiveMentorsWithMentees, "recapCountCurrentMonth")
+                  })}
                   columns={[
                     { key: "mentorName", label: "Mentor", render: (row) => displayText(row.mentorName) },
                     { key: "industry", label: "Ngành", render: (row) => displayText(row.industry) },
@@ -191,6 +217,10 @@ export default async function FounderIntelligencePage() {
               </div>
               <SimpleTable
                 rows={data.activityBySegment.silentMenteeByCareerInterest}
+                footer={totalRow(data.activityBySegment.silentMenteeByCareerInterest, {
+                  careerInterest: "Tổng",
+                  silentMentees: sumKey(data.activityBySegment.silentMenteeByCareerInterest, "silentMentees")
+                })}
                 columns={[
                   { key: "careerInterest", label: "Định hướng nghề nghiệp", render: (row) => displayText(row.careerInterest) },
                   { key: "silentMentees", label: "Mentee cần kết nối lại" }
@@ -224,6 +254,17 @@ export default async function FounderIntelligencePage() {
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Tỷ lệ Mentee active theo ngành học</h3>
                 <SimpleTable
                   rows={data.activityBySegment.activeMenteeRateByMajor}
+                  footer={totalRow(data.activityBySegment.activeMenteeRateByMajor, {
+                    major: `Tổng ${data.activityBySegment.activeMenteeRateByMajor.length} ngành học`,
+                    mentees: sumKey(data.activityBySegment.activeMenteeRateByMajor, "mentees"),
+                    activeMentees: sumKey(data.activityBySegment.activeMenteeRateByMajor, "activeMentees"),
+                    activeRate: rateText(
+                      percentOneDecimal(
+                        sumKey(data.activityBySegment.activeMenteeRateByMajor, "activeMentees"),
+                        sumKey(data.activityBySegment.activeMenteeRateByMajor, "mentees")
+                      )
+                    )
+                  })}
                   columns={[
                     { key: "major", label: "Ngành học", render: (row) => displayText(row.major) },
                     { key: "mentees", label: "Tổng mentee" },
@@ -236,6 +277,17 @@ export default async function FounderIntelligencePage() {
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Tỷ lệ recap theo Support Team</h3>
                 <SimpleTable
                   rows={data.activityBySegment.recapRateBySupportTeam}
+                  footer={totalRow(data.activityBySegment.recapRateBySupportTeam, {
+                    supportTeam: "Tổng",
+                    activeMentees: sumKey(data.activityBySegment.recapRateBySupportTeam, "activeMentees"),
+                    menteesWithRecap: sumKey(data.activityBySegment.recapRateBySupportTeam, "menteesWithRecap"),
+                    recapRate: rateText(
+                      percentOneDecimal(
+                        sumKey(data.activityBySegment.recapRateBySupportTeam, "menteesWithRecap"),
+                        sumKey(data.activityBySegment.recapRateBySupportTeam, "activeMentees")
+                      )
+                    )
+                  })}
                   columns={[
                     { key: "supportTeam", label: "Support Team", render: (row) => displayText(row.supportTeam) },
                     { key: "activeMentees", label: "Mentee active" },
@@ -248,6 +300,17 @@ export default async function FounderIntelligencePage() {
                 <h3 className="mb-3 text-base font-semibold text-vam-ink">Tỷ lệ Mentor active theo ngành</h3>
                 <SimpleTable
                   rows={data.activityBySegment.activeMentorRateByIndustry}
+                  footer={totalRow(data.activityBySegment.activeMentorRateByIndustry, {
+                    industry: `Tổng ${data.activityBySegment.activeMentorRateByIndustry.length} ngành`,
+                    mentors: sumKey(data.activityBySegment.activeMentorRateByIndustry, "mentors"),
+                    activeMentors: sumKey(data.activityBySegment.activeMentorRateByIndustry, "activeMentors"),
+                    activeRate: rateText(
+                      percentOneDecimal(
+                        sumKey(data.activityBySegment.activeMentorRateByIndustry, "activeMentors"),
+                        sumKey(data.activityBySegment.activeMentorRateByIndustry, "mentors")
+                      )
+                    )
+                  })}
                   columns={[
                     { key: "industry", label: "Ngành", render: (row) => displayText(row.industry) },
                     { key: "mentors", label: "Tổng mentor" },

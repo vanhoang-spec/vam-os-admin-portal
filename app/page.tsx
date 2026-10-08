@@ -3,6 +3,7 @@ import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, ErrorBox, InternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getDashboardData, getOperationsData, getRestrictedDashboardSummary, keyById } from "@/lib/data";
 import { getAdminScopeContext } from "@/lib/program-scope";
+import { sumBy } from "@/lib/report-totals-core";
 import { displayCode, displayText, formatMonthVN } from "@/lib/utils";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { MyWorkCard } from "@/components/my-work-card";
@@ -352,6 +353,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
     month,
     count: s11Rec.monthlyCounted[month] ?? 0
   }));
+  const s11MonthlyTotal = sumBy(s11MonthlyRows, (row) => row.count);
 
   const warningRows = [
     { label: "People thiếu số điện thoại", count: peopleMissingPhone, href: "/data-issues?issue=missing_phone#issue-missing-phone" },
@@ -505,11 +507,19 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Breakdown theo tháng — tất cả loại hình mentoring</h3>
           <SimpleTable
             rows={s11MonthlyRows}
+            footer={{ month: "Tổng", count: s11MonthlyTotal }}
             columns={[
               { key: "month", label: "Tháng", render: (row) => formatMonthVN(row.month) },
               { key: "count", label: "Recap chính thức" }
             ]}
           />
+          {/* Bảng chỉ có các tháng của mùa; recap thiếu tháng gặp hoặc ghi tháng ngoài
+              khung vẫn được tính ở ô KPI. Nói ra phần chênh để dòng Tổng không bị đọc là sai. */}
+          {s11Rec.reportCounted !== s11MonthlyTotal ? (
+            <p className="mt-2 text-xs text-slate-500" data-testid="monthly-recap-gap">
+              Ô “Recap được tính vào báo cáo” là {s11Rec.reportCounted}: {s11Rec.reportCounted - s11MonthlyTotal} recap không có tháng gặp hoặc ghi tháng ngoài các tháng trên.
+            </p>
+          ) : null}
         </Card>
       </section>
 
