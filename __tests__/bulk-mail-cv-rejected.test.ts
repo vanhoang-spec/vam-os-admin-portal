@@ -326,6 +326,77 @@ describe("đã nhận thư ở lô trước của nhóm này (BTC 08/10/2026)", 
   }
 });
 
+describe("nhóm 'rớt CV sau khi đã nhận thư mời phỏng vấn' (BTC 08/10/2026)", () => {
+  /** 12 bạn thật: nhận thư mời 07/10, bị khoá link, BTC chuyển "Không đạt" sáng 08/10. */
+  function withWithdrawn(t: Record<string, Row[]>) {
+    const sent = "2026-10-06T23:08:00.000Z";
+    t.applications.push(
+      app("rut-moi", { status: "rejected_or_not_fit" }),
+      app("rut-moi-2", { status: "rejected_or_not_fit" }),
+      app("moi-chua-gui-thu", { status: "rejected_or_not_fit" }),
+      app("moi-co-giu-cho", { status: "rejected_or_not_fit" }),
+      app("moi-chua-chot", { status: "screening_completed" }),
+      app("moi-pass", { status: "rejected_or_not_fit" })
+    );
+    t.application_reviews.push(
+      review("rut-moi", { total_score: 15 }),
+      review("rut-moi-2", { total_score: 13 }),
+      review("moi-chua-gui-thu"),
+      review("moi-co-giu-cho"),
+      review("moi-chua-chot"),
+      review("moi-pass", { recommendation: "pass_to_interview", total_score: 0 })
+    );
+    t.mentee_interview_invites.push(
+      { id: "i-rut", application_id: "rut-moi", first_sent_at: sent },
+      { id: "i-rut2", application_id: "rut-moi-2", first_sent_at: sent },
+      // Có dòng lời mời nhưng thư chưa từng đi: người này chưa biết mình được mời.
+      { id: "i-chua", application_id: "moi-chua-gui-thu", first_sent_at: null },
+      { id: "i-giu", application_id: "moi-co-giu-cho", first_sent_at: sent },
+      { id: "i-chot", application_id: "moi-chua-chot", first_sent_at: sent },
+      { id: "i-pass", application_id: "moi-pass", first_sent_at: sent }
+    );
+    t.mentee_interview_bookings.push({ id: "bk-2", application_id: "moi-co-giu-cho", status: "cancelled" });
+  }
+
+  it("chỉ người đã THẬT SỰ nhận thư mời, đã bị chốt 'Không đạt', phiếu CV nói rớt, chưa từng giữ chỗ", async () => {
+    use([], withWithdrawn);
+    const result = await listBulkRecipients({ seasonId: S12, audience: "mentee_invite_withdrawn" });
+    expect(result.error).toBeNull();
+    expect(result.partition.sendable.map((row) => row.personId).sort()).toEqual(["rut-moi", "rut-moi-2"]);
+    for (const row of result.partition.sendable) expect(row.relationTable).toBe("applications");
+    expect(result.label).toBe("Mentee rớt CV sau khi đã nhận thư mời phỏng vấn");
+  });
+
+  it("hai nhóm không chồng nhau: người đã được mời không vào nhóm thư rớt chung", async () => {
+    use([], withWithdrawn);
+    const cv = await listBulkRecipients({ seasonId: S12, audience: "mentee_cv_rejected" });
+    expect(cv.partition.sendable.map((row) => row.personId).sort()).toEqual(["reject-diem-cao", "rot-reject", "rot-waitlist-duoi13"]);
+  });
+
+  it("mỗi người đúng MỘT lá thư rớt: đã nhận ở lô của nhóm này hay của nhóm thư rớt chung thì không nhận nữa", async () => {
+    use([], (t) => {
+      withWithdrawn(t);
+      t.email_batches = [
+        { id: "lo-rut", season_id: S12, audience: "mentee_invite_withdrawn" },
+        { id: "lo-cv", season_id: S12, audience: "mentee_cv_rejected" }
+      ];
+      t.outbound_emails = [
+        { id: "o1", batch_id: "lo-rut", to_email: "rut-moi@sv.ueh.edu.vn", related_id: "rut-moi", status: "sent" },
+        { id: "o2", batch_id: "lo-cv", to_email: "rut-moi-2@sv.ueh.edu.vn", related_id: "rut-moi-2", status: "sent" }
+      ];
+    });
+    const result = await listBulkRecipients({ seasonId: S12, audience: "mentee_invite_withdrawn" });
+    expect(result.partition.sendable).toEqual([]);
+  });
+
+  it("số trên ô chọn", async () => {
+    use([], withWithdrawn);
+    const { counts } = await countBulkRecipients(S12);
+    expect(counts.mentee_invite_withdrawn.sendable).toBe(2);
+    expect(counts.mentee_cv_rejected.sendable).toBe(3);
+  });
+});
+
 describe("màn hình và lô gửi", () => {
   it("nhóm có trong ô chọn, chọn từ form được, và có câu nói rõ là ai", () => {
     expect(FIXED_BULK_AUDIENCES).toContain("mentee_cv_rejected");

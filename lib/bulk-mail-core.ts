@@ -25,11 +25,11 @@ import { TEMPLATE_SPECS, type TemplateKind } from "@/lib/email-templates-core";
  * không — để một nhóm phủ được mọi buổi: orientation của mentor, của mentee, và
  * mọi sự kiện sau này, mà không phải thêm mã cho từng buổi.
  */
-export const BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected", "event"] as const;
+export const BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected", "mentee_invite_withdrawn", "event"] as const;
 export type BulkAudience = (typeof BULK_AUDIENCES)[number];
 
 /** Nhóm cố định: không mang tham số, nên đếm sẵn được để hiện ngay trong ô chọn. */
-export const FIXED_BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected"] as const;
+export const FIXED_BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected", "mentee_invite_withdrawn"] as const;
 export type FixedBulkAudience = (typeof FIXED_BULK_AUDIENCES)[number];
 
 /**
@@ -43,6 +43,7 @@ export const BULK_AUDIENCE_LABELS: Record<BulkAudience, string> = {
   staff: "Ban tổ chức (admin, core team, support team)",
   returning_mentor: "Mentor đã xác nhận quay lại mùa này",
   mentee_cv_rejected: "Mentee rớt vòng hồ sơ (CV)",
+  mentee_invite_withdrawn: "Mentee rớt CV sau khi đã nhận thư mời phỏng vấn",
   event: "Người đã đăng ký một sự kiện"
 };
 
@@ -54,7 +55,9 @@ export const BULK_AUDIENCE_HINTS: Record<FixedBulkAudience, string> = {
   staff: "Tài khoản admin, super admin, core team, support team đang hoạt động.",
   returning_mentor: "Mentor đã chấp nhận lời mời quay lại và vẫn đang tham gia mùa này.",
   mentee_cv_rejected:
-    "Đơn mentee bị reviewer đề xuất reject, hoặc đề xuất khác dưới 13 điểm, và chưa từng được mời phỏng vấn. Không gồm người đã được mời, đã đậu, đang là mentor hay BTC, và người đã nhận thư ở một lô gửi trước của nhóm này."
+    "Đơn mentee bị reviewer đề xuất reject, hoặc đề xuất khác dưới 13 điểm, và chưa từng được mời phỏng vấn. Không gồm người đã được mời, đã đậu, đang là mentor hay BTC, và người đã nhận thư ở một lô gửi trước của nhóm này.",
+  mentee_invite_withdrawn:
+    "Mentee đã nhận thư mời chọn ca phỏng vấn, sau đó BTC chuyển “Không đạt” vòng hồ sơ — chưa từng giữ chỗ hay check-in. Dùng mẫu thư có nhắc tới thư mời đã nhận. Không gồm người đã nhận thư rớt ở lô trước."
 };
 
 /**
