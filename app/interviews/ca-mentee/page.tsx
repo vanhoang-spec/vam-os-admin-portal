@@ -1,7 +1,9 @@
 import { Card, EmptyState, KpiCard, PageHeader } from "@/components/ui";
 import { getMenteeInviteStatus } from "@/lib/mentee-invite-dispatch";
+import { getOnlineNoticeStatus } from "@/lib/mentee-online-notice";
 import { getReopenNoticeStatus } from "@/lib/mentee-reopen-notice";
 import { getSessionAdminData } from "@/lib/mentee-session-admin";
+import { OnlineNoticePanel } from "./online-notice-panel";
 import { ReopenNoticePanel } from "./reopen-notice-panel";
 import { BulkPanel, InviteDispatchPanel, SessionRowForm } from "./session-config-client";
 import Link from "next/link";
@@ -31,10 +33,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export default async function MenteeSessionConfigPage() {
-  const [data, invite, reopen] = await Promise.all([
+  const [data, invite, reopen, online] = await Promise.all([
     getSessionAdminData(),
     getMenteeInviteStatus(),
-    getReopenNoticeStatus()
+    getReopenNoticeStatus(),
+    getOnlineNoticeStatus()
   ]);
 
   if (!data.ok) {
@@ -113,6 +116,27 @@ export default async function MenteeSessionConfigPage() {
             preview={reopen.preview}
             canOperate={data.canOperate}
           />
+        </Card>
+      ) : null}
+
+      {online.ok && online.total > 0 ? (
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Báo ca chuyển sang phỏng vấn online</h2>
+          <OnlineNoticePanel
+            total={online.total}
+            pending={online.pending}
+            notified={online.notified}
+            sessionsWithoutLink={online.sessionsWithoutLink}
+            sentInWindow={online.sentInWindow}
+            allowance={online.allowance}
+            preview={online.preview}
+            canOperate={data.canOperate}
+          />
+        </Card>
+      ) : !online.ok ? (
+        <Card>
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Báo ca chuyển sang phỏng vấn online</h2>
+          <EmptyState message={online.message} />
         </Card>
       ) : null}
 
