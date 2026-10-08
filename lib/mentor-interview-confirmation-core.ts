@@ -24,6 +24,49 @@ export const MAX_SHEET_BYTES = 2_000_000;
 
 export type SessionInput = { id: string; startsAtIso: string; endsAtIso: string; venue: string | null };
 
+/**
+ * Hướng dẫn RIÊNG CHO MENTOR của một buổi, khi nó khác địa điểm ghi trên ca.
+ *
+ * Địa điểm của ca là thứ mentee đọc (trang chọn ca, thư của mentee) — vd. "Check-in
+ * tại phòng B1-502" là câu cho mentee; mentor Chủ nhật 11/10 lại đi thẳng tới phòng
+ * phỏng vấn. Sửa địa điểm của ca để thư mentor nói đúng thì trang của mentee nói sai,
+ * nên phần riêng của mentor nằm ở đây, theo khoá buổi.
+ */
+export type MentorBlockGuide = {
+  /** Có = buổi phỏng vấn online: thay cả mục địa điểm bằng các dòng này. */
+  online?: readonly string[];
+  /** Thay ô "Cơ sở" đọc từ ca. */
+  place?: string;
+  /** Nhãn ô phòng, mặc định "Phòng". */
+  roomsLabel?: string;
+  /** Dòng thêm sau ô cơ sở (check-in…). Có thì không in câu "BTC xếp phòng khi check-in". */
+  extra?: readonly string[];
+};
+
+const SUNDAY_11_10: MentorBlockGuide = {
+  place: "Cơ sở B – UEH, 279 Nguyễn Tri Phương, Phường Diên Hồng, TP.HCM",
+  roomsLabel: "Phòng PV",
+  extra: [
+    "- Check-in Mentee: B1-502",
+    "- Check-in Mentor: Mentor chủ động đến các phòng B1-503, B1-504, B1-506, B1-802, B1-803; BTC hỗ trợ check-in và phân bàn trực tiếp tại phòng."
+  ]
+};
+
+/**
+ * BTC 08/10/2026 cho đợt 2 (10–11/10). Sáng Thứ Bảy dùng nguyên địa điểm trên ca
+ * (Phòng E501, E502, E504 — Cơ sở E). Thêm đợt sau thì thêm khoá "YYYY-MM-DD:sang|chieu".
+ */
+export const MENTOR_BLOCK_GUIDES: Readonly<Record<string, MentorBlockGuide>> = {
+  "2026-10-10:chieu": {
+    online: [
+      "- Hình thức: PHỎNG VẤN ONLINE",
+      "- Mỗi Mentor có 1 phòng online riêng, BTC điều phối Mentee vào phòng theo từng ca."
+    ]
+  },
+  "2026-10-11:sang": SUNDAY_11_10,
+  "2026-10-11:chieu": SUNDAY_11_10
+};
+
 export type InterviewBlock = {
   /** "2026-10-03:sang" */
   key: string;
@@ -40,6 +83,8 @@ export type InterviewBlock = {
   mapUrl: string;
   firstStartIso: string;
   firstSessionId: string;
+  /** Hướng dẫn riêng cho mentor của buổi này, nếu BTC có. */
+  guide: MentorBlockGuide | null;
 };
 
 const PERIOD_WORD = { sang: "Sáng", chieu: "Chiều" } as const;
@@ -74,7 +119,11 @@ function periodOf(iso: string): "sang" | "chieu" {
  * Gom các ca CHƯA KẾT THÚC thành từng buổi (ngày × sáng/chiều). Ca đã qua tự rơi
  * khỏi danh sách: thư gửi lúc đợt 2 mở sẽ không nhắc lại buổi của đợt 1.
  */
-export function buildInterviewBlocks(sessions: readonly SessionInput[], nowIso: string): InterviewBlock[] {
+export function buildInterviewBlocks(
+  sessions: readonly SessionInput[],
+  nowIso: string,
+  guides: Readonly<Record<string, MentorBlockGuide>> = MENTOR_BLOCK_GUIDES
+): InterviewBlock[] {
   const groups = new Map<string, SessionInput[]>();
   for (const s of sessions) {
     if (!s.startsAtIso || !s.endsAtIso || s.endsAtIso <= nowIso) continue;
@@ -107,7 +156,8 @@ export function buildInterviewBlocks(sessions: readonly SessionInput[], nowIso: 
         place: Array.from(new Set(parts.map((p) => p.place).filter(Boolean))).join("; "),
         mapUrl: parts.map((p) => p.mapUrl).find(Boolean) ?? "",
         firstStartIso: first.startsAtIso,
-        firstSessionId: first.id
+        firstSessionId: first.id,
+        guide: guides[key] ?? null
       };
     });
 }
@@ -115,13 +165,18 @@ export function buildInterviewBlocks(sessions: readonly SessionInput[], nowIso: 
 /**
  * Link sheet BTC dán → địa chỉ xuất CSV. Chỉ nhận đúng dạng link Google Sheets và
  * TỰ dựng địa chỉ đọc: server không bao giờ gọi một địa chỉ do người dùng gõ.
+ *
+ * Đường `/export?format=csv`, KHÔNG phải `/gviz/tq`: gviz tự đoán hàng tiêu đề và
+ * gộp chúng lại. 08/10/2026 BTC thêm khối hướng dẫn trên đầu sheet; gviz gộp nhầm
+ * cả khối đó làm "tiêu đề" và làm rơi mất hàng "Sáng 10/10, Chiều 10/10…" — trang
+ * báo "Sheet không có cột cho buổi". `/export` trả đúng lưới ô như trên màn hình.
  */
 export function sheetCsvUrl(link: unknown): string | null {
   const text = String(link ?? "").trim();
   const match = /^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,100})(?:[/?#][^\s]*)?$/.exec(text);
   if (!match) return null;
   const gid = /[?#&]gid=(\d{1,12})(?!\d)/.exec(text)?.[1] ?? "0";
-  return `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?tqx=out:csv&gid=${gid}`;
+  return `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv&gid=${gid}`;
 }
 
 /** CSV theo RFC 4180 — ô có xuống dòng và dấu nháy kép (tiêu đề cột của sheet có cả hai). */
@@ -159,10 +214,19 @@ export type SheetParse =
   | { ok: true; rows: SignupRow[]; duplicates: string[] }
   | { ok: false; message: string };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Tiêu đề nhiều tầng hiếm khi quá ba hàng; quá thế là đã đọc vào dữ liệu. */
+const MAX_SUBHEADER_ROWS = 3;
+
 /**
  * Đọc sheet đăng ký theo TIÊU ĐỀ cột, không theo vị trí: BTC chèn thêm cột thì
  * vẫn đọc đúng. Thiếu cột của một buổi đang có ca thì từ chối cả sheet — đọc
  * nhầm cột là gửi nhầm lịch cho người thật.
+ *
+ * Tiêu đề có thể nhiều tầng (sheet 08/10/2026: hàng "Họ và tên | Email | …", rồi
+ * hàng "Đợt 1 | Đợt 2", rồi hàng "Sáng 4/10 | … | Sáng 10/10 | …"). Nhãn buổi được
+ * tìm trên hàng tiêu đề VÀ các hàng ngay dưới nó cho tới dòng dữ liệu đầu tiên (dòng
+ * đầu có email). Một ô gộp cả tầng trên ("Đợt 2 Sáng 10/10") cũng khớp.
  */
 export function parseSignupSheet(csv: string, blocks: readonly InterviewBlock[]): SheetParse {
   const table = parseCsv(csv);
@@ -176,10 +240,20 @@ export function parseSignupSheet(csv: string, blocks: readonly InterviewBlock[])
   const emailCol = find((h) => /^email/i.test(h));
   const phoneCol = find((h) => /số điện thoại/i.test(h));
   const noteCol = find((h) => /^note/i.test(h) || /\snote\b/i.test(h));
-  const blockCols = blocks.map((b) => ({
-    key: b.key,
-    col: find((h) => h === b.headerLabel || h.endsWith(` ${b.headerLabel}`))
-  }));
+
+  const headerRows = [header];
+  for (const r of table.slice(headerIndex + 1, headerIndex + 1 + MAX_SUBHEADER_ROWS)) {
+    if (EMAIL_PATTERN.test(norm(r[emailCol] ?? "").toLowerCase())) break;
+    headerRows.push(r.map(norm));
+  }
+  const labelCol = (label: string) => {
+    for (const row of headerRows) {
+      const col = row.findIndex((h) => h === label || h.endsWith(` ${label}`));
+      if (col >= 0) return col;
+    }
+    return -1;
+  };
+  const blockCols = blocks.map((b) => ({ key: b.key, col: labelCol(b.headerLabel) }));
   const missing = blocks.filter((_, i) => blockCols[i].col < 0).map((b) => b.headerLabel);
   if (missing.length) return { ok: false, message: `Sheet không có cột cho buổi: ${missing.join(", ")}.` };
 
@@ -187,7 +261,7 @@ export function parseSignupSheet(csv: string, blocks: readonly InterviewBlock[])
   const duplicates: string[] = [];
   for (const r of table.slice(headerIndex + 1)) {
     const email = norm(r[emailCol] ?? "").toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+    if (!EMAIL_PATTERN.test(email)) continue;
     const blockKeys = blockCols.filter(({ col }) => norm(r[col] ?? "").toUpperCase() === "TRUE").map(({ key }) => key);
     const row: SignupRow = {
       name: norm(r[nameCol] ?? ""),
@@ -334,26 +408,33 @@ export function renderConfirmation(input: ConfirmationInput): { subject: string;
   const origin = input.origin.replace(/\/+$/, "");
   const name = input.name || input.loginEmail;
   const time = input.blocks.map((b) => `- ${b.label}: ${b.timeLabel}`);
-  const places = input.blocks.map((b) =>
-    [
+  const places = input.blocks.map((b) => {
+    const guide = b.guide;
+    if (guide?.online?.length) return [b.label, ...guide.online].join("\n");
+    return [
       b.label,
-      b.rooms ? `- Phòng: ${b.rooms}` : null,
-      `- Cơ sở: ${b.place || "BTC sẽ thông báo trong Group Zalo"}`,
-      b.mapUrl ? `- Link maps: ${b.mapUrl}` : null
-    ].filter(Boolean).join("\n")
-  );
+      b.rooms ? `- ${guide?.roomsLabel ?? "Phòng"}: ${b.rooms}` : null,
+      `- Cơ sở: ${guide?.place || b.place || "BTC sẽ thông báo trong Group Zalo"}`,
+      ...(guide?.extra ?? []),
+      b.mapUrl ? `- Link maps: ${b.mapUrl}` : null,
+      // Buổi có hướng dẫn check-in riêng thì câu chung này nói ngược với nó.
+      guide?.extra?.length ? null : "- Phòng và bàn phỏng vấn cụ thể BTC sẽ xếp khi Anh/Chị check-in."
+    ].filter(Boolean).join("\n");
+  });
+  const onlineOnly = input.blocks.length > 0 && input.blocks.every((b) => Boolean(b.guide?.online?.length));
   const lines = [
     `Kính gửi Anh/Chị Mentor ${name},`,
     "BTC UEH Mentoring Mùa 12 xin xác nhận lịch tham gia Vòng phỏng vấn Tuyển Mentee của Anh/Chị như sau:",
     [
       "1. Thời gian",
       ...time,
-      "- Anh/Chị vui lòng có mặt trước 15 phút để check-in và chuẩn bị trước khi bắt đầu phỏng vấn.",
+      onlineOnly
+        ? "- Anh/Chị vui lòng sẵn sàng trước 15 phút để chuẩn bị trước khi bắt đầu phỏng vấn."
+        : "- Anh/Chị vui lòng có mặt trước 15 phút để check-in và chuẩn bị trước khi bắt đầu phỏng vấn.",
       input.note ? `- Ghi chú Anh/Chị đã đăng ký: ${input.note}` : null
     ].filter(Boolean).join("\n"),
     "2. Địa điểm",
     ...places,
-    "Phòng và bàn phỏng vấn cụ thể BTC sẽ xếp khi Anh/Chị check-in.",
     [
       "3. Tài khoản chấm & Hướng dẫn đăng nhập",
       `- Tài khoản: ${input.loginEmail}`,

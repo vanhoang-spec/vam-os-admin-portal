@@ -56,7 +56,12 @@ export function ConfirmationClient() {
             <h2 className="font-semibold">Các buổi của đợt này (đọc từ ca phỏng vấn)</h2>
             <ul className="mt-2 grid gap-1 text-sm">
               {plan.blocks.map((b) => (
-                <li key={b.key}><strong>{b.label}</strong> · {b.timeLabel} · Phòng {b.rooms || "—"} · {b.place || "—"}</li>
+                <li key={b.key} data-testid="confirmation-block">
+                  <strong>{b.label}</strong> · {b.timeLabel} ·{" "}
+                  {b.guide?.online?.length
+                    ? "Phỏng vấn online"
+                    : `${b.guide?.roomsLabel ?? "Phòng"} ${b.rooms || "—"} · ${b.guide?.place || b.place || "—"}`}
+                </li>
               ))}
             </ul>
             <p className="mt-3 text-sm">

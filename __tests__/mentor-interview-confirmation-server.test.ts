@@ -156,7 +156,7 @@ describe("1. cổng — không qua thì không đọc gì, không gửi gì", ()
   it("server chỉ gọi đúng địa chỉ xuất CSV tự dựng", async () => {
     await previewMentorConfirmations(LINK);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://docs.google.com/spreadsheets/d/1xei5xJX45v-5rn3-mHuEpG5nYzuk/gviz/tq?tqx=out:csv&gid=77");
+    expect(fetchMock.mock.calls[0][0]).toBe("https://docs.google.com/spreadsheets/d/1xei5xJX45v-5rn3-mHuEpG5nYzuk/export?format=csv&gid=77");
   });
 });
 

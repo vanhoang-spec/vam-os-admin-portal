@@ -25,8 +25,12 @@ const CT = uuid(62); // core team
 const GONE = uuid(63); // reviewer bật 22/09 nhưng tư cách đã huỷ
 const GONE_PERSON = uuid(64);
 const APP = uuid(65);
-const FUTURE = "2026-10-08T03:00:00Z"; // 10:00 giờ Việt Nam
-const FUTURE2 = "2026-10-08T04:00:00Z";
+// "Giờ trống sắp tới" phải luôn ở tương lai so với lúc chạy test. Trước 08/10/2026
+// đây là mốc cố định 08/10 10:00 — qua giờ đó test đỏ trên main và chặn mọi lần
+// deploy (CI chạy toàn bộ test). Giữ 03:00Z (10:00 giờ Việt Nam) cho giờ chẵn.
+const FUTURE_DAY = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const FUTURE = `${FUTURE_DAY}T03:00:00Z`;
+const FUTURE2 = `${FUTURE_DAY}T04:00:00Z`;
 
 let db: PGlite;
 async function host(admin: string) {
