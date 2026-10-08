@@ -175,10 +175,30 @@ function tables(): Record<string, Row[]> {
   };
 }
 
-function use(failOn: string[] = []) {
-  const db = fakeDb(tables(), failOn);
+function use(failOn: string[] = [], change: (t: Record<string, Row[]>) => void = () => {}) {
+  const t = tables();
+  change(t);
+  const db = fakeDb(t, failOn);
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(db.client as never);
   return db;
+}
+
+/** Sáng 08/10: một lô của chính nhóm này đã gửi; kèm các lô KHÔNG được tính. */
+function withEarlierBatches(t: Record<string, Row[]>) {
+  t.email_batches = [
+    { id: "lo-sang", season_id: S12, audience: "mentee_cv_rejected" },
+    { id: "lo-mentee", season_id: S12, audience: "mentee" },
+    { id: "lo-mua-cu", season_id: S11, audience: "mentee_cv_rejected" }
+  ];
+  t.outbound_emails = [
+    // Đã nhận ở lô sáng → loại.
+    { id: "o1", batch_id: "lo-sang", to_email: "ROT-REJECT@sv.ueh.edu.vn", related_id: "rot-reject", status: "sent" },
+    // Gửi hỏng ở lô sáng → CHƯA nhận, lô sau phải gửi lại.
+    { id: "o2", batch_id: "lo-sang", to_email: "rot-waitlist-duoi13@sv.ueh.edu.vn", related_id: "rot-waitlist-duoi13", status: "failed" },
+    // Nhận một thư khác ở lô "Mentee" hay ở mùa cũ → không phải thư rớt mùa này.
+    { id: "o3", batch_id: "lo-mentee", to_email: "reject-diem-cao@sv.ueh.edu.vn", related_id: "x", status: "sent" },
+    { id: "o4", batch_id: "lo-mua-cu", to_email: "reject-diem-cao@sv.ueh.edu.vn", related_id: "y", status: "sent" }
+  ];
 }
 
 beforeEach(() => {
@@ -245,6 +265,60 @@ describe("listBulkRecipients — mentee_cv_rejected", () => {
   ]) {
     it(`đọc ${table} hỏng: báo lỗi, không trả danh sách thiếu phép loại`, async () => {
       use([table]);
+      const result = await listBulkRecipients({ seasonId: S12, audience: "mentee_cv_rejected" });
+      expect(result.error).not.toBeNull();
+      expect(result.partition.sendable).toEqual([]);
+    });
+  }
+});
+
+describe("đã nhận thư ở lô trước của nhóm này (BTC 08/10/2026)", () => {
+  it("chỉ còn người CHƯA nhận: loại người đã nhận ở lô sáng; thư hỏng và thư của nhóm/mùa khác không tính", async () => {
+    use([], withEarlierBatches);
+    const result = await listBulkRecipients({ seasonId: S12, audience: "mentee_cv_rejected" });
+    expect(result.error).toBeNull();
+    expect(result.partition.sendable.map((row) => row.personId).sort()).toEqual(["reject-diem-cao", "rot-waitlist-duoi13"]);
+  });
+
+  it("đã nhận rồi BTC sửa email của đơn: vẫn là người đã nhận (khớp theo đơn)", async () => {
+    use([], (t) => {
+      withEarlierBatches(t);
+      t.applications = t.applications.map((a) => (a.id === "rot-reject" ? { ...a, email_primary: "email-moi@sv.ueh.edu.vn" } : a));
+    });
+    const result = await listBulkRecipients({ seasonId: S12, audience: "mentee_cv_rejected" });
+    expect(result.partition.sendable.map((row) => row.personId)).not.toContain("rot-reject");
+  });
+
+  it("số trên ô chọn đã trừ người đã nhận", async () => {
+    use([], withEarlierBatches);
+    const { counts } = await countBulkRecipients(S12);
+    expect(counts.mentee_cv_rejected.sendable).toBe(2);
+  });
+
+  it("'Gửi tiếp' một lô đang chạy: chỉ gửi người lô đó chưa gửi, không ai nhận hai lá", async () => {
+    use([], (t) => {
+      t.email_batches = [{ id: "b1", season_id: S12, audience: "mentee_cv_rejected" }];
+      t.outbound_emails = [{ id: "o1", batch_id: "b1", to_email: "rot-reject@sv.ueh.edu.vn", related_id: "rot-reject", status: "sent" }];
+    });
+    const run = await runEmailBatch({
+      batch: {
+        id: "b1", seasonId: S12, kind: "general_announcement", templateId: "t1", audience: "mentee_cv_rejected",
+        audienceEventId: null, audienceCoversSeries: false, status: "running", requestedCount: 3, sentCount: 1,
+        skippedCount: 0, failedCount: 0, note: null, createdAt: "", completedAt: null
+      } as never,
+      seasonCode: "UEHM-S12",
+      subject: "Kết quả vòng Hồ sơ",
+      body: "Chào bạn {{ten_nguoi_nhan}}."
+    });
+    expect(run.ok).toBe(true);
+    const sentTo = vi.mocked(sendTemplatedEmail).mock.calls.map((call) => call[0].relation?.id).sort();
+    expect(sentTo).toEqual(["reject-diem-cao", "rot-waitlist-duoi13"]);
+    expect(run.remaining).toBe(0);
+  });
+
+  for (const table of ["email_batches", "outbound_emails"]) {
+    it(`đọc ${table} hỏng: báo lỗi, không trả danh sách có thể gồm người đã nhận`, async () => {
+      use([table], withEarlierBatches);
       const result = await listBulkRecipients({ seasonId: S12, audience: "mentee_cv_rejected" });
       expect(result.error).not.toBeNull();
       expect(result.partition.sendable).toEqual([]);

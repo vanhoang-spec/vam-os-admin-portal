@@ -315,7 +315,8 @@ const DEAD_APPLICATION_STATUSES = new Set(["screening_completed", "rejected_or_n
  *     khi trạng thái đơn đã bị đổi ngược (15 bạn bị tạm khoá link ngày 07/10 đang
  *     ở `screening_completed` nhưng đã nhận thư mời: BTC quyết riêng cho họ);
  *   - người đó không có tư cách đang hoạt động nào trong mùa, không có tài khoản
- *     BTC, và không có đơn nào khác của mùa còn sống (vd. đơn mentor đã duyệt).
+ *     BTC, và không có đơn nào khác của mùa còn sống (vd. đơn mentor đã duyệt);
+ *   - CHƯA nhận thư ở một lô nào của chính nhóm này (08/10/2026).
  *
  * Đọc hỏng bất kỳ bảng nào thì trả lỗi chứ không trả danh sách thiếu phép loại.
  *
@@ -374,6 +375,35 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
     return { rows: [], error: VI_ERROR };
   }
 
+  // Ai đã nhận thư ở một lô của CHÍNH nhóm này (BTC 08/10/2026: sáng gửi 146 bạn,
+  // chiều có thêm 11 hồ sơ vừa chấm rớt — mở lô mới thì chỉ được gửi 11 bạn đó).
+  // Tính cả lô đang chạy: người lô này đã gửi rơi khỏi danh sách, và "Gửi tiếp" vẫn
+  // đếm đúng phần còn lại. Thư hỏng không tính là đã nhận — lô sau gửi lại.
+  const batches = await readBounded<{ id: string }>(
+    "bulk mail cv-rejected batches",
+    client.from("email_batches").select("id").eq("season_id", seasonId).eq("audience", "mentee_cv_rejected"),
+    500
+  );
+  if (batches.error) {
+    log("listBulkRecipients:cv-rejected-batches", batches.error);
+    return { rows: [], error: VI_ERROR };
+  }
+  const batchIds = batches.data.map((row) => String(row.id));
+  const received = batchIds.length
+    ? await readAllPagesIn<{ id: string; to_email: string | null; related_id: string | null }>(
+        client,
+        "outbound_emails",
+        "batch_id",
+        batchIds,
+        "id, to_email, related_id",
+        (query) => query.in("status", ["sent", "queued"])
+      )
+    : { data: [] as Array<{ id: string; to_email: string | null; related_id: string | null }>, error: null };
+  if (received.error) {
+    log("listBulkRecipients:cv-rejected-received", received.error);
+    return { rows: [], error: VI_ERROR };
+  }
+
   const reviewsByApp = new Map<string, ProfileReviewVerdict[]>();
   for (const review of reviews.data) {
     const key = String(review.application_id);
@@ -387,6 +417,8 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
   const normalizeEmail = (value: unknown) => String(value ?? "").trim().toLowerCase();
   const activePeople = new Set(memberships.data.map((row) => String(row.person_id ?? "")).filter(Boolean));
   const staffEmails = new Set(accounts.data.map((row) => normalizeEmail(row.email)).filter(Boolean));
+  const receivedEmails = new Set(received.data.map((row) => normalizeEmail(row.to_email)).filter(Boolean));
+  const receivedApps = new Set(received.data.map((row) => String(row.related_id ?? "")).filter(Boolean));
   const livePeople = new Set<string>();
   const liveEmails = new Set<string>();
   for (const app of apps.data) {
@@ -405,6 +437,8 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
     const email = normalizeEmail(app.email_primary);
     if (personId && (activePeople.has(personId) || livePeople.has(personId))) continue;
     if (email && (staffEmails.has(email) || liveEmails.has(email))) continue;
+    // Theo cả email lẫn đơn: BTC sửa email của đơn sau khi đã gửi thì vẫn là người đã nhận.
+    if (receivedApps.has(id) || (email && receivedEmails.has(email))) continue;
     rows.push({
       personId: id,
       fullName: String(app.full_name ?? "").trim(),
