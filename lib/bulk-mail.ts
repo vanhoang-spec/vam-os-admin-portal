@@ -85,8 +85,8 @@ export async function listBulkRecipients(input: {
     result = await staffRecipients(client);
   } else if (input.audience === "returning_mentor") {
     result = await returningMentorRecipients(client, input.seasonId);
-  } else if (input.audience === "mentee_cv_rejected") {
-    result = await cvRejectedMenteeRecipients(client, input.seasonId);
+  } else if (input.audience === "mentee_cv_rejected" || input.audience === "mentee_invite_withdrawn") {
+    result = await rejectedMenteeRecipients(client, input.seasonId, input.audience);
   } else {
     result = await eventRecipients(client, input.seasonId, input.eventId ?? null, input.coversSeries === true);
   }
@@ -316,14 +316,28 @@ const DEAD_APPLICATION_STATUSES = new Set(["screening_completed", "rejected_or_n
  *     ở `screening_completed` nhưng đã nhận thư mời: BTC quyết riêng cho họ);
  *   - người đó không có tư cách đang hoạt động nào trong mùa, không có tài khoản
  *     BTC, và không có đơn nào khác của mùa còn sống (vd. đơn mentor đã duyệt);
- *   - CHƯA nhận thư ở một lô nào của chính nhóm này (08/10/2026).
+ *   - CHƯA nhận thư rớt ở một lô nào của hai nhóm thư rớt (08/10/2026) — mỗi người
+ *     nhận đúng MỘT lá thư rớt.
+ *
+ * Nhóm `mentee_invite_withdrawn` (BTC 08/10/2026) là nửa còn lại: người ĐÃ nhận thư
+ * mời chọn ca đợt 2 rồi bị khoá link và BTC chuyển "Không đạt" — đơn ở
+ * `rejected_or_not_fit`, đã có thư mời, chưa từng giữ chỗ, chưa từng check-in. Họ cần
+ * một lá thư riêng có nhắc tới thư mời đã nhận; thư rớt chung nói "chưa thể chọn hồ sơ
+ * của bạn để bước tiếp vào vòng phỏng vấn" sẽ khó hiểu với người đã được mời.
  *
  * Đọc hỏng bất kỳ bảng nào thì trả lỗi chứ không trả danh sách thiếu phép loại.
  *
  * Họ tên và email lấy từ ĐƠN, nối thư về `applications`: phần lớn người rớt vòng
  * hồ sơ chưa có trong danh bạ (07/10: 144/146 bạn không có person_id).
  */
-async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promise<RecipientRows> {
+const REJECTION_LETTER_AUDIENCES = ["mentee_cv_rejected", "mentee_invite_withdrawn"] as const;
+
+async function rejectedMenteeRecipients(
+  client: any,
+  seasonId: string,
+  audience: (typeof REJECTION_LETTER_AUDIENCES)[number]
+): Promise<RecipientRows> {
+  const withdrawn = audience === "mentee_invite_withdrawn";
   type AppRow = {
     id: string;
     person_id: string | null;
@@ -342,9 +356,12 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
     return { rows: [], error: VI_ERROR };
   }
 
-  const candidates = apps.data.filter(
-    (app) => String(app.role_applied ?? "") === "mentee" && CV_STAGE_END_STATUSES.has(String(app.status ?? ""))
-  );
+  const candidates = apps.data.filter((app) => {
+    if (String(app.role_applied ?? "") !== "mentee") return false;
+    const status = String(app.status ?? "");
+    // Người đã được mời rồi bị rút lời mời: chỉ khi BTC đã chốt "Không đạt".
+    return withdrawn ? status === "rejected_or_not_fit" : CV_STAGE_END_STATUSES.has(status);
+  });
   if (!candidates.length) return { rows: [], error: null };
   const ids = candidates.map((app) => String(app.id));
 
@@ -357,7 +374,13 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
       "id, application_id, status, recommendation, total_score",
       (query) => query.eq("review_round", "profile_screening")
     ),
-    readAllPagesIn<{ id: string; application_id: string }>(client, "mentee_interview_invites", "application_id", ids, "id, application_id"),
+    readAllPagesIn<{ id: string; application_id: string; first_sent_at: string | null }>(
+      client,
+      "mentee_interview_invites",
+      "application_id",
+      ids,
+      "id, application_id, first_sent_at"
+    ),
     readAllPagesIn<{ id: string; application_id: string }>(client, "mentee_interview_bookings", "application_id", ids, "id, application_id"),
     readAllPagesIn<{ id: string }>(client, "mentee_interview_operations", "id", ids, "id"),
     readAllPages<{ id: string; person_id: string | null }>(
@@ -375,13 +398,14 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
     return { rows: [], error: VI_ERROR };
   }
 
-  // Ai đã nhận thư ở một lô của CHÍNH nhóm này (BTC 08/10/2026: sáng gửi 146 bạn,
-  // chiều có thêm 11 hồ sơ vừa chấm rớt — mở lô mới thì chỉ được gửi 11 bạn đó).
-  // Tính cả lô đang chạy: người lô này đã gửi rơi khỏi danh sách, và "Gửi tiếp" vẫn
-  // đếm đúng phần còn lại. Thư hỏng không tính là đã nhận — lô sau gửi lại.
+  // Ai đã nhận thư rớt ở một lô của MỘT TRONG HAI nhóm thư rớt (BTC 08/10/2026: sáng
+  // gửi 146 bạn, chiều có thêm 11 hồ sơ vừa chấm rớt — mở lô mới thì chỉ được gửi 11
+  // bạn đó; và không ai nhận cả thư rớt chung lẫn thư rút lời mời). Tính cả lô đang
+  // chạy: người lô này đã gửi rơi khỏi danh sách, và "Gửi tiếp" vẫn đếm đúng phần còn
+  // lại. Thư hỏng không tính là đã nhận — lô sau gửi lại.
   const batches = await readBounded<{ id: string }>(
-    "bulk mail cv-rejected batches",
-    client.from("email_batches").select("id").eq("season_id", seasonId).eq("audience", "mentee_cv_rejected"),
+    "bulk mail rejection batches",
+    client.from("email_batches").select("id").eq("season_id", seasonId).in("audience", Array.from(REJECTION_LETTER_AUDIENCES)),
     500
   );
   if (batches.error) {
@@ -409,8 +433,9 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
     const key = String(review.application_id);
     reviewsByApp.set(key, [...(reviewsByApp.get(key) ?? []), review]);
   }
-  const touchedInterview = new Set<string>([
-    ...invites.data.map((row) => String(row.application_id)),
+  const invited = new Set(invites.data.map((row) => String(row.application_id)));
+  const invitationSent = new Set(invites.data.filter((row) => row.first_sent_at).map((row) => String(row.application_id)));
+  const bookedOrSeen = new Set<string>([
     ...bookings.data.map((row) => String(row.application_id)),
     ...operations.data.map((row) => String(row.id))
   ]);
@@ -432,7 +457,10 @@ async function cvRejectedMenteeRecipients(client: any, seasonId: string): Promis
   for (const app of candidates) {
     const id = String(app.id);
     if (!isCvRejected(reviewsByApp.get(id) ?? [])) continue;
-    if (touchedInterview.has(id)) continue;
+    // Chưa từng giữ chỗ, chưa từng check-in — ở cả hai nhóm.
+    if (bookedOrSeen.has(id)) continue;
+    // Thư rớt chung: chưa từng có lời mời. Thư rút lời mời: đã THẬT SỰ nhận thư mời.
+    if (withdrawn ? !invitationSent.has(id) : invited.has(id)) continue;
     const personId = String(app.person_id ?? "");
     const email = normalizeEmail(app.email_primary);
     if (personId && (activePeople.has(personId) || livePeople.has(personId))) continue;
