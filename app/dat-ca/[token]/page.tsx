@@ -1,7 +1,8 @@
 import { Card } from "@/components/ui";
 import { LiveRefresh } from "@/app/events/[id]/live-refresh";
 import { getMenteeSessionPageData } from "@/lib/mentee-interview";
-import { interviewDaysLabel, type MenteeSessionDay } from "@/lib/mentee-interview-core";
+import { interviewDaysLabel, isOnlineVenue, type MenteeSessionDay } from "@/lib/mentee-interview-core";
+import { linkify } from "@/lib/text-links";
 import { SessionForm } from "./session-form";
 import { InterviewTicket } from "./interview-ticket";
 import { PrepAnswersForm } from "./prep-answers-form";
@@ -23,9 +24,33 @@ export const dynamic = "force-dynamic";
  * nên người mở link ở đợt 2 đọc thấy ngày của đợt 1; và ngày có ca nhưng chưa mở (Thứ
  * Bảy 10/10 chưa chốt địa điểm) không được nêu như thể chọn được.
  */
-function interviewDaysText(data: { ok: boolean } & Partial<{ days: MenteeSessionDay[] }>): string {
+function interviewDaysText(
+  data: { ok: boolean } & Partial<{ days: MenteeSessionDay[]; booking: { venue: string | null } }>
+): string {
+  // Ca đã giữ là ca online (chiều 10/10, BTC 08/10/2026): câu "trực tiếp tại UEH" sẽ sai với bạn này.
+  if (data.ok && isOnlineVenue(data.booking?.venue)) return "Ca phỏng vấn của bạn là phỏng vấn online.";
   const label = data.ok && Array.isArray(data.days) ? interviewDaysLabel(data.days) : "";
   return label ? `Phỏng vấn trực tiếp tại UEH, ngày ${label}.` : "Phỏng vấn trực tiếp tại UEH.";
+}
+
+/** Địa điểm của ca, với link (nhóm Zalo, bản đồ) bấm được trên điện thoại. */
+function VenueText({ venue }: { venue: string }) {
+  return (
+    <>
+      {linkify(venue).map((part, index) => (
+        <span key={index}>
+          {index > 0 ? " " : null}
+          {part.kind === "link" ? (
+            <a href={part.href} target="_blank" rel="noopener noreferrer" className="break-all font-medium text-vam-green underline">
+              {part.value}
+            </a>
+          ) : (
+            part.value
+          )}
+        </span>
+      ))}
+    </>
+  );
 }
 
 export default async function MenteeSessionBookingPage(props: {
@@ -62,10 +87,14 @@ export default async function MenteeSessionBookingPage(props: {
               <div className="rounded-lg border border-vam-green/40 bg-vam-mint/40 p-5 text-vam-ink">
                 <h2 className="text-lg font-semibold">Bạn đã có ca phỏng vấn</h2>
                 <p className="mt-2 text-sm font-medium">{data.booking.sessionLabel}</p>
-                <p className="mt-2 text-sm">
-                  {data.booking.venue
-                    ? `Địa điểm: ${data.booking.venue}`
-                    : "Địa điểm đang được ban tổ chức hoàn tất. Gần tới ngày phỏng vấn, bạn mở lại đúng đường dẫn này (trong email mời) để xem địa chỉ chính xác — không có email xác nhận riêng."}
+                <p className="mt-2 text-sm" data-testid="booking-venue">
+                  {data.booking.venue ? (
+                    <>
+                      Địa điểm: <VenueText venue={data.booking.venue} />
+                    </>
+                  ) : (
+                    "Địa điểm đang được ban tổ chức hoàn tất. Gần tới ngày phỏng vấn, bạn mở lại đúng đường dẫn này (trong email mời) để xem địa chỉ chính xác — không có email xác nhận riêng."
+                  )}
                 </p>
                 <InterviewTicket code={data.booking.checkinToken} />
               </div>
