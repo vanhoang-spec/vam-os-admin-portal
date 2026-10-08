@@ -101,7 +101,7 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
       </>
     );
   }
-  const { board, canManage } = result.data;
+  const { board, canManage, canEditGroups } = result.data;
   const eligible = board.rows.filter((r) => r.person.eligible);
   const count = (role: "mentor" | "mentee", pred: (r: Round2Row) => boolean) =>
     eligible.filter((r) => r.person.role === role && pred(r)).length;
@@ -137,7 +137,10 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
         {canManage ? (
           <ClassifyPanel pendingMentors={pendingMentors} pendingMentees={pendingMentees} />
         ) : (
-          <p className="text-sm text-slate-500">Chỉ Super admin, Admin, Core team có quyền vận hành mùa này mới lưu được nhóm.</p>
+          <p className="text-sm text-slate-500">
+            Chỉ Super admin, Admin, Core team có quyền vận hành mùa này mới phân loại người mới.
+            {canEditGroups ? " Bạn vẫn đổi / xác nhận được nhóm của từng người ở bảng dưới." : ""}
+          </p>
         )}
         {board.pending.length ? (
           <div className="vam-table-frame mt-3 overflow-x-auto rounded-lg border border-vam-line">
@@ -258,7 +261,7 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
                         </td>
                         <td className="px-3 py-2" data-search-skip>
                           <StatusCell row={row} />
-                          {canManage && row.assignment ? (
+                          {canEditGroups && row.assignment ? (
                             <details className="mt-2">
                               <summary className="cursor-pointer text-xs font-medium text-vam-green">Đổi / xác nhận nhóm</summary>
                               <GroupEditForm assignmentId={row.assignment.id} currentGroup={row.assignment.group} />

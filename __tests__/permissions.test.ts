@@ -11,6 +11,7 @@ import {
   canManageReviewers,
   canSelfClaimInterview,
   canManageMatches,
+  canEditRound2Group,
   canViewOutboundEmails,
   canRunConfirmationBackfill,
   canToggleApplicationForm,
@@ -164,6 +165,21 @@ describe("canManageMatches", () => {
     it(`denies ${role}`, () => expect(canManageMatches(role)).toBe(false));
   });
   it("denies null", () => expect(canManageMatches(null)).toBe(false));
+});
+
+// ── canEditRound2Group (admin tier + support_team, BTC 08/10/2026) ──────────────
+
+describe("canEditRound2Group", () => {
+  it("đúng bốn vai trò: Super admin, Admin, Core team, Support team", () => {
+    const roles = ["super_admin", "admin", "core_team", "support_team", "reviewer", "viewer", "", "SUPPORT_TEAM"];
+    expect(roles.filter((r) => canEditRound2Group(r))).toEqual(["super_admin", "admin", "core_team", "support_team"]);
+    expect(canEditRound2Group(null)).toBe(false);
+    expect(canEditRound2Group(undefined)).toBe(false);
+  });
+  it("support_team đổi nhóm được nhưng vẫn KHÔNG quản lý ghép cặp", () => {
+    expect(canEditRound2Group("support_team")).toBe(true);
+    expect(canManageMatches("support_team")).toBe(false);
+  });
 });
 
 // ── Role set consistency ───────────────────────────────────────────────────────

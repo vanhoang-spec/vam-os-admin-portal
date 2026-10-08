@@ -21,7 +21,7 @@ import { CLASSIFICATION_RULE_VERSION } from "@/lib/matching-round2-classify-core
 import { applicationOptionLabel } from "@/lib/application-form-options";
 import { MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import { readAllPages, readAllPagesIn } from "@/lib/paged-read";
-import { canManageMatches } from "@/lib/permissions";
+import { canEditRound2Group, canManageMatches } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -34,6 +34,8 @@ export type Round2Data = {
   seasonCode: string;
   board: Round2Board;
   canManage: boolean;
+  /** Đổi/xác nhận nhóm từng người — rộng hơn canManage: có cả Support team. */
+  canEditGroups: boolean;
 };
 
 const INACTIVE_MEMBERSHIP = new Set(["withdrawn", "opted_out"]);
@@ -199,18 +201,31 @@ export async function loadRound2Board(client: any, seasonId: string): Promise<Ro
   return buildRound2Board({ people: persons, assignments: assignmentRows, matches: matchRows });
 }
 
-export async function round2Operator(seasonId: string) {
+async function seasonActor(seasonId: string, allowed: (role?: string | null) => boolean) {
   const actor = await getCurrentAdminUser();
-  if (!actor?.id || !canManageMatches(actor.role)) return null;
+  if (!actor?.id || !allowed(actor.role)) return null;
   const ctx = await getAdminScopeContext();
   return (await canOperateSeason(ctx, seasonId)) ? actor : null;
+}
+
+export async function round2Operator(seasonId: string) {
+  return seasonActor(seasonId, canManageMatches);
+}
+
+/** Người được đổi nhóm từng người: thêm Support team (08/10/2026), vẫn phải có quyền vận hành mùa. */
+export async function round2GroupEditor(seasonId: string) {
+  return seasonActor(seasonId, canEditRound2Group);
 }
 
 export async function getRound2Data(): Promise<{ ok: true; data: Round2Data } | { ok: false; message: string }> {
   try {
     const { client, seasonId, seasonCode } = await round2SeasonContext();
-    const [board, actor] = await Promise.all([loadRound2Board(client, seasonId), round2Operator(seasonId)]);
-    return { ok: true, data: { seasonId, seasonCode, board, canManage: Boolean(actor) } };
+    const [board, actor, editor] = await Promise.all([
+      loadRound2Board(client, seasonId),
+      round2Operator(seasonId),
+      round2GroupEditor(seasonId)
+    ]);
+    return { ok: true, data: { seasonId, seasonCode, board, canManage: Boolean(actor), canEditGroups: Boolean(editor) } };
   } catch (error) {
     console.error("[matching-round2] load failed", { message: error instanceof Error ? error.message : String(error) });
     return { ok: false, message: "Không đọc được dữ liệu Vòng 2. Thử tải lại trang; nếu vẫn lỗi, báo quản trị viên." };
@@ -288,7 +303,7 @@ export async function setRound2Window(input: { opensAt: string; closesAt: string
   }
 }
 
-/** BTC đổi hoặc xác nhận nhóm của một người. Chỉ chạm đúng nhóm và lý do. */
+/** BTC hoặc Support team đổi/xác nhận nhóm của một người. Chỉ chạm đúng nhóm và lý do. */
 export async function setIndustryGroup(input: {
   assignmentId: string;
   expectedGroup: number;
@@ -297,7 +312,7 @@ export async function setIndustryGroup(input: {
 }): Promise<{ ok: boolean; message: string }> {
   try {
     const { client, seasonId } = await round2SeasonContext();
-    const actor = await round2Operator(seasonId);
+    const actor = await round2GroupEditor(seasonId);
     if (!actor) return { ok: false, message: RPC_MESSAGES.ACCESS_DENIED };
     const { error } = await client.rpc("vam112_set_industry_group", {
       p_actor: actor.id,

@@ -46,7 +46,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import Round2GroupsPage from "@/app/matches/vong-2/page";
 import Round2ReportPage from "@/app/matches/vong-2/bao-cao/page";
-import { classifyNewAction } from "@/app/actions/matching-round2";
+import { classifyNewAction, setGroupAction } from "@/app/actions/matching-round2";
 import { GET as exportRound2 } from "@/app/api/exports/matching-round2/route";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -173,6 +173,69 @@ describe("nút Phân loại người mới", () => {
     expect(state.status).toBe("error");
     signIn("core_team", "auth-no-scope");
     expect((await classifyNewAction(ROUND2_IDLE, new FormData())).status).toBe("error");
+    expect(rpcCalls).toHaveLength(0);
+  });
+});
+
+describe("đổi / xác nhận nhóm từng người (Support team được làm từ 08/10/2026)", () => {
+  const seedAssignments = () => {
+    db.tables.matching_industry_assignments = [
+      { id: "a5000000-0000-4000-8000-000000000001", season_id: SEASON, person_id: "p-mentee", role: "mentee", group_code: 2, confidence: "thap", flags: ["CAN_BTC_XEM"], secondary_groups: [], evidence: { reasons: [] }, source: "auto", drift_group: null }
+    ];
+    db.tables.admin_scope_access.push(
+      { id: "g3", user_id: "auth-support-read", program_id: null, season_id: SEASON, role: "read", status: "active" },
+      { id: "g4", user_id: "auth-reviewer-ops", program_id: null, season_id: SEASON, role: "operations", status: "active" }
+    );
+  };
+  const editForm = (container: HTMLElement) => personRow(container, "p-mentee").querySelector('[data-testid="group-edit-form"]');
+  const submit = (group: number, reason = "Bạn muốn làm phân tích đầu tư") => {
+    const form = new FormData();
+    form.set("assignmentId", "a5000000-0000-4000-8000-000000000001");
+    form.set("expectedGroup", "2");
+    form.set("newGroup", String(group));
+    form.set("reason", reason);
+    return setGroupAction(ROUND2_IDLE, form);
+  };
+
+  it("Support team có quyền vận hành mùa: thấy ô đổi nhóm ở đúng dòng, nhưng vẫn không có nút phân loại", async () => {
+    seedAssignments();
+    signIn("support_team", "auth-support");
+    const { container } = render(<>{await Round2GroupsPage({ searchParams: Promise.resolve({}) })}</>);
+    expect(editForm(container)).not.toBeNull();
+    expect(container.querySelector('[data-testid="classify-panel"]')).toBeNull();
+    expect(container.textContent).toContain("Bạn vẫn đổi / xác nhận được nhóm");
+  });
+
+  it("Support team bấm Lưu nhóm: gửi đúng một lệnh đổi nhóm, mang chính người bấm", async () => {
+    seedAssignments();
+    signIn("support_team", "auth-support");
+    const state = await submit(3);
+    expect(state).toEqual({ status: "ok", message: "Đã đổi sang nhóm 3." });
+    expect(rpcCalls).toEqual([
+      {
+        fn: "vam112_set_industry_group",
+        args: {
+          p_actor: "admin-auth-support",
+          p_assignment: "a5000000-0000-4000-8000-000000000001",
+          p_expected_group: 2,
+          p_new_group: 3,
+          p_reason: "Bạn muốn làm phân tích đầu tư"
+        }
+      }
+    ]);
+  });
+
+  it("không đủ quyền thì không thấy ô đổi nhóm và không gửi gì: Support team chỉ có quyền đọc mùa, Reviewer dù có quyền vận hành", async () => {
+    seedAssignments();
+    signIn("support_team", "auth-support-read");
+    const { container } = render(<>{await Round2GroupsPage({ searchParams: Promise.resolve({}) })}</>);
+    expect(container.querySelector('[data-testid="round2-table"]')).not.toBeNull();
+    expect(editForm(container)).toBeNull();
+    expect((await submit(3)).status).toBe("error");
+    signIn("reviewer", "auth-reviewer-ops");
+    expect((await submit(3)).status).toBe("error");
+    signIn("viewer", "auth-core");
+    expect((await submit(3)).status).toBe("error");
     expect(rpcCalls).toHaveLength(0);
   });
 });
