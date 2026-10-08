@@ -186,4 +186,13 @@ describe("buildRound2Board", () => {
       ["mentee", "x", 4]
     ]);
   });
+
+  it("dòng gửi lưu bỏ người BTC đã đổi / xác nhận nhóm — không sinh 'Dữ liệu đổi nhóm' giả; người máy xếp vẫn được soát", () => {
+    const board = buildRound2Board({
+      people: [mentor("a"), mentor("b"), mentee("x")],
+      assignments: [assign("mentor", "a", 3, { source: "btc" }), assign("mentor", "b", 1), assign("mentee", "x", 4, { source: "btc" })],
+      matches: []
+    });
+    expect(assignmentRowsForSave(board).map((r) => [r.role, r.personId])).toEqual([["mentor", "b"]]);
+  });
 });
