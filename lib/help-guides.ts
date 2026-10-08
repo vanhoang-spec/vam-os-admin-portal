@@ -601,10 +601,10 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     ],
     notes: [
       "Luật xếp: mentor — chức danh quyết định trước, rồi chức năng, ngành, chức năng khác. Mentee — chức năng mục tiêu, ngành mục tiêu tinh chỉnh; ngành học/khoa là bằng chứng phụ. “Chưa xác định” coi như để trống; “Khác” chỉ về nhóm 9 khi trường còn lại cũng không rõ (BTC 07/10/2026).",
-      "Xem: Super admin, Admin, Core team, Support team. Lưu và đổi nhóm: Super admin, Admin, Core team có quyền vận hành mùa.",
+      "Xem: Super admin, Admin, Core team, Support team. Phân loại người mới: Super admin, Admin, Core team có quyền vận hành mùa. Đổi / xác nhận nhóm từng người: thêm Support team có quyền vận hành mùa (BTC 08/10/2026). Mọi lần đổi đều lưu người đổi và lý do.",
       "Người đã rút khỏi mùa không được phân loại và không vào danh sách."
     ],
-    updated: "07/10/2026"
+    updated: "08/10/2026"
   },
   "/matches/vong-2/bao-cao": {
     title: "Vòng 2 · Báo cáo",

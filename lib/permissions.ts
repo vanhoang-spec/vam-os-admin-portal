@@ -205,6 +205,18 @@ export function canManageMatches(role?: string | null) {
 }
 
 /**
+ * Đổi hoặc xác nhận nhóm ngành của MỘT người ở Vòng 2 (/matches/vong-2).
+ *
+ * Rộng hơn canManageMatches đúng một bậc: support_team có mặt theo quyết định của
+ * chủ dự án ngày 08/10/2026 — Support team rà nhóm Claude xếp chưa đúng trước khi gửi
+ * link cho mentor. Phân loại hàng loạt, mở vòng, gửi thư vẫn chỉ core_team trở lên.
+ * Hàm vam114_round2_group_editor_for_season trong database giữ đúng danh sách này.
+ */
+export function canEditRound2Group(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
  * Can OPEN or CLOSE a public application form (M069).
  *
  * Deliberately narrower than every other admin-tier permission in this file.
