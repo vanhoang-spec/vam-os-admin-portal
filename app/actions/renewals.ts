@@ -8,6 +8,7 @@ import {
   confirmRenewalAndApprove,
   createRenewalInvite,
   regenerateRenewalInvite,
+  reopenDeclinedRenewalInvite,
   revokeRenewalInvite,
   submitRenewalAccepted,
   submitRenewalDeclined,
@@ -245,6 +246,32 @@ export async function regenerateRenewalInviteAction(
   } catch (error) {
     console.error("[renewal-actions] regenerate failed", { code: (error as { code?: string })?.code ?? "UNKNOWN" });
     return adminFail("Không thể tạo lại link gia hạn an toàn.");
+  }
+}
+
+/** Mở lại link cho mentor đã từ chối rồi đổi ý — cùng cổng quyền với "Tạo lại". */
+export async function reopenDeclinedRenewalInviteAction(
+  _previous: RenewalAdminActionState,
+  formData: FormData
+): Promise<RenewalAdminActionState> {
+  try {
+    const inviteId = value(formData, "invite_id");
+    const days = Number(value(formData, "expires_days") || "14");
+    if (!Number.isInteger(days) || days < 1 || days > 60) {
+      return adminFail("Thời hạn link phải từ 1 đến 60 ngày.");
+    }
+    const scoped = await scopedInvite(inviteId);
+    if (!scoped) return adminFail("Link không hợp lệ hoặc bạn không có quyền operations.");
+    const result = await reopenDeclinedRenewalInvite({
+      actorAdminUserId: scoped.admin.id as string,
+      inviteId,
+      expiresAt: new Date(Date.now() + days * 86_400_000).toISOString()
+    }, scoped.client);
+    revalidatePath("/admin/renewals");
+    return result;
+  } catch (error) {
+    console.error("[renewal-actions] reopen failed", { code: (error as { code?: string })?.code ?? "UNKNOWN" });
+    return adminFail("Không thể mở lại link gia hạn an toàn.");
   }
 }
 

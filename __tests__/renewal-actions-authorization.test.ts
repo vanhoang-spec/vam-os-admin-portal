@@ -14,6 +14,7 @@ vi.mock("@/lib/renewal-runtime", () => ({
   createRenewalInvite: vi.fn(),
   revokeRenewalInvite: vi.fn(),
   regenerateRenewalInvite: vi.fn(),
+  reopenDeclinedRenewalInvite: vi.fn(),
   confirmRenewalAndApprove: vi.fn()
 }));
 
@@ -23,12 +24,14 @@ import {
   confirmRenewalAndApprove,
   createRenewalInvite,
   regenerateRenewalInvite,
+  reopenDeclinedRenewalInvite,
   revokeRenewalInvite
 } from "@/lib/renewal-runtime";
 import {
   confirmRenewalAction,
   createRenewalInviteAction,
   regenerateRenewalInviteAction,
+  reopenDeclinedRenewalInviteAction,
   revokeRenewalInviteAction
 } from "@/app/actions/renewals";
 
@@ -92,7 +95,7 @@ beforeEach(() => {
   (getAdminScopeContext as Mock).mockResolvedValue(operatorContext());
   (canOperateSeason as Mock).mockResolvedValue(true);
   (getSupabaseServiceRoleClient as Mock).mockReturnValue(client());
-  for (const mutation of [createRenewalInvite, revokeRenewalInvite, regenerateRenewalInvite, confirmRenewalAndApprove]) {
+  for (const mutation of [createRenewalInvite, revokeRenewalInvite, regenerateRenewalInvite, reopenDeclinedRenewalInvite, confirmRenewalAndApprove]) {
     (mutation as Mock).mockResolvedValue({ ok: true, outcome: "ok", message: "ok" });
   }
 });
@@ -107,6 +110,7 @@ describe("renewal server actions — exact season authorization", () => {
     }));
     await revokeRenewalInviteAction(previous, form({ invite_id: IDS.invite }));
     await regenerateRenewalInviteAction(previous, form({ invite_id: IDS.invite, expires_days: "14" }));
+    await reopenDeclinedRenewalInviteAction(previous, form({ invite_id: IDS.invite, expires_days: "14" }));
     await confirmRenewalAction(previous, form({
       application_id: IDS.application,
       reviewed: JSON.stringify({
@@ -120,8 +124,9 @@ describe("renewal server actions — exact season authorization", () => {
     expect(createRenewalInvite).toHaveBeenCalledOnce();
     expect(revokeRenewalInvite).toHaveBeenCalledOnce();
     expect(regenerateRenewalInvite).toHaveBeenCalledOnce();
+    expect(reopenDeclinedRenewalInvite).toHaveBeenCalledOnce();
     expect(confirmRenewalAndApprove).toHaveBeenCalledOnce();
-    expect(canOperateSeason).toHaveBeenCalledTimes(4);
+    expect(canOperateSeason).toHaveBeenCalledTimes(5);
     for (const call of (canOperateSeason as Mock).mock.calls) expect(call[1]).toBe(IDS.season);
   });
 
@@ -137,6 +142,7 @@ describe("renewal server actions — exact season authorization", () => {
       })),
       revokeRenewalInviteAction(previous, form({ invite_id: IDS.invite })),
       regenerateRenewalInviteAction(previous, form({ invite_id: IDS.invite, expires_days: "14" })),
+      reopenDeclinedRenewalInviteAction(previous, form({ invite_id: IDS.invite, expires_days: "14" })),
       confirmRenewalAction(previous, form({
         application_id: IDS.application,
         reviewed: JSON.stringify({
@@ -152,6 +158,7 @@ describe("renewal server actions — exact season authorization", () => {
     expect(createRenewalInvite).not.toHaveBeenCalled();
     expect(revokeRenewalInvite).not.toHaveBeenCalled();
     expect(regenerateRenewalInvite).not.toHaveBeenCalled();
+    expect(reopenDeclinedRenewalInvite).not.toHaveBeenCalled();
     expect(confirmRenewalAndApprove).not.toHaveBeenCalled();
   });
 

@@ -76,6 +76,12 @@ export type RenewalConsoleRow = {
   coreTeamNote: string | null;
   declineFeedback: string | null;
   commitmentsCompleted: boolean | null;
+  /**
+   * Dòng "Từ chối" MỚI NHẤT của một mentor chưa có link sống và chưa đồng ý — chỉ
+   * dòng đó mang nút "Mở lại link gia hạn" (BTC 08/10/2026). Mentor đã được mời lại
+   * thì nút ẩn: bấm nữa chỉ gặp lời từ chối của database.
+   */
+  canReopen: boolean;
 };
 
 export type RenewalConsoleData = {
@@ -111,6 +117,32 @@ export function renewalDeclineAttention(
       ? "Membership chưa được opt-out; có thể là deferred_actor_unauthorized. Cần operator xử lý."
       : `Membership ${membershipStatus} không đủ điều kiện tự động; cần operator rà soát.`;
   return { needsAttention, reason };
+}
+
+/**
+ * Lời mời "Từ chối" nào được mở lại (BTC 08/10/2026): lời từ chối MỚI NHẤT của mỗi
+ * mentor, khi mentor đó chưa đồng ý và chưa có link sống. Cùng điều kiện mà
+ * vam071_create_renewal_invite sẽ xét — nút chỉ hiện khi bấm vào thì tạo được link.
+ */
+export function reopenableDeclinedInviteIds(invites: readonly Row[], now = Date.now()): Set<string> {
+  const accepted = new Set<string>();
+  const live = new Set<string>();
+  const latestDeclined = new Map<string, Row>();
+  for (const row of invites) {
+    const person = String(row.person_id);
+    const state = renewalInviteState(row, now);
+    if (state === "accepted") accepted.add(person);
+    if (state === "live") live.add(person);
+    if (state === "declined") {
+      const prev = latestDeclined.get(person);
+      if (!prev || Date.parse(String(row.created_at)) > Date.parse(String(prev.created_at))) latestDeclined.set(person, row);
+    }
+  }
+  const out = new Set<string>();
+  latestDeclined.forEach((row, person) => {
+    if (!accepted.has(person) && !live.has(person)) out.add(String(row.id));
+  });
+  return out;
 }
 
 export async function loadRenewalSeasonContext(): Promise<RenewalSeasonContext | null> {
@@ -160,6 +192,7 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
   // below puts it BELOW live, so a mentor who declined and was later re-invited
   // shows their current live link instead of a stale refusal.
   const declinedPeople = new Set(invites.data.filter((row) => row.outcome === "declined").map((row) => String(row.person_id)));
+  const reopenable = reopenableDeclinedInviteIds(invites.data);
 
   // The eligibility RULE is unchanged: a mentor may receive a link only when
   // they have exactly one canonical profile, a known person row, no accepted
@@ -239,7 +272,8 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
         diff,
         coreTeamNote: typeof renewal.core_team_note === "string" ? renewal.core_team_note : null,
         declineFeedback: typeof invite.decline_feedback === "string" ? invite.decline_feedback : null,
-        commitmentsCompleted: typeof renewal.commitments_completed === "boolean" ? renewal.commitments_completed : null
+        commitmentsCompleted: typeof renewal.commitments_completed === "boolean" ? renewal.commitments_completed : null,
+        canReopen: reopenable.has(String(invite.id))
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));

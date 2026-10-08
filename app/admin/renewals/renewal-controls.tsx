@@ -6,6 +6,7 @@ import {
   confirmRenewalAction,
   createRenewalInviteAction,
   regenerateRenewalInviteAction,
+  reopenDeclinedRenewalInviteAction,
   revokeRenewalInviteAction
 } from "@/app/actions/renewals";
 import { SubmitButton } from "@/components/submit-button";
@@ -94,6 +95,7 @@ export function RenewalInviteActions({ row }: { row: RenewalConsoleRow }) {
   const [revokeState, revokeAction] = useFormState(revokeRenewalInviteAction, initialRenewalAdminActionState);
   const [regenerateState, regenerateAction] = useFormState(regenerateRenewalInviteAction, initialRenewalAdminActionState);
   const [confirmState, confirmFormAction] = useFormState(confirmRenewalAction, initialRenewalAdminActionState);
+  const [reopenState, reopenAction] = useFormState(reopenDeclinedRenewalInviteAction, initialRenewalAdminActionState);
 
   // The CURRENT/PROPOSED snapshot the admin is looking at, submitted with the
   // confirmation so the server validates exactly what was on screen. It is a
@@ -136,6 +138,17 @@ export function RenewalInviteActions({ row }: { row: RenewalConsoleRow }) {
             </SubmitButton>
           </form>
         ) : null}
+        {row.canReopen ? (
+          <form action={reopenAction} className="flex items-end gap-2" data-testid="renewal-reopen">
+            <input type="hidden" name="invite_id" value={row.id} />
+            <label className="text-xs text-slate-600">Ngày
+              <input name="expires_days" type="number" min="1" max="60" defaultValue="14" className="ml-1 w-16 rounded border border-vam-line px-2 py-1.5" />
+            </label>
+            <SubmitButton variant="outline" pendingText="Đang mở lại..." onClick={(event) => { if (!window.confirm("Mentor này đã từ chối. Tạo link gia hạn mới để mentor tham gia lại?")) event.preventDefault(); }}>
+              Mở lại link gia hạn
+            </SubmitButton>
+          </form>
+        ) : null}
         {canConfirm ? (
           <form action={confirmFormAction}>
             <input type="hidden" name="application_id" value={row.applicationId ?? ""} />
@@ -149,7 +162,9 @@ export function RenewalInviteActions({ row }: { row: RenewalConsoleRow }) {
       <Feedback state={revokeState} />
       <Feedback state={regenerateState} />
       <Feedback state={confirmState} />
+      <Feedback state={reopenState} />
       <OneTimeLink path={regenerateState.renewalPath} />
+      <OneTimeLink path={reopenState.renewalPath} />
     </div>
   );
 }

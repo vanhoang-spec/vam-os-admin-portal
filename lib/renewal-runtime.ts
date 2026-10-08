@@ -848,3 +848,48 @@ export async function regenerateRenewalInvite(
   }
   return { ...created, outcome: "regenerated", message: "Đã thu hồi link cũ và tạo link mới. Hãy sao chép ngay." };
 }
+
+/**
+ * Mở lại link gia hạn cho mentor đã bấm "Từ chối" rồi đổi ý (BTC 08/10/2026 — chị
+ * Đặng Thụy Thanh Lan; trường hợp này sẽ còn lặp lại).
+ *
+ * Đây là lối tắt trên dòng "Từ chối" của ĐÚNG đường mời lại từng người đã có (khung
+ * "Tạo link gia hạn cá nhân", M076): cùng createRenewalInvite, cùng
+ * vam071_create_renewal_invite. Lời mời đã từ chối được GIỮ NGUYÊN làm lịch sử —
+ * không thu hồi, vì nó đã được trả lời và không còn là link sống. Database tự chặn
+ * nếu người này đã đồng ý hoặc đang có một link sống.
+ *
+ * Khi mentor đồng ý qua link mới, bước "Xác nhận & hoàn tất" kích hoạt lại tư cách
+ * mùa đang ở opted_out (reconcileRenewalMembership) — lời từ chối cũ không chặn gì.
+ */
+export async function reopenDeclinedRenewalInvite(
+  input: { actorAdminUserId: string; inviteId: string; expiresAt: string },
+  client = getSupabaseServiceRoleClient()
+): Promise<RenewalAdminActionState> {
+  if (!client) return { ok: false, message: SAFE_ADMIN_FAILURE };
+  const { data: invite, error } = await client
+    .from("person_season_invites")
+    .select("id,person_id,program_id,season_id,role,outcome")
+    .eq("id", input.inviteId)
+    .maybeSingle();
+  if (error || !invite || invite.role !== "mentor" || invite.outcome !== "declined") {
+    return { ok: false, message: "Chỉ mở lại được link của mentor đã bấm Từ chối." };
+  }
+  const created = await createRenewalInvite(
+    {
+      actorAdminUserId: input.actorAdminUserId,
+      personId: String(invite.person_id),
+      programId: String(invite.program_id),
+      seasonId: String(invite.season_id),
+      expiresAt: input.expiresAt
+    },
+    client
+  );
+  if (!created.ok) {
+    return {
+      ok: false,
+      message: "Chưa tạo được link mới — mentor này có thể đã có một link đang hiệu lực hoặc đã đồng ý. Tải lại trang để xem."
+    };
+  }
+  return { ...created, outcome: "reopened", message: "Đã mở lại: tạo link gia hạn mới. Link chỉ hiện một lần — hãy sao chép và gửi cho mentor ngay." };
+}
