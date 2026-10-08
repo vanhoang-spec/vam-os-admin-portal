@@ -64,9 +64,9 @@ const CSV = [
 ].join("\n");
 
 describe("1. link sheet → địa chỉ đọc CSV", () => {
-  it("dựng đúng địa chỉ xuất CSV, giữ gid của trang tính", () => {
+  it("dựng đúng địa chỉ xuất CSV (/export, không phải gviz), giữ gid của trang tính", () => {
     expect(sheetCsvUrl("https://docs.google.com/spreadsheets/d/1xei5xJX45v-5rn3-mHuEpG5nYzuk-tIN61v8UpRG29Y/edit?gid=1947266161#gid=1947266161"))
-      .toBe("https://docs.google.com/spreadsheets/d/1xei5xJX45v-5rn3-mHuEpG5nYzuk-tIN61v8UpRG29Y/gviz/tq?tqx=out:csv&gid=1947266161");
+      .toBe("https://docs.google.com/spreadsheets/d/1xei5xJX45v-5rn3-mHuEpG5nYzuk-tIN61v8UpRG29Y/export?format=csv&gid=1947266161");
     expect(sheetCsvUrl("https://docs.google.com/spreadsheets/d/1xei5xJX45v-5rn3-mHuEpG5nYzuk/edit")).toMatch(/gid=0$/);
   });
   it.each([
@@ -131,6 +131,118 @@ describe("3. đọc sheet theo tiêu đề cột", () => {
   });
   it("không có hàng tiêu đề: từ chối", () => {
     expect(parseSignupSheet("a,b\n1,2", BLOCKS).ok).toBe(false);
+  });
+});
+
+describe("3b. sheet 08/10/2026: khối hướng dẫn trên đầu, tiêu đề ba tầng (dạng /export)", () => {
+  // Chép đúng HÌNH DẠNG bản /export của sheet thật lúc 08/10: vài hàng hướng dẫn,
+  // một hàng tổng số TRUE nằm TRÊN tiêu đề, tiêu đề tách ba hàng (tên/email | đợt |
+  // buổi), một dòng STT trống và hàng tổng ở cuối.
+  const DOT2_SESSIONS: SessionInput[] = [
+    { id: "s10a", startsAtIso: "2026-10-10T01:00:00.000Z", endsAtIso: "2026-10-10T04:30:00.000Z", venue: "Phòng E501, E502, E504 —  Cơ sở E – UEH: 54 Nguyễn Văn Thủ, Phường Tân Định, TP. Hồ Chí Minh. Bản đồ: https://maps.app.goo.gl/eeee" },
+    { id: "s10p", startsAtIso: "2026-10-10T06:30:00.000Z", endsAtIso: "2026-10-10T10:00:00.000Z", venue: null },
+    { id: "s11a", startsAtIso: "2026-10-11T01:00:00.000Z", endsAtIso: "2026-10-11T04:30:00.000Z", venue: "Phòng B1-502, B1-503, B1-504, B1-506, B1-802, B1-803 — Cơ sở B, 279 Nguyễn Tri Phương, Phường Diên Hồng, TP. Hồ Chí Minh (địa chỉ cũ: 279 Nguyễn Tri Phương, P.5, Q.10, TP.HCM). Check-in tại phòng B1-502. Bản đồ: https://maps.app.goo.gl/bbbb" },
+    { id: "s11p", startsAtIso: "2026-10-11T06:30:00.000Z", endsAtIso: "2026-10-11T10:00:00.000Z", venue: "Phòng B1-502, B1-503, B1-504, B1-506, B1-802, B1-803 — Cơ sở B, 279 Nguyễn Tri Phương, Phường Diên Hồng, TP. Hồ Chí Minh (địa chỉ cũ: 279 Nguyễn Tri Phương, P.5, Q.10, TP.HCM). Check-in tại phòng B1-502. Bản đồ: https://maps.app.goo.gl/bbbb" }
+  ];
+  const DOT2 = buildInterviewBlocks(DOT2_SESSIONS, "2026-10-08T03:00:00.000Z");
+  const blank = (n: number) => Array.from({ length: n }, () => "");
+  const SHEET = [
+    q(["TUYỂN MENTEE MÙA 12", ...blank(12)]),
+    q(["Thời gian phỏng vấn: Đợt 1: 3-4/10 và Đợt 2: 10-11/10", ...blank(12)]),
+    q(["HƯỚNG DẪN:", ...blank(12)]),
+    q(["Thông tin liên hệ: Mỹ Anh (0394983679) và Hoàng Vy (0936359670)", ...blank(12)]),
+    q([...blank(8), "30", "26", "27", "20", ""]),
+    q(["DANH SÁCH MENTOR ĐĂNG KÝ THAM GIA PHỎNG VẤN", ...blank(12)]),
+    q(["STT", "Họ và tên", "Email\nLưu ý: Email dùng lúc điền đơn trên hệ thống VAM OS", "Số điện thoại", "Thời gian phỏng vấn anh chị có thể hỗ trợ", "", "", "", "", "", "", "", "Note (giờ đến, giờ về)"]),
+    q(["", "", "", "", "Đợt 1", "", "", "", "Đợt 2", "", "", "", ""]),
+    q(["", "", "", "", "Sáng 4/10", "Chiều 4/10", "Sáng 3/10", "Chiều 3/10", "Sáng 10/10", "Chiều 10/10", "Sáng 11/10", "Chiều 11/10", ""]),
+    q(["1", "Mentor Sáng Bảy", "sang7@example.test", "0901000001", "TRUE", "FALSE", "FALSE", "FALSE", "TRUE", "FALSE", "FALSE", "FALSE", ""]),
+    q(["2", "Mentor Online", "online@example.test", "0901000002", "FALSE", "FALSE", "FALSE", "FALSE", "FALSE", "TRUE", "FALSE", "FALSE", "13-15g30"]),
+    q(["3", "Mentor Chủ Nhật", "cn@example.test", "0901000003", "FALSE", "FALSE", "FALSE", "FALSE", "", "FALSE", "TRUE", "TRUE", ""]),
+    q(["4", "", "", "", "FALSE", "FALSE", "FALSE", "FALSE", "", "FALSE", "FALSE", "FALSE", ""]),
+    q([...blank(4), "21", "21", "20", "20", "30", "26", "27", "20", ""])
+  ].join("\n");
+
+  it("tìm được cột của cả bốn buổi đợt 2 ở hàng tiêu đề thứ ba", () => {
+    expect(DOT2.map((b) => b.headerLabel)).toEqual(["Sáng 10/10", "Chiều 10/10", "Sáng 11/10", "Chiều 11/10"]);
+    const parsed = parseSignupSheet(SHEET, DOT2);
+    if (!parsed.ok) throw new Error(parsed.message);
+    const by = new Map(parsed.rows.map((r) => [r.email, r.blockKeys]));
+    // Ô tick của đợt 1 (Sáng 4/10) không được đọc thành buổi của đợt 2.
+    expect(by.get("sang7@example.test")).toEqual(["2026-10-10:sang"]);
+    expect(by.get("online@example.test")).toEqual(["2026-10-10:chieu"]);
+    expect(by.get("cn@example.test")).toEqual(["2026-10-11:sang", "2026-10-11:chieu"]);
+    expect(parsed.rows).toHaveLength(3);
+  });
+
+  it("hàng phụ dưới tiêu đề dừng ở dòng dữ liệu đầu tiên: ghi chú của mentor không bị đọc thành nhãn", () => {
+    // Bỏ hàng nhãn buổi, và để mentor đầu tiên ghi chú đúng chữ "Sáng 10/10". Bộ đọc mà
+    // lấn xuống dòng dữ liệu sẽ lấy cột Ghi chú làm cột "Sáng 10/10" — đọc lệch lặng lẽ.
+    // Đúng là phải từ chối cả sheet.
+    const noLabels = SHEET.split("\n")
+      .filter((line) => !line.includes("Sáng 4/10"))
+      .map((line) => (line.includes("sang7@example.test") ? line.replace(/""$/, '"Sáng 10/10"') : line))
+      .join("\n");
+    expect(noLabels).toContain('"Sáng 10/10"');
+    expect(parseSignupSheet(noLabels, DOT2)).toEqual({
+      ok: false,
+      message: "Sheet không có cột cho buổi: Sáng 10/10, Chiều 10/10, Sáng 11/10, Chiều 11/10."
+    });
+  });
+
+  it("hướng dẫn riêng cho mentor gắn đúng buổi đợt 2", () => {
+    const by = new Map(DOT2.map((b) => [b.key, b]));
+    expect(by.get("2026-10-10:sang")?.guide).toBeNull();
+    expect(by.get("2026-10-10:chieu")?.guide?.online?.join(" ")).toContain("PHỎNG VẤN ONLINE");
+    expect(by.get("2026-10-11:sang")?.guide?.extra?.join(" ")).toContain("Check-in Mentor");
+    expect(by.get("2026-10-11:chieu")?.guide).toBe(by.get("2026-10-11:sang")?.guide);
+  });
+
+  const render = (keys: string[]) =>
+    renderConfirmation({
+      name: "Mentor A",
+      loginEmail: "a@example.test",
+      matchedBy: "email",
+      note: "",
+      blocks: DOT2.filter((b) => keys.includes(b.key)),
+      origin: "https://os.alumni-mentoring.edu.vn"
+    }).body;
+
+  it("chiều Thứ Bảy: phỏng vấn online, không có phòng/cơ sở/check-in", () => {
+    const body = render(["2026-10-10:chieu"]);
+    expect(body).toContain("- Thứ Bảy 10/10/2026 — buổi chiều: 13:30 – 17:00");
+    expect(body).toContain("- Hình thức: PHỎNG VẤN ONLINE");
+    expect(body).toContain("Mỗi Mentor có 1 phòng online riêng, BTC điều phối Mentee vào phòng theo từng ca.");
+    expect(body).not.toContain("- Cơ sở:");
+    expect(body).not.toContain("BTC sẽ thông báo trong Group Zalo");
+    expect(body).not.toContain("Phòng và bàn phỏng vấn cụ thể");
+    expect(body).not.toContain("có mặt trước 15 phút để check-in");
+    expect(body).toContain("sẵn sàng trước 15 phút");
+  });
+
+  it("Chủ nhật: phòng PV, cơ sở theo BTC, check-in mentee/mentor; KHÔNG có câu check-in của mentee trên ca", () => {
+    const body = render(["2026-10-11:sang", "2026-10-11:chieu"]);
+    expect(body).toContain("- Phòng PV: B1-502, B1-503, B1-504, B1-506, B1-802, B1-803");
+    expect(body).toContain("- Cơ sở: Cơ sở B – UEH, 279 Nguyễn Tri Phương, Phường Diên Hồng, TP.HCM");
+    expect(body).toContain("- Check-in Mentee: B1-502");
+    expect(body).toContain("- Check-in Mentor: Mentor chủ động đến các phòng B1-503, B1-504, B1-506, B1-802, B1-803; BTC hỗ trợ check-in và phân bàn trực tiếp tại phòng.");
+    expect(body).toContain("- Link maps: https://maps.app.goo.gl/bbbb");
+    expect(body).not.toContain("Check-in tại phòng B1-502");
+    expect(body).not.toContain("Phòng và bàn phỏng vấn cụ thể");
+    expect(body).toContain("có mặt trước 15 phút để check-in");
+  });
+
+  it("sáng Thứ Bảy: phòng và cơ sở đọc từ ca, kèm câu BTC xếp phòng khi check-in", () => {
+    const body = render(["2026-10-10:sang"]);
+    expect(body).toContain("- Phòng: E501, E502, E504");
+    expect(body).toContain("- Cơ sở: Cơ sở E – UEH: 54 Nguyễn Văn Thủ, Phường Tân Định, TP. Hồ Chí Minh");
+    expect(body).toContain("- Link maps: https://maps.app.goo.gl/eeee");
+    expect(body).toContain("- Phòng và bàn phỏng vấn cụ thể BTC sẽ xếp khi Anh/Chị check-in.");
+  });
+
+  it("mentor vừa online vừa trực tiếp: vẫn nhắc có mặt để check-in", () => {
+    const body = render(["2026-10-10:chieu", "2026-10-11:sang"]);
+    expect(body).toContain("có mặt trước 15 phút để check-in");
   });
 });
 
