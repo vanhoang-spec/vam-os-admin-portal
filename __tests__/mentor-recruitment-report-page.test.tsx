@@ -174,6 +174,35 @@ describe("báo cáo", () => {
     }
   });
 
+  it("bảng công ty có dòng tổng; bảng toàn bộ nơi làm việc cộng thêm tự do + không khai cho khớp số người (BTC 09/10/2026)", async () => {
+    signIn("core_team", "auth-core");
+    db.tables.applications.push(
+      {
+        id: "app-vcb", person_id: null, full_name: "Đỗ Một Mình", email_primary: "vcb@example.test", role_applied: "mentor",
+        status: "submitted", source: "vam_os_form", season_id: SEASON, submitted_at: "2026-09-05T00:00:00Z", raw_payload: payload({ company_current: "Vietcombank" })
+      },
+      {
+        id: "app-blank", person_id: null, full_name: "Ngô Không Khai", email_primary: "blank@example.test", role_applied: "mentor",
+        status: "submitted", source: "vam_os_form", season_id: SEASON, submitted_at: "2026-09-06T00:00:00Z", raw_payload: payload({ company_current: "" })
+      }
+    );
+    // Mọi người: 3 MB (một người viết "NH TMCP Quân Đội"), 1 Vietcombank, 1 tự do, 1 không khai = 6.
+    const { container } = await open({ "pham-vi": "tat-ca" });
+    const cells = (testId: string) =>
+      Array.from(container.querySelectorAll(`[data-testid="${testId}"] td`)).map((td) => td.textContent?.trim());
+
+    const many = container.querySelector('[data-testid="companies-total"]') as HTMLElement;
+    expect(many.tagName).toBe("TFOOT");
+    expect(many.closest("table")).toBe(container.querySelector('[data-testid="companies"] table'));
+    expect(cells("companies-total")).toEqual(["", "Tổng 1 nơi", "3", "50% trong 6 người của phạm vi đang xem"]);
+
+    const all = container.querySelector('[data-testid="companies-all-total"]') as HTMLElement;
+    expect(all.closest("table")).toBe(container.querySelector('[data-testid="companies-all"]'));
+    expect(cells("companies-all-total")).toEqual(["Tổng cả bảng: 2 nơi", "4", "+ 1 tự do / nghỉ hưu + 1 không khai = 6 người"]);
+    // Bảng toàn bộ giờ có tiêu đề cột — trước đây chỉ có dòng, không biết cột số là gì.
+    expect(Array.from(container.querySelectorAll('[data-testid="companies-all"] thead th')).map((th) => th.textContent)).toEqual(["Công ty", "Số mentor", "Mentor"]);
+  });
+
   it("?pham-vi=tat-ca: tính mọi người nộp đơn / gia hạn; giá trị lạ quay về mặc định", async () => {
     signIn("core_team", "auth-core");
     const all = await open({ "pham-vi": "tat-ca" });

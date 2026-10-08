@@ -194,6 +194,18 @@ function InterviewerTable({ report }: { report: InterviewReport }) {
                 </tr>
               ))}
             </tbody>
+            {/* Dòng tổng là của cả bảng: ô tìm chỉ lọc tbody, nên nhãn nói rõ số người. */}
+            <tfoot className="border-t-2 border-vam-line bg-slate-50 font-semibold" data-testid="interviewer-total">
+              <tr>
+                <td className={`${TD} text-vam-ink`}>Tất cả {formatInt(rows.length)} người</td>
+                <td className={NUM}>{formatInt(all.forms)}</td>
+                <td className={NUM}>{formatScore(all.avg)}</td>
+                {REPORT_GROUPS.map((g) => (
+                  <td key={g} className={NUM}><GroupCell score={all.byGroup[g]} /></td>
+                ))}
+                <td className={NUM}>{formatInt(all.taken)}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </TableSearch>

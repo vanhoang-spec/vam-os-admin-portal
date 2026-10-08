@@ -9,6 +9,7 @@ import { Round2DispatchPanel } from "./dispatch-panel";
 import { byGroupThenName, type GroupSummary, type Round2Row } from "@/lib/matching-round2-core";
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canAssignReview, canBrowseOperations } from "@/lib/permissions";
+import { sumBy } from "@/lib/report-totals-core";
 import { formatDateTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -227,6 +228,17 @@ export default async function Round2ReportPage() {
                     </tr>
                   ))}
                 </tbody>
+                {/* tfoot: ô tìm không lọc dòng này, nên nhãn nói rõ là tổng cả bảng. */}
+                <tfoot className="border-t-2 border-vam-line bg-slate-50 font-semibold tabular-nums" data-testid="mentors-with-slots-total">
+                  <tr>
+                    <td className="px-3 py-2" colSpan={3}>
+                      Tổng cả bảng: {mentorsWithSlots.length} mentor
+                    </td>
+                    <td className="px-3 py-2 text-right">{sumBy(mentorsWithSlots, (r) => r.capacity)}</td>
+                    <td className="px-3 py-2 text-right">{sumBy(mentorsWithSlots, (r) => r.activeMatches.length)}</td>
+                    <td className="px-3 py-2 text-right">{slots}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </TableSearch>

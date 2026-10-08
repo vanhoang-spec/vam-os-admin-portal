@@ -9,6 +9,7 @@ import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { newestFirst } from "@/lib/list-order";
 import { canBrowseOperations } from "@/lib/permissions";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { sumBy } from "@/lib/report-totals-core";
 import type { Event, EventParticipation, MentoringRecap, Season } from "@/lib/types";
 import { displayText, formatDate } from "@/lib/utils";
 import { SEASON_CONFIG } from "@/lib/season-config";
@@ -188,6 +189,12 @@ export default async function MonthlyOperationsPage(props: { searchParams?: Prom
         ) : (
           <SimpleTable
             rows={eventRows}
+            footer={{
+              event_name: `Tổng ${eventRows.length} sự kiện`,
+              attended: sumBy(eventRows, (row) => row.attended),
+              absent: sumBy(eventRows, (row) => row.absent),
+              total: sumBy(eventRows, (row) => row.total)
+            }}
             columns={[
               {
                 key: "event_name",

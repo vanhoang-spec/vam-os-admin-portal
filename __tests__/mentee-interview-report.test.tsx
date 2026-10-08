@@ -267,10 +267,22 @@ describe("trang", () => {
 
   it("bảng người phỏng vấn: một dòng mỗi người, điểm theo nhóm; không hiện tên mentee", () => {
     const { container } = render(<ReportView report={buildInterviewReport(ROWS, WAVE1)} waves={WAVES} notes={null} generatedAt="2026-10-06T03:00:00Z" />);
-    const rows = within(screen.getByTestId("interviewer-table")).getAllByRole("row").slice(1);
+    const rows = Array.from(screen.getByTestId("interviewer-table").querySelectorAll("tbody tr"));
     expect(rows.map((r) => r.querySelector("td")?.textContent)).toEqual(["Mentor An", "Mentor Bình"]);
     expect(rows[0].textContent).toContain("4,00 · 2 phiếu");
     expect(container.textContent).not.toMatch(/Mentee Bí Mật|Mentor Chi/);
+  });
+
+  it("bảng người phỏng vấn có dòng tổng: cộng phiếu và số nhận ngay, điểm là trung bình của MỌI phiếu (BTC 09/10/2026)", () => {
+    render(<ReportView report={buildInterviewReport(ROWS, WAVE1)} waves={WAVES} notes={null} generatedAt="2026-10-06T03:00:00Z" />);
+    const foot = screen.getByTestId("interviewer-total");
+    // Nằm trong <tfoot> của chính bảng đó: ô tìm chỉ lọc tbody nên không lọc mất dòng tổng.
+    expect(foot.tagName).toBe("TFOOT");
+    expect(foot.closest("table")).toBe(screen.getByTestId("interviewer-table"));
+    const cells = Array.from(foot.querySelectorAll("td")).map((td) => td.textContent);
+    // 3,34 = (4,2 + 3,8 + 3,0 + 3,5 + 2,2) / 5 phiếu. Trung bình của hai điểm từng người
+    // (3,67 và 2,85) sẽ ra 3,26 — sai khi hai người chấm số phiếu khác nhau.
+    expect(cells).toEqual(["Tất cả 2 người", "5", "3,34", "3,83 · 3 phiếu", "2,20 · 1 phiếu", "3,00 · 1 phiếu", "1"]);
   });
 
   it("hiện phần nhận xét và câu báo bản chụp đã cũ", () => {

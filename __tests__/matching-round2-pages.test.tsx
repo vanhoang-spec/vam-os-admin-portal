@@ -307,4 +307,25 @@ describe("báo cáo và CSV", () => {
     expect(csv).toContain("renew@example.test");
     expect(csv).not.toContain("Mentor Đơn Mới"); // chưa có nhóm → chưa nhận danh sách
   });
+
+  it("bảng Mentor còn nhận có dòng tổng cả bảng: cộng Đăng ký / Đang có / Còn (BTC 09/10/2026)", async () => {
+    db.tables.matching_industry_assignments = [
+      { id: "as1", season_id: SEASON, person_id: "p-renew", role: "mentor", group_code: 2, confidence: "cao", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "auto", drift_group: null },
+      { id: "as3", season_id: SEASON, person_id: "p-new", role: "mentor", group_code: 6, confidence: "cao", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "auto", drift_group: null }
+    ];
+    // Mentor gia hạn đăng ký 3, đã có 1 cặp → còn min(2, 3) − 1 = 1. Mentor mới đăng ký 2, chưa có ai → còn 2.
+    db.tables.matches = [{ id: "m1", season_id: SEASON, mentor_person_id: "p-renew", mentee_person_id: "p-mentee", status: "active", matching_round: 1 }];
+    signIn("core_team", "auth-core");
+    const { container } = render(<>{await Round2ReportPage()}</>);
+    const table = container.querySelector('[data-testid="mentors-with-slots"]') as HTMLElement;
+    const body = Array.from(table.querySelectorAll("tbody tr")).map((tr) => Array.from(tr.querySelectorAll("td")).map((td) => td.textContent));
+    expect(body.map((cells) => [cells[1], cells[3], cells[4], cells[5]])).toEqual([
+      ["Mentor Gia Hạn", "3", "1", "1"],
+      ["Mentor Đơn Mới", "2", "0", "2"]
+    ]);
+    const foot = container.querySelector('[data-testid="mentors-with-slots-total"]') as HTMLElement;
+    expect(foot.tagName).toBe("TFOOT");
+    expect(foot.closest("table")).toBe(table);
+    expect(Array.from(foot.querySelectorAll("td")).map((td) => td.textContent?.trim())).toEqual(["Tổng cả bảng: 2 mentor", "5", "1", "3"]);
+  });
 });

@@ -141,12 +141,19 @@ export function SimpleTable<T>({
   rows,
   columns,
   getHref,
-  search
+  search,
+  footer
 }: {
   rows: T[];
   columns: Array<SimpleTableColumn<T>>;
   getHref?: (row: T) => string;
   search?: TableSearchOption;
+  /**
+   * Dòng tổng cuối bảng, theo khoá cột; cột không có khoá để trống. Nằm trong
+   * <tfoot> nên ô tìm kiếm không lọc mất nó — nhãn của bảng có ô tìm nên nói rõ
+   * đó là tổng cả bảng, không phải tổng các dòng đang hiện.
+   */
+  footer?: Partial<Record<string, React.ReactNode>>;
 }) {
   if (!rows.length) return <EmptyState />;
   const renderCell = (row: T, column: SimpleTableColumn<T>, href?: string) => {
@@ -228,6 +235,17 @@ export function SimpleTable<T>({
             );
           })}
         </tbody>
+        {footer ? (
+          <tfoot className="border-t-2 border-vam-line bg-slate-50 font-semibold" data-testid="table-total">
+            <tr>
+              {columns.map((column) => (
+                <td key={column.key} className="max-w-xs break-words px-4 py-3 text-vam-ink">
+                  {footer[column.key] ?? null}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
     </div>
   );

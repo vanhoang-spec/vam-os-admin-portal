@@ -11,6 +11,7 @@ import {
   type YearStats
 } from "@/lib/mentor-recruitment-report-core";
 import { formatShare, type CrossTabRow } from "@/lib/report-crosstab-core";
+import { sumBy } from "@/lib/report-totals-core";
 import { formatDateTime, formatInt } from "@/lib/utils";
 
 /**
@@ -172,6 +173,8 @@ export function MentorReportView({ report, seasonCode, generatedAt }: { report: 
   const cvPassedTotal = cv.byGroup.columns[0]?.total ?? 0;
   const cvDecidedTotal = cv.byGroup.columns.reduce((s, c) => s + c.total, 0);
   const companiesWithMany = profile.companies.ranked.filter((c) => c.count >= 2);
+  const manyMentors = sumBy(companiesWithMany, (c) => c.count);
+  const allCompanyMentors = sumBy(profile.companies.ranked, (c) => c.count);
 
   return (
     <div className={`${COLUMN} gap-4`} data-testid="mentor-report-root">
@@ -383,6 +386,16 @@ export function MentorReportView({ report, seasonCode, generatedAt }: { report: 
                 </tr>
               ))}
             </tbody>
+            <tfoot className="border-t-2 border-vam-line bg-slate-50 font-semibold" data-testid="companies-total">
+              <tr>
+                <td className={REPORT_NUM} />
+                <td className={`${REPORT_TD} text-vam-ink`}>Tổng {formatInt(companiesWithMany.length)} nơi</td>
+                <td className={REPORT_NUM}>{formatInt(manyMentors)}</td>
+                <td className={REPORT_TD}>
+                  {ratio(manyMentors, profile.population)} trong {formatInt(profile.population)} người của phạm vi đang xem
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         <details className="rounded-lg border border-vam-line bg-white px-3 py-2">
@@ -390,7 +403,14 @@ export function MentorReportView({ report, seasonCode, generatedAt }: { report: 
           <div className="mt-2">
             <TableSearch placeholder="Tìm công ty hoặc tên mentor… không cần dấu">
               <div className="vam-table-frame rounded-lg border border-vam-line bg-white">
-                <table className="min-w-full divide-y divide-vam-line text-sm">
+                <table className="min-w-full divide-y divide-vam-line text-sm" data-testid="companies-all">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
+                    <tr>
+                      <th className={REPORT_TH}>Công ty</th>
+                      <th className={`${REPORT_TH} text-right`}>Số mentor</th>
+                      <th className={REPORT_TH}>Mentor</th>
+                    </tr>
+                  </thead>
                   <tbody className="divide-y divide-vam-line">
                     {profile.companies.ranked.map((c) => (
                       <tr key={c.key} className="align-top">
@@ -400,6 +420,18 @@ export function MentorReportView({ report, seasonCode, generatedAt }: { report: 
                       </tr>
                     ))}
                   </tbody>
+                  {/* Cả bảng, không phải các dòng đang hiện khi tìm. Cộng thêm hai nhóm không
+                      có công ty để tổng khớp đúng số người của phạm vi. */}
+                  <tfoot className="border-t-2 border-vam-line bg-slate-50 font-semibold" data-testid="companies-all-total">
+                    <tr>
+                      <td className={`${REPORT_TD} text-vam-ink`}>Tổng cả bảng: {formatInt(profile.companies.distinct)} nơi</td>
+                      <td className={REPORT_NUM}>{formatInt(allCompanyMentors)}</td>
+                      <td className={`${REPORT_TD} font-normal`}>
+                        + {formatInt(profile.companies.independent)} tự do / nghỉ hưu + {formatInt(profile.companies.undeclared)} không khai ={" "}
+                        <strong>{formatInt(allCompanyMentors + profile.companies.independent + profile.companies.undeclared)}</strong> người
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </TableSearch>
