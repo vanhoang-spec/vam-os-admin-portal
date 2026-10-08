@@ -684,6 +684,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Một mentor: ở “Tạo link gia hạn cá nhân”, chọn “Mentor”, đặt “Hiệu lực (ngày)” rồi bấm “Tạo link”.",
       "Ngay sau khi tạo, bấm “Sao chép link đầy đủ”, “Sao chép” hoặc “Tải CSV” để lấy link, rồi tự gửi cho mentor qua Gmail/Zalo.",
       "Ở “Danh sách invite”, lọc bằng “Tìm mentor”, “Trạng thái”, “Nguồn” rồi bấm “Lọc” (“Xóa lọc” để bỏ). Dùng “Thu hồi” hoặc “Tạo lại” khi cần đổi link.",
+      "Mentor đã “Từ chối” rồi đổi ý: lọc “Trạng thái” = Từ chối, bấm “Mở lại link gia hạn” trên dòng của mentor đó, rồi sao chép link mới gửi lại. Lời từ chối cũ vẫn giữ làm lịch sử.",
       "Mentor đã “Đồng ý”: đọc “Thay đổi hồ sơ chờ xác nhận” và cam kết, rồi bấm “Xác nhận & hoàn tất” để duyệt gia hạn."
     ],
     notes: [
