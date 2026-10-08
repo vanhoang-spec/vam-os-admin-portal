@@ -33,6 +33,8 @@ vi.mock("react-dom", async (importOriginal) => ({
   useFormState: (action: unknown, initial: unknown) => [initial, action],
   useFormStatus: () => ({ pending: false })
 }));
+// Thẻ check-in dựng mã QR bất đồng bộ — không phải thứ bộ test này soát.
+vi.mock("@/app/dat-ca/[token]/interview-ticket", () => ({ InterviewTicket: () => <div data-testid="ticket" /> }));
 vi.mock("@/app/interviews/mentee-offline/workflow", () => ({
   OfflineDashboardClient: (props: any) => {
     mocks.clientProps = props;
@@ -151,6 +153,38 @@ describe("câu đầu trang chọn ca", () => {
     expect(intro.textContent).toContain("ngày Chủ nhật 11/10/2026.");
     expect(intro.textContent).not.toContain("Thứ Bảy 10/10");
     expect(intro.textContent).not.toContain("03 và 04/10");
+  });
+
+  // Đúng câu migration 20261008153000 ghi cho 7 ca chiều Thứ Bảy 10/10.
+  const ONLINE_VENUE =
+    "PHỎNG VẤN ONLINE — Bạn tham gia nhóm Zalo https://zalo.me/g/i2ppr7x3cj6kxchwtj16 trước giờ ca. Support Team điều phối theo ca; tới lượt, mentor sẽ gửi link phòng phỏng vấn online cho bạn.";
+  const booked = (venue: string | null) => ({
+    ok: true, state: "booked", candidateName: "Lan",
+    booking: { sessionId: "s10p", sessionLabel: "Thứ Bảy 10/10/2026, 13:30 – 14:00 (giờ Việt Nam)", venue, checkinToken: "chk" },
+    days: [{ dateKey: "2026-10-11", label: "Chủ nhật 11/10/2026", sessions: [view("s11", "open")] }],
+    canChange: false, deadlineLabel: null, hotlineZalo: "0919144638", support: { name: "BTC", phone: "0" }, prepAnswers: []
+  });
+
+  it("ca online (chiều 10/10): link nhóm Zalo bấm được, đầu trang không còn nói 'trực tiếp tại UEH'", async () => {
+    mocks.bookingPage = booked(ONLINE_VENUE);
+    render(await MenteeSessionBookingPage({ params: Promise.resolve({ token: "tok" }) }));
+    const venue = screen.getByTestId("booking-venue");
+    const link = within(venue).getByRole("link");
+    expect(link.getAttribute("href")).toBe("https://zalo.me/g/i2ppr7x3cj6kxchwtj16");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(venue.textContent).toContain("PHỎNG VẤN ONLINE");
+    expect(venue.textContent).toContain("trước giờ ca. Support Team điều phối theo ca");
+    expect(screen.getByText(/Ca phỏng vấn của bạn là phỏng vấn online\./)).toBeTruthy();
+    expect(screen.queryByText(/Phỏng vấn trực tiếp tại UEH/)).toBeNull();
+  });
+
+  it("ca trực tiếp: đầu trang giữ câu cũ; link bản đồ trong địa điểm cũng bấm được; chữ 'javascript:' vẫn là chữ", async () => {
+    mocks.bookingPage = booked(`${SUN_VENUE_2} javascript:alert(1)`);
+    render(await MenteeSessionBookingPage({ params: Promise.resolve({ token: "tok" }) }));
+    const venue = screen.getByTestId("booking-venue");
+    expect(within(venue).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual(["https://maps.app.goo.gl/Cne2WL3a6LfXNZ2fA"]);
+    expect(venue.textContent).toContain("Check-in tại phòng B1-502.");
+    expect(screen.getByText(/Phỏng vấn trực tiếp tại UEH/)).toBeTruthy();
   });
 });
 

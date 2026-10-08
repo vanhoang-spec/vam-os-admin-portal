@@ -224,6 +224,15 @@ export function bookingClosesAt(rows: readonly SessionRow[], openUntilIso: strin
 }
 
 /**
+ * Địa điểm của ca nói đây là ca phỏng vấn online (chiều 10/10, BTC 08/10/2026 —
+ * migration 20261008153000 ghi "PHỎNG VẤN ONLINE — …"). NFC vì địa điểm gõ từ máy
+ * khác có thể mang dấu dạng tổ hợp.
+ */
+export function isOnlineVenue(venue: string | null | undefined): boolean {
+  return /^\s*phỏng vấn online/i.test(String(venue ?? "").normalize("NFC"));
+}
+
+/**
  * "Thứ Bảy 03/10/2026 và Chủ nhật 04/10/2026" — các ngày phỏng vấn, cho thư mời.
  *
  * Đọc từ chính các ca CÒN ĐẶT ĐƯỢC chứ không từ một hằng: giai đoạn 2 thêm ca

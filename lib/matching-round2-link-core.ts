@@ -41,45 +41,10 @@ export const MENTEE_CARD_KEYS: readonly string[] = [
   "profile_or_cv_url"
 ];
 
-export type LinkPart = { kind: "text"; value: string } | { kind: "link"; value: string; href: string };
-
-const WHITESPACE = new Set([" ", String.fromCharCode(9), String.fromCharCode(10), String.fromCharCode(13)]);
-
-/**
- * Biến các đoạn http(s):// trong chữ tự do thành link; mọi thứ khác giữ nguyên là chữ.
- * Chỉ http/https: một "javascript:..." trong ô CV vẫn chỉ là chữ.
- */
-export function linkify(text: string): LinkPart[] {
-  const words: string[] = [];
-  let current = "";
-  for (const ch of text) {
-    if (WHITESPACE.has(ch)) {
-      if (current) words.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  if (current) words.push(current);
-
-  const parts: LinkPart[] = [];
-  let buffer: string[] = [];
-  const flush = () => {
-    if (buffer.length) parts.push({ kind: "text", value: buffer.join(" ") });
-    buffer = [];
-  };
-  for (const word of words) {
-    const lower = word.toLowerCase();
-    if (lower.startsWith("https://") || lower.startsWith("http://")) {
-      flush();
-      parts.push({ kind: "link", value: word, href: word });
-    } else {
-      buffer.push(word);
-    }
-  }
-  flush();
-  return parts;
-}
+// Hàm biến URL thành link nằm ở lib/text-links.ts (dùng chung với trang chọn ca của
+// mentee); xuất lại ở đây để các chỗ đang import từ file này không phải đổi.
+import { linkify, type LinkPart } from "@/lib/text-links";
+export { linkify, type LinkPart };
 
 export type MenteeCard = {
   applicationId: string;
