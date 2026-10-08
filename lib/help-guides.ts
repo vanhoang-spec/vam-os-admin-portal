@@ -95,6 +95,27 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     ],
     updated: "06/10/2026"
   },
+  "/interviews/bao-cao-mentor": {
+    title: "Báo cáo tuyển mentor",
+    summary:
+      "Phễu tuyển mentor mới (vòng hồ sơ → phỏng vấn / trao đổi với Core team → mentor chính thức) kèm tỷ lệ từng vòng, mentor cũ gia hạn, và hồ sơ mentor theo số năm kinh nghiệm, nhóm ngành Vòng 2, cấp bậc, công ty, sức nhận mentee.",
+    steps: [
+      "Mục 1–2: đọc tỷ lệ đạt vòng hồ sơ (đạt / đã có kết quả) và tỷ lệ thành mentor chính thức trong số người đã phỏng vấn. Hai bảng dưới phễu cho biết người đã phỏng vấn đang ở đâu, và ai vào vòng phỏng vấn mà chưa có phiếu.",
+      "Mục 3: tỷ lệ đạt vòng hồ sơ theo nhóm ngành, số năm kinh nghiệm, cấp bậc — cột cuối là tỷ lệ đạt của dòng.",
+      "Mục 5–9 mặc định tính mentor chính thức; bấm “Mọi người nộp đơn / gia hạn” trên băng vàng để tính cả người chưa đạt hoặc đang chờ.",
+      "Mục 7 Cấp bậc: mở từng cấp để xem ai, chức danh và chữ máy đã khớp. Bấm tên để mở hồ sơ ở tab mới.",
+      "Mục 8 Công ty: bảng xếp hạng các nơi có từ 2 mentor; mở “Toàn bộ … nơi làm việc” và gõ vào ô tìm để tra một công ty."
+    ],
+    notes: [
+      "Trên menu: Tuyển Mentor/Mentee → Tuyển Mentor → Báo cáo (mục đầu tiên của nhánh).",
+      "Mentor gia hạn không qua chấm hồ sơ hay phỏng vấn nên không tính vào phễu; mục 4 đếm theo người: mời, đồng ý, từ chối, chưa trả lời.",
+      "“Không đạt” / “Rút đơn” ở vòng nào được đọc từ lịch sử quyết định và phiếu phỏng vấn đã nộp — cùng cách với file xuất kết quả tuyển.",
+      "Cấp bậc đọc từ chức danh tự khai bằng luật chữ (Việt – Anh, viết tắt như GĐ, PGĐ, VP); chức danh máy không đọc ra cấp nằm ở “Chưa xếp được”. Công ty: tên viết khác nhau của cùng một nơi được gộp (vd. “NH TMCP Quân Đội” = “MB Bank”).",
+      "Nhóm ngành lấy từ Vòng 2 ghép cặp (gồm các lần BTC / Support team đổi tay); người chưa lưu nhóm dùng nhóm máy đề xuất.",
+      "Chỉ Core team / Support team có quyền vận hành mùa xem được; mentor phỏng vấn không xem được vì trang có tên và kết quả của mọi người nộp đơn."
+    ],
+    updated: "08/10/2026"
+  },
   "/interviews/ca-mentee": {
     title: "Ca phỏng vấn mentee",
     summary: "Tình hình các ca phỏng vấn mentee: số chỗ, số người đã đặt, ca còn trống/đã kín; BTC cấu hình ghế, địa điểm và gửi thư mời chọn ca.",
