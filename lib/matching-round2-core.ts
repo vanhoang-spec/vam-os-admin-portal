@@ -332,10 +332,16 @@ export function buildRound2Board(input: {
   return { rows, groups, unclassified, pending, round2Matches, anomalies };
 }
 
-/** Dòng gửi cho vam112_save_industry_assignments: mọi người đủ điều kiện, mentor trước. */
+/**
+ * Dòng gửi cho vam112_save_industry_assignments: mọi người đủ điều kiện, mentor trước.
+ *
+ * Bỏ người BTC / Support team đã đổi hoặc xác nhận nhóm (source = btc): với họ, máy đề
+ * xuất khác nhóm đang lưu là chuyện đã biết — gửi đi thì mỗi lần bấm lại ghi "Dữ liệu
+ * đổi nhóm" cho đúng những người vừa được người thật rà xong (BTC 08/10/2026).
+ */
 export function assignmentRowsForSave(board: Round2Board) {
   return board.rows
-    .filter((r) => r.person.eligible)
+    .filter((r) => r.person.eligible && r.assignment?.source !== "btc")
     .sort((a, b) => (a.person.role === b.person.role ? 0 : a.person.role === "mentor" ? -1 : 1))
     .map((r) => ({
       role: r.person.role,
