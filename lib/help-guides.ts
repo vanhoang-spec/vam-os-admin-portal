@@ -595,7 +595,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     steps: [
       "Xem bảng “Nhóm đề xuất” trong khung “Phân loại người mới”: số mentor/mentee chưa có nhóm sẽ vào mỗi nhóm nếu lưu ngay bây giờ. Mở trang không ghi gì.",
       "Bấm “Phân loại … người mới” để lưu. Người đã có nhóm không bị đổi; nếu dữ liệu hôm nay cho ra nhóm khác, dòng đó hiện “Dữ liệu hôm nay: …” và được đếm ở “Dữ liệu đổi nhóm”.",
-      "Lọc “Cần BTC xem” để duyệt người hệ thống không đủ căn cứ (tin cậy thấp, thường là nhóm 9 hoặc khối Tài chính còn hoà). Đọc cột “Căn cứ” và “Hồ sơ”.",
+      "Lọc “Cần BTC xem” để duyệt người hệ thống không đủ căn cứ (tin cậy thấp, thường là nhóm 9 hoặc khối Tài chính còn hoà). Đọc cột “Căn cứ” và “Hồ sơ” (mentor có thêm Công ty). Cần đọc đầy đủ thì bấm vào tên: hồ sơ đăng ký mở ở tab mới, trang đang rà giữ nguyên bộ lọc.",
       "Mở “Đổi / xác nhận nhóm”, chọn nhóm, ghi lý do rồi bấm “Lưu nhóm”. Giữ nguyên nhóm + ghi lý do = xác nhận (gỡ cờ “Cần BTC xem”).",
       "Sau mỗi đợt phỏng vấn có thêm mentee đạt, quay lại bấm “Phân loại … người mới” để họ vào danh sách."
     ],

@@ -82,7 +82,7 @@ export async function loadRound2Board(client: any, seasonId: string): Promise<Ro
 
   const [people, profiles, matches, memberships, assignments] = await Promise.all([
     readAllPagesIn<Row>(client, "people", "id", personIds, "id,full_name,email_primary"),
-    readAllPagesIn<Row>(client, "mentor_profiles", "person_id", mentorIds, "id,person_id,title_current,industry,function_area,capacity_target"),
+    readAllPagesIn<Row>(client, "mentor_profiles", "person_id", mentorIds, "id,person_id,title_current,company_current,industry,function_area,capacity_target"),
     readAllPages<Row>(
       "matches",
       "id,mentor_person_id,mentee_person_id,status,matching_round,matched_at,created_at,ended_at,end_reason",
@@ -135,6 +135,9 @@ export async function loadRound2Board(client: any, seasonId: string): Promise<Ro
         industryCode: text(payload.industry_primary) ?? text(profile?.industry),
         functionOther: text(payload.function_primary_other)
       };
+      // Chỉ để BTC đọc khi rà nhóm — không đưa vào luật xếp: tên công ty không nói
+      // được chức năng của người đó.
+      const company = text(payload.company_current) ?? text(profile?.company_current);
       persons.push({
         ...base,
         mentorInput,
@@ -142,6 +145,7 @@ export async function loadRound2Board(client: any, seasonId: string): Promise<Ro
         profileCount: own.length,
         details: [
           ["Chức danh", mentorInput.title ?? "—"],
+          ["Công ty", company ?? "—"],
           ["Chức năng", optionLabel(MENTOR_FUNCTION_OPTIONS, mentorInput.functionCode) ?? "—"],
           ["Ngành", optionLabel(MENTOR_INDUSTRY_OPTIONS, mentorInput.industryCode) ?? "—"],
           ...(mentorInput.functionOther ? ([["Chức năng khác", mentorInput.functionOther]] as Array<[string, string]>) : [])
