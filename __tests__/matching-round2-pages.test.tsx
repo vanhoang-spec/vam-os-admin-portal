@@ -149,6 +149,49 @@ describe("trang Vòng 2 · Phân nhóm ngành", () => {
   });
 });
 
+describe("cột Hồ sơ có Công ty, tên mở hồ sơ ở tab mới (BTC 08/10/2026)", () => {
+  const detailLine = (container: HTMLElement, personId: string, label: string) =>
+    Array.from(personRow(container, personId).querySelectorAll("div"))
+      .map((d) => d.textContent ?? "")
+      .find((t) => t.startsWith(`${label}:`)) ?? null;
+
+  it("mentor: Công ty lấy từ đơn (cả đơn gia hạn), đơn trống thì lấy hồ sơ mentor; mentee không có dòng Công ty", async () => {
+    db.tables.applications[0].raw_payload.company_current = "Công ty Sữa Đơn Mới";
+    db.tables.mentor_profiles[0].company_current = "Công ty Cũ Không Dùng";
+    db.tables.mentor_profiles[1].company_current = "Nhà máy Hồ Sơ Mentor";
+    signIn("support_team", "auth-support");
+    const { container } = render(<>{await Round2GroupsPage({ searchParams: Promise.resolve({}) })}</>);
+    expect(detailLine(container, "p-new", "Công ty")).toBe("Công ty: Công ty Sữa Đơn Mới");
+    expect(detailLine(container, "p-renew", "Công ty")).toBe("Công ty: Nhà máy Hồ Sơ Mentor");
+    expect(detailLine(container, "p-mentee", "Công ty")).toBeNull();
+  });
+
+  it("đơn gia hạn có công ty dưới raw_payload.renewal thì dùng công ty đó", async () => {
+    db.tables.applications[1].raw_payload.renewal.company_current = "Tập đoàn Gia Hạn";
+    db.tables.mentor_profiles[1].company_current = "Nhà máy Hồ Sơ Mentor";
+    signIn("core_team", "auth-core");
+    const { container } = render(<>{await Round2GroupsPage({ searchParams: Promise.resolve({}) })}</>);
+    expect(detailLine(container, "p-renew", "Công ty")).toBe("Công ty: Tập đoàn Gia Hạn");
+  });
+
+  it("tên mentor và mentee là link tới đúng đơn đã dùng để xếp nhóm, mở tab mới", async () => {
+    signIn("support_team", "auth-support");
+    const { container } = render(<>{await Round2GroupsPage({ searchParams: Promise.resolve({}) })}</>);
+    for (const [personId, appId, name] of [
+      ["p-renew", "a-renew", "Mentor Gia Hạn"],
+      ["p-mentee", "a-mentee", "Mentee Kế Toán"]
+    ]) {
+      const links = personRow(container, personId).querySelectorAll('a[data-testid="profile-link"]');
+      expect(links).toHaveLength(1);
+      const link = links[0] as HTMLAnchorElement;
+      expect(link.getAttribute("href")).toBe(`/applications/${appId}`);
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toContain("noopener");
+      expect(link.textContent).toContain(name);
+    }
+  });
+});
+
 describe("nút Phân loại người mới", () => {
   it("gửi đúng một lệnh lưu, do máy chủ tự tính: mentor trước, không có người đã rút", async () => {
     signIn("core_team", "auth-core");

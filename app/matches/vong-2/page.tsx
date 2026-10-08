@@ -231,7 +231,18 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
                     return (
                       <tr key={`${row.person.role}-${row.person.personId}`} data-person={row.person.personId} className="align-top">
                         <td className="px-3 py-2">
-                          <div className="font-medium text-vam-ink">{row.person.name}</div>
+                          {/* Mở tab mới: BTC đọc hồ sơ mà không mất bộ lọc và vị trí đang rà. */}
+                          <a
+                            href={`/applications/${row.person.applicationId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Mở hồ sơ đăng ký trong tab mới"
+                            data-testid="profile-link"
+                            className="font-medium text-vam-ink underline decoration-vam-line underline-offset-2 hover:text-vam-green hover:decoration-vam-green"
+                          >
+                            {row.person.name}
+                            <span aria-hidden="true" className="ml-1 text-xs text-slate-400">↗</span>
+                          </a>
                           <div className="text-xs text-slate-500">{row.person.role === "mentor" ? "Mentor" : "Mentee"}</div>
                           {row.person.email ? <div className="break-all text-xs text-slate-400">{row.person.email}</div> : null}
                         </td>
