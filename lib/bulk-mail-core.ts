@@ -54,7 +54,7 @@ export const BULK_AUDIENCE_HINTS: Record<FixedBulkAudience, string> = {
   staff: "Tài khoản admin, super admin, core team, support team đang hoạt động.",
   returning_mentor: "Mentor đã chấp nhận lời mời quay lại và vẫn đang tham gia mùa này.",
   mentee_cv_rejected:
-    "Đơn mentee bị reviewer đề xuất reject, hoặc đề xuất khác dưới 13 điểm, và chưa từng được mời phỏng vấn. Không gồm người đã được mời, đã đậu, đang là mentor hay BTC."
+    "Đơn mentee bị reviewer đề xuất reject, hoặc đề xuất khác dưới 13 điểm, và chưa từng được mời phỏng vấn. Không gồm người đã được mời, đã đậu, đang là mentor hay BTC, và người đã nhận thư ở một lô gửi trước của nhóm này."
 };
 
 /**
