@@ -46,7 +46,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import Round2GroupsPage from "@/app/matches/vong-2/page";
 import Round2ReportPage from "@/app/matches/vong-2/bao-cao/page";
-import { classifyNewAction, setGroupAction } from "@/app/actions/matching-round2";
+import { classifyNewAction, confirmMentorGroupsAction, setGroupAction } from "@/app/actions/matching-round2";
 import { GET as exportRound2 } from "@/app/api/exports/matching-round2/route";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -111,6 +111,7 @@ beforeEach(() => {
   const client = fakeClient(db, {
     rpc: (fn: string, args: any) => {
       rpcCalls.push({ fn, args });
+      if (fn === "vam115_confirm_mentor_groups") return { data: { ok: true, approved: args.p_rows.length }, error: null };
       return { data: { ok: true, newMentors: 2, newMentees: 1, drift: 0 }, error: null };
     }
   });
@@ -216,6 +217,30 @@ describe("nút Phân loại người mới", () => {
     expect(state.status).toBe("error");
     signIn("core_team", "auth-no-scope");
     expect((await classifyNewAction(ROUND2_IDLE, new FormData())).status).toBe("error");
+    expect(rpcCalls).toHaveLength(0);
+  });
+});
+
+describe("nút duyệt mentor hàng loạt", () => {
+  const submit = (confirmed = "yes") => {
+    const form = new FormData();
+    form.set("confirmed", confirmed);
+    form.set("rows", JSON.stringify([{ assignmentId: "a5000000-0000-4000-8000-000000000001", expectedGroup: 3, expectedDrift: null }]));
+    return confirmMentorGroupsAction(ROUND2_IDLE, form);
+  };
+  it("Support có quyền gửi đúng một RPC với mùa, người duyệt và nhóm đang xem", async () => {
+    signIn("support_team", "auth-support");
+    expect((await submit()).status).toBe("ok");
+    expect(rpcCalls).toEqual([{ fn: "vam115_confirm_mentor_groups", args: {
+      p_actor: "admin-auth-support", p_season: SEASON,
+      p_rows: [{ assignmentId: "a5000000-0000-4000-8000-000000000001", expectedGroup: 3, expectedDrift: null }]
+    } }]);
+  });
+  it("thiếu xác nhận hoặc không có quyền mùa không gửi gì", async () => {
+    signIn("support_team", "auth-support");
+    expect((await submit("no")).status).toBe("error");
+    signIn("support_team", "auth-no-scope");
+    expect((await submit()).status).toBe("error");
     expect(rpcCalls).toHaveLength(0);
   });
 });

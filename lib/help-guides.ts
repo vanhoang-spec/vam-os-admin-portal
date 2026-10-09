@@ -618,14 +618,16 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Bấm “Phân loại … người mới” để lưu. Người đã có nhóm không bị đổi; nếu dữ liệu hôm nay cho ra nhóm khác, dòng đó hiện “Dữ liệu hôm nay: …” và được đếm ở “Dữ liệu đổi nhóm”.",
       "Lọc “Cần BTC xem” để duyệt người hệ thống không đủ căn cứ (tin cậy thấp, thường là nhóm 9 hoặc khối Tài chính còn hoà). Đọc cột “Căn cứ” và “Hồ sơ” (mentor có thêm Công ty). Cần đọc đầy đủ thì bấm vào tên: hồ sơ đăng ký mở ở tab mới, trang đang rà giữ nguyên bộ lọc.",
       "Mở “Đổi / xác nhận nhóm”, chọn nhóm, ghi lý do rồi bấm “Lưu nhóm”. Giữ nguyên nhóm + ghi lý do = xác nhận (gỡ cờ “Cần BTC xem”).",
+      "Để duyệt nhiều mentor đã rà hồ sơ: tích ô “Duyệt” từng dòng hoặc “Chọn tất cả mentor chưa duyệt đang hiện”, bấm “Duyệt … mentor đã chọn”, kiểm tra tên và nhóm trong bảng xác nhận rồi bấm “Xác nhận duyệt”. Chọn tất cả chỉ lấy các mentor đang hiện sau bộ lọc và ô tìm kiếm.",
+      "Mentor đã duyệt hiện nhãn “BTC đã duyệt”. Lần rà tiếp theo chọn bộ lọc “Chưa được BTC duyệt” để bỏ qua những người đã xử lý.",
       "Sau mỗi đợt phỏng vấn có thêm mentee đạt, quay lại bấm “Phân loại … người mới” để họ vào danh sách."
     ],
     notes: [
       "Luật xếp: mentor — chức danh quyết định trước, rồi chức năng, ngành, chức năng khác. Mentee — chức năng mục tiêu, ngành mục tiêu tinh chỉnh; ngành học/khoa là bằng chứng phụ. “Chưa xác định” coi như để trống; “Khác” chỉ về nhóm 9 khi trường còn lại cũng không rõ (BTC 07/10/2026).",
-      "Xem: Super admin, Admin, Core team, Support team. Phân loại người mới: Super admin, Admin, Core team có quyền vận hành mùa. Đổi / xác nhận nhóm từng người: thêm Support team có quyền vận hành mùa (BTC 08/10/2026). Mọi lần đổi đều lưu người đổi và lý do.",
+      "Xem: Super admin, Admin, Core team, Support team. Phân loại người mới: Super admin, Admin, Core team có quyền vận hành mùa. Đổi / xác nhận nhóm từng người và duyệt nhóm mentor hàng loạt: thêm Support team có quyền vận hành mùa. Mọi lần duyệt đều lưu người duyệt và lý do. Nếu một nhóm trong danh sách đã đổi, cả lượt duyệt dừng để bạn tải lại và rà nhóm mới.",
       "Người đã rút khỏi mùa không được phân loại và không vào danh sách."
     ],
-    updated: "08/10/2026"
+    updated: "10/10/2026"
   },
   "/matches/vong-2/bao-cao": {
     title: "Vòng 2 · Báo cáo",

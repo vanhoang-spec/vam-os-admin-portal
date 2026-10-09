@@ -26,6 +26,7 @@ import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { Application } from "@/lib/types";
+import { parseGroupApprovals, type GroupApproval } from "@/lib/matching-round2-bulk-core";
 
 type Row = Record<string, any>;
 
@@ -253,6 +254,23 @@ function rpcMessage(error: { message?: string } | null | undefined): string {
   const raw = String(error?.message ?? "");
   const code = Object.keys(RPC_MESSAGES).find((c) => raw.includes(c));
   return code ? RPC_MESSAGES[code] : "Không lưu được. Thử lại; nếu vẫn lỗi, báo quản trị viên.";
+}
+
+export async function confirmMentorGroups(rows: GroupApproval[]): Promise<{ ok: boolean; message: string }> {
+  if (!parseGroupApprovals(rows)) return { ok: false, message: RPC_MESSAGES.INVALID_ROWS };
+  try {
+    const { client, seasonId } = await round2SeasonContext();
+    const actor = await round2GroupEditor(seasonId);
+    if (!actor) return { ok: false, message: RPC_MESSAGES.ACCESS_DENIED };
+    const { data, error } = await client.rpc("vam115_confirm_mentor_groups", {
+      p_actor: actor.id, p_season: seasonId, p_rows: rows
+    });
+    if (error) return { ok: false, message: rpcMessage(error) };
+    if (data?.ok !== true || data?.approved !== rows.length) return { ok: false, message: "Chưa xác nhận được kết quả. Tải lại trang để kiểm tra." };
+    return { ok: true, message: `Đã ghi nhận BTC đã duyệt cho ${data.approved} mentor.` };
+  } catch {
+    return { ok: false, message: "Không duyệt được. Tải lại trang rồi thử lại." };
+  }
 }
 
 /** BTC bấm "Phân loại người mới": người chưa có nhóm được gán; người cũ chỉ ghi drift. */
