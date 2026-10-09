@@ -132,7 +132,7 @@ function shouldShowWalkinHint(status: CheckinActionStatus): boolean {
   return !blockingStatuses.includes(status);
 }
 
-export function CheckinForm({ token }: { token: string }) {
+export function CheckinForm({ token, showStudentId = true }: { token: string; showStudentId?: boolean }) {
   const [state, formAction] = useFormState(submitEventCheckinAction, initialPublicCheckinActionState);
 
   const showForm = shouldShowForm(state.status);
@@ -165,7 +165,7 @@ export function CheckinForm({ token }: { token: string }) {
           <Field label="Email" name="email" type="email" required autoComplete="email" defaultValue={state.values?.email} />
           <Field label="Họ và tên" name="full_name" autoComplete="name" defaultValue={state.values?.full_name} />
           <Field label="Số điện thoại" name="phone" type="tel" autoComplete="tel" defaultValue={state.values?.phone} />
-          <Field label="Mã số sinh viên" name="student_id" defaultValue={state.values?.student_id} />
+          {showStudentId && <Field label="Mã số sinh viên" name="student_id" defaultValue={state.values?.student_id} />}
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Ghi chú</span>
