@@ -195,6 +195,8 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Duyệt nhóm mentor hàng loạt — migration 20261009235000, chưa áp dụng Production.
+  "vam115_confirm_mentor_groups",
   // Ghép cặp Vòng 2 — mentor chọn mentee qua link riêng, migration
   // 20261008080000_vong_2_mentor_chon_mentee.sql.
   "vam113_set_round2_window",

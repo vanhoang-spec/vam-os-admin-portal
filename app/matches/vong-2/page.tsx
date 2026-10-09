@@ -9,6 +9,7 @@ import { byGroupThenName, type Round2Row } from "@/lib/matching-round2-core";
 import { INDUSTRY_GROUPS, industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canBrowseOperations } from "@/lib/permissions";
 import { ClassifyPanel, GroupEditForm } from "./round2-forms";
+import { BulkGroupReview, MentorReviewCheckbox } from "./bulk-group-review";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,8 @@ function filterRows(rows: Round2Row[], search: Search) {
     }
     if (flag === "can-xem" && !(r.assignment ? r.assignment.flags.includes(REVIEW_FLAG) : r.proposal.flags.includes(REVIEW_FLAG))) return false;
     if (flag === "doi-nhom" && !r.assignment?.driftGroup) return false;
+    if (flag === "chua-duyet" && r.assignment?.source === "btc") return false;
+    if (flag === "da-duyet" && r.assignment?.source !== "btc") return false;
     return true;
   });
 }
@@ -196,6 +199,8 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
               <option value="">Tất cả</option>
               <option value="can-xem">Cần BTC xem</option>
               <option value="doi-nhom">Dữ liệu đổi nhóm</option>
+              <option value="chua-duyet">Chưa được BTC duyệt</option>
+              <option value="da-duyet">BTC đã duyệt</option>
             </select>
           </label>
           <button type="submit" className="rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white">
@@ -212,6 +217,10 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
         {rows.length === 0 ? (
           <EmptyState message="Không có ai khớp bộ lọc." />
         ) : (
+          <BulkGroupReview enabled={canEditGroups} items={canEditGroups ? rows.filter((row) => row.person.role === "mentor" && row.person.eligible && row.assignment?.source === "auto").map((row) => ({
+            assignmentId: row.assignment!.id, expectedGroup: row.assignment!.group,
+            expectedDrift: row.assignment!.driftGroup ?? null, name: row.person.name
+          })) : []}>
           <TableSearch placeholder="Tìm tên, email, chức danh, ngành học… không cần dấu">
             <div className="vam-table-frame overflow-x-auto rounded-lg border border-vam-line bg-white">
               <table className="min-w-full divide-y divide-vam-line text-sm" data-testid="round2-table">
@@ -222,6 +231,7 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
                     <th className="px-3 py-2">Căn cứ</th>
                     <th className="px-3 py-2">Hồ sơ</th>
                     <th className="px-3 py-2">Tình trạng</th>
+                    {canEditGroups ? <th className="px-3 py-2">Duyệt</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-vam-line">
@@ -279,6 +289,12 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
                             </details>
                           ) : null}
                         </td>
+                        {canEditGroups ? <td className="px-3 py-2" data-search-skip>
+                          {row.person.role === "mentor" && row.person.eligible && row.assignment?.source === "auto" ? (
+                            <MentorReviewCheckbox item={{ assignmentId: row.assignment.id, expectedGroup: row.assignment.group,
+                              expectedDrift: row.assignment.driftGroup ?? null, name: row.person.name }} />
+                          ) : row.assignment?.source === "btc" ? <span className="text-xs text-vam-green">Đã duyệt</span> : null}
+                        </td> : null}
                       </tr>
                     );
                   })}
@@ -286,6 +302,7 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
               </table>
             </div>
           </TableSearch>
+          </BulkGroupReview>
         )}
       </Card>
     </div>
