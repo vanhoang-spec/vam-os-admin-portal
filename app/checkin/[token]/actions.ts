@@ -21,6 +21,16 @@ export async function submitEventCheckinAction(
     notes: formText(formData, "notes")
   };
 
+  // Kiểm lại ở server: thuộc tính required trên trình duyệt có thể bị bỏ qua.
+  if (!values.full_name || !values.phone) {
+    return {
+      ok: false,
+      status: "validation_error",
+      message: "Vui lòng nhập đầy đủ họ và tên, số điện thoại để BTC đối chiếu thông tin tham dự.",
+      values
+    };
+  }
+
   const result = await checkInForEvent({ token, ...values });
 
   if (result.status === "success" || result.status === "already_checked_in") {

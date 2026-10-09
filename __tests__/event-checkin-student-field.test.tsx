@@ -17,6 +17,8 @@ it("mentor không thấy MSSV, vẫn có email bắt buộc và nút check-in", 
   render(<CheckinForm token="t" showStudentId={false} />);
   expect(screen.queryByRole("textbox", { name: "Mã số sinh viên" })).toBeNull();
   expect(screen.getByRole("textbox", { name: /Email/ }).hasAttribute("required")).toBe(true);
+  expect(screen.getByRole("textbox", { name: /Họ và tên/ }).hasAttribute("required")).toBe(true);
+  expect(screen.getByRole("textbox", { name: /Số điện thoại/ }).hasAttribute("required")).toBe(true);
   expect(screen.getByRole("button", { name: "Check-in" })).toBeTruthy();
 });
 it("sự kiện khác vẫn hiện MSSV khi bật hoặc chưa cấu hình", () => {

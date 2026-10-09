@@ -157,14 +157,14 @@ export function CheckinForm({ token, showStudentId = true }: { token: string; sh
         <>
           {showHint ? (
             <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              <p>Nếu bạn đã đăng ký trước, chỉ cần nhập email.</p>
-              <p className="mt-1">Nếu bạn chưa đăng ký trước, vui lòng nhập thêm họ và tên để điểm danh vãng lai.</p>
+              <p>Vui lòng nhập họ tên, số điện thoại và email đã đăng ký để BTC đối chiếu thông tin tham dự.</p>
+              <p className="mt-1">Nếu bạn chưa đăng ký trước, hệ thống kiểm tra điều kiện điểm danh vãng lai của sự kiện.</p>
             </div>
           ) : null}
 
           <Field label="Email" name="email" type="email" required autoComplete="email" defaultValue={state.values?.email} />
-          <Field label="Họ và tên" name="full_name" autoComplete="name" defaultValue={state.values?.full_name} />
-          <Field label="Số điện thoại" name="phone" type="tel" autoComplete="tel" defaultValue={state.values?.phone} />
+          <Field label="Họ và tên" name="full_name" required autoComplete="name" defaultValue={state.values?.full_name} />
+          <Field label="Số điện thoại" name="phone" type="tel" required autoComplete="tel" defaultValue={state.values?.phone} />
           {showStudentId && <Field label="Mã số sinh viên" name="student_id" defaultValue={state.values?.student_id} />}
 
           <label className="block">
