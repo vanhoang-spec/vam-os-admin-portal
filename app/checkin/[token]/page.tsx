@@ -65,7 +65,7 @@ export default async function PublicEventCheckinPage(props: { params: Promise<{ 
           ) : data.ok ? (
             <>
               <h2 className="mb-4 text-lg font-semibold text-vam-ink">Check-in sự kiện</h2>
-              <CheckinForm token={params.token} />
+              <CheckinForm token={params.token} showStudentId={data.event?.show_student_id_field !== false} />
             </>
           ) : (
             <div className="py-6 text-center">
