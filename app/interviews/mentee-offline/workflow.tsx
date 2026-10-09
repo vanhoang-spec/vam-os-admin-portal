@@ -18,11 +18,11 @@ const button="rounded-md bg-vam-green px-4 py-2 text-white disabled:opacity-50";
 
 /**
  * Ô chọn phòng/bàn theo CHÍNH CA (roomDeskBounds): danh sách phòng trong địa điểm và
- * số chỗ của ca. Chỉ là tiện dụng — cận thật do trigger vam104_room_desk_bounds_guard
+ * 10 bàn mỗi phòng. Chỉ là tiện dụng — cận thật do trigger vam104_room_desk_bounds_guard
  * cưỡng chế lại, vì ô chọn đã lọc trên màn hình không phải một phép kiểm.
  */
 function roomDeskOptions(session: { venue: string | null; seat_limit: number | null } | undefined) {
-  const { rooms, desks } = roomDeskBounds(session?.venue, session?.seat_limit);
+  const { rooms, desks } = roomDeskBounds(session?.venue);
   const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
   return { rooms: range(rooms), desks: range(desks) };
 }

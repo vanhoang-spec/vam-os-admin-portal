@@ -108,19 +108,19 @@ describe("đợt", () => {
 });
 
 describe("phòng/bàn theo chính ca — cùng luật với trigger database", () => {
-  it("đợt 1 ra đúng như cũ", () => {
-    expect(roomDeskBounds(SAT_VENUE_1, 18)).toEqual({ rooms: 3, desks: 6 });
-    expect(roomDeskBounds(SUN_VENUE_1, 28)).toEqual({ rooms: 6, desks: 5 });
+  it("giữ tên và số phòng của đợt 1, mỗi phòng có 10 bàn", () => {
+    expect(roomDeskBounds(SAT_VENUE_1)).toEqual({ rooms: 3, desks: 10 });
+    expect(roomDeskBounds(SUN_VENUE_1)).toEqual({ rooms: 6, desks: 10 });
   });
 
-  it("đợt 2: Chủ nhật 6 phòng B1-502…B1-803 × 5 bàn; Thứ Bảy chưa có địa điểm → 6 phòng × 3 bàn", () => {
-    expect(roomDeskBounds(SUN_VENUE_2, 28)).toEqual({ rooms: 6, desks: 5 });
-    expect(roomDeskBounds(null, 18)).toEqual({ rooms: 6, desks: 3 });
+  it("đợt 2: Chủ nhật 6 phòng, sáng Thứ Bảy 3 phòng, mỗi phòng 10 bàn", () => {
+    expect(roomDeskBounds(SUN_VENUE_2)).toEqual({ rooms: 6, desks: 10 });
+    expect(roomDeskBounds("Phòng E501, E502, E504 — Cơ sở E")).toEqual({ rooms: 3, desks: 10 });
   });
 
-  it("thiếu số chỗ → 6 bàn; địa điểm không theo khuôn “Phòng …” → 6 phòng", () => {
-    expect(roomDeskBounds(SAT_VENUE_1, null)).toEqual({ rooms: 3, desks: 6 });
-    expect(roomDeskBounds("Hội trường A, tầng 2", 30)).toEqual({ rooms: 6, desks: 5 });
+  it("thiếu địa điểm hoặc không theo khuôn “Phòng …” → 6 phòng, vẫn 10 bàn", () => {
+    expect(roomDeskBounds(null)).toEqual({ rooms: 6, desks: 10 });
+    expect(roomDeskBounds("Hội trường A, tầng 2")).toEqual({ rooms: 6, desks: 10 });
   });
 });
 

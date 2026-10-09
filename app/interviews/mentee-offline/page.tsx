@@ -26,7 +26,7 @@ function daySummary(sessions: ReadonlyArray<{ starts_at: string; venue: string |
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, s]) => {
       const day = sessionDayLabel(s.starts_at).replace(/\/\d{4}$/, "");
-      const where = s.venue ? `${roomDeskBounds(s.venue, s.seat_limit).rooms} phòng` : "chưa có địa điểm";
+      const where = s.venue ? `${roomDeskBounds(s.venue).rooms} phòng` : "chưa có địa điểm";
       return `${day}: ${where}, tối đa ${s.seat_limit ?? "—"} mentee/ca`;
     })
     .join(" · ");
