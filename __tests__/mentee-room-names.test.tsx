@@ -74,6 +74,14 @@ describe("tên phòng từ địa điểm của ca", () => {
 });
 
 describe("màn hình phỏng vấn trực tiếp", () => {
+  it.each([15, 18, 28, 30, null])("ô chọn có đủ bàn 1–10 dù ca có %s chỗ mentee", (seatLimit) => {
+    render(<OfflineDashboardClient data={data({ sessions: [{ ...S, seat_limit: seatLimit }] })} initialApplication="wait" />);
+    const select = screen.getByRole("combobox", { name: "Bàn" }) as HTMLSelectElement;
+    expect(Array.from(select.options).filter((o) => o.value).map((o) => o.value)).toEqual(
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    );
+  });
+
   it("bảng hiện tên phòng của đúng bạn đã phân bàn", () => {
     render(<OfflineDashboardClient data={data()} />);
     const row = (name: string) => Array.from(document.querySelectorAll("tbody tr")).find((r) => r.textContent?.includes(name))!;

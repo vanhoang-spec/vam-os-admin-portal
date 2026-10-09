@@ -111,21 +111,18 @@ export function roomNamesFromVenue(venue: string | null | undefined): string[] {
 }
 
 /**
- * Số phòng và số bàn mỗi phòng của một ca (BTC 07/10/2026) — thay cho bảng ghi cứng
- * theo hai ngày 03/10 và 04/10. Phòng = số tên trong địa điểm (“Phòng a, b, c — …”);
- * bàn mỗi phòng = số chỗ chia đều, làm tròn lên. Đợt 1 ra đúng như cũ: 03/10 3 phòng
- * × 6 bàn (18 chỗ), 04/10 6 phòng × 5 bàn (28 chỗ). Chưa có địa điểm → 6 phòng; chưa
- * có số chỗ → 6 bàn.
+ * Phòng = số tên trong địa điểm (“Phòng a, b, c — …”); chưa có tên → 6 phòng.
+ * BTC 09/10/2026: mỗi phòng có 10 bàn cho mentor. Số chỗ mentee không quyết định
+ * số bàn, vì mentor đăng ký một ca có thể nhiều hơn số mentee đang giữ ca.
  *
- * CÙNG LUẬT với trigger vam104_room_desk_bounds_guard (migration 20261007090000): ô
+ * CÙNG LUẬT với trigger vam104_room_desk_bounds_guard (migration 20261009100000): ô
  * chọn trên màn hình chỉ là tiện dụng, database mới là nơi chặn thật — hai bên lệch
  * nhau thì Support chọn được một bàn rồi bị từ chối lúc lưu.
  */
-export function roomDeskBounds(venue: string | null | undefined, seatLimit: number | null | undefined): { rooms: number; desks: number } {
+export function roomDeskBounds(venue: string | null | undefined): { rooms: number; desks: number } {
   const named = roomNamesFromVenue(venue).length;
   const rooms = named > 0 ? named : 6;
-  const seats = typeof seatLimit === "number" && Number.isFinite(seatLimit) && seatLimit >= 1 ? seatLimit : null;
-  return { rooms, desks: seats === null ? 6 : Math.max(1, Math.ceil(seats / rooms)) };
+  return { rooms, desks: 10 };
 }
 
 /** "B1.504" cho phòng số 2 của ca Cơ sở B; không có tên thì chính con số. */
