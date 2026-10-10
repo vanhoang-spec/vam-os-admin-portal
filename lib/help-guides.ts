@@ -348,14 +348,16 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Thu hẹp bằng ô “Giới tính”; bấm “Xoá bộ lọc” để xem lại toàn bộ. Mặc định người mới thêm gần đây đứng đầu; chọn “Tên A-Z” ở ô sắp xếp để xem theo tên. Dùng “Trước” / “Sau” cuối bảng để chuyển trang.",
       "Bấm vào một dòng để mở hồ sơ: “Trạng thái tham gia”, “Lịch sử VAM”, “Ghi chú CRM”, các match và hoạt động sự kiện của người đó.",
       "Trong hồ sơ, ghi lại liên hệ bằng “Thêm ghi chú CRM”; người nghỉ mùa này thì dùng “Chuyển sang Không tham dự” ở khung “Trạng thái tham gia”.",
+      "Hồ sơ mentor: khung “Số mentee tối đa mùa …” (trong “Mentor profile”) cho biết mùa này mentor nhận tối đa mấy mentee, đang nhận mấy, còn mấy chỗ. Core team trở lên gõ số mới vào ô “Đổi thành” rồi bấm “Lưu”.",
       "Hồ sơ trùng, nhập sai hoặc thử nghiệm: bấm “Xoá khỏi hệ thống”, gõ lại họ tên, ghi “Lý do xoá” rồi bấm “Xoá hẳn khỏi hệ thống”."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, Support team. Danh sách chỉ gồm hồ sơ trong phạm vi chương trình bạn được cấp quyền.",
       "Đổi Tham dự / Không tham dự và xoá hồ sơ: mentor do Core team trở lên; mentee thì Support team cũng làm được. Người mang nhiều vai trò tính theo mức chặt hơn.",
+      "Số mentee tối đa: Support team xem được, chỉ Core team trở lên (có quyền vận hành mùa) sửa được, từ 1 đến 10. Không hạ được thấp hơn số mentee mentor đang nhận — huỷ cặp ở trang Ghép cặp trước. Số này là trần khi ghép cặp; riêng Vòng 2 mỗi mentor tự chọn tối đa 2 mentee.",
       "Xoá hẳn không hoàn lại được. Hồ sơ còn dữ liệu chương trình thì hệ thống không cho xoá — dùng “Chuyển sang Không tham dự” thay vào đó."
     ],
-    updated: "02/10/2026"
+    updated: "10/10/2026"
   },
   "/mentors": {
     title: "Mentor",
