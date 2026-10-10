@@ -205,6 +205,20 @@ export function canManageMatches(role?: string | null) {
 }
 
 /**
+ * Sửa số mentee tối đa một mentor nhận trong mùa, trên hồ sơ người (BTC 10/10/2026).
+ *
+ * Cùng bậc với canManageMatches và không rộng hơn: con số này CHÍNH LÀ trần mà ghép
+ * cặp cưỡng chế, nên ai không được tạo cặp thì cũng không được nới trần để người khác
+ * tạo. Support team xem được số, không sửa.
+ *
+ * Đây mới là nửa vai trò. Nơi gọi còn phải có quyền vận hành mùa (canOperateSeason),
+ * và vam084_operator_for_season trong database kiểm lại cả hai.
+ */
+export function canEditMentorCapacity(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}
+
+/**
  * Đổi hoặc xác nhận nhóm ngành của MỘT người ở Vòng 2 (/matches/vong-2).
  *
  * Rộng hơn canManageMatches đúng một bậc: support_team có mặt theo quyết định của

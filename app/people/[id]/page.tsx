@@ -30,7 +30,13 @@ import { isEventAbsenceStatus, isEventAttendedStatus } from "@/lib/events";
 import { canOperateAnyScope, canOperateSeason, getAdminScopeContext, getScopeFilter, resolveCanonicalScope } from "@/lib/program-scope";
 import { isMembershipRole, MEMBERSHIP_ROLE_LABELS } from "@/lib/membership-lifecycle";
 import { MembershipLifecycleControls } from "./membership-lifecycle-controls";
+import { MentorCapacityPanel } from "./mentor-capacity-panel";
 import { PersonDeletePanel } from "./person-delete-panel";
+import { setMentorCapacityAction } from "@/app/actions/mentor-capacity";
+import { ROUND2_MENTOR_CAP } from "@/lib/matching-round2-core";
+import { MENTOR_CAPACITY_MAX, mentorCapacityEditState, mentorCapacityView, storedMentorCapacity } from "@/lib/mentor-capacity";
+import { MENTOR_CAPACITY_SEASON_CODE } from "@/lib/mentor-capacity-admin";
+import { canEditMentorCapacity } from "@/lib/permissions";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 import { SubmitButton } from "@/components/submit-button";
@@ -243,6 +249,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
   const scopeContext = await getAdminScopeContext();
   const scope = await getScopeFilter(scopeContext);
   const canOperateUehmS12 = await canOperateSeason(scopeContext, "UEHM-S12");
+  const canOperateCapacitySeason = await canOperateSeason(scopeContext, MENTOR_CAPACITY_SEASON_CODE);
   const [
     person,
     people,
@@ -372,6 +379,23 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
   const mentorCount = new Set(menteeMatches.map((match) => match.mentor_person_id).filter(Boolean)).size;
   const isMentor = Boolean(mentorProfile) || mentorMatches.length > 0 || seasonMembershipRows.some((row) => normalizeStatus(row.role) === "mentor");
   const isMentee = Boolean(menteeProfile) || menteeMatches.length > 0 || seasonMembershipRows.some((row) => normalizeStatus(row.role) === "mentee");
+  // Số mentee tối đa của mentor trong mùa đang ghép cặp (BTC 10/10/2026). Ai mở được hồ
+  // sơ cũng thấy; ô sửa chỉ hiện cho Core team trở lên có quyền vận hành mùa, và chỉ khi
+  // người này đang là mentor của mùa — đúng ba điều kiện hàm vam116 trong database kiểm lại.
+  const capacitySeason = seasons.data.find((row) => row.code === MENTOR_CAPACITY_SEASON_CODE);
+  const capacityView = mentorProfile
+    ? mentorCapacityView({ capacityTarget: mentorProfile.capacity_target, personId: params.id, seasonId: capacitySeason?.id, matches: matches.data })
+    : null;
+  const isCapacitySeasonMentor =
+    Boolean(capacitySeason) &&
+    seasonMembershipRows.some(
+      (row) => row.season_id === capacitySeason?.id && normalizeStatus(row.role) === "mentor" && normalizeStatus(row.status) === "active"
+    );
+  const capacityEdit = mentorCapacityEditState({
+    roleAllowed: canEditMentorCapacity(adminUser.role),
+    canOperateSeason: canOperateCapacitySeason,
+    isSeasonMentor: isCapacitySeasonMentor
+  });
   const hasMentorSide = Boolean(mentorProfile) || mentorMatches.length > 0;
   const hasMenteeSide = Boolean(menteeProfile) || menteeMatches.length > 0;
   const canCreateCrmNote =
@@ -447,6 +471,14 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
             <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
               <div className="text-xs font-medium uppercase text-slate-500">Số mentee đang phụ trách</div>
               <div className="mt-1 text-2xl font-semibold text-vam-ink">{menteeCount}</div>
+            </div>
+          ) : null}
+          {capacityView ? (
+            <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2" data-testid="capacity-summary">
+              <div className="text-xs font-medium uppercase text-slate-500">Mùa {MENTOR_CAPACITY_SEASON_CODE}: đang nhận / tối đa</div>
+              <div className="mt-1 text-2xl font-semibold text-vam-ink">
+                {capacityView.active} / {capacityView.effective}
+              </div>
             </div>
           ) : null}
           {isMentee ? (
@@ -696,6 +728,18 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
           </div>
           {mentorProfile ? (
             <div className="grid gap-3">
+              {capacityView ? (
+                <MentorCapacityPanel
+                  action={setMentorCapacityAction.bind(null, params.id)}
+                  seasonLabel={MENTOR_CAPACITY_SEASON_CODE}
+                  view={capacityView}
+                  expected={storedMentorCapacity(mentorProfile.capacity_target)}
+                  canEdit={capacityEdit.canEdit}
+                  lockedReason={capacityEdit.lockedReason}
+                  max={MENTOR_CAPACITY_MAX}
+                  round2Cap={ROUND2_MENTOR_CAP}
+                />
+              ) : null}
               <div className="rounded-md border border-vam-line bg-slate-50 px-3 py-2">
                 <div className="text-xs font-medium uppercase text-slate-500">Chương trình mentoring</div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
