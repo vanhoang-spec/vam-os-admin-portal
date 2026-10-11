@@ -195,6 +195,11 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Mentee đặc cách (Support team) — migration
+  // 20261011150000_mentee_dac_cach_support_team.sql, chưa áp dụng Production.
+  "vam117_add_mentee_exemptions",
+  "vam117_revoke_mentee_exemption",
+  "vam117_confirm_mentee_exemption",
   // Sửa số mentee tối đa của mentor trên hồ sơ — migration
   // 20261010200000_suc_nhan_mentor_theo_mua.sql, chưa áp dụng Production.
   "vam116_set_mentor_capacity",

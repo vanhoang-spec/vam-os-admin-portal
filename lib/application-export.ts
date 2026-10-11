@@ -100,7 +100,13 @@ const RAW_PAYLOAD_LABELS: Record<string, string> = {
   if_not_effective_text: "Cách xử lý khi mentoring chưa hiệu quả",
   commitment_understanding: "Xác nhận hiểu cam kết",
   available_for_interview: "Khung giờ phỏng vấn",
-  available_for_kickoff: "Có thể tham gia kickoff"
+  available_for_kickoff: "Có thể tham gia kickoff",
+  // Đơn do hệ thống tạo khi một bạn Support team bấm xác nhận mentee đặc cách
+  // (migration 20261011150000). Đơn đó không có câu trả lời nào — chỉ có ba dòng này, nên
+  // người mở đơn phải đọc ra ngay vì sao nó trống.
+  exemption_reason: "Đặc cách — lý do",
+  exemption_confirmed_at: "Đặc cách — xác nhận lúc",
+  exemption_id: "Đặc cách — mã dòng trong danh sách"
 };
 
 const SECTION_ORDER = ["Thông tin ứng viên", "Thông tin ứng tuyển", "Hồ sơ Mentor", "Hồ sơ Mentee", "Nội dung form S12", "Câu trả lời ứng tuyển"];

@@ -440,6 +440,26 @@ export const AUTOMATION_SLOTS: readonly AutomationSlot[] = [
     ]
   },
   {
+    id: "mentee_exemption_confirm",
+    kind: "mentee_exemption_confirm",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Mời Support team xác nhận tham gia mentee — đặc cách",
+    audience: "Bạn Support team được ban tổ chức đưa vào danh sách mentee đặc cách (không qua phỏng vấn)",
+    trigger: 'Khi ban tổ chức bấm "Gửi thư mời xác nhận" ở mục Mentee → Đặc cách Support team.',
+    note: "Mỗi người một đường dẫn riêng. Bấm gửi lại sau 20 giờ là nhắc những người chưa xác nhận; người đã xác nhận không nhận thêm thư.",
+    placeholders: [
+      P_TEN_NGUOI_NHAN,
+      P_MUA,
+      {
+        key: "link_xac_nhan",
+        label: "Đường dẫn xác nhận",
+        required: true,
+        hint: "Đường dẫn riêng của từng người. Bỏ ô này là thư không còn tác dụng gì."
+      },
+      P_ZALO
+    ]
+  },
+  {
     id: "reviewer_invite_new",
     kind: "reviewer_invite",
     group: "Chấm hồ sơ",

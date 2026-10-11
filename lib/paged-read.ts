@@ -180,6 +180,7 @@ export const PAGE_ORDER = {
   interview_mentor_availability: { strategy: "keyset", key: "id" },
   interview_sessions: { strategy: "keyset", key: "id" },
   interview_slot_invites: { strategy: "keyset", key: "id" },
+  mentee_exemptions: { strategy: "keyset", key: "id" },
   mentee_interview_bookings: { strategy: "keyset", key: "id" },
   mentee_interview_invites: { strategy: "keyset", key: "id" },
   mentee_interview_operations: { strategy: "keyset", key: "id" },

@@ -203,6 +203,9 @@ function buildRecruitmentGroup(
       children: MENTEE_INTERVIEW_WAVE_LINKS.map((w) => ({ href: `/interviews/mentee-offline?dot=${w.key}`, label: w.label }))
     }),
     ...when(decisionLists, { href: "/applications/mentee-review", label: "Duyệt Mentee S12" }),
+    // Support team làm mentee không qua phỏng vấn (BTC 11/10/2026). Có họ tên, email và nút
+    // gửi thư: cùng khán giả với trang tự gate bằng canManageMatches (Core team trở lên).
+    ...when(showAdminTier, { href: "/applications/mentee-dac-cach", label: "Mentee đặc cách (Support team)" }),
     // Điểm cộng theo ngày nộp chỉ áp cho đơn mentee; BTC xếp xuống cuối nhánh (07/10/2026).
     ...when(canManageSubmissionBonus(role), { href: SUBMISSION_BONUS_PATH, label: "Điểm cộng theo ngày nộp" })
   ];

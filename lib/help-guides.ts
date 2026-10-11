@@ -651,6 +651,25 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     ],
     updated: "07/10/2026"
   },
+  "/applications/mentee-dac-cach": {
+    title: "Mentee đặc cách (Support team)",
+    summary:
+      "Danh sách các bạn Support team làm mentee mùa này mà không qua phỏng vấn. Ban tổ chức chốt danh sách, gửi thư mời; người nhận bấm xác nhận trên đường dẫn riêng là thành mentee của mùa.",
+    steps: [
+      "Ở khung “Gợi ý thêm vào danh sách”, tick đúng những bạn thuộc Support team rồi bấm “Thêm … người đã chọn vào danh sách”. Hệ thống gợi ý ba nhóm: có tài khoản vai trò Support team, được gắn tay tư cách mentee mùa này mà chưa có đơn, có đơn mentee được duyệt tay không qua phỏng vấn.",
+      "Bạn nào chưa hiện trong gợi ý: mở trang hồ sơ của bạn đó (Cộng đồng VAM), gắn tư cách mentee của mùa, rồi quay lại trang này.",
+      "Ở khung “Gửi thư mời xác nhận”, bấm “Gửi thử cho tôi” để xem thư, rồi “Gửi thư mời xác nhận” → “Xác nhận gửi”.",
+      "Theo dõi cột “Trạng thái”: Chưa gửi thư → Đã gửi thư, chờ xác nhận → Đã xác nhận. Muốn nhắc người chưa xác nhận, bấm gửi lại sau 20 giờ.",
+      "Thêm nhầm người: bấm “Gỡ khỏi danh sách” → “Xác nhận gỡ” ở dòng của người đó (chỉ khi họ chưa xác nhận)."
+    ],
+    notes: [
+      "Người đã xác nhận có đơn mentee ở trạng thái đã duyệt và tư cách mentee đang hoạt động, nên được tính ở Vòng 2 như mọi mentee khác. Bạn nào chưa từng nộp đơn mùa này thì hệ thống tạo một đơn đặc cách không có câu trả lời — ở Vòng 2 bạn đó nằm ở “Chưa phân nhóm” cho tới khi ban tổ chức gán nhóm ngành.",
+      "Không thêm được người có đơn mentee mùa này đã bị từ chối hoặc đã rút, hay tư cách mentee đã ngừng: đó là quyết định đã có chủ, xử lý ở trang đơn hoặc trang hồ sơ trước.",
+      "Xem trang: Super admin, Admin, Core team. Thêm, gỡ, gửi thư: cần thêm quyền vận hành mùa.",
+      "Mỗi người một đường dẫn riêng (/xac-nhan-mentee/…). Gỡ khỏi danh sách thì đường dẫn ngừng dùng được; thêm lại thì đường dẫn cũ dùng lại được."
+    ],
+    updated: "11/10/2026"
+  },
   "/events": {
     title: "Sự kiện",
     summary: "Danh sách sự kiện và hoạt động của chương trình (orientation, training, networking, closing…), kèm số đăng ký và tình hình tham gia của từng buổi.",

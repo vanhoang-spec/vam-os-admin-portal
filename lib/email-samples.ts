@@ -30,6 +30,7 @@ import {
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
   buildMatchingRound2InviteEmail,
+  buildMenteeExemptionConfirmEmail,
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
   buildMenteeSessionInviteEmail,
@@ -262,6 +263,22 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         slotsLabel: "2",
         pickUrl: `${ORIGIN}/chon-mentee/ma-vi-du`,
         deadlineLabel: "23:59 ngày 12/10/2026",
+        hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "mentee_exemption_confirm",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Mời Support team xác nhận tham gia mentee — đặc cách",
+    audience: "Bạn Support team trong danh sách mentee đặc cách",
+    trigger: 'Khi ban tổ chức bấm "Gửi thư mời xác nhận" ở mục Mentee → Đặc cách Support team.',
+    note: "Người nhận không qua phỏng vấn; mở đường dẫn riêng và bấm xác nhận là thành mentee của mùa.",
+    body: built(
+      buildMenteeExemptionConfirmEmail({
+        recipientName: MENTEE,
+        seasonLabel: SEASON,
+        confirmUrl: `${ORIGIN}/xac-nhan-mentee/ma-vi-du`,
         hotlineZalo: "0919144638"
       })
     )

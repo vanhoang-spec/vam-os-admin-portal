@@ -390,7 +390,9 @@ const OPS_ADMIN_ROUTES = [
 // core_team as well, because the screen is useful read-only; the ability to
 // CHANGE a form's state is gated separately by canToggleApplicationForm plus
 // season scope, not by nav visibility.
-const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team"];
+// 11/10/2026: thêm trang Mentee đặc cách (Support team) — có họ tên, email và nút gửi thư
+// nên cùng khán giả với nhóm này (Core team trở lên), trang tự gate bằng canManageMatches.
+const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team", "/applications/mentee-dac-cach"];
 
 const REVIEW_ROUTES = [
   // My Work rides the same `showReviews` gate as the rest of this set: it is
