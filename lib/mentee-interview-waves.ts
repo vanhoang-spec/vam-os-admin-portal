@@ -104,6 +104,20 @@ export function waveOfSession(waves: readonly InterviewWave[], sessionId: string
 }
 
 /**
+ * Đợt mà màn hình phỏng vấn mở, từ đường dẫn: ?dot= thắng; không có thì đợt của hồ sơ
+ * đang mở (?application=); không có nữa thì đợt đang diễn ra / sắp tới. Một cửa cho
+ * cả trang lẫn máy chủ: máy chủ chỉ tải ứng viên của ĐÚNG đợt trang sẽ hiện — hai nơi
+ * tự suy riêng mà lệch nhau thì trang hiện một đợt rỗng.
+ */
+export function resolveOfflineWave(
+  waves: readonly InterviewWave[],
+  pick: { dot?: string | null; linkedSessionId?: string | null; todayKey: string }
+): InterviewWave | null {
+  const linked = waveOfSession(waves, pick.linkedSessionId);
+  return (pick.dot ? null : linked) ?? pickCurrentWave(waves, pick.todayKey, pick.dot?.trim() || null);
+}
+
+/**
  * Dữ liệu màn hình phỏng vấn trực tiếp, chỉ còn các ca và mentee của MỘT đợt. Danh
  * sách ca đầy đủ giữ ở `moveTargets` — BTC vẫn đổi được một bạn sang ca của đợt khác
  * (người vắng đợt 1 chuyển sang đợt 2).

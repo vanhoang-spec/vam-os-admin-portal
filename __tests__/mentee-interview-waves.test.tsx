@@ -17,8 +17,8 @@ import {
   waveOfSession
 } from "@/lib/mentee-interview-waves";
 
-const mocks = vi.hoisted(() => ({ dashboard: null as any, clientProps: null as any, bookingPage: null as any }));
-vi.mock("@/lib/mentee-offline", () => ({ getOfflineDashboard: async () => mocks.dashboard }));
+const mocks = vi.hoisted(() => ({ dashboard: null as any, clientProps: null as any, bookingPage: null as any, scopes: [] as unknown[] }));
+vi.mock("@/lib/mentee-offline", () => ({ getOfflineDashboard: async (scope: unknown) => { mocks.scopes.push(scope); return mocks.dashboard; } }));
 vi.mock("@/lib/mentee-interview", () => ({
   getMenteeSessionPageData: async () => mocks.bookingPage,
   bookMenteeSession: vi.fn(),
@@ -191,7 +191,10 @@ describe("câu đầu trang chọn ca", () => {
 describe("màn hình Phỏng vấn mentee trực tiếp", () => {
   it("?dot= đợt 2: tiêu đề đọc từ ca của đợt, chỉ mentee đợt 2, có nút chuyển đợt", async () => {
     mocks.dashboard = { ok: true, data: DASHBOARD };
+    mocks.scopes = [];
     render(await OfflineInterviewPage({ searchParams: Promise.resolve({ dot: "2026-10-10" }) }));
+    // Máy chủ được hỏi đúng đợt trên đường dẫn — nó chỉ tải ứng viên của đợt đó (11/10/2026).
+    expect(mocks.scopes).toEqual([{ kind: "interview", application: undefined, dot: "2026-10-10" }]);
     const header = screen.getByRole("heading", { name: "Phỏng vấn mentee trực tiếp" }).parentElement!;
     expect(header.textContent).toContain("Đợt 2 · 10–11/10/2026");
     expect(header.textContent).toContain("Thứ Bảy 10/10: chưa có địa điểm, tối đa 18 mentee/ca");
@@ -205,7 +208,9 @@ describe("màn hình Phỏng vấn mentee trực tiếp", () => {
 
   it("đường dẫn mở thẳng một hồ sơ rơi đúng đợt của hồ sơ đó", async () => {
     mocks.dashboard = { ok: true, data: DASHBOARD };
+    mocks.scopes = [];
     render(await OfflineInterviewPage({ searchParams: Promise.resolve({ application: "a1" }) }));
+    expect(mocks.scopes).toEqual([{ kind: "interview", application: "a1", dot: undefined }]);
     expect(screen.getByTestId("client").textContent).toBe("An Đợt Một");
     expect(mocks.clientProps.initialApplication).toBe("a1");
   });

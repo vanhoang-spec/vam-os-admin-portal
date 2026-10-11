@@ -98,7 +98,7 @@ describe("máy chủ gắn tên người check-in", () => {
     mocks.staffReads = [];
     mocks.staff = [{ id: "sup-2", full_name: "Support Hai", email: "s2@example.test" }, { id: "sup-3", full_name: null, email: "s3@example.test" }];
     mocks.rpc.mockImplementation(async (fn: string) =>
-      fn === "vam104_offline_dashboard"
+      fn === "vam118_offline_board"
         ? { data: { canOperate: true, logs: [], sessions: [S1], participants: [], candidates: [
             cand("a", "A", "s1", op("2026-10-04T01:00:00Z", "sup-2")),
             cand("b", "B", "s1", op("2026-10-04T01:01:00Z", "sup-3")),
@@ -109,7 +109,7 @@ describe("máy chủ gắn tên người check-in", () => {
   });
 
   it("đọc đúng các tài khoản đã check-in và gắn tên (không có tên thì dùng email)", async () => {
-    const r = await getOfflineDashboard();
+    const r = await getOfflineDashboard({ kind: "progress" });
     if (!r.ok) throw new Error(r.message);
     expect(mocks.staffReads).toEqual([["sup-2", "sup-3"]]);
     const by = Object.fromEntries(r.data.candidates.map((c) => [c.id, c.operation?.checked_in_by_name ?? null]));

@@ -38,7 +38,8 @@ export default async function MenteeProgressPage() {
   if (!admin || !canViewMenteeSessionStatus(admin.role)) {
     return <Refused message="Trang này dành cho BTC (Core team, Support team)." />;
   }
-  const result = await getOfflineDashboard();
+  // Bản gọn nhất: trang này tự làm mới mỗi 15 giây, không cần nhật ký hay phiếu chấm.
+  const result = await getOfflineDashboard({ kind: "progress" });
   if (!result.ok) return <Refused message={result.message} />;
   if (!result.data.canOperate) {
     return <Refused message="Tài khoản chưa có quyền vận hành mùa hiện tại nên chưa xem được tiến độ phỏng vấn." />;

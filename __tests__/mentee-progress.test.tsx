@@ -8,10 +8,10 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { type OfflineDashboard } from "@/lib/mentee-offline-core";
 import { buildMenteeProgress, halfOf, progressStatus } from "@/lib/mentee-progress-core";
 
-const mocks = vi.hoisted(() => ({ admin: null as any, dashboard: null as any }));
+const mocks = vi.hoisted(() => ({ admin: null as any, dashboard: null as any, scopes: [] as unknown[] }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: async () => mocks.admin }));
-vi.mock("@/lib/mentee-offline", () => ({ getOfflineDashboard: async () => mocks.dashboard }));
+vi.mock("@/lib/mentee-offline", () => ({ getOfflineDashboard: async (scope: unknown) => { mocks.scopes.push(scope); return mocks.dashboard; } }));
 
 import { ProgressBoard } from "@/app/interviews/tien-do-mentee/progress-board";
 import MenteeProgressPage from "@/app/interviews/tien-do-mentee/page";
@@ -135,7 +135,10 @@ describe("cổng quyền của trang", () => {
   });
 
   it("support có quyền vận hành thấy bảng tiến độ", async () => {
+    mocks.scopes = [];
     render(await MenteeProgressPage());
     expect(screen.getByTestId("progress-tiles")).toBeTruthy();
+    // Trang tự làm mới mỗi 15 giây: phải xin bản gọn nhất, không phải bản của màn hình phỏng vấn.
+    expect(mocks.scopes).toEqual([{ kind: "progress" }]);
   });
 });

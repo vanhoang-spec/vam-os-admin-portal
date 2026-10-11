@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getOfflineDashboard } from "@/lib/mentee-offline";
 import { roomDeskBounds } from "@/lib/mentee-offline-core";
 import { sessionDayLabel, vietnamDateKeyOf } from "@/lib/mentee-interview-core";
-import { dashboardForWave, interviewWaves, pickCurrentWave, waveOfSession, type InterviewWave } from "@/lib/mentee-interview-waves";
+import { dashboardForWave, interviewWaves, resolveOfflineWave, type InterviewWave } from "@/lib/mentee-interview-waves";
 import { vietnamDateKey } from "@/lib/utils";
 import { PageHeader, Card } from "@/components/ui";
 import { OfflineDashboardClient } from "./workflow";
@@ -56,7 +56,8 @@ function WaveTabs({ waves, current }: { waves: InterviewWave[]; current: Intervi
 
 export default async function OfflineInterviewPage({searchParams}:{searchParams:Promise<{application?:string; dot?:string}>}) {
   const {application, dot}=await searchParams;
-  const result=await getOfflineDashboard();
+  // Máy chủ chỉ tải ứng viên của đợt sẽ hiện (cùng luật resolveOfflineWave bên dưới).
+  const result=await getOfflineDashboard({kind:"interview",application,dot});
   if (!result.ok) {
     return <div className="grid gap-4">
       <PageHeader title="Phỏng vấn mentee trực tiếp" />
@@ -67,8 +68,11 @@ export default async function OfflineInterviewPage({searchParams}:{searchParams:
   // Mỗi lần chỉ một đợt (BTC 07/10/2026): danh sách, ca, bàn, nhật ký đều của đợt đó.
   // Đường dẫn mở thẳng một hồ sơ rơi đúng đợt của hồ sơ đó.
   const waves=interviewWaves(result.data.sessions);
-  const linked=application ? waveOfSession(waves, result.data.candidates.find(c=>c.id===application)?.sessionId) : null;
-  const wave=(dot ? null : linked) ?? pickCurrentWave(waves, vietnamDateKey(new Date()) ?? "", dot?.trim() || null);
+  const wave=resolveOfflineWave(waves,{
+    dot,
+    linkedSessionId:application ? result.data.candidates.find(c=>c.id===application)?.sessionId : null,
+    todayKey:vietnamDateKey(new Date()) ?? ""
+  });
   const data=wave ? dashboardForWave(result.data, wave) : result.data;
 
   return <div className="grid gap-4">
