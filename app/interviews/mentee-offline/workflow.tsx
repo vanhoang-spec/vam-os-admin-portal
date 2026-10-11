@@ -1,9 +1,9 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction } from "@/app/actions/mentee-offline";
-import { normalizedPhone, openAtDeskAndMentor, roomDeskBounds, roomDeskLabel, roomLabel, sortCandidatesByArrival, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
+import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction, loadOfflineCandidateDetailAction } from "@/app/actions/mentee-offline";
+import { detailCacheKey, normalizedPhone, openAtDeskAndMentor, roomDeskBounds, roomDeskLabel, roomLabel, sortCandidatesByArrival, takesElsewhere, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineCandidateDetail, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
 import { formatDateTime, formatTime } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
@@ -44,6 +44,10 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
   },[]);
   const [message,setMessage]=useState("");
   const [mine,setMine]=useState(false);
+  // Hồ sơ chi tiết đã tải (đơn đăng ký + phiếu chấm), theo detailCacheKey. Nằm ở đây
+  // chứ không trong CandidatePanel: panel dựng lại sau mỗi lần lưu, còn màn hình thì
+  // sống suốt buổi — mở lại một bạn đã xem không phải tải lần nữa.
+  const detailCache=useRef(new Map<string,OfflineCandidateDetail>());
   const chooseCode=useCallback(async (code:string)=>{
     try {
       const result=await lookupOfflineTicketAction(code);
@@ -97,7 +101,7 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
         <td className="p-3">{c.operation?.outcome ? OFFLINE_OUTCOMES[c.operation.outcome] : "Chưa chấm"}{c.operation?.match_id && <div className="text-vam-green">Đã ghép mentor</div>}</td>
       </tr>)}</tbody>
     </table>{!visible.length && <p className="p-4">Không có ứng viên phù hợp.</p>}</div>
-    {candidate && <CandidatePanel key={`${candidate.id}:${candidate.operation?.revision??0}`} candidate={candidate} data={data} close={()=>setSelected(null)} />}
+    {candidate && <CandidatePanel key={`${candidate.id}:${candidate.operation?.revision??0}`} candidate={candidate} data={data} detailCache={detailCache.current} close={()=>setSelected(null)} />}
     <details className="rounded-lg border bg-white p-4"><summary className="cursor-pointer font-semibold">Lịch sử thao tác — 200 lần gần nhất</summary>
       <div className="mt-3 grid gap-3">{data.logs.map(log=><details key={log.id} className="border-t pt-2">
         <summary>{formatDateTime(log.created_at)} · {log.actor_name} · {log.candidate_name} · {({checkin:"Check-in",assign:"Phân bàn",result:"Lưu/sửa kết quả"} as Record<string,string>)[log.action]??log.action}</summary>
@@ -127,7 +131,14 @@ function AuditChange({before,after,venue}:{before:unknown;after:unknown;venue?:s
   </dl>;
 }
 
-function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;data:OfflineDashboard;close:()=>void}) {
+/** Chỗ của đơn đăng ký khi hồ sơ chi tiết chưa về: đang tải, hoặc lỗi kèm nút thử lại. */
+function DetailPending({error,retry}:{error:string;retry:()=>void}) {
+  return error
+    ? <div role="alert" data-testid="detail-error" className="mt-3 grid gap-2 text-red-700"><p>{error}</p><div><button type="button" className="rounded border border-red-700 px-3 py-2" onClick={retry}>Tải lại hồ sơ</button></div></div>
+    : <p role="status" data-testid="detail-loading" className="mt-3 text-sm text-slate-600">Đang tải hồ sơ…</p>;
+}
+
+function CandidatePanel({candidate:c,data,detailCache,close}:{candidate:OfflineCandidate;data:OfflineDashboard;detailCache:Map<string,OfflineCandidateDetail>;close:()=>void}) {
   const router=useRouter();
   const [busy,setBusy]=useState(false);
   const [state,setState]=useState<OfflineActionResult | null>(null);
@@ -138,14 +149,32 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
   // Bàn / mentor đang chọn trong form phân bàn — chỉ để nhắc ai đang ở đó chưa có kết quả.
   const [pick,setPick]=useState<{room:number|null;desk:number|null;interviewerId:string|null}>({room:op?.room??null,desk:op?.desk??null,interviewerId:op?.interviewer_id??null});
   const busyHere=openAtDeskAndMentor(data,c.id,pick);
-  const review=c.reviews.find(r=>r.id===op?.review_id);
+  // Hồ sơ chi tiết — đơn đăng ký + phiếu chấm đầy đủ (11/10/2026). Danh sách không còn
+  // chở theo cho mọi người: tải riêng cho bạn đang mở. Phần check-in / phân bàn phía
+  // trên và form chấm của bạn CHƯA có kết quả không chờ lần tải này — mạng chập chờn
+  // thì Support và mentor vẫn làm việc được.
+  const cacheKey=detailCacheKey(c);
+  const inline=c.answers!==undefined;
+  const [fetched,setFetched]=useState<OfflineCandidateDetail|null>(()=>detailCache.get(cacheKey)??null);
+  const [detailError,setDetailError]=useState("");
+  const [detailAttempt,setDetailAttempt]=useState(0);
+  useEffect(()=>{
+    if(inline || detailCache.has(cacheKey)) return;
+    setDetailError("");
+    // Panel này gắn với đúng một bạn ở đúng một phiên bản (key của nó), nên câu trả lời
+    // về muộn không thể hiện nhầm dưới tên bạn khác; về sau khi panel đã đóng thì chỉ
+    // còn việc nhớ lại — lần mở sau không phải tải nữa.
+    loadOfflineCandidateDetailAction(c.id).then(result=>{
+      if(result.ok) {detailCache.set(cacheKey,result.detail);setFetched(result.detail);}
+      else setDetailError(result.message);
+    }).catch(()=>setDetailError("Mất kết nối khi tải hồ sơ. Kiểm tra mạng rồi bấm “Tải lại hồ sơ”."));
+  },[inline,detailCache,cacheKey,c.id,detailAttempt]);
+  const detail:OfflineCandidateDetail|null=c.answers!==undefined ? {answers:c.answers,reviews:c.reviews} : fetched;
+  const review=(detail?.reviews??c.reviews).find(r=>r.id===op?.review_id);
   const me=data.participants.find(p=>p.id===data.actorId);
   const full=me?.capacity==null || (me.activeMatches>=me.capacity && !op?.match_id);
-  // Số hồ sơ KHÁC mà chính mentor này đã chọn "Có – Tôi muốn nhận" trong mùa — database
-  // kiểm lại cùng con số (TAKE_LIMIT_REACHED); ở đây chỉ để khoá nút trước khi bấm.
-  const takesElsewhere=data.candidates.filter(x=>x.id!==c.id && x.operation?.interviewer_id===data.actorId &&
-    x.reviews.some(r=>r.id===x.operation?.review_id && r.status==="submitted" && r.take_choice==="take")).length;
-  const takeLimitReached=takesElsewhere>=MAX_TAKES_PER_INTERVIEWER;
+  // Database kiểm lại cùng con số (TAKE_LIMIT_REACHED); ở đây chỉ để khoá nút trước khi bấm.
+  const takeLimitReached=takesElsewhere(data.candidates,c.id,data.actorId)>=MAX_TAKES_PER_INTERVIEWER;
   // Trả kết quả cho form chấm: ok → xoá bản nháp; lỗi → hiện NGAY cạnh nút gửi (đầu
   // hồ sơ cách nút gửi cả màn hình — sự cố 03/10: mentor không thấy lỗi, tải lại, mất phiếu).
   async function save(action:string,values:Record<string,unknown>):Promise<OfflineActionResult> {
@@ -215,14 +244,20 @@ function CandidatePanel({candidate:c,data,close}:{candidate:OfflineCandidate;dat
         <button className={button} disabled={busy}>Lưu phân bàn</button>
       </form>}
     </div>}
-    <details open className="rounded border p-3"><summary className="cursor-pointer font-semibold">Application đã nộp</summary><dl className="mt-3 grid gap-4">{c.answers.map(([key,value],i)=><div key={`${key}-${i}`}><dt className="font-semibold text-slate-600">{key}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{value}</dd></div>)}</dl></details>
-    <details open className="rounded border p-3"><summary className="cursor-pointer font-semibold">Điểm và nhận xét vòng hồ sơ</summary>{c.reviews.filter(r=>r.review_round==="profile_screening").map(r=><div key={r.id} className="mt-3 border-t pt-3">
+    <details open className="rounded border p-3"><summary className="cursor-pointer font-semibold">Application đã nộp</summary>{detail
+      ? <dl className="mt-3 grid gap-4">{detail.answers.map(([key,value],i)=><div key={`${key}-${i}`}><dt className="font-semibold text-slate-600">{key}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{value}</dd></div>)}</dl>
+      : <DetailPending error={detailError} retry={()=>setDetailAttempt(n=>n+1)} />}</details>
+    <details open className="rounded border p-3"><summary className="cursor-pointer font-semibold">Điểm và nhận xét vòng hồ sơ</summary>{detail ? detail.reviews.filter(r=>r.review_round==="profile_screening").map(r=><div key={r.id} className="mt-3 border-t pt-3">
       <p className="font-semibold">{r.reviewerName} · {r.total_score??"—"}/25 · {recommendationLabel(r.recommendation)}</p>
       <p className="text-sm">{PROFILE_SCREENING_SCORES.map(([key,label])=>`${label}: ${r[key]??"—"}`).join(" · ")}</p><p className="whitespace-pre-wrap">{r.reviewer_note??"Chưa có nhận xét"}</p>
-    </div>)}</details>
+    </div>) : <p className="mt-3 text-sm text-slate-600">{detailError ? "Chưa tải được — bấm “Tải lại hồ sơ” ở mục trên." : "Đang tải…"}</p>}</details>
+    {/* Đã có kết quả: phiếu đã lưu nằm trong hồ sơ chi tiết. Chưa về thì chỉ nói kết quả,
+        và CHƯA cho sửa — form sửa dựng trên một phiếu trống sẽ ghi đè phiếu thật bằng ô trống. */}
     {op?.outcome && <div className="rounded bg-vam-mint/40 p-3">
-      <InterviewResultSummary review={review} operation={op} showWeighted={data.canOperate} />
-      {own && !editing && <button className="mt-2 rounded border px-3 py-2" onClick={()=>setEditing(true)}>Sửa kết quả / lựa chọn mentee</button>}
+      {detail
+        ? <InterviewResultSummary review={review} operation={op} showWeighted={data.canOperate} />
+        : <p data-testid="result-pending">Kết quả: <strong>{OFFLINE_OUTCOMES[op.outcome]}</strong> · đang tải phiếu đã lưu…</p>}
+      {own && !editing && detail && <button className="mt-2 rounded border px-3 py-2" onClick={()=>setEditing(true)}>Sửa kết quả / lựa chọn mentee</button>}
     </div>}
     {own && editing && (data.rubric
       ? <InterviewResultForm rubric={data.rubric} review={review} operation={op} candidateName={c.name}

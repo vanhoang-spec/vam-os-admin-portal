@@ -41,11 +41,25 @@ export type OfflineOperation = {
   checked_in_by_name?: string | null;
   is_online: boolean; online_note: string | null;
 };
+/**
+ * Một dòng của danh sách. Từ 11/10/2026 danh sách KHÔNG còn chở đơn đăng ký và phiếu
+ * chấm của mọi người (khoảng 11 MB mỗi lần tải, database sập 6 lần trong một ngày
+ * phỏng vấn): `answers` vắng mặt nghĩa là hồ sơ chi tiết CHƯA tải, màn hình tự tải
+ * riêng cho bạn đang mở (OfflineCandidateDetail). Có `answers` thì `reviews` đi kèm
+ * là bản đầy đủ.
+ */
 export type OfflineCandidate = {
   id: string; name: string; phone: string | null; email: string | null; status: string;
-  sessionId: string; bookedAt: string; rawPayload: Record<string, unknown> | null;
-  answers: Array<[string, string]>; operation: OfflineOperation | null; reviews: OfflineReview[];
+  sessionId: string; bookedAt: string;
+  /** Chỉ còn ở dữ liệu báo cáo (vam104_offline_dashboard); danh sách gọn không gửi. */
+  rawPayload?: Record<string, unknown> | null;
+  answers?: Array<[string, string]>; operation: OfflineOperation | null; reviews: OfflineReview[];
+  /** Người phỏng vấn đã NỘP phiếu chọn "Có – Tôi muốn nhận" cho bạn này (danh sách gọn tính sẵn). */
+  takeSubmitted?: boolean;
 };
+/** Đơn đăng ký + mọi phiếu chấm chưa huỷ của MỘT bạn — tải khi mở hồ sơ bạn đó. */
+export type OfflineCandidateDetail = { answers: Array<[string, string]>; reviews: OfflineReview[] };
+export type OfflineDetailResult = { ok: true; detail: OfflineCandidateDetail } | { ok: false; message: string };
 export type OfflineDashboard = {
   actorId: string; seasonId: string; canOperate: boolean;
   /** Phiếu chấm hiệu lực của mùa (riêng, hoặc kế thừa phiếu lưu gần nhất). null = chưa có phiếu nào. */
@@ -162,6 +176,31 @@ export function openAtDeskAndMentor(
       : [],
     withMentor: pick.interviewerId ? open.filter((c) => c.operation?.interviewer_id === pick.interviewerId).map((c) => c.name) : []
   };
+}
+
+/**
+ * Số hồ sơ KHÁC mà người phỏng vấn này đã nộp phiếu chọn "Có – Tôi muốn nhận". Chỉ để
+ * khoá lựa chọn trên màn hình trước khi bấm — database kiểm lại cùng con số lúc lưu
+ * (TAKE_LIMIT_REACHED). Danh sách gọn mang sẵn `takeSubmitted`; dữ liệu còn kèm phiếu
+ * đầy đủ thì đọc từ phiếu.
+ */
+export function takesElsewhere(candidates: readonly OfflineCandidate[], selfId: string, actorId: string): number {
+  return candidates.filter(
+    (x) =>
+      x.id !== selfId &&
+      x.operation?.interviewer_id === actorId &&
+      (x.takeSubmitted ?? x.reviews.some((r) => r.id === x.operation?.review_id && r.status === "submitted" && r.take_choice === "take"))
+  ).length;
+}
+
+/**
+ * Khoá bộ nhớ đệm của hồ sơ chi tiết. Chưa có kết quả: đơn đăng ký và điểm vòng hồ sơ
+ * không đổi trong buổi phỏng vấn, check-in / phân bàn không cần tải lại. Đã có kết
+ * quả: mỗi lần lưu là một phiên bản mới của phiếu, phải tải lại.
+ */
+export function detailCacheKey(candidate: Pick<OfflineCandidate, "id" | "operation">): string {
+  const op = candidate.operation;
+  return op?.outcome ? `${candidate.id}:${op.revision}` : `${candidate.id}:pending`;
 }
 
 export function normalizedPhone(value: string) {

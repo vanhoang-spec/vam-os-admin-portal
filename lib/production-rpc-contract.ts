@@ -195,6 +195,10 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Màn hình phỏng vấn mentee bản gọn + hồ sơ chi tiết tải riêng — migration
+  // 20261011190000_man_hinh_pv_nhe.sql, phải dán Production TRƯỚC khi merge.
+  "vam118_offline_board",
+  "vam118_offline_candidate_detail",
   // Sửa số mentee tối đa của mentor trên hồ sơ — migration
   // 20261010200000_suc_nhan_mentor_theo_mua.sql, chưa áp dụng Production.
   "vam116_set_mentor_capacity",
