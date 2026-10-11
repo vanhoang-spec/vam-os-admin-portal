@@ -22,6 +22,8 @@ import {
 import { MENTOR_PROGRAM_OPTIONS, MENTOR_UNIVERSITY_OPTIONS, MENTOR_FUNCTION_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import { MentorProfileIntro } from "@/app/apply/_components/mentor-profile-intro";
 import { MentorSupportContacts } from "@/app/apply/_components/mentor-support-contacts";
+import { CheckboxGroupField } from "@/app/apply/_components/form-primitives";
+import { MissingFieldsSummary, useMissingFields } from "@/app/apply/_components/missing-fields";
 import { DEFAULT_APPLICATION_FORM_TEXTS, type ApplicationFormTexts } from "@/lib/application-form-text-core";
 
 function fieldClass() {
@@ -31,6 +33,22 @@ function fieldClass() {
 function RequiredIndicator() {
   return <span className="text-red-700"> — Bắt buộc</span>;
 }
+
+/**
+ * Gắn tên và nhãn cho phần tử bọc một ô bắt buộc.
+ *
+ * Danh sách "mục chưa hoàn thành" cạnh nút xác nhận (missing-fields.tsx) đọc hai thuộc
+ * tính này: `name` gộp các ô cùng nhóm thành một dòng, `label` là chữ hiện trong danh
+ * sách. Ô bắt buộc nào thiếu nó sẽ hiện bằng tên kỹ thuật — nên mỗi ô `required` trong
+ * form này đều phải nằm trong một phần tử có `field(...)`.
+ */
+function field(name: string, label: string) {
+  return { "data-field-name": name, "data-field-label": label };
+}
+
+/** Tô đỏ ô còn thiếu sau khi bấm xác nhận; gỡ ngay khi người dùng sửa ô đó. */
+const invalidMark =
+  "data-[invalid=true]:rounded-md data-[invalid=true]:bg-red-50 data-[invalid=true]:outline data-[invalid=true]:outline-2 data-[invalid=true]:outline-offset-4 data-[invalid=true]:outline-red-300";
 
 function Feedback({ ok, message }: { ok: boolean; message: string }) {
   if (!message) return null;
@@ -83,6 +101,9 @@ export function RenewalForm({
     initialRenewalPublicActionState
   );
   const completed = acceptState.ok || declineState.ok;
+  // BTC 11/10/2026: bấm "Xác nhận tiếp tục" khi còn thiếu thì phải thấy NGAY tại nút đó
+  // mọi mục còn thiếu, không phải sửa xong một ô mới biết ô kế.
+  const missingFields = useMissingFields();
 
   if (completed) {
     return (
@@ -112,7 +133,13 @@ export function RenewalForm({
         </p>
       </section>
 
-      <form onReset={keepFormValues} action={acceptAction} className="grid gap-5 rounded-lg border border-vam-line bg-white p-5 shadow-soft">
+      <form onReset={keepFormValues} action={acceptAction}
+        ref={missingFields.formRef}
+        onInvalidCapture={missingFields.revealInvalid}
+        onSubmit={missingFields.clearMissing}
+        onChange={missingFields.clearFieldMark}
+        className="grid gap-5 rounded-lg border border-vam-line bg-white p-5 shadow-soft"
+      >
         <div>
           <h2 className="text-lg font-semibold text-vam-ink">Tiếp tục đồng hành — Season 12</h2>
           <p className="mt-1 text-sm text-slate-600">
@@ -123,30 +150,21 @@ export function RenewalForm({
           </p>
         </div>
 
-        <label className="flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm">
+        <label {...field("participation_confirmed", "Xác nhận tiếp tục tham gia Season 12")} className={`flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm ${invalidMark}`}>
           <input className="mt-0.5" type="checkbox" name="participation_confirmed" value="yes" required />
           <span>Tôi xác nhận tiếp tục tham gia với vai trò mentor trong Season 12.<RequiredIndicator /></span>
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="text-sm font-medium text-vam-ink">
+          <label {...field("company_current", "Công ty / Tổ chức hiện tại")} className={`text-sm font-medium text-vam-ink ${invalidMark}`}>
             Công ty / Tổ chức hiện tại<RequiredIndicator />
             <input className={fieldClass()} name="company_current" defaultValue={display.companyCurrent ?? ""} required />
           </label>
-          <label className="text-sm font-medium text-vam-ink">
+          <label {...field("title_current", "Chức danh / Vị trí hiện tại")} className={`text-sm font-medium text-vam-ink ${invalidMark}`}>
             Chức danh / Vị trí hiện tại<RequiredIndicator />
             <input className={fieldClass()} name="title_current" defaultValue={display.titleCurrent ?? ""} required />
           </label>
-          <label className="text-sm font-medium text-vam-ink">
-            Số năm kinh nghiệm<RequiredIndicator />
-            <select className={fieldClass()} name="mentor_total_work_years" required defaultValue={display.yearsExperienceMin ?? ""}>
-              <option value="">-- Chọn --</option>
-              {Array.from({ length: RENEWAL_MAX_EXPERIENCE_YEARS + 1 }, (_, i) => (
-                <option key={i} value={i}>{i} năm</option>
-              ))}
-            </select>
-          </label>
-          <div className="flex flex-col">
+          <div {...field("industry_primary", "Ngành nghề chính")} className={`flex flex-col ${invalidMark}`}>
             <label className="text-sm font-medium text-vam-ink mb-1">
               Ngành nghề chính (chọn 1)<RequiredIndicator />
             </label>
@@ -161,12 +179,12 @@ export function RenewalForm({
             </select>
           </div>
           {industryPrimary === "other" ? (
-            <label className="text-sm font-medium text-vam-ink mt-2">
+            <label {...field("industry_primary_other", "Ghi rõ ngành nghề chính")} className={`text-sm font-medium text-vam-ink mt-2 ${invalidMark}`}>
               Vui lòng ghi rõ ngành nghề<RequiredIndicator />
               <input className={fieldClass()} name="industry_primary_other" required />
             </label>
           ) : null}
-          <div className="flex flex-col">
+          <div {...field("function_primary", "Chức năng / chuyên môn chính")} className={`flex flex-col ${invalidMark}`}>
             <label className="text-sm font-medium text-vam-ink mb-1">
               Chức năng / chuyên môn chính (chọn 1)<RequiredIndicator />
             </label>
@@ -181,16 +199,59 @@ export function RenewalForm({
             </select>
           </div>
           {functionPrimary === "other" ? (
-            <label className="text-sm font-medium text-vam-ink mt-2">
+            <label {...field("function_primary_other", "Ghi rõ chức năng / chuyên môn chính")} className={`text-sm font-medium text-vam-ink mt-2 ${invalidMark}`}>
               Vui lòng ghi rõ chức năng / chuyên môn<RequiredIndicator />
               <input className={fieldClass()} name="function_primary_other" required />
             </label>
           ) : null}
-          <label className="text-sm font-medium text-vam-ink">
+          {/*
+            Một ngành chính và một chức năng chính vẫn chỉ chọn 1: Vòng 2 xếp nhóm ngành
+            theo đúng hai ô đó. Mentor có nhiều lĩnh vực chọn thêm ở đây — cùng ô, cùng
+            luật (tối đa 3, "Khác" phải ghi rõ) với form đăng ký mentor mới. Trước
+            11/10/2026 form gia hạn không có ô này nên mentor cũ chỉ khai được một lĩnh vực.
+          */}
+          <div className="sm:col-span-2">
+            <CheckboxGroupField
+              name="secondary_industries_functions"
+              label="Ngành / chức năng phụ (nếu có, chọn tối đa 3)"
+              options={[...MENTOR_INDUSTRY_OPTIONS, ...MENTOR_FUNCTION_OPTIONS]}
+              helpText="Chọn thêm nếu anh/chị có thể mentoring ở nhiều lĩnh vực — không bắt buộc."
+              maxSelections={3}
+              otherInput={{
+                name: "secondary_industries_functions_other",
+                label: "Vui lòng ghi rõ kỹ năng/lĩnh vực khác"
+              }}
+            />
+          </div>
+          <label {...field("mentor_total_work_years", "Số năm kinh nghiệm")} className={`text-sm font-medium text-vam-ink ${invalidMark}`}>
+            Số năm kinh nghiệm<RequiredIndicator />
+            {/*
+              Ô nhập số, không phải danh sách chọn. Danh sách 0–80 năm chỉ hiện chừng 20
+              dòng đầu trước khi phải cuộn, nên mentor nhiều năm kinh nghiệm tưởng form chỉ
+              cho chọn tới 20 (BTC góp ý 11/10/2026). Giới hạn thật vẫn là
+              RENEWAL_MAX_EXPERIENCE_YEARS, máy chủ kiểm lại.
+            */}
+            <input
+              className={fieldClass()}
+              type="number"
+              inputMode="numeric"
+              min="0"
+              max={RENEWAL_MAX_EXPERIENCE_YEARS}
+              step="1"
+              name="mentor_total_work_years"
+              defaultValue={display.yearsExperienceMin ?? ""}
+              placeholder="VD: 25"
+              required
+            />
+            <span className="mt-1 block text-xs font-normal text-slate-500">
+              Nhập số năm, không giới hạn ở 20. Ví dụ: 8, 15, 25, 32.
+            </span>
+          </label>
+          <label {...field("mentor_people_management_years", "Số năm kinh nghiệm quản lý con người / đội ngũ")} className={`text-sm font-medium text-vam-ink ${invalidMark}`}>
             Tổng số năm kinh nghiệm quản lý con người / đội ngũ<RequiredIndicator />
             <input className={fieldClass()} type="number" min="0" max={RENEWAL_MAX_EXPERIENCE_YEARS} step="1" name="mentor_people_management_years" required />
           </label>
-          <fieldset className="sm:col-span-2">
+          <fieldset {...field("mentoring_capacity_total", "Số mentee có thể nhận trong Season 12")} className={`sm:col-span-2 ${invalidMark}`}>
             <legend className="text-sm font-medium text-vam-ink mb-2">Số mentee có thể nhận trong Season 12<RequiredIndicator /></legend>
             <div className="flex gap-4">
               {RENEWAL_MENTEE_CAPACITY_CHOICES.map((num) => (
@@ -222,7 +283,7 @@ export function RenewalForm({
               Không bắt buộc. Anh/chị có thể chia sẻ các chủ đề hoặc hình thức hỗ trợ thêm, ví dụ: training/chia sẻ chuyên đề, career sharing, company visit, kết nối cơ hội thực tập, hoặc các lĩnh vực chuyên môn khác.
             </span>
           </label>
-          <label className="text-sm font-medium text-vam-ink sm:col-span-2">
+          <label {...field("university", "Trường đại học đã tốt nghiệp")} className={`text-sm font-medium text-vam-ink sm:col-span-2 ${invalidMark}`}>
             Anh/chị tốt nghiệp trường đại học nào?<RequiredIndicator />
             <select className={fieldClass()} name="university" required value={university} onChange={(event) => setUniversity(event.target.value)}>
               <option value="">Chọn trường đại học…</option>
@@ -230,7 +291,7 @@ export function RenewalForm({
             </select>
           </label>
           {university === "OTHER" ? (
-            <label className="text-sm font-medium text-vam-ink sm:col-span-2">
+            <label {...field("university_other", "Tên trường đại học")} className={`text-sm font-medium text-vam-ink sm:col-span-2 ${invalidMark}`}>
               Tên trường đại học
               <input className={fieldClass()} name="university_other" required />
             </label>
@@ -259,7 +320,7 @@ export function RenewalForm({
               not keep a list of its own, so a commitment added to the policy
               source appears here and is enforced server-side without an edit. */}
           {requiredCheckboxAcknowledgements("mentor").filter(entry => entry.category !== "professional_safety").map((entry) => (
-            <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
+            <label key={entry.key} {...field(entry.key, entry.wording)} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm data-[invalid=true]:border-red-400 data-[invalid=true]:bg-red-50">
               <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
               <span>{entry.wording}</span>
             </label>
@@ -271,14 +332,14 @@ export function RenewalForm({
             Ranh giới nghề nghiệp, an toàn và bảo mật
           </h3>
           {requiredCheckboxAcknowledgements("mentor").filter(entry => entry.category === "professional_safety").map((entry) => (
-            <label key={entry.key} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm">
+            <label key={entry.key} {...field(entry.key, entry.wording)} className="mb-2 flex items-start gap-3 rounded-md border border-vam-line bg-white p-3 text-sm data-[invalid=true]:border-red-400 data-[invalid=true]:bg-red-50">
               <input className="mt-0.5" type="checkbox" name={entry.key} value="true" required />
               <span>{entry.wording}</span>
             </label>
           ))}
         </div>
 
-        <div className="rounded-md border border-vam-line bg-slate-50 p-4">
+        <div {...field(ACTIVE_READING_KEYS.mentor, "Nhập lại câu xác nhận đã đọc và hiểu các nguyên tắc chính")} className="rounded-md border border-vam-line bg-slate-50 p-4 data-[invalid=true]:border-red-400 data-[invalid=true]:bg-red-50">
           <label className="text-sm font-medium text-vam-ink block mb-2">
             Vui lòng nhập lại câu dưới đây để xác nhận bạn đã đọc và hiểu các nguyên tắc chính.
           </label>
@@ -299,12 +360,12 @@ export function RenewalForm({
           <textarea className={fieldClass()} name="core_team_note" rows={3} />
         </div>
 
-        <label className="flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm">
+        <label {...field("consent_data_storage", "Quyền riêng tư: đồng ý lưu trữ và sử dụng dữ liệu cho Season 12")} className="flex items-start gap-3 rounded-md border border-vam-line bg-slate-50 p-3 text-sm data-[invalid=true]:border-red-400 data-[invalid=true]:bg-red-50">
           <input className="mt-0.5" type="checkbox" name="consent_data_storage" value="yes" required />
           <span><strong>Quyền riêng tư:</strong> Tôi đồng ý để VAM lưu trữ và sử dụng dữ liệu này cho hoạt động Season 12.<RequiredIndicator /></span>
         </label>
 
-        <label className="flex items-start gap-3 rounded-md border-2 border-vam-green bg-vam-mint/40 p-4 text-sm">
+        <label {...field(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD, "Xác nhận rà soát hồ sơ")} className="flex items-start gap-3 rounded-md border-2 border-vam-green bg-vam-mint/40 p-4 text-sm data-[invalid=true]:border-red-400 data-[invalid=true]:bg-red-50">
           <input
             className="mt-0.5"
             type="checkbox"
@@ -315,6 +376,7 @@ export function RenewalForm({
           <span><strong>Xác nhận rà soát hồ sơ — Bắt buộc:</strong> {RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT}</span>
         </label>
 
+        <MissingFieldsSummary missing={missingFields.missing} />
         <Feedback ok={acceptState.ok} message={acceptState.message} />
         <div>
           <SubmitButton pendingText="Đang gửi xác nhận...">Xác nhận tiếp tục</SubmitButton>
