@@ -758,14 +758,15 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     summary: "Quản lý tài khoản ban tổ chức cấp dưới mình: sửa vai trò, trạng thái và phạm vi program/season, gửi link đặt mật khẩu, tạm khóa, ngừng quyền hoặc xoá hẳn tài khoản.",
     steps: [
       "Chọn chương trình và season ở bộ chọn phạm vi phía trên (“Chọn chương trình”, “Chọn season”); chưa chọn thì biểu mẫu tạo tài khoản và sửa phạm vi bị khoá.",
-      "Super admin: điền “Thêm user quản trị” (Email, Họ tên, Vai trò, Season, Program, Phân quyền) rồi bấm “Tạo / mời người dùng”; người dùng nhận thư để tự đặt mật khẩu.",
+      "Super admin và Admin: điền “Thêm user quản trị” (Email, Họ tên, Vai trò, Season, Program, Phân quyền) rồi bấm “Tạo / mời người dùng”; người dùng nhận thư để tự đặt mật khẩu. Thêm một người vào Core team là tạo tài khoản cấp Core team cho họ, hoặc bấm “Sửa” rồi đổi Vai trò của một tài khoản đã có.",
       "Ở “Danh sách người dùng”, bấm “Sửa” ở dòng cần đổi, chỉnh Họ tên, Vai trò, Trạng thái, Program, Season, scope_level, scope_status rồi bấm “Lưu thay đổi”.",
       "Bấm “Gửi link đặt mật khẩu” khi người dùng chưa nhận thư hoặc quên mật khẩu; “Tạm khóa” / “Kích hoạt lại” để đổi trạng thái; “Xóa quyền admin” để ngừng quyền.",
       "Xoá hẳn: bấm “Xoá hẳn tài khoản”, gõ lại email ở “Gõ lại email để xác nhận”, ghi “Lý do xoá” rồi bấm “Xoá hẳn”."
     ],
     notes: [
       "Mở được: Super admin (quản Admin trở xuống), Admin (quản Core team trở xuống), Core team (quản Support team, Reviewer, Viewer). Chỉ sửa cấp thấp hơn mình, không tự thao tác trên tài khoản của mình.",
-      "Menu chỉ hiện mục này cho Super admin; Admin và Core team vào bằng đường dẫn /admin/users. Tạo tài khoản, “Đồng bộ Auth”, “Import CSV an toàn” và nhật ký quyền chỉ dành cho Super admin.",
+      "Menu hiện mục này cho Super admin và Admin; Core team vào bằng đường dẫn /admin/users. Tạo tài khoản: Super admin (mọi cấp) và Admin (Core team, Support team, Reviewer, Viewer). “Đồng bộ Auth”, “Import CSV an toàn” và nhật ký quyền chỉ dành cho Super admin.",
+      "Ô “Vai trò” chỉ mời những cấp bạn đặt được. Phân quyền (scope) không vượt cấp của tài khoản: Core team và Support team tối đa “Operations”, Reviewer tối đa “Review”, Viewer chỉ “Read” — chỉ Super admin cấp được cao hơn.",
       "Xoá hẳn không hoàn lại được; tài khoản đã chấm bài hoặc có nhật ký thao tác sẽ bị từ chối, khi đó dùng “Xóa quyền admin”. Không khóa hay hạ quyền được Super admin cuối cùng."
     ],
     updated: "02/10/2026"

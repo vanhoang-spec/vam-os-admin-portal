@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { isMembershipLifecycleOperation, isMembershipRole, isParticipationRole, membershipChangeDeniedMessage, membershipOperationNeedsReason, type MembershipLifecycleOperation, type MembershipLifecycleActionState } from "@/lib/membership-lifecycle";
+import { APPOINTMENT_DENIED_MESSAGE, isMembershipLifecycleOperation, isMembershipRole, isParticipationRole, membershipChangeDeniedMessage, membershipOperationNeedsReason, type MembershipLifecycleOperation, type MembershipLifecycleActionState } from "@/lib/membership-lifecycle";
 import { canChangeSeasonMembership } from "@/lib/permissions";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -14,6 +14,7 @@ function uuid(input: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 function safeRpcMessage(message: string) {
   if (message.includes("reason required")) return "Vui lòng nhập lý do cho thao tác này.";
   if (message.includes("invalid status transition")) return "Trạng thái membership đã thay đổi hoặc không hỗ trợ thao tác này.";
+  if (message.includes("appointment requires core team")) return APPOINTMENT_DENIED_MESSAGE;
   if (message.includes("not authorized") || message.includes("unauthorized")) return "Bạn không có quyền operations trong program và season này.";
   if (message.includes("membership not found")) return "Không tìm thấy membership cần cập nhật.";
   if (message.includes("cross-program") || message.includes("program-season")) return "Program và season không hợp lệ cho membership này.";

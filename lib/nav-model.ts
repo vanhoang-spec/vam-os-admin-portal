@@ -230,7 +230,11 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
   const role = adminUser?.role;
   const showReviews = roleIn(role, ["super_admin", "admin", "core_team", "reviewer"]);
   const showAdminTier = roleIn(role, ["super_admin", "admin", "core_team"]);
-  const showUserMgmt = role === "super_admin" && adminUser?.status === "active";
+  // BTC 13/10/2026: admin đổi được thành viên Core team, nên admin phải TỚI được
+  // trang này từ menu — trước đó chỉ vào được bằng cách gõ đường dẫn. Core team
+  // vẫn vào bằng đường dẫn như cũ: họ quản cấp dưới nhưng chưa ai yêu cầu thêm
+  // một mục menu cho họ.
+  const showUserMgmt = roleIn(role, ["super_admin", "admin"]) && adminUser?.status === "active";
   // H2 fix: the operations/matches nav entries used to fall back to a plain
   // link (operations) or render unconditionally (matches) for every role
   // that wasn't admin-tier, which included reviewer. Both must follow the

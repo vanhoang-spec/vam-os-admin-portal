@@ -75,8 +75,9 @@ beforeEach(() => {
 });
 
 describe("1. danh sách vai trò thêm tay được", () => {
-  it("gồm đúng bốn vai trò: mentor, mentee, trainer, speaker", () => {
-    expect([...MEMBERSHIP_ROLES]).toEqual(["mentor", "mentee", "trainer", "speaker"]);
+  it("gồm đúng năm vai trò: mentor, mentee, trainer, speaker, cross_mentor", () => {
+    // cross_mentor thêm 13/10/2026 (20261013100000) theo cùng lối với trainer và speaker.
+    expect([...MEMBERSHIP_ROLES]).toEqual(["mentor", "mentee", "trainer", "speaker", "cross_mentor"]);
   });
 
   it("nhận trainer và speaker", () => {

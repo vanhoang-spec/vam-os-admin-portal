@@ -68,8 +68,19 @@ describe("1. hàm quyền", () => {
     expect(canChangeSeasonMembership("core_team", "mentor")).toBe(true);
   });
 
+  it("trainer và cross mentor là bổ nhiệm: Core Team trở lên, Support Team thì không", () => {
+    // BTC 13/10/2026. Trước đó trainer đi cùng nhánh với speaker.
+    for (const membershipRole of ["trainer", "cross_mentor"]) {
+      expect(ADMIN_ROLES.filter((role) => canChangeSeasonMembership(role, membershipRole))).toEqual([
+        "super_admin",
+        "admin",
+        "core_team"
+      ]);
+    }
+  });
+
   it("vai trò khác của mùa giữ đúng các tầng từng có quyền operations; reviewer, viewer, rỗng thì không", () => {
-    for (const membershipRole of ["trainer", "speaker", "interviewer", "reviewer"]) {
+    for (const membershipRole of ["speaker", "interviewer", "reviewer"]) {
       expect(ADMIN_ROLES.filter((role) => canChangeSeasonMembership(role, membershipRole))).toEqual([
         "super_admin",
         "admin",
@@ -354,7 +365,7 @@ describe("4. hồ sơ CRM", () => {
     expect(message).toContain("không được mời tạo tài khoản");
   });
 
-  it("form thêm vai trò: Support Team không thấy Mentor; Core Team thấy", () => {
+  it("form thêm vai trò: Support Team không thấy Mentor, Trainer, Cross mentor; Core Team thấy đủ", () => {
     const optionsFor = (adminRole: string) => {
       const view = renderAs(adminRole, []);
       const select = view.container.querySelector('select[name="role"]') as HTMLSelectElement;
@@ -362,8 +373,8 @@ describe("4. hồ sơ CRM", () => {
       cleanup();
       return values;
     };
-    expect(optionsFor("support_team")).toEqual(["mentee", "trainer", "speaker"]);
-    expect(optionsFor("core_team")).toEqual(["mentor", "mentee", "trainer", "speaker"]);
+    expect(optionsFor("support_team")).toEqual(["mentee", "speaker"]);
+    expect(optionsFor("core_team")).toEqual(["mentor", "mentee", "trainer", "speaker", "cross_mentor"]);
   });
 
   it("Tiếp tục sang Mùa 12: Support Team chỉ thấy cho mentee, Core Team thấy cả mentor", () => {

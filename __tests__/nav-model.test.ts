@@ -109,7 +109,16 @@ describe("buildNavGroups — admin", () => {
   const hrefs = allNavHrefs(groups);
 
   it("has ≤ 9 top-level groups", () => expect(groups.length).toBeLessThanOrEqual(9));
-  it("does NOT include /admin/users", () => expect(hrefs).not.toContain("/admin/users"));
+  // BTC 13/10/2026: admin đổi được thành viên Core team, nên menu phải dẫn tới
+  // trang đó. Trước ngày này admin chỉ vào được bằng cách gõ đường dẫn.
+  it("includes /admin/users, in the admin group", () => {
+    const admin = groups.find((g) => g.key === "admin");
+    expect(navItemsOf(admin!).map((i) => i.href)).toContain("/admin/users");
+  });
+  it("does NOT include /admin/users once the admin account is no longer active", () => {
+    const inactive = buildNavGroups({ ...makeUser("admin"), status: "inactive" } as unknown as ReturnType<typeof makeUser>);
+    expect(allNavHrefs(inactive)).not.toContain("/admin/users");
+  });
   it("retains unrelated admin routes", () => {
     expect(hrefs).toContain("/admin");
     expect(hrefs).toContain("/admin/renewals");
@@ -472,7 +481,8 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
   core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES],
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
+  // Từ 13/10/2026 admin thấy "/admin/users": BTC giao admin đổi thành viên Core team.
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
   super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
 };
 
