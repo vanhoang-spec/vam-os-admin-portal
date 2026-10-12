@@ -425,7 +425,8 @@ export function InterviewResultSummary({ review, operation: op, showWeighted }: 
   showWeighted: boolean;
 }) {
   const scores = review?.interview_scores;
-  const editReason = op.outcome_reason && op.outcome_reason !== review?.reviewer_note ? op.outcome_reason : null;
+  // BTC chốt thì outcome_reason là lý do của BTC — màn hình hiện nó ở dòng "BTC đã chốt", không gọi là "lý do sửa".
+  const editReason = !op.btc_decided_at && op.outcome_reason && op.outcome_reason !== review?.reviewer_note ? op.outcome_reason : null;
   return (
     <div className="grid gap-1">
       <strong>{op.outcome ? OFFLINE_OUTCOMES[op.outcome] : ""}</strong>
