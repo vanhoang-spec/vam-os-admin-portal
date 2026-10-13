@@ -18,6 +18,7 @@ import {
   buildMenteeSessionConfirmedEmail,
   buildMatchingRound2InviteEmail,
   buildMenteeExemptionConfirmEmail,
+  markAsTestEmail,
   buildMenteeSessionInviteEmail,
   buildMenteeSessionReopenEmail,
   textToHtmlEmail,
@@ -1185,9 +1186,11 @@ export async function sendMenteeExemptionConfirm(input: {
     hotlineZalo: HOTLINE_ZALO
   });
   const message = await resolveAutomationEmail({ slotId: "mentee_exemption_confirm", values, fallback: built });
+  const outgoing = { ...built, ...message, to: input.toEmail };
   return deliver(
     "mentee_exemption_confirm",
-    { ...built, ...message, to: input.toEmail },
+    // Thư thử (không có mã) phải ghi rõ là thư thử và không để lại nút trông như bấm được.
+    input.token ? outgoing : markAsTestEmail(outgoing, link),
     input.exemptionId ? { table: "mentee_exemptions", id: input.exemptionId } : null
   );
 }

@@ -2054,6 +2054,36 @@ export function buildMenteeExemptionConfirmEmail(input: {
   return { to: "", subject, text: lines.join("\n"), html };
 }
 
+/** Tiền tố tiêu đề và lời báo ở đầu một thư GỬI THỬ cho ban tổ chức. */
+export const TEST_EMAIL_SUBJECT_PREFIX = "[THƯ THỬ] ";
+export const TEST_EMAIL_NOTICE =
+  "Đây là thư GỬI THỬ cho ban tổ chức, chỉ để xem thư hiển thị thế nào. Thư thật gửi tới từng bạn có đường dẫn xác nhận riêng và bấm được; trong thư thử này nút không bấm được.";
+
+/**
+ * Biến một thư thành thư THỬ: tiêu đề có [THƯ THỬ], đầu thư có khung báo, và nút mang đường dẫn
+ * giữ chỗ mất thuộc tính href.
+ *
+ * Vì sao: thư thử cố ý không mang link thật nào ("không link thật nào rời hệ thống"), nên đường
+ * dẫn của nó là một câu giữ chỗ. Câu đó nằm trong href thì nút trông như bấm được, bấm vào ra
+ * một trang lỗi của trình duyệt — người thử tưởng LINK THẬT hỏng và đòi sửa. Bỏ href thì nút
+ * không còn là đường dẫn, và khung báo nói thẳng lý do. Thư thật không đi qua hàm này.
+ *
+ * `placeholder` là đúng câu giữ chỗ đã được đặt vào thư (kể cả thư theo mẫu BTC tự sửa, vì bước
+ * gắn giá trị vào mẫu không đổi câu đó). Hàm chỉ gỡ href mang đúng câu ấy; mọi href khác giữ nguyên.
+ */
+export function markAsTestEmail<T extends { subject: string; text: string; html: string }>(message: T, placeholder: string): T {
+  const banner =
+    `<p style="margin:0 0 16px;padding:10px 12px;background:#fff4d6;border:1px solid #e0b84a;border-radius:6px;color:#6b4e00">` +
+    `<strong>THƯ THỬ.</strong> ${escapeHtml(TEST_EMAIL_NOTICE)}</p>`;
+  const disabledHref = `href="${escapeHtml(placeholder)}"`;
+  return {
+    ...message,
+    subject: message.subject.startsWith(TEST_EMAIL_SUBJECT_PREFIX) ? message.subject : `${TEST_EMAIL_SUBJECT_PREFIX}${message.subject}`,
+    text: `[THƯ THỬ] ${TEST_EMAIL_NOTICE}\n\n${message.text}`,
+    html: banner + message.html.split(disabledHref).join("")
+  };
+}
+
 /**
  * Thư báo MỞ LẠI chọn ca — cho mentee đã nhận thư mời nhưng chưa chọn ca trước
  * hạn chung (BTC 02/10/2026: 72 bạn, hạn mới 20:00 ngày 03/10).

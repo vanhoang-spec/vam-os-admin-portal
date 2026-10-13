@@ -163,6 +163,10 @@ export function ExemptionSendPanel(props: SendPanelProps) {
         <Submit label="Gửi thử cho tôi" pendingLabel="Đang gửi thử…" />
         <Message state={testState} />
       </form>
+      <p className="text-xs text-slate-500" data-testid="exemption-test-note">
+        Thư thử gửi về hộp thư của bạn, tiêu đề có [THƯ THỬ], chỉ để xem thư hiển thị thế nào — nút xác nhận trong thư thử cố ý không bấm được.
+        Thư thật gửi tới từng bạn có đường dẫn xác nhận riêng và bấm được.
+      </p>
       {blocked ? (
         <p className="text-sm text-amber-700">{blocked}</p>
       ) : confirming ? (
