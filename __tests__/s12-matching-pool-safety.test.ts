@@ -90,7 +90,6 @@ type Row = Record<string, any>;
 
 const db: {
   applications: Row[];
-  person_season_memberships: Row[];
   mentor_profiles: Row[];
   mentee_profiles: Row[];
   mentee_profilesAlias?: Row[];
@@ -101,7 +100,6 @@ const db: {
   insertError: Row | null;
 } = {
   applications: [],
-  person_season_memberships: [],
   mentor_profiles: [],
   mentee_profiles: [],
   matches: [],
@@ -227,15 +225,15 @@ function seed() {
 
   db.applications = [
     // A renewal mentor: approved in S12, but the application carries NO batch.
-    { id: "app-r", season_id: S12, person_id: P_RENEWAL_MENTOR, role_applied: "mentor", status: "approved_as_mentor", intake_batch_id: null },
+    { id: "app-r", season_id: S12, person_id: P_RENEWAL_MENTOR, status: "approved_as_mentor", intake_batch_id: null },
     // A form mentor: approved in S12, batch present.
-    { id: "app-f", season_id: S12, person_id: P_FORM_MENTOR, role_applied: "mentor", status: "approved_as_mentor", intake_batch_id: B1 },
+    { id: "app-f", season_id: S12, person_id: P_FORM_MENTOR, status: "approved_as_mentor", intake_batch_id: B1 },
     // Approved as a mentor in S11 ONLY. Must never be matchable in S12.
-    { id: "app-o", season_id: S11, person_id: P_OTHER_SEASON_MENTOR, role_applied: "mentor", status: "approved_as_mentor", intake_batch_id: B_OLD },
+    { id: "app-o", season_id: S11, person_id: P_OTHER_SEASON_MENTOR, status: "approved_as_mentor", intake_batch_id: B_OLD },
     // Reached interview but was never approved.
-    { id: "app-u", season_id: S12, person_id: P_UNAPPROVED_MENTOR, role_applied: "mentor", status: "interview_passed", intake_batch_id: B1 },
-    { id: "app-e", season_id: S12, person_id: P_MENTEE, role_applied: "mentee", status: "approved_as_mentee", intake_batch_id: B1 },
-    { id: "app-eu", season_id: S12, person_id: P_UNAPPROVED_MENTEE, role_applied: "mentee", status: "ready_for_final_decision", intake_batch_id: B1 }
+    { id: "app-u", season_id: S12, person_id: P_UNAPPROVED_MENTOR, status: "interview_passed", intake_batch_id: B1 },
+    { id: "app-e", season_id: S12, person_id: P_MENTEE, status: "approved_as_mentee", intake_batch_id: B1 },
+    { id: "app-eu", season_id: S12, person_id: P_UNAPPROVED_MENTEE, status: "ready_for_final_decision", intake_batch_id: B1 }
   ];
 
   db.mentor_profiles = [
@@ -262,7 +260,6 @@ function seed() {
     { id: P_UNAPPROVED_MENTEE, full_name: "Unapproved Mentee", email_primary: "eu@x.vn", phone_primary: null }
   ];
 
-  db.person_season_memberships = [];
   db.matches = [];
   db.inserted = [];
   db.insertError = null;
@@ -591,220 +588,5 @@ describe("createManualMatch — pre-existing guards preserved", () => {
     expect(result.message).toContain("Hồ sơ mentor/mentee thiếu person_id");
     // The replaced string was mojibake; guard against it coming back.
     expect(result.message).not.toContain("Ã");
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MENTEE CHUYỂN TIẾP (BTC 13/10/2026) — tư cách mentee đang hoạt động, KHÔNG có đơn mùa này
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// Mentee mùa 11 tiếp tục mùa 12 không điền form mới. Trên production: 12 người có tư cách
-// mentee đang hoạt động ở S12 (ghi lý do "Tiếp tục tham gia Mùa 12"), hồ sơ mentee cũ, và
-// KHÔNG có đơn S12. Danh sách ghép tay chỉ đọc đơn đã duyệt nên loại cả 12 người đó.
-
-const P_CONT = "00000000-0000-4000-8000-000000000601";
-const P_CONT_WITHDRAWN = "00000000-0000-4000-8000-000000000602";
-const P_CONT_PENDING_APP = "00000000-0000-4000-8000-000000000603";
-const P_CONT_OTHER_SEASON = "00000000-0000-4000-8000-000000000604";
-const P_CONT_MENTOR_ROLE = "00000000-0000-4000-8000-000000000605";
-const P_CONT_ALSO_MENTOR = "00000000-0000-4000-8000-000000000606";
-const EPROF_CONT_ALSO_MENTOR = "00000000-0000-4000-8000-000000000706";
-const EPROF_CONT = "00000000-0000-4000-8000-000000000701";
-const EPROF_CONT_WITHDRAWN = "00000000-0000-4000-8000-000000000702";
-const EPROF_CONT_PENDING = "00000000-0000-4000-8000-000000000703";
-const EPROF_CONT_OTHER = "00000000-0000-4000-8000-000000000704";
-const EPROF_CONT_MENTOR_ROLE = "00000000-0000-4000-8000-000000000705";
-
-function seedContinuing() {
-  const profile = (id: string, person: string, code: string) => ({
-    id, person_id: person, mentee_code: code, intake_batch_id: B_OLD, school_code: "UEH", major: "Mkt"
-  });
-  db.mentee_profiles.push(
-    profile(EPROF_CONT, P_CONT, "C-1"),
-    profile(EPROF_CONT_WITHDRAWN, P_CONT_WITHDRAWN, "C-2"),
-    profile(EPROF_CONT_PENDING, P_CONT_PENDING_APP, "C-3"),
-    profile(EPROF_CONT_OTHER, P_CONT_OTHER_SEASON, "C-4"),
-    profile(EPROF_CONT_MENTOR_ROLE, P_CONT_MENTOR_ROLE, "C-5"),
-    profile(EPROF_CONT_ALSO_MENTOR, P_CONT_ALSO_MENTOR, "C-6")
-  );
-  db.people.push(
-    { id: P_CONT, full_name: "Continuing Mentee", email_primary: "c1@x.vn", phone_primary: null },
-    { id: P_CONT_WITHDRAWN, full_name: "Withdrawn Continuing", email_primary: "c2@x.vn", phone_primary: null },
-    { id: P_CONT_PENDING_APP, full_name: "Pending Application", email_primary: "c3@x.vn", phone_primary: null },
-    { id: P_CONT_OTHER_SEASON, full_name: "Other Season Member", email_primary: "c4@x.vn", phone_primary: null },
-    { id: P_CONT_MENTOR_ROLE, full_name: "Mentor Role Member", email_primary: "c5@x.vn", phone_primary: null },
-    { id: P_CONT_ALSO_MENTOR, full_name: "Also A Mentor", email_primary: "c6@x.vn", phone_primary: null }
-  );
-  const member = (id: string, person: string, season: string, role: string, status: string) =>
-    ({ id, person_id: person, season_id: season, role, status });
-  db.person_season_memberships.push(
-    // Đúng ca cần ghép: đang hoạt động, mentee, đúng mùa, không đơn nào của mùa này.
-    member("m-cont", P_CONT, S12, "mentee", "active"),
-    // Đã rút: không còn tiếp tục.
-    member("m-wd", P_CONT_WITHDRAWN, S12, "mentee", "withdrawn"),
-    // Có đơn đang chờ chốt: đơn là nguồn quyết định, tư cách đang hoạt động không vượt mặt được.
-    member("m-pend", P_CONT_PENDING_APP, S12, "mentee", "active"),
-    // Tư cách của mùa khác.
-    member("m-other", P_CONT_OTHER_SEASON, S11, "mentee", "active"),
-    // Tư cách mentor, không phải mentee.
-    member("m-mentor", P_CONT_MENTOR_ROLE, S12, "mentor", "active"),
-    member("m-also", P_CONT_ALSO_MENTOR, S12, "mentee", "active")
-  );
-  db.applications.push(
-    // Có đơn MENTOR của mùa nhưng không có đơn MENTEE: vẫn là mentee chuyển tiếp. Chỉ đơn mentee
-    // mới nói "bạn đã điền form mentee mùa này"; đơn vai trò khác không được che bạn đi.
-    { id: "app-also-mentor", season_id: S12, person_id: P_CONT_ALSO_MENTOR, role_applied: "mentor", status: "approved_as_mentor", intake_batch_id: B1 },
-    { id: "app-pend", season_id: S12, person_id: P_CONT_PENDING_APP, role_applied: "mentee", status: "ready_for_final_decision", intake_batch_id: B1 },
-    // Đơn mùa 11 của chính bạn chuyển tiếp: đơn của mùa KHÁC không được coi là "có đơn mùa này".
-    { id: "app-cont-s11", season_id: S11, person_id: P_CONT, role_applied: "mentee", status: "approved_as_mentee", intake_batch_id: B_OLD }
-  );
-}
-
-/** Làm một bảng đọc ra lỗi — cùng cách bài "fails closed" ở trên. */
-function failReadsOf(table: string, onlyNthRead?: number) {
-  const failing = makeFakeClient();
-  const original = failing.from;
-  let reads = 0;
-  failing.from = vi.fn((name: string) => {
-    const q = original(name) as Row;
-    if (name === table) {
-      reads += 1;
-      if (onlyNthRead === undefined || reads === onlyNthRead) {
-        q.then = (resolve: unknown) => Promise.resolve({ data: null, error: { message: "boom" } }).then(resolve as never);
-      }
-    }
-    return q;
-  }) as never;
-  (getSupabaseServiceRoleClient as Mock).mockReturnValue(failing);
-  vi.spyOn(console, "error").mockImplementation(() => undefined);
-}
-
-describe("mentee chuyển tiếp — danh sách ghép tay", () => {
-  beforeEach(() => seedContinuing());
-
-  it("hiện bạn có tư cách mentee đang hoạt động mà không có đơn mùa này, gắn cờ chuyển tiếp", async () => {
-    const result = await getManualMatchingCandidates(B1);
-
-    expect(result.ok).toBe(true);
-    const cont = result.mentees.find((m) => m.profile_id === EPROF_CONT);
-    expect(cont).toBeDefined();
-    expect(cont?.continuing).toBe(true);
-    expect(cont?.person_id).toBe(P_CONT);
-    expect(cont?.full_name).toBe("Continuing Mentee");
-    expect(cont?.has_active_match).toBe(false);
-  });
-
-  it("mentee có đơn đã duyệt vẫn hiện và KHÔNG bị gắn cờ chuyển tiếp", async () => {
-    const result = await getManualMatchingCandidates(B1);
-    const approved = result.mentees.find((m) => m.profile_id === EPROF_MENTEE);
-    expect(approved).toBeDefined();
-    expect(approved?.continuing).toBe(false);
-  });
-
-  it("KHÔNG hiện tư cách đã rút, mùa khác, vai trò mentor, hay người có đơn đang chờ chốt", async () => {
-    const ids = (await getManualMatchingCandidates(B1)).mentees.map((m) => m.profile_id);
-
-    expect(ids).not.toContain(EPROF_CONT_WITHDRAWN);
-    expect(ids).not.toContain(EPROF_CONT_OTHER);
-    expect(ids).not.toContain(EPROF_CONT_MENTOR_ROLE);
-    expect(ids).not.toContain(EPROF_CONT_PENDING);
-    // Người ngoài tập chuyển tiếp vẫn bị loại như trước.
-    expect(ids).not.toContain(EPROF_UNAPPROVED);
-  });
-
-  it("đơn mentor của mùa không che bạn chuyển tiếp: chỉ đơn MENTEE mới tính là đã điền form", async () => {
-    const also = (await getManualMatchingCandidates(B1)).mentees.find((m) => m.profile_id === EPROF_CONT_ALSO_MENTOR);
-    expect(also?.continuing).toBe(true);
-  });
-
-  it("đơn mùa KHÁC của chính bạn không làm mất cờ chuyển tiếp", async () => {
-    // app-cont-s11 là đơn S11 đã duyệt của P_CONT: nếu đọc đơn không lọc mùa thì bạn bị coi là
-    // "đã có đơn" và rơi khỏi danh sách.
-    const cont = (await getManualMatchingCandidates(B1)).mentees.find((m) => m.profile_id === EPROF_CONT);
-    expect(cont?.continuing).toBe(true);
-  });
-
-  it("bạn chuyển tiếp đã có mentor thì hiện 'đã có mentor' như mọi mentee", async () => {
-    db.matches.push({ id: "m-x", season_id: S12, mentor_person_id: P_FORM_MENTOR, mentee_person_id: P_CONT, status: "active" });
-    const cont = (await getManualMatchingCandidates(B1)).mentees.find((m) => m.profile_id === EPROF_CONT);
-    expect(cont?.has_active_match).toBe(true);
-  });
-
-  it("không đọc được tư cách tham gia thì cả danh sách báo lỗi, KHÔNG lặng lẽ thiếu bạn chuyển tiếp", async () => {
-    failReadsOf("person_season_memberships");
-
-    const result = await getManualMatchingCandidates(B1);
-
-    expect(result.ok).toBe(false);
-    expect(result.error).toBeTruthy();
-    expect(result.mentees).toHaveLength(0);
-  });
-
-  it("không đọc được đơn mentee thì báo lỗi, KHÔNG coi mọi người đang chờ duyệt là chuyển tiếp", async () => {
-    // Lần đọc đơn thứ nhất (đơn đã duyệt) vẫn tốt; lần thứ hai (mọi đơn mentee của mùa) hỏng.
-    failReadsOf("applications", 2);
-
-    const result = await getManualMatchingCandidates(B1);
-
-    expect(result.ok).toBe(false);
-    // Nếu lỗi bị nuốt, người có đơn chờ chốt (tư cách vẫn active) sẽ lọt vào đây.
-    expect(result.mentees.map((m) => m.profile_id)).not.toContain(EPROF_CONT_PENDING);
-  });
-});
-
-describe("mentee chuyển tiếp — tạo cặp", () => {
-  beforeEach(() => seedContinuing());
-
-  it("ghép được bạn chuyển tiếp với mentor đã duyệt: ghi đúng một cặp active của mùa", async () => {
-    const result = await create(MPROF_FORM, EPROF_CONT);
-
-    expect(result.ok).toBe(true);
-    expect(db.inserted).toHaveLength(1);
-    expect(db.inserted[0]).toMatchObject({
-      season_id: S12,
-      mentor_person_id: P_FORM_MENTOR,
-      mentee_person_id: P_CONT,
-      status: "active"
-    });
-  });
-
-  it.each([
-    ["tư cách đã rút", EPROF_CONT_WITHDRAWN],
-    ["tư cách của mùa khác", EPROF_CONT_OTHER],
-    ["tư cách mentor", EPROF_CONT_MENTOR_ROLE],
-    ["người có đơn đang chờ chốt", EPROF_CONT_PENDING]
-  ])("từ chối ở bước ghi, dù ai đó gửi thẳng hồ sơ: %s", async (_label, profileId) => {
-    const result = await create(MPROF_FORM, profileId);
-
-    expect(result.ok).toBe(false);
-    expect(result.message).toContain("Mentee này chưa được duyệt chính thức");
-    expect(db.inserted).toHaveLength(0);
-  });
-
-  it("vẫn một mentee một mentor: bạn chuyển tiếp đã có cặp active thì bị từ chối", async () => {
-    db.matches.push({ id: "m-x", season_id: S12, mentor_person_id: P_FORM_MENTOR, mentee_person_id: P_CONT, status: "active" });
-
-    const result = await create(MPROF_FORM, EPROF_CONT);
-
-    expect(result.ok).toBe(false);
-    expect(db.inserted).toHaveLength(0);
-  });
-
-  it("vẫn tôn trọng sức nhận của mentor: mentor sức nhận 1 đã có 1 mentee thì không ghép thêm bạn chuyển tiếp", async () => {
-    db.matches.push({ id: "m-y", season_id: S12, mentor_person_id: P_RENEWAL_MENTOR, mentee_person_id: P_MENTEE, status: "active" });
-
-    const result = await create(MPROF_RENEWAL, EPROF_CONT);
-
-    expect(result.ok).toBe(false);
-    expect(db.inserted).toHaveLength(0);
-  });
-
-  it("không đọc được tư cách tham gia ở bước ghi thì từ chối, không coi là đã duyệt", async () => {
-    failReadsOf("person_season_memberships");
-
-    const result = await create(MPROF_FORM, EPROF_CONT);
-
-    expect(result.ok).toBe(false);
-    expect(db.inserted).toHaveLength(0);
   });
 });

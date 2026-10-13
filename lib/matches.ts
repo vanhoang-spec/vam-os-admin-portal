@@ -7,7 +7,6 @@ import { canAccessSeason, canOperateAnyScope, getAdminScopeContext, getAllowedSe
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { MatchingRoundFilter } from "@/lib/matching-round";
 import { effectiveMentorCapacity } from "@/lib/mentor-capacity";
-import { continuingMenteePersonIds } from "@/lib/continuing-mentee-core";
 import type { JsonRecord, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { vietnamDateKey } from "@/lib/utils";
 
@@ -53,12 +52,6 @@ export type MenteeCandidate = {
   school_code: string | null;
   major: string | null;
   has_active_match: boolean;
-  /**
-   * Mentee chuyển tiếp từ mùa trước: có tư cách mentee đang hoạt động trong mùa nhưng không
-   * có đơn mùa này (lib/continuing-mentee-core.ts). Màn hình dùng để gắn nhãn và để nói đúng
-   * lý do khi bấm "Xem hồ sơ" (khung đó đọc đơn mùa, mà bạn này không có).
-   */
-  continuing: boolean;
 };
 
 export type MatchCandidates = {
@@ -191,86 +184,6 @@ function dedupeProfilesByPerson(rows: JsonRecord[]): JsonRecord[] {
 }
 
 /**
- * Mentee chuyển tiếp của một mùa: tư cách mentee ĐANG HOẠT ĐỘNG trong mùa mà không có đơn
- * mentee nào của mùa đó (mọi trạng thái) — xem lib/continuing-mentee-core.ts. Mentee mùa trước
- * tiếp tục không điền form mới, nên đọc eligibility từ đơn đã duyệt thì loại họ ra.
- *
- * Hai cách đọc cho CÙNG một luật:
- *   - `personIds` có (đường GHI, hai người): một lượt `.in()` bị chặn bởi số id truyền vào.
- *   - không có (danh sách ứng viên): cả mùa, đọc phân trang đến hết — hàng nghìn dòng,
- *     không được để PostgREST cắt lặng lẽ ở 1000 (lib/paged-read.ts).
- *
- * Fail-closed: không đọc được một trong hai bảng thì trả { ok: false }. "Không đọc được đơn"
- * mà coi như "không có đơn" sẽ biến mọi người đang chờ duyệt thành mentee chuyển tiếp.
- */
-async function loadContinuingMentees(
-  client: any,
-  seasonId: string,
-  personIds?: string[]
-): Promise<{ ok: true; ids: Set<string> } | { ok: false }> {
-  let members: JsonRecord[];
-  let applicants: JsonRecord[];
-
-  if (personIds) {
-    const ids = uniqueStrings(personIds);
-    if (!ids.length) return { ok: true, ids: new Set() };
-    const [memberRes, applicantRes] = await Promise.all([
-      client
-        .from("person_season_memberships")
-        .select("person_id")
-        .eq("season_id", seasonId)
-        .eq("role", "mentee")
-        .eq("status", "active")
-        .in("person_id", ids)
-        .limit(100),
-      client
-        .from("applications")
-        .select("person_id")
-        .eq("season_id", seasonId)
-        .eq("role_applied", "mentee")
-        .in("person_id", ids)
-        .limit(100)
-    ]);
-    if (memberRes.error || applicantRes.error) {
-      log("continuing mentee lookup failed", memberRes.error ?? applicantRes.error);
-      return { ok: false };
-    }
-    members = (memberRes.data ?? []) as JsonRecord[];
-    applicants = (applicantRes.data ?? []) as JsonRecord[];
-  } else {
-    const [memberRes, applicantRes] = await Promise.all([
-      readAllPages<JsonRecord>("person_season_memberships", "id,person_id", (projection) =>
-        client
-          .from("person_season_memberships")
-          .select(projection)
-          .eq("season_id", seasonId)
-          .eq("role", "mentee")
-          .eq("status", "active")
-      ),
-      readAllPages<JsonRecord>("applications", "id,person_id", (projection) =>
-        client.from("applications").select(projection).eq("season_id", seasonId).eq("role_applied", "mentee")
-      )
-    ]);
-    if (memberRes.error || applicantRes.error) {
-      log("continuing mentee pool read failed", memberRes.error ?? applicantRes.error);
-      return { ok: false };
-    }
-    members = memberRes.data;
-    applicants = applicantRes.data;
-  }
-
-  return {
-    ok: true,
-    ids: new Set(
-      continuingMenteePersonIds({
-        activeMenteeMembers: members.map((row) => clean(row.person_id)),
-        menteeApplicants: applicants.map((row) => clean(row.person_id))
-      })
-    )
-  };
-}
-
-/**
  * Independently re-checks that a person holds an approved application of the
  * required kind in this season, on the mutation path.
  *
@@ -310,14 +223,6 @@ async function loadSeasonApprovals(
     if (status === APPROVED_MENTOR_STATUS) mentors.add(personId);
     if (status === APPROVED_MENTEE_STATUS) mentees.add(personId);
   }
-
-  // Mentee chuyển tiếp không có đơn nào để "duyệt": tư cách mentee đang hoạt động của mùa là
-  // bằng chứng duy nhất. Kiểm lại ở đây, không tin ô chọn trên màn hình (CLAUDE.md: cái đến
-  // từ biểu mẫu là thứ người gửi tự đặt được).
-  const continuing = await loadContinuingMentees(client, seasonId, ids);
-  if (!continuing.ok) return { ok: false };
-  for (const personId of Array.from(continuing.ids)) mentees.add(personId);
-
   return { ok: true, mentors, mentees };
 }
 
@@ -615,11 +520,6 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
     return { ...empty, ok: false, error: SAFE_ERROR };
   }
 
-  // Mentee mùa trước tiếp tục (không điền form mới) không có đơn nào, nên không bao giờ nằm
-  // trong `approvedApps` dù tư cách mentee của mùa đã có sẵn: đọc thêm từ tư cách mùa.
-  const continuing = await loadContinuingMentees(client, selectedSeasonId);
-  if (!continuing.ok) return { ...empty, ok: false, error: SAFE_ERROR };
-
   // Sorted so a person holding more than one approved application resolves the
   // same way on every load rather than following arrival order.
   const approvedMentorPersonIds = uniqueStrings(
@@ -627,12 +527,11 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
       .filter((row) => String(row.status ?? "") === APPROVED_MENTOR_STATUS)
       .map((row) => clean(row.person_id))
   ).sort();
-  const approvedMenteePersonIds = uniqueStrings([
-    ...approvedApps.data
+  const approvedMenteePersonIds = uniqueStrings(
+    approvedApps.data
       .filter((row) => String(row.status ?? "") === APPROVED_MENTEE_STATUS)
-      .map((row) => clean(row.person_id)),
-    ...Array.from(continuing.ids)
-  ]).sort();
+      .map((row) => clean(row.person_id))
+  ).sort();
 
   const [mentorProfileRows, menteeProfileRows, activeMatchesRes] = await Promise.all([
     approvedMentorPersonIds.length
@@ -728,8 +627,7 @@ export async function getManualMatchingCandidates(intakeBatchId: string, scope?:
       mentee_code: (mp.mentee_code as string | null) ?? null,
       school_code: (mp.school_code as string | null) ?? null,
       major: (mp.major as string | null) ?? null,
-      has_active_match: Boolean(mp.person_id && activelyMatchedMenteePersonIds.has(mp.person_id as string)),
-      continuing: Boolean(mp.person_id && continuing.ids.has(mp.person_id as string))
+      has_active_match: Boolean(mp.person_id && activelyMatchedMenteePersonIds.has(mp.person_id as string))
     };
   }).sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "vi"));
 

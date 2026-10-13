@@ -10,7 +10,6 @@ import type { MatchActionState } from "@/lib/match-action-types";
 import { filterMentees, filterMentors } from "@/lib/match-search";
 import type { QuickViewPayload } from "@/lib/matching-quick-view-core";
 import type { MenteeCandidate, MentorCandidate } from "@/lib/matches";
-import { CONTINUING_MENTEE_LABEL, CONTINUING_MENTEE_QUICK_VIEW_MESSAGE } from "@/lib/continuing-mentee-core";
 import { QuickViewDrawer } from "./quick-view-drawer";
 
 const initialState: MatchActionState = { ok: false, message: null };
@@ -116,14 +115,6 @@ export function ManualMatchForm({
     setQuickView({ role, title });
     setQuickViewPayload(null);
     setQuickViewError(null);
-
-    // Mentee chuyển tiếp không điền form mùa này: khung xem nhanh đọc ĐƠN của mùa nên máy chủ
-    // chỉ có thể trả "chưa được duyệt chính thức" — sai sự thật. Nói đúng lý do, không gọi máy chủ.
-    if (role === "mentee" && selectedMentee?.continuing) {
-      setQuickViewError(CONTINUING_MENTEE_QUICK_VIEW_MESSAGE);
-      setQuickViewLoading(false);
-      return;
-    }
 
     if (!personId) {
       setQuickViewError("Hồ sơ này chưa gắn person_id nên không thể xem chi tiết.");
@@ -290,7 +281,6 @@ export function ManualMatchForm({
                 <option key={m.profile_id} value={m.profile_id} disabled={hasMatch}>
                   {`${m.full_name ?? m.email_primary ?? m.profile_id}`}
                   {m.school_code ? ` (${m.school_code})` : ""}
-                  {m.continuing ? ` — ${CONTINUING_MENTEE_LABEL}` : ""}
                   {hasMatch ? " — Đã có mentor" : ""}
                 </option>
               );
@@ -307,11 +297,6 @@ export function ManualMatchForm({
                 ) : (
                   <span className="rounded bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">Chưa có mentor</span>
                 )}
-                {selectedMentee.continuing ? (
-                  <span data-testid="continuing-mentee-badge" className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                    {CONTINUING_MENTEE_LABEL}
-                  </span>
-                ) : null}
                 <button
                   type="button"
                   onClick={() => void openQuickView("mentee")}
@@ -322,9 +307,8 @@ export function ManualMatchForm({
               </div>
             </div>
           ) : (
-            <p className="mt-1 text-[11px] text-slate-500" data-testid="mentee-pool-count">
+            <p className="mt-1 text-[11px] text-slate-500">
               Mentee chưa có mentor: {availableMentees.length}/{mentees.length}
-              {mentees.some((m) => m.continuing) ? ` · trong đó ${mentees.filter((m) => m.continuing).length} bạn ${CONTINUING_MENTEE_LABEL.toLowerCase()}` : ""}
             </p>
           )}
         </div>
