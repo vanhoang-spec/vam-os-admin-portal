@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction, loadOfflineCandidateDetailAction } from "@/app/actions/mentee-offline";
-import { detailCacheKey, normalizedPhone, openAtDeskAndMentor, roomDeskBounds, roomDeskLabel, roomLabel, sortCandidatesByArrival, takesElsewhere, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineCandidateDetail, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
+import { saveOfflineInterviewAction, lookupOfflineTicketAction, cancelMenteeBookingAction, moveMenteeBookingAction, loadOfflineCandidateDetailAction, decideNeedsReviewAction } from "@/app/actions/mentee-offline";
+import { btcCanDecide, detailCacheKey, isBtcDecision, normalizedPhone, BTC_DECISIONS, openAtDeskAndMentor, roomDeskBounds, roomDeskLabel, roomLabel, sortCandidatesByArrival, takesElsewhere, OFFLINE_GUIDE_PATH, OFFLINE_OUTCOMES, PROFILE_SCREENING_SCORES, type OfflineDashboard, type OfflineCandidate, type OfflineCandidateDetail, type OfflineOperation, type OfflineOutcome, type OfflineActionResult } from "@/lib/mentee-offline-core";
 import { formatDateTime, formatTime } from "@/lib/utils";
 import { recommendationLabel } from "@/lib/screening-decision";
 import { InterviewQrCamera } from "./qr-camera";
@@ -44,6 +44,9 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
   },[]);
   const [message,setMessage]=useState("");
   const [mine,setMine]=useState(false);
+  // Chỉ các hồ sơ người phỏng vấn để lại "Cần BTC xem xét thêm" — hàng chờ của Core team (12/10/2026).
+  const [needsReviewOnly,setNeedsReviewOnly]=useState(false);
+  const needsReviewCount=data.candidates.filter(c=>c.operation?.outcome==="needs_review").length;
   // Hồ sơ chi tiết đã tải (đơn đăng ký + phiếu chấm), theo detailCacheKey. Nằm ở đây
   // chứ không trong CandidatePanel: panel dựng lại sau mỗi lần lưu, còn màn hình thì
   // sống suốt buổi — mở lại một bạn đã xem không phải tải lần nữa.
@@ -65,7 +68,7 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
     } catch {setMessage("Không tra được vé, kiểm tra kết nối rồi thử lại.");}
   },[data.candidates,router,setSelected]);
   // Ca sớm trước; trong ca, ai check-in trước đứng trước (BTC 04/10/2026).
-  const visible=sortCandidatesByArrival(data.candidates.filter(c=>(!session || c.sessionId===session) && (!mine || c.operation?.interviewer_id===data.actorId) &&
+  const visible=sortCandidatesByArrival(data.candidates.filter(c=>(!session || c.sessionId===session) && (!mine || c.operation?.interviewer_id===data.actorId) && (!needsReviewOnly || c.operation?.outcome==="needs_review") &&
     matchesTableQuery([c.name, c.phone, normalizedPhone(c.phone??"")], query)),data.sessions);
   const candidate=data.candidates.find(c=>c.id===selected);
   const currentMentor=data.participants.find(p=>p.id===data.actorId);
@@ -89,6 +92,7 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
       <label>Tìm tên hoặc số điện thoại<input className={field} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nhập tên hoặc SĐT" /></label>
     </div>
     <label className="flex items-center gap-2"><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)} />Chỉ ứng viên được phân cho tôi</label>
+    {(data.canOperate || data.canDecide) && <label className="flex items-center gap-2"><input type="checkbox" checked={needsReviewOnly} onChange={e=>setNeedsReviewOnly(e.target.checked)} />Chỉ hồ sơ cần BTC xem xét thêm ({needsReviewCount})</label>}
     <div className="vam-table-frame rounded-lg border bg-white"><table className="w-full text-left text-sm">
       <thead><tr className="bg-slate-100"><th className="p-3">Mentee / SĐT</th><th>Ca</th><th>Check-in / Bàn</th><th>Người phỏng vấn</th><th>Kết quả</th></tr></thead>
       <tbody>{visible.map(c=><tr key={c.id} className="border-t align-top">
@@ -104,7 +108,7 @@ export function OfflineDashboardClient({ data, initialApplication }: { data: Off
     {candidate && <CandidatePanel key={`${candidate.id}:${candidate.operation?.revision??0}`} candidate={candidate} data={data} detailCache={detailCache.current} close={()=>setSelected(null)} />}
     <details className="rounded-lg border bg-white p-4"><summary className="cursor-pointer font-semibold">Lịch sử thao tác — 200 lần gần nhất</summary>
       <div className="mt-3 grid gap-3">{data.logs.map(log=><details key={log.id} className="border-t pt-2">
-        <summary>{formatDateTime(log.created_at)} · {log.actor_name} · {log.candidate_name} · {({checkin:"Check-in",assign:"Phân bàn",result:"Lưu/sửa kết quả"} as Record<string,string>)[log.action]??log.action}</summary>
+        <summary>{formatDateTime(log.created_at)} · {log.actor_name} · {log.candidate_name} · {({checkin:"Check-in",assign:"Phân bàn",result:"Lưu/sửa kết quả",btc_decision:"BTC chốt kết quả"} as Record<string,string>)[log.action]??log.action}</summary>
         <p>Lý do: {log.reason??"—"}</p><AuditChange before={log.before_data} after={log.after_data} venue={data.sessions.find(s=>s.id===data.candidates.find(c=>c.id===log.application_id)?.sessionId)?.venue} />
       </details>)}</div>
     </details>
@@ -129,6 +133,54 @@ function AuditChange({before,after,venue}:{before:unknown;after:unknown;venue?:s
     <div>Phòng/bàn: {roomLabel(old?.operation?.room,venue)}/{old?.operation?.desk??"—"} → {roomLabel(next?.operation?.room,venue)}/{next?.operation?.desk??"—"}</div>
     <div>Ghép cặp: {old?.operation?.match_id ? "Có" : "Không"} → {next?.operation?.match_id ? "Có" : "Không"}</div>
   </dl>;
+}
+
+/**
+ * Ô của Core team: chốt kết quả cho hồ sơ người phỏng vấn để lại "Cần BTC xem xét thêm"
+ * (12/10/2026). Hai bước ngay tại chỗ — chọn + lý do, rồi xác nhận — vì đây là quyết định
+ * biến một bạn thành mentee của mùa hoặc loại bạn đó; lỗi hiện cạnh nút, không ở đầu hồ sơ.
+ * Quyền và mọi luật do vam119_btc_decide_needs_review kiểm lại; ô này chỉ là lời mời.
+ */
+function BtcDecisionBox({name,operation:op,busy,onDecide}:{name:string;operation:OfflineOperation;busy:boolean;onDecide:(outcome:string,reason:string)=>Promise<OfflineActionResult>}) {
+  const [choice,setChoice]=useState("");
+  const [reason,setReason]=useState("");
+  const [confirming,setConfirming]=useState(false);
+  const [error,setError]=useState("");
+  const decided=Boolean(op.btc_decided_at);
+  function ask() {
+    if(!isBtcDecision(choice)) {setError("Chọn kết quả: Đạt hoặc Không chọn.");return;}
+    if(!reason.trim()) {setError("Nhập lý do của quyết định — bắt buộc.");return;}
+    setError("");setConfirming(true);
+  }
+  async function confirm() {
+    const result=await onDecide(choice,reason.trim());
+    if(!result.ok) {setError(result.message);setConfirming(false);}
+  }
+  return <div className="grid gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3" data-testid="btc-decision">
+    <h3 className="font-semibold text-amber-900">BTC chốt kết quả</h3>
+    <p className="text-sm text-amber-900">{decided
+      ? "BTC đã chốt hồ sơ này. Nếu bấm nhầm, chọn kết quả còn lại và ghi lý do để đổi."
+      : "Người phỏng vấn để lại “Cần BTC xem xét thêm”. Đọc đơn đăng ký, điểm vòng hồ sơ và phiếu phỏng vấn ở trên rồi chốt."}</p>
+    <fieldset className="grid gap-2"><legend className="text-sm font-semibold">Kết quả BTC chốt</legend>
+      {(Object.keys(BTC_DECISIONS) as Array<keyof typeof BTC_DECISIONS>).map(key=><label key={key} className="flex items-center gap-2">
+        <input type="radio" name="btc-decision" value={key} checked={choice===key} disabled={busy || op.outcome===key}
+          onChange={()=>{setChoice(key);setConfirming(false);setError("");}} />{BTC_DECISIONS[key]}{op.outcome===key ? " (đang là kết quả này)" : ""}</label>)}
+    </fieldset>
+    <label className="grid gap-1 text-sm">Lý do của quyết định (bắt buộc)
+      <textarea rows={3} value={reason} disabled={busy} className={field} onChange={e=>{setReason(e.target.value);setConfirming(false);}} /></label>
+    {error && <p role="alert" className="text-red-700">{error}</p>}
+    {!confirming
+      ? <div><button type="button" className={button} disabled={busy} onClick={ask}>Chốt kết quả</button></div>
+      : <div role="group" aria-label="Xác nhận chốt kết quả" className="grid gap-2 rounded border border-amber-400 bg-white p-3">
+          <p>Xác nhận chốt <strong>{isBtcDecision(choice) ? BTC_DECISIONS[choice] : ""}</strong> cho <strong>{name}</strong>? {choice==="passed"
+            ? "Bạn này thành mentee của mùa và vào danh sách chờ mentor chọn ở Vòng 2."
+            : "Hồ sơ chuyển sang không được chọn làm mentee."}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={button} disabled={busy} onClick={()=>void confirm()}>Xác nhận chốt</button>
+            <button type="button" className="rounded border px-4 py-2" disabled={busy} onClick={()=>setConfirming(false)}>Quay lại</button>
+          </div>
+        </div>}
+  </div>;
 }
 
 /** Chỗ của đơn đăng ký khi hồ sơ chi tiết chưa về: đang tải, hoặc lỗi kèm nút thử lại. */
@@ -201,6 +253,19 @@ function CandidatePanel({candidate:c,data,detailCache,close}:{candidate:OfflineC
     } catch {setState({ok:false,message:"Mất kết nối. Tải lại để kiểm tra trước khi thử lại."});}
     finally {setBusy(false);}
   }
+  // Trả kết quả về cho ô chốt để lỗi hiện ngay cạnh nút; thành công thì trang làm mới và panel dựng lại.
+  async function decide(outcome:string,reason:string):Promise<OfflineActionResult> {
+    if(busy) return {ok:false,message:"Đang lưu, chờ một chút."};
+    setBusy(true);
+    try {
+      const result=await decideNeedsReviewAction({applicationId:c.id,revision:op?.revision??0,outcome,reason});
+      if(result.ok) {setState(result);router.refresh();}
+      return result;
+    } catch {
+      return {ok:false,message:"Mất kết nối. Tải lại để kiểm tra trước khi chốt lại."};
+    }
+    finally {setBusy(false);}
+  }
   async function cancelBooking(reason:string) {
     if(busy) return;
     setBusy(true);
@@ -256,9 +321,14 @@ function CandidatePanel({candidate:c,data,detailCache,close}:{candidate:OfflineC
     {op?.outcome && <div className="rounded bg-vam-mint/40 p-3">
       {detail
         ? <InterviewResultSummary review={review} operation={op} showWeighted={data.canOperate} />
-        : <p data-testid="result-pending">Kết quả: <strong>{OFFLINE_OUTCOMES[op.outcome]}</strong> · đang tải phiếu đã lưu…</p>}
-      {own && !editing && detail && <button className="mt-2 rounded border px-3 py-2" onClick={()=>setEditing(true)}>Sửa kết quả / lựa chọn mentee</button>}
+        : <p data-testid="result-pending">Kết quả: <strong>{OFFLINE_OUTCOMES[op.outcome]}</strong> · {detailError ? "chưa tải được phiếu đã lưu — bấm “Tải lại hồ sơ” ở trên." : "đang tải phiếu đã lưu…"}</p>}
+      {op.btc_decided_at && <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-sm" data-testid="btc-decided">
+        BTC đã chốt: <strong>{OFFLINE_OUTCOMES[op.outcome]}</strong> · {op.btc_decided_by_name ?? "BTC"} · {formatDateTime(op.btc_decided_at)}.
+        {" "}Người phỏng vấn để lại “{OFFLINE_OUTCOMES.needs_review}”. Lý do của BTC: <span className="whitespace-pre-wrap">{op.outcome_reason ?? "—"}</span></p>}
+      {/* BTC đã chốt thì người phỏng vấn không sửa đè được nữa (database cũng chặn: BTC_DECIDED). */}
+      {own && !editing && detail && !op.btc_decided_at && <button className="mt-2 rounded border px-3 py-2" onClick={()=>setEditing(true)}>Sửa kết quả / lựa chọn mentee</button>}
     </div>}
+    {data.canDecide && op && btcCanDecide(op) && <BtcDecisionBox name={c.name} operation={op} busy={busy} onDecide={decide} />}
     {own && editing && (data.rubric
       ? <InterviewResultForm rubric={data.rubric} review={review} operation={op} candidateName={c.name}
           mentorLabel={`${me?.full_name??"tài khoản hiện tại"}${me?.capacity!=null ? ` · ${me.activeMatches}/${me.capacity}` : " · chưa có hồ sơ mentor hợp lệ"}`}

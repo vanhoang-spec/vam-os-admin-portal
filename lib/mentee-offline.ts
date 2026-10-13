@@ -3,7 +3,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { flattenRawPayload, humanizeKey } from "@/lib/application-export";
-import { offlineError, parseOfflineQr, type OfflineActionResult, type OfflineDashboard, type OfflineDetailResult, type OfflineReview } from "@/lib/mentee-offline-core";
+import { isBtcDecision, offlineError, parseOfflineQr, type OfflineActionResult, type OfflineDashboard, type OfflineDetailResult, type OfflineReview } from "@/lib/mentee-offline-core";
 import { interviewWaves, resolveOfflineWave } from "@/lib/mentee-interview-waves";
 import { vietnamDateKey } from "@/lib/utils";
 import { sanitizeHandbookHtml } from "@/lib/handbook-html";
@@ -82,9 +82,12 @@ export async function getOfflineDashboard(scope: OfflineDashboardScope): Promise
     dashboard.seasonId=seasonId;
     dashboard.rubric=(guide.data as InterviewGuide | null)?.rubric ?? null;
     dashboard.logs=dashboard.logs ?? [];
+    // Chỉ đúng `true` từ database mới mở ô chốt của BTC — thiếu khoá (hàm cũ) hay giá trị lạ đều là không.
+    dashboard.canDecide=dashboard.canDecide===true;
     // Ai đã check-in cho từng bạn (BTC 04/10/2026): tên tài khoản Support/BTC. Danh sách
     // người phỏng vấn không chứa Support, nên đọc riêng đúng các tài khoản xuất hiện.
-    const checkinIds = Array.from(new Set(dashboard.candidates.map(c => String(c.operation?.checked_in_by ?? "")).filter(Boolean)));
+    // Cùng một lần đọc cho cả người check-in lẫn người BTC đã chốt kết quả (12/10/2026).
+    const checkinIds = Array.from(new Set(dashboard.candidates.flatMap(c => [String(c.operation?.checked_in_by ?? ""), String(c.operation?.btc_decided_by ?? "")]).filter(Boolean)));
     const names = new Map<string,string>();
     if (checkinIds.length) {
       const staff = await readAllPagesIn<{id:string;full_name:string|null;email:string|null}>(client,"admin_users","id",checkinIds,"id,full_name,email");
@@ -94,7 +97,10 @@ export async function getOfflineDashboard(scope: OfflineDashboardScope): Promise
     // `answers` cố ý vắng mặt: đó là dấu hiệu "hồ sơ chi tiết chưa tải" cho màn hình.
     dashboard.candidates=dashboard.candidates.map(c => ({...c,
       reviews:[],
-      operation: c.operation ? {...c.operation, checked_in_by_name: c.operation.checked_in_by ? names.get(String(c.operation.checked_in_by)) ?? null : null} : null
+      operation: c.operation ? {...c.operation,
+        checked_in_by_name: c.operation.checked_in_by ? names.get(String(c.operation.checked_in_by)) ?? null : null,
+        btc_decided_by_name: c.operation.btc_decided_by ? names.get(String(c.operation.btc_decided_by)) ?? null : null
+      } : null
     }));
     return {ok:true,data:dashboard};
   } catch (error) {
@@ -172,6 +178,33 @@ export async function saveOfflineInterview(input: {applicationId: string; action
     return {ok:true,message:String(data.message)};
   } catch (error) {
     return {ok:false,message:offlineError(error instanceof Error ? error.message : "")};
+  }
+}
+
+/**
+ * BTC chốt kết quả cho một hồ sơ "Cần BTC xem xét thêm" (12/10/2026): Đạt hoặc Không chọn,
+ * bắt buộc có lý do. Quyền (Core team trở lên, có quyền vận hành mùa) và mọi luật nằm trong
+ * vam119_btc_decide_needs_review — ở đây chỉ chặn sớm những thứ chắc chắn sai, để người dùng
+ * thấy lời nhắc đúng chỗ thay vì một mã lỗi.
+ */
+export async function decideNeedsReview(input: {applicationId: string; revision: number; outcome: string; reason: string}): Promise<OfflineActionResult> {
+  try {
+    if (!UUID.test(String(input.applicationId ?? ""))) throw new Error("NOT_NEEDS_REVIEW");
+    if (!isBtcDecision(input.outcome)) return {ok:false,message:"Chọn kết quả: Đạt hoặc Không chọn."};
+    const reason = String(input.reason ?? "").trim();
+    if (!reason) return {ok:false,message:"Nhập lý do của quyết định — bắt buộc."};
+    const {actor,client} = await context();
+    const {data,error} = await client.rpc("vam119_btc_decide_needs_review",{
+      p_actor:actor.id,p_application:input.applicationId,p_revision:input.revision,p_outcome:input.outcome,p_reason:reason
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error("WRITE_FAILED");
+    return {ok:true,message:input.outcome==="passed" ? "Đã chốt: Đạt — bạn này là mentee của mùa." : "Đã chốt: Không chọn làm mentee."};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    // ACCESS_DENIED ở đây không phải "chưa có quyền phỏng vấn": người gọi vào được màn hình, chỉ không được chốt.
+    if (message.includes("ACCESS_DENIED")) return {ok:false,message:"Chỉ Core team trở lên, có quyền vận hành mùa này, mới chốt được hồ sơ cần xem thêm."};
+    return {ok:false,message:offlineError(message)};
   }
 }
 

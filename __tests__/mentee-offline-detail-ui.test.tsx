@@ -184,6 +184,7 @@ describe("bạn ĐÃ có kết quả: phiếu đã lưu nằm trong hồ sơ chi
     render(<OfflineDashboardClient data={dashboard([scored()])} initialApplication="a" />);
     const p = within(panel("An"));
     expect(p.getByTestId("result-pending").textContent).toContain("Đạt làm mentee");
+    expect(p.getByTestId("result-pending").textContent).toContain("đang tải phiếu đã lưu");
     expect(p.queryByRole("button", { name: "Sửa kết quả / lựa chọn mentee" })).toBeNull();
     expect(p.queryByRole("button", { name: "Xác nhận kết quả" })).toBeNull();
     await act(async () => { pending.resolve(okDetail("Đơn", [SCREENING, SAVED_INTERVIEW])); });
@@ -211,7 +212,9 @@ describe("bạn ĐÃ có kết quả: phiếu đã lưu nằm trong hồ sơ chi
     const p = within(panel("An"));
     await waitFor(() => expect(p.getByTestId("detail-error")).toBeTruthy());
     expect(p.queryByRole("button", { name: "Sửa kết quả / lựa chọn mentee" })).toBeNull();
-    expect(p.getByTestId("result-pending")).toBeTruthy();
+    // Đã hỏng thì không được nói "đang tải" — người đọc sẽ ngồi chờ một thứ không đến.
+    expect(p.getByTestId("result-pending").textContent).toContain("chưa tải được phiếu đã lưu");
+    expect(p.getByTestId("result-pending").textContent).not.toContain("đang tải");
     fireEvent.click(p.getByRole("button", { name: "Tải lại hồ sơ" }));
     expect(await p.findByRole("button", { name: "Sửa kết quả / lựa chọn mentee" })).toBeTruthy();
   });
