@@ -14,7 +14,7 @@
  *     một hàm database với đúng mã;
  *   - trang BTC hiện đúng danh sách, đúng người được gợi ý, và ẩn nút khi chỉ được xem.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
@@ -529,6 +529,13 @@ describe("trang người nhận /xac-nhan-mentee/[token]", () => {
 });
 
 describe("trang BTC /applications/mentee-dac-cach", () => {
+  // Trang tự lấy giờ hiện tại để quyết định ai "đang chờ thư" (thư gần nhất cũ hơn 20 giờ
+  // thì gửi lại được), còn dữ liệu mẫu thì gắn với NOW. Đồng hồ phải đứng ở NOW: không thì
+  // bộ test xanh đúng ngày viết rồi tự đỏ sau 20 giờ — đã xảy ra, đỏ từ 12/10/2026 và chỉ
+  // lộ ra khi ghép main ngày 13/10. Chỉ giả Date; setTimeout để thật cho testing-library.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"], now: NOW }); });
+  afterEach(() => { vi.useRealTimers(); });
+
   const renderPage = async () => render(<>{await MenteeExemptionPage()}</>).container;
 
   it("hiện bốn con số, danh sách đúng thứ tự và đúng trạng thái từng dòng", async () => {
