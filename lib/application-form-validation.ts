@@ -2,21 +2,30 @@ export type SelectionValidation =
   | { ok: true }
   | { ok: false; message: string; fieldName: string; fieldLabel: string };
 
-export function validateMaxThreeWithOther({
+/**
+ * Một nhóm ô tick có lựa chọn "Khác": chọn "Khác" thì phải ghi rõ.
+ *
+ * `max` là trần số lựa chọn; bỏ trống là KHÔNG có trần. BTC 13/10/2026 bỏ trần cho
+ * "Ngành / chức năng phụ" của mentor (form đăng ký mới và form gia hạn); các nhóm khác
+ * vẫn giữ trần 3 qua validateMaxThreeWithOther.
+ */
+export function validateSelectionWithOther({
   values,
   otherText,
   fieldName,
-  fieldLabel
+  fieldLabel,
+  max
 }: {
   values: string[];
   otherText: string;
   fieldName: string;
   fieldLabel: string;
+  max?: number;
 }): SelectionValidation {
-  if (values.length > 3) {
+  if (max !== undefined && values.length > max) {
     return {
       ok: false,
-      message: "Bạn chỉ có thể chọn tối đa 3 lựa chọn.",
+      message: `Bạn chỉ có thể chọn tối đa ${max} lựa chọn.`,
       fieldName,
       fieldLabel
     };
@@ -30,6 +39,16 @@ export function validateMaxThreeWithOther({
     };
   }
   return { ok: true };
+}
+
+/** Trần 3 lựa chọn — dùng cho các nhóm vẫn giới hạn (ví dụ soft skills của mentee). */
+export function validateMaxThreeWithOther(input: {
+  values: string[];
+  otherText: string;
+  fieldName: string;
+  fieldLabel: string;
+}): SelectionValidation {
+  return validateSelectionWithOther({ ...input, max: 3 });
 }
 
 /** Server-side phone rule: exactly 10 ASCII digits. Never coerce to a number. */

@@ -135,7 +135,7 @@ describe("nút trên dòng 'Từ chối'", () => {
     id: IDS.invite, personId: IDS.person, personName: "Đặng Thụy Thanh Lan", personEmail: "lan@example.test", mentorCode: null,
     inviteSource: "s11_renewal", seasonCode: "UEHM-S12", inviteState: "declined", expiresAt: PAST, createdAt: "2026-08-29T04:30:44Z",
     applicationId: null, applicationStatus: null, renewalOutcome: "declined", membershipStatus: null, needsAttention: false,
-    attentionReason: null, diff: [], coreTeamNote: null, declineFeedback: null, commitmentsCompleted: null, canReopen: true, ...over
+    attentionReason: null, diff: [], coreTeamNote: null, declineFeedback: null, commitmentsCompleted: null, acceptanceMode: null, canReopen: true, ...over
   });
 
   it("dòng mở lại được: có nút 'Mở lại link gia hạn' mang đúng invite_id, không có nút Tạo lại/Thu hồi", () => {

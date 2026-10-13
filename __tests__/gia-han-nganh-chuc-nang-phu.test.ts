@@ -4,8 +4,10 @@
  * không dừng ở 20.
  *
  * Ô trên màn hình chỉ là gợi ý; cái đến từ biểu mẫu là thứ người gửi tự đặt được
- * (CLAUDE.md). Nên luật của ô mới — lựa chọn phải có thật, tối đa 3, "Khác" phải ghi rõ —
- * được soi ở đúng cổng ghi: validateRenewalAcceptance, hàm chạy trước khi gọi vam071.
+ * (CLAUDE.md). Nên luật của ô mới — lựa chọn phải có thật, "Khác" phải ghi rõ — được soi ở
+ * đúng cổng ghi: validateRenewalAcceptance, hàm chạy trước khi gọi vam071.
+ *
+ * 13/10/2026: BTC bỏ trần 3 lựa chọn. Hai luật còn lại giữ nguyên.
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -72,11 +74,9 @@ describe("ngành / chức năng phụ trên form gia hạn", () => {
     expect(payload.secondary_industries_functions).toEqual(["fmcg", "marketing"]);
   });
 
-  it("lựa chọn thứ tư bị từ chối, nói rõ mục nào", () => {
-    expect(validateRenewalAcceptance(acceptedForm(secondary("fmcg", "marketing", "data_analytics", "tech")))).toEqual({
-      ok: false,
-      message: "Ngành / chức năng phụ: Bạn chỉ có thể chọn tối đa 3 lựa chọn."
-    });
+  it("lựa chọn thứ tư (và thứ năm) được nhận: không còn trần 3", () => {
+    const five = ["fmcg", "marketing", "data_analytics", "tech", "product"];
+    expect(accepted(acceptedForm(secondary(...five))).secondary_industries_functions).toEqual(five);
   });
 
   it("giá trị không có trong danh sách bị từ chối — ô tick trên màn hình không phải phép kiểm", () => {
@@ -146,7 +146,7 @@ describe("ngành / chức năng phụ trên form gia hạn", () => {
     chain.maybeSingle = vi.fn(async () => ({ data: invite, error: null }));
     const client = { from: vi.fn(() => chain), rpc } as any;
 
-    const refused = await submitRenewalAccepted(token, acceptedForm(secondary("fmcg", "marketing", "data_analytics", "tech")), client);
+    const refused = await submitRenewalAccepted(token, acceptedForm(secondary("fmcg", "Chief Happiness Officer")), client);
     expect(refused.ok).toBe(false);
     expect(rpc).not.toHaveBeenCalled();
 

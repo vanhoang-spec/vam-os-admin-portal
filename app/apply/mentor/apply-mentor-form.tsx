@@ -217,10 +217,9 @@ function MentorFormBody({
         />
         <CheckboxGroupField
           name="secondary_industries_functions"
-          label="Ngành / chức năng phụ (nếu có, chọn tối đa 3)"
+          label="Ngành / chức năng phụ (nếu có)"
           options={[...MENTOR_INDUSTRY_OPTIONS, ...MENTOR_FUNCTION_OPTIONS]}
-          helpText="Chỉ chọn nếu có thêm chuyên môn phụ — không bắt buộc."
-          maxSelections={3}
+          helpText="Chỉ chọn nếu có thêm chuyên môn phụ — không bắt buộc, chọn bao nhiêu cũng được."
           otherInput={{
             name: "secondary_industries_functions_other",
             label: "Vui lòng ghi rõ kỹ năng/lĩnh vực khác"
