@@ -9,7 +9,7 @@ import { byGroupThenName, type Round2Row } from "@/lib/matching-round2-core";
 import { INDUSTRY_GROUPS, industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canBrowseOperations } from "@/lib/permissions";
 import { ClassifyPanel, GroupEditForm } from "./round2-forms";
-import { BulkGroupReview, MentorReviewCheckbox } from "./bulk-group-review";
+import { BulkGroupReview, ReviewCheckbox } from "./bulk-group-review";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +113,11 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
   const pendingMentors = board.pending.filter((r) => r.person.role === "mentor").length;
   const pendingMentees = board.pending.filter((r) => r.person.role === "mentee").length;
   const rows = filterRows(board.rows, search).sort(byGroupThenName);
+  // Duyệt hàng loạt áp cho MỘT vai trò mỗi lần, theo ô "Vai trò" của bộ lọc: đang xem mentee thì duyệt mentee.
+  // Xem cả hai vai trò thì giữ như cũ (mentor) và nhắc người dùng chọn vai trò — gộp hai vai trò vào một nút
+  // sẽ chạm trần 500 dòng của một lần duyệt và dễ duyệt nhầm.
+  const bulkRole: "mentor" | "mentee" = one(search.vai) === "mentee" ? "mentee" : "mentor";
+  const bulkNote = one(search.vai) === "" ? "Đang xem cả mentor và mentee: nút duyệt hàng loạt ở đây chỉ áp cho mentor. Chọn “Vai trò = Mentee” rồi bấm “Lọc” để duyệt hàng loạt mentee." : undefined;
   const proposalByGroup = INDUSTRY_GROUPS.map((g) => ({
     label: industryGroupLabel(g.code),
     mentors: board.pending.filter((r) => r.person.role === "mentor" && r.proposal.group === g.code).length,
@@ -217,9 +222,10 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
         {rows.length === 0 ? (
           <EmptyState message="Không có ai khớp bộ lọc." />
         ) : (
-          <BulkGroupReview enabled={canEditGroups} items={canEditGroups ? rows.filter((row) => row.person.role === "mentor" && row.person.eligible && row.assignment?.source === "auto").map((row) => ({
+          <BulkGroupReview enabled={canEditGroups} role={bulkRole} note={canEditGroups ? bulkNote : undefined} items={canEditGroups ? rows.filter((row) => row.person.role === bulkRole && row.person.eligible && row.assignment?.source === "auto").map((row) => ({
             assignmentId: row.assignment!.id, expectedGroup: row.assignment!.group,
-            expectedDrift: row.assignment!.driftGroup ?? null, name: row.person.name
+            expectedDrift: row.assignment!.driftGroup ?? null, name: row.person.name,
+            needsReview: row.assignment!.flags.includes(REVIEW_FLAG)
           })) : []}>
           <TableSearch placeholder="Tìm tên, email, chức danh, ngành học… không cần dấu">
             <div className="vam-table-frame overflow-x-auto rounded-lg border border-vam-line bg-white">
@@ -290,9 +296,10 @@ export default async function Round2GroupsPage(props: { searchParams?: Promise<S
                           ) : null}
                         </td>
                         {canEditGroups ? <td className="px-3 py-2" data-search-skip>
-                          {row.person.role === "mentor" && row.person.eligible && row.assignment?.source === "auto" ? (
-                            <MentorReviewCheckbox item={{ assignmentId: row.assignment.id, expectedGroup: row.assignment.group,
-                              expectedDrift: row.assignment.driftGroup ?? null, name: row.person.name }} />
+                          {row.person.role === bulkRole && row.person.eligible && row.assignment?.source === "auto" ? (
+                            <ReviewCheckbox item={{ assignmentId: row.assignment.id, expectedGroup: row.assignment.group,
+                              expectedDrift: row.assignment.driftGroup ?? null, name: row.person.name,
+                              needsReview: row.assignment.flags.includes(REVIEW_FLAG) }} />
                           ) : row.assignment?.source === "btc" ? <span className="text-xs text-vam-green">Đã duyệt</span> : null}
                         </td> : null}
                       </tr>

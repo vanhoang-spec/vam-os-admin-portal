@@ -256,22 +256,34 @@ function rpcMessage(error: { message?: string } | null | undefined): string {
   return code ? RPC_MESSAGES[code] : "Không lưu được. Thử lại; nếu vẫn lỗi, báo quản trị viên.";
 }
 
-export async function confirmMentorGroups(rows: GroupApproval[]): Promise<{ ok: boolean; message: string }> {
+/**
+ * Duyệt hàng loạt nhóm ngành cho MỘT vai trò. Hai vai trò đi chung một đường (cùng cổng quyền, cùng
+ * kiểm kết quả); khác nhau đúng hai thứ: hàm database (mỗi hàm chỉ nhận dòng của vai trò mình) và
+ * danh từ trong câu báo (chính là tên vai trò). BTC 13/10/2026 thêm mentee, cùng khuôn với mentor.
+ * Tên hàm viết thẳng ở hai lệnh rpc() chứ không để trong biến: bộ quét hợp đồng RPC của bản phát hành
+ * (rpc-release-contract) chỉ đọc được tên viết thẳng, nên mới kiểm được cả hai hàm đã có trên Production.
+ */
+async function confirmGroups(role: "mentor" | "mentee", rows: GroupApproval[]): Promise<{ ok: boolean; message: string }> {
   if (!parseGroupApprovals(rows)) return { ok: false, message: RPC_MESSAGES.INVALID_ROWS };
+  const noun = role;
   try {
     const { client, seasonId } = await round2SeasonContext();
     const actor = await round2GroupEditor(seasonId);
     if (!actor) return { ok: false, message: RPC_MESSAGES.ACCESS_DENIED };
-    const { data, error } = await client.rpc("vam115_confirm_mentor_groups", {
-      p_actor: actor.id, p_season: seasonId, p_rows: rows
-    });
+    const args = { p_actor: actor.id, p_season: seasonId, p_rows: rows };
+    const { data, error } = role === "mentee"
+      ? await client.rpc("vam122_confirm_mentee_groups", args)
+      : await client.rpc("vam115_confirm_mentor_groups", args);
     if (error) return { ok: false, message: rpcMessage(error) };
     if (data?.ok !== true || data?.approved !== rows.length) return { ok: false, message: "Chưa xác nhận được kết quả. Tải lại trang để kiểm tra." };
-    return { ok: true, message: `Đã ghi nhận BTC đã duyệt cho ${data.approved} mentor.` };
+    return { ok: true, message: `Đã ghi nhận BTC đã duyệt cho ${data.approved} ${noun}.` };
   } catch {
     return { ok: false, message: "Không duyệt được. Tải lại trang rồi thử lại." };
   }
 }
+
+export const confirmMentorGroups = (rows: GroupApproval[]) => confirmGroups("mentor", rows);
+export const confirmMenteeGroups = (rows: GroupApproval[]) => confirmGroups("mentee", rows);
 
 /** BTC bấm "Phân loại người mới": người chưa có nhóm được gán; người cũ chỉ ghi drift. */
 export async function classifyNewPeople(): Promise<{ ok: boolean; message: string }> {

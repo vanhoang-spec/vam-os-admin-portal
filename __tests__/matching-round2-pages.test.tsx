@@ -11,7 +11,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { render, within } from "@testing-library/react";
+import { fireEvent, render, within } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
@@ -46,7 +47,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import Round2GroupsPage from "@/app/matches/vong-2/page";
 import Round2ReportPage from "@/app/matches/vong-2/bao-cao/page";
-import { classifyNewAction, confirmMentorGroupsAction, setGroupAction } from "@/app/actions/matching-round2";
+import { classifyNewAction, confirmMenteeGroupsAction, confirmMentorGroupsAction, setGroupAction } from "@/app/actions/matching-round2";
 import { GET as exportRound2 } from "@/app/api/exports/matching-round2/route";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -56,6 +57,8 @@ const SEASON = "11111111-1111-4111-8111-111111111111";
 const PROGRAM = "33333333-3333-4333-8333-333333333333";
 const db = createFakeDb();
 let rpcCalls: Array<{ fn: string; args: any }> = [];
+let rpcError: { message: string } | null = null;
+let rpcApproved: number | null = null;
 
 function seed() {
   db.tables.seasons = [{ id: SEASON, code: "UEHM-S12", name: "UEH Mentoring Season 12", program_id: PROGRAM }];
@@ -108,10 +111,13 @@ beforeEach(() => {
   db.reset();
   seed();
   rpcCalls = [];
+  rpcError = null;
+  rpcApproved = null;
   const client = fakeClient(db, {
     rpc: (fn: string, args: any) => {
       rpcCalls.push({ fn, args });
-      if (fn === "vam115_confirm_mentor_groups") return { data: { ok: true, approved: args.p_rows.length }, error: null };
+      if (rpcError) return { data: null, error: rpcError };
+      if (fn === "vam115_confirm_mentor_groups" || fn === "vam122_confirm_mentee_groups") return { data: { ok: true, approved: rpcApproved ?? args.p_rows.length }, error: null };
       return { data: { ok: true, newMentors: 2, newMentees: 1, drift: 0 }, error: null };
     }
   });
@@ -242,6 +248,184 @@ describe("nút duyệt mentor hàng loạt", () => {
     signIn("support_team", "auth-no-scope");
     expect((await submit()).status).toBe("error");
     expect(rpcCalls).toHaveLength(0);
+  });
+});
+
+describe("nút duyệt mentee hàng loạt (BTC 13/10/2026)", () => {
+  const ROW = { assignmentId: "a5000000-0000-4000-8000-000000000002", expectedGroup: 2, expectedDrift: null };
+  const submit = (opts: { confirmed?: string; rows?: unknown } = {}) => {
+    const form = new FormData();
+    form.set("confirmed", opts.confirmed ?? "yes");
+    form.set("rows", typeof opts.rows === "string" ? opts.rows : JSON.stringify(opts.rows ?? [ROW]));
+    return confirmMenteeGroupsAction(ROUND2_IDLE, form);
+  };
+
+  it("Support có quyền gửi đúng MỘT lệnh của MENTEE (không phải của mentor) với mùa, người duyệt và nhóm đang xem", async () => {
+    signIn("support_team", "auth-support");
+    const state = await submit();
+    expect(state).toEqual({ status: "ok", message: "Đã ghi nhận BTC đã duyệt cho 1 mentee." });
+    expect(rpcCalls).toEqual([{ fn: "vam122_confirm_mentee_groups", args: { p_actor: "admin-auth-support", p_season: SEASON, p_rows: [ROW] } }]);
+  });
+
+  it("Core team cũng duyệt được; trang được làm mới sau khi duyệt xong, và chỉ khi xong", async () => {
+    const { revalidatePath } = await import("next/cache");
+    signIn("core_team", "auth-core");
+    expect((await submit()).status).toBe("ok");
+    expect(vi.mocked(revalidatePath).mock.calls.map((c) => c[0])).toEqual(["/matches/vong-2", "/matches/vong-2/bao-cao"]);
+    vi.mocked(revalidatePath).mockClear();
+    rpcError = { message: "STALE_GROUP" };
+    expect((await submit()).status).toBe("error");
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hành động của mentor không bao giờ gọi lệnh của mentee và ngược lại", async () => {
+    signIn("support_team", "auth-support");
+    const mentorForm = new FormData();
+    mentorForm.set("confirmed", "yes");
+    mentorForm.set("rows", JSON.stringify([ROW]));
+    await confirmMentorGroupsAction(ROUND2_IDLE, mentorForm);
+    await submit();
+    expect(rpcCalls.map((c) => c.fn)).toEqual(["vam115_confirm_mentor_groups", "vam122_confirm_mentee_groups"]);
+  });
+
+  it("thiếu dấu xác nhận, không có quyền mùa, hay danh sách sai hình dạng thì KHÔNG gửi gì, và câu báo nói 'mentee'", async () => {
+    signIn("support_team", "auth-support");
+    expect((await submit({ confirmed: "no" })).status).toBe("error");
+    for (const rows of [[], "không phải JSON", [{ ...ROW, expectedGroup: 12 }], [ROW, ROW], Array(501).fill(ROW)]) {
+      const state = await submit({ rows: rows as any });
+      expect(state, JSON.stringify(rows).slice(0, 40)).toEqual({ status: "error", message: "Danh sách không hợp lệ. Chọn từ 1 đến 500 mentee rồi thử lại." });
+    }
+    signIn("support_team", "auth-no-scope");
+    expect((await submit()).status).toBe("error");
+    signIn("reviewer", "auth-core");
+    expect((await submit()).status).toBe("error");
+    expect(rpcCalls).toHaveLength(0);
+  });
+
+  it("lỗi của database được nói bằng lời người dùng hiểu", async () => {
+    signIn("support_team", "auth-support");
+    const cases: Array<[string, RegExp]> = [
+      ["NOT_APPROVED", /không còn ở trạng thái đã duyệt/],
+      ["STALE_GROUP", /vừa được đổi ở nơi khác/],
+      ["NOT_FOUND", /Không tìm thấy người này/],
+      ["ACCESS_DENIED", /không có quyền vận hành ghép cặp/],
+      ["deadlock detected", /Không lưu được/]
+    ];
+    for (const [code, expected] of cases) {
+      rpcError = { message: code };
+      const state = await submit();
+      expect(state.status, code).toBe("error");
+      expect(state.message, code).toMatch(expected);
+    }
+  });
+
+  it("database báo số người được duyệt khác số đã gửi thì KHÔNG báo thành công", async () => {
+    signIn("support_team", "auth-support");
+    rpcApproved = 0;
+    expect(await submit()).toEqual({ status: "error", message: "Chưa xác nhận được kết quả. Tải lại trang để kiểm tra." });
+  });
+
+  describe("thanh duyệt trên trang theo ô 'Vai trò'", () => {
+    const seedAssignments = () => {
+      const base = { season_id: SEASON, confidence: "thap", secondary_groups: [], evidence: { reasons: [] }, drift_group: null };
+      db.tables.matching_industry_assignments = [
+        { ...base, id: "a5000000-0000-4000-8000-000000000002", person_id: "p-mentee", role: "mentee", group_code: 2, flags: ["CAN_BTC_XEM"], source: "auto" },
+        { ...base, id: "a5000000-0000-4000-8000-000000000003", person_id: "p-renew", role: "mentor", group_code: 2, flags: [], source: "auto" },
+        { ...base, id: "a5000000-0000-4000-8000-000000000004", person_id: "p-new", role: "mentor", group_code: 6, flags: [], source: "btc" }
+      ];
+    };
+    const view = async (search: Record<string, string>, role = "support_team", auth = "auth-support") => {
+      signIn(role, auth);
+      return render(<>{await Round2GroupsPage({ searchParams: Promise.resolve(search) })}</>);
+    };
+    const ticks = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLInputElement>("input[data-round2-approve]")).map((i) => i.getAttribute("aria-label"));
+
+    it("xem Mentee: thanh nói 'mentee' và chỉ mentee còn do máy gán có ô tick", async () => {
+      seedAssignments();
+      const { container } = await view({ vai: "mentee" });
+      expect(container.textContent).toContain("Chọn tất cả mentee chưa duyệt đang hiện (1)");
+      expect(container.textContent).toContain("Mentee đã duyệt có nhãn");
+      expect(ticks(container)).toEqual(["Duyệt nhóm của Mentee Kế Toán"]);
+      expect(container.querySelector('[data-testid="bulk-note"]')).toBeNull();
+    });
+
+    it("xem Mentor: thanh nói 'mentor'; mentor đã được BTC duyệt không có ô tick", async () => {
+      seedAssignments();
+      const { container } = await view({ vai: "mentor" });
+      expect(container.textContent).toContain("Chọn tất cả mentor chưa duyệt đang hiện (1)");
+      expect(ticks(container)).toEqual(["Duyệt nhóm của Mentor Gia Hạn"]);
+      expect(personRow(container, "p-new").textContent).toContain("Đã duyệt");
+      expect(container.querySelector('[data-testid="bulk-note"]')).toBeNull();
+    });
+
+    it("xem cả hai vai trò: giữ như cũ (mentor) và có dòng nhắc chọn Vai trò = Mentee", async () => {
+      seedAssignments();
+      const { container } = await view({});
+      expect(container.textContent).toContain("Chọn tất cả mentor chưa duyệt đang hiện (1)");
+      expect(ticks(container)).toEqual(["Duyệt nhóm của Mentor Gia Hạn"]);
+      expect(container.querySelector('[data-testid="bulk-note"]')!.textContent).toContain("Chọn “Vai trò = Mentee”");
+    });
+
+    // Thêm một mentee thật (người + đơn đã duyệt + dòng phân nhóm) để dữ liệu mẫu có nhiều hơn một mentee.
+    const addMentee = (n: number, name: string, over: { flags?: string[]; source?: string } = {}) => {
+      const id = `p-extra-${n}`;
+      db.tables.people.push({ id, full_name: name, email_primary: `${id}@example.test` });
+      db.tables.applications.push({ id: `a-extra-${n}`, person_id: id, season_id: SEASON, role_applied: "mentee", status: "approved_as_mentee", source: "vam_os_form", raw_payload: { target_function: "marketing", target_industry: "fmcg", major: "Marketing" } });
+      db.tables.matching_industry_assignments.push({ id: `a5000000-0000-4000-8000-0000000001${String(n).padStart(2, "0")}`, season_id: SEASON, person_id: id, role: "mentee", group_code: 4, confidence: "cao", flags: over.flags ?? [], secondary_groups: [], evidence: { reasons: [] }, source: over.source ?? "auto", drift_group: null });
+    };
+
+    it("HTML dựng ở máy chủ (trước khi trình duyệt chạy mã) đã đếm đúng: chỉ người đúng vai trò, đủ điều kiện, còn do máy gán", async () => {
+      seedAssignments();
+      // Mentee đã rút còn dòng phân nhóm (không đủ điều kiện) và mentee đã được BTC duyệt: có trên bảng, không thuộc danh sách chờ duyệt.
+      db.tables.matching_industry_assignments.push({ id: "a5000000-0000-4000-8000-000000000005", season_id: SEASON, person_id: "p-gone", role: "mentee", group_code: 5, confidence: "thap", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "auto", drift_group: null });
+      addMentee(1, "Mentee Đã Duyệt", { source: "btc" });
+      signIn("support_team", "auth-support");
+      const menteeView = renderToStaticMarkup(<>{await Round2GroupsPage({ searchParams: Promise.resolve({ vai: "mentee" }) })}</>);
+      expect(menteeView).toContain("Chọn tất cả mentee chưa duyệt đang hiện (1)");
+      // Xem cả hai vai trò: thanh chỉ áp cho mentor, nên mentee không được lọt vào đếm.
+      const bothView = renderToStaticMarkup(<>{await Round2GroupsPage({ searchParams: Promise.resolve({}) })}</>);
+      expect(bothView).toContain("Chọn tất cả mentor chưa duyệt đang hiện (1)");
+    });
+
+    it("chọn tất cả rồi mở hộp xác nhận: người còn cờ 'Cần BTC xem' được cảnh báo và đánh dấu đúng người", async () => {
+      seedAssignments();
+      addMentee(2, "Mentee Không Cờ");
+      const { container } = await view({ vai: "mentee" });
+      fireEvent.click(within(container).getByLabelText(/Chọn tất cả mentee/));
+      fireEvent.click(within(container).getByRole("button", { name: "Duyệt 2 mentee đã chọn" }));
+      const dialog = within(container).getByRole("dialog");
+      expect(within(dialog).getByTestId("bulk-flagged-warning").textContent).toContain("1 người trong danh sách đang có cờ");
+      expect(within(dialog).getAllByText("Cần BTC xem")).toHaveLength(1);
+      expect(within(within(dialog).getByText("Mentee Kế Toán").closest("td")!).getByText("Cần BTC xem")).toBeTruthy();
+    });
+
+    it("tick riêng từng người: người còn cờ thì hộp xác nhận cảnh báo, người không cờ thì không", async () => {
+      seedAssignments();
+      addMentee(2, "Mentee Không Cờ");
+      const flagged = await view({ vai: "mentee" });
+      fireEvent.click(within(flagged.container).getByLabelText("Duyệt nhóm của Mentee Kế Toán"));
+      fireEvent.click(within(flagged.container).getByRole("button", { name: "Duyệt 1 mentee đã chọn" }));
+      expect(within(within(flagged.container).getByRole("dialog")).getByTestId("bulk-flagged-warning")).toBeTruthy();
+      flagged.unmount();
+      const clean = await view({ vai: "mentee" });
+      fireEvent.click(within(clean.container).getByLabelText("Duyệt nhóm của Mentee Không Cờ"));
+      fireEvent.click(within(clean.container).getByRole("button", { name: "Duyệt 1 mentee đã chọn" }));
+      expect(within(within(clean.container).getByRole("dialog")).queryByTestId("bulk-flagged-warning")).toBeNull();
+    });
+
+    it("mentee đã rút không có ô tick dù đang có dòng; không có quyền sửa nhóm thì không có thanh duyệt nào", async () => {
+      seedAssignments();
+      db.tables.matching_industry_assignments.push({ id: "a5000000-0000-4000-8000-000000000005", season_id: SEASON, person_id: "p-gone", role: "mentee", group_code: 5, confidence: "thap", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "auto", drift_group: null });
+      db.tables.admin_scope_access.push({ id: "g9", user_id: "auth-support-read", program_id: null, season_id: SEASON, role: "read", status: "active" });
+      const withEdit = await view({ vai: "mentee" });
+      expect(ticks(withEdit.container)).toEqual(["Duyệt nhóm của Mentee Kế Toán"]);
+      withEdit.unmount();
+      const readOnly = await view({ vai: "mentee" }, "support_team", "auth-support-read");
+      expect(readOnly.container.querySelector('[data-testid="round2-table"]')).not.toBeNull();
+      expect(readOnly.container.textContent).not.toContain("Chọn tất cả");
+      expect(ticks(readOnly.container)).toEqual([]);
+      expect(readOnly.container.querySelector('[data-testid="bulk-note"]')).toBeNull();
+    });
   });
 });
 
