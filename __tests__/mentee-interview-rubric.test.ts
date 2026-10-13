@@ -5,8 +5,10 @@
  * đây canh những gì chạy trước khi tới database: kiểm phiếu, đọc dữ liệu biểu
  * mẫu, ô xuất CSV, lọc HTML, và file Word đi qua đúng một cửa.
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import PizZip from "pizzip";
+
+import { LAZY_LOAD_TIMEOUT } from "./support/lazy-load";
 
 vi.mock("server-only", () => ({}));
 
@@ -161,6 +163,15 @@ function form(bytes: Uint8Array, name: string) {
 }
 
 describe("7. Handbook Word đi qua đúng một cửa", () => {
+  // Lần đọc Word đầu tiên của worker trả giá nạp mammoth từ đĩa (188 file) — một cái
+  // giá theo tải của máy, không theo mã. Trả nó ở đây, dưới thời hạn riêng, để 30 giây
+  // của ca bên dưới đo việc chuyển file. Vì sao gọi đúng cửa của sản phẩm và vì sao
+  // phải khẳng định kết quả: xem __tests__/support/lazy-load.ts.
+  beforeAll(async () => {
+    const first = await readHandbookDocx(form(minimalDocx(), "nap-san.docx"), "handbook");
+    expect(first.ok).toBe(true);
+  }, LAZY_LOAD_TIMEOUT);
+
   it("file Word thật: giữ bảng, BỎ ảnh, bỏ liên kết javascript:", async () => {
     const result = await readHandbookDocx(form(minimalDocx(), "VAM_Handbook_S12.docx"), "handbook");
     expect(result.ok).toBe(true);
