@@ -32,6 +32,9 @@ import { isMembershipRole, MEMBERSHIP_ROLE_LABELS } from "@/lib/membership-lifec
 import { MembershipLifecycleControls } from "./membership-lifecycle-controls";
 import { MentorCapacityPanel } from "./mentor-capacity-panel";
 import { PersonDeletePanel } from "./person-delete-panel";
+import { SupportTeamPanel } from "./support-team-panel";
+import { markSupportTeamAction } from "@/app/actions/support-team";
+import { getSupportTeamPanel } from "@/lib/support-team-mark";
 import { setMentorCapacityAction } from "@/app/actions/mentor-capacity";
 import { ROUND2_MENTOR_CAP } from "@/lib/matching-round2-core";
 import { MENTOR_CAPACITY_MAX, mentorCapacityEditState, mentorCapacityView, storedMentorCapacity } from "@/lib/mentor-capacity";
@@ -438,6 +441,9 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
     );
   }
 
+  // Khung "Support team": null nếu người xem không được tích (khung ẩn hẳn).
+  const supportTeamPanel = await getSupportTeamPanel(params.id);
+
   return (
     <>
       <PageHeader title={text(person.data.full_name, "Hồ sơ cá nhân")} description={text(person.data.email_primary)} />
@@ -493,6 +499,19 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
           </div>
         </div>
       </Card>
+
+      {supportTeamPanel ? (
+        <Card className="mb-4">
+          <h2 className="mb-3 text-base font-semibold text-vam-ink">Support team</h2>
+          <SupportTeamPanel
+            action={markSupportTeamAction.bind(null, params.id)}
+            seasonCode={supportTeamPanel.seasonCode}
+            personName={String(person.data.full_name ?? "")}
+            state={supportTeamPanel.state}
+            sendCount={supportTeamPanel.sendCount}
+          />
+        </Card>
+      ) : null}
 
       <Card className="mb-4">
         <h2 className="mb-3 text-base font-semibold text-vam-ink">Trạng thái tham gia</h2>

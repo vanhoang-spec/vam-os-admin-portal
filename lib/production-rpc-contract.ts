@@ -200,6 +200,9 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam117_add_mentee_exemptions",
   "vam117_revoke_mentee_exemption",
   "vam117_confirm_mentee_exemption",
+  // Support team tích "Support team" trên hồ sơ → tự thành mentee của mùa — migration
+  // 20261013160000_support_team_tich_tren_ho_so.sql, phải dán Production TRƯỚC khi merge.
+  "vam121_set_support_team",
   // BTC chốt hồ sơ mentee "Cần BTC xem xét thêm" — migration
   // 20261012230000_btc_chot_ho_so_can_xem_them.sql, phải dán Production TRƯỚC khi merge.
   "vam119_btc_decide_needs_review",

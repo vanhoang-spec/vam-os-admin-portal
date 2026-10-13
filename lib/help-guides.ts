@@ -349,15 +349,17 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Bấm vào một dòng để mở hồ sơ: “Trạng thái tham gia”, “Lịch sử VAM”, “Ghi chú CRM”, các match và hoạt động sự kiện của người đó.",
       "Trong hồ sơ, ghi lại liên hệ bằng “Thêm ghi chú CRM”; người nghỉ mùa này thì dùng “Chuyển sang Không tham dự” ở khung “Trạng thái tham gia”.",
       "Hồ sơ mentor: khung “Số mentee tối đa mùa …” (trong “Mentor profile”) cho biết mùa này mentor nhận tối đa mấy mentee, đang nhận mấy, còn mấy chỗ. Core team trở lên gõ số mới vào ô “Đổi thành” rồi bấm “Lưu”.",
+      "Bạn Support team làm mentee không qua phỏng vấn: mở hồ sơ bạn đó, ở khung “Support team” tích “Là Support team” rồi bấm “Lưu” — bạn thành mentee của mùa hiện tại ngay (đơn được duyệt, có hồ sơ mentee, tư cách đang hoạt động), không cần gửi thư hay chạy SQL.",
       "Hồ sơ trùng, nhập sai hoặc thử nghiệm: bấm “Xoá khỏi hệ thống”, gõ lại họ tên, ghi “Lý do xoá” rồi bấm “Xoá hẳn khỏi hệ thống”."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, Support team. Danh sách chỉ gồm hồ sơ trong phạm vi chương trình bạn được cấp quyền.",
       "Đổi Tham dự / Không tham dự và xoá hồ sơ: mentor do Core team trở lên; mentee thì Support team cũng làm được. Người mang nhiều vai trò tính theo mức chặt hơn.",
       "Số mentee tối đa: Support team xem được, chỉ Core team trở lên (có quyền vận hành mùa) sửa được, từ 1 đến 10. Không hạ được thấp hơn số mentee mentor đang nhận — huỷ cặp ở trang Ghép cặp trước. Số này là trần khi ghép cặp; riêng Vòng 2 mỗi mentor tự chọn tối đa 2 mentee.",
+      "Tích “Support team”: Support team, Core team, Admin và Super admin làm được (cần quyền vận hành mùa). Chỉ áp cho mùa đang vận hành, sang mùa mới tự theo mùa mới — không phải chạy lại SQL. Không có lệnh bỏ tích: đã thành mentee rồi mà muốn ngừng thì đổi tư cách ở khung “Trạng thái tham gia”. Bạn có đơn mentee mùa này đã bị từ chối hoặc đã rút, hay tư cách mentee đã ngừng, thì chưa tích được — ban tổ chức xử lý hồ sơ trước.",
       "Xoá hẳn không hoàn lại được. Hồ sơ còn dữ liệu chương trình thì hệ thống không cho xoá — dùng “Chuyển sang Không tham dự” thay vào đó."
     ],
-    updated: "10/10/2026"
+    updated: "13/10/2026"
   },
   "/mentors": {
     title: "Mentor",
@@ -657,7 +659,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Danh sách các bạn Support team làm mentee mùa này mà không qua phỏng vấn. Ban tổ chức chốt danh sách, gửi thư mời; người nhận bấm xác nhận trên đường dẫn riêng là thành mentee của mùa.",
     steps: [
       "Ở khung “Gợi ý thêm vào danh sách”, tick đúng những bạn thuộc Support team rồi bấm “Thêm … người đã chọn vào danh sách”. Hệ thống gợi ý ba nhóm: có tài khoản vai trò Support team, được gắn tay tư cách mentee mùa này mà chưa có đơn, có đơn mentee được duyệt tay không qua phỏng vấn.",
-      "Bạn nào chưa hiện trong gợi ý: mở trang hồ sơ của bạn đó (Cộng đồng VAM), gắn tư cách mentee của mùa, rồi quay lại trang này.",
+      "Nhanh hơn, không cần gửi thư: mở hồ sơ của bạn đó (Cộng đồng VAM), ở khung “Support team” tích “Là Support team” rồi bấm “Lưu” — bạn thành mentee của mùa ngay. Bạn nào chưa hiện trong gợi ý cũng làm theo cách này.",
       "Ở khung “Gửi thư mời xác nhận”, bấm “Gửi thử cho tôi” để xem thư, rồi “Gửi thư mời xác nhận” → “Xác nhận gửi”.",
       "Theo dõi cột “Trạng thái”: Chưa gửi thư → Đã gửi thư, chờ xác nhận → Đã xác nhận. Muốn nhắc người chưa xác nhận, bấm gửi lại sau 20 giờ.",
       "Thêm nhầm người: bấm “Gỡ khỏi danh sách” → “Xác nhận gỡ” ở dòng của người đó (chỉ khi họ chưa xác nhận)."
@@ -666,9 +668,10 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Người đã xác nhận có đơn mentee ở trạng thái đã duyệt và tư cách mentee đang hoạt động, nên được tính ở Vòng 2 như mọi mentee khác. Bạn nào chưa từng nộp đơn mùa này thì hệ thống tạo một đơn đặc cách không có câu trả lời — ở Vòng 2 bạn đó nằm ở “Chưa phân nhóm” cho tới khi ban tổ chức gán nhóm ngành.",
       "Không thêm được người có đơn mentee mùa này đã bị từ chối hoặc đã rút, hay tư cách mentee đã ngừng: đó là quyết định đã có chủ, xử lý ở trang đơn hoặc trang hồ sơ trước.",
       "Xem trang: Super admin, Admin, Core team. Thêm, gỡ, gửi thư: cần thêm quyền vận hành mùa.",
-      "Mỗi người một đường dẫn riêng (/xac-nhan-mentee/…). Gỡ khỏi danh sách thì đường dẫn ngừng dùng được; thêm lại thì đường dẫn cũ dùng lại được."
+      "Mỗi người một đường dẫn riêng (/xac-nhan-mentee/…). Gỡ khỏi danh sách thì đường dẫn ngừng dùng được; thêm lại thì đường dẫn cũ dùng lại được.",
+      "Người được tích “Support team” ở hồ sơ cũng hiện ở đây với trạng thái “Đã xác nhận” (không có thư nào được gửi). Bạn đang “Đã gửi thư, chờ xác nhận” mà được tích ở hồ sơ thì thành mentee luôn; đường dẫn trong thư lúc sau chỉ báo đã xác nhận."
     ],
-    updated: "11/10/2026"
+    updated: "13/10/2026"
   },
   "/events": {
     title: "Sự kiện",
