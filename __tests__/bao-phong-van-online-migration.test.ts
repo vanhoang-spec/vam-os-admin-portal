@@ -16,7 +16,7 @@ beforeAll(async () => {
   await db.exec("reset role");
   // Bảng trên production đã bật RLS; bộ dựng thử có thể chưa — bật cho đúng production.
   await db.exec("alter table mentee_interview_invites enable row level security");
-});
+}, 120_000);
 afterAll(async () => db?.close());
 
 describe("dấu đã báo phỏng vấn online", () => {

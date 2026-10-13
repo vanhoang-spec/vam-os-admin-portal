@@ -46,6 +46,12 @@ const EXPECTED = ORIGINAL.replace(
 const PROD_AUDIENCE_CHECK =
   "check ((audience is null) or (audience = any (array['mentee'::text, 'mentor'::text, 'both'::text, 'staff'::text, 'returning_mentor'::text, 'event'::text])))";
 
+// Mỗi ca dựng một PGlite riêng ngay trong thân ca, nên thời hạn phải nằm trên TỪNG ca.
+// Dựng một PGlite mất ~2 giây khi máy rảnh nhưng 20–50 giây khi máy tải nặng; để mặc
+// định 5 giây của vitest thì ca đỏ "Test timed out in 5000ms" tuỳ tải máy, không tuỳ
+// mã (13/10/2026). Ca mới thêm vào file này mà gọi fresh() thì cũng phải mang nó.
+const DB_TIMEOUT = 120_000;
+
 let db: PGlite | null = null;
 
 async function fresh(template: { body: string; status: "draft" | "approved" } | null = { body: ORIGINAL, status: "draft" }) {
@@ -110,7 +116,7 @@ describe("1. nhóm nhận thư mentee_cv_rejected", () => {
       expect(await accepts(old)).toBe(true);
     }
     expect(await accepts("tat_ca_moi_nguoi")).toBe(false);
-  });
+  }, DB_TIMEOUT);
 
   it("chạy lại không nhân đôi giá trị", async () => {
     await fresh();
@@ -120,7 +126,7 @@ describe("1. nhóm nhận thư mentee_cv_rejected", () => {
       "select pg_get_constraintdef(oid) d from pg_constraint where conname = 'email_batches_audience_check'"
     )).rows[0].d;
     expect(def.split("'mentee_cv_rejected'").length - 1).toBe(1);
-  });
+  }, DB_TIMEOUT);
 });
 
 describe("2. sửa mẫu thư rớt vòng hồ sơ", () => {
@@ -128,7 +134,7 @@ describe("2. sửa mẫu thư rớt vòng hồ sơ", () => {
     await fresh();
     const md5 = (await db!.query<{ m: string }>("select md5($1) m", [ORIGINAL])).rows[0].m;
     expect(md5).toBe("08485ea0c37243bdc070e0f36c2b9857");
-  });
+  }, DB_TIMEOUT);
 
   it("sửa đúng 3 chỗ, phần còn lại giữ nguyên từng chữ, ghi một dòng nhật ký", async () => {
     await fresh();
@@ -138,7 +144,7 @@ describe("2. sửa mẫu thư rớt vòng hồ sơ", () => {
     expect(row.body).not.toContain("{{vai_tro}}");
     expect(row.status).toBe("draft");
     expect(await logs()).toEqual([{ action: "edited", detail: expect.objectContaining({ revoked_approval: false }) }]);
-  });
+  }, DB_TIMEOUT);
 
   it("chạy lại không sửa thêm, không ghi thêm nhật ký", async () => {
     await fresh();
@@ -146,7 +152,7 @@ describe("2. sửa mẫu thư rớt vòng hồ sơ", () => {
     await db!.exec(SQL);
     expect((await templateRow()).body).toBe(EXPECTED);
     expect(await logs()).toHaveLength(1);
-  });
+  }, DB_TIMEOUT);
 
   it("mẫu đang được duyệt: đổi nội dung thì quay về nháp và bỏ duyệt", async () => {
     await fresh({ body: ORIGINAL, status: "approved" });
@@ -154,7 +160,7 @@ describe("2. sửa mẫu thư rớt vòng hồ sơ", () => {
     const row = await templateRow();
     expect(row).toMatchObject({ body: EXPECTED, status: "draft", approved_at: null, approved_by: null });
     expect((await logs())[0].detail.revoked_approval).toBe(true);
-  });
+  }, DB_TIMEOUT);
 
   it("BTC đã tự sửa mẫu sau lúc rà: KHÔNG ghi đè, không ghi nhật ký — phần nhóm nhận thư vẫn chạy", async () => {
     const edited = ORIGINAL.replace("Thân ái,", "Trân trọng,");
@@ -163,11 +169,11 @@ describe("2. sửa mẫu thư rớt vòng hồ sơ", () => {
     expect((await templateRow()).body).toBe(edited);
     expect(await logs()).toHaveLength(0);
     expect(await accepts("mentee_cv_rejected")).toBe(true);
-  });
+  }, DB_TIMEOUT);
 
   it("không có mẫu: không lỗi, phần nhóm nhận thư vẫn chạy", async () => {
     await fresh(null);
     await db!.exec(SQL);
     expect(await accepts("mentee_cv_rejected")).toBe(true);
-  });
+  }, DB_TIMEOUT);
 });
