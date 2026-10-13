@@ -11,7 +11,14 @@ import { executeManualStaffProvisioning, type ProvisioningResult } from "@/lib/m
 import { sendStaffInvite } from "@/lib/email";
 import { adminRoleLabel } from "@/lib/ui-labels";
 import { getPublicOrigin } from "@/lib/public-url";
-import { canManageAdminAccount, canOpenAdminUsers, manageableAdminRoles } from "@/lib/permissions";
+import {
+  canCreateAdminAccount,
+  canManageAdminAccount,
+  canOpenAdminUsers,
+  creatableAdminRoles,
+  manageableAdminRoles,
+  scopeRoleWithinAdminRole
+} from "@/lib/permissions";
 
 export type AdminUserStatus = "invited" | "active" | "suspended" | "inactive";
 export type ScopeRole = "full_access" | "operations" | "review" | "read";
@@ -573,8 +580,12 @@ export async function createManagedAdminUser(input: {
   scopeRole: unknown;
   scopeStatus: unknown;
 }): Promise<AdminUserMutationResult> {
-  const actor = await requireSuperAdmin();
-  if (!actor) return { ok: false, message: "Chỉ super_admin mới được tạo người dùng nội bộ." };
+  // BTC 13/10/2026: admin tạo được tài khoản cho cấp mình quản — thêm người vào
+  // Core team là tạo tài khoản cho họ. Super admin giữ nguyên như trước.
+  const actor = await requireAdminAccountManager();
+  if (!actor || !canCreateAdminAccount(actor.role)) {
+    return { ok: false, message: "Chỉ super admin và admin mới được tạo tài khoản ban tổ chức." };
+  }
 
   const { client, error } = serviceClient();
   if (!client) return { ok: false, message: error };
@@ -583,6 +594,13 @@ export async function createManagedAdminUser(input: {
   if (!isValidEmail(email)) return { ok: false, message: "Email không hợp lệ." };
   const validatedScope = await validateExplicitAdminScope(client, input.programId, input.seasonId);
   if (!validatedScope.ok) return validatedScope.result;
+
+  // Từ chối TRƯỚC khi đụng tới nhà cung cấp Auth: sau bước đó là đã có một tài
+  // khoản đăng nhập thật, và một lần từ chối muộn phải đi kèm xoá bù.
+  const denied = await createDeniedByTier(client, actor, email, validRole(input.role), validScopeRole(input.scopeRole));
+  if (denied) {
+    return { ok: false, status: "rejected", failureClass: "account_tier_denied", failureStage: "pre_lookup", reconciliationRequired: false, ownerAction: "none", message: denied };
+  }
 
   const requestedOperationId = String(input.operationId ?? "").trim();
   const operationId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedOperationId)
@@ -719,6 +737,39 @@ export async function createManagedAdminUser(input: {
   */
 }
 
+/**
+ * Người dưới super admin tạo tài khoản: ba điều phải đúng, và hàm
+ * vam062_admin_mutation_atomic kiểm lại cả ba.
+ *
+ * Trả về câu từ chối, hoặc null nếu được.
+ */
+async function createDeniedByTier(
+  client: any,
+  actor: CurrentAdminUser,
+  email: string,
+  role: AdminRole,
+  scopeRole: ScopeRole
+): Promise<string | null> {
+  if (actor.role === "super_admin") return null;
+  if (!creatableAdminRoles(actor.role).includes(role)) {
+    return `Bạn không thể tạo tài khoản cấp ${adminRoleLabel(role)}.`;
+  }
+  if (!scopeRoleWithinAdminRole(role, scopeRole)) {
+    return `Phạm vi "${scopeRole}" vượt quá cấp ${adminRoleLabel(role)}. Hãy chọn phạm vi thấp hơn.`;
+  }
+  // Ghi là ghi đè theo email. Email đã thuộc một tài khoản cấp cao hơn thì
+  // "tạo" chính là hạ cấp tài khoản đó.
+  const { data, error } = await client.from("admin_users").select("role").eq("email", email).maybeSingle();
+  if (error) {
+    logAdminUsersRuntime("createDeniedByTier lookup failed", { message: error.message });
+    return "Không kiểm tra được email này đã có tài khoản hay chưa. Vui lòng thử lại.";
+  }
+  if (data && !canManageAdminAccount(actor.role, String((data as JsonRecord).role ?? ""))) {
+    return "Email này đã thuộc một tài khoản bạn không quản được.";
+  }
+  return null;
+}
+
 /** Sửa tài khoản: theo bậc quản lý, không còn là đặc quyền của super admin. */
 export async function updateManagedAdminUser(input: {
   id: unknown;
@@ -746,6 +797,11 @@ export async function updateManagedAdminUser(input: {
   const nextRole = validRole(input.role);
   if (!canManageAdminAccount(actor.role, nextRole)) {
     return { ok: false, message: `Bạn không thể đặt tài khoản này thành cấp ${nextRole}.` };
+  }
+
+  // Cấp thì không vượt được, nên phạm vi mùa cũng không được là cửa sau.
+  if (actor.role !== "super_admin" && !scopeRoleWithinAdminRole(nextRole, validScopeRole(input.scopeRole))) {
+    return { ok: false, message: `Phạm vi "${validScopeRole(input.scopeRole)}" vượt quá cấp ${adminRoleLabel(nextRole)}. Hãy chọn phạm vi thấp hơn.` };
   }
 
   const validatedScope = await validateExplicitAdminScope(client, input.programId, input.seasonId);

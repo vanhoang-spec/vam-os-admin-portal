@@ -334,15 +334,29 @@ export function canChangeMenteeParticipation(role?: string | null) {
  *
  * `membershipRole` must come from the stored row, never from the form — a form
  * saying "mentee" about a mentor row is exactly how support_team would get
- * around the split. Trainer, speaker, reviewer and interviewer keep the tiers
- * that held operations scope before the split; that set now also shuts out a
- * reviewer or viewer who is ever granted operations scope by mistake.
+ * around the split. Speaker, reviewer and interviewer keep the tiers that held
+ * operations scope before the split; that set now also shuts out a reviewer or
+ * viewer who is ever granted operations scope by mistake.
+ *
+ * BTC 13/10/2026: bổ nhiệm một mentor làm trainer hoặc cross mentor là việc của
+ * Core team trở lên — cùng bậc với mọi thay đổi khác trên mentor. Support team
+ * chỉ đổi trạng thái mentee. Trước đó trainer đi theo nhánh cuối, tức Support
+ * team cũng bổ nhiệm được.
  */
 export function canChangeSeasonMembership(role: string | null | undefined, membershipRole: unknown) {
   const kind = String(membershipRole ?? "").trim().toLowerCase();
   if (kind === "mentor") return canChangeMentorParticipation(role);
   if (kind === "mentee") return canChangeMenteeParticipation(role);
+  if (kind === "trainer" || kind === "cross_mentor") return canAppointMentorRole(role);
   return canBrowseOperations(role);
+}
+
+/**
+ * Bổ nhiệm (hoặc gỡ) vai trò trainer / cross mentor của một người trong mùa.
+ * Hàm vam063_add_membership_role kiểm lại đúng bậc này.
+ */
+export function canAppointMentorRole(role?: string | null) {
+  return canChangeMentorParticipation(role);
 }
 
 /**
@@ -438,9 +452,63 @@ export function canOpenAdminUsers(role?: string | null) {
   return manageableAdminRoles(role).length > 0;
 }
 
-/** Tạo tài khoản mới vẫn chỉ của super admin — chủ dự án không yêu cầu mở rộng. */
+/**
+ * Ai tạo được tài khoản ban tổ chức mới.
+ *
+ * BTC 13/10/2026: admin đổi được thành viên Core team — thêm một người vào Core
+ * team là tạo tài khoản cho họ, nên admin phải tạo được. Trước đó chỉ super
+ * admin tạo, và mỗi lần Core team có người mới là một lần chờ super admin.
+ *
+ * Core team KHÔNG ở đây: họ quản (sửa, tạm khoá, xoá) cấp dưới nhưng chưa ai
+ * yêu cầu cho họ tạo tài khoản. Hàm vam062_admin_mutation_atomic giữ đúng điều
+ * này một lần nữa.
+ */
 export function canCreateAdminAccount(role?: string | null) {
-  return role === "super_admin";
+  return role === "super_admin" || role === "admin";
+}
+
+const ALL_ADMIN_ROLES: readonly string[] = Object.freeze([
+  "viewer", "reviewer", "support_team", "core_team", "admin", "super_admin"
+]);
+
+/**
+ * Những cấp người này được ĐẶT cho một tài khoản khi tạo mới.
+ *
+ * Super admin giữ nguyên như trước (mọi cấp). Người khác chỉ đặt được cấp mình
+ * quản được: admin tạo một tài khoản admin là tự nhân bản cấp của mình.
+ *
+ * Một cửa cho cả ô chọn lẫn phép kiểm của máy chủ — ô chọn mời một cấp mà máy
+ * chủ từ chối là một nút bấm chỉ để nhận lỗi.
+ */
+export function creatableAdminRoles(role?: string | null): readonly string[] {
+  if (role === "super_admin") return ALL_ADMIN_ROLES;
+  return canCreateAdminAccount(role) ? manageableAdminRoles(role) : [];
+}
+
+const SCOPE_RANK: Readonly<Record<string, number>> = Object.freeze({ read: 1, review: 2, operations: 3, full_access: 4 });
+const MAX_SCOPE_BY_ADMIN_ROLE: Readonly<Record<string, string>> = Object.freeze({
+  core_team: "operations",
+  support_team: "operations",
+  reviewer: "review",
+  viewer: "read"
+});
+
+/**
+ * Phạm vi mùa cấp kèm có vượt CẤP của tài khoản không — hỏi khi người cấp không
+ * phải super admin.
+ *
+ * Không có phép kiểm này thì bậc quản lý có một cửa sau: Core team không đặt
+ * được ai thành admin, nhưng đặt được cho một tài khoản reviewer phạm vi
+ * "operations" — và nhiều hàm trong database chỉ hỏi phạm vi.
+ *
+ * Cấp không có trong bảng (admin, super_admin, cấp lạ) trả false: người dưới
+ * super admin vốn không được đặt các cấp đó.
+ */
+export function scopeRoleWithinAdminRole(targetRole?: string | null, scopeRole?: string | null) {
+  const max = SCOPE_RANK[MAX_SCOPE_BY_ADMIN_ROLE[String(targetRole ?? "")] ?? ""];
+  const asked = SCOPE_RANK[String(scopeRole ?? "")];
+  if (!max || !asked) return false;
+  return asked <= max;
 }
 
 /**
