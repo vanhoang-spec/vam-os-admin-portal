@@ -127,6 +127,8 @@ describe("createManualMatch — mentor capacity guard", () => {
       makeChain({ data: MENTEE_PROFILE }), // mentee_profiles
       makeChain({ data: BATCH }),           // intake_batches
       makeChain({ data: APPROVALS }),      // applications — season approval gate
+      makeChain({ data: [] }),             // person_season_memberships — mentee chuyển tiếp (không ai)
+      makeChain({ data: [] }),             // applications — đơn mentee của mùa (cho luật chuyển tiếp)
       makeChain({ data: null }),            // matches — mentee check (no active match)
       makeChain({ count: 3 }),              // matches — mentor count = 3 (AT LIMIT)
     ]);
@@ -150,6 +152,8 @@ describe("createManualMatch — mentor capacity guard", () => {
       makeChain({ data: MENTEE_PROFILE }),           // mentee_profiles
       makeChain({ data: BATCH }),                    // intake_batches
       makeChain({ data: APPROVALS }),      // applications — season approval gate
+      makeChain({ data: [] }),             // person_season_memberships — mentee chuyển tiếp (không ai)
+      makeChain({ data: [] }),             // applications — đơn mentee của mùa (cho luật chuyển tiếp)
       makeChain({ data: null }),                     // matches — mentee check
       makeChain({ count: 2 }),                       // matches — mentor count = 2 (OK)
       makeChain({ data: { id: newMatchId } }),       // matches insert
@@ -176,6 +180,8 @@ describe("createManualMatch — mentee active match guard", () => {
       makeChain({ data: MENTEE_PROFILE }), // mentee_profiles
       makeChain({ data: BATCH }),           // intake_batches
       makeChain({ data: APPROVALS }),      // applications — season approval gate
+      makeChain({ data: [] }),             // person_season_memberships — mentee chuyển tiếp (không ai)
+      makeChain({ data: [] }),             // applications — đơn mentee của mùa (cho luật chuyển tiếp)
       makeChain({ data: { id: VALID_UUID } }), // matches — mentee check → FOUND (has active)
     ]);
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);
@@ -201,6 +207,8 @@ describe("createManualMatch — duplicate pair constraint (23505)", () => {
       makeChain({ data: MENTEE_PROFILE }),
       makeChain({ data: BATCH }),
       makeChain({ data: APPROVALS }),      // applications — season approval gate
+      makeChain({ data: [] }),             // person_season_memberships — mentee chuyển tiếp (không ai)
+      makeChain({ data: [] }),             // applications — đơn mentee của mùa (cho luật chuyển tiếp)
       makeChain({ data: null }),           // mentee check — no active
       makeChain({ count: 0 }),             // mentor count — available
       makeChain({ data: null, error: constraintError }), // INSERT → 23505
@@ -450,6 +458,8 @@ describe("createManualMatch — DB error safety", () => {
       makeChain({ data: MENTEE_PROFILE }),                                  // (2) mentee_profiles
       makeChain({ data: BATCH }),                                           // (3) intake_batches
       makeChain({ data: APPROVALS }),      // applications — season approval gate
+      makeChain({ data: [] }),             // person_season_memberships — mentee chuyển tiếp (không ai)
+      makeChain({ data: [] }),             // applications — đơn mentee của mùa (cho luật chuyển tiếp)
       makeChain({ error: { code: "42501", message: SENSITIVE_MSG } }),     // (4) mentee match check FAILS
     ]);
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(client);

@@ -73,7 +73,8 @@ const MENTEES: MenteeCandidate[] = [
     mentee_code: "E1",
     school_code: "UEH",
     major: "Finance",
-    has_active_match: false
+    has_active_match: false,
+    continuing: false
   }
 ];
 
