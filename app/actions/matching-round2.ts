@@ -1,22 +1,38 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { classifyNewPeople, confirmMentorGroups, setIndustryGroup, setRound2Window } from "@/lib/matching-round2";
-import { parseGroupApprovals } from "@/lib/matching-round2-bulk-core";
+import { classifyNewPeople, confirmMenteeGroups, confirmMentorGroups, setIndustryGroup, setRound2Window } from "@/lib/matching-round2";
+import { MAX_BULK_APPROVALS, parseGroupApprovals } from "@/lib/matching-round2-bulk-core";
 import { runRound2Dispatch, sendRound2InviteTest } from "@/lib/matching-round2-dispatch";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
 
 const PATHS = ["/matches/vong-2", "/matches/vong-2/bao-cao"];
 
-export async function confirmMentorGroupsAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+/**
+ * Duyệt hàng loạt nhóm ngành. Mọi ô của form đều do người gửi tự đặt được: dấu xác nhận và danh sách
+ * được kiểm hình dạng ở đây, còn quyền, vai trò của từng dòng và nhóm hiện tại do máy chủ + RPC kiểm lại.
+ */
+async function confirmGroupsFromForm(
+  form: FormData,
+  noun: "mentor" | "mentee",
+  confirm: (rows: NonNullable<ReturnType<typeof parseGroupApprovals>>) => Promise<{ ok: boolean; message: string }>
+): Promise<Round2ActionState> {
   if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần xác nhận danh sách trước khi duyệt." };
   let rows;
   try { rows = parseGroupApprovals(JSON.parse(String(form.get("rows") ?? ""))); } catch { rows = null; }
-  if (!rows) return { status: "error", message: "Danh sách không hợp lệ. Chọn từ 1 đến 500 mentor rồi thử lại." };
-  const result = await confirmMentorGroups(rows);
+  if (!rows) return { status: "error", message: `Danh sách không hợp lệ. Chọn từ 1 đến ${MAX_BULK_APPROVALS} ${noun} rồi thử lại.` };
+  const result = await confirm(rows);
   if (result.ok) for (const path of PATHS) revalidatePath(path);
   return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+export async function confirmMentorGroupsAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+  return confirmGroupsFromForm(form, "mentor", confirmMentorGroups);
+}
+
+export async function confirmMenteeGroupsAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+  return confirmGroupsFromForm(form, "mentee", confirmMenteeGroups);
 }
 
 export async function classifyNewAction(_prev: Round2ActionState, _formData: FormData): Promise<Round2ActionState> {

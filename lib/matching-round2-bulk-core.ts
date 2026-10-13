@@ -1,7 +1,10 @@
 export type GroupApproval = { assignmentId: string; expectedGroup: number; expectedDrift: number | null };
 
+/** Một lượt duyệt hàng loạt nhận tối đa ngần này người (hàm SQL vam115/vam122 cũng giữ đúng trần này). */
+export const MAX_BULK_APPROVALS = 500;
+
 export function parseGroupApprovals(value: unknown): GroupApproval[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 500) return null;
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_BULK_APPROVALS) return null;
   const ids = new Set<string>();
   for (const row of value) {
     if (!row || typeof row !== "object" ||
