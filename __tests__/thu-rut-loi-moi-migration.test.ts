@@ -16,6 +16,12 @@ const CHECK_AFTER_CV =
 const CHECK_BEFORE_CV =
   "check ((audience is null) or (audience = any (array['mentee'::text, 'mentor'::text, 'both'::text, 'staff'::text, 'returning_mentor'::text, 'event'::text])))";
 
+// Mỗi ca dựng một PGlite riêng ngay trong thân ca, nên thời hạn phải nằm trên TỪNG ca.
+// Dựng một PGlite mất ~2 giây khi máy rảnh nhưng 20–50 giây khi máy tải nặng; để mặc
+// định 5 giây của vitest thì ca đỏ "Test timed out in 5000ms" tuỳ tải máy, không tuỳ
+// mã (13/10/2026). Ca mới thêm vào file này mà gọi fresh() thì cũng phải mang nó.
+const DB_TIMEOUT = 120_000;
+
 let db: PGlite | null = null;
 
 async function fresh(check = CHECK_AFTER_CV) {
@@ -56,13 +62,13 @@ describe("nhóm mentee_invite_withdrawn", () => {
       expect(await accepts(v)).toBe(true);
     }
     expect(await accepts("ai_cung_duoc")).toBe(false);
-  });
+  }, DB_TIMEOUT);
 
   it("thiếu nhóm mentee_cv_rejected (chưa dán migration trước): dừng, không đụng gì", async () => {
     await fresh(CHECK_BEFORE_CV);
     await expect(db!.exec(SQL)).rejects.toThrow(/20261007234500/);
     expect((await db!.query("select count(*)::int n from email_templates")).rows[0]).toEqual({ n: 0 });
-  });
+  }, DB_TIMEOUT);
 });
 
 describe("mẫu thư nháp", () => {
@@ -81,7 +87,7 @@ describe("mẫu thư nháp", () => {
     expect(row.body).not.toContain("{{vai_tro}}");
     const logs = (await db!.query<{ action: string }>("select action from email_template_log where template_id = $1", [TEMPLATE])).rows;
     expect(logs).toEqual([{ action: "created" }]);
-  });
+  }, DB_TIMEOUT);
 
   it("chạy lại: không tạo mẫu thứ hai, không ghi đè bản BTC đã sửa", async () => {
     await fresh();
@@ -91,5 +97,5 @@ describe("mẫu thư nháp", () => {
     const rows = (await db!.query<{ body: string }>("select body from email_templates")).rows;
     expect(rows).toEqual([{ body: "BTC đã sửa" }]);
     expect((await db!.query("select count(*)::int n from email_template_log")).rows[0]).toEqual({ n: 1 });
-  });
+  }, DB_TIMEOUT);
 });
