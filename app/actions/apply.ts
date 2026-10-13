@@ -21,6 +21,7 @@ import {
   enforceOtherDetails,
   isValidApplicationPhone,
   validateMaxThreeWithOther,
+  validateSelectionWithOther,
   MENTEE_OTHER_DETAIL_RULES,
   MENTOR_OTHER_DETAIL_RULES
 } from "@/lib/application-form-validation";
@@ -263,7 +264,8 @@ export async function submitMentorApplicationAction(
     };
     const programsOk = (rawPayload.programs_willing_to_join as string[]).length > 0;
     const consentMethodsOk = (rawPayload.consent_contact_methods as string[]).length > 0;
-    const secondaryValidation = validateMaxThreeWithOther({
+    // Ngành / chức năng phụ không còn trần 3 lựa chọn (BTC 13/10/2026); "Khác" vẫn phải ghi rõ.
+    const secondaryValidation = validateSelectionWithOther({
       values: rawPayload.secondary_industries_functions as string[],
       otherText: String(rawPayload.secondary_industries_functions_other ?? ""),
       fieldName: "secondary_industries_functions",

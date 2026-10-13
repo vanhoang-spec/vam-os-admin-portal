@@ -14,6 +14,7 @@ import {
   CONFIRMATION_PHRASES,
   requiredCheckboxAcknowledgements
 } from "@/lib/application-commitments";
+import { RENEWAL_ONE_CLICK_MODE, RENEWAL_ONE_CLICK_NOTICE } from "@/lib/renewal-one-click-core";
 import { RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD } from "@/lib/renewal-types";
 
 const IDS = {
@@ -82,12 +83,14 @@ function acceptedForm() {
   return form;
 }
 
-/** The commitments block the canonical set produces when every box is ticked. */
+/**
+ * The commitments block of a one-click renewal (13/10/2026): every canonical
+ * commitment, accepted by the button. The typed phrase is no longer collected,
+ * so its two keys are gone.
+ */
 function expectedCommitments() {
-  const commitments: Record<string, boolean | string> = {};
+  const commitments: Record<string, boolean> = {};
   for (const entry of requiredCheckboxAcknowledgements("mentor")) commitments[entry.key] = true;
-  commitments[`${ACTIVE_READING_KEYS.mentor}_matched`] = true;
-  commitments[`${ACTIVE_READING_KEYS.mentor}_text`] = CONFIRMATION_PHRASES.mentor;
   return commitments;
 }
 
@@ -171,7 +174,8 @@ describe("P0 public renewal submission boundary", () => {
       p_token_hash: tokenHash,
       p_raw_payload: {
         participation_confirmed: true,
-        profile_review_confirmed: true,
+        acceptance_mode: RENEWAL_ONE_CLICK_MODE,
+        acceptance_notice: RENEWAL_ONE_CLICK_NOTICE,
         company_current: "Acme",
         title_current: "Director",
         function_primary: "strategy_consulting",
@@ -191,13 +195,19 @@ describe("P0 public renewal submission boundary", () => {
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(token);
   });
 
-  it("rejects submission if consent_data_storage is missing", async () => {
+  it("reads no consent checkbox: consent travels with the button, and M071 still receives true", async () => {
+    // Trước 13/10 thiếu ô này là bị từ chối. Form một nút không còn ô đó — câu thông báo
+    // ngay trên nút nói rõ bấm Gia hạn là đồng ý lưu dữ liệu.
     const { token } = mintRenewalInviteToken();
     const form = acceptedForm();
     form.delete("consent_data_storage");
-    const result = await submitRenewalAccepted(token, form, { from: () => query({ data: invite(token) }) } as any);
-    expect(result.ok).toBe(false);
-    expect(result.message).toBe("Vui lòng đồng ý lưu trữ dữ liệu để gửi xác nhận gia hạn.");
+    const rpc = vi.fn(async () => ({ data: [{ outcome_status: "accepted" }], error: null }));
+    const result = await submitRenewalAccepted(token, form, { from: () => query({ data: invite(token) }), rpc } as any);
+    expect(result.ok).toBe(true);
+    expect(rpc).toHaveBeenCalledWith("vam071_submit_renewal_accepted", expect.objectContaining({
+      p_consent_data_storage: true,
+      p_raw_payload: expect.objectContaining({ acceptance_notice: RENEWAL_ONE_CLICK_NOTICE })
+    }));
   });
 
   it("passes consent_data_storage exactly to the payload in M071 RPC", async () => {

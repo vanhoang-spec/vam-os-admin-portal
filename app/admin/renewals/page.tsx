@@ -9,6 +9,18 @@ import { CreateRenewalInviteForm, RenewalInviteActions as RenewalInviteControls 
 import { BatchRenewalInviteForm } from "./mentor-batch-form";
 import Link from "next/link";
 import { matchesMentorQuery } from "@/lib/renewal-search";
+import { renewalCommitmentSummary } from "@/lib/renewal-one-click-core";
+
+/** Dòng cam kết của một đơn gia hạn đã đồng ý; câu chữ do renewalCommitmentSummary quyết định. */
+function CommitmentLine({ row }: { row: RenewalConsoleRow }) {
+  const commitment = renewalCommitmentSummary(row);
+  if (!commitment) return null;
+  return (
+    <p data-testid="renewal-commitment-line" className={`mt-2 text-sm font-medium ${commitment.ok ? "text-green-700" : "text-red-700"}`}>
+      {commitment.text}
+    </p>
+  );
+}
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -163,11 +175,7 @@ export default async function AdminRenewalsPage(props: { searchParams?: Promise<
               <div className="mt-5">
                 <h4 className="text-sm font-semibold text-vam-ink">Thay đổi hồ sơ chờ xác nhận</h4>
                 
-                {row.commitmentsCompleted === true ? (
-                  <p className="mt-2 text-sm text-green-700 font-medium">Cam kết Mentor: Đã xác nhận đầy đủ</p>
-                ) : row.commitmentsCompleted === false ? (
-                  <p className="mt-2 text-sm text-red-700 font-medium">Cam kết Mentor: Chưa xác nhận đủ hoặc lỗi dữ liệu</p>
-                ) : null}
+                <CommitmentLine row={row} />
 
                 {row.coreTeamNote ? (
                   <div className="mt-2 rounded-md bg-slate-50 p-3">

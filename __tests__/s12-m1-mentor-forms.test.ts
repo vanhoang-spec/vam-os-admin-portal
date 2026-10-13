@@ -84,14 +84,26 @@ describe("S12-M1 renewal annual confirmation", () => {
     }
   });
 
+  // Gia hạn một nút (BTC 13/10/2026): các ô hồ sơ không còn bắt buộc — để trống là giữ hồ
+  // sơ mùa trước, máy chủ chép sang khi ghi đơn (gia-han-mot-nut.test.tsx, mục 5–6).
   it.each(["company_current", "title_current", "mentor_total_work_years", "industry_primary", "function_primary"])(
-    "requires %s for the Season 12 submission",
-    (key) => expect(validateRenewalAcceptance(renewalForm({ [key]: null })).ok).toBe(false)
+    "no longer requires %s: a blank keeps last season's profile",
+    (key) => {
+      const result = validateRenewalAcceptance(renewalForm({ [key]: null }));
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.payload).not.toHaveProperty(key);
+    }
   );
 
-  it("requires explicit consent, at least one known program, and an other-university name", () => {
-    expect(validateRenewalAcceptance(renewalForm({ consent_data_storage: null })).ok).toBe(false);
-    expect(validateRenewalAcceptance(renewalForm({ programs_willing_to_join: null })).ok).toBe(false);
+  it("still requires the season's mentee capacity", () => {
+    expect(validateRenewalAcceptance(renewalForm({ mentoring_capacity_total: null })).ok).toBe(false);
+    expect(validateRenewalAcceptance(renewalForm({ mentoring_capacity_total: "7" })).ok).toBe(false);
+  });
+
+  it("takes consent from the button, accepts no program, but never an unknown program or a nameless other-university", () => {
+    // Đồng ý lưu dữ liệu và chương trình tham gia nằm trong chính lần bấm Gia hạn.
+    expect(validateRenewalAcceptance(renewalForm({ consent_data_storage: null })).ok).toBe(true);
+    expect(validateRenewalAcceptance(renewalForm({ programs_willing_to_join: null })).ok).toBe(true);
     expect(validateRenewalAcceptance(renewalForm({ programs_willing_to_join: "NOT_A_PROGRAM" })).ok).toBe(false);
     expect(validateRenewalAcceptance(renewalForm({ university: "OTHER", university_other: null })).ok).toBe(false);
     expect(validateRenewalAcceptance(renewalForm({ university: "OTHER", university_other: "RMIT" })).ok).toBe(true);

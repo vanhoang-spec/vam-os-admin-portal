@@ -1,6 +1,7 @@
 import "server-only";
 
 import { readAllPages } from "@/lib/paged-read";
+import { renewalAcceptanceModeOf } from "@/lib/renewal-one-click-core";
 import { buildRenewalProfileDiff, buildRenewalProfileRefresh, type RenewalProfileDiffEntry } from "@/lib/renewal-profile-safety";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -76,6 +77,11 @@ export type RenewalConsoleRow = {
   coreTeamNote: string | null;
   declineFeedback: string | null;
   commitmentsCompleted: boolean | null;
+  /**
+   * "one_click" khi mentor gia hạn theo lối một nút (từ 13/10/2026): cam kết được đồng ý
+   * bằng lần bấm dưới câu thông báo, không tick từng ô. null với các đơn trước đó.
+   */
+  acceptanceMode: string | null;
   /**
    * Dòng "Từ chối" MỚI NHẤT của một mentor chưa có link sống và chưa đồng ý — chỉ
    * dòng đó mang nút "Mở lại link gia hạn" (BTC 08/10/2026). Mentor đã được mời lại
@@ -273,6 +279,7 @@ export async function loadRenewalConsoleData(seasonContext?: RenewalSeasonContex
         coreTeamNote: typeof renewal.core_team_note === "string" ? renewal.core_team_note : null,
         declineFeedback: typeof invite.decline_feedback === "string" ? invite.decline_feedback : null,
         commitmentsCompleted: typeof renewal.commitments_completed === "boolean" ? renewal.commitments_completed : null,
+        acceptanceMode: renewalAcceptanceModeOf(renewal),
         canReopen: reopenable.has(String(invite.id))
       };
     })

@@ -1,12 +1,7 @@
 import "server-only";
 
 import { approveApplication } from "@/lib/application-approvals";
-import {
-  ACTIVE_READING_KEYS,
-  confirmationMatches,
-  CONFIRMATION_PHRASES,
-  requiredCheckboxAcknowledgements
-} from "@/lib/application-commitments";
+import { requiredCheckboxAcknowledgements } from "@/lib/application-commitments";
 import {
   evaluateRenewalInviteGate,
   mintRenewalInviteToken,
@@ -22,13 +17,17 @@ import {
   type RenewalProfileDiffEntry
 } from "@/lib/renewal-profile-safety";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { validateMaxThreeWithOther } from "@/lib/application-form-validation";
+import { validateSelectionWithOther } from "@/lib/application-form-validation";
+import {
+  carryOverRenewalProfile,
+  RENEWAL_ONE_CLICK_MODE,
+  RENEWAL_ONE_CLICK_NOTICE
+} from "@/lib/renewal-one-click-core";
 import { MENTOR_FUNCTION_OPTIONS, MENTOR_PROGRAM_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   isRenewalMenteeCapacity,
   RENEWAL_MAX_EXPERIENCE_YEARS,
   RENEWAL_MENTEE_CAPACITY_CHOICES,
-  RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
   type RenewalAdminActionState,
   type RenewalConfirmationIntent,
   type RenewalMentorProfile,
@@ -95,35 +94,35 @@ function secondarySelections(formData: FormData): string[] | undefined {
  * P0 submission envelope supplied to M071. Identity and binding fields are
  * intentionally impossible to add here; M071 obtains them from the invite.
  * Blank values are omitted, preserving canonical profile columns.
+ *
+ * Gia hạn một nút (BTC 13/10/2026). Hàm này chỉ được gọi khi người giữ link đã bấm
+ * nút đứng ngay dưới RENEWAL_ONE_CLICK_NOTICE. Form không còn ô cam kết, câu xác nhận
+ * gõ tay hay ô đồng ý lưu dữ liệu nào, nên phần đó không đọc gì từ formData: payload
+ * ghi lại đúng điều đã xảy ra — đồng ý bằng một lần bấm, kèm nguyên văn câu họ thấy.
+ *
+ * Ghi `true` cho từng cam kết chứ không bỏ trống: đó là nội dung câu thông báo ("đồng ý
+ * với các cam kết của mentor liệt kê bên dưới"), và mọi nơi đọc đơn gia hạn — bảng của
+ * BTC, file xuất — vẫn hỏi đúng các khoá đó. `acceptance_mode` là thứ phân biệt đơn này
+ * với các đơn trước 13/10, nơi từng ô được tick tay.
  */
 export function renewalPayloadFromFormData(formData: FormData): Record<string, unknown> {
-  const commitments: Record<string, boolean | string> = {};
-  let commitmentsCompleted = true;
-  for (const entry of requiredCheckboxAcknowledgements("mentor")) {
-    const checked = formData.get(entry.key) === "true";
-    commitments[entry.key] = checked;
-    if (!checked) commitmentsCompleted = false;
-  }
-  const activeReading = String(formData.get(ACTIVE_READING_KEYS.mentor) ?? "").trim();
-  const activeReadingMatches = confirmationMatches(activeReading, CONFIRMATION_PHRASES.mentor);
-  if (!activeReadingMatches) commitmentsCompleted = false;
+  const commitments: Record<string, boolean> = {};
+  for (const entry of requiredCheckboxAcknowledgements("mentor")) commitments[entry.key] = true;
 
-  commitments[`${ACTIVE_READING_KEYS.mentor}_matched`] = activeReadingMatches;
-  commitments[`${ACTIVE_READING_KEYS.mentor}_text`] = activeReading;
+  const programs = Array.from(new Set(selectedValues(formData, "programs_willing_to_join")));
 
   const payload: Record<string, unknown> = {
-    participation_confirmed: formData.get("participation_confirmed") === "yes",
-    [RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD]:
-      formData.get(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD) === "yes",
+    participation_confirmed: true,
+    acceptance_mode: RENEWAL_ONE_CLICK_MODE,
+    acceptance_notice: RENEWAL_ONE_CLICK_NOTICE,
     commitments,
-    commitments_completed: commitmentsCompleted,
+    commitments_completed: true,
     core_team_note: nonBlank(formData, "core_team_note"),
     university: nonBlank(formData, "university"),
     university_other: nonBlank(formData, "university_other"),
-    programs_willing_to_join: selectedValues(formData, "programs_willing_to_join"),
+    programs_willing_to_join: programs.length ? programs : undefined,
     // Lĩnh vực mentor chọn thêm ngoài ngành/chức năng chính (BTC 11/10/2026). Không chọn
-    // gì thì KHÔNG ghi khoá này: payload của người không dùng ô mới giữ nguyên hình dạng
-    // như mọi đơn gia hạn trước đó.
+    // gì thì KHÔNG ghi khoá này.
     secondary_industries_functions: secondarySelections(formData),
     secondary_industries_functions_other: nonBlank(formData, "secondary_industries_functions_other")
   };
@@ -285,36 +284,28 @@ export type RenewalAcceptanceValidation =
 /**
  * P0-RT-12. The server-side acceptance gate.
  *
- * The renewal form marks every commitment `required`, and that attribute is
- * worth exactly nothing here: the submission arrives at a server action, and a
- * direct POST never renders the form at all. Before this gate existed the
- * runtime computed `commitments_completed` and then submitted regardless, so
- * an accepted Season 12 renewal could carry every commitment false and an
- * unmatched acknowledgement while the console reported it as a live mentor.
- *
- * Fails CLOSED and BEFORE M071: a submission that does not satisfy every
+ * The submission arrives at a server action, and a direct POST never renders
+ * the form at all — so whatever the form marks or pre-selects is worth nothing
+ * here. Fails CLOSED and BEFORE M071: a submission that does not satisfy every
  * condition never reaches the trusted RPC, so no invite is claimed, no
  * applications row is written and the invite stays usable for a corrected
  * resubmission.
  *
- * The required set is read from `requiredCheckboxAcknowledgements("mentor")`,
- * so this function has no list of its own to fall out of date.
+ * Gia hạn một nút (BTC 13/10/2026) đổi NỘI DUNG của cổng này, không đổi vị trí của nó:
+ *
+ *   - Còn bắt buộc đúng một thứ: số mentee nhận mùa này. Form luôn gửi nó (mặc định 1),
+ *     nên thiếu nghĩa là một lần POST thẳng — và đó là cam kết của từng mùa, không có
+ *     giá trị nào trong hồ sơ để giữ nguyên thay.
+ *   - Mọi ô hồ sơ khác KHÔNG bắt buộc. Để trống là giữ hồ sơ mùa trước. Nhưng ô nào đã
+ *     gửi lên thì phải hợp lệ: một lựa chọn không có trong danh sách, hay "Khác" mà
+ *     không ghi rõ, vẫn bị từ chối như trước.
+ *   - Cam kết, câu xác nhận gõ tay và ô đồng ý lưu dữ liệu không còn được kiểm ở đây,
+ *     vì form không còn hỏi: bấm nút dưới RENEWAL_ONE_CLICK_NOTICE là đồng ý. Điều đó
+ *     được GHI vào payload (renewalPayloadFromFormData), không phải đọc từ formData.
+ *   - Ngành / chức năng phụ không còn trần 3 lựa chọn.
  */
 export function validateRenewalAcceptance(formData: FormData): RenewalAcceptanceValidation {
   const payload = renewalPayloadFromFormData(formData);
-
-  if (payload.participation_confirmed !== true) {
-    return { ok: false, message: "Vui lòng xác nhận tiếp tục đồng hành trong Season 12." };
-  }
-  if (payload[RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD] !== true) {
-    return {
-      ok: false,
-      message: "Vui lòng xác nhận đã kiểm tra thông tin nghề nghiệp hiện tại cho Season 12."
-    };
-  }
-  if (formData.get("consent_data_storage") !== "yes") {
-    return { ok: false, message: "Vui lòng đồng ý lưu trữ dữ liệu để gửi xác nhận gia hạn." };
-  }
 
   if (!isRenewalMenteeCapacity(payload.mentoring_capacity_total)) {
     return {
@@ -323,49 +314,48 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
     };
   }
 
-  const requiredSeasonFields = [
-    ["company_current", "công ty hiện tại"],
-    ["title_current", "chức danh hiện tại"],
-    ["mentor_total_work_years", "số năm kinh nghiệm"],
-    ["mentor_people_management_years", "số năm kinh nghiệm quản lý con người/đội ngũ"],
-    ["industry_primary", "ngành nghề chính"],
-    ["function_primary", "chức năng/chuyên môn chính"]
-  ] as const;
-  const missingSeasonField = requiredSeasonFields.find(([key]) => !String(payload[key] ?? "").trim());
-  if (missingSeasonField) {
-    return { ok: false, message: `Vui lòng xác nhận ${missingSeasonField[1]} cho Season 12.` };
-  }
-  const allowedFunctions = new Set(MENTOR_FUNCTION_OPTIONS.map((option) => option.value));
-  const functionPrimary = String(payload.function_primary);
-  if (!allowedFunctions.has(functionPrimary)) {
-    return { ok: false, message: "Vui lòng chọn chức năng/chuyên môn chính hợp lệ." };
-  }
-  if (functionPrimary === "other") {
-    const functionPrimaryOther = String(payload.function_primary_other ?? "").trim();
-    if (!functionPrimaryOther) {
-      return { ok: false, message: "Vui lòng ghi rõ chức năng/chuyên môn chính khác." };
-    }
-    payload.function_primary_other = functionPrimaryOther;
-  } else {
+  if (payload.function_primary === undefined) {
+    // Câu ghi rõ "Khác" không đi một mình: không chọn chức năng thì không có gì để ghi rõ.
     delete payload.function_primary_other;
-  }
-  const allowedIndustries = new Set(MENTOR_INDUSTRY_OPTIONS.map((option) => option.value));
-  const industryPrimary = String(payload.industry_primary);
-  if (!allowedIndustries.has(industryPrimary)) {
-    return { ok: false, message: "Vui lòng chọn ngành nghề chính hợp lệ." };
-  }
-  if (industryPrimary === "other") {
-    const industryPrimaryOther = String(payload.industry_primary_other ?? "").trim();
-    if (!industryPrimaryOther) {
-      return { ok: false, message: "Vui lòng ghi rõ ngành nghề chính khác." };
-    }
-    payload.industry_primary_other = industryPrimaryOther;
   } else {
-    delete payload.industry_primary_other;
+    const allowedFunctions = new Set(MENTOR_FUNCTION_OPTIONS.map((option) => option.value));
+    const functionPrimary = String(payload.function_primary);
+    if (!allowedFunctions.has(functionPrimary)) {
+      return { ok: false, message: "Vui lòng chọn chức năng/chuyên môn chính hợp lệ." };
+    }
+    if (functionPrimary === "other") {
+      const functionPrimaryOther = String(payload.function_primary_other ?? "").trim();
+      if (!functionPrimaryOther) {
+        return { ok: false, message: "Vui lòng ghi rõ chức năng/chuyên môn chính khác." };
+      }
+      payload.function_primary_other = functionPrimaryOther;
+    } else {
+      delete payload.function_primary_other;
+    }
   }
-  // Ngành/chức năng phụ: không bắt buộc, nhưng đã gửi lên thì phải là lựa chọn có thật
-  // trong danh sách, tối đa 3, và "Khác" phải kèm nội dung — đúng luật của form đăng ký
-  // mentor mới (validateMaxThreeWithOther), không viết luật thứ hai.
+
+  if (payload.industry_primary === undefined) {
+    delete payload.industry_primary_other;
+  } else {
+    const allowedIndustries = new Set(MENTOR_INDUSTRY_OPTIONS.map((option) => option.value));
+    const industryPrimary = String(payload.industry_primary);
+    if (!allowedIndustries.has(industryPrimary)) {
+      return { ok: false, message: "Vui lòng chọn ngành nghề chính hợp lệ." };
+    }
+    if (industryPrimary === "other") {
+      const industryPrimaryOther = String(payload.industry_primary_other ?? "").trim();
+      if (!industryPrimaryOther) {
+        return { ok: false, message: "Vui lòng ghi rõ ngành nghề chính khác." };
+      }
+      payload.industry_primary_other = industryPrimaryOther;
+    } else {
+      delete payload.industry_primary_other;
+    }
+  }
+
+  // Ngành/chức năng phụ: không bắt buộc và không giới hạn số lượng (BTC 13/10/2026),
+  // nhưng đã gửi lên thì phải là lựa chọn có thật trong danh sách, và "Khác" phải kèm
+  // nội dung — cùng luật với form đăng ký mentor mới (validateSelectionWithOther).
   const secondary = Array.isArray(payload.secondary_industries_functions)
     ? payload.secondary_industries_functions.map(String)
     : [];
@@ -375,7 +365,7 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
   if (secondary.some((value) => !allowedSecondary.has(value))) {
     return { ok: false, message: "Vui lòng chọn ngành/chức năng phụ hợp lệ." };
   }
-  const secondaryCheck = validateMaxThreeWithOther({
+  const secondaryCheck = validateSelectionWithOther({
     values: secondary,
     otherText: String(payload.secondary_industries_functions_other ?? ""),
     fieldName: "secondary_industries_functions",
@@ -386,62 +376,59 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
   }
   // Chữ "Khác" còn sót lại sau khi đã bỏ chọn "Khác" thì không lưu.
   if (!secondary.includes("other")) delete payload.secondary_industries_functions_other;
+
+  const hasWorkYears = payload.mentor_total_work_years !== undefined;
   const workYears = Number(payload.mentor_total_work_years);
-  if (!Number.isInteger(workYears) || workYears < 0 || workYears > RENEWAL_MAX_EXPERIENCE_YEARS) {
+  if (hasWorkYears && (!Number.isInteger(workYears) || workYears < 0 || workYears > RENEWAL_MAX_EXPERIENCE_YEARS)) {
     return {
       ok: false,
       message: `Số năm kinh nghiệm phải là số nguyên từ 0 đến ${RENEWAL_MAX_EXPERIENCE_YEARS}.`
     };
   }
-  const managementYears = Number(payload.mentor_people_management_years);
-  if (
-    !Number.isInteger(managementYears) ||
-    managementYears < 0 ||
-    managementYears > RENEWAL_MAX_EXPERIENCE_YEARS ||
-    managementYears > workYears
-  ) {
-    return {
-      ok: false,
-      message: `Số năm kinh nghiệm quản lý phải là số nguyên từ 0 đến ${workYears}.`
-    };
+  if (payload.mentor_people_management_years !== undefined) {
+    const managementYears = Number(payload.mentor_people_management_years);
+    // So với số năm kinh nghiệm khi mentor có gửi nó; không thì chỉ còn trần chung.
+    const ceiling = hasWorkYears ? workYears : RENEWAL_MAX_EXPERIENCE_YEARS;
+    if (!Number.isInteger(managementYears) || managementYears < 0 || managementYears > ceiling) {
+      return {
+        ok: false,
+        message: `Số năm kinh nghiệm quản lý phải là số nguyên từ 0 đến ${ceiling}.`
+      };
+    }
   }
-  if (String(payload.mentoring_topics).length > 2000) {
+  if (payload.mentoring_topics !== undefined && String(payload.mentoring_topics).length > 2000) {
     return { ok: false, message: "Chủ đề mentoring không được vượt quá 2.000 ký tự." };
   }
-  const university = String(payload.university ?? "");
-  if (!["UEH", "OTHER"].includes(university)) {
-    return { ok: false, message: "Vui lòng chọn trường đại học đã tốt nghiệp." };
-  }
-  if (university === "OTHER" && !String(payload.university_other ?? "").trim()) {
-    return { ok: false, message: "Vui lòng nhập tên trường đại học." };
-  }
-  if (university !== "OTHER") delete payload.university_other;
-  const allowedPrograms = new Set(MENTOR_PROGRAM_OPTIONS.map((option) => option.value));
-  const programs = Array.isArray(payload.programs_willing_to_join)
-    ? payload.programs_willing_to_join.map(String)
-    : [];
-  if (!programs.length || programs.some((program) => !allowedPrograms.has(program))) {
-    return { ok: false, message: "Vui lòng chọn ít nhất một chương trình sẵn sàng tham gia." };
+
+  if (payload.university === undefined) {
+    delete payload.university_other;
+  } else {
+    const university = String(payload.university);
+    if (!["UEH", "OTHER"].includes(university)) {
+      return { ok: false, message: "Vui lòng chọn trường đại học đã tốt nghiệp." };
+    }
+    if (university === "OTHER" && !String(payload.university_other ?? "").trim()) {
+      return { ok: false, message: "Vui lòng nhập tên trường đại học." };
+    }
+    if (university !== "OTHER") delete payload.university_other;
   }
 
-  const missing = requiredCheckboxAcknowledgements("mentor").find(
-    (entry) => formData.get(entry.key) !== "true"
-  );
-  if (missing) {
-    return { ok: false, message: `Vui lòng xác nhận: ${missing.wording}` };
-  }
-
-  const activeReading = String(formData.get(ACTIVE_READING_KEYS.mentor) ?? "");
-  if (!confirmationMatches(activeReading, CONFIRMATION_PHRASES.mentor)) {
-    return {
-      ok: false,
-      message:
-        "Câu xác nhận chủ động của Mentor chưa đúng. Vui lòng nhập lại chính xác câu được hiển thị."
-    };
+  if (payload.programs_willing_to_join !== undefined) {
+    const allowedPrograms = new Set(MENTOR_PROGRAM_OPTIONS.map((option) => option.value));
+    const programs = (payload.programs_willing_to_join as unknown[]).map(String);
+    if (programs.some((program) => !allowedPrograms.has(program))) {
+      return { ok: false, message: "Vui lòng chọn chương trình sẵn sàng tham gia hợp lệ." };
+    }
   }
 
   return { ok: true, payload };
 }
+
+/**
+ * Chương trình ghi cho một đơn gia hạn không khai chương trình nào. Link gia hạn này là
+ * của UEH Mentoring Season 12, nên bấm Gia hạn chính là nhận lời với chương trình đó.
+ */
+export const RENEWAL_DEFAULT_PROGRAM = "UEHM";
 
 export async function submitRenewalAccepted(
   rawToken: unknown,
@@ -450,7 +437,6 @@ export async function submitRenewalAccepted(
 ): Promise<RenewalPublicActionState> {
   const validation = validateRenewalAcceptance(formData);
   if (!validation.ok) return { ok: false, message: validation.message };
-  const payload = validation.payload;
 
   const decision = await resolveRenewalGate(rawToken, "submit", client);
   if (decision.status !== "renewable" || !client) {
@@ -458,6 +444,25 @@ export async function submitRenewalAccepted(
   }
   const tokenHash = safeHashRenewalInviteToken(rawToken);
   if (!tokenHash) return { ok: false, message: SAFE_PUBLIC_FAILURE };
+
+  // Hồ sơ mùa trước đi cùng đơn: ô nào mentor không tự điền thì chép từ hồ sơ đang lưu.
+  // Đọc hồ sơ theo người của CHÍNH lời mời, không theo bất cứ thứ gì trong form. Không
+  // đọc được thì dừng trước khi ghi — lời mời còn nguyên, bấm lại là được; ghi tiếp với
+  // một đơn thiếu nửa hồ sơ thì không có lần sửa nào về sau.
+  const canonical = await loadPersonAndProfile(client, decision.invite.person_id);
+  if (!canonical) return { ok: false, message: SAFE_PUBLIC_FAILURE };
+  const carried = carryOverRenewalProfile(validation.payload, canonical.profile, {
+    industries: MENTOR_INDUSTRY_OPTIONS,
+    functions: MENTOR_FUNCTION_OPTIONS
+  });
+  const payload = carried.payload;
+  const filled = [...carried.filled];
+  if (payload.programs_willing_to_join === undefined) {
+    payload.programs_willing_to_join = [RENEWAL_DEFAULT_PROGRAM];
+    filled.push("programs_willing_to_join");
+  }
+  // Ghi rõ ô nào do hệ thống điền: về sau phân biệt được "mentor khai lại" với "giữ nguyên".
+  if (filled.length) payload.system_filled_fields = filled;
 
   const { data, error } = await client.rpc("vam071_submit_renewal_accepted", {
     p_token_hash: tokenHash,

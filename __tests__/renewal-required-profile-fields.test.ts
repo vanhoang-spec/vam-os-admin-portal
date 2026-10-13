@@ -12,10 +12,8 @@ import {
   submitRenewalAccepted,
   validateRenewalAcceptance
 } from "@/lib/renewal-runtime";
-import {
-  RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
-  RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT
-} from "@/lib/renewal-types";
+import { RENEWAL_ONE_CLICK_MODE } from "@/lib/renewal-one-click-core";
+import { RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD } from "@/lib/renewal-types";
 
 function acceptedForm(overrides: Record<string, string> = {}) {
   const form = new FormData();
@@ -50,8 +48,14 @@ function query(data: unknown) {
   return chain;
 }
 
+/**
+ * Tên file giữ từ thời form gia hạn BẮT mentor khai lại hồ sơ. Từ 13/10/2026 (gia hạn một
+ * nút) các ô hồ sơ không còn bắt buộc: để trống là giữ hồ sơ mùa trước. Những ca dưới đây
+ * khoá hai điều còn lại — ô nào ĐÃ gửi thì phải hợp lệ, và số mentee vẫn bắt buộc. Luật
+ * đầy đủ của lối một nút: gia-han-mot-nut.test.tsx.
+ */
 describe("Season 12 renewal current-profile requirements", () => {
-  it("renders every required profile field and the exact separate review confirmation", () => {
+  it("still offers every profile field for an optional update; no review confirmation or privacy checkbox remains", () => {
     const source = fs.readFileSync("app/renew/[token]/renewal-form.tsx", "utf8");
     for (const field of [
       "company_current",
@@ -62,17 +66,16 @@ describe("Season 12 renewal current-profile requirements", () => {
       "mentor_people_management_years",
       "mentoring_capacity_total",
       "mentoring_topics",
-      "programs_willing_to_join",
-      "consent_data_storage"
+      "programs_willing_to_join"
     ]) {
       expect(source).toContain(field);
     }
-    expect(source).toContain("RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD");
-    expect(RENEWAL_PROFILE_REVIEW_CONFIRMATION_TEXT).toBe(
-      "Tôi xác nhận đã kiểm tra và cập nhật các thông tin nghề nghiệp ở trên theo tình trạng hiện tại của tôi cho Season 12."
-    );
-    expect(source).toContain("Quyền riêng tư:");
-    expect(source).toContain("Xác nhận rà soát hồ sơ — Bắt buộc:");
+    expect(source).not.toContain("consent_data_storage");
+    expect(source).not.toContain("RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD");
+    expect(source).not.toContain("Quyền riêng tư:");
+    expect(source).not.toContain("Xác nhận rà soát hồ sơ");
+    // Không ô nào mang thuộc tính required (soi thuộc tính JSX, không soi chữ trong chú thích).
+    expect(source).not.toMatch(/\srequired(\s*\/?>|\s+[a-zA-Z]|=\{)/);
   });
 
   it.each([
@@ -81,10 +84,16 @@ describe("Season 12 renewal current-profile requirements", () => {
     ["industry_primary", "   "],
     ["function_primary", "\n"],
     ["mentor_total_work_years", "   "],
-    ["mentor_people_management_years", "   "],
-    ["mentoring_capacity_total", "   "]
-  ])("refuses blank required field %s", (field, value) => {
-    expect(validateRenewalAcceptance(acceptedForm({ [field]: value })).ok).toBe(false);
+    ["mentor_people_management_years", "   "]
+  ])("accepts a blank %s and leaves it out, so last season's value is kept", (field, value) => {
+    const result = validateRenewalAcceptance(acceptedForm({ [field]: value }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload).not.toHaveProperty(field);
+  });
+
+  it("still refuses a blank mentee capacity: it is this season's commitment", () => {
+    expect(validateRenewalAcceptance(acceptedForm({ mentoring_capacity_total: "   " })).ok).toBe(false);
+    expect(validateRenewalAcceptance(acceptedForm({ mentoring_capacity_total: "__DELETE__" })).ok).toBe(false);
   });
 
   it("accepts a canonical mentor function value", () => {
@@ -175,14 +184,18 @@ describe("Season 12 renewal current-profile requirements", () => {
     if (result.ok) expect(result.payload).not.toHaveProperty("mentoring_topics");
   });
 
-  it("refuses an unchecked final profile-review confirmation independently of consent", () => {
-    const form = acceptedForm({ [RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD]: "__DELETE__" });
-    expect(form.get("consent_data_storage")).toBe("yes");
-    const result = validateRenewalAcceptance(form);
-    expect(result).toEqual({
-      ok: false,
-      message: "Vui lòng xác nhận đã kiểm tra thông tin nghề nghiệp hiện tại cho Season 12."
-    });
+  it("no longer asks for a profile-review confirmation or a consent tick: neither is required, neither is stored", () => {
+    for (const overrides of [
+      { [RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD]: "__DELETE__", consent_data_storage: "__DELETE__" },
+      { [RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD]: "yes", consent_data_storage: "yes" }
+    ]) {
+      const result = validateRenewalAcceptance(acceptedForm(overrides));
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.payload).not.toHaveProperty(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD);
+      expect(result.payload).not.toHaveProperty("consent_data_storage");
+      expect(result.payload.acceptance_mode).toBe(RENEWAL_ONE_CLICK_MODE);
+    }
   });
 
   it.each([
@@ -219,15 +232,16 @@ describe("Season 12 renewal current-profile requirements", () => {
     }, refresh)).toEqual([]);
   });
 
-  it("persists management years, mentoring topics, and review evidence in the renewal payload", () => {
+  it("persists management years, mentoring topics, and how the renewal was accepted in the payload", () => {
     const payload = renewalPayloadFromFormData(acceptedForm());
     expect(payload).toMatchObject({
       mentor_total_work_years: 12,
       mentor_people_management_years: 5,
       mentoring_capacity_total: 2,
       mentoring_topics: "Phát triển nghề nghiệp và chiến lược",
-      profile_review_confirmed: true
+      acceptance_mode: RENEWAL_ONE_CLICK_MODE
     });
+    expect(payload).not.toHaveProperty(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD);
     const refresh = buildRenewalProfileRefresh(payload) as Record<string, unknown>;
     expect(refresh).not.toHaveProperty("mentor_people_management_years");
     expect(refresh).not.toHaveProperty(RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD);
@@ -261,9 +275,11 @@ describe("Season 12 renewal current-profile requirements", () => {
     expect(rpc).toHaveBeenCalledWith("vam071_submit_renewal_accepted", expect.objectContaining({
       p_token_hash: tokenHash,
       p_consent_data_storage: true,
-      p_raw_payload: expect.objectContaining({ profile_review_confirmed: true })
+      p_raw_payload: expect.objectContaining({ acceptance_mode: RENEWAL_ONE_CLICK_MODE, mentoring_capacity_total: 2 })
     }));
-    expect(from.mock.calls.map((call) => call[0])).toEqual(["person_season_invites"]);
+    // Lời mời, rồi hồ sơ của chính người được mời (để chép những ô mentor không tự điền).
+    // Không bảng nào khác — đặc biệt là không ghi gì ngoài lệnh RPC ở trên.
+    expect(from.mock.calls.map((call) => call[0])).toEqual(["person_season_invites", "people", "mentor_profiles"]);
     expect(rpc.mock.calls.map((call) => call[0])).not.toContain("vam063_add_membership_role");
     expect(JSON.stringify(rpc.mock.calls)).not.toContain(token);
   });

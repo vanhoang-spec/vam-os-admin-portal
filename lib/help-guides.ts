@@ -735,9 +735,10 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Trên menu: Tuyển Mentor/Mentee → Tuyển Mentor → Gia hạn mentor S12 (trước 06/10/2026 nằm ở “Quản trị”).",
       "Dùng được: Super admin, Admin, Core team có quyền vận hành (operations) mùa UEHM-S12. Mỗi lượt hàng loạt tối đa 25 mentor.",
       "Hệ thống không tự gửi email. Link chỉ hiển thị một lần: tải lại trang là mất link thô, khi đó phải bấm “Tạo lại” (link cũ bị thu hồi).",
-      "Khung đỏ “Cần operator xử lý membership” báo phản hồi từ chối chưa được đối soát tự động. Mentor cũ chưa có trong danh sách thì dùng “Import / thêm legacy mentor”."
+      "Khung đỏ “Cần operator xử lý membership” báo phản hồi từ chối chưa được đối soát tự động. Mentor cũ chưa có trong danh sách thì dùng “Import / thêm legacy mentor”.",
+      "Từ 13/10/2026 mentor gia hạn bằng một nút: chọn số mentee nhận mùa này (mặc định 1) rồi bấm Gia hạn; bấm nút là đồng ý cam kết mentor và việc lưu dữ liệu. Hồ sơ mùa trước được giữ nguyên nên thường không có thay đổi nào chờ xác nhận, trừ số mentee hoặc khi mentor tự mở phần cập nhật hồ sơ. Mentor muốn nhận nhiều hơn 3 mentee thì Core team sửa số mentee tối đa trên hồ sơ của mentor."
     ],
-    updated: "02/10/2026"
+    updated: "13/10/2026"
   },
   "/admin/seasons-forms": {
     title: "Mùa & Form đăng ký",

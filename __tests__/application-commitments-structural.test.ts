@@ -51,11 +51,14 @@ describe("Season 12 commitment structural safeguards", () => {
     expect(detail).toContain("Acknowledgements completed");
   });
 
-  it("persists and validates max-three Other answers without a migration", () => {
+  it("persists and validates Other answers without a migration; only the mentee group keeps the max-three cap", () => {
     expect(action).toContain("validateMaxThreeWithOther");
     expect(action).toContain("secondary_industries_functions_other");
     expect(action).toContain("target_soft_skills_other");
-    expect(mentorForm).toContain("maxSelections={3}");
+    // BTC 13/10/2026 bỏ trần 3 cho "Ngành / chức năng phụ" của mentor; soft skills của
+    // mentee giữ nguyên (chi tiết: gia-han-mot-nut.test.tsx, mục 4).
+    expect(action).toContain("validateSelectionWithOther");
+    expect(mentorForm).not.toContain("maxSelections={3}");
     expect(menteeForm).toContain("maxSelections={3}");
   });
 

@@ -281,7 +281,11 @@ describe("M073 admin console reads decline feedback from the invite", () => {
 // F3 / F4 — server-side enforcement, derived from the canonical policy source
 // ---------------------------------------------------------------------------
 
-describe("M073 acceptance gate enforces the canonical mentor commitments", () => {
+// 13/10/2026 — gia hạn một nút. Form không còn ô tick cam kết, câu xác nhận gõ tay hay ô
+// đồng ý lưu dữ liệu: bấm nút dưới câu thông báo là đồng ý. Cổng này vì thế không còn TỪ
+// CHỐI theo từng cam kết; nó GHI đủ danh mục chuẩn vào đơn. Điều M073 canh từ đầu vẫn
+// nguyên: danh mục chỉ có một nguồn, và runtime lẫn form không giữ bản riêng.
+describe("M073 acceptance records the canonical mentor commitments", () => {
   it("derives the required set from the canonical acknowledgements", () => {
     const required = requiredCheckboxAcknowledgements("mentor");
     const applicationStage = acknowledgementsForRole("mentor");
@@ -308,49 +312,44 @@ describe("M073 acceptance gate enforces the canonical mentor commitments", () =>
   });
 
   it.each(requiredCheckboxAcknowledgements("mentor").map((entry) => entry.key))(
-    "refuses when required commitment %s is missing",
+    "records commitment %s as accepted even when the request omits it",
     (key) => {
       const result = validateRenewalAcceptance(acceptedForm({ [key]: "__DELETE__" }));
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.message).toContain("Vui lòng xác nhận:");
+      expect(result.ok).toBe(true);
+      if (result.ok) expect((result.payload.commitments as Record<string, unknown>)[key]).toBe(true);
     }
   );
 
-  it("refuses a commitment submitted with any value other than true", () => {
+  it("a commitment value sent with the request cannot lower what is recorded", () => {
     const key = requiredCheckboxAcknowledgements("mentor")[0].key;
-    expect(validateRenewalAcceptance(acceptedForm({ [key]: "false" })).ok).toBe(false);
-    expect(validateRenewalAcceptance(acceptedForm({ [key]: "on" })).ok).toBe(false);
+    for (const forged of ["false", "on", ""]) {
+      const result = validateRenewalAcceptance(acceptedForm({ [key]: forged }));
+      expect(result.ok).toBe(true);
+      if (result.ok) expect((result.payload.commitments as Record<string, unknown>)[key]).toBe(true);
+    }
   });
 
-  it("accepts the canonical typed phrase, including surrounding whitespace", () => {
-    const padded = `   ${CONFIRMATION_PHRASES.mentor}   `;
-    expect(validateRenewalAcceptance(acceptedForm({ [ACTIVE_READING_KEYS.mentor]: padded })).ok).toBe(
-      true
-    );
-  });
-
-  it("refuses a materially different typed phrase", () => {
-    const rejects = [
+  it("ignores the typed phrase entirely — canonical, altered or empty", () => {
+    const candidates = [
+      `   ${CONFIRMATION_PHRASES.mentor}   `,
       "",
       "Tôi đồng ý",
       `${CONFIRMATION_PHRASES.mentor} nhưng không chắc`,
       CONFIRMATION_PHRASES.mentee
     ];
-    for (const candidate of rejects) {
-      const result = validateRenewalAcceptance(
-        acceptedForm({ [ACTIVE_READING_KEYS.mentor]: candidate })
-      );
-      expect(`${candidate.slice(0, 14)}:${result.ok}`).toBe(`${candidate.slice(0, 14)}:false`);
+    for (const candidate of candidates) {
+      const result = validateRenewalAcceptance(acceptedForm({ [ACTIVE_READING_KEYS.mentor]: candidate }));
+      expect(`${candidate.slice(0, 14)}:${result.ok}`).toBe(`${candidate.slice(0, 14)}:true`);
+      if (result.ok) expect(JSON.stringify(result.payload)).not.toContain(ACTIVE_READING_KEYS.mentor);
     }
   });
 
-  it("refuses a missing participation confirmation or data-storage consent", () => {
-    expect(validateRenewalAcceptance(acceptedForm({ participation_confirmed: "__DELETE__" })).ok).toBe(
-      false
-    );
-    expect(validateRenewalAcceptance(acceptedForm({ consent_data_storage: "__DELETE__" })).ok).toBe(
-      false
-    );
+  it("needs neither a participation tick nor a consent tick: pressing the button is both", () => {
+    for (const missing of ["participation_confirmed", "consent_data_storage"]) {
+      const result = validateRenewalAcceptance(acceptedForm({ [missing]: "__DELETE__" }));
+      expect(`${missing}:${result.ok}`).toBe(`${missing}:true`);
+      if (result.ok) expect(result.payload.participation_confirmed).toBe(true);
+    }
   });
 
   it.each(RENEWAL_MENTEE_CAPACITY_CHOICES.map((choice) => String(choice)))(
@@ -368,11 +367,11 @@ describe("M073 acceptance gate enforces the canonical mentor commitments", () =>
     if (!result.ok) expect(result.message).toContain("số mentee");
   });
 
-  it("never reaches the trusted RPC, or even the invite, when a commitment is missing", async () => {
+  it("never reaches the trusted RPC, or even the invite, when the mentee capacity is missing", async () => {
+    // Số mentee là thứ duy nhất cổng còn đòi; thiếu nó thì dừng TRƯỚC mọi thứ khác.
     const rpc = vi.fn();
     const from = vi.fn(() => query(invite()));
-    const key = requiredCheckboxAcknowledgements("mentor")[0].key;
-    const result = await submitRenewalAccepted(TOKEN.token, acceptedForm({ [key]: "__DELETE__" }), {
+    const result = await submitRenewalAccepted(TOKEN.token, acceptedForm({ mentoring_capacity_total: "__DELETE__" }), {
       from,
       rpc
     } as any);
@@ -382,12 +381,15 @@ describe("M073 acceptance gate enforces the canonical mentor commitments", () =>
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("records commitments_completed true only once every condition holds", () => {
-    expect(renewalPayloadFromFormData(acceptedForm()).commitments_completed).toBe(true);
+  it("records commitments_completed true, with exactly the canonical keys, for every accepted renewal", () => {
     const key = requiredCheckboxAcknowledgements("mentor")[0].key;
-    expect(
-      renewalPayloadFromFormData(acceptedForm({ [key]: "__DELETE__" })).commitments_completed
-    ).toBe(false);
+    for (const form of [acceptedForm(), acceptedForm({ [key]: "__DELETE__" })]) {
+      const payload = renewalPayloadFromFormData(form);
+      expect(payload.commitments_completed).toBe(true);
+      expect(Object.keys(payload.commitments as Record<string, unknown>).sort()).toEqual(
+        requiredCheckboxAcknowledgements("mentor").map((entry) => entry.key).sort()
+      );
+    }
   });
 });
 

@@ -97,6 +97,11 @@ export const QUICK_VIEW_EXCLUDED_KEYS: ReadonlySet<string> = new Set([
   "commitments_completed",
   "participation_confirmed",
   RENEWAL_PROFILE_REVIEW_CONFIRMATION_FIELD,
+  // Gia hạn một nút (13/10/2026): cách đồng ý, nguyên văn câu thông báo và danh sách ô do
+  // hệ thống chép từ hồ sơ — giấy tờ của đơn, không phải thông tin để chọn mentor.
+  "acceptance_mode",
+  "acceptance_notice",
+  "system_filled_fields",
   // Scheduling logistics, not matching fit
   "available_for_interview",
   "available_for_kickoff",
