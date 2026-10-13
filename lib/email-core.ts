@@ -83,7 +83,10 @@ export type EmailKind =
   | "mentee_session_confirmed"
   // Ghép cặp Vòng 2: mời mentor mở link riêng chọn mentee cùng nhóm ngành
   // (supabase/migrations/20261008080000_vong_2_mentor_chon_mentee.sql).
-  | "matching_round2_invite";
+  | "matching_round2_invite"
+  // Mentee đặc cách (Support team): mời mở link riêng bấm xác nhận tham gia mentee mùa này
+  // (supabase/migrations/20261011150000_mentee_dac_cach_support_team.sql).
+  | "mentee_exemption_confirm";
 
 /**
  * Một tệp đi kèm thư.
@@ -1998,6 +2001,54 @@ export function buildMatchingRound2InviteEmail(input: {
       "<p>Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.</p>",
       `<p>Cần hỗ trợ, anh/chị nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
       `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho anh/chị, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.pickUrl)}</p>`
+    ].join("")
+  );
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư mời một bạn Support team xác nhận tham gia mentee mùa này (BTC 11/10/2026).
+ *
+ * Người nhận được ĐẶC CÁCH: không qua phỏng vấn. Thư chỉ nhờ một việc — mở đường dẫn riêng
+ * và bấm "Xác nhận tham gia" — nên không kèm hạn, không kèm bước nào khác. Xưng "bạn" vì
+ * người nhận là sinh viên, khác các thư gửi mentor.
+ */
+export function buildMenteeExemptionConfirmEmail(input: {
+  recipientName: string;
+  seasonLabel: string;
+  confirmUrl: string;
+  hotlineZalo: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.recipientName, "bạn");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+
+  const subject = `[UEH Mentoring] Mời bạn xác nhận tham gia Mentee — ${season}`;
+  const lines = [
+    `Chào ${name},`,
+    "",
+    `Cảm ơn bạn đã đồng hành cùng chương trình trong vai trò Support team. Ban tổ chức đặc cách để bạn tham gia ${season} với vai trò Mentee mà không cần qua vòng phỏng vấn.`,
+    "",
+    'Để ban tổ chức ghi nhận, bạn mở đường dẫn riêng dưới đây và bấm "Xác nhận tham gia":',
+    input.confirmUrl,
+    "",
+    "Sau khi bạn xác nhận, ban tổ chức sẽ đưa bạn vào bước ghép cặp Mentor – Mentee của mùa này và báo cho bạn khi có kết quả.",
+    "",
+    "Nếu bạn chưa tham gia được với vai trò Mentee trong mùa này, bạn không cần bấm xác nhận — nhắn ban tổ chức một tiếng là được.",
+    "",
+    `Cần hỗ trợ, bạn nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này.`,
+    "",
+    SIGNATURE_TEXT
+  ];
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>Cảm ơn bạn đã đồng hành cùng chương trình trong vai trò Support team. Ban tổ chức đặc cách để bạn tham gia <strong>${escapeHtml(season)}</strong> với vai trò <strong>Mentee</strong> mà không cần qua vòng phỏng vấn.</p>`,
+      "<p>Để ban tổ chức ghi nhận, bạn mở đường dẫn riêng dưới đây và bấm <strong>Xác nhận tham gia</strong>:</p>",
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.confirmUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Mở trang xác nhận</a></p>`,
+      "<p>Sau khi bạn xác nhận, ban tổ chức sẽ đưa bạn vào bước ghép cặp Mentor – Mentee của mùa này và báo cho bạn khi có kết quả.</p>",
+      "<p>Nếu bạn chưa tham gia được với vai trò Mentee trong mùa này, bạn không cần bấm xác nhận — nhắn ban tổ chức một tiếng là được.</p>",
+      `<p>Cần hỗ trợ, bạn nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
+      `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho bạn, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.confirmUrl)}</p>`
     ].join("")
   );
   return { to: "", subject, text: lines.join("\n"), html };

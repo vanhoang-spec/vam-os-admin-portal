@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, createContext, useContext } from "react";
 import { cn } from "@/lib/utils";
 import { ApplySubmitButton } from "./submit-button";
+import { MissingFieldsSummary, useMissingFields } from "./missing-fields";
 import { RETURNING_MENTOR_GUIDANCE, type ApplyActionState } from "@/lib/apply-types";
 import {
   draftChecked,
@@ -84,16 +85,6 @@ const InlineRequiredError = ({ message }: { message?: string }) => (
   </span>
 );
 
-type MissingField = { name: string; label: string };
-
-function fieldDetails(control: HTMLElement): MissingField {
-  const container = control.closest<HTMLElement>("[data-field-name]");
-  return {
-    name: container?.dataset.fieldName || control.getAttribute("name") || control.id,
-    label: container?.dataset.fieldLabel || control.getAttribute("name") || "Mục bắt buộc"
-  };
-}
-
 export function ApplicationForm({
   action,
   state,
@@ -114,50 +105,9 @@ export function ApplicationForm({
   onSubmitCapture?: React.FormEventHandler<HTMLFormElement>;
   children: React.ReactNode;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
-  const [missing, setMissing] = useState<MissingField[]>([]);
-
-  // Runs from the form's `invalid` capture listener, which the browser fires once
-  // per invalid control during interactive validation.
-  //
-  // MUST NOT call checkValidity(): per the HTML spec that method *dispatches* an
-  // `invalid` event at the control, which captures straight back into this handler
-  // and recurses without bound. Read the `validity` property instead — a plain
-  // property access that fires nothing.
-  const revealInvalid = () => {
-    const form = formRef.current;
-    if (!form) return;
-    const controls = Array.from(form.querySelectorAll<HTMLElement>("input, select, textarea"));
-    const invalid = controls.filter((control) => {
-      const candidate = control as HTMLInputElement;
-      return candidate.validity ? !candidate.validity.valid : false;
-    });
-    const unique = Array.from(new Map(invalid.map((control) => {
-      const details = fieldDetails(control);
-      return [details.name, details];
-    })).values());
-    // The browser fires one `invalid` event per invalid control, so this handler
-    // runs N times per submit. Keep the previous array when nothing changed so the
-    // repeats collapse into a single React render.
-    setMissing((prev) =>
-      prev.length === unique.length && prev.every((item, i) => item.name === unique[i].name)
-        ? prev
-        : unique
-    );
-    form.querySelectorAll("[data-field-name]").forEach((node) => node.removeAttribute("data-invalid"));
-    controls.forEach((control) => control.removeAttribute("aria-invalid"));
-    invalid.forEach((control) => {
-      control.setAttribute("aria-invalid", "true");
-      control.closest("[data-field-name]")?.setAttribute("data-invalid", "true");
-    });
-    // Deterministic first-invalid handling in DOM order. Idempotent across the N
-    // repeats because `invalid[0]` is the same node every time.
-    const first = invalid[0];
-    if (first && document.activeElement !== first) {
-      first.scrollIntoView({ behavior: "smooth", block: "center" });
-      first.focus({ preventScroll: true });
-    }
-  };
+  // Danh sách "mục chưa hoàn thành" và dấu đỏ từng ô: dùng chung với form gia hạn mentor,
+  // xem missing-fields.tsx.
+  const { formRef, missing, setMissing, revealInvalid, clearMissing, clearFieldMark } = useMissingFields();
 
   useEffect(() => {
     if (state.ok || !state.fieldErrors?.length) return;
@@ -170,7 +120,7 @@ export function ApplicationForm({
     control?.setAttribute("aria-invalid", "true");
     field?.scrollIntoView({ behavior: "smooth", block: "center" });
     control?.focus({ preventScroll: true });
-  }, [state]);
+  }, [state, formRef, setMissing]);
 
   return (
     <form
@@ -180,25 +130,12 @@ export function ApplicationForm({
       onInvalidCapture={revealInvalid}
       onChangeCapture={onChangeCapture}
       onSubmitCapture={onSubmitCapture}
-      onSubmit={(event) => {
-        setMissing([]);
-      }}
-      onChange={(event) => {
-        const control = event.target as HTMLInputElement;
-        control.removeAttribute("aria-invalid");
-        control.closest("[data-field-name]")?.removeAttribute("data-invalid");
-      }}
+      onSubmit={clearMissing}
+      onChange={clearFieldMark}
     >
       <FormBanner state={state} />
       {children}
-      {missing.length ? (
-        <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-900" role="alert" aria-live="polite">
-          <p className="font-semibold">Bạn còn {missing.length} mục bắt buộc chưa hoàn thành.</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {missing.map((item) => <li key={item.name}>{item.label}</li>)}
-          </ul>
-        </div>
-      ) : null}
+      <MissingFieldsSummary missing={missing} />
       <SubmitAreaAlert state={state} />
       <div className="flex justify-end pt-2">
         <ApplySubmitButton idleLabel={submitLabel} />

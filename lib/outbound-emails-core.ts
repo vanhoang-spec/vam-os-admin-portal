@@ -67,7 +67,8 @@ const KIND_LABELS: Record<string, string> = {
   reviewer_invite: "Mời chấm hồ sơ",
   mentee_session_invite: "Mời mentee chọn ca phỏng vấn",
   mentee_session_confirmed: "Xác nhận ca phỏng vấn mentee",
-  matching_round2_invite: "Mời mentor chọn mentee (Vòng 2)"
+  matching_round2_invite: "Mời mentor chọn mentee (Vòng 2)",
+  mentee_exemption_confirm: "Mời Support team xác nhận mentee (đặc cách)"
 };
 
 /** Nhãn tiếng Việt; loại lạ trả về nguyên mã để không giấu mất thông tin. */

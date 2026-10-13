@@ -22,6 +22,7 @@ import {
   type RenewalProfileDiffEntry
 } from "@/lib/renewal-profile-safety";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import { validateMaxThreeWithOther } from "@/lib/application-form-validation";
 import { MENTOR_FUNCTION_OPTIONS, MENTOR_PROGRAM_OPTIONS, MENTOR_INDUSTRY_OPTIONS } from "@/lib/mentor-intake-content";
 import {
   isRenewalMenteeCapacity,
@@ -84,6 +85,12 @@ function selectedValues(formData: FormData, key: string): string[] {
   return formData.getAll(key).map((value) => String(value).trim()).filter(Boolean);
 }
 
+/** Ngành/chức năng phụ đã chọn, bỏ giá trị lặp; không chọn gì thì trả undefined để khoá bị bỏ. */
+function secondarySelections(formData: FormData): string[] | undefined {
+  const values = Array.from(new Set(selectedValues(formData, "secondary_industries_functions")));
+  return values.length ? values : undefined;
+}
+
 /**
  * P0 submission envelope supplied to M071. Identity and binding fields are
  * intentionally impossible to add here; M071 obtains them from the invite.
@@ -113,7 +120,12 @@ export function renewalPayloadFromFormData(formData: FormData): Record<string, u
     core_team_note: nonBlank(formData, "core_team_note"),
     university: nonBlank(formData, "university"),
     university_other: nonBlank(formData, "university_other"),
-    programs_willing_to_join: selectedValues(formData, "programs_willing_to_join")
+    programs_willing_to_join: selectedValues(formData, "programs_willing_to_join"),
+    // Lĩnh vực mentor chọn thêm ngoài ngành/chức năng chính (BTC 11/10/2026). Không chọn
+    // gì thì KHÔNG ghi khoá này: payload của người không dùng ô mới giữ nguyên hình dạng
+    // như mọi đơn gia hạn trước đó.
+    secondary_industries_functions: secondarySelections(formData),
+    secondary_industries_functions_other: nonBlank(formData, "secondary_industries_functions_other")
   };
 
   for (const key of [
@@ -351,6 +363,29 @@ export function validateRenewalAcceptance(formData: FormData): RenewalAcceptance
   } else {
     delete payload.industry_primary_other;
   }
+  // Ngành/chức năng phụ: không bắt buộc, nhưng đã gửi lên thì phải là lựa chọn có thật
+  // trong danh sách, tối đa 3, và "Khác" phải kèm nội dung — đúng luật của form đăng ký
+  // mentor mới (validateMaxThreeWithOther), không viết luật thứ hai.
+  const secondary = Array.isArray(payload.secondary_industries_functions)
+    ? payload.secondary_industries_functions.map(String)
+    : [];
+  const allowedSecondary = new Set(
+    [...MENTOR_INDUSTRY_OPTIONS, ...MENTOR_FUNCTION_OPTIONS].map((option) => option.value)
+  );
+  if (secondary.some((value) => !allowedSecondary.has(value))) {
+    return { ok: false, message: "Vui lòng chọn ngành/chức năng phụ hợp lệ." };
+  }
+  const secondaryCheck = validateMaxThreeWithOther({
+    values: secondary,
+    otherText: String(payload.secondary_industries_functions_other ?? ""),
+    fieldName: "secondary_industries_functions",
+    fieldLabel: "Ngành / chức năng phụ"
+  });
+  if (!secondaryCheck.ok) {
+    return { ok: false, message: `Ngành / chức năng phụ: ${secondaryCheck.message}` };
+  }
+  // Chữ "Khác" còn sót lại sau khi đã bỏ chọn "Khác" thì không lưu.
+  if (!secondary.includes("other")) delete payload.secondary_industries_functions_other;
   const workYears = Number(payload.mentor_total_work_years);
   if (!Number.isInteger(workYears) || workYears < 0 || workYears > RENEWAL_MAX_EXPERIENCE_YEARS) {
     return {

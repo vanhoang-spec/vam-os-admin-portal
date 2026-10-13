@@ -17,6 +17,7 @@ import {
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
   buildMatchingRound2InviteEmail,
+  buildMenteeExemptionConfirmEmail,
   buildMenteeSessionInviteEmail,
   buildMenteeSessionReopenEmail,
   textToHtmlEmail,
@@ -49,6 +50,7 @@ import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib
 import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/lib/interview-schedule-core";
 import { menteeBookingUrl } from "@/lib/mentee-interview-core";
 import { mentorPickUrl } from "@/lib/matching-round2-link-core";
+import { menteeConfirmUrl } from "@/lib/mentee-exemption-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
 /**
@@ -1147,6 +1149,46 @@ export async function sendMatchingRound2Invite(input: {
     "matching_round2_invite",
     { ...built, ...message, to: input.toEmail },
     input.linkId ? { table: "matching_round2_links", id: input.linkId } : null
+  );
+}
+
+/**
+ * Thư mời một bạn Support team xác nhận tham gia mentee (đặc cách). `token` null là thư
+ * thử gửi cho chính BTC: đường dẫn là câu giữ chỗ, không link thật nào rời hệ thống.
+ */
+export async function sendMenteeExemptionConfirm(input: {
+  toEmail: string;
+  recipientName: string;
+  seasonLabel: string;
+  token: string | null;
+  exemptionId: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  let link = "(đường dẫn riêng của từng người — chỉ có trong thư thật)";
+  if (input.token) {
+    const base = resolveEmailBaseUrl(input.requestOrigin);
+    if (!base) {
+      return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+    }
+    link = menteeConfirmUrl(base, input.token);
+  }
+  const values = {
+    ten_nguoi_nhan: input.recipientName,
+    mua: input.seasonLabel,
+    link_xac_nhan: link,
+    zalo_ho_tro: HOTLINE_ZALO
+  };
+  const built = buildMenteeExemptionConfirmEmail({
+    recipientName: values.ten_nguoi_nhan,
+    seasonLabel: values.mua,
+    confirmUrl: link,
+    hotlineZalo: HOTLINE_ZALO
+  });
+  const message = await resolveAutomationEmail({ slotId: "mentee_exemption_confirm", values, fallback: built });
+  return deliver(
+    "mentee_exemption_confirm",
+    { ...built, ...message, to: input.toEmail },
+    input.exemptionId ? { table: "mentee_exemptions", id: input.exemptionId } : null
   );
 }
 

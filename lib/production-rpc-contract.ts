@@ -195,6 +195,11 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Mentee đặc cách (Support team) — migration
+  // 20261011150000_mentee_dac_cach_support_team.sql, chưa áp dụng Production.
+  "vam117_add_mentee_exemptions",
+  "vam117_revoke_mentee_exemption",
+  "vam117_confirm_mentee_exemption",
   // BTC chốt hồ sơ mentee "Cần BTC xem xét thêm" — migration
   // 20261012230000_btc_chot_ho_so_can_xem_them.sql, phải dán Production TRƯỚC khi merge.
   "vam119_btc_decide_needs_review",

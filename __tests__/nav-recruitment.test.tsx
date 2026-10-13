@@ -63,7 +63,7 @@ describe("cấu trúc theo vai trò", () => {
       [MENTEE_RECRUITMENT_LABEL, [
         "Báo cáo", "Hồ sơ mentee", "Giao hồ sơ mentee", "Đánh giá mentee",
         "Phiếu chấm & hướng dẫn mentee", "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee",
-        "Phỏng vấn mentee trực tiếp", "Duyệt Mentee S12", "Điểm cộng theo ngày nộp"
+        "Phỏng vấn mentee trực tiếp", "Duyệt Mentee S12", "Mentee đặc cách (Support team)", "Điểm cộng theo ngày nộp"
       ]],
       "Ghép cặp"
     ]);

@@ -6,6 +6,7 @@ import {
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
   buildMatchingRound2InviteEmail,
+  buildMenteeExemptionConfirmEmail,
   buildMenteeSessionConfirmedEmail,
   buildMenteeSessionInviteEmail,
   buildParticipantInviteEmail,
@@ -232,6 +233,16 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
           slotsLabel: S("so_cho"),
           pickUrl: S("link_chon_mentee"),
           deadlineLabel: S("han_chon"),
+          hotlineZalo: S("zalo_ho_tro")
+        })
+      );
+
+    case "mentee_exemption_confirm":
+      return one(
+        buildMenteeExemptionConfirmEmail({
+          recipientName: S("ten_nguoi_nhan"),
+          seasonLabel: S("mua"),
+          confirmUrl: S("link_xac_nhan"),
           hotlineZalo: S("zalo_ho_tro")
         })
       );
