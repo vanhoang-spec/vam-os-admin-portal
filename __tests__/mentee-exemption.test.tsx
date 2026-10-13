@@ -622,6 +622,16 @@ describe("trang BTC /applications/mentee-dac-cach", () => {
     expect(panel.querySelector("input[name='confirmed']")).toBeNull();
   });
 
+  it("cạnh nút 'Gửi thử cho tôi' có lời nói thẳng: thư thử có [THƯ THỬ], nút trong thư thử cố ý không bấm được", async () => {
+    const page = await renderPage();
+    const note = within(page).getByTestId("exemption-test-note").textContent ?? "";
+    expect(note).toContain("[THƯ THỬ]");
+    expect(note).toContain("cố ý không bấm được");
+    expect(note).toContain("Thư thật gửi tới từng bạn có đường dẫn xác nhận riêng và bấm được");
+    // Lời nằm trong khung gửi, cùng chỗ với nút gửi thử.
+    expect(within(within(page).getByTestId("exemption-send")).getByTestId("exemption-test-note")).toBe(within(page).getByTestId("exemption-test-note"));
+  });
+
   it("không ai chờ thư thì không có nút gửi thật, chỉ có lời giải thích", async () => {
     Object.assign(row(1), { send_count: 1, last_sent_at: new Date(Date.now() - HOURS).toISOString() });
     const page = await renderPage();

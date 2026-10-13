@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(),
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { sendMenteeExemptionConfirm } from "@/lib/email";
 import { AUTOMATION_SLOTS } from "@/lib/email-automation-core";
-import { buildMenteeExemptionConfirmEmail } from "@/lib/email-core";
+import { buildMenteeExemptionConfirmEmail, markAsTestEmail, TEST_EMAIL_NOTICE, TEST_EMAIL_SUBJECT_PREFIX } from "@/lib/email-core";
 import { outboundEmailKindLabel } from "@/lib/outbound-emails-core";
 import { middleware } from "@/middleware";
 
@@ -79,6 +79,46 @@ describe("1. nội dung thư", () => {
     expect(slot?.kind).toBe("mentee_exemption_confirm");
     expect(slot?.placeholders.find((p) => p.key === "link_xac_nhan")?.required).toBe(true);
     expect(slot?.placeholders.map((p) => p.key)).toEqual(["ten_nguoi_nhan", "mua", "link_xac_nhan", "zalo_ho_tro"]);
+  });
+});
+
+describe("1b. markAsTestEmail (phần thuần)", () => {
+  const PLACEHOLDER = "(đường dẫn riêng của từng người — chỉ có trong thư thật)";
+  const base = { recipientName: "Trần Mỹ Anh", seasonLabel: "UEH Mentoring Mùa 12", confirmUrl: PLACEHOLDER, hotlineZalo: HOTLINE };
+
+  it("thêm tiền tố vào tiêu đề, khung báo vào đầu thư, và gỡ đúng href mang câu giữ chỗ", () => {
+    const real = buildMenteeExemptionConfirmEmail(base);
+    expect(real.html).toContain(`href="${PLACEHOLDER}"`);
+    const test = markAsTestEmail(real, PLACEHOLDER);
+    expect(test.subject).toBe(`${TEST_EMAIL_SUBJECT_PREFIX}${real.subject}`);
+    expect(test.text.startsWith("[THƯ THỬ] ")).toBe(true);
+    expect(test.text.endsWith(real.text)).toBe(true);
+    expect(test.html.startsWith("<p ")).toBe(true);
+    expect(test.html).toContain(TEST_EMAIL_NOTICE);
+    expect(test.html).not.toContain(`href="${PLACEHOLDER}"`);
+    // Phần còn lại của thư không đổi: chỉ mất thuộc tính href.
+    expect(test.html.replace(/^<p .*?<\/p>/, "")).toBe(real.html.split(`href="${PLACEHOLDER}"`).join(""));
+  });
+
+  it("chỉ gỡ href mang ĐÚNG câu giữ chỗ — href khác của thư giữ nguyên", () => {
+    const html = `<a href="${PLACEHOLDER}">Nút</a><a href="https://os.test/khac">Khác</a>`;
+    const test = markAsTestEmail({ subject: "S", text: "T", html }, PLACEHOLDER);
+    expect(test.html).toContain('href="https://os.test/khac"');
+    expect(test.html).not.toContain(`href="${PLACEHOLDER}"`);
+  });
+
+  it("không thêm tiền tố hai lần nếu tiêu đề đã có", () => {
+    const test = markAsTestEmail({ subject: `${TEST_EMAIL_SUBJECT_PREFIX}S`, text: "T", html: "<p>H</p>" }, PLACEHOLDER);
+    expect(test.subject).toBe(`${TEST_EMAIL_SUBJECT_PREFIX}S`);
+  });
+
+  it("không đổi các trường khác của thư (người nhận, tệp đính kèm…)", () => {
+    const original = { to: "a@b.test", subject: "S", text: "T", html: "H", extra: 7 };
+    const test = markAsTestEmail(original, PLACEHOLDER);
+    expect(test.to).toBe("a@b.test");
+    expect(test.extra).toBe(7);
+    expect(original.subject).toBe("S");
+    expect(original.html).toBe("H");
   });
 });
 
@@ -158,6 +198,33 @@ describe("2. gửi thư", () => {
     expect(String(body.text)).toContain("chỉ có trong thư thật");
     expect(logged.payloads[0]).toMatchObject({ kind: "mentee_exemption_confirm", to_email: "btc@example.test" });
     expect(logged.payloads[0].related_id ?? null).toBeNull();
+  });
+
+  // 13/10/2026: BTC bấm nút trong thư thử, ra trang "Thông báo chuyển hướng — url không hợp lệ" của
+  // trình duyệt, tưởng link thật hỏng. Thư thử phải tự nói nó là thư thử, và nút không được trông như link.
+  it("thư thử ghi rõ là thư thử và nút KHÔNG còn là đường dẫn bấm được", async () => {
+    await sendMenteeExemptionConfirm({ ...INPUT, toEmail: "btc@example.test", token: null, exemptionId: null });
+    const body = requestBody();
+    expect(String(body.subject)).toMatch(/^\[THƯ THỬ\] \[UEH Mentoring\] Mời bạn xác nhận tham gia Mentee/);
+    expect(String(body.text)).toContain("[THƯ THỬ] Đây là thư GỬI THỬ");
+    expect(String(body.html)).toContain("THƯ THỬ.");
+    expect(String(body.html)).toContain("trong thư thử này nút không bấm được");
+    // Nút vẫn hiện (để xem thư trông thế nào) nhưng không còn href nào mang câu giữ chỗ.
+    expect(String(body.html)).toContain("Mở trang xác nhận");
+    expect(String(body.html)).not.toContain("href=\"(đường dẫn riêng");
+    expect(String(body.html)).not.toMatch(/href="\(/);
+    // Chữ nằm trong thân thư (không phải trong href) thì còn — để người thử thấy câu giữ chỗ.
+    expect(String(body.text)).toContain("(đường dẫn riêng của từng người — chỉ có trong thư thật)");
+  });
+
+  it("thư THẬT không bị đụng: không có dấu hiệu thư thử và nút mang đúng href", async () => {
+    await sendMenteeExemptionConfirm(INPUT);
+    const body = requestBody();
+    expect(String(body.subject)).not.toContain("THƯ THỬ");
+    expect(String(body.text)).not.toContain("THƯ THỬ");
+    expect(String(body.html)).not.toContain("THƯ THỬ");
+    expect(String(body.html)).toContain(`href="${ORIGIN}/xac-nhan-mentee/${TOKEN}"`);
+    expect(String(body.subject)).toBe("[UEH Mentoring] Mời bạn xác nhận tham gia Mentee — UEH Mentoring Mùa 12");
   });
 
   it("không biết địa chỉ công khai của hệ thống thì KHÔNG gửi thư thật — thà không gửi còn hơn gửi link hỏng", async () => {
