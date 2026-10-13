@@ -40,14 +40,52 @@ export type OfflineOperation = {
   checked_in_by?: string | null;
   checked_in_by_name?: string | null;
   is_online: boolean; online_note: string | null;
+  /**
+   * BTC đã chốt kết quả cho hồ sơ "Cần BTC xem xét thêm" (12/10/2026): ai, lúc nào. Có dấu
+   * này thì `outcome` là quyết định của BTC, còn phiếu vẫn là của người phỏng vấn.
+   */
+  btc_decided_by?: string | null;
+  btc_decided_at?: string | null;
+  /** Tên hiển thị của người chốt — gắn ở máy chủ. */
+  btc_decided_by_name?: string | null;
 };
+/** Hai kết quả BTC chốt được cho hồ sơ "cần xem thêm". */
+export const BTC_DECISIONS = { passed: "Đạt — nhận làm mentee", rejected: "Không chọn làm mentee" } as const;
+export type BtcDecision = keyof typeof BTC_DECISIONS;
+export function isBtcDecision(value: unknown): value is BtcDecision {
+  return value === "passed" || value === "rejected";
+}
+/**
+ * Hồ sơ này có đang chờ / đã qua tay BTC chốt không: kết quả "cần xem thêm", hoặc BTC đã
+ * chốt (đổi lại được). Kết quả Đạt / Không chọn do người phỏng vấn chốt thì không.
+ * CÙNG LUẬT với vam119_btc_decide_needs_review — ô trên màn hình chỉ là lời mời.
+ */
+export function btcCanDecide(operation: Pick<OfflineOperation, "outcome" | "btc_decided_at"> | null | undefined): boolean {
+  return Boolean(operation && (operation.outcome === "needs_review" || operation.btc_decided_at));
+}
+/**
+ * Một dòng của danh sách. Từ 11/10/2026 danh sách KHÔNG còn chở đơn đăng ký và phiếu
+ * chấm của mọi người (khoảng 11 MB mỗi lần tải, database sập 6 lần trong một ngày
+ * phỏng vấn): `answers` vắng mặt nghĩa là hồ sơ chi tiết CHƯA tải, màn hình tự tải
+ * riêng cho bạn đang mở (OfflineCandidateDetail). Có `answers` thì `reviews` đi kèm
+ * là bản đầy đủ.
+ */
 export type OfflineCandidate = {
   id: string; name: string; phone: string | null; email: string | null; status: string;
-  sessionId: string; bookedAt: string; rawPayload: Record<string, unknown> | null;
-  answers: Array<[string, string]>; operation: OfflineOperation | null; reviews: OfflineReview[];
+  sessionId: string; bookedAt: string;
+  /** Chỉ còn ở dữ liệu báo cáo (vam104_offline_dashboard); danh sách gọn không gửi. */
+  rawPayload?: Record<string, unknown> | null;
+  answers?: Array<[string, string]>; operation: OfflineOperation | null; reviews: OfflineReview[];
+  /** Người phỏng vấn đã NỘP phiếu chọn "Có – Tôi muốn nhận" cho bạn này (danh sách gọn tính sẵn). */
+  takeSubmitted?: boolean;
 };
+/** Đơn đăng ký + mọi phiếu chấm chưa huỷ của MỘT bạn — tải khi mở hồ sơ bạn đó. */
+export type OfflineCandidateDetail = { answers: Array<[string, string]>; reviews: OfflineReview[] };
+export type OfflineDetailResult = { ok: true; detail: OfflineCandidateDetail } | { ok: false; message: string };
 export type OfflineDashboard = {
   actorId: string; seasonId: string; canOperate: boolean;
+  /** Core team trở lên có quyền vận hành mùa: được chốt hồ sơ "Cần BTC xem xét thêm". Support team thì không. */
+  canDecide?: boolean;
   /** Phiếu chấm hiệu lực của mùa (riêng, hoặc kế thừa phiếu lưu gần nhất). null = chưa có phiếu nào. */
   rubric: InterviewRubric | null;
   sessions: Array<{id: string; starts_at: string; ends_at: string; venue: string | null; seat_limit: number | null}>;
@@ -164,6 +202,31 @@ export function openAtDeskAndMentor(
   };
 }
 
+/**
+ * Số hồ sơ KHÁC mà người phỏng vấn này đã nộp phiếu chọn "Có – Tôi muốn nhận". Chỉ để
+ * khoá lựa chọn trên màn hình trước khi bấm — database kiểm lại cùng con số lúc lưu
+ * (TAKE_LIMIT_REACHED). Danh sách gọn mang sẵn `takeSubmitted`; dữ liệu còn kèm phiếu
+ * đầy đủ thì đọc từ phiếu.
+ */
+export function takesElsewhere(candidates: readonly OfflineCandidate[], selfId: string, actorId: string): number {
+  return candidates.filter(
+    (x) =>
+      x.id !== selfId &&
+      x.operation?.interviewer_id === actorId &&
+      (x.takeSubmitted ?? x.reviews.some((r) => r.id === x.operation?.review_id && r.status === "submitted" && r.take_choice === "take"))
+  ).length;
+}
+
+/**
+ * Khoá bộ nhớ đệm của hồ sơ chi tiết. Chưa có kết quả: đơn đăng ký và điểm vòng hồ sơ
+ * không đổi trong buổi phỏng vấn, check-in / phân bàn không cần tải lại. Đã có kết
+ * quả: mỗi lần lưu là một phiên bản mới của phiếu, phải tải lại.
+ */
+export function detailCacheKey(candidate: Pick<OfflineCandidate, "id" | "operation">): string {
+  const op = candidate.operation;
+  return op?.outcome ? `${candidate.id}:${op.revision}` : `${candidate.id}:pending`;
+}
+
 export function normalizedPhone(value: string) {
   const digits = value.replace(/\D/g, "");
   return digits.startsWith("84") ? `0${digits.slice(2)}` : digits;
@@ -212,7 +275,11 @@ export function offlineError(message: string): string {
     IDENTITY_REQUIRES_BTC: "Danh tính/hồ sơ ứng viên cần BTC kiểm tra trước khi duyệt.",
     MEMBERSHIP_REQUIRES_BTC: "Mentee đã có trạng thái tham gia từ luồng khác. Nhờ BTC xử lý trước khi sửa.",
     OTHER_MATCH_REQUIRES_BTC: "Mentee có cặp ghép từ luồng khác. Nhờ BTC xử lý trước khi đổi kết quả.",
-    SESSION_CHANGED: "Ca đã thay đổi sau check-in, cần BTC kiểm tra."
+    SESSION_CHANGED: "Ca đã thay đổi sau check-in, cần BTC kiểm tra.",
+    NOT_NEEDS_REVIEW: "Hồ sơ này không còn ở diện “Cần BTC xem xét thêm”. Tải lại trang để xem kết quả hiện tại.",
+    SAME_RESULT: "Hồ sơ đang ở đúng kết quả này rồi.",
+    STATUS_CHANGED: "Trạng thái hồ sơ đã được đổi ở một màn hình khác. Tải lại và kiểm tra trước khi chốt.",
+    BTC_DECIDED: "BTC đã chốt kết quả hồ sơ này nên không sửa ở đây được nữa. Cần đổi thì nhờ Core team."
   };
   return Object.entries(errors).find(([key]) => message.includes(key))?.[1] ?? "Chưa lưu được. Vui lòng thử lại hoặc liên hệ BTC.";
 }

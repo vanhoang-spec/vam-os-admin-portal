@@ -205,9 +205,13 @@ describe("2. bậc quản lý tài khoản", () => {
     expect(canOpenAdminUsers("viewer")).toBe(false);
   });
 
-  it("tạo tài khoản mới vẫn chỉ của super admin", () => {
+  it("tạo tài khoản mới: super admin và admin; Core team trở xuống thì không", () => {
+    // BTC 13/10/2026: admin đổi được thành viên Core team, nên admin tạo được tài khoản.
     expect(canCreateAdminAccount("super_admin")).toBe(true);
-    expect(canCreateAdminAccount("admin")).toBe(false);
+    expect(canCreateAdminAccount("admin")).toBe(true);
+    for (const role of ["core_team", "support_team", "reviewer", "viewer", "", null, undefined]) {
+      expect(canCreateAdminAccount(role)).toBe(false);
+    }
   });
 });
 

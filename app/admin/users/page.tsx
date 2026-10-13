@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, EmptyState, ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 import { listAdminAuditLogs, listManagedAdminUsers, requireAdminAccountManager, type ManagedAdminUser } from "@/lib/admin-users";
-import { canCreateAdminAccount, canManageAdminAccount, manageableAdminRoles } from "@/lib/permissions";
+import { canCreateAdminAccount, canManageAdminAccount, creatableAdminRoles, manageableAdminRoles } from "@/lib/permissions";
 import { displayText, formatDate } from "@/lib/utils";
 import { loadProgramContextCatalog, resolveAuthorizedProgramContext } from "@/lib/program-context";
 import { ProgramContextError } from "@/lib/program-context-core";
@@ -233,7 +233,7 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
         <p className="mb-4 text-sm text-slate-600">
           Tạo xong là tài khoản được kích hoạt ngay. Người dùng nhận thư để tự đặt mật khẩu, đặt xong là đăng nhập được. Chưa nhận được thư hoặc quên mật khẩu thì bấm &quot;Gửi link đặt mật khẩu&quot; ở dòng của họ.
         </p>
-        {contextError ? <p className="text-sm text-slate-600">Chọn phạm vi hợp lệ để bật biểu mẫu.</p> : <CreateAdminUserForm scopeOptions={scopeOptions} />}
+        {contextError ? <p className="text-sm text-slate-600">Chọn phạm vi hợp lệ để bật biểu mẫu.</p> : <CreateAdminUserForm scopeOptions={scopeOptions} roles={creatableAdminRoles(adminUser.role)} />}
       </Card>
       ) : null}
 
@@ -250,7 +250,7 @@ export default async function AdminUsersPage(props: { searchParams?: Promise<Rec
                 Đóng form sửa
               </Link>
             </div>
-            {contextError ? <ErrorBox message="Không thể sửa scope khi phạm vi trang chưa hợp lệ." /> : <EditAdminUserForm user={selectedUser} scopeOptions={scopeOptions} />}
+            {contextError ? <ErrorBox message="Không thể sửa scope khi phạm vi trang chưa hợp lệ." /> : <EditAdminUserForm user={selectedUser} scopeOptions={scopeOptions} roles={manageableAdminRoles(adminUser.role)} />}
           </Card>
         </section>
       ) : null}

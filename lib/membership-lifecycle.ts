@@ -11,10 +11,14 @@
  * trò này chỉ tồn tại ở phạm vi một buổi (`event_participants.role_at_event`),
  * nên người đứng lớp cả mùa không có chỗ nào trong CRM nói rằng họ thuộc mùa đó.
  *
+ * Cross mentor (BTC 13/10/2026) cùng lý do: mentor nhận hỗ trợ thêm mentee của
+ * người khác ở một lĩnh vực. Trước đó "cross-mentoring" chỉ có ở loại buổi và
+ * loại recap, không có chỗ nào nói mùa này AI là cross mentor.
+ *
  * Một cửa cho cả ô chọn trên màn hình lẫn phép kiểm của server action: hai danh
  * sách viết riêng là hai cơ hội để ô chọn mời một giá trị mà server từ chối.
  */
-export const MEMBERSHIP_ROLES = ["mentor", "mentee", "trainer", "speaker"] as const;
+export const MEMBERSHIP_ROLES = ["mentor", "mentee", "trainer", "speaker", "cross_mentor"] as const;
 export type MembershipRole = (typeof MEMBERSHIP_ROLES)[number];
 
 /** Nhãn tiếng Việt của vai trò trong mùa, dùng chung cho ô chọn và chỗ hiển thị. */
@@ -22,7 +26,8 @@ export const MEMBERSHIP_ROLE_LABELS: Record<MembershipRole, string> = {
   mentor: "Mentor",
   mentee: "Mentee",
   trainer: "Trainer / Người đào tạo",
-  speaker: "Speaker / Diễn giả"
+  speaker: "Speaker / Diễn giả",
+  cross_mentor: "Cross mentor"
 };
 
 export type MembershipLifecycleActionState = { ok: boolean; message: string; outcome?: string };
@@ -106,10 +111,14 @@ export function otherMembershipActions(role: unknown, status: unknown): Membersh
   return available.filter((operation) => !(PARTICIPATION_MOVES as readonly string[]).includes(operation));
 }
 
+/** Một câu cho cả tầng mã lẫn lời từ chối của vam063_add_membership_role. */
+export const APPOINTMENT_DENIED_MESSAGE = "Chỉ Core Team, Admin và Super Admin được bổ nhiệm hoặc gỡ Trainer / Cross mentor.";
+
 /** Câu từ chối khi vai trò của người thao tác không được đổi membership này. */
 export function membershipChangeDeniedMessage(role: unknown) {
   const kind = normalizedText(role);
   if (kind === "mentor") return "Chỉ Core Team, Admin và Super Admin được đổi trạng thái tham dự của mentor.";
   if (kind === "mentee") return "Chỉ Support Team, Core Team, Admin và Super Admin được đổi trạng thái tham dự của mentee.";
+  if (kind === "trainer" || kind === "cross_mentor") return APPOINTMENT_DENIED_MESSAGE;
   return "Bạn không có quyền đổi vai trò này trong mùa.";
 }

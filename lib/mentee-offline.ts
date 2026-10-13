@@ -3,7 +3,9 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { flattenRawPayload, humanizeKey } from "@/lib/application-export";
-import { offlineError, parseOfflineQr, type OfflineActionResult, type OfflineDashboard } from "@/lib/mentee-offline-core";
+import { isBtcDecision, offlineError, parseOfflineQr, type OfflineActionResult, type OfflineDashboard, type OfflineDetailResult, type OfflineReview } from "@/lib/mentee-offline-core";
+import { interviewWaves, resolveOfflineWave } from "@/lib/mentee-interview-waves";
+import { vietnamDateKey } from "@/lib/utils";
 import { sanitizeHandbookHtml } from "@/lib/handbook-html";
 import type { InterviewGuide } from "@/lib/mentee-interview-rubric-core";
 import { readAllPagesIn } from "@/lib/paged-read";
@@ -19,14 +21,59 @@ async function context() {
   return { actor, client, seasonId: String(data.id) };
 }
 
-export async function getOfflineDashboard(): Promise<{ok: true; data: OfflineDashboard} | {ok: false; message: string}> {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Ai đang hỏi dữ liệu. Màn hình phỏng vấn chỉ cần ứng viên của MỘT đợt (đợt trên
+ * đường dẫn); trang Tiến độ cần mọi đợt nhưng không cần nhật ký hay phiếu chấm.
+ */
+export type OfflineDashboardScope =
+  | { kind: "interview"; application?: string | null; dot?: string | null }
+  | { kind: "progress" };
+
+type OfflineClient = NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>;
+
+/**
+ * Các ca của đợt mà màn hình phỏng vấn sẽ hiện. Hai lần đọc này CHỈ để chọn đợt cần
+ * tải — không dòng nào của chúng được hiển thị; quyền xem vẫn do vam118_offline_board
+ * quyết định ở bước sau. null = mùa chưa có ca nào (không có gì để lọc).
+ */
+async function waveSessionIds(client: OfflineClient, seasonId: string, scope: { application?: string | null; dot?: string | null }): Promise<string[] | null> {
+  const sessions = await client.from("interview_sessions").select("id,starts_at").eq("season_id", seasonId);
+  // Không đọc được lịch ca thì không đoán đợt: tải nhầm đợt là màn hình hiện danh sách rỗng giữa buổi phỏng vấn.
+  if (sessions.error) throw new Error("READ_FAILED");
+  let linkedSessionId: string | null = null;
+  const application = String(scope.application ?? "");
+  // ?application= đến từ đường dẫn — ai cũng gõ được; không phải UUID thì đừng đem đi hỏi database.
+  if (!scope.dot && UUID.test(application)) {
+    const booking = await client.from("mentee_interview_bookings").select("session_id")
+      .eq("season_id", seasonId).eq("application_id", application).eq("status", "booked").maybeSingle();
+    // Không tra được ca của hồ sơ thì mở đợt hiện tại — vẫn là một màn hình dùng được.
+    linkedSessionId = booking.error ? null : (booking.data?.session_id ? String(booking.data.session_id) : null);
+  }
+  const waves = interviewWaves((sessions.data ?? []).map((s) => ({ id: String(s.id), starts_at: String(s.starts_at) })));
+  const wave = resolveOfflineWave(waves, { dot: scope.dot, linkedSessionId, todayKey: vietnamDateKey(new Date()) ?? "" });
+  return wave ? wave.sessionIds : null;
+}
+
+/**
+ * Danh sách gọn cho màn hình phỏng vấn và trang Tiến độ (11/10/2026). Không còn chở
+ * đơn đăng ký và phiếu chấm của mọi ứng viên — hồ sơ chi tiết của từng bạn tải riêng
+ * bằng getOfflineCandidateDetail khi mở.
+ */
+export async function getOfflineDashboard(scope: OfflineDashboardScope): Promise<{ok: true; data: OfflineDashboard} | {ok: false; message: string}> {
   try {
     const { actor, client, seasonId } = await context();
+    const interview = scope.kind === "interview";
+    const sessionIds = interview ? await waveSessionIds(client, seasonId, scope) : null;
     const [board, guide] = await Promise.all([
-      client.rpc("vam104_offline_dashboard",{p_actor:actor.id,p_season:seasonId}),
+      client.rpc("vam118_offline_board",{p_actor:actor.id,p_season:seasonId,p_sessions:sessionIds,p_with_logs:interview}),
       // Không kèm Handbook: màn hình làm mới sau mỗi thao tác, chở cả trang
-      // hướng dẫn theo mỗi lần là phí. Trang Handbook đọc riêng.
-      client.rpc("vam106_interview_guide",{p_actor:actor.id,p_season:seasonId,p_include_handbook:false})
+      // hướng dẫn theo mỗi lần là phí. Trang Handbook đọc riêng. Trang Tiến độ
+      // không chấm nên không cần phiếu.
+      interview
+        ? client.rpc("vam106_interview_guide",{p_actor:actor.id,p_season:seasonId,p_include_handbook:false})
+        : Promise.resolve({data:null,error:null})
     ]);
     if (board.error || !board.data) throw new Error(board.error?.message ?? "READ_FAILED");
     if (guide.error) throw new Error(guide.error.message);
@@ -34,23 +81,55 @@ export async function getOfflineDashboard(): Promise<{ok: true; data: OfflineDas
     dashboard.actorId=actor.id!;
     dashboard.seasonId=seasonId;
     dashboard.rubric=(guide.data as InterviewGuide | null)?.rubric ?? null;
+    dashboard.logs=dashboard.logs ?? [];
+    // Chỉ đúng `true` từ database mới mở ô chốt của BTC — thiếu khoá (hàm cũ) hay giá trị lạ đều là không.
+    dashboard.canDecide=dashboard.canDecide===true;
     // Ai đã check-in cho từng bạn (BTC 04/10/2026): tên tài khoản Support/BTC. Danh sách
     // người phỏng vấn không chứa Support, nên đọc riêng đúng các tài khoản xuất hiện.
-    const checkinIds = Array.from(new Set(dashboard.candidates.map(c => String(c.operation?.checked_in_by ?? "")).filter(Boolean)));
+    // Cùng một lần đọc cho cả người check-in lẫn người BTC đã chốt kết quả (12/10/2026).
+    const checkinIds = Array.from(new Set(dashboard.candidates.flatMap(c => [String(c.operation?.checked_in_by ?? ""), String(c.operation?.btc_decided_by ?? "")]).filter(Boolean)));
     const names = new Map<string,string>();
     if (checkinIds.length) {
       const staff = await readAllPagesIn<{id:string;full_name:string|null;email:string|null}>(client,"admin_users","id",checkinIds,"id,full_name,email");
       // Không đọc được tên thì vẫn mở màn hình — chỉ thiếu tên người check-in, không chặn ca phỏng vấn.
       if (!staff.error) for (const s of staff.data) names.set(String(s.id), String(s.full_name || s.email || ""));
     }
+    // `answers` cố ý vắng mặt: đó là dấu hiệu "hồ sơ chi tiết chưa tải" cho màn hình.
     dashboard.candidates=dashboard.candidates.map(c => ({...c,
-      answers:flattenRawPayload(c.rawPayload ?? {}).map(({key,value}) => [humanizeKey(key),value]),
-      rawPayload:null,
-      operation: c.operation ? {...c.operation, checked_in_by_name: c.operation.checked_in_by ? names.get(String(c.operation.checked_in_by)) ?? null : null} : null
+      reviews:[],
+      operation: c.operation ? {...c.operation,
+        checked_in_by_name: c.operation.checked_in_by ? names.get(String(c.operation.checked_in_by)) ?? null : null,
+        btc_decided_by_name: c.operation.btc_decided_by ? names.get(String(c.operation.btc_decided_by)) ?? null : null
+      } : null
     }));
     return {ok:true,data:dashboard};
   } catch (error) {
     return {ok:false,message:offlineError(error instanceof Error ? error.message : "")};
+  }
+}
+
+/**
+ * Đơn đăng ký + mọi phiếu chấm chưa huỷ của MỘT ứng viên — màn hình gọi khi mở hồ sơ
+ * bạn đó. Cùng cổng quyền với danh sách (vam104_offline_access, kiểm trong database),
+ * và chỉ mở được hồ sơ đang giữ ca trong mùa.
+ */
+export async function getOfflineCandidateDetail(applicationId: string): Promise<OfflineDetailResult> {
+  try {
+    if (!UUID.test(String(applicationId ?? ""))) throw new Error("NO_BOOKING");
+    const { actor, client, seasonId } = await context();
+    const {data,error} = await client.rpc("vam118_offline_candidate_detail",{p_actor:actor.id,p_season:seasonId,p_application:applicationId});
+    if (error || !data) throw new Error(error?.message ?? "READ_FAILED");
+    const row = data as {rawPayload: Record<string, unknown> | null; reviews: OfflineReview[] | null};
+    return {ok:true,detail:{
+      answers:flattenRawPayload(row.rawPayload ?? {}).map(({key,value}) => [humanizeKey(key),value]),
+      reviews:row.reviews ?? []
+    }};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    // offlineError nói "Chưa lưu được" cho lỗi lạ — đúng cho thao tác ghi, sai cho một lần đọc.
+    return {ok:false,message:message.includes("ACCESS_DENIED") || message.includes("NO_BOOKING")
+      ? offlineError(message)
+      : "Chưa tải được hồ sơ của bạn này. Kiểm tra mạng rồi bấm “Tải lại hồ sơ”."};
   }
 }
 
@@ -99,6 +178,33 @@ export async function saveOfflineInterview(input: {applicationId: string; action
     return {ok:true,message:String(data.message)};
   } catch (error) {
     return {ok:false,message:offlineError(error instanceof Error ? error.message : "")};
+  }
+}
+
+/**
+ * BTC chốt kết quả cho một hồ sơ "Cần BTC xem xét thêm" (12/10/2026): Đạt hoặc Không chọn,
+ * bắt buộc có lý do. Quyền (Core team trở lên, có quyền vận hành mùa) và mọi luật nằm trong
+ * vam119_btc_decide_needs_review — ở đây chỉ chặn sớm những thứ chắc chắn sai, để người dùng
+ * thấy lời nhắc đúng chỗ thay vì một mã lỗi.
+ */
+export async function decideNeedsReview(input: {applicationId: string; revision: number; outcome: string; reason: string}): Promise<OfflineActionResult> {
+  try {
+    if (!UUID.test(String(input.applicationId ?? ""))) throw new Error("NOT_NEEDS_REVIEW");
+    if (!isBtcDecision(input.outcome)) return {ok:false,message:"Chọn kết quả: Đạt hoặc Không chọn."};
+    const reason = String(input.reason ?? "").trim();
+    if (!reason) return {ok:false,message:"Nhập lý do của quyết định — bắt buộc."};
+    const {actor,client} = await context();
+    const {data,error} = await client.rpc("vam119_btc_decide_needs_review",{
+      p_actor:actor.id,p_application:input.applicationId,p_revision:input.revision,p_outcome:input.outcome,p_reason:reason
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error("WRITE_FAILED");
+    return {ok:true,message:input.outcome==="passed" ? "Đã chốt: Đạt — bạn này là mentee của mùa." : "Đã chốt: Không chọn làm mentee."};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    // ACCESS_DENIED ở đây không phải "chưa có quyền phỏng vấn": người gọi vào được màn hình, chỉ không được chốt.
+    if (message.includes("ACCESS_DENIED")) return {ok:false,message:"Chỉ Core team trở lên, có quyền vận hành mùa này, mới chốt được hồ sơ cần xem thêm."};
+    return {ok:false,message:offlineError(message)};
   }
 }
 

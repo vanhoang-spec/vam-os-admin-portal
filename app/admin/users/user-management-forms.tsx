@@ -47,15 +47,25 @@ function ActionMessage({ state }: { state: AdminUserActionState }) {
   );
 }
 
-function RoleSelect({ defaultValue }: { defaultValue: string }) {
+const ROLE_OPTIONS: ReadonlyArray<readonly [string, string]> = [
+  ["viewer", "Viewer"],
+  ["reviewer", "Reviewer"],
+  ["support_team", "Support team"],
+  ["core_team", "Core team"],
+  ["admin", "Admin"],
+  ["super_admin", "Super admin"]
+];
+
+/**
+ * Ô chọn cấp chỉ mời những cấp người đang thao tác đặt được. Cấp hiện tại của
+ * tài khoản đang sửa luôn có mặt, kể cả khi nằm ngoài danh sách: thiếu nó thì
+ * trình duyệt lặng lẽ chọn dòng đầu, và bấm Lưu là đổi cấp ngoài ý muốn.
+ */
+function RoleSelect({ defaultValue, roles }: { defaultValue: string; roles: readonly string[] }) {
+  const offered = ROLE_OPTIONS.filter(([value]) => roles.includes(value) || value === defaultValue);
   return (
     <select name="role" defaultValue={defaultValue} className={inputClass}>
-      <option value="viewer">Viewer</option>
-      <option value="reviewer">Reviewer</option>
-      <option value="support_team">Support team</option>
-      <option value="core_team">Core team</option>
-      <option value="admin">Admin</option>
-      <option value="super_admin">Super admin</option>
+      {offered.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </select>
   );
 }
@@ -91,7 +101,7 @@ function ScopeStatusSelect({ defaultValue }: { defaultValue: string }) {
   );
 }
 
-export function CreateAdminUserForm({ scopeOptions }: { scopeOptions: ScopeCatalogOptions }) {
+export function CreateAdminUserForm({ scopeOptions, roles }: { scopeOptions: ScopeCatalogOptions; roles: readonly string[] }) {
   type ProvisioningUiState = "idle" | "pending" | "success" | "rejected" | "reconciliation" | "ambiguous";
   const [uiState, setUiState] = useState<ProvisioningUiState>("idle");
   const [result, setResult] = useState<AdminUserActionState>(initialState);
@@ -209,7 +219,7 @@ export function CreateAdminUserForm({ scopeOptions }: { scopeOptions: ScopeCatal
         </label>
         <label className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Vai trò</span>
-          <RoleSelect defaultValue="viewer" />
+          <RoleSelect defaultValue={roles.includes("viewer") ? "viewer" : roles[0] ?? "viewer"} roles={roles} />
         </label>
         <div className="block">
           <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>
@@ -246,7 +256,7 @@ export function CreateAdminUserForm({ scopeOptions }: { scopeOptions: ScopeCatal
   );
 }
 
-export function EditAdminUserForm({ user, scopeOptions }: { user: ManagedAdminUser; scopeOptions: ScopeCatalogOptions }) {
+export function EditAdminUserForm({ user, scopeOptions, roles }: { user: ManagedAdminUser; scopeOptions: ScopeCatalogOptions; roles: readonly string[] }) {
   const [state, formAction] = useFormState(updateAdminUserAction, initialState);
   const scopes = Array.isArray(user.scopes) ? user.scopes : [];
   const scope = scopes[0];
@@ -276,7 +286,7 @@ export function EditAdminUserForm({ user, scopeOptions }: { user: ManagedAdminUs
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Vai trò</span>
-            <RoleSelect defaultValue={user.role} />
+            <RoleSelect defaultValue={user.role} roles={roles} />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Trạng thái</span>

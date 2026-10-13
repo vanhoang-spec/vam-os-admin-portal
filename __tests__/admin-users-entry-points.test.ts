@@ -130,7 +130,9 @@ describe("guide instruction", () => {
 });
 
 describe("main navigation entry point", () => {
-  it("shows /admin/users only to active super_admin", () => {
+  // BTC 13/10/2026: admin đổi được thành viên Core team, nên mục menu hiện cho
+  // cả admin. Trước ngày này chỉ super admin thấy; Core team trở xuống vẫn không.
+  it("shows /admin/users only to active super_admin and admin", () => {
     const roles: CurrentAdminUser["role"][] = [
       "super_admin",
       "admin",
@@ -142,7 +144,7 @@ describe("main navigation entry point", () => {
 
     roles.forEach((role) => {
       const hrefs = allNavHrefs(buildNavGroups(userForRole(role)));
-      expect(hrefs.includes("/admin/users")).toBe(role === "super_admin");
+      expect(hrefs.includes("/admin/users"), role).toBe(role === "super_admin" || role === "admin");
     });
   });
 

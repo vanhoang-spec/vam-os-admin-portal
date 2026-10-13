@@ -200,6 +200,13 @@ export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
   "vam117_add_mentee_exemptions",
   "vam117_revoke_mentee_exemption",
   "vam117_confirm_mentee_exemption",
+  // BTC chốt hồ sơ mentee "Cần BTC xem xét thêm" — migration
+  // 20261012230000_btc_chot_ho_so_can_xem_them.sql, phải dán Production TRƯỚC khi merge.
+  "vam119_btc_decide_needs_review",
+  // Màn hình phỏng vấn mentee bản gọn + hồ sơ chi tiết tải riêng — migration
+  // 20261011190000_man_hinh_pv_nhe.sql, phải dán Production TRƯỚC khi merge.
+  "vam118_offline_board",
+  "vam118_offline_candidate_detail",
   // Sửa số mentee tối đa của mentor trên hồ sơ — migration
   // 20261010200000_suc_nhan_mentor_theo_mua.sql, chưa áp dụng Production.
   "vam116_set_mentor_capacity",
