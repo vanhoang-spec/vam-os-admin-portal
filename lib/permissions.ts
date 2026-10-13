@@ -328,6 +328,18 @@ export function canChangeMenteeParticipation(role?: string | null) {
 }
 
 /**
+ * Tích "Support team" trên hồ sơ: người được tích thành MENTEE của mùa hiện tại ngay, không qua
+ * phỏng vấn (BTC 13/10/2026). Vì kết quả chỉ là tư cách mentee nên cùng bậc với đổi trạng thái
+ * mentee: Support team, Core team, Admin, Super admin — không mở thêm quyền nào cho vai trò khác.
+ *
+ * Đây CHỈ là nửa vai trò. Nơi gọi còn phải chứng minh phạm vi vận hành mùa, và hàm
+ * vam121_set_support_team trong database kiểm lại cả hai lần nữa.
+ */
+export function canMarkSupportTeam(role?: string | null) {
+  return canChangeMenteeParticipation(role);
+}
+
+/**
  * One door for every write on a season membership: the server actions and the
  * CRM controls both ask this, so a button is never offered that the server
  * refuses.
