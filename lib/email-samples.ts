@@ -262,7 +262,8 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         groupLabel: "4. Marketing - Kinh doanh",
         slotsLabel: "2",
         pickUrl: `${ORIGIN}/chon-mentee/ma-vi-du`,
-        deadlineLabel: "23:59 ngày 12/10/2026",
+        opensLabel: "11:00 ngày 15/10/2026 (giờ Việt Nam)",
+        deadlineLabel: "11:00 ngày 17/10/2026 (giờ Việt Nam)",
         hotlineZalo: "0919144638"
       })
     )

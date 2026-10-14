@@ -1111,6 +1111,7 @@ export async function sendMatchingRound2Invite(input: {
   seasonLabel: string;
   groupLabel: string;
   slots: number;
+  opensLabel: string;
   deadlineLabel: string;
   waveNote: string;
   token: string | null;
@@ -1132,6 +1133,7 @@ export async function sendMatchingRound2Invite(input: {
     nhom_nganh: input.groupLabel,
     so_cho: String(input.slots),
     link_chon_mentee: link,
+    gio_mo: input.opensLabel,
     han_chon: input.deadlineLabel,
     zalo_ho_tro: HOTLINE_ZALO
   };
@@ -1142,13 +1144,16 @@ export async function sendMatchingRound2Invite(input: {
     groupLabel: values.nhom_nganh,
     slotsLabel: values.so_cho,
     pickUrl: link,
+    opensLabel: values.gio_mo,
     deadlineLabel: values.han_chon,
     hotlineZalo: HOTLINE_ZALO
   });
   const message = await resolveAutomationEmail({ slotId: "matching_round2_invite", values, fallback: built });
+  const outgoing = { ...built, ...message, to: input.toEmail };
   return deliver(
     "matching_round2_invite",
-    { ...built, ...message, to: input.toEmail },
+    // Thư thử (không có mã) phải ghi rõ là thư thử và không để lại nút trông như bấm được.
+    input.token ? outgoing : markAsTestEmail(outgoing, link),
     input.linkId ? { table: "matching_round2_links", id: input.linkId } : null
   );
 }

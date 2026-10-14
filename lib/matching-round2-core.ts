@@ -21,6 +21,7 @@ import {
 } from "@/lib/matching-round2-classify-core";
 import { INDUSTRY_GROUPS, industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { compareNewest } from "@/lib/list-order";
+import { poolList, poolOf, type PoolMap } from "@/lib/matching-round2-pools-core";
 import { effectiveMentorCapacity } from "@/lib/mentor-capacity";
 
 export const ROUND2_MENTOR_CAP = 2;
@@ -121,9 +122,22 @@ export type Round2Anomaly = {
   personIds: string[];
 };
 
+/** Một dòng "Theo cụm chọn": cộng các nhóm chung danh sách (BTC 14/10/2026). */
+export type PoolSummary = {
+  code: number;
+  label: string;
+  groups: number[];
+  mentorsWithSlots: number;
+  slots: number;
+  visible: number;
+};
+
 export type Round2Board = {
   rows: Round2Row[];
   groups: GroupSummary[];
+  pools: PoolSummary[];
+  /** Nhóm nào chung danh sách với nhóm nào — để thư và trang nói đúng như database. */
+  poolMap: PoolMap;
   unclassified: GroupSummary;
   /** Người đủ điều kiện mà chưa có nhóm: đầu vào của nút "Phân loại người mới". */
   pending: Round2Row[];
@@ -173,7 +187,10 @@ export function buildRound2Board(input: {
   people: Round2Person[];
   assignments: Round2Assignment[];
   matches: Round2Match[];
+  /** Nhóm nào chung danh sách với nhóm nào; thiếu = mỗi nhóm một danh sách (luật cũ). */
+  pools?: PoolMap;
 }): Round2Board {
+  const pools: PoolMap = input.pools ?? new Map();
   const assignmentKey = (role: Role, personId: string) => `${role}|${personId}`;
   const assignments = new Map(input.assignments.map((a) => [assignmentKey(a.role, a.personId), a]));
   const namesByPerson = new Map<string, string>();
@@ -238,6 +255,17 @@ export function buildRound2Board(input: {
 
   const groups = INDUSTRY_GROUPS.map((g) => summarize(g.code, industryGroupLabel(g.code), rows.filter((r) => r.group === g.code)));
   const unclassified = summarize(null, "Chưa phân nhóm", rows.filter((r) => r.group === null));
+  const poolSummaries: PoolSummary[] = poolList(pools).map((pool) => {
+    const members = groups.filter((g) => g.code !== null && pool.groups.includes(g.code));
+    return {
+      code: pool.code,
+      label: pool.label,
+      groups: pool.groups,
+      mentorsWithSlots: members.reduce((sum, g) => sum + g.mentorsWithSlots, 0),
+      slots: members.reduce((sum, g) => sum + g.slots, 0),
+      visible: members.reduce((sum, g) => sum + g.visible, 0)
+    };
+  });
   const pending = rows.filter((r) => r.group === null && r.person.eligible);
 
   const rowsByPerson = (role: Role) => new Map(rows.filter((r) => r.person.role === role).map((r) => [r.person.personId, r]));
@@ -305,6 +333,8 @@ export function buildRound2Board(input: {
     const mentor = m.mentorPersonId ? mentorRows.get(m.mentorPersonId) : undefined;
     const mentee = m.menteePersonId ? menteeRows.get(m.menteePersonId) : undefined;
     if (!mentor?.group || !mentee?.group || mentor.group === mentee.group) continue;
+    // Chọn trong cùng cụm là đúng luật (vam113 so theo cụm): không phải bất thường.
+    if (m.round === 2 && poolOf(pools, mentor.group) === poolOf(pools, mentee.group)) continue;
     anomalies.push({
       kind: "cross_group",
       severity: m.round === 2 ? "warning" : "info",
@@ -329,7 +359,7 @@ export function buildRound2Board(input: {
     });
   }
 
-  return { rows, groups, unclassified, pending, round2Matches, anomalies };
+  return { rows, groups, pools: poolSummaries, poolMap: pools, unclassified, pending, round2Matches, anomalies };
 }
 
 /**

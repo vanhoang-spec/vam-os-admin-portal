@@ -1963,6 +1963,8 @@ export function buildMatchingRound2InviteEmail(input: {
   groupLabel: string;
   slotsLabel: string;
   pickUrl: string;
+  /** Giờ mở vòng (BTC 14/10/2026: thư gửi trước giờ mở, mọi mentor bắt đầu cùng lúc). */
+  opensLabel: string;
   deadlineLabel: string;
   waveNote: string;
   hotlineZalo: string;
@@ -1972,6 +1974,7 @@ export function buildMatchingRound2InviteEmail(input: {
   const group = safeDisplayName(input.groupLabel, "");
   const slots = safeDisplayName(input.slotsLabel, "");
   const deadline = safeDisplayName(input.deadlineLabel, "");
+  const opens = safeDisplayName(input.opensLabel, "");
   const waveNote = safeDisplayName(input.waveNote, "");
 
   const subject = `[UEH Mentoring] Mời anh/chị chọn mentee — ${season}`;
@@ -1980,10 +1983,10 @@ export function buildMatchingRound2InviteEmail(input: {
     "",
     waveNote,
     "",
-    `Nhóm ngành của anh/chị: ${group}. Anh/chị còn nhận được ${slots} mentee ở vòng này. Mở đường dẫn riêng dưới đây để đọc hồ sơ các bạn mentee cùng nhóm chưa có mentor và bấm "Chọn bạn này":`,
+    `Nhóm ngành của anh/chị: ${group}. Anh/chị còn nhận được ${slots} mentee ở vòng này. Mở đường dẫn riêng dưới đây để đọc hồ sơ các bạn mentee chưa có mentor trong danh sách của anh/chị và bấm "Chọn bạn này":`,
     input.pickUrl,
     "",
-    `Hạn chọn: ${deadline}. Bạn nào đã được mentor khác chọn sẽ biến khỏi danh sách, nên anh/chị chọn sớm giúp ban tổ chức. Chọn nhầm thì bỏ chọn được trong 30 phút.`,
+    `Thời gian chọn: từ ${opens} đến ${deadline}. Trước giờ mở, đường dẫn báo "chưa mở" — anh/chị mở lại đúng đường dẫn này khi tới giờ. Bạn nào đã được mentor khác chọn sẽ tự ẩn khỏi danh sách; chọn nhầm thì bỏ chọn được trong 30 phút.`,
     "",
     "Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.",
     "",
@@ -1995,9 +1998,9 @@ export function buildMatchingRound2InviteEmail(input: {
     [
       `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
       `<p>${escapeHtml(waveNote)}</p>`,
-      `<p>Nhóm ngành của anh/chị: <strong>${escapeHtml(group)}</strong>. Anh/chị còn nhận được <strong>${escapeHtml(slots)}</strong> mentee ở vòng này. Mở đường dẫn riêng dưới đây để đọc hồ sơ các bạn mentee cùng nhóm chưa có mentor và bấm “Chọn bạn này”.</p>`,
+      `<p>Nhóm ngành của anh/chị: <strong>${escapeHtml(group)}</strong>. Anh/chị còn nhận được <strong>${escapeHtml(slots)}</strong> mentee ở vòng này. Mở đường dẫn riêng dưới đây để đọc hồ sơ các bạn mentee chưa có mentor trong danh sách của anh/chị và bấm “Chọn bạn này”.</p>`,
       `<p style="margin:20px 0"><a href="${escapeHtml(input.pickUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn mentee</a></p>`,
-      `<p>Hạn chọn: <strong>${escapeHtml(deadline)}</strong>. Bạn nào đã được mentor khác chọn sẽ biến khỏi danh sách, nên anh/chị chọn sớm giúp ban tổ chức. Chọn nhầm thì bỏ chọn được trong 30 phút.</p>`,
+      `<p>Thời gian chọn: từ <strong>${escapeHtml(opens)}</strong> đến <strong>${escapeHtml(deadline)}</strong>. Trước giờ mở, đường dẫn báo “chưa mở” — anh/chị mở lại đúng đường dẫn này khi tới giờ. Bạn nào đã được mentor khác chọn sẽ tự ẩn khỏi danh sách; chọn nhầm thì bỏ chọn được trong 30 phút.</p>`,
       "<p>Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.</p>",
       `<p>Cần hỗ trợ, anh/chị nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
       `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho anh/chị, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.pickUrl)}</p>`

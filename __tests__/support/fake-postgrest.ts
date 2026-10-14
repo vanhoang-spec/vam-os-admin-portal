@@ -280,6 +280,20 @@ function projectColumns(row: any, columns: string): Record<string, unknown> {
             : projectColumns(value, nestedColumns);
       continue;
     }
+    // PostgREST đọc một khoá trong cột JSON: `raw_payload->>major` (TEXT) hoặc `raw_payload->x` (JSON),
+    // tên cột trả về là khoá cuối, hoặc bí danh nếu viết `alias:raw_payload->>major`.
+    if (token.includes("->")) {
+      const colon = token.indexOf(":");
+      const alias = colon > 0 && !token.slice(0, colon).includes("-") ? token.slice(0, colon) : null;
+      const expr = alias ? token.slice(colon + 1) : token;
+      const asText = expr.includes("->>");
+      const [column, ...keys] = expr.split("->").map((part) => (part.startsWith(">") ? part.slice(1) : part));
+      let current: any = row[column];
+      for (const key of keys) current = current !== null && typeof current === "object" ? current[key] : undefined;
+      const value = current === undefined || current === null ? null : asText && typeof current === "object" ? JSON.stringify(current) : asText ? String(current) : current;
+      out[alias ?? keys[keys.length - 1]] = value;
+      continue;
+    }
     if (Object.prototype.hasOwnProperty.call(row, token)) out[token] = row[token];
   }
   return out;

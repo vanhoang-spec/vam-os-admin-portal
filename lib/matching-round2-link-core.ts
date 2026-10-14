@@ -41,6 +41,38 @@ export const MENTEE_CARD_KEYS: readonly string[] = [
   "profile_or_cv_url"
 ];
 
+/**
+ * Đọc khi mở trang: thông tin ngắn, mục tiêu, CV. Bốn câu tự luận còn lại chỉ tải khi mentor bấm
+ * "Xem đầy đủ hồ sơ" (BTC 14/10/2026). Lý do là tải database: tự luận chiếm gần hết dung lượng hồ
+ * sơ — nhóm 4 có 175 bạn, cả hồ sơ là 1,4 MB mỗi lần một mentor mở trang, trong khi trang chỉ cần
+ * khoảng 140 KB. Database Micro đã sập ngày 11/10 vì đúng kiểu đọc nặng lặp lại này.
+ */
+export const SUMMARY_TEXT_KEYS: readonly string[] = ["mentoring_goals_text"];
+export const DETAIL_TEXT_KEYS: readonly string[] = TEXT_FIELDS.map(([k]) => k).filter((k) => !SUMMARY_TEXT_KEYS.includes(k));
+export const CARD_SUMMARY_KEYS: readonly string[] = MENTEE_CARD_KEYS.filter((k) => !DETAIL_TEXT_KEYS.includes(k));
+
+/** Cột PostgREST đọc đúng từng khoá trong raw_payload (`khoá:raw_payload->>khoá`), không kéo cả hồ sơ. */
+export function payloadProjection(keys: readonly string[]): string {
+  return keys.map((key) => `${key}:raw_payload->>${key}`).join(",");
+}
+
+export function payloadFromRow(row: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of keys) if (row[key] !== undefined && row[key] !== null) out[key] = row[key];
+  return out;
+}
+
+/** Bốn câu tự luận tải sau, cùng nhãn và thứ tự như trên thẻ. */
+export function menteeDetailTexts(payload: Record<string, unknown>): Array<[label: string, value: string]> {
+  const out: Array<[string, string]> = [];
+  for (const [key, label] of TEXT_FIELDS) {
+    if (!DETAIL_TEXT_KEYS.includes(key)) continue;
+    const raw = text(payload[key]);
+    if (raw) out.push([label, raw]);
+  }
+  return out;
+}
+
 // Hàm biến URL thành link nằm ở lib/text-links.ts (dùng chung với trang chọn ca của
 // mentee); xuất lại ở đây để các chỗ đang import từ file này không phải đổi.
 import { linkify, type LinkPart } from "@/lib/text-links";
@@ -49,6 +81,9 @@ export { linkify, type LinkPart };
 export type MenteeCard = {
   applicationId: string;
   name: string;
+  /** Nhóm của bạn mentee — cần khi danh sách gộp nhiều nhóm (cụm chọn). */
+  groupCode: number | null;
+  groupLabel: string | null;
   facts: Array<[label: string, value: string]>;
   texts: Array<[label: string, value: string]>;
   cv: LinkPart[] | null;
@@ -58,7 +93,13 @@ function text(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-export function menteeCard(input: { applicationId: string; name: string; payload: Record<string, unknown> }): MenteeCard {
+export function menteeCard(input: {
+  applicationId: string;
+  name: string;
+  payload: Record<string, unknown>;
+  groupCode?: number | null;
+  groupLabel?: string | null;
+}): MenteeCard {
   const p = input.payload;
   const facts: Array<[string, string]> = [];
   for (const [key, label] of FACT_FIELDS) {
@@ -75,7 +116,15 @@ export function menteeCard(input: { applicationId: string; name: string; payload
     if (raw) texts.push([label, raw]);
   }
   const cvRaw = text(p.profile_or_cv_url);
-  return { applicationId: input.applicationId, name: input.name, facts, texts, cv: cvRaw ? linkify(cvRaw) : null };
+  return {
+    applicationId: input.applicationId,
+    name: input.name,
+    groupCode: input.groupCode ?? null,
+    groupLabel: input.groupLabel ?? null,
+    facts,
+    texts,
+    cv: cvRaw ? linkify(cvRaw) : null
+  };
 }
 
 /**
@@ -100,6 +149,13 @@ export function windowState(settings: { opensAt: string | null; closesAt: string
   const closes = settings.closesAt ? Date.parse(settings.closesAt) : NaN;
   if (Number.isFinite(closes) && nowMs >= closes) return "closed";
   return "open";
+}
+
+/** Hạn bỏ chọn (ISO), để trình duyệt tự đếm lùi; null = không có giờ chọn. */
+export function undoDeadline(pickedAt: string | null): string | null {
+  if (!pickedAt) return null;
+  const picked = Date.parse(pickedAt);
+  return Number.isFinite(picked) ? new Date(picked + PICK_UNDO_MINUTES * 60_000).toISOString() : null;
 }
 
 /** Số phút còn bỏ chọn được (0 = hết hạn). */

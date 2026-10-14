@@ -1,63 +1,23 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/ui";
 import { getRound2PickPageData, type Round2PickPage } from "@/lib/matching-round2-link";
-import type { MenteeCard } from "@/lib/matching-round2-link-core";
 import { formatDateTime } from "@/lib/utils";
-import { PickButton, UnpickButton } from "./pick-forms";
+import { MenteeList } from "./mentee-list";
+import { UnpickButton } from "./pick-forms";
 
 /**
  * Trang mentor chọn mentee ở Vòng 2 — công khai, không cần đăng nhập (BTC 07/10/2026).
  *
- * Mentor vào bằng đường dẫn riêng trong thư mời. Trang chỉ hiện mentee cùng nhóm ngành,
- * chưa có mentor; chọn xong là bạn ấy biến khỏi danh sách của mọi mentor khác. Ai bấm
- * trước được — database phân xử dưới khoá, trang không tự quyết.
+ * Mentor vào bằng đường dẫn riêng trong thư mời. Trang hiện mentee chưa có mentor trong danh
+ * sách chọn của mentor (một nhóm ngành, hoặc các nhóm BTC gộp chung — BTC 14/10/2026); chọn
+ * xong là bạn ấy biến khỏi danh sách của mọi mentor khác. Ai bấm trước được — database phân
+ * xử dưới khoá, trang không tự quyết.
  */
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Chọn mentee · UEH Mentoring", robots: { index: false, follow: false } };
 
 const SUPPORT = "Cần hỗ trợ, anh/chị nhắn Zalo ban tổ chức 0919144638 hoặc trả lời thư mời.";
-
-function MenteeCardView({ card, token, canPick }: { card: MenteeCard; token: string; canPick: boolean }) {
-  return (
-    <Card>
-      <article data-testid="mentee-card" data-application={card.applicationId} className="grid gap-3">
-        <h2 className="text-lg font-semibold text-vam-ink">{card.name}</h2>
-        {card.facts.length ? (
-          <dl className="grid gap-1 text-sm sm:grid-cols-2">
-            {card.facts.map(([label, value]) => (
-              <div key={label}>
-                <dt className="inline text-slate-500">{label}: </dt>
-                <dd className="inline text-vam-ink">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-        {card.cv ? (
-          <p className="break-words text-sm">
-            <span className="text-slate-500">CV / hồ sơ: </span>
-            {card.cv.map((part, index) =>
-              part.kind === "link" ? (
-                <a key={index} href={part.href} target="_blank" rel="noopener noreferrer" className="break-all text-vam-green underline">
-                  {part.value}{" "}
-                </a>
-              ) : (
-                <span key={index}>{part.value} </span>
-              )
-            )}
-          </p>
-        ) : null}
-        {card.texts.map(([label, value]) => (
-          <div key={label} className="text-sm">
-            <div className="font-medium text-slate-600">{label}</div>
-            <p className="whitespace-pre-line text-vam-ink">{value}</p>
-          </div>
-        ))}
-        {canPick ? <PickButton token={token} applicationId={card.applicationId} menteeName={card.name} /> : null}
-      </article>
-    </Card>
-  );
-}
 
 function Body({ data, token }: { data: Round2PickPage; token: string }) {
   if (data.state !== "ready") {
@@ -77,7 +37,7 @@ function Body({ data, token }: { data: Round2PickPage; token: string }) {
           <li key={p.matchId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="font-medium text-vam-ink">{p.menteeName}</span>
             {p.undoMinutesLeft > 0 ? (
-              <UnpickButton token={token} matchId={p.matchId} minutesLeft={p.undoMinutesLeft} />
+              <UnpickButton token={token} matchId={p.matchId} minutesLeft={p.undoMinutesLeft} deadline={p.undoDeadline} />
             ) : (
               <span className="text-xs text-slate-500">Quá 30 phút — muốn đổi, liên hệ ban tổ chức.</span>
             )}
@@ -135,21 +95,15 @@ function Body({ data, token }: { data: Round2PickPage; token: string }) {
       <Card>
         <p className="text-sm text-vam-ink">
           Anh/chị còn chọn được <strong>{data.slots}</strong> mentee (tối đa {data.limit} ở vòng này). Danh sách gồm{" "}
-          <strong>{data.mentees.length}</strong> bạn thuộc nhóm <strong>{data.groupLabel}</strong> chưa có mentor. Bạn nào vừa được
-          mentor khác chọn sẽ biến khỏi danh sách khi anh/chị tải lại trang.
+          <strong>{data.mentees.length}</strong> bạn chưa có mentor thuộc <strong>{data.groupLabel}</strong>. Bạn nào vừa được
+          mentor khác chọn sẽ tự ẩn khỏi danh sách trong khoảng 20 giây.
           {data.closesAt ? ` Vòng 2 đóng lúc ${formatDateTime(data.closesAt)} (giờ Việt Nam).` : ""}
         </p>
         <p className="mt-2 text-xs text-slate-500">
           Chọn nhầm thì bỏ chọn được trong 30 phút. Hồ sơ dưới đây chỉ dùng để chọn mentee — vui lòng không chia sẻ ra ngoài.
         </p>
       </Card>
-      {data.mentees.length === 0 ? (
-        <Card>
-          <p className="text-sm text-slate-600">Hiện chưa còn mentee nào trong nhóm của anh/chị. Ban tổ chức sẽ báo khi có thêm hồ sơ.</p>
-        </Card>
-      ) : (
-        data.mentees.map((card) => <MenteeCardView key={card.applicationId} card={card} token={token} canPick />)
-      )}
+      <MenteeList token={token} cards={data.mentees} groups={data.poolGroups} closesAt={data.closesAt} />
     </>
   );
 }

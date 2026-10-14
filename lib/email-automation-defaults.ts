@@ -232,6 +232,7 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
           groupLabel: S("nhom_nganh"),
           slotsLabel: S("so_cho"),
           pickUrl: S("link_chon_mentee"),
+          opensLabel: S("gio_mo"),
           deadlineLabel: S("han_chon"),
           hotlineZalo: S("zalo_ho_tro")
         })

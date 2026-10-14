@@ -195,6 +195,9 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Vòng 2 — cụm chọn (bảng trống: giữ 9 nhóm) + danh sách mã còn trống cho trang chọn tự cập nhật —
+  // migration 20261014190000_vong_2_cum_chon.sql, phải dán Production TRƯỚC khi merge.
+  "vam123_round2_available",
   // Duyệt nhóm mentee hàng loạt (cùng khuôn vam115 của mentor) — migration
   // 20261013230000_round2_duyet_nhom_mentee_hang_loat.sql, phải dán Production TRƯỚC khi merge.
   "vam122_confirm_mentee_groups",

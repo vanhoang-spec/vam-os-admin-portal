@@ -9,8 +9,11 @@
  *   - chỉ hiện mentee cùng nhóm, chưa có mentor, chưa rút;
  *   - token lạ / chưa mở / đã đủ chỗ thì không hiện hồ sơ nào;
  *   - nút chọn gửi đúng token đã bind + mã đơn, mã sai hình dạng thì không gọi RPC;
- *   - bộ gửi chỉ gửi cho mentor còn chỗ, dùng lại link cũ, ghi đúng đợt, không gửi khi vòng
- *     chưa mở, và đợt 2 gửi lại cho người còn chỗ.
+ *   - bộ gửi chỉ gửi cho mentor còn chỗ, dùng lại link cũ, ghi đúng đợt, gửi được khi đã ĐẶT giờ
+ *     mở (kể cả trước giờ mở — BTC 14/10/2026), không gửi khi chưa đặt giờ hay vòng đã đóng, và
+ *     đợt 2 gửi lại cho người còn chỗ;
+ *   - cụm chọn (BTC 14/10/2026): danh sách gồm mọi nhóm trong cụm, thư và trang mang nhãn cụm;
+ *   - trang chỉ đọc các trường thẻ cần; tự luận và danh sách mã còn trống đi qua lệnh có kiểm token.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
@@ -38,7 +41,8 @@ vi.mock("@/lib/public-url", () => ({ getPublicOrigin: vi.fn(async () => "https:/
 vi.mock("@/lib/email", () => ({ sendMatchingRound2Invite: vi.fn(async () => ({ ok: true, skipped: false })) }));
 
 import MentorPickPage from "@/app/chon-mentee/[token]/page";
-import { pickMenteeAction } from "@/app/chon-mentee/[token]/actions";
+import { availableMenteesAction, menteeDetailAction, pickMenteeAction } from "@/app/chon-mentee/[token]/actions";
+import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { sendMatchingRound2Invite } from "@/lib/email";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -55,6 +59,8 @@ const APP = (n: number) => `00000000-0000-4000-8000-00000000010${n}`;
 const PRIVATE = { email_primary: "rieng@example.test", phone_primary: "0909123456", mssv: "31221020999", gender: "female", linkedin_url: "https://linkedin.example/x" };
 const db = createFakeDb();
 let rpcCalls: Array<{ fn: string; args: any }> = [];
+/** Kết quả giả của vam123_round2_available (database thật đã được soát ở vong-2-cum-chon-migration). */
+let availableIds: string[] | null = [];
 
 function menteePayload(major: string) {
   return {
@@ -66,7 +72,9 @@ function menteePayload(major: string) {
     target_industry: "fmcg",
     gpa_4: "3.6",
     profile_or_cv_url: "CV: https://drive.example/cv javascript:alert(1)",
-    mentoring_goals_text: "Hiểu nghề brand"
+    mentoring_goals_text: "Hiểu nghề brand",
+    current_difficulty_text: "TU LUAN TAI SAU — khó khăn hiện tại",
+    top_3_questions_for_mentor: "TU LUAN TAI SAU — ba câu hỏi"
   };
 }
 
@@ -112,6 +120,7 @@ function seed(opensOffsetMs = -3600_000) {
   db.tables.person_season_memberships = [{ id: "psm4", person_id: "m4", season_id: SEASON, role: "mentee", status: "withdrawn" }];
   db.tables.matches = [{ id: "match-r1", season_id: SEASON, mentor_person_id: "mentor-full", mentee_person_id: "m2", status: "active", matching_round: 1 }];
   db.tables.outbound_emails = [];
+  db.tables.matching_round2_pools = [];
 }
 
 beforeEach(() => {
@@ -119,9 +128,13 @@ beforeEach(() => {
   db.reset();
   seed();
   rpcCalls = [];
+  availableIds = [APP(1)];
   const client = fakeClient(db, {
     rpc: (fn: string, args: any) => {
       rpcCalls.push({ fn, args });
+      if (fn === "vam123_round2_available") {
+        return availableIds === null ? { data: null, error: { message: "boom" } } : { data: availableIds, error: null };
+      }
       return { data: { ok: true, remaining: 1 }, error: null };
     }
   });
@@ -185,6 +198,44 @@ describe("trang /chon-mentee/[token]", () => {
     expect(container.textContent).toContain("còn chọn được 2 mentee");
   });
 
+  it("chỉ đọc các trường thẻ cần (theo đường JSON), không kéo cả hồ sơ; tự luận phía sau không có trên trang", async () => {
+    const container = await renderPage(TOKEN_A);
+    const reads = db.requests.filter((r) => r.table === "applications" && String(r.columns).includes("raw_payload->>"));
+    expect(reads.length).toBeGreaterThan(0);
+    for (const read of reads) {
+      const tokens = String(read.columns).split(",");
+      expect(tokens).not.toContain("raw_payload");
+      expect(tokens).toContain("mentoring_goals_text:raw_payload->>mentoring_goals_text");
+      expect(String(read.columns)).not.toContain("current_difficulty_text");
+    }
+    const card = container.querySelector('[data-testid="mentee-card"]') as HTMLElement;
+    expect(card.textContent).toContain("Hiểu nghề brand");
+    expect(card.textContent).not.toContain("TU LUAN TAI SAU");
+    expect(card.textContent).toContain("Xem đầy đủ hồ sơ");
+  });
+
+  it("cụm chọn: nhóm 4 gộp với nhóm 6 thì thấy cả bạn nhóm 6, thẻ mang nhãn nhóm, có nút lọc theo nhóm", async () => {
+    db.tables.matching_round2_pools = [
+      { season_id: SEASON, group_code: 4, pool_code: 4 },
+      { season_id: SEASON, group_code: 6, pool_code: 4 }
+    ];
+    const container = await renderPage(TOKEN_A);
+    const cards = Array.from(container.querySelectorAll('[data-testid="mentee-card"]'));
+    expect(cards.map((c) => c.getAttribute("data-application")).sort()).toEqual([APP(1), APP(3)].sort());
+    const groupOf = (app: string) =>
+      container.querySelector(`[data-application="${app}"] [data-testid="mentee-group"]`)?.textContent;
+    expect(groupOf(APP(1))).toBe("4. Marketing - Kinh doanh");
+    expect(groupOf(APP(3))).toBe("6. Nhân sự");
+    expect(container.querySelector('[data-testid="group-filter"]')?.textContent).toContain("6. Nhân sự (1)");
+    expect(container.textContent).toContain("4. Marketing - Kinh doanh (chung danh sách với 6. Nhân sự)");
+  });
+
+  it("mùa không gộp nhóm: không có nút lọc, nhãn chỉ là nhóm của mentor", async () => {
+    const container = await renderPage(TOKEN_A);
+    expect(container.querySelector('[data-testid="group-filter"]')).toBeNull();
+    expect(container.textContent).not.toContain("chung danh sách");
+  });
+
   it("token sai hình dạng: không chạm database; token lạ: báo không mở được", async () => {
     const bad = await renderPage("khong-phai-uuid");
     expect(bad.textContent).toContain("Không mở được trang chọn mentee");
@@ -223,6 +274,43 @@ describe("nút chọn", () => {
   });
 });
 
+describe("lệnh nhẹ cho trang tự cập nhật", () => {
+  it("mã còn trống: gọi đúng một RPC với đúng token; token sai hình dạng thì không gọi; lỗi thì báo không đọc được", async () => {
+    expect(await availableMenteesAction(TOKEN_A)).toEqual({ ok: true, ids: [APP(1)] });
+    expect(rpcCalls).toEqual([{ fn: "vam123_round2_available", args: { p_token: TOKEN_A } }]);
+    expect(await availableMenteesAction("khong-phai-uuid")).toEqual({ ok: true, ids: [] });
+    expect(rpcCalls).toHaveLength(1);
+    availableIds = null;
+    expect(await availableMenteesAction(TOKEN_A)).toEqual({ ok: false, ids: [] });
+  });
+
+  it("hồ sơ đầy đủ: chỉ trả bốn câu tự luận của bạn còn trong danh sách của chính mentor đó", async () => {
+    const result = await menteeDetailAction(TOKEN_A, APP(1));
+    expect(result).toEqual({
+      ok: true,
+      texts: [
+        ["Khó khăn hiện tại", "TU LUAN TAI SAU — khó khăn hiện tại"],
+        ["3 câu hỏi muốn hỏi mentor", "TU LUAN TAI SAU — ba câu hỏi"]
+      ]
+    });
+    const read = db.requests.filter((r) => r.table === "applications").at(-1)!;
+    expect(String(read.columns).split(",")).not.toContain("raw_payload");
+    expect(JSON.stringify(result)).not.toContain("rieng@example.test");
+  });
+
+  it("bạn không còn trong danh sách (ngoài cụm, đã có mentor, token khác): không đọc hồ sơ nào", async () => {
+    const before = db.requests.filter((r) => r.table === "applications").length;
+    const outside = await menteeDetailAction(TOKEN_A, APP(3));
+    expect(outside.ok).toBe(false);
+    expect(db.requests.filter((r) => r.table === "applications").length).toBe(before);
+    expect((await menteeDetailAction("khong-phai-uuid", APP(1))).ok).toBe(false);
+    expect((await menteeDetailAction(TOKEN_A, "khong-phai-uuid")).ok).toBe(false);
+    availableIds = null;
+    expect((await menteeDetailAction(TOKEN_A, APP(1))).ok).toBe(false);
+    expect(db.requests.filter((r) => r.table === "applications").length).toBe(before);
+  });
+});
+
 describe("bộ gửi link", () => {
   it("gửi cho mentor còn chỗ (không cho mentor đã đủ), dùng lại link cũ, ghi đợt; bấm lại không gửi trùng", async () => {
     // Bộ gửi đọc nhóm đã lưu → mentor-a nhận danh sách, mentor-full đã đủ.
@@ -248,10 +336,45 @@ describe("bộ gửi link", () => {
     expect(db.tables.matching_round2_links.find((l: any) => l.id === "L1")).toMatchObject({ last_sent_wave: 2, send_count: 2 });
   });
 
-  it("vòng chưa mở hoặc người bấm không vận hành mùa: không gửi gì", async () => {
+  it("đã đặt giờ mở ở tương lai: gửi được, thư mang giờ mở và hạn chọn (BTC 14/10/2026: gửi trước, mở cùng lúc)", async () => {
     db.reset();
     seed(3600_000);
-    expect((await runRound2Dispatch()).ok).toBe(false);
+    const result = await runRound2Dispatch();
+    expect(result).toMatchObject({ ok: true, sent: 1 });
+    const input = vi.mocked(sendMatchingRound2Invite).mock.calls[0][0];
+    expect(input.opensLabel).toMatch(/\(giờ Việt Nam\)$/);
+    expect(input.opensLabel).not.toBe(input.deadlineLabel);
+    expect(input.groupLabel).toBe("4. Marketing - Kinh doanh");
+  });
+
+  it("thư mang nhãn cụm khi nhóm của mentor được gộp", async () => {
+    db.tables.matching_round2_pools = [
+      { season_id: SEASON, group_code: 4, pool_code: 4 },
+      { season_id: SEASON, group_code: 6, pool_code: 4 }
+    ];
+    await runRound2Dispatch();
+    expect(vi.mocked(sendMatchingRound2Invite).mock.calls[0][0].groupLabel).toBe("4. Marketing - Kinh doanh (chung danh sách với 6. Nhân sự)");
+  });
+
+  it("link đã thu hồi: không gửi, và không bị đếm là đang chờ thư", async () => {
+    db.tables.matching_round2_links.find((l: any) => l.id === "L1").revoked_at = "2026-10-14T00:00:00Z";
+    const status = await getRound2DispatchStatus();
+    expect(status?.pending).toBe(0);
+    const result = await runRound2Dispatch();
+    expect(result.sent).toBe(0);
+    // Câu báo cho BTC nói đúng: không còn ai chờ thư (không phải "có thể một lượt gửi khác đang chạy").
+    expect(result.message).toBe("Không còn mentor nào chờ thư của đợt 1.");
+    expect(sendMatchingRound2Invite).not.toHaveBeenCalled();
+  });
+
+  it("chưa đặt giờ mở, vòng đã đóng, hoặc người bấm không vận hành mùa: không gửi gì", async () => {
+    db.tables.matching_round2_settings = [];
+    expect(await runRound2Dispatch()).toMatchObject({ ok: false, message: "Chưa đặt giờ mở vòng 2 — đặt giờ mở trước khi gửi link." });
+    db.reset();
+    seed();
+    db.tables.matching_round2_settings[0].opens_at = new Date(Date.now() - 2 * 86400_000).toISOString();
+    db.tables.matching_round2_settings[0].closes_at = new Date(Date.now() - 3600_000).toISOString();
+    expect(await runRound2Dispatch()).toMatchObject({ ok: false, message: "Vòng 2 đã đóng — không gửi link." });
     db.reset();
     seed();
     vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "admin-sp", role: "support_team", status: "active", auth_user_id: "auth-sp", email: "sp@example.test" } as any);

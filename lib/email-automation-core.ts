@@ -435,6 +435,7 @@ export const AUTOMATION_SLOTS: readonly AutomationSlot[] = [
         required: true,
         hint: "Đường dẫn riêng của từng mentor. Bỏ ô này là thư không còn tác dụng gì."
       },
+      { key: "gio_mo", label: "Giờ mở", required: false, hint: "Đọc từ giờ mở vòng 2 ban tổ chức đặt — thư gửi trước giờ mở." },
       { key: "han_chon", label: "Hạn chọn", required: true, hint: "Đọc từ giờ đóng vòng 2 ban tổ chức đặt." },
       P_ZALO
     ]

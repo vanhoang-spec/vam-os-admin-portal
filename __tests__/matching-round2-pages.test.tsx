@@ -537,4 +537,39 @@ describe("báo cáo và CSV", () => {
     expect(foot.closest("table")).toBe(table);
     expect(Array.from(foot.querySelectorAll("td")).map((td) => td.textContent?.trim())).toEqual(["Tổng cả bảng: 2 mentor", "5", "1", "3"]);
   });
+
+  // BTC 14/10/2026: mùa có gộp nhóm thì cung - cầu phải đọc theo cụm — theo nhóm thì nhóm 2 trông như
+  // thừa chỗ dù mentor nhóm 2 đang chọn chung với mentee nhóm 3.
+  it("bảng Theo danh sách chọn (cụm): cộng chỗ và mentee chờ của mọi nhóm trong cụm, có dòng tổng; không gộp thì không có bảng", async () => {
+    db.tables.matching_industry_assignments = [
+      { id: "as1", season_id: SEASON, person_id: "p-renew", role: "mentor", group_code: 2, confidence: "cao", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "btc", drift_group: null },
+      { id: "as3", season_id: SEASON, person_id: "p-new", role: "mentor", group_code: 6, confidence: "cao", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "btc", drift_group: null },
+      { id: "as2", season_id: SEASON, person_id: "p-mentee", role: "mentee", group_code: 3, confidence: "cao", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "btc", drift_group: null }
+    ];
+    signIn("core_team", "auth-core");
+    const plain = render(<>{await Round2ReportPage()}</>);
+    expect(plain.container.querySelector('[data-testid="pool-table"]')).toBeNull();
+    plain.unmount();
+
+    db.tables.matching_round2_pools = [
+      { season_id: SEASON, group_code: 1, pool_code: 1 },
+      { season_id: SEASON, group_code: 2, pool_code: 1 },
+      { season_id: SEASON, group_code: 3, pool_code: 1 },
+      { season_id: SEASON, group_code: 6, pool_code: 6 },
+      { season_id: SEASON, group_code: 9, pool_code: 6 }
+    ];
+    const { container } = render(<>{await Round2ReportPage()}</>);
+    const cells = (selector: string) => Array.from(container.querySelectorAll(`${selector} td`)).map((td) => td.textContent?.trim());
+    // Mentor nhóm 2 đăng ký 3 → còn 2 chỗ; mentee nhóm 3 chưa có mentor → cụm Tài chính thừa 1.
+    expect(cells('[data-testid="pool-table"] tr[data-pool="1"]')).toEqual([
+      "Cụm 1 + 2 + 3: 1. Ngân hàng - Bảo hiểm · 2. Kế toán - Kiểm toán · 3. Tài chính - Đầu tư",
+      "1",
+      "2",
+      "1",
+      "1"
+    ]);
+    expect(cells('[data-testid="pool-table"] tr[data-pool="6"]')).toEqual(["Cụm 6 + 9: 6. Nhân sự · 9. Khác", "1", "2", "0", "2"]);
+    const total = Array.from(container.querySelectorAll('[data-testid="pool-table"] tbody tr')).at(-1)!;
+    expect(Array.from(total.querySelectorAll("td")).map((td) => td.textContent?.trim())).toEqual(["Tổng", "2", "4", "1", "3"]);
+  });
 });
