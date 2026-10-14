@@ -4,7 +4,7 @@ import { useContext, useEffect, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { pickMenteeAction, unpickMenteeAction } from "./actions";
 import { PickReport } from "./pick-report";
-import { ROUND2_PICK_IDLE } from "@/lib/matching-round2-action-types";
+import { ROUND2_PICK_IDLE, type Round2PickState } from "@/lib/matching-round2-action-types";
 
 function Status({ status, message }: { status: string; message: string }) {
   if (status === "idle") return null;
@@ -34,12 +34,16 @@ function Submit({ label, pendingLabel, tone = "primary" }: { label: string; pend
  * (PickReport): sau khi trang làm mới, thẻ này có thể không còn.
  */
 export function PickButton({ token, applicationId, menteeName }: { token: string; applicationId: string; menteeName: string }) {
-  const [state, action] = useFormState(pickMenteeAction.bind(null, token), ROUND2_PICK_IDLE);
-  const [confirming, setConfirming] = useState(false);
   const report = useContext(PickReport);
-  useEffect(() => {
-    if (state.status === "ok" || state.status === "error") report?.({ status: state.status, message: `${menteeName}: ${state.message}` });
-  }, [state, report, menteeName]);
+  const [state, action] = useFormState(async (prev: Round2PickState, formData: FormData): Promise<Round2PickState> => {
+    const next = await pickMenteeAction(token, prev, formData);
+    // Báo NGAY khi có kết quả, không đợi thẻ vẽ lại. Next áp kết quả cùng một lần với trang đã làm
+    // mới, nên thẻ của bạn vừa chọn (hay vừa bị người khác chọn) biến mất luôn và một useEffect trong
+    // thẻ không bao giờ chạy: mentor chọn xong mà không thấy câu báo nào (14/10/2026, chạy thử trang thật).
+    if (next.status !== "idle") report?.({ status: next.status, message: `${menteeName}: ${next.message}` });
+    return next;
+  }, ROUND2_PICK_IDLE);
+  const [confirming, setConfirming] = useState(false);
   if (state.status === "ok") return <Status status={state.status} message={state.message} />;
   return (
     <div className="flex flex-col gap-2" data-testid="pick-button">
