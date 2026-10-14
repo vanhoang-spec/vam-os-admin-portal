@@ -1,5 +1,9 @@
 /**
- * Vòng 2 — "cụm chọn" (BTC 14/10/2026: gộp nhóm 1+2+3 và 6+9 cho mùa 12), chạy THẬT trên PostgreSQL (PGlite).
+ * Vòng 2 — "cụm chọn", chạy THẬT trên PostgreSQL (PGlite).
+ *
+ * BTC 14/10/2026 (tối) chốt GIỮ 9 NHÓM RIÊNG cho Vòng 2 mùa 12: migration không gộp nhóm nào, và với
+ * bảng cụm trống mọi lượt chọn phải y hệt luật cũ "cùng nhóm". Cơ chế gộp vẫn được soát (test tự thêm
+ * dòng cụm như khi BTC dán SQL gộp), vì đó là đường duy nhất để mở rộng danh sách sau này.
  *
  * Mentor không có tài khoản bấm chọn qua link riêng, nên luật cụm phải nằm trong hàm chọn:
  *   - mentor nhóm nào trong cụm cũng chọn được mentee mọi nhóm trong cụm; ngoài cụm vẫn bị từ chối;
@@ -91,6 +95,15 @@ async function menteeIn(group: number | null, status = "approved_as_mentee"): Pr
 
 const M: Record<string, Mentor> = {};
 const E: Record<string, Mentee> = {};
+/** Số dòng cụm ngay sau khi chạy migration — phải là 0 (BTC giữ 9 nhóm). */
+let poolRowsAfterMigration = -1;
+/** Như khi BTC dán SQL gộp nhóm: mùa 12 gộp 1+2+3 và 6+9 (để soát cơ chế). */
+const MERGE_S12 = `insert into matching_round2_pools(season_id, group_code, pool_code)
+  select s.id, g.group_code, g.pool_code from seasons s
+  cross join (values (1::smallint, 1::smallint), (2::smallint, 1::smallint), (3::smallint, 1::smallint),
+                     (6::smallint, 6::smallint), (9::smallint, 6::smallint)) as g(group_code, pool_code)
+  where s.code = 'UEHM-S12'
+  on conflict (season_id, group_code) do nothing`;
 
 beforeAll(async () => {
   db = await offlineDb();
@@ -109,6 +122,8 @@ beforeAll(async () => {
     grant all on vam063_trusted_api_role_result, outbound_emails to service_role;
   `);
   for (const file of MIGRATIONS) await db.exec(read(file));
+  poolRowsAfterMigration = Number((await one<{ n: number }>("select count(*)::int as n from matching_round2_pools")).n);
+  await db.exec(MERGE_S12);
 
   M.g1 = await mentor(1);
   M.g3 = await mentor(3);
@@ -141,8 +156,27 @@ afterAll(async () => {
   await db?.close();
 });
 
-describe("bảng cụm và hàm vam123_round2_pool", () => {
-  it("mùa 12 gộp 1+2+3 và 6+9; nhóm không có dòng là cụm của chính nó; mùa khác không bị ảnh hưởng", async () => {
+describe("BTC giữ 9 nhóm riêng (phương án A)", () => {
+  it("migration không gộp nhóm nào: bảng cụm trống sau khi chạy", () => {
+    expect(poolRowsAfterMigration).toBe(0);
+  });
+
+  it("bảng cụm trống: mỗi nhóm một danh sách — khác nhóm (kể cả 1–3, 6–9) bị từ chối, cùng nhóm được, danh sách còn trống chỉ gồm nhóm mình", () =>
+    isolated(async () => {
+      await asOwner(() => db.exec("delete from matching_round2_pools"));
+      await openWindow();
+      expect(await pick(M.g1.token, E.g3.app)).toEqual({ ok: false, code: "mentee_not_in_group" });
+      expect(await pick(M.g3.token, E.g2.app)).toEqual({ ok: false, code: "mentee_not_in_group" });
+      expect(await pick(M.g6.token, E.g9.app)).toEqual({ ok: false, code: "mentee_not_in_group" });
+      expect(await available(M.g1.token)).toEqual([E.g1.app]);
+      expect(await available(M.g9.token)).toEqual([E.g9.app]);
+      expect(await pick(M.g3.token, E.g3.app)).toMatchObject({ ok: true });
+      expect(await pick(M.g9.token, E.g9.app)).toMatchObject({ ok: true });
+    }));
+});
+
+describe("bảng cụm và hàm vam123_round2_pool (khi BTC dán SQL gộp nhóm)", () => {
+  it("gộp 1+2+3 và 6+9; nhóm không có dòng là cụm của chính nó; mùa khác không bị ảnh hưởng", async () => {
     const rows = await asOwner(async () =>
       (await db.query<{ group_code: number; pool_code: number }>(
         "select group_code, pool_code from matching_round2_pools where season_id = $1 order by group_code",
@@ -320,7 +354,7 @@ describe("vam123_round2_available", () => {
 });
 
 describe("chạy lại migration", () => {
-  it("chạy lần hai không lỗi và không nhân đôi dòng cụm", () =>
+  it("chạy lần hai không lỗi, không thêm cũng không xoá dòng cụm BTC đã đặt", () =>
     isolated(async () => {
       await asOwner(async () => {
         await db.exec(read(THIS));

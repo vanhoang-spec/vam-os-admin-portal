@@ -652,7 +652,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Chỗ còn của mentor = tối đa 2 mentee, không vượt số đã đăng ký, trừ số cặp đang hoạt động (tính cả vòng 1). Mentor có nhiều hơn một hồ sơ mentor không được tính cho tới khi gộp hồ sơ.",
       "Mỗi mentor một đường dẫn riêng (/chon-mentee/…), dùng cho mọi đợt. Mentor thấy họ tên, hồ sơ học tập, mục tiêu, tự luận, CV, GPA của mentee — không thấy email, SĐT, MSSV. Chọn trước được trước; bỏ chọn được trong 30 phút, quá 30 phút thì BTC huỷ cặp ở trang Ghép cặp.",
       "Chưa lưu giờ mở thì vòng 2 đang đóng: link mở ra chỉ báo “chưa mở”, không ai chọn được.",
-      "Cụm chọn (BTC 14/10/2026): mùa 12 gộp nhóm 1+2+3 (Tài chính) và 6+9 (Nhân sự + Khác) vào chung danh sách — mentor của nhóm nào trong cụm cũng thấy và chọn được mentee của mọi nhóm trong cụm. Nhóm ngành của từng người không đổi. Đổi cách gộp là quyết định của BTC, làm bằng SQL có duyệt.",
+      "Mỗi mentor chỉ thấy và chọn mentee cùng nhóm ngành — Vòng 2 mùa 12 giữ 9 nhóm riêng (BTC 14/10/2026). Hệ thống có sẵn cách gộp nhiều nhóm vào chung một danh sách (cụm chọn) nếu BTC quyết định sau này, ví dụ đợt mở rộng sau khi đóng vòng; việc gộp làm bằng SQL có duyệt, nhóm ngành của từng người không đổi.",
       "Trang chọn của mentor tự ẩn bạn vừa được người khác chọn trong khoảng 20 giây (không cần tải lại trang). Thẻ hiện thông tin ngắn và mục tiêu; mentor bấm “Xem đầy đủ hồ sơ” để đọc các câu tự luận còn lại.",
       "Tải CSV: Super admin, Admin, Core team có quyền vận hành mùa. File có họ tên và email."
     ],

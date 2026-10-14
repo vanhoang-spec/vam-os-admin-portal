@@ -22,7 +22,7 @@ function detail(row: Round2Row, label: string): string {
 
 /**
  * Cung - cầu theo DANH SÁCH CHỌN (BTC 14/10/2026): mentor thấy mentee của cả cụm, nên "còn thiếu bao
- * nhiêu chỗ" phải cộng theo cụm — cộng theo nhóm thì nhóm 1 trông như thừa 60 chỗ dù đã gộp với nhóm 3.
+ * nhiêu chỗ" phải cộng theo cụm khi BTC gộp nhóm. Không gộp (Vòng 2 mùa 12 giữ 9 nhóm) thì bảng không hiện.
  */
 function PoolTable({ pools }: { pools: PoolSummary[] }) {
   const cell = "px-3 py-2 text-right";

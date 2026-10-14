@@ -1,18 +1,16 @@
--- Ghép cặp Vòng 2 — "cụm chọn": gộp nhiều nhóm ngành vào chung một danh sách chọn (BTC 14/10/2026).
+-- Ghép cặp Vòng 2 — "cụm chọn": cho phép gộp nhiều nhóm ngành vào chung một danh sách chọn.
 --
--- Số liệu mùa 12 lúc 17:40 ngày 14/10: 548 chỗ cho 578 mentee đang chờ, nhưng lệch theo nhóm —
--- nhóm 1 (Ngân hàng) thừa 60 chỗ trong khi nhóm 3 (Tài chính) thiếu 27, nhóm 6 (Nhân sự) thừa 30
--- trong khi nhóm 9 (Khác) thiếu 13. Chọn đúng nhóm thì ít nhất 139 bạn chắc chắn không có mentor.
--- Anh Hoàng chốt gộp 1+2+3 và 6+9: mentor của bất kỳ nhóm nào trong cụm thấy và chọn được mentee
--- của mọi nhóm trong cụm.
+-- Số liệu mùa 12 lúc 17:40 ngày 14/10: 548 chỗ cho 578 mentee đang chờ, lệch theo nhóm. BTC đã cân
+-- nhắc gộp nhóm (1+2+3, 6+9) rồi chốt GIỮ 9 NHÓM RIÊNG cho Vòng 2 (BTC 14/10/2026, tối). Vì vậy
+-- migration này KHÔNG gộp nhóm nào: bảng matching_round2_pools để trống, mỗi nhóm là một danh sách,
+-- hành vi y hệt luật cũ "cùng nhóm". Nếu sau này BTC muốn gộp (ví dụ đợt mở rộng sau khi đóng vòng),
+-- chỉ cần thêm dòng vào bảng bằng SQL có duyệt — không phải đổi hàm.
 --
--- Gộp ở tầng CHỌN, không đổi nhóm của ai: nhóm ngành vẫn là căn cứ phân loại và báo cáo; bảng
--- matching_round2_pools chỉ nói nhóm nào chung danh sách với nhóm nào. Nhóm không có dòng là cụm
--- của chính nó, nên mùa nào không gộp thì không cần làm gì.
+-- Gộp ở tầng CHỌN, không đổi nhóm của ai: nhóm ngành vẫn là căn cứ phân loại và báo cáo.
 --
--- vam113_round2_pick giữ nguyên từng dòng, chỉ đổi bước "cùng nhóm" thành "cùng cụm"
--- (test soát diff thân hàm). vam123_round2_available trả mã đơn các bạn còn trống trong cụm của
--- mentor, một truy vấn — để trang chọn tự cập nhật mà không tải lại cả hồ sơ.
+-- vam113_round2_pick giữ nguyên từng dòng, chỉ đổi bước "cùng nhóm" thành "cùng cụm" (test soát
+-- diff thân hàm; bảng trống thì cụm = nhóm). vam123_round2_available trả mã đơn các bạn còn trống
+-- trong danh sách của mentor, một truy vấn — để trang chọn tự cập nhật mà không tải lại cả hồ sơ.
 
 do $prereq$
 begin
@@ -37,15 +35,7 @@ revoke all on public.matching_round2_pools from public, anon, authenticated, ser
 -- Máy chủ chỉ đọc; đổi cách gộp là quyết định của BTC, làm bằng SQL có duyệt.
 grant select on public.matching_round2_pools to service_role;
 
--- Mùa 12: cụm Tài chính (1 Ngân hàng - Bảo hiểm, 2 Kế toán - Kiểm toán, 3 Tài chính - Đầu tư)
--- và cụm Nhân sự + Khác (6, 9).
-insert into public.matching_round2_pools(season_id, group_code, pool_code)
-select s.id, g.group_code, g.pool_code
-  from public.seasons s
- cross join (values (1::smallint, 1::smallint), (2::smallint, 1::smallint), (3::smallint, 1::smallint),
-                    (6::smallint, 6::smallint), (9::smallint, 6::smallint)) as g(group_code, pool_code)
- where s.code = 'UEHM-S12'
-on conflict (season_id, group_code) do nothing;
+-- Không nạp dòng nào: BTC chốt giữ 9 nhóm riêng cho Vòng 2 mùa 12 (14/10/2026).
 
 create or replace function public.vam123_round2_pool(p_season uuid, p_group smallint)
 returns smallint

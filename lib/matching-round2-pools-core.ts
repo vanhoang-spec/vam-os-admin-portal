@@ -2,9 +2,9 @@
  * Ghép cặp Vòng 2 — "cụm chọn" (BTC 14/10/2026). Phần thuần.
  *
  * Cụm = các nhóm ngành chung một danh sách chọn: mentor nhóm nào trong cụm cũng thấy và chọn được
- * mentee mọi nhóm trong cụm. Mùa 12 gộp 1+2+3 (Tài chính) và 6+9 (Nhân sự + Khác) vì cung - cầu lệch
- * theo nhóm. Nhóm ngành của từng người KHÔNG đổi — cụm chỉ nói ai chung danh sách với ai; nhóm không
- * có dòng trong matching_round2_pools là cụm của chính nó (đúng luật cũ "cùng nhóm").
+ * mentee mọi nhóm trong cụm. Nhóm ngành của từng người KHÔNG đổi — cụm chỉ nói ai chung danh sách
+ * với ai; nhóm không có dòng trong matching_round2_pools là cụm của chính nó (đúng luật cũ "cùng nhóm").
+ * Vòng 2 mùa 12: BTC chốt giữ 9 nhóm riêng (14/10/2026), bảng trống. Gộp sau này = thêm dòng bằng SQL có duyệt.
  *
  * Database (vam123_round2_pool trong vam113_round2_pick) là nơi quyết định; file này chỉ để trang,
  * thư và báo cáo nói cùng một điều với database.
