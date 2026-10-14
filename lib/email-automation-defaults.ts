@@ -234,7 +234,9 @@ function rawDefaultFor(slot: AutomationSlot): Raw | null {
           pickUrl: S("link_chon_mentee"),
           opensLabel: S("gio_mo"),
           deadlineLabel: S("han_chon"),
-          hotlineZalo: S("zalo_ho_tro")
+          hotlineZalo: S("zalo_ho_tro"),
+          guideVideoUrl: S("link_video_huong_dan"),
+          guidePdfUrl: S("link_file_huong_dan")
         })
       );
 

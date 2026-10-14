@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getRound2AvailableIds, getRound2MenteeDetail, pickRound2Mentee, unpickRound2Match } from "@/lib/matching-round2-link";
+import { getRound2AvailableIds, getRound2MenteeDetail, getRound2WindowCards, pickRound2Mentee, unpickRound2Match } from "@/lib/matching-round2-link";
+import type { MenteeCard } from "@/lib/matching-round2-link-core";
 import { MENTOR_PICK_PATH_PREFIX } from "@/lib/matching-round2-link-core";
 import type { Round2PickState } from "@/lib/matching-round2-action-types";
 
@@ -30,6 +31,14 @@ export async function unpickMenteeAction(token: string, _prev: Round2PickState, 
 export async function availableMenteesAction(token: string): Promise<{ ok: boolean; ids: string[] }> {
   const ids = await getRound2AvailableIds(String(token ?? ""));
   return ids === null ? { ok: false, ids: [] } : { ok: true, ids };
+}
+
+/**
+ * Danh sách 15 hồ sơ mới nhất của mentor — trang gọi khi phát hiện một bạn trong danh sách vừa được
+ * người khác chọn, để bù hồ sơ khác vào (BTC 14/10/2026). Chỉ tải 15 thẻ, không tải lại cả trang.
+ */
+export async function windowCardsAction(token: string): Promise<{ ok: true; cards: MenteeCard[]; total: number } | { ok: false }> {
+  return getRound2WindowCards(String(token ?? ""));
 }
 
 export async function menteeDetailAction(

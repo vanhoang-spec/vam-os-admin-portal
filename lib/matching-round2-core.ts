@@ -21,7 +21,7 @@ import {
 } from "@/lib/matching-round2-classify-core";
 import { INDUSTRY_GROUPS, industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { compareNewest } from "@/lib/list-order";
-import { poolList, poolOf, type PoolMap } from "@/lib/matching-round2-pools-core";
+import { isFillPick, poolList, poolOf, type FillPair, type PoolMap } from "@/lib/matching-round2-pools-core";
 import { effectiveMentorCapacity } from "@/lib/mentor-capacity";
 
 export const ROUND2_MENTOR_CAP = 2;
@@ -189,8 +189,11 @@ export function buildRound2Board(input: {
   matches: Round2Match[];
   /** Nhóm nào chung danh sách với nhóm nào; thiếu = mỗi nhóm một danh sách (luật cũ). */
   pools?: PoolMap;
+  /** Nhóm nhận bù (BTC 15/10/2026, một chiều); thiếu = không bù. */
+  fills?: readonly FillPair[];
 }): Round2Board {
   const pools: PoolMap = input.pools ?? new Map();
+  const fills = input.fills ?? [];
   const assignmentKey = (role: Role, personId: string) => `${role}|${personId}`;
   const assignments = new Map(input.assignments.map((a) => [assignmentKey(a.role, a.personId), a]));
   const namesByPerson = new Map<string, string>();
@@ -335,6 +338,8 @@ export function buildRound2Board(input: {
     if (!mentor?.group || !mentee?.group || mentor.group === mentee.group) continue;
     // Chọn trong cùng cụm là đúng luật (vam113 so theo cụm): không phải bất thường.
     if (m.round === 2 && poolOf(pools, mentor.group) === poolOf(pools, mentee.group)) continue;
+    // Chọn qua đường bù (mentor nhóm nhận bù chọn mentee nhóm bù sang — BTC 15/10/2026) cũng đúng luật.
+    if (m.round === 2 && isFillPick(pools, fills, mentor.group, mentee.group)) continue;
     anomalies.push({
       kind: "cross_group",
       severity: m.round === 2 ? "warning" : "info",

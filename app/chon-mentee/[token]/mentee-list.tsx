@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui";
 import type { MenteeCard } from "@/lib/matching-round2-link-core";
-import { availableMenteesAction, menteeDetailAction } from "./actions";
+import { availableMenteesAction, menteeDetailAction, windowCardsAction } from "./actions";
 import { PickButton } from "./pick-forms";
 import { PickReport, type PickReportMessage } from "./pick-report";
 
@@ -119,22 +119,36 @@ function MenteeCardView({ card, token }: { card: MenteeCard; token: string }) {
 
 export function MenteeList({
   token,
-  cards,
+  cards: serverCards,
   groups,
   closesAt,
+  windowSize,
   pollMs = POLL_MS
 }: {
   token: string;
   cards: MenteeCard[];
   groups: Array<{ code: number; label: string }>;
   closesAt: string | null;
+  /** Số hồ sơ tối đa của một mentor (máy chủ gửi xuống — ROUND2_WINDOW_SIZE). */
+  windowSize: number;
   pollMs?: number;
 }) {
+  // Danh sách 15 hồ sơ của mentor (BTC 14/10/2026). Trang làm mới sau một lượt chọn thì theo danh
+  // sách máy chủ gửi; giữa hai lần đó, hồ sơ bù đến từ windowCardsAction.
+  const [cards, setCards] = useState(serverCards);
+  const cardsRef = useRef(serverCards);
   const [available, setAvailable] = useState<Set<string> | null>(null);
+  const [replaced, setReplaced] = useState(0);
   const [filter, setFilter] = useState<number | null>(null);
   const [report, setReport] = useState<PickReportMessage | null>(null);
   const [closed, setClosed] = useState(false);
   const busy = useRef(false);
+
+  useEffect(() => {
+    cardsRef.current = serverCards;
+    setCards(serverCards);
+    setAvailable(null);
+  }, [serverCards]);
 
   const refresh = useCallback(async () => {
     if (busy.current) return;
@@ -147,13 +161,26 @@ export function MenteeList({
     try {
       const result = await availableMenteesAction(token);
       // Không đọc được thì giữ nguyên danh sách: ẩn nhầm cả danh sách còn tệ hơn để thừa một thẻ.
-      if (result.ok) setAvailable(new Set(result.ids));
+      if (!result.ok) return;
+      const ids = new Set(result.ids);
+      setAvailable(ids);
+      const current = cardsRef.current;
+      const gone = current.filter((card) => !ids.has(card.applicationId)).length;
+      const shown = new Set(current.map((card) => card.applicationId));
+      // Danh sách chưa đủ 15 mà có bạn mới trống (vd. một bạn vừa được bỏ chọn) thì cũng bù.
+      const canGrow = current.length < windowSize && result.ids.some((id) => !shown.has(id));
+      if (gone === 0 && !canGrow) return;
+      const next = await windowCardsAction(token);
+      if (!next.ok) return;
+      cardsRef.current = next.cards;
+      setCards(next.cards);
+      if (gone > 0) setReplaced(gone);
     } catch {
       // như trên
     } finally {
       busy.current = false;
     }
-  }, [token, closesAt]);
+  }, [token, closesAt, windowSize]);
 
   useEffect(() => {
     if (closed) return;
@@ -174,7 +201,7 @@ export function MenteeList({
     return (
       <Card>
         <p className="text-sm text-vam-ink" data-testid="round-closed">
-          Vòng 2 đã đóng. Anh/chị tải lại trang để xem mentee đã chọn; ban tổ chức sẽ liên hệ về bước tiếp theo.
+          Vòng 2 đã đóng. Anh/Chị tải lại trang để xem mentee đã chọn. Ban tổ chức sẽ liên hệ Anh/Chị cho các bước tiếp theo.
         </p>
       </Card>
     );
@@ -183,6 +210,15 @@ export function MenteeList({
   const open = cards.filter((card) => !available || available.has(card.applicationId));
   const gone = cards.length - open.length;
   const shown = open.filter((card) => filter === null || card.groupCode === filter);
+  // Nút lọc: các nhóm của cụm, cộng nhóm của thẻ bù sang (BTC 15/10/2026) — hiện khi có hơn một nhóm.
+  const filterGroups = Array.from(
+    new Map([
+      ...groups.map((g) => [g.code, g.label] as const),
+      ...cards.filter((card) => card.groupCode !== null).map((card) => [card.groupCode as number, card.groupLabel ?? String(card.groupCode)] as const)
+    ]).entries()
+  )
+    .sort((a, b) => a[0] - b[0])
+    .map(([code, label]) => ({ code, label }));
 
   return (
     <PickReport.Provider value={setReport}>
@@ -201,10 +237,14 @@ export function MenteeList({
         <p data-testid="gone-note" className="text-sm text-amber-700">
           {gone} bạn vừa được mentor khác chọn và đã ẩn khỏi danh sách.
         </p>
+      ) : replaced > 0 ? (
+        <p data-testid="gone-note" className="text-sm text-amber-700">
+          {replaced} bạn vừa được mentor khác chọn — đã thay bằng hồ sơ khác.
+        </p>
       ) : null}
-      {groups.length > 1 ? (
+      {filterGroups.length > 1 ? (
         <div role="group" aria-label="Lọc theo nhóm ngành" className="flex flex-wrap gap-2" data-testid="group-filter">
-          {[{ code: null as number | null, label: "Tất cả" }, ...groups].map((g) => {
+          {[{ code: null as number | null, label: "Tất cả" }, ...filterGroups].map((g) => {
             const count = g.code === null ? open.length : open.filter((card) => card.groupCode === g.code).length;
             const active = filter === g.code;
             return (

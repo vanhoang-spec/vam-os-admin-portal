@@ -437,7 +437,19 @@ export const AUTOMATION_SLOTS: readonly AutomationSlot[] = [
       },
       { key: "gio_mo", label: "Giờ mở", required: false, hint: "Đọc từ giờ mở vòng 2 ban tổ chức đặt — thư gửi trước giờ mở." },
       { key: "han_chon", label: "Hạn chọn", required: true, hint: "Đọc từ giờ đóng vòng 2 ban tổ chức đặt." },
-      P_ZALO
+      P_ZALO,
+      {
+        key: "link_video_huong_dan",
+        label: "Video hướng dẫn",
+        required: false,
+        hint: "Video hướng dẫn từng bước trên kênh YouTube Vietnam Alumni Mentoring."
+      },
+      {
+        key: "link_file_huong_dan",
+        label: "File PDF hướng dẫn",
+        required: false,
+        hint: "File PDF hướng dẫn từng bước, mở được không cần đăng nhập."
+      }
     ]
   },
   {

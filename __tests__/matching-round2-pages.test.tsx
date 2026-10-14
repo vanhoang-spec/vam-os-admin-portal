@@ -572,4 +572,21 @@ describe("báo cáo và CSV", () => {
     const total = Array.from(container.querySelectorAll('[data-testid="pool-table"] tbody tr')).at(-1)!;
     expect(Array.from(total.querySelectorAll("td")).map((td) => td.textContent?.trim())).toEqual(["Tổng", "2", "4", "1", "3"]);
   });
+
+  // BTC 15/10/2026: mentor nhóm nhận bù chọn mentee nhóm bù sang là đúng luật — báo cáo không gắn cờ "khác nhóm".
+  it("cặp vòng 2 chọn qua đường bù (mentor nhóm 2 – mentee nhóm 3 khi có dòng bù 2 ← 3) không bị báo khác nhóm", async () => {
+    db.tables.matching_industry_assignments = [
+      { id: "as1", season_id: SEASON, person_id: "p-renew", role: "mentor", group_code: 2, confidence: "cao", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "btc", drift_group: null },
+      { id: "as2", season_id: SEASON, person_id: "p-mentee", role: "mentee", group_code: 3, confidence: "cao", flags: [], secondary_groups: [], evidence: { reasons: [] }, source: "btc", drift_group: null }
+    ];
+    db.tables.matches = [{ id: "m-fill", season_id: SEASON, mentor_person_id: "p-renew", mentee_person_id: "p-mentee", status: "active", matching_round: 2 }];
+    signIn("core_team", "auth-core");
+    const crossText = (c: HTMLElement) => c.querySelector('[data-testid="anomalies"]')?.textContent ?? "";
+    const without = render(<>{await Round2ReportPage()}</>);
+    expect(crossText(without.container)).toContain("khác nhóm");
+    without.unmount();
+    db.tables.matching_round2_fill = [{ season_id: SEASON, group_code: 2, donor_group_code: 3 }];
+    const withFill = render(<>{await Round2ReportPage()}</>);
+    expect(crossText(withFill.container)).not.toContain("khác nhóm");
+  });
 });

@@ -60,3 +60,34 @@ export function poolList(pools: PoolMap): PoolInfo[] {
     }))
     .sort((a, b) => a.groups[0] - b.groups[0]);
 }
+
+/**
+ * "Nhóm nhận bù" (BTC 15/10/2026): mentor nhóm `group` được bù hồ sơ mentee nhóm `donor` khi danh
+ * sách 15 hồ sơ của mình còn dưới 15 bạn cùng cụm. MỘT CHIỀU — bảng matching_round2_fill; database
+ * (vam113_round2_pick, vam123_round2_available) là nơi quyết định, các hàm dưới đây chỉ để trang và
+ * báo cáo nói cùng một điều.
+ */
+export type FillPair = { group: number; donor: number };
+
+export function fillPairsFromRows(rows: ReadonlyArray<{ group_code?: unknown; donor_group_code?: unknown }>): FillPair[] {
+  const out: FillPair[] = [];
+  for (const row of rows) {
+    const group = Number(row.group_code);
+    const donor = Number(row.donor_group_code);
+    if (isGroup(group) && isGroup(donor) && group !== donor) out.push({ group, donor });
+  }
+  return out;
+}
+
+/** Các nhóm mentee được bù cho mentor nhóm này (cả cụm của nhóm bù), trừ nhóm đã chung danh sách. */
+export function fillGroups(pools: PoolMap, fills: readonly FillPair[], group: number): number[] {
+  const own = new Set(poolGroups(pools, group));
+  const donors = new Set<number>();
+  for (const f of fills) if (f.group === group) for (const code of poolGroups(pools, f.donor)) if (!own.has(code)) donors.add(code);
+  return GROUP_CODES.filter((code) => donors.has(code));
+}
+
+/** Mentor nhóm `mentorGroup` chọn mentee nhóm `menteeGroup` qua đường bù — đúng luật, không phải "khác nhóm". */
+export function isFillPick(pools: PoolMap, fills: readonly FillPair[], mentorGroup: number, menteeGroup: number): boolean {
+  return fills.some((f) => f.group === mentorGroup && poolOf(pools, f.donor) === poolOf(pools, menteeGroup));
+}
