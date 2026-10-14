@@ -50,7 +50,7 @@ import { resolveAutomationEmail } from "@/lib/email-automation";
 import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib/participant-invite-core";
 import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/lib/interview-schedule-core";
 import { menteeBookingUrl } from "@/lib/mentee-interview-core";
-import { mentorPickUrl } from "@/lib/matching-round2-link-core";
+import { mentorPickUrl, round2GuidePdfUrl, ROUND2_GUIDE_VIDEO_URL } from "@/lib/matching-round2-link-core";
 import { menteeConfirmUrl } from "@/lib/mentee-exemption-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
@@ -1119,8 +1119,8 @@ export async function sendMatchingRound2Invite(input: {
   requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
   let link = "(đường dẫn riêng của từng mentor — chỉ có trong thư thật)";
+  const base = resolveEmailBaseUrl(input.requestOrigin);
   if (input.token) {
-    const base = resolveEmailBaseUrl(input.requestOrigin);
     if (!base) {
       return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
     }
@@ -1135,7 +1135,10 @@ export async function sendMatchingRound2Invite(input: {
     link_chon_mentee: link,
     gio_mo: input.opensLabel,
     han_chon: input.deadlineLabel,
-    zalo_ho_tro: HOTLINE_ZALO
+    zalo_ho_tro: HOTLINE_ZALO,
+    // Hướng dẫn là đường dẫn công khai, giống nhau cho mọi mentor — thư thử cũng mang link thật.
+    link_video_huong_dan: ROUND2_GUIDE_VIDEO_URL,
+    link_file_huong_dan: base ? round2GuidePdfUrl(base) : ""
   };
   const built = buildMatchingRound2InviteEmail({
     mentorName: values.ten_nguoi_nhan,
@@ -1146,7 +1149,9 @@ export async function sendMatchingRound2Invite(input: {
     pickUrl: link,
     opensLabel: values.gio_mo,
     deadlineLabel: values.han_chon,
-    hotlineZalo: HOTLINE_ZALO
+    hotlineZalo: HOTLINE_ZALO,
+    guideVideoUrl: values.link_video_huong_dan,
+    guidePdfUrl: values.link_file_huong_dan
   });
   const message = await resolveAutomationEmail({ slotId: "matching_round2_invite", values, fallback: built });
   const outgoing = { ...built, ...message, to: input.toEmail };
