@@ -23,17 +23,27 @@ import type { MenteeCard } from "@/lib/matching-round2-link-core";
 const h = vi.hoisted(() => ({
   available: vi.fn(),
   detail: vi.fn(),
-  formState: { current: { status: "idle", message: "" } as { status: string; message: string } }
+  pick: vi.fn(),
+  formState: { current: { status: "idle", message: "" } as { status: string; message: string } },
+  // Hàm form của nút vẽ gần nhất — test gọi thẳng, như khi mentor bấm "Xác nhận chọn".
+  lastFormAction: { current: null as null | ((prev: unknown, formData: FormData) => Promise<unknown>) }
 }));
 vi.mock("@/app/chon-mentee/[token]/actions", () => ({
   availableMenteesAction: h.available,
   menteeDetailAction: h.detail,
-  pickMenteeAction: vi.fn(),
+  pickMenteeAction: h.pick,
   unpickMenteeAction: vi.fn()
 }));
 vi.mock("react-dom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-dom")>();
-  return { ...actual, useFormState: () => [h.formState.current, vi.fn()], useFormStatus: () => ({ pending: false }) };
+  return {
+    ...actual,
+    useFormState: (fn: (prev: unknown, formData: FormData) => Promise<unknown>) => {
+      h.lastFormAction.current = fn;
+      return [h.formState.current, vi.fn()];
+    },
+    useFormStatus: () => ({ pending: false })
+  };
 });
 
 import { MenteeList, POLL_MS } from "@/app/chon-mentee/[token]/mentee-list";
@@ -65,6 +75,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-10-15T05:00:00Z"));
   h.available.mockReset();
   h.detail.mockReset();
+  h.pick.mockReset();
+  h.lastFormAction.current = null;
   h.formState.current = { status: "idle", message: "" };
   setHidden(false);
 });
@@ -175,18 +187,42 @@ describe("lọc và xem hồ sơ", () => {
 });
 
 describe("câu báo kết quả chọn", () => {
-  it("nằm ở đầu danh sách, kèm tên bạn được chọn, và còn lại khi thẻ đó biến mất sau khi trang làm mới", async () => {
-    h.formState.current = { status: "error", message: "Bạn này vừa được mentor khác chọn — anh/chị chọn bạn khác nhé." };
+  // Next áp kết quả lượt chọn CÙNG MỘT LẦN với trang đã làm mới: thẻ của bạn vừa chọn (hay vừa bị
+  // người khác chọn trước) biến mất trước khi nút kịp vẽ lại với kết quả. Bản giả dưới đây làm đúng
+  // thứ tự đó — trang mới tới trước, kết quả về sau — vì thứ tự ngược lại (thẻ còn đó lúc có kết quả)
+  // là thứ đã làm test cũ xanh trong khi trang thật không hiện câu báo nào (14/10/2026).
+  async function submitWhileCardVanishes(result: { status: string; message: string }) {
     const view = render(<MenteeList token={TOKEN} cards={[CARDS[1]]} groups={GROUPS} closesAt={null} />);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+    const formAction = h.lastFormAction.current;
+    expect(formAction).not.toBeNull();
+    h.pick.mockImplementation(async () => {
+      view.rerender(<MenteeList token={TOKEN} cards={[]} groups={GROUPS} closesAt={null} />);
+      return result;
     });
-    const report = () => view.container.querySelector('[data-testid="pick-report"]')?.textContent;
-    expect(report()).toBe("Bạn Kế Toán: Bạn này vừa được mentor khác chọn — anh/chị chọn bạn khác nhé.");
-    h.formState.current = { status: "idle", message: "" };
-    view.rerender(<MenteeList token={TOKEN} cards={[]} groups={GROUPS} closesAt={null} />);
+    const formData = new FormData();
+    formData.set("menteeApplicationId", B);
+    const prev = { status: "idle", message: "" };
+    await act(async () => {
+      await formAction!(prev, formData);
+    });
+    expect(h.pick).toHaveBeenCalledWith(TOKEN, prev, formData);
     expect(shownIds(view.container)).toEqual([]);
-    expect(report()).toBe("Bạn Kế Toán: Bạn này vừa được mentor khác chọn — anh/chị chọn bạn khác nhé.");
+    return view.container.querySelector('[data-testid="pick-report"]') as HTMLElement | null;
+  }
+
+  it("chọn được: câu báo xanh ở đầu danh sách, kèm tên bạn được chọn, dù thẻ đã biến mất", async () => {
+    const report = await submitWhileCardVanishes({
+      status: "ok",
+      message: "Đã chọn. Anh/chị còn có thể chọn thêm 1 mentee. Có thể bỏ chọn trong 30 phút."
+    });
+    expect(report?.textContent).toBe("Bạn Kế Toán: Đã chọn. Anh/chị còn có thể chọn thêm 1 mentee. Có thể bỏ chọn trong 30 phút.");
+    expect(report?.className).toContain("bg-green-50");
+  });
+
+  it("mentor khác chọn trước: câu báo đỏ, kèm tên bạn đó, dù thẻ đã biến mất", async () => {
+    const report = await submitWhileCardVanishes({ status: "error", message: "Bạn này vừa được mentor khác chọn — anh/chị chọn bạn khác nhé." });
+    expect(report?.textContent).toBe("Bạn Kế Toán: Bạn này vừa được mentor khác chọn — anh/chị chọn bạn khác nhé.");
+    expect(report?.className).toContain("bg-red-50");
   });
 
   it("chưa bấm gì thì không có câu báo", () => {

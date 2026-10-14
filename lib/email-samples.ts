@@ -42,6 +42,7 @@ import {
   type EmailKind
 } from "@/lib/email-core";
 import { QUESTION_PROMPT, impressionQuestion, trackingNotice } from "@/lib/event-survey-core";
+import { round2DeadlineLabel, round2OpensLabel, round2WaveNote } from "@/lib/matching-round2-dispatch-core";
 
 const ORIGIN = "https://os.alumni-mentoring.edu.vn";
 const SEASON = "UEH Mentoring Mùa 12";
@@ -258,12 +259,13 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
       buildMatchingRound2InviteEmail({
         mentorName: MENTOR,
         seasonLabel: SEASON,
-        waveNote: "Ban tổ chức mời anh/chị chọn mentee ở Vòng 2 ghép cặp: các bạn mentee đã đạt phỏng vấn, cùng nhóm ngành với anh/chị.",
+        // Câu mở đầu và giờ đi qua đúng các hàm của đợt gửi thật; giờ là lịch BTC chốt 14/10/2026.
+        waveNote: round2WaveNote(1),
         groupLabel: "4. Marketing - Kinh doanh",
         slotsLabel: "2",
         pickUrl: `${ORIGIN}/chon-mentee/ma-vi-du`,
-        opensLabel: "11:00 ngày 15/10/2026 (giờ Việt Nam)",
-        deadlineLabel: "11:00 ngày 17/10/2026 (giờ Việt Nam)",
+        opensLabel: round2OpensLabel("2026-10-15T03:00:00Z"),
+        deadlineLabel: round2DeadlineLabel("2026-10-18T16:59:00Z"),
         hotlineZalo: "0919144638"
       })
     )

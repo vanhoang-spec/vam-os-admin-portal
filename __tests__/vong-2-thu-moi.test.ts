@@ -14,6 +14,8 @@ import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { sendMatchingRound2Invite } from "@/lib/email";
 import { AUTOMATION_SLOTS } from "@/lib/email-automation-core";
 import { buildMatchingRound2InviteEmail } from "@/lib/email-core";
+import { round2WaveNote } from "@/lib/matching-round2-dispatch-core";
+import { EMAIL_SAMPLES } from "@/lib/email-samples";
 
 const ORIGIN = "https://os.alumni-mentoring.edu.vn";
 const TOKEN = "aaaaaaaa-0000-4000-8000-000000000002";
@@ -48,6 +50,30 @@ describe("1. nội dung thư", () => {
     expect(mail.text.split(base.pickUrl).length - 1).toBe(1);
     expect(mail.html).toContain(`href="${base.pickUrl}"`);
     expect(mail.html.split(base.pickUrl).length - 1).toBe(2);
+  });
+
+  it("câu mở đầu thật của cả hai đợt ra nguyên câu, không bị cắt (14/10/2026: bị cắt ở 120 ký tự)", () => {
+    for (const wave of [1, 2]) {
+      const note = round2WaveNote(wave);
+      expect(note.length).toBeGreaterThan(120);
+      const mail = buildMatchingRound2InviteEmail({ ...base, waveNote: note });
+      expect(mail.text).toContain(`\n${note}\n`);
+      expect(mail.html).toContain(`<p>${note}</p>`);
+      expect(mail.text).not.toContain("...");
+      expect(mail.html).not.toContain("...");
+    }
+  });
+
+  it("câu mở đầu vẫn gộp xuống dòng thành một dòng, và trống thì không in gì", () => {
+    const mail = buildMatchingRound2InviteEmail({ ...base, waveNote: " Dòng một\r\ndòng hai\t " });
+    expect(mail.html).toContain("<p>Dòng một dòng hai</p>");
+    expect(buildMatchingRound2InviteEmail({ ...base, waveNote: "   " }).html).toContain("</strong>,</p><p></p>");
+  });
+
+  it("thư mẫu ở trang Mẫu thư theo lịch BTC chốt (10:00 15/10 → 23:59 18/10) và đúng câu mở đầu đợt 1", () => {
+    const sample = EMAIL_SAMPLES.find((s) => s.kind === "matching_round2_invite");
+    expect(sample?.body?.text).toContain("Thời gian chọn: từ 15/10/2026 10:00 (giờ Việt Nam) đến 18/10/2026 23:59 (giờ Việt Nam).");
+    expect(sample?.body?.text).toContain(round2WaveNote(1));
   });
 
   it("mẫu thư BTC sửa được có chỗ điền giờ mở", () => {
@@ -123,6 +149,13 @@ describe("2. gửi thư", () => {
     expect(String(b.subject)).toBe("[UEH Mentoring] Mời anh/chị chọn mentee — UEH Mentoring Mùa 12");
     expect(String(b.text)).not.toContain("THƯ THỬ");
     expect(logged.payloads[0]).toMatchObject({ kind: "matching_round2_invite", to_email: "mentor@example.test", related_table: "matching_round2_links", related_id: LINK_ID });
+  });
+
+  it("thư thật mang nguyên câu mở đầu của đợt 1 (đường gửi thật, không chỉ hàm dựng)", async () => {
+    const result = await sendMatchingRound2Invite({ ...INPUT, waveNote: round2WaveNote(1) });
+    expect(result.ok).toBe(true);
+    expect(String(body().text)).toContain(round2WaveNote(1));
+    expect(String(body().html)).toContain(round2WaveNote(1));
   });
 
   it("thư thử: ghi rõ là thư thử, không mang đường dẫn thật, nút không còn trỏ vào câu giữ chỗ", async () => {

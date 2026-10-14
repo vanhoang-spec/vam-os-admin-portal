@@ -267,6 +267,16 @@ export function safeDisplayName(value: unknown, fallback = "anh/chị"): string 
 }
 
 /**
+ * Một câu văn hệ thống tự soạn (không phải tên người): gộp xuống dòng, KHÔNG cắt.
+ * safeDisplayName cắt ở 120 ký tự vì nó dành cho tên — câu mở đầu thư mời Vòng 2 (127 ký tự)
+ * đã bị cắt thành "…cùng nhóm ngành với anh/chị, ..." (phát hiện 14/10/2026, trước khi gửi).
+ */
+export function safeSentence(value: unknown, fallback = ""): string {
+  const text = String(value ?? "").replace(/[\r\n\t]+/g, " ").trim();
+  return text || fallback;
+}
+
+/**
  * Only ever accept a link this application generated. A confirmation email must
  * not be able to carry an arbitrary URL supplied by a caller.
  */
@@ -1975,7 +1985,7 @@ export function buildMatchingRound2InviteEmail(input: {
   const slots = safeDisplayName(input.slotsLabel, "");
   const deadline = safeDisplayName(input.deadlineLabel, "");
   const opens = safeDisplayName(input.opensLabel, "");
-  const waveNote = safeDisplayName(input.waveNote, "");
+  const waveNote = safeSentence(input.waveNote, "");
 
   const subject = `[UEH Mentoring] Mời anh/chị chọn mentee — ${season}`;
   const lines = [
