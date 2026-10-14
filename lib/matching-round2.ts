@@ -27,7 +27,7 @@ import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { Application } from "@/lib/types";
 import { parseGroupApprovals, type GroupApproval } from "@/lib/matching-round2-bulk-core";
-import { poolMapFromRows } from "@/lib/matching-round2-pools-core";
+import { fillPairsFromRows, poolMapFromRows } from "@/lib/matching-round2-pools-core";
 
 type Row = Record<string, any>;
 
@@ -82,7 +82,7 @@ export async function loadRound2Board(client: any, seasonId: string): Promise<Ro
   const personIds = Array.from(new Set(apps.data.map((a) => String(a.person_id ?? "")).filter(Boolean)));
   const mentorIds = Array.from(new Set(Array.from(byPersonRole.keys()).filter((k) => k.startsWith("mentor|")).map((k) => k.slice(7))));
 
-  const [people, profiles, matches, memberships, assignments, poolRows] = await Promise.all([
+  const [people, profiles, matches, memberships, assignments, poolRows, fillRows] = await Promise.all([
     readAllPagesIn<Row>(client, "people", "id", personIds, "id,full_name,email_primary"),
     readAllPagesIn<Row>(client, "mentor_profiles", "person_id", mentorIds, "id,person_id,title_current,company_current,industry,function_area,capacity_target"),
     readAllPages<Row>(
@@ -99,9 +99,11 @@ export async function loadRound2Board(client: any, seasonId: string): Promise<Ro
       (columns) => client.from("matching_industry_assignments").select(columns).eq("season_id", seasonId)
     ),
     // Tối đa 9 dòng mỗi mùa (khoá chính mùa + nhóm): không cần phân trang.
-    client.from("matching_round2_pools").select("group_code,pool_code").eq("season_id", seasonId).limit(9)
+    client.from("matching_round2_pools").select("group_code,pool_code").eq("season_id", seasonId).limit(9),
+    // Nhóm nhận bù: tối đa 9 × 8 dòng mỗi mùa (khoá chính mùa + nhóm + nhóm bù).
+    client.from("matching_round2_fill").select("group_code,donor_group_code").eq("season_id", seasonId).limit(72)
   ]);
-  for (const read of [people, profiles, matches, memberships, assignments, poolRows]) {
+  for (const read of [people, profiles, matches, memberships, assignments, poolRows, fillRows]) {
     if (read.error) throw new Error("READ_FAILED");
   }
 
@@ -206,7 +208,13 @@ export async function loadRound2Board(client: any, seasonId: string): Promise<Ro
     endReason: text(m.end_reason)
   }));
 
-  return buildRound2Board({ people: persons, assignments: assignmentRows, matches: matchRows, pools: poolMapFromRows((poolRows.data ?? []) as Row[]) });
+  return buildRound2Board({
+    people: persons,
+    assignments: assignmentRows,
+    matches: matchRows,
+    pools: poolMapFromRows((poolRows.data ?? []) as Row[]),
+    fills: fillPairsFromRows((fillRows.data ?? []) as Row[])
+  });
 }
 
 async function seasonActor(seasonId: string, allowed: (role?: string | null) => boolean) {

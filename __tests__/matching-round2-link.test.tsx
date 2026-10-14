@@ -510,3 +510,74 @@ describe("danh sách 15 hồ sơ của từng mentor (BTC 14/10/2026)", () => {
     expect(await windowCardsAction(TOKEN_A)).toEqual({ ok: false });
   });
 });
+
+describe("nhóm nhận bù (BTC 15/10/2026): danh sách dưới 15 bạn thì bù từ nhóm bù sang", () => {
+  // Trong file này mentor-a thuộc nhóm 4; dòng bù "nhóm 4 ← nhóm 6" đóng vai "nhóm 1 ← nhóm 3" của mùa 12.
+  const FILL_APP = (n: number) => `00000000-0000-4000-8000-0000000003${String(n).padStart(2, "0")}`;
+  const OWN_APP = (n: number) => `00000000-0000-4000-8000-0000000004${String(n).padStart(2, "0")}`;
+  function seedGroup(group: number, count: number, idOf: (n: number) => string, prefix: string) {
+    for (let n = 0; n < count; n += 1) {
+      db.tables.people.push({ id: `${prefix}${n}`, full_name: `${prefix.toUpperCase()} Bạn ${n}` });
+      db.tables.applications.push({
+        id: idOf(n), person_id: `${prefix}${n}`, season_id: SEASON, role_applied: "mentee", status: "approved_as_mentee", source: "vam_os_form", raw_payload: menteePayload(`Ngành ${n}`)
+      });
+      db.tables.matching_industry_assignments.push({
+        id: `as-${prefix}${n}`, season_id: SEASON, person_id: `${prefix}${n}`, role: "mentee", application_id: idOf(n), group_code: group, confidence: "cao", flags: [], secondary_groups: [], evidence: {}, source: "auto", drift_group: null
+      });
+    }
+    return Array.from({ length: count }, (_, n) => idOf(n));
+  }
+  const shown = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid="mentee-card"]')).map((x) => x.getAttribute("data-application")!);
+  const donorReads = () =>
+    db.requests.filter(
+      (r) => r.table === "matching_industry_assignments" && (JSON.parse(r.filters) as any[]).some((f) => f.kind === "in" && f.column === "group_code" && f.values.includes(6))
+    );
+
+  it("nhóm mình còn 1 bạn: danh sách bù đủ 15 bằng bạn nhóm 6, bạn nhóm mình đứng đầu; trang nói rõ bao nhiêu bạn bù từ nhóm nào; có nút lọc", async () => {
+    db.tables.matching_round2_fill = [{ season_id: SEASON, group_code: 4, donor_group_code: 6 }];
+    const donor = seedGroup(6, 20, FILL_APP, "f");
+    availableIds = [APP(1), ...donor];
+    const container = await renderPage(TOKEN_A);
+    const ids = shown(container);
+    expect(ids).toHaveLength(15);
+    expect(ids[0]).toBe(APP(1));
+    expect(ids.slice(1).every((id) => donor.includes(id))).toBe(true);
+    const summary = container.querySelector('[data-testid="list-summary"]')?.textContent ?? "";
+    expect(summary).toContain("gồm 15 bạn: 1 bạn thuộc 4. Marketing - Kinh doanh (cả nhóm chỉ còn 1 bạn chưa có mentor) và 14 bạn bổ sung từ nhóm 6. Nhân sự");
+    expect(container.querySelector('[data-testid="group-filter"]')?.textContent).toContain("6. Nhân sự (14)");
+    expect(container.querySelector(`[data-application="${donor.find((d) => ids.includes(d))}"] [data-testid="mentee-group"]`)?.textContent).toBe("6. Nhân sự");
+  });
+
+  it("nhóm mình còn đủ 15 bạn: không bù, không đọc nhóm bù sang", async () => {
+    db.tables.matching_round2_fill = [{ season_id: SEASON, group_code: 4, donor_group_code: 6 }];
+    const own = seedGroup(4, 20, OWN_APP, "o");
+    const donor = seedGroup(6, 20, FILL_APP, "f");
+    availableIds = [...own, ...donor];
+    const container = await renderPage(TOKEN_A);
+    const ids = shown(container);
+    expect(ids).toHaveLength(15);
+    expect(ids.every((id) => own.includes(id))).toBe(true);
+    expect(donorReads()).toHaveLength(0);
+    expect(container.querySelector('[data-testid="list-summary"]')?.textContent).not.toContain("bổ sung");
+  });
+
+  it("không có dòng bù: nhóm mình ít thì danh sách ngắn, không có bạn nhóm khác", async () => {
+    db.tables.matching_round2_fill = [];
+    const donor = seedGroup(6, 20, FILL_APP, "f");
+    availableIds = [APP(1), ...donor];
+    const container = await renderPage(TOKEN_A);
+    expect(shown(container)).toEqual([APP(1)]);
+    expect(donorReads()).toHaveLength(0);
+  });
+
+  it("lệnh bù (tự cập nhật) cũng bù từ nhóm bù sang; tổng số chỉ đếm nhóm mình", async () => {
+    db.tables.matching_round2_fill = [{ season_id: SEASON, group_code: 4, donor_group_code: 6 }];
+    const donor = seedGroup(6, 20, FILL_APP, "f");
+    availableIds = [APP(1), ...donor];
+    const result = await windowCardsAction(TOKEN_A);
+    if (!result.ok) throw new Error("lệnh bù phải chạy được");
+    expect(result.cards).toHaveLength(15);
+    expect(result.cards[0].applicationId).toBe(APP(1));
+    expect(result.total).toBe(1);
+  });
+});

@@ -210,6 +210,15 @@ export function MenteeList({
   const open = cards.filter((card) => !available || available.has(card.applicationId));
   const gone = cards.length - open.length;
   const shown = open.filter((card) => filter === null || card.groupCode === filter);
+  // Nút lọc: các nhóm của cụm, cộng nhóm của thẻ bù sang (BTC 15/10/2026) — hiện khi có hơn một nhóm.
+  const filterGroups = Array.from(
+    new Map([
+      ...groups.map((g) => [g.code, g.label] as const),
+      ...cards.filter((card) => card.groupCode !== null).map((card) => [card.groupCode as number, card.groupLabel ?? String(card.groupCode)] as const)
+    ]).entries()
+  )
+    .sort((a, b) => a[0] - b[0])
+    .map(([code, label]) => ({ code, label }));
 
   return (
     <PickReport.Provider value={setReport}>
@@ -233,9 +242,9 @@ export function MenteeList({
           {replaced} bạn vừa được mentor khác chọn — đã thay bằng hồ sơ khác.
         </p>
       ) : null}
-      {groups.length > 1 ? (
+      {filterGroups.length > 1 ? (
         <div role="group" aria-label="Lọc theo nhóm ngành" className="flex flex-wrap gap-2" data-testid="group-filter">
-          {[{ code: null as number | null, label: "Tất cả" }, ...groups].map((g) => {
+          {[{ code: null as number | null, label: "Tất cả" }, ...filterGroups].map((g) => {
             const count = g.code === null ? open.length : open.filter((card) => card.groupCode === g.code).length;
             const active = filter === g.code;
             return (

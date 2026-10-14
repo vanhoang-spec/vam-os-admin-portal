@@ -89,13 +89,22 @@ function Body({ data, token }: { data: Round2PickPage; token: string }) {
       </>
     );
   }
+  // Bạn bù sang từ nhóm nhận bù (BTC 15/10/2026): thẻ không thuộc nhóm nào trong cụm của mentor.
+  const fillCount = data.mentees.filter((m) => !data.poolGroups.some((g) => g.code === m.groupCode)).length;
   return (
     <>
       {picks}
       <Card>
         <p className="text-sm text-vam-ink" data-testid="list-summary">
           Anh/chị còn chọn được <strong>{data.slots}</strong> mentee (tối đa {data.limit} ở vòng này).{" "}
-          {data.poolOpen > data.mentees.length ? (
+          {fillCount > 0 ? (
+            <>
+              Danh sách của anh/chị gồm <strong>{data.mentees.length}</strong> bạn: <strong>{data.mentees.length - fillCount}</strong> bạn
+              thuộc <strong>{data.groupLabel}</strong> (cả nhóm chỉ còn {data.poolOpen} bạn chưa có mentor) và{" "}
+              <strong>{fillCount}</strong> bạn bổ sung từ nhóm <strong>{data.fillGroups.map((g) => g.label).join(", ")}</strong> — thẻ
+              ghi rõ nhóm của từng bạn. Bạn nào vừa được mentor khác chọn sẽ tự được thay bằng hồ sơ khác trong khoảng 20 giây.
+            </>
+          ) : data.poolOpen > data.mentees.length ? (
             <>
               Danh sách của anh/chị gồm <strong>{data.mentees.length}</strong> bạn, trong tổng số{" "}
               <strong>{data.poolOpen}</strong> bạn chưa có mentor thuộc <strong>{data.groupLabel}</strong> — mỗi mentor

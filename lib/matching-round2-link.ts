@@ -25,7 +25,7 @@ import {
   type MenteeCard,
   type WindowState
 } from "@/lib/matching-round2-link-core";
-import { mentorPoolLabel, poolGroups, poolMapFromRows } from "@/lib/matching-round2-pools-core";
+import { fillGroups, fillPairsFromRows, mentorPoolLabel, poolGroups, poolMapFromRows } from "@/lib/matching-round2-pools-core";
 import { round2Circle, round2MentorIndex, round2Window, round2WindowStart, ROUND2_WINDOW_SIZE } from "@/lib/matching-round2-window-core";
 import { round2Slots, ROUND2_MENTOR_CAP } from "@/lib/matching-round2-core";
 import { effectiveMentorCapacity } from "@/lib/mentor-capacity";
@@ -48,6 +48,8 @@ export type Round2PickPage =
       groupLabel: string | null;
       /** Các nhóm trong danh sách chọn của mentor (một nhóm, hoặc cả cụm), để lọc trên trang. */
       poolGroups: Array<{ code: number; label: string }>;
+      /** Nhóm bù sang khi danh sách cụm mình dưới 15 bạn (BTC 15/10/2026); rỗng = không bù. */
+      fillGroups: Array<{ code: number; label: string }>;
       window: WindowState;
       opensAt: string | null;
       closesAt: string | null;
@@ -79,7 +81,7 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
     const seasonId = String(link.season_id);
     const mentorId = String(link.mentor_person_id);
 
-    const [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes, poolsRes] = await Promise.all([
+    const [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes, poolsRes, fillRes] = await Promise.all([
       client.from("matching_round2_settings").select("opens_at,closes_at").eq("season_id", seasonId).maybeSingle(),
       client.from("people").select("id,full_name").eq("id", mentorId).maybeSingle(),
       client.from("matching_industry_assignments").select("group_code").eq("season_id", seasonId).eq("person_id", mentorId).eq("role", "mentor").maybeSingle(),
@@ -93,9 +95,11 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
       ),
       client.from("matching_round2_picks").select("match_id,created_at").eq("link_id", link.id).eq("action", "pick").eq("outcome", "ok").limit(50),
       // Tối đa 9 dòng mỗi mùa (khoá chính mùa + nhóm).
-      client.from("matching_round2_pools").select("group_code,pool_code").eq("season_id", seasonId).limit(9)
+      client.from("matching_round2_pools").select("group_code,pool_code").eq("season_id", seasonId).limit(9),
+      // Nhóm nhận bù: tối đa 9 × 8 dòng mỗi mùa.
+      client.from("matching_round2_fill").select("group_code,donor_group_code").eq("season_id", seasonId).limit(72)
     ]);
-    for (const res of [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes, poolsRes]) {
+    for (const res of [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes, poolsRes, fillRes]) {
       if ((res as { error?: unknown }).error) throw (res as { error: unknown }).error;
     }
 
@@ -104,6 +108,7 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
     const group = mentorAssignRes.data ? Number((mentorAssignRes.data as Row).group_code) : null;
     const pools = poolMapFromRows((poolsRes.data ?? []) as Row[]);
     const listGroups = group === null ? [] : poolGroups(pools, group);
+    const donorGroups = group === null ? [] : fillGroups(pools, fillPairsFromRows((fillRes.data ?? []) as Row[]), group);
     const profiles = (profilesRes.data ?? []) as Row[];
     const inactive = new Set(membershipsRes.data.map((m) => `${m.role}|${m.person_id}`));
     const active = activeRes.data;
@@ -125,7 +130,7 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
     let mentees: MenteeCard[] = [];
     let poolOpen = 0;
     if (!blocked && window === "open" && slots > 0 && group !== null) {
-      const view = await loadMentorWindow(client, { seasonId, linkId: String(link.id), token, listGroups });
+      const view = await loadMentorWindow(client, { seasonId, linkId: String(link.id), token, listGroups, fillGroups: donorGroups });
       mentees = view.cards;
       poolOpen = view.total;
     }
@@ -151,6 +156,7 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
       mentorName: String((personRes.data as Row | null)?.full_name ?? "").trim() || "anh/chị",
       groupLabel: group === null ? null : mentorPoolLabel(pools, group),
       poolGroups: listGroups.map((code) => ({ code, label: industryGroupLabel(code) })),
+      fillGroups: donorGroups.map((code) => ({ code, label: industryGroupLabel(code) })),
       window,
       opensAt: settings?.opens_at ?? null,
       closesAt: settings?.closes_at ?? null,
@@ -175,9 +181,9 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
  */
 async function loadMentorWindow(
   client: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
-  input: { seasonId: string; linkId: string; token: string; listGroups: number[] }
+  input: { seasonId: string; linkId: string; token: string; listGroups: number[]; fillGroups: number[] }
 ): Promise<{ cards: MenteeCard[]; total: number }> {
-  const { seasonId, linkId, token, listGroups } = input;
+  const { seasonId, linkId, token, listGroups, fillGroups } = input;
   const [availableRes, poolAssign, mentorAssign] = await Promise.all([
     client.rpc("vam123_round2_available", { p_token: token }),
     readAllPages<Row>("matching_industry_assignments", "id,person_id,application_id,group_code", (columns) =>
@@ -203,15 +209,48 @@ async function loadMentorWindow(
   const available = new Set(((availableRes.data ?? []) as unknown[]).map(String));
   const withApp = poolAssign.data.filter((a) => a.application_id);
   const circle = round2Circle(seasonId, listGroups, withApp.map((a) => String(a.application_id)));
+  // Số bạn còn trống của chính cụm mentor (danh sách còn trống từ database có cả nhóm bù sang).
+  const total = circle.filter((id) => available.has(id)).length;
   const index = Math.max(0, round2MentorIndex(links.data.map((l) => ({ id: String(l.id), createdAt: String(l.created_at) })), linkId));
   const ids = round2Window(circle, available, round2WindowStart(index, circle.length));
-  if (!ids.length) return { cards: [], total: available.size };
 
-  const assignByApp = new Map(withApp.map((a) => [String(a.application_id), a]));
+  // Nhóm nhận bù (BTC 15/10/2026): danh sách cụm mình dưới 15 bạn thì bù bằng mentee nhóm bù sang,
+  // cũng chia vòng tròn. Điểm xuất phát nối tiếp sau các mentor của chính nhóm bù trên dãy rải đều,
+  // để mentor nhận bù không trùng điểm xuất phát với mentor nhóm đó.
+  let fillAssign: Row[] = [];
+  let fillIds: string[] = [];
+  if (ids.length < ROUND2_WINDOW_SIZE && fillGroups.length) {
+    const [donorMentees, donorMentors] = await Promise.all([
+      readAllPages<Row>("matching_industry_assignments", "id,person_id,application_id,group_code", (columns) =>
+        client.from("matching_industry_assignments").select(columns).eq("season_id", seasonId).eq("role", "mentee").in("group_code", fillGroups)
+      ),
+      readAllPages<Row>("matching_industry_assignments", "id,person_id", (columns) =>
+        client.from("matching_industry_assignments").select(columns).eq("season_id", seasonId).eq("role", "mentor").in("group_code", fillGroups)
+      )
+    ]);
+    if (donorMentees.error || donorMentors.error) throw donorMentees.error ?? donorMentors.error;
+    const donorLinks = await readAllPagesIn<Row>(
+      client,
+      "matching_round2_links",
+      "mentor_person_id",
+      donorMentors.data.map((m) => String(m.person_id)),
+      "id",
+      (query) => query.eq("season_id", seasonId)
+    );
+    if (donorLinks.error) throw donorLinks.error;
+    fillAssign = donorMentees.data.filter((a) => a.application_id);
+    const donorCircle = round2Circle(seasonId, fillGroups, fillAssign.map((a) => String(a.application_id)));
+    fillIds = round2Window(donorCircle, available, round2WindowStart(donorLinks.data.length + index, donorCircle.length), ROUND2_WINDOW_SIZE - ids.length);
+  }
+  if (!ids.length && !fillIds.length) return { cards: [], total };
+
+  const assignByApp = new Map([...withApp, ...fillAssign].map((a) => [String(a.application_id), a]));
+  const own = new Set(ids);
+  const allIds = [...ids, ...fillIds];
   const [apps, people, reviews] = await Promise.all([
-    readAllPagesIn<Row>(client, "applications", "id", ids, `id,person_id,status,${payloadProjection(CARD_SUMMARY_KEYS)}`),
-    readAllPagesIn<Row>(client, "people", "id", ids.map((id) => String(assignByApp.get(id)?.person_id ?? "")), "id,full_name"),
-    readAllPagesIn<Row>(client, "application_reviews", "application_id", ids, "id,application_id,desired_mentor_profile,updated_at")
+    readAllPagesIn<Row>(client, "applications", "id", allIds, `id,person_id,status,${payloadProjection(CARD_SUMMARY_KEYS)}`),
+    readAllPagesIn<Row>(client, "people", "id", allIds.map((id) => String(assignByApp.get(id)?.person_id ?? "")), "id,full_name"),
+    readAllPagesIn<Row>(client, "application_reviews", "application_id", allIds, "id,application_id,desired_mentor_profile,updated_at")
   ]);
   if (apps.error || people.error || reviews.error) throw apps.error ?? people.error ?? reviews.error;
   const names = new Map(people.data.map((p) => [String(p.id), String(p.full_name ?? "").trim()]));
@@ -239,9 +278,14 @@ async function loadMentorWindow(
         desiredMentorProfile: desired.get(String(a.id))?.text ?? null
       });
     })
-    // Thứ tự hiện xáo riêng từng mentor: bạn đứng đầu vòng không vì thế mà luôn nằm đầu trang.
-    .sort((x, y) => stableOrderKey(token, x.applicationId) - stableOrderKey(token, y.applicationId));
-  return { cards, total: available.size };
+    // Thứ tự hiện xáo riêng từng mentor: bạn đứng đầu vòng không vì thế mà luôn nằm đầu trang. Bạn
+    // cùng cụm đứng trước, bạn bù sang đứng sau.
+    .sort(
+      (x, y) =>
+        Number(!own.has(x.applicationId)) - Number(!own.has(y.applicationId)) ||
+        stableOrderKey(token, x.applicationId) - stableOrderKey(token, y.applicationId)
+    );
+  return { cards, total };
 }
 
 /**
@@ -261,7 +305,7 @@ export async function getRound2WindowCards(token: string): Promise<{ ok: true; c
     if (error) throw error;
     if (!link || link.revoked_at) return { ok: false };
     const seasonId = String(link.season_id);
-    const [mentorAssignRes, poolsRes] = await Promise.all([
+    const [mentorAssignRes, poolsRes, fillRes] = await Promise.all([
       client
         .from("matching_industry_assignments")
         .select("group_code")
@@ -269,13 +313,16 @@ export async function getRound2WindowCards(token: string): Promise<{ ok: true; c
         .eq("person_id", String(link.mentor_person_id))
         .eq("role", "mentor")
         .maybeSingle(),
-      client.from("matching_round2_pools").select("group_code,pool_code").eq("season_id", seasonId).limit(9)
+      client.from("matching_round2_pools").select("group_code,pool_code").eq("season_id", seasonId).limit(9),
+      client.from("matching_round2_fill").select("group_code,donor_group_code").eq("season_id", seasonId).limit(72)
     ]);
-    if (mentorAssignRes.error || poolsRes.error) throw mentorAssignRes.error ?? poolsRes.error;
+    if (mentorAssignRes.error || poolsRes.error || fillRes.error) throw mentorAssignRes.error ?? poolsRes.error ?? fillRes.error;
     if (!mentorAssignRes.data) return { ok: false };
     const group = Number((mentorAssignRes.data as Row).group_code);
-    const listGroups = poolGroups(poolMapFromRows((poolsRes.data ?? []) as Row[]), group);
-    const view = await loadMentorWindow(client, { seasonId, linkId: String(link.id), token, listGroups });
+    const pools = poolMapFromRows((poolsRes.data ?? []) as Row[]);
+    const listGroups = poolGroups(pools, group);
+    const donorGroups = fillGroups(pools, fillPairsFromRows((fillRes.data ?? []) as Row[]), group);
+    const view = await loadMentorWindow(client, { seasonId, linkId: String(link.id), token, listGroups, fillGroups: donorGroups });
     return { ok: true, ...view };
   } catch (error) {
     console.error("[round2-pick] window refill failed", { message: error instanceof Error ? error.message : String(error) });

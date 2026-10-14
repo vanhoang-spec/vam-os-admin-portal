@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildRound2Board, type Round2Assignment, type Round2Match, type Round2Person } from "@/lib/matching-round2-core";
-import { mentorPoolLabel, poolGroups, poolList, poolMapFromRows, poolOf } from "@/lib/matching-round2-pools-core";
+import { fillGroups, fillPairsFromRows, isFillPick, mentorPoolLabel, poolGroups, poolList, poolMapFromRows, poolOf } from "@/lib/matching-round2-pools-core";
 import { round2DispatchBlocked, round2OpensLabel } from "@/lib/matching-round2-dispatch-core";
 
 const S12 = poolMapFromRows([
@@ -173,5 +173,38 @@ describe("được gửi thư mời khi nào", () => {
   it("giờ mở trong thư theo giờ Việt Nam", () => {
     expect(round2OpensLabel("2026-10-15T04:00:00Z")).toBe("15/10/2026 11:00 (giờ Việt Nam)");
     expect(round2OpensLabel(null)).toBe("khi ban tổ chức thông báo mở vòng");
+  });
+});
+
+describe("nhóm nhận bù (BTC 15/10/2026): nhóm 1 ← nhóm 3, một chiều", () => {
+  const NO_POOLS = new Map<number, number>();
+  const FILL = fillPairsFromRows([{ group_code: 1, donor_group_code: 3 }]);
+
+  it("đọc dòng bảng: bỏ dòng hỏng và dòng tự bù cho chính mình", () => {
+    expect(fillPairsFromRows([{ group_code: 1, donor_group_code: 3 }, { group_code: 4, donor_group_code: 4 }, { group_code: 0, donor_group_code: 3 }, { group_code: "x", donor_group_code: 2 }])).toEqual([
+      { group: 1, donor: 3 }
+    ]);
+  });
+
+  it("nhóm được bù: nhóm 1 nhận nhóm 3; nhóm 3 không nhận nhóm 1; nhóm khác không nhận gì", () => {
+    expect(fillGroups(NO_POOLS, FILL, 1)).toEqual([3]);
+    expect(fillGroups(NO_POOLS, FILL, 3)).toEqual([]);
+    expect(fillGroups(NO_POOLS, FILL, 4)).toEqual([]);
+    expect(isFillPick(NO_POOLS, FILL, 1, 3)).toBe(true);
+    expect(isFillPick(NO_POOLS, FILL, 3, 1)).toBe(false);
+    expect(isFillPick(NO_POOLS, FILL, 1, 2)).toBe(false);
+  });
+
+  it("báo cáo: cặp vòng 2 mentor nhóm 1 – mentee nhóm 3 không phải bất thường; chiều ngược lại và nhóm khác vẫn là cảnh báo", () => {
+    const people = [mentor("t1"), mentor("t3"), mentor("t4"), mentee("e1"), mentee("e3"), mentee("e3b")];
+    const assignments = [assign("mentor", "t1", 1), assign("mentor", "t3", 3), assign("mentor", "t4", 4), assign("mentee", "e1", 1), assign("mentee", "e3", 3), assign("mentee", "e3b", 3)];
+    const cross = (matches: Round2Match[], fills = FILL) =>
+      buildRound2Board({ people, assignments, matches, pools: NO_POOLS, fills }).anomalies.filter((a) => a.kind === "cross_group").map((a) => a.severity);
+    expect(cross([match("f1", "t1", "e3", 2)])).toEqual([]);
+    expect(cross([match("f2", "t3", "e1", 2)])).toEqual(["warning"]);
+    expect(cross([match("f3", "t4", "e3b", 2)])).toEqual(["warning"]);
+    // Không có dòng bù thì nhóm 1 – nhóm 3 lại là cảnh báo như luật cũ; cặp vòng 1 vẫn ghi chú.
+    expect(cross([match("f4", "t1", "e3", 2)], [])).toEqual(["warning"]);
+    expect(cross([match("f5", "t1", "e3", 1)])).toEqual(["info"]);
   });
 });
