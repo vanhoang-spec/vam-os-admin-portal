@@ -639,20 +639,24 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     summary:
       "Số liệu trực tiếp của vòng 2 theo 9 nhóm ngành: cặp đã ghép ở vòng 2, chỗ mentor còn nhận, mentee chưa có mentor, kèm danh sách chi tiết và bất thường.",
     steps: [
+      "Đọc bảng “Theo danh sách chọn (cụm)” (khi mùa có gộp nhóm): mentor thấy mentee của cả cụm, nên thiếu hay thừa mentor tính theo dòng này.",
       "Đọc bảng “Đối soát theo nhóm”: mỗi nhóm phải “Khớp” (Mentee = ghép vòng 1 + vòng 2 + khác + chưa có mentor). Cột “Chỗ − mentee chờ” âm nghĩa là nhóm thiếu mentor.",
       "Xem ba danh sách “Đã ghép ở vòng 2”, “Mentor còn nhận”, “Mentee chưa có mentor”; gõ vào ô tìm để lọc nhanh.",
       "Đọc mục “Bất thường”: mentor vượt trần, cặp khác nhóm, mentee hiện lại sau khi cặp bị huỷ, người chưa phân nhóm.",
       "Bấm “Tải CSV” ở từng phần để lấy file.",
-      "Mở vòng và gửi link (Super admin, Admin, Core team): ở khung “Mở vòng 2 và gửi link chọn mentee”, nhập giờ mở/đóng, chọn “Đợt gửi thư” rồi bấm “Lưu giờ và đợt”. Tới giờ mở, bấm “Gửi thử cho tôi” để xem thư, rồi “Gửi link chọn mentee” → “Xác nhận gửi”; mỗi lần tối đa 40 thư, bấm lại tới khi hết người chờ.",
+      "Mở vòng và gửi link (Super admin, Admin, Core team): ở khung “Mở vòng 2 và gửi link chọn mentee”, nhập giờ mở/đóng, chọn “Đợt gửi thư” rồi bấm “Lưu giờ và đợt”. Bấm “Gửi thử cho tôi” để xem thư (thư thử ghi rõ là thư thử, không có link thật), rồi “Gửi link chọn mentee” → “Xác nhận gửi”; mỗi lần tối đa 40 thư, bấm lại tới khi hết người chờ.",
+      "Nên gửi hết thư TRƯỚC giờ mở: thư ghi giờ mở, mentor bấm link sớm chỉ thấy “chưa mở”, nên mọi mentor bắt đầu chọn cùng một lúc. Gửi được ngay khi đã lưu giờ mở; vòng đã đóng thì không gửi được.",
       "Sau đợt phỏng vấn kế tiếp: phân loại người mới ở trang Phân nhóm, đổi “Đợt gửi thư” sang Đợt 2, lưu, rồi gửi — chỉ mentor lúc đó còn chỗ mới nhận thư."
     ],
     notes: [
       "Chỗ còn của mentor = tối đa 2 mentee, không vượt số đã đăng ký, trừ số cặp đang hoạt động (tính cả vòng 1). Mentor có nhiều hơn một hồ sơ mentor không được tính cho tới khi gộp hồ sơ.",
       "Mỗi mentor một đường dẫn riêng (/chon-mentee/…), dùng cho mọi đợt. Mentor thấy họ tên, hồ sơ học tập, mục tiêu, tự luận, CV, GPA của mentee — không thấy email, SĐT, MSSV. Chọn trước được trước; bỏ chọn được trong 30 phút, quá 30 phút thì BTC huỷ cặp ở trang Ghép cặp.",
       "Chưa lưu giờ mở thì vòng 2 đang đóng: link mở ra chỉ báo “chưa mở”, không ai chọn được.",
+      "Cụm chọn (BTC 14/10/2026): mùa 12 gộp nhóm 1+2+3 (Tài chính) và 6+9 (Nhân sự + Khác) vào chung danh sách — mentor của nhóm nào trong cụm cũng thấy và chọn được mentee của mọi nhóm trong cụm. Nhóm ngành của từng người không đổi. Đổi cách gộp là quyết định của BTC, làm bằng SQL có duyệt.",
+      "Trang chọn của mentor tự ẩn bạn vừa được người khác chọn trong khoảng 20 giây (không cần tải lại trang). Thẻ hiện thông tin ngắn và mục tiêu; mentor bấm “Xem đầy đủ hồ sơ” để đọc các câu tự luận còn lại.",
       "Tải CSV: Super admin, Admin, Core team có quyền vận hành mùa. File có họ tên và email."
     ],
-    updated: "07/10/2026"
+    updated: "14/10/2026"
   },
   "/applications/mentee-dac-cach": {
     title: "Mentee đặc cách (Support team)",

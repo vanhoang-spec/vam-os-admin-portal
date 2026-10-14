@@ -6,6 +6,7 @@
  * đợt 2) mới nhận tiếp — mentor đã đủ không bị làm phiền.
  */
 import type { Round2Row } from "@/lib/matching-round2-core";
+import { windowState } from "@/lib/matching-round2-link-core";
 import { formatDateTime } from "@/lib/utils";
 
 export function isRound2Recipient(row: Round2Row, lastSentWave: number, wave: number): boolean {
@@ -27,4 +28,20 @@ export function round2WaveNote(wave: number): string {
 
 export function round2DeadlineLabel(closesAt: string | null): string {
   return closesAt ? `${formatDateTime(closesAt)} (giờ Việt Nam)` : "khi ban tổ chức thông báo đóng vòng";
+}
+
+/**
+ * Gửi được khi đã ĐẶT giờ mở và vòng chưa đóng — kể cả khi giờ mở còn ở tương lai (BTC 14/10/2026).
+ * Trước đây chỉ gửi khi vòng đã mở; 368 thư cần khoảng 10 lần bấm, nên người nhận thư sớm được chọn
+ * trước người nhận sau vài phút. Gửi hết trước giờ mở thì mọi mentor bắt đầu cùng một lúc; trước
+ * giờ đó đường dẫn báo "chưa mở", và database tự từ chối mọi lượt chọn.
+ */
+export function round2DispatchBlocked(settings: { opensAt: string | null; closesAt: string | null } | null, nowMs: number): string | null {
+  if (!settings?.opensAt || !Number.isFinite(Date.parse(settings.opensAt))) return "Chưa đặt giờ mở vòng 2 — đặt giờ mở trước khi gửi link.";
+  if (windowState(settings, nowMs) === "closed") return "Vòng 2 đã đóng — không gửi link.";
+  return null;
+}
+
+export function round2OpensLabel(opensAt: string | null): string {
+  return opensAt ? `${formatDateTime(opensAt)} (giờ Việt Nam)` : "khi ban tổ chức thông báo mở vòng";
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { pickMenteeAction, unpickMenteeAction } from "./actions";
+import { PickReport } from "./pick-report";
 import { ROUND2_PICK_IDLE } from "@/lib/matching-round2-action-types";
 
 function Status({ status, message }: { status: string; message: string }) {
@@ -29,11 +30,16 @@ function Submit({ label, pendingLabel, tone = "primary" }: { label: string; pend
 
 /**
  * Nút Chọn hai bước NGAY TRÊN TRANG (không window.confirm — trình duyệt tích hợp chặn hộp
- * hỏi đó). Bước một chỉ mở xác nhận; bước hai mới gửi.
+ * hỏi đó). Bước một chỉ mở xác nhận; bước hai mới gửi. Kết quả báo cả lên đầu danh sách
+ * (PickReport): sau khi trang làm mới, thẻ này có thể không còn.
  */
 export function PickButton({ token, applicationId, menteeName }: { token: string; applicationId: string; menteeName: string }) {
   const [state, action] = useFormState(pickMenteeAction.bind(null, token), ROUND2_PICK_IDLE);
   const [confirming, setConfirming] = useState(false);
+  const report = useContext(PickReport);
+  useEffect(() => {
+    if (state.status === "ok" || state.status === "error") report?.({ status: state.status, message: `${menteeName}: ${state.message}` });
+  }, [state, report, menteeName]);
   if (state.status === "ok") return <Status status={state.status} message={state.message} />;
   return (
     <div className="flex flex-col gap-2" data-testid="pick-button">
@@ -60,10 +66,49 @@ export function PickButton({ token, applicationId, menteeName }: { token: string
   );
 }
 
-export function UnpickButton({ token, matchId, minutesLeft }: { token: string; matchId: string; minutesLeft: number }) {
+function minutesUntil(deadline: string | null | undefined, nowMs: number): number | null {
+  const at = deadline ? Date.parse(deadline) : NaN;
+  if (!Number.isFinite(at)) return null;
+  const left = at - nowMs;
+  return left > 0 ? Math.ceil(left / 60_000) : 0;
+}
+
+/**
+ * Bỏ chọn trong 30 phút. Số phút đếm lùi ngay trên trình duyệt (trước đây chỉ tính lúc mở trang,
+ * nên để trang mở lâu là thấy "còn 12 phút" khi đã hết hạn). Database vẫn là nơi quyết định.
+ */
+export function UnpickButton({
+  token,
+  matchId,
+  minutesLeft,
+  deadline
+}: {
+  token: string;
+  matchId: string;
+  minutesLeft: number;
+  deadline?: string | null;
+}) {
   const [state, action] = useFormState(unpickMenteeAction.bind(null, token), ROUND2_PICK_IDLE);
   const [confirming, setConfirming] = useState(false);
+  const [left, setLeft] = useState(minutesLeft);
+  useEffect(() => {
+    if (!deadline) return;
+    const tick = () => {
+      const next = minutesUntil(deadline, Date.now());
+      if (next !== null) setLeft(next);
+    };
+    tick();
+    const timer = setInterval(tick, 15_000);
+    return () => clearInterval(timer);
+  }, [deadline]);
   if (state.status === "ok") return <Status status={state.status} message={state.message} />;
+  if (left <= 0) {
+    return (
+      <span className="text-xs text-slate-500" data-testid="undo-expired">
+        Quá 30 phút — muốn đổi, liên hệ ban tổ chức.
+      </span>
+    );
+  }
   return (
     <div className="flex flex-col gap-1" data-testid="unpick-button">
       {confirming ? (
@@ -76,7 +121,7 @@ export function UnpickButton({ token, matchId, minutesLeft }: { token: string; m
         </form>
       ) : (
         <button type="button" onClick={() => setConfirming(true)} className="self-start text-sm font-medium text-red-600">
-          Bỏ chọn (còn {minutesLeft} phút)
+          Bỏ chọn (còn {left} phút)
         </button>
       )}
       <Status status={state.status} message={state.message} />

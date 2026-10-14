@@ -8,13 +8,19 @@ import "server-only";
  * không ai nhận hai thư, dừng ngay khi nhà cung cấp báo 429, nhả mọi claim chưa gửi.
  * Dùng chung trần thư 1.000/24 giờ và phần chừa 80 thư cho các thư khác của hệ thống.
  *
- * Không gửi khi vòng 2 chưa mở hoặc đã đóng: thư trỏ vào một trang "chưa mở" dạy người
- * nhận bỏ qua thư sau.
+ * Gửi được khi đã đặt giờ mở và vòng chưa đóng, kể cả khi giờ mở còn ở tương lai (BTC
+ * 14/10/2026): gửi hết thư trước giờ mở để mọi mentor bắt đầu cùng một lúc; thư ghi giờ mở.
  */
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { sendMatchingRound2Invite } from "@/lib/email";
-import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
-import { isRound2Recipient, round2DeadlineLabel, round2WaveNote } from "@/lib/matching-round2-dispatch-core";
+import {
+  isRound2Recipient,
+  round2DeadlineLabel,
+  round2DispatchBlocked,
+  round2OpensLabel,
+  round2WaveNote
+} from "@/lib/matching-round2-dispatch-core";
+import { mentorPoolLabel } from "@/lib/matching-round2-pools-core";
 import { windowState, type WindowState } from "@/lib/matching-round2-link-core";
 import { loadRound2Board, round2Operator, round2SeasonContext } from "@/lib/matching-round2";
 import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
@@ -85,9 +91,11 @@ export async function getRound2DispatchStatus(nowMs = Date.now()): Promise<Round
     let sentThisWave = 0;
     for (const row of board.rows) {
       if (row.person.role !== "mentor") continue;
-      const last = Number(links.get(row.person.personId)?.last_sent_wave ?? 0);
+      const link = links.get(row.person.personId);
+      const last = Number(link?.last_sent_wave ?? 0);
       if (last >= wave) sentThisWave += 1;
-      else if (isRound2Recipient(row, last, wave)) pending += 1;
+      // Link đã thu hồi không bao giờ được gửi: đếm vào "chờ thư" là con số không bao giờ về 0.
+      else if (!link?.revoked_at && isRound2Recipient(row, last, wave)) pending += 1;
     }
     return {
       window: windowState(settings ? { opensAt: settings.opens_at, closesAt: settings.closes_at } : null, nowMs),
@@ -115,10 +123,8 @@ export async function runRound2Dispatch(input: { now?: () => number } = {}): Pro
     const nowIso = new Date(startedMs).toISOString();
 
     const settings = await readSettings(client, seasonId);
-    const state = windowState(settings ? { opensAt: settings.opens_at, closesAt: settings.closes_at } : null, startedMs);
-    if (state !== "open") {
-      return fail(state === "closed" ? "Vòng 2 đã đóng — không gửi link." : "Vòng 2 chưa mở — đặt giờ mở (đã tới giờ) trước khi gửi link.");
-    }
+    const blocked = round2DispatchBlocked(settings ? { opensAt: settings.opens_at, closesAt: settings.closes_at } : null, startedMs);
+    if (blocked) return fail(blocked);
     const wave = Number(settings?.current_send_wave ?? 1);
 
     const sentInWindow = await countSentInWindow(client, startedMs);
@@ -134,9 +140,10 @@ export async function runRound2Dispatch(input: { now?: () => number } = {}): Pro
     }
 
     const [board, linksBefore] = await Promise.all([loadRound2Board(client, seasonId), readLinks(client, seasonId)]);
-    const recipients = board.rows.filter((row) =>
-      isRound2Recipient(row, Number(linksBefore.get(row.person.personId)?.last_sent_wave ?? 0), wave)
-    );
+    const recipients = board.rows.filter((row) => {
+      const link = linksBefore.get(row.person.personId);
+      return !link?.revoked_at && isRound2Recipient(row, Number(link?.last_sent_wave ?? 0), wave);
+    });
     if (!recipients.length) return { ok: true, message: `Không còn mentor nào chờ thư của đợt ${wave}.`, sent: 0, failed: 0 };
     const byPerson = new Map(recipients.map((r) => [r.person.personId, r]));
 
@@ -183,6 +190,7 @@ export async function runRound2Dispatch(input: { now?: () => number } = {}): Pro
 
     const requestOrigin = await getPublicOrigin();
     const deadlineLabel = round2DeadlineLabel(settings?.closes_at ?? null);
+    const opensLabel = round2OpensLabel(settings?.opens_at ?? null);
     const waveNote = round2WaveNote(wave);
     let sent = 0;
     let failed = 0;
@@ -202,8 +210,9 @@ export async function runRound2Dispatch(input: { now?: () => number } = {}): Pro
           toEmail: row.person.email!,
           mentorName: row.person.name,
           seasonLabel: CURRENT_APPLICATION_SEASON_LABEL,
-          groupLabel: industryGroupLabel(row.group),
+          groupLabel: row.group === null ? "" : mentorPoolLabel(board.poolMap, row.group),
           slots: row.slots ?? 0,
+          opensLabel,
           deadlineLabel,
           waveNote,
           token: String(link.token),
@@ -277,6 +286,7 @@ export async function sendRound2InviteTest(nowMs = Date.now()): Promise<Round2Se
       seasonLabel: CURRENT_APPLICATION_SEASON_LABEL,
       groupLabel: "(nhóm ngành của từng mentor)",
       slots: 2,
+      opensLabel: round2OpensLabel(settings?.opens_at ?? null),
       deadlineLabel: round2DeadlineLabel(settings?.closes_at ?? null),
       waveNote: round2WaveNote(Number(settings?.current_send_wave ?? 1)),
       token: null,

@@ -50,11 +50,12 @@ export function Round2DispatchPanel(props: DispatchPanelProps) {
   const [sendState, sendAction] = useFormState(sendRound2InvitesAction, ROUND2_IDLE);
   const [confirming, setConfirming] = useState(false);
   const batch = Math.min(props.pending, props.allowance);
-  const blocked =
-    props.window !== "open"
-      ? props.window === "closed"
-        ? "Vòng 2 đã đóng — không gửi link."
-        : "Vòng 2 chưa mở — đặt giờ mở (và chờ tới giờ) trước khi gửi."
+  // Gửi được khi đã đặt giờ mở, kể cả trước giờ mở (BTC 14/10/2026): gửi hết thư trước để mọi mentor
+  // bắt đầu cùng lúc. Máy chủ (round2DispatchBlocked) kiểm lại đúng luật này.
+  const blocked = !props.opensAt
+    ? "Chưa đặt giờ mở vòng 2 — đặt giờ mở ở mục 1 trước khi gửi."
+    : props.window === "closed"
+      ? "Vòng 2 đã đóng — không gửi link."
       : props.pending === 0
         ? `Không còn mentor nào chờ thư của đợt ${props.wave}.`
         : props.allowance === 0
@@ -95,6 +96,12 @@ export function Round2DispatchPanel(props: DispatchPanelProps) {
           <Submit label="Gửi thử cho tôi" pendingLabel="Đang gửi thử…" />
           <Message state={testState} />
         </form>
+        {!blocked && props.window === "not_open" ? (
+          <p className="text-sm text-slate-600" data-testid="send-before-open">
+            Vòng 2 chưa tới giờ mở: thư ghi giờ mở, mentor bấm link trước giờ sẽ thấy “chưa mở”. Nên gửi hết thư trước giờ mở để mọi
+            mentor bắt đầu cùng lúc.
+          </p>
+        ) : null}
         {blocked ? (
           <p className="text-sm text-amber-700">{blocked}</p>
         ) : confirming ? (

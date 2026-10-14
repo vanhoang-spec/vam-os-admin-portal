@@ -5,19 +5,27 @@ import "server-only";
  * khoản; token trong URL là thứ duy nhất xác định họ. Trang chỉ đọc; mọi lượt chọn/bỏ
  * chọn đi qua hai RPC vam113, nơi mọi luật được kiểm lại trong database.
  *
- * Mỗi lần mở chỉ đọc mentee của ĐÚNG nhóm ngành của mentor đó, không đọc cả mùa: hàng
- * trăm mentor mở trang cùng lúc trong ngày đầu.
+ * Mỗi lần mở chỉ đọc mentee của ĐÚNG cụm chọn của mentor đó (một nhóm, hoặc các nhóm BTC
+ * gộp chung danh sách — BTC 14/10/2026), không đọc cả mùa, và chỉ đọc các trường thẻ cần:
+ * hàng trăm mentor mở trang cùng lúc lúc vòng mở.
  */
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import {
+  CARD_SUMMARY_KEYS,
+  DETAIL_TEXT_KEYS,
   menteeCard,
+  menteeDetailTexts,
+  payloadFromRow,
+  payloadProjection,
   pickMessage,
   stableOrderKey,
+  undoDeadline,
   undoMinutesLeft,
   windowState,
   type MenteeCard,
   type WindowState
 } from "@/lib/matching-round2-link-core";
+import { mentorPoolLabel, poolGroups, poolMapFromRows } from "@/lib/matching-round2-pools-core";
 import { round2Slots, ROUND2_MENTOR_CAP } from "@/lib/matching-round2-core";
 import { effectiveMentorCapacity } from "@/lib/mentor-capacity";
 import { readAllPages, readAllPagesIn } from "@/lib/paged-read";
@@ -28,7 +36,7 @@ type Row = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INACTIVE = new Set(["withdrawn", "opted_out"]);
 
-export type MyPick = { matchId: string; menteeName: string; undoMinutesLeft: number };
+export type MyPick = { matchId: string; menteeName: string; undoMinutesLeft: number; undoDeadline: string | null };
 
 export type Round2PickPage =
   | { state: "invalid"; message: string }
@@ -37,6 +45,8 @@ export type Round2PickPage =
       state: "ready";
       mentorName: string;
       groupLabel: string | null;
+      /** Các nhóm trong danh sách chọn của mentor (một nhóm, hoặc cả cụm), để lọc trên trang. */
+      poolGroups: Array<{ code: number; label: string }>;
       window: WindowState;
       opensAt: string | null;
       closesAt: string | null;
@@ -64,7 +74,7 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
     const seasonId = String(link.season_id);
     const mentorId = String(link.mentor_person_id);
 
-    const [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes] = await Promise.all([
+    const [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes, poolsRes] = await Promise.all([
       client.from("matching_round2_settings").select("opens_at,closes_at").eq("season_id", seasonId).maybeSingle(),
       client.from("people").select("id,full_name").eq("id", mentorId).maybeSingle(),
       client.from("matching_industry_assignments").select("group_code").eq("season_id", seasonId).eq("person_id", mentorId).eq("role", "mentor").maybeSingle(),
@@ -76,15 +86,19 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
       readAllPages<Row>("matches", "id,mentor_person_id,mentee_person_id,matching_round", (columns) =>
         client.from("matches").select(columns).eq("season_id", seasonId).eq("status", "active")
       ),
-      client.from("matching_round2_picks").select("match_id,created_at").eq("link_id", link.id).eq("action", "pick").eq("outcome", "ok").limit(50)
+      client.from("matching_round2_picks").select("match_id,created_at").eq("link_id", link.id).eq("action", "pick").eq("outcome", "ok").limit(50),
+      // Tối đa 9 dòng mỗi mùa (khoá chính mùa + nhóm).
+      client.from("matching_round2_pools").select("group_code,pool_code").eq("season_id", seasonId).limit(9)
     ]);
-    for (const res of [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes]) {
+    for (const res of [settingsRes, personRes, mentorAssignRes, mentorAppsRes, profilesRes, membershipsRes, activeRes, picksRes, poolsRes]) {
       if ((res as { error?: unknown }).error) throw (res as { error: unknown }).error;
     }
 
     const settings = settingsRes.data as Row | null;
     const window = windowState(settings ? { opensAt: settings.opens_at, closesAt: settings.closes_at } : null, nowMs);
     const group = mentorAssignRes.data ? Number((mentorAssignRes.data as Row).group_code) : null;
+    const pools = poolMapFromRows((poolsRes.data ?? []) as Row[]);
+    const listGroups = group === null ? [] : poolGroups(pools, group);
     const profiles = (profilesRes.data ?? []) as Row[];
     const inactive = new Set(membershipsRes.data.map((m) => `${m.role}|${m.person_id}`));
     const active = activeRes.data;
@@ -106,28 +120,38 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
 
     let mentees: MenteeCard[] = [];
     if (!blocked && window === "open" && slots > 0 && group !== null) {
-      const groupAssign = await readAllPages<Row>("matching_industry_assignments", "id,person_id,application_id", (columns) =>
-        client.from("matching_industry_assignments").select(columns).eq("season_id", seasonId).eq("role", "mentee").eq("group_code", group)
+      const poolAssign = await readAllPages<Row>("matching_industry_assignments", "id,person_id,application_id,group_code", (columns) =>
+        client.from("matching_industry_assignments").select(columns).eq("season_id", seasonId).eq("role", "mentee").in("group_code", listGroups)
       );
-      if (groupAssign.error) throw groupAssign.error;
-      const visible = groupAssign.data.filter(
+      if (poolAssign.error) throw poolAssign.error;
+      const visible = poolAssign.data.filter(
         (a) => !takenMentees.has(String(a.person_id)) && !inactive.has(`mentee|${a.person_id}`) && a.application_id
       );
+      const groupByApp = new Map(visible.map((a) => [String(a.application_id), Number(a.group_code)]));
       const [apps, people] = await Promise.all([
-        readAllPagesIn<Row>(client, "applications", "id", visible.map((a) => String(a.application_id)), "id,person_id,status,raw_payload"),
+        readAllPagesIn<Row>(
+          client,
+          "applications",
+          "id",
+          visible.map((a) => String(a.application_id)),
+          `id,person_id,status,${payloadProjection(CARD_SUMMARY_KEYS)}`
+        ),
         readAllPagesIn<Row>(client, "people", "id", visible.map((a) => String(a.person_id)), "id,full_name")
       ]);
       if (apps.error || people.error) throw apps.error ?? people.error;
       const names = new Map(people.data.map((p) => [String(p.id), String(p.full_name ?? "").trim()]));
       mentees = apps.data
         .filter((a) => a.status === "approved_as_mentee")
-        .map((a) =>
-          menteeCard({
+        .map((a) => {
+          const groupCode = groupByApp.get(String(a.id)) ?? null;
+          return menteeCard({
             applicationId: String(a.id),
             name: names.get(String(a.person_id)) || "(chưa có tên)",
-            payload: (a.raw_payload ?? {}) as Record<string, unknown>
-          })
-        )
+            payload: payloadFromRow(a, CARD_SUMMARY_KEYS),
+            groupCode,
+            groupLabel: groupCode === null ? null : industryGroupLabel(groupCode)
+          });
+        })
         .sort((x, y) => stableOrderKey(token, x.applicationId) - stableOrderKey(token, y.applicationId));
     }
 
@@ -137,16 +161,21 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
       if (people.error) throw people.error;
       pickNames = new Map(people.data.map((p) => [String(p.id), String(p.full_name ?? "").trim()]));
     }
-    const picks: MyPick[] = myRound2.map((m) => ({
-      matchId: String(m.id),
-      menteeName: pickNames.get(String(m.mentee_person_id)) || "(chưa có tên)",
-      undoMinutesLeft: undoMinutesLeft(pickedAt.get(String(m.id)) ?? null, nowMs)
-    }));
+    const picks: MyPick[] = myRound2.map((m) => {
+      const at = pickedAt.get(String(m.id)) ?? null;
+      return {
+        matchId: String(m.id),
+        menteeName: pickNames.get(String(m.mentee_person_id)) || "(chưa có tên)",
+        undoMinutesLeft: undoMinutesLeft(at, nowMs),
+        undoDeadline: undoDeadline(at)
+      };
+    });
 
     return {
       state: "ready",
       mentorName: String((personRes.data as Row | null)?.full_name ?? "").trim() || "anh/chị",
-      groupLabel: group === null ? null : industryGroupLabel(group),
+      groupLabel: group === null ? null : mentorPoolLabel(pools, group),
+      poolGroups: listGroups.map((code) => ({ code, label: industryGroupLabel(code) })),
       window,
       opensAt: settings?.opens_at ?? null,
       closesAt: settings?.closes_at ?? null,
@@ -160,6 +189,53 @@ export async function getRound2PickPageData(token: string, nowMs = Date.now()): 
     console.error("[round2-pick] page load failed", { message: error instanceof Error ? error.message : String(error) });
     return { state: "error", message: pickMessage("") };
   }
+}
+
+/**
+ * Mã đơn các bạn còn trống trong cụm của mentor — trang gọi lại mỗi 20 giây để ẩn bạn vừa được
+ * người khác chọn. Một truy vấn (vam123_round2_available), vài KB, thay vì tải lại cả trang.
+ * null = không đọc được (trang giữ nguyên danh sách đang có, không ẩn nhầm ai).
+ */
+export async function getRound2AvailableIds(token: string): Promise<string[] | null> {
+  if (!UUID.test(token)) return [];
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return null;
+  const { data, error } = await client.rpc("vam123_round2_available", { p_token: token });
+  if (error) {
+    console.error("[round2-pick] available failed", { message: error.message });
+    return null;
+  }
+  return Array.isArray(data) ? data.map(String) : [];
+}
+
+/**
+ * Bốn câu tự luận của MỘT bạn, khi mentor bấm "Xem đầy đủ hồ sơ". Chỉ trả hồ sơ của bạn còn
+ * nằm trong danh sách của chính mentor đó (cùng cụm, còn trống, vòng đang mở) — token khác,
+ * mã đơn ngoài cụm hay bạn đã có mentor đều không đọc được gì.
+ */
+export async function getRound2MenteeDetail(
+  token: string,
+  applicationId: string
+): Promise<{ ok: true; texts: Array<[string, string]> } | { ok: false; message: string }> {
+  if (!UUID.test(token)) return { ok: false, message: pickMessage("invalid_token") };
+  if (!UUID.test(applicationId)) return { ok: false, message: pickMessage("mentee_not_found") };
+  const ids = await getRound2AvailableIds(token);
+  if (ids === null) return { ok: false, message: pickMessage("") };
+  if (!ids.includes(applicationId)) {
+    return { ok: false, message: "Bạn này không còn trong danh sách của anh/chị — có thể vừa được mentor khác chọn." };
+  }
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { ok: false, message: pickMessage("") };
+  const { data, error } = await client
+    .from("applications")
+    .select(`id,${payloadProjection(DETAIL_TEXT_KEYS)}`)
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (error || !data) {
+    if (error) console.error("[round2-pick] detail failed", { message: error.message });
+    return { ok: false, message: pickMessage("") };
+  }
+  return { ok: true, texts: menteeDetailTexts(payloadFromRow(data as Row, DETAIL_TEXT_KEYS)) };
 }
 
 export async function pickRound2Mentee(input: { token: string; menteeApplicationId: string }): Promise<{ ok: boolean; message: string }> {

@@ -6,7 +6,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getRound2Data } from "@/lib/matching-round2";
 import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
 import { Round2DispatchPanel } from "./dispatch-panel";
-import { byGroupThenName, type GroupSummary, type Round2Row } from "@/lib/matching-round2-core";
+import { byGroupThenName, type GroupSummary, type PoolSummary, type Round2Row } from "@/lib/matching-round2-core";
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canAssignReview, canBrowseOperations } from "@/lib/permissions";
 import { sumBy } from "@/lib/report-totals-core";
@@ -18,6 +18,48 @@ const COLUMN = "grid grid-cols-[minmax(0,1fr)] gap-4";
 
 function detail(row: Round2Row, label: string): string {
   return row.person.details.find(([l]) => l === label)?.[1] ?? "—";
+}
+
+/**
+ * Cung - cầu theo DANH SÁCH CHỌN (BTC 14/10/2026): mentor thấy mentee của cả cụm, nên "còn thiếu bao
+ * nhiêu chỗ" phải cộng theo cụm — cộng theo nhóm thì nhóm 1 trông như thừa 60 chỗ dù đã gộp với nhóm 3.
+ */
+function PoolTable({ pools }: { pools: PoolSummary[] }) {
+  const cell = "px-3 py-2 text-right";
+  const total = (key: "mentorsWithSlots" | "slots" | "visible") => pools.reduce((s, p) => s + p[key], 0);
+  return (
+    <div className="vam-table-frame overflow-x-auto rounded-lg border border-vam-line bg-white">
+      <table className="min-w-full divide-y divide-vam-line text-sm tabular-nums" data-testid="pool-table">
+        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+          <tr>
+            <th className="px-3 py-2">Danh sách chọn</th>
+            <th className={cell}>Mentor còn chỗ</th>
+            <th className={cell}>Tổng chỗ còn</th>
+            <th className={cell}>Mentee chưa có mentor</th>
+            <th className={cell}>Chỗ − mentee chờ</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-vam-line">
+          {pools.map((p) => (
+            <tr key={p.code} data-pool={p.code}>
+              <td className="px-3 py-2">{p.label}</td>
+              <td className={cell}>{p.mentorsWithSlots}</td>
+              <td className={cell}>{p.slots}</td>
+              <td className={cell}>{p.visible}</td>
+              <td className={`${cell} ${p.slots - p.visible < 0 ? "text-red-600" : ""}`}>{p.slots - p.visible}</td>
+            </tr>
+          ))}
+          <tr className="bg-slate-50 font-semibold">
+            <td className="px-3 py-2">Tổng</td>
+            <td className={cell}>{total("mentorsWithSlots")}</td>
+            <td className={cell}>{total("slots")}</td>
+            <td className={cell}>{total("visible")}</td>
+            <td className={cell}>{total("slots") - total("visible")}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function GroupTable({ groups, unclassified }: { groups: GroupSummary[]; unclassified: GroupSummary }) {
@@ -142,6 +184,16 @@ export default async function Round2ReportPage() {
           ) : (
             <ErrorBox message="Không đọc được trạng thái gửi thư. Tải lại trang." />
           )}
+        </Card>
+      ) : null}
+
+      {board.pools.some((p) => p.groups.length > 1) ? (
+        <Card>
+          <h2 className="mb-2 text-base font-semibold text-vam-ink">Theo danh sách chọn (cụm)</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Mentor thấy và chọn được mentee của mọi nhóm trong cụm, nên cung - cầu tính theo cụm. Mentee “chưa có mentor” chỉ tính người đã có nhóm.
+          </p>
+          <PoolTable pools={board.pools} />
         </Card>
       ) : null}
 
