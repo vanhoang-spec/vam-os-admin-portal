@@ -22,7 +22,7 @@ export function mentorPickUrl(base: string, token: string): string {
  * cần đăng nhập; đặt ở chỗ khác là middleware đưa người đọc về trang đăng nhập của ban tổ chức.
  * Nội dung chỉ có dữ liệu mẫu.
  */
-export const ROUND2_GUIDE_VIDEO_URL = "https://youtu.be/0oBWCcogMCw";
+export const ROUND2_GUIDE_VIDEO_URL = "https://youtu.be/ZC0fqUDMRzo";
 export const ROUND2_GUIDE_PDF_PATH = `${MENTOR_PICK_PATH_PREFIX}/huong-dan-vong-2.pdf`;
 export const ROUND2_GUIDE_PDF_SOURCE = "docs/huong-dan/HUONG_DAN_MENTOR_CHON_MENTEE_VONG_2.pdf";
 
@@ -30,22 +30,30 @@ export function round2GuidePdfUrl(base: string): string {
   return `${base.replace(/\/+$/, "")}${ROUND2_GUIDE_PDF_PATH}`;
 }
 
+// Không có GPA (BTC 14/10/2026): chương trình không chọn mentee theo điểm.
 const FACT_FIELDS: ReadonlyArray<readonly [key: string, label: string]> = [
   ["year_of_study", "Năm học"],
   ["school_or_faculty", "Khoa"],
   ["major", "Ngành học"],
   ["target_industry", "Ngành nghề mục tiêu"],
-  ["target_function", "Chức năng mục tiêu"],
-  ["gpa_4", "GPA (thang 4)"]
+  ["target_function", "Chức năng mục tiêu"]
 ];
 
+/**
+ * Thứ tự BTC chốt 14/10/2026: (1)–(4) từ đơn và (5) "Chân dung Mentor phù hợp" từ phiếu phỏng vấn
+ * hiện sẵn trên thẻ; (6)–(7) hiện khi bấm "Xem đầy đủ hồ sơ".
+ */
 const TEXT_FIELDS: ReadonlyArray<readonly [key: string, label: string]> = [
   ["mentoring_goals_text", "Mục tiêu khi tham gia mentoring"],
   ["current_difficulty_text", "Khó khăn hiện tại"],
+  ["mentor_reason_text", "Lý do muốn có Mentor đồng hành"],
+  ["mentor_expectation_text", "Mong muốn về Mentor đồng hành"],
   ["top_3_questions_for_mentor", "3 câu hỏi muốn hỏi mentor"],
-  ["one_year_vision_text", "Hình dung bản thân sau 1 năm"],
-  ["mentor_expectation_text", "Mong đợi ở mentor"]
+  ["one_year_vision_text", "Hình dung bản thân sau 1 năm"]
 ];
+
+/** (5) — lấy từ phiếu phỏng vấn (application_reviews.desired_mentor_profile), không phải từ đơn. */
+export const DESIRED_MENTOR_LABEL = "Chân dung Mentor phù hợp";
 
 /** Các khoá được phép hiện, xuất ra để test soát. */
 export const MENTEE_CARD_KEYS: readonly string[] = [
@@ -57,12 +65,16 @@ export const MENTEE_CARD_KEYS: readonly string[] = [
 ];
 
 /**
- * Đọc khi mở trang: thông tin ngắn, mục tiêu, CV. Bốn câu tự luận còn lại chỉ tải khi mentor bấm
- * "Xem đầy đủ hồ sơ" (BTC 14/10/2026). Lý do là tải database: tự luận chiếm gần hết dung lượng hồ
- * sơ — nhóm 4 có 175 bạn, cả hồ sơ là 1,4 MB mỗi lần một mentor mở trang, trong khi trang chỉ cần
- * khoảng 140 KB. Database Micro đã sập ngày 11/10 vì đúng kiểu đọc nặng lặp lại này.
+ * Đọc khi mở trang: thông tin ngắn, CV và bốn câu (1)–(4). Hai câu (6)–(7) chỉ tải khi mentor bấm
+ * "Xem đầy đủ hồ sơ" (BTC 14/10/2026). Trang chỉ đọc hồ sơ của 15 bạn trong danh sách của mentor,
+ * không đọc cả nhóm — database Micro đã sập ngày 11/10 vì kiểu đọc nặng lặp lại.
  */
-export const SUMMARY_TEXT_KEYS: readonly string[] = ["mentoring_goals_text"];
+export const SUMMARY_TEXT_KEYS: readonly string[] = [
+  "mentoring_goals_text",
+  "current_difficulty_text",
+  "mentor_reason_text",
+  "mentor_expectation_text"
+];
 export const DETAIL_TEXT_KEYS: readonly string[] = TEXT_FIELDS.map(([k]) => k).filter((k) => !SUMMARY_TEXT_KEYS.includes(k));
 export const CARD_SUMMARY_KEYS: readonly string[] = MENTEE_CARD_KEYS.filter((k) => !DETAIL_TEXT_KEYS.includes(k));
 
@@ -114,6 +126,8 @@ export function menteeCard(input: {
   payload: Record<string, unknown>;
   groupCode?: number | null;
   groupLabel?: string | null;
+  /** (5) Chân dung Mentor phù hợp, từ phiếu phỏng vấn; trống thì không in. */
+  desiredMentorProfile?: string | null;
 }): MenteeCard {
   const p = input.payload;
   const facts: Array<[string, string]> = [];
@@ -127,9 +141,12 @@ export function menteeCard(input: {
   }
   const texts: Array<[string, string]> = [];
   for (const [key, label] of TEXT_FIELDS) {
+    if (!SUMMARY_TEXT_KEYS.includes(key)) continue;
     const raw = text(p[key]);
     if (raw) texts.push([label, raw]);
   }
+  const desired = text(input.desiredMentorProfile);
+  if (desired) texts.push([DESIRED_MENTOR_LABEL, desired]);
   const cvRaw = text(p.profile_or_cv_url);
   return {
     applicationId: input.applicationId,

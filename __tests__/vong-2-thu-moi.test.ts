@@ -28,7 +28,7 @@ const LINK_ID = "11111111-0000-4000-8000-000000000002";
 const OPENS = "15/10/2026 11:00 (giờ Việt Nam)";
 const CLOSES = "17/10/2026 11:00 (giờ Việt Nam)";
 const GROUP = "3. Tài chính - Đầu tư (chung danh sách với 1. Ngân hàng - Bảo hiểm, 2. Kế toán - Kiểm toán)";
-const VIDEO = "https://youtu.be/0oBWCcogMCw";
+const VIDEO = "https://youtu.be/ZC0fqUDMRzo";
 const PDF = `${ORIGIN}/chon-mentee/huong-dan-vong-2.pdf`;
 
 describe("1. nội dung thư", () => {

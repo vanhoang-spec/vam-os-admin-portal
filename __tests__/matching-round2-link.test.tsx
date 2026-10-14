@@ -41,7 +41,7 @@ vi.mock("@/lib/public-url", () => ({ getPublicOrigin: vi.fn(async () => "https:/
 vi.mock("@/lib/email", () => ({ sendMatchingRound2Invite: vi.fn(async () => ({ ok: true, skipped: false })) }));
 
 import MentorPickPage from "@/app/chon-mentee/[token]/page";
-import { availableMenteesAction, menteeDetailAction, pickMenteeAction } from "@/app/chon-mentee/[token]/actions";
+import { availableMenteesAction, menteeDetailAction, pickMenteeAction, windowCardsAction } from "@/app/chon-mentee/[token]/actions";
 import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { sendMatchingRound2Invite } from "@/lib/email";
@@ -72,9 +72,12 @@ function menteePayload(major: string) {
     target_industry: "fmcg",
     gpa_4: "3.6",
     profile_or_cv_url: "CV: https://drive.example/cv javascript:alert(1)",
-    mentoring_goals_text: "Hiểu nghề brand",
-    current_difficulty_text: "TU LUAN TAI SAU — khó khăn hiện tại",
-    top_3_questions_for_mentor: "TU LUAN TAI SAU — ba câu hỏi"
+    mentoring_goals_text: "(1) Hiểu nghề brand",
+    current_difficulty_text: "(2) Chưa biết bắt đầu từ đâu",
+    mentor_reason_text: "(3) Cần người dẫn đường",
+    mentor_expectation_text: "(4) Mentor ngành FMCG",
+    top_3_questions_for_mentor: "TU LUAN TAI SAU — ba câu hỏi",
+    one_year_vision_text: "TU LUAN TAI SAU — sau một năm"
   };
 }
 
@@ -152,7 +155,10 @@ describe("phần thuần", () => {
     const card = menteeCard({ applicationId: APP(1), name: "A", payload: menteePayload("Marketing số") });
     const flat = JSON.stringify(card);
     for (const secret of Object.values(PRIVATE)) expect(flat).not.toContain(secret);
-    expect(card.facts).toContainEqual(["GPA (thang 4)", "3.6"]);
+    // Không có GPA (BTC 14/10/2026: không chọn mentee theo điểm).
+    expect(flat).not.toContain("3.6");
+    expect(flat).not.toContain("GPA");
+    expect(MENTEE_CARD_KEYS).not.toContain("gpa_4");
     expect(card.cv).toEqual([
       { kind: "text", value: "CV:" },
       { kind: "link", value: "https://drive.example/cv", href: "https://drive.example/cv" },
@@ -190,7 +196,8 @@ describe("trang /chon-mentee/[token]", () => {
     expect(cards.map((c) => c.getAttribute("data-application"))).toEqual([APP(1)]);
     const card = cards[0] as HTMLElement;
     expect(card.textContent).toContain("Mentee Còn Trống");
-    expect(card.textContent).toContain("3.6");
+    expect(card.textContent).not.toContain("3.6");
+    expect(card.textContent).not.toContain("GPA");
     for (const secret of Object.values(PRIVATE)) expect(card.innerHTML).not.toContain(secret);
     expect(card.querySelector('a[href="https://drive.example/cv"]')).not.toBeNull();
     expect(card.querySelector('a[href^="javascript"]')).toBeNull();
@@ -205,13 +212,47 @@ describe("trang /chon-mentee/[token]", () => {
     for (const read of reads) {
       const tokens = String(read.columns).split(",");
       expect(tokens).not.toContain("raw_payload");
-      expect(tokens).toContain("mentoring_goals_text:raw_payload->>mentoring_goals_text");
-      expect(String(read.columns)).not.toContain("current_difficulty_text");
+      for (const key of ["mentoring_goals_text", "current_difficulty_text", "mentor_reason_text", "mentor_expectation_text"]) {
+        expect(tokens).toContain(`${key}:raw_payload->>${key}`);
+      }
+      expect(String(read.columns)).not.toContain("top_3_questions_for_mentor");
+      expect(String(read.columns)).not.toContain("one_year_vision_text");
+      expect(String(read.columns)).not.toContain("gpa_4");
     }
     const card = container.querySelector('[data-testid="mentee-card"]') as HTMLElement;
-    expect(card.textContent).toContain("Hiểu nghề brand");
     expect(card.textContent).not.toContain("TU LUAN TAI SAU");
     expect(card.textContent).toContain("Xem đầy đủ hồ sơ");
+  });
+
+  it("thẻ thu gọn: (1)–(4) từ đơn rồi (5) Chân dung Mentor phù hợp từ phiếu phỏng vấn mới nhất, đúng thứ tự, đúng nhãn", async () => {
+    db.tables.application_reviews = [
+      { id: "rv-old", application_id: APP(1), desired_mentor_profile: "Phiếu cũ", updated_at: "2026-10-04T01:00:00Z", total_score: 4.2 },
+      { id: "rv-new", application_id: APP(1), desired_mentor_profile: "(5) Nữ, ngành FMCG, brand", updated_at: "2026-10-11T01:00:00Z" },
+      { id: "rv-empty", application_id: APP(1), desired_mentor_profile: "  ", updated_at: "2026-10-12T01:00:00Z" }
+    ];
+    const container = await renderPage(TOKEN_A);
+    const card = container.querySelector('[data-testid="mentee-card"]') as HTMLElement;
+    const text = card.textContent ?? "";
+    const order = [
+      "Mục tiêu khi tham gia mentoring",
+      "(1) Hiểu nghề brand",
+      "Khó khăn hiện tại",
+      "(2) Chưa biết bắt đầu từ đâu",
+      "Lý do muốn có Mentor đồng hành",
+      "(3) Cần người dẫn đường",
+      "Mong muốn về Mentor đồng hành",
+      "(4) Mentor ngành FMCG",
+      "Chân dung Mentor phù hợp",
+      "(5) Nữ, ngành FMCG, brand",
+      "Xem đầy đủ hồ sơ"
+    ];
+    for (let i = 1; i < order.length; i += 1) expect(text.indexOf(order[i - 1]), order[i]).toBeLessThan(text.indexOf(order[i]));
+    expect(text).not.toContain("Phiếu cũ");
+    // Từ phiếu phỏng vấn chỉ lấy đúng mục (5) — không điểm, không nhận xét khác.
+    const reviewReads = db.requests.filter((r) => r.table === "application_reviews");
+    expect(reviewReads.length).toBeGreaterThan(0);
+    for (const read of reviewReads) expect(String(read.columns).split(",").sort()).toEqual(["application_id", "desired_mentor_profile", "id", "updated_at"]);
+    expect(text).not.toContain("4.2");
   });
 
   it("cụm chọn: nhóm 4 gộp với nhóm 6 thì thấy cả bạn nhóm 6, thẻ mang nhãn nhóm, có nút lọc theo nhóm", async () => {
@@ -219,6 +260,7 @@ describe("trang /chon-mentee/[token]", () => {
       { season_id: SEASON, group_code: 4, pool_code: 4 },
       { season_id: SEASON, group_code: 6, pool_code: 4 }
     ];
+    availableIds = [APP(1), APP(3)];
     const container = await renderPage(TOKEN_A);
     const cards = Array.from(container.querySelectorAll('[data-testid="mentee-card"]'));
     expect(cards.map((c) => c.getAttribute("data-application")).sort()).toEqual([APP(1), APP(3)].sort());
@@ -284,13 +326,13 @@ describe("lệnh nhẹ cho trang tự cập nhật", () => {
     expect(await availableMenteesAction(TOKEN_A)).toEqual({ ok: false, ids: [] });
   });
 
-  it("hồ sơ đầy đủ: chỉ trả bốn câu tự luận của bạn còn trong danh sách của chính mentor đó", async () => {
+  it("hồ sơ đầy đủ: chỉ trả (6)–(7), đúng thứ tự, của bạn còn trong danh sách của chính mentor đó", async () => {
     const result = await menteeDetailAction(TOKEN_A, APP(1));
     expect(result).toEqual({
       ok: true,
       texts: [
-        ["Khó khăn hiện tại", "TU LUAN TAI SAU — khó khăn hiện tại"],
-        ["3 câu hỏi muốn hỏi mentor", "TU LUAN TAI SAU — ba câu hỏi"]
+        ["3 câu hỏi muốn hỏi mentor", "TU LUAN TAI SAU — ba câu hỏi"],
+        ["Hình dung bản thân sau 1 năm", "TU LUAN TAI SAU — sau một năm"]
       ]
     });
     const read = db.requests.filter((r) => r.table === "applications").at(-1)!;
@@ -381,5 +423,90 @@ describe("bộ gửi link", () => {
     expect((await runRound2Dispatch()).ok).toBe(false);
     expect(sendMatchingRound2Invite).not.toHaveBeenCalled();
     expect(db.writes.filter((w) => w.table === "matching_round2_links")).toHaveLength(0);
+  });
+});
+
+describe("danh sách 15 hồ sơ của từng mentor (BTC 14/10/2026)", () => {
+  const BIG = (n: number) => `00000000-0000-4000-8000-0000000002${String(n).padStart(2, "0")}`;
+  function seedBig(count: number) {
+    for (let n = 0; n < count; n += 1) {
+      db.tables.people.push({ id: `b${n}`, full_name: `Bạn Số ${n}` });
+      db.tables.applications.push({
+        id: BIG(n), person_id: `b${n}`, season_id: SEASON, role_applied: "mentee", status: "approved_as_mentee", source: "vam_os_form", raw_payload: menteePayload(`Ngành ${n}`)
+      });
+      db.tables.matching_industry_assignments.push({
+        id: `as-b${n}`, season_id: SEASON, person_id: `b${n}`, role: "mentee", application_id: BIG(n), group_code: 4, confidence: "cao", flags: [], secondary_groups: [], evidence: {}, source: "auto", drift_group: null
+      });
+    }
+    availableIds = Array.from({ length: count }, (_, n) => BIG(n));
+  }
+  function addMentor(id: string, linkId: string, token: string, createdAt: string) {
+    db.tables.people.push({ id, full_name: `Mentor ${id}` });
+    db.tables.applications.push({ id: `app-${id}`, person_id: id, season_id: SEASON, role_applied: "mentor", status: "approved_as_mentor", source: "vam_os_form", raw_payload: {} });
+    db.tables.mentor_profiles.push({ id: `mp-${id}`, person_id: id, capacity_target: 2 });
+    db.tables.matching_industry_assignments.push({
+      id: `as-${id}`, season_id: SEASON, person_id: id, role: "mentor", application_id: `app-${id}`, group_code: 4, confidence: "cao", flags: [], secondary_groups: [], evidence: {}, source: "auto", drift_group: null
+    });
+    db.tables.matching_round2_links.push({ id: linkId, season_id: SEASON, mentor_person_id: id, token, revoked_at: null, last_sent_wave: 1, send_count: 1, first_sent_at: null, claimed_at: null, created_at: createdAt });
+  }
+  const shown = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid="mentee-card"]')).map((x) => x.getAttribute("data-application")!);
+
+  it("nhóm đông: mentor thấy đúng 15 bạn còn trống, chỉ đọc hồ sơ của đúng 15 bạn đó; đầu trang nói 15 trong tổng số", async () => {
+    seedBig(40);
+    const container = await renderPage(TOKEN_A);
+    const ids = shown(container);
+    expect(ids).toHaveLength(15);
+    expect(new Set(ids).size).toBe(15);
+    for (const id of ids) expect(availableIds).toContain(id);
+    const read = db.requests
+      .filter((r) => r.table === "applications" && String(r.columns).includes("raw_payload->>"))
+      .flatMap((r) => (JSON.parse(r.filters) as any[]).filter((f) => f.kind === "in" && f.column === "id").flatMap((f) => f.values));
+    expect(new Set(read)).toEqual(new Set(ids));
+    expect(container.querySelector('[data-testid="list-summary"]')?.textContent).toContain("gồm 15 bạn, trong tổng số 40 bạn chưa có mentor");
+  });
+
+  it("hai mentor cùng nhóm nhận hai danh sách khác nhau, mỗi danh sách vẫn đủ 15", async () => {
+    seedBig(40);
+    const TOKEN_B = "dddddddd-0000-4000-8000-00000000000d";
+    addMentor("mentor-b", "L3", TOKEN_B, "2026-10-08T00:00:00Z");
+    const a = shown(await renderPage(TOKEN_A));
+    const b = shown(await renderPage(TOKEN_B));
+    expect(a).toHaveLength(15);
+    expect(b).toHaveLength(15);
+    expect(new Set(a)).not.toEqual(new Set(b));
+  });
+
+  it("một bạn trong danh sách được chọn: lệnh bù trả 14 bạn cũ giữ nguyên + 1 bạn mới, và tổng số giảm 1", async () => {
+    seedBig(40);
+    const before = await windowCardsAction(TOKEN_A);
+    if (!before.ok) throw new Error("lệnh bù phải chạy được");
+    const ids0 = before.cards.map((c) => c.applicationId);
+    expect(ids0).toHaveLength(15);
+    expect(before.total).toBe(40);
+    const gone = ids0[3];
+    availableIds = (availableIds ?? []).filter((id) => id !== gone);
+    const after = await windowCardsAction(TOKEN_A);
+    if (!after.ok) throw new Error("lệnh bù phải chạy được");
+    const ids1 = after.cards.map((c) => c.applicationId);
+    expect(ids1).toHaveLength(15);
+    expect(ids1).not.toContain(gone);
+    expect(ids1.filter((id) => ids0.includes(id))).toHaveLength(14);
+    expect(after.total).toBe(39);
+  });
+
+  it("còn dưới 15 bạn trống: mentor thấy hết, đầu trang không nói 'trong tổng số'", async () => {
+    seedBig(5);
+    const container = await renderPage(TOKEN_A);
+    expect(shown(container).sort()).toEqual([...(availableIds ?? [])].sort());
+    expect(container.querySelector('[data-testid="list-summary"]')?.textContent).toContain("Danh sách gồm 5 bạn chưa có mentor");
+    expect(container.querySelector('[data-testid="list-summary"]')?.textContent).not.toContain("trong tổng số");
+  });
+
+  it("lệnh bù: token sai hình dạng, token lạ, link đã thu hồi — không trả hồ sơ nào", async () => {
+    seedBig(20);
+    expect(await windowCardsAction("khong-phai-uuid")).toEqual({ ok: false });
+    expect(await windowCardsAction("cccccccc-0000-4000-8000-00000000000c")).toEqual({ ok: false });
+    db.tables.matching_round2_links.find((l: any) => l.id === "L1").revoked_at = "2026-10-14T00:00:00Z";
+    expect(await windowCardsAction(TOKEN_A)).toEqual({ ok: false });
   });
 });

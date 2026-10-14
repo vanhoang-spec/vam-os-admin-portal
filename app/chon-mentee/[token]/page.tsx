@@ -71,7 +71,7 @@ function Body({ data, token }: { data: Round2PickPage; token: string }) {
     return (
       <>
         <Card>
-          <p className="text-sm text-vam-ink">Vòng 2 đã đóng. Cảm ơn anh/chị đã tham gia; ban tổ chức sẽ liên hệ về bước tiếp theo.</p>
+          <p className="text-sm text-vam-ink">Vòng 2 đã đóng. Cảm ơn Anh/Chị đã tham gia. Ban tổ chức sẽ liên hệ Anh/Chị cho các bước tiếp theo.</p>
         </Card>
         {picks}
       </>
@@ -93,17 +93,28 @@ function Body({ data, token }: { data: Round2PickPage; token: string }) {
     <>
       {picks}
       <Card>
-        <p className="text-sm text-vam-ink">
-          Anh/chị còn chọn được <strong>{data.slots}</strong> mentee (tối đa {data.limit} ở vòng này). Danh sách gồm{" "}
-          <strong>{data.mentees.length}</strong> bạn chưa có mentor thuộc <strong>{data.groupLabel}</strong>. Bạn nào vừa được
-          mentor khác chọn sẽ tự ẩn khỏi danh sách trong khoảng 20 giây.
+        <p className="text-sm text-vam-ink" data-testid="list-summary">
+          Anh/chị còn chọn được <strong>{data.slots}</strong> mentee (tối đa {data.limit} ở vòng này).{" "}
+          {data.poolOpen > data.mentees.length ? (
+            <>
+              Danh sách của anh/chị gồm <strong>{data.mentees.length}</strong> bạn, trong tổng số{" "}
+              <strong>{data.poolOpen}</strong> bạn chưa có mentor thuộc <strong>{data.groupLabel}</strong> — mỗi mentor
+              nhận một danh sách riêng, chia đều để bạn nào cũng có cơ hội như nhau. Bạn nào vừa được mentor khác chọn sẽ
+              tự được thay bằng hồ sơ khác trong khoảng 20 giây.
+            </>
+          ) : (
+            <>
+              Danh sách gồm <strong>{data.mentees.length}</strong> bạn chưa có mentor thuộc <strong>{data.groupLabel}</strong>.
+              Bạn nào vừa được mentor khác chọn sẽ tự ẩn khỏi danh sách trong khoảng 20 giây.
+            </>
+          )}
           {data.closesAt ? ` Vòng 2 đóng lúc ${formatDateTime(data.closesAt)} (giờ Việt Nam).` : ""}
         </p>
         <p className="mt-2 text-xs text-slate-500">
           Chọn nhầm thì bỏ chọn được trong 30 phút. Hồ sơ dưới đây chỉ dùng để chọn mentee — vui lòng không chia sẻ ra ngoài.
         </p>
       </Card>
-      <MenteeList token={token} cards={data.mentees} groups={data.poolGroups} closesAt={data.closesAt} />
+      <MenteeList token={token} cards={data.mentees} groups={data.poolGroups} closesAt={data.closesAt} windowSize={data.windowSize} />
     </>
   );
 }
