@@ -268,6 +268,8 @@ describe("2. gửi thư", () => {
     expect(result.ok).toBe(true);
     const b = body();
     expect(String(b.subject)).toMatch(/^\[THƯ THỬ\] \[UEH Mentoring\] Mời anh\/chị chọn mentee/);
+    // Mỗi thư thử một tiêu đề (kèm giờ gửi): Gmail không gom chung rồi ẩn phần cuối thư sau "•••".
+    expect(String(b.subject)).toMatch(/ \(gửi lúc \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}\)$/);
     expect(String(b.text)).toContain("[THƯ THỬ] Đây là thư GỬI THỬ");
     expect(String(b.html)).toContain("THƯ THỬ.");
     // Không mã riêng nào rời hệ thống (đường file PDF hướng dẫn dưới /chon-mentee/ thì được).

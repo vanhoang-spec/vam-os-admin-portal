@@ -48,7 +48,7 @@ import { sendMatchingRound2Invite } from "@/lib/email";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { linkify, menteeCard, MENTEE_CARD_KEYS, stableOrderKey, undoMinutesLeft, windowState } from "@/lib/matching-round2-link-core";
 import { isRound2Recipient } from "@/lib/matching-round2-dispatch-core";
-import { runRound2Dispatch } from "@/lib/matching-round2-dispatch";
+import { runRound2Dispatch, sendRound2InviteTest } from "@/lib/matching-round2-dispatch";
 import { ROUND2_PICK_IDLE } from "@/lib/matching-round2-action-types";
 
 const SEASON = "11111111-1111-4111-8111-111111111111";
@@ -396,6 +396,20 @@ describe("bộ gửi link", () => {
     ];
     await runRound2Dispatch();
     expect(vi.mocked(sendMatchingRound2Invite).mock.calls[0][0].groupLabel).toBe("4. Marketing - Kinh doanh (chung danh sách với 6. Nhân sự)");
+  });
+
+  it("thư thử: gửi cho chính người bấm, KHÔNG mã riêng, và mang địa chỉ trang như thư thật (để có link PDF hướng dẫn — 15/10/2026)", async () => {
+    vi.mocked(sendMatchingRound2Invite).mockResolvedValue({ ok: true, skipped: false } as any);
+    const result = await sendRound2InviteTest();
+    expect(result.ok).toBe(true);
+    expect(sendMatchingRound2Invite).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendMatchingRound2Invite).mock.calls[0][0]).toMatchObject({
+      toEmail: "core@example.test",
+      token: null,
+      linkId: null,
+      requestOrigin: "https://os.test"
+    });
+    expect(db.writes.filter((w) => w.table === "matching_round2_links")).toHaveLength(0);
   });
 
   it("link đã thu hồi: không gửi, và không bị đếm là đang chờ thư", async () => {

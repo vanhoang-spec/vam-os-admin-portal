@@ -290,7 +290,10 @@ export async function sendRound2InviteTest(nowMs = Date.now()): Promise<Round2Se
       deadlineLabel: round2DeadlineLabel(settings?.closes_at ?? null),
       waveNote: round2WaveNote(Number(settings?.current_send_wave ?? 1)),
       token: null,
-      linkId: null
+      linkId: null,
+      // Cùng địa chỉ trang như thư thật: production không đặt VAM_OS_PUBLIC_BASE_URL, thiếu dòng này
+      // thì thư thử mất link file PDF hướng dẫn (BTC thấy 15/10/2026) dù thư thật vẫn có.
+      requestOrigin: await getPublicOrigin()
     });
     if (outcome.skipped) return fail("Môi trường này đang tắt gửi thư — thư thử chưa đi.");
     if (!outcome.ok) return fail("Gửi thư thử không thành công. Xem Vận hành → Mail → Nhật ký gửi.");
