@@ -18,7 +18,8 @@ import { round2WaveNote } from "@/lib/matching-round2-dispatch-core";
 import { EMAIL_SAMPLES } from "@/lib/email-samples";
 import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
-import { ROUND2_GUIDE_PDF_PATH, ROUND2_GUIDE_PDF_SOURCE, ROUND2_GUIDE_VIDEO_URL, round2GuidePdfUrl } from "@/lib/matching-round2-link-core";
+import { ROUND2_GUIDE_PDF_PATH, ROUND2_GUIDE_PDF_SOURCE, round2GuidePdfUrl } from "@/lib/matching-round2-link-core";
+import { VONG2_TIMELINE_JPEG_BASE64 } from "@/lib/email-assets/vong-2-timeline";
 import { middleware } from "@/middleware";
 import { GET as guidePdfRoute } from "@/app/chon-mentee/huong-dan-vong-2.pdf/route";
 
@@ -28,7 +29,8 @@ const LINK_ID = "11111111-0000-4000-8000-000000000002";
 const OPENS = "15/10/2026 11:00 (giờ Việt Nam)";
 const CLOSES = "17/10/2026 11:00 (giờ Việt Nam)";
 const GROUP = "3. Tài chính - Đầu tư (chung danh sách với 1. Ngân hàng - Bảo hiểm, 2. Kế toán - Kiểm toán)";
-const VIDEO = "https://youtu.be/ZC0fqUDMRzo";
+const VIDEO_HOST = "youtu";
+const CID = "timeline-ueh-mentoring-mua-12";
 const PDF = `${ORIGIN}/chon-mentee/huong-dan-vong-2.pdf`;
 
 describe("1. nội dung thư", () => {
@@ -83,27 +85,45 @@ describe("1. nội dung thư", () => {
     expect(sample?.body?.text).toContain(round2WaveNote(1));
   });
 
-  it("hai link hướng dẫn: mỗi link một dòng ở bản chữ (không dính dấu chấm), link bấm được ở HTML, nằm sau giờ chọn", () => {
-    const mail = buildMatchingRound2InviteEmail({ ...base, guideVideoUrl: VIDEO, guidePdfUrl: PDF });
-    expect(mail.text).toContain(`\nHướng dẫn từng bước cho mentor:\n- Video (khoảng 3 phút): ${VIDEO}\n- File PDF: ${PDF}\n`);
-    expect(mail.html).toContain(`<p>Hướng dẫn từng bước cho mentor: <a href="${VIDEO}">xem video (khoảng 3 phút)</a> · <a href="${PDF}">mở file PDF</a>.</p>`);
+  it("link file PDF hướng dẫn: đứng riêng một dòng ở bản chữ (không dính dấu chấm), bấm được ở HTML, sau giờ chọn; không còn link video (BTC 15/10/2026)", () => {
+    const mail = buildMatchingRound2InviteEmail({ ...base, guidePdfUrl: PDF });
+    expect(mail.text).toContain(`\nHướng dẫn từng bước cho mentor (file PDF):\n${PDF}\n`);
+    expect(mail.html).toContain(`<p>Hướng dẫn từng bước cho mentor: <a href="${PDF}">mở file PDF hướng dẫn</a>.</p>`);
     for (const body of [mail.text, mail.html]) {
       expect(body.indexOf("Thời gian chọn")).toBeLessThan(body.indexOf("Hướng dẫn từng bước"));
       expect(body.indexOf("Hướng dẫn từng bước")).toBeLessThan(body.indexOf("Sau khi chọn"));
+      expect(body).not.toContain(VIDEO_HOST);
+      expect(body.toLowerCase()).not.toContain("video");
     }
-  });
-
-  it("thiếu link nào thì bỏ đúng link đó; không có link nào thì không in dòng hướng dẫn", () => {
-    const onlyVideo = buildMatchingRound2InviteEmail({ ...base, guideVideoUrl: VIDEO, guidePdfUrl: "" });
-    expect(onlyVideo.text).toContain(`- Video (khoảng 3 phút): ${VIDEO}\n`);
-    expect(onlyVideo.text).not.toContain("- File PDF");
-    expect(onlyVideo.html).not.toContain("mở file PDF");
     const none = buildMatchingRound2InviteEmail(base);
     expect(none.text).not.toContain("Hướng dẫn từng bước");
     expect(none.html).not.toContain("Hướng dẫn từng bước");
   });
 
-  it("đường file PDF trong thư trỏ đúng route trả file; route trả đúng file PDF trong kho mã; video trên YouTube", async () => {
+  it("hình timeline Mùa 12 (BTC 15/10/2026): nhúng bằng cid ngay sau đoạn giờ chọn, trước link hướng dẫn; không có cid thì không in hình", () => {
+    const mail = buildMatchingRound2InviteEmail({ ...base, guidePdfUrl: PDF, timelineImageCid: CID });
+    const img = `<img src="cid:${CID}"`;
+    expect(mail.html.split(img).length - 1).toBe(1);
+    expect(mail.html).toContain('alt="UEH Mentoring Mùa 12 — Timeline Matching Mentor – Mentee và hoạt động sắp tới"');
+    expect(mail.html.indexOf("Thời gian chọn")).toBeLessThan(mail.html.indexOf(img));
+    expect(mail.html.indexOf(img)).toBeLessThan(mail.html.indexOf("Hướng dẫn từng bước"));
+    expect(mail.text).toContain("Timeline matching Mentor – Mentee và hoạt động sắp tới của Mùa 12: xem hình trong thư.");
+    // Hàm dựng không tự đính ảnh (giữ file thuần) — nơi gửi đính, xem phần 2.
+    expect(mail.attachments).toBeUndefined();
+    const none = buildMatchingRound2InviteEmail(base);
+    expect(none.html).not.toContain("<img");
+    expect(none.text).not.toContain("Timeline");
+  });
+
+  it("hình timeline là JPEG thật, nhỏ hơn 400 KB", () => {
+    const bytes = Buffer.from(VONG2_TIMELINE_JPEG_BASE64, "base64");
+    expect(bytes.subarray(0, 3).toString("hex")).toBe("ffd8ff");
+    expect(bytes.subarray(-2).toString("hex")).toBe("ffd9");
+    expect(bytes.length).toBeGreaterThan(50 * 1024);
+    expect(bytes.length).toBeLessThan(400 * 1024);
+  });
+
+  it("đường file PDF trong thư trỏ đúng route trả file; route trả đúng file PDF trong kho mã", async () => {
     expect(ROUND2_GUIDE_PDF_PATH).toBe("/chon-mentee/huong-dan-vong-2.pdf");
     expect(round2GuidePdfUrl(`${ORIGIN}/`)).toBe(PDF);
     // Route nằm đúng ở đường thư trỏ tới (thư mục app/ = đường dẫn).
@@ -117,15 +137,16 @@ describe("1. nội dung thư", () => {
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(response.headers.get("content-disposition")).toMatch(/^inline;/);
     expect(Buffer.from(await response.arrayBuffer()).equals(source)).toBe(true);
-    expect(ROUND2_GUIDE_VIDEO_URL).toBe(VIDEO);
   });
 
-  it("mẫu thư BTC sửa được có chỗ điền hai link hướng dẫn; thư mẫu mang đủ hai link", () => {
+  it("mẫu thư BTC sửa được có chỗ điền link PDF, không còn chỗ điền video; thư mẫu mang link PDF, không có video", () => {
     const slot = AUTOMATION_SLOTS.find((s) => s.id === "matching_round2_invite");
-    expect(slot?.placeholders.map((p) => p.key)).toEqual(expect.arrayContaining(["link_video_huong_dan", "link_file_huong_dan"]));
+    const keys = slot?.placeholders.map((p) => p.key) ?? [];
+    expect(keys).toContain("link_file_huong_dan");
+    expect(keys).not.toContain("link_video_huong_dan");
     const sample = EMAIL_SAMPLES.find((s) => s.kind === "matching_round2_invite");
-    expect(sample?.body?.text).toContain(`- Video (khoảng 3 phút): ${VIDEO}`);
-    expect(sample?.body?.text).toContain(`- File PDF: ${PDF}`);
+    expect(sample?.body?.text).toContain(`Hướng dẫn từng bước cho mentor (file PDF):\n${PDF}`);
+    expect(sample?.body?.text).not.toContain(VIDEO_HOST);
   });
 
   it("mẫu thư BTC sửa được có chỗ điền giờ mở", () => {
@@ -200,11 +221,29 @@ describe("2. gửi thư", () => {
     expect(String(b.text)).toContain(`Thời gian chọn: từ ${OPENS} đến ${CLOSES}.`);
     expect(String(b.subject)).toBe("[UEH Mentoring] Mời anh/chị chọn mentee — UEH Mentoring Mùa 12");
     expect(String(b.text)).not.toContain("THƯ THỬ");
-    // Hai link hướng dẫn: video cố định, PDF dựng từ đúng địa chỉ trang đang chạy.
-    expect(String(b.text)).toContain(`- Video (khoảng 3 phút): ${VIDEO}\n- File PDF: ${PDF}`);
-    expect(String(b.html)).toContain(`href="${VIDEO}"`);
+    // Link PDF dựng từ đúng địa chỉ trang đang chạy; không còn link video (BTC 15/10/2026).
+    expect(String(b.text)).toContain(`Hướng dẫn từng bước cho mentor (file PDF):\n${PDF}`);
     expect(String(b.html)).toContain(`href="${PDF}"`);
+    expect(String(b.html)).not.toContain(VIDEO_HOST);
+    expect(String(b.text)).not.toContain(VIDEO_HOST);
     expect(logged.payloads[0]).toMatchObject({ kind: "matching_round2_invite", to_email: "mentor@example.test", related_table: "matching_round2_links", related_id: LINK_ID });
+  });
+
+  it("hình timeline đi kèm thư thật qua Resend: đúng một tệp JPEG mang content_id khớp cid trong thân thư", async () => {
+    const result = await sendMatchingRound2Invite(INPUT);
+    expect(result.ok).toBe(true);
+    const b = body();
+    expect(String(b.html)).toContain(`<img src="cid:${CID}"`);
+    expect(b.attachments).toEqual([
+      { filename: "timeline-ueh-mentoring-mua-12.jpg", content: VONG2_TIMELINE_JPEG_BASE64, content_id: CID, content_type: "image/jpeg" }
+    ]);
+  });
+
+  it("qua Brevo (đường lui): hình đi thành tệp đính kèm thường — Brevo không nhận content_id", async () => {
+    process.env.VAM_OS_EMAIL_PROVIDER = "brevo";
+    const result = await sendMatchingRound2Invite(INPUT);
+    expect(result.ok).toBe(true);
+    expect(body().attachment).toEqual([{ name: "timeline-ueh-mentoring-mua-12.jpg", content: VONG2_TIMELINE_JPEG_BASE64 }]);
   });
 
   it("thư thật mang nguyên câu mở đầu của đợt 1 (đường gửi thật, không chỉ hàm dựng)", async () => {
@@ -231,8 +270,10 @@ describe("2. gửi thư", () => {
     expect(String(b.text)).toContain("(đường dẫn riêng của từng mentor — chỉ có trong thư thật)");
     expect(logged.payloads[0].related_id ?? null).toBeNull();
     // Hướng dẫn là link công khai, giống nhau cho mọi mentor: thư thử vẫn bấm được để BTC xem trước.
-    expect(String(b.html)).toContain(`href="${VIDEO}"`);
     expect(String(b.html)).toContain(`href="${PDF}"`);
+    // Thư thử cũng mang hình timeline để BTC xem đúng lá thư mentor nhận.
+    expect(String(b.html)).toContain(`<img src="cid:${CID}"`);
+    expect((b.attachments as Array<{ content_id?: string }>).map((a) => a.content_id)).toEqual([CID]);
   });
 });
 
