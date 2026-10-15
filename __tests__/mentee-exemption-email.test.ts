@@ -247,7 +247,7 @@ describe("3. cánh cửa của trang xác nhận", () => {
 
   it("URL mang mã riêng: không lưu cache, không lộ mã qua Referer", async () => {
     const response = await middleware(request(`/xac-nhan-mentee/${TOKEN}`));
-    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+    expect(response.headers.get("Referrer-Policy")).toBe("same-origin");
     expect(response.headers.get("Cache-Control")).toContain("no-store");
   });
 

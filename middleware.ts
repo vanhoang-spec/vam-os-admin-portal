@@ -268,6 +268,12 @@ export async function middleware(request: NextRequest) {
     // trong cache dùng chung, và trang đích của bất kỳ đường dẫn nào trên đó
     // không cần biết mã là gì. Trang đặt lịch phỏng vấn cùng loại: URL mang mã
     // riêng của một ứng viên, ai cầm được mã là đặt/huỷ được lịch của họ.
+    //
+    // Referrer-Policy same-origin, KHÔNG no-referrer: trang ngoài (link CV, Zalo…) vẫn không thấy
+    // mã trong URL, nhưng lệnh gửi về chính trang mình mang Origin thật. Với no-referrer, trình
+    // duyệt làm đúng chuẩn Fetch gửi "Origin: null" cho mọi POST; Next 15 đọc header đó bằng
+    // new URL("null") và văng lỗi, nên mọi nút bấm (chọn mentee, xem hồ sơ, gia hạn…) đều hỏng —
+    // 15/10/2026, 3 mentor bấm chọn liên tục không được; Chrome không gặp vì vẫn gửi Origin thật.
     if (
       publicRoute === "renewal" ||
       publicRoute === "ticket" ||
@@ -278,7 +284,7 @@ export async function middleware(request: NextRequest) {
       // Ai cầm mã là xác nhận tham gia mentee thay người đó.
       publicRoute === "mentee_exemption_confirm"
     ) {
-      response.headers.set("Referrer-Policy", "no-referrer");
+      response.headers.set("Referrer-Policy", "same-origin");
       response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
       response.headers.set("Pragma", "no-cache");
     }

@@ -315,8 +315,8 @@ describe("no GET mutation, and the route contract the page must honour", () => {
     expect(code).not.toContain('"use client"');
   });
 
-  it("exports the no-referrer and no-store contract as data the route cannot forget", () => {
-    expect(RENEWAL_ROUTE_HEADERS["Referrer-Policy"]).toBe("no-referrer");
+  it("exports the same-origin referrer and no-store contract as data the route cannot forget", () => {
+    expect(RENEWAL_ROUTE_HEADERS["Referrer-Policy"]).toBe("same-origin");
     expect(RENEWAL_ROUTE_HEADERS["Cache-Control"]).toContain("no-store");
     expect(RENEWAL_ROUTE_SEGMENT_CONFIG.dynamic).toBe("force-dynamic");
     expect(RENEWAL_ROUTE_SEGMENT_CONFIG.revalidate).toBe(0);
