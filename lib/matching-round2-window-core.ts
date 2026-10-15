@@ -54,3 +54,44 @@ export function round2Window(circle: readonly string[], available: ReadonlySet<s
   }
   return out;
 }
+
+/*
+ * "Đổi 15 hồ sơ khác" (BTC 15/10/2026). Mentor xem chi tiết hết danh sách mà chưa ưng thì danh sách
+ * nhảy tới 15 bạn còn trống KẾ TIẾP. "Kế tiếp" đi theo thứ tự riêng của mentor: vòng cụm mình xoay từ
+ * điểm xuất phát, nối tiếp vòng nhóm bù sang (nếu có) xoay từ điểm xuất phát bên đó; hết thì quay về
+ * đầu. Không có điểm neo thì danh sách y hệt round2Window + phần bù — danh sách của mentor chưa bấm
+ * đổi không xê dịch khi bản này lên.
+ *
+ * Điểm neo lưu bằng MÃ ĐƠN chứ không bằng vị trí: vòng thêm người (đợt sau) thì vị trí dịch, mã đơn
+ * thì không. Bạn ở điểm neo có người chọn mất cũng không sao — danh sách vẫn bắt đầu từ chỗ đó.
+ */
+
+/** Thứ tự riêng của một mentor: vòng cụm mình từ `ownStart`, rồi vòng nhóm bù sang từ `donorStart`. */
+export function round2Ordering(own: readonly string[], ownStart: number, donor: readonly string[] = [], donorStart = 0): string[] {
+  const rotate = (circle: readonly string[], start: number) => {
+    if (!circle.length) return [];
+    const at = ((Math.trunc(start) % circle.length) + circle.length) % circle.length;
+    return [...circle.slice(at), ...circle.slice(0, at)];
+  };
+  return Array.from(new Set([...rotate(own, ownStart), ...rotate(donor, donorStart)]));
+}
+
+/** Danh sách bắt đầu từ điểm neo (mã đơn); null hoặc mã không còn trong thứ tự = từ đầu. Theo thứ tự quét. */
+export function round2WindowAt(ordering: readonly string[], available: ReadonlySet<string>, anchor: string | null, size = ROUND2_WINDOW_SIZE): string[] {
+  const at = anchor ? ordering.indexOf(anchor) : -1;
+  return round2Window(ordering, available, at < 0 ? 0 : at, size);
+}
+
+/**
+ * Điểm neo của lần đổi kế tiếp: vị trí ngay sau hồ sơ cuối của danh sách hiện tại (`window` theo thứ
+ * tự quét, KHÔNG phải thứ tự đã xáo để hiện). null = không còn bạn trống nào ngoài danh sách — đổi
+ * cũng chỉ ra đúng những bạn đang thấy.
+ */
+export function round2NextAnchor(ordering: readonly string[], available: ReadonlySet<string>, window: readonly string[]): string | null {
+  if (!window.length || !ordering.length) return null;
+  const shown = new Set(window);
+  if (!ordering.some((id) => available.has(id) && !shown.has(id))) return null;
+  const last = ordering.indexOf(window[window.length - 1]);
+  if (last < 0) return null;
+  return ordering[(last + 1) % ordering.length];
+}

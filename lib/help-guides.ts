@@ -656,9 +656,10 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Chưa lưu giờ mở thì vòng 2 đang đóng: link mở ra chỉ báo “chưa mở”, không ai chọn được.",
       "Mỗi mentor chỉ thấy và chọn mentee cùng nhóm ngành — Vòng 2 mùa 12 giữ 9 nhóm riêng (BTC 14/10/2026). Hệ thống có sẵn cách gộp nhiều nhóm vào chung một danh sách (cụm chọn) nếu BTC quyết định sau này, ví dụ đợt mở rộng sau khi đóng vòng; việc gộp làm bằng SQL có duyệt, nhóm ngành của từng người không đổi.",
       "Trang chọn của mentor tự thay bạn vừa được người khác chọn trong khoảng 20 giây (không cần tải lại trang). Thẻ hiện sẵn: mục tiêu, khó khăn hiện tại, lý do và mong muốn về mentor, chân dung mentor phù hợp; mentor bấm “Xem đầy đủ hồ sơ” để đọc thêm 3 câu hỏi muốn hỏi mentor và hình dung sau 1 năm.",
+      "Đổi 15 hồ sơ khác (BTC 15/10/2026): mentor đã bấm “Xem đầy đủ hồ sơ” ở TẤT CẢ hồ sơ trong danh sách mà chưa ưng thì nút “Đổi 15 hồ sơ khác” mới hiện ở cuối danh sách; trước đó trang chỉ hiện “Đã xem chi tiết X/15 hồ sơ”. Bấm đổi thì danh sách nhảy tới 15 bạn còn trống kế tiếp; đổi nhiều lần thì đi hết các bạn trống của nhóm rồi quay lại từ đầu (nhóm 1 đi hết nhóm 1 thì sang nhóm 3). Không có nút quay lại danh sách trước. Máy chủ tự kiểm đã xem hết trước khi đổi; nhóm chỉ còn 15 bạn trống trở xuống thì không có nút vì mentor đã thấy hết.",
       "Tải CSV: Super admin, Admin, Core team có quyền vận hành mùa. File có họ tên và email."
     ],
-    updated: "14/10/2026"
+    updated: "15/10/2026"
   },
   "/applications/mentee-dac-cach": {
     title: "Mentee đặc cách (Support team)",
