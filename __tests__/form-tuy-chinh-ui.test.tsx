@@ -76,8 +76,13 @@ function fillValid(container: HTMLElement) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Nháp nằm trong bộ nhớ trình duyệt, chung cho mọi ca của file: không xoá thì nháp ca trước mở lại ở ca sau.
+  window.localStorage.clear();
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("1. form công khai", () => {
   it("không hiện trường ẩn; khối tiêu đề hiện như phần chia; mục bắt buộc có dấu *", () => {
@@ -403,6 +408,125 @@ describe("2b. trình tạo form — thư tự động, ngắt trang", () => {
     expect(cards[2].textContent).toContain("Ngắt trang");
     expect(cards[2].textContent).not.toContain("Bắt buộc trả lời");
     expect(cards[3].textContent).toContain("Câu 3");
+  });
+});
+
+describe("1c. lưu nháp khi đang điền (BTC 15/10/2026)", () => {
+  const KEY = `vam-form-nhap:${CODE}`;
+  const stored = () => JSON.parse(window.localStorage.getItem(KEY) ?? "null");
+  const PAGED: CustomFormField[] = [
+    field("f_nameaaaa", "short_text", { label: "Họ và tên" }),
+    field("f_brk1aaaa", "page_break", { label: "Hồ sơ", required: false }),
+    field("f_mssvaaaa", "student_id", { label: "MSSV" })
+  ];
+  const at = (iso: string) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(iso));
+  };
+
+  it("đang gõ: tự lưu trên máy này sau khi ngừng gõ (không lưu từng phím); ô đồng ý và ô bẫy không bao giờ được lưu", async () => {
+    at("2026-10-15T13:00:00Z");
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "Nguyễn Văn An" } });
+    fireEvent.click(container.querySelector("#q-__consent")!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    fireEvent.change(input(container, "f_mssvaaaa"), { target: { value: "3124" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    expect(stored()).toEqual({ v: 1, savedAt: Date.parse("2026-10-15T13:00:01.300Z"), page: 0, values: { f_nameaaaa: "Nguyễn Văn An", f_mssvaaaa: "3124" } });
+    expect(JSON.stringify(stored())).not.toContain("consent");
+    expect(container.querySelector('[data-testid="draft-status"]')?.textContent).toContain("Đã tự lưu nháp trên máy này lúc 15/10/2026 20:00");
+  });
+
+  it("mở lại đúng link trên máy này: câu cũ và trang đang điền dở hiện lại, báo giờ đã lưu; ô đồng ý vẫn phải tích lại", () => {
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({ v: 1, savedAt: Date.parse("2026-10-15T13:05:00Z"), page: 1, values: { f_nameaaaa: "An", f_mssvaaaa: "31241028261" } })
+    );
+    const { container } = render(<PublicForm code={CODE} fields={PAGED} />);
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 2/2");
+    expect(input(container, "f_mssvaaaa").value).toBe("31241028261");
+    expect(container.querySelector('[data-testid="draft-restored"]')?.textContent).toContain("15/10/2026 20:05");
+    expect((container.querySelector("#q-__consent") as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(container.querySelector('[data-testid="page-back"]')!);
+    expect(input(container, "f_nameaaaa").value).toBe("An");
+  });
+
+  it("chỉ mở trang thôi thì KHÔNG ghi gì, không đè nháp cũ; nháp của form khác không bị mở ra ở form này", async () => {
+    at("2026-10-15T13:00:00Z");
+    const other = JSON.stringify({ v: 1, savedAt: Date.now(), page: 0, values: { f_nameaaaa: "Người form khác" } });
+    window.localStorage.setItem("vam-form-nhap:zzzzzzzzzzzz", other);
+    const mine = JSON.stringify({ v: 1, savedAt: Date.now(), page: 0, values: { f_nameaaaa: "An" } });
+    window.localStorage.setItem(KEY, mine);
+    render(<PublicForm code={CODE} fields={FIELDS} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(window.localStorage.getItem(KEY)).toBe(mine);
+    cleanup();
+    window.localStorage.removeItem(KEY);
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
+    expect(input(container, "f_nameaaaa").value).toBe("");
+    expect(container.querySelector('[data-testid="draft-restored"]')).toBeNull();
+  });
+
+  it("nút “Lưu nháp”: lưu ngay và báo; form còn trống thì báo không có gì để lưu", () => {
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
+    fireEvent.click(container.querySelector('[data-testid="draft-save"]')!);
+    expect(container.querySelector('[data-testid="form-notice"]')?.textContent).toContain("Chưa có câu nào");
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "An" } });
+    fireEvent.click(container.querySelector('[data-testid="draft-save"]')!);
+    expect(stored().values).toEqual({ f_nameaaaa: "An" });
+    expect(container.querySelector('[data-testid="form-notice"]')?.textContent).toContain("Đã lưu nháp trên máy này");
+  });
+
+  it("“Xoá nháp”: xoá khỏi máy và làm trống form", () => {
+    window.localStorage.setItem(KEY, JSON.stringify({ v: 1, savedAt: Date.now(), page: 0, values: { f_nameaaaa: "An" } }));
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
+    expect(input(container, "f_nameaaaa").value).toBe("An");
+    fireEvent.click(container.querySelector('[data-testid="draft-clear"]')!);
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    expect(input(container, "f_nameaaaa").value).toBe("");
+    expect(container.querySelector('[data-testid="draft-restored"]')).toBeNull();
+  });
+
+  it("gửi thành công thì nháp mất; gửi hỏng thì nháp còn nguyên", async () => {
+    h.submit.mockResolvedValueOnce({ ok: false, message: "Hệ thống đang bận, thử lại sau ít phút.", errors: {} });
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
+    fillValid(container);
+    fireEvent.click(container.querySelector('[data-testid="draft-save"]')!);
+    await submitForm(container);
+    expect(stored().values.f_nameaaaa).toBe("Nguyễn Văn An");
+    h.submit.mockResolvedValueOnce({ ok: true, message: "Cảm ơn!", errors: {} });
+    await submitForm(container);
+    expect(container.querySelector('[data-testid="form-done"]')).not.toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("trình duyệt chặn bộ nhớ (ẩn danh): không vỡ trang, báo rõ không lưu nháp được", () => {
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "An" } });
+    fireEvent.click(container.querySelector('[data-testid="draft-save"]')!);
+    expect(container.querySelector('[data-testid="form-notice"]')?.textContent).toContain("không cho lưu nháp");
+    spy.mockRestore();
+  });
+
+  it("bản xem thử của ban tổ chức lưu nháp riêng, không lẫn với nháp của người điền thật", () => {
+    window.localStorage.setItem(KEY, JSON.stringify({ v: 1, savedAt: Date.now(), page: 0, values: { f_nameaaaa: "Người điền thật" } }));
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} preview />);
+    expect(input(container, "f_nameaaaa").value).toBe("");
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "BTC thử" } });
+    fireEvent.click(container.querySelector('[data-testid="draft-save"]')!);
+    expect(JSON.parse(window.localStorage.getItem(`${KEY}:xem-thu`)!).values).toEqual({ f_nameaaaa: "BTC thử" });
+    expect(JSON.parse(window.localStorage.getItem(KEY)!).values).toEqual({ f_nameaaaa: "Người điền thật" });
   });
 });
 

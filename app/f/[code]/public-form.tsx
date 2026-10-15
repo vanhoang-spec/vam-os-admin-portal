@@ -1,17 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CUSTOM_FORM_CONSENT_TEXT,
   FIELD_FORMAT_HINTS,
+  customFormDraftKey,
+  hasDraftContent,
   isQuestion,
+  parseDraft,
+  serializeDraft,
   splitPages,
   validateAnswers,
   type CustomFormAnswerValue,
   type CustomFormField
 } from "@/lib/custom-form-core";
 import { maskVietnamDate } from "@/lib/event-datetime";
+import { formatDateTime } from "@/lib/utils";
 import { submitCustomFormAction } from "./actions";
+
+/** Tự lưu nháp sau khi ngừng gõ chừng này — đủ thưa để không ghi bộ nhớ ở mỗi phím bấm. */
+export const DRAFT_SAVE_DELAY_MS = 800;
+const timeLabel = (ms: number) => formatDateTime(new Date(ms).toISOString());
 
 const BOX =
   "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-base text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint aria-[invalid=true]:border-red-400";
@@ -49,6 +58,11 @@ function asList(value: CustomFormAnswerValue | undefined): string[] {
  * Bấm "Gửi": kiểm lại TOÀN BỘ bằng đúng luật máy chủ dùng (lib/custom-form-core.ts); lỗi ở trang
  * trước thì quay về đúng trang đó. Máy chủ vẫn kiểm lại toàn bộ: trình duyệt chỉ để người điền khỏi
  * phải chờ.
+ *
+ * Lưu nháp (BTC 15/10/2026): câu đã điền tự lưu trên MÁY NÀY (bộ nhớ trình duyệt) sau mỗi lần ngừng
+ * gõ, và nút "Lưu nháp" lưu ngay. Mở lại đúng đường dẫn trên máy đó thì câu cũ và trang đang điền dở
+ * hiện lại. Gửi thành công hay bấm "Xoá nháp" thì nháp mất. Ô đồng ý không bao giờ được lưu. Chỉ lưu
+ * sau khi người điền đã gõ: mở trang thôi không ghi gì, và không đè lên nháp cũ.
  */
 export function PublicForm({ code, fields, preview = false }: { code: string; fields: CustomFormField[]; preview?: boolean }) {
   const [values, setValues] = useState<Record<string, CustomFormAnswerValue>>({});
@@ -60,8 +74,66 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
   const [done, setDone] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [restoredAt, setRestoredAt] = useState<number | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Người điền đã gõ/chọn gì chưa — chưa thì không ghi nháp (mở trang không được đè nháp cũ).
+  const touched = useRef(false);
 
   const pages = useMemo(() => splitPages(fields), [fields]);
+  const draftKey = customFormDraftKey(code, preview);
+
+  /** Ghi nháp; trả giờ đã ghi, hoặc null (không có gì để ghi, hay trình duyệt chặn bộ nhớ). */
+  const writeDraft = useCallback(
+    (vals: Record<string, CustomFormAnswerValue>, pg: number): number | null => {
+      try {
+        if (!hasDraftContent(vals)) {
+          window.localStorage.removeItem(draftKey);
+          return null;
+        }
+        const now = Date.now();
+        window.localStorage.setItem(draftKey, serializeDraft(vals, pg, now));
+        return now;
+      } catch {
+        return null;
+      }
+    },
+    [draftKey]
+  );
+  const removeDraft = useCallback(() => {
+    try {
+      window.localStorage.removeItem(draftKey);
+    } catch {
+      // bộ nhớ bị chặn: không có gì để xoá
+    }
+  }, [draftKey]);
+
+  // Mở lại nháp đã lưu trên máy này (chỉ đọc được sau khi trang đã lên trình duyệt).
+  useEffect(() => {
+    let raw: string | null = null;
+    try {
+      raw = window.localStorage.getItem(draftKey);
+    } catch {
+      raw = null;
+    }
+    const draft = parseDraft(fields, raw, Date.now());
+    if (draft) {
+      setValues(draft.values);
+      setPage(Math.min(draft.page, pages.length - 1));
+      setRestoredAt(draft.savedAt);
+    } else if (raw) {
+      removeDraft();
+    }
+  }, [draftKey, fields, pages, removeDraft]);
+
+  // Tự lưu sau mỗi lần ngừng gõ / chuyển trang.
+  useEffect(() => {
+    if (!touched.current || done) return;
+    const timer = setTimeout(() => {
+      const at = writeDraft(values, page);
+      if (at) setSavedAt(at);
+    }, DRAFT_SAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [values, page, done, writeDraft]);
   const last = pages.length - 1;
   const current = pages[Math.min(page, last)];
   // Mọi mục đang hiện của cả form (không gồm ngắt trang) — để kiểm lần cuối trước khi gửi.
@@ -80,8 +152,34 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     if (errors[id]) setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
   };
   const setValue = (id: string, value: CustomFormAnswerValue) => {
+    touched.current = true;
     setValues((prev) => ({ ...prev, [id]: value }));
     clearError(id);
+  };
+
+  const saveNow = () => {
+    if (!hasDraftContent(values)) {
+      setNotice({ kind: "error", message: "Chưa có câu nào để lưu nháp." });
+      return;
+    }
+    const at = writeDraft(values, page);
+    if (!at) {
+      setNotice({ kind: "error", message: "Trình duyệt này không cho lưu nháp (có thể đang ở chế độ ẩn danh). Bạn điền xong rồi gửi trong lần này nhé." });
+      return;
+    }
+    setSavedAt(at);
+    setNotice({ kind: "ok", message: `Đã lưu nháp trên máy này lúc ${timeLabel(at)}. Mở lại đúng đường dẫn này trên máy này để điền tiếp.` });
+  };
+  const clearDraft = () => {
+    removeDraft();
+    touched.current = false;
+    setValues({});
+    setErrors({});
+    setPage(0);
+    setRestoredAt(null);
+    setSavedAt(null);
+    setNotice({ kind: "ok", message: "Đã xoá bản nháp — form trống, bạn điền lại từ đầu." });
+    setFocusId("top");
   };
 
   /** Hiện lỗi; nếu mục lỗi đầu tiên nằm ở trang khác thì chuyển tới trang đó. */
@@ -139,6 +237,9 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     try {
       const result = await submitCustomFormAction(code, { values, consent, trap });
       if (result.ok) {
+        // Đã gửi: nháp hết việc. Không xoá khi gửi hỏng — người điền còn cần nó.
+        touched.current = false;
+        removeDraft();
         setDone(result.message);
         return;
       }
@@ -161,6 +262,14 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
   return (
     <form noValidate onSubmit={onSubmit} className="grid gap-5" data-testid="custom-form" data-page={page + 1}>
       <div id="custom-form-top" />
+      {restoredAt ? (
+        <div data-testid="draft-restored" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          <span>Đã mở lại bản nháp bạn lưu lúc {timeLabel(restoredAt)} trên máy này.</span>
+          <button type="button" data-testid="draft-clear" className="font-medium underline" onClick={clearDraft}>
+            Xoá nháp, điền lại từ đầu
+          </button>
+        </div>
+      ) : null}
       {pages.length > 1 ? (
         <div className="grid gap-1" data-testid="page-header">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500" data-testid="page-progress">
@@ -306,7 +415,11 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
           role={notice.kind === "error" ? "alert" : "status"}
           data-testid="form-notice"
           className={`rounded-md border px-3 py-2 text-sm ${
-            notice.kind === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-900"
+            notice.kind === "error"
+              ? "border-red-200 bg-red-50 text-red-700"
+              : notice.kind === "ok"
+                ? "border-green-200 bg-green-50 text-green-800"
+                : "border-amber-200 bg-amber-50 text-amber-900"
           }`}
         >
           {notice.message}
@@ -314,6 +427,9 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row">
+        <button type="button" data-testid="draft-save" className={SECONDARY} onClick={saveNow} disabled={sending}>
+          Lưu nháp
+        </button>
         {page > 0 ? (
           <button type="button" data-testid="page-back" className={SECONDARY} onClick={goBack} disabled={sending}>
             Quay lại
@@ -329,6 +445,10 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
           </button>
         )}
       </div>
+      <p className="text-xs text-slate-500" data-testid="draft-status">
+        {savedAt ? `Đã tự lưu nháp trên máy này lúc ${timeLabel(savedAt)}. ` : ""}
+        Câu trả lời được lưu nháp trên máy này trong lúc bạn điền — mở lại đúng đường dẫn này trên máy này để điền tiếp.
+      </p>
     </form>
   );
 }

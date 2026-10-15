@@ -470,6 +470,70 @@ export function responseColumns(fields: CustomFormField[]): Array<{ id: string; 
   return fields.filter(isQuestion).map((f) => ({ id: f.id, label: f.hidden ? `${f.label} (đã ẩn)` : f.label }));
 }
 
+// ---------------------------------------------------------------------------
+// Lưu nháp khi đang điền (BTC 15/10/2026) — trên máy của người điền, không qua máy chủ.
+//
+// Nháp nằm trong bộ nhớ trình duyệt (localStorage), theo từng form. Không qua máy chủ: chưa tích đồng
+// ý thì CRM chưa giữ CCCD, ngày sinh… của ai. Đổi lại, nháp chỉ mở lại được trên đúng máy và trình
+// duyệt đó. Ô đồng ý và ô bẫy không bao giờ được lưu. Nội dung đọc từ bộ nhớ là thứ ai cũng sửa được,
+// nên đọc lại phải lọc như đọc câu trả lời: chỉ giữ trường còn trên form, đúng kiểu, lựa chọn còn có.
+// ---------------------------------------------------------------------------
+
+export const CUSTOM_FORM_DRAFT_TTL_MS = 14 * 24 * 60 * 60_000;
+const DRAFT_VERSION = 1;
+const DRAFT_TEXT_MAX = CUSTOM_FORM_LIMITS.longText;
+
+export type CustomFormDraft = { values: CustomFormAnswers; page: number; savedAt: number };
+
+export function customFormDraftKey(code: string, preview = false): string {
+  return `vam-form-nhap:${code}${preview ? ":xem-thu" : ""}`;
+}
+
+const isFilled = (value: CustomFormAnswerValue | undefined) => (Array.isArray(value) ? value.length > 0 : Boolean(String(value ?? "").trim()));
+
+export function hasDraftContent(values: Record<string, CustomFormAnswerValue>): boolean {
+  return Object.values(values).some(isFilled);
+}
+
+/** Chuỗi để ghi vào bộ nhớ trình duyệt — chỉ các ô đã điền. */
+export function serializeDraft(values: Record<string, CustomFormAnswerValue>, page: number, nowMs: number): string {
+  const kept = Object.fromEntries(Object.entries(values).filter(([, value]) => isFilled(value)));
+  return JSON.stringify({ v: DRAFT_VERSION, savedAt: nowMs, page: Math.max(0, Math.trunc(page) || 0), values: kept });
+}
+
+/**
+ * Đọc lại nháp. null = không có, hỏng, quá hạn, hay không còn câu nào khớp form hiện tại (BTC sửa form
+ * sau khi người điền lưu nháp: câu đã xoá bị bỏ, lựa chọn đã bỏ bị bỏ, phần còn lại vẫn mở lại được).
+ */
+export function parseDraft(fields: CustomFormField[], raw: string | null, nowMs: number): CustomFormDraft | null {
+  if (!raw) return null;
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!data || typeof data !== "object" || data.v !== DRAFT_VERSION) return null;
+  const savedAt = Number(data.savedAt);
+  if (!Number.isFinite(savedAt) || savedAt > nowMs + 60_000 || nowMs - savedAt > CUSTOM_FORM_DRAFT_TTL_MS) return null;
+  const stored = data.values && typeof data.values === "object" && !Array.isArray(data.values) ? (data.values as Record<string, unknown>) : {};
+  const values: CustomFormAnswers = {};
+  for (const field of fields) {
+    if (!isQuestion(field) || field.hidden || !Object.prototype.hasOwnProperty.call(stored, field.id)) continue;
+    const value = stored[field.id];
+    if (field.type === "multi_choice") {
+      if (!Array.isArray(value)) continue;
+      const picked = field.options.filter((o) => value.includes(o));
+      if (picked.length) values[field.id] = picked;
+    } else if (typeof value === "string" && value.trim()) {
+      if (CHOICE_TYPES.has(field.type) && !field.options.includes(value)) continue;
+      values[field.id] = value.slice(0, DRAFT_TEXT_MAX);
+    }
+  }
+  if (!Object.keys(values).length) return null;
+  return { values, page: Math.max(0, Math.trunc(Number(data.page)) || 0), savedAt };
+}
+
 /** Trường mặc định của một form mới: đủ để bật "Mỗi email chỉ gửi một lần" ngay. */
 export function defaultFields(random: () => number = Math.random): CustomFormField[] {
   const base = { help: "", hidden: false, options: [] as string[] };
