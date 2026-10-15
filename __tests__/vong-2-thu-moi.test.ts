@@ -121,6 +121,16 @@ describe("1. nội dung thư", () => {
     expect(bytes.subarray(-2).toString("hex")).toBe("ffd9");
     expect(bytes.length).toBeGreaterThan(50 * 1024);
     expect(bytes.length).toBeLessThan(400 * 1024);
+    // Bản BTC gửi lại ~09:50 15/10/2026 (gốc 1536x1024 → 1200x800); bản 08:00 là 1200x676.
+    let size: [number, number] | null = null;
+    for (let i = 2; i + 9 < bytes.length && !size; ) {
+      if (bytes[i] !== 0xff) break;
+      const marker = bytes[i + 1];
+      const length = bytes.readUInt16BE(i + 2);
+      if (marker >= 0xc0 && marker <= 0xc2) size = [bytes.readUInt16BE(i + 7), bytes.readUInt16BE(i + 5)];
+      i += 2 + length;
+    }
+    expect(size).toEqual([1200, 800]);
   });
 
   it("đường file PDF trong thư trỏ đúng route trả file; route trả đúng file PDF trong kho mã", async () => {
