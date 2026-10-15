@@ -42,6 +42,9 @@ export default async function CustomFormEditPage(props: { params: Promise<{ id: 
           closesAt: form.closesAt,
           thankYou: form.thankYou,
           onePerEmail: form.onePerEmail,
+          autoReply: form.autoReply,
+          autoReplySubject: form.autoReplySubject,
+          autoReplyBody: form.autoReplyBody,
           fields: form.fields
         }}
         programs={programs}

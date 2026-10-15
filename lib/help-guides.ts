@@ -689,6 +689,9 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Bấm “Tạo form mới”. Form mới có sẵn ba câu: Họ và tên, Email, Số điện thoại.",
       "Điền tiêu đề, giới thiệu, chọn chương trình; đặt giờ mở/đóng nếu cần (để trống = mở ngay khi công khai, không hạn).",
       "Thêm câu hỏi: chọn loại ở cuối trang rồi bấm “+ Thêm trường”. Mỗi câu: nội dung, mô tả thêm, tích “Bắt buộc trả lời” nếu cần. Câu chọn một / chọn nhiều / danh sách thả xuống: mỗi dòng một lựa chọn. “Tiêu đề / đoạn giới thiệu” để chia form thành phần.",
+      "Cần người điền nộp file (CV, bảng điểm…): dùng loại “Tải file (gửi link)”. Người điền tải file lên Google Drive/OneDrive, bật chia sẻ “Bất kỳ ai có đường liên kết đều xem được” rồi dán link — dưới ô đã có sẵn hướng dẫn này. CRM không lưu file, form luôn nhẹ.",
+      "Form dài: thêm “Ngắt trang” ở chỗ muốn sang trang mới (tiêu đề của ngắt trang là tên trang sau). Người điền bấm “Tiếp” — trang còn thiếu mục bắt buộc hay sai định dạng thì không qua được; “Quay lại” giữ nguyên câu đã điền; ô đồng ý và nút Gửi ở trang cuối.",
+      "Muốn gửi thư xác nhận cho người điền: tích “Gửi thư tự động cho người điền”, viết tiêu đề (để trống = “Đã nhận câu trả lời: <tên form>”) và nội dung, bấm “Gửi thử cho tôi” để xem thư, rồi Lưu. Thư đi tới email người điền nhập ở trường Email bắt buộc đầu tiên, ngay sau khi họ bấm Gửi.",
       "Bấm “Lưu form”, rồi “Xem thử form” để điền thử — bản xem thử kiểm lỗi y như form thật nhưng không ghi gì.",
       "Bấm “Công khai form”, “Sao chép link” và gửi link cho người điền. Hết đợt thì bấm “Đóng form”.",
       "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm và nút “Tải CSV”."
@@ -698,7 +701,8 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Mỗi form tự có ô “đồng ý cho xử lý dữ liệu cá nhân” ở cuối — bắt buộc tích mới gửi được.",
       "“Mỗi email chỉ gửi một lần” (bật sẵn): dùng trường Email bắt buộc đầu tiên; gửi lần hai bị báo “Email này đã gửi form rồi”, câu trả lời cũ giữ nguyên.",
       "Form đã có câu trả lời: câu hỏi cũ không xoá hay đổi loại được (bấm “Ẩn” để bỏ khỏi form, dữ liệu cũ vẫn xem được); câu chọn chỉ thêm được lựa chọn mới. Sửa chữ câu hỏi và thêm câu mới vẫn được.",
-      "Chưa có trong bản này: tải file lên (dùng loại “Link” cho CV), thư tự động gửi người điền, câu hỏi rẽ nhánh, form nhiều trang.",
+      "Thư tự động: mỗi form gửi tối đa 300 lá trong 24 giờ, và dừng khi cả hệ thống còn dưới 40 lá trong hạn mức chung 1.000 thư/24 giờ qua Resend (chừa cho thư mời, xác nhận lịch…). Thư không đi thì câu trả lời vẫn được lưu bình thường. Nội dung là chữ thường, xuống dòng giữ nguyên. Thư đã gửi xem ở Vận hành → Mail → Nhật ký gửi.",
+      "Chưa có trong bản này: câu hỏi rẽ nhánh (nhảy câu theo câu trả lời).",
       "Ai dùng được: Super admin, Admin, Core team, Support team — tạo/sửa form, xem câu trả lời và tải CSV. File có họ tên, email, SĐT, có thể có CCCD: không chia sẻ ra ngoài."
     ],
     updated: "15/10/2026"

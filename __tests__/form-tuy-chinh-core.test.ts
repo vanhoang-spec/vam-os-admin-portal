@@ -10,7 +10,12 @@
  *   - form đã có câu trả lời: không xoá / không đổi loại / không bỏ lựa chọn của câu cũ.
  */
 import { describe, expect, it } from "vitest";
+import { buildCustomFormReceiptEmail } from "@/lib/email-core";
 import {
+  FILE_LINK_HINT,
+  FIELD_FORMAT_HINTS,
+  isQuestion,
+  splitPages,
   checkDefinitionRules,
   checkLockedChanges,
   dedupeKeyFor,
@@ -235,5 +240,78 @@ describe("5. mở / đóng và chặn gửi trùng", () => {
     ]);
     expect(answerText(["Sáng", "Tối"])).toBe("Sáng; Tối");
     expect(answerText(undefined)).toBe("");
+  });
+});
+
+describe("6. ô tải file = gửi link; ngắt trang (BTC 15/10/2026)", () => {
+  it("“Tải file (gửi link)”: nhận link http(s), từ chối thứ khác; dưới ô có sẵn hướng dẫn bật chia sẻ công khai", () => {
+    const file = f("f_cvaaaaaa", "file_link");
+    expect(answer(file, "https://drive.google.com/file/d/abc/view?usp=sharing").answers).toEqual({ f_cvaaaaaa: "https://drive.google.com/file/d/abc/view?usp=sharing" });
+    expect(answer(file, "C:\\Users\\cv.pdf").ok).toBe(false);
+    expect(answer(file, "javascript:alert(1)").ok).toBe(false);
+    expect(FIELD_FORMAT_HINTS.file_link).toBe(FILE_LINK_HINT);
+    expect(FILE_LINK_HINT).toContain("Bất kỳ ai có đường liên kết");
+  });
+
+  it("ngắt trang: không phải câu hỏi, để trống tiêu đề được, không bao giờ bắt buộc, không nhận dữ liệu", () => {
+    const parsed = parseFieldDefinitions([{ id: "f_breakaaa", type: "page_break", label: "", required: true }]);
+    expect(parsed).toEqual({ ok: true, fields: [{ id: "f_breakaaa", type: "page_break", label: "", help: "", required: false, hidden: false, options: [] }] });
+    expect(isQuestion({ type: "page_break" })).toBe(false);
+    expect(validateAnswers([f("f_breakaaa", "page_break")], () => ["x"])).toEqual({ ok: true, answers: {}, errors: {} });
+    // Câu thường vẫn phải có nội dung.
+    expect(parseFieldDefinitions([{ id: "f_aaaaaaaa", type: "short_text", label: "" }]).ok).toBe(false);
+  });
+
+  it("chia trang: tiêu đề của ngắt trang là của trang SAU; ngắt ở đầu/cuối, liền nhau hay đang ẩn không sinh trang rỗng", () => {
+    const name = f("f_nameaaaa", "short_text");
+    const mail = f("f_emailaaa", "email");
+    const cv = f("f_cvaaaaaa", "file_link");
+    const brk = (id: string, label = "", extra: Partial<CustomFormField> = {}) => f(id, "page_break", { label, required: false, ...extra });
+    expect(splitPages([name, mail])).toEqual([{ title: "", help: "", fields: [name, mail] }]);
+    expect(splitPages([name, brk("f_brk1aaaa", "Hồ sơ", { help: "Gửi link CV" }), cv])).toEqual([
+      { title: "", help: "", fields: [name] },
+      { title: "Hồ sơ", help: "Gửi link CV", fields: [cv] }
+    ]);
+    expect(splitPages([brk("f_brk0aaaa", "Mở đầu"), name, brk("f_brk1aaaa"), brk("f_brk2aaaa", "Trang 2"), mail, brk("f_brk3aaaa")])).toEqual([
+      { title: "Mở đầu", help: "", fields: [name] },
+      { title: "Trang 2", help: "", fields: [mail] }
+    ]);
+    expect(splitPages([name, brk("f_brk1aaaa", "Ẩn", { hidden: true }), mail])).toEqual([{ title: "", help: "", fields: [name, mail] }]);
+    expect(splitPages([])).toEqual([{ title: "", help: "", fields: [] }]);
+  });
+});
+
+describe("7. thư tự động gửi người điền (BTC 15/10/2026)", () => {
+  const email = f("f_emailaaa", "email");
+  it("bật thư cần trường Email bắt buộc đang hiện và nội dung thư", () => {
+    expect(checkDefinitionRules([f("f_nameaaaa", "short_text")], { onePerEmail: false, autoReply: true, autoReplyBody: "Cảm ơn" })).toContain("trường Email bắt buộc");
+    expect(checkDefinitionRules([email], { onePerEmail: false, autoReply: true, autoReplyBody: "   " })).toContain("chưa có nội dung");
+    expect(checkDefinitionRules([email], { onePerEmail: false, autoReply: true, autoReplyBody: "Cảm ơn" })).toBeNull();
+    expect(checkDefinitionRules([f("f_nameaaaa", "short_text")], { onePerEmail: false, autoReply: false, autoReplyBody: "" })).toBeNull();
+  });
+
+  it("cài đặt: tiêu đề một dòng, nội dung giữ xuống dòng, có trần độ dài", () => {
+    const base = { title: "Form", description: "", programId: "", thankYou: "", onePerEmail: false, opensAt: null, closesAt: null };
+    expect(parseFormSettings({ ...base, autoReply: "on", autoReplySubject: " Đã nhận\nđơn ", autoReplyBody: "Dòng 1\r\nDòng 2 " })).toMatchObject({
+      ok: true,
+      settings: { autoReply: true, autoReplySubject: "Đã nhận đơn", autoReplyBody: "Dòng 1\nDòng 2" }
+    });
+    expect(parseFormSettings({ ...base, autoReplySubject: "x".repeat(201) }).ok).toBe(false);
+    expect(parseFormSettings({ ...base, autoReplyBody: "x".repeat(5001) }).ok).toBe(false);
+    expect(parseFormSettings(base)).toMatchObject({ ok: true, settings: { autoReply: false, autoReplySubject: "", autoReplyBody: "" } });
+  });
+
+  it("thư: chữ BTC soạn được thoát HTML, xuống dòng giữ nguyên; tiêu đề trống thì dùng tên form; thư thử ghi rõ", () => {
+    const mail = buildCustomFormReceiptEmail({ formTitle: "Tuyển mentee Job Shadowing", subject: "", body: "Chào <b>bạn</b>,\nĐã nhận.\n\nHẹn gặp!" });
+    expect(mail.subject).toBe("Đã nhận câu trả lời: Tuyển mentee Job Shadowing");
+    expect(mail.html).toContain("Chào &lt;b&gt;bạn&lt;/b&gt;,<br />Đã nhận.");
+    expect(mail.html).toContain("<p>Hẹn gặp!</p>");
+    expect(mail.html).not.toContain("<b>bạn</b>");
+    expect(mail.text).toContain("Chào <b>bạn</b>,\nĐã nhận.\n\nHẹn gặp!");
+    expect(mail.text).toContain("Vietnam Alumni Mentoring");
+    const test = buildCustomFormReceiptEmail({ formTitle: "Form", subject: "Đã nhận đơn", body: "x", test: true });
+    expect(test.subject).toBe("[THƯ THỬ] Đã nhận đơn");
+    expect(test.html).toContain("THƯ THỬ.");
+    expect(buildCustomFormReceiptEmail({ formTitle: "Form", subject: "Đã nhận đơn", body: "x" }).html).not.toContain("THƯ THỬ");
   });
 });

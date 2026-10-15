@@ -86,7 +86,10 @@ export type EmailKind =
   | "matching_round2_invite"
   // Mentee đặc cách (Support team): mời mở link riêng bấm xác nhận tham gia mentee mùa này
   // (supabase/migrations/20261011150000_mentee_dac_cach_support_team.sql).
-  | "mentee_exemption_confirm";
+  | "mentee_exemption_confirm"
+  // Form tùy chỉnh: thư tự động gửi người điền ngay sau khi gửi form, nội dung do BTC/Support team
+  // soạn trong trình tạo form (supabase/migrations/20261015200000_form_tuy_chinh.sql).
+  | "custom_form_receipt";
 
 /**
  * Một tệp đi kèm thư.
@@ -2093,6 +2096,37 @@ export function buildMenteeExemptionConfirmEmail(input: {
     ].join("")
   );
   return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư tự động sau khi gửi form tùy chỉnh (BTC 15/10/2026). Tiêu đề và nội dung do BTC/Support team
+ * soạn trong trình tạo form — là chữ thuần: mọi ký tự được thoát HTML, xuống dòng giữ nguyên. Tiêu đề
+ * để trống thì dùng "Đã nhận câu trả lời: <tên form>". Ký tên Vietnam Alumni Mentoring (form dùng
+ * cho nhiều chương trình, không riêng UEH Mentoring). `test`: thư thử cho người đang soạn.
+ */
+export function buildCustomFormReceiptEmail(input: { formTitle: string; subject?: string; body: string; test?: boolean }): EmailMessage & { to: string } {
+  const formTitle = safeSentence(input.formTitle, "form");
+  const baseSubject = safeSentence(input.subject) || `Đã nhận câu trả lời: ${formTitle}`;
+  const subject = input.test ? `${TEST_EMAIL_SUBJECT_PREFIX}${baseSubject}` : baseSubject;
+  const body = String(input.body ?? "").replace(/\r\n/g, "\n").trim();
+  const footer = `Thư này được gửi tự động khi bạn gửi form “${formTitle}”.`;
+  const testNote = "Đây là thư GỬI THỬ cho người soạn form. Thư thật gửi tới email người điền nhập trong form, ngay sau khi họ bấm Gửi.";
+  const text = [...(input.test ? [`[THƯ THỬ] ${testNote}`, ""] : []), body, "", footer, "", "Vietnam Alumni Mentoring"].join("\n");
+  const paragraphs = body
+    .split(/\n{2,}/)
+    .map((block) => `<p>${escapeHtml(block).split("\n").join("<br />")}</p>`)
+    .join("");
+  const html = [
+    '<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;color:#14352a">',
+    input.test
+      ? `<p style="margin:0 0 16px;padding:10px 12px;background:#fff4d6;border:1px solid #e0b84a;border-radius:6px;color:#6b4e00"><strong>THƯ THỬ.</strong> ${escapeHtml(testNote)}</p>`
+      : "",
+    paragraphs,
+    `<p style="color:#4f6b60;font-size:13px">${escapeHtml(footer)}</p>`,
+    '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Vietnam Alumni Mentoring</p>',
+    "</div>"
+  ].join("");
+  return { to: "", subject, text, html };
 }
 
 /** Tiền tố tiêu đề và lời báo ở đầu một thư GỬI THỬ cho ban tổ chức. */

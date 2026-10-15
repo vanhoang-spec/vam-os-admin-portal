@@ -51,6 +51,11 @@ const insertResponse = (formId: string, key: string | null) =>
 beforeAll(async () => {
   db = await offlineDb();
   await db.exec("reset role");
+  // Sổ thư như trên production: ràng buộc loại thư đã có sẵn vài loại — migration phải NỐI THÊM.
+  await db.exec(`
+    create table outbound_emails(id uuid primary key default gen_random_uuid(), kind text not null,
+      constraint outbound_emails_kind_check check (kind = any (array['mentee_session_invite'::text, 'mentee_exemption_confirm'::text])));
+  `);
   await db.exec(SQL);
   await db.exec("reset role");
   form = (await asServer(() => one<{ id: string }>("insert into custom_forms(title) values ('Tuyển mentee Job Shadowing') returning id")))!.id;
@@ -117,10 +122,29 @@ describe("migration 20261015200000 — form tùy chỉnh", () => {
     }
   });
 
-  it("dán lại lần hai vẫn chạy, không mất dữ liệu", async () => {
+  it("thư tự động: ba cột mặc định tắt và rỗng; nội dung quá 5.000 ký tự bị từ chối", async () => {
+    expect(await one("select auto_reply, auto_reply_subject, auto_reply_body from custom_forms where id = $1", [otherForm])).toEqual({
+      auto_reply: false,
+      auto_reply_subject: "",
+      auto_reply_body: ""
+    });
+    expect(await rejected("service_role", "update custom_forms set auto_reply_body = repeat('x', 5001) where id = $1", [otherForm])).toBe(true);
+  });
+
+  it("loại thư 'custom_form_receipt' được NỐI THÊM: loại cũ vẫn ghi được, loại lạ vẫn bị chặn", async () => {
+    await db.query("insert into outbound_emails(kind) values ('custom_form_receipt'), ('mentee_session_invite'), ('mentee_exemption_confirm')");
+    expect(await rejected("postgres", "insert into outbound_emails(kind) values ('loai_la')")).toBe(true);
+  });
+
+  it("dán lại lần hai vẫn chạy, không mất dữ liệu, không nối loại thư hai lần", async () => {
     await db.exec(SQL);
     await db.exec("reset role");
     expect((await one<{ n: number }>("select count(*)::int as n from custom_forms"))!.n).toBe(2);
     expect((await one<{ n: number }>("select count(*)::int as n from custom_form_responses"))!.n).toBe(4);
+    const def = (await one<{ def: string }>(
+      "select pg_get_constraintdef(oid) as def from pg_constraint where conrelid = 'public.outbound_emails'::regclass and conname = 'outbound_emails_kind_check'"
+    ))!.def;
+    expect(def.split("custom_form_receipt").length - 1).toBe(1);
+    expect(def).toContain("mentee_exemption_confirm");
   }, 120_000);
 });

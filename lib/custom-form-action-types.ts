@@ -18,6 +18,10 @@ export type CustomFormSavePayload = {
   programId: string;
   thankYou: string;
   onePerEmail: boolean;
+  /** Thư tự động gửi người điền (BTC 15/10/2026). */
+  autoReply: boolean;
+  autoReplySubject: string;
+  autoReplyBody: string;
   /** `YYYY-MM-DDTHH:mm` giờ Việt Nam, hoặc chuỗi rỗng. */
   opensAt: string;
   closesAt: string;

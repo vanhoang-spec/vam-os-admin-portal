@@ -19,11 +19,16 @@ import type { CustomFormField } from "@/lib/custom-form-core";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
-const h = vi.hoisted(() => ({ submit: vi.fn(), save: vi.fn(), status: vi.fn(), refresh: vi.fn() }));
+const h = vi.hoisted(() => ({ submit: vi.fn(), save: vi.fn(), status: vi.fn(), testReceipt: vi.fn(), refresh: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(), getSupabaseServerClient: vi.fn() }));
 vi.mock("@/app/f/[code]/actions", () => ({ submitCustomFormAction: h.submit }));
-vi.mock("@/app/forms/actions", () => ({ saveCustomFormAction: h.save, setCustomFormStatusAction: h.status, createCustomFormAction: vi.fn() }));
+vi.mock("@/app/forms/actions", () => ({
+  saveCustomFormAction: h.save,
+  setCustomFormStatusAction: h.status,
+  sendCustomFormReceiptTestAction: h.testReceipt,
+  createCustomFormAction: vi.fn()
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }), redirect: vi.fn(), notFound: vi.fn() }));
 
 import { PublicForm } from "@/app/f/[code]/public-form";
@@ -174,6 +179,9 @@ describe("2. trình tạo form", () => {
     closesAt: null,
     thankYou: "",
     onePerEmail: true,
+    autoReply: false,
+    autoReplySubject: "",
+    autoReplyBody: "",
     fields: [field("f_nameaaaa", "short_text", { label: "Họ và tên" }), field("f_emailaaa", "email", { label: "Email" })]
   };
   const renderBuilder = (responseCount = 0) =>
@@ -246,6 +254,155 @@ describe("2. trình tạo form", () => {
     const newDel = Array.from((cards[2] as HTMLElement).querySelectorAll("button")).find((b) => b.textContent === "Xoá") as HTMLButtonElement;
     expect(newDel.disabled).toBe(false);
     expect(getByLabelText("Loại trường mới")).toBeTruthy();
+  });
+});
+
+describe("1b. form nhiều trang (BTC 15/10/2026)", () => {
+  const PAGED: CustomFormField[] = [
+    field("f_nameaaaa", "short_text", { label: "Họ và tên" }),
+    field("f_emailaaa", "email", { label: "Email" }),
+    field("f_brk1aaaa", "page_break", { label: "Hồ sơ", help: "Gửi link CV đã bật chia sẻ", required: false }),
+    field("f_cvaaaaaa", "file_link", { label: "CV" }),
+    field("f_brk2aaaa", "page_break", { label: "", required: false }),
+    field("f_slotaaaa", "single_choice", { label: "Buổi", options: ["Sáng", "Chiều"] })
+  ];
+  const shownFields = (c: HTMLElement) => Array.from(c.querySelectorAll("[data-field]")).map((x) => x.getAttribute("data-field"));
+  const click = async (c: HTMLElement, testId: string) => {
+    await act(async () => {
+      fireEvent.click(c.querySelector(`[data-testid="${testId}"]`)!);
+    });
+  };
+
+  it("trang 1 chỉ có câu của trang 1, có “Tiếp”, chưa có ô đồng ý hay nút Gửi", () => {
+    const { container } = render(<PublicForm code={CODE} fields={PAGED} />);
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 1/3");
+    expect(shownFields(container)).toEqual(["f_nameaaaa", "f_emailaaa"]);
+    expect(container.querySelector('[data-testid="page-next"]')).not.toBeNull();
+    expect(container.querySelector("#q-__consent")).toBeNull();
+    expect(container.querySelector('button[type="submit"]')).toBeNull();
+  });
+
+  it("“Tiếp” khi trang còn thiếu: KHÔNG qua trang, báo dưới đúng mục; điền đủ thì qua trang 2 có tiêu đề và mô tả của ngắt trang", async () => {
+    const { container } = render(<PublicForm code={CODE} fields={PAGED} />);
+    await click(container, "page-next");
+    expect(container.querySelector('[data-testid="custom-form"]')?.getAttribute("data-page")).toBe("1");
+    expect(errorOf(container, "f_nameaaaa")).not.toBeNull();
+    expect(errorOf(container, "f_emailaaa")).not.toBeNull();
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "An" } });
+    fireEvent.change(input(container, "f_emailaaa"), { target: { value: "an@gmail.com" } });
+    await click(container, "page-next");
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 2/3");
+    expect(container.querySelector('[data-testid="page-header"]')?.textContent).toContain("Hồ sơ");
+    expect(container.querySelector('[data-testid="page-header"]')?.textContent).toContain("Gửi link CV đã bật chia sẻ");
+    expect(shownFields(container)).toEqual(["f_cvaaaaaa"]);
+    expect(container.querySelector('[data-field="f_cvaaaaaa"]')?.textContent).toContain("Bất kỳ ai có đường liên kết");
+    expect(h.submit).not.toHaveBeenCalled();
+  });
+
+  it("Enter ở trang chưa cuối = Tiếp (không gửi); “Quay lại” giữ nguyên câu đã điền; trang cuối mới có đồng ý + Gửi; gửi đủ mọi trang", async () => {
+    h.submit.mockResolvedValue({ ok: true, message: "Cảm ơn!", errors: {} });
+    const { container } = render(<PublicForm code={CODE} fields={PAGED} />);
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "An" } });
+    fireEvent.change(input(container, "f_emailaaa"), { target: { value: "an@gmail.com" } });
+    await submitForm(container);
+    expect(h.submit).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 2/3");
+    await click(container, "page-back");
+    expect(input(container, "f_nameaaaa").value).toBe("An");
+    await click(container, "page-next");
+    fireEvent.change(input(container, "f_cvaaaaaa"), { target: { value: "https://drive.google.com/file/d/x" } });
+    await click(container, "page-next");
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 3/3");
+    expect(container.querySelector('[data-testid="page-next"]')).toBeNull();
+    fireEvent.click(Array.from(container.querySelectorAll('[data-field="f_slotaaaa"] label')).find((l) => l.textContent === "Chiều")!.querySelector("input")!);
+    fireEvent.click(container.querySelector("#q-__consent")!);
+    await submitForm(container);
+    expect(h.submit).toHaveBeenCalledTimes(1);
+    expect(h.submit.mock.calls[0][1].values).toEqual({
+      f_nameaaaa: "An",
+      f_emailaaa: "an@gmail.com",
+      f_cvaaaaaa: "https://drive.google.com/file/d/x",
+      f_slotaaaa: "Chiều"
+    });
+  });
+
+  it("Enter ở trang 1 khi các trang sau đều tùy chọn: chỉ sang trang 2 — không gửi, không nhảy tới trang cuối đòi ô đồng ý", async () => {
+    const optionalLater = PAGED.map((f) => (f.id === "f_cvaaaaaa" || f.id === "f_slotaaaa" ? { ...f, required: false } : f));
+    const { container } = render(<PublicForm code={CODE} fields={optionalLater} />);
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "An" } });
+    fireEvent.change(input(container, "f_emailaaa"), { target: { value: "an@gmail.com" } });
+    await submitForm(container);
+    expect(h.submit).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 2/3");
+    expect(container.querySelector('[data-testid="form-notice"]')).toBeNull();
+    expect(container.querySelectorAll('[data-testid="field-error"]')).toHaveLength(0);
+  });
+
+  it("máy chủ báo lỗi ở một mục trang 1 (vd. trùng email): quay về trang 1 và hiện lỗi dưới ô đó", async () => {
+    h.submit.mockResolvedValue({ ok: false, message: "Email này đã gửi form rồi — mỗi email chỉ gửi một lần.", errors: { f_emailaaa: "Email này đã gửi form rồi." } });
+    const { container } = render(<PublicForm code={CODE} fields={PAGED} />);
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "An" } });
+    fireEvent.change(input(container, "f_emailaaa"), { target: { value: "an@gmail.com" } });
+    await click(container, "page-next");
+    fireEvent.change(input(container, "f_cvaaaaaa"), { target: { value: "https://drive.google.com/file/d/x" } });
+    await click(container, "page-next");
+    fireEvent.click(Array.from(container.querySelectorAll('[data-field="f_slotaaaa"] label')).find((l) => l.textContent === "Sáng")!.querySelector("input")!);
+    fireEvent.click(container.querySelector("#q-__consent")!);
+    await submitForm(container);
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 1/3");
+    expect(errorOf(container, "f_emailaaa")).toBe("Email này đã gửi form rồi.");
+  });
+});
+
+describe("2b. trình tạo form — thư tự động, ngắt trang", () => {
+  const FORM2: BuilderForm = {
+    id: "11111111-2222-4333-8444-555555555555",
+    publicCode: CODE,
+    title: "Tuyển mentee Job Shadowing",
+    description: "",
+    programId: null,
+    status: "draft",
+    opensAt: null,
+    closesAt: null,
+    thankYou: "",
+    onePerEmail: true,
+    autoReply: false,
+    autoReplySubject: "",
+    autoReplyBody: "",
+    fields: [field("f_nameaaaa", "short_text", { label: "Họ và tên" }), field("f_emailaaa", "email", { label: "Email" })]
+  };
+  const renderBuilder = () =>
+    render(<FormBuilder form={FORM2} programs={[]} responseCount={0} publicUrl={`https://os.test/f/${CODE}`} />);
+
+  it("tick “Gửi thư tự động” thì hiện ô tiêu đề + nội dung; “Gửi thử cho tôi” gửi đúng chữ đang trên trang; Lưu mang đủ ba trường thư", async () => {
+    h.testReceipt.mockResolvedValue({ ok: true, message: "Đã gửi thư thử tới a@x.vn." });
+    h.save.mockResolvedValue({ ok: true, message: "Đã lưu form." });
+    const { container, getByLabelText, queryByLabelText } = renderBuilder();
+    expect(queryByLabelText("Nội dung thư tự động")).toBeNull();
+    fireEvent.click(container.querySelector('[data-testid="auto-reply-toggle"]')!);
+    fireEvent.change(getByLabelText("Tiêu đề thư tự động"), { target: { value: "Đã nhận đơn" } });
+    fireEvent.change(getByLabelText("Nội dung thư tự động"), { target: { value: "Chào bạn,\nĐã nhận." } });
+    await act(async () => {
+      fireEvent.click(container.querySelector('[data-testid="test-receipt"]')!);
+    });
+    expect(h.testReceipt).toHaveBeenCalledWith(FORM2.id, { subject: "Đã nhận đơn", body: "Chào bạn,\nĐã nhận." });
+    expect(container.querySelector('[data-testid="builder-report"]')?.textContent).toBe("Đã gửi thư thử tới a@x.vn.");
+    await act(async () => {
+      fireEvent.click(container.querySelector('[data-testid="save-form"]')!);
+    });
+    expect(h.save.mock.calls[0][1]).toMatchObject({ autoReply: true, autoReplySubject: "Đã nhận đơn", autoReplyBody: "Chào bạn,\nĐã nhận." });
+  });
+
+  it("thêm “Ngắt trang”: thẻ ghi rõ là ngắt trang, không có ô bắt buộc, không chiếm số thứ tự câu hỏi", () => {
+    const { container, getByLabelText } = renderBuilder();
+    fireEvent.change(getByLabelText("Loại trường mới"), { target: { value: "page_break" } });
+    fireEvent.click(container.querySelector('[data-testid="add-field"]')!);
+    fireEvent.change(getByLabelText("Loại trường mới"), { target: { value: "file_link" } });
+    fireEvent.click(container.querySelector('[data-testid="add-field"]')!);
+    const cards = Array.from(container.querySelectorAll('[data-testid="field-list"] [data-field]')) as HTMLElement[];
+    expect(cards[2].textContent).toContain("Ngắt trang");
+    expect(cards[2].textContent).not.toContain("Bắt buộc trả lời");
+    expect(cards[3].textContent).toContain("Câu 3");
   });
 });
 

@@ -11,6 +11,10 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import type { CustomFormAdminResult, CustomFormSavePayload, CustomFormSubmitResult } from "@/lib/custom-form-action-types";
 import {
+  AUTO_REPLY_DAILY_CAP_PER_FORM,
+  AUTO_REPLY_SYSTEM_HEADROOM,
+  CUSTOM_FORM_LIMITS,
+  replyEmailField,
   checkDefinitionRules,
   checkLockedChanges,
   dedupeEmailField,
@@ -28,7 +32,10 @@ import {
   type CustomFormField,
   type CustomFormStatus
 } from "@/lib/custom-form-core";
+import { sendCustomFormReceipt } from "@/lib/email";
+import { DAILY_EMAIL_LIMIT, QUOTA_WINDOW_MS } from "@/lib/email-quota-core";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
+import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import { readAllPages } from "@/lib/paged-read";
 import { canManageCustomForms } from "@/lib/permissions";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -38,7 +45,8 @@ type ServiceClient = NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
-const FORM_COLUMNS = "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,fields,created_at,updated_at";
+const FORM_COLUMNS =
+  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,created_at,updated_at";
 
 export type ProgramOption = { id: string; name: string };
 
@@ -53,6 +61,9 @@ export type CustomFormDetail = {
   closesAt: string | null;
   thankYou: string;
   onePerEmail: boolean;
+  autoReply: boolean;
+  autoReplySubject: string;
+  autoReplyBody: string;
   fields: CustomFormField[];
   createdAt: string;
   updatedAt: string;
@@ -79,6 +90,9 @@ function toDetail(row: Row): CustomFormDetail {
     closesAt: row.closes_at ?? null,
     thankYou: String(row.thank_you ?? ""),
     onePerEmail: row.one_per_email === true,
+    autoReply: row.auto_reply === true,
+    autoReplySubject: String(row.auto_reply_subject ?? ""),
+    autoReplyBody: String(row.auto_reply_body ?? ""),
     fields: storedFields(row.fields),
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? "")
@@ -86,12 +100,12 @@ function toDetail(row: Row): CustomFormDetail {
 }
 
 /** Người đang bấm có được vận hành form không. null = không (fail-closed). */
-async function operator(): Promise<{ client: ServiceClient; adminId: string } | null> {
+async function operator(): Promise<{ client: ServiceClient; adminId: string; adminEmail: string } | null> {
   const admin = await getCurrentAdminUser();
   if (!admin || admin.status !== "active" || !canManageCustomForms(admin.role)) return null;
   const client = getSupabaseServiceRoleClient();
   if (!client) return null;
-  return { client, adminId: String(admin.id) };
+  return { client, adminId: String(admin.id), adminEmail: String(admin.email ?? "").trim() };
 }
 
 export async function canOperateCustomForms(): Promise<boolean> {
@@ -200,6 +214,9 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
     programId: input.programId,
     thankYou: input.thankYou,
     onePerEmail: input.onePerEmail,
+    autoReply: input.autoReply,
+    autoReplySubject: input.autoReplySubject,
+    autoReplyBody: input.autoReplyBody,
     opensAt,
     closesAt
   });
@@ -227,6 +244,9 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
         program_id: settings.programId,
         thank_you: settings.thankYou,
         one_per_email: settings.onePerEmail,
+        auto_reply: settings.autoReply,
+        auto_reply_subject: settings.autoReplySubject,
+        auto_reply_body: settings.autoReplyBody,
         opens_at: settings.opensAt,
         closes_at: settings.closesAt,
         fields,
@@ -267,6 +287,36 @@ export async function setCustomFormStatus(id: string, status: string): Promise<C
     return { ok: true, message };
   } catch (error) {
     log("status failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+}
+
+/**
+ * Gửi thử thư tự động cho chính người đang soạn — dùng tiêu đề và nội dung ĐANG trên trang (chưa cần
+ * lưu), để xem thư hiển thị thế nào trước khi bật. Thư thử ghi rõ là thư thử.
+ */
+export async function sendCustomFormReceiptTest(id: string, input: { subject: unknown; body: unknown }): Promise<CustomFormAdminResult> {
+  const op = await operator();
+  if (!op) return { ok: false, message: DENIED };
+  if (!op.adminEmail) return { ok: false, message: "Tài khoản của bạn chưa có email để nhận thư thử." };
+  const subject = String(input?.subject ?? "").trim();
+  const body = String(input?.body ?? "").trim();
+  if (!body) return { ok: false, message: "Chưa có nội dung thư." };
+  if (subject.length > CUSTOM_FORM_LIMITS.autoReplySubject || body.length > CUSTOM_FORM_LIMITS.autoReplyBody) {
+    return { ok: false, message: "Tiêu đề hoặc nội dung thư dài quá giới hạn." };
+  }
+  try {
+    const form = await readForm(op.client, id);
+    if (!form) return { ok: false, message: "Không tìm thấy form." };
+    const sent = await countSentInWindow(op.client, Date.now());
+    if (sent === null) return { ok: false, message: "Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi." };
+    if (sent >= DAILY_EMAIL_LIMIT) return { ok: false, message: "Đã chạm hạn mức thư trong 24 giờ. Thử lại sau vài giờ." };
+    const result = await sendCustomFormReceipt({ toEmail: op.adminEmail, formId: form.id, formTitle: form.title, subject, body, test: true });
+    if (result.skipped) return { ok: false, message: "Môi trường này đang tắt gửi thư — thư thử chưa đi." };
+    if (!result.ok) return { ok: false, message: "Gửi thư thử không thành công. Xem Vận hành → Mail → Nhật ký gửi." };
+    return { ok: true, message: `Đã gửi thư thử tới ${op.adminEmail}.` };
+  } catch (error) {
+    log("test receipt failed", error);
     return { ok: false, message: SAFE_ERROR };
   }
 }
@@ -312,7 +362,7 @@ export type PublicCustomForm =
 async function readPublicRow(client: ServiceClient, code: string): Promise<Row | null> {
   const { data, error } = await client
     .from("custom_forms")
-    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,fields")
+    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields")
     .eq("public_code", code)
     .maybeSingle();
   if (error) throw error;
@@ -345,6 +395,48 @@ export async function getPublicCustomForm(code: string, nowMs = Date.now()): Pro
 }
 
 const DEFAULT_THANKS = "Đã nhận câu trả lời của bạn. Cảm ơn bạn đã dành thời gian!";
+
+/**
+ * Thư tự động sau một lần gửi đã GHI xong (BTC 15/10/2026). Không bao giờ làm hỏng lần gửi: câu trả
+ * lời đã lưu, lỗi thư chỉ ghi log. Ai cũng gõ được email bất kỳ vào form công khai, nên trước khi gửi
+ * kiểm hai trần: trần chung của hệ thống (chừa AUTO_REPLY_SYSTEM_HEADROOM thư cho thư mời, xác nhận
+ * lịch…) và trần riêng của form — chạm trần thì bỏ qua thư, không bỏ qua câu trả lời.
+ */
+async function sendReceiptAfterSubmit(client: ServiceClient, row: Row, fields: CustomFormField[], answers: CustomFormAnswers, nowMs: number): Promise<void> {
+  try {
+    if (row.auto_reply !== true) return;
+    const body = String(row.auto_reply_body ?? "").trim();
+    const field = replyEmailField(fields);
+    const to = field ? answers[field.id] : undefined;
+    if (!body || typeof to !== "string" || !to) return;
+    const sent = await countSentInWindow(client, nowMs);
+    if (sent === null || sent >= DAILY_EMAIL_LIMIT - AUTO_REPLY_SYSTEM_HEADROOM) {
+      log("auto reply skipped: system quota", sent);
+      return;
+    }
+    const { count, error } = await client
+      .from("outbound_emails")
+      .select("id", { count: "exact", head: true })
+      .eq("kind", "custom_form_receipt")
+      .eq("related_id", String(row.id))
+      .in("status", ["sent", "queued"])
+      .gte("created_at", new Date(nowMs - QUOTA_WINDOW_MS).toISOString());
+    if (error || Number(count ?? 0) >= AUTO_REPLY_DAILY_CAP_PER_FORM) {
+      log("auto reply skipped: form cap", error ?? count);
+      return;
+    }
+    const result = await sendCustomFormReceipt({
+      toEmail: to,
+      formId: String(row.id),
+      formTitle: String(row.title ?? ""),
+      subject: String(row.auto_reply_subject ?? ""),
+      body
+    });
+    if (!result.ok) log("auto reply failed", result.reason);
+  } catch (error) {
+    log("auto reply crashed", error);
+  }
+}
 
 /**
  * Nhận một lần gửi. Kiểm lại MỌI thứ ở máy chủ theo định nghĩa đã lưu (không theo cái trang gửi kèm):
@@ -394,6 +486,7 @@ export async function submitPublicCustomForm(
       }
       throw error;
     }
+    await sendReceiptAfterSubmit(client, row, fields, checked.answers, nowMs);
     return { ok: true, message: thanks, errors: {} };
   } catch (error) {
     log("submit failed", error);

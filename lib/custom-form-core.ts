@@ -19,10 +19,12 @@ export const CUSTOM_FORM_FIELD_TYPES = [
   "date",
   "number",
   "url",
+  "file_link",
   "single_choice",
   "multi_choice",
   "dropdown",
-  "section"
+  "section",
+  "page_break"
 ] as const;
 export type CustomFormFieldType = (typeof CUSTOM_FORM_FIELD_TYPES)[number];
 
@@ -36,11 +38,20 @@ export const FIELD_TYPE_LABELS: Record<CustomFormFieldType, string> = {
   date: "Ngày (DD/MM/YYYY)",
   number: "Số",
   url: "Link (http/https)",
+  file_link: "Tải file (gửi link)",
   single_choice: "Chọn một",
   multi_choice: "Chọn nhiều",
   dropdown: "Danh sách thả xuống",
-  section: "Tiêu đề / đoạn giới thiệu"
+  section: "Tiêu đề / đoạn giới thiệu",
+  page_break: "Ngắt trang"
 };
+
+/**
+ * Ô "tải file" không nhận file (BTC 15/10/2026): form giữ nhẹ, CRM không phải lưu và quét file lạ.
+ * Người điền tải file lên kho của họ, bật chia sẻ công khai, rồi dán link — câu này dạy đúng việc đó.
+ */
+export const FILE_LINK_HINT =
+  "Tải file lên Google Drive (hoặc OneDrive, Dropbox), bật chia sẻ “Bất kỳ ai có đường liên kết đều xem được”, rồi dán link vào đây.";
 
 /** Gợi ý định dạng hiện dưới ô nhập, để người điền biết luật trước khi bị báo lỗi. */
 export const FIELD_FORMAT_HINTS: Partial<Record<CustomFormFieldType, string>> = {
@@ -48,7 +59,8 @@ export const FIELD_FORMAT_HINTS: Partial<Record<CustomFormFieldType, string>> = 
   student_id: "Chỉ gồm chữ số, 8–12 ký tự",
   citizen_id: "Đúng 12 chữ số",
   date: "Định dạng DD/MM/YYYY, ví dụ 05/09/2004",
-  url: "Bắt đầu bằng http:// hoặc https://"
+  url: "Bắt đầu bằng http:// hoặc https://",
+  file_link: FILE_LINK_HINT
 };
 
 export const CHOICE_TYPES: ReadonlySet<CustomFormFieldType> = new Set<CustomFormFieldType>(["single_choice", "multi_choice", "dropdown"]);
@@ -65,8 +77,18 @@ export const CUSTOM_FORM_LIMITS = {
   shortText: 500,
   longText: 5000,
   url: 1000,
-  number: 30
+  number: 30,
+  autoReplySubject: 200,
+  autoReplyBody: 5000
 } as const;
+
+/**
+ * Trần thư tự động của MỘT form trong 24 giờ, và phần chừa lại dưới trần chung 1.000 thư/24 giờ.
+ * Ai cũng gõ được email bất kỳ vào form công khai: không có trần riêng thì một người gửi form liên
+ * tục với email khác nhau sẽ đốt hết hạn mức của cả hệ thống (thư mời, xác nhận lịch…).
+ */
+export const AUTO_REPLY_DAILY_CAP_PER_FORM = 300;
+export const AUTO_REPLY_SYSTEM_HEADROOM = 40;
 
 export const CUSTOM_FORM_STATUSES = ["draft", "published", "closed"] as const;
 export type CustomFormStatus = (typeof CUSTOM_FORM_STATUSES)[number];
@@ -110,8 +132,9 @@ export function newFieldId(random: () => number = Math.random): string {
   return `f_${out.slice(0, 8)}`;
 }
 
+/** Khối tiêu đề và ngắt trang chỉ để trình bày, không nhận câu trả lời. */
 export function isQuestion(field: Pick<CustomFormField, "type">): boolean {
-  return field.type !== "section";
+  return field.type !== "section" && field.type !== "page_break";
 }
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -140,7 +163,8 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
     if (!FIELD_ID.test(id) || ids.has(id)) return { ok: false, error: `${fieldName(draft, i)}: mã trường không hợp lệ — tải lại trang rồi thử lại.` };
     ids.add(id);
     if (!CUSTOM_FORM_FIELD_TYPES.includes(type)) return { ok: false, error: `${fieldName(draft, i)}: loại trường không hợp lệ.` };
-    if (!label) return { ok: false, error: `${fieldName(draft, i)}: chưa có nội dung câu hỏi / tiêu đề.` };
+    // Ngắt trang được để trống tiêu đề (trang sau không có tên riêng).
+    if (!label && type !== "page_break") return { ok: false, error: `${fieldName(draft, i)}: chưa có nội dung câu hỏi / tiêu đề.` };
     if (label.length > CUSTOM_FORM_LIMITS.label) return { ok: false, error: `${fieldName(draft, i)}: câu hỏi dài quá ${CUSTOM_FORM_LIMITS.label} ký tự.` };
     if (help.length > CUSTOM_FORM_LIMITS.help) return { ok: false, error: `${fieldName(draft, i)}: phần mô tả dài quá ${CUSTOM_FORM_LIMITS.help} ký tự.` };
     let options: string[] = [];
@@ -162,7 +186,7 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
       type,
       label,
       help,
-      required: type === "section" ? false : item.required === true,
+      required: isQuestion({ type }) ? item.required === true : false,
       hidden: item.hidden === true,
       options
     });
@@ -187,6 +211,9 @@ export type CustomFormSettingsInput = {
   programId: unknown;
   thankYou: unknown;
   onePerEmail: unknown;
+  autoReply?: unknown;
+  autoReplySubject?: unknown;
+  autoReplyBody?: unknown;
   /** ISO đã đọc theo giờ Việt Nam (parseVietnamDateTime), hoặc null. */
   opensAt: string | null;
   closesAt: string | null;
@@ -198,9 +225,15 @@ export type CustomFormSettings = {
   programId: string | null;
   thankYou: string;
   onePerEmail: boolean;
+  /** Thư tự động gửi người điền ngay sau khi gửi form (BTC 15/10/2026). */
+  autoReply: boolean;
+  autoReplySubject: string;
+  autoReplyBody: string;
   opensAt: string | null;
   closesAt: string | null;
 };
+
+const truthy = (value: unknown) => value === true || value === "on" || value === "true";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -209,11 +242,15 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
   const description = String(input.description ?? "").replace(/\r\n/g, "\n").trim();
   const thankYou = String(input.thankYou ?? "").replace(/\r\n/g, "\n").trim();
   const programRaw = text(input.programId);
+  const autoReplySubject = text(input.autoReplySubject).replace(/[\r\n]+/g, " ");
+  const autoReplyBody = String(input.autoReplyBody ?? "").replace(/\r\n/g, "\n").trim();
   if (!title) return { ok: false, error: "Form cần có tiêu đề." };
   if (title.length > CUSTOM_FORM_LIMITS.title) return { ok: false, error: `Tiêu đề tối đa ${CUSTOM_FORM_LIMITS.title} ký tự.` };
   if (description.length > CUSTOM_FORM_LIMITS.description) return { ok: false, error: `Phần giới thiệu tối đa ${CUSTOM_FORM_LIMITS.description} ký tự.` };
   if (thankYou.length > CUSTOM_FORM_LIMITS.thankYou) return { ok: false, error: `Lời cảm ơn tối đa ${CUSTOM_FORM_LIMITS.thankYou} ký tự.` };
   if (programRaw && !UUID.test(programRaw)) return { ok: false, error: "Chương trình không hợp lệ." };
+  if (autoReplySubject.length > CUSTOM_FORM_LIMITS.autoReplySubject) return { ok: false, error: `Tiêu đề thư tự động tối đa ${CUSTOM_FORM_LIMITS.autoReplySubject} ký tự.` };
+  if (autoReplyBody.length > CUSTOM_FORM_LIMITS.autoReplyBody) return { ok: false, error: `Nội dung thư tự động tối đa ${CUSTOM_FORM_LIMITS.autoReplyBody} ký tự.` };
   if (input.opensAt && input.closesAt && Date.parse(input.closesAt) <= Date.parse(input.opensAt)) {
     return { ok: false, error: "Giờ đóng phải sau giờ mở." };
   }
@@ -224,7 +261,10 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
       description,
       programId: programRaw || null,
       thankYou,
-      onePerEmail: input.onePerEmail === true || input.onePerEmail === "on" || input.onePerEmail === "true",
+      onePerEmail: truthy(input.onePerEmail),
+      autoReply: truthy(input.autoReply),
+      autoReplySubject,
+      autoReplyBody,
       opensAt: input.opensAt,
       closesAt: input.closesAt
     }
@@ -236,12 +276,46 @@ export function dedupeEmailField(fields: CustomFormField[]): CustomFormField | n
   return fields.find((f) => f.type === "email" && f.required && !f.hidden) ?? null;
 }
 
+/** Thư tự động gửi tới đâu: cùng trường Email với luật chặn trùng — Email bắt buộc đầu tiên đang hiện. */
+export const replyEmailField = dedupeEmailField;
+
 /** Luật giữa cài đặt và danh sách trường. null = hợp lệ. */
-export function checkDefinitionRules(fields: CustomFormField[], settings: Pick<CustomFormSettings, "onePerEmail">): string | null {
+export function checkDefinitionRules(
+  fields: CustomFormField[],
+  settings: Pick<CustomFormSettings, "onePerEmail"> & Partial<Pick<CustomFormSettings, "autoReply" | "autoReplyBody">>
+): string | null {
   if (settings.onePerEmail && !dedupeEmailField(fields)) {
     return "Đang bật “Mỗi email chỉ gửi một lần” nên form cần một trường Email bắt buộc (không ẩn).";
   }
+  if (settings.autoReply) {
+    if (!replyEmailField(fields)) return "Đang bật thư tự động nên form cần một trường Email bắt buộc (không ẩn) — thư gửi tới email người điền nhập ở đó.";
+    if (!String(settings.autoReplyBody ?? "").trim()) return "Đang bật thư tự động nhưng chưa có nội dung thư.";
+  }
   return null;
+}
+
+export type CustomFormPage = { title: string; help: string; fields: CustomFormField[] };
+
+/**
+ * Chia form thành từng trang tại các “Ngắt trang” đang hiện (BTC 15/10/2026). Tiêu đề và mô tả của
+ * một ngắt trang là của trang SAU nó. Ngắt trang ở đầu/cuối hay hai ngắt liền nhau không sinh trang
+ * rỗng — người điền không bao giờ phải bấm “Tiếp” qua một trang trống. Form không có ngắt trang là
+ * một trang.
+ */
+export function splitPages(fields: CustomFormField[]): CustomFormPage[] {
+  const pages: CustomFormPage[] = [];
+  let current: CustomFormPage = { title: "", help: "", fields: [] };
+  for (const field of fields) {
+    if (field.hidden) continue;
+    if (field.type === "page_break") {
+      if (current.fields.length) pages.push(current);
+      current = { title: field.label, help: field.help, fields: [] };
+      continue;
+    }
+    current.fields.push(field);
+  }
+  if (current.fields.length || !pages.length) pages.push(current);
+  return pages;
 }
 
 /** Công khai được khi có ít nhất một câu hỏi đang hiện. */
@@ -332,7 +406,8 @@ function normalizeAnswer(field: CustomFormField, values: string[]): { value: Cus
     }
     case "number":
       return value.length <= CUSTOM_FORM_LIMITS.number && /^-?\d+([.,]\d+)?$/.test(value) ? { value } : { error: "Vui lòng nhập một con số." };
-    case "url": {
+    case "url":
+    case "file_link": {
       if (value.length > CUSTOM_FORM_LIMITS.url) return { error: `Link tối đa ${CUSTOM_FORM_LIMITS.url} ký tự.` };
       try {
         const url = new URL(value);

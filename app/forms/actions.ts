@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { CustomFormAdminResult, CustomFormSavePayload } from "@/lib/custom-form-action-types";
 import { CUSTOM_FORMS_PATH } from "@/lib/custom-form-core";
-import { createCustomForm, saveCustomForm, setCustomFormStatus } from "@/lib/custom-forms";
+import { createCustomForm, saveCustomForm, sendCustomFormReceiptTest, setCustomFormStatus } from "@/lib/custom-forms";
 
 /**
  * Lệnh của trình tạo form (BTC 15/10/2026). Mỗi lệnh tự kiểm quyền ở lib/custom-forms.ts — nút ẩn
@@ -25,6 +25,11 @@ export async function saveCustomFormAction(id: string, payload: CustomFormSavePa
     revalidatePath(`${CUSTOM_FORMS_PATH}/${formId}`);
   }
   return result;
+}
+
+/** "Gửi thử cho tôi" ở phần thư tự động: gửi cho chính người đang bấm, với chữ đang trên trang. */
+export async function sendCustomFormReceiptTestAction(id: string, input: { subject: string; body: string }): Promise<CustomFormAdminResult> {
+  return sendCustomFormReceiptTest(String(id ?? ""), input ?? { subject: "", body: "" });
 }
 
 export async function setCustomFormStatusAction(id: string, status: string): Promise<CustomFormAdminResult> {

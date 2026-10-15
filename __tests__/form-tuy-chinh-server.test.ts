@@ -16,8 +16,10 @@ import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(), getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
+vi.mock("@/lib/email", () => ({ sendCustomFormReceipt: vi.fn(async () => ({ ok: true, skipped: false })) }));
 
 import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { sendCustomFormReceipt } from "@/lib/email";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import {
   createCustomForm,
@@ -25,6 +27,7 @@ import {
   listCustomFormResponses,
   listCustomForms,
   saveCustomForm,
+  sendCustomFormReceiptTest,
   setCustomFormStatus,
   submitPublicCustomForm
 } from "@/lib/custom-forms";
@@ -67,6 +70,7 @@ function seed(status = "published", extra: Record<string, unknown> = {}) {
     }
   ];
   db.tables.custom_form_responses = [];
+  db.tables.outbound_emails = [];
   db.tables.programs = [{ id: PROGRAM, code: "CEP", name: "Career Experience Program" }];
 }
 
@@ -125,6 +129,9 @@ describe("2. tạo, lưu, đổi trạng thái", () => {
     programId: PROGRAM,
     thankYou: "",
     onePerEmail: true,
+    autoReply: false,
+    autoReplySubject: "",
+    autoReplyBody: "",
     opensAt: "2026-10-16T08:00",
     closesAt: "2026-10-20T23:59",
     fields: FIELDS,
@@ -150,7 +157,21 @@ describe("2. tạo, lưu, đổi trạng thái", () => {
     expect(writes[0].kind).toBe("update");
     expect(JSON.parse(writes[0].filters)).toEqual([{ kind: "eq", column: "id", value: FORM }]);
     expect(Object.keys(writes[0].rows[0]).sort()).toEqual(
-      ["closes_at", "description", "fields", "one_per_email", "opens_at", "program_id", "thank_you", "title", "updated_at", "updated_by"].sort()
+      [
+        "auto_reply",
+        "auto_reply_body",
+        "auto_reply_subject",
+        "closes_at",
+        "description",
+        "fields",
+        "one_per_email",
+        "opens_at",
+        "program_id",
+        "thank_you",
+        "title",
+        "updated_at",
+        "updated_by"
+      ].sort()
     );
     expect(writes[0].rows[0]).toMatchObject({
       title: "Tuyển mentee Job Shadowing 2026",
@@ -290,6 +311,110 @@ describe("3. gửi công khai /f/<mã>", () => {
     const draft = await getPublicCustomForm(CODE, NOW);
     expect(draft).toEqual({ state: "ready", availability: "draft", title: "", description: "", fields: [], opensAt: null, closesAt: null });
     expect(await getPublicCustomForm("sai", NOW)).toEqual({ state: "invalid" });
+  });
+});
+
+describe("3b. thư tự động gửi người điền (BTC 15/10/2026)", () => {
+  const BODY = "Chào bạn,\n\nBan tổ chức đã nhận đơn Job Shadowing của bạn.";
+  const withReply = (extra: Record<string, unknown> = {}) =>
+    seed("published", { auto_reply: true, auto_reply_subject: "Đã nhận đơn Job Shadowing", auto_reply_body: BODY, ...extra });
+  const submit = (values: Record<string, unknown> = VALID, consent: unknown = true, trap: unknown = "") =>
+    submitPublicCustomForm(CODE, { values, consent, trap }, NOW);
+  const sentRows = (n: number, extra: Record<string, unknown> = {}) =>
+    Array.from({ length: n }, (_, i) => ({ id: `o${i}`, kind: "mentee_session_invite", status: "sent", created_at: new Date(NOW - 3600_000).toISOString(), related_id: null, ...extra }));
+
+  it("bật thư: sau khi GHI xong, gửi đúng MỘT thư tới email người điền (đã chuẩn hoá), đúng form, đúng chữ BTC soạn", async () => {
+    withReply();
+    expect((await submit()).ok).toBe(true);
+    expect(db.writes.filter((w) => w.table === "custom_form_responses")).toHaveLength(1);
+    expect(vi.mocked(sendCustomFormReceipt)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendCustomFormReceipt).mock.calls[0][0]).toEqual({
+      toEmail: "an.nguyen@gmail.com",
+      formId: FORM,
+      formTitle: "Tuyển mentee Job Shadowing",
+      subject: "Đã nhận đơn Job Shadowing",
+      body: BODY
+    });
+  });
+
+  it("tắt thư, hay lần gửi không được ghi (sai định dạng, thiếu đồng ý, ô bẫy, trùng email): KHÔNG gửi thư", async () => {
+    // Tắt thư nhưng tiêu đề và nội dung vẫn còn (BTC soạn rồi bỏ tick): không được gửi.
+    seed("published", { auto_reply: false, auto_reply_subject: "Đã nhận", auto_reply_body: BODY });
+    expect((await submit()).ok).toBe(true);
+    withReply();
+    await submit({ ...VALID, f_mssvaaaa: "1" });
+    await submit(VALID, false);
+    await submit(VALID, true, "bot");
+    db.errors["insert:custom_form_responses"] = { code: "23505", message: "duplicate" };
+    await submit();
+    expect(vi.mocked(sendCustomFormReceipt)).not.toHaveBeenCalled();
+  });
+
+  it("chạm trần chung của hệ thống (chừa 40 thư cho thư khác): bỏ qua thư, câu trả lời VẪN được ghi", async () => {
+    withReply();
+    db.tables.outbound_emails = sentRows(960);
+    expect((await submit()).ok).toBe(true);
+    expect(db.writes.filter((w) => w.table === "custom_form_responses")).toHaveLength(1);
+    expect(vi.mocked(sendCustomFormReceipt)).not.toHaveBeenCalled();
+  });
+
+  it("form đã gửi 300 thư tự động trong 24 giờ: bỏ qua thư; thư của form khác hay quá 24 giờ thì không tính", async () => {
+    withReply();
+    db.tables.outbound_emails = [
+      ...sentRows(299, { kind: "custom_form_receipt", related_id: FORM }),
+      ...sentRows(50, { kind: "custom_form_receipt", related_id: "99999999-2222-4333-8444-555555555555" }),
+      ...sentRows(50, { kind: "custom_form_receipt", related_id: FORM, created_at: new Date(NOW - 25 * 3600_000).toISOString() })
+    ].map((r, i) => ({ ...r, id: `o${i}` }));
+    await submit();
+    expect(vi.mocked(sendCustomFormReceipt)).toHaveBeenCalledTimes(1);
+    vi.mocked(sendCustomFormReceipt).mockClear();
+    db.tables.outbound_emails.push({ id: "o-them", kind: "custom_form_receipt", status: "sent", created_at: new Date(NOW - 60_000).toISOString(), related_id: FORM });
+    await submit({ ...VALID, f_emailaaa: "khac@x.vn" });
+    expect(vi.mocked(sendCustomFormReceipt)).not.toHaveBeenCalled();
+  });
+
+  it("gửi thư lỗi hay văng: lần gửi form vẫn thành công", async () => {
+    withReply();
+    vi.mocked(sendCustomFormReceipt).mockRejectedValueOnce(new Error("mạng"));
+    expect(await submit()).toEqual({ ok: true, message: "Cảm ơn bạn!", errors: {} });
+  });
+
+  it("lưu: bật thư mà chưa có nội dung, hay chưa có trường Email bắt buộc → KHÔNG ghi; đủ thì ghi đúng ba cột thư", async () => {
+    const base = {
+      title: "Form",
+      description: "",
+      programId: "",
+      thankYou: "",
+      onePerEmail: false,
+      opensAt: "",
+      closesAt: "",
+      fields: FIELDS
+    };
+    expect((await saveCustomForm(FORM, { ...base, autoReply: true, autoReplySubject: "", autoReplyBody: "  " })).message).toContain("chưa có nội dung");
+    expect((await saveCustomForm(FORM, { ...base, autoReply: true, autoReplySubject: "", autoReplyBody: BODY, fields: [FIELDS[0]] })).message).toContain(
+      "trường Email bắt buộc"
+    );
+    expect(db.writes).toEqual([]);
+    expect((await saveCustomForm(FORM, { ...base, autoReply: true, autoReplySubject: " Đã nhận ", autoReplyBody: `${BODY}\r\n` })).ok).toBe(true);
+    expect(db.writes[0].rows[0]).toMatchObject({ auto_reply: true, auto_reply_subject: "Đã nhận", auto_reply_body: BODY });
+  });
+
+  it("gửi thử: tới email của CHÍNH người bấm, đánh dấu thư thử, dùng chữ đang trên trang; không quyền hay thiếu nội dung → không gửi", async () => {
+    const result = await sendCustomFormReceiptTest(FORM, { subject: "Tiêu đề nháp", body: "Nội dung nháp" });
+    expect(result).toEqual({ ok: true, message: "Đã gửi thư thử tới a@x.vn." });
+    expect(vi.mocked(sendCustomFormReceipt).mock.calls[0][0]).toEqual({
+      toEmail: "a@x.vn",
+      formId: FORM,
+      formTitle: "Tuyển mentee Job Shadowing",
+      subject: "Tiêu đề nháp",
+      body: "Nội dung nháp",
+      test: true
+    });
+    vi.mocked(sendCustomFormReceipt).mockClear();
+    expect((await sendCustomFormReceiptTest(FORM, { subject: "", body: "  " })).ok).toBe(false);
+    asRole("viewer");
+    expect((await sendCustomFormReceiptTest(FORM, { subject: "", body: "x" })).ok).toBe(false);
+    expect(vi.mocked(sendCustomFormReceipt)).not.toHaveBeenCalled();
   });
 });
 

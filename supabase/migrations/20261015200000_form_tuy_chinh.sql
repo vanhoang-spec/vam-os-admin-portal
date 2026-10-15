@@ -12,6 +12,10 @@
 --                            chuẩn hoá khi form bật "Mỗi email chỉ gửi một lần"; chỉ mục duy nhất
 --                            (form_id, dedupe_key) là nơi phân xử hai lần gửi cùng lúc.
 --
+-- Thêm (BTC 15/10/2026, tối): ô "tải file" là trường gửi LINK (form nhẹ, CRM không lưu file); ngắt
+-- trang; thư tự động gửi người điền (cột auto_reply*, loại thư 'custom_form_receipt'). Hai thứ đầu
+-- chỉ là loại trường trong fields jsonb, không cần cột.
+--
 -- Chỉ máy chủ (service_role) đọc/ghi, sau khi tự kiểm quyền. Bảng có họ tên, email, SĐT, có thể
 -- có CCCD và ngày sinh: anon và authenticated không có quyền gì (khoá công khai nằm sẵn trong mã
 -- trang web, ai cũng lấy được). Câu trả lời chỉ thêm, không sửa, không xoá.
@@ -28,6 +32,10 @@ create table if not exists public.custom_forms (
   closes_at timestamptz,
   thank_you text not null default '' check (char_length(thank_you) <= 1000),
   one_per_email boolean not null default true,
+  -- Thư tự động gửi người điền ngay sau khi gửi form; tiêu đề và nội dung do BTC/Support team soạn.
+  auto_reply boolean not null default false,
+  auto_reply_subject text not null default '' check (char_length(auto_reply_subject) <= 200),
+  auto_reply_body text not null default '' check (char_length(auto_reply_body) <= 5000),
   fields jsonb not null default '[]'::jsonb
     check (jsonb_typeof(fields) = 'array' and jsonb_array_length(fields) <= 60),
   created_by uuid references public.admin_users(id),
@@ -65,9 +73,35 @@ revoke all on public.custom_form_responses from public, anon, authenticated, ser
 grant select, insert, update on public.custom_forms to service_role;
 grant select, insert on public.custom_form_responses to service_role;
 
+-- Loại thư mới 'custom_form_receipt' (thư tự động sau khi gửi form), theo lối cộng thêm: đọc định
+-- nghĩa đang có rồi nối thêm — viết đè cả danh sách là để sót loại cũ và lặng lẽ chặn thư loại đó.
+do $kind$
+declare
+  v_existing text;
+  v_rebuilt text;
+begin
+  select pg_get_constraintdef(c.oid) into v_existing
+    from pg_constraint c
+   where c.conrelid = 'public.outbound_emails'::regclass and c.conname = 'outbound_emails_kind_check';
+  if v_existing is null then
+    raise exception 'SCHEMA_CONTRACT_VIOLATION: không thấy outbound_emails_kind_check';
+  end if;
+  if position(quote_literal('custom_form_receipt') in v_existing) > 0 then
+    return;
+  end if;
+  v_rebuilt := regexp_replace(v_existing, '(\]\)+)$', ', ''custom_form_receipt''::text\1');
+  if v_rebuilt = v_existing then
+    raise exception 'SCHEMA_CONTRACT_VIOLATION: không tìm thấy đuôi mảng của outbound_emails_kind_check: %', v_existing;
+  end if;
+  execute 'alter table public.outbound_emails drop constraint outbound_emails_kind_check';
+  execute 'alter table public.outbound_emails add constraint outbound_emails_kind_check ' || replace(v_rebuilt, 'CHECK ', 'check ');
+end
+$kind$;
+
 do $check$
 declare
   t text;
+  v_def text;
 begin
   foreach t in array array['custom_forms', 'custom_form_responses'] loop
     if to_regclass('public.' || t) is null then
@@ -96,6 +130,16 @@ begin
   end if;
   if to_regclass('public.custom_form_responses_dedupe_uniq') is null then
     raise exception 'SELF_CHECK: thiếu chỉ mục chặn gửi trùng';
+  end if;
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'custom_forms' and column_name = 'auto_reply_body') then
+    raise exception 'SELF_CHECK: custom_forms thiếu cột thư tự động';
+  end if;
+  select pg_get_constraintdef(c.oid) into v_def from pg_constraint c
+   where c.conrelid = 'public.outbound_emails'::regclass and c.conname = 'outbound_emails_kind_check';
+  if position(quote_literal('custom_form_receipt') in coalesce(v_def, '')) = 0
+     or position(quote_literal('mentee_exemption_confirm') in coalesce(v_def, '')) = 0 then
+    raise exception 'SELF_CHECK: outbound_emails_kind_check thiếu loại thư';
   end if;
   raise notice 'Form tùy chỉnh: sẵn sàng';
 end

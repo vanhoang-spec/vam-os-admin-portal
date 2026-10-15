@@ -17,6 +17,7 @@ import {
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
   buildMatchingRound2InviteEmail,
+  buildCustomFormReceiptEmail,
   buildMenteeExemptionConfirmEmail,
   markAsTestEmail,
   buildMenteeSessionInviteEmail,
@@ -1222,6 +1223,22 @@ export async function sendMenteeExemptionConfirm(input: {
     input.token ? outgoing : markAsTestEmail(outgoing, link),
     input.exemptionId ? { table: "mentee_exemptions", id: input.exemptionId } : null
   );
+}
+
+/**
+ * Thư tự động sau khi gửi form tùy chỉnh (BTC 15/10/2026). Ghi sổ theo FORM (related custom_forms)
+ * để đếm được trần thư tự động của từng form. Hạn mức kiểm ở lib/custom-forms.ts trước khi gọi.
+ */
+export async function sendCustomFormReceipt(input: {
+  toEmail: string;
+  formId: string;
+  formTitle: string;
+  subject: string;
+  body: string;
+  test?: boolean;
+}): Promise<SendEmailResult> {
+  const built = buildCustomFormReceiptEmail({ formTitle: input.formTitle, subject: input.subject, body: input.body, test: input.test });
+  return deliver("custom_form_receipt", { ...built, to: input.toEmail }, { table: "custom_forms", id: input.formId });
 }
 
 /** Thư xác nhận ca phỏng vấn của mentee — sau khi đặt, và sau khi đổi. */

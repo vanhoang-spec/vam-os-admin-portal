@@ -18,7 +18,7 @@ import {
   type CustomFormStatus
 } from "@/lib/custom-form-core";
 import { combineVietnamDateTime, maskVietnamDate, maskVietnamTime, splitVietnamDateTime } from "@/lib/event-datetime";
-import { saveCustomFormAction, setCustomFormStatusAction } from "../actions";
+import { saveCustomFormAction, sendCustomFormReceiptTestAction, setCustomFormStatusAction } from "../actions";
 
 const BOX =
   "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -37,6 +37,9 @@ export type BuilderForm = {
   closesAt: string | null;
   thankYou: string;
   onePerEmail: boolean;
+  autoReply: boolean;
+  autoReplySubject: string;
+  autoReplyBody: string;
   fields: CustomFormField[];
 };
 
@@ -67,6 +70,9 @@ export function FormBuilder({
   const [programId, setProgramId] = useState(form.programId ?? "");
   const [thankYou, setThankYou] = useState(form.thankYou);
   const [onePerEmail, setOnePerEmail] = useState(form.onePerEmail);
+  const [autoReply, setAutoReply] = useState(form.autoReply);
+  const [autoReplySubject, setAutoReplySubject] = useState(form.autoReplySubject);
+  const [autoReplyBody, setAutoReplyBody] = useState(form.autoReplyBody);
   const [opensDate, setOpensDate] = useState(opens.date);
   const [opensTime, setOpensTime] = useState(opens.time);
   const [closesDate, setClosesDate] = useState(closes.date);
@@ -80,6 +86,12 @@ export function FormBuilder({
   const [copied, setCopied] = useState(false);
 
   const locked = responseCount > 0;
+  // Số thứ tự chỉ đếm câu hỏi: khối tiêu đề và ngắt trang không chiếm số.
+  const questionNumber = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const f of fields) if (isQuestion(f)) out.set(f.id, out.size + 1);
+    return out;
+  }, [fields]);
   // Câu hỏi đã có câu trả lời: theo bản đã lưu lúc mở trang.
   const lockedIds = useMemo(() => new Set(locked ? form.fields.filter(isQuestion).map((f) => f.id) : []), [locked, form.fields]);
   const lockedOptions = useMemo(() => new Map(form.fields.map((f) => [f.id, f.options])), [form.fields]);
@@ -169,6 +181,9 @@ export function FormBuilder({
           programId,
           thankYou,
           onePerEmail,
+          autoReply,
+          autoReplySubject,
+          autoReplyBody,
           opensAt,
           closesAt,
           fields: fields.map(({ optionsText, ...f }) => ({ ...f, options: CHOICE_TYPES.has(f.type) ? lines(optionsText) : [] }))
@@ -176,6 +191,7 @@ export function FormBuilder({
       () => setDirty(false)
     );
   };
+  const testReceipt = () => void run(() => sendCustomFormReceiptTestAction(form.id, { subject: autoReplySubject, body: autoReplyBody }));
   const changeStatus = (next: CustomFormStatus) => void run(() => setCustomFormStatusAction(form.id, next), () => setStatus(next));
   const copy = async () => {
     try {
@@ -306,6 +322,53 @@ export function FormBuilder({
               form rồi”, câu trả lời cũ giữ nguyên.
             </span>
           </label>
+          <div className="grid gap-2 rounded-md border border-vam-line p-3" data-testid="auto-reply">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                data-testid="auto-reply-toggle"
+                className="mt-0.5 h-4 w-4"
+                checked={autoReply}
+                onChange={(e) => {
+                  setAutoReply(e.target.checked);
+                  touch();
+                }}
+              />
+              <span>
+                <span className="font-medium">Gửi thư tự động cho người điền</span> — ngay sau khi bấm Gửi, tới email người điền nhập ở trường Email
+                bắt buộc đầu tiên của form.
+              </span>
+            </label>
+            {autoReply ? (
+              <>
+                <input
+                  className={BOX}
+                  aria-label="Tiêu đề thư tự động"
+                  maxLength={200}
+                  placeholder={`Đã nhận câu trả lời: ${title || "tên form"}`}
+                  value={autoReplySubject}
+                  onChange={edit(setAutoReplySubject)}
+                />
+                <textarea
+                  className={BOX}
+                  rows={6}
+                  aria-label="Nội dung thư tự động"
+                  placeholder={"Chào bạn,\n\nBan tổ chức đã nhận câu trả lời của bạn. …"}
+                  value={autoReplyBody}
+                  onChange={edit(setAutoReplyBody)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" data-testid="test-receipt" disabled={busy} className={SMALL_BUTTON} onClick={testReceipt}>
+                    Gửi thử cho tôi
+                  </button>
+                  <span className="text-xs text-slate-500">
+                    Thư thử dùng chữ đang trên trang, gửi tới email của bạn. Mỗi form gửi tối đa 300 lá thư tự động trong 24 giờ; chữ là chữ
+                    thường, xuống dòng được giữ nguyên.
+                  </span>
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
       </Card>
 
@@ -313,11 +376,12 @@ export function FormBuilder({
         {fields.map((field, index) => {
           const fieldLocked = lockedIds.has(field.id);
           const question = isQuestion(field);
+          const pageBreak = field.type === "page_break";
           return (
-            <Card key={field.id}>
+            <Card key={field.id} className={pageBreak ? "border-dashed bg-slate-50" : undefined}>
               <div className="grid gap-2" data-field={field.id}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold uppercase text-slate-500">{question ? `Câu ${index + 1}` : "Khối tiêu đề"}</span>
+                  <span className="text-xs font-semibold uppercase text-slate-500">{question ? `Câu ${questionNumber.get(field.id)}` : pageBreak ? "Ngắt trang — phần dưới sang trang mới" : "Khối tiêu đề"}</span>
                   <select
                     aria-label="Loại trường"
                     className="rounded-md border border-vam-line bg-white px-2 py-1 text-xs"
@@ -355,8 +419,8 @@ export function FormBuilder({
                 </div>
                 <input
                   className={BOX}
-                  aria-label={question ? "Câu hỏi" : "Tiêu đề phần"}
-                  placeholder={question ? "Câu hỏi" : "Tiêu đề phần"}
+                  aria-label={question ? "Câu hỏi" : pageBreak ? "Tiêu đề trang tiếp theo" : "Tiêu đề phần"}
+                  placeholder={question ? "Câu hỏi" : pageBreak ? "Tiêu đề trang tiếp theo (không bắt buộc)" : "Tiêu đề phần"}
                   maxLength={300}
                   value={field.label}
                   onChange={(e) => updateField(field.id, { label: e.target.value })}
@@ -365,7 +429,9 @@ export function FormBuilder({
                   className={BOX}
                   rows={question ? 1 : 3}
                   aria-label="Mô tả thêm"
-                  placeholder={question ? "Mô tả thêm (không bắt buộc)" : "Đoạn giới thiệu cho phần này (không bắt buộc)"}
+                  placeholder={
+                    question ? "Mô tả thêm (không bắt buộc)" : pageBreak ? "Mô tả ngắn cho trang tiếp theo (không bắt buộc)" : "Đoạn giới thiệu cho phần này (không bắt buộc)"
+                  }
                   value={field.help}
                   onChange={(e) => updateField(field.id, { help: e.target.value })}
                 />
