@@ -16,7 +16,9 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Xác nhận tham gia Mentee · UEH Mentoring",
   robots: { index: false, follow: false },
-  referrer: "no-referrer"
+  // same-origin, không phải no-referrer: xem middleware.ts — no-referrer làm nút xác nhận hỏng ở
+  // trình duyệt gửi "Origin: null".
+  referrer: "same-origin"
 };
 
 const SUPPORT = "Cần hỗ trợ, bạn nhắn Zalo ban tổ chức 0919144638 hoặc trả lời thư mời.";

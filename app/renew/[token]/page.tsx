@@ -10,7 +10,9 @@ export const fetchCache = "force-no-store";
 export const metadata: Metadata = {
   title: "Gia hạn Mentor Season 12 — VAM",
   robots: { index: false, follow: false },
-  referrer: "no-referrer"
+  // same-origin, không phải no-referrer: xem middleware.ts — no-referrer làm nút gửi đơn hỏng ở
+  // trình duyệt gửi "Origin: null".
+  referrer: "same-origin"
 };
 
 export default async function RenewalPage({ params }: { params: Promise<{ token: string }> }) {

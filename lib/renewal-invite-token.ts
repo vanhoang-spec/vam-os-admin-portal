@@ -59,17 +59,21 @@ export const RENEWAL_GATE_FAILURE_MESSAGE =
  * cannot quietly omit one and so a test can assert them without rendering
  * anything.
  *
- *   Referrer-Policy: no-referrer   the token is IN THE URL. Without this, the
+ *   Referrer-Policy: same-origin   the token is IN THE URL. Without this, the
  *                                  full path leaks to every third-party origin
  *                                  the page ever links to or loads from, and
- *                                  into their logs.
+ *                                  into their logs. NOT no-referrer: under it a
+ *                                  spec-following browser sends "Origin: null"
+ *                                  on the form's own POST, Next 15 parses that
+ *                                  with new URL("null") and every server action
+ *                                  on the page fails (15/10/2026).
  *   Cache-Control / Pragma         a shared cache — a CDN, a corporate proxy,
  *                                  a browser back/forward store — must never
  *                                  retain a page rendered for one person's
  *                                  bearer token.
  */
 export const RENEWAL_ROUTE_HEADERS: Readonly<Record<string, string>> = Object.freeze({
-  "Referrer-Policy": "no-referrer",
+  "Referrer-Policy": "same-origin",
   "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
   Pragma: "no-cache"
 });
