@@ -472,6 +472,10 @@ const AI_TOOL_ROUTES = ["/ai"];
 // mốc đổi điểm mà Core Team dùng để xếp hạng.
 const SUBMISSION_BONUS_ROUTES = ["/admin/seasons-forms/bonus-points"];
 
+// Form tùy chỉnh (15/10/2026). Bốn vai trò của canManageCustomForms — support_team là nhóm chính
+// làm form tuyển người; reviewer và viewer thì không: câu trả lời có họ tên, email, SĐT, CCCD.
+const CUSTOM_FORM_ROUTES = ["/forms"];
+
 const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   viewer:       ["/"],
   // support_team là nhóm thật sự viết thư cho người tham gia, nên nó soạn
@@ -480,12 +484,12 @@ const EXPECTED_ROUTES: Record<CurrentAdminUser["role"], string[]> = {
   //
   // Từ 11/09/2026 support_team cũng mời reviewer và giao hồ sơ, nên thấy đúng
   // hai màn hình đó — nhưng vẫn không thấy /reviews hay /interviews.
-  support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES],
+  support_team: [...BASE_ROUTE_ARR, "/interviews/ket-qua-mentor", "/interviews/mentee-offline", "/operations/mail", "/reviews/assign-bulk", "/reviews/reviewer-pool", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...CUSTOM_FORM_ROUTES],
   reviewer:     ["/", ...HELPER_REVIEW_ROUTES],
-  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES],
+  core_team:    [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...CUSTOM_FORM_ROUTES],
   // Từ 13/10/2026 admin thấy "/admin/users": BTC giao admin đổi thành viên Core team.
-  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
-  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES],
+  admin:        [...BASE_ROUTE_ARR, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES, ...CUSTOM_FORM_ROUTES],
+  super_admin:  [...SUPER_ADMIN_BASE_ROUTES, ...OPS_ADMIN_ROUTES, ...REVIEW_ROUTES, ...STAFFING_ROUTES, ...ADMIN_TIER_ROUTES, "/admin/users", ...LOGIN_ACCOUNT_ROUTES, ...AI_TOOL_ROUTES, ...SUBMISSION_BONUS_ROUTES, ...MENTEE_SESSION_STATUS_ROUTES, ...INTERVIEW_RUBRIC_ROUTES, ...MENTOR_CONFIRMATION_ROUTES, ...CUSTOM_FORM_ROUTES],
 };
 
 function sortedRoutes(arr: string[]) {

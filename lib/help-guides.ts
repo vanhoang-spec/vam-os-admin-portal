@@ -681,6 +681,28 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     ],
     updated: "13/10/2026"
   },
+  "/forms": {
+    title: "Form tùy chỉnh",
+    summary:
+      "Tạo form như Google Form ngay trong CRM cho từng đợt (vd. tuyển mentee Job Shadowing): tự chọn câu hỏi, bắt buộc hay tùy chọn, định dạng có kiểm (MSSV, CCCD, ngày DD/MM/YYYY…). Bật công khai để có link trên tên miền của CRM; câu trả lời lưu tại đây.",
+    steps: [
+      "Bấm “Tạo form mới”. Form mới có sẵn ba câu: Họ và tên, Email, Số điện thoại.",
+      "Điền tiêu đề, giới thiệu, chọn chương trình; đặt giờ mở/đóng nếu cần (để trống = mở ngay khi công khai, không hạn).",
+      "Thêm câu hỏi: chọn loại ở cuối trang rồi bấm “+ Thêm trường”. Mỗi câu: nội dung, mô tả thêm, tích “Bắt buộc trả lời” nếu cần. Câu chọn một / chọn nhiều / danh sách thả xuống: mỗi dòng một lựa chọn. “Tiêu đề / đoạn giới thiệu” để chia form thành phần.",
+      "Bấm “Lưu form”, rồi “Xem thử form” để điền thử — bản xem thử kiểm lỗi y như form thật nhưng không ghi gì.",
+      "Bấm “Công khai form”, “Sao chép link” và gửi link cho người điền. Hết đợt thì bấm “Đóng form”.",
+      "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm và nút “Tải CSV”."
+    ],
+    notes: [
+      "Định dạng được kiểm khi người điền bấm Gửi (trên trình duyệt và lại ở máy chủ): Email đúng dạng; Số điện thoại 10 chữ số bắt đầu bằng 0 (+84 tự đổi về 0); MSSV chỉ chữ số, 8–12 ký tự; CCCD đúng 12 chữ số; Ngày đúng DD/MM/YYYY và là ngày có thật; Link bắt đầu bằng http(s). Thiếu mục bắt buộc hay sai định dạng thì không gửi được, trang báo ngay dưới mục đó.",
+      "Mỗi form tự có ô “đồng ý cho xử lý dữ liệu cá nhân” ở cuối — bắt buộc tích mới gửi được.",
+      "“Mỗi email chỉ gửi một lần” (bật sẵn): dùng trường Email bắt buộc đầu tiên; gửi lần hai bị báo “Email này đã gửi form rồi”, câu trả lời cũ giữ nguyên.",
+      "Form đã có câu trả lời: câu hỏi cũ không xoá hay đổi loại được (bấm “Ẩn” để bỏ khỏi form, dữ liệu cũ vẫn xem được); câu chọn chỉ thêm được lựa chọn mới. Sửa chữ câu hỏi và thêm câu mới vẫn được.",
+      "Chưa có trong bản này: tải file lên (dùng loại “Link” cho CV), thư tự động gửi người điền, câu hỏi rẽ nhánh, form nhiều trang.",
+      "Ai dùng được: Super admin, Admin, Core team, Support team — tạo/sửa form, xem câu trả lời và tải CSV. File có họ tên, email, SĐT, có thể có CCCD: không chia sẻ ra ngoài."
+    ],
+    updated: "15/10/2026"
+  },
   "/events": {
     title: "Sự kiện",
     summary: "Danh sách sự kiện và hoạt động của chương trình (orientation, training, networking, closing…), kèm số đăng ký và tình hình tham gia của từng buổi.",

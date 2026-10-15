@@ -33,6 +33,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     publicRoute === "mentor_mentee_pick" ||
     // Trang Support team xác nhận tham gia mentee (đặc cách) — mã riêng trong thư mời.
     publicRoute === "mentee_exemption_confirm" ||
+    // Form tùy chỉnh công khai (/f/<mã>) — người điền không có tài khoản nào.
+    publicRoute === "custom_form" ||
     publicRoute === "renewal" ||
     publicRoute === "blog"
   ) {
