@@ -119,11 +119,25 @@ function Body({ data, token }: { data: Round2PickPage; token: string }) {
           )}
           {data.closesAt ? ` Vòng 2 đóng lúc ${formatDateTime(data.closesAt)} (giờ Việt Nam).` : ""}
         </p>
+        {data.canSwap ? (
+          <p className="mt-2 text-sm text-vam-ink" data-testid="swap-hint">
+            Xem chi tiết hết các hồ sơ trong danh sách mà chưa thấy bạn phù hợp thì Anh/Chị đổi được sang {data.windowSize} hồ sơ khác
+            (nút ở cuối danh sách).
+          </p>
+        ) : null}
         <p className="mt-2 text-xs text-slate-500">
           Chọn nhầm thì bỏ chọn được trong 30 phút. Hồ sơ dưới đây chỉ dùng để chọn mentee — vui lòng không chia sẻ ra ngoài.
         </p>
       </Card>
-      <MenteeList token={token} cards={data.mentees} groups={data.poolGroups} closesAt={data.closesAt} windowSize={data.windowSize} />
+      <MenteeList
+        token={token}
+        cards={data.mentees}
+        groups={data.poolGroups}
+        closesAt={data.closesAt}
+        windowSize={data.windowSize}
+        viewedIds={data.viewedIds}
+        canSwap={data.canSwap}
+      />
     </>
   );
 }

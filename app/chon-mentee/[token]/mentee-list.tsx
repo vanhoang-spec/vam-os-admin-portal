@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui";
 import type { MenteeCard } from "@/lib/matching-round2-link-core";
-import { availableMenteesAction, menteeDetailAction, windowCardsAction } from "./actions";
+import { availableMenteesAction, menteeDetailAction, swapWindowAction, windowCardsAction } from "./actions";
 import { PickButton } from "./pick-forms";
 import { PickReport, type PickReportMessage } from "./pick-report";
+
+type WindowView = { cards: MenteeCard[]; viewedIds: string[]; canSwap: boolean };
 
 /**
  * Danh sách mentee trên trang chọn (BTC 14/10/2026).
@@ -17,7 +19,7 @@ import { PickReport, type PickReportMessage } from "./pick-report";
  */
 export const POLL_MS = 20_000;
 
-function Detail({ token, applicationId }: { token: string; applicationId: string }) {
+function Detail({ token, applicationId, onViewed }: { token: string; applicationId: string; onViewed: (applicationId: string) => void }) {
   const [state, setState] = useState<
     { kind: "closed" } | { kind: "loading" } | { kind: "open"; texts: Array<[string, string]> } | { kind: "error"; message: string }
   >({ kind: "closed" });
@@ -26,6 +28,9 @@ function Detail({ token, applicationId }: { token: string; applicationId: string
     try {
       const result = await menteeDetailAction(token, applicationId);
       setState(result.ok ? { kind: "open", texts: result.texts } : { kind: "error", message: result.message });
+      // Chỉ đếm lượt máy chủ đã ghi được: nút "Đổi 15 hồ sơ khác" hiện theo số đếm này, và máy chủ
+      // kiểm lại đúng những lượt đã ghi.
+      if (result.ok && result.viewed) onViewed(applicationId);
     } catch {
       setState({ kind: "error", message: "Chưa tải được hồ sơ. Anh/chị thử lại sau ít phút." });
     }
@@ -68,17 +73,34 @@ function Detail({ token, applicationId }: { token: string; applicationId: string
   );
 }
 
-function MenteeCardView({ card, token }: { card: MenteeCard; token: string }) {
+function MenteeCardView({
+  card,
+  token,
+  viewed,
+  onViewed
+}: {
+  card: MenteeCard;
+  token: string;
+  viewed: boolean;
+  onViewed: (applicationId: string) => void;
+}) {
   return (
     <Card>
       <article data-testid="mentee-card" data-application={card.applicationId} className="grid gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold text-vam-ink">{card.name}</h2>
-          {card.groupLabel ? (
-            <span data-testid="mentee-group" className="rounded-full bg-vam-mint px-2 py-0.5 text-[11px] font-semibold text-vam-green">
-              {card.groupLabel}
-            </span>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {viewed ? (
+              <span data-testid="viewed-badge" className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                Đã xem chi tiết
+              </span>
+            ) : null}
+            {card.groupLabel ? (
+              <span data-testid="mentee-group" className="rounded-full bg-vam-mint px-2 py-0.5 text-[11px] font-semibold text-vam-green">
+                {card.groupLabel}
+              </span>
+            ) : null}
+          </div>
         </div>
         {card.facts.length ? (
           <dl className="grid gap-1 text-sm sm:grid-cols-2">
@@ -110,7 +132,7 @@ function MenteeCardView({ card, token }: { card: MenteeCard; token: string }) {
             <p className="whitespace-pre-line text-vam-ink">{value}</p>
           </div>
         ))}
-        <Detail token={token} applicationId={card.applicationId} />
+        <Detail token={token} applicationId={card.applicationId} onViewed={onViewed} />
         <PickButton token={token} applicationId={card.applicationId} menteeName={card.name} />
       </article>
     </Card>
@@ -123,6 +145,8 @@ export function MenteeList({
   groups,
   closesAt,
   windowSize,
+  viewedIds: serverViewed,
+  canSwap: serverCanSwap,
   pollMs = POLL_MS
 }: {
   token: string;
@@ -131,10 +155,14 @@ export function MenteeList({
   closesAt: string | null;
   /** Số hồ sơ tối đa của một mentor (máy chủ gửi xuống — ROUND2_WINDOW_SIZE). */
   windowSize: number;
+  /** Hồ sơ mentor đã mở "Xem đầy đủ hồ sơ" (máy chủ đã ghi) — BTC 15/10/2026. */
+  viewedIds: string[];
+  /** Còn bạn trống ngoài danh sách để "Đổi 15 hồ sơ khác". */
+  canSwap: boolean;
   pollMs?: number;
 }) {
   // Danh sách 15 hồ sơ của mentor (BTC 14/10/2026). Trang làm mới sau một lượt chọn thì theo danh
-  // sách máy chủ gửi; giữa hai lần đó, hồ sơ bù đến từ windowCardsAction.
+  // sách máy chủ gửi; giữa hai lần đó, hồ sơ bù đến từ windowCardsAction, danh sách mới từ lệnh đổi.
   const [cards, setCards] = useState(serverCards);
   const cardsRef = useRef(serverCards);
   const [available, setAvailable] = useState<Set<string> | null>(null);
@@ -142,13 +170,29 @@ export function MenteeList({
   const [filter, setFilter] = useState<number | null>(null);
   const [report, setReport] = useState<PickReportMessage | null>(null);
   const [closed, setClosed] = useState(false);
+  const [viewed, setViewed] = useState(() => new Set(serverViewed));
+  const [swappable, setSwappable] = useState(serverCanSwap);
+  const [swapping, setSwapping] = useState(false);
   const busy = useRef(false);
 
   useEffect(() => {
     cardsRef.current = serverCards;
     setCards(serverCards);
     setAvailable(null);
-  }, [serverCards]);
+    setViewed(new Set(serverViewed));
+    setSwappable(serverCanSwap);
+  }, [serverCards, serverViewed, serverCanSwap]);
+
+  const markViewed = useCallback((applicationId: string) => {
+    setViewed((prev) => (prev.has(applicationId) ? prev : new Set(prev).add(applicationId)));
+  }, []);
+
+  const applyView = useCallback((view: WindowView) => {
+    cardsRef.current = view.cards;
+    setCards(view.cards);
+    setViewed(new Set(view.viewedIds));
+    setSwappable(view.canSwap);
+  }, []);
 
   const refresh = useCallback(async () => {
     if (busy.current) return;
@@ -172,15 +216,38 @@ export function MenteeList({
       if (gone === 0 && !canGrow) return;
       const next = await windowCardsAction(token);
       if (!next.ok) return;
-      cardsRef.current = next.cards;
-      setCards(next.cards);
+      applyView(next);
       if (gone > 0) setReplaced(gone);
     } catch {
       // như trên
     } finally {
       busy.current = false;
     }
-  }, [token, closesAt, windowSize]);
+  }, [token, closesAt, windowSize, applyView]);
+
+  // "Đổi 15 hồ sơ khác" (BTC 15/10/2026). Dùng chung cờ bận với lệnh tự cập nhật: danh sách bù về
+  // giữa chừng không được đè lên danh sách vừa đổi.
+  const swap = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setSwapping(true);
+    try {
+      const result = await swapWindowAction(token);
+      if (result.view) {
+        applyView(result.view);
+        setAvailable(null);
+        setReplaced(0);
+        setFilter(null);
+      }
+      setReport({ status: result.ok ? "ok" : "error", message: result.message });
+      if (result.ok) document.getElementById("danh-sach-ho-so")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    } catch {
+      setReport({ status: "error", message: "Chưa đổi được danh sách. Anh/Chị thử lại sau ít phút." });
+    } finally {
+      busy.current = false;
+      setSwapping(false);
+    }
+  }, [token, applyView]);
 
   useEffect(() => {
     if (closed) return;
@@ -219,9 +286,13 @@ export function MenteeList({
   )
     .sort((a, b) => a[0] - b[0])
     .map(([code, label]) => ({ code, label }));
+  // Đếm trên các thẻ đang hiện (bạn vừa bị chọn mất đã ẩn), không theo nút lọc: phải xem hết cả danh sách.
+  const viewedCount = open.filter((card) => viewed.has(card.applicationId)).length;
+  const allViewed = open.length > 0 && viewedCount === open.length;
 
   return (
     <PickReport.Provider value={setReport}>
+      <div id="danh-sach-ho-so" />
       {report ? (
         <div
           role="status"
@@ -268,8 +339,40 @@ export function MenteeList({
           <p className="text-sm text-slate-600">Hiện chưa còn mentee nào trong danh sách của anh/chị. Ban tổ chức sẽ báo khi có thêm hồ sơ.</p>
         </Card>
       ) : (
-        shown.map((card) => <MenteeCardView key={card.applicationId} card={card} token={token} />)
+        shown.map((card) => (
+          <MenteeCardView key={card.applicationId} card={card} token={token} viewed={viewed.has(card.applicationId)} onViewed={markViewed} />
+        ))
       )}
+      {open.length > 0 ? (
+        <Card>
+          <div data-testid="swap-panel" className="grid gap-2 text-sm text-vam-ink">
+            {!swappable ? (
+              <p data-testid="swap-none">Anh/Chị đang thấy toàn bộ hồ sơ còn trống — không còn hồ sơ khác để đổi.</p>
+            ) : allViewed ? (
+              <>
+                <p data-testid="swap-ready">
+                  Anh/Chị đã xem chi tiết hết {open.length} hồ sơ. Chưa thấy bạn phù hợp thì đổi sang các bạn còn trống khác — danh sách
+                  hiện tại sẽ được thay.
+                </p>
+                <button
+                  type="button"
+                  data-testid="swap-button"
+                  onClick={() => void swap()}
+                  disabled={swapping}
+                  className="self-start rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {swapping ? "Đang đổi…" : `Đổi ${windowSize} hồ sơ khác`}
+                </button>
+              </>
+            ) : (
+              <p data-testid="swap-progress">
+                Đã xem chi tiết <strong>{viewedCount}/{open.length}</strong> hồ sơ. Bấm &quot;Xem đầy đủ hồ sơ&quot; ở tất cả hồ sơ trong danh
+                sách thì Anh/Chị đổi được sang {windowSize} hồ sơ khác.
+              </p>
+            )}
+          </div>
+        </Card>
+      ) : null}
     </PickReport.Provider>
   );
 }

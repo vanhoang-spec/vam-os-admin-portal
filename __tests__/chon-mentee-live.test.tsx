@@ -11,7 +11,9 @@
  *   - quá giờ đóng thì dừng hỏi và báo vòng đã đóng;
  *   - lọc theo nhóm trong cụm; "Xem đầy đủ hồ sơ" gọi đúng token + mã đơn;
  *   - câu báo kết quả chọn nằm ở đầu danh sách, còn lại khi thẻ biến mất sau khi trang làm mới;
- *   - "Bỏ chọn (còn N phút)" tự đếm lùi, hết hạn thì nút biến mất.
+ *   - "Bỏ chọn (còn N phút)" tự đếm lùi, hết hạn thì nút biến mất;
+ *   - "Đổi 15 hồ sơ khác" (BTC 15/10/2026) chỉ hiện khi đã xem chi tiết HẾT các thẻ đang có, chỉ đếm
+ *     lượt máy chủ đã ghi, và thay danh sách bằng đúng danh sách máy chủ trả về.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
@@ -25,6 +27,7 @@ const h = vi.hoisted(() => ({
   detail: vi.fn(),
   pick: vi.fn(),
   windowCards: vi.fn(),
+  swap: vi.fn(),
   formState: { current: { status: "idle", message: "" } as { status: string; message: string } },
   // Hàm form của nút vẽ gần nhất — test gọi thẳng, như khi mentor bấm "Xác nhận chọn".
   lastFormAction: { current: null as null | ((prev: unknown, formData: FormData) => Promise<unknown>) }
@@ -34,7 +37,8 @@ vi.mock("@/app/chon-mentee/[token]/actions", () => ({
   menteeDetailAction: h.detail,
   pickMenteeAction: h.pick,
   unpickMenteeAction: vi.fn(),
-  windowCardsAction: h.windowCards
+  windowCardsAction: h.windowCards,
+  swapWindowAction: h.swap
 }));
 vi.mock("react-dom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-dom")>();
@@ -80,6 +84,7 @@ beforeEach(() => {
   h.pick.mockReset();
   h.windowCards.mockReset();
   h.windowCards.mockResolvedValue({ ok: false });
+  h.swap.mockReset();
   h.lastFormAction.current = null;
   h.formState.current = { status: "idle", message: "" };
   setHidden(false);
@@ -98,7 +103,7 @@ async function tick(ms = POLL_MS) {
 describe("tự cập nhật", () => {
   it("mỗi 20 giây hỏi máy chủ một lần; bạn vừa được người khác chọn bị ẩn, câu báo đúng số người", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [A] });
-    const { container } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt="2026-10-17T04:00:00Z" />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt="2026-10-17T04:00:00Z" />);
     expect(shownIds(container)).toEqual([A, B]);
     await tick(POLL_MS - 1000);
     expect(h.available).not.toHaveBeenCalled();
@@ -111,7 +116,7 @@ describe("tự cập nhật", () => {
 
   it("không đọc được (lỗi máy chủ hay mạng): giữ nguyên danh sách, không ẩn nhầm ai", async () => {
     h.available.mockResolvedValueOnce({ ok: false, ids: [] }).mockRejectedValueOnce(new Error("mạng"));
-    const { container } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     await tick();
     await tick();
     expect(h.available).toHaveBeenCalledTimes(2);
@@ -122,7 +127,7 @@ describe("tự cập nhật", () => {
   it("tab đang ẩn thì không hỏi; quay lại tab thì hỏi ngay", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [B] });
     setHidden(true);
-    const { container } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     await tick();
     await tick();
     expect(h.available).not.toHaveBeenCalled();
@@ -137,7 +142,7 @@ describe("tự cập nhật", () => {
 
   it("quá giờ đóng: dừng hỏi máy chủ và báo vòng đã đóng", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [A, B] });
-    const { container } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt="2026-10-15T05:00:10Z" />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt="2026-10-15T05:00:10Z" />);
     await tick();
     expect(h.available).not.toHaveBeenCalled();
     expect(container.querySelector('[data-testid="round-closed"]')).not.toBeNull();
@@ -150,7 +155,7 @@ describe("tự cập nhật", () => {
 describe("lọc và xem hồ sơ", () => {
   it("lọc theo nhóm trong cụm; số đếm trên nút trừ người đã được chọn", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [A, B] });
-    const { container, getByRole } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container, getByRole } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     fireEvent.click(getByRole("button", { name: "2. Kế toán - Kiểm toán (1)" }));
     expect(shownIds(container)).toEqual([B]);
     expect(getByRole("button", { name: "2. Kế toán - Kiểm toán (1)" }).getAttribute("aria-pressed")).toBe("true");
@@ -163,13 +168,13 @@ describe("lọc và xem hồ sơ", () => {
   });
 
   it("một nhóm thì không có nút lọc", () => {
-    const { container } = render(<MenteeList windowSize={15} token={TOKEN} cards={[CARDS[0]]} groups={[GROUPS[0]]} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={[CARDS[0]]} groups={[GROUPS[0]]} closesAt={null} />);
     expect(container.querySelector('[data-testid="group-filter"]')).toBeNull();
   });
 
   it("“Xem đầy đủ hồ sơ” gọi đúng token + mã đơn của thẻ đó và hiện các câu tự luận; lỗi thì báo, không hiện gì sai", async () => {
     h.detail.mockResolvedValueOnce({ ok: true, texts: [["Khó khăn hiện tại", "Chưa biết bắt đầu từ đâu"]] });
-    const { container, getAllByRole } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container, getAllByRole } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     await act(async () => {
       fireEvent.click(getAllByRole("button", { name: "Xem đầy đủ hồ sơ" })[1]);
       await vi.advanceTimersByTimeAsync(0);
@@ -196,11 +201,11 @@ describe("câu báo kết quả chọn", () => {
   // thứ tự đó — trang mới tới trước, kết quả về sau — vì thứ tự ngược lại (thẻ còn đó lúc có kết quả)
   // là thứ đã làm test cũ xanh trong khi trang thật không hiện câu báo nào (14/10/2026).
   async function submitWhileCardVanishes(result: { status: string; message: string }) {
-    const view = render(<MenteeList windowSize={15} token={TOKEN} cards={[CARDS[1]]} groups={GROUPS} closesAt={null} />);
+    const view = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={[CARDS[1]]} groups={GROUPS} closesAt={null} />);
     const formAction = h.lastFormAction.current;
     expect(formAction).not.toBeNull();
     h.pick.mockImplementation(async () => {
-      view.rerender(<MenteeList windowSize={15} token={TOKEN} cards={[]} groups={GROUPS} closesAt={null} />);
+      view.rerender(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={[]} groups={GROUPS} closesAt={null} />);
       return result;
     });
     const formData = new FormData();
@@ -230,7 +235,7 @@ describe("câu báo kết quả chọn", () => {
   });
 
   it("chưa bấm gì thì không có câu báo", () => {
-    const { container } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     expect(container.querySelector('[data-testid="pick-report"]')).toBeNull();
   });
 });
@@ -257,7 +262,7 @@ describe("bù hồ sơ — danh sách 15 bạn của từng mentor (BTC 14/10/20
   it("một bạn trong danh sách vừa được người khác chọn: gọi lệnh bù đúng token, thay thẻ, báo đã thay", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [A, C] });
     h.windowCards.mockResolvedValue({ ok: true, cards: [CARDS[0], NEW], total: 2 });
-    const { container } = render(<MenteeList windowSize={2} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={2} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     await tick();
     expect(h.windowCards).toHaveBeenCalledTimes(1);
     expect(h.windowCards).toHaveBeenCalledWith(TOKEN);
@@ -267,7 +272,7 @@ describe("bù hồ sơ — danh sách 15 bạn của từng mentor (BTC 14/10/20
 
   it("không ai trong danh sách bị chọn và danh sách đã đủ: không gọi lệnh bù", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [A, B, C] });
-    const { container } = render(<MenteeList windowSize={2} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={2} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     await tick();
     await tick();
     expect(h.available).toHaveBeenCalledTimes(2);
@@ -279,7 +284,7 @@ describe("bù hồ sơ — danh sách 15 bạn của từng mentor (BTC 14/10/20
   it("danh sách chưa đủ mà có bạn mới trống (vd. vừa được bỏ chọn): gọi lệnh bù, không báo gì", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [A, B, C] });
     h.windowCards.mockResolvedValue({ ok: true, cards: [...CARDS, NEW], total: 3 });
-    const { container } = render(<MenteeList windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     await tick();
     expect(h.windowCards).toHaveBeenCalledTimes(1);
     expect(shownIds(container)).toEqual([A, B, C]);
@@ -289,9 +294,111 @@ describe("bù hồ sơ — danh sách 15 bạn của từng mentor (BTC 14/10/20
   it("lệnh bù lỗi: giữ danh sách, chỉ ẩn bạn đã có người chọn", async () => {
     h.available.mockResolvedValue({ ok: true, ids: [A] });
     h.windowCards.mockRejectedValue(new Error("mạng"));
-    const { container } = render(<MenteeList windowSize={2} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={false} windowSize={2} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
     await tick();
     expect(shownIds(container)).toEqual([A]);
     expect(note(container)).toBe("1 bạn vừa được mentor khác chọn và đã ẩn khỏi danh sách.");
+  });
+});
+
+describe("đổi 15 hồ sơ khác (BTC 15/10/2026)", () => {
+  const C = "00000000-0000-4000-8000-000000000103";
+  const D = "00000000-0000-4000-8000-000000000104";
+  const NEXT = [card(C, "Bạn Danh Sách Mới", 1, "1. Ngân hàng - Bảo hiểm"), card(D, "Bạn Danh Sách Mới Hai", 2, "2. Kế toán - Kiểm toán")];
+  const panel = (container: HTMLElement) => container.querySelector('[data-testid="swap-panel"]') as HTMLElement | null;
+  const swapButton = (container: HTMLElement) => container.querySelector('[data-testid="swap-button"]') as HTMLButtonElement | null;
+  const badges = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('[data-testid="mentee-card"]'))
+      .filter((c) => c.querySelector('[data-testid="viewed-badge"]'))
+      .map((c) => c.getAttribute("data-application"));
+  async function openDetail(container: HTMLElement, applicationId: string) {
+    const button = Array.from((container.querySelector(`[data-application="${applicationId}"]`) as HTMLElement).querySelectorAll("button")).find(
+      (b) => b.textContent === "Xem đầy đủ hồ sơ"
+    ) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(button);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  it("chưa xem hết: chỉ có dòng tiến độ, không có nút; xem hết từng thẻ thì nút mới hiện", async () => {
+    h.detail.mockResolvedValue({ ok: true, texts: [], viewed: true });
+    const { container } = render(<MenteeList viewedIds={[]} canSwap={true} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    expect(panel(container)?.querySelector('[data-testid="swap-progress"]')?.textContent).toContain("Đã xem chi tiết 0/2 hồ sơ");
+    expect(swapButton(container)).toBeNull();
+    await openDetail(container, B);
+    expect(badges(container)).toEqual([B]);
+    expect(panel(container)?.querySelector('[data-testid="swap-progress"]')?.textContent).toContain("Đã xem chi tiết 1/2 hồ sơ");
+    expect(swapButton(container)).toBeNull();
+    await openDetail(container, A);
+    expect(badges(container)).toEqual([A, B]);
+    expect(panel(container)?.querySelector('[data-testid="swap-progress"]')).toBeNull();
+    expect(swapButton(container)?.textContent).toBe("Đổi 15 hồ sơ khác");
+  });
+
+  it("máy chủ chưa ghi được lượt xem (viewed: false): đọc được hồ sơ nhưng không được đếm", async () => {
+    h.detail.mockResolvedValue({ ok: true, texts: [["Khó khăn hiện tại", "x"]], viewed: false });
+    const { container } = render(<MenteeList viewedIds={[B]} canSwap={true} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    await openDetail(container, A);
+    expect((container.querySelector(`[data-application="${A}"]`) as HTMLElement).querySelector('[data-testid="mentee-detail"]')).not.toBeNull();
+    expect(badges(container)).toEqual([B]);
+    expect(swapButton(container)).toBeNull();
+  });
+
+  it("đã xem từ trước (máy chủ gửi xuống): nút hiện ngay; bấm thì gọi đúng token và thay bằng đúng danh sách máy chủ trả", async () => {
+    h.swap.mockResolvedValue({ ok: true, message: "Đã đổi sang danh sách hồ sơ mới.", view: { cards: NEXT, total: 9, viewedIds: [], canSwap: true } });
+    const { container } = render(<MenteeList viewedIds={[A, B]} canSwap={true} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    await act(async () => {
+      fireEvent.click(swapButton(container)!);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(h.swap).toHaveBeenCalledTimes(1);
+    expect(h.swap).toHaveBeenCalledWith(TOKEN);
+    expect(shownIds(container)).toEqual([C, D]);
+    expect(badges(container)).toEqual([]);
+    expect(swapButton(container)).toBeNull();
+    expect(panel(container)?.querySelector('[data-testid="swap-progress"]')?.textContent).toContain("Đã xem chi tiết 0/2 hồ sơ");
+    const report = container.querySelector('[data-testid="pick-report"]');
+    expect(report?.textContent).toBe("Đã đổi sang danh sách hồ sơ mới.");
+    expect(report?.className).toContain("bg-green-50");
+  });
+
+  it("máy chủ từ chối (vd. vừa có hồ sơ mới thay vào chưa xem): báo đỏ, hiện đúng danh sách máy chủ trả", async () => {
+    h.swap.mockResolvedValue({
+      ok: false,
+      message: "Anh/Chị cần bấm \"Xem đầy đủ hồ sơ\" ở cả 2 hồ sơ trong danh sách trước khi đổi (còn 1 hồ sơ chưa xem).",
+      view: { cards: [CARDS[0], NEXT[0]], total: 9, viewedIds: [A], canSwap: true }
+    });
+    const { container } = render(<MenteeList viewedIds={[A, B]} canSwap={true} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    await act(async () => {
+      fireEvent.click(swapButton(container)!);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(shownIds(container)).toEqual([A, C]);
+    expect(badges(container)).toEqual([A]);
+    expect(swapButton(container)).toBeNull();
+    const report = container.querySelector('[data-testid="pick-report"]');
+    expect(report?.textContent).toContain("còn 1 hồ sơ chưa xem");
+    expect(report?.className).toContain("bg-red-50");
+  });
+
+  it("không còn hồ sơ nào khác để đổi: không có nút dù đã xem hết, nói rõ đang thấy toàn bộ", () => {
+    const { container } = render(<MenteeList viewedIds={[A, B]} canSwap={false} windowSize={15} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    expect(swapButton(container)).toBeNull();
+    expect(panel(container)?.querySelector('[data-testid="swap-none"]')?.textContent).toContain("toàn bộ hồ sơ còn trống");
+  });
+
+  it("một bạn đã xem bị người khác chọn, hồ sơ mới vào thay: phải xem cả hồ sơ mới thì nút mới hiện lại", async () => {
+    h.available.mockResolvedValue({ ok: true, ids: [A, C] });
+    h.windowCards.mockResolvedValue({ ok: true, cards: [CARDS[0], NEXT[0]], total: 2, viewedIds: [A], canSwap: true });
+    h.detail.mockResolvedValue({ ok: true, texts: [], viewed: true });
+    const { container } = render(<MenteeList viewedIds={[A, B]} canSwap={true} windowSize={2} token={TOKEN} cards={CARDS} groups={GROUPS} closesAt={null} />);
+    expect(swapButton(container)).not.toBeNull();
+    await tick();
+    expect(shownIds(container)).toEqual([A, C]);
+    expect(swapButton(container)).toBeNull();
+    expect(panel(container)?.querySelector('[data-testid="swap-progress"]')?.textContent).toContain("Đã xem chi tiết 1/2 hồ sơ");
+    await openDetail(container, C);
+    expect(swapButton(container)).not.toBeNull();
   });
 });

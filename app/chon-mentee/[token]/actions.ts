@@ -1,8 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getRound2AvailableIds, getRound2MenteeDetail, getRound2WindowCards, pickRound2Mentee, unpickRound2Match } from "@/lib/matching-round2-link";
-import type { MenteeCard } from "@/lib/matching-round2-link-core";
+import {
+  getRound2AvailableIds,
+  getRound2MenteeDetail,
+  getRound2WindowCards,
+  pickRound2Mentee,
+  swapRound2Window,
+  unpickRound2Match,
+  type Round2SwapResult,
+  type Round2WindowView
+} from "@/lib/matching-round2-link";
 import { MENTOR_PICK_PATH_PREFIX } from "@/lib/matching-round2-link-core";
 import type { Round2PickState } from "@/lib/matching-round2-action-types";
 
@@ -37,13 +45,21 @@ export async function availableMenteesAction(token: string): Promise<{ ok: boole
  * Danh sách 15 hồ sơ mới nhất của mentor — trang gọi khi phát hiện một bạn trong danh sách vừa được
  * người khác chọn, để bù hồ sơ khác vào (BTC 14/10/2026). Chỉ tải 15 thẻ, không tải lại cả trang.
  */
-export async function windowCardsAction(token: string): Promise<{ ok: true; cards: MenteeCard[]; total: number } | { ok: false }> {
+export async function windowCardsAction(token: string): Promise<({ ok: true } & Round2WindowView) | { ok: false }> {
   return getRound2WindowCards(String(token ?? ""));
 }
 
 export async function menteeDetailAction(
   token: string,
   applicationId: string
-): Promise<{ ok: true; texts: Array<[string, string]> } | { ok: false; message: string }> {
+): Promise<{ ok: true; texts: Array<[string, string]>; viewed: boolean } | { ok: false; message: string }> {
   return getRound2MenteeDetail(String(token ?? ""), String(applicationId ?? ""));
+}
+
+/**
+ * "Đổi 15 hồ sơ khác" (BTC 15/10/2026). Máy chủ tự kiểm mentor đã xem chi tiết hết danh sách — nút
+ * chỉ hiện trên trang khi đã xem hết, nhưng cái trình duyệt gửi lên là thứ người gửi tự đặt được.
+ */
+export async function swapWindowAction(token: string): Promise<Round2SwapResult> {
+  return swapRound2Window(String(token ?? ""));
 }

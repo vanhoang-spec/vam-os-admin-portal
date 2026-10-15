@@ -41,7 +41,7 @@ vi.mock("@/lib/public-url", () => ({ getPublicOrigin: vi.fn(async () => "https:/
 vi.mock("@/lib/email", () => ({ sendMatchingRound2Invite: vi.fn(async () => ({ ok: true, skipped: false })) }));
 
 import MentorPickPage from "@/app/chon-mentee/[token]/page";
-import { availableMenteesAction, menteeDetailAction, pickMenteeAction, windowCardsAction } from "@/app/chon-mentee/[token]/actions";
+import { availableMenteesAction, menteeDetailAction, pickMenteeAction, swapWindowAction, windowCardsAction } from "@/app/chon-mentee/[token]/actions";
 import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { sendMatchingRound2Invite } from "@/lib/email";
@@ -124,6 +124,8 @@ function seed(opensOffsetMs = -3600_000) {
   db.tables.matches = [{ id: "match-r1", season_id: SEASON, mentor_person_id: "mentor-full", mentee_person_id: "m2", status: "active", matching_round: 1 }];
   db.tables.outbound_emails = [];
   db.tables.matching_round2_pools = [];
+  db.tables.matching_round2_views = [];
+  db.tables.matching_round2_window_state = [];
 }
 
 beforeEach(() => {
@@ -326,21 +328,34 @@ describe("lệnh nhẹ cho trang tự cập nhật", () => {
     expect(await availableMenteesAction(TOKEN_A)).toEqual({ ok: false, ids: [] });
   });
 
-  it("hồ sơ đầy đủ: chỉ trả (6)–(7), đúng thứ tự, của bạn còn trong danh sách của chính mentor đó", async () => {
+  it("hồ sơ đầy đủ: chỉ trả (6)–(7), đúng thứ tự, của bạn còn trong danh sách của chính mentor đó; ghi đúng một lượt xem", async () => {
     const result = await menteeDetailAction(TOKEN_A, APP(1));
     expect(result).toEqual({
       ok: true,
       texts: [
         ["3 câu hỏi muốn hỏi mentor", "TU LUAN TAI SAU — ba câu hỏi"],
         ["Hình dung bản thân sau 1 năm", "TU LUAN TAI SAU — sau một năm"]
-      ]
+      ],
+      viewed: true
     });
     const read = db.requests.filter((r) => r.table === "applications").at(-1)!;
     expect(String(read.columns).split(",")).not.toContain("raw_payload");
     expect(JSON.stringify(result)).not.toContain("rieng@example.test");
+    // Lượt xem: điều kiện của "Đổi 15 hồ sơ khác" (BTC 15/10/2026) — đúng link, đúng đơn, không ghi đè.
+    expect(db.writes.filter((w) => w.table === "matching_round2_views")).toEqual([
+      { table: "matching_round2_views", kind: "upsert", rows: [{ link_id: "L1", application_id: APP(1) }], filters: JSON.stringify({ onConflict: "link_id,application_id", ignoreDuplicates: true }) }
+    ]);
+    expect(db.writes.filter((w) => w.table !== "matching_round2_views")).toEqual([]);
   });
 
-  it("bạn không còn trong danh sách (ngoài cụm, đã có mentor, token khác): không đọc hồ sơ nào", async () => {
+  it("ghi lượt xem hỏng: vẫn trả hồ sơ, nhưng báo chưa tính lượt xem", async () => {
+    db.errors["upsert:matching_round2_views"] = { message: "boom" };
+    const result = await menteeDetailAction(TOKEN_A, APP(1));
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.viewed).toBe(false);
+  });
+
+  it("bạn không còn trong danh sách (ngoài cụm, đã có mentor, token khác): không đọc hồ sơ nào, không ghi lượt xem", async () => {
     const before = db.requests.filter((r) => r.table === "applications").length;
     const outside = await menteeDetailAction(TOKEN_A, APP(3));
     expect(outside.ok).toBe(false);
@@ -350,6 +365,7 @@ describe("lệnh nhẹ cho trang tự cập nhật", () => {
     availableIds = null;
     expect((await menteeDetailAction(TOKEN_A, APP(1))).ok).toBe(false);
     expect(db.requests.filter((r) => r.table === "applications").length).toBe(before);
+    expect(db.writes).toEqual([]);
   });
 });
 
@@ -562,7 +578,7 @@ describe("nhóm nhận bù (BTC 15/10/2026): danh sách dưới 15 bạn thì b�
     expect(container.querySelector(`[data-application="${donor.find((d) => ids.includes(d))}"] [data-testid="mentee-group"]`)?.textContent).toBe("6. Nhân sự");
   });
 
-  it("nhóm mình còn đủ 15 bạn: không bù, không đọc nhóm bù sang", async () => {
+  it("nhóm mình còn đủ 15 bạn: không bù, không đọc hồ sơ nhóm bù sang (chỉ đọc vòng bên đó để biết lần đổi kế tiếp)", async () => {
     db.tables.matching_round2_fill = [{ season_id: SEASON, group_code: 4, donor_group_code: 6 }];
     const own = seedGroup(4, 20, OWN_APP, "o");
     const donor = seedGroup(6, 20, FILL_APP, "f");
@@ -571,7 +587,13 @@ describe("nhóm nhận bù (BTC 15/10/2026): danh sách dưới 15 bạn thì b�
     const ids = shown(container);
     expect(ids).toHaveLength(15);
     expect(ids.every((id) => own.includes(id))).toBe(true);
-    expect(donorReads()).toHaveLength(0);
+    // "Đổi 15 hồ sơ khác" (BTC 15/10/2026) đi hết cụm mình thì sang nhóm bù, nên vòng bên đó được đọc;
+    // nhưng hồ sơ thì chỉ đọc của 15 bạn đang hiện.
+    expect(donorReads().length).toBeGreaterThan(0);
+    const cardReads = db.requests
+      .filter((r) => r.table === "applications" && String(r.columns).includes("raw_payload->>"))
+      .flatMap((r) => (JSON.parse(r.filters) as any[]).filter((f) => f.kind === "in" && f.column === "id").flatMap((f) => f.values));
+    expect(new Set(cardReads)).toEqual(new Set(ids));
     expect(container.querySelector('[data-testid="list-summary"]')?.textContent).not.toContain("bổ sung");
   });
 
@@ -593,5 +615,165 @@ describe("nhóm nhận bù (BTC 15/10/2026): danh sách dưới 15 bạn thì b�
     expect(result.cards).toHaveLength(15);
     expect(result.cards[0].applicationId).toBe(APP(1));
     expect(result.total).toBe(1);
+  });
+});
+
+describe("đổi 15 hồ sơ khác (BTC 15/10/2026)", () => {
+  const MANY = (n: number) => `00000000-0000-4000-8000-0000000005${String(n).padStart(2, "0")}`;
+  const DONOR = (n: number) => `00000000-0000-4000-8000-0000000006${String(n).padStart(2, "0")}`;
+  function seedGroup(group: number, count: number, idOf: (n: number) => string, prefix: string) {
+    for (let n = 0; n < count; n += 1) {
+      db.tables.people.push({ id: `${prefix}${n}`, full_name: `${prefix.toUpperCase()} Bạn ${n}` });
+      db.tables.applications.push({
+        id: idOf(n), person_id: `${prefix}${n}`, season_id: SEASON, role_applied: "mentee", status: "approved_as_mentee", source: "vam_os_form", raw_payload: menteePayload(`Ngành ${n}`)
+      });
+      db.tables.matching_industry_assignments.push({
+        id: `as-${prefix}${n}`, season_id: SEASON, person_id: `${prefix}${n}`, role: "mentee", application_id: idOf(n), group_code: group, confidence: "cao", flags: [], secondary_groups: [], evidence: {}, source: "auto", drift_group: null
+      });
+    }
+    return Array.from({ length: count }, (_, n) => idOf(n));
+  }
+  const viewAll = (ids: string[]) => {
+    for (const id of ids) db.tables.matching_round2_views.push({ link_id: "L1", application_id: id, viewed_at: "2026-10-15T07:00:00Z" });
+  };
+  const idsOf = (cards: Array<{ applicationId: string }> | undefined) => (cards ?? []).map((c) => c.applicationId);
+  async function currentIds() {
+    const view = await windowCardsAction(TOKEN_A);
+    if (!view.ok) throw new Error("lệnh bù phải chạy được");
+    return idsOf(view.cards);
+  }
+  const stateWrites = () => db.writes.filter((w) => w.table === "matching_round2_window_state");
+
+  it("chưa xem chi tiết hết: từ chối, nói còn bao nhiêu hồ sơ chưa xem, trả lại đúng danh sách cũ, KHÔNG ghi gì", async () => {
+    availableIds = seedGroup(4, 40, MANY, "n");
+    const ids0 = await currentIds();
+    expect(ids0).toHaveLength(15);
+    viewAll(ids0.slice(0, 14));
+    const result = await swapWindowAction(TOKEN_A);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("còn 1 hồ sơ chưa xem");
+    expect(idsOf(result.view?.cards)).toEqual(ids0);
+    expect([...(result.view?.viewedIds ?? [])].sort()).toEqual(ids0.slice(0, 14).sort());
+    expect(db.writes).toEqual([]);
+  });
+
+  it("xem hết 15: đổi sang 15 bạn khác hẳn, ghi đúng một dòng điểm neo của đúng link; tải lại vẫn là danh sách mới", async () => {
+    availableIds = seedGroup(4, 40, MANY, "n");
+    const ids0 = await currentIds();
+    viewAll(ids0);
+    const result = await swapWindowAction(TOKEN_A);
+    expect(result.ok).toBe(true);
+    const ids1 = idsOf(result.view?.cards);
+    expect(ids1).toHaveLength(15);
+    expect(ids1.filter((id) => ids0.includes(id))).toEqual([]);
+    expect(result.view?.viewedIds).toEqual([]);
+    expect(result.view?.canSwap).toBe(true);
+    expect(db.writes).toHaveLength(1);
+    const [write] = stateWrites();
+    expect(write.kind).toBe("insert");
+    expect(Object.keys(write.rows[0]).sort()).toEqual(["anchor_application_id", "link_id", "swaps", "updated_at"]);
+    expect(write.rows[0]).toMatchObject({ link_id: "L1", swaps: 1 });
+    expect(ids0).not.toContain(write.rows[0].anchor_application_id);
+    expect(new Set(await currentIds())).toEqual(new Set(ids1));
+    const container = await renderPage(TOKEN_A);
+    expect(new Set(Array.from(container.querySelectorAll('[data-testid="mentee-card"]')).map((c) => c.getAttribute("data-application")))).toEqual(new Set(ids1));
+  });
+
+  it("đổi tiếp: đi tiếp quanh vòng, hết vòng thì quay lại đầu; lệnh ghi có điều kiện theo điểm neo cũ", async () => {
+    availableIds = seedGroup(4, 40, MANY, "n");
+    const ids0 = await currentIds();
+    viewAll(ids0);
+    const first = await swapWindowAction(TOKEN_A);
+    const ids1 = idsOf(first.view?.cards);
+    const anchor1 = db.tables.matching_round2_window_state[0].anchor_application_id;
+    viewAll(ids1);
+    const second = await swapWindowAction(TOKEN_A);
+    expect(second.ok).toBe(true);
+    const ids2 = idsOf(second.view?.cards);
+    // 40 bạn: 15 + 15 + (10 bạn còn lại + 5 bạn đầu vòng).
+    expect(ids2).toHaveLength(15);
+    const unseen = (availableIds ?? []).filter((id) => !ids0.includes(id) && !ids1.includes(id));
+    expect(unseen).toHaveLength(10);
+    for (const id of unseen) expect(ids2).toContain(id);
+    expect(ids2.filter((id) => ids1.includes(id))).toEqual([]);
+    expect(ids2.filter((id) => ids0.includes(id))).toHaveLength(5);
+    const update = stateWrites().at(-1)!;
+    expect(update.kind).toBe("update");
+    expect(Object.keys(update.rows[0]).sort()).toEqual(["anchor_application_id", "swaps", "updated_at"]);
+    expect(update.rows[0].swaps).toBe(2);
+    expect(JSON.parse(update.filters)).toEqual([
+      { kind: "eq", column: "link_id", value: "L1" },
+      { kind: "eq", column: "anchor_application_id", value: anchor1 }
+    ]);
+  });
+
+  it("hai cửa sổ cùng bấm (dòng điểm neo vừa được tạo ở tab kia): không nhảy thêm, báo đã đổi ở cửa sổ khác", async () => {
+    availableIds = seedGroup(4, 40, MANY, "n");
+    viewAll(await currentIds());
+    db.errors["insert:matching_round2_window_state"] = { code: "23505", message: "duplicate key value" };
+    const result = await swapWindowAction(TOKEN_A);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("cửa sổ khác");
+    expect(result.view?.cards).toHaveLength(15);
+  });
+
+  it("không còn bạn trống nào ngoài danh sách: xem hết cũng không đổi, không ghi gì; trang không hiện gợi ý đổi", async () => {
+    availableIds = seedGroup(4, 5, MANY, "n");
+    const ids0 = await currentIds();
+    expect(ids0).toHaveLength(5);
+    viewAll(ids0);
+    const result = await swapWindowAction(TOKEN_A);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("toàn bộ hồ sơ còn trống");
+    expect(result.view?.canSwap).toBe(false);
+    expect(db.writes).toEqual([]);
+    const container = await renderPage(TOKEN_A);
+    expect(container.querySelector('[data-testid="swap-hint"]')).toBeNull();
+    expect(container.querySelector('[data-testid="swap-none"]')).not.toBeNull();
+  });
+
+  it("vòng đã đóng, token sai hình dạng, token lạ, link đã thu hồi: không đổi, không ghi gì", async () => {
+    availableIds = seedGroup(4, 40, MANY, "n");
+    viewAll(await currentIds());
+    const before = db.requests.length;
+    expect((await swapWindowAction("khong-phai-uuid")).ok).toBe(false);
+    expect(db.requests.length).toBe(before);
+    expect((await swapWindowAction("cccccccc-0000-4000-8000-00000000000c")).ok).toBe(false);
+    db.tables.matching_round2_settings[0].closes_at = new Date(Date.now() - 60_000).toISOString();
+    expect(await swapWindowAction(TOKEN_A)).toMatchObject({ ok: false, message: "Vòng 2 đã đóng." });
+    db.tables.matching_round2_settings[0].closes_at = new Date(Date.now() + 86400_000).toISOString();
+    db.tables.matching_round2_links.find((l: any) => l.id === "L1").revoked_at = "2026-10-15T00:00:00Z";
+    expect((await swapWindowAction(TOKEN_A)).ok).toBe(false);
+    expect(db.writes).toEqual([]);
+  });
+
+  it("có nhóm bù sang: đổi hết các bạn cụm mình thì danh sách đi tiếp sang nhóm bù", async () => {
+    db.tables.matching_round2_fill = [{ season_id: SEASON, group_code: 4, donor_group_code: 6 }];
+    const own = seedGroup(4, 20, MANY, "n");
+    const donor = seedGroup(6, 20, DONOR, "d");
+    availableIds = [...own, ...donor];
+    const ids0 = await currentIds();
+    expect(ids0.every((id) => own.includes(id))).toBe(true);
+    viewAll(ids0);
+    const result = await swapWindowAction(TOKEN_A);
+    expect(result.ok).toBe(true);
+    const ids1 = idsOf(result.view?.cards);
+    expect(ids1).toHaveLength(15);
+    expect(ids1.filter((id) => own.includes(id)).sort()).toEqual(own.filter((id) => !ids0.includes(id)).sort());
+    expect(ids1.filter((id) => donor.includes(id))).toHaveLength(10);
+  });
+
+  it("trang: có gợi ý đổi, thẻ đã xem có dấu, dòng tiến độ đếm đúng số đã xem", async () => {
+    availableIds = seedGroup(4, 40, MANY, "n");
+    const ids0 = await currentIds();
+    viewAll(ids0.slice(0, 3));
+    const container = await renderPage(TOKEN_A);
+    expect(container.querySelector('[data-testid="swap-hint"]')?.textContent).toContain("đổi được sang 15 hồ sơ khác");
+    const badged = Array.from(container.querySelectorAll('[data-testid="mentee-card"]'))
+      .filter((c) => c.querySelector('[data-testid="viewed-badge"]'))
+      .map((c) => c.getAttribute("data-application"));
+    expect(badged.sort()).toEqual(ids0.slice(0, 3).sort());
+    expect(container.querySelector('[data-testid="swap-progress"]')?.textContent).toContain("Đã xem chi tiết 3/15 hồ sơ");
+    expect(container.querySelector('[data-testid="swap-button"]')).toBeNull();
   });
 });

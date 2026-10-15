@@ -9,7 +9,10 @@ import { describe, expect, it } from "vitest";
 import {
   round2Circle,
   round2MentorIndex,
+  round2NextAnchor,
+  round2Ordering,
   round2Window,
+  round2WindowAt,
   round2WindowStart,
   ROUND2_WINDOW_SIZE
 } from "@/lib/matching-round2-window-core";
@@ -153,5 +156,87 @@ describe("4. ổn định", () => {
     expect(round2WindowStart(-1, 100)).toBe(round2WindowStart(0, 100));
     const starts = new Set(Array.from({ length: 50 }, (_, i) => round2WindowStart(i, 175)));
     expect(starts.size).toBe(50);
+  });
+});
+
+describe("6. đổi 15 hồ sơ khác (BTC 15/10/2026)", () => {
+  /** Đi n lần đổi từ danh sách mặc định; trả các danh sách lần lượt (theo thứ tự quét). */
+  function walk(ordering: string[], available: Set<string>, times: number): string[][] {
+    const out: string[][] = [];
+    let anchor: string | null = null;
+    for (let k = 0; k <= times; k += 1) {
+      const w = round2WindowAt(ordering, available, anchor);
+      out.push(w);
+      anchor = round2NextAnchor(ordering, available, w);
+      if (anchor === null) break;
+    }
+    return out;
+  }
+
+  it("chưa đổi lần nào: danh sách y hệt trước khi có nút đổi — cả khi có nhóm bù — với mọi mentor", () => {
+    const own = round2Circle(SEASON, [1], ids(16));
+    const donor = round2Circle(SEASON, [3], ids(150).slice(16));
+    for (const ownOpen of [0, 3, 15, 16]) {
+      const available = new Set([...own.slice(0, ownOpen), ...donor.filter((_, p) => p % 4 !== 0)]);
+      for (let i = 0; i < 60; i += 1) {
+        const ownStart = round2WindowStart(i, own.length);
+        const donorStart = round2WindowStart(50 + i, donor.length);
+        const before = round2Window(own, available, ownStart);
+        const fill = before.length < ROUND2_WINDOW_SIZE ? round2Window(donor, available, donorStart, ROUND2_WINDOW_SIZE - before.length) : [];
+        expect(round2WindowAt(round2Ordering(own, ownStart, donor, donorStart), available, null)).toEqual([...before, ...fill]);
+      }
+    }
+  });
+
+  it("đổi liên tiếp: mỗi lần 15 bạn khác hẳn lần trước; đi hết vòng thì mọi bạn trống đều đã hiện, rồi quay về đầu", () => {
+    const circle = round2Circle(SEASON, [4], ids(175));
+    const available = new Set(circle.filter((_, p) => p % 5 !== 0)); // 140 bạn trống
+    const ordering = round2Ordering(circle, round2WindowStart(9, circle.length));
+    const lists = walk(ordering, available, 10);
+    expect(lists).toHaveLength(11);
+    for (let k = 1; k < lists.length; k += 1) {
+      expect(lists[k]).toHaveLength(15);
+      expect(lists[k].filter((x) => lists[k - 1].includes(x))).toEqual([]);
+    }
+    // 140 = 9 × 15 + 5: chín lần đầu (lists[0..8]) phủ 135 bạn khác nhau, lần thứ mười gồm 5 bạn cuối + 10 bạn đầu vòng.
+    expect(new Set(lists.slice(0, 9).flat()).size).toBe(135);
+    expect(new Set(lists.slice(0, 10).flat())).toEqual(available);
+    expect(lists[9].slice(5)).toEqual(lists[0].slice(0, 10));
+  });
+
+  it("điểm neo là MÃ ĐƠN: bạn ở điểm neo có người chọn mất thì danh sách vẫn bắt đầu từ chỗ đó; mã lạ thì về đầu", () => {
+    const circle = round2Circle(SEASON, [4], ids(60));
+    const ordering = round2Ordering(circle, 7);
+    const available = new Set(ordering);
+    const anchor = ordering[20];
+    const before = round2WindowAt(ordering, available, anchor);
+    expect(before[0]).toBe(anchor);
+    available.delete(anchor);
+    const after = round2WindowAt(ordering, available, anchor);
+    expect(after).toEqual([...before.slice(1), ordering[35]]);
+    expect(round2WindowAt(ordering, available, "khong-co-tren-vong")).toEqual(round2WindowAt(ordering, available, null));
+  });
+
+  it("không còn bạn trống nào ngoài danh sách thì không có lần đổi kế tiếp", () => {
+    const circle = round2Circle(SEASON, [7], ids(9));
+    const ordering = round2Ordering(circle, 3);
+    const available = new Set(circle.slice(0, 6));
+    const w = round2WindowAt(ordering, available, null);
+    expect(w).toHaveLength(6);
+    expect(round2NextAnchor(ordering, available, w)).toBeNull();
+    expect(round2NextAnchor(ordering, available, [])).toBeNull();
+    // Thêm đúng một bạn trống ngoài danh sách 15 → có lần đổi.
+    const big = round2Circle(SEASON, [4], ids(16));
+    const bigOrdering = round2Ordering(big, 0);
+    const all = new Set(big);
+    const first = round2WindowAt(bigOrdering, all, null);
+    expect(round2NextAnchor(bigOrdering, all, first)).toBe(bigOrdering[15]);
+  });
+
+  it("vòng nhóm bù nối sau vòng cụm mình; thứ tự không trùng mã; xoay đúng điểm xuất phát", () => {
+    expect(round2Ordering(["a", "b", "c"], 1, ["x", "y"], 1)).toEqual(["b", "c", "a", "y", "x"]);
+    expect(round2Ordering(["a", "b"], 5)).toEqual(["b", "a"]);
+    expect(round2Ordering([], 0, ["x"], 0)).toEqual(["x"]);
+    expect(round2Ordering(["a", "b"], 0, ["b", "c"], 0)).toEqual(["a", "b", "c"]);
   });
 });
