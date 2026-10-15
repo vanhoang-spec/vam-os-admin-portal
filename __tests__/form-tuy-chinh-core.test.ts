@@ -12,6 +12,10 @@
 import { describe, expect, it } from "vitest";
 import { buildCustomFormReceiptEmail } from "@/lib/email-core";
 import {
+  CUSTOM_FORM_DRAFT_TTL_MS,
+  customFormDraftKey,
+  parseDraft,
+  serializeDraft,
   FILE_LINK_HINT,
   FIELD_FORMAT_HINTS,
   isQuestion,
@@ -313,5 +317,56 @@ describe("7. thư tự động gửi người điền (BTC 15/10/2026)", () => {
     expect(test.subject).toBe("[THƯ THỬ] Đã nhận đơn");
     expect(test.html).toContain("THƯ THỬ.");
     expect(buildCustomFormReceiptEmail({ formTitle: "Form", subject: "Đã nhận đơn", body: "x" }).html).not.toContain("THƯ THỬ");
+  });
+});
+
+describe("8. lưu nháp trên máy người điền (BTC 15/10/2026)", () => {
+  const NOW = Date.parse("2026-10-15T13:00:00Z");
+  const fields = [
+    f("f_nameaaaa", "short_text"),
+    f("f_slotaaaa", "multi_choice", { options: ["Sáng", "Chiều", "Tối"] }),
+    f("f_khoaaaaa", "dropdown", { options: ["UEH", "FTU"] }),
+    f("f_hiddenaa", "short_text", { hidden: true }),
+    f("f_sectaaaa", "section")
+  ];
+  const draft = (values: Record<string, unknown>, extra: Record<string, unknown> = {}) => JSON.stringify({ v: 1, savedAt: NOW - 60_000, page: 2, values, ...extra });
+
+  it("ghi: chỉ các ô đã điền; đọc lại đúng nguyên giá trị, trang, giờ lưu", () => {
+    const raw = serializeDraft({ f_nameaaaa: "An", f_slotaaaa: [], f_khoaaaaa: " " }, 1, NOW);
+    expect(JSON.parse(raw)).toEqual({ v: 1, savedAt: NOW, page: 1, values: { f_nameaaaa: "An" } });
+    expect(parseDraft(fields, raw, NOW + 1000)).toEqual({ values: { f_nameaaaa: "An" }, page: 1, savedAt: NOW });
+  });
+
+  it("đọc là LỌC: bỏ câu không còn trên form, câu đang ẩn, khối tiêu đề, sai kiểu, lựa chọn đã bị bỏ; chọn nhiều giữ thứ tự form", () => {
+    const parsed = parseDraft(
+      fields,
+      draft({
+        f_nameaaaa: ["không phải chữ"],
+        f_slotaaaa: ["Tối", "Đêm", "Sáng"],
+        f_khoaaaaa: "BK",
+        f_hiddenaa: "lén",
+        f_sectaaaa: "x",
+        f_daxoaaaa: "câu đã xoá"
+      }),
+      NOW
+    );
+    expect(parsed).toEqual({ values: { f_slotaaaa: ["Sáng", "Tối"] }, page: 2, savedAt: NOW - 60_000 });
+    expect(parseDraft(fields, draft({ f_nameaaaa: "x".repeat(6000) }), NOW)!.values.f_nameaaaa).toHaveLength(5000);
+  });
+
+  it("không mở lại: rỗng, hỏng, sai phiên bản, quá 14 ngày, giờ lưu ở tương lai, hay không còn câu nào khớp", () => {
+    expect(parseDraft(fields, null, NOW)).toBeNull();
+    expect(parseDraft(fields, "{hỏng", NOW)).toBeNull();
+    expect(parseDraft(fields, draft({ f_nameaaaa: "An" }, { v: 2 }), NOW)).toBeNull();
+    expect(parseDraft(fields, draft({ f_nameaaaa: "An" }, { savedAt: NOW - CUSTOM_FORM_DRAFT_TTL_MS - 1 }), NOW)).toBeNull();
+    expect(parseDraft(fields, draft({ f_nameaaaa: "An" }, { savedAt: NOW - CUSTOM_FORM_DRAFT_TTL_MS + 1000 }), NOW)).not.toBeNull();
+    expect(parseDraft(fields, draft({ f_nameaaaa: "An" }, { savedAt: NOW + 120_000 }), NOW)).toBeNull();
+    expect(parseDraft(fields, draft({ f_daxoaaaa: "x" }), NOW)).toBeNull();
+    expect(parseDraft(fields, JSON.stringify([1, 2]), NOW)).toBeNull();
+  });
+
+  it("mỗi form một chỗ lưu; bản xem thử của ban tổ chức lưu riêng", () => {
+    expect(customFormDraftKey("a1b2c3d4e5f6")).toBe("vam-form-nhap:a1b2c3d4e5f6");
+    expect(customFormDraftKey("a1b2c3d4e5f6", true)).toBe("vam-form-nhap:a1b2c3d4e5f6:xem-thu");
   });
 });
