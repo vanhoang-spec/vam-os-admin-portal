@@ -16,13 +16,12 @@ export function mentorPickUrl(base: string, token: string): string {
 }
 
 /**
- * Hướng dẫn từng bước cho mentor, gắn vào thư mời (BTC 14/10/2026). Video nằm trên kênh YouTube
- * Vietnam Alumni Mentoring (công khai). File PDF lưu trong kho mã (docs/huong-dan/) và được một
+ * Hướng dẫn từng bước cho mentor, gắn vào thư mời (BTC 14/10/2026). Thư chỉ mang link file PDF — BTC bỏ
+ * link video khỏi thư ngày 15/10/2026 (video vẫn ở kênh YouTube Vietnam Alumni Mentoring). File PDF lưu trong kho mã (docs/huong-dan/) và được một
  * route dưới /chon-mentee/ trả về — đường công khai sẵn có của trang chọn, mentor mở được mà không
  * cần đăng nhập; đặt ở chỗ khác là middleware đưa người đọc về trang đăng nhập của ban tổ chức.
  * Nội dung chỉ có dữ liệu mẫu.
  */
-export const ROUND2_GUIDE_VIDEO_URL = "https://youtu.be/ZC0fqUDMRzo";
 export const ROUND2_GUIDE_PDF_PATH = `${MENTOR_PICK_PATH_PREFIX}/huong-dan-vong-2.pdf`;
 export const ROUND2_GUIDE_PDF_SOURCE = "docs/huong-dan/HUONG_DAN_MENTOR_CHON_MENTEE_VONG_2.pdf";
 

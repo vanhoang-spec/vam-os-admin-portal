@@ -50,9 +50,13 @@ import { resolveAutomationEmail } from "@/lib/email-automation";
 import { INVITE_CLAIM_STALE_MINUTES, PARTICIPANT_INVITE_EMAIL_KIND } from "@/lib/participant-invite-core";
 import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/lib/interview-schedule-core";
 import { menteeBookingUrl } from "@/lib/mentee-interview-core";
-import { mentorPickUrl, round2GuidePdfUrl, ROUND2_GUIDE_VIDEO_URL } from "@/lib/matching-round2-link-core";
+import { mentorPickUrl, round2GuidePdfUrl } from "@/lib/matching-round2-link-core";
+import { VONG2_TIMELINE_JPEG_BASE64 } from "@/lib/email-assets/vong-2-timeline";
 import { menteeConfirmUrl } from "@/lib/mentee-exemption-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
+
+/** Mã cid của hình timeline trong thư mời Vòng 2 (thân thư trỏ <img src="cid:…">). */
+const VONG2_TIMELINE_CID = "timeline-ueh-mentoring-mua-12";
 
 /**
  * lib/email.ts
@@ -411,7 +415,10 @@ async function sendViaResend(input: {
           ? {
               attachments: input.message.attachments.map((file) => ({
                 filename: file.filename,
-                content: file.contentBase64
+                content: file.contentBase64,
+                // Ảnh nhúng trong thân thư (thân thư trỏ cid:…) — Resend REST nhận content_id.
+                ...(file.contentId ? { content_id: file.contentId } : {}),
+                ...(file.contentType ? { content_type: file.contentType } : {})
               }))
             }
           : {}),
@@ -1137,7 +1144,7 @@ export async function sendMatchingRound2Invite(input: {
     han_chon: input.deadlineLabel,
     zalo_ho_tro: HOTLINE_ZALO,
     // Hướng dẫn là đường dẫn công khai, giống nhau cho mọi mentor — thư thử cũng mang link thật.
-    link_video_huong_dan: ROUND2_GUIDE_VIDEO_URL,
+    // Bỏ link video khỏi thư (BTC 15/10/2026); video vẫn ở kênh YouTube.
     link_file_huong_dan: base ? round2GuidePdfUrl(base) : ""
   };
   const built = buildMatchingRound2InviteEmail({
@@ -1150,11 +1157,19 @@ export async function sendMatchingRound2Invite(input: {
     opensLabel: values.gio_mo,
     deadlineLabel: values.han_chon,
     hotlineZalo: HOTLINE_ZALO,
-    guideVideoUrl: values.link_video_huong_dan,
-    guidePdfUrl: values.link_file_huong_dan
+    guidePdfUrl: values.link_file_huong_dan,
+    timelineImageCid: VONG2_TIMELINE_CID
   });
   const message = await resolveAutomationEmail({ slotId: "matching_round2_invite", values, fallback: built });
-  const outgoing = { ...built, ...message, to: input.toEmail };
+  // Hình timeline Mùa 12 (BTC 15/10/2026) nhúng trong thân thư qua cid; thư thử cũng mang hình.
+  const outgoing = {
+    ...built,
+    ...message,
+    to: input.toEmail,
+    attachments: [
+      { filename: "timeline-ueh-mentoring-mua-12.jpg", contentBase64: VONG2_TIMELINE_JPEG_BASE64, contentId: VONG2_TIMELINE_CID, contentType: "image/jpeg" }
+    ]
+  };
   return deliver(
     "matching_round2_invite",
     // Thư thử (không có mã) phải ghi rõ là thư thử và không để lại nút trông như bấm được.

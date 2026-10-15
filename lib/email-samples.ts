@@ -43,7 +43,7 @@ import {
 } from "@/lib/email-core";
 import { QUESTION_PROMPT, impressionQuestion, trackingNotice } from "@/lib/event-survey-core";
 import { round2DeadlineLabel, round2OpensLabel, round2WaveNote } from "@/lib/matching-round2-dispatch-core";
-import { round2GuidePdfUrl, ROUND2_GUIDE_VIDEO_URL } from "@/lib/matching-round2-link-core";
+import { round2GuidePdfUrl } from "@/lib/matching-round2-link-core";
 
 const ORIGIN = "https://os.alumni-mentoring.edu.vn";
 const SEASON = "UEH Mentoring Mùa 12";
@@ -268,7 +268,6 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         opensLabel: round2OpensLabel("2026-10-15T03:00:00Z"),
         deadlineLabel: round2DeadlineLabel("2026-10-18T16:59:00Z"),
         hotlineZalo: "0919144638",
-        guideVideoUrl: ROUND2_GUIDE_VIDEO_URL,
         guidePdfUrl: round2GuidePdfUrl(ORIGIN)
       })
     )

@@ -97,6 +97,12 @@ export type EmailKind =
 export type EmailAttachment = {
   filename: string;
   contentBase64: string;
+  /**
+   * Ảnh nhúng trong thân thư: thân thư trỏ `<img src="cid:…">` tới mã này (BTC 15/10/2026, hình
+   * timeline thư mời Vòng 2). Chỉ Resend nhúng được (`content_id`); qua Brevo ảnh thành tệp đính kèm.
+   */
+  contentId?: string;
+  contentType?: string;
 };
 
 export type EmailMessage = {
@@ -1978,9 +1984,14 @@ export function buildMatchingRound2InviteEmail(input: {
   deadlineLabel: string;
   waveNote: string;
   hotlineZalo: string;
-  /** Hướng dẫn từng bước (BTC 14/10/2026): video YouTube và file PDF. Trống thì không in dòng đó. */
-  guideVideoUrl?: string;
+  /** Hướng dẫn từng bước: file PDF (BTC 14/10/2026; bỏ link video 15/10/2026). Trống thì không in dòng đó. */
   guidePdfUrl?: string;
+  /**
+   * Hình timeline Mùa 12 nhúng trong thân thư (BTC 15/10/2026): mã cid của tệp đính kèm mà nơi gửi
+   * gắn vào thư. Trống thì không in hình. Hàm này không tự đính ảnh — giữ file thuần, không mang
+   * 300 KB ảnh vào mọi nơi dựng thư (trang Mẫu thư, mẫu BTC sửa được).
+   */
+  timelineImageCid?: string;
 }): EmailMessage & { to: string } {
   const name = safeDisplayName(input.mentorName, "anh/chị");
   const season = safeDisplayName(input.seasonLabel, "mùa mới");
@@ -1989,20 +2000,16 @@ export function buildMatchingRound2InviteEmail(input: {
   const deadline = safeDisplayName(input.deadlineLabel, "");
   const opens = safeDisplayName(input.opensLabel, "");
   const waveNote = safeSentence(input.waveNote, "");
-  const guideVideo = safeSentence(input.guideVideoUrl, "");
   const guidePdf = safeSentence(input.guidePdfUrl, "");
-  // Bản chữ: mỗi đường dẫn một dòng riêng, không có dấu chấm dính đuôi — trình đọc thư tự biến
+  const timelineCid = safeSentence(input.timelineImageCid, "");
+  // Bản chữ: đường dẫn đứng riêng một dòng, không có dấu chấm dính đuôi — trình đọc thư tự biến
   // URL thành link và hay nuốt luôn dấu chấm cuối câu, làm hỏng đường dẫn.
-  const guideText = [
-    ...(guideVideo || guidePdf ? ["", "Hướng dẫn từng bước cho mentor:"] : []),
-    ...(guideVideo ? [`- Video (khoảng 3 phút): ${guideVideo}`] : []),
-    ...(guidePdf ? [`- File PDF: ${guidePdf}`] : [])
-  ];
-  const guideLinks = [
-    guideVideo ? `<a href="${escapeHtml(guideVideo)}">xem video (khoảng 3 phút)</a>` : "",
-    guidePdf ? `<a href="${escapeHtml(guidePdf)}">mở file PDF</a>` : ""
-  ].filter(Boolean);
-  const guideHtml = guideLinks.length ? `<p>Hướng dẫn từng bước cho mentor: ${guideLinks.join(" · ")}.</p>` : "";
+  const guideText = guidePdf ? ["", "Hướng dẫn từng bước cho mentor (file PDF):", guidePdf] : [];
+  const guideHtml = guidePdf ? `<p>Hướng dẫn từng bước cho mentor: <a href="${escapeHtml(guidePdf)}">mở file PDF hướng dẫn</a>.</p>` : "";
+  const timelineText = timelineCid ? ["", "Timeline matching Mentor – Mentee và hoạt động sắp tới của Mùa 12: xem hình trong thư."] : [];
+  const timelineHtml = timelineCid
+    ? `<p style="margin:20px 0"><img src="cid:${escapeHtml(timelineCid)}" alt="UEH Mentoring Mùa 12 — Timeline Matching Mentor – Mentee và hoạt động sắp tới" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:8px" /></p>`
+    : "";
 
   const subject = `[UEH Mentoring] Mời anh/chị chọn mentee — ${season}`;
   const lines = [
@@ -2014,6 +2021,7 @@ export function buildMatchingRound2InviteEmail(input: {
     input.pickUrl,
     "",
     `Thời gian chọn: từ ${opens} đến ${deadline}. Trước giờ mở, đường dẫn báo "chưa mở" — anh/chị mở lại đúng đường dẫn này khi tới giờ. Bạn nào đã được mentor khác chọn sẽ tự ẩn khỏi danh sách; chọn nhầm thì bỏ chọn được trong 30 phút.`,
+    ...timelineText,
     ...guideText,
     "",
     "Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.",
@@ -2029,6 +2037,7 @@ export function buildMatchingRound2InviteEmail(input: {
       `<p>Nhóm ngành của anh/chị: <strong>${escapeHtml(group)}</strong>. Anh/chị còn nhận được <strong>${escapeHtml(slots)}</strong> mentee ở vòng này. Mở đường dẫn riêng dưới đây để đọc hồ sơ các bạn mentee chưa có mentor trong danh sách của anh/chị và bấm “Chọn bạn này”.</p>`,
       `<p style="margin:20px 0"><a href="${escapeHtml(input.pickUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Chọn mentee</a></p>`,
       `<p>Thời gian chọn: từ <strong>${escapeHtml(opens)}</strong> đến <strong>${escapeHtml(deadline)}</strong>. Trước giờ mở, đường dẫn báo “chưa mở” — anh/chị mở lại đúng đường dẫn này khi tới giờ. Bạn nào đã được mentor khác chọn sẽ tự ẩn khỏi danh sách; chọn nhầm thì bỏ chọn được trong 30 phút.</p>`,
+      timelineHtml,
       guideHtml,
       "<p>Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.</p>",
       `<p>Cần hỗ trợ, anh/chị nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
