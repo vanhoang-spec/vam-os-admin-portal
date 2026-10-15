@@ -52,6 +52,7 @@ import { BTC_EMAIL, HOTLINE_ZALO, bookingUrl as interviewBookingUrl } from "@/li
 import { menteeBookingUrl } from "@/lib/mentee-interview-core";
 import { mentorPickUrl, round2GuidePdfUrl } from "@/lib/matching-round2-link-core";
 import { VONG2_TIMELINE_JPEG_BASE64 } from "@/lib/email-assets/vong-2-timeline";
+import { formatDateTime } from "@/lib/utils";
 import { menteeConfirmUrl } from "@/lib/mentee-exemption-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
@@ -1170,10 +1171,13 @@ export async function sendMatchingRound2Invite(input: {
       { filename: "timeline-ueh-mentoring-mua-12.jpg", contentBase64: VONG2_TIMELINE_JPEG_BASE64, contentId: VONG2_TIMELINE_CID, contentType: "image/jpeg" }
     ]
   };
+  // Thư thử (không có mã) phải ghi rõ là thư thử và không để lại nút trông như bấm được. Tiêu đề kèm
+  // giờ gửi: các thư thử cùng tiêu đề bị Gmail gom vào một cuộc trò chuyện và ẩn phần cuối thư sau
+  // nút "•••" — đúng chỗ hình timeline và link PDF — nên BTC tưởng thư thiếu (15/10/2026).
+  const testMail = input.token ? null : markAsTestEmail(outgoing, link);
   return deliver(
     "matching_round2_invite",
-    // Thư thử (không có mã) phải ghi rõ là thư thử và không để lại nút trông như bấm được.
-    input.token ? outgoing : markAsTestEmail(outgoing, link),
+    testMail ? { ...testMail, subject: `${testMail.subject} (gửi lúc ${formatDateTime(new Date().toISOString())})` } : outgoing,
     input.linkId ? { table: "matching_round2_links", id: input.linkId } : null
   );
 }
