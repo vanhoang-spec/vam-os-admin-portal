@@ -30,6 +30,7 @@ import {
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
   buildMatchingRound2InviteEmail,
+  buildCustomFormReceiptEmail,
   buildMenteeExemptionConfirmEmail,
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
@@ -285,6 +286,20 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         seasonLabel: SEASON,
         confirmUrl: `${ORIGIN}/xac-nhan-mentee/ma-vi-du`,
         hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "custom_form_receipt",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Thư tự động sau khi gửi form tùy chỉnh",
+    audience: "Người vừa gửi một form tùy chỉnh (tới trường Email bắt buộc đầu tiên của form)",
+    trigger: "Ngay sau khi người điền bấm Gửi, nếu form bật “Gửi thư tự động cho người điền” (Vận hành → Form tùy chỉnh).",
+    note: "Tiêu đề và nội dung do người soạn form tự viết trong trình tạo form; mẫu dưới đây là một ví dụ, để trống tiêu đề. Mỗi form gửi tối đa 300 lá thư tự động trong 24 giờ.",
+    body: built(
+      buildCustomFormReceiptEmail({
+        formTitle: "Tuyển mentee Job Shadowing",
+        body: "Chào bạn,\n\nBan tổ chức đã nhận đơn đăng ký Job Shadowing của bạn. Kết quả vòng hồ sơ sẽ được gửi qua email trước ngày 25/10.\n\nCảm ơn bạn đã quan tâm!"
       })
     )
   },

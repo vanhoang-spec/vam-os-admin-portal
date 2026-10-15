@@ -575,6 +575,18 @@ export function canComposeEmailTemplate(role?: string | null) {
 }
 
 /**
+ * Form tùy chỉnh (BTC 15/10/2026): tạo/sửa form, bật công khai, xem câu trả lời và tải CSV.
+ *
+ * Support team là nhóm thật sự làm form tuyển người cho từng chương trình — cả lý do có tính năng
+ * này là để họ khỏi phải nhờ lập trình. BTC chốt cả bốn vai trò dùng chung một cổng, kể cả tải
+ * CSV (khác thường lệ "cổng tải hẹp hơn cổng xem"): người tạo form là người cần dữ liệu của nó.
+ * Viewer và reviewer không thấy gì.
+ */
+export function canManageCustomForms(role?: string | null) {
+  return ["super_admin", "admin", "core_team", "support_team"].includes(role || "");
+}
+
+/**
  * Can approve a template, which is what makes it eligible for a bulk send.
  *
  * As narrow as `canRunConfirmationBackfill`, and for the same reason: approval

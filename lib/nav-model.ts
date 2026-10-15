@@ -5,6 +5,7 @@ import {
   canBrowseOperations,
   canComposeEmailTemplate,
   canInviteParticipants,
+  canManageCustomForms,
   canManageReviewers,
   canManageSubmissionBonus,
   canUseAiTools,
@@ -298,6 +299,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
             // nav và route không thể lệch nhau. Sổ thư đã gửi giờ là một tab
             // bên trong module này, không còn là một mục nav riêng.
             { href: "/operations/mail", label: "Mail" },
+            // Form tùy chỉnh (BTC 15/10/2026): cùng predicate trang /forms tự kiểm.
+            ...(canManageCustomForms(role) ? [{ href: "/forms", label: "Form tùy chỉnh" }] : []),
             { href: "/recaps/create", label: "Tạo báo cáo" },
             // Công cụ AI (14/09/2026) nằm trong nhóm này chứ không thành nhóm riêng:
             // ba vai trò admin tier đã chạm trần 9 nhóm của sidebar. Gate theo đúng
@@ -316,6 +319,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
               items: [
                 { href: "/operations", label: "Tổng quan vận hành" },
                 { href: "/operations/mail", label: "Mail" },
+                // Support team là nhóm chính làm form tuyển người (BTC 15/10/2026).
+                ...(canManageCustomForms(role) ? [{ href: "/forms", label: "Form tùy chỉnh" }] : []),
                 ...(canUseAiTools(role) ? [{ href: "/ai", label: "Công cụ AI" }] : []),
               ],
             }

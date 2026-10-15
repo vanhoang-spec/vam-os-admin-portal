@@ -235,6 +235,9 @@ export async function middleware(request: NextRequest) {
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
     request.nextUrl.pathname.startsWith("/renew/") ||
+    // Form tùy chỉnh công khai (BTC 15/10/2026): người điền là sinh viên, người ngoài — không ai có
+    // tài khoản. Trang chỉ hiện form đang công khai; ai được tạo/xem form kiểm ở lib/custom-forms.ts.
+    request.nextUrl.pathname.startsWith("/f/") ||
     // Blog: bài công khai phải đọc được mà không cần đăng nhập — đó là cả lý do
     // nó tồn tại. Phép quyết định bài nào ra được ngoài nằm ở lib/blog-core.ts,
     // chạy trên máy chủ cho từng bài; middleware chỉ mở cửa đường dẫn.
@@ -256,6 +259,8 @@ export async function middleware(request: NextRequest) {
           ? "mentee_exemption_confirm"
           : request.nextUrl.pathname.startsWith("/renew/")
           ? "renewal"
+          : request.nextUrl.pathname.startsWith("/f/")
+          ? "custom_form"
           : request.nextUrl.pathname.startsWith("/ve/")
             ? "ticket"
             : request.nextUrl.pathname === "/blog" ||
