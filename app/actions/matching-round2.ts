@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { classifyNewPeople, confirmMenteeGroups, confirmMentorGroups, setIndustryGroup, setRound2Window } from "@/lib/matching-round2";
 import { MAX_BULK_APPROVALS, parseGroupApprovals } from "@/lib/matching-round2-bulk-core";
-import { runRound2Dispatch, sendRound2InviteTest } from "@/lib/matching-round2-dispatch";
+import { runRound2Dispatch, runRound2Reminder, sendRound2InviteTest, sendRound2ReminderTest } from "@/lib/matching-round2-dispatch";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
 
@@ -78,6 +78,20 @@ export async function setRound2WindowAction(_prev: Round2ActionState, formData: 
 
 export async function sendRound2TestAction(_prev: Round2ActionState, _formData: FormData): Promise<Round2ActionState> {
   const result = await sendRound2InviteTest();
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/** Gửi thử thư nhắc (BTC 16/10/2026) cho chính người bấm. */
+export async function sendRound2ReminderTestAction(_prev: Round2ActionState, _formData: FormData): Promise<Round2ActionState> {
+  const result = await sendRound2ReminderTest();
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/** Gửi thư nhắc thật. Chỉ chạy khi form mang đúng dấu xác nhận của bước thứ hai trên trang. */
+export async function sendRound2RemindersAction(_prev: Round2ActionState, formData: FormData): Promise<Round2ActionState> {
+  if (formData.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước khi gửi." };
+  const result = await runRound2Reminder();
+  for (const path of PATHS) revalidatePath(path);
   return { status: result.ok ? "ok" : "error", message: result.message };
 }
 

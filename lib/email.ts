@@ -18,6 +18,7 @@ import {
   buildMenteeSessionConfirmedEmail,
   buildMatchingRound2InviteEmail,
   buildCustomFormReceiptEmail,
+  buildMatchingRound2ReminderEmail,
   buildMenteeExemptionConfirmEmail,
   markAsTestEmail,
   buildMenteeSessionInviteEmail,
@@ -1178,6 +1179,51 @@ export async function sendMatchingRound2Invite(input: {
   const testMail = input.token ? null : markAsTestEmail(outgoing, link);
   return deliver(
     "matching_round2_invite",
+    testMail ? { ...testMail, subject: `${testMail.subject} (gửi lúc ${formatDateTime(new Date().toISOString())})` } : outgoing,
+    input.linkId ? { table: "matching_round2_links", id: input.linkId } : null
+  );
+}
+
+/**
+ * Thư NHẮC mentor chưa chọn mentee (BTC 16/10/2026). Dùng lại đúng đường dẫn đã gửi ở thư mời: `token`
+ * là mã của link cũ, KHÔNG sinh mã mới. Ghi sổ theo link (related matching_round2_links) để đếm được ai
+ * đã được nhắc gần đây. Không qua mẫu BTC sửa được: BTC đọc thư qua "Gửi thử cho tôi" trước khi gửi thật.
+ */
+export async function sendMatchingRound2Reminder(input: {
+  toEmail: string;
+  mentorName: string;
+  seasonLabel: string;
+  slots: number;
+  waitingMentees: number | null;
+  deadlineLabel: string;
+  token: string | null;
+  linkId: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  let link = "(đường dẫn riêng của từng mentor — chỉ có trong thư thật)";
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  if (input.token) {
+    if (!base) {
+      return { ok: false, skipped: false, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+    }
+    link = mentorPickUrl(base, input.token);
+  }
+  const built = buildMatchingRound2ReminderEmail({
+    mentorName: input.mentorName,
+    seasonLabel: input.seasonLabel,
+    slotsLabel: String(input.slots),
+    waitingMentees: input.waitingMentees,
+    pickUrl: link,
+    deadlineLabel: input.deadlineLabel,
+    hotlineZalo: HOTLINE_ZALO,
+    guidePdfUrl: base ? round2GuidePdfUrl(base) : ""
+  });
+  const outgoing = { ...built, to: input.toEmail };
+  // Thư thử: ghi rõ là thư thử, không để nút trông như bấm được; tiêu đề kèm giờ gửi để Gmail không gom
+  // các thư thử cùng tiêu đề vào một cuộc trò chuyện rồi ẩn phần cuối thư (15/10/2026).
+  const testMail = input.token ? null : markAsTestEmail(outgoing, link);
+  return deliver(
+    "matching_round2_reminder",
     testMail ? { ...testMail, subject: `${testMail.subject} (gửi lúc ${formatDateTime(new Date().toISOString())})` } : outgoing,
     input.linkId ? { table: "matching_round2_links", id: input.linkId } : null
   );
