@@ -42,6 +42,43 @@ export function round2DispatchBlocked(settings: { opensAt: string | null; closes
   return null;
 }
 
+/**
+ * Thư NHẮC mentor chưa chọn mentee (BTC 16/10/2026: "trưa mai gửi nhắc các mentor chưa đăng ký, kèm
+ * đường link đã gửi trước đó"). Khác thư mời: không theo đợt gửi, dùng lại ĐÚNG link cũ của từng mentor
+ * (không tạo link mới, không đổi mã), và danh sách người nhận được tính lúc bấm gửi — ai đã chọn xong
+ * trước giờ đó thì không bị nhắc.
+ *
+ * "Chưa chọn" = chưa có cặp Vòng 2 nào đang hoạt động; mentor đã nhận một bạn ở Vòng 1 mà còn chỗ vẫn
+ * được nhắc (họ chưa chọn gì ở Vòng 2). Mentor đã chọn một bạn và còn chỗ thứ hai thì KHÔNG nhắc: họ
+ * đang tham gia, thư nhắc "chưa chọn" nói sai về họ.
+ */
+export const ROUND2_REMINDER_COOLDOWN_MS = 18 * 3_600_000;
+
+export type ReminderLink = { id?: unknown; token?: unknown; revoked_at?: unknown; last_sent_wave?: unknown };
+
+export function isRound2ReminderRecipient(row: Round2Row, link: ReminderLink | undefined, remindedLinkIds: ReadonlySet<string>): boolean {
+  if (!link) return false;
+  return (
+    row.person.role === "mentor" &&
+    row.receivesList === true &&
+    Boolean(row.person.email) &&
+    !link.revoked_at &&
+    Boolean(link.token) &&
+    // Chưa nhận thư mời thì thư nhắc "đường link đã gửi trước đó" nói sai — người đó thuộc nút gửi mời.
+    Number(link.last_sent_wave ?? 0) >= 1 &&
+    !row.activeMatches.some((m) => m.round === 2) &&
+    !remindedLinkIds.has(String(link.id))
+  );
+}
+
+/** Chỉ nhắc khi vòng đang mở: chưa mở thì link báo "chưa mở", đã đóng thì không còn gì để nhắc. */
+export function round2ReminderBlocked(settings: { opensAt: string | null; closesAt: string | null } | null, nowMs: number): string | null {
+  const state = windowState(settings, nowMs);
+  if (state === "not_open") return "Vòng 2 chưa mở — chưa nhắc được.";
+  if (state === "closed") return "Vòng 2 đã đóng — không gửi thư nhắc.";
+  return null;
+}
+
 export function round2OpensLabel(opensAt: string | null): string {
   return opensAt ? `${formatDateTime(opensAt)} (giờ Việt Nam)` : "khi ban tổ chức thông báo mở vòng";
 }

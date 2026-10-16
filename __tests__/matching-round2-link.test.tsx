@@ -38,17 +38,21 @@ vi.mock("@/lib/supabase", () => ({ supabase: null, supabaseUrl: "https://x.test"
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(), getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/public-url", () => ({ getPublicOrigin: vi.fn(async () => "https://os.test") }));
-vi.mock("@/lib/email", () => ({ sendMatchingRound2Invite: vi.fn(async () => ({ ok: true, skipped: false })) }));
+vi.mock("@/lib/email", () => ({
+  sendMatchingRound2Invite: vi.fn(async () => ({ ok: true, skipped: false })),
+  sendMatchingRound2Reminder: vi.fn(async () => ({ ok: true, skipped: false }))
+}));
 
 import MentorPickPage from "@/app/chon-mentee/[token]/page";
 import { availableMenteesAction, menteeDetailAction, pickMenteeAction, swapWindowAction, windowCardsAction } from "@/app/chon-mentee/[token]/actions";
 import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { sendMatchingRound2Invite } from "@/lib/email";
+import { sendMatchingRound2Invite, sendMatchingRound2Reminder } from "@/lib/email";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import { linkify, menteeCard, MENTEE_CARD_KEYS, stableOrderKey, undoMinutesLeft, windowState } from "@/lib/matching-round2-link-core";
 import { isRound2Recipient } from "@/lib/matching-round2-dispatch-core";
-import { runRound2Dispatch, sendRound2InviteTest } from "@/lib/matching-round2-dispatch";
+import { getRound2ReminderStatus, runRound2Dispatch, runRound2Reminder, sendRound2InviteTest, sendRound2ReminderTest } from "@/lib/matching-round2-dispatch";
+import { getRound2Data } from "@/lib/matching-round2";
 import { ROUND2_PICK_IDLE } from "@/lib/matching-round2-action-types";
 
 const SEASON = "11111111-1111-4111-8111-111111111111";
@@ -775,5 +779,162 @@ describe("đổi 15 hồ sơ khác (BTC 15/10/2026)", () => {
     expect(badged.sort()).toEqual(ids0.slice(0, 3).sort());
     expect(container.querySelector('[data-testid="swap-progress"]')?.textContent).toContain("Đã xem chi tiết 3/15 hồ sơ");
     expect(container.querySelector('[data-testid="swap-button"]')).toBeNull();
+  });
+});
+
+describe("thư nhắc mentor chưa chọn mentee (BTC 16/10/2026)", () => {
+  const sendMock = () => vi.mocked(sendMatchingRound2Reminder);
+  const linkWrites = () => db.writes.filter((w) => w.table === "matching_round2_links");
+  const L1 = () => db.tables.matching_round2_links.find((l: any) => l.id === "L1");
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+  const logged = (over: Record<string, unknown> = {}) => ({
+    id: `o-${Math.random()}`, kind: "matching_round2_reminder", related_table: "matching_round2_links", related_id: "L1", status: "sent", created_at: hoursAgo(1), ...over
+  });
+  const round2Match = (round: number) => ({ id: `mt-${round}`, season_id: SEASON, mentor_person_id: "mentor-a", mentee_person_id: "m1", status: "active", matching_round: round });
+  // Mentor đã nhận thư mời ở đợt 1 — điều kiện để được nhắc.
+  beforeEach(() => {
+    for (const l of db.tables.matching_round2_links) l.last_sent_wave = 1;
+  });
+
+  it("nhắc đúng mentor chưa chọn: dùng ĐÚNG link cũ, số chỗ còn nhận, số bạn đang chờ; mentor đã đủ chỗ không nhận", async () => {
+    const result = await runRound2Reminder();
+    expect(result).toMatchObject({ ok: true, sent: 1, failed: 0 });
+    expect(sendMock()).toHaveBeenCalledTimes(1);
+    expect(sendMock().mock.calls[0][0]).toMatchObject({
+      toEmail: "an@example.test",
+      mentorName: "Mentor An",
+      slots: 2,
+      waitingMentees: 1,
+      token: TOKEN_A,
+      linkId: "L1",
+      requestOrigin: "https://os.test"
+    });
+    expect(sendMock().mock.calls[0][0].deadlineLabel).toMatch(/\(giờ Việt Nam\)$/);
+  });
+
+  it("đường ghi hẹp: chỉ khoá rồi nhả khoá của đúng link — không đổi mã, đợt gửi, số lần gửi mời", async () => {
+    const before = { ...L1() };
+    await runRound2Reminder();
+    const writes = linkWrites();
+    expect(writes.length).toBeGreaterThan(0);
+    for (const w of writes) expect(Object.keys(w.rows[0])).toEqual(["claimed_at"]);
+    expect(L1()).toMatchObject({ token: before.token, last_sent_wave: 1, send_count: before.send_count, claimed_at: null });
+    expect(db.tables.matching_round2_links.find((l: any) => l.id === "L2")).toMatchObject({ claimed_at: null, token: TOKEN_FULL });
+  });
+
+  it("mentor đã nhận một bạn ở Vòng 1 mà còn chỗ: vẫn được nhắc, thư ghi số chỗ còn lại", async () => {
+    db.tables.matches.push(round2Match(1));
+    await runRound2Reminder();
+    expect(sendMock().mock.calls[0][0]).toMatchObject({ linkId: "L1", slots: 1 });
+  });
+
+  it.each([
+    ["đã có cặp Vòng 2", () => db.tables.matches.push(round2Match(2))],
+    ["link đã thu hồi", () => (L1().revoked_at = "2026-10-15T00:00:00Z")],
+    ["chưa nhận thư mời (đợt 0)", () => (L1().last_sent_wave = 0)],
+    ["đã được nhắc 1 giờ trước (sổ thư)", () => db.tables.outbound_emails.push(logged())],
+    ["đang nằm trong lượt gửi khác (link đang khoá)", () => (L1().claimed_at = new Date().toISOString())]
+  ])("không gửi: %s", async (_name, arrange) => {
+    arrange();
+    const result = await runRound2Reminder();
+    expect(result.sent).toBe(0);
+    expect(sendMock()).not.toHaveBeenCalled();
+  });
+
+  it("nhắc đã quá 18 giờ, hay lần nhắc cũ bị lỗi (status failed), hay thư nhắc của link khác: vẫn nhắc", async () => {
+    db.tables.outbound_emails.push(logged({ created_at: hoursAgo(19) }), logged({ status: "failed" }), logged({ related_id: "L2" }));
+    expect((await runRound2Reminder()).sent).toBe(1);
+  });
+
+  it("bấm hai lần liền: lần hai không gửi trùng (sổ thư giữ dấu lần nhắc)", async () => {
+    sendMock().mockImplementation(async (input: any) => {
+      db.tables.outbound_emails.push(logged({ related_id: input.linkId }));
+      return { ok: true, skipped: false } as any;
+    });
+    expect((await runRound2Reminder()).sent).toBe(1);
+    sendMock().mockClear();
+    const again = await runRound2Reminder();
+    expect(again.sent).toBe(0);
+    expect(again.message).toContain("Không còn mentor nào cần nhắc");
+    expect(sendMock()).not.toHaveBeenCalled();
+  });
+
+  it("hai người bấm sát nhau: người kia khoá link giữa lúc đọc và lúc khoá → mình KHÔNG gửi, và không nhả nhầm khoá của người kia", async () => {
+    const inner = fakeClient(db);
+    const competitor = "2026-10-16T05:00:00.000Z";
+    const wrapped = {
+      ...inner,
+      from: (table: string) => {
+        const query = inner.from(table);
+        if (table !== "matching_round2_links") return query;
+        return {
+          ...query,
+          update: (patch: Record<string, unknown>) => {
+            // Lượt bấm kia vừa khoá link L1 ngay trước lệnh khoá của lượt này.
+            if (patch.claimed_at) L1().claimed_at = competitor;
+            return query.update(patch);
+          }
+        };
+      }
+    };
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(wrapped as any);
+    const result = await runRound2Reminder();
+    expect(result.sent).toBe(0);
+    expect(sendMock()).not.toHaveBeenCalled();
+    expect(L1().claimed_at).toBe(competitor);
+  });
+
+  it("khoá bỏ quên (quá 10 phút) được nhả và vẫn nhắc; thư lỗi thì nhả khoá, báo lỗi, lần bấm sau thử lại", async () => {
+    L1().claimed_at = new Date(Date.now() - 20 * 60_000).toISOString();
+    sendMock().mockResolvedValueOnce({ ok: false, skipped: false, reason: "boom" } as any);
+    const result = await runRound2Reminder();
+    expect(result).toMatchObject({ ok: true, sent: 0, failed: 1 });
+    expect(result.message).toContain("1 thư lỗi");
+    expect(L1().claimed_at).toBeNull();
+    sendMock().mockResolvedValue({ ok: true, skipped: false } as any);
+    expect((await runRound2Reminder()).sent).toBe(1);
+  });
+
+  it("nhà cung cấp báo 429: dừng ngay, nhả khoá, báo còn bao nhiêu mentor chưa được nhắc", async () => {
+    sendMock().mockResolvedValueOnce({ ok: false, skipped: false, reason: "429", providerStatus: 429 } as any);
+    const result = await runRound2Reminder();
+    expect(result.message).toContain("chạm trần");
+    expect(L1().claimed_at).toBeNull();
+  });
+
+  it("vòng chưa mở, đã đóng, người bấm không vận hành mùa, hết hạn mức: không gửi gì", async () => {
+    db.tables.matching_round2_settings[0].opens_at = new Date(Date.now() + 3600_000).toISOString();
+    expect(await runRound2Reminder()).toMatchObject({ ok: false, message: "Vòng 2 chưa mở — chưa nhắc được." });
+    db.tables.matching_round2_settings[0].opens_at = new Date(Date.now() - 2 * 86400_000).toISOString();
+    db.tables.matching_round2_settings[0].closes_at = new Date(Date.now() - 3600_000).toISOString();
+    expect(await runRound2Reminder()).toMatchObject({ ok: false, message: "Vòng 2 đã đóng — không gửi thư nhắc." });
+    db.tables.matching_round2_settings[0].closes_at = new Date(Date.now() + 86400_000).toISOString();
+    db.tables.outbound_emails = Array.from({ length: 920 }, (_, i) => ({ id: `q${i}`, kind: "mentee_session_invite", status: "sent", created_at: hoursAgo(2) }));
+    expect((await runRound2Reminder()).message).toContain("hạn mức");
+    db.tables.outbound_emails = [];
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "admin-sp", role: "support_team", status: "active", auth_user_id: "auth-sp", email: "sp@example.test" } as any);
+    expect((await runRound2Reminder()).ok).toBe(false);
+    expect(sendMock()).not.toHaveBeenCalled();
+    expect(linkWrites()).toEqual([]);
+  });
+
+  it("thư thử: gửi cho chính người bấm, KHÔNG mã riêng, không đụng link nào; không quyền thì không gửi", async () => {
+    const result = await sendRound2ReminderTest();
+    expect(result.ok).toBe(true);
+    expect(sendMock()).toHaveBeenCalledTimes(1);
+    expect(sendMock().mock.calls[0][0]).toMatchObject({ toEmail: "core@example.test", token: null, linkId: null, requestOrigin: "https://os.test" });
+    expect(linkWrites()).toEqual([]);
+    sendMock().mockClear();
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "admin-sp", role: "support_team", status: "active", auth_user_id: "auth-sp", email: "sp@example.test" } as any);
+    expect((await sendRound2ReminderTest()).ok).toBe(false);
+    expect(sendMock()).not.toHaveBeenCalled();
+  });
+
+  it("trạng thái cho BTC: đếm đúng số sẽ nhắc và số đã được nhắc gần đây; thư nhắc cũ hơn 18 giờ không tính", async () => {
+    const data = await getRound2Data();
+    if (!data.ok) throw new Error("bảng Vòng 2 phải đọc được");
+    expect(await getRound2ReminderStatus(data.data.board)).toMatchObject({ window: "open", eligible: 1, remindedRecently: 0 });
+    db.tables.outbound_emails.push(logged(), logged({ related_id: "L9", created_at: hoursAgo(30) }));
+    expect(await getRound2ReminderStatus(data.data.board)).toMatchObject({ eligible: 0, remindedRecently: 1 });
   });
 });

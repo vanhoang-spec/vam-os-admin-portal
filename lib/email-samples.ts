@@ -31,6 +31,7 @@ import {
   buildInterviewSlotInviteEmail,
   buildMatchingRound2InviteEmail,
   buildCustomFormReceiptEmail,
+  buildMatchingRound2ReminderEmail,
   buildMenteeExemptionConfirmEmail,
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
@@ -267,6 +268,26 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         slotsLabel: "2",
         pickUrl: `${ORIGIN}/chon-mentee/ma-vi-du`,
         opensLabel: round2OpensLabel("2026-10-15T03:00:00Z"),
+        deadlineLabel: round2DeadlineLabel("2026-10-18T16:59:00Z"),
+        hotlineZalo: "0919144638",
+        guidePdfUrl: round2GuidePdfUrl(ORIGIN)
+      })
+    )
+  },
+  {
+    kind: "matching_round2_reminder",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Nhắc mentor chưa chọn mentee — Ghép cặp Vòng 2",
+    audience: "Mentor còn chỗ, đã nhận thư mời Vòng 2 nhưng chưa có cặp Vòng 2 nào",
+    trigger: 'Khi ban tổ chức bấm "Gửi thư nhắc" ở mục Vòng 2 · Báo cáo (chỉ khi vòng đang mở).',
+    note: "Dùng lại đúng đường dẫn riêng đã gửi ở thư mời. Danh sách người nhận tính lúc bấm gửi; mỗi mentor chỉ được nhắc một lần trong 18 giờ.",
+    body: built(
+      buildMatchingRound2ReminderEmail({
+        mentorName: MENTOR,
+        seasonLabel: SEASON,
+        slotsLabel: "2",
+        waitingMentees: 41,
+        pickUrl: `${ORIGIN}/chon-mentee/ma-vi-du`,
         deadlineLabel: round2DeadlineLabel("2026-10-18T16:59:00Z"),
         hotlineZalo: "0919144638",
         guidePdfUrl: round2GuidePdfUrl(ORIGIN)

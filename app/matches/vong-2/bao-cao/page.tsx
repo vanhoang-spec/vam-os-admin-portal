@@ -4,8 +4,9 @@ import { Card, EmptyState, ErrorBox, KpiCard, PageHeader } from "@/components/ui
 import { TableSearch } from "@/components/table-search";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { getRound2Data } from "@/lib/matching-round2";
-import { getRound2DispatchStatus } from "@/lib/matching-round2-dispatch";
+import { getRound2DispatchStatus, getRound2ReminderStatus } from "@/lib/matching-round2-dispatch";
 import { Round2DispatchPanel } from "./dispatch-panel";
+import { Round2ReminderPanel } from "./reminder-panel";
 import { byGroupThenName, type GroupSummary, type PoolSummary, type Round2Row } from "@/lib/matching-round2-core";
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 import { canAssignReview, canBrowseOperations } from "@/lib/permissions";
@@ -139,6 +140,8 @@ export default async function Round2ReportPage() {
   }
   const { board, canManage } = result.data;
   const dispatch = canManage ? await getRound2DispatchStatus() : null;
+  // Thư nhắc (BTC 16/10/2026): dùng lại bảng đã đọc ở trên, chỉ thêm vài truy vấn nhẹ (link, sổ thư).
+  const reminder = canManage ? await getRound2ReminderStatus(board) : null;
   const windowLabel = !dispatch
     ? ""
     : dispatch.window === "open"
@@ -180,7 +183,14 @@ export default async function Round2ReportPage() {
         <Card>
           <h2 className="mb-2 text-base font-semibold text-vam-ink">Mở vòng 2 và gửi link chọn mentee</h2>
           {dispatch ? (
-            <Round2DispatchPanel {...dispatch} windowLabel={windowLabel} />
+            <div className="grid gap-4">
+              <Round2DispatchPanel {...dispatch} windowLabel={windowLabel} />
+              {reminder ? (
+                <Round2ReminderPanel {...reminder} />
+              ) : (
+                <ErrorBox message="Không đọc được trạng thái thư nhắc. Tải lại trang." />
+              )}
+            </div>
           ) : (
             <ErrorBox message="Không đọc được trạng thái gửi thư. Tải lại trang." />
           )}

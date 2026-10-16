@@ -89,7 +89,10 @@ export type EmailKind =
   | "mentee_exemption_confirm"
   // Form tùy chỉnh: thư tự động gửi người điền ngay sau khi gửi form, nội dung do BTC/Support team
   // soạn trong trình tạo form (supabase/migrations/20261015200000_form_tuy_chinh.sql).
-  | "custom_form_receipt";
+  | "custom_form_receipt"
+  // Ghép cặp Vòng 2: thư nhắc mentor chưa chọn mentee, kèm đúng đường dẫn đã gửi ở thư mời
+  // (supabase/migrations/20261016220000_vong_2_thu_nhac.sql).
+  | "matching_round2_reminder";
 
 /**
  * Một tệp đi kèm thư.
@@ -2045,6 +2048,80 @@ export function buildMatchingRound2InviteEmail(input: {
       "<p>Sau khi chọn, ban tổ chức sẽ giới thiệu hai bên với nhau. Hồ sơ mentee chỉ dùng để chọn — vui lòng không chia sẻ ra ngoài.</p>",
       `<p>Cần hỗ trợ, anh/chị nhắn Zalo ban tổ chức <strong>${escapeHtml(input.hotlineZalo)}</strong> hoặc trả lời email này.</p>`,
       `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho anh/chị, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.pickUrl)}</p>`
+    ].join("")
+  );
+  return { to: "", subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Thư NHẮC mentor chưa chọn mentee ở Vòng 2 (BTC 16/10/2026). Giọng thân mật, thúc đẩy hành động chứ
+ * không ra lệnh: cảm ơn trước, nói điều bạn mentee đang chờ, đưa việc cần làm thành lời mời ("mở đường
+ * dẫn… bấm Chọn bạn này"), rồi gỡ trở ngại (đổi 15 hồ sơ khác, bỏ chọn trong 30 phút) và chừa lối ra
+ * ("nếu chưa tiện, nhắn ban tổ chức"). Không dùng "vui lòng", "yêu cầu", "bắt buộc", "phải", không in
+ * hạn bằng chữ in hoa hay dấu chấm than dồn dập. Dùng đúng đường dẫn riêng đã gửi ở thư mời.
+ *
+ * `waitingMentees`: số bạn trong danh sách chọn của mentor còn chưa có mentor — con số thật lúc gửi;
+ * trống hoặc 0 thì bỏ câu đó (không nói "còn 0 bạn đang chờ").
+ */
+export function buildMatchingRound2ReminderEmail(input: {
+  mentorName: string;
+  seasonLabel: string;
+  slotsLabel: string;
+  waitingMentees?: number | null;
+  pickUrl: string;
+  deadlineLabel: string;
+  hotlineZalo: string;
+  guidePdfUrl?: string;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName, "Anh/Chị");
+  const season = safeDisplayName(input.seasonLabel, "mùa mới");
+  const slots = safeDisplayName(input.slotsLabel, "");
+  const deadline = safeDisplayName(input.deadlineLabel, "");
+  const guidePdf = safeSentence(input.guidePdfUrl, "");
+  const waiting = Number.isFinite(input.waitingMentees) && Number(input.waitingMentees) > 0 ? Math.trunc(Number(input.waitingMentees)) : 0;
+  const waitingSentence = waiting ? ` Nhóm ngành của Anh/Chị hiện còn ${waiting} bạn chưa có mentor.` : "";
+  const slotsSentence = slots ? `Anh/Chị còn nhận được ${slots} mentee. ` : "";
+
+  const subject = `[UEH Mentoring] Nhắc nhẹ: các bạn mentee đang chờ Anh/Chị — ${season}`;
+  const intro = `Cảm ơn Anh/Chị đã đồng hành cùng ${season}. Ban tổ chức nhắn nhẹ một chút: Anh/Chị chưa chọn mentee nào ở Vòng 2, trong khi các bạn mentee vẫn đang mong có một người đồng hành.${waitingSentence}`;
+  const ask = `${slotsSentence}Danh sách riêng của Anh/Chị gồm tối đa 15 hồ sơ đã được chia sẵn. Anh/Chị mở đường dẫn dưới đây (vẫn là đường dẫn đã gửi trước đó), đọc hồ sơ và bấm "Chọn bạn này" ở bạn mình thấy hợp là xong:`;
+  const tipSwap = 'Chưa thấy bạn nào hợp trong 15 hồ sơ đầu? Sau khi mở "Xem đầy đủ hồ sơ" của từng bạn, nút "Đổi 15 hồ sơ khác" sẽ hiện ra để Anh/Chị xem thêm các bạn khác.';
+  const tipUndo = "Chọn nhầm cũng không sao: Anh/Chị bỏ chọn được trong 30 phút.";
+  const tipDeadline = `Vòng 2 mở đến ${deadline}. Chọn sớm thì các bạn có thêm thời gian chuẩn bị để gặp Anh/Chị.`;
+  const outro = `Nếu lúc này Anh/Chị chưa tiện, cũng không sao — Anh/Chị nhắn Zalo ban tổ chức ${input.hotlineZalo} hoặc trả lời email này, ban tổ chức sẽ hỗ trợ ngay.`;
+
+  const lines = [
+    `Chào ${name},`,
+    "",
+    intro,
+    "",
+    ask,
+    input.pickUrl,
+    "",
+    "Vài điều nhỏ có thể giúp Anh/Chị thuận tiện hơn:",
+    `- ${tipSwap}`,
+    `- ${tipUndo}`,
+    ...(deadline ? [`- ${tipDeadline}`] : []),
+    ...(guidePdf ? ["", "Hướng dẫn từng bước cho mentor (file PDF):", guidePdf] : []),
+    "",
+    outro,
+    "",
+    "Cảm ơn Anh/Chị rất nhiều!",
+    "",
+    SIGNATURE_TEXT
+  ];
+  const html = wrapHtml(
+    [
+      `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+      `<p>${escapeHtml(intro)}</p>`,
+      `<p>${escapeHtml(ask)}</p>`,
+      `<p style="margin:20px 0"><a href="${escapeHtml(input.pickUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Xem hồ sơ và chọn mentee</a></p>`,
+      "<p>Vài điều nhỏ có thể giúp Anh/Chị thuận tiện hơn:</p>",
+      `<ul style="margin:0 0 16px;padding-left:20px"><li>${escapeHtml(tipSwap)}</li><li>${escapeHtml(tipUndo)}</li>${deadline ? `<li>${escapeHtml(tipDeadline)}</li>` : ""}</ul>`,
+      guidePdf ? `<p>Hướng dẫn từng bước cho mentor: <a href="${escapeHtml(guidePdf)}">mở file PDF hướng dẫn</a>.</p>` : "",
+      `<p>${escapeHtml(outro)}</p>`,
+      "<p>Cảm ơn Anh/Chị rất nhiều!</p>",
+      `<p style="color:#4f6b60;font-size:13px">Đường dẫn là riêng cho Anh/Chị, vui lòng không chuyển tiếp. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.pickUrl)}</p>`
     ].join("")
   );
   return { to: "", subject, text: lines.join("\n"), html };

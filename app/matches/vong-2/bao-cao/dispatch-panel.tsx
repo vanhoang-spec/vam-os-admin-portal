@@ -18,7 +18,7 @@ export type DispatchPanelProps = {
   windowLabel: string;
 };
 
-function Message({ state }: { state: Round2ActionState }) {
+export function Message({ state }: { state: Round2ActionState }) {
   if (state.status === "idle") return null;
   return (
     <p role="status" className={`text-sm ${state.status === "ok" ? "text-green-700" : "text-red-600"}`}>
@@ -27,7 +27,7 @@ function Message({ state }: { state: Round2ActionState }) {
   );
 }
 
-function Submit({ label, pendingLabel, disabled }: { label: string; pendingLabel: string; disabled?: boolean }) {
+export function Submit({ label, pendingLabel, disabled }: { label: string; pendingLabel: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
