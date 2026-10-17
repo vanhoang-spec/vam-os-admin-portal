@@ -100,7 +100,7 @@ describe("3. nội dung thư nhắc — thân mật, thúc đẩy hành động,
       expect(body).toContain("0919144638");
     }
     expect(mail.text).toContain("Chào Nguyễn Văn An,");
-    expect(mail.subject).toBe("[UEH Mentoring] Nhắc nhẹ: các bạn mentee đang chờ Anh/Chị — UEH Mentoring Mùa 12");
+    expect(mail.subject).toBe("[UEH Mentoring] Các bạn mentee đang chờ anh/chị chọn làm mentee của mình - Mùa 12");
     // Bản chữ: đường dẫn đứng riêng một dòng (không dính dấu câu cuối, trình đọc thư không cắt nhầm).
     expect(mail.text.split("\n")).toContain(base.pickUrl);
   });
@@ -160,9 +160,20 @@ describe("3. nội dung thư nhắc — thân mật, thúc đẩy hành động,
     expect(buildMatchingRound2ReminderEmail({ ...base, mentorName: "  " }).text).toContain("Chào Anh/Chị,");
   });
 
+  it("tiêu đề chỉ bỏ chữ “UEH Mentoring” thừa ở ĐẦU tên mùa: mùa khác giữ nguyên, tên mùa trống thì dùng “mùa mới”", () => {
+    const subjectOf = (seasonLabel: string) => buildMatchingRound2ReminderEmail({ ...base, seasonLabel }).subject;
+    expect(subjectOf("UEH Mentoring Mùa 12")).toBe("[UEH Mentoring] Các bạn mentee đang chờ anh/chị chọn làm mentee của mình - Mùa 12");
+    expect(subjectOf("ueh mentoring   Mùa 13")).toBe("[UEH Mentoring] Các bạn mentee đang chờ anh/chị chọn làm mentee của mình - Mùa 13");
+    expect(subjectOf("BK Mentoring Mùa 3")).toContain("- BK Mentoring Mùa 3");
+    expect(subjectOf("UEH Mentoring")).toContain("- UEH Mentoring");
+    expect(subjectOf("  ")).toContain("- mùa mới");
+    // Phần thân vẫn gọi đủ tên chương trình.
+    expect(buildMatchingRound2ReminderEmail(base).text).toContain("đồng hành cùng UEH Mentoring Mùa 12");
+  });
+
   it("có mẫu trong thư viện Mẫu thư và nhãn trong nhật ký thư", () => {
     const sample = EMAIL_SAMPLES.find((s) => s.kind === "matching_round2_reminder");
-    expect(sample?.body?.subject).toContain("Nhắc nhẹ");
+    expect(sample?.body?.subject).toContain("đang chờ anh/chị chọn làm mentee của mình");
     expect(sample?.body?.html).toContain("/chon-mentee/ma-vi-du");
     expect(outboundEmailKindLabel("matching_round2_reminder")).toBe("Nhắc mentor chọn mentee (Vòng 2)");
   });

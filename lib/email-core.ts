@@ -2082,7 +2082,8 @@ export function buildMatchingRound2ReminderEmail(input: {
   const waitingSentence = waiting ? ` Nhóm ngành của Anh/Chị hiện còn ${waiting} bạn chưa có mentor.` : "";
   const slotsSentence = slots ? `Anh/Chị còn nhận được ${slots} mentee. ` : "";
 
-  const subject = `[UEH Mentoring] Nhắc nhẹ: các bạn mentee đang chờ Anh/Chị — ${season}`;
+  // Đầu tiêu đề đã có thẻ [UEH Mentoring] nên bỏ chữ "UEH Mentoring" thừa ở tên mùa: "UEH Mentoring Mùa 12" → "Mùa 12".
+  const subject = `[UEH Mentoring] Các bạn mentee đang chờ anh/chị chọn làm mentee của mình - ${season.replace(/^UEH Mentoring\s+/i, "")}`;
   const intro = `Cảm ơn Anh/Chị đã đồng hành cùng ${season}. Ban tổ chức nhắn nhẹ một chút: Anh/Chị chưa chọn mentee nào ở Vòng 2, trong khi các bạn mentee vẫn đang mong có một người đồng hành.${waitingSentence}`;
   const ask = `${slotsSentence}Danh sách riêng của Anh/Chị gồm tối đa 15 hồ sơ đã được chia sẵn. Anh/Chị mở đường dẫn dưới đây (vẫn là đường dẫn đã gửi trước đó), đọc hồ sơ và bấm "Chọn bạn này" ở bạn mình thấy hợp là xong:`;
   const tipSwap = 'Chưa thấy bạn nào hợp trong 15 hồ sơ đầu? Sau khi mở "Xem đầy đủ hồ sơ" của từng bạn, nút "Đổi 15 hồ sơ khác" sẽ hiện ra để Anh/Chị xem thêm các bạn khác.';
