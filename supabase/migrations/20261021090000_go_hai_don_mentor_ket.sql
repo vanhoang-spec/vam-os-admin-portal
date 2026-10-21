@@ -45,7 +45,7 @@ declare
   -- đúng một tài khoản như vậy, nhiều hơn thì dừng và bảo điền tay. Điền email vào đây
   -- nếu muốn một người cụ thể đứng tên. Phải là email đăng nhập VAM OS trong bảng
   -- admin_users, không phải hộp thư gửi đi hello@ của hệ thống.
-  c_actor_email constant text := '';
+  c_actor_email constant text := 'vanhoang.nguyen@gmail.com';
   c_names       constant text[] := array['Nguyễn Hoàng Tân', 'Trần Thanh Bạch'];
   -- Từ vựng audit là danh sách đóng và mỗi Production một khác; chọn giá trị đang được
   -- nhận thay vì đoán. Thứ tự ưu tiên = sát nghĩa nhất trước.

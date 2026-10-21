@@ -26,6 +26,8 @@ const PREV_MARKER = "DOI_TRANG_THAI_MENTOR_2026_10_21";
 const CHANGED_AT = "2026-10-20T17:42:51.315171+00:00";
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
+/** Email đang ghi trong c_actor_email của file — người đứng tên lần gỡ này. */
+const ACTOR_EMAIL = "vanhoang.nguyen@gmail.com";
 const PROGRAM = uuid(1);
 const S12 = uuid(12);
 const SUPER = uuid(21);
@@ -166,9 +168,15 @@ beforeEach(async () => {
     "truncate admin_audit_log, matching_round2_links, matches, person_season_memberships, application_reviews, application_decisions, applications, admin_users, people, seasons cascade"
   );
   await db.query("insert into seasons values ($1,$2,'UEHM-S12')", [S12, PROGRAM]);
+  // Đúng tài khoản ghi trong c_actor_email của file, cộng hai super admin khác: production
+  // có ba, nên ca test phải chạy trong đúng hoàn cảnh đó.
   await db.query(
-    "insert into admin_users values ($1,'Nguyễn Văn Hoàng','hoang@example.test','super_admin','active'), ($2,'Lương Quốc Vĩ','vi@example.test','reviewer','active')",
-    [SUPER, REVIEWER]
+    `insert into admin_users values
+       ($1,'Nguyễn Văn Hoàng',$4,'super_admin','active'),
+       ($2,'Lương Quốc Vĩ','vi@example.test','reviewer','active'),
+       ($3,'Super Hai','hai@example.test','super_admin','active'),
+       ($5,'Super Ba','ba@example.test','super_admin','active')`,
+    [SUPER, REVIEWER, uuid(23), ACTOR_EMAIL, uuid(24)]
   );
   await seedStuck();
 });
@@ -302,16 +310,26 @@ describe("dừng trước khi ghi khi tình trạng đã khác", () => {
     await expectRefused(/cần đúng 1/);
   });
 
-  it("không có hoặc có nhiều super admin thì đòi điền tay, không tự chọn hộ", async () => {
+  it("tài khoản đứng tên không còn hoạt động", async () => {
     await db.query("update admin_users set status = 'disabled' where id = $1", [SUPER]);
-    await expectRefused(/tài khoản super admin đang hoạt động/);
+    await expectRefused(/không thấy tài khoản admin đang hoạt động với email/);
+  });
 
-    await db.query("update admin_users set status = 'active' where id = $1", [SUPER]);
-    await db.query(
-      "insert into admin_users values ($1,'Super Hai','hai@example.test','super_admin','active')",
-      [uuid(23)]
-    );
-    await expectRefused(/tài khoản super admin đang hoạt động/);
+  it("ba super admin cùng hoạt động vẫn chạy được — file đi theo email đã ghi", async () => {
+    expect(
+      await one<{ n: number }>(
+        "select count(*)::int as n from admin_users where status = 'active' and role = 'super_admin'"
+      )
+    ).toEqual({ n: 3 });
+
+    await run();
+
+    // Đúng người trong c_actor_email đứng tên, không phải một super admin bất kỳ.
+    const history = await decisionsOf(TAN.app);
+    expect(history[history.length - 1]).toMatchObject({
+      decided_by: SUPER,
+      decided_by_name: "Nguyễn Văn Hoàng"
+    });
   });
 
   it("không thấy mùa thì dừng", async () => {
