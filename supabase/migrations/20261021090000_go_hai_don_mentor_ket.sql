@@ -41,8 +41,11 @@ declare
   c_prev_marker constant text := 'DOI_TRANG_THAI_MENTOR_2026_10_21';
   c_target      constant text := 'invited_to_interview';
   c_season_code constant text := 'UEHM-S12';
-  -- ĐIỀN TRƯỚC KHI CHẠY.
-  c_actor_email constant text := 'REPLACE_ME@alumni-mentoring.edu.vn';
+  -- Để TRỐNG thì file tự tìm tài khoản super admin đang hoạt động — chỉ nhận khi có
+  -- đúng một tài khoản như vậy, nhiều hơn thì dừng và bảo điền tay. Điền email vào đây
+  -- nếu muốn một người cụ thể đứng tên. Phải là email đăng nhập VAM OS trong bảng
+  -- admin_users, không phải hộp thư gửi đi hello@ của hệ thống.
+  c_actor_email constant text := '';
   c_names       constant text[] := array['Nguyễn Hoàng Tân', 'Trần Thanh Bạch'];
   -- Từ vựng audit là danh sách đóng và mỗi Production một khác; chọn giá trị đang được
   -- nhận thay vì đoán. Thứ tự ưu tiên = sát nghĩa nhất trước.
@@ -65,12 +68,27 @@ declare
   v_done       integer := 0;
   v_skipped    integer := 0;
 begin
-  select au.id, coalesce(nullif(btrim(au.full_name), ''), au.email)
-    into v_actor_id, v_actor_name
-  from public.admin_users au
-  where lower(au.email) = lower(c_actor_email) and au.status = 'active';
-  if v_actor_id is null then
-    raise exception 'PRECHECK: không thấy tài khoản admin đang hoạt động với email % — dừng, chưa ghi gì', c_actor_email;
+  if btrim(coalesce(c_actor_email, '')) <> '' then
+    select au.id, coalesce(nullif(btrim(au.full_name), ''), au.email)
+      into v_actor_id, v_actor_name
+    from public.admin_users au
+    where lower(au.email) = lower(c_actor_email) and au.status = 'active';
+    if v_actor_id is null then
+      raise exception 'PRECHECK: không thấy tài khoản admin đang hoạt động với email % — dừng, chưa ghi gì. Đây phải là email đăng nhập VAM OS, không phải hộp thư gửi đi của hệ thống.', c_actor_email;
+    end if;
+  else
+    -- Không điền thì lấy super admin, và CHỈ khi có đúng một. Nhiều hơn một thì file
+    -- không được tự chọn hộ: dòng quyết định này mang tên một người thật.
+    select count(*) into v_count
+    from public.admin_users au
+    where au.status = 'active' and au.role = 'super_admin';
+    if v_count <> 1 then
+      raise exception 'PRECHECK: có % tài khoản super admin đang hoạt động (cần đúng 1 để tự chọn) — điền c_actor_email rồi chạy lại; chưa ghi gì', v_count;
+    end if;
+    select au.id, coalesce(nullif(btrim(au.full_name), ''), au.email)
+      into v_actor_id, v_actor_name
+    from public.admin_users au
+    where au.status = 'active' and au.role = 'super_admin';
   end if;
 
   select s.id into v_season from public.seasons s where s.code = c_season_code;
