@@ -36,7 +36,15 @@ import {
   SCREENING_DECISION_CHOICES,
   buildScreeningDecisionState
 } from "@/lib/screening-decision";
-import { getApplicationDecisionEligibility } from "@/lib/application-decisions";
+import {
+  getApplicationDecisionEligibility,
+  getFinalApprovalEligibility
+} from "@/lib/application-decisions";
+import {
+  finalApprovalNextStep,
+  finalApprovalReasonMessage,
+  finalApprovalTargetStatus
+} from "@/lib/final-approval-eligibility";
 import { findReturningMentorProfile } from "@/lib/returning-mentor";
 import { redirect } from "next/navigation";
 import {
@@ -150,6 +158,13 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
   const requiredProfileReviews = stageRequirementsResult.error
     ? null
     : stageRequirementsResult.data.find((r) => r.review_stage === "profile_screening")
+        ?.minimum_submitted_reviews ?? null;
+
+  // Cùng một lượt đọc đã có, dùng cho thẻ duyệt chính thức bên dưới: thiếu mấy
+  // phiếu phỏng vấn là con số BTC cần thấy, không phải thứ phải mở database mới biết.
+  const requiredInterviewReviews = stageRequirementsResult.error
+    ? null
+    : stageRequirementsResult.data.find((r) => r.review_stage === "interview")
         ?.minimum_submitted_reviews ?? null;
 
   const personId = application.data?.person_id;
@@ -324,6 +339,23 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
         )
       )
     : {};
+
+  // Thẻ duyệt chính thức hỏi ĐÚNG hàm mà đường ghi sẽ hỏi, thay vì suy từ trạng
+  // thái. Trước 21/10/2026 nó chỉ xem `status === "interview_passed"`, nên hai đơn
+  // mentor chưa có phiếu phỏng vấn nào vẫn thấy nút duyệt — bấm vào thì bị từ chối
+  // bằng một câu không nói thiếu gì.
+  const finalApprovalTarget = finalApprovalTargetStatus(application.data?.role_applied);
+  const inFinalApprovalStage =
+    canMakeDecision && !isWithdrawn && displayStatus === "interview_passed" && !!finalApprovalTarget;
+  const finalApproval = inFinalApprovalStage
+    ? await getFinalApprovalEligibility(application.data!.id, finalApprovalTarget!)
+    : null;
+  // Chỉ đếm người ĐÃ NỘP, và đếm theo người — đúng phép đếm của hàm SQL.
+  const submittedInterviewReviewers = new Set(
+    reviews
+      .filter((r) => r.review_round === "interview" && r.status === "submitted")
+      .map((r) => r.reviewer_admin_user_id ?? r.id)
+  ).size;
 
   const screeningState = buildScreeningDecisionState({
     applicationStatus: displayStatus,
@@ -714,7 +746,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
       </Card>
 
       {/* ── Final approval (admin / core-team only) ───────────────────────────── */}
-      {canMakeDecision && displayStatus === "interview_passed" && (
+      {inFinalApprovalStage && finalApproval?.eligible && (
         <Card className="mb-4 border-vam-green/30">
           <div className="mb-3">
             <h2 className="text-base font-semibold text-vam-ink">
@@ -738,6 +770,29 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
             alreadyApproved={!!application.data.person_id}
             personId={application.data.person_id}
           />
+        </Card>
+      )}
+
+      {/* Cùng chỗ, cùng lúc: không có nút thì phải có lý do, ngay tại đây. */}
+      {inFinalApprovalStage && finalApproval && !finalApproval.eligible && (
+        <Card className="mb-4 border-amber-300" data-testid="final-approval-blocked">
+          <div className="mb-3">
+            <h2 className="text-base font-semibold text-vam-ink">
+              Chưa duyệt chính thức được
+            </h2>
+          </div>
+          <p className="mb-2 text-sm text-slate-700">
+            {finalApprovalReasonMessage(finalApproval.reason)}
+          </p>
+          {finalApproval.reason === "interview_review_minimum_not_met" && (
+            <p className="mb-2 text-sm text-slate-600">
+              Phiếu phỏng vấn đã nộp: <strong>{submittedInterviewReviewers}</strong>
+              {requiredInterviewReviews === null ? "" : `/${requiredInterviewReviews}`}
+            </p>
+          )}
+          {finalApprovalNextStep(finalApproval.reason) && (
+            <p className="text-sm text-slate-500">{finalApprovalNextStep(finalApproval.reason)}</p>
+          )}
         </Card>
       )}
 
