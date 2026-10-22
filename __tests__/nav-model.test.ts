@@ -401,7 +401,8 @@ const OPS_ADMIN_ROUTES = [
 // season scope, not by nav visibility.
 // 11/10/2026: thêm trang Mentee đặc cách (Support team) — có họ tên, email và nút gửi thư
 // nên cùng khán giả với nhóm này (Core team trở lên), trang tự gate bằng canManageMatches.
-const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team", "/applications/mentee-dac-cach"];
+// "/matches/ket-qua" (22/10/2026): thư kết quả + hồ sơ người đồng hành, cùng khán giả canManageMatches.
+const ADMIN_TIER_ROUTES = ["/admin", "/admin/renewals", "/admin/seasons-forms", "/team", "/applications/mentee-dac-cach", "/matches/ket-qua"];
 
 const REVIEW_ROUTES = [
   // My Work rides the same `showReviews` gate as the rest of this set: it is

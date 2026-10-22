@@ -223,7 +223,10 @@ function buildRecruitmentGroup(
       // Vòng 2 (BTC 07/10/2026): mentor tự chọn mentee cùng nhóm ngành.
       children: [
         { href: "/matches/vong-2", label: "Vòng 2 · Phân nhóm ngành" },
-        { href: "/matches/vong-2/bao-cao", label: "Vòng 2 · Báo cáo" }
+        { href: "/matches/vong-2/bao-cao", label: "Vòng 2 · Báo cáo" },
+        // Thư kết quả + hồ sơ người đồng hành (BTC 22/10/2026). Có họ tên, email, SĐT của mọi cặp:
+        // cùng khán giả với trang tự gate bằng canManageMatches (Core team trở lên).
+        ...(showAdminTier ? [{ href: "/matches/ket-qua", label: "Kết quả ghép cặp" }] : [])
       ]
     })
   ];

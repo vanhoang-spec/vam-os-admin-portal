@@ -127,14 +127,14 @@ describe("KHÔNG tái sinh phép đọc đã bị thu hồi", () => {
 });
 
 describe("đường công khai không bị đụng vào", () => {
-  it("bốn đường công khai vẫn được NHẬN RA, không chỉ được nhắc tên", () => {
+  it("các đường công khai vẫn được NHẬN RA, không chỉ được nhắc tên", () => {
     // Soi đúng khối điều kiện mở đầu middleware. Tìm chung cả file thì một
     // đường bị gỡ khỏi điều kiện vẫn xanh, vì tên nó còn nằm trong nhánh chọn
     // nhãn ngay bên dưới.
     const middlewareBody = code.slice(code.indexOf("export async function middleware"));
     const guard = middlewareBody.slice(0, middlewareBody.indexOf("const requestHeaders"));
 
-    for (const path of ["/register/", "/checkin/", "/ve/", "/renew/"]) {
+    for (const path of ["/register/", "/checkin/", "/ve/", "/renew/", "/ho-so/"]) {
       expect(guard, path).toMatch(
         new RegExp(`startsWith\\("${path.replace(/\//g, "\\/")}"\\)`)
       );
