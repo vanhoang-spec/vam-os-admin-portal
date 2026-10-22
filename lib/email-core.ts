@@ -2207,6 +2207,179 @@ export function buildCustomFormReceiptEmail(input: { formTitle: string; subject?
   return { to: "", subject, text, html };
 }
 
+/**
+ * Thư thông báo kết quả Matching mùa 12 (BTC 22/10/2026) — chữ NGUYÊN VĂN từ Google Doc
+ * "[UM][TUYỂN MENTEE SS12] | MAIL KẾT QUẢ MATCHING", hai mẫu thường MENTEE và MENTOR.
+ *
+ * Chỗ khác Doc, đều có chủ ý: dòng link hồ sơ mang thêm tên người đồng hành (Doc chỉ ghi
+ * "[LINK HỒ SƠ ...]"), mentor có bao nhiêu mentee thì bấy nhiêu dòng "Mentee n" (Doc ghi sẵn
+ * "Mentee 2 (nếu có)"), và một dòng chữ nhỏ cuối thư nhắc đường dẫn hồ sơ là riêng — hồ sơ
+ * mang SĐT và email của người đồng hành.
+ *
+ * Thư KHÔNG mang SĐT, email hay câu tự luận của ai: những thứ đó chỉ nằm sau link, nơi cổng kiểm
+ * cặp còn hoạt động mỗi lần mở (lib/match-profile.ts).
+ */
+export const MATCH_RESULT_SUBJECT = "THÔNG BÁO KẾT QUẢ MATCHING THÀNH CÔNG - UEH MENTORING MÙA 12";
+export const MATCH_RESULT_MENTEE_TRAINING_URL = "https://os.alumni-mentoring.edu.vn/register/eba60bb2-57b6-4e4f-b786-5e7a6f517584";
+export const MATCH_RESULT_MENTOR_TRAINING_URL = "https://os.alumni-mentoring.edu.vn/register/5663ff34-358d-4949-9ef8-f1bab428ae64";
+const MATCH_RESULT_KICKOFF_PENDING = "BTC sẽ cập nhật sau.";
+const MATCH_RESULT_SIGN_OFF = "BAN TỔ CHỨC UEH MENTORING MÙA 12";
+
+type MatchResultLink = { label: string; name: string; url: string };
+type MatchResultBlock =
+  | { kind: "p"; text: string }
+  | { kind: "h"; text: string }
+  | { kind: "lines"; lines: Array<string | { label: string; url: string }> }
+  | { kind: "profiles"; links: MatchResultLink[] };
+
+function renderMatchResultEmail(blocks: MatchResultBlock[], privacyNote: string): { text: string; html: string } {
+  const text: string[] = [];
+  const html: string[] = [];
+  const a = (url: string, label = url) => `<a href="${escapeHtml(url)}">${escapeHtml(label)}</a>`;
+  for (const b of blocks) {
+    if (b.kind === "p") {
+      text.push(b.text, "");
+      html.push(`<p>${escapeHtml(b.text)}</p>`);
+    } else if (b.kind === "h") {
+      text.push(b.text, "");
+      html.push(`<p style="margin:20px 0 8px"><strong>${escapeHtml(b.text)}</strong></p>`);
+    } else if (b.kind === "lines") {
+      text.push(...b.lines.map((l) => (typeof l === "string" ? l : `${l.label}${l.url}`)), "");
+      html.push(`<p>${b.lines.map((l) => (typeof l === "string" ? escapeHtml(l) : `${escapeHtml(l.label)}${a(l.url)}`)).join("<br />")}</p>`);
+    } else {
+      text.push(...b.links.map((l) => `${l.label}: ${l.name} — ${l.url}`), "");
+      html.push(
+        `<p>${b.links
+          .map((l) => `${escapeHtml(l.label)}: <strong>${escapeHtml(l.name)}</strong> — ${a(l.url, "Xem hồ sơ")}`)
+          .join("<br />")}</p>`
+      );
+    }
+  }
+  text.push("Trân trọng,", "", MATCH_RESULT_SIGN_OFF, "", privacyNote);
+  return {
+    text: text.join("\n"),
+    html: [
+      '<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;color:#14352a">',
+      ...html,
+      `<p style="margin:24px 0 0">Trân trọng,</p><p><strong>${escapeHtml(MATCH_RESULT_SIGN_OFF)}</strong></p>`,
+      `<p style="color:#4f6b60;font-size:13px">${escapeHtml(privacyNote)}</p>`,
+      "</div>"
+    ].join("")
+  };
+}
+
+function kickoffLine(url: string | null | undefined): string | { label: string; url: string } {
+  const link = safeSentence(url, "");
+  return link ? { label: "Link đăng ký tham gia: ", url: link } : `Link đăng ký tham gia: ${MATCH_RESULT_KICKOFF_PENDING}`;
+}
+
+export function buildMatchResultMenteeEmail(input: {
+  menteeName: string;
+  mentorName: string;
+  mentorProfileUrl: string;
+  handbookUrl: string;
+  kickoffRegisterUrl?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.menteeName, "bạn");
+  const mentorName = safeDisplayName(input.mentorName, "Mentor của bạn");
+  const blocks: MatchResultBlock[] = [
+    { kind: "p", text: `Thân gửi bạn ${name},` },
+    { kind: "p", text: "Ban Tổ chức UEH Mentoring Mùa 12 xin chúc mừng bạn đã matching thành công và chính thức trở thành Mentee của chương trình UEH Mentoring Mùa 12." },
+    { kind: "p", text: "Sau quá trình tuyển chọn và kết nối, BTC hy vọng rằng hành trình Mentoring sắp tới sẽ mang đến cho bạn những trải nghiệm ý nghĩa, cơ hội học hỏi từ Mentor và những bước tiến tích cực trên hành trình phát triển bản thân." },
+    { kind: "p", text: "Để chuẩn bị tốt nhất cho chặng đường đồng hành sắp tới, bạn vui lòng lưu ý các thông tin sau:" },
+    { kind: "h", text: "1. THÔNG TIN MENTOR ĐỒNG HÀNH" },
+    { kind: "profiles", links: [{ label: "Hồ sơ Mentor", name: mentorName, url: input.mentorProfileUrl }] },
+    { kind: "p", text: "BTC khuyến khích bạn tìm hiểu thông tin về Mentor và chủ động liên hệ Mentor, tạo tiền đề thuận lợi cho quá trình kết nối và trao đổi giữa hai bên." },
+    { kind: "h", text: "2. MENTEE HANDBOOK" },
+    { kind: "lines", lines: [{ label: "Tài liệu hướng dẫn: ", url: input.handbookUrl }] },
+    { kind: "p", text: "Mentee Handbook tổng hợp các thông tin, quy định và hướng dẫn quan trọng trong suốt hành trình Mentoring. Bạn vui lòng đọc kỹ tài liệu để nắm rõ vai trò, trách nhiệm cũng như những lưu ý cần thiết khi tham gia chương trình." },
+    { kind: "h", text: "3. TRAINING MENTEE ĐẦU VÀO" },
+    { kind: "p", text: "Nhằm trang bị những kiến thức và kỹ năng cần thiết trước khi chính thức bước vào hành trình Mentoring, mỗi Mentee bắt buộc tham gia 01 trong 03 buổi Training theo lịch trình sau (nội dung mỗi buổi đều giống nhau) :" },
+    {
+      kind: "lines",
+      lines: [
+        "Buổi 1: 08:00 - 11:30, Chủ nhật, ngày 01/11/2026.",
+        "Buổi 2: 08:00 - 11:30, Chủ nhật, ngày 08/11/2026.",
+        "Buổi 3: 14:00 - 17:00, Chủ nhật, ngày 15/11/2026.",
+        "Địa điểm: Phòng A.103, Cơ sở A UEH - 59C Nguyễn Đình Chiểu, phường Xuân Hòa, TP. Hồ Chí Minh.",
+        { label: "Link đăng ký tham gia: ", url: MATCH_RESULT_MENTEE_TRAINING_URL }
+      ]
+    },
+    { kind: "p", text: "Nội dung Training tập trung vào việc định hướng hành trình đồng hành cùng Mentor, xác định mục tiêu phát triển cá nhân và xây dựng Personal Development Plan (PDP). Qua đó, bạn sẽ có sự chuẩn bị cần thiết để chủ động tham gia và tận dụng hiệu quả các cơ hội học hỏi trong suốt chương trình." },
+    { kind: "h", text: "4. CHƯƠNG TRÌNH KICK - OFF UEH MENTORING MÙA 12" },
+    {
+      kind: "lines",
+      lines: [
+        "Thời gian: 16:30 - 20:30, thứ Sáu, ngày 20/11/2026.",
+        "Địa điểm: Hội trường A.116, Cơ sở A - 59C Nguyễn Đình Chiểu, phường Xuân Hòa, TP. Hồ Chí Minh.",
+        kickoffLine(input.kickoffRegisterUrl)
+      ]
+    },
+    { kind: "p", text: "Chương trình Kick - off là dịp để Mentor và Mentee chính thức gặp gỡ, kết nối và cùng khởi động hành trình Mentoring Mùa 12. BTC mong bạn sắp xếp thời gian tham gia đầy đủ để không bỏ lỡ những hoạt động ý nghĩa trong chương trình." },
+    { kind: "p", text: "Trong thời gian tới, BTC sẽ tiếp tục cập nhật các thông tin và hướng dẫn liên quan thông qua những kênh truyền thông chính thức của chương trình. Bạn vui lòng theo dõi thường xuyên để không bỏ lỡ các thông báo quan trọng." },
+    { kind: "p", text: "Một lần nữa, xin chúc mừng bạn đã chính thức trở thành một phần của UEH Mentoring Mùa 12. Hy vọng rằng với tinh thần chủ động, cởi mở và sẵn sàng học hỏi, bạn sẽ có một hành trình Mentoring thật trọn vẹn, tích lũy được nhiều giá trị và tạo nên những dấu ấn đáng nhớ cùng Mentor của mình." },
+    { kind: "p", text: "Hẹn gặp bạn trong các hoạt động sắp tới!" }
+  ];
+  const body = renderMatchResultEmail(
+    blocks,
+    "Đường dẫn hồ sơ là riêng cho bạn và có số điện thoại, email của Mentor — vui lòng không chuyển tiếp thư này."
+  );
+  return { to: "", subject: MATCH_RESULT_SUBJECT, ...body };
+}
+
+export function buildMatchResultMentorEmail(input: {
+  mentorName: string;
+  mentees: ReadonlyArray<{ name: string; profileUrl: string }>;
+  handbookUrl: string;
+  kickoffRegisterUrl?: string | null;
+}): EmailMessage & { to: string } {
+  const name = safeDisplayName(input.mentorName, "Anh/Chị");
+  const blocks: MatchResultBlock[] = [
+    { kind: "p", text: `Kính gửi Anh/Chị ${name},` },
+    { kind: "p", text: "Ban Tổ chức UEH Mentoring Mùa 12 xin chân thành cảm ơn Anh/Chị đã tin tưởng, dành thời gian và tâm huyết đồng hành cùng chương trình." },
+    { kind: "p", text: "BTC trân trọng thông báo Anh/Chị đã matching thành công với Mentee và chính thức bắt đầu hành trình đồng hành tại UEH Mentoring Mùa 12." },
+    { kind: "p", text: "Để chuẩn bị tốt nhất cho hành trình Mentoring kéo dài 09 tháng sắp tới, BTC xin gửi đến Anh/Chị một số thông tin quan trọng như sau:" },
+    { kind: "h", text: "1. THÔNG TIN MENTEE ĐỒNG HÀNH" },
+    {
+      kind: "profiles",
+      links: input.mentees.map((m, i) => ({ label: `Mentee ${i + 1}`, name: safeDisplayName(m.name, "Mentee"), url: m.profileUrl }))
+    },
+    { kind: "p", text: "BTC kính mời Anh/Chị dành thời gian tìm hiểu hồ sơ Mentee nhằm nắm bắt định hướng, mục tiêu phát triển và kỳ vọng của các bạn. Mùa 12 tất cả mentee đều được training từ 1/11 đến 15/11 để xác định mục tiêu phát triển cá nhân và xây dựng Personal Development Plan (PDP) và định hướng hành trình đồng hành cùng Mentor." },
+    { kind: "h", text: "2. MENTOR HANDBOOK" },
+    { kind: "lines", lines: [{ label: "Tài liệu hướng dẫn: ", url: input.handbookUrl }] },
+    { kind: "p", text: "BTC kính gửi Anh/Chị tài liệu tổng hợp các thông tin, hướng dẫn và quy định quan trọng trong hành trình Mentoring Mùa 12 để Anh/Chị thuận tiện tham khảo trong quá trình đồng hành cùng Mentee." },
+    { kind: "h", text: "3. TRAINING MENTOR" },
+    { kind: "p", text: "Nhằm mang đến những giá trị kết nối sâu sắc và thiết thực hơn, Ban Tổ chức đã triển khai chương trình Training chuyên sâu dành riêng cho Mentor. Thông qua chương trình, Ban Tổ chức kỳ vọng mang đến cho anh chị những phương pháp, kỹ năng dẫn dắt và công cụ hỗ trợ cần thiết, giúp anh chị tự tin đồng hành cùng Mentee, xây dựng mối quan hệ Mentoring hiệu quả và tạo nên một mùa Mentoring thật ý nghĩa. Với lịch trình cụ thể như sau:" },
+    {
+      kind: "lines",
+      lines: [
+        "Thời gian: 08:30 - 12:00, Chủ nhật, 15/11/2026.",
+        "Địa điểm: Phòng A.103, Cơ sở A UEH - 59C Nguyễn Đình Chiểu, phường Xuân Hòa, TP. Hồ Chí Minh.",
+        { label: "Link đăng ký tham gia: ", url: MATCH_RESULT_MENTOR_TRAINING_URL }
+      ]
+    },
+    { kind: "p", text: "Buổi Mentor Training này là hoạt động khuyến nghị bắt buộc đối với tất cả Mentor tham gia chương trình. Đặc biệt đối với Mentor Mùa 12, mặc dù đã tham gia phần Training trong buổi Mentor Orientation, Ban Tổ chức vẫn khuyến khích anh chị sắp xếp thời gian tham dự buổi training lần này. Với thời lượng dài hơn cùng nội dung chuyên sâu và có thực hành, chương trình sẽ giúp anh chị củng cố kiến thức, nâng cao kỹ năng và có sự chuẩn bị tốt nhất cho hành trình đồng hành cùng Mentee." },
+    { kind: "h", text: "4. CHƯƠNG TRÌNH KICK - OFF UEH MENTORING MÙA 12" },
+    { kind: "p", text: "BTC trân trọng kính mời Anh/Chị tham dự chương trình Kick - off UEH Mentoring Mùa 12, đánh dấu sự khởi đầu chính thức của hành trình đồng hành giữa Mentor và Mentee." },
+    {
+      kind: "lines",
+      lines: [
+        "Thời gian: 16:30 - 20:30, thứ Sáu, ngày 20/11/2026.",
+        "Địa điểm: Hội trường A.116, Cơ sở A - 59C Nguyễn Đình Chiểu, phường Xuân Hòa, TP. Hồ Chí Minh.",
+        kickoffLine(input.kickoffRegisterUrl)
+      ]
+    },
+    { kind: "p", text: "Chương trình là dịp để Mentor và Mentee gặp gỡ, kết nối và cùng khởi động hành trình Mentoring. Sự hiện diện của Anh/Chị sẽ góp phần tạo nên khởi đầu ý nghĩa cho Mùa 12." },
+    { kind: "p", text: "Trong thời gian tới, BTC sẽ tiếp tục cập nhật các thông tin và hướng dẫn liên quan thông qua những kênh thông tin chính thức của chương trình. Kính mong Anh/Chị theo dõi để nắm bắt các thông báo cần thiết." },
+    { kind: "p", text: "Kính chúc Anh/Chị và Mentee sẽ có một hành trình 09 tháng thật ý nghĩa, cùng nhau tạo nên những giá trị thiết thực và những trải nghiệm đáng nhớ." }
+  ];
+  const body = renderMatchResultEmail(
+    blocks,
+    "Đường dẫn hồ sơ là riêng cho Anh/Chị và có số điện thoại, email của Mentee — kính mong Anh/Chị không chuyển tiếp thư này."
+  );
+  return { to: "", subject: MATCH_RESULT_SUBJECT, ...body };
+}
+
 /** Tiền tố tiêu đề và lời báo ở đầu một thư GỬI THỬ cho ban tổ chức. */
 export const TEST_EMAIL_SUBJECT_PREFIX = "[THƯ THỬ] ";
 export const TEST_EMAIL_NOTICE =

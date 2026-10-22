@@ -19,6 +19,8 @@ import {
   buildMatchingRound2InviteEmail,
   buildCustomFormReceiptEmail,
   buildMatchingRound2ReminderEmail,
+  buildMatchResultMenteeEmail,
+  buildMatchResultMentorEmail,
   buildMenteeExemptionConfirmEmail,
   markAsTestEmail,
   buildMenteeSessionInviteEmail,
@@ -56,6 +58,7 @@ import { mentorPickUrl, round2GuidePdfUrl } from "@/lib/matching-round2-link-cor
 import { VONG2_TIMELINE_JPEG_BASE64 } from "@/lib/email-assets/vong-2-timeline";
 import { formatDateTime } from "@/lib/utils";
 import { menteeConfirmUrl } from "@/lib/mentee-exemption-core";
+import { profileLinkUrl } from "@/lib/match-profile-core";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
 /** Mã cid của hình timeline trong thư mời Vòng 2 (thân thư trỏ <img src="cid:…">). */
@@ -1226,6 +1229,94 @@ export async function sendMatchingRound2Reminder(input: {
     "matching_round2_reminder",
     testMail ? { ...testMail, subject: `${testMail.subject} (gửi lúc ${formatDateTime(new Date().toISOString())})` } : outgoing,
     input.linkId ? { table: "matching_round2_links", id: input.linkId } : null
+  );
+}
+
+/** Câu giữ chỗ cho link hồ sơ trong thư thử: không link thật nào rời hệ thống. */
+const MATCH_RESULT_TEST_LINK = "(đường dẫn hồ sơ riêng của từng người — chỉ có trong thư thật)";
+/** Thư thử khi BTC chưa nhập link Handbook: câu giữ chỗ, không bấm được. Thư thật bắt buộc có link. */
+const MATCH_RESULT_HANDBOOK_PENDING = "(link Handbook — BTC chưa nhập)";
+
+/**
+ * Link hồ sơ cho từng mã; mọi mã null là thư thử (câu giữ chỗ). Lẫn lộn có mã và không mã là lỗi của
+ * nơi gọi — không gửi một thư mà một nửa link là câu giữ chỗ.
+ */
+function matchResultProfileUrls(tokens: ReadonlyArray<string | null>, requestOrigin?: string | null) {
+  if (tokens.every((t) => !t)) return { ok: true as const, test: true, urls: tokens.map(() => MATCH_RESULT_TEST_LINK) };
+  if (tokens.some((t) => !t)) return { ok: false as const, reason: "Thiếu mã link hồ sơ." };
+  const base = resolveEmailBaseUrl(requestOrigin);
+  if (!base) return { ok: false as const, reason: "Chưa cấu hình VAM_OS_PUBLIC_BASE_URL." };
+  return { ok: true as const, test: false, urls: tokens.map((t) => profileLinkUrl(base, String(t))) };
+}
+
+function matchResultOutgoing(built: EmailMessage & { to: string }, toEmail: string, test: boolean) {
+  const outgoing = { ...built, to: toEmail };
+  if (!test) return outgoing;
+  // Thư thử: ghi rõ là thư thử, gỡ href của mọi link hồ sơ; tiêu đề kèm giờ gửi để Gmail không gom
+  // các thư thử cùng tiêu đề vào một cuộc trò chuyện rồi ẩn phần cuối thư (15/10/2026).
+  const marked = markAsTestEmail(outgoing, MATCH_RESULT_TEST_LINK);
+  const testMail = { ...marked, html: marked.html.split(`href="${MATCH_RESULT_HANDBOOK_PENDING}"`).join("") };
+  return { ...testMail, subject: `${testMail.subject} (gửi lúc ${formatDateTime(new Date().toISOString())})` };
+}
+
+/**
+ * Thư kết quả ghép cặp gửi MENTEE (BTC 22/10/2026), mang link hồ sơ mentor. `mentorToken` null là thư thử
+ * cho BTC. Ghi sổ theo dòng match_result_notices. Không qua mẫu BTC sửa được: chữ nguyên văn Doc BTC đã
+ * chốt, BTC đọc qua "Gửi thử cho tôi" trước khi gửi thật.
+ */
+export async function sendMatchResultMentee(input: {
+  toEmail: string;
+  menteeName: string;
+  mentorName: string;
+  mentorToken: string | null;
+  handbookUrl: string | null;
+  kickoffRegisterUrl: string | null;
+  noticeId: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const links = matchResultProfileUrls([input.mentorToken], input.requestOrigin);
+  if (!links.ok) return { ok: false, skipped: false, reason: links.reason };
+  const handbookUrl = input.handbookUrl ?? (links.test ? MATCH_RESULT_HANDBOOK_PENDING : null);
+  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có link Handbook." };
+  const built = buildMatchResultMenteeEmail({
+    menteeName: input.menteeName,
+    mentorName: input.mentorName,
+    mentorProfileUrl: links.urls[0],
+    handbookUrl,
+    kickoffRegisterUrl: input.kickoffRegisterUrl
+  });
+  return deliver(
+    "mentee_mentor_intro",
+    matchResultOutgoing(built, input.toEmail, links.test),
+    input.noticeId ? { table: "match_result_notices", id: input.noticeId } : null
+  );
+}
+
+/** Thư kết quả ghép cặp gửi MENTOR, một link hồ sơ cho mỗi mentee. Mọi mã null là thư thử. */
+export async function sendMatchResultMentor(input: {
+  toEmail: string;
+  mentorName: string;
+  mentees: ReadonlyArray<{ name: string; token: string | null }>;
+  handbookUrl: string | null;
+  kickoffRegisterUrl: string | null;
+  noticeId: string | null;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  if (!input.mentees.length) return { ok: false, skipped: false, reason: "Mentor chưa có mentee nào." };
+  const links = matchResultProfileUrls(input.mentees.map((m) => m.token), input.requestOrigin);
+  if (!links.ok) return { ok: false, skipped: false, reason: links.reason };
+  const handbookUrl = input.handbookUrl ?? (links.test ? MATCH_RESULT_HANDBOOK_PENDING : null);
+  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có link Handbook." };
+  const built = buildMatchResultMentorEmail({
+    mentorName: input.mentorName,
+    mentees: input.mentees.map((m, i) => ({ name: m.name, profileUrl: links.urls[i] })),
+    handbookUrl,
+    kickoffRegisterUrl: input.kickoffRegisterUrl
+  });
+  return deliver(
+    "mentor_mentee_package",
+    matchResultOutgoing(built, input.toEmail, links.test),
+    input.noticeId ? { table: "match_result_notices", id: input.noticeId } : null
   );
 }
 

@@ -70,7 +70,9 @@ const KIND_LABELS: Record<string, string> = {
   matching_round2_invite: "Mời mentor chọn mentee (Vòng 2)",
   mentee_exemption_confirm: "Mời Support team xác nhận mentee (đặc cách)",
   custom_form_receipt: "Thư tự động sau khi gửi form tùy chỉnh",
-  matching_round2_reminder: "Nhắc mentor chọn mentee (Vòng 2)"
+  matching_round2_reminder: "Nhắc mentor chọn mentee (Vòng 2)",
+  mentee_mentor_intro: "Kết quả Matching — gửi mentee",
+  mentor_mentee_package: "Kết quả Matching — gửi mentor"
 };
 
 /** Nhãn tiếng Việt; loại lạ trả về nguyên mã để không giấu mất thông tin. */

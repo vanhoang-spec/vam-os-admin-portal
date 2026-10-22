@@ -8,11 +8,14 @@
 import { describe, expect, it } from "vitest";
 import {
   SETTLE_MINUTES,
+  batchSize,
   buildRecipients,
+  dispatchGroups,
   countByStatus,
   holdsFingerprint,
   missingFieldLabels,
   parseHoldEmailInput,
+  planDispatchBatch,
   profileCoverage,
   resolveHoldEmails,
   sendBlockedReasons,
@@ -279,5 +282,60 @@ describe("độ phủ hồ sơ", () => {
   it("nhãn các trường bị ẩn trên một thẻ", () => {
     const missing = missingFieldLabels(card(["full_name", "group", "phone", "email", "title_current", "company_current", "industry", "years", "strengths", "mentoring_topics", "motivation_text"]));
     expect(missing).toEqual(["Mong muốn về Mentee đồng hành", "LinkedIn / Hồ sơ nghề nghiệp"]);
+  });
+});
+
+describe("chia lô theo nhóm mentor (mentor + mentee của họ cùng một lần bấm)", () => {
+  // mt-a: 3 mentee (me-1, me-2, me-3); mt-b: 1 mentee (me-4).
+  const groupsOf = (over: Partial<Parameters<typeof buildRecipients>[0]> = {}) => dispatchGroups(build(over));
+  const ids = (g: { members: MatchResultRecipient[] }) => g.members.map((m) => `${m.role}:${m.personId}`);
+
+  it("mỗi mentor một nhóm, mentor đứng trước rồi các mentee của mình", () => {
+    const groups = groupsOf();
+    expect(groups.map((g) => g.mentorPersonId)).toEqual(["mt-a", "mt-b"]);
+    expect(ids(groups[0])).toEqual(["mentor:mt-a", "mentee:me-2", "mentee:me-3", "mentee:me-1"]);
+    expect(ids(groups[1])).toEqual(["mentor:mt-b", "mentee:me-4"]);
+  });
+
+  it("nhóm có cặp mới: CẢ nhóm chờ, kể cả mentee của cặp cũ; nhóm khác vẫn đi", () => {
+    const groups = groupsOf({
+      matches: [match("m1", "mt-a", "me-1"), match("m2", "mt-a", "me-2", { createdAt: minutesAgo(5) }), match("m4", "mt-b", "me-4")]
+    });
+    expect(groups.map((g) => g.mentorPersonId)).toEqual(["mt-b"]);
+  });
+
+  it("mentor bị giữ: cả nhóm không có ai để gửi", () => {
+    expect(groupsOf({ heldMentorIds: new Set(["mt-a"]) }).map((g) => g.mentorPersonId)).toEqual(["mt-b"]);
+  });
+
+  it("mentor thiếu email: mentee của họ vẫn đi; mentee thiếu email không chặn mentor", () => {
+    const people = new Map(PEOPLE);
+    people.set("mt-b", { fullName: "Bình Mentor B", email: null });
+    people.set("me-1", { fullName: "Chi Mentee 1", email: null });
+    const groups = groupsOf({ people });
+    expect(ids(groups.find((g) => g.mentorPersonId === "mt-b")!)).toEqual(["mentee:me-4"]);
+    expect(ids(groups.find((g) => g.mentorPersonId === "mt-a")!)).toEqual(["mentor:mt-a", "mentee:me-2", "mentee:me-3"]);
+  });
+
+  it("mentor đã nhận thư, BTC ghép thêm mentee mới: chỉ mentee mới trong nhóm (mentor gửi lại riêng)", () => {
+    const groups = groupsOf({ notices: [{ personId: "mt-b", role: "mentor", matchIds: ["m4"], sentAt: "2026-10-22T08:00:00Z", lastError: null }, { personId: "me-4", role: "mentee", matchIds: ["m4"], sentAt: "2026-10-22T08:00:00Z", lastError: null }],
+      matches: [match("m1", "mt-a", "me-1"), match("m4", "mt-b", "me-4"), match("m5", "mt-b", "me-3")] });
+    expect(ids(groups.find((g) => g.mentorPersonId === "mt-b")!)).toEqual(["mentee:me-3"]);
+  });
+
+  it("lô lấy trọn từng nhóm, không bao giờ cắt đôi; nhóm không vừa thì thử nhóm nhỏ hơn phía sau", () => {
+    const groups = groupsOf();
+    expect(planDispatchBatch(groups, 40).map((g) => g.mentorPersonId)).toEqual(["mt-a", "mt-b"]);
+    // Còn 3 chỗ: nhóm mt-a (4 người) không vừa → bỏ qua, nhóm mt-b (2 người) vừa.
+    const three = planDispatchBatch(groups, 3);
+    expect(three.map((g) => g.mentorPersonId)).toEqual(["mt-b"]);
+    expect(batchSize(three)).toBe(2);
+    expect(planDispatchBatch(groups, 4).map((g) => g.mentorPersonId)).toEqual(["mt-a"]);
+    expect(planDispatchBatch(groups, 1)).toEqual([]);
+    expect(planDispatchBatch(groups, 0)).toEqual([]);
+  });
+
+  it("thứ tự nhóm cố định giữa các lần bấm (theo tên mentor)", () => {
+    expect(groupsOf().map((g) => g.mentorPersonId)).toEqual(groupsOf().map((g) => g.mentorPersonId));
   });
 });

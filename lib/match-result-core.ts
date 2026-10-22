@@ -213,6 +213,76 @@ export function countByStatus(recipients: readonly MatchResultRecipient[]): Stat
 }
 
 // ---------------------------------------------------------------------------
+// Chia lô gửi theo nhóm mentor
+// ---------------------------------------------------------------------------
+
+/** Một mentor và các mentee của họ — đơn vị nhỏ nhất của một lần gửi. */
+export type DispatchGroup = {
+  mentorPersonId: string;
+  mentorName: string | null;
+  /** Người trong nhóm sẽ nhận thư ở lần gửi này (chỉ người "chờ gửi"), mentor đứng trước. */
+  members: MatchResultRecipient[];
+};
+
+/**
+ * Nhóm gửi theo mentor (BTC 22/10/2026): mentor và mọi mentee của họ đi cùng một lần bấm, để hai bên
+ * của một cặp nhận thư cùng ngày. Hạn mức 1.000 thư/24 giờ không đủ cho cả mùa trong một ngày, nên
+ * cắt lô ở giữa một nhóm là để mentee biết mentor của mình hôm nay còn mentor thì mai mới biết.
+ *
+ * Nhóm có người là "cặp mới" thì CẢ nhóm chờ: BTC còn đang ghép thêm cho mentor đó. Người không ở
+ * trạng thái "chờ gửi" (thiếu email, đã gửi…) không chặn những người còn lại của nhóm.
+ */
+export function dispatchGroups(recipients: readonly MatchResultRecipient[]): DispatchGroup[] {
+  const byMentor = new Map<string, { mentor: MatchResultRecipient | null; mentees: MatchResultRecipient[]; name: string | null }>();
+  const slot = (mentorId: string, name: string | null) => {
+    const g = byMentor.get(mentorId) ?? { mentor: null, mentees: [], name };
+    byMentor.set(mentorId, g);
+    return g;
+  };
+  for (const r of recipients) {
+    if (r.role === "mentor") {
+      const g = slot(r.personId, r.fullName);
+      g.mentor = r;
+      g.name = r.fullName;
+    } else {
+      // Mentee hai cặp (không nên có — đối chiếu 22/10 ra 0) đi theo mentor có mã nhỏ nhất, cố định giữa các lần bấm.
+      const mentor = [...r.partners].sort((a, b) => a.personId.localeCompare(b.personId))[0];
+      if (mentor) slot(mentor.personId, mentor.fullName).mentees.push(r);
+    }
+  }
+  const groups: DispatchGroup[] = [];
+  for (const [mentorPersonId, g] of Array.from(byMentor.entries())) {
+    const all = [...(g.mentor ? [g.mentor] : []), ...g.mentees];
+    if (all.some((r) => r.status === "too_new")) continue;
+    const members = all.filter((r) => r.status === "pending");
+    if (members.length) groups.push({ mentorPersonId, mentorName: g.name, members });
+  }
+  return groups.sort(
+    (a, b) => String(a.mentorName ?? "").localeCompare(String(b.mentorName ?? ""), "vi") || a.mentorPersonId.localeCompare(b.mentorPersonId)
+  );
+}
+
+/**
+ * Lô của một lần bấm: lấy trọn từng nhóm theo thứ tự, nhóm không còn vừa thì bỏ qua để thử nhóm nhỏ hơn
+ * phía sau — KHÔNG bao giờ cắt đôi một nhóm.
+ */
+export function planDispatchBatch(groups: readonly DispatchGroup[], allowance: number): DispatchGroup[] {
+  const room = Math.max(0, Math.floor(allowance));
+  const batch: DispatchGroup[] = [];
+  let used = 0;
+  for (const g of groups) {
+    if (used + g.members.length > room) continue;
+    batch.push(g);
+    used += g.members.length;
+  }
+  return batch;
+}
+
+export function batchSize(groups: readonly DispatchGroup[]): number {
+  return groups.reduce((n, g) => n + g.members.length, 0);
+}
+
+// ---------------------------------------------------------------------------
 // Danh sách mentor giữ lại
 // ---------------------------------------------------------------------------
 

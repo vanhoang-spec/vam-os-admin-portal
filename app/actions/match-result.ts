@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { addMatchResultHolds, confirmMatchResultHolds, removeMatchResultHold, saveMatchResultSettings } from "@/lib/match-result";
+import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultTest } from "@/lib/match-result-dispatch";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
 
 const PATH = "/matches/ket-qua";
@@ -34,4 +35,26 @@ export async function removeMatchResultHoldAction(_prev: Round2ActionState, form
 export async function confirmMatchResultHoldsAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
   if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước." };
   return state(await confirmMatchResultHolds({ fingerprint: form.get("fingerprint") }));
+}
+
+/** Gửi thử bản mentee và bản mentor cho chính người bấm. */
+export async function sendMatchResultTestAction(_prev: Round2ActionState, _form: FormData): Promise<Round2ActionState> {
+  const result = await sendMatchResultTest();
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/** Gửi thật một lô (trọn từng nhóm mentor). Chỉ chạy khi form mang dấu của bước xác nhận thứ hai. */
+export async function sendMatchResultAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+  if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước khi gửi." };
+  const result = await runMatchResultDispatch();
+  revalidatePath(PATH);
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/** Gửi riêng / gửi lại một người. Mã link mới — link trong thư trước của người đó hết hiệu lực. */
+export async function resendMatchResultAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+  if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước khi gửi." };
+  const result = await resendMatchResultNotice({ personId: form.get("personId"), role: form.get("role") });
+  revalidatePath(PATH);
+  return { status: result.ok ? "ok" : "error", message: result.message };
 }

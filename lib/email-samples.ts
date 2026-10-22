@@ -32,6 +32,8 @@ import {
   buildMatchingRound2InviteEmail,
   buildCustomFormReceiptEmail,
   buildMatchingRound2ReminderEmail,
+  buildMatchResultMenteeEmail,
+  buildMatchResultMentorEmail,
   buildMenteeExemptionConfirmEmail,
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
@@ -295,6 +297,42 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
     )
   },
   {
+    kind: "mentee_mentor_intro",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Kết quả Matching — gửi mentee",
+    audience: "Mentee đang có cặp ở mùa 12 (trừ mentee của các mentor trong danh sách giữ lại)",
+    trigger: 'Khi ban tổ chức bấm "Gửi thư kết quả" ở mục Ghép cặp → Kết quả ghép cặp.',
+    note: "Chữ nguyên văn mẫu MENTEE trong Doc của BTC. Link hồ sơ Mentor là riêng của từng người; mở được khi cặp còn hoạt động.",
+    body: built(
+      buildMatchResultMenteeEmail({
+        menteeName: MENTEE,
+        mentorName: MENTOR,
+        mentorProfileUrl: `${ORIGIN}/ho-so/ma-vi-du`,
+        handbookUrl: `${ORIGIN}/handbook-mentee-vi-du`,
+        kickoffRegisterUrl: null
+      })
+    )
+  },
+  {
+    kind: "mentor_mentee_package",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Kết quả Matching — gửi mentor",
+    audience: "Mentor đang có cặp ở mùa 12 (trừ các mentor trong danh sách giữ lại)",
+    trigger: 'Khi ban tổ chức bấm "Gửi thư kết quả" ở mục Ghép cặp → Kết quả ghép cặp; mentor và các mentee của họ đi cùng một lần bấm.',
+    note: "Chữ nguyên văn mẫu MENTOR trong Doc của BTC. Một dòng link hồ sơ cho mỗi mentee.",
+    body: built(
+      buildMatchResultMentorEmail({
+        mentorName: MENTOR,
+        mentees: [
+          { name: MENTEE, profileUrl: `${ORIGIN}/ho-so/ma-vi-du-1` },
+          { name: "Lê Thị C (ví dụ)", profileUrl: `${ORIGIN}/ho-so/ma-vi-du-2` }
+        ],
+        handbookUrl: `${ORIGIN}/handbook-mentor-vi-du`,
+        kickoffRegisterUrl: null
+      })
+    )
+  },
+  {
     kind: "mentee_exemption_confirm",
     group: "Nộp đơn và tuyển chọn",
     title: "Mời Support team xác nhận tham gia mentee — đặc cách",
@@ -554,24 +592,6 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
     title: "Báo mentee được chọn",
     audience: "Mentee trúng tuyển",
     trigger: "Sau khi chốt kết quả và bấm gửi hàng loạt.",
-    body: null,
-    note: TEMPLATE_NOTE
-  },
-  {
-    kind: "mentee_mentor_intro",
-    group: "Thư dùng mẫu do ban tổ chức soạn",
-    title: "Giới thiệu mentor cho mentee",
-    audience: "Mentee đã được ghép cặp",
-    trigger: "Sau khi ghép cặp và bấm gửi hàng loạt.",
-    body: null,
-    note: TEMPLATE_NOTE
-  },
-  {
-    kind: "mentor_mentee_package",
-    group: "Thư dùng mẫu do ban tổ chức soạn",
-    title: "Gửi mentor thông tin mentee được ghép",
-    audience: "Mentor đã được ghép cặp",
-    trigger: "Sau khi ghép cặp và bấm gửi hàng loạt.",
     body: null,
     note: TEMPLATE_NOTE
   },
