@@ -65,7 +65,7 @@ vi.mock("@/lib/email-automation", () => ({
 import EmailSamplesPage from "@/app/operations/mail/samples/page";
 import { MailTabs } from "@/app/operations/mail/mail-tabs";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import { buildApplicationConfirmationEmail } from "@/lib/email-core";
+import { MATCH_RESULT_MENTEE_TRAINING_URL, MATCH_RESULT_MENTOR_TRAINING_URL, buildApplicationConfirmationEmail } from "@/lib/email-core";
 import { AUTOMATION_SLOTS } from "@/lib/email-automation-core";
 import { EMAIL_SAMPLES, emailSamplesByGroup } from "@/lib/email-samples";
 import { canViewEmailSamples, canViewOutboundEmails } from "@/lib/permissions";
@@ -99,9 +99,7 @@ describe("1. mẫu phủ hết các loại thư", () => {
     expect(templateDriven.map((sample) => sample.kind).sort()).toEqual([
       "general_announcement",
       "kickoff_invite",
-      "mentee_mentor_intro",
-      "mentee_selected",
-      "mentor_mentee_package"
+      "mentee_selected"
     ]);
     for (const sample of templateDriven) expect(sample.note).toContain("Mẫu thư");
   });
@@ -161,7 +159,9 @@ describe("3. mẫu không mang dữ liệu của người thật", () => {
     for (const sample of EMAIL_SAMPLES) {
       const text = sample.body?.text ?? "";
       for (const link of text.match(/https?:[^\s)]+/g) ?? []) {
-        if (/\/renew\/|\/ve\/|\/cross\/|\/register\/|reset-password|link-hop/.test(link)) {
+        // Link đăng ký Training trong thư kết quả Matching là trang sự kiện công khai, giống nhau cho mọi người.
+        if (link === MATCH_RESULT_MENTEE_TRAINING_URL || link === MATCH_RESULT_MENTOR_TRAINING_URL) continue;
+        if (/\/renew\/|\/ve\/|\/cross\/|\/register\/|\/ho-so\/|reset-password|link-hop/.test(link)) {
           expect(link).toContain("vi-du");
         }
       }

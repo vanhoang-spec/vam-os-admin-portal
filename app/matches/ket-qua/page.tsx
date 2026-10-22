@@ -13,15 +13,22 @@ import {
 import { matchingRoundLabel } from "@/lib/matching-round";
 import { canManageMatches } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/utils";
-import { AddHoldsForm, ConfirmHoldsPanel, MatchResultSettingsForm, RemoveHoldButton } from "./forms";
+import { AddHoldsForm, ConfirmHoldsPanel, MatchResultSendPanel, MatchResultSettingsForm, RemoveHoldButton, ResendButton } from "./forms";
 
 export const dynamic = "force-dynamic";
-// Báo cáo độ phủ đọc hồ sơ của mọi người đang có cặp — cần nhiều hơn 10 giây mặc định.
+// Báo cáo độ phủ đọc hồ sơ của mọi người đang có cặp, và mỗi lần bấm gửi chạy tới 45 giây — cần nhiều
+// hơn 10 giây mặc định.
 export const maxDuration = 60;
 
 const PATH = "/matches/ket-qua";
 const STATUS_ORDER: RecipientStatus[] = ["pending", "too_new", "missing_email", "held", "changed_since_sent", "sent"];
 const ROLE_LABEL = { mentor: "Mentor", mentee: "Mentee" } as const;
+const RESENDABLE: RecipientStatus[] = ["pending", "sent", "changed_since_sent"];
+
+/** Cùng điều kiện máy chủ kiểm lại ở resendMatchResultNotice. */
+function canResend(r: MatchResultRecipient) {
+  return RESENDABLE.includes(r.status) && Boolean(r.email) && r.partners.length > 0 && (r.role === "mentor" || r.partners.length === 1);
+}
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -140,7 +147,7 @@ export default async function MatchResultPage(props: { searchParams: Promise<Sea
     <div className="grid gap-6">
       <PageHeader
         title={`Kết quả ghép cặp · ${data.seasonLabel}`}
-        description="Thư thông báo kết quả Matching kèm link hồ sơ người đồng hành. Mọi cặp đang hoạt động, mọi vòng. Bản này dùng để chuẩn bị: cài link, chốt danh sách giữ lại, soát hồ sơ — chưa gửi thư."
+        description="Thư thông báo kết quả Matching kèm link hồ sơ người đồng hành. Mọi cặp đang hoạt động, mọi vòng. Cài link, chốt danh sách giữ lại, soát hồ sơ, rồi gửi theo từng nhóm mentor."
       />
 
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6" data-testid="match-result-kpis">
@@ -156,18 +163,13 @@ export default async function MatchResultPage(props: { searchParams: Promise<Sea
       </div>
 
       <Card>
-        <h2 className="text-base font-semibold text-vam-ink">Trạng thái gửi</h2>
-        {data.blocked.length ? (
-          <ul className="mt-2 list-disc pl-5 text-sm text-amber-700" data-testid="match-result-blocked">
-            {data.blocked.map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-green-700" data-testid="match-result-ready">
-            Đủ điều kiện gửi. Nút gửi thư có ở bản cập nhật tiếp theo.
-          </p>
-        )}
+        <h2 className="text-base font-semibold text-vam-ink">Gửi thư kết quả</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Mỗi lần bấm gửi trọn từng nhóm mentor — mentor và các mentee của họ đi cùng nhau, để hai bên một cặp nhận thư cùng ngày.
+        </p>
+        <div className="mt-3">
+          <MatchResultSendPanel blocked={data.blocked} {...data.dispatch} />
+        </div>
       </Card>
 
       <Card>
@@ -287,6 +289,7 @@ export default async function MatchResultPage(props: { searchParams: Promise<Sea
                 <th className="px-3 py-2">Email</th>
                 <th className="px-3 py-2">Link hồ sơ trong thư</th>
                 <th className="px-3 py-2">Trạng thái</th>
+                <th className="px-3 py-2">Gửi riêng</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-vam-line">
@@ -319,6 +322,11 @@ export default async function MatchResultPage(props: { searchParams: Promise<Sea
                     {r.holdReason ? <div className="mt-1 text-xs text-slate-500">{HOLD_REASON_LABELS[r.holdReason]}</div> : null}
                     {r.sentAt ? <div className="mt-1 text-xs text-slate-500">Gửi lúc {formatDateTime(r.sentAt)}</div> : null}
                     {r.lastError && !r.sentAt ? <div className="mt-1 text-xs text-red-600">Lỗi lần trước: {r.lastError}</div> : null}
+                  </td>
+                  <td className="px-3 py-2">
+                    {!data.blocked.length && canResend(r) ? (
+                      <ResendButton personId={r.personId} role={r.role} name={r.fullName ?? r.email ?? ""} sentBefore={Boolean(r.sentAt)} />
+                    ) : null}
                   </td>
                 </tr>
               ))}

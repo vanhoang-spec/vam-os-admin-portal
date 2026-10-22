@@ -13,12 +13,15 @@ import "server-only";
 import { loadProfileSources, getProfilePreview, profileSourceKey, type ProfileSubject } from "@/lib/match-profile";
 import type { ProfileCard, ProfileRole } from "@/lib/match-profile-core";
 import {
+  batchSize,
   buildRecipients,
   countByStatus,
+  dispatchGroups,
   holdsFingerprint,
   missingFieldLabels,
   normalizeEmail,
   parseHoldEmailInput,
+  planDispatchBatch,
   profileCoverage,
   resolveHoldEmails,
   sendBlockedReasons,
@@ -33,6 +36,8 @@ import {
   type StatusCounts
 } from "@/lib/match-result-core";
 import { round2Operator, round2SeasonContext } from "@/lib/matching-round2";
+import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
+import { dispatchAllowance } from "@/lib/mentee-invite-dispatch-core";
 import { readAllPages, readAllPagesIn } from "@/lib/paged-read";
 import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
 
@@ -77,6 +82,18 @@ export type MatchResultData = {
   recipients: MatchResultRecipient[];
   counts: StatusCounts;
   blocked: string[];
+  dispatch: MatchResultDispatchView;
+};
+
+/** Khung gửi: hạn mức còn lại và lô của lần bấm kế tiếp (trọn từng nhóm mentor). */
+export type MatchResultDispatchView = {
+  /** Thư cả hệ thống đã gửi trong 24 giờ; null = không đếm được (khoá gửi). */
+  sentInWindow: number | null;
+  allowance: number;
+  readyGroups: number;
+  readyPeople: number;
+  nextBatchGroups: number;
+  nextBatchPeople: number;
 };
 
 type Loaded = {
@@ -199,22 +216,55 @@ async function loadInputs(client: any, seasonId: string): Promise<Loaded> {
   };
 }
 
+export type MatchResultState = {
+  matches: ActiveMatch[];
+  people: Map<string, RecipientPerson>;
+  activeHolds: Row[] | null;
+  settings: MatchResultSettings | null;
+  settingsReadOk: boolean;
+  recipients: MatchResultRecipient[];
+  /** Rỗng = gửi được. */
+  blocked: string[];
+};
+
+/**
+ * Trạng thái dùng chung cho trang và cho lúc gửi — cùng một hàm, để màn hình không đếm một kiểu còn
+ * lúc bấm gửi lại tính kiểu khác. Không kiểm quyền: nơi gọi kiểm trước.
+ */
+export async function loadMatchResultState(client: any, seasonId: string, nowMs: number): Promise<MatchResultState> {
+  const loaded = await loadInputs(client, seasonId);
+  const heldIds = loaded.activeHolds ? new Set(loaded.activeHolds.map((h) => String(h.mentor_person_id))) : null;
+  const recipients = buildRecipients({
+    matches: loaded.matches,
+    people: loaded.people,
+    heldMentorIds: heldIds,
+    inactiveKeys: loaded.inactiveKeys,
+    notices: loaded.notices,
+    now: nowMs
+  });
+  return {
+    matches: loaded.matches,
+    people: loaded.people,
+    activeHolds: loaded.activeHolds,
+    settings: loaded.settings,
+    settingsReadOk: loaded.settingsReadOk,
+    recipients,
+    blocked: sendBlockedReasons({ settings: loaded.settings, settingsReadOk: loaded.settingsReadOk, holdsReadOk: loaded.activeHolds !== null })
+  };
+}
+
 export async function getMatchResultData(): Promise<
   { ok: true; data: MatchResultData } | { ok: false; message: string; denied?: boolean }
 > {
   try {
     const { client, seasonId } = await round2SeasonContext();
     if (!(await round2Operator(seasonId))) return { ok: false, denied: true, message: DENIED };
-    const loaded = await loadInputs(client, seasonId);
-    const heldIds = loaded.activeHolds ? new Set(loaded.activeHolds.map((h) => String(h.mentor_person_id))) : null;
-    const recipients = buildRecipients({
-      matches: loaded.matches,
-      people: loaded.people,
-      heldMentorIds: heldIds,
-      inactiveKeys: loaded.inactiveKeys,
-      notices: loaded.notices,
-      now: Date.now()
-    });
+    const nowMs = Date.now();
+    const [loaded, sentInWindow] = await Promise.all([loadMatchResultState(client, seasonId, nowMs), countSentInWindow(client, nowMs)]);
+    const recipients = loaded.recipients;
+    const groups = dispatchGroups(recipients);
+    const allowance = sentInWindow === null ? 0 : dispatchAllowance(sentInWindow);
+    const next = planDispatchBatch(groups, allowance);
     const menteesOf = (mentorId: string) => loaded.matches.filter((m) => m.mentorPersonId === mentorId).length;
     const holds: HoldView[] = (loaded.activeHolds ?? [])
       .map((h) => {
@@ -243,11 +293,15 @@ export async function getMatchResultData(): Promise<
         holdsFingerprint: holdsFingerprint(holds.map((h) => h.mentorPersonId)),
         recipients,
         counts: countByStatus(recipients),
-        blocked: sendBlockedReasons({
-          settings: loaded.settings,
-          settingsReadOk: loaded.settingsReadOk,
-          holdsReadOk: loaded.activeHolds !== null
-        })
+        blocked: loaded.blocked,
+        dispatch: {
+          sentInWindow,
+          allowance,
+          readyGroups: groups.length,
+          readyPeople: batchSize(groups),
+          nextBatchGroups: next.length,
+          nextBatchPeople: batchSize(next)
+        }
       }
     };
   } catch (error) {

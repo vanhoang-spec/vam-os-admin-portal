@@ -6,7 +6,10 @@ import {
   addMatchResultHoldsAction,
   confirmMatchResultHoldsAction,
   removeMatchResultHoldAction,
-  saveMatchResultSettingsAction
+  resendMatchResultAction,
+  saveMatchResultSettingsAction,
+  sendMatchResultAction,
+  sendMatchResultTestAction
 } from "@/app/actions/match-result";
 import { Message, Submit } from "@/app/matches/vong-2/bao-cao/dispatch-panel";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
@@ -112,5 +115,109 @@ export function ConfirmHoldsPanel({ fingerprint, count, confirmedLabel }: { fing
       )}
       <Message state={state} />
     </div>
+  );
+}
+
+export type MatchResultSendPanelProps = {
+  blocked: string[];
+  sentInWindow: number | null;
+  allowance: number;
+  readyGroups: number;
+  readyPeople: number;
+  nextBatchGroups: number;
+  nextBatchPeople: number;
+};
+
+/**
+ * Gửi thư kết quả. Mỗi lần bấm gửi trọn từng nhóm mentor (mentor + các mentee của họ) trong phần hạn
+ * mức còn lại; máy chủ tự tính lại lô lúc bấm. Xác nhận bằng bước thứ hai ngay trên trang.
+ */
+export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
+  const [testState, testAction] = useFormState(sendMatchResultTestAction, ROUND2_IDLE);
+  const [sendState, sendAction] = useFormState(sendMatchResultAction, ROUND2_IDLE);
+  const [confirming, setConfirming] = useState(false);
+  const blocked = props.blocked.length
+    ? null
+    : props.readyPeople === 0
+      ? "Không còn ai chờ thư kết quả."
+      : props.sentInWindow === null
+        ? "Không đếm được số thư đã gửi trong 24 giờ qua, nên tạm khoá nút gửi."
+        : props.nextBatchPeople === 0
+          ? `Phần hạn mức còn ${props.allowance} thư, không đủ cho trọn một nhóm mentor. Thử lại sau vài giờ.`
+          : null;
+
+  return (
+    <div className="grid gap-3" data-testid="match-result-send">
+      <p className="text-sm text-slate-600">
+        Chờ gửi: <strong>{props.readyPeople}</strong> người trong <strong>{props.readyGroups}</strong> nhóm mentor · Thư cả hệ thống trong 24 giờ:{" "}
+        {props.sentInWindow ?? "?"}/1.000 · Lần bấm kế tiếp: {props.nextBatchPeople} thư ({props.nextBatchGroups} nhóm).
+      </p>
+      <form action={testAction} className="flex flex-wrap items-center gap-3">
+        <Submit label="Gửi thử cho tôi (2 thư)" pendingLabel="Đang gửi thử…" />
+        <Message state={testState} />
+      </form>
+      {props.blocked.length ? (
+        <ul className="list-disc pl-5 text-sm text-amber-700" data-testid="match-result-blocked">
+          {props.blocked.map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>
+      ) : blocked ? (
+        <p className="text-sm text-amber-700">{blocked}</p>
+      ) : confirming ? (
+        <form action={sendAction} className="flex flex-wrap items-center gap-3" data-testid="match-result-send-confirm">
+          <input type="hidden" name="confirmed" value="yes" />
+          <span className="text-sm text-vam-ink">
+            Gửi {props.nextBatchPeople} thư kết quả ({props.nextBatchGroups} nhóm mentor) tới người thật?
+          </span>
+          <Submit label="Xác nhận gửi" pendingLabel="Đang gửi…" />
+          <button type="button" onClick={() => setConfirming(false)} className="rounded-md border border-vam-line px-3 py-2 text-sm text-slate-700">
+            Huỷ
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="self-start rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+        >
+          Gửi thư kết quả (tối đa {props.nextBatchPeople} thư)
+        </button>
+      )}
+      <Message state={sendState} />
+    </div>
+  );
+}
+
+/** Gửi riêng một người (thí điểm, hoặc gửi lại khi cặp đổi). Bước xác nhận nói rõ link cũ hết hiệu lực. */
+export function ResendButton({ personId, role, name, sentBefore }: { personId: string; role: "mentor" | "mentee"; name: string; sentBefore: boolean }) {
+  const [state, action] = useFormState(resendMatchResultAction, ROUND2_IDLE);
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <div className="grid gap-1">
+        <button type="button" onClick={() => setConfirming(true)} className="self-start rounded-md border border-vam-line px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">
+          {sentBefore ? "Gửi lại" : "Gửi riêng"}
+        </button>
+        <Message state={state} />
+      </div>
+    );
+  }
+  return (
+    <form action={action} className="grid gap-1" data-testid="match-result-resend-confirm">
+      <input type="hidden" name="confirmed" value="yes" />
+      <input type="hidden" name="personId" value={personId} />
+      <input type="hidden" name="role" value={role} />
+      <span className="text-xs text-vam-ink">
+        Gửi thư kết quả tới {name}?{sentBefore ? " Link trong thư trước sẽ hết hiệu lực." : ""}
+      </span>
+      <div className="flex gap-2">
+        <Submit label="Xác nhận" pendingLabel="Đang gửi…" />
+        <button type="button" onClick={() => setConfirming(false)} className="rounded-md border border-vam-line px-2 py-1 text-xs text-slate-700">
+          Huỷ
+        </button>
+      </div>
+      <Message state={state} />
+    </form>
   );
 }

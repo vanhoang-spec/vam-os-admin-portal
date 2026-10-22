@@ -172,13 +172,15 @@ describe("trang", () => {
     expect(html).not.toContain('data-testid="match-result-ready"');
   });
 
-  it("đủ cài đặt và đã xác nhận: báo đủ điều kiện, nhưng bản này không có nút gửi", async () => {
+  it("đủ cài đặt và đã xác nhận: không còn lý do khoá, nút gửi mời gửi đúng lô kế tiếp (trọn từng nhóm mentor)", async () => {
     db.tables.match_result_settings = [
       { season_id: SEASON, mentee_handbook_url: "https://x.test/me", mentor_handbook_url: "https://x.test/mt", kickoff_register_url: null, holds_confirmed_at: "2026-10-22T09:00:00Z" }
     ];
     const html = await page();
-    expect(html).toContain('data-testid="match-result-ready"');
-    expect(html).not.toMatch(/Gửi thư kết quả|Xác nhận gửi/);
+    expect(html).not.toContain('data-testid="match-result-blocked"');
+    // A: mentor + 2 mentee, B: mentor + 1 mentee (ME_3 lấy email từ đơn) = 5 thư, 2 nhóm.
+    expect(html).toContain("Gửi thư kết quả (tối đa 5 thư)");
+    expect(html).toContain("Lần bấm kế tiếp: 5 thư (2 nhóm)");
   });
 
   it("mentor bị giữ: mentor và mentee của họ ở trạng thái giữ lại", async () => {

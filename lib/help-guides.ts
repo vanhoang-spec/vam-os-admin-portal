@@ -673,10 +673,14 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Mục “2. Mentor giữ lại”: dán email các mentor không nhận thư đợt này (mỗi dòng một email), bấm “Thêm vào danh sách giữ lại”. Mỗi email phải khớp đúng một mentor đã duyệt mùa này; có email không khớp thì không email nào được ghi — sửa rồi dán lại. Mentee của mentor bị giữ cũng không nhận thư.",
       "Rà danh sách rồi bấm “Xác nhận danh sách giữ lại” → “Xác nhận danh sách”. Thêm hoặc bỏ giữ bất kỳ ai thì phải xác nhận lại.",
       "Mục “3. Độ phủ dữ liệu hồ sơ”: bấm “Xem độ phủ” để đếm mỗi trường có ở bao nhiêu hồ sơ và xem ai thiếu gì. Trường không có dữ liệu tự ẩn trên thẻ.",
-      "Bấm vào tên trong cột “Link hồ sơ trong thư” (hoặc trong danh sách thiếu) để xem trước đúng thẻ người đồng hành sẽ thấy, kể cả SĐT và email."
+      "Bấm vào tên trong cột “Link hồ sơ trong thư” (hoặc trong danh sách thiếu) để xem trước đúng thẻ người đồng hành sẽ thấy, kể cả SĐT và email.",
+      "Khung “Gửi thư kết quả”: bấm “Gửi thử cho tôi (2 thư)” để đọc bản mentee và bản mentor (link hồ sơ trong thư thử không bấm được). Thí điểm: ở cột “Gửi riêng”, gửi cho một cặp quen rồi mở thử hai link khi chưa đăng nhập.",
+      "Gửi thật: bấm “Gửi thư kết quả” → “Xác nhận gửi”. Mỗi lần bấm gửi trọn từng nhóm mentor (mentor và các mentee của họ cùng lần), tối đa 40 thư; bấm lại tới khi hết người chờ. Mùa 12 cần khoảng 1.150 thư, quá hạn mức 1.000 thư/24 giờ của Resend, nên gửi trong hai ngày — nhóm nào đã bắt đầu thì đi trọn trong ngày.",
+      "Người “Đổi cặp sau khi gửi” hoặc gửi lỗi: bấm “Gửi lại” ở cột “Gửi riêng”. Thư mới mang link mới; link trong thư trước của người đó hết hiệu lực."
     ],
     notes: [
-      "Gửi được khi đủ hai link Handbook và đã xác nhận danh sách giữ lại. Nút gửi thư có ở bản cập nhật tiếp theo; bản này chỉ để chuẩn bị.",
+      "Gửi được khi đủ hai link Handbook và đã xác nhận danh sách giữ lại. Thư dùng nguyên văn hai mẫu MENTEE và MENTOR trong Doc của BTC; thân thư không có SĐT hay email của ai.",
+      "Hai lần bấm cùng lúc không gửi trùng: mỗi người bị chiếm chỗ trước khi gửi. Một người đã có thư trong sổ thư (lần trước gửi xong mà chưa kịp ghi nhận) thì chỉ được ghi nhận, không gửi lại.",
       "Cặp vừa ghi chưa đủ 30 phút thì chờ: mentor có một cặp mới thì cả thư của mentor đó chờ, để thư không mang danh sách thiếu.",
       "Người đã rút khỏi mùa không nhận thư, và thư của người đồng hành cũng bị giữ cho tới khi BTC kết thúc cặp đó — link tới hồ sơ người đã rút sẽ báo hết hiệu lực.",
       "Link hồ sơ (/ho-so/…) mở được không cần đăng nhập, nhưng chỉ khi cặp còn hoạt động; cặp bị huỷ hoặc đổi người thì link báo hết hiệu lực. SĐT và email chỉ hiện trong hồ sơ gửi cho người đồng hành.",
