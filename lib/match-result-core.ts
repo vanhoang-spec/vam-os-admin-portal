@@ -282,6 +282,33 @@ export function batchSize(groups: readonly DispatchGroup[]): number {
   return groups.reduce((n, g) => n + g.members.length, 0);
 }
 
+function nameKey(value: unknown): string {
+  return String(value ?? "").normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Tìm một mentor đang có cặp theo email hoặc họ tên (gửi thử thư của một nhóm, BTC 22/10/2026). Email
+ * khớp thì lấy luôn; không thì khớp đúng họ tên (không phân biệt hoa thường). Trùng tên hai người thì
+ * báo lại, không đoán.
+ */
+export function findMentorRecipient(
+  recipients: readonly MatchResultRecipient[],
+  query: unknown
+): { ok: true; mentor: MatchResultRecipient } | { ok: false; message: string } {
+  const mentors = recipients.filter((r) => r.role === "mentor" && r.partners.length > 0);
+  const email = normalizeEmail(query);
+  if (email) {
+    const hit = mentors.find((r) => r.email === email);
+    return hit ? { ok: true, mentor: hit } : { ok: false, message: `Không thấy mentor đang có cặp với email ${email}.` };
+  }
+  const key = nameKey(query);
+  if (!key) return { ok: false, message: "Nhập email hoặc họ tên mentor." };
+  const hits = mentors.filter((r) => nameKey(r.fullName) === key);
+  if (hits.length === 1) return { ok: true, mentor: hits[0] };
+  if (hits.length > 1) return { ok: false, message: `Có ${hits.length} mentor tên "${String(query).trim()}" — nhập email để chọn đúng người.` };
+  return { ok: false, message: `Không thấy mentor đang có cặp tên "${String(query).trim()}".` };
+}
+
 // ---------------------------------------------------------------------------
 // Danh sách mentor giữ lại
 // ---------------------------------------------------------------------------
@@ -363,35 +390,32 @@ export function validateHttpsUrl(raw: unknown): { ok: true; value: string | null
   return { ok: true, value };
 }
 
+/**
+ * Cài đặt BTC nhập trên trang. Handbook KHÔNG ở đây: file nằm trên VAM OS, link cố định
+ * (lib/handbook.ts, BTC 22/10/2026). Hai cột link Handbook cũ trong bảng không còn được đọc.
+ */
 export type MatchResultSettings = {
-  menteeHandbookUrl: string | null;
-  mentorHandbookUrl: string | null;
   kickoffRegisterUrl: string | null;
   holdsConfirmedAt: string | null;
 };
 
 /**
  * Vì sao chưa gửi được — rỗng nghĩa là gửi được. Link Kick-off KHÔNG chặn: thư ghi "BTC sẽ cập nhật
- * sau" khi chưa có. Không đọc được cài đặt hay danh sách giữ lại thì khoá, không đoán.
+ * sau" khi chưa có. Handbook chưa có file trên VAM OS thì chặn. Không đọc được cài đặt hay danh sách
+ * giữ lại thì khoá, không đoán.
  */
 export function sendBlockedReasons(input: {
   settings: MatchResultSettings | null;
   settingsReadOk: boolean;
   holdsReadOk: boolean;
+  handbooksReady: Record<ProfileRole, boolean>;
 }): string[] {
   const reasons: string[] = [];
   if (!input.settingsReadOk) reasons.push("Không đọc được cài đặt thư — tạm khoá gửi.");
   if (!input.holdsReadOk) reasons.push("Không đọc được danh sách mentor giữ lại — tạm khoá gửi.");
-  if (input.settingsReadOk) {
-    const s = input.settings;
-    const ok = (v: string | null | undefined) => {
-      const r = validateHttpsUrl(v);
-      return r.ok && r.value !== null;
-    };
-    if (!ok(s?.menteeHandbookUrl)) reasons.push("Chưa nhập link Handbook cho mentee.");
-    if (!ok(s?.mentorHandbookUrl)) reasons.push("Chưa nhập link Handbook cho mentor.");
-    if (!s?.holdsConfirmedAt) reasons.push("Danh sách mentor giữ lại chưa được xác nhận.");
-  }
+  if (!input.handbooksReady.mentee) reasons.push("Chưa có file Handbook mentee trên VAM OS.");
+  if (!input.handbooksReady.mentor) reasons.push("Chưa có file Handbook mentor trên VAM OS.");
+  if (input.settingsReadOk && !input.settings?.holdsConfirmedAt) reasons.push("Danh sách mentor giữ lại chưa được xác nhận.");
   return reasons;
 }
 

@@ -65,7 +65,7 @@ describe("1. hai danh sách nhãn không được lệch nhau", () => {
   it("đọc ra đủ các nhãn middleware đang gắn, trong đó có vé", () => {
     const labels = middlewarePublicLabels();
     expect(labels).toEqual(
-      expect.arrayContaining(["register", "checkin", "ticket", "renewal", "blog", "survey", "interview_booking", "mentee_session_booking", "mentor_mentee_pick", "mentee_exemption_confirm", "match_profile", "custom_form"])
+      expect.arrayContaining(["register", "checkin", "ticket", "renewal", "blog", "survey", "interview_booking", "mentee_session_booking", "mentor_mentee_pick", "mentee_exemption_confirm", "match_profile", "document", "custom_form"])
     );
   });
 
@@ -78,7 +78,7 @@ describe("1. hai danh sách nhãn không được lệch nhau", () => {
 });
 
 describe("2. layout thật sự trả khung trần", () => {
-  it.each(["register", "checkin", "ticket", "renewal", "blog", "survey", "interview_booking", "mentee_session_booking", "mentor_mentee_pick", "mentee_exemption_confirm", "match_profile", "custom_form"])(
+  it.each(["register", "checkin", "ticket", "renewal", "blog", "survey", "interview_booking", "mentee_session_booking", "mentor_mentee_pick", "mentee_exemption_confirm", "match_profile", "document", "custom_form"])(
     "nhãn %s: hiện nội dung trang, không vẽ khung ban tổ chức, không đọc tài khoản admin",
     async (label) => {
       const html = await renderWith(label);

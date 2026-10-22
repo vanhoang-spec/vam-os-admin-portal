@@ -48,6 +48,7 @@ import {
 import { QUESTION_PROMPT, impressionQuestion, trackingNotice } from "@/lib/event-survey-core";
 import { round2DeadlineLabel, round2OpensLabel, round2WaveNote } from "@/lib/matching-round2-dispatch-core";
 import { round2GuidePdfUrl } from "@/lib/matching-round2-link-core";
+import { HANDBOOKS } from "@/lib/handbook";
 
 const ORIGIN = "https://os.alumni-mentoring.edu.vn";
 const SEASON = "UEH Mentoring Mùa 12";
@@ -308,7 +309,7 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         menteeName: MENTEE,
         mentorName: MENTOR,
         mentorProfileUrl: `${ORIGIN}/ho-so/ma-vi-du`,
-        handbookUrl: `${ORIGIN}/handbook-mentee-vi-du`,
+        handbookUrl: `${ORIGIN}${HANDBOOKS.mentee.path}`,
         kickoffRegisterUrl: null
       })
     )
@@ -327,7 +328,7 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
           { name: MENTEE, profileUrl: `${ORIGIN}/ho-so/ma-vi-du-1` },
           { name: "Lê Thị C (ví dụ)", profileUrl: `${ORIGIN}/ho-so/ma-vi-du-2` }
         ],
-        handbookUrl: `${ORIGIN}/handbook-mentor-vi-du`,
+        handbookUrl: `${ORIGIN}${HANDBOOKS.mentor.path}`,
         kickoffRegisterUrl: null
       })
     )

@@ -234,6 +234,9 @@ export async function middleware(request: NextRequest) {
     // Hồ sơ tóm tắt của người đồng hành, gửi kèm thư kết quả ghép cặp (BTC 22/10/2026). Người mở
     // là mentor/mentee không có tài khoản; mã riêng nằm trong thư gửi tới hộp thư của chính họ.
     request.nextUrl.pathname.startsWith("/ho-so/") ||
+    // Tài liệu công khai của chương trình (Handbook mentee/mentor, BTC 22/10/2026): link trong thư
+    // kết quả ghép cặp, người mở không có tài khoản. Chỉ là file cố định trong kho mã (lib/handbook.ts).
+    request.nextUrl.pathname.startsWith("/tai-lieu/") ||
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
@@ -262,6 +265,8 @@ export async function middleware(request: NextRequest) {
           ? "mentee_exemption_confirm"
           : request.nextUrl.pathname.startsWith("/ho-so/")
           ? "match_profile"
+          : request.nextUrl.pathname.startsWith("/tai-lieu/")
+          ? "document"
           : request.nextUrl.pathname.startsWith("/renew/")
           ? "renewal"
           : request.nextUrl.pathname.startsWith("/f/")

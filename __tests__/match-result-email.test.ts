@@ -20,6 +20,9 @@ import {
   buildMatchResultMentorEmail
 } from "@/lib/email-core";
 import { outboundEmailKindLabel } from "@/lib/outbound-emails-core";
+import { HANDBOOKS } from "@/lib/handbook";
+
+const REAL_READY = { mentee: HANDBOOKS.mentee.ready, mentor: HANDBOOKS.mentor.ready };
 
 const ORIGIN = "https://os.alumni-mentoring.edu.vn";
 const HANDBOOK = "https://drive.example.test/handbook";
@@ -187,6 +190,9 @@ describe("4. gửi thư", () => {
     (getSupabaseServiceRoleClient as Mock).mockReturnValue(makeClient());
     fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: "x" }) });
     vi.stubGlobal("fetch", fetchMock);
+    // Giả lập Handbook đã có file trên VAM OS; ca "chưa có file" tự tắt.
+    HANDBOOKS.mentee.ready = true;
+    HANDBOOKS.mentor.ready = true;
   });
   afterEach(() => {
     for (const key of TOUCHED_ENV) {
@@ -195,16 +201,18 @@ describe("4. gửi thư", () => {
       else process.env[key] = value;
     }
     vi.unstubAllGlobals();
+    HANDBOOKS.mentee.ready = REAL_READY.mentee;
+    HANDBOOKS.mentor.ready = REAL_READY.mentor;
   });
 
   const MENTEE_SEND = {
     toEmail: "sv@example.test", menteeName: "Trần Mỹ Anh", mentorName: "Nguyễn Văn Bình", mentorToken: TOKEN_A,
-    handbookUrl: HANDBOOK, kickoffRegisterUrl: null, noticeId: NOTICE, requestOrigin: ORIGIN
+    kickoffRegisterUrl: null, noticeId: NOTICE, requestOrigin: ORIGIN
   };
   const MENTOR_SEND = {
     toEmail: "mentor@example.test", mentorName: "Nguyễn Văn Bình",
     mentees: [{ name: "Trần Mỹ Anh", token: TOKEN_A }, { name: "Lê Hoà", token: TOKEN_B }],
-    handbookUrl: HANDBOOK, kickoffRegisterUrl: null, noticeId: NOTICE, requestOrigin: ORIGIN
+    kickoffRegisterUrl: null, noticeId: NOTICE, requestOrigin: ORIGIN
   };
 
   it("thư thật gửi mentee: link /ho-so/<mã> dựng từ địa chỉ hệ thống; sổ thư gắn đúng dòng thông báo", async () => {
@@ -230,22 +238,43 @@ describe("4. gửi thư", () => {
     expect(String(sent.html)).not.toMatch(/href="\(/);
     expect(String(sent.text)).toContain("chỉ có trong thư thật");
     // Link Handbook và Training là link công khai — thư thử vẫn mang để BTC bấm thử.
-    expect(String(sent.html)).toContain(`href="${HANDBOOK}"`);
+    expect(String(sent.html)).toContain(`href="${ORIGIN}/tai-lieu/handbook-mentor.pdf"`);
     expect(logged.payloads[0].related_id ?? null).toBeNull();
   });
 
-  it("thư thử khi BTC chưa nhập Handbook: câu giữ chỗ, không href nào trỏ tới nó", async () => {
-    await sendMatchResultMentee({ ...MENTEE_SEND, toEmail: "btc@example.test", mentorToken: null, handbookUrl: null, noticeId: null });
-    const sent = body();
-    expect(String(sent.text)).toContain("(link Handbook — BTC chưa nhập)");
-    expect(String(sent.html)).not.toMatch(/href="\(/);
-    expect(String(sent.html)).not.toContain('href="(link Handbook');
+  it("link Handbook trong thư là file trên VAM OS, đúng vai người nhận", async () => {
+    await sendMatchResultMentee(MENTEE_SEND);
+    await sendMatchResultMentor(MENTOR_SEND);
+    const sentBody = (i: number) => JSON.parse((fetchMock.mock.calls[i] as [string, { body: string }])[1].body) as Record<string, any>;
+    expect(String(sentBody(0).text)).toContain(`Tài liệu hướng dẫn: ${ORIGIN}/tai-lieu/handbook-mentee.pdf`);
+    expect(String(sentBody(1).text)).toContain(`Tài liệu hướng dẫn: ${ORIGIN}/tai-lieu/handbook-mentor.pdf`);
   });
 
-  it("thư THẬT thiếu link Handbook: không gửi", async () => {
-    expect((await sendMatchResultMentee({ ...MENTEE_SEND, handbookUrl: null })).ok).toBe(false);
-    expect((await sendMatchResultMentor({ ...MENTOR_SEND, handbookUrl: null })).ok).toBe(false);
+  it("thư thử khi chưa có file Handbook: câu giữ chỗ, không href nào trỏ tới nó", async () => {
+    HANDBOOKS.mentee.ready = false;
+    await sendMatchResultMentee({ ...MENTEE_SEND, toEmail: "btc@example.test", mentorToken: null, noticeId: null });
+    const sent = body();
+    expect(String(sent.text)).toContain("(Handbook đang được cập nhật trên VAM OS)");
+    expect(String(sent.html)).not.toMatch(/href="\(/);
+    expect(String(sent.html)).not.toContain("/tai-lieu/");
+  });
+
+  it("thư THẬT khi chưa có file Handbook: không gửi", async () => {
+    HANDBOOKS.mentee.ready = false;
+    HANDBOOKS.mentor.ready = false;
+    expect((await sendMatchResultMentee(MENTEE_SEND)).ok).toBe(false);
+    expect((await sendMatchResultMentor(MENTOR_SEND)).ok).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("thư thử của một nhóm: tiêu đề mang người nhận thật, để Gmail không gom các thư cùng phút", async () => {
+    await sendMatchResultMentee({ ...MENTEE_SEND, toEmail: "btc@example.test", mentorToken: null, noticeId: null, testFor: "mentee Trần Mỹ Anh" });
+    expect(String(body().subject)).toMatch(/^\[THƯ THỬ\] THÔNG BÁO KẾT QUẢ MATCHING THÀNH CÔNG - UEH MENTORING MÙA 12 — bản gửi mentee Trần Mỹ Anh \(gửi lúc /);
+  });
+
+  it("thư thật không bao giờ mang nhãn thư thử dù nơi gọi truyền testFor", async () => {
+    await sendMatchResultMentee({ ...MENTEE_SEND, testFor: "x" });
+    expect(String(body().subject)).toBe("THÔNG BÁO KẾT QUẢ MATCHING THÀNH CÔNG - UEH MENTORING MÙA 12");
   });
 
   it("lẫn lộn mã và câu giữ chỗ: không gửi gì", async () => {

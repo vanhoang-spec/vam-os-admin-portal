@@ -59,6 +59,7 @@ import { VONG2_TIMELINE_JPEG_BASE64 } from "@/lib/email-assets/vong-2-timeline";
 import { formatDateTime } from "@/lib/utils";
 import { menteeConfirmUrl } from "@/lib/mentee-exemption-core";
 import { profileLinkUrl } from "@/lib/match-profile-core";
+import { handbookUrl } from "@/lib/handbook";
 import { buildPasswordLinkUrl, type PasswordLinkType } from "@/lib/password-link-core";
 
 /** Mã cid của hình timeline trong thư mời Vòng 2 (thân thư trỏ <img src="cid:…">). */
@@ -1234,8 +1235,15 @@ export async function sendMatchingRound2Reminder(input: {
 
 /** Câu giữ chỗ cho link hồ sơ trong thư thử: không link thật nào rời hệ thống. */
 const MATCH_RESULT_TEST_LINK = "(đường dẫn hồ sơ riêng của từng người — chỉ có trong thư thật)";
-/** Thư thử khi BTC chưa nhập link Handbook: câu giữ chỗ, không bấm được. Thư thật bắt buộc có link. */
-const MATCH_RESULT_HANDBOOK_PENDING = "(link Handbook — BTC chưa nhập)";
+/** Thư thử khi file Handbook chưa có trên VAM OS: câu giữ chỗ, không bấm được. Thư thật bắt buộc có file. */
+const MATCH_RESULT_HANDBOOK_PENDING = "(Handbook đang được cập nhật trên VAM OS)";
+
+/** Link Handbook trên VAM OS (lib/handbook.ts); thư thử dùng câu giữ chỗ khi file chưa có. */
+function matchResultHandbook(role: "mentor" | "mentee", test: boolean, requestOrigin?: string | null): string | null {
+  const base = resolveEmailBaseUrl(requestOrigin);
+  const url = base ? handbookUrl(base, role) : null;
+  return url ?? (test ? MATCH_RESULT_HANDBOOK_PENDING : null);
+}
 
 /**
  * Link hồ sơ cho từng mã; mọi mã null là thư thử (câu giữ chỗ). Lẫn lộn có mã và không mã là lỗi của
@@ -1249,14 +1257,16 @@ function matchResultProfileUrls(tokens: ReadonlyArray<string | null>, requestOri
   return { ok: true as const, test: false, urls: tokens.map((t) => profileLinkUrl(base, String(t))) };
 }
 
-function matchResultOutgoing(built: EmailMessage & { to: string }, toEmail: string, test: boolean) {
+function matchResultOutgoing(built: EmailMessage & { to: string }, toEmail: string, test: boolean, testFor?: string | null) {
   const outgoing = { ...built, to: toEmail };
   if (!test) return outgoing;
-  // Thư thử: ghi rõ là thư thử, gỡ href của mọi link hồ sơ; tiêu đề kèm giờ gửi để Gmail không gom
-  // các thư thử cùng tiêu đề vào một cuộc trò chuyện rồi ẩn phần cuối thư (15/10/2026).
+  // Thư thử: ghi rõ là thư thử, gỡ href của mọi link hồ sơ; tiêu đề kèm người nhận thật và giờ gửi để
+  // Gmail không gom các thư thử cùng tiêu đề vào một cuộc trò chuyện rồi ẩn phần cuối thư (15/10/2026) —
+  // gửi thử một nhóm mentor là 2–4 thư cùng tiêu đề trong cùng một phút.
   const marked = markAsTestEmail(outgoing, MATCH_RESULT_TEST_LINK);
   const testMail = { ...marked, html: marked.html.split(`href="${MATCH_RESULT_HANDBOOK_PENDING}"`).join("") };
-  return { ...testMail, subject: `${testMail.subject} (gửi lúc ${formatDateTime(new Date().toISOString())})` };
+  const label = testFor ? ` — bản gửi ${testFor}` : "";
+  return { ...testMail, subject: `${testMail.subject}${label} (gửi lúc ${formatDateTime(new Date().toISOString())})` };
 }
 
 /**
@@ -1269,15 +1279,16 @@ export async function sendMatchResultMentee(input: {
   menteeName: string;
   mentorName: string;
   mentorToken: string | null;
-  handbookUrl: string | null;
   kickoffRegisterUrl: string | null;
   noticeId: string | null;
   requestOrigin?: string | null;
+  /** Thư thử: ghi người nhận thật vào tiêu đề (gửi thử một nhóm mentor). */
+  testFor?: string | null;
 }): Promise<SendEmailResult> {
   const links = matchResultProfileUrls([input.mentorToken], input.requestOrigin);
   if (!links.ok) return { ok: false, skipped: false, reason: links.reason };
-  const handbookUrl = input.handbookUrl ?? (links.test ? MATCH_RESULT_HANDBOOK_PENDING : null);
-  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có link Handbook." };
+  const handbookUrl = matchResultHandbook("mentee", links.test, input.requestOrigin);
+  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có file Handbook mentee trên VAM OS." };
   const built = buildMatchResultMenteeEmail({
     menteeName: input.menteeName,
     mentorName: input.mentorName,
@@ -1287,7 +1298,7 @@ export async function sendMatchResultMentee(input: {
   });
   return deliver(
     "mentee_mentor_intro",
-    matchResultOutgoing(built, input.toEmail, links.test),
+    matchResultOutgoing(built, input.toEmail, links.test, input.testFor),
     input.noticeId ? { table: "match_result_notices", id: input.noticeId } : null
   );
 }
@@ -1297,16 +1308,17 @@ export async function sendMatchResultMentor(input: {
   toEmail: string;
   mentorName: string;
   mentees: ReadonlyArray<{ name: string; token: string | null }>;
-  handbookUrl: string | null;
   kickoffRegisterUrl: string | null;
   noticeId: string | null;
   requestOrigin?: string | null;
+  /** Thư thử: ghi người nhận thật vào tiêu đề (gửi thử một nhóm mentor). */
+  testFor?: string | null;
 }): Promise<SendEmailResult> {
   if (!input.mentees.length) return { ok: false, skipped: false, reason: "Mentor chưa có mentee nào." };
   const links = matchResultProfileUrls(input.mentees.map((m) => m.token), input.requestOrigin);
   if (!links.ok) return { ok: false, skipped: false, reason: links.reason };
-  const handbookUrl = input.handbookUrl ?? (links.test ? MATCH_RESULT_HANDBOOK_PENDING : null);
-  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có link Handbook." };
+  const handbookUrl = matchResultHandbook("mentor", links.test, input.requestOrigin);
+  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có file Handbook mentor trên VAM OS." };
   const built = buildMatchResultMentorEmail({
     mentorName: input.mentorName,
     mentees: input.mentees.map((m, i) => ({ name: m.name, profileUrl: links.urls[i] })),
@@ -1315,7 +1327,7 @@ export async function sendMatchResultMentor(input: {
   });
   return deliver(
     "mentor_mentee_package",
-    matchResultOutgoing(built, input.toEmail, links.test),
+    matchResultOutgoing(built, input.toEmail, links.test, input.testFor),
     input.noticeId ? { table: "match_result_notices", id: input.noticeId } : null
   );
 }

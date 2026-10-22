@@ -666,20 +666,21 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
   "/matches/ket-qua": {
     title: "Kết quả ghép cặp",
     summary:
-      "Chuẩn bị thư thông báo kết quả Matching kèm link hồ sơ người đồng hành: link Handbook và Kick-off trong thư, danh sách mentor giữ lại, độ phủ dữ liệu hồ sơ, xem trước từng thẻ.",
+      "Chuẩn bị thư thông báo kết quả Matching kèm link hồ sơ người đồng hành: Handbook trên VAM OS và link Kick-off, danh sách mentor giữ lại, độ phủ dữ liệu hồ sơ, xem trước từng thẻ.",
     steps: [
       "Đọc các ô số liệu đầu trang: mỗi người nhận có một trạng thái — Chờ gửi, Cặp mới (< 30 phút), Thiếu email, Giữ lại, Đổi cặp sau khi gửi, Đã gửi. Mọi cặp đang hoạt động đều tính, ở mọi vòng (1, 2, 3 và cặp BTC ghép tay); mentor có nhiều mentee nhận một thư mang đủ link.",
-      "Mục “1. Link trong thư”: dán link Handbook cho mentee và cho mentor (bắt buộc, phải bắt đầu bằng https://), link đăng ký Kick-off nếu đã có, rồi bấm “Lưu link”. Chưa có link Kick-off thì thư ghi “BTC sẽ cập nhật sau”.",
+      "Mục “1. Handbook và link Kick-off”: Handbook mentee và mentor là file PDF lưu trên VAM OS (os.alumni-mentoring.edu.vn/tai-lieu/…), thư tự lấy link này — không cần nhập. Khi BTC có file, gửi file PDF cho người phụ trách kỹ thuật để đưa lên; thay bản mới thì link trong thư đã gửi vẫn đúng. Link đăng ký Kick-off: dán link (phải bắt đầu bằng https://) rồi bấm “Lưu link Kick-off”; chưa có thì thư ghi “BTC sẽ cập nhật sau”.",
       "Mục “2. Mentor giữ lại”: dán email các mentor không nhận thư đợt này (mỗi dòng một email), bấm “Thêm vào danh sách giữ lại”. Mỗi email phải khớp đúng một mentor đã duyệt mùa này; có email không khớp thì không email nào được ghi — sửa rồi dán lại. Mentee của mentor bị giữ cũng không nhận thư.",
       "Rà danh sách rồi bấm “Xác nhận danh sách giữ lại” → “Xác nhận danh sách”. Thêm hoặc bỏ giữ bất kỳ ai thì phải xác nhận lại.",
       "Mục “3. Độ phủ dữ liệu hồ sơ”: bấm “Xem độ phủ” để đếm mỗi trường có ở bao nhiêu hồ sơ và xem ai thiếu gì. Trường không có dữ liệu tự ẩn trên thẻ.",
       "Bấm vào tên trong cột “Link hồ sơ trong thư” (hoặc trong danh sách thiếu) để xem trước đúng thẻ người đồng hành sẽ thấy, kể cả SĐT và email.",
       "Khung “Gửi thư kết quả”: bấm “Gửi thử cho tôi (2 thư)” để đọc bản mentee và bản mentor (link hồ sơ trong thư thử không bấm được). Thí điểm: ở cột “Gửi riêng”, gửi cho một cặp quen rồi mở thử hai link khi chưa đăng nhập.",
+      "Xem trước thư của một nhóm mentor (cho team support): ở khung “Xem trước thư của một nhóm mentor”, gõ email hoặc họ tên mentor, để trống “Gửi tới” (gửi cho bạn) hoặc gõ email tài khoản VAM OS của người cần xem, bấm “Gửi thử nhóm này”. Hệ thống gửi thư thử của mentor và của từng mentee, đúng chữ và đúng tên — không gửi tới mentor hay mentee thật.",
       "Gửi thật: bấm “Gửi thư kết quả” → “Xác nhận gửi”. Mỗi lần bấm gửi trọn từng nhóm mentor (mentor và các mentee của họ cùng lần), tối đa 40 thư; bấm lại tới khi hết người chờ. Mùa 12 cần khoảng 1.150 thư, quá hạn mức 1.000 thư/24 giờ của Resend, nên gửi trong hai ngày — nhóm nào đã bắt đầu thì đi trọn trong ngày.",
       "Người “Đổi cặp sau khi gửi” hoặc gửi lỗi: bấm “Gửi lại” ở cột “Gửi riêng”. Thư mới mang link mới; link trong thư trước của người đó hết hiệu lực."
     ],
     notes: [
-      "Gửi được khi đủ hai link Handbook và đã xác nhận danh sách giữ lại. Thư dùng nguyên văn hai mẫu MENTEE và MENTOR trong Doc của BTC; thân thư không có SĐT hay email của ai.",
+      "Gửi được khi đã có hai file Handbook trên VAM OS và đã xác nhận danh sách giữ lại. Thư dùng nguyên văn hai mẫu MENTEE và MENTOR trong Doc của BTC; thân thư không có SĐT hay email của ai.",
       "Hai lần bấm cùng lúc không gửi trùng: mỗi người bị chiếm chỗ trước khi gửi. Một người đã có thư trong sổ thư (lần trước gửi xong mà chưa kịp ghi nhận) thì chỉ được ghi nhận, không gửi lại.",
       "Cặp vừa ghi chưa đủ 30 phút thì chờ: mentor có một cặp mới thì cả thư của mentor đó chờ, để thư không mang danh sách thiếu.",
       "Người đã rút khỏi mùa không nhận thư, và thư của người đồng hành cũng bị giữ cho tới khi BTC kết thúc cặp đó — link tới hồ sơ người đã rút sẽ báo hết hiệu lực.",

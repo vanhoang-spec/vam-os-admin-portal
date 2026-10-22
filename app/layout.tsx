@@ -35,6 +35,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     publicRoute === "mentee_exemption_confirm" ||
     // Hồ sơ người đồng hành gửi kèm thư kết quả ghép cặp — mã riêng trong thư.
     publicRoute === "match_profile" ||
+    // Tài liệu công khai (Handbook) — file PDF, không phải trang; nhãn có mặt để khung không bao giờ đọc tài khoản admin.
+    publicRoute === "document" ||
     // Form tùy chỉnh công khai (/f/<mã>) — người điền không có tài khoản nào.
     publicRoute === "custom_form" ||
     publicRoute === "renewal" ||
