@@ -13,7 +13,8 @@ import {
 import { matchingRoundLabel } from "@/lib/matching-round";
 import { canManageMatches } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/utils";
-import { AddHoldsForm, ConfirmHoldsPanel, MatchResultSendPanel, MatchResultSettingsForm, RemoveHoldButton, ResendButton } from "./forms";
+import { AddHoldsForm, ConfirmHoldsPanel, GroupTestForm, MatchResultSendPanel, MatchResultSettingsForm, RemoveHoldButton, ResendButton } from "./forms";
+import { HANDBOOKS } from "@/lib/handbook";
 
 export const dynamic = "force-dynamic";
 // Báo cáo độ phủ đọc hồ sơ của mọi người đang có cặp, và mỗi lần bấm gửi chạy tới 45 giây — cần nhiều
@@ -170,17 +171,31 @@ export default async function MatchResultPage(props: { searchParams: Promise<Sea
         <div className="mt-3">
           <MatchResultSendPanel blocked={data.blocked} {...data.dispatch} />
         </div>
+        <div className="mt-4">
+          <GroupTestForm />
+        </div>
       </Card>
 
       <Card>
-        <h2 className="text-base font-semibold text-vam-ink">1. Link trong thư</h2>
+        <h2 className="text-base font-semibold text-vam-ink">1. Handbook và link Kick-off</h2>
+        <ul className="mt-2 grid gap-1 text-sm" data-testid="match-result-handbooks">
+          {(["mentee", "mentor"] as const).map((role) => (
+            <li key={role} data-handbook={role}>
+              Handbook {role}:{" "}
+              {HANDBOOKS[role].ready ? (
+                <a href={HANDBOOKS[role].path} target="_blank" rel="noopener noreferrer" className="font-medium text-vam-green underline">
+                  {HANDBOOKS[role].path}
+                </a>
+              ) : (
+                <span className="text-amber-700">chưa có file trên VAM OS — gửi file PDF cho người phụ trách kỹ thuật để đưa lên</span>
+              )}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-1 text-xs text-slate-500">Thư lấy link Handbook từ VAM OS; thay bản mới thì link trong thư đã gửi vẫn đúng.</p>
         {data.settingsReadOk ? (
           <div className="mt-3">
-            <MatchResultSettingsForm
-              menteeHandbookUrl={data.settings?.menteeHandbookUrl ?? null}
-              mentorHandbookUrl={data.settings?.mentorHandbookUrl ?? null}
-              kickoffRegisterUrl={data.settings?.kickoffRegisterUrl ?? null}
-            />
+            <MatchResultSettingsForm kickoffRegisterUrl={data.settings?.kickoffRegisterUrl ?? null} />
           </div>
         ) : (
           <ErrorBox message="Không đọc được cài đặt thư — tải lại trang." />

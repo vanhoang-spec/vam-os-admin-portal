@@ -11,6 +11,7 @@ import {
   batchSize,
   buildRecipients,
   dispatchGroups,
+  findMentorRecipient,
   countByStatus,
   holdsFingerprint,
   missingFieldLabels,
@@ -236,35 +237,55 @@ describe("link trong cài đặt", () => {
 });
 
 describe("lý do khoá gửi", () => {
-  const ready = {
-    menteeHandbookUrl: "https://example.com/mentee",
-    mentorHandbookUrl: "https://example.com/mentor",
-    kickoffRegisterUrl: null,
-    holdsConfirmedAt: "2026-10-22T09:00:00Z"
-  };
+  const settings = { kickoffRegisterUrl: null, holdsConfirmedAt: "2026-10-22T09:00:00Z" };
+  const both = { mentee: true, mentor: true };
+  const base = { settings, settingsReadOk: true, holdsReadOk: true, handbooksReady: both };
 
-  it("đủ hai Handbook và đã xác nhận danh sách giữ lại → gửi được; thiếu Kick-off không chặn", () => {
-    expect(sendBlockedReasons({ settings: ready, settingsReadOk: true, holdsReadOk: true })).toEqual([]);
+  it("có đủ hai file Handbook trên VAM OS và đã xác nhận danh sách giữ lại → gửi được; thiếu Kick-off không chặn", () => {
+    expect(sendBlockedReasons(base)).toEqual([]);
   });
 
   it.each([
-    ["thiếu Handbook mentee", { ...ready, menteeHandbookUrl: null }, "Chưa nhập link Handbook cho mentee."],
-    ["thiếu Handbook mentor", { ...ready, mentorHandbookUrl: null }, "Chưa nhập link Handbook cho mentor."],
-    ["Handbook lưu sẵn không phải https", { ...ready, mentorHandbookUrl: "http://x.com" }, "Chưa nhập link Handbook cho mentor."],
-    ["chưa xác nhận danh sách giữ lại", { ...ready, holdsConfirmedAt: null }, "Danh sách mentor giữ lại chưa được xác nhận."]
-  ])("%s", (_label, settings, reason) => {
-    expect(sendBlockedReasons({ settings, settingsReadOk: true, holdsReadOk: true })).toEqual([reason]);
-  });
-
-  it("chưa có dòng cài đặt nào → khoá vì cả ba", () => {
-    expect(sendBlockedReasons({ settings: null, settingsReadOk: true, holdsReadOk: true })).toHaveLength(3);
+    ["chưa có file Handbook mentee", { ...base, handbooksReady: { mentee: false, mentor: true } }, "Chưa có file Handbook mentee trên VAM OS."],
+    ["chưa có file Handbook mentor", { ...base, handbooksReady: { mentee: true, mentor: false } }, "Chưa có file Handbook mentor trên VAM OS."],
+    ["chưa xác nhận danh sách giữ lại", { ...base, settings: { ...settings, holdsConfirmedAt: null } }, "Danh sách mentor giữ lại chưa được xác nhận."],
+    ["chưa có dòng cài đặt nào", { ...base, settings: null }, "Danh sách mentor giữ lại chưa được xác nhận."]
+  ])("%s", (_label, input, reason) => {
+    expect(sendBlockedReasons(input)).toEqual([reason]);
   });
 
   it("không đọc được cài đặt hoặc danh sách giữ lại → khoá (fail-closed)", () => {
-    expect(sendBlockedReasons({ settings: null, settingsReadOk: false, holdsReadOk: true })).toEqual(["Không đọc được cài đặt thư — tạm khoá gửi."]);
-    expect(sendBlockedReasons({ settings: ready, settingsReadOk: true, holdsReadOk: false })).toEqual([
-      "Không đọc được danh sách mentor giữ lại — tạm khoá gửi."
-    ]);
+    expect(sendBlockedReasons({ ...base, settings: null, settingsReadOk: false })).toEqual(["Không đọc được cài đặt thư — tạm khoá gửi."]);
+    expect(sendBlockedReasons({ ...base, holdsReadOk: false })).toEqual(["Không đọc được danh sách mentor giữ lại — tạm khoá gửi."]);
+  });
+});
+
+describe("tìm mentor để gửi thử thư của nhóm", () => {
+  it("theo email (không phân biệt hoa thường)", () => {
+    const r = findMentorRecipient(build(), " A@Example.com ");
+    expect(r.ok && r.mentor.personId).toBe("mt-a");
+  });
+
+  it("theo đúng họ tên, không phân biệt hoa thường và khoảng trắng thừa", () => {
+    const r = findMentorRecipient(build(), "  bình   mentor b ");
+    expect(r.ok && r.mentor.personId).toBe("mt-b");
+  });
+
+  it("chữ có dấu gõ kiểu tổ hợp (NFD) vẫn khớp", () => {
+    const r = findMentorRecipient(build(), "Bình Mentor B".normalize("NFD"));
+    expect(r.ok && r.mentor.personId).toBe("mt-b");
+  });
+
+  it("tên của mentee, tên không có, ô trống: báo lại, không đoán", () => {
+    for (const q of ["Chi Mentee 1", "Không Ai Cả", "", "   "]) expect(findMentorRecipient(build(), q).ok, q).toBe(false);
+  });
+
+  it("trùng tên hai mentor: báo lại, đòi email", () => {
+    const people = new Map(PEOPLE);
+    people.set("mt-b", { fullName: "Anh Mentor A", email: "b@example.com" });
+    const r = findMentorRecipient(build({ people }), "Anh Mentor A");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("nhập email");
   });
 });
 

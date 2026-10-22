@@ -9,6 +9,7 @@ import {
   resendMatchResultAction,
   saveMatchResultSettingsAction,
   sendMatchResultAction,
+  sendMatchResultGroupTestAction,
   sendMatchResultTestAction
 } from "@/app/actions/match-result";
 import { Message, Submit } from "@/app/matches/vong-2/bao-cao/dispatch-panel";
@@ -16,28 +17,47 @@ import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 
 const INPUT = "mt-1 block w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm";
 
-export function MatchResultSettingsForm(props: {
-  menteeHandbookUrl: string | null;
-  mentorHandbookUrl: string | null;
-  kickoffRegisterUrl: string | null;
-}) {
+export function MatchResultSettingsForm(props: { kickoffRegisterUrl: string | null }) {
   const [state, action] = useFormState(saveMatchResultSettingsAction, ROUND2_IDLE);
   return (
     <form action={action} className="grid gap-3" data-testid="match-result-settings">
-      <label className="text-sm text-slate-600">
-        Link Handbook cho mentee (bắt buộc trước khi gửi)
-        <input name="menteeHandbookUrl" type="url" defaultValue={props.menteeHandbookUrl ?? ""} placeholder="https://" className={INPUT} />
-      </label>
-      <label className="text-sm text-slate-600">
-        Link Handbook cho mentor (bắt buộc trước khi gửi)
-        <input name="mentorHandbookUrl" type="url" defaultValue={props.mentorHandbookUrl ?? ""} placeholder="https://" className={INPUT} />
-      </label>
       <label className="text-sm text-slate-600">
         Link đăng ký Kick-off 20/11 (để trống thì thư ghi “BTC sẽ cập nhật sau”)
         <input name="kickoffRegisterUrl" type="url" defaultValue={props.kickoffRegisterUrl ?? ""} placeholder="https://" className={INPUT} />
       </label>
       <div className="flex flex-wrap items-center gap-3">
-        <Submit label="Lưu link" pendingLabel="Đang lưu…" />
+        <Submit label="Lưu link Kick-off" pendingLabel="Đang lưu…" />
+        <Message state={state} />
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Gửi thử thư thật của một nhóm mentor (mentor + từng mentee của họ) — để team support xem trước. Người
+ * nhận là người bấm hoặc một tài khoản nhân sự; máy chủ từ chối mọi địa chỉ khác.
+ */
+export function GroupTestForm() {
+  const [state, action] = useFormState(sendMatchResultGroupTestAction, ROUND2_IDLE);
+  return (
+    <form action={action} className="grid gap-3 rounded-md border border-vam-line p-3" data-testid="match-result-group-test">
+      <div className="text-sm font-semibold text-vam-ink">Xem trước thư của một nhóm mentor</div>
+      <p className="text-xs text-slate-500">
+        Gửi thư thử đúng chữ, đúng tên của một mentor và từng mentee của họ (link hồ sơ trong thư thử không bấm được). Không gửi tới
+        mentor hay mentee thật.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm text-slate-600">
+          Email hoặc họ tên mentor
+          <input name="mentor" required className={INPUT} placeholder="Lương Quốc Vĩ" />
+        </label>
+        <label className="text-sm text-slate-600">
+          Gửi tới (để trống = email của bạn; chỉ nhận email tài khoản nhân sự VAM OS)
+          <input name="toEmail" type="email" className={INPUT} />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Submit label="Gửi thử nhóm này" pendingLabel="Đang gửi thử…" />
         <Message state={state} />
       </div>
     </form>

@@ -7,7 +7,7 @@
  * nút xác nhận chỉ chốt đúng danh sách đang hiện; link trong thư chỉ nhận https; không đọc được danh
  * sách giữ lại thì khoá gửi.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 
@@ -43,6 +43,7 @@ import {
   saveMatchResultSettings
 } from "@/lib/match-result";
 import { holdsFingerprint } from "@/lib/match-result-core";
+import { HANDBOOKS } from "@/lib/handbook";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -111,9 +112,17 @@ function rowOf(html: string, marker: string) {
 }
 
 const writesTo = (table: string) => db.writes.filter((w) => w.table === table);
+const REAL_READY = { mentee: HANDBOOKS.mentee.ready, mentor: HANDBOOKS.mentor.ready };
+afterEach(() => {
+  HANDBOOKS.mentee.ready = REAL_READY.mentee;
+  HANDBOOKS.mentor.ready = REAL_READY.mentor;
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Handbook có file (giả lập); ca "chưa có file" tự tắt. afterEach trả về giá trị thật trong kho.
+  HANDBOOKS.mentee.ready = true;
+  HANDBOOKS.mentor.ready = true;
   db.reset();
   seed();
   const client = fakeClient(db);
@@ -139,7 +148,7 @@ describe("quyền", () => {
 
   it("mọi đường ghi từ chối người không có quyền vận hành mùa — và không ghi gì", async () => {
     signIn("core_team", "auth-khac");
-    await saveMatchResultSettings({ menteeHandbookUrl: "https://x.test/a", mentorHandbookUrl: "https://x.test/b", kickoffRegisterUrl: "" });
+    await saveMatchResultSettings({ kickoffRegisterUrl: "https://x.test/kick-off" });
     await addMatchResultHolds({ text: "a@example.test", reason: "" });
     await removeMatchResultHold({ mentorPersonId: MT_A });
     await confirmMatchResultHolds({ fingerprint: "" });
@@ -163,19 +172,27 @@ describe("trang", () => {
     expect(rowOf(await page(), `data-recipient="mentee:${ME_3}"`)).toContain("m3@app.example.test");
   });
 
-  it("chưa có cài đặt: khoá gửi vì thiếu hai Handbook và chưa xác nhận danh sách", async () => {
+  it("chưa có file Handbook trên VAM OS và chưa xác nhận danh sách: khoá gửi, nói rõ cả ba", async () => {
+    HANDBOOKS.mentee.ready = false;
+    HANDBOOKS.mentor.ready = false;
     const html = await page();
     expect(html).toContain('data-testid="match-result-blocked"');
-    expect(html).toContain("Chưa nhập link Handbook cho mentee.");
-    expect(html).toContain("Chưa nhập link Handbook cho mentor.");
+    expect(html).toContain("Chưa có file Handbook mentee trên VAM OS.");
+    expect(html).toContain("Chưa có file Handbook mentor trên VAM OS.");
     expect(html).toContain("Danh sách mentor giữ lại chưa được xác nhận.");
-    expect(html).not.toContain('data-testid="match-result-ready"');
+    expect(html).not.toContain("Gửi thư kết quả (tối đa");
+    expect(rowOf(html, 'data-handbook="mentee"')).toContain("chưa có file trên VAM OS");
   });
 
-  it("đủ cài đặt và đã xác nhận: không còn lý do khoá, nút gửi mời gửi đúng lô kế tiếp (trọn từng nhóm mentor)", async () => {
-    db.tables.match_result_settings = [
-      { season_id: SEASON, mentee_handbook_url: "https://x.test/me", mentor_handbook_url: "https://x.test/mt", kickoff_register_url: null, holds_confirmed_at: "2026-10-22T09:00:00Z" }
-    ];
+  it("Handbook có file: trang hiện đúng link trên VAM OS, không có ô nhập link Handbook", async () => {
+    const html = await page();
+    expect(html).toContain('href="/tai-lieu/handbook-mentee.pdf"');
+    expect(html).toContain('href="/tai-lieu/handbook-mentor.pdf"');
+    expect(html).not.toMatch(/name="(mentee|mentor)HandbookUrl"/);
+  });
+
+  it("đủ file Handbook và đã xác nhận: không còn lý do khoá, nút gửi mời gửi đúng lô kế tiếp (trọn từng nhóm mentor)", async () => {
+    db.tables.match_result_settings = [{ season_id: SEASON, kickoff_register_url: null, holds_confirmed_at: "2026-10-22T09:00:00Z" }];
     const html = await page();
     expect(html).not.toContain('data-testid="match-result-blocked"');
     // A: mentor + 2 mentee, B: mentor + 1 mentee (ME_3 lấy email từ đơn) = 5 thư, 2 nhóm.
@@ -229,23 +246,26 @@ describe("trang", () => {
   });
 });
 
-describe("link trong thư", () => {
+describe("link Kick-off", () => {
   it("chỉ nhận https: http bị từ chối, không ghi gì", async () => {
-    const r = await saveMatchResultSettings({ menteeHandbookUrl: "http://x.test/a", mentorHandbookUrl: "https://x.test/b", kickoffRegisterUrl: "" });
+    const r = await saveMatchResultSettings({ kickoffRegisterUrl: "http://x.test/kick-off" });
     expect(r.ok).toBe(false);
-    expect(r.message).toContain("Handbook mentee");
+    expect(r.message).toContain("Kick-off");
     expect(db.writes).toEqual([]);
   });
 
-  it("lưu đúng ba link cùng người sửa — không đụng dấu xác nhận danh sách", async () => {
-    const r = await saveMatchResultSettings({ menteeHandbookUrl: " https://x.test/a ", mentorHandbookUrl: "https://x.test/b", kickoffRegisterUrl: "" });
+  it("chỉ ghi cột Kick-off cùng người sửa — không đụng dấu xác nhận danh sách, không đụng cột Handbook cũ", async () => {
+    const r = await saveMatchResultSettings({ kickoffRegisterUrl: " https://x.test/kick-off " });
     expect(r.ok).toBe(true);
     const [w] = writesTo("match_result_settings");
     expect(w.kind).toBe("upsert");
-    expect(Object.keys(w.rows[0]).sort()).toEqual(
-      ["kickoff_register_url", "mentee_handbook_url", "mentor_handbook_url", "season_id", "updated_at", "updated_by"].sort()
-    );
-    expect(w.rows[0]).toMatchObject({ season_id: SEASON, mentee_handbook_url: "https://x.test/a", kickoff_register_url: null, updated_by: "admin-auth-core" });
+    expect(Object.keys(w.rows[0]).sort()).toEqual(["kickoff_register_url", "season_id", "updated_at", "updated_by"]);
+    expect(w.rows[0]).toMatchObject({ season_id: SEASON, kickoff_register_url: "https://x.test/kick-off", updated_by: "admin-auth-core" });
+  });
+
+  it("để trống: lưu null (thư ghi “BTC sẽ cập nhật sau”)", async () => {
+    await saveMatchResultSettings({ kickoffRegisterUrl: "" });
+    expect(writesTo("match_result_settings")[0].rows[0].kickoff_register_url).toBeNull();
   });
 });
 

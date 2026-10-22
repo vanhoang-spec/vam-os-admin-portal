@@ -24,6 +24,8 @@ import {
   RECIPIENT_STATUS_LABELS,
   batchSize,
   dispatchGroups,
+  findMentorRecipient,
+  normalizeEmail,
   planDispatchBatch,
   type MatchResultRecipient
 } from "@/lib/match-result-core";
@@ -114,14 +116,13 @@ async function sendOne(
   noticeId: string,
   requestOrigin: string | null
 ): Promise<SendEmailResult> {
-  const settings = state.settings!;
+  const kickoffRegisterUrl = state.settings?.kickoffRegisterUrl ?? null;
   if (r.role === "mentor") {
     return sendMatchResultMentor({
       toEmail: r.email!,
       mentorName: r.fullName ?? "",
       mentees: r.partners.map((p, i) => ({ name: p.fullName ?? "", token: tokens[i] })),
-      handbookUrl: settings.mentorHandbookUrl,
-      kickoffRegisterUrl: settings.kickoffRegisterUrl,
+      kickoffRegisterUrl,
       noticeId,
       requestOrigin
     });
@@ -131,8 +132,7 @@ async function sendOne(
     menteeName: r.fullName ?? "",
     mentorName: r.partners[0]?.fullName ?? "",
     mentorToken: tokens[0],
-    handbookUrl: settings.menteeHandbookUrl,
-    kickoffRegisterUrl: settings.kickoffRegisterUrl,
+    kickoffRegisterUrl,
     noticeId,
     requestOrigin
   });
@@ -326,10 +326,10 @@ export async function sendMatchResultTest(nowMs = Date.now()): Promise<MatchResu
         menteeName: name || "(tên Mentee)",
         mentorName: "(tên Mentor đồng hành)",
         mentorToken: null,
-        handbookUrl: settings?.menteeHandbookUrl ?? null,
         kickoffRegisterUrl: settings?.kickoffRegisterUrl ?? null,
         noticeId: null,
-        requestOrigin
+        requestOrigin,
+        testFor: "mentee mẫu"
       }),
       await sendMatchResultMentor({
         toEmail: actor.email,
@@ -338,10 +338,10 @@ export async function sendMatchResultTest(nowMs = Date.now()): Promise<MatchResu
           { name: "(tên Mentee 1)", token: null },
           { name: "(tên Mentee 2)", token: null }
         ],
-        handbookUrl: settings?.mentorHandbookUrl ?? null,
         kickoffRegisterUrl: settings?.kickoffRegisterUrl ?? null,
         noticeId: null,
-        requestOrigin
+        requestOrigin,
+        testFor: "mentor mẫu"
       })
     ];
     if (results.some((r) => r.skipped)) return fail("Môi trường này đang tắt gửi thư — thư thử chưa đi.");
@@ -350,6 +350,92 @@ export async function sendMatchResultTest(nowMs = Date.now()): Promise<MatchResu
     return { ok: true, message: `Đã gửi 2 thư thử (bản mentee và bản mentor) tới ${actor.email}.`, sent: 2, failed: 0 };
   } catch (error) {
     log("test send failed", error);
+    return fail(SAFE_ERROR);
+  }
+}
+
+/** Email của một tài khoản nhân sự đang hoạt động. Đọc lỗi thì ném: không biết thì không gửi. */
+async function isActiveStaffEmail(client: any, email: string): Promise<boolean> {
+  const res = await readAllPages<Row>("admin_users", "id,email,status", (columns) =>
+    client.from("admin_users").select(columns).eq("status", "active")
+  );
+  if (res.error) throw res.error;
+  return res.data.some((u) => normalizeEmail(u.email) === email);
+}
+
+/**
+ * Gửi thử đúng các lá thư của MỘT nhóm mentor — thư của mentor và thư của từng mentee của họ (BTC
+ * 22/10/2026: team support xem trước thư thật trước khi gửi hàng loạt). Chữ, tên, link Handbook và
+ * Kick-off như thư thật; link hồ sơ là câu giữ chỗ, không mã nào được tạo, không dòng nào được ghi.
+ *
+ * Gửi tới người bấm, hoặc tới email của một tài khoản nhân sự đang hoạt động — KHÔNG BAO GIỜ tới mentor
+ * hay mentee: ô "gửi tới" là thứ người bấm tự gõ được. Gửi được cả khi chưa đủ điều kiện gửi thật và cả
+ * với mentor đang bị giữ, vì đây chỉ là bản xem trước.
+ */
+export async function sendMatchResultGroupTest(input: { mentor: unknown; toEmail?: unknown }, nowMs = Date.now()): Promise<MatchResultSendResult> {
+  const fail = (message: string): MatchResultSendResult => ({ ok: false, message, sent: 0, failed: 0 });
+  const typedTarget = String(input.toEmail ?? "").trim();
+  const target = typedTarget ? normalizeEmail(typedTarget) : null;
+  if (typedTarget && !target) return fail("Email người nhận thư thử không hợp lệ.");
+  try {
+    const { client, seasonId } = await round2SeasonContext();
+    if (!(await round2Operator(seasonId))) return fail(DENIED);
+    const actor = await getCurrentAdminUser();
+    const actorEmail = normalizeEmail(actor?.email);
+    if (!actorEmail) return fail("Cần đăng nhập.");
+    const toEmail = target ?? actorEmail;
+    if (toEmail !== actorEmail && !(await isActiveStaffEmail(client, toEmail))) {
+      return fail(`${toEmail} không phải tài khoản nhân sự đang hoạt động trên VAM OS — thư thử chỉ gửi cho nhân sự.`);
+    }
+
+    const state = await loadMatchResultState(client, seasonId, nowMs);
+    const found = findMentorRecipient(state.recipients, input.mentor);
+    if (!found.ok) return fail(found.message);
+    const mentor = found.mentor;
+    const count = 1 + mentor.partners.length;
+    const sentInWindow = await countSentInWindow(client, nowMs);
+    if (sentInWindow === null) return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi.");
+    if (sentInWindow + count > DAILY_EMAIL_LIMIT) return fail("Đã chạm hạn mức thư trong 24 giờ. Thử lại sau vài giờ.");
+
+    const requestOrigin = await getPublicOrigin();
+    const kickoffRegisterUrl = state.settings?.kickoffRegisterUrl ?? null;
+    const mentorName = mentor.fullName ?? "";
+    const results = [
+      await sendMatchResultMentor({
+        toEmail,
+        mentorName,
+        mentees: mentor.partners.map((p) => ({ name: p.fullName ?? "", token: null })),
+        kickoffRegisterUrl,
+        noticeId: null,
+        requestOrigin,
+        testFor: `mentor ${mentorName}`
+      })
+    ];
+    for (const p of mentor.partners) {
+      results.push(
+        await sendMatchResultMentee({
+          toEmail,
+          menteeName: p.fullName ?? "",
+          mentorName,
+          mentorToken: null,
+          kickoffRegisterUrl,
+          noticeId: null,
+          requestOrigin,
+          testFor: `mentee ${p.fullName ?? ""}`
+        })
+      );
+    }
+    if (results.some((r) => r.skipped)) return fail("Môi trường này đang tắt gửi thư — thư thử chưa đi.");
+    const ok = results.filter((r) => r.ok).length;
+    if (ok < count) return fail(`Gửi thư thử chưa trọn (${ok}/${count} thư). Xem Vận hành → Mail → Nhật ký gửi.`);
+    return {
+      ok: true,
+      message: `Đã gửi ${count} thư thử tới ${toEmail}: thư của mentor ${mentorName} và ${mentor.partners.length} mentee (${mentor.partners.map((p) => p.fullName).join(", ")}).`,
+      sent: count,
+      failed: 0
+    };
+  } catch (error) {
+    log("group test send failed", error);
     return fail(SAFE_ERROR);
   }
 }

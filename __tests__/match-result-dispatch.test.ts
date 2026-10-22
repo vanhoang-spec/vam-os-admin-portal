@@ -6,7 +6,7 @@
  * nằm trong database, chỉ hash; link trong thư mở được ngay; bị 429 thì dừng; người đã có thư trong sổ
  * thư thì chỉ chốt, không gửi lại (gửi lại là làm chết link của thư trước).
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 
 const mocks = vi.hoisted(() => ({ mentee: vi.fn(), mentor: vi.fn() }));
@@ -29,7 +29,8 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 import { hashBearerToken } from "@/lib/bearer-token";
 import { getMatchProfilePage } from "@/lib/match-profile";
-import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultTest } from "@/lib/match-result-dispatch";
+import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultGroupTest, sendMatchResultTest } from "@/lib/match-result-dispatch";
+import { HANDBOOKS } from "@/lib/handbook";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 const SEASON = "11111111-1111-4111-8111-111111111111";
@@ -40,8 +41,7 @@ const ME_1 = "e0000000-0000-4000-8000-000000000001";
 const ME_2 = "e0000000-0000-4000-8000-000000000002";
 const ME_3 = "e0000000-0000-4000-8000-000000000003";
 const OLD = "2026-10-20T00:00:00Z";
-const HANDBOOK_ME = "https://drive.example.test/mentee";
-const HANDBOOK_MT = "https://drive.example.test/mentor";
+const REAL_READY = { mentee: HANDBOOKS.mentee.ready, mentor: HANDBOOKS.mentor.ready };
 
 const db = createFakeDb();
 let client: ReturnType<typeof fakeClient>;
@@ -68,7 +68,7 @@ function seed() {
   db.tables.match_result_holds = [];
   db.tables.match_profile_links = [];
   db.tables.match_result_settings = [
-    { season_id: SEASON, mentee_handbook_url: HANDBOOK_ME, mentor_handbook_url: HANDBOOK_MT, kickoff_register_url: null, holds_confirmed_at: "2026-10-22T09:00:00Z" }
+    { season_id: SEASON, kickoff_register_url: null, holds_confirmed_at: "2026-10-22T09:00:00Z" }
   ];
   db.tables.outbound_emails = [];
   db.tables.matching_industry_assignments = [];
@@ -76,6 +76,11 @@ function seed() {
   db.tables.mentee_profiles = [];
   db.tables.application_reviews = [];
 }
+
+afterEach(() => {
+  HANDBOOKS.mentee.ready = REAL_READY.mentee;
+  HANDBOOKS.mentor.ready = REAL_READY.mentor;
+});
 
 const sentTo = () => [
   ...mocks.mentor.mock.calls.map((c) => `mentor:${c[0].toEmail}`),
@@ -90,6 +95,9 @@ const tokensSent = () => [
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
+  // Giả lập Handbook đã có file trên VAM OS; ca "chưa có file" tự tắt.
+  HANDBOOKS.mentee.ready = true;
+  HANDBOOKS.mentor.ready = true;
   db.reset();
   seed();
   client = fakeClient(db);
@@ -112,9 +120,9 @@ describe("1. khoá gửi (fail-closed)", () => {
   });
 
   it.each([
-    ["thiếu Handbook mentee", () => (db.tables.match_result_settings[0].mentee_handbook_url = null), "Handbook cho mentee"],
+    ["chưa có file Handbook mentee trên VAM OS", () => (HANDBOOKS.mentee.ready = false), "Handbook mentee"],
     ["danh sách giữ lại chưa xác nhận", () => (db.tables.match_result_settings[0].holds_confirmed_at = null), "chưa được xác nhận"],
-    ["chưa có dòng cài đặt", () => (db.tables.match_result_settings = []), "Handbook"],
+    ["chưa có dòng cài đặt", () => (db.tables.match_result_settings = []), "chưa được xác nhận"],
     ["đọc danh sách giữ lại lỗi", () => (db.errors.match_result_holds = { message: "down" }), "danh sách mentor giữ lại"],
     ["đọc cài đặt lỗi", () => (db.errors.match_result_settings = { message: "down" }), "cài đặt thư"]
   ])("%s: không gửi, không ghi", async (_label, breakIt, reason) => {
@@ -146,8 +154,6 @@ describe("2. gửi theo nhóm mentor", () => {
     ]);
     const a = mocks.mentor.mock.calls.find((c) => c[0].toEmail === "a@example.test")![0];
     expect(a.mentees.map((m: any) => m.name)).toEqual(["Mentee Hai", "Mentee Một"]);
-    expect(a.handbookUrl).toBe(HANDBOOK_MT);
-    expect(mocks.mentee.mock.calls[0][0].handbookUrl).toBe(HANDBOOK_ME);
   });
 
   it("chốt từng người: sent_at, đúng các cặp trong thư, nhả chỗ", async () => {
@@ -315,7 +321,7 @@ describe("6. gửi thử và gửi riêng", () => {
   });
 
   it("gửi riêng khi chưa đủ điều kiện gửi: từ chối", async () => {
-    db.tables.match_result_settings[0].mentor_handbook_url = null;
+    HANDBOOKS.mentor.ready = false;
     expect((await resendMatchResultNotice({ personId: MT_A, role: "mentor" })).ok).toBe(false);
     expect(sentTo()).toEqual([]);
   });
@@ -337,5 +343,87 @@ describe("7. form gửi", () => {
     form.set("confirmed", "yes");
     expect((await sendMatchResultAction(ROUND2_IDLE, form)).status).toBe("ok");
     expect(sentTo()).toHaveLength(5);
+  });
+});
+
+describe("8. gửi thử thư của một nhóm mentor (xem trước cho team support)", () => {
+  const STAFF = [
+    { id: "s1", email: "support@example.test", status: "active" },
+    { id: "s2", email: "da-nghi@example.test", status: "inactive" }
+  ];
+
+  it("theo họ tên: thư của mentor + thư của từng mentee, tới người bấm, đúng tên, không mã, không ghi gì", async () => {
+    const r = await sendMatchResultGroupTest({ mentor: "anh mentor a" });
+    expect(r.ok).toBe(true);
+    expect(sentTo()).toEqual(["mentee:btc@example.test", "mentee:btc@example.test", "mentor:btc@example.test"]);
+    const m = mocks.mentor.mock.calls[0][0];
+    expect(m.mentorName).toBe("Anh Mentor A");
+    expect(m.mentees.map((x: any) => x.name)).toEqual(["Mentee Hai", "Mentee Một"]);
+    expect(m.testFor).toBe("mentor Anh Mentor A");
+    expect(mocks.mentee.mock.calls.map((c) => [c[0].menteeName, c[0].mentorName, c[0].testFor])).toEqual([
+      ["Mentee Hai", "Anh Mentor A", "mentee Mentee Hai"],
+      ["Mentee Một", "Anh Mentor A", "mentee Mentee Một"]
+    ]);
+    expect(tokensSent().every((t) => t === null)).toBe(true);
+    expect([...mocks.mentor.mock.calls, ...mocks.mentee.mock.calls].every((c) => c[0].noticeId === null)).toBe(true);
+    expect(db.writes).toEqual([]);
+    expect(r.message).toContain("Mentee Hai, Mentee Một");
+  });
+
+  it("theo email mentor", async () => {
+    await sendMatchResultGroupTest({ mentor: "B@example.test" });
+    expect(sentTo()).toEqual(["mentee:btc@example.test", "mentor:btc@example.test"]);
+  });
+
+  it("gửi tới một tài khoản nhân sự đang hoạt động", async () => {
+    db.tables.admin_users = STAFF;
+    const r = await sendMatchResultGroupTest({ mentor: "Bình Mentor B", toEmail: "Support@Example.test" });
+    expect(r.ok).toBe(true);
+    expect(sentTo()).toEqual(["mentee:support@example.test", "mentor:support@example.test"]);
+  });
+
+  it.each([
+    ["email của một mentee thật", "m1@example.test"],
+    ["email của chính mentor đó", "a@example.test"],
+    ["tài khoản nhân sự đã nghỉ", "da-nghi@example.test"],
+    ["email ngoài", "ai-do@gmail.com"],
+    ["không phải email", "khong-phai-email"]
+  ])("không bao giờ gửi tới %s", async (_label, toEmail) => {
+    db.tables.admin_users = STAFF;
+    const r = await sendMatchResultGroupTest({ mentor: "Anh Mentor A", toEmail });
+    expect(r.ok).toBe(false);
+    expect(sentTo()).toEqual([]);
+  });
+
+  it("không đọc được danh sách nhân sự: không gửi tới người khác (fail-closed)", async () => {
+    db.errors.admin_users = { message: "down" };
+    expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A", toEmail: "support@example.test" })).ok).toBe(false);
+    expect(sentTo()).toEqual([]);
+  });
+
+  it("gửi cho chính mình thì không cần đọc danh sách nhân sự", async () => {
+    db.errors.admin_users = { message: "down" };
+    expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(true);
+  });
+
+  it("mentor đang bị giữ và lúc chưa đủ điều kiện gửi thật: vẫn xem trước được", async () => {
+    db.tables.match_result_holds = [{ id: "h1", season_id: SEASON, mentor_person_id: MT_A, input_email: "a@example.test", reason: null, created_at: OLD, removed_at: null }];
+    db.tables.match_result_settings = [];
+    HANDBOOKS.mentee.ready = false;
+    expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(true);
+    expect(sentTo()).toHaveLength(3);
+  });
+
+  it("mentor không có hoặc không có quyền vận hành mùa: không gửi", async () => {
+    expect((await sendMatchResultGroupTest({ mentor: "Không Ai Cả" })).ok).toBe(false);
+    vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "x", role: "core_team", status: "active", auth_user_id: "auth-khac", email: "x@example.test" } as any);
+    expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(false);
+    expect(sentTo()).toEqual([]);
+  });
+
+  it("hạn mức 24 giờ không đủ cho cả nhóm: không gửi lẻ", async () => {
+    db.tables.outbound_emails = Array.from({ length: 998 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
+    expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(false);
+    expect(sentTo()).toEqual([]);
   });
 });

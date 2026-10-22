@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { addMatchResultHolds, confirmMatchResultHolds, removeMatchResultHold, saveMatchResultSettings } from "@/lib/match-result";
-import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultTest } from "@/lib/match-result-dispatch";
+import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultGroupTest, sendMatchResultTest } from "@/lib/match-result-dispatch";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
 
 const PATH = "/matches/ket-qua";
@@ -12,14 +12,10 @@ function state(result: { ok: boolean; message: string }): Round2ActionState {
   return { status: result.ok ? "ok" : "error", message: result.message };
 }
 
-/** Ba link trong thư. Mọi ô do người gửi tự đặt được: máy chủ kiểm lại https và quyền. */
+/** Link đăng ký Kick-off. Ô do người gửi tự đặt được: máy chủ kiểm lại https và quyền. */
 export async function saveMatchResultSettingsAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
   return state(
-    await saveMatchResultSettings({
-      menteeHandbookUrl: form.get("menteeHandbookUrl"),
-      mentorHandbookUrl: form.get("mentorHandbookUrl"),
-      kickoffRegisterUrl: form.get("kickoffRegisterUrl")
-    })
+    await saveMatchResultSettings({ kickoffRegisterUrl: form.get("kickoffRegisterUrl") })
   );
 }
 
@@ -56,5 +52,11 @@ export async function resendMatchResultAction(_prev: Round2ActionState, form: Fo
   if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước khi gửi." };
   const result = await resendMatchResultNotice({ personId: form.get("personId"), role: form.get("role") });
   revalidatePath(PATH);
+  return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/** Gửi thử thư thật của một nhóm mentor tới người bấm hoặc một tài khoản nhân sự. Không gửi tới mentor/mentee. */
+export async function sendMatchResultGroupTestAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+  const result = await sendMatchResultGroupTest({ mentor: form.get("mentor"), toEmail: form.get("toEmail") });
   return { status: result.ok ? "ok" : "error", message: result.message };
 }

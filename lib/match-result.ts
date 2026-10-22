@@ -40,6 +40,7 @@ import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import { dispatchAllowance } from "@/lib/mentee-invite-dispatch-core";
 import { readAllPages, readAllPagesIn } from "@/lib/paged-read";
 import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
+import { HANDBOOKS } from "@/lib/handbook";
 
 type Row = Record<string, any>;
 type Result = { ok: boolean; message: string };
@@ -109,8 +110,6 @@ type Loaded = {
 function settingsFromRow(row: Row | null): MatchResultSettings | null {
   if (!row) return null;
   return {
-    menteeHandbookUrl: text(row.mentee_handbook_url),
-    mentorHandbookUrl: text(row.mentor_handbook_url),
     kickoffRegisterUrl: text(row.kickoff_register_url),
     holdsConfirmedAt: text(row.holds_confirmed_at)
   };
@@ -141,7 +140,7 @@ async function loadInputs(client: any, seasonId: string): Promise<Loaded> {
     readActiveHolds(client, seasonId),
     client
       .from("match_result_settings")
-      .select("season_id,mentee_handbook_url,mentor_handbook_url,kickoff_register_url,holds_confirmed_at")
+      .select("season_id,kickoff_register_url,holds_confirmed_at")
       .eq("season_id", seasonId)
       .maybeSingle()
   ]);
@@ -249,7 +248,12 @@ export async function loadMatchResultState(client: any, seasonId: string, nowMs:
     settings: loaded.settings,
     settingsReadOk: loaded.settingsReadOk,
     recipients,
-    blocked: sendBlockedReasons({ settings: loaded.settings, settingsReadOk: loaded.settingsReadOk, holdsReadOk: loaded.activeHolds !== null })
+    blocked: sendBlockedReasons({
+      settings: loaded.settings,
+      settingsReadOk: loaded.settingsReadOk,
+      holdsReadOk: loaded.activeHolds !== null,
+      handbooksReady: { mentee: HANDBOOKS.mentee.ready, mentor: HANDBOOKS.mentor.ready }
+    })
   };
 }
 
@@ -407,29 +411,20 @@ async function resetHoldsConfirmation(client: any, seasonId: string) {
   return error;
 }
 
-/** Ba link trong thư. Chỉ chạm ba cột đó cùng người/giờ sửa — không đụng dấu xác nhận danh sách. */
-export async function saveMatchResultSettings(input: {
-  menteeHandbookUrl: unknown;
-  mentorHandbookUrl: unknown;
-  kickoffRegisterUrl: unknown;
-}): Promise<Result> {
-  const checks = [
-    ["Handbook mentee", validateHttpsUrl(input.menteeHandbookUrl)],
-    ["Handbook mentor", validateHttpsUrl(input.mentorHandbookUrl)],
-    ["Kick-off", validateHttpsUrl(input.kickoffRegisterUrl)]
-  ] as const;
-  const bad = checks.find(([, r]) => !r.ok);
-  if (bad) return { ok: false, message: `${bad[0]}: ${(bad[1] as { message: string }).message}` };
-  const [mentee, mentor, kickoff] = checks.map(([, r]) => (r.ok ? r.value : null));
+/**
+ * Link đăng ký Kick-off. Chỉ chạm cột đó cùng người/giờ sửa — không đụng dấu xác nhận danh sách.
+ * Handbook không nhập ở đây: file nằm trên VAM OS, link cố định (lib/handbook.ts).
+ */
+export async function saveMatchResultSettings(input: { kickoffRegisterUrl: unknown }): Promise<Result> {
+  const checked = validateHttpsUrl(input.kickoffRegisterUrl);
+  if (!checked.ok) return { ok: false, message: `Kick-off: ${checked.message}` };
   try {
     const { client, seasonId, actor } = await operator();
     if (!actor) return { ok: false, message: DENIED };
     const { error } = await client.from("match_result_settings").upsert(
       {
         season_id: seasonId,
-        mentee_handbook_url: mentee,
-        mentor_handbook_url: mentor,
-        kickoff_register_url: kickoff,
+        kickoff_register_url: checked.value,
         updated_by: actor.id,
         updated_at: new Date().toISOString()
       },
@@ -439,7 +434,7 @@ export async function saveMatchResultSettings(input: {
       log("settings save failed", error);
       return { ok: false, message: "Không lưu được. Thử lại; nếu vẫn lỗi, báo quản trị viên." };
     }
-    return { ok: true, message: "Đã lưu link trong thư." };
+    return { ok: true, message: "Đã lưu link đăng ký Kick-off." };
   } catch (error) {
     log("settings save crashed", error);
     return { ok: false, message: "Không lưu được. Thử lại; nếu vẫn lỗi, báo quản trị viên." };
