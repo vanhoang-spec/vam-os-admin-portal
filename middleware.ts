@@ -231,6 +231,9 @@ export async function middleware(request: NextRequest) {
     // Trang một bạn Support team xác nhận tham gia mentee (đặc cách, BTC 11/10/2026). Người
     // mở không có tài khoản; mã riêng nằm trong thư mời gửi tới hộp thư của chính họ.
     request.nextUrl.pathname.startsWith("/xac-nhan-mentee/") ||
+    // Hồ sơ tóm tắt của người đồng hành, gửi kèm thư kết quả ghép cặp (BTC 22/10/2026). Người mở
+    // là mentor/mentee không có tài khoản; mã riêng nằm trong thư gửi tới hộp thư của chính họ.
+    request.nextUrl.pathname.startsWith("/ho-so/") ||
     // Tấm vé cá nhân. Công khai có chủ ý: mã nằm trong hộp thư của chính chủ,
     // và tấm vé phải mở được trên một điện thoại chưa đăng nhập, ở cửa sự kiện.
     request.nextUrl.pathname.startsWith("/ve/") ||
@@ -257,6 +260,8 @@ export async function middleware(request: NextRequest) {
           ? "mentor_mentee_pick"
           : request.nextUrl.pathname.startsWith("/xac-nhan-mentee/")
           ? "mentee_exemption_confirm"
+          : request.nextUrl.pathname.startsWith("/ho-so/")
+          ? "match_profile"
           : request.nextUrl.pathname.startsWith("/renew/")
           ? "renewal"
           : request.nextUrl.pathname.startsWith("/f/")
@@ -282,6 +287,9 @@ export async function middleware(request: NextRequest) {
     if (
       publicRoute === "renewal" ||
       publicRoute === "ticket" ||
+      // Hồ sơ người đồng hành gửi kèm thư kết quả ghép cặp: mang SĐT/email của một người thật, và
+      // trang ngoài (link CV, LinkedIn) không được thấy mã trong URL.
+      publicRoute === "match_profile" ||
       publicRoute === "interview_booking" ||
       publicRoute === "mentee_session_booking" ||
       // Ai cầm mã là chọn/bỏ chọn mentee thay mentor đó; trang còn mang hồ sơ mentee.

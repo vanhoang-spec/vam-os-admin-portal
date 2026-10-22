@@ -663,6 +663,27 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     ],
     updated: "16/10/2026"
   },
+  "/matches/ket-qua": {
+    title: "Kết quả ghép cặp",
+    summary:
+      "Chuẩn bị thư thông báo kết quả Matching kèm link hồ sơ người đồng hành: link Handbook và Kick-off trong thư, danh sách mentor giữ lại, độ phủ dữ liệu hồ sơ, xem trước từng thẻ.",
+    steps: [
+      "Đọc các ô số liệu đầu trang: mỗi người nhận có một trạng thái — Chờ gửi, Cặp mới (< 30 phút), Thiếu email, Giữ lại, Đổi cặp sau khi gửi, Đã gửi. Mọi cặp đang hoạt động đều tính, ở mọi vòng (1, 2, 3 và cặp BTC ghép tay); mentor có nhiều mentee nhận một thư mang đủ link.",
+      "Mục “1. Link trong thư”: dán link Handbook cho mentee và cho mentor (bắt buộc, phải bắt đầu bằng https://), link đăng ký Kick-off nếu đã có, rồi bấm “Lưu link”. Chưa có link Kick-off thì thư ghi “BTC sẽ cập nhật sau”.",
+      "Mục “2. Mentor giữ lại”: dán email các mentor không nhận thư đợt này (mỗi dòng một email), bấm “Thêm vào danh sách giữ lại”. Mỗi email phải khớp đúng một mentor đã duyệt mùa này; có email không khớp thì không email nào được ghi — sửa rồi dán lại. Mentee của mentor bị giữ cũng không nhận thư.",
+      "Rà danh sách rồi bấm “Xác nhận danh sách giữ lại” → “Xác nhận danh sách”. Thêm hoặc bỏ giữ bất kỳ ai thì phải xác nhận lại.",
+      "Mục “3. Độ phủ dữ liệu hồ sơ”: bấm “Xem độ phủ” để đếm mỗi trường có ở bao nhiêu hồ sơ và xem ai thiếu gì. Trường không có dữ liệu tự ẩn trên thẻ.",
+      "Bấm vào tên trong cột “Link hồ sơ trong thư” (hoặc trong danh sách thiếu) để xem trước đúng thẻ người đồng hành sẽ thấy, kể cả SĐT và email."
+    ],
+    notes: [
+      "Gửi được khi đủ hai link Handbook và đã xác nhận danh sách giữ lại. Nút gửi thư có ở bản cập nhật tiếp theo; bản này chỉ để chuẩn bị.",
+      "Cặp vừa ghi chưa đủ 30 phút thì chờ: mentor có một cặp mới thì cả thư của mentor đó chờ, để thư không mang danh sách thiếu.",
+      "Người đã rút khỏi mùa không nhận thư, và thư của người đồng hành cũng bị giữ cho tới khi BTC kết thúc cặp đó — link tới hồ sơ người đã rút sẽ báo hết hiệu lực.",
+      "Link hồ sơ (/ho-so/…) mở được không cần đăng nhập, nhưng chỉ khi cặp còn hoạt động; cặp bị huỷ hoặc đổi người thì link báo hết hiệu lực. SĐT và email chỉ hiện trong hồ sơ gửi cho người đồng hành.",
+      "Xem và thao tác: Super admin, Admin, Core team có quyền vận hành mùa."
+    ],
+    updated: "22/10/2026"
+  },
   "/applications/mentee-dac-cach": {
     title: "Mentee đặc cách (Support team)",
     summary:

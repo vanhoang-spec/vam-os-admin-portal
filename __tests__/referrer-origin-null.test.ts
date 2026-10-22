@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(),
 import { middleware } from "@/middleware";
 
 const TOKEN = "aaaaaaaa-0000-4000-8000-00000000000a";
-const TOKEN_ROUTES = ["/chon-mentee/", "/renew/", "/ve/", "/dat-lich/", "/dat-ca/", "/xac-nhan-mentee/"];
+const TOKEN_ROUTES = ["/chon-mentee/", "/renew/", "/ve/", "/dat-lich/", "/dat-ca/", "/xac-nhan-mentee/", "/ho-so/"];
 
 function files(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
