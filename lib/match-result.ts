@@ -32,6 +32,7 @@ import {
   type MatchResultRecipient,
   type MatchResultSettings,
   type NoticeInfo,
+  type ResultVariant,
   type RecipientPerson,
   type StatusCounts
 } from "@/lib/match-result-core";
@@ -85,6 +86,8 @@ export type MatchResultData = {
   counts: StatusCounts;
   blocked: string[];
   dispatch: MatchResultDispatchView;
+  /** Thư "MATCHING SAU 15/11": các mentor trong danh sách giữ lại và mentee của họ. */
+  late: { recipients: MatchResultRecipient[]; counts: StatusCounts; dispatch: MatchResultDispatchView };
 };
 
 /** Khung gửi: hạn mức còn lại và lô của lần bấm kế tiếp (trọn từng nhóm mentor). */
@@ -104,7 +107,8 @@ type Loaded = {
   matches: ActiveMatch[];
   people: Map<string, RecipientPerson>;
   inactiveKeys: Set<string>;
-  notices: NoticeInfo[];
+  /** Dòng thông báo tách theo loại thư — mỗi người một dòng cho mỗi loại (migration 20261023120000). */
+  notices: Record<ResultVariant, NoticeInfo[]>;
   activeHolds: Row[] | null;
   settings: MatchResultSettings | null;
   settingsReadOk: boolean;
@@ -134,7 +138,7 @@ async function loadInputs(client: any, seasonId: string): Promise<Loaded> {
     readAllPages<Row>("matches", "id,mentor_person_id,mentee_person_id,status,matching_round,created_at", (columns) =>
       client.from("matches").select(columns).eq("season_id", seasonId).eq("status", "active")
     ),
-    readAllPages<Row>("match_result_notices", "id,person_id,role,match_ids,sent_at,last_error", (columns) =>
+    readAllPages<Row>("match_result_notices", "id,person_id,role,variant,match_ids,sent_at,last_error", (columns) =>
       client.from("match_result_notices").select(columns).eq("season_id", seasonId)
     ),
     readAllPages<Row>("person_season_memberships", "id,person_id,role,status", (columns) =>
@@ -160,21 +164,27 @@ async function loadInputs(client: any, seasonId: string): Promise<Loaded> {
       createdAt: text(m.created_at),
       round: Number.isInteger(Number(m.matching_round)) && m.matching_round !== null ? Number(m.matching_round) : null
     }));
-  const noticeRows: NoticeInfo[] = notices.data
-    .filter((n) => n.role === "mentor" || n.role === "mentee")
-    .map((n) => ({
+  const noticesByVariant: Record<ResultVariant, NoticeInfo[]> = { standard: [], special: [] };
+  for (const n of notices.data) {
+    if (n.role !== "mentor" && n.role !== "mentee") continue;
+    // Dòng không ghi loại thư là dòng của thư thường (giá trị mặc định của cột).
+    const variant: ResultVariant | null = n.variant === "special" ? "special" : n.variant === "standard" || n.variant == null ? "standard" : null;
+    if (!variant) continue;
+    noticesByVariant[variant].push({
       personId: String(n.person_id),
       role: n.role as ProfileRole,
       matchIds: Array.isArray(n.match_ids) ? n.match_ids.map(String) : [],
       sentAt: text(n.sent_at),
       lastError: text(n.last_error)
-    }));
+    });
+  }
   const activeHolds = holds.error ? null : holds.data;
 
   const ids = Array.from(
     new Set([
       ...active.flatMap((m) => [m.mentorPersonId, m.menteePersonId]),
-      ...noticeRows.map((n) => n.personId),
+      ...noticesByVariant.standard.map((n) => n.personId),
+      ...noticesByVariant.special.map((n) => n.personId),
       ...(activeHolds ?? []).map((h) => String(h.mentor_person_id))
     ])
   );
@@ -211,7 +221,7 @@ async function loadInputs(client: any, seasonId: string): Promise<Loaded> {
     matches: active,
     people: personMap,
     inactiveKeys,
-    notices: noticeRows,
+    notices: noticesByVariant,
     activeHolds,
     settings: settings.error ? null : settingsFromRow(settings.data ?? null),
     settingsReadOk: !settings.error
@@ -224,10 +234,17 @@ export type MatchResultState = {
   activeHolds: Row[] | null;
   settings: MatchResultSettings | null;
   settingsReadOk: boolean;
+  /** Thư thường: mọi cặp đang hoạt động; người trong nhóm giữ lại ở trạng thái "giữ lại". */
   recipients: MatchResultRecipient[];
-  /** Rỗng = gửi được. */
+  /** Thư sau 15/11: chỉ các cặp của mentor trong danh sách giữ lại. Không đọc được danh sách thì rỗng. */
+  lateRecipients: MatchResultRecipient[];
+  /** Rỗng = gửi được (cả hai loại thư cùng điều kiện). */
   blocked: string[];
 };
+
+export function recipientsFor(state: MatchResultState, variant: ResultVariant): MatchResultRecipient[] {
+  return variant === "special" ? state.lateRecipients : state.recipients;
+}
 
 /**
  * Trạng thái dùng chung cho trang và cho lúc gửi — cùng một hàm, để màn hình không đếm một kiểu còn
@@ -241,9 +258,25 @@ export async function loadMatchResultState(client: any, seasonId: string, nowMs:
     people: loaded.people,
     heldMentorIds: heldIds,
     inactiveKeys: loaded.inactiveKeys,
-    notices: loaded.notices,
+    notices: loaded.notices.standard,
     now: nowMs
   });
+  // Nhóm sau 15/11 = cặp của mentor đang bị giữ, tính như thư thường nhưng không ai "bị giữ" trong nhóm
+  // này. Người đã chuyển sang nhóm thường (BTC bỏ giữ) không còn hiện ở đây dù từng nhận thư sau 15/11.
+  let lateRecipients: MatchResultRecipient[] = [];
+  if (heldIds) {
+    const inStandard = new Set(
+      loaded.matches.filter((m) => !heldIds.has(m.mentorPersonId)).flatMap((m) => [`mentor:${m.mentorPersonId}`, `mentee:${m.menteePersonId}`])
+    );
+    lateRecipients = buildRecipients({
+      matches: loaded.matches.filter((m) => heldIds.has(m.mentorPersonId)),
+      people: loaded.people,
+      heldMentorIds: new Set(),
+      inactiveKeys: loaded.inactiveKeys,
+      notices: loaded.notices.special.filter((n) => !inStandard.has(`${n.role}:${n.personId}`)),
+      now: nowMs
+    });
+  }
   return {
     matches: loaded.matches,
     people: loaded.people,
@@ -251,12 +284,28 @@ export async function loadMatchResultState(client: any, seasonId: string, nowMs:
     settings: loaded.settings,
     settingsReadOk: loaded.settingsReadOk,
     recipients,
+    lateRecipients,
     blocked: sendBlockedReasons({
       settings: loaded.settings,
       settingsReadOk: loaded.settingsReadOk,
       holdsReadOk: loaded.activeHolds !== null,
       handbooksReady: { mentee: HANDBOOKS.mentee.ready, mentor: HANDBOOKS.mentor.ready }
     })
+  };
+}
+
+function dispatchView(recipients: readonly MatchResultRecipient[], sentInWindow: number | null): MatchResultDispatchView {
+  const groups = dispatchGroups(recipients);
+  const allowance = sentInWindow === null ? 0 : dispatchAllowance(sentInWindow);
+  const next = planDispatchBatch(groups, allowance);
+  return {
+    sentInWindow,
+    allowance,
+    readyGroups: groups.length,
+    readyPeople: batchSize(groups),
+    nextBatchGroups: next.length,
+    nextBatchPeople: batchSize(next),
+    roomToday: sentInWindow === null ? 0 : Math.max(0, DAILY_EMAIL_LIMIT - DISPATCH_RESERVE - sentInWindow)
   };
 }
 
@@ -269,9 +318,6 @@ export async function getMatchResultData(): Promise<
     const nowMs = Date.now();
     const [loaded, sentInWindow] = await Promise.all([loadMatchResultState(client, seasonId, nowMs), countSentInWindow(client, nowMs)]);
     const recipients = loaded.recipients;
-    const groups = dispatchGroups(recipients);
-    const allowance = sentInWindow === null ? 0 : dispatchAllowance(sentInWindow);
-    const next = planDispatchBatch(groups, allowance);
     const menteesOf = (mentorId: string) => loaded.matches.filter((m) => m.mentorPersonId === mentorId).length;
     const holds: HoldView[] = (loaded.activeHolds ?? [])
       .map((h) => {
@@ -301,14 +347,11 @@ export async function getMatchResultData(): Promise<
         recipients,
         counts: countByStatus(recipients),
         blocked: loaded.blocked,
-        dispatch: {
-          sentInWindow,
-          allowance,
-          readyGroups: groups.length,
-          readyPeople: batchSize(groups),
-          nextBatchGroups: next.length,
-          nextBatchPeople: batchSize(next),
-          roomToday: sentInWindow === null ? 0 : Math.max(0, DAILY_EMAIL_LIMIT - DISPATCH_RESERVE - sentInWindow)
+        dispatch: dispatchView(recipients, sentInWindow),
+        late: {
+          recipients: loaded.lateRecipients,
+          counts: countByStatus(loaded.lateRecipients),
+          dispatch: dispatchView(loaded.lateRecipients, sentInWindow)
         }
       }
     };

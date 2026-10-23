@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 
-const mocks = vi.hoisted(() => ({ mentee: vi.fn(), mentor: vi.fn() }));
+const mocks = vi.hoisted(() => ({ mentee: vi.fn(), mentor: vi.fn(), menteeLate: vi.fn(), mentorLate: vi.fn() }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("react", async (importOriginal) => {
@@ -21,7 +21,12 @@ vi.mock("@/lib/supabase", () => ({ supabase: null, supabaseUrl: "https://x.test"
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(), getSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: vi.fn() }));
 vi.mock("@/lib/public-url", () => ({ getPublicOrigin: vi.fn(async () => "https://os.alumni-mentoring.edu.vn") }));
-vi.mock("@/lib/email", () => ({ sendMatchResultMentee: mocks.mentee, sendMatchResultMentor: mocks.mentor }));
+vi.mock("@/lib/email", () => ({
+  sendMatchResultMentee: mocks.mentee,
+  sendMatchResultMentor: mocks.mentor,
+  sendMatchResultMenteeLate: mocks.menteeLate,
+  sendMatchResultMentorLate: mocks.mentorLate
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { resendMatchResultAction, sendMatchResultAction, sendMatchResultBatchAction } from "@/app/actions/match-result";
@@ -29,6 +34,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 import { hashBearerToken } from "@/lib/bearer-token";
 import { getMatchProfilePage } from "@/lib/match-profile";
+import { loadMatchResultState } from "@/lib/match-result";
 import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultGroupTest, sendMatchResultTest } from "@/lib/match-result-dispatch";
 import { HANDBOOKS } from "@/lib/handbook";
 import { getSupabaseServerClient, getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -108,6 +114,8 @@ beforeEach(() => {
   } as any);
   mocks.mentee.mockResolvedValue({ ok: true, skipped: false });
   mocks.mentor.mockResolvedValue({ ok: true, skipped: false });
+  mocks.menteeLate.mockResolvedValue({ ok: true, skipped: false });
+  mocks.mentorLate.mockResolvedValue({ ok: true, skipped: false });
 });
 
 describe("1. khoá gửi (fail-closed)", () => {
@@ -250,7 +258,7 @@ describe("4. không gửi trùng", () => {
   });
 
   it("đã có thư 'sent' trong sổ thư cho dòng thông báo (lần trước gửi xong chưa kịp chốt): chỉ chốt, không gửi lại", async () => {
-    db.tables.match_result_notices = [{ id: "n-me1", season_id: SEASON, person_id: ME_1, role: "mentee", claimed_at: null, sent_at: null, send_count: 0 }];
+    db.tables.match_result_notices = [{ id: "n-me1", season_id: SEASON, person_id: ME_1, role: "mentee", variant: "standard", claimed_at: null, sent_at: null, send_count: 0 }];
     db.tables.outbound_emails = [{ id: "o1", related_table: "match_result_notices", related_id: "n-me1", status: "sent", created_at: new Date().toISOString() }];
     const r = await runMatchResultDispatch();
     expect(sentTo()).not.toContain("mentee:m1@example.test");
@@ -406,12 +414,24 @@ describe("8. gửi thử thư của một nhóm mentor (xem trước cho team su
     expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(true);
   });
 
-  it("mentor đang bị giữ và lúc chưa đủ điều kiện gửi thật: vẫn xem trước được", async () => {
-    db.tables.match_result_holds = [{ id: "h1", season_id: SEASON, mentor_person_id: MT_A, input_email: "a@example.test", reason: null, created_at: OLD, removed_at: null }];
+  it("lúc chưa đủ điều kiện gửi thật: vẫn xem trước được", async () => {
     db.tables.match_result_settings = [];
     HANDBOOKS.mentee.ready = false;
     expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(true);
     expect(sentTo()).toHaveLength(3);
+  });
+
+  it("mentor trong danh sách giữ lại: xem trước đúng mẫu SAU 15/11 (không phải thư thường)", async () => {
+    db.tables.match_result_holds = [{ id: "h1", season_id: SEASON, mentor_person_id: MT_A, input_email: "a@example.test", reason: null, created_at: OLD, removed_at: null }];
+    const r = await sendMatchResultGroupTest({ mentor: "Anh Mentor A" });
+    expect(r.ok).toBe(true);
+    expect(r.message).toContain("sau 15/11");
+    expect(sentTo()).toEqual([]);
+    expect(mocks.mentorLate.mock.calls.map((c) => [c[0].toEmail, c[0].menteeNames, c[0].test, c[0].noticeId])).toEqual([
+      ["btc@example.test", ["Mentee Hai", "Mentee Một"], true, null]
+    ]);
+    expect(mocks.menteeLate.mock.calls.map((c) => [c[0].menteeName, c[0].test])).toEqual([["Mentee Hai", true], ["Mentee Một", true]]);
+    expect(db.writes).toEqual([]);
   });
 
   it("mentor không có hoặc không có quyền vận hành mùa: không gửi", async () => {
@@ -527,5 +547,104 @@ describe("9. gửi liên tục — phía máy chủ", () => {
     expect(r.ok).toBe(true);
     expect(sentTo()).not.toContain("mentee:m1@example.test");
     expect(sentTo()).toHaveLength(4);
+  });
+});
+
+describe("10. thư sau 15/11 — nhóm mentor cần Training 15/11", () => {
+  const hold = (removedAt: string | null = null) => {
+    db.tables.match_result_holds = [{ id: "h1", season_id: SEASON, mentor_person_id: MT_A, input_email: "a@example.test", reason: null, created_at: OLD, removed_at: removedAt }];
+  };
+  const lateTo = () => [
+    ...mocks.mentorLate.mock.calls.map((c) => `mentor:${c[0].toEmail}`),
+    ...mocks.menteeLate.mock.calls.map((c) => `mentee:${c[0].toEmail}`)
+  ].sort();
+
+  it("chỉ mentor bị giữ và mentee của họ nhận mẫu sau 15/11; không link hồ sơ nào được tạo", async () => {
+    hold();
+    const r = await runMatchResultDispatch({ variant: "special" });
+    expect(r.ok).toBe(true);
+    expect(lateTo()).toEqual(["mentee:m1@example.test", "mentee:m2@example.test", "mentor:a@example.test"]);
+    expect(sentTo()).toEqual([]);
+    expect(mocks.mentorLate.mock.calls[0][0]).toMatchObject({ mentorName: "Anh Mentor A", menteeNames: ["Mentee Hai", "Mentee Một"], test: false });
+    expect(mocks.mentorLate.mock.calls[0][0].noticeId).toBeTruthy();
+    expect(db.writes.filter((w) => w.table === "match_profile_links")).toEqual([]);
+    expect(db.tables.match_profile_links).toEqual([]);
+    const special = db.tables.match_result_notices.filter((n: any) => n.variant === "special");
+    expect(special).toHaveLength(3);
+    expect(special.every((n: any) => n.sent_at)).toBe(true);
+  });
+
+  it("thư thường vẫn giữ nhóm này lại; nhóm khác đi bình thường", async () => {
+    hold();
+    await runMatchResultDispatch({ variant: "special" });
+    await runMatchResultDispatch();
+    expect(sentTo()).toEqual(["mentee:m3@example.test", "mentor:b@example.test"]);
+  });
+
+  it("sau 15/11 BTC bỏ giữ: nhóm đó nhận THÊM thư thường có link — dòng thư sau 15/11 không chặn", async () => {
+    hold();
+    await runMatchResultDispatch({ variant: "special" });
+    hold("2026-11-16T00:00:00Z");
+    vi.clearAllMocks();
+    mocks.mentee.mockResolvedValue({ ok: true, skipped: false });
+    mocks.mentor.mockResolvedValue({ ok: true, skipped: false });
+    await runMatchResultDispatch();
+    expect(sentTo()).toEqual([
+      "mentee:m1@example.test", "mentee:m2@example.test", "mentee:m3@example.test", "mentor:a@example.test", "mentor:b@example.test"
+    ]);
+    expect(db.tables.match_result_notices.filter((n: any) => n.person_id === MT_A).map((n: any) => n.variant).sort()).toEqual(["special", "standard"]);
+    // Đã chuyển sang nhóm thường: không còn hiện ở danh sách sau 15/11.
+    const state = await loadMatchResultState(client, SEASON, Date.now());
+    expect(state.lateRecipients).toEqual([]);
+  });
+
+  it("dòng thư sau 15/11 đã gửi (xếp sau theo mã) không bị lấy nhầm khi gửi thư thường cho cùng người", async () => {
+    // Hai dòng của cùng một người; dòng sau 15/11 đứng SAU theo mã — đọc mà không lọc loại thư sẽ lấy nhầm dòng này.
+    db.tables.match_result_notices = [
+      { id: "n-a-1-standard", season_id: SEASON, person_id: MT_A, role: "mentor", variant: "standard", match_ids: [], claimed_at: null, sent_at: null, send_count: 0 },
+      { id: "n-a-2-special", season_id: SEASON, person_id: MT_A, role: "mentor", variant: "special", match_ids: ["m1", "m2"], claimed_at: null, sent_at: "2026-10-24T00:00:00Z", send_count: 1 }
+    ];
+    await runMatchResultDispatch();
+    expect(sentTo()).toContain("mentor:a@example.test");
+    expect(db.tables.match_result_notices.find((n: any) => n.id === "n-a-1-standard").sent_at).toBeTruthy();
+  });
+
+  it("không ai trong danh sách giữ lại: không gửi gì", async () => {
+    const r = await runMatchResultDispatch({ variant: "special" });
+    expect(r.message).toContain("sau 15/11");
+    expect(lateTo()).toEqual([]);
+  });
+
+  it("cùng điều kiện như thư thường: chưa có file Handbook thì khoá", async () => {
+    hold();
+    HANDBOOKS.mentor.ready = false;
+    expect((await runMatchResultDispatch({ variant: "special" })).ok).toBe(false);
+    expect(lateTo()).toEqual([]);
+  });
+
+  it("gửi thử mẫu sau 15/11: hai thư thử tới người bấm, không ghi gì", async () => {
+    const r = await sendMatchResultTest({ variant: "special" });
+    expect(r.ok).toBe(true);
+    expect(lateTo()).toEqual(["mentee:btc@example.test", "mentor:btc@example.test"]);
+    expect([...mocks.mentorLate.mock.calls, ...mocks.menteeLate.mock.calls].every((c) => c[0].test === true && c[0].noticeId === null)).toBe(true);
+    expect(db.writes).toEqual([]);
+  });
+
+  it("gửi riêng mẫu sau 15/11: không nhắc link hết hiệu lực (thư này không có link)", async () => {
+    hold();
+    await runMatchResultDispatch({ variant: "special" });
+    const r = await resendMatchResultNotice({ personId: ME_1, role: "mentee", variant: "special" });
+    expect(r.ok).toBe(true);
+    expect(r.message).not.toContain("hết hiệu lực");
+    expect(mocks.menteeLate.mock.calls.filter((c) => c[0].toEmail === "m1@example.test")).toHaveLength(2);
+  });
+
+  it("action: variant lạ là thư thường — không bao giờ gửi nhầm mẫu sau 15/11", async () => {
+    hold();
+    await sendMatchResultBatchAction({ confirmed: true, variant: "SPECIAL" });
+    expect(lateTo()).toEqual([]);
+    expect(sentTo()).toEqual(["mentee:m3@example.test", "mentor:b@example.test"]);
+    await sendMatchResultBatchAction({ confirmed: true, variant: "special" });
+    expect(lateTo()).toEqual(["mentee:m1@example.test", "mentee:m2@example.test", "mentor:a@example.test"]);
   });
 });

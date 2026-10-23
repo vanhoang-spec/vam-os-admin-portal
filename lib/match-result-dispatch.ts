@@ -17,8 +17,14 @@ import "server-only";
  */
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { mintBearerToken } from "@/lib/bearer-token";
-import { sendMatchResultMentee, sendMatchResultMentor, type SendEmailResult } from "@/lib/email";
-import { loadMatchResultState, type MatchResultState } from "@/lib/match-result";
+import {
+  sendMatchResultMentee,
+  sendMatchResultMenteeLate,
+  sendMatchResultMentor,
+  sendMatchResultMentorLate,
+  type SendEmailResult
+} from "@/lib/email";
+import { loadMatchResultState, recipientsFor, type MatchResultState } from "@/lib/match-result";
 import {
   HOLD_REASON_LABELS,
   RECIPIENT_STATUS_LABELS,
@@ -27,7 +33,8 @@ import {
   findMentorRecipient,
   normalizeEmail,
   planDispatchBatch,
-  type MatchResultRecipient
+  type MatchResultRecipient,
+  type ResultVariant
 } from "@/lib/match-result-core";
 import { round2Operator, round2SeasonContext } from "@/lib/matching-round2";
 import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
@@ -65,21 +72,22 @@ function log(message: string, error?: unknown) {
 
 const key = (r: { role: string; personId: string }) => `${r.role}:${r.personId}`;
 
-async function readNotices(client: any, seasonId: string): Promise<Map<string, Row>> {
+/** Dòng thông báo của MỘT loại thư — thư sau 15/11 và thư thường của cùng một người là hai dòng. */
+async function readNotices(client: any, seasonId: string, variant: ResultVariant): Promise<Map<string, Row>> {
   const res = await readAllPages<Row>(
     "match_result_notices",
-    "id,person_id,role,claimed_at,sent_at,send_count",
-    (columns) => client.from("match_result_notices").select(columns).eq("season_id", seasonId)
+    "id,person_id,role,variant,claimed_at,sent_at,send_count",
+    (columns) => client.from("match_result_notices").select(columns).eq("season_id", seasonId).eq("variant", variant)
   );
   if (res.error) throw res.error;
   return new Map(res.data.map((n) => [`${n.role}:${n.person_id}`, n]));
 }
 
-/** Dòng thông báo cho từng người — ignoreDuplicates: không bao giờ đè dòng đang có. */
-async function ensureNotices(client: any, seasonId: string, people: readonly MatchResultRecipient[]) {
+/** Dòng thông báo cho từng người, đúng loại thư — ignoreDuplicates: không bao giờ đè dòng đang có. */
+async function ensureNotices(client: any, seasonId: string, people: readonly MatchResultRecipient[], variant: ResultVariant) {
   const { error } = await client.from("match_result_notices").upsert(
-    people.map((r) => ({ season_id: seasonId, person_id: r.personId, role: r.role })),
-    { onConflict: "season_id,person_id,role", ignoreDuplicates: true }
+    people.map((r) => ({ season_id: seasonId, person_id: r.personId, role: r.role, variant })),
+    { onConflict: "season_id,person_id,role,variant", ignoreDuplicates: true }
   );
   if (error) throw error;
 }
@@ -149,6 +157,40 @@ async function sendOne(
   });
 }
 
+/**
+ * Gửi đúng lá thư của loại thư. Thư thường tạo mã link mới rồi mới gửi; thư sau 15/11 không có link hồ
+ * sơ nào (chưa kết nối chính thức) nên không tạo mã, không ghi gì vào bảng link.
+ */
+async function sendLetter(
+  client: any,
+  seasonId: string,
+  r: MatchResultRecipient,
+  state: MatchResultState,
+  noticeId: string,
+  requestOrigin: string | null,
+  variant: ResultVariant,
+  rotate: boolean
+): Promise<SendEmailResult> {
+  if (variant === "special") {
+    const kickoffRegisterUrl = state.settings?.kickoffRegisterUrl ?? null;
+    return r.role === "mentor"
+      ? sendMatchResultMentorLate({
+          toEmail: r.email!,
+          mentorName: r.fullName ?? "",
+          menteeNames: r.partners.map((p) => p.fullName ?? ""),
+          kickoffRegisterUrl,
+          noticeId,
+          requestOrigin,
+          test: false
+        })
+      : sendMatchResultMenteeLate({ toEmail: r.email!, menteeName: r.fullName ?? "", kickoffRegisterUrl, noticeId, requestOrigin, test: false });
+  }
+  const tokens = await issueProfileLinks(client, seasonId, r, rotate);
+  return sendOne(r, tokens, state, noticeId, requestOrigin);
+}
+
+const LETTER_LABEL: Record<ResultVariant, string> = { standard: "thư kết quả", special: "thư kết quả (sau 15/11)" };
+
 /** Thư mentee chỉ mang một link mentor. Mentee hai cặp (đối chiếu 22/10 ra 0) để BTC xử lý tay. */
 function unsendableReason(r: MatchResultRecipient): string | null {
   if (!r.email) return "Thiếu email.";
@@ -160,10 +202,14 @@ function unsendableReason(r: MatchResultRecipient): string | null {
 /**
  * Một lượt gửi (một lần bấm, hoặc một vòng của chế độ gửi liên tục). `skip`: người đã lỗi ở các lượt
  * trước của cùng phiên gửi liên tục — bỏ qua để một hộp thư hỏng không bị gửi lại ở mọi lượt. Chỉ thu
- * hẹp danh sách, không bao giờ thêm ai, nên nhận từ trình duyệt được.
+ * hẹp danh sách, không bao giờ thêm ai, nên nhận từ trình duyệt được. `variant`: thư thường hay thư
+ * sau 15/11 — hai danh sách người nhận, hai bộ dòng thông báo riêng, cùng điều kiện và cùng hạn mức.
  */
-export async function runMatchResultDispatch(input: { now?: () => number; skip?: ReadonlySet<string> } = {}): Promise<MatchResultSendResult> {
+export async function runMatchResultDispatch(
+  input: { now?: () => number; skip?: ReadonlySet<string>; variant?: ResultVariant } = {}
+): Promise<MatchResultSendResult> {
   const now = input.now ?? Date.now;
+  const variant: ResultVariant = input.variant ?? "standard";
   const fail = (message: string): MatchResultSendResult => ({ ok: false, message, sent: 0, failed: 0 });
   try {
     const { client, seasonId } = await round2SeasonContext();
@@ -178,8 +224,9 @@ export async function runMatchResultDispatch(input: { now?: () => number; skip?:
     if (sentInWindow === null) return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi.");
     const allowance = dispatchAllowance(sentInWindow);
     const skip = input.skip;
-    const groups = dispatchGroups(skip?.size ? state.recipients.filter((r) => !skip.has(key(r))) : state.recipients);
-    if (!groups.length) return { ok: true, message: "Không còn ai chờ thư kết quả.", sent: 0, failed: 0, left: 0 };
+    const recipients = recipientsFor(state, variant);
+    const groups = dispatchGroups(skip?.size ? recipients.filter((r) => !skip.has(key(r))) : recipients);
+    if (!groups.length) return { ok: true, message: `Không còn ai chờ ${LETTER_LABEL[variant]}.`, sent: 0, failed: 0, left: 0 };
     if (allowance === 0) {
       return {
         ok: true,
@@ -203,8 +250,8 @@ export async function runMatchResultDispatch(input: { now?: () => number; skip?:
       .lt("claimed_at", staleIso);
     if (staleError) log("stale release failed", staleError);
 
-    await ensureNotices(client, seasonId, planned);
-    const notices = await readNotices(client, seasonId);
+    await ensureNotices(client, seasonId, planned, variant);
+    const notices = await readNotices(client, seasonId, variant);
     const candidateIds = planned
       .map((r) => notices.get(key(r)))
       .filter((n): n is Row => Boolean(n) && !n!.claimed_at && !n!.sent_at)
@@ -279,8 +326,7 @@ export async function runMatchResultDispatch(input: { now?: () => number; skip?:
           outcome = { ok: false, skipped: false, reason: problem };
         } else {
           try {
-            const tokens = await issueProfileLinks(client, seasonId, r, false);
-            outcome = await sendOne(r, tokens, state, id, requestOrigin);
+            outcome = await sendLetter(client, seasonId, r, state, id, requestOrigin, variant, false);
           } catch (error) {
             log("send crashed", error);
             outcome = { ok: false, skipped: false, reason: "Không tạo được link hồ sơ hoặc gửi lỗi." };
@@ -319,7 +365,7 @@ export async function runMatchResultDispatch(input: { now?: () => number; skip?:
         more: false
       };
     }
-    const parts = [`Đã gửi ${sent} thư kết quả (${plan.length} nhóm mentor).`];
+    const parts = [`Đã gửi ${sent} ${LETTER_LABEL[variant]} (${plan.length} nhóm mentor).`];
     if (settled) parts.push(`${settled} người đã có thư trong sổ từ lần trước — chỉ ghi nhận, không gửi lại.`);
     if (failed) parts.push(`${failed} thư lỗi, xem cột Trạng thái hoặc Vận hành → Mail → Nhật ký gửi.`);
     if (left) parts.push(`Còn ${left} người chờ thư — bấm lại để gửi tiếp.`);
@@ -333,12 +379,59 @@ export async function runMatchResultDispatch(input: { now?: () => number; skip?:
 }
 
 /**
- * Gửi thử cho chính BTC đang bấm: một thư mentee và một thư mentor (2 mentee ví dụ). Link hồ sơ là câu
- * giữ chỗ — không mã nào được tạo, không dòng nào được ghi. Gửi được cả khi chưa đủ điều kiện gửi thật,
- * để BTC soát chữ trước.
+ * Thư THỬ của một loại thư: một thư mentor (liệt kê `mentorMentees`) và mỗi phần tử `menteeLetters` một
+ * thư mentee. Không mã nào được tạo, không dòng nào được ghi — dòng thông báo luôn null.
  */
-export async function sendMatchResultTest(nowMs = Date.now()): Promise<MatchResultSendResult> {
+async function sendTestLetters(input: {
+  variant: ResultVariant;
+  toEmail: string;
+  mentorName: string;
+  mentorLabel: string;
+  mentorMentees: readonly string[];
+  menteeLetters: ReadonlyArray<{ name: string; label: string }>;
+  kickoffRegisterUrl: string | null;
+  requestOrigin: string | null;
+}): Promise<SendEmailResult[]> {
+  const { variant, toEmail, mentorName, kickoffRegisterUrl, requestOrigin } = input;
+  const results: SendEmailResult[] = [];
+  if (variant === "special") {
+    results.push(
+      await sendMatchResultMentorLate({
+        toEmail, mentorName, menteeNames: input.mentorMentees, kickoffRegisterUrl, noticeId: null, requestOrigin, test: true, testFor: input.mentorLabel
+      })
+    );
+    for (const m of input.menteeLetters) {
+      results.push(await sendMatchResultMenteeLate({ toEmail, menteeName: m.name, kickoffRegisterUrl, noticeId: null, requestOrigin, test: true, testFor: m.label }));
+    }
+    return results;
+  }
+  results.push(
+    await sendMatchResultMentor({
+      toEmail,
+      mentorName,
+      mentees: input.mentorMentees.map((name) => ({ name, token: null })),
+      kickoffRegisterUrl,
+      noticeId: null,
+      requestOrigin,
+      testFor: input.mentorLabel
+    })
+  );
+  for (const m of input.menteeLetters) {
+    results.push(
+      await sendMatchResultMentee({ toEmail, menteeName: m.name, mentorName, mentorToken: null, kickoffRegisterUrl, noticeId: null, requestOrigin, testFor: m.label })
+    );
+  }
+  return results;
+}
+
+/**
+ * Gửi thử cho chính BTC đang bấm: một thư mentee và một thư mentor (2 mentee ví dụ) của loại thư đã
+ * chọn. Link hồ sơ là câu giữ chỗ — không mã nào được tạo, không dòng nào được ghi. Gửi được cả khi
+ * chưa đủ điều kiện gửi thật, để BTC soát chữ trước.
+ */
+export async function sendMatchResultTest(input: { variant?: ResultVariant } = {}, nowMs = Date.now()): Promise<MatchResultSendResult> {
   const fail = (message: string): MatchResultSendResult => ({ ok: false, message, sent: 0, failed: 0 });
+  const variant: ResultVariant = input.variant ?? "standard";
   try {
     const { client, seasonId } = await round2SeasonContext();
     if (!(await round2Operator(seasonId))) return fail(DENIED);
@@ -348,37 +441,22 @@ export async function sendMatchResultTest(nowMs = Date.now()): Promise<MatchResu
     if (sentInWindow === null) return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi.");
     if (sentInWindow + 2 > DAILY_EMAIL_LIMIT) return fail("Đã chạm hạn mức thư trong 24 giờ. Thử lại sau vài giờ.");
     const state = await loadMatchResultState(client, seasonId, nowMs);
-    const settings = state.settings;
-    const requestOrigin = await getPublicOrigin();
     const name = String(actor.full_name ?? "").trim();
-    const results = [
-      await sendMatchResultMentee({
-        toEmail: actor.email,
-        menteeName: name || "(tên Mentee)",
-        mentorName: "(tên Mentor đồng hành)",
-        mentorToken: null,
-        kickoffRegisterUrl: settings?.kickoffRegisterUrl ?? null,
-        noticeId: null,
-        requestOrigin,
-        testFor: "mentee mẫu"
-      }),
-      await sendMatchResultMentor({
-        toEmail: actor.email,
-        mentorName: name || "(tên Mentor)",
-        mentees: [
-          { name: "(tên Mentee 1)", token: null },
-          { name: "(tên Mentee 2)", token: null }
-        ],
-        kickoffRegisterUrl: settings?.kickoffRegisterUrl ?? null,
-        noticeId: null,
-        requestOrigin,
-        testFor: "mentor mẫu"
-      })
-    ];
+    const results = await sendTestLetters({
+      variant,
+      toEmail: actor.email,
+      mentorName: name || "(tên Mentor)",
+      mentorLabel: "mentor mẫu",
+      mentorMentees: ["(tên Mentee 1)", "(tên Mentee 2)"],
+      menteeLetters: [{ name: name || "(tên Mentee)", label: "mentee mẫu" }],
+      kickoffRegisterUrl: state.settings?.kickoffRegisterUrl ?? null,
+      requestOrigin: await getPublicOrigin()
+    });
     if (results.some((r) => r.skipped)) return fail("Môi trường này đang tắt gửi thư — thư thử chưa đi.");
     const ok = results.filter((r) => r.ok).length;
     if (ok < 2) return fail(`Gửi thư thử chưa trọn (${ok}/2 thư). Xem Vận hành → Mail → Nhật ký gửi.`);
-    return { ok: true, message: `Đã gửi 2 thư thử (bản mentee và bản mentor) tới ${actor.email}.`, sent: 2, failed: 0 };
+    const kind = variant === "special" ? " mẫu sau 15/11" : "";
+    return { ok: true, message: `Đã gửi 2 thư thử${kind} (bản mentee và bản mentor) tới ${actor.email}.`, sent: 2, failed: 0 };
   } catch (error) {
     log("test send failed", error);
     return fail(SAFE_ERROR);
@@ -428,40 +506,26 @@ export async function sendMatchResultGroupTest(input: { mentor: unknown; toEmail
     if (sentInWindow === null) return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi.");
     if (sentInWindow + count > DAILY_EMAIL_LIMIT) return fail("Đã chạm hạn mức thư trong 24 giờ. Thử lại sau vài giờ.");
 
-    const requestOrigin = await getPublicOrigin();
-    const kickoffRegisterUrl = state.settings?.kickoffRegisterUrl ?? null;
+    // Đúng lá thư mentor này sẽ nhận: mentor trong danh sách giữ lại nhận mẫu sau 15/11.
+    const variant: ResultVariant = state.lateRecipients.some((r) => r.role === "mentor" && r.personId === mentor.personId) ? "special" : "standard";
     const mentorName = mentor.fullName ?? "";
-    const results = [
-      await sendMatchResultMentor({
-        toEmail,
-        mentorName,
-        mentees: mentor.partners.map((p) => ({ name: p.fullName ?? "", token: null })),
-        kickoffRegisterUrl,
-        noticeId: null,
-        requestOrigin,
-        testFor: `mentor ${mentorName}`
-      })
-    ];
-    for (const p of mentor.partners) {
-      results.push(
-        await sendMatchResultMentee({
-          toEmail,
-          menteeName: p.fullName ?? "",
-          mentorName,
-          mentorToken: null,
-          kickoffRegisterUrl,
-          noticeId: null,
-          requestOrigin,
-          testFor: `mentee ${p.fullName ?? ""}`
-        })
-      );
-    }
+    const results = await sendTestLetters({
+      variant,
+      toEmail,
+      mentorName,
+      mentorLabel: `mentor ${mentorName}`,
+      mentorMentees: mentor.partners.map((p) => p.fullName ?? ""),
+      menteeLetters: mentor.partners.map((p) => ({ name: p.fullName ?? "", label: `mentee ${p.fullName ?? ""}` })),
+      kickoffRegisterUrl: state.settings?.kickoffRegisterUrl ?? null,
+      requestOrigin: await getPublicOrigin()
+    });
     if (results.some((r) => r.skipped)) return fail("Môi trường này đang tắt gửi thư — thư thử chưa đi.");
     const ok = results.filter((r) => r.ok).length;
     if (ok < count) return fail(`Gửi thư thử chưa trọn (${ok}/${count} thư). Xem Vận hành → Mail → Nhật ký gửi.`);
+    const kind = variant === "special" ? " (mẫu sau 15/11 — mentor trong danh sách cần Training 15/11)" : "";
     return {
       ok: true,
-      message: `Đã gửi ${count} thư thử tới ${toEmail}: thư của mentor ${mentorName} và ${mentor.partners.length} mentee (${mentor.partners.map((p) => p.fullName).join(", ")}).`,
+      message: `Đã gửi ${count} thư thử${kind} tới ${toEmail}: thư của mentor ${mentorName} và ${mentor.partners.length} mentee (${mentor.partners.map((p) => p.fullName).join(", ")}).`,
       sent: count,
       failed: 0
     };
@@ -477,7 +541,11 @@ const RESENDABLE = new Set(["pending", "sent", "changed_since_sent"]);
  * Gửi riêng một người — dùng để thí điểm (một cặp BTC quen) và để gửi lại khi cặp đổi sau khi gửi.
  * Luôn tạo mã MỚI: link trong thư trước của người này hết hiệu lực. Không tra sổ thư — gửi lại là ý định.
  */
-export async function resendMatchResultNotice(input: { personId: unknown; role: unknown }, nowMs = Date.now()): Promise<MatchResultSendResult> {
+export async function resendMatchResultNotice(
+  input: { personId: unknown; role: unknown; variant?: ResultVariant },
+  nowMs = Date.now()
+): Promise<MatchResultSendResult> {
+  const variant: ResultVariant = input.variant ?? "standard";
   const fail = (message: string): MatchResultSendResult => ({ ok: false, message, sent: 0, failed: 0 });
   const personId = String(input.personId ?? "").trim();
   const role = input.role === "mentor" || input.role === "mentee" ? input.role : null;
@@ -487,7 +555,7 @@ export async function resendMatchResultNotice(input: { personId: unknown; role: 
     if (!(await round2Operator(seasonId))) return fail(DENIED);
     const state = await loadMatchResultState(client, seasonId, nowMs);
     if (state.blocked.length) return fail(state.blocked.join(" "));
-    const r = state.recipients.find((x) => x.role === role && x.personId === personId);
+    const r = recipientsFor(state, variant).find((x) => x.role === role && x.personId === personId);
     if (!r) return fail("Người này không có cặp nào đang hoạt động.");
     if (!RESENDABLE.has(r.status)) {
       const why = r.holdReason ? HOLD_REASON_LABELS[r.holdReason] : RECIPIENT_STATUS_LABELS[r.status];
@@ -499,8 +567,8 @@ export async function resendMatchResultNotice(input: { personId: unknown; role: 
     if (sentInWindow === null) return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi.");
     if (sentInWindow >= DAILY_EMAIL_LIMIT) return fail("Đã chạm hạn mức thư trong 24 giờ. Thử lại sau vài giờ.");
 
-    await ensureNotices(client, seasonId, [r]);
-    const notice = (await readNotices(client, seasonId)).get(key(r));
+    await ensureNotices(client, seasonId, [r], variant);
+    const notice = (await readNotices(client, seasonId, variant)).get(key(r));
     if (!notice) return fail(SAFE_ERROR);
     const stamp = new Date(nowMs).toISOString();
     const { data: claimedRows, error: claimError } = await client
@@ -514,8 +582,7 @@ export async function resendMatchResultNotice(input: { personId: unknown; role: 
 
     let outcome: SendEmailResult;
     try {
-      const tokens = await issueProfileLinks(client, seasonId, r, Boolean(notice.sent_at));
-      outcome = await sendOne(r, tokens, state, String(notice.id), await getPublicOrigin());
+      outcome = await sendLetter(client, seasonId, r, state, String(notice.id), await getPublicOrigin(), variant, Boolean(notice.sent_at));
     } catch (error) {
       log("resend crashed", error);
       outcome = { ok: false, skipped: false, reason: "Không tạo được link hồ sơ hoặc gửi lỗi." };
@@ -535,7 +602,7 @@ export async function resendMatchResultNotice(input: { personId: unknown; role: 
         .eq("id", notice.id)
         .eq("claimed_at", stamp);
       if (error) log("resend finalize failed", error);
-      const tail = notice.sent_at ? " Link trong thư trước đã hết hiệu lực." : "";
+      const tail = notice.sent_at && variant === "standard" ? " Link trong thư trước đã hết hiệu lực." : "";
       return { ok: true, message: `Đã gửi thư kết quả tới ${r.fullName ?? r.email}.${tail}`, sent: 1, failed: 0 };
     }
     const { error } = await client

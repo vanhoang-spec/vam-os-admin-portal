@@ -176,6 +176,59 @@ export default async function MatchResultPage(props: { searchParams: Promise<Sea
         </div>
       </Card>
 
+      <Card id="thu-sau-15-11">
+        <h2 className="text-base font-semibold text-vam-ink">Thư nhóm mentor cần Training 15/11 (mẫu “sau 15/11”)</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Mentor trong danh sách giữ lại (mục 2) và các mentee của họ nhận mẫu “MATCHING SAU 15/11”: mentor chỉ thấy họ tên mentee,
+          mentee chưa thấy thông tin mentor, chưa có link hồ sơ. Sau 15/11, BTC bỏ giữ từng mentor đã dự Training để họ và mentee
+          nhận thư thường có link hồ sơ.
+        </p>
+        <p className="mt-2 text-sm text-slate-600" data-testid="late-counts">
+          {STATUS_ORDER.map((st) => `${RECIPIENT_STATUS_LABELS[st]}: ${data.late.counts.mentor[st] + data.late.counts.mentee[st]}`).join(" · ")}
+        </p>
+        <div className="mt-3">
+          <MatchResultSendPanel blocked={data.blocked} {...data.late.dispatch} variant="special" />
+        </div>
+        {data.late.recipients.length ? (
+          <div className="vam-table-frame mt-3 overflow-x-auto rounded-lg border border-vam-line bg-white">
+            <table className="min-w-full divide-y divide-vam-line text-sm" data-testid="late-recipients">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Vai</th>
+                  <th className="px-3 py-2">Người nhận</th>
+                  <th className="px-3 py-2">Email</th>
+                  <th className="px-3 py-2">Người đồng hành</th>
+                  <th className="px-3 py-2">Trạng thái</th>
+                  <th className="px-3 py-2">Gửi riêng</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-vam-line">
+                {data.late.recipients.map((r) => (
+                  <tr key={`${r.role}:${r.personId}`} data-late-recipient={`${r.role}:${r.personId}`}>
+                    <td className="px-3 py-2">{ROLE_LABEL[r.role]}</td>
+                    <td className="px-3 py-2">{r.fullName ?? "(chưa có tên)"}</td>
+                    <td className="px-3 py-2">{r.email ?? "—"}</td>
+                    <td className="px-3 py-2">{r.partners.map((p) => p.fullName ?? "(chưa có tên)").join(", ") || "Không còn cặp"}</td>
+                    <td className="px-3 py-2">
+                      <StatusBadge r={r} />
+                      {r.sentAt ? <div className="mt-1 text-xs text-slate-500">Gửi lúc {formatDateTime(r.sentAt)}</div> : null}
+                      {r.lastError && !r.sentAt ? <div className="mt-1 text-xs text-red-600">Lỗi lần trước: {r.lastError}</div> : null}
+                    </td>
+                    <td className="px-3 py-2">
+                      {!data.blocked.length && canResend(r) ? (
+                        <ResendButton personId={r.personId} role={r.role} name={r.fullName ?? r.email ?? ""} sentBefore={Boolean(r.sentAt)} variant="special" />
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-500">Chưa có mentor nào trong danh sách giữ lại.</p>
+        )}
+      </Card>
+
       <Card>
         <h2 className="text-base font-semibold text-vam-ink">1. Handbook và link Kick-off</h2>
         <ul className="mt-2 grid gap-1 text-sm" data-testid="match-result-handbooks">
@@ -203,9 +256,10 @@ export default async function MatchResultPage(props: { searchParams: Promise<Sea
       </Card>
 
       <Card>
-        <h2 className="text-base font-semibold text-vam-ink">2. Mentor giữ lại (thư riêng, gửi sau)</h2>
+        <h2 className="text-base font-semibold text-vam-ink">2. Mentor cần Training 15/11 (danh sách giữ lại)</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Mentor trong danh sách này và mọi mentee của họ không nhận thư đợt này.
+          Mentor trong danh sách này và mọi mentee của họ không nhận thư thường; họ nhận mẫu “sau 15/11” ở mục “Thư nhóm mentor cần
+          Training 15/11”. Sau 15/11, bỏ giữ mentor nào đã dự Training để họ nhận thư thường có link hồ sơ.
         </p>
         {data.holdsReadOk ? (
           <div className="mt-3 grid gap-4">

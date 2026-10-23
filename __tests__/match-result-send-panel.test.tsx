@@ -80,7 +80,7 @@ describe("nút và bước xác nhận", () => {
 
   it("bấm gửi liên tục chưa chạy lượt nào: hiện câu xác nhận; Huỷ thì quay lại", () => {
     const { container, getByText } = start({ readyPeople: 235 });
-    expect(text(container)).toContain("Gửi liên tục tới người thật? Hôm nay gửi được khoảng 235 thư");
+    expect(text(container)).toContain("Gửi liên tục thư kết quả tới người thật? Hôm nay gửi được khoảng 235 thư");
     expect(mocks.batch).not.toHaveBeenCalled();
     fireEvent.click(getByText("Huỷ"));
     expect(container.querySelector('[data-testid="match-result-continuous"]')).not.toBeNull();
@@ -104,9 +104,9 @@ describe("vòng lặp gửi liên tục", () => {
     confirm(container);
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
     expect(mocks.batch).toHaveBeenCalledTimes(3);
-    expect(mocks.batch.mock.calls[0][0]).toEqual({ confirmed: true, skip: [] });
-    expect(mocks.batch.mock.calls[1][0]).toEqual({ confirmed: true, skip: [FAILED] });
-    expect(mocks.batch.mock.calls[2][0]).toEqual({ confirmed: true, skip: [FAILED] });
+    expect(mocks.batch.mock.calls[0][0]).toEqual({ confirmed: true, skip: [], variant: "standard" });
+    expect(mocks.batch.mock.calls[1][0]).toEqual({ confirmed: true, skip: [FAILED], variant: "standard" });
+    expect(mocks.batch.mock.calls[2][0]).toEqual({ confirmed: true, skip: [FAILED], variant: "standard" });
     expect(status(container)).toContain("Xong 3 lượt: đã gửi 77 thư, 1 thư lỗi");
     expect(status(container)).toContain("Đã chạm phần hạn mức");
   });

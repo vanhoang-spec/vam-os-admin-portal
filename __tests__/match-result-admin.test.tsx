@@ -211,6 +211,17 @@ describe("trang", () => {
     expect(rowOf(html, `data-hold="${MT_A}"`)).toContain("Anh Mentor A");
   });
 
+  it("mục thư sau 15/11: đúng mentor bị giữ và mentee của họ, có khung gửi riêng mẫu sau 15/11", async () => {
+    db.tables.match_result_holds = [{ id: "h1", season_id: SEASON, mentor_person_id: MT_A, input_email: "a@example.test", reason: "Training", created_at: OLD, removed_at: null }];
+    db.tables.match_result_settings = [{ season_id: SEASON, kickoff_register_url: null, holds_confirmed_at: "2026-10-22T09:00:00Z" }];
+    const html = await page();
+    for (const id of [`mentor:${MT_A}`, `mentee:${ME_1}`, `mentee:${ME_2}`]) expect(html).toContain(`data-late-recipient="${id}"`);
+    expect(html).not.toContain(`data-late-recipient="mentor:${MT_B}"`);
+    expect(rowOf(html, `data-late-recipient="mentor:${MT_A}"`)).toContain('data-status="pending"');
+    expect(html).toContain('data-variant="special"');
+    expect(html).toContain("Gửi thử cho tôi (2 thư mẫu sau 15/11)");
+  });
+
   it("dòng giữ lại đã bỏ (removed_at) không còn giữ ai", async () => {
     db.tables.match_result_holds = [{ id: "h1", season_id: SEASON, mentor_person_id: MT_A, input_email: "a@example.test", reason: null, created_at: OLD, removed_at: "2026-10-22T08:00:00Z" }];
     const html = await page();
