@@ -24,7 +24,8 @@ vi.mock("next/link", () => ({ default: ({ children, href, ...rest }: any) => <a 
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((destination: string) => {
     throw new Error("REDIRECT:" + destination);
-  })
+  }),
+  useRouter: () => ({ refresh: vi.fn() })
 }));
 vi.mock("next/headers", () => ({ cookies: vi.fn(() => ({ get: vi.fn() })) }));
 vi.mock("@/lib/supabase", () => ({ supabase: null, supabaseUrl: "https://x.test", supabaseAnonKey: "anon" }));
@@ -180,7 +181,7 @@ describe("trang", () => {
     expect(html).toContain("Chưa có file Handbook mentee trên VAM OS.");
     expect(html).toContain("Chưa có file Handbook mentor trên VAM OS.");
     expect(html).toContain("Danh sách mentor giữ lại chưa được xác nhận.");
-    expect(html).not.toContain("Gửi thư kết quả (tối đa");
+    expect(html).not.toContain("Gửi liên tục (khoảng");
     expect(rowOf(html, 'data-handbook="mentee"')).toContain("chưa có file trên VAM OS");
   });
 
@@ -196,7 +197,8 @@ describe("trang", () => {
     const html = await page();
     expect(html).not.toContain('data-testid="match-result-blocked"');
     // A: mentor + 2 mentee, B: mentor + 1 mentee (ME_3 lấy email từ đơn) = 5 thư, 2 nhóm.
-    expect(html).toContain("Gửi thư kết quả (tối đa 5 thư)");
+    expect(html).toContain("Gửi liên tục (khoảng 5 thư hôm nay)");
+    expect(html).toContain("Gửi một lô (tối đa 5 thư)");
     expect(html).toContain("Lần bấm kế tiếp: 5 thư (2 nhóm)");
   });
 

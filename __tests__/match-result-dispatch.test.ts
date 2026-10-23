@@ -24,7 +24,7 @@ vi.mock("@/lib/public-url", () => ({ getPublicOrigin: vi.fn(async () => "https:/
 vi.mock("@/lib/email", () => ({ sendMatchResultMentee: mocks.mentee, sendMatchResultMentor: mocks.mentor }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { resendMatchResultAction, sendMatchResultAction } from "@/app/actions/match-result";
+import { resendMatchResultAction, sendMatchResultAction, sendMatchResultBatchAction } from "@/app/actions/match-result";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 import { hashBearerToken } from "@/lib/bearer-token";
@@ -425,5 +425,107 @@ describe("8. gửi thử thư của một nhóm mentor (xem trước cho team su
     db.tables.outbound_emails = Array.from({ length: 998 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
     expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(false);
     expect(sentTo()).toEqual([]);
+  });
+});
+
+describe("9. gửi liên tục — phía máy chủ", () => {
+  // Thư gửi thành công ghi vào sổ thư như thật, để hạn mức 24 giờ giảm dần giữa các lượt.
+  const logSent = async (input: any) => {
+    db.tables.outbound_emails.push({
+      id: `o-${db.tables.outbound_emails.length}`,
+      status: "sent",
+      created_at: new Date().toISOString(),
+      related_table: input.noticeId ? "match_result_notices" : null,
+      related_id: input.noticeId
+    });
+    return { ok: true, skipped: false };
+  };
+  const fill = (n: number) => {
+    db.tables.outbound_emails = Array.from({ length: n }, (_, i) => ({ id: `x${i}`, status: "sent", created_at: new Date().toISOString() }));
+  };
+
+  /** Đúng điều trang làm: gọi tới khi more = false, cộng dồn người lỗi vào danh sách bỏ qua. */
+  async function loop() {
+    const skip = new Set<string>();
+    const results = [];
+    for (let i = 0; i < 20; i++) {
+      const r = await runMatchResultDispatch({ skip });
+      results.push(r);
+      for (const k of r.failedKeys ?? []) skip.add(k);
+      if (!r.ok || !r.more) break;
+    }
+    return results;
+  }
+
+  beforeEach(() => {
+    mocks.mentee.mockImplementation(logSent);
+    mocks.mentor.mockImplementation(logSent);
+  });
+
+  it("đủ hạn mức: gửi tới khi hết người chờ, mỗi người đúng một thư, lượt cuối báo dừng", async () => {
+    const results = await loop();
+    expect(sentTo()).toHaveLength(5);
+    expect(new Set(sentTo()).size).toBe(5);
+    expect(results.at(-1)!.more).toBe(false);
+    expect(results.at(-1)!.left).toBe(0);
+  });
+
+  it("hạn mức hôm nay chỉ đủ một nhóm: lượt 1 gửi nhóm A rồi báo gửi tiếp, lượt 2 thấy hết hạn mức và dừng", async () => {
+    fill(917); // còn 3 thư: đúng nhóm A (mentor + 2 mentee)
+    const results = await loop();
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ sent: 3, left: 2, more: true });
+    expect(results[1].sent).toBe(0);
+    expect(results[1].more).toBeFalsy();
+    expect(results[1].message).toContain("hạn mức");
+    expect(sentTo()).toEqual(["mentee:m1@example.test", "mentee:m2@example.test", "mentor:a@example.test"]);
+  });
+
+  it("một người lỗi: báo đúng người đó, lượt sau bỏ qua họ — không gửi lại họ ở mọi lượt", async () => {
+    mocks.mentee.mockImplementation(async (input: any) =>
+      input.toEmail === "m2@example.test" ? { ok: false, skipped: false, reason: "hộp thư từ chối" } : logSent(input)
+    );
+    const results = await loop();
+    expect(results[0].failedKeys).toEqual([`mentee:${ME_2}`]);
+    expect(mocks.mentee.mock.calls.filter((c) => c[0].toEmail === "m2@example.test")).toHaveLength(1);
+    expect(results.at(-1)!.more).toBe(false);
+    expect(notice(ME_3, "mentee").sent_at).toBeTruthy();
+  });
+
+  it("chỉ còn người vừa lỗi: không báo gửi tiếp (không quay vòng mãi)", async () => {
+    mocks.mentor.mockResolvedValue({ ok: false, skipped: false, reason: "x" });
+    mocks.mentee.mockResolvedValue({ ok: false, skipped: false, reason: "x" });
+    const r = await runMatchResultDispatch();
+    expect(r.sent).toBe(0);
+    expect(r.more).toBe(false);
+  });
+
+  it("bị 429: báo dừng", async () => {
+    mocks.mentor.mockResolvedValue({ ok: false, skipped: false, reason: "rate", providerStatus: 429 });
+    expect((await runMatchResultDispatch()).more).toBe(false);
+  });
+
+  it("môi trường tắt gửi thư (mọi thư bị bỏ qua): báo dừng, không tính lỗi", async () => {
+    mocks.mentor.mockResolvedValue({ ok: true, skipped: true, reason: "gate" });
+    mocks.mentee.mockResolvedValue({ ok: true, skipped: true, reason: "gate" });
+    const r = await runMatchResultDispatch();
+    expect(r).toMatchObject({ sent: 0, failed: 0, more: false });
+  });
+
+  it("danh sách bỏ qua chỉ thu hẹp: khoá lạ không thêm ai, khoá đúng thì người đó không nhận", async () => {
+    await runMatchResultDispatch({ skip: new Set([`mentee:${ME_1}`, "mentee:00000000-0000-4000-8000-000000000999"]) });
+    expect(sentTo()).toEqual(["mentee:m2@example.test", "mentee:m3@example.test", "mentor:a@example.test", "mentor:b@example.test"]);
+  });
+
+  it("action: chỉ chạy khi trang gửi confirmed === true; mục lạ trong danh sách bỏ qua bị lờ đi", async () => {
+    for (const input of [{}, { confirmed: "yes" }, { confirmed: 1 }]) {
+      expect((await sendMatchResultBatchAction(input as any)).ok).toBe(false);
+    }
+    expect(sentTo()).toEqual([]);
+    expect(db.writes).toEqual([]);
+    const r = await sendMatchResultBatchAction({ confirmed: true, skip: ["rác", 42, `mentee:${ME_1}`] });
+    expect(r.ok).toBe(true);
+    expect(sentTo()).not.toContain("mentee:m1@example.test");
+    expect(sentTo()).toHaveLength(4);
   });
 });

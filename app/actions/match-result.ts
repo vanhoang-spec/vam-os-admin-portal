@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { addMatchResultHolds, confirmMatchResultHolds, removeMatchResultHold, saveMatchResultSettings } from "@/lib/match-result";
 import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultGroupTest, sendMatchResultTest } from "@/lib/match-result-dispatch";
+import type { MatchResultBatchResult } from "@/lib/match-result-action-types";
+import { parseSkipKeys } from "@/lib/match-result-core";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
 
 const PATH = "/matches/ket-qua";
@@ -59,4 +61,24 @@ export async function resendMatchResultAction(_prev: Round2ActionState, form: Fo
 export async function sendMatchResultGroupTestAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
   const result = await sendMatchResultGroupTest({ mentor: form.get("mentor"), toEmail: form.get("toEmail") });
   return { status: result.ok ? "ok" : "error", message: result.message };
+}
+
+/**
+ * Một vòng của chế độ gửi liên tục: trang gọi lại hàm này tới khi `more` = false. Chỉ chạy khi trang gửi
+ * kèm dấu đã qua bước xác nhận; quyền, hạn mức và cách chia lô do máy chủ tự kiểm ở mỗi vòng.
+ */
+export async function sendMatchResultBatchAction(input: { confirmed?: unknown; skip?: unknown }): Promise<MatchResultBatchResult> {
+  if (input?.confirmed !== true) {
+    return { ok: false, message: "Cần bấm xác nhận trước khi gửi.", sent: 0, failed: 0, left: 0, failedKeys: [], more: false };
+  }
+  const result = await runMatchResultDispatch({ skip: parseSkipKeys(input.skip) });
+  return {
+    ok: result.ok,
+    message: result.message,
+    sent: result.sent,
+    failed: result.failed,
+    left: result.left ?? 0,
+    failedKeys: result.failedKeys ?? [],
+    more: result.ok && result.more === true
+  };
 }

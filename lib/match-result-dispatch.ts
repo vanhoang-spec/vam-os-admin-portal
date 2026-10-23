@@ -45,7 +45,18 @@ type Row = Record<string, any>;
 const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
 const DENIED = "Bạn không có quyền vận hành ghép cặp mùa này.";
 
-export type MatchResultSendResult = { ok: boolean; message: string; sent: number; failed: number };
+export type MatchResultSendResult = {
+  ok: boolean;
+  message: string;
+  sent: number;
+  failed: number;
+  /** Người còn chờ thư sau lượt này (kể cả người vừa lỗi). */
+  left?: number;
+  /** `vai:person_id` của người gửi lỗi ở lượt này — chế độ gửi liên tục bỏ qua họ ở các lượt sau. */
+  failedKeys?: string[];
+  /** Gửi tiếp ngay được: còn người chờ, lượt này có tiến triển, không bị 429. Hết hạn mức thì lượt sau tự báo. */
+  more?: boolean;
+};
 
 function log(message: string, error?: unknown) {
   const detail = error && typeof error === "object" ? (error as { message?: unknown; code?: unknown }) : null;
@@ -146,7 +157,12 @@ function unsendableReason(r: MatchResultRecipient): string | null {
   return null;
 }
 
-export async function runMatchResultDispatch(input: { now?: () => number } = {}): Promise<MatchResultSendResult> {
+/**
+ * Một lượt gửi (một lần bấm, hoặc một vòng của chế độ gửi liên tục). `skip`: người đã lỗi ở các lượt
+ * trước của cùng phiên gửi liên tục — bỏ qua để một hộp thư hỏng không bị gửi lại ở mọi lượt. Chỉ thu
+ * hẹp danh sách, không bao giờ thêm ai, nên nhận từ trình duyệt được.
+ */
+export async function runMatchResultDispatch(input: { now?: () => number; skip?: ReadonlySet<string> } = {}): Promise<MatchResultSendResult> {
   const now = input.now ?? Date.now;
   const fail = (message: string): MatchResultSendResult => ({ ok: false, message, sent: 0, failed: 0 });
   try {
@@ -161,8 +177,9 @@ export async function runMatchResultDispatch(input: { now?: () => number } = {})
     const sentInWindow = await countSentInWindow(client, startedMs);
     if (sentInWindow === null) return fail("Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi.");
     const allowance = dispatchAllowance(sentInWindow);
-    const groups = dispatchGroups(state.recipients);
-    if (!groups.length) return { ok: true, message: "Không còn ai chờ thư kết quả.", sent: 0, failed: 0 };
+    const skip = input.skip;
+    const groups = dispatchGroups(skip?.size ? state.recipients.filter((r) => !skip.has(key(r))) : state.recipients);
+    if (!groups.length) return { ok: true, message: "Không còn ai chờ thư kết quả.", sent: 0, failed: 0, left: 0 };
     if (allowance === 0) {
       return {
         ok: true,
@@ -227,6 +244,7 @@ export async function runMatchResultDispatch(input: { now?: () => number } = {})
     let settled = 0;
     let stopped429 = false;
     const leftover: string[] = [];
+    const failedKeys: string[] = [];
 
     const finalize = async (noticeId: string, r: MatchResultRecipient, count: number | null) => {
       const nowIso = new Date().toISOString();
@@ -273,7 +291,10 @@ export async function runMatchResultDispatch(input: { now?: () => number } = {})
           await finalize(id, r, count);
         } else {
           // Bị cổng gửi thư chặn (môi trường thử) thì KHÔNG tính lỗi; lỗi thật thì ghi lại.
-          if (!outcome.skipped) failed += 1;
+          if (!outcome.skipped) {
+            failed += 1;
+            failedKeys.push(key(r));
+          }
           if (outcome.providerStatus === 429) stopped429 = true;
           const { error } = await client
             .from("match_result_notices")
@@ -288,13 +309,23 @@ export async function runMatchResultDispatch(input: { now?: () => number } = {})
 
     const left = Math.max(0, batchSize(groups) - sent - settled);
     if (stopped429) {
-      return { ok: true, message: `Đã gửi ${sent} thư rồi nhà cung cấp báo chạm trần. Còn ${left} người chờ thư — bấm lại sau vài giờ.`, sent, failed };
+      return {
+        ok: true,
+        message: `Đã gửi ${sent} thư rồi nhà cung cấp báo chạm trần. Còn ${left} người chờ thư — bấm lại sau vài giờ.`,
+        sent,
+        failed,
+        left,
+        failedKeys,
+        more: false
+      };
     }
     const parts = [`Đã gửi ${sent} thư kết quả (${plan.length} nhóm mentor).`];
     if (settled) parts.push(`${settled} người đã có thư trong sổ từ lần trước — chỉ ghi nhận, không gửi lại.`);
     if (failed) parts.push(`${failed} thư lỗi, xem cột Trạng thái hoặc Vận hành → Mail → Nhật ký gửi.`);
     if (left) parts.push(`Còn ${left} người chờ thư — bấm lại để gửi tiếp.`);
-    return { ok: true, message: parts.join(" "), sent, failed };
+    // Gửi tiếp chỉ khi lượt này có tiến triển và còn người ngoài số vừa lỗi: không bao giờ quay vòng mãi.
+    const more = sent + settled > 0 && left - failedKeys.length > 0;
+    return { ok: true, message: parts.join(" "), sent, failed, left, failedKeys, more };
   } catch (error) {
     log("dispatch failed", error);
     return fail(SAFE_ERROR);

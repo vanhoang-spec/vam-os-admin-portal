@@ -282,6 +282,24 @@ export function batchSize(groups: readonly DispatchGroup[]): number {
   return groups.reduce((n, g) => n + g.members.length, 0);
 }
 
+const SKIP_KEY = /^(mentor|mentee):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** Một mùa ~1.200 người nhận; trần rộng gấp đôi, đủ chặn một danh sách bịa khổng lồ. */
+export const MAX_SKIP_KEYS = 2500;
+
+/**
+ * Danh sách người bỏ qua do trình duyệt gửi lên ở chế độ gửi liên tục (người đã lỗi ở các lượt trước).
+ * Chỉ giữ khoá đúng hình dạng `vai:uuid`; mục lạ bị bỏ, không làm hỏng lượt gửi. Danh sách này chỉ thu
+ * hẹp người nhận — gửi bịa lên cũng không thêm được ai.
+ */
+export function parseSkipKeys(value: unknown): Set<string> {
+  const out = new Set<string>();
+  if (!Array.isArray(value)) return out;
+  for (const item of value.slice(0, MAX_SKIP_KEYS)) {
+    if (typeof item === "string" && SKIP_KEY.test(item)) out.add(item);
+  }
+  return out;
+}
+
 function nameKey(value: unknown): string {
   return String(value ?? "").normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
 }
