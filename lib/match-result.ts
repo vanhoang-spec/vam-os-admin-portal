@@ -37,7 +37,8 @@ import {
 } from "@/lib/match-result-core";
 import { round2Operator, round2SeasonContext } from "@/lib/matching-round2";
 import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
-import { dispatchAllowance } from "@/lib/mentee-invite-dispatch-core";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
+import { DISPATCH_RESERVE, dispatchAllowance } from "@/lib/mentee-invite-dispatch-core";
 import { readAllPages, readAllPagesIn } from "@/lib/paged-read";
 import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
 import { HANDBOOKS } from "@/lib/handbook";
@@ -95,6 +96,8 @@ export type MatchResultDispatchView = {
   readyPeople: number;
   nextBatchGroups: number;
   nextBatchPeople: number;
+  /** Phần hạn mức 24 giờ còn lại cho thư này (đã chừa thư khác) — chế độ gửi liên tục đi tới đây là dừng. */
+  roomToday: number;
 };
 
 type Loaded = {
@@ -304,7 +307,8 @@ export async function getMatchResultData(): Promise<
           readyGroups: groups.length,
           readyPeople: batchSize(groups),
           nextBatchGroups: next.length,
-          nextBatchPeople: batchSize(next)
+          nextBatchPeople: batchSize(next),
+          roomToday: sentInWindow === null ? 0 : Math.max(0, DAILY_EMAIL_LIMIT - DISPATCH_RESERVE - sentInWindow)
         }
       }
     };

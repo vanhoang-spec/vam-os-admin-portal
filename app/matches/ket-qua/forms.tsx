@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormState } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   addMatchResultHoldsAction,
   confirmMatchResultHoldsAction,
@@ -9,10 +10,12 @@ import {
   resendMatchResultAction,
   saveMatchResultSettingsAction,
   sendMatchResultAction,
+  sendMatchResultBatchAction,
   sendMatchResultGroupTestAction,
   sendMatchResultTestAction
 } from "@/app/actions/match-result";
 import { Message, Submit } from "@/app/matches/vong-2/bao-cao/dispatch-panel";
+import type { MatchResultBatchResult } from "@/lib/match-result-action-types";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 
 const INPUT = "mt-1 block w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm";
@@ -146,16 +149,82 @@ export type MatchResultSendPanelProps = {
   readyPeople: number;
   nextBatchGroups: number;
   nextBatchPeople: number;
+  roomToday: number;
 };
+
+/** Trần số vòng của một lần gửi liên tục — ~1.200 thư / 40 thư mỗi vòng là ~30; chặn mọi vòng lặp do lỗi. */
+export const CONTINUOUS_MAX_ROUNDS = 60;
+
+type ContinuousRun = { running: boolean; stopping: boolean; rounds: number; sent: number; failed: number; message: string; ok: boolean };
 
 /**
  * Gửi thư kết quả. Mỗi lần bấm gửi trọn từng nhóm mentor (mentor + các mentee của họ) trong phần hạn
  * mức còn lại; máy chủ tự tính lại lô lúc bấm. Xác nhận bằng bước thứ hai ngay trên trang.
+ *
+ * Gửi liên tục (BTC 23/10/2026): một lần bấm, trang tự gọi lượt này nối lượt kia tới khi hết người chờ,
+ * chạm hạn mức trong ngày, bị 429, hoặc người bấm dừng. Mỗi lượt máy chủ kiểm lại quyền, điều kiện và
+ * hạn mức như một lần bấm tay; người lỗi ở lượt trước được bỏ qua ở lượt sau.
  */
 export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
   const [testState, testAction] = useFormState(sendMatchResultTestAction, ROUND2_IDLE);
   const [sendState, sendAction] = useFormState(sendMatchResultAction, ROUND2_IDLE);
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<null | "one" | "continuous">(null);
+  const [run, setRun] = useState<ContinuousRun | null>(null);
+  const stopRef = useRef(false);
+  const router = useRouter();
+  const running = Boolean(run?.running);
+  const todayEstimate = Math.min(props.readyPeople, props.roomToday);
+
+  // Đang gửi liên tục thì hỏi trước khi rời trang: đóng tab là dừng sau lượt đang chạy.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [running]);
+
+  async function startContinuous() {
+    setConfirming(null);
+    stopRef.current = false;
+    const skip: string[] = [];
+    let rounds = 0;
+    let sent = 0;
+    let failed = 0;
+    let last: MatchResultBatchResult | null = null;
+    setRun({ running: true, stopping: false, rounds, sent, failed, message: "Đang gửi lượt đầu…", ok: true });
+    try {
+      while (rounds < CONTINUOUS_MAX_ROUNDS) {
+        last = await sendMatchResultBatchAction({ confirmed: true, skip: [...skip] });
+        rounds += 1;
+        sent += last.sent;
+        failed += last.failed;
+        for (const k of last.failedKeys) if (!skip.includes(k)) skip.push(k);
+        setRun({ running: true, stopping: stopRef.current, rounds, sent, failed, message: last.message, ok: last.ok });
+        if (!last.ok || !last.more || stopRef.current) break;
+      }
+    } catch {
+      last = null;
+    }
+    const why = !last
+      ? "Mất kết nối giữa chừng — tải lại trang để xem số đã gửi, rồi bấm gửi tiếp."
+      : stopRef.current
+        ? "Đã dừng theo yêu cầu."
+        : last.message;
+    setRun({
+      running: false,
+      stopping: false,
+      rounds,
+      sent,
+      failed,
+      message: `Xong ${rounds} lượt: đã gửi ${sent} thư${failed ? `, ${failed} thư lỗi (gửi lại từng người ở cột “Gửi riêng”)` : ""}. ${why}`,
+      ok: Boolean(last?.ok)
+    });
+    router.refresh();
+  }
+
   const blocked = props.blocked.length
     ? null
     : props.readyPeople === 0
@@ -182,28 +251,83 @@ export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
             <li key={b}>{b}</li>
           ))}
         </ul>
-      ) : blocked ? (
+      ) : running ? null : blocked ? (
         <p className="text-sm text-amber-700">{blocked}</p>
-      ) : confirming ? (
+      ) : confirming === "one" ? (
         <form action={sendAction} className="flex flex-wrap items-center gap-3" data-testid="match-result-send-confirm">
           <input type="hidden" name="confirmed" value="yes" />
           <span className="text-sm text-vam-ink">
             Gửi {props.nextBatchPeople} thư kết quả ({props.nextBatchGroups} nhóm mentor) tới người thật?
           </span>
           <Submit label="Xác nhận gửi" pendingLabel="Đang gửi…" />
-          <button type="button" onClick={() => setConfirming(false)} className="rounded-md border border-vam-line px-3 py-2 text-sm text-slate-700">
+          <button type="button" onClick={() => setConfirming(null)} className="rounded-md border border-vam-line px-3 py-2 text-sm text-slate-700">
             Huỷ
           </button>
         </form>
+      ) : confirming === "continuous" ? (
+        <div className="flex flex-wrap items-center gap-3" data-testid="match-result-continuous-confirm">
+          <span className="text-sm text-vam-ink">
+            Gửi liên tục tới người thật? Hôm nay gửi được khoảng {todayEstimate} thư; phần còn lại bấm lại sau khi hạn mức mở lại. Giữ trang
+            này mở trong lúc gửi.
+          </span>
+          <button
+            type="button"
+            onClick={startContinuous}
+            className="rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+          >
+            Xác nhận gửi liên tục
+          </button>
+          <button type="button" onClick={() => setConfirming(null)} className="rounded-md border border-vam-line px-3 py-2 text-sm text-slate-700">
+            Huỷ
+          </button>
+        </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="self-start rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
-        >
-          Gửi thư kết quả (tối đa {props.nextBatchPeople} thư)
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setConfirming("continuous")}
+            className="rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90"
+            data-testid="match-result-continuous"
+          >
+            Gửi liên tục (khoảng {todayEstimate} thư hôm nay)
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming("one")}
+            className="rounded-md border border-vam-line px-4 py-2 text-sm font-medium text-vam-ink hover:bg-slate-50"
+          >
+            Gửi một lô (tối đa {props.nextBatchPeople} thư)
+          </button>
+        </div>
       )}
+      {run ? (
+        <div className="grid gap-2 rounded-md border border-vam-line p-3" data-testid="match-result-continuous-progress">
+          <p className={`text-sm ${run.ok ? "text-vam-ink" : "text-red-600"}`} role="status">
+            {run.running ? (
+              <>
+                Đang gửi liên tục — lượt {run.rounds + 1} · đã gửi <strong>{run.sent}</strong> thư{run.failed ? ` · ${run.failed} lỗi` : ""}. Giữ trang
+                này mở.
+              </>
+            ) : (
+              run.message
+            )}
+          </p>
+          {run.running && run.rounds > 0 ? <p className="text-xs text-slate-500">Lượt vừa xong: {run.message}</p> : null}
+          {run.running ? (
+            <button
+              type="button"
+              disabled={run.stopping}
+              onClick={() => {
+                stopRef.current = true;
+                setRun((r) => (r ? { ...r, stopping: true } : r));
+              }}
+              className="self-start rounded-md border border-vam-line px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50"
+            >
+              {run.stopping ? "Sẽ dừng sau lượt đang chạy…" : "Dừng sau lượt này"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <Message state={sendState} />
     </div>
   );

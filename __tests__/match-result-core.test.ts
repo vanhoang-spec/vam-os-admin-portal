@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  MAX_SKIP_KEYS,
   SETTLE_MINUTES,
   batchSize,
   buildRecipients,
@@ -16,6 +17,7 @@ import {
   holdsFingerprint,
   missingFieldLabels,
   parseHoldEmailInput,
+  parseSkipKeys,
   planDispatchBatch,
   profileCoverage,
   resolveHoldEmails,
@@ -358,5 +360,22 @@ describe("chia lô theo nhóm mentor (mentor + mentee của họ cùng một l�
 
   it("thứ tự nhóm cố định giữa các lần bấm (theo tên mentor)", () => {
     expect(groupsOf().map((g) => g.mentorPersonId)).toEqual(groupsOf().map((g) => g.mentorPersonId));
+  });
+});
+
+describe("danh sách bỏ qua của chế độ gửi liên tục", () => {
+  const ok = "mentee:e0000000-0000-4000-8000-000000000001";
+  it("chỉ giữ khoá đúng hình dạng vai:uuid; mục lạ bị bỏ, không ném lỗi", () => {
+    expect(Array.from(parseSkipKeys([ok, "mentor:e0000000-0000-4000-8000-00000000000a", "admin:x", "mentee:'; drop", 7, null, ok]))).toEqual([
+      ok,
+      "mentor:e0000000-0000-4000-8000-00000000000a"
+    ]);
+  });
+  it("không phải mảng thì rỗng", () => {
+    for (const v of [undefined, null, "mentee:x", { 0: ok }]) expect(parseSkipKeys(v).size).toBe(0);
+  });
+  it("cắt ở trần", () => {
+    const many = Array.from({ length: MAX_SKIP_KEYS + 50 }, (_, i) => `mentee:e0000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
+    expect(parseSkipKeys(many).size).toBe(MAX_SKIP_KEYS);
   });
 });
