@@ -21,6 +21,8 @@ import {
   buildMatchingRound2ReminderEmail,
   buildMatchResultMenteeEmail,
   buildMatchResultMentorEmail,
+  buildMatchResultMenteeLateEmail,
+  buildMatchResultMentorLateEmail,
   buildMenteeExemptionConfirmEmail,
   markAsTestEmail,
   buildMenteeSessionInviteEmail,
@@ -1328,6 +1330,59 @@ export async function sendMatchResultMentor(input: {
   return deliver(
     "mentor_mentee_package",
     matchResultOutgoing(built, input.toEmail, links.test, input.testFor),
+    input.noticeId ? { table: "match_result_notices", id: input.noticeId } : null
+  );
+}
+
+/**
+ * Thư "MATCHING SAU 15/11" gửi MENTEE của mentor còn phải dự Training 15/11 (BTC 23/10/2026). Không có link
+ * hồ sơ nào, nên thư thử phải nói rõ bằng cờ `test` — không suy ra được từ mã như thư thường. Cùng loại
+ * thư và cùng sổ thư với thư thường; dòng thông báo là dòng loại "special".
+ */
+export async function sendMatchResultMenteeLate(input: {
+  toEmail: string;
+  menteeName: string;
+  kickoffRegisterUrl: string | null;
+  noticeId: string | null;
+  requestOrigin?: string | null;
+  test: boolean;
+  testFor?: string | null;
+}): Promise<SendEmailResult> {
+  if (!input.test && !input.noticeId) return { ok: false, skipped: false, reason: "Thiếu dòng thông báo." };
+  const handbookUrl = matchResultHandbook("mentee", input.test, input.requestOrigin);
+  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có file Handbook mentee trên VAM OS." };
+  const built = buildMatchResultMenteeLateEmail({ menteeName: input.menteeName, handbookUrl, kickoffRegisterUrl: input.kickoffRegisterUrl });
+  return deliver(
+    "mentee_mentor_intro",
+    matchResultOutgoing(built, input.toEmail, input.test, input.testFor),
+    input.noticeId ? { table: "match_result_notices", id: input.noticeId } : null
+  );
+}
+
+/** Thư "MATCHING SAU 15/11" gửi MENTOR còn phải dự Training 15/11: chỉ họ tên mentee, không link hồ sơ. */
+export async function sendMatchResultMentorLate(input: {
+  toEmail: string;
+  mentorName: string;
+  menteeNames: readonly string[];
+  kickoffRegisterUrl: string | null;
+  noticeId: string | null;
+  requestOrigin?: string | null;
+  test: boolean;
+  testFor?: string | null;
+}): Promise<SendEmailResult> {
+  if (!input.menteeNames.length) return { ok: false, skipped: false, reason: "Mentor chưa có mentee nào." };
+  if (!input.test && !input.noticeId) return { ok: false, skipped: false, reason: "Thiếu dòng thông báo." };
+  const handbookUrl = matchResultHandbook("mentor", input.test, input.requestOrigin);
+  if (!handbookUrl) return { ok: false, skipped: false, reason: "Chưa có file Handbook mentor trên VAM OS." };
+  const built = buildMatchResultMentorLateEmail({
+    mentorName: input.mentorName,
+    menteeNames: input.menteeNames,
+    handbookUrl,
+    kickoffRegisterUrl: input.kickoffRegisterUrl
+  });
+  return deliver(
+    "mentor_mentee_package",
+    matchResultOutgoing(built, input.toEmail, input.test, input.testFor),
     input.noticeId ? { table: "match_result_notices", id: input.noticeId } : null
   );
 }

@@ -16,6 +16,7 @@ import {
 } from "@/app/actions/match-result";
 import { Message, Submit } from "@/app/matches/vong-2/bao-cao/dispatch-panel";
 import type { MatchResultBatchResult } from "@/lib/match-result-action-types";
+import type { ResultVariant } from "@/lib/match-result-core";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 
 const INPUT = "mt-1 block w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm";
@@ -150,6 +151,8 @@ export type MatchResultSendPanelProps = {
   nextBatchGroups: number;
   nextBatchPeople: number;
   roomToday: number;
+  /** Thư thường (mặc định) hay thư "MATCHING SAU 15/11" của nhóm mentor cần Training 15/11. */
+  variant?: ResultVariant;
 };
 
 /** Trần số vòng của một lần gửi liên tục — ~1.200 thư / 40 thư mỗi vòng là ~30; chặn mọi vòng lặp do lỗi. */
@@ -166,6 +169,8 @@ type ContinuousRun = { running: boolean; stopping: boolean; rounds: number; sent
  * hạn mức như một lần bấm tay; người lỗi ở lượt trước được bỏ qua ở lượt sau.
  */
 export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
+  const variant: ResultVariant = props.variant ?? "standard";
+  const letter = variant === "special" ? "thư sau 15/11" : "thư kết quả";
   const [testState, testAction] = useFormState(sendMatchResultTestAction, ROUND2_IDLE);
   const [sendState, sendAction] = useFormState(sendMatchResultAction, ROUND2_IDLE);
   const [confirming, setConfirming] = useState<null | "one" | "continuous">(null);
@@ -197,7 +202,7 @@ export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
     setRun({ running: true, stopping: false, rounds, sent, failed, message: "Đang gửi lượt đầu…", ok: true });
     try {
       while (rounds < CONTINUOUS_MAX_ROUNDS) {
-        last = await sendMatchResultBatchAction({ confirmed: true, skip: [...skip] });
+        last = await sendMatchResultBatchAction({ confirmed: true, skip: [...skip], variant });
         rounds += 1;
         sent += last.sent;
         failed += last.failed;
@@ -236,13 +241,14 @@ export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
           : null;
 
   return (
-    <div className="grid gap-3" data-testid="match-result-send">
+    <div className="grid gap-3" data-testid="match-result-send" data-variant={variant}>
       <p className="text-sm text-slate-600">
         Chờ gửi: <strong>{props.readyPeople}</strong> người trong <strong>{props.readyGroups}</strong> nhóm mentor · Thư cả hệ thống trong 24 giờ:{" "}
         {props.sentInWindow ?? "?"}/1.000 · Lần bấm kế tiếp: {props.nextBatchPeople} thư ({props.nextBatchGroups} nhóm).
       </p>
       <form action={testAction} className="flex flex-wrap items-center gap-3">
-        <Submit label="Gửi thử cho tôi (2 thư)" pendingLabel="Đang gửi thử…" />
+        <input type="hidden" name="variant" value={variant} />
+        <Submit label={variant === "special" ? "Gửi thử cho tôi (2 thư mẫu sau 15/11)" : "Gửi thử cho tôi (2 thư)"} pendingLabel="Đang gửi thử…" />
         <Message state={testState} />
       </form>
       {props.blocked.length ? (
@@ -256,8 +262,9 @@ export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
       ) : confirming === "one" ? (
         <form action={sendAction} className="flex flex-wrap items-center gap-3" data-testid="match-result-send-confirm">
           <input type="hidden" name="confirmed" value="yes" />
+          <input type="hidden" name="variant" value={variant} />
           <span className="text-sm text-vam-ink">
-            Gửi {props.nextBatchPeople} thư kết quả ({props.nextBatchGroups} nhóm mentor) tới người thật?
+            Gửi {props.nextBatchPeople} {letter} ({props.nextBatchGroups} nhóm mentor) tới người thật?
           </span>
           <Submit label="Xác nhận gửi" pendingLabel="Đang gửi…" />
           <button type="button" onClick={() => setConfirming(null)} className="rounded-md border border-vam-line px-3 py-2 text-sm text-slate-700">
@@ -267,7 +274,7 @@ export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
       ) : confirming === "continuous" ? (
         <div className="flex flex-wrap items-center gap-3" data-testid="match-result-continuous-confirm">
           <span className="text-sm text-vam-ink">
-            Gửi liên tục tới người thật? Hôm nay gửi được khoảng {todayEstimate} thư; phần còn lại bấm lại sau khi hạn mức mở lại. Giữ trang
+            Gửi liên tục {letter} tới người thật? Hôm nay gửi được khoảng {todayEstimate} thư; phần còn lại bấm lại sau khi hạn mức mở lại. Giữ trang
             này mở trong lúc gửi.
           </span>
           <button
@@ -334,7 +341,19 @@ export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
 }
 
 /** Gửi riêng một người (thí điểm, hoặc gửi lại khi cặp đổi). Bước xác nhận nói rõ link cũ hết hiệu lực. */
-export function ResendButton({ personId, role, name, sentBefore }: { personId: string; role: "mentor" | "mentee"; name: string; sentBefore: boolean }) {
+export function ResendButton({
+  personId,
+  role,
+  name,
+  sentBefore,
+  variant = "standard"
+}: {
+  personId: string;
+  role: "mentor" | "mentee";
+  name: string;
+  sentBefore: boolean;
+  variant?: ResultVariant;
+}) {
   const [state, action] = useFormState(resendMatchResultAction, ROUND2_IDLE);
   const [confirming, setConfirming] = useState(false);
   if (!confirming) {
@@ -352,8 +371,10 @@ export function ResendButton({ personId, role, name, sentBefore }: { personId: s
       <input type="hidden" name="confirmed" value="yes" />
       <input type="hidden" name="personId" value={personId} />
       <input type="hidden" name="role" value={role} />
+      <input type="hidden" name="variant" value={variant} />
       <span className="text-xs text-vam-ink">
-        Gửi thư kết quả tới {name}?{sentBefore ? " Link trong thư trước sẽ hết hiệu lực." : ""}
+        Gửi {variant === "special" ? "thư sau 15/11" : "thư kết quả"} tới {name}?
+        {sentBefore && variant === "standard" ? " Link trong thư trước sẽ hết hiệu lực." : ""}
       </span>
       <div className="flex gap-2">
         <Submit label="Xác nhận" pendingLabel="Đang gửi…" />

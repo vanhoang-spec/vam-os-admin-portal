@@ -33,6 +33,17 @@ export type NoticeInfo = {
 
 export type RecipientStatus = "pending" | "held" | "missing_email" | "too_new" | "sent" | "changed_since_sent";
 
+/**
+ * Loại thư: "standard" = thư thường có link hồ sơ; "special" = thư "MATCHING SAU 15/11" cho nhóm mentor
+ * còn phải dự Training 15/11 (danh sách giữ lại) và mentee của họ (BTC 23/10/2026).
+ */
+export type ResultVariant = "standard" | "special";
+
+/** Loại thư từ form/trình duyệt: chỉ đúng chữ "special" mới là thư sau 15/11; còn lại là thư thường. */
+export function parseVariant(value: unknown): ResultVariant {
+  return value === "special" ? "special" : "standard";
+}
+
 export type HoldReason = "mentor_held" | "partner_held" | "self_inactive" | "partner_inactive" | "holds_unreadable";
 
 export type RecipientPartner = { personId: string; fullName: string | null; matchId: string; round: number | null };

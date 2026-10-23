@@ -18,6 +18,7 @@ import {
   missingFieldLabels,
   parseHoldEmailInput,
   parseSkipKeys,
+  parseVariant,
   planDispatchBatch,
   profileCoverage,
   resolveHoldEmails,
@@ -377,5 +378,12 @@ describe("danh sách bỏ qua của chế độ gửi liên tục", () => {
   it("cắt ở trần", () => {
     const many = Array.from({ length: MAX_SKIP_KEYS + 50 }, (_, i) => `mentee:e0000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
     expect(parseSkipKeys(many).size).toBe(MAX_SKIP_KEYS);
+  });
+});
+
+describe("loại thư từ form", () => {
+  it("chỉ đúng chữ special là thư sau 15/11; mọi thứ khác là thư thường", () => {
+    expect(parseVariant("special")).toBe("special");
+    for (const v of ["standard", "SPECIAL", " special", "", null, undefined, 1, ["special"]]) expect(parseVariant(v)).toBe("standard");
   });
 });

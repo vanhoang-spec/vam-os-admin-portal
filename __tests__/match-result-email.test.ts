@@ -11,13 +11,15 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase-server", () => ({ getSupabaseServiceRoleClient: vi.fn(), getSupabaseServerClient: vi.fn() }));
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { sendMatchResultMentee, sendMatchResultMentor } from "@/lib/email";
+import { sendMatchResultMentee, sendMatchResultMenteeLate, sendMatchResultMentor, sendMatchResultMentorLate } from "@/lib/email";
 import {
   MATCH_RESULT_MENTEE_TRAINING_URL,
   MATCH_RESULT_MENTOR_TRAINING_URL,
   MATCH_RESULT_SUBJECT,
   buildMatchResultMenteeEmail,
-  buildMatchResultMentorEmail
+  buildMatchResultMenteeLateEmail,
+  buildMatchResultMentorEmail,
+  buildMatchResultMentorLateEmail
 } from "@/lib/email-core";
 import { outboundEmailKindLabel } from "@/lib/outbound-emails-core";
 import { HANDBOOKS } from "@/lib/handbook";
@@ -291,5 +293,118 @@ describe("4. gửi thư", () => {
   it("sổ thư có nhãn tiếng Việt cho hai loại thư", () => {
     expect(outboundEmailKindLabel("mentee_mentor_intro")).toBe("Kết quả Matching — gửi mentee");
     expect(outboundEmailKindLabel("mentor_mentee_package")).toBe("Kết quả Matching — gửi mentor");
+  });
+});
+
+describe("5. mẫu sau 15/11 (nhóm mentor cần Training 15/11)", () => {
+  const menteeLate = () => buildMatchResultMenteeLateEmail({ menteeName: "Trần Mỹ Anh", handbookUrl: HANDBOOK, kickoffRegisterUrl: null });
+  const mentorLate = (names = ["Trần Mỹ Anh", "Lê Hoà"]) =>
+    buildMatchResultMentorLateEmail({ mentorName: "Nguyễn Văn Bình", menteeNames: names, handbookUrl: HANDBOOK, kickoffRegisterUrl: null });
+
+  it("mentee: đúng các câu của mẫu MENTEE MATCHING SAU 15/11, chưa có thông tin mentor", () => {
+    const mail = menteeLate();
+    expect(mail.subject).toBe(MATCH_RESULT_SUBJECT);
+    for (const line of [
+      "Thân gửi bạn Trần Mỹ Anh,",
+      "Sau quá trình tuyển chọn và kết nối, BTC hy vọng rằng hành trình Mentoring kéo dài 09 tháng sắp tới sẽ mang đến cho bạn những trải nghiệm ý nghĩa",
+      "1. MENTOR ĐỒNG HÀNH",
+      "Bạn sẽ nhận được thông tin Mentor đồng hành và chính thức kết nối với anh/chị sau ngày 15/11/2026.",
+      "2. MENTEE HANDBOOK",
+      `Tài liệu hướng dẫn: ${HANDBOOK}`,
+      "3. TRAINING MENTEE ĐẦU VÀO",
+      "(nội dung mỗi buổi đều giống nhau):",
+      `Link đăng ký tham gia: ${MATCH_RESULT_MENTEE_TRAINING_URL}`,
+      "4. CHƯƠNG TRÌNH KICK - OFF UEH MENTORING MÙA 12",
+      "Link đăng ký tham gia: BTC sẽ cập nhật sau.",
+      "Hẹn gặp bạn trong các hoạt động sắp tới!"
+    ]) {
+      expect(mail.text, line).toContain(line);
+    }
+    expect(mail.text).not.toContain("THÔNG TIN MENTOR ĐỒNG HÀNH");
+    expect(mail.text).not.toContain("Hồ sơ Mentor");
+    expect(mail.html).not.toContain("/ho-so/");
+    // Không có link hồ sơ thì không có dòng nhắc "đường dẫn hồ sơ là riêng".
+    expect(mail.text).not.toContain("Đường dẫn hồ sơ");
+  });
+
+  it("mentor: chỉ họ tên mentee, không link; không có mục Training Mentor; Kick-off là mục 3", () => {
+    const mail = mentorLate();
+    for (const line of [
+      "Kính gửi Anh/Chị Nguyễn Văn Bình,",
+      "1. THÔNG TIN MENTEE ĐỒNG HÀNH",
+      "Mentee 1: Trần Mỹ Anh",
+      "Mentee 2: Lê Hoà",
+      "Hiện tại, Anh/Chị vẫn cần hoàn thành chương trình Training ngày 15/11 để được trở thành mentor chính thức mùa 12. Vì vậy, sau khi Anh/Chị tham gia Training, BTC sẽ kết nối chính thức giữa Mentor và Mentee.",
+      "Mùa 12 tất cả mentee đều được training từ 1/11 đến 15/11 để xác định mục tiêu phát triển cá nhân",
+      "2. MENTOR HANDBOOK",
+      "3. CHƯƠNG TRÌNH KICK - OFF UEH MENTORING MÙA 12",
+      "Kính chúc Anh/Chị và Mentee sẽ có một hành trình 09 tháng thật ý nghĩa"
+    ]) {
+      expect(mail.text, line).toContain(line);
+    }
+    expect(mail.text).not.toContain("TRAINING MENTOR");
+    expect(mail.text).not.toContain(MATCH_RESULT_MENTOR_TRAINING_URL);
+    expect(mail.text).not.toContain("4. CHƯƠNG TRÌNH");
+    expect(mail.html).not.toContain("/ho-so/");
+    expect(mail.text).not.toContain("Mentee 3:");
+  });
+
+  it("tên mentee không thoát được HTML", () => {
+    const mail = mentorLate(['<img src=x onerror="alert(1)">']);
+    expect(mail.html).not.toContain("<img");
+  });
+});
+
+describe("6. gửi mẫu sau 15/11", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    logged.payloads = [];
+    for (const key of TOUCHED_ENV) ORIGINAL_ENV.set(key, process.env[key]);
+    process.env.VAM_OS_EMAIL_ENABLED = "true";
+    process.env.VERCEL_ENV = "production";
+    process.env.VAM_OS_EMAIL_PROVIDER = "resend";
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.VAM_OS_EMAIL_FROM = "Ban tổ chức VAM <no-reply@vam.test>";
+    delete process.env.VAM_OS_PUBLIC_BASE_URL;
+    (getSupabaseServiceRoleClient as Mock).mockReturnValue(makeClient());
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: "x" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    HANDBOOKS.mentee.ready = true;
+    HANDBOOKS.mentor.ready = true;
+  });
+  afterEach(() => {
+    for (const key of TOUCHED_ENV) {
+      const value = ORIGINAL_ENV.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    vi.unstubAllGlobals();
+    HANDBOOKS.mentee.ready = REAL_READY.mentee;
+    HANDBOOKS.mentor.ready = REAL_READY.mentor;
+  });
+
+  it("thư thật: đúng loại thư, gắn đúng dòng thông báo, link Handbook trên VAM OS, không link hồ sơ", async () => {
+    await sendMatchResultMentorLate({ toEmail: "mentor@example.test", mentorName: "Bình", menteeNames: ["An"], kickoffRegisterUrl: null, noticeId: NOTICE, requestOrigin: ORIGIN, test: false });
+    const sent = body();
+    expect(String(sent.text)).toContain(`Tài liệu hướng dẫn: ${ORIGIN}/tai-lieu/handbook-mentor.pdf`);
+    expect(String(sent.html)).not.toContain("/ho-so/");
+    expect(String(sent.subject)).toBe(MATCH_RESULT_SUBJECT);
+    expect(logged.payloads[0]).toMatchObject({ kind: "mentor_mentee_package", related_table: "match_result_notices", related_id: NOTICE });
+  });
+
+  it("thư thử: nói rõ là thư thử, không gắn dòng nào", async () => {
+    await sendMatchResultMenteeLate({ toEmail: "btc@example.test", menteeName: "An", kickoffRegisterUrl: null, noticeId: null, requestOrigin: ORIGIN, test: true, testFor: "mentee An" });
+    const sent = body();
+    expect(String(sent.subject)).toMatch(/^\[THƯ THỬ\] .* — bản gửi mentee An \(gửi lúc /);
+    expect(logged.payloads[0]).toMatchObject({ kind: "mentee_mentor_intro" });
+    expect(logged.payloads[0].related_id ?? null).toBeNull();
+  });
+
+  it("thư thật không có dòng thông báo, hoặc chưa có file Handbook, hoặc mentor không có mentee: không gửi", async () => {
+    expect((await sendMatchResultMenteeLate({ toEmail: "a@x.test", menteeName: "An", kickoffRegisterUrl: null, noticeId: null, requestOrigin: ORIGIN, test: false })).ok).toBe(false);
+    expect((await sendMatchResultMentorLate({ toEmail: "a@x.test", mentorName: "B", menteeNames: [], kickoffRegisterUrl: null, noticeId: NOTICE, requestOrigin: ORIGIN, test: false })).ok).toBe(false);
+    HANDBOOKS.mentee.ready = false;
+    expect((await sendMatchResultMenteeLate({ toEmail: "a@x.test", menteeName: "An", kickoffRegisterUrl: null, noticeId: NOTICE, requestOrigin: ORIGIN, test: false })).ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

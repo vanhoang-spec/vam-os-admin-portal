@@ -26,13 +26,13 @@ export const HANDBOOKS: Record<HandbookRole, Handbook> = {
     path: `${HANDBOOK_PATH_PREFIX}/handbook-mentee.pdf`,
     source: "docs/handbook/handbook-mentee.pdf",
     filename: "UEH-Mentoring-Mua-12-Mentee-Handbook.pdf",
-    ready: false
+    ready: true
   },
   mentor: {
     path: `${HANDBOOK_PATH_PREFIX}/handbook-mentor.pdf`,
     source: "docs/handbook/handbook-mentor.pdf",
     filename: "UEH-Mentoring-Mua-12-Mentor-Handbook.pdf",
-    ready: false
+    ready: true
   }
 };
 

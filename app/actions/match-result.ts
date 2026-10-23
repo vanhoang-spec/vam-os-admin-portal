@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { addMatchResultHolds, confirmMatchResultHolds, removeMatchResultHold, saveMatchResultSettings } from "@/lib/match-result";
 import { resendMatchResultNotice, runMatchResultDispatch, sendMatchResultGroupTest, sendMatchResultTest } from "@/lib/match-result-dispatch";
 import type { MatchResultBatchResult } from "@/lib/match-result-action-types";
-import { parseSkipKeys } from "@/lib/match-result-core";
+import { parseSkipKeys, parseVariant } from "@/lib/match-result-core";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
 
 const PATH = "/matches/ket-qua";
@@ -35,16 +35,16 @@ export async function confirmMatchResultHoldsAction(_prev: Round2ActionState, fo
   return state(await confirmMatchResultHolds({ fingerprint: form.get("fingerprint") }));
 }
 
-/** Gửi thử bản mentee và bản mentor cho chính người bấm. */
-export async function sendMatchResultTestAction(_prev: Round2ActionState, _form: FormData): Promise<Round2ActionState> {
-  const result = await sendMatchResultTest();
+/** Gửi thử bản mentee và bản mentor (của loại thư trên form) cho chính người bấm. */
+export async function sendMatchResultTestAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+  const result = await sendMatchResultTest({ variant: parseVariant(form.get("variant")) });
   return { status: result.ok ? "ok" : "error", message: result.message };
 }
 
 /** Gửi thật một lô (trọn từng nhóm mentor). Chỉ chạy khi form mang dấu của bước xác nhận thứ hai. */
 export async function sendMatchResultAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
   if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước khi gửi." };
-  const result = await runMatchResultDispatch();
+  const result = await runMatchResultDispatch({ variant: parseVariant(form.get("variant")) });
   revalidatePath(PATH);
   return { status: result.ok ? "ok" : "error", message: result.message };
 }
@@ -52,7 +52,7 @@ export async function sendMatchResultAction(_prev: Round2ActionState, form: Form
 /** Gửi riêng / gửi lại một người. Mã link mới — link trong thư trước của người đó hết hiệu lực. */
 export async function resendMatchResultAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
   if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần bấm xác nhận trước khi gửi." };
-  const result = await resendMatchResultNotice({ personId: form.get("personId"), role: form.get("role") });
+  const result = await resendMatchResultNotice({ personId: form.get("personId"), role: form.get("role"), variant: parseVariant(form.get("variant")) });
   revalidatePath(PATH);
   return { status: result.ok ? "ok" : "error", message: result.message };
 }
@@ -67,11 +67,11 @@ export async function sendMatchResultGroupTestAction(_prev: Round2ActionState, f
  * Một vòng của chế độ gửi liên tục: trang gọi lại hàm này tới khi `more` = false. Chỉ chạy khi trang gửi
  * kèm dấu đã qua bước xác nhận; quyền, hạn mức và cách chia lô do máy chủ tự kiểm ở mỗi vòng.
  */
-export async function sendMatchResultBatchAction(input: { confirmed?: unknown; skip?: unknown }): Promise<MatchResultBatchResult> {
+export async function sendMatchResultBatchAction(input: { confirmed?: unknown; skip?: unknown; variant?: unknown }): Promise<MatchResultBatchResult> {
   if (input?.confirmed !== true) {
     return { ok: false, message: "Cần bấm xác nhận trước khi gửi.", sent: 0, failed: 0, left: 0, failedKeys: [], more: false };
   }
-  const result = await runMatchResultDispatch({ skip: parseSkipKeys(input.skip) });
+  const result = await runMatchResultDispatch({ skip: parseSkipKeys(input.skip), variant: parseVariant(input.variant) });
   return {
     ok: result.ok,
     message: result.message,
