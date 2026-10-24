@@ -101,9 +101,14 @@ export const CUSTOM_FORM_STATUS_LABELS: Record<CustomFormStatus, string> = {
 export const CUSTOM_FORMS_PATH = "/forms";
 export const CUSTOM_FORM_PUBLIC_PREFIX = "/f";
 
-/** Câu đồng ý luôn có ở cuối mọi form: form có thể thu CCCD, ngày sinh, số điện thoại. */
+/**
+ * Câu đồng ý luôn có ở cuối mọi form: form có thể thu CCCD, ngày sinh, số điện thoại.
+ * Mọi form /f/… đọc câu này lúc hiển thị (không lưu riêng theo form), nên đổi ở đây là
+ * đổi cho mọi form, cả form đã tạo. Người điền biết chương trình là "UEH Mentoring"
+ * (người dùng yêu cầu 24/10/2026), không phải tên tổ chức đứng sau.
+ */
 export const CUSTOM_FORM_CONSENT_TEXT =
-  "Tôi đồng ý để Vietnam Alumni Mentoring thu thập và xử lý các thông tin trên cho mục đích tuyển chọn và tổ chức chương trình này.";
+  "Tôi đồng ý để UEH Mentoring thu thập và xử lý các thông tin trên cho mục đích tuyển chọn và tổ chức chương trình này.";
 
 export type CustomFormField = {
   id: string;

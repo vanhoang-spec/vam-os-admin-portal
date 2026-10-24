@@ -9,6 +9,7 @@ import {
   sendMenteeExemptionTestAction
 } from "@/app/actions/mentee-exemption";
 import { EXEMPTION_IDLE, type ExemptionActionState } from "@/lib/mentee-exemption-action-types";
+import { dailyEmailLimitNumber } from "@/lib/email-quota-core";
 
 function Message({ state }: { state: ExemptionActionState }) {
   if (state.status === "idle") return null;
@@ -156,7 +157,7 @@ export function ExemptionSendPanel(props: SendPanelProps) {
   return (
     <div className="grid gap-3" data-testid="exemption-send">
       <p className="text-sm text-slate-600">
-        Đang chờ thư: <strong>{props.pending}</strong> người · Thư cả hệ thống trong 24 giờ: {props.sentInWindow ?? "?"}/1.000 · Mỗi lần bấm gửi tối đa{" "}
+        Đang chờ thư: <strong>{props.pending}</strong> người · Thư cả hệ thống trong 24 giờ: {props.sentInWindow ?? "?"}/{dailyEmailLimitNumber()} · Mỗi lần bấm gửi tối đa{" "}
         {props.allowance} thư.
       </p>
       <form action={testAction} className="flex flex-wrap items-center gap-3">

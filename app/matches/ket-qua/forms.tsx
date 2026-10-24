@@ -18,6 +18,7 @@ import { Message, Submit } from "@/app/matches/vong-2/bao-cao/dispatch-panel";
 import type { MatchResultBatchResult } from "@/lib/match-result-action-types";
 import type { ResultVariant } from "@/lib/match-result-core";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
+import { dailyEmailLimitNumber } from "@/lib/email-quota-core";
 
 const INPUT = "mt-1 block w-full rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm";
 
@@ -244,7 +245,7 @@ export function MatchResultSendPanel(props: MatchResultSendPanelProps) {
     <div className="grid gap-3" data-testid="match-result-send" data-variant={variant}>
       <p className="text-sm text-slate-600">
         Chờ gửi: <strong>{props.readyPeople}</strong> người trong <strong>{props.readyGroups}</strong> nhóm mentor · Thư cả hệ thống trong 24 giờ:{" "}
-        {props.sentInWindow ?? "?"}/1.000 · Lần bấm kế tiếp: {props.nextBatchPeople} thư ({props.nextBatchGroups} nhóm).
+        {props.sentInWindow ?? "?"}/{dailyEmailLimitNumber()} · Lần bấm kế tiếp: {props.nextBatchPeople} thư ({props.nextBatchGroups} nhóm).
       </p>
       <form action={testAction} className="flex flex-wrap items-center gap-3">
         <input type="hidden" name="variant" value={variant} />

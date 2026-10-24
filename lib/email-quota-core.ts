@@ -38,5 +38,13 @@ export const QUOTA_WINDOW_MS = 24 * 60 * 60_000;
 
 /** "1.000 thư/24 giờ" — cùng cách viết số với mọi con số khác trên màn hình. */
 export function dailyEmailLimitLabel(): string {
-  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(DAILY_EMAIL_LIMIT)} thư/24 giờ`;
+  return `${dailyEmailLimitNumber()} thư/24 giờ`;
+}
+
+/**
+ * "3.000" — vế sau của "đã gửi x/3.000" trên các khung gửi. Bốn khung từng gõ cứng "/1.000" nên vẫn ghi
+ * 1.000 sau khi trần lên 3.000 (24/10/2026): "1200/1.000" đọc như đã vượt trần trong khi còn chỗ.
+ */
+export function dailyEmailLimitNumber(): string {
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(DAILY_EMAIL_LIMIT);
 }
