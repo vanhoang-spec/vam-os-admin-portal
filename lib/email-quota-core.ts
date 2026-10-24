@@ -20,11 +20,14 @@ export const EMAIL_PROVIDER_NAME = "Resend";
  * Trần thư trong 24 giờ trượt — mức TỰ ĐẶT, không phải trần của nhà cung cấp.
  *
  * Từ 06/10/2026 thư đi qua Resend gói Pro: 50.000 thư/THÁNG, không giới hạn theo
- * ngày, và dùng chung với các dự án khác trong cùng nhóm Resend. 1.000 thư/ngày
- * đủ cho đợt dồn nhất của một mùa (khoảng 2.700 thư rải vài ngày) mà một lần
- * bấm nhầm cũng không đốt hết ngân sách tháng của cả nhóm. Đổi gói thì đổi số này.
+ * ngày, và dùng chung với các dự án khác trong cùng nhóm Resend.
+ *
+ * 1.000 → 3.000 ngày 24/10/2026 (quyết định của người dùng): một đợt "Thông báo chung"
+ * 742 thư buổi sáng đã chặn thư kết quả matching cả ngày. Cái giá: trần ngày không còn
+ * tự giữ ngân sách tháng — dùng kín 3.000 thư/ngày thì 50.000 thư hết sau khoảng 17 ngày.
+ * Tháng 10/2026, VAM OS dùng 5.226 thư trong 24 ngày. Đổi gói thì đổi số này.
  */
-export const DAILY_EMAIL_LIMIT = 1000;
+export const DAILY_EMAIL_LIMIT = 3000;
 
 /**
  * Cửa sổ đếm thư đã gửi: 24 GIỜ TRƯỢT, không theo ngày lịch — không có gì bảo

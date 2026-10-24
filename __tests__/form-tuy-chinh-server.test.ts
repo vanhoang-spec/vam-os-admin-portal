@@ -11,6 +11,7 @@
  *     → báo đúng ô email; trường ẩn không lộ ra trang công khai, form nháp không lộ tiêu đề.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 
 vi.mock("server-only", () => ({}));
@@ -352,7 +353,7 @@ describe("3b. thư tự động gửi người điền (BTC 15/10/2026)", () => 
 
   it("chạm trần chung của hệ thống (chừa 40 thư cho thư khác): bỏ qua thư, câu trả lời VẪN được ghi", async () => {
     withReply();
-    db.tables.outbound_emails = sentRows(960);
+    db.tables.outbound_emails = sentRows(DAILY_EMAIL_LIMIT - 40);
     expect((await submit()).ok).toBe(true);
     expect(db.writes.filter((w) => w.table === "custom_form_responses")).toHaveLength(1);
     expect(vi.mocked(sendCustomFormReceipt)).not.toHaveBeenCalled();

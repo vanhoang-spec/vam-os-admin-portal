@@ -6,7 +6,7 @@ import "server-only";
  * Khuôn là bộ gửi thư mời chọn ca (lib/mentee-invite-dispatch.ts), vốn đã chạy thật:
  * cấp link cho người chưa có, CLAIM nguyên tử trước khi gửi để hai tab bấm cùng lúc
  * không ai nhận hai thư, dừng ngay khi nhà cung cấp báo 429, nhả mọi claim chưa gửi.
- * Dùng chung trần thư 1.000/24 giờ và phần chừa 80 thư cho các thư khác của hệ thống.
+ * Dùng chung trần thư 24 giờ (DAILY_EMAIL_LIMIT) và phần chừa 80 thư cho các thư khác của hệ thống.
  *
  * Gửi được khi đã đặt giờ mở và vòng chưa đóng, kể cả khi giờ mở còn ở tương lai (BTC
  * 14/10/2026): gửi hết thư trước giờ mở để mọi mentor bắt đầu cùng một lúc; thư ghi giờ mở.

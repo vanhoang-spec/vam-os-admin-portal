@@ -237,7 +237,7 @@ export type DispatchGroup = {
 
 /**
  * Nhóm gửi theo mentor (BTC 22/10/2026): mentor và mọi mentee của họ đi cùng một lần bấm, để hai bên
- * của một cặp nhận thư cùng ngày. Hạn mức 1.000 thư/24 giờ không đủ cho cả mùa trong một ngày, nên
+ * của một cặp nhận thư cùng ngày. Hạn mức ngày (lúc viết: 1.000 thư/24 giờ) không đủ cho cả mùa trong một ngày, nên
  * cắt lô ở giữa một nhóm là để mentee biết mentor của mình hôm nay còn mentor thì mai mới biết.
  *
  * Nhóm có người là "cặp mới" thì CẢ nhóm chờ: BTC còn đang ghép thêm cho mentor đó. Người không ở

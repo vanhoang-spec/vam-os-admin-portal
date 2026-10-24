@@ -5,7 +5,7 @@ import "server-only";
  *
  * Khuôn là bộ gửi Vòng 2 (lib/matching-round2-dispatch.ts), vốn đã chạy thật: CLAIM nguyên tử trước khi
  * gửi để hai tab bấm cùng lúc không ai nhận hai thư, dừng ngay khi nhà cung cấp báo 429, nhả mọi claim
- * chưa gửi, dùng chung trần 1.000 thư/24 giờ và phần chừa 80 thư cho các thư khác.
+ * chưa gửi, dùng chung trần thư 24 giờ (DAILY_EMAIL_LIMIT) và phần chừa 80 thư cho các thư khác.
  *
  * Khác Vòng 2 ở ba chỗ:
  *   1. Lô cắt theo NHÓM MENTOR (BTC 22/10): mentor và mọi mentee của họ đi cùng một lần bấm, để hai bên

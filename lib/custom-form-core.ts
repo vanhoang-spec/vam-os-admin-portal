@@ -83,7 +83,7 @@ export const CUSTOM_FORM_LIMITS = {
 } as const;
 
 /**
- * Trần thư tự động của MỘT form trong 24 giờ, và phần chừa lại dưới trần chung 1.000 thư/24 giờ.
+ * Trần thư tự động của MỘT form trong 24 giờ, và phần chừa lại dưới trần chung (DAILY_EMAIL_LIMIT).
  * Ai cũng gõ được email bất kỳ vào form công khai: không có trần riêng thì một người gửi form liên
  * tục với email khác nhau sẽ đốt hết hạn mức của cả hệ thống (thư mời, xác nhận lịch…).
  */
