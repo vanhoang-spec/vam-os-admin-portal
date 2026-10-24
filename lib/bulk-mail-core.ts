@@ -25,11 +25,30 @@ import { TEMPLATE_SPECS, type TemplateKind } from "@/lib/email-templates-core";
  * không — để một nhóm phủ được mọi buổi: orientation của mentor, của mentee, và
  * mọi sự kiện sau này, mà không phải thêm mã cho từng buổi.
  */
-export const BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected", "mentee_invite_withdrawn", "event"] as const;
+export const BULK_AUDIENCES = [
+  "mentee",
+  "mentor",
+  "both",
+  "staff",
+  "returning_mentor",
+  "mentee_cv_rejected",
+  "mentee_invite_withdrawn",
+  "mentee_interview_rejected",
+  "event"
+] as const;
 export type BulkAudience = (typeof BULK_AUDIENCES)[number];
 
 /** Nhóm cố định: không mang tham số, nên đếm sẵn được để hiện ngay trong ô chọn. */
-export const FIXED_BULK_AUDIENCES = ["mentee", "mentor", "both", "staff", "returning_mentor", "mentee_cv_rejected", "mentee_invite_withdrawn"] as const;
+export const FIXED_BULK_AUDIENCES = [
+  "mentee",
+  "mentor",
+  "both",
+  "staff",
+  "returning_mentor",
+  "mentee_cv_rejected",
+  "mentee_invite_withdrawn",
+  "mentee_interview_rejected"
+] as const;
 export type FixedBulkAudience = (typeof FIXED_BULK_AUDIENCES)[number];
 
 /**
@@ -44,6 +63,7 @@ export const BULK_AUDIENCE_LABELS: Record<BulkAudience, string> = {
   returning_mentor: "Mentor đã xác nhận quay lại mùa này",
   mentee_cv_rejected: "Mentee rớt vòng hồ sơ (CV)",
   mentee_invite_withdrawn: "Mentee rớt CV sau khi đã nhận thư mời phỏng vấn",
+  mentee_interview_rejected: "Mentee không trúng tuyển vòng phỏng vấn (rớt, không phỏng vấn, không chọn ca)",
   event: "Người đã đăng ký một sự kiện"
 };
 
@@ -57,8 +77,91 @@ export const BULK_AUDIENCE_HINTS: Record<FixedBulkAudience, string> = {
   mentee_cv_rejected:
     "Đơn mentee bị reviewer đề xuất reject, hoặc đề xuất khác dưới 13 điểm, và chưa từng được mời phỏng vấn. Không gồm người đã được mời, đã đậu, đang là mentor hay BTC, và người đã nhận thư ở một lô gửi trước của nhóm này.",
   mentee_invite_withdrawn:
-    "Mentee đã nhận thư mời chọn ca phỏng vấn, sau đó BTC chuyển “Không đạt” vòng hồ sơ — chưa từng giữ chỗ hay check-in. Dùng mẫu thư có nhắc tới thư mời đã nhận. Không gồm người đã nhận thư rớt ở lô trước."
+    "Mentee đã nhận thư mời chọn ca phỏng vấn, sau đó BTC chuyển “Không đạt” vòng hồ sơ — chưa từng giữ chỗ hay check-in. Dùng mẫu thư có nhắc tới thư mời đã nhận. Không gồm người đã nhận thư rớt ở lô trước.",
+  mentee_interview_rejected:
+    "Mentee rớt phỏng vấn; đã check-in, đã phân bàn hoặc đã chọn ca mà không phỏng vấn; và người đã nhận thư mời mà không chọn ca. Không gồm người đã đậu, đang chờ BTC xem xét thêm, đã huỷ chỗ mà không chọn lại, đang tham gia mùa này, là BTC, người đã nhận thư rớt ở lô trước, và 5 bạn BTC giữ lại (24/10/2026)."
 };
+
+/**
+ * Thư "không trúng tuyển vòng phỏng vấn" mentee mùa 12 (BTC 24/10/2026) — đơn nào vào nhóm nào.
+ *
+ * Khớp đúng con số BTC đếm: 197 bạn (rớt / check-in hoặc phân bàn mà không phỏng vấn / chọn ca mà
+ * không đến) + 90 bạn được mời mà không chọn ca = 287. "Phân bàn" theo cách BTC đếm gồm cả người
+ * đã chọn ca mà không đến.
+ *
+ * Ba nhóm đầu theo đúng cách trang Tiến độ phỏng vấn mentee tính (lib/mentee-progress-core.ts): đã
+ * có kết quả thì theo kết quả; chưa có thì phân bàn → check-in. Không ai thuộc hai nhóm. KHÔNG vào
+ * nhóm nào: đã đậu, "cần BTC xem xét thêm" (chưa chốt), đã huỷ chỗ / vắng đợt 1 rồi không chọn lại
+ * (BTC không đếm), người chưa từng nhận thư mời, và người được mời nhưng đơn đã "Không đạt" (12 bạn
+ * bị rút lời mời 08/10 — đã nhận thư riêng).
+ */
+export type MenteeInterviewLetterGroup = "failed" | "checked_in" | "assigned" | "booked_no_show" | "invited_no_booking";
+
+export const MENTEE_INTERVIEW_LETTER_GROUP_LABELS: Record<MenteeInterviewLetterGroup, string> = {
+  failed: "Rớt phỏng vấn",
+  checked_in: "Đã check-in, không phỏng vấn",
+  assigned: "Đã phân bàn, không phỏng vấn",
+  booked_no_show: "Đã chọn ca, không đến",
+  invited_no_booking: "Được mời, không chọn ca"
+};
+
+export function menteeInterviewLetterGroup(input: {
+  applicationStatus: string | null;
+  operation: { outcome: string | null; checked_in_at: string | null; interviewer_id: string | null } | null;
+  /** Có một chỗ đang giữ (booked). */
+  hasBookedSeat: boolean;
+  /** Từng có bất kỳ chỗ nào (kể cả đã huỷ). */
+  hadAnyBooking: boolean;
+  /** Thư mời chọn ca đã thật sự gửi đi. */
+  inviteSent: boolean;
+}): MenteeInterviewLetterGroup | null {
+  const op = input.operation;
+  if (op?.outcome === "rejected") return "failed";
+  if (op?.outcome) return null;
+  if (op?.interviewer_id) return "assigned";
+  if (op?.checked_in_at) return "checked_in";
+  if (input.hasBookedSeat) return "booked_no_show";
+  if (input.hadAnyBooking) return null;
+  if (input.inviteSent && input.applicationStatus !== "rejected_or_not_fit") return "invited_no_booking";
+  return null;
+}
+
+/**
+ * 5 bạn BTC dặn KHÔNG gửi thư này (24/10/2026) — cả năm đều "đã phân bàn, không phỏng vấn". Ghi đúng
+ * tên trên hệ thống: BTC viết "Lê Hoàn Thịnh", hệ thống ghi "Lê Hoàng Thịnh" (người duy nhất gần giống ở
+ * nhóm đó). So sau khi bỏ dấu, chữ hoa, khoảng trắng thừa — "Thúy" và "Thuý" là một.
+ */
+export const MENTEE_INTERVIEW_LETTER_HELD_NAMES = [
+  "Vũ Thị Thúy Vy",
+  "Đỗ Huỳnh Uyên Nhi",
+  "Tống Huỳnh Phương Nguyên",
+  "Đinh Ngọc Kim Hoàn",
+  "Lê Hoàng Thịnh"
+] as const;
+
+const COMBINING_MARKS = new RegExp(`[${String.fromCharCode(0x300)}-${String.fromCharCode(0x36f)}]`, "g");
+
+/** Họ tên để so: bỏ dấu (cả vị trí dấu thanh), đ→d, chữ thường, gộp khoảng trắng. */
+export function foldPersonName(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(COMBINING_MARKS, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(" ");
+}
+
+const HELD_NAME_KEYS = new Set(MENTEE_INTERVIEW_LETTER_HELD_NAMES.map(foldPersonName));
+
+export function isHeldFromInterviewLetter(...names: unknown[]): boolean {
+  return names.some((n) => {
+    const key = foldPersonName(n);
+    return key !== "" && HELD_NAME_KEYS.has(key);
+  });
+}
 
 /**
  * Luật rớt vòng hồ sơ mentee (BTC 07/10/2026): reviewer đề xuất reject → rớt;
