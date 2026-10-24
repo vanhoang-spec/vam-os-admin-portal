@@ -40,9 +40,12 @@ describe("Kế hoạch chốt 29/09 — gửi thư mời ngay, địa điểm b�
   });
 
   it("không hứa vượt hạn mức email hiện có, và số liệu khớp hằng số nguồn", () => {
-    expect(text).toContain(`${DAILY_EMAIL_LIMIT} thư/24 giờ`);
+    // Văn bản ghi mức của lúc viết (1000/24 giờ, 01/10/2026); trần sau đó chỉ nâng lên
+    // (3.000 từ 24/10/2026) — điều cần giữ là văn bản không hứa nhiều hơn trần đang có.
+    const promised = Array.from(text.matchAll(/(\d+) thư\/24 giờ/g), (m) => Number(m[1]));
+    expect(promised.length).toBeGreaterThanOrEqual(2);
+    for (const n of promised) expect(n).toBeLessThanOrEqual(DAILY_EMAIL_LIMIT);
     expect(text).toContain(`chừa ${DISPATCH_RESERVE} thư`);
-    expect(text).toContain(`${DAILY_EMAIL_LIMIT - DISPATCH_RESERVE} thư/24 giờ`);
     expect(text).toContain(`tối đa ${DISPATCH_MAX_PER_RUN} thư`);
   });
 

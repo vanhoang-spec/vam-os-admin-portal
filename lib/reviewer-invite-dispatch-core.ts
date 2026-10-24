@@ -9,7 +9,7 @@
  * DÙNG CHUNG MỘT HẠN MỨC THẬT VỚI BỘ GỬI THƯ MỜI MENTEE
  * ---------------------------------------------------------------------------
  * `lib/mentee-invite-dispatch-core.ts` tự giới hạn ở
- * `DAILY_EMAIL_LIMIT - DISPATCH_RESERVE` (920/1.000) để CHỪA phần còn lại (80)
+ * `DAILY_EMAIL_LIMIT - DISPATCH_RESERVE` (trần chung trừ 80) để CHỪA phần còn lại (80)
  * cho đúng loại thư này — thư mời reviewer/interviewer. Vì vậy bộ này KHÔNG
  * trừ thêm một lần chừa nữa; nó nhìn thẳng vào phần hạn mức THẬT còn trống
  * trong `DAILY_EMAIL_LIMIT`, đọc từ cùng một số "đã gửi trong 24 giờ trượt"

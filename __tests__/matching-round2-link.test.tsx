@@ -16,6 +16,7 @@
  *   - trang chỉ đọc các trường thẻ cần; tự luận và danh sách mã còn trống đi qua lệnh có kiểm token.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 import React from "react";
 import { render } from "@testing-library/react";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
@@ -909,7 +910,7 @@ describe("thư nhắc mentor chưa chọn mentee (BTC 16/10/2026)", () => {
     db.tables.matching_round2_settings[0].closes_at = new Date(Date.now() - 3600_000).toISOString();
     expect(await runRound2Reminder()).toMatchObject({ ok: false, message: "Vòng 2 đã đóng — không gửi thư nhắc." });
     db.tables.matching_round2_settings[0].closes_at = new Date(Date.now() + 86400_000).toISOString();
-    db.tables.outbound_emails = Array.from({ length: 920 }, (_, i) => ({ id: `q${i}`, kind: "mentee_session_invite", status: "sent", created_at: hoursAgo(2) }));
+    db.tables.outbound_emails = Array.from({ length: DAILY_EMAIL_LIMIT - 80 }, (_, i) => ({ id: `q${i}`, kind: "mentee_session_invite", status: "sent", created_at: hoursAgo(2) }));
     expect((await runRound2Reminder()).message).toContain("hạn mức");
     db.tables.outbound_emails = [];
     vi.mocked(getCurrentAdminUser).mockResolvedValue({ id: "admin-sp", role: "support_team", status: "active", auth_user_id: "auth-sp", email: "sp@example.test" } as any);

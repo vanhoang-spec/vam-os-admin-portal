@@ -9,7 +9,7 @@ import "server-only";
  *
  * Bộ gửi thư chép khuôn lib/matching-round2-dispatch.ts (đã chạy thật): CLAIM nguyên tử
  * trước khi gửi để hai lần bấm cùng lúc không ai nhận hai thư, dừng ngay khi nhà cung cấp
- * báo 429, nhả mọi claim chưa gửi, dùng chung trần thư 1.000/24 giờ.
+ * báo 429, nhả mọi claim chưa gửi, dùng chung trần thư 24 giờ (DAILY_EMAIL_LIMIT).
  */
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { sendMenteeExemptionConfirm } from "@/lib/email";

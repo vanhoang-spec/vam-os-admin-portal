@@ -15,6 +15,7 @@
  *   - trang BTC hiện đúng danh sách, đúng người được gợi ý, và ẩn nút khi chỉ được xem.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
@@ -420,7 +421,7 @@ describe("gửi thư mời xác nhận", () => {
   });
 
   it("đã chạm phần hạn mức thư 24 giờ: không gửi, không claim", async () => {
-    db.tables.outbound_emails = Array.from({ length: 920 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date(NOW - HOURS).toISOString() }));
+    db.tables.outbound_emails = Array.from({ length: DAILY_EMAIL_LIMIT - 80 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date(NOW - HOURS).toISOString() }));
     const result = await dispatch();
     expect(sendMenteeExemptionConfirm).not.toHaveBeenCalled();
     expect(result.message).toContain("hạn mức");
@@ -430,8 +431,8 @@ describe("gửi thư mời xác nhận", () => {
   it("hạn mức chỉ còn chỗ cho một thư: gửi đúng một, người còn lại chờ lượt sau — theo thứ tự được thêm", async () => {
     db.tables.people.push({ id: P(10), full_name: "Minh Thứ Hai", email_primary: "minh@example.test" });
     db.tables.mentee_exemptions.push(exemption(6, P(10)));
-    // 1.000 − 80 chừa lại − 919 đã gửi = còn đúng 1 thư cho lượt này.
-    db.tables.outbound_emails = Array.from({ length: 919 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date(NOW - HOURS).toISOString() }));
+    // Trần − 80 chừa lại − (trần − 81) đã gửi = còn đúng 1 thư cho lượt này.
+    db.tables.outbound_emails = Array.from({ length: DAILY_EMAIL_LIMIT - 81 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date(NOW - HOURS).toISOString() }));
 
     const result = await dispatch();
 
