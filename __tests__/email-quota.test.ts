@@ -1,6 +1,6 @@
 /**
  * Trần thư MỘT cho cả hệ thống (06/10/2026): thư đi qua Resend, mọi bộ gửi so với
- * cùng 1.000 thư/24 giờ, và mọi chữ trên màn hình nói đúng con số đó.
+ * cùng một trần thư/24 giờ (3.000 từ 24/10/2026), và mọi chữ trên màn hình nói đúng con số đó.
  *
  * Trước đó trang lời mời tài khoản dùng trần riêng 300 (gói miễn phí Brevo) trong
  * khi các bộ gửi khác dùng 1.000 — cùng một sổ thư, hai câu trả lời "còn gửi được
@@ -23,10 +23,10 @@ function files(dir: string, ext: RegExp): string[] {
 }
 
 describe("một trần cho cả hệ thống", () => {
-  it("1.000 thư trong 24 giờ trượt, chữ hiện là '1.000 thư/24 giờ', gửi qua Resend", () => {
-    expect(DAILY_EMAIL_LIMIT).toBe(1000);
+  it("3.000 thư trong 24 giờ trượt, chữ hiện là '3.000 thư/24 giờ', gửi qua Resend", () => {
+    expect(DAILY_EMAIL_LIMIT).toBe(3000);
     expect(QUOTA_WINDOW_MS).toBe(24 * 60 * 60_000);
-    expect(dailyEmailLimitLabel()).toBe("1.000 thư/24 giờ");
+    expect(dailyEmailLimitLabel()).toBe("3.000 thư/24 giờ");
     expect(EMAIL_PROVIDER_NAME).toBe("Resend");
   });
 
@@ -41,7 +41,7 @@ describe("một trần cho cả hệ thống", () => {
     expect(inviteBudgetRemaining(DAILY_EMAIL_LIMIT)).toBe(0);
     // Không đếm được thì coi như đã đầy — fail-closed.
     expect(inviteBudgetRemaining(Number.NaN)).toBe(0);
-    expect(inviteRefusalMessage("daily_budget")).toContain(`trên 1.000 thư`);
+    expect(inviteRefusalMessage("daily_budget")).toContain(`trên 3.000 thư`);
   });
 
   it("trong lib/ chỉ có MỘT chỗ định nghĩa trần thư theo ngày", () => {
@@ -51,7 +51,7 @@ describe("một trần cho cả hệ thống", () => {
         .filter((line) => /export const [A-Z_]*DAILY[A-Z_]*LIMIT\s*=/.test(line))
         .map((line) => `${file}: ${line.trim()}`)
     );
-    expect(definitions).toEqual(["lib/email-quota-core.ts: export const DAILY_EMAIL_LIMIT = 1000;"]);
+    expect(definitions).toEqual(["lib/email-quota-core.ts: export const DAILY_EMAIL_LIMIT = 3000;"]);
   });
 });
 
@@ -61,11 +61,11 @@ describe("chữ trên màn hình", () => {
     ...(guide.notes ?? [])
   ]);
 
-  it("hướng dẫn trong app nói 1.000 thư/24 giờ qua Resend, không còn Brevo 300", () => {
+  it("hướng dẫn trong app nói 3.000 thư/24 giờ qua Resend, không còn Brevo 300", () => {
     const quotaNotes = allNotes.filter((text) => text.includes("thư/24 giờ"));
     expect(quotaNotes.length).toBeGreaterThanOrEqual(2);
     for (const text of quotaNotes) {
-      expect(text).toContain("1.000 thư/24 giờ");
+      expect(text).toContain("3.000 thư/24 giờ");
       expect(text).toContain("Resend");
     }
     expect(allNotes.filter((text) => /Brevo|300 thư|300\/24/.test(text))).toEqual([]);

@@ -7,6 +7,7 @@
  * thư thì chỉ chốt, không gửi lại (gửi lại là làm chết link của thư trước).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 import { createFakeDb, fakeClient } from "./support/fake-postgrest";
 
 const mocks = vi.hoisted(() => ({ mentee: vi.fn(), mentor: vi.fn(), menteeLate: vi.fn(), mentorLate: vi.fn() }));
@@ -173,14 +174,14 @@ describe("2. gửi theo nhóm mentor", () => {
   });
 
   it("hạn mức chỉ còn 3 thư: nhóm A (3 người) đi trọn, nhóm B chờ — không cắt đôi nhóm nào", async () => {
-    db.tables.outbound_emails = Array.from({ length: 917 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
+    db.tables.outbound_emails = Array.from({ length: DAILY_EMAIL_LIMIT - 83 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
     const r = await runMatchResultDispatch();
     expect(sentTo()).toEqual(["mentee:m1@example.test", "mentee:m2@example.test", "mentor:a@example.test"]);
     expect(r.message).toContain("Còn 2 người chờ thư");
   });
 
   it("hạn mức chỉ còn 2 thư: nhóm A không vừa thì bỏ qua, nhóm B (2 người) đi", async () => {
-    db.tables.outbound_emails = Array.from({ length: 918 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
+    db.tables.outbound_emails = Array.from({ length: DAILY_EMAIL_LIMIT - 82 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
     await runMatchResultDispatch();
     expect(sentTo()).toEqual(["mentee:m3@example.test", "mentor:b@example.test"]);
   });
@@ -442,9 +443,15 @@ describe("8. gửi thử thư của một nhóm mentor (xem trước cho team su
   });
 
   it("hạn mức 24 giờ không đủ cho cả nhóm: không gửi lẻ", async () => {
-    db.tables.outbound_emails = Array.from({ length: 998 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
+    db.tables.outbound_emails = Array.from({ length: DAILY_EMAIL_LIMIT - 2 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
     expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(false);
     expect(sentTo()).toEqual([]);
+  });
+
+  it("vừa đủ chỗ cho cả nhóm (3 thư) thì gửi — so với trần chung, không phải một con số riêng", async () => {
+    db.tables.outbound_emails = Array.from({ length: DAILY_EMAIL_LIMIT - 3 }, (_, i) => ({ id: `o${i}`, status: "sent", created_at: new Date().toISOString() }));
+    expect((await sendMatchResultGroupTest({ mentor: "Anh Mentor A" })).ok).toBe(true);
+    expect(sentTo()).toHaveLength(3);
   });
 });
 
@@ -491,7 +498,7 @@ describe("9. gửi liên tục — phía máy chủ", () => {
   });
 
   it("hạn mức hôm nay chỉ đủ một nhóm: lượt 1 gửi nhóm A rồi báo gửi tiếp, lượt 2 thấy hết hạn mức và dừng", async () => {
-    fill(917); // còn 3 thư: đúng nhóm A (mentor + 2 mentee)
+    fill(DAILY_EMAIL_LIMIT - 83); // còn 3 thư: đúng nhóm A (mentor + 2 mentee)
     const results = await loop();
     expect(results).toHaveLength(2);
     expect(results[0]).toMatchObject({ sent: 3, left: 2, more: true });
