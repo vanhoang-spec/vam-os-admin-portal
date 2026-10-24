@@ -8,7 +8,9 @@ import {
   STAFF_ROLES,
   buildRecipientValues,
   isCvRejected,
+  isHeldFromInterviewLetter,
   isMembershipAudience,
+  menteeInterviewLetterGroup,
   partitionRecipients,
   remainingRecipients,
   rolesForAudience,
@@ -87,6 +89,8 @@ export async function listBulkRecipients(input: {
     result = await returningMentorRecipients(client, input.seasonId);
   } else if (input.audience === "mentee_cv_rejected" || input.audience === "mentee_invite_withdrawn") {
     result = await rejectedMenteeRecipients(client, input.seasonId, input.audience);
+  } else if (input.audience === "mentee_interview_rejected") {
+    result = await interviewRejectedMenteeRecipients(client, input.seasonId);
   } else {
     result = await eventRecipients(client, input.seasonId, input.eventId ?? null, input.coversSeries === true);
   }
@@ -330,12 +334,12 @@ const DEAD_APPLICATION_STATUSES = new Set(["screening_completed", "rejected_or_n
  * Họ tên và email lấy từ ĐƠN, nối thư về `applications`: phần lớn người rớt vòng
  * hồ sơ chưa có trong danh bạ (07/10: 144/146 bạn không có person_id).
  */
-const REJECTION_LETTER_AUDIENCES = ["mentee_cv_rejected", "mentee_invite_withdrawn"] as const;
+const REJECTION_LETTER_AUDIENCES = ["mentee_cv_rejected", "mentee_invite_withdrawn", "mentee_interview_rejected"] as const;
 
 async function rejectedMenteeRecipients(
   client: any,
   seasonId: string,
-  audience: (typeof REJECTION_LETTER_AUDIENCES)[number]
+  audience: "mentee_cv_rejected" | "mentee_invite_withdrawn"
 ): Promise<RecipientRows> {
   const withdrawn = audience === "mentee_invite_withdrawn";
   type AppRow = {
@@ -398,33 +402,11 @@ async function rejectedMenteeRecipients(
     return { rows: [], error: VI_ERROR };
   }
 
-  // Ai đã nhận thư rớt ở một lô của MỘT TRONG HAI nhóm thư rớt (BTC 08/10/2026: sáng
-  // gửi 146 bạn, chiều có thêm 11 hồ sơ vừa chấm rớt — mở lô mới thì chỉ được gửi 11
-  // bạn đó; và không ai nhận cả thư rớt chung lẫn thư rút lời mời). Tính cả lô đang
-  // chạy: người lô này đã gửi rơi khỏi danh sách, và "Gửi tiếp" vẫn đếm đúng phần còn
-  // lại. Thư hỏng không tính là đã nhận — lô sau gửi lại.
-  const batches = await readBounded<{ id: string }>(
-    "bulk mail rejection batches",
-    client.from("email_batches").select("id").eq("season_id", seasonId).in("audience", Array.from(REJECTION_LETTER_AUDIENCES)),
-    500
-  );
-  if (batches.error) {
-    log("listBulkRecipients:cv-rejected-batches", batches.error);
-    return { rows: [], error: VI_ERROR };
-  }
-  const batchIds = batches.data.map((row) => String(row.id));
-  const received = batchIds.length
-    ? await readAllPagesIn<{ id: string; to_email: string | null; related_id: string | null }>(
-        client,
-        "outbound_emails",
-        "batch_id",
-        batchIds,
-        "id, to_email, related_id",
-        (query) => query.in("status", ["sent", "queued"])
-      )
-    : { data: [] as Array<{ id: string; to_email: string | null; related_id: string | null }>, error: null };
-  if (received.error) {
-    log("listBulkRecipients:cv-rejected-received", received.error);
+  // BTC 08/10/2026: sáng gửi 146 bạn, chiều có thêm 11 hồ sơ vừa chấm rớt — mở lô mới thì
+  // chỉ được gửi 11 bạn đó; và không ai nhận hai lá thư rớt.
+  const receipts = await readRejectionLetterReceipts(client, seasonId);
+  if (receipts.error) {
+    log("listBulkRecipients:cv-rejected-received", receipts.error);
     return { rows: [], error: VI_ERROR };
   }
 
@@ -442,8 +424,6 @@ async function rejectedMenteeRecipients(
   const normalizeEmail = (value: unknown) => String(value ?? "").trim().toLowerCase();
   const activePeople = new Set(memberships.data.map((row) => String(row.person_id ?? "")).filter(Boolean));
   const staffEmails = new Set(accounts.data.map((row) => normalizeEmail(row.email)).filter(Boolean));
-  const receivedEmails = new Set(received.data.map((row) => normalizeEmail(row.to_email)).filter(Boolean));
-  const receivedApps = new Set(received.data.map((row) => String(row.related_id ?? "")).filter(Boolean));
   const livePeople = new Set<string>();
   const liveEmails = new Set<string>();
   for (const app of apps.data) {
@@ -466,7 +446,166 @@ async function rejectedMenteeRecipients(
     if (personId && (activePeople.has(personId) || livePeople.has(personId))) continue;
     if (email && (staffEmails.has(email) || liveEmails.has(email))) continue;
     // Theo cả email lẫn đơn: BTC sửa email của đơn sau khi đã gửi thì vẫn là người đã nhận.
-    if (receivedApps.has(id) || (email && receivedEmails.has(email))) continue;
+    if (receipts.apps.has(id) || (email && receipts.emails.has(email))) continue;
+    rows.push({
+      personId: id,
+      fullName: String(app.full_name ?? "").trim(),
+      email: String(app.email_primary ?? "").trim(),
+      role: "mentee",
+      relationTable: "applications"
+    });
+  }
+  return { rows, error: null };
+}
+
+/**
+ * Ai đã nhận một lá thư rớt (của bất kỳ nhóm thư rớt nào) trong mùa — theo cả đơn lẫn email. Tính cả lô
+ * đang chạy, để "Gửi tiếp" đếm đúng phần còn lại; thư hỏng không tính là đã nhận.
+ */
+async function readRejectionLetterReceipts(
+  client: any,
+  seasonId: string
+): Promise<{ apps: Set<string>; emails: Set<string>; error: unknown }> {
+  const empty = { apps: new Set<string>(), emails: new Set<string>() };
+  const batches = await readBounded<{ id: string }>(
+    "bulk mail rejection batches",
+    client.from("email_batches").select("id").eq("season_id", seasonId).in("audience", Array.from(REJECTION_LETTER_AUDIENCES)),
+    500
+  );
+  if (batches.error) return { ...empty, error: batches.error };
+  const batchIds = batches.data.map((row) => String(row.id));
+  if (!batchIds.length) return { ...empty, error: null };
+  const received = await readAllPagesIn<{ id: string; to_email: string | null; related_id: string | null }>(
+    client,
+    "outbound_emails",
+    "batch_id",
+    batchIds,
+    "id, to_email, related_id",
+    (query) => query.in("status", ["sent", "queued"])
+  );
+  if (received.error) return { ...empty, error: received.error };
+  return {
+    apps: new Set(received.data.map((row) => String(row.related_id ?? "")).filter(Boolean)),
+    emails: new Set(received.data.map((row) => String(row.to_email ?? "").trim().toLowerCase()).filter(Boolean)),
+    error: null
+  };
+}
+
+/**
+ * Mentee không trúng tuyển vòng phỏng vấn mùa 12 (BTC 24/10/2026): rớt phỏng vấn; check-in, phân bàn
+ * hoặc chọn ca mà không phỏng vấn; được mời mà không chọn ca. Đơn nào vào nhóm nào: xem
+ * `menteeInterviewLetterGroup` (lib/bulk-mail-core.ts).
+ *
+ * Cùng nếp fail-closed với thư rớt hồ sơ — một lá thư rớt gửi nhầm không rút lại được:
+ *   - đọc hỏng bất kỳ bảng nào thì trả lỗi, không trả danh sách thiếu phép loại;
+ *   - không gửi cho người đang có tư cách hoạt động trong mùa (đang là mentee — kể cả đặc cách — hay
+ *     mentor), tài khoản BTC, người có một đơn đã được duyệt, đơn đã rút;
+ *   - mỗi người nhận đúng MỘT lá thư rớt, tính chung cả ba nhóm thư rớt;
+ *   - giữ lại 5 bạn BTC dặn (`MENTEE_INTERVIEW_LETTER_HELD_NAMES`), so cả tên trên đơn lẫn tên hồ sơ.
+ *
+ * Họ tên và email lấy từ ĐƠN, nối thư về `applications` — như hai nhóm thư rớt trước.
+ */
+async function interviewRejectedMenteeRecipients(client: any, seasonId: string): Promise<RecipientRows> {
+  type AppRow = {
+    id: string;
+    person_id: string | null;
+    full_name: string | null;
+    email_primary: string | null;
+    role_applied: string | null;
+    status: string | null;
+  };
+  const apps = await readAllPages<AppRow>(
+    "applications",
+    "id, person_id, full_name, email_primary, role_applied, status",
+    (projection) => client.from("applications").select(projection).eq("season_id", seasonId)
+  );
+  if (apps.error) {
+    log("listBulkRecipients:interview-rejected-applications", apps.error);
+    return { rows: [], error: VI_ERROR };
+  }
+  const mentees = apps.data.filter((app) => String(app.role_applied ?? "") === "mentee");
+  if (!mentees.length) return { rows: [], error: null };
+  const ids = mentees.map((app) => String(app.id));
+  const personIds = Array.from(new Set(mentees.map((app) => String(app.person_id ?? "")).filter(Boolean)));
+
+  const [operations, bookings, invites, memberships, accounts, people] = await Promise.all([
+    readAllPagesIn<{ id: string; outcome: string | null; checked_in_at: string | null; interviewer_id: string | null }>(
+      client,
+      "mentee_interview_operations",
+      "id",
+      ids,
+      "id, outcome, checked_in_at, interviewer_id"
+    ),
+    readAllPagesIn<{ id: string; application_id: string; status: string | null }>(
+      client,
+      "mentee_interview_bookings",
+      "application_id",
+      ids,
+      "id, application_id, status"
+    ),
+    readAllPagesIn<{ id: string; application_id: string; first_sent_at: string | null }>(
+      client,
+      "mentee_interview_invites",
+      "application_id",
+      ids,
+      "id, application_id, first_sent_at"
+    ),
+    readAllPages<{ id: string; person_id: string | null }>(
+      "person_season_memberships",
+      "id, person_id",
+      (projection) => client.from("person_season_memberships").select(projection).eq("season_id", seasonId).eq("status", "active")
+    ),
+    readAllPages<{ id: string; email: string | null }>("admin_users", "id, email", (projection) =>
+      client.from("admin_users").select(projection)
+    ),
+    readAllPagesIn<{ id: string; full_name: string | null }>(client, "people", "id", personIds, "id, full_name")
+  ]);
+  const failed = [operations, bookings, invites, memberships, accounts, people].find((result) => result.error);
+  if (failed) {
+    log("listBulkRecipients:interview-rejected-sources", failed.error);
+    return { rows: [], error: VI_ERROR };
+  }
+  const receipts = await readRejectionLetterReceipts(client, seasonId);
+  if (receipts.error) {
+    log("listBulkRecipients:interview-rejected-received", receipts.error);
+    return { rows: [], error: VI_ERROR };
+  }
+
+  const normalizeEmail = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  const opById = new Map(operations.data.map((row) => [String(row.id), row]));
+  const booked = new Set(bookings.data.filter((row) => row.status === "booked").map((row) => String(row.application_id)));
+  const everBooked = new Set(bookings.data.map((row) => String(row.application_id)));
+  const invited = new Set(invites.data.filter((row) => row.first_sent_at).map((row) => String(row.application_id)));
+  const activePeople = new Set(memberships.data.map((row) => String(row.person_id ?? "")).filter(Boolean));
+  const staffEmails = new Set(accounts.data.map((row) => normalizeEmail(row.email)).filter(Boolean));
+  const profileName = new Map(people.data.map((row) => [String(row.id), row.full_name]));
+  const approvedPeople = new Set<string>();
+  const approvedEmails = new Set<string>();
+  for (const app of apps.data) {
+    if (!String(app.status ?? "").startsWith("approved_as_")) continue;
+    if (app.person_id) approvedPeople.add(String(app.person_id));
+    const email = normalizeEmail(app.email_primary);
+    if (email) approvedEmails.add(email);
+  }
+
+  const rows: BulkRecipient[] = [];
+  for (const app of mentees) {
+    const id = String(app.id);
+    const group = menteeInterviewLetterGroup({
+      applicationStatus: app.status,
+      operation: opById.get(id) ?? null,
+      hasBookedSeat: booked.has(id),
+      hadAnyBooking: everBooked.has(id),
+      inviteSent: invited.has(id)
+    });
+    if (!group) continue;
+    if (String(app.status ?? "") === "withdrawn") continue;
+    const personId = String(app.person_id ?? "");
+    if (isHeldFromInterviewLetter(app.full_name, personId ? profileName.get(personId) : null)) continue;
+    const email = normalizeEmail(app.email_primary);
+    if (personId && (activePeople.has(personId) || approvedPeople.has(personId))) continue;
+    if (email && (staffEmails.has(email) || approvedEmails.has(email))) continue;
+    if (receipts.apps.has(id) || (email && receipts.emails.has(email))) continue;
     rows.push({
       personId: id,
       fullName: String(app.full_name ?? "").trim(),
