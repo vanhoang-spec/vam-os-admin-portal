@@ -9,7 +9,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DAILY_EMAIL_LIMIT, EMAIL_PROVIDER_NAME, QUOTA_WINDOW_MS, dailyEmailLimitLabel } from "@/lib/email-quota-core";
+import { DAILY_EMAIL_LIMIT, EMAIL_PROVIDER_NAME, QUOTA_WINDOW_MS, dailyEmailLimitLabel, dailyEmailLimitNumber } from "@/lib/email-quota-core";
 import * as dispatchCore from "@/lib/mentee-invite-dispatch-core";
 import { INVITE_DAILY_RESERVE, inviteBudgetRemaining, inviteRefusalMessage } from "@/lib/participant-invite-core";
 import { HELP_GUIDES } from "@/lib/help-guides";
@@ -80,6 +80,18 @@ describe("chữ trên màn hình", () => {
         .map(([line, i]) => `${file}:${i + 1}: ${line.trim()}`)
     );
     expect(hits).toEqual([]);
+  });
+
+  it("khung gửi không gõ tay vế sau của 'đã gửi x/…' — 24/10/2026 bốn khung còn ghi /1.000 sau khi trần lên 3.000", () => {
+    const hits = files("app", /\.tsx?$/).flatMap((file) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .map((line, i) => [line, i] as const)
+        .filter(([line]) => /sentInWindow[^\n]*\/\s*[\d.]{3,}/.test(line))
+        .map(([line, i]) => `${file}:${i + 1}: ${line.trim()}`)
+    );
+    expect(hits).toEqual([]);
+    expect(dailyEmailLimitNumber()).toBe("3.000");
   });
 
   it("trang cấp quyền hàng loạt đọc trần từ module chung, không gõ tay con số", () => {

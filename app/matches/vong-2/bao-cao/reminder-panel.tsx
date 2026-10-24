@@ -5,6 +5,7 @@ import { useFormState } from "react-dom";
 import { sendRound2ReminderTestAction, sendRound2RemindersAction } from "@/app/actions/matching-round2";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 import { Message, Submit } from "./dispatch-panel";
+import { dailyEmailLimitNumber } from "@/lib/email-quota-core";
 
 export type ReminderPanelProps = {
   window: "not_open" | "open" | "closed";
@@ -42,7 +43,7 @@ export function Round2ReminderPanel(props: ReminderPanelProps) {
       <div className="text-sm font-semibold text-vam-ink">3. Nhắc mentor chưa chọn mentee</div>
       <p className="text-sm text-slate-600">
         Sẽ nhắc: <strong>{props.eligible}</strong> mentor (đã nhận link mời, còn chỗ, chưa có cặp Vòng 2 nào, chưa được nhắc trong 18 giờ qua) · Đã được nhắc
-        gần đây: <strong>{props.remindedRecently}</strong> · Thư cả hệ thống trong 24 giờ: {props.sentInWindow ?? "?"}/1.000 · Mỗi lần bấm gửi tối đa{" "}
+        gần đây: <strong>{props.remindedRecently}</strong> · Thư cả hệ thống trong 24 giờ: {props.sentInWindow ?? "?"}/{dailyEmailLimitNumber()} · Mỗi lần bấm gửi tối đa{" "}
         {props.allowance} thư.
       </p>
       <p className="text-xs text-slate-500">

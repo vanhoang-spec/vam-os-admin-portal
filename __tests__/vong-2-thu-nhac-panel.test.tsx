@@ -38,7 +38,7 @@ describe("khung nhắc mentor chưa chọn mentee", () => {
     const { container } = render(<Round2ReminderPanel {...base} remindedRecently={12} />);
     expect(text(container)).toContain("Sẽ nhắc: 189 mentor");
     expect(text(container)).toContain("Đã được nhắc gần đây: 12");
-    expect(text(container)).toContain("120/1.000");
+    expect(text(container)).toContain("120/3.000");
     expect(text(container)).toContain("Gửi thử thư nhắc cho tôi");
     expect(container.querySelector('[data-testid="reminder-send"]')?.textContent).toBe("Gửi thư nhắc (tối đa 189 thư)");
   });

@@ -5,6 +5,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { VietnamDateTimeField } from "@/app/events/vietnam-datetime-field";
 import { sendRound2InvitesAction, sendRound2TestAction, setRound2WindowAction } from "@/app/actions/matching-round2";
 import { ROUND2_IDLE, type Round2ActionState } from "@/lib/matching-round2-action-types";
+import { dailyEmailLimitNumber } from "@/lib/email-quota-core";
 
 export type DispatchPanelProps = {
   window: "not_open" | "open" | "closed";
@@ -90,7 +91,7 @@ export function Round2DispatchPanel(props: DispatchPanelProps) {
         <div className="text-sm font-semibold text-vam-ink">2. Gửi link chọn mentee — đợt {props.wave}</div>
         <p className="text-sm text-slate-600">
           Chờ thư: <strong>{props.pending}</strong> mentor · Đã nhận thư đợt này: <strong>{props.sentThisWave}</strong> · Thư cả hệ thống trong 24 giờ:{" "}
-          {props.sentInWindow ?? "?"}/1.000 · Mỗi lần bấm gửi tối đa {props.allowance} thư.
+          {props.sentInWindow ?? "?"}/{dailyEmailLimitNumber()} · Mỗi lần bấm gửi tối đa {props.allowance} thư.
         </p>
         <form action={testAction} className="flex flex-wrap items-center gap-3">
           <Submit label="Gửi thử cho tôi" pendingLabel="Đang gửi thử…" />
