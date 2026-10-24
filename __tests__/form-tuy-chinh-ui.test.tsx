@@ -94,6 +94,13 @@ describe("1. form công khai", () => {
     expect(container.querySelector('[data-field="f_noteaaaa"] label')?.textContent).not.toContain("*");
   });
 
+  it("ô đồng ý ở trang cuối ghi tên chương trình “UEH Mentoring” (24/10/2026)", () => {
+    const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
+    const consent = container.querySelector("#q-__consent")?.closest("label")?.textContent ?? "";
+    expect(consent).toContain("Tôi đồng ý để UEH Mentoring thu thập và xử lý các thông tin trên");
+    expect(consent).not.toContain("Vietnam Alumni Mentoring");
+  });
+
   it("bấm Gửi khi còn trống: KHÔNG gọi máy chủ, báo dưới đúng từng mục bắt buộc và ô đồng ý", async () => {
     const { container } = render(<PublicForm code={CODE} fields={FIELDS} />);
     await submitForm(container);
