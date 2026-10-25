@@ -43,6 +43,13 @@ export default async function CustomFormResponsesPage(props: { params: Promise<{
         >
           Tải CSV
         </a>
+        <Link
+          href={`${CUSTOM_FORMS_PATH}/${form.id}/doi-chieu?doi_tuong=mentee`}
+          data-testid="roster-check-link"
+          className="rounded-md border border-vam-green px-4 py-2 text-sm font-semibold text-vam-green hover:bg-vam-mint/40"
+        >
+          Đối chiếu với danh sách mentee/mentor
+        </Link>
       </div>
       <SimpleTable
         rows={rows}

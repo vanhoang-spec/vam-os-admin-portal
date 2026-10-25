@@ -724,7 +724,8 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Muốn gửi thư xác nhận cho người điền: tích “Gửi thư tự động cho người điền”, viết tiêu đề (để trống = “Đã nhận câu trả lời: <tên form>”) và nội dung, bấm “Gửi thử cho tôi” để xem thư, rồi Lưu. Thư đi tới email người điền nhập ở trường Email bắt buộc đầu tiên, ngay sau khi họ bấm Gửi.",
       "Bấm “Lưu form”, rồi “Xem thử form” để điền thử — bản xem thử kiểm lỗi y như form thật nhưng không ghi gì.",
       "Bấm “Công khai form”, “Sao chép link” và gửi link cho người điền. Hết đợt thì bấm “Đóng form”.",
-      "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm và nút “Tải CSV”."
+      "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm và nút “Tải CSV”.",
+      "Muốn biết ai đã nộp, ai chưa: ở trang câu trả lời bấm “Đối chiếu với danh sách mentee/mentor”, chọn Mentee hoặc Mentor. Trang so với danh sách chính thức của mùa (cùng danh sách ở trang Mentee/Mentor) và chia ba nhóm: Chưa nộp, Người nộp không có trong danh sách, Đã nộp. “Tải CSV đối chiếu” có cột “Nhóm” để lọc người chưa nộp khi nhắc."
     ],
     notes: [
       "Định dạng được kiểm khi người điền bấm Gửi (trên trình duyệt và lại ở máy chủ): Email đúng dạng; Số điện thoại 10 chữ số bắt đầu bằng 0 (+84 tự đổi về 0); MSSV chỉ chữ số, 8–12 ký tự; CCCD đúng 12 chữ số; Ngày đúng DD/MM/YYYY và là ngày có thật; Link bắt đầu bằng http(s). Thiếu mục bắt buộc hay sai định dạng thì không gửi được, trang báo ngay dưới mục đó.",
