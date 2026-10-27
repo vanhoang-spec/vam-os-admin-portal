@@ -1,8 +1,30 @@
 # Bàn giao AI — VAM OS
 
-**Cập nhật lần cuối: 27/09/2026, bởi Claude Code** (nối tiếp bản Codex viết cùng
+**Cập nhật lần cuối: 27/10/2026, bởi Claude Code** (mục Báo lỗi ngay dưới; các mục sau viết 27/09/2026) (nối tiếp bản Codex viết cùng
 ngày). Càng xa ngày này càng nên tự kiểm lại bằng `git log` / `gh pr list` thay
 vì tin nguyên văn — xem bước 2 của `CODEX_BAT_DAU.md`.
+
+## Báo lỗi / góp ý cải thiện trên VAM OS (Claude Code, 27/10/2026) — PR #279
+
+Chủ chương trình yêu cầu chép tính năng "Báo lỗi" của CRM Embassy Language sang VAM OS:
+- Nút cam **"Báo lỗi"** góc dưới trái mọi trang (AppShell) cho mọi tài khoản ban tổ chức active; loại có
+  "Đề xuất cải thiện"; tối đa 5 hình (dán Ctrl+V). Mã báo lỗi `VAM00001…`.
+- Quản trị → **Báo lỗi** (`/admin/bao-loi`, `canManageBaoLoi` = super_admin + admin): tần suất, lọc, hỏi lại
+  người gửi (thư `bao_loi_hoi_lai` + pop-up), trả lời, trùng; `?ticket=VAM00012` mở thẳng.
+- Người gửi: `/bao-loi` (form, link gửi qua Zalo) và `/bao-loi?ticket=…` (trả lời bổ sung chữ + hình).
+- Thẻ **CẦN ĐỌC** trên Công việc của tôi + Tổng quan (ẩn bằng "Đã đọc", tự hết 30/11/2026).
+- **Hình:** chủ chọn "Mở cho tải hình" → xếp loại lại cảnh báo sharp: trình duyệt PUT thẳng lên kho riêng
+  Supabase `bao-loi` bằng link ký sẵn, xem bằng link ký sẵn + `<img>` thường. Mục 3c của
+  `__tests__/image-optimizer-attack-surface.test.ts` khoá đường đi; chỉ `lib/bao-loi-anh.ts` chạm Storage.
+
+**Trạng thái lúc viết:** PR #279 mở, bốn cổng đạt trên máy. Migration
+`supabase/migrations/20261027200000_bao_loi.sql` đã chạy thử trên production trong giao dịch rồi rollback
+(nối loại thư OK), **CHƯA dán** — chế độ tự động chặn Claude chạy SQL lên production; chờ chủ dán vào
+Supabase SQL Editor rồi mới merge.
+
+**Lịch tự chạy (chủ đồng ý 27/10):** `vam-bao-loi-ra-17h` (rà, hỏi lại, báo chủ duyệt buổi tối; code vào
+nhánh local `bao-loi/cho-phat-hanh`) và `vam-bao-loi-phat-hanh-2h` (02:00–05:00: PR → CI → merge; migration
+chưa dán thì dừng và báo chủ). Prompt ở `C:\Users\DELL\.claude\scheduled-tasks\vam-bao-loi-*\SKILL.md`.
 
 ## Việc của Codex — truy xuất kết quả mentor S12 (27/09) — ĐÃ MERGE
 

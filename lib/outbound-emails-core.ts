@@ -71,6 +71,7 @@ const KIND_LABELS: Record<string, string> = {
   mentee_exemption_confirm: "Mời Support team xác nhận mentee (đặc cách)",
   custom_form_receipt: "Thư tự động sau khi gửi form tùy chỉnh",
   matching_round2_reminder: "Nhắc mentor chọn mentee (Vòng 2)",
+  bao_loi_hoi_lai: "Hỏi lại người gửi báo lỗi",
   mentee_mentor_intro: "Kết quả Matching — gửi mentee",
   mentor_mentee_package: "Kết quả Matching — gửi mentor"
 };

@@ -92,7 +92,10 @@ export type EmailKind =
   | "custom_form_receipt"
   // Ghép cặp Vòng 2: thư nhắc mentor chưa chọn mentee, kèm đúng đường dẫn đã gửi ở thư mời
   // (supabase/migrations/20261016220000_vong_2_thu_nhac.sql).
-  | "matching_round2_reminder";
+  | "matching_round2_reminder"
+  // Báo lỗi: ban xử lý hỏi lại người gửi một báo lỗi chưa rõ, kèm link mở đúng báo lỗi để trả lời
+  // (supabase/migrations/20261027200000_bao_loi.sql).
+  | "bao_loi_hoi_lai";
 
 /**
  * Một tệp đi kèm thư.
@@ -2201,6 +2204,39 @@ export function buildCustomFormReceiptEmail(input: { formTitle: string; subject?
       : "",
     paragraphs,
     `<p style="color:#4f6b60;font-size:13px">${escapeHtml(footer)}</p>`,
+    '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Vietnam Alumni Mentoring</p>',
+    "</div>"
+  ].join("");
+  return { to: "", subject, text, html };
+}
+
+/**
+ * Báo lỗi (27/10/2026): ban xử lý cần người gửi bổ sung một báo lỗi. Thư chỉ mang mã, tiêu đề, câu hỏi
+ * và link mở đúng báo lỗi trên VAM OS (phải đăng nhập mới xem / trả lời được) — không mang ảnh hay mô tả.
+ */
+export function buildBaoLoiHoiLaiEmail(input: { recipientName: string; ma: string; tieuDe: string; cauHoi: string; replyUrl: string }): EmailMessage & { to: string } {
+  const name = safeSentence(input.recipientName, "bạn");
+  const tieuDe = safeSentence(input.tieuDe, "báo lỗi của bạn");
+  const subject = `Cần bạn bổ sung báo lỗi ${input.ma} — VAM OS`;
+  const cauHoi = String(input.cauHoi ?? "").replace(/\r\n/g, "\n").trim();
+  const text = [
+    `Chào ${name},`,
+    "",
+    `Để sửa đúng báo lỗi ${input.ma} — "${tieuDe}" — ban xử lý cần bạn bổ sung thêm thông tin:`,
+    "",
+    cauHoi,
+    "",
+    `Bạn mở đường dẫn sau (đăng nhập VAM OS), ghi câu trả lời và thêm hình nếu cần rồi bấm "Gửi bổ sung": ${input.replyUrl}`,
+    "",
+    "Vietnam Alumni Mentoring"
+  ].join("\n");
+  const html = [
+    '<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;color:#14352a">',
+    `<p>Chào <strong>${escapeHtml(name)}</strong>,</p>`,
+    `<p>Để sửa đúng báo lỗi <strong>${escapeHtml(input.ma)}</strong> — “${escapeHtml(tieuDe)}” — ban xử lý cần bạn bổ sung thêm thông tin:</p>`,
+    `<blockquote style="margin:12px 0;padding:10px 14px;border-left:4px solid #f97316;background:#fff7ed">${escapeHtml(cauHoi).split("\n").join("<br />")}</blockquote>`,
+    `<p style="margin:20px 0"><a href="${escapeHtml(input.replyUrl)}" style="background:#16834c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;display:inline-block;font-weight:600">Trả lời ngay</a></p>`,
+    `<p style="color:#4f6b60;font-size:13px">Cần đăng nhập VAM OS. Nếu nút trên không bấm được, mở đường dẫn này: ${escapeHtml(input.replyUrl)}</p>`,
     '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Vietnam Alumni Mentoring</p>',
     "</div>"
   ].join("");

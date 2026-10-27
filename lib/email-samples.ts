@@ -30,6 +30,7 @@ import {
   buildInterviewSlotCancelledEmail,
   buildInterviewSlotInviteEmail,
   buildMatchingRound2InviteEmail,
+  buildBaoLoiHoiLaiEmail,
   buildCustomFormReceiptEmail,
   buildMatchingRound2ReminderEmail,
   buildMatchResultMenteeEmail,
@@ -346,6 +347,23 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
         seasonLabel: SEASON,
         confirmUrl: `${ORIGIN}/xac-nhan-mentee/ma-vi-du`,
         hotlineZalo: "0919144638"
+      })
+    )
+  },
+  {
+    kind: "bao_loi_hoi_lai",
+    group: "Vận hành nội bộ",
+    title: "Hỏi lại người gửi báo lỗi",
+    audience: "Thành viên ban tổ chức đã gửi một báo lỗi / góp ý trên VAM OS",
+    trigger: "Khi người xử lý bấm “Gửi câu hỏi” ở Quản trị → Báo lỗi (hoặc lịch rà 17:00 hỏi lại).",
+    note: "Người nhận đăng nhập VAM OS để trả lời bằng chữ + hình; báo lỗi chuyển sang “Chờ người gửi bổ sung”.",
+    body: built(
+      buildBaoLoiHoiLaiEmail({
+        recipientName: MENTOR,
+        ma: "VAM00012",
+        tieuDe: "Không xuất được file Excel danh sách mentee",
+        cauHoi: "Bạn cho mình biết bạn đang ở trang nào, chọn mùa nào và chụp màn hình lúc bấm “Xuất Excel” giúp nhé?",
+        replyUrl: `${ORIGIN}/bao-loi?ticket=VAM00012`
       })
     )
   },

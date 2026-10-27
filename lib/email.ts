@@ -17,6 +17,7 @@ import {
   buildMentorConfirmationLinkEmail,
   buildMenteeSessionConfirmedEmail,
   buildMatchingRound2InviteEmail,
+  buildBaoLoiHoiLaiEmail,
   buildCustomFormReceiptEmail,
   buildMatchingRound2ReminderEmail,
   buildMatchResultMenteeEmail,
@@ -1443,6 +1444,25 @@ export async function sendCustomFormReceipt(input: {
 }): Promise<SendEmailResult> {
   const built = buildCustomFormReceiptEmail({ formTitle: input.formTitle, subject: input.subject, body: input.body, test: input.test });
   return deliver("custom_form_receipt", { ...built, to: input.toEmail }, { table: "custom_forms", id: input.formId });
+}
+
+/**
+ * Báo lỗi (27/10/2026): báo người gửi rằng ban xử lý cần họ bổ sung. Ghi sổ theo báo lỗi
+ * (related bao_loi). Một câu hỏi một lá thư; người hỏi tự bấm nên không cần trần riêng ngoài trần chung.
+ */
+export async function sendBaoLoiHoiLai(input: {
+  toEmail: string;
+  recipientName: string;
+  baoLoiId: string;
+  ma: string;
+  tieuDe: string;
+  cauHoi: string;
+  requestOrigin?: string | null;
+}): Promise<SendEmailResult> {
+  const base = resolveEmailBaseUrl(input.requestOrigin);
+  const replyUrl = `${base}/bao-loi?ticket=${encodeURIComponent(input.ma)}`;
+  const built = buildBaoLoiHoiLaiEmail({ recipientName: input.recipientName, ma: input.ma, tieuDe: input.tieuDe, cauHoi: input.cauHoi, replyUrl });
+  return deliver("bao_loi_hoi_lai", { ...built, to: input.toEmail }, { table: "bao_loi", id: input.baoLoiId });
 }
 
 /** Thư xác nhận ca phỏng vấn của mentee — sau khi đặt, và sau khi đổi. */

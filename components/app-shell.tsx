@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { Suspense, useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  TriangleAlert,
   UserCog,
   Users,
   UserRoundCheck,
@@ -43,6 +44,7 @@ import {
   type NavSubGroupDef
 } from "@/lib/nav-model";
 import { HelpGuideButton } from "@/components/help-guide-button";
+import { NutBaoLoi } from "@/components/bao-loi/nut-bao-loi";
 import { SeasonSelector } from "@/components/season-selector";
 import { isSeasonAwarePath } from "@/lib/season-labels";
 
@@ -68,6 +70,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "/admin": Settings2,
   "/team": ShieldCheck,
   "/admin/users": UserCog,
+  "/admin/bao-loi": TriangleAlert,
   community: Users,
   applications: ClipboardList,
   "sub:mentor": UserRoundCheck,
@@ -578,6 +581,10 @@ export function AppShell({
           </main>
         </div>
       </div>
+      {/* Báo lỗi / góp ý (27/10/2026): nút cam góc dưới trái + pop-up trả lời / cần bổ sung, cho mọi tài khoản ban tổ chức. */}
+      <Suspense fallback={null}>
+        <NutBaoLoi />
+      </Suspense>
     </>
   );
 }

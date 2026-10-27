@@ -648,3 +648,12 @@ export function canRunAiExecutiveReport(role?: string | null) {
 export function canViewAiStatus(role?: string | null) {
   return ["super_admin", "admin"].includes(role || "");
 }
+
+/**
+ * Báo lỗi / góp ý cải thiện (chủ chương trình 27/10/2026): mọi tài khoản ban tổ chức đang active đều
+ * GỬI được (nút ở góc màn hình). Xem hết, đổi trạng thái, trả lời và hỏi lại người gửi là việc của
+ * người duyệt sửa lỗi — super_admin và admin. Người khác chỉ thấy báo lỗi của chính mình.
+ */
+export function canManageBaoLoi(role?: string | null) {
+  return ["super_admin", "admin"].includes(role || "");
+}

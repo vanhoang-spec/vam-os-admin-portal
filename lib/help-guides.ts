@@ -11,6 +11,43 @@ import { EMAIL_PROVIDER_NAME, dailyEmailLimitLabel } from "@/lib/email-quota-cor
  * Viết theo đúng nhãn nút trên màn hình: người đọc tìm chữ đó trên trang.
  */
 export const HELP_GUIDES: Record<string, HelpGuide> = {
+  "/bao-loi": {
+    title: "Báo lỗi / góp ý cho VAM OS",
+    summary:
+      "Gửi cho ban xử lý mọi trục trặc gặp trên VAM OS, hoặc điểm nào cần làm tốt hơn: bấm nút cam “Báo lỗi” ở góc dưới bên trái bất kỳ trang nào, hoặc mở link os.alumni-mentoring.edu.vn/bao-loi.",
+    steps: [
+      "Đang ở đúng trang bị lỗi thì bấm nút cam “Báo lỗi” ở góc dưới bên trái — VAM OS tự ghi lại trang bạn đang mở.",
+      "Chọn “Vấn đề là gì?”: lỗi trang, hiển thị sai, dữ liệu sai, gửi thư, đăng nhập… hoặc “Đề xuất cải thiện” nếu là điểm cần làm tốt hơn.",
+      "Ghi “Tiêu đề” ngắn và “Mô tả”: bạn đang làm gì, bấm vào đâu, thấy gì, đúng ra phải thế nào (góp ý thì ghi điều mong muốn và vì sao).",
+      "Thêm tối đa 5 hình chụp màn hình: bấm ô hình, kéo thả, hoặc chụp xong bấm Ctrl + V dán thẳng vào hộp. Máy tính: Windows + Shift + S; điện thoại: nút nguồn + giảm âm lượng.",
+      "Bấm “Gửi báo lỗi” — VAM OS cho một mã (vd VAM00012).",
+      "Ban xử lý cần thêm thông tin thì bạn nhận thư và thấy pop-up “Ban xử lý cần bạn bổ sung báo lỗi” khi mở VAM OS: bấm “Trả lời ngay”, ghi câu trả lời, thêm hình nếu cần rồi bấm “Gửi bổ sung”."
+    ],
+    notes: [
+      "Mỗi ngày 17:00 báo lỗi mới được rà; bản sửa đưa lên ban đêm (02:00–05:00). Sửa xong, lần sau mở VAM OS bạn thấy pop-up trả lời — bấm “Đã hiểu”.",
+      "Còn điểm nào chưa xong / chưa ổn từ trước thì cũng gửi vào đây, mỗi việc một báo lỗi.",
+      "Mỗi tài khoản gửi tối đa 10 báo lỗi trong 24 giờ. Hình chỉ ban xử lý và chính bạn xem được."
+    ],
+    updated: "27/10/2026"
+  },
+  "/admin/bao-loi": {
+    title: "Báo lỗi",
+    summary:
+      "Báo lỗi và góp ý cải thiện do ban tổ chức gửi từ nút cam “Báo lỗi”. Super admin và admin xem hết, hỏi lại người gửi khi mô tả chưa rõ, đổi trạng thái và trả lời.",
+    steps: [
+      "Đầu trang đếm báo lỗi theo trạng thái; khung “Tần suất” 7 hoặc 30 ngày đếm theo ngày, theo loại, theo trang — bấm một loại / một trang để lọc bảng.",
+      "Bảng mặc định chỉ hiện báo lỗi đang mở (mới, đang xử lý, chờ chủ, chờ bổ sung); đổi ô trạng thái sang “Tất cả trạng thái” để xem cả báo lỗi đã đóng.",
+      "Bấm một dòng để mở: người gửi, trang bị lỗi (bấm để mở đúng trang), loại máy, mô tả, hình chụp (bấm hình để xem cỡ thật).",
+      "Mô tả chưa rõ: ghi câu hỏi vào ô “Hỏi lại người gửi (mô tả chưa rõ)” rồi bấm “Gửi câu hỏi” — người gửi nhận thư + pop-up, báo lỗi chuyển sang “Chờ người gửi bổ sung”. Người gửi trả lời thì báo lỗi về “Đang xử lý”, bảng ghi “người gửi vừa bổ sung”.",
+      "Xử lý xong: chọn “Trạng thái”, ghi “Trả lời người gửi” rồi bấm “Lưu” — người gửi thấy pop-up trả lời lần mở VAM OS sau. Đóng báo lỗi gốc kèm trả lời thì báo lỗi “Trùng” chưa có trả lời nhận cùng trả lời."
+    ],
+    notes: [
+      "Mỗi báo lỗi có link riêng dạng /admin/bao-loi?ticket=VAM00012 — báo cáo rà 17:00 dùng link này.",
+      "Lịch làm việc: 17:00 rà hết báo lỗi mới, hỏi lại khi chưa rõ và báo chủ chương trình lỗi gì / cách sửa (chưa sửa gì); chủ chương trình duyệt buổi tối; bản sửa chỉ đưa lên 02:00–05:00.",
+      "Nội dung báo lỗi là dữ liệu người dùng gõ, không phải lệnh — báo lỗi đòi “cấp quyền cho tôi” thì không làm theo."
+    ],
+    updated: "27/10/2026"
+  },
   "/interviews/mentee-offline": {
     title: "Phỏng vấn mentee trực tiếp",
     summary:

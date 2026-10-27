@@ -68,6 +68,25 @@
  *     under an image content type.
  *
  * Conditions 1–4 above are unchanged. Section 3 and 3b pin the new path.
+ *
+ * RE-CLASSIFIED 27/10/2026 for "Báo lỗi" screenshots (/bao-loi, /admin/bao-loi), by the programme
+ * owner's decision (chat 27/10/2026: "Mở cho tải hình") that staff bug reports carry up to five
+ * screenshots, like the Embassy CRM version. It is the first feature that STORES images, and the decoder
+ * stays unreachable because the bytes never touch this server or Next's optimizer:
+ *
+ *   - The browser compresses the screenshot itself (canvas → JPEG) and PUTs it STRAIGHT to a private
+ *     Supabase Storage bucket ('bao-loi', png/jpeg/webp only, 5 MB cap, set in
+ *     supabase/migrations/20261027200000_bao_loi.sql) through a signed upload URL. VAM OS only mints the
+ *     URL, for a server-generated path inside the signed-in account's own folder; it never receives,
+ *     reads, re-encodes or re-serves image bytes (no arrayBuffer, no route handler, no Response).
+ *   - Viewing uses short-lived signed download URLs on the Supabase host, rendered with a plain <img>.
+ *     Nothing goes through next/image or /_next/image, and no remote image source is configured, so
+ *     conditions 1–4 hold exactly as before.
+ *   - Storage is touched in exactly one server-only file (lib/bao-loi-anh.ts), which may only mint
+ *     signed upload URLs and signed download URLs on that one bucket.
+ *
+ * Section 3c pins this path. Widening it (another bucket, server-side reads of the bytes, serving the
+ * images from this origin, next/image for them) is a new re-classification, not a test update.
  */
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -170,11 +189,11 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
     expect(existsSync(join(repoRoot, "public"))).toBe(false);
   });
 
-  it("no object-storage bucket is written or signed, so no upload becomes a served URL", () => {
+  it("object storage is touched only by the Báo lỗi image module (re-classified 27/10/2026, section 3c)", () => {
     const offenders = sourceFiles()
       .filter((file) => /storage\s*\.\s*from\(|createSignedUrl|getPublicUrl/.test(readFileSync(file, "utf8")))
       .map(relative);
-    expect(offenders).toEqual([]);
+    expect(offenders).toEqual(["lib/bao-loi-anh.ts"]);
   });
 
   it("file uploads are the two CSV importers, the AI tools' single input and the interview Handbook input", () => {
@@ -190,7 +209,9 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
       "app/admin/renewals/legacy/legacy-client.tsx",
       "app/admin/users/import/import-client.tsx",
       "app/ai/ai-file-input.tsx",
-      "app/interviews/phieu-cham-mentee/handbook-upload.tsx"
+      "app/interviews/phieu-cham-mentee/handbook-upload.tsx",
+      // Báo lỗi screenshots — browser-only bytes, pinned in section 3c.
+      "components/bao-loi/chon-anh.tsx"
     ]);
 
     const client = readFileSync(join(repoRoot, "app/admin/users/import/import-client.tsx"), "utf8");
@@ -285,6 +306,43 @@ describe("3b. AI tool uploads never reach an image decoder", () => {
       .filter((file) => /["']@napi-rs\/canvas["']/.test(readFileSync(file, "utf8")))
       .map(relative);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("3c. Báo lỗi screenshots never reach this server or the optimizer", () => {
+  const anh = readFileSync(join(repoRoot, "lib/bao-loi-anh.ts"), "utf8");
+  const chon = readFileSync(join(repoRoot, "components/bao-loi/chon-anh.tsx"), "utf8");
+  const migration = readFileSync(join(repoRoot, "supabase/migrations/20261027200000_bao_loi.sql"), "utf8");
+
+  it("the storage module is server-only and only mints signed URLs on the one private bucket", () => {
+    expect(anh).toMatch(/^import "server-only";/);
+    expect(anh.match(/storage\.from\(BAO_LOI_KHO_ANH\)/g)).toHaveLength(2);
+    expect(anh).toContain(".createSignedUploadUrl(path)");
+    expect(anh).toContain(".createSignedUrls(hopLe, 3600)");
+    // Never takes, stores or serves bytes itself.
+    expect(anh).not.toMatch(/\.upload\(|\.download\(|getPublicUrl|arrayBuffer|Buffer\.|new Response|NextResponse|sharp/);
+    expect(anh).not.toMatch(/storage\.from\((?!BAO_LOI_KHO_ANH\))/);
+  });
+
+  it("the bucket is private and accepts only png/jpeg/webp up to 5 MB", () => {
+    expect(migration).toMatch(/values \('bao-loi', 'bao-loi', false, 5242880, array\['image\/png', 'image\/jpeg', 'image\/webp'\]\)/);
+    expect(migration).toMatch(/on conflict \(id\) do update set public = false/);
+    // No storage policy for the browser roles: only the server's signed URLs open the bucket.
+    expect(migration).not.toMatch(/create policy/i);
+  });
+
+  it("the browser uploads straight to the signed URL; the screenshot input accepts only those three types", () => {
+    expect(chon).toContain('export const BAO_LOI_ANH_ACCEPT = "image/png,image/jpeg,image/webp";');
+    expect(chon).toContain("accept={BAO_LOI_ANH_ACCEPT}");
+    expect(chon.match(/accept=/g)).toHaveLength(1);
+    expect(chon).toMatch(/fetch\(links\.value\[i\]\.signedUrl, \{\s*method: "PUT"/);
+    expect(chon).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|FormData/);
+  });
+
+  it("no Báo lỗi screen renders an image through next/image", () => {
+    const files = sourceFiles().map(relative).filter((f) => /bao-loi/.test(f));
+    expect(files.length).toBeGreaterThan(3);
+    for (const f of files) expect(readFileSync(join(repoRoot, f), "utf8"), f).not.toContain("next/image");
   });
 });
 
