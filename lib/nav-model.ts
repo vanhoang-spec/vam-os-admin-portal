@@ -10,7 +10,8 @@ import {
   canManageSubmissionBonus,
   canUseAiTools,
   canEditInterviewRubric,
-  canViewMenteeSessionStatus
+  canViewMenteeSessionStatus,
+  canManageBaoLoi
 } from "@/lib/permissions";
 import {
   canBrowseApplications,
@@ -366,6 +367,8 @@ export function buildNavGroups(adminUser: CurrentAdminUser | null): NavGroupDef[
         { href: "/admin/seasons-forms", label: "Mùa & Form đăng ký" },
         { href: "/team", label: "Phân công & Trách nhiệm" },
         ...(showUserMgmt ? [{ href: "/admin/users", label: "Quản lý người dùng" }] : []),
+        // Báo lỗi / góp ý (27/10/2026): cùng predicate trang /admin/bao-loi tự kiểm.
+        ...(canManageBaoLoi(role) ? [{ href: "/admin/bao-loi", label: "Báo lỗi" }] : []),
       ],
     });
   }
