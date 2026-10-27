@@ -7,7 +7,9 @@ import PizZip from "pizzip";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
 import type { TDocumentDefinitions } from "pdfmake/interfaces";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { LAZY_LOAD_TIMEOUT } from "./support/lazy-load";
 
 vi.mock("server-only", () => ({}));
 
@@ -56,7 +58,19 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
+// Mỗi nhóm PDF và DOCX mở đầu bằng một lần đọc thật, dưới thời hạn riêng: lần đọc đầu
+// tiên của worker trả giá nạp pdf-parse / mammoth từ đĩa, một cái giá theo tải của
+// máy. Trả nó trong hook thì 30 giây của từng ca đo việc đọc file, và ca nào chạy
+// trước (kể cả khi lọc bằng -t) cũng không phải gánh. Vì sao gọi đúng hàm của sản
+// phẩm và vì sao phải khẳng định kết quả: xem __tests__/support/lazy-load.ts.
+// Nhóm XLSX không cần: pizzip đã được chính file này nạp tĩnh ở đầu file.
+
 describe("PDF", () => {
+  beforeAll(async () => {
+    const pdf = await makePdf({ content: [{ text: "Nạp sẵn bộ đọc PDF" }] });
+    expect(await extractTextFromFile(pdf, AI_UPLOAD_KINDS.pdf)).not.toBeNull();
+  }, LAZY_LOAD_TIMEOUT);
+
   it(
     "đọc được chữ tiếng Việt từ một PDF thật",
     async () => {
@@ -104,6 +118,11 @@ describe("PDF", () => {
 });
 
 describe("DOCX", () => {
+  beforeAll(async () => {
+    const docx = buildDocx({ title: "Nạp sẵn", blocks: [{ type: "paragraph", text: "Nạp sẵn bộ đọc Word" }] });
+    expect(await extractTextFromFile(docx, AI_UPLOAD_KINDS.docx)).not.toBeNull();
+  }, LAZY_LOAD_TIMEOUT);
+
   it("đọc được file Word", async () => {
     const docx = buildDocx({ title: "Thư mời mentor", blocks: [{ type: "paragraph", text: "Kính gửi anh chị mentor Mùa 12" }] });
     const result = await extractTextFromFile(docx, AI_UPLOAD_KINDS.docx);
