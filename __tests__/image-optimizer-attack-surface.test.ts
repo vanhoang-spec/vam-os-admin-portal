@@ -87,6 +87,22 @@
  *
  * Section 3c pins this path. Widening it (another bucket, server-side reads of the bytes, serving the
  * images from this origin, next/image for them) is a new re-classification, not a test update.
+ *
+ * RE-CLASSIFIED 30/10/2026 for custom form banners and logos (VAM00009), by the programme owner's decision
+ * (chat 30/10/2026: "cho phép mở kho ảnh riêng để upload ảnh lên"). It is the second bucket and the first
+ * one whose images public pages show, so a person who is not signed in can load them. The decoder stays
+ * unreachable for the same reasons as 3c:
+ *
+ *   - The browser shrinks the image itself (canvas) and PUTs it STRAIGHT to a second private bucket
+ *     ('form-anh', png/jpeg/webp only, 5 MB cap, supabase/migrations/20261030210000_form_banner_logo.sql)
+ *     through a signed upload URL, minted only for a signed-in form operator, for a server-generated path
+ *     inside that form's own folder. VAM OS never receives, reads, re-encodes or re-serves image bytes.
+ *   - Public pages get short-lived signed download URLs on the Supabase host, rendered with a plain <img>.
+ *     Nothing goes through next/image or /_next/image, and no remote image source is configured.
+ *   - That bucket is touched in exactly one server-only file (lib/custom-form-anh.ts), which may only mint
+ *     signed upload URLs and signed download URLs on that one bucket.
+ *
+ * Section 3d pins this path. Widening it further is again a new re-classification, not a test update.
  */
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -189,11 +205,11 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
     expect(existsSync(join(repoRoot, "public"))).toBe(false);
   });
 
-  it("object storage is touched only by the Báo lỗi image module (re-classified 27/10/2026, section 3c)", () => {
+  it("object storage is touched only by the Báo lỗi and form image modules (sections 3c, 3d)", () => {
     const offenders = sourceFiles()
       .filter((file) => /storage\s*\.\s*from\(|createSignedUrl|getPublicUrl/.test(readFileSync(file, "utf8")))
       .map(relative);
-    expect(offenders).toEqual(["lib/bao-loi-anh.ts"]);
+    expect(offenders.sort()).toEqual(["lib/bao-loi-anh.ts", "lib/custom-form-anh.ts"]);
   });
 
   it("file uploads are the two CSV importers, the AI tools' single input and the interview Handbook input", () => {
@@ -209,6 +225,8 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
       "app/admin/renewals/legacy/legacy-client.tsx",
       "app/admin/users/import/import-client.tsx",
       "app/ai/ai-file-input.tsx",
+      // Form banners and logos — browser-only bytes, pinned in section 3d.
+      "app/forms/[id]/form-image-field.tsx",
       "app/interviews/phieu-cham-mentee/handbook-upload.tsx",
       // Báo lỗi screenshots — browser-only bytes, pinned in section 3c.
       "components/bao-loi/chon-anh.tsx"
@@ -343,6 +361,40 @@ describe("3c. Báo lỗi screenshots never reach this server or the optimizer", 
     const files = sourceFiles().map(relative).filter((f) => /bao-loi/.test(f));
     expect(files.length).toBeGreaterThan(3);
     for (const f of files) expect(readFileSync(join(repoRoot, f), "utf8"), f).not.toContain("next/image");
+  });
+});
+
+describe("3d. form banners and logos never reach this server or the optimizer", () => {
+  const anh = readFileSync(join(repoRoot, "lib/custom-form-anh.ts"), "utf8");
+  const field = readFileSync(join(repoRoot, "app/forms/[id]/form-image-field.tsx"), "utf8");
+  const header = readFileSync(join(repoRoot, "app/f/[code]/form-header.tsx"), "utf8");
+  const migration = readFileSync(join(repoRoot, "supabase/migrations/20261030210000_form_banner_logo.sql"), "utf8");
+
+  it("the storage module is server-only and only mints signed URLs on the one private bucket", () => {
+    expect(anh).toMatch(/^import "server-only";/);
+    expect(anh.match(/storage\.from\(CUSTOM_FORM_IMAGE_BUCKET\)/g)).toHaveLength(2);
+    expect(anh).toContain(".createSignedUploadUrl(path)");
+    expect(anh).toContain(".createSignedUrls(valid, 3600)");
+    expect(anh).not.toMatch(/\.upload\(|\.download\(|getPublicUrl|arrayBuffer|Buffer\.|new Response|NextResponse|sharp/);
+    expect(anh).not.toMatch(/storage\.from\((?!CUSTOM_FORM_IMAGE_BUCKET\))/);
+  });
+
+  it("the bucket is private and accepts only png/jpeg/webp up to 5 MB", () => {
+    expect(migration).toMatch(/values \('form-anh', 'form-anh', false, 5242880, array\['image\/png', 'image\/jpeg', 'image\/webp'\]\)/);
+    expect(migration).toMatch(/on conflict \(id\) do update set public = false/);
+    expect(migration).not.toMatch(/create policy/i);
+  });
+
+  it("the browser uploads straight to the signed URL and the input accepts only those three types", () => {
+    expect(field).toContain('export const FORM_IMAGE_ACCEPT = "image/png,image/jpeg,image/webp";');
+    expect(field).toContain("accept={FORM_IMAGE_ACCEPT}");
+    expect(field.match(/accept=/g)).toHaveLength(1);
+    expect(field).toMatch(/fetch\(link\.signedUrl, \{\s*method: "PUT"/);
+    expect(field).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|FormData/);
+  });
+
+  it("no form screen renders an image through next/image", () => {
+    for (const source of [field, header]) expect(source).not.toContain("next/image");
   });
 });
 

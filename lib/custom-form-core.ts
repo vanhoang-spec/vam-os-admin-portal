@@ -72,6 +72,26 @@ export const YES_NO_OPTIONS = ["Có", "Không"] as const;
 /** Đích "kết thúc form": người điền tới thẳng ô đồng ý và nút Gửi. */
 export const BRANCH_END = "__end";
 
+/** Banner và logo riêng từng form (VAM00009 mục 4.1): kho riêng, đường dẫn <mã form>/<loại>-<uuid>. */
+export const CUSTOM_FORM_IMAGE_BUCKET = "form-anh";
+export const CUSTOM_FORM_IMAGE_KINDS = ["banner", "logo"] as const;
+export type CustomFormImageKind = (typeof CUSTOM_FORM_IMAGE_KINDS)[number];
+export const LOGO_POSITIONS = ["left", "center", "right"] as const;
+export type LogoPosition = (typeof LOGO_POSITIONS)[number];
+export const LOGO_POSITION_LABELS: Record<LogoPosition, string> = { left: "Bên trái", center: "Ở giữa", right: "Bên phải" };
+
+export function newFormImagePath(formId: string, kind: CustomFormImageKind, uuid: string): string {
+  return `${formId}/${kind}-${uuid}`;
+}
+
+/** Đường dẫn có đúng là ảnh của form này không. Cái trình duyệt gửi lên là thứ người gửi tự đặt được. */
+export function isFormImagePath(formId: string, path: unknown, kind?: CustomFormImageKind): path is string {
+  const value = String(path ?? "");
+  if (!value.startsWith(`${formId}/`)) return false;
+  const match = /^(banner|logo)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.exec(value.slice(formId.length + 1));
+  return Boolean(match) && (!kind || match?.[1] === kind);
+}
+
 export const CUSTOM_FORM_LIMITS = {
   title: 200,
   description: 4000,
@@ -252,6 +272,8 @@ export type CustomFormSettingsInput = {
   requireKnownPerson?: unknown;
   /** VAM00009 mục 4.1: màu chủ đạo dạng #rrggbb, hoặc rỗng = màu mặc định. */
   themeColor?: unknown;
+  /** VAM00009 mục 4.1: vị trí logo. */
+  logoPosition?: unknown;
 };
 
 export const REGISTRATION_LIMIT_MAX = 100000;
@@ -272,6 +294,7 @@ export type CustomFormSettings = {
   registrationLimit: number | null;
   requireKnownPerson: boolean;
   themeColor: string | null;
+  logoPosition: LogoPosition;
 };
 
 const truthy = (value: unknown) => value === true || value === "on" || value === "true";
@@ -310,6 +333,8 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
   if (registrationLimit !== null && (!Number.isInteger(registrationLimit) || registrationLimit < 1 || registrationLimit > REGISTRATION_LIMIT_MAX)) {
     return { ok: false, error: `Giới hạn số đăng ký phải là số nguyên từ 1 đến ${REGISTRATION_LIMIT_MAX}, hoặc để trống.` };
   }
+  const logoRaw = text(input.logoPosition) || "left";
+  if (!(LOGO_POSITIONS as readonly string[]).includes(logoRaw)) return { ok: false, error: "Vị trí logo không hợp lệ." };
   const themeRaw = text(input.themeColor).toLowerCase();
   if (themeRaw && !THEME_COLOR.test(themeRaw)) return { ok: false, error: "Màu chủ đạo không hợp lệ." };
   return {
@@ -328,7 +353,8 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
       eventId: eventRaw || null,
       registrationLimit,
       requireKnownPerson: truthy(input.requireKnownPerson),
-      themeColor: themeRaw || null
+      themeColor: themeRaw || null,
+      logoPosition: logoRaw as LogoPosition
     }
   };
 }

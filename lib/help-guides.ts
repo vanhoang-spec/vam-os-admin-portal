@@ -760,7 +760,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Form dài: thêm “Ngắt trang” ở chỗ muốn sang trang mới (tiêu đề của ngắt trang là tên trang sau). Người điền bấm “Tiếp” — trang còn thiếu mục bắt buộc hay sai định dạng thì không qua được; “Quay lại” giữ nguyên câu đã điền; ô đồng ý và nút Gửi ở trang cuối.",
       "Muốn gửi thư xác nhận cho người điền: tích “Gửi thư tự động cho người điền”, viết tiêu đề (để trống = “Đã nhận câu trả lời: <tên form>”) và nội dung, bấm “Gửi thử cho tôi” để xem thư, rồi Lưu. Thư đi tới email người điền nhập ở trường Email bắt buộc đầu tiên, ngay sau khi họ bấm Gửi.",
       "Muốn rẽ nhánh theo câu trả lời: thêm câu loại “Có / Không (rẽ nhánh được)”, thêm các “Ngắt trang”, rồi ở câu đó chọn trả lời Có thì đến đâu, Không thì đến đâu (một trang phía sau, trang kế tiếp, hoặc kết thúc form).",
-      "Muốn đổi màu: chọn “Màu chủ đạo”, áp cho viền đầu form và nút Tiếp, Gửi.",
+      "Muốn đổi giao diện: chọn “Ảnh banner đầu form”, “Logo đơn vị tổ chức” (và vị trí logo), “Màu chủ đạo”. Chọn xong ảnh phải bấm “Lưu form” thì form mới dùng ảnh đó.",
       "Bấm “Lưu form”, rồi “Xem thử form” để điền thử — bản xem thử kiểm lỗi y như form thật nhưng không ghi gì.",
       "Bấm “Công khai form”, “Sao chép link” và gửi link cho người điền. Hết đợt thì bấm “Đóng form”.",
       "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm và nút “Tải CSV”.",
