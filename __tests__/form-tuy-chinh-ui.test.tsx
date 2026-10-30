@@ -287,6 +287,35 @@ describe("1b. form nhiều trang (BTC 15/10/2026)", () => {
     });
   };
 
+  // VAM00010 (30/10/2026): React tái dùng nút "Tiếp" làm nút "Gửi" (chỉ đổi type). Trên trình duyệt thật React vẽ
+  // lại TRƯỚC khi trình duyệt xử lý cú bấm, nên cú bấm "Tiếp" ở trang kế cuối gửi luôn form. jsdom xử lý cú bấm
+  // trước khi React vẽ lại nên không dựng lại được đúng thời điểm đó — test khoá thẳng vào gốc: nút "Gửi" phải là
+  // một phần tử KHÁC, và nút "Tiếp" vừa bấm không bao giờ trở thành nút submit.
+  it("“Tiếp” ở trang kế cuối không bao giờ biến thành nút Gửi; qua lại giữa các trang không gửi, không báo lỗi", async () => {
+    const { container } = render(<PublicForm code={CODE} fields={PAGED} />);
+    fireEvent.change(input(container, "f_nameaaaa"), { target: { value: "An" } });
+    fireEvent.change(input(container, "f_emailaaa"), { target: { value: "an@gmail.com" } });
+    await click(container, "page-next");
+    fireEvent.change(input(container, "f_cvaaaaaa"), { target: { value: "https://drive.google.com/file/d/x" } });
+    const nextOnPenultimate = container.querySelector('[data-testid="page-next"]') as HTMLButtonElement;
+    await click(container, "page-next");
+    expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 3/3");
+    const submit = container.querySelector('button[type="submit"]');
+    expect(submit).not.toBeNull();
+    expect(submit).not.toBe(nextOnPenultimate);
+    expect(nextOnPenultimate.isConnected).toBe(false);
+    expect(nextOnPenultimate.type).toBe("button");
+    expect(container.querySelector('[data-testid="form-notice"]')).toBeNull();
+    // Tích đồng ý, quay lại rồi "Tiếp" lần nữa: vẫn là nút khác, vẫn không gửi.
+    fireEvent.click(container.querySelector("#q-__consent")!);
+    await click(container, "page-back");
+    const nextAgain = container.querySelector('[data-testid="page-next"]') as HTMLButtonElement;
+    await click(container, "page-next");
+    expect(container.querySelector('button[type="submit"]')).not.toBe(nextAgain);
+    expect(nextAgain.type).toBe("button");
+    expect(h.submit).not.toHaveBeenCalled();
+  });
+
   it("trang 1 chỉ có câu của trang 1, có “Tiếp”, chưa có ô đồng ý hay nút Gửi", () => {
     const { container } = render(<PublicForm code={CODE} fields={PAGED} />);
     expect(container.querySelector('[data-testid="page-progress"]')?.textContent).toBe("Trang 1/3");

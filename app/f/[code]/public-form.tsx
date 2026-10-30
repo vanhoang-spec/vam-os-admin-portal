@@ -435,12 +435,16 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
             Quay lại
           </button>
         ) : null}
+        {/* key khác nhau là bắt buộc (VAM00010, 30/10/2026): không có key, React giữ nguyên MỘT phần tử <button>
+            và chỉ đổi type từ "button" sang "submit". Bấm "Tiếp" ở trang kế cuối thì React vẽ lại ngay trong cú bấm,
+            trình duyệt xử lý cú bấm trên nút giờ đã là "submit" và GỬI form — chưa tích đồng ý thì hiện chữ đỏ,
+            đã tích (Quay lại → Tiếp) thì gửi thật dù người điền chưa bấm "Gửi". */}
         {page < last ? (
-          <button type="button" data-testid="page-next" className={PRIMARY} onClick={goNext}>
+          <button key="page-next" type="button" data-testid="page-next" className={PRIMARY} onClick={goNext}>
             Tiếp
           </button>
         ) : (
-          <button type="submit" disabled={sending} className={PRIMARY}>
+          <button key="form-submit" type="submit" data-testid="form-submit" disabled={sending} className={PRIMARY}>
             {sending ? "Đang gửi…" : preview ? "Gửi (xem thử)" : "Gửi"}
           </button>
         )}
