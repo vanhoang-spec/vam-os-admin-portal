@@ -79,7 +79,8 @@ function GroupTable({ groups, unclassified }: { groups: GroupSummary[]; unclassi
             <th className={cell}>Mentee</th>
             <th className={cell}>Ghép vòng 1</th>
             <th className={cell}>Ghép vòng 2</th>
-            <th className={cell}>Ghép khác</th>
+            <th className={cell}>Ghép vòng 3</th>
+            <th className={cell}>Ghép trực tiếp</th>
             <th className={cell}>Chưa có mentor</th>
             <th className={cell}>Chỗ − mentee chờ</th>
             <th className="px-3 py-2">Đối soát</th>
@@ -87,7 +88,7 @@ function GroupTable({ groups, unclassified }: { groups: GroupSummary[]; unclassi
         </thead>
         <tbody className="divide-y divide-vam-line">
           {all.map((g) => {
-            const waiting = g.code === null ? g.mentees - g.matchedR1 - g.matchedR2 - g.matchedOther : g.visible;
+            const waiting = g.code === null ? g.mentees - g.matchedR1 - g.matchedR2 - g.matchedR3 - g.matchedDirect : g.visible;
             return (
               <tr key={g.label} data-group={g.code ?? "chua"}>
                 <td className="px-3 py-2">{g.label}</td>
@@ -97,7 +98,8 @@ function GroupTable({ groups, unclassified }: { groups: GroupSummary[]; unclassi
                 <td className={cell}>{g.mentees}</td>
                 <td className={cell}>{g.matchedR1}</td>
                 <td className={cell}>{g.matchedR2}</td>
-                <td className={cell}>{g.matchedOther}</td>
+                <td className={cell}>{g.matchedR3}</td>
+                <td className={cell}>{g.matchedDirect}</td>
                 <td className={cell}>{waiting}</td>
                 <td className={`${cell} ${g.slots - waiting < 0 ? "text-red-600" : ""}`}>{g.code === null ? "—" : g.slots - waiting}</td>
                 <td className="px-3 py-2">{g.reconciled ? <span className="text-green-700">Khớp</span> : <span className="text-red-600">Lệch</span>}</td>
@@ -112,8 +114,9 @@ function GroupTable({ groups, unclassified }: { groups: GroupSummary[]; unclassi
             <td className={cell}>{sum("mentees")}</td>
             <td className={cell}>{sum("matchedR1")}</td>
             <td className={cell}>{sum("matchedR2")}</td>
-            <td className={cell}>{sum("matchedOther")}</td>
-            <td className={cell}>{sum("mentees") - sum("matchedR1") - sum("matchedR2") - sum("matchedOther")}</td>
+            <td className={cell}>{sum("matchedR3")}</td>
+            <td className={cell}>{sum("matchedDirect")}</td>
+            <td className={cell}>{sum("mentees") - sum("matchedR1") - sum("matchedR2") - sum("matchedR3") - sum("matchedDirect")}</td>
             <td className={cell}>—</td>
             <td className="px-3 py-2" />
           </tr>

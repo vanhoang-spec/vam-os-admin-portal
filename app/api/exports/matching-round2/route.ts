@@ -38,7 +38,7 @@ export async function GET(request: Request) {
   let rows: unknown[][];
   if (list === "nhom") {
     rows = [
-      ["Nhóm", "Mentor", "Mentor còn chỗ", "Tổng chỗ còn", "Mentee", "Ghép vòng 1", "Ghép vòng 2", "Ghép khác", "Chưa có mentor", "Đối soát"],
+      ["Nhóm", "Mentor", "Mentor còn chỗ", "Tổng chỗ còn", "Mentee", "Ghép vòng 1", "Ghép vòng 2", "Ghép vòng 3", "Ghép trực tiếp", "Chưa có mentor", "Đối soát"],
       ...[...board.groups, board.unclassified].map((g) => [
         g.label,
         g.mentors,
@@ -47,8 +47,9 @@ export async function GET(request: Request) {
         g.mentees,
         g.matchedR1,
         g.matchedR2,
-        g.matchedOther,
-        g.mentees - g.matchedR1 - g.matchedR2 - g.matchedOther,
+        g.matchedR3,
+        g.matchedDirect,
+        g.mentees - g.matchedR1 - g.matchedR2 - g.matchedR3 - g.matchedDirect,
         g.reconciled ? "Khớp" : "Lệch"
       ])
     ];

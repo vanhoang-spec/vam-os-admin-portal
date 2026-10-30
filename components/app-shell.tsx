@@ -576,7 +576,8 @@ export function AppShell({
               </div>
             </div>
           </header>
-          <main id="main-content" tabIndex={-1} className="px-4 py-6 sm:px-6 lg:px-8">
+          {/* Trên điện thoại nút "Báo lỗi" nằm cố định góc dưới trái: chừa khoảng trống để kéo được nút "Trước" của bảng lên trên nó (VAM00002). */}
+          <main id="main-content" tabIndex={-1} className="px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pb-6">
             {children}
           </main>
         </div>

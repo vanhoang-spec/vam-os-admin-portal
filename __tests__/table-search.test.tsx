@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams()
 import { FilterableTable } from "@/components/filterable-table";
 import { TableSearch } from "@/components/table-search";
 import { ProgressiveTable, SimpleTable } from "@/components/ui";
-import { matchesTableQuery, parseTableQuery, prepareRowText, rowMatchesQuery, rowMatchesTerms, tableSearchTerms } from "@/lib/table-search-core";
+import { filterRowsByQuery, matchesTableQuery, parseTableQuery, prepareRowText, rowMatchesQuery, rowMatchesTerms, tableSearchTerms } from "@/lib/table-search-core";
 
 afterEach(cleanup);
 
@@ -58,6 +58,27 @@ describe("1. so khớp", () => {
 
   it("chữ không có số thì không khớp xuyên ranh giới hai cột", () => {
     expect(matches("Danh B1", "anhb")).toBe(false);
+  });
+
+  it("VAM00003: có dòng chứa nguyên cụm thì chỉ giữ các dòng đó; không dòng nào có thì về luật 'đủ mọi từ, cột nào cũng được'", () => {
+    const rows = [
+      "Sơn Nguyễn Minh Hải sonhai@gmail.com Kinh tế",
+      "Nguyễn Văn Sơn hai.nguyen@gmail.com TP. Hồ Chí Minh",
+      "Lê Minh Tuấn tuan@gmail.com Hải Phòng",
+      "Trần Thái Bình binh@gmail.com Hồ Chí Minh",
+      "Phạm Minh Hải Yến yen@gmail.com Kinh tế"
+    ].map(prepareRowText);
+    const keep = (q: string) => filterRowsByQuery(rows, parseTableQuery(q));
+    expect(keep("Sơn Nguyễn Minh Hải")).toEqual([0]);
+    expect(keep("minh hai")).toEqual([0, 4]);
+    // Gõ dở chữ cuối vẫn là cụm.
+    expect(keep("minh ha")).toEqual([0, 4]);
+    // Không dòng nào có nguyên cụm → luật cũ, khớp xuyên cột như trước.
+    expect(keep("tuan hai phong")).toEqual([2]);
+    expect(keep("binh minh")).toEqual([3]);
+    // Một chữ: không có bước cụm.
+    expect(keep("son")).toEqual([0, 1]);
+    expect(keep("")).toEqual([0, 1, 2, 3, 4]);
   });
 
   it("câu tìm rỗng hoặc chỉ dấu câu khớp mọi dòng", () => {
@@ -426,7 +447,8 @@ describe("7. rà toàn CRM: mọi bảng nằm trong khung dính tiêu đề", (
     "components/filterable-table.tsx"
   ])("%s lọc bằng phép khớp chung (bỏ dấu, đủ mọi từ)", (file) => {
     const source = readFileSync(file, "utf8");
-    expect(source).toContain("matchesTableQuery(");
+    // matchesTableQuery (từng dòng) hoặc filterRowsByQuery (cả bảng, ưu tiên cụm liền — VAM00003).
+    expect(source).toMatch(/matchesTableQuery\(|filterRowsByQuery\(/);
     expect(source).not.toMatch(/toLocaleLowerCase\("vi"\)\.includes|toLowerCase\(\)\.includes\(q\)/);
   });
 });

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import { parseTableQuery, prepareRowText, rowMatchesQuery, tableSearchTerms } from "@/lib/table-search-core";
+import { filterRowsByQuery, parseTableQuery, prepareRowText, tableSearchTerms } from "@/lib/table-search-core";
 
 /**
  * Ô tìm kiếm cho một (hoặc vài) bảng dữ liệu bên trong nó (BTC 05/10/2026).
@@ -58,18 +58,20 @@ export function TableSearch({
     const terms = parsed.terms;
     let shown = 0;
     let total = 0;
-    for (const row of dataRows(container)) {
-      // Dòng nhóm/tiêu đề phụ giữa bảng: luôn giữ, không đếm.
-      if (row.hasAttribute("data-search-keep")) continue;
+    // Dòng nhóm/tiêu đề phụ giữa bảng: luôn giữ, không đếm.
+    const searchable = dataRows(container).filter((row) => !row.hasAttribute("data-search-keep"));
+    // Ưu tiên dòng chứa nguyên cụm vừa gõ (xem filterRowsByQuery).
+    const keep = terms.length === 0 ? null : new Set(filterRowsByQuery(searchable.map((row) => prepareRowText(rowText(row))), parsed));
+    searchable.forEach((row, index) => {
       total += 1;
-      const match = terms.length === 0 || rowMatchesQuery(prepareRowText(rowText(row)), parsed);
+      const match = keep === null || keep.has(index);
       if (match) {
         shown += 1;
         row.removeAttribute("data-search-hidden");
       } else {
         row.setAttribute("data-search-hidden", "");
       }
-    }
+    });
     // Phần "Xem thêm N dòng" đang gập: đang tìm thì mở ra, kẻo dòng khớp nằm khuất
     // trong đó và người dùng tưởng không có. Xoá ô tìm thì gập lại đúng những phần
     // chính ô này đã mở.

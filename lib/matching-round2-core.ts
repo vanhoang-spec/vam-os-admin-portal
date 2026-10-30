@@ -102,9 +102,12 @@ export type GroupSummary = {
   mentees: number;
   matchedR1: number;
   matchedR2: number;
-  matchedOther: number;
+  /** Cặp vòng 3 (153 cặp ghi 22/10/2026). */
+  matchedR3: number;
+  /** Cặp BTC ghép tay: cột vòng để trống hoặc ngoài 1–3 (VAM00004 — trước đây gộp chung với vòng 3 thành "Ghép khác"). */
+  matchedDirect: number;
   visible: number;
-  /** mentees = R1 + R2 + khác + đang hiện. */
+  /** mentees = R1 + R2 + R3 + trực tiếp + đang hiện. */
   reconciled: boolean;
 };
 
@@ -237,7 +240,10 @@ export function buildRound2Board(input: {
     const mentees = groupRows.filter((r) => r.person.role === "mentee" && r.menteeState !== "ineligible");
     const matchedR1 = mentees.filter((r) => r.menteeState === "matched" && r.matchedRound === 1).length;
     const matchedR2 = mentees.filter((r) => r.menteeState === "matched" && r.matchedRound === 2).length;
-    const matchedOther = mentees.filter((r) => r.menteeState === "matched" && r.matchedRound !== 1 && r.matchedRound !== 2).length;
+    const matchedR3 = mentees.filter((r) => r.menteeState === "matched" && r.matchedRound === 3).length;
+    const matchedDirect = mentees.filter(
+      (r) => r.menteeState === "matched" && r.matchedRound !== 1 && r.matchedRound !== 2 && r.matchedRound !== 3
+    ).length;
     // Chỉ mentee ĐÃ có nhóm mới hiện cho mentor; dòng "Chưa phân nhóm" luôn 0 người hiện.
     const visible = code === null ? 0 : mentees.filter((r) => r.menteeState === "visible").length;
     const waiting = code === null ? mentees.filter((r) => r.menteeState === "visible").length : 0;
@@ -250,9 +256,10 @@ export function buildRound2Board(input: {
       mentees: mentees.length,
       matchedR1,
       matchedR2,
-      matchedOther,
+      matchedR3,
+      matchedDirect,
       visible,
-      reconciled: mentees.length === matchedR1 + matchedR2 + matchedOther + visible + waiting
+      reconciled: mentees.length === matchedR1 + matchedR2 + matchedR3 + matchedDirect + visible + waiting
     };
   };
 

@@ -221,10 +221,11 @@ function buildRecruitmentGroup(
     ...when(showOperations, {
       href: "/matches",
       label: "Ghép cặp",
-      // Vòng 2 (BTC 07/10/2026): mentor tự chọn mentee cùng nhóm ngành.
+      // Vòng 2 (BTC 07/10/2026): mentor tự chọn mentee cùng nhóm ngành. Mục con bỏ tiền tố "Vòng 2 ·":
+      // đã nằm dưới "Ghép cặp" thì tiền tố chỉ làm dài menu (VAM00006, 28/10/2026).
       children: [
-        { href: "/matches/vong-2", label: "Vòng 2 · Phân nhóm ngành" },
-        { href: "/matches/vong-2/bao-cao", label: "Vòng 2 · Báo cáo" },
+        { href: "/matches/vong-2", label: "Phân nhóm ngành" },
+        { href: "/matches/vong-2/bao-cao", label: "Báo cáo" },
         // Thư kết quả + hồ sơ người đồng hành (BTC 22/10/2026). Có họ tên, email, SĐT của mọi cặp:
         // cùng khán giả với trang tự gate bằng canManageMatches (Core team trở lên).
         ...(showAdminTier ? [{ href: "/matches/ket-qua", label: "Kết quả ghép cặp" }] : [])

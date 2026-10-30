@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { FilterBar, SimpleTable } from "@/components/ui";
-import { matchesTableQuery } from "@/lib/table-search-core";
+import { filterRowsByQuery, parseTableQuery, prepareTableValues } from "@/lib/table-search-core";
 
 type Option = { label: string; value: string };
 type Column = {
@@ -102,14 +102,16 @@ export function FilterableTable<T>({
   );
 
   const sortedRows = useMemo(() => {
-    const filtered = rows.filter((row) => {
-      if (!matchesTableQuery(allSearchKeys.map((key) => (row as any)[key]), query)) return false;
-      return resolvedFilters.every((filter) => {
+    const byFilters = rows.filter((row) =>
+      resolvedFilters.every((filter) => {
         const selected = filterValues[filter.key];
         if (!selected) return true;
         return String((row as any)[filter.valueKey] ?? "") === selected;
-      });
-    });
+      })
+    );
+    // Ô tìm sau bộ lọc: ưu tiên dòng chứa nguyên cụm vừa gõ (xem filterRowsByQuery).
+    const keep = new Set(filterRowsByQuery(byFilters.map((row) => prepareTableValues(allSearchKeys.map((key) => (row as any)[key]))), parseTableQuery(query)));
+    const filtered = byFilters.filter((_, index) => keep.has(index));
     const selectedSort = sortOptions.find((option) => option.label === sortKey);
     if (!selectedSort) return filtered;
     return [...filtered].sort((a, b) => {

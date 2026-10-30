@@ -92,6 +92,15 @@ describe("cấu trúc theo vai trò", () => {
     }
   });
 
+  it("“Ghép cặp” gom các trang ghép cặp, mục con không lặp tiền tố “Vòng 2 ·” (VAM00006)", () => {
+    const children = (role: Parameters<typeof recruitment>[0]) => {
+      const entry = (recruitment(role)?.items ?? []).find((e) => !isNavSubGroup(e) && e.href === "/matches");
+      return entry && !isNavSubGroup(entry) ? (entry.children ?? []).map((c) => c.label) : [];
+    };
+    expect(children("core_team")).toEqual(["Phân nhóm ngành", "Báo cáo", "Kết quả ghép cặp"]);
+    expect(children("support_team")).toEqual(["Phân nhóm ngành", "Báo cáo"]);
+  });
+
   it("mục dùng chung mở đúng bộ lọc vai trò của nhánh chứa nó", () => {
     const group = recruitment("super_admin")!;
     for (const entry of group.items ?? []) {
