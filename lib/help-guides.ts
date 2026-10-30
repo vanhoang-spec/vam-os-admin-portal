@@ -759,6 +759,8 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Cần người điền nộp file (CV, bảng điểm…): dùng loại “Tải file (gửi link)”. Người điền tải file lên Google Drive/OneDrive, bật chia sẻ “Bất kỳ ai có đường liên kết đều xem được” rồi dán link — dưới ô đã có sẵn hướng dẫn này. CRM không lưu file, form luôn nhẹ.",
       "Form dài: thêm “Ngắt trang” ở chỗ muốn sang trang mới (tiêu đề của ngắt trang là tên trang sau). Người điền bấm “Tiếp” — trang còn thiếu mục bắt buộc hay sai định dạng thì không qua được; “Quay lại” giữ nguyên câu đã điền; ô đồng ý và nút Gửi ở trang cuối.",
       "Muốn gửi thư xác nhận cho người điền: tích “Gửi thư tự động cho người điền”, viết tiêu đề (để trống = “Đã nhận câu trả lời: <tên form>”) và nội dung, bấm “Gửi thử cho tôi” để xem thư, rồi Lưu. Thư đi tới email người điền nhập ở trường Email bắt buộc đầu tiên, ngay sau khi họ bấm Gửi.",
+      "Muốn rẽ nhánh theo câu trả lời: thêm câu loại “Có / Không (rẽ nhánh được)”, thêm các “Ngắt trang”, rồi ở câu đó chọn trả lời Có thì đến đâu, Không thì đến đâu (một trang phía sau, trang kế tiếp, hoặc kết thúc form).",
+      "Muốn đổi màu: chọn “Màu chủ đạo”, áp cho viền đầu form và nút Tiếp, Gửi.",
       "Bấm “Lưu form”, rồi “Xem thử form” để điền thử — bản xem thử kiểm lỗi y như form thật nhưng không ghi gì.",
       "Bấm “Công khai form”, “Sao chép link” và gửi link cho người điền. Hết đợt thì bấm “Đóng form”.",
       "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm và nút “Tải CSV”.",
@@ -772,7 +774,8 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "“Mỗi email chỉ gửi một lần” (bật sẵn): dùng trường Email bắt buộc đầu tiên; gửi lần hai bị báo “Email này đã gửi form rồi”, câu trả lời cũ giữ nguyên.",
       "Form đã có câu trả lời: câu hỏi cũ không xoá hay đổi loại được (bấm “Ẩn” để bỏ khỏi form, dữ liệu cũ vẫn xem được); câu chọn chỉ thêm được lựa chọn mới. Sửa chữ câu hỏi và thêm câu mới vẫn được.",
       `Thư tự động: mỗi form gửi tối đa 300 lá trong 24 giờ, và dừng khi cả hệ thống còn dưới 40 lá trong hạn mức chung ${dailyEmailLimitLabel()} qua ${EMAIL_PROVIDER_NAME} (chừa cho thư mời, xác nhận lịch…). Thư không đi thì câu trả lời vẫn được lưu bình thường. Nội dung là chữ thường, xuống dòng giữ nguyên. Thư đã gửi xem ở Vận hành → Mail → Nhật ký gửi.`,
-      "Chưa có trong bản này: câu hỏi rẽ nhánh (nhảy câu theo câu trả lời).",
+      "Rẽ nhánh: chỉ nhảy tới các trang nằm sau câu hỏi, không nhảy lùi. Câu ở trang bị bỏ qua không bắt buộc và không được lưu, kể cả khi người điền đã điền rồi quay lại đổi câu trả lời. Trường Email (và Họ và tên nếu form gắn sự kiện hoặc bật chặn) phải nằm trước hoặc cùng trang với câu rẽ nhánh đầu tiên.",
+      "“Chỉ nhận người đã có trên hệ thống”: email và họ tên phải khớp một mentor hoặc mentee đã được duyệt của mùa hiện tại. Tùy chọn riêng từng form, tắt thì ai cũng gửi được.",
       "Ai dùng được: Super admin, Admin, Core team, Support team — tạo/sửa form, xem câu trả lời và tải CSV. File có họ tên, email, SĐT, có thể có CCCD: không chia sẻ ra ngoài."
     ],
     updated: "15/10/2026"

@@ -47,7 +47,9 @@ export default async function CustomFormEditPage(props: { params: Promise<{ id: 
           autoReplyBody: form.autoReplyBody,
           fields: form.fields,
           eventId: form.eventId,
-          registrationLimit: form.registrationLimit
+          registrationLimit: form.registrationLimit,
+          requireKnownPerson: form.requireKnownPerson,
+          themeColor: form.themeColor
         }}
         programs={programs}
         events={events}

@@ -14,6 +14,7 @@ import {
   AUTO_REPLY_DAILY_CAP_PER_FORM,
   AUTO_REPLY_SYSTEM_HEADROOM,
   CUSTOM_FORM_LIMITS,
+  nameField,
   replyEmailField,
   checkDefinitionRules,
   checkLockedChanges,
@@ -26,12 +27,13 @@ import {
   parseFormSettings,
   publishBlocker,
   storedFields,
-  validateAnswers,
+  validateFormAnswers,
   type CustomFormAnswers,
   type CustomFormAvailability,
   type CustomFormField,
   type CustomFormStatus
 } from "@/lib/custom-form-core";
+import { KNOWN_PERSON_MESSAGE, isKnownPerson } from "@/lib/custom-form-gate";
 import { checkLinkableEvent, listDuplicateFlags, listLinkableEvents, submitEventLinkedForm, EVENT_FORM_MESSAGES, type DuplicateFlag, type LinkableEvent } from "@/lib/custom-form-event";
 import { sendCustomFormReceipt } from "@/lib/email";
 import { DAILY_EMAIL_LIMIT, QUOTA_WINDOW_MS } from "@/lib/email-quota-core";
@@ -47,7 +49,7 @@ type ServiceClient = NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
 const FORM_COLUMNS =
-  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,created_at,updated_at";
+  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,created_at,updated_at";
 
 export type ProgramOption = { id: string; name: string };
 
@@ -70,6 +72,10 @@ export type CustomFormDetail = {
   eventId: string | null;
   /** Giới hạn số đăng ký riêng của form; null = không giới hạn. */
   registrationLimit: number | null;
+  /** Chỉ nhận người đã có trên hệ thống (VAM00009). */
+  requireKnownPerson: boolean;
+  /** Màu chủ đạo #rrggbb; null = màu mặc định. */
+  themeColor: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -101,6 +107,8 @@ function toDetail(row: Row): CustomFormDetail {
     fields: storedFields(row.fields),
     eventId: row.event_id ? String(row.event_id) : null,
     registrationLimit: row.registration_limit === null || row.registration_limit === undefined ? null : Number(row.registration_limit),
+    requireKnownPerson: row.require_known_person === true,
+    themeColor: row.theme_color ? String(row.theme_color) : null,
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? "")
   };
@@ -231,7 +239,9 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
     opensAt,
     closesAt,
     eventId: input.eventId,
-    registrationLimit: input.registrationLimit
+    registrationLimit: input.registrationLimit,
+    requireKnownPerson: input.requireKnownPerson,
+    themeColor: input.themeColor
   });
   if (!settingsParsed.ok) return { ok: false, message: settingsParsed.error };
   const fields = fieldsParsed.fields;
@@ -273,6 +283,8 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
         fields,
         event_id: settings.eventId,
         registration_limit: settings.registrationLimit,
+        require_known_person: settings.requireKnownPerson,
+        theme_color: settings.themeColor,
         updated_by: op.adminId,
         updated_at: new Date().toISOString()
       })
@@ -380,12 +392,13 @@ export type PublicCustomForm =
       fields: CustomFormField[];
       opensAt: string | null;
       closesAt: string | null;
+      themeColor: string | null;
     };
 
 async function readPublicRow(client: ServiceClient, code: string): Promise<Row | null> {
   const { data, error } = await client
     .from("custom_forms")
-    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit")
+    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color")
     .eq("public_code", code)
     .maybeSingle();
   if (error) throw error;
@@ -401,7 +414,7 @@ export async function getPublicCustomForm(code: string, nowMs = Date.now()): Pro
     if (!row) return { state: "invalid" };
     const availability = formAvailability({ status: String(row.status), opensAt: row.opens_at ?? null, closesAt: row.closes_at ?? null }, nowMs);
     // Form nháp: không lộ tiêu đề hay câu hỏi cho người đoán trúng mã.
-    if (availability === "draft") return { state: "ready", availability, title: "", description: "", fields: [], opensAt: null, closesAt: null };
+    if (availability === "draft") return { state: "ready", availability, title: "", description: "", fields: [], opensAt: null, closesAt: null, themeColor: null };
     return {
       state: "ready",
       availability,
@@ -409,7 +422,8 @@ export async function getPublicCustomForm(code: string, nowMs = Date.now()): Pro
       description: String(row.description ?? ""),
       fields: storedFields(row.fields).filter((f) => !f.hidden),
       opensAt: row.opens_at ?? null,
-      closesAt: row.closes_at ?? null
+      closesAt: row.closes_at ?? null,
+      themeColor: row.theme_color ? String(row.theme_color) : null
     };
   } catch (error) {
     log("public load failed", error);
@@ -491,8 +505,20 @@ export async function submitPublicCustomForm(
       if (Array.isArray(value)) return value.map((v) => String(v ?? ""));
       return value === undefined || value === null ? [] : [String(value)];
     };
-    const checked = validateAnswers(fields, read);
+    const checked = validateFormAnswers(fields, read);
     if (!checked.ok) return fail("Một vài mục chưa đúng — xem chữ đỏ dưới từng mục.", checked.errors);
+
+    // Chặn người chưa có trên hệ thống (VAM00009): trước mọi lệnh ghi. Lỗi đọc database rơi xuống catch
+    // cuối hàm, tức là KHÔNG cho qua.
+    if (row.require_known_person === true) {
+      const emailField = dedupeEmailField(fields);
+      const name = nameField(fields.filter((f) => !f.hidden));
+      const email = emailField ? checked.answers[emailField.id] : undefined;
+      const fullName = name ? checked.answers[name.id] : undefined;
+      if (typeof email !== "string" || typeof fullName !== "string" || !(await isKnownPerson(client, email, fullName))) {
+        return fail(KNOWN_PERSON_MESSAGE);
+      }
+    }
 
     const dedupeKey = dedupeKeyFor(fields, checked.answers, row.one_per_email === true);
     // Form gắn sự kiện (VAM00008): đăng ký đi vào danh sách người tham gia của sự kiện; thư xác nhận

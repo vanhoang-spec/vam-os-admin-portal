@@ -271,17 +271,17 @@ describe("6. ô tải file = gửi link; ngắt trang (BTC 15/10/2026)", () => {
     const mail = f("f_emailaaa", "email");
     const cv = f("f_cvaaaaaa", "file_link");
     const brk = (id: string, label = "", extra: Partial<CustomFormField> = {}) => f(id, "page_break", { label, required: false, ...extra });
-    expect(splitPages([name, mail])).toEqual([{ title: "", help: "", fields: [name, mail] }]);
-    expect(splitPages([name, brk("f_brk1aaaa", "Hồ sơ", { help: "Gửi link CV" }), cv])).toEqual([
+    expect(splitPages([name, mail])).toMatchObject([{ title: "", help: "", fields: [name, mail] }]);
+    expect(splitPages([name, brk("f_brk1aaaa", "Hồ sơ", { help: "Gửi link CV" }), cv])).toMatchObject([
       { title: "", help: "", fields: [name] },
       { title: "Hồ sơ", help: "Gửi link CV", fields: [cv] }
     ]);
-    expect(splitPages([brk("f_brk0aaaa", "Mở đầu"), name, brk("f_brk1aaaa"), brk("f_brk2aaaa", "Trang 2"), mail, brk("f_brk3aaaa")])).toEqual([
+    expect(splitPages([brk("f_brk0aaaa", "Mở đầu"), name, brk("f_brk1aaaa"), brk("f_brk2aaaa", "Trang 2"), mail, brk("f_brk3aaaa")])).toMatchObject([
       { title: "Mở đầu", help: "", fields: [name] },
       { title: "Trang 2", help: "", fields: [mail] }
     ]);
-    expect(splitPages([name, brk("f_brk1aaaa", "Ẩn", { hidden: true }), mail])).toEqual([{ title: "", help: "", fields: [name, mail] }]);
-    expect(splitPages([])).toEqual([{ title: "", help: "", fields: [] }]);
+    expect(splitPages([name, brk("f_brk1aaaa", "Ẩn", { hidden: true }), mail])).toMatchObject([{ title: "", help: "", fields: [name, mail] }]);
+    expect(splitPages([])).toMatchObject([{ title: "", help: "", fields: [] }]);
   });
 });
 

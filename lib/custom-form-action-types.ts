@@ -30,4 +30,8 @@ export type CustomFormSavePayload = {
   eventId?: string;
   /** Giới hạn số đăng ký riêng của form, hoặc chuỗi rỗng. */
   registrationLimit?: string;
+  /** Chỉ nhận người đã có trên hệ thống (VAM00009). */
+  requireKnownPerson?: boolean;
+  /** Màu chủ đạo #rrggbb, hoặc chuỗi rỗng (VAM00009). */
+  themeColor?: string;
 };

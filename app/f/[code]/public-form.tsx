@@ -5,12 +5,17 @@ import {
   CUSTOM_FORM_CONSENT_TEXT,
   FIELD_FORMAT_HINTS,
   customFormDraftKey,
+  hasBranching,
   hasDraftContent,
   isQuestion,
+  nextPageIndex,
   parseDraft,
   serializeDraft,
   splitPages,
+  themeTextColor,
   validateAnswers,
+  validateFormAnswers,
+  visitedPages,
   type CustomFormAnswerValue,
   type CustomFormField
 } from "@/lib/custom-form-core";
@@ -64,7 +69,7 @@ function asList(value: CustomFormAnswerValue | undefined): string[] {
  * hiện lại. Gửi thành công hay bấm "Xoá nháp" thì nháp mất. Ô đồng ý không bao giờ được lưu. Chỉ lưu
  * sau khi người điền đã gõ: mở trang thôi không ghi gì, và không đè lên nháp cũ.
  */
-export function PublicForm({ code, fields, preview = false }: { code: string; fields: CustomFormField[]; preview?: boolean }) {
+export function PublicForm({ code, fields, preview = false, themeColor = null }: { code: string; fields: CustomFormField[]; preview?: boolean; themeColor?: string | null }) {
   const [values, setValues] = useState<Record<string, CustomFormAnswerValue>>({});
   const [consent, setConsent] = useState(false);
   const [trap, setTrap] = useState("");
@@ -73,6 +78,8 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  // Các trang đã đi qua trước trang đang xem: có rẽ nhánh thì "Quay lại" là về trang vừa đi, không phải trang số liền trước.
+  const [trail, setTrail] = useState<number[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -118,7 +125,12 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     const draft = parseDraft(fields, raw, Date.now());
     if (draft) {
       setValues(draft.values);
-      setPage(Math.min(draft.page, pages.length - 1));
+      // Nháp mở lại đúng đường đã đi: trang đã lưu không còn trên đường (BTC đổi form) thì về trang cuối của đường.
+      const path = visitedPages(pages, (id) => asList(draft.values[id])[0]);
+      const at = path.indexOf(draft.page);
+      const stop = at >= 0 ? at : path.length - 1;
+      setPage(path[stop]);
+      setTrail(path.slice(0, stop));
       setRestoredAt(draft.savedAt);
     } else if (raw) {
       removeDraft();
@@ -134,10 +146,21 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     }, DRAFT_SAVE_DELAY_MS);
     return () => clearTimeout(timer);
   }, [values, page, done, writeDraft]);
-  const last = pages.length - 1;
-  const current = pages[Math.min(page, last)];
-  // Mọi mục đang hiện của cả form (không gồm ngắt trang) — để kiểm lần cuối trước khi gửi.
+  const current = pages[Math.min(page, pages.length - 1)];
+  const answerOf = (id: string) => asList(values[id])[0];
+  // Trang cuối của lượt điền này: phụ thuộc câu trả lời, không phải trang số cuối của form.
+  const next = nextPageIndex(pages, page, answerOf);
+  const onLastPage = next === null;
+  const branching = useMemo(() => hasBranching(fields), [fields]);
+  // Mọi mục đang hiện của cả form (không gồm ngắt trang) — để tìm trang chứa mục lỗi.
   const allFields = useMemo(() => pages.flatMap((p) => p.fields), [pages]);
+  /** Tới một trang nằm trên đường đi hiện tại, giữ "Quay lại" đúng. */
+  const jumpTo = (target: number) => {
+    const path = visitedPages(pages, answerOf);
+    const at = path.indexOf(target);
+    setPage(at >= 0 ? target : path[path.length - 1]);
+    setTrail(path.slice(0, at >= 0 ? at : path.length - 1));
+  };
 
   // Đưa con trỏ tới mục lỗi SAU khi trang chứa nó đã hiện ra.
   useEffect(() => {
@@ -176,6 +199,7 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     setValues({});
     setErrors({});
     setPage(0);
+    setTrail([]);
     setRestoredAt(null);
     setSavedAt(null);
     setNotice({ kind: "ok", message: "Đã xoá bản nháp — form trống, bạn điền lại từ đầu." });
@@ -189,10 +213,10 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     const first = allFields.find((f) => found[f.id]);
     if (first) {
       const target = pages.findIndex((p) => p.fields.some((f) => f.id === first.id));
-      if (target >= 0) setPage(target);
+      if (target >= 0) jumpTo(target);
       setFocusId(first.id);
     } else if (found[CONSENT_KEY]) {
-      setPage(last);
+      jumpTo(pages.length - 1);
       setFocusId(CONSENT_KEY);
     }
   };
@@ -204,12 +228,16 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
       return;
     }
     setNotice(null);
-    setPage((p) => Math.min(p + 1, last));
+    if (next !== null) {
+      setTrail((t) => [...t, page]);
+      setPage(next);
+    }
     setFocusId("top");
   };
   const goBack = () => {
     setNotice(null);
-    setPage((p) => Math.max(p - 1, 0));
+    setPage(trail[trail.length - 1] ?? 0);
+    setTrail((t) => t.slice(0, -1));
     setFocusId("top");
   };
 
@@ -217,11 +245,11 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     event.preventDefault();
     if (sending) return;
     // Enter trong một ô ở trang chưa cuối = bấm "Tiếp", không gửi cả form.
-    if (page < last) {
+    if (!onLastPage) {
       goNext();
       return;
     }
-    const checked = validateAnswers(allFields, (id) => asList(values[id]));
+    const checked = validateFormAnswers(fields, (id) => asList(values[id]));
     const found: Record<string, string> = { ...checked.errors };
     if (!consent) found[CONSENT_KEY] = "Vui lòng tích ô đồng ý trước khi gửi.";
     if (Object.keys(found).length) {
@@ -251,6 +279,8 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
     }
   };
 
+  const accent = themeColor ? { backgroundColor: themeColor, color: themeTextColor(themeColor) } : undefined;
+
   if (done) {
     return (
       <div role="status" data-testid="form-done" className="whitespace-pre-line rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-base text-green-800">
@@ -273,7 +303,7 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
       {pages.length > 1 ? (
         <div className="grid gap-1" data-testid="page-header">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500" data-testid="page-progress">
-            Trang {page + 1}/{pages.length}
+            {branching ? `Trang ${trail.length + 1}` : `Trang ${page + 1}/${pages.length}`}
           </p>
           {current.title ? <h2 className="text-lg font-semibold text-vam-ink">{current.title}</h2> : null}
           {current.help ? <p className="whitespace-pre-line text-sm text-slate-600">{current.help}</p> : null}
@@ -303,19 +333,20 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
         let control: React.ReactNode;
         if (field.type === "long_text") {
           control = <textarea {...common} rows={4} className={BOX} value={text} onChange={(e) => setValue(field.id, e.target.value)} />;
-        } else if (field.type === "single_choice" || field.type === "multi_choice") {
+        } else if (field.type === "single_choice" || field.type === "multi_choice" || field.type === "yes_no") {
+          const oneOnly = field.type !== "multi_choice";
           const picked = asList(value);
           control = (
-            <div {...common} role={field.type === "single_choice" ? "radiogroup" : "group"} tabIndex={-1} className="grid gap-2">
+            <div {...common} role={oneOnly ? "radiogroup" : "group"} tabIndex={-1} className="grid gap-2">
               {field.options.map((option) => (
                 <label key={option} className="flex items-start gap-2 text-base text-vam-ink">
                   <input
-                    type={field.type === "single_choice" ? "radio" : "checkbox"}
+                    type={oneOnly ? "radio" : "checkbox"}
                     name={`q-${field.id}`}
                     className="mt-1 h-4 w-4"
                     checked={picked.includes(option)}
                     onChange={(e) => {
-                      if (field.type === "single_choice") setValue(field.id, option);
+                      if (oneOnly) setValue(field.id, option);
                       else setValue(field.id, e.target.checked ? [...picked, option] : picked.filter((p) => p !== option));
                     }}
                   />
@@ -383,7 +414,7 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
         </label>
       </div>
 
-      {page === last ? (
+      {onLastPage ? (
         <div className="grid gap-1.5 border-t border-vam-line pt-4">
           <label className="flex items-start gap-2 text-sm text-vam-ink">
             <input
@@ -430,7 +461,7 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
         <button type="button" data-testid="draft-save" className={SECONDARY} onClick={saveNow} disabled={sending}>
           Lưu nháp
         </button>
-        {page > 0 ? (
+        {trail.length > 0 ? (
           <button type="button" data-testid="page-back" className={SECONDARY} onClick={goBack} disabled={sending}>
             Quay lại
           </button>
@@ -439,12 +470,12 @@ export function PublicForm({ code, fields, preview = false }: { code: string; fi
             và chỉ đổi type từ "button" sang "submit". Bấm "Tiếp" ở trang kế cuối thì React vẽ lại ngay trong cú bấm,
             trình duyệt xử lý cú bấm trên nút giờ đã là "submit" và GỬI form — chưa tích đồng ý thì hiện chữ đỏ,
             đã tích (Quay lại → Tiếp) thì gửi thật dù người điền chưa bấm "Gửi". */}
-        {page < last ? (
-          <button key="page-next" type="button" data-testid="page-next" className={PRIMARY} onClick={goNext}>
+        {!onLastPage ? (
+          <button key="page-next" type="button" data-testid="page-next" className={PRIMARY} style={accent} onClick={goNext}>
             Tiếp
           </button>
         ) : (
-          <button key="form-submit" type="submit" data-testid="form-submit" disabled={sending} className={PRIMARY}>
+          <button key="form-submit" type="submit" data-testid="form-submit" disabled={sending} className={PRIMARY} style={accent}>
             {sending ? "Đang gửi…" : preview ? "Gửi (xem thử)" : "Gửi"}
           </button>
         )}
