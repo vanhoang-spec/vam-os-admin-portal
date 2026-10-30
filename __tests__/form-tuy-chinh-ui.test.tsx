@@ -183,7 +183,7 @@ describe("2. trình tạo form", () => {
   const FORM: BuilderForm = {
     id: "11111111-2222-4333-8444-555555555555",
     eventId: null,
-    registrationLimit: null,
+    registrationLimit: null, requireKnownPerson: false, themeColor: null,
     publicCode: CODE,
     title: "Tuyển mentee Job Shadowing",
     description: "",
@@ -401,7 +401,7 @@ describe("2b. trình tạo form — thư tự động, ngắt trang", () => {
   const FORM2: BuilderForm = {
     id: "11111111-2222-4333-8444-555555555555",
     eventId: null,
-    registrationLimit: null,
+    registrationLimit: null, requireKnownPerson: false, themeColor: null,
     publicCode: CODE,
     title: "Tuyển mentee Job Shadowing",
     description: "",

@@ -170,6 +170,8 @@ describe("2. tạo, lưu, đổi trạng thái", () => {
         "opens_at",
         "program_id",
         "registration_limit",
+        "require_known_person",
+        "theme_color",
         "thank_you",
         "title",
         "updated_at",
@@ -312,7 +314,7 @@ describe("3. gửi công khai /f/<mã>", () => {
     }
     seed("draft");
     const draft = await getPublicCustomForm(CODE, NOW);
-    expect(draft).toEqual({ state: "ready", availability: "draft", title: "", description: "", fields: [], opensAt: null, closesAt: null });
+    expect(draft).toEqual({ state: "ready", availability: "draft", title: "", description: "", fields: [], opensAt: null, closesAt: null, themeColor: null });
     expect(await getPublicCustomForm("sai", NOW)).toEqual({ state: "invalid" });
   });
 });

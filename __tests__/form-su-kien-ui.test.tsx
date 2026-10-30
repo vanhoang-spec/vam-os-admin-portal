@@ -50,7 +50,7 @@ const FORM: BuilderForm = {
   autoReplyBody: "",
   fields: [field("f_nameaaaa", "short_text", "Họ và tên"), field("f_mailaaaa", "email", "Email")],
   eventId: null,
-  registrationLimit: null
+  registrationLimit: null, requireKnownPerson: false, themeColor: null
 };
 const EVENTS: BuilderEvent[] = [
   { id: "ev-1", name: "Training 15/11", startsAt: "2026-11-15T01:00:00Z", capacity: 100, status: "active", blocker: null },

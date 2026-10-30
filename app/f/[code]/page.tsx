@@ -76,7 +76,7 @@ export default async function CustomFormPublicPage(props: { params: Promise<{ co
   }
   return (
     <Shell>
-      <FormHeader title={data.title} description={data.description} closesAt={data.closesAt} />
+      <FormHeader title={data.title} description={data.description} closesAt={data.closesAt} themeColor={data.themeColor} />
       <div className="rounded-lg border border-vam-line bg-white px-4 py-5">
         <PublicForm code={code} fields={data.fields} />
       </div>

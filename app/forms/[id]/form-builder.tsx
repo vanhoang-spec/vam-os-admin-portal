@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui";
 import type { CustomFormAdminResult } from "@/lib/custom-form-action-types";
 import {
+  BRANCH_END,
   CHOICE_TYPES,
   CUSTOM_FORM_FIELD_TYPES,
   CUSTOM_FORM_STATUS_LABELS,
@@ -45,6 +46,9 @@ export type BuilderForm = {
   /** Sự kiện liên kết (VAM00008). */
   eventId: string | null;
   registrationLimit: number | null;
+  /** Chỉ nhận người đã có trên hệ thống (VAM00009). */
+  requireKnownPerson: boolean;
+  themeColor: string | null;
 };
 
 export type BuilderEvent = { id: string; name: string; startsAt: string | null; capacity: number | null; status: string; blocker: string | null };
@@ -79,6 +83,8 @@ export function FormBuilder({
   const [thankYou, setThankYou] = useState(form.thankYou);
   const [eventId, setEventId] = useState(form.eventId ?? "");
   const [registrationLimit, setRegistrationLimit] = useState(form.registrationLimit === null ? "" : String(form.registrationLimit));
+  const [requireKnownPerson, setRequireKnownPerson] = useState(form.requireKnownPerson);
+  const [themeColor, setThemeColor] = useState(form.themeColor ?? "");
   const [events, setEvents] = useState<BuilderEvent[]>(initialEvents);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickName, setQuickName] = useState("");
@@ -205,6 +211,8 @@ export function FormBuilder({
           closesAt,
           eventId,
           registrationLimit,
+          requireKnownPerson,
+          themeColor,
           fields: fields.map(({ optionsText, ...f }) => ({ ...f, options: CHOICE_TYPES.has(f.type) ? lines(optionsText) : [] }))
         }),
       () => setDirty(false)
@@ -410,6 +418,31 @@ export function FormBuilder({
               onChange={edit(setThankYou)}
             />
           </label>
+          <div className="grid gap-1 text-sm">
+            <span className="font-medium">Màu chủ đạo của form</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="color" aria-label="Màu chủ đạo" data-testid="theme-color" className="h-9 w-14 rounded border border-vam-line bg-white p-1" value={themeColor || "#0f766e"} onChange={edit(setThemeColor)} />
+              {themeColor ? (
+                <button type="button" className={SMALL_BUTTON} onClick={() => { setThemeColor(""); touch(); }}>
+                  Dùng màu mặc định
+                </button>
+              ) : (
+                <span className="text-xs text-slate-500">Đang dùng màu mặc định.</span>
+              )}
+            </div>
+            <span className="text-xs text-slate-600">Áp cho viền đầu form và nút Tiếp, Gửi. Chữ trên nút tự chọn trắng hoặc đen cho dễ đọc.</span>
+          </div>
+          <label className="flex items-start gap-2 text-sm" data-testid="known-person">
+            <input type="checkbox" data-testid="known-person-toggle" className="mt-0.5 h-4 w-4" checked={requireKnownPerson} onChange={(e) => {
+                setRequireKnownPerson(e.target.checked);
+                touch();
+              }} />
+            <span>
+              <span className="font-medium">Chỉ nhận người đã có trên hệ thống</span> — email và họ tên phải khớp một mentor hoặc mentee đã được duyệt của
+              mùa hiện tại. Người khác không gửi được và thấy câu “Thông tin của bạn chưa có trên hệ thống. Vui lòng liên hệ BTC để được hỗ trợ.”
+              Form cần trường Email và ô Họ và tên bắt buộc.
+            </span>
+          </label>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5 h-4 w-4" checked={onePerEmail} onChange={(e) => {
                 setOnePerEmail(e.target.checked);
@@ -541,6 +574,30 @@ export function FormBuilder({
                     </span>
                     <textarea className={BOX} rows={4} value={field.optionsText} onChange={(e) => updateField(field.id, { optionsText: e.target.value })} />
                   </label>
+                ) : null}
+                {field.type === "yes_no" ? (
+                  <div className="grid gap-2 rounded-md border border-vam-line p-2 sm:grid-cols-2" data-testid="branch-targets">
+                    {(["yes", "no"] as const).map((side) => (
+                      <label key={side} className="grid gap-1 text-xs text-slate-600">
+                        <span>Trả lời “{side === "yes" ? "Có" : "Không"}” thì đến</span>
+                        <select
+                          className={BOX}
+                          aria-label={`Đích khi trả lời ${side === "yes" ? "Có" : "Không"}`}
+                          value={field.branches?.[side] ?? ""}
+                          onChange={(e) => updateField(field.id, { branches: { yes: field.branches?.yes ?? "", no: field.branches?.no ?? "", [side]: e.target.value } })}
+                        >
+                          <option value="">Trang kế tiếp</option>
+                          {fields.slice(index + 1).filter((f) => f.type === "page_break" && !f.hidden).map((f) => (
+                            <option key={f.id} value={f.id}>
+                              Trang: {f.label || "(chưa đặt tên)"}
+                            </option>
+                          ))}
+                          <option value={BRANCH_END}>Kết thúc form (tới nút Gửi)</option>
+                        </select>
+                      </label>
+                    ))}
+                    <p className="text-xs text-slate-500 sm:col-span-2">Chỉ đến được các “Ngắt trang” nằm sau câu này. Câu ở trang bị bỏ qua không bắt buộc và không được lưu.</p>
+                  </div>
                 ) : null}
                 {question ? (
                   <label className="flex items-center gap-2 text-sm">
