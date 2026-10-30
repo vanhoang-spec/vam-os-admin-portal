@@ -148,16 +148,16 @@ describe("buildRound2Board", () => {
     expect(board.anomalies.filter((a) => a.kind === "unclassified").map((a) => a.personIds[0])).toEqual(["x"]);
   });
 
-  it("đối soát theo nhóm: mentee = vòng 1 + vòng 2 + khác + đang hiện", () => {
+  it("đối soát theo nhóm: mentee = vòng 1 + vòng 2 + vòng 3 + trực tiếp + đang hiện", () => {
     const board = buildRound2Board({
-      people: [mentor("a", { capacityTarget: 3 }), mentor("b"), mentee("w"), mentee("x"), mentee("y"), mentee("z")],
-      assignments: ["a", "b"].map((id) => assign("mentor", id, 4)).concat(["w", "x", "y", "z"].map((id) => assign("mentee", id, 4))),
-      matches: [match("a", "w"), match("a", "x", { round: 2 }), match("b", "y", { round: null })]
+      people: [mentor("a", { capacityTarget: 3 }), mentor("b"), mentee("w"), mentee("x"), mentee("y"), mentee("v"), mentee("z")],
+      assignments: ["a", "b"].map((id) => assign("mentor", id, 4)).concat(["w", "x", "y", "v", "z"].map((id) => assign("mentee", id, 4))),
+      matches: [match("a", "w"), match("a", "x", { round: 2 }), match("b", "y", { round: null }), match("b", "v", { round: 3 })]
     });
     const g = board.groups.find((x) => x.code === 4)!;
-    expect(g).toMatchObject({ mentors: 2, mentees: 4, matchedR1: 1, matchedR2: 1, matchedOther: 1, visible: 1, reconciled: true });
-    // a: min(2,3) − 2 = 0; b: min(2,2) − 1 = 1.
-    expect([g.mentorsWithSlots, g.slots]).toEqual([1, 1]);
+    expect(g).toMatchObject({ mentors: 2, mentees: 5, matchedR1: 1, matchedR2: 1, matchedR3: 1, matchedDirect: 1, visible: 1, reconciled: true });
+    // a: min(2,3) − 2 = 0; b: min(2,2) − 2 = 0.
+    expect([g.mentorsWithSlots, g.slots]).toEqual([0, 0]);
     expect(board.round2Matches.map((m) => m.mentee?.person.personId)).toEqual(["x"]);
   });
 

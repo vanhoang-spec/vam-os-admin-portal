@@ -63,6 +63,30 @@ export function parseTableQuery(query: string): TableQuery {
   return { terms, phoneDigits: Array.from(variants) };
 }
 
+/**
+ * Dòng chứa NGUYÊN CỤM vừa gõ, liền nhau, mỗi chữ khớp từ đầu một từ ("minh hai" trong "Nguyễn
+ * Minh Hải"; chữ cuối gõ dở vẫn được: "minh ha"). Chỉ có nghĩa với câu từ hai chữ trở lên.
+ *
+ * Dùng để ƯU TIÊN, không thay luật "đủ mọi từ, ở cột nào cũng được": VAM00002/00003 (28/10/2026) —
+ * gõ "Minh Hải" ra 13 dòng vì "Minh" ở cột trường (Hồ Chí Minh), "hai" nằm trong "Thái" ở cột khác.
+ * Có dòng chứa nguyên cụm thì người gõ đang tìm đúng cái tên đó; không dòng nào có thì quay về luật cũ.
+ */
+export function rowMatchesPhrase(row: PreparedRowText, query: TableQuery): boolean {
+  if (query.terms.length < 2) return false;
+  return ` ${row.normal}`.includes(` ${query.terms.join(" ")}`);
+}
+
+/**
+ * Lọc cả bảng một lượt: luật thường, rồi nếu có dòng khớp nguyên cụm thì chỉ giữ các dòng đó.
+ * Trả chỉ số các dòng được giữ, theo thứ tự cũ.
+ */
+export function filterRowsByQuery(rows: readonly PreparedRowText[], query: TableQuery): number[] {
+  if (!query.terms.length && !query.phoneDigits) return rows.map((_, i) => i);
+  const matched = rows.map((row, i) => [row, i] as const).filter(([row]) => rowMatchesQuery(row, query));
+  const phrase = matched.filter(([row]) => rowMatchesPhrase(row, query));
+  return (phrase.length ? phrase : matched).map(([, i]) => i);
+}
+
 export function rowMatchesQuery(row: PreparedRowText, query: TableQuery): boolean {
   if (query.phoneDigits?.some((digits) => row.compact.includes(digits))) return true;
   return rowMatchesTerms(row, query.terms);
@@ -84,4 +108,9 @@ export function matchesTableQuery(values: readonly unknown[], query: string): bo
   const parsed = parseTableQuery(query);
   if (!parsed.terms.length) return true;
   return rowMatchesQuery(prepareRowText(values.map(searchableText).join(" ")), parsed);
+}
+
+/** Chữ của một dòng dữ liệu, chuẩn hoá sẵn cho filterRowsByQuery. */
+export function prepareTableValues(values: readonly unknown[]): PreparedRowText {
+  return prepareRowText(values.map(searchableText).join(" "));
 }
