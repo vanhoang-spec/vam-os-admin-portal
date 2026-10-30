@@ -26,4 +26,8 @@ export type CustomFormSavePayload = {
   opensAt: string;
   closesAt: string;
   fields: unknown;
+  /** Sự kiện liên kết (VAM00008), hoặc chuỗi rỗng. */
+  eventId?: string;
+  /** Giới hạn số đăng ký riêng của form, hoặc chuỗi rỗng. */
+  registrationLimit?: string;
 };

@@ -32,6 +32,7 @@ import {
   type CustomFormField,
   type CustomFormStatus
 } from "@/lib/custom-form-core";
+import { checkLinkableEvent, listDuplicateFlags, listLinkableEvents, submitEventLinkedForm, EVENT_FORM_MESSAGES, type DuplicateFlag, type LinkableEvent } from "@/lib/custom-form-event";
 import { sendCustomFormReceipt } from "@/lib/email";
 import { DAILY_EMAIL_LIMIT, QUOTA_WINDOW_MS } from "@/lib/email-quota-core";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
@@ -46,7 +47,7 @@ type ServiceClient = NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
 const FORM_COLUMNS =
-  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,created_at,updated_at";
+  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,created_at,updated_at";
 
 export type ProgramOption = { id: string; name: string };
 
@@ -65,6 +66,10 @@ export type CustomFormDetail = {
   autoReplySubject: string;
   autoReplyBody: string;
   fields: CustomFormField[];
+  /** Sự kiện liên kết (VAM00008); null = form độc lập. */
+  eventId: string | null;
+  /** Giới hạn số đăng ký riêng của form; null = không giới hạn. */
+  registrationLimit: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -94,6 +99,8 @@ function toDetail(row: Row): CustomFormDetail {
     autoReplySubject: String(row.auto_reply_subject ?? ""),
     autoReplyBody: String(row.auto_reply_body ?? ""),
     fields: storedFields(row.fields),
+    eventId: row.event_id ? String(row.event_id) : null,
+    registrationLimit: row.registration_limit === null || row.registration_limit === undefined ? null : Number(row.registration_limit),
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? "")
   };
@@ -160,14 +167,18 @@ export async function listCustomForms(): Promise<FormsResult<{ forms: CustomForm
 
 export async function getCustomFormForEdit(
   id: string
-): Promise<FormsResult<{ form: CustomFormDetail; programs: ProgramOption[]; responseCount: number }>> {
+): Promise<FormsResult<{ form: CustomFormDetail; programs: ProgramOption[]; responseCount: number; events: Array<LinkableEvent & { blocker: string | null }> }>> {
   const op = await operator();
   if (!op) return { ok: false, message: DENIED };
   try {
     const form = await readForm(op.client, id);
     if (!form) return { ok: false, message: "Không tìm thấy form." };
-    const [programs, responseCount] = await Promise.all([readPrograms(op.client), countResponses(op.client, form.id)]);
-    return { ok: true, data: { form, programs, responseCount } };
+    const [programs, responseCount, events] = await Promise.all([
+      readPrograms(op.client),
+      countResponses(op.client, form.id),
+      listLinkableEvents(op.client, form.eventId)
+    ]);
+    return { ok: true, data: { form, programs, responseCount, events } };
   } catch (error) {
     log("load failed", error);
     return { ok: false, message: SAFE_ERROR };
@@ -218,7 +229,9 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
     autoReplySubject: input.autoReplySubject,
     autoReplyBody: input.autoReplyBody,
     opensAt,
-    closesAt
+    closesAt,
+    eventId: input.eventId,
+    registrationLimit: input.registrationLimit
   });
   if (!settingsParsed.ok) return { ok: false, message: settingsParsed.error };
   const fields = fieldsParsed.fields;
@@ -231,6 +244,14 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
     if ((await countResponses(op.client, current.id)) > 0) {
       const locked = checkLockedChanges(current.fields, fields);
       if (locked) return { ok: false, message: locked };
+      // Người đã điền đang nằm trong danh sách của sự kiện cũ: đổi sự kiện là tách họ khỏi chỗ đã giữ.
+      if ((current.eventId ?? null) !== settings.eventId) {
+        return { ok: false, message: "Form đã có câu trả lời — không đổi hay bỏ sự kiện liên kết được nữa." };
+      }
+    }
+    if (settings.eventId) {
+      const linkable = await checkLinkableEvent(op.client, settings.eventId);
+      if (linkable) return { ok: false, message: linkable };
     }
     if (current.status === "published") {
       const blocker = publishBlocker(fields);
@@ -250,6 +271,8 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
         opens_at: settings.opensAt,
         closes_at: settings.closesAt,
         fields,
+        event_id: settings.eventId,
+        registration_limit: settings.registrationLimit,
         updated_by: op.adminId,
         updated_at: new Date().toISOString()
       })
@@ -362,7 +385,7 @@ export type PublicCustomForm =
 async function readPublicRow(client: ServiceClient, code: string): Promise<Row | null> {
   const { data, error } = await client
     .from("custom_forms")
-    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields")
+    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit")
     .eq("public_code", code)
     .maybeSingle();
   if (error) throw error;
@@ -472,24 +495,56 @@ export async function submitPublicCustomForm(
     if (!checked.ok) return fail("Một vài mục chưa đúng — xem chữ đỏ dưới từng mục.", checked.errors);
 
     const dedupeKey = dedupeKeyFor(fields, checked.answers, row.one_per_email === true);
-    const { error } = await client.from("custom_form_responses").insert({
-      form_id: String(row.id),
-      answers: checked.answers,
-      dedupe_key: dedupeKey,
-      consent_at: new Date(nowMs).toISOString()
-    });
-    if (error) {
-      if ((error as { code?: string }).code === "23505") {
-        const emailField = dedupeEmailField(fields);
-        const message = "Email này đã gửi form rồi — mỗi email chỉ gửi một lần.";
-        return fail(message, emailField ? { [emailField.id]: message } : {});
+    // Form gắn sự kiện (VAM00008): đăng ký đi vào danh sách người tham gia của sự kiện; thư xác nhận
+    // kèm vé QR của sự kiện thay cho thư tự động của form.
+    if (row.event_id) {
+      if (!dedupeKey) return fail(SAFE_ERROR);
+      return await submitEventLinkedForm({ client, form: row, fields, answers: checked.answers, email: dedupeKey, thanks, nowMs });
+    }
+    const duplicate = () => {
+      const emailField = dedupeEmailField(fields);
+      const message = "Email này đã gửi form rồi — mỗi email chỉ gửi một lần.";
+      return fail(message, emailField ? { [emailField.id]: message } : {});
+    };
+    const row0 = { answers: checked.answers, dedupe_key: dedupeKey, consent_at: new Date(nowMs).toISOString() };
+    if (row.registration_limit !== null && row.registration_limit !== undefined) {
+      // Giới hạn riêng: đếm và ghi dưới khoá theo form, hai người bấm cùng lúc không cùng lấy chỗ cuối.
+      const { data, error } = await client.rpc("vam_custom_form_insert_response", {
+        p_form_id: String(row.id),
+        p_limit: Number(row.registration_limit),
+        p_row: row0
+      });
+      if (error) throw error;
+      const status = String((data as { status?: string } | null)?.status ?? "");
+      if (status === "full") return fail(EVENT_FORM_MESSAGES.formFull);
+      if (status === "duplicate") return duplicate();
+      if (status !== "inserted") throw new Error(`insert_response returned ${status}`);
+    } else {
+      const { error } = await client.from("custom_form_responses").insert({ form_id: String(row.id), ...row0 });
+      if (error) {
+        if ((error as { code?: string }).code === "23505") return duplicate();
+        throw error;
       }
-      throw error;
     }
     await sendReceiptAfterSubmit(client, row, fields, checked.answers, nowMs);
     return { ok: true, message: thanks, errors: {} };
   } catch (error) {
     log("submit failed", error);
     return fail(SAFE_ERROR);
+  }
+}
+
+/** Cảnh báo "email trùng, họ tên khác" của form gắn sự kiện (VAM00008) — chỉ BTC thấy. */
+export async function listCustomFormDuplicateFlags(id: string): Promise<FormsResult<DuplicateFlag[]>> {
+  const op = await operator();
+  if (!op) return { ok: false, message: DENIED };
+  try {
+    const form = await readForm(op.client, id);
+    if (!form) return { ok: false, message: "Không tìm thấy form." };
+    if (!form.eventId) return { ok: true, data: [] };
+    return { ok: true, data: await listDuplicateFlags(op.client, form.id) };
+  } catch (error) {
+    log("duplicate flags failed", error);
+    return { ok: false, message: SAFE_ERROR };
   }
 }

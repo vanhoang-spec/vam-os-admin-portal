@@ -22,7 +22,7 @@ export default async function CustomFormEditPage(props: { params: Promise<{ id: 
       </div>
     );
   }
-  const { form, programs, responseCount } = result.data;
+  const { form, programs, responseCount, events } = result.data;
   const origin = (await getPublicOrigin()) ?? "";
   return (
     <div className="grid gap-4">
@@ -45,9 +45,12 @@ export default async function CustomFormEditPage(props: { params: Promise<{ id: 
           autoReply: form.autoReply,
           autoReplySubject: form.autoReplySubject,
           autoReplyBody: form.autoReplyBody,
-          fields: form.fields
+          fields: form.fields,
+          eventId: form.eventId,
+          registrationLimit: form.registrationLimit
         }}
         programs={programs}
+        events={events}
         responseCount={responseCount}
         publicUrl={`${origin}${CUSTOM_FORM_PUBLIC_PREFIX}/${form.publicCode}`}
       />

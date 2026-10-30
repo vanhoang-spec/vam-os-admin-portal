@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ErrorBox, PageHeader, SimpleTable } from "@/components/ui";
 import { answerText, CUSTOM_FORMS_PATH, responseColumns } from "@/lib/custom-form-core";
-import { listCustomFormResponses } from "@/lib/custom-forms";
+import { listCustomFormDuplicateFlags, listCustomFormResponses } from "@/lib/custom-forms";
 import { formatDateTime } from "@/lib/utils";
 
 /**
@@ -24,6 +24,8 @@ export default async function CustomFormResponsesPage(props: { params: Promise<{
     );
   }
   const { form, responses } = result.data;
+  // Cảnh báo trùng chỉ có ở form gắn sự kiện; đọc hỏng thì báo ngay trên khối đó, không giấu đi.
+  const flags = form.eventId ? await listCustomFormDuplicateFlags(form.id) : null;
   const columns = responseColumns(form.fields);
   const rows = responses.map((r) => ({
     [AT_KEY]: formatDateTime(r.createdAt),
@@ -51,6 +53,39 @@ export default async function CustomFormResponsesPage(props: { params: Promise<{
           Đối chiếu với danh sách mentee/mentor
         </Link>
       </div>
+      {form.eventId ? (
+        <section className="grid gap-2 rounded-md border border-vam-line p-3" data-testid="event-link-info">
+          <p className="text-sm text-vam-ink">
+            Form gắn sự kiện: người điền nằm trong danh sách người tham gia của sự kiện (số đăng ký, vé QR, check-in, huỷ xem ở đó).{" "}
+            <Link href={`/events/${form.eventId}`} className="text-vam-green underline">
+              Mở trang sự kiện
+            </Link>
+          </p>
+          <h2 className="text-sm font-semibold text-vam-ink">Cảnh báo: email trùng, họ tên khác ({flags?.ok ? flags.data.length : "?"})</h2>
+          <p className="text-xs text-slate-600">
+            Lần gửi này KHÔNG ghi đè đăng ký đã có; người điền không thấy cảnh báo. Kiểm tra xem là cùng một người gõ khác tên hay hai người dùng
+            chung email, rồi sửa ở trang sự kiện nếu cần.
+          </p>
+          {flags && !flags.ok ? (
+            <ErrorBox message={flags.message} />
+          ) : (
+            <SimpleTable
+              rows={(flags?.ok ? flags.data : []).map((f) => ({
+                at: formatDateTime(f.createdAt),
+                submittedName: f.submittedName,
+                submittedEmail: f.submittedEmail,
+                existingName: f.existingName
+              }))}
+              columns={[
+                { key: "at", label: "Gửi lúc", nowrap: true },
+                { key: "submittedName", label: "Họ tên vừa gửi" },
+                { key: "submittedEmail", label: "Email" },
+                { key: "existingName", label: "Họ tên đã đăng ký" }
+              ]}
+            />
+          )}
+        </section>
+      ) : null}
       <SimpleTable
         rows={rows}
         search="Tìm theo tên, email, MSSV…"

@@ -222,7 +222,13 @@ export type CustomFormSettingsInput = {
   /** ISO đã đọc theo giờ Việt Nam (parseVietnamDateTime), hoặc null. */
   opensAt: string | null;
   closesAt: string | null;
+  /** Sự kiện liên kết (VAM00008) — mã sự kiện, hoặc rỗng. */
+  eventId?: unknown;
+  /** Giới hạn số đăng ký riêng của form — số nguyên dương, hoặc rỗng. */
+  registrationLimit?: unknown;
 };
+
+export const REGISTRATION_LIMIT_MAX = 100000;
 
 export type CustomFormSettings = {
   title: string;
@@ -236,6 +242,8 @@ export type CustomFormSettings = {
   autoReplyBody: string;
   opensAt: string | null;
   closesAt: string | null;
+  eventId: string | null;
+  registrationLimit: number | null;
 };
 
 const truthy = (value: unknown) => value === true || value === "on" || value === "true";
@@ -259,6 +267,13 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
   if (input.opensAt && input.closesAt && Date.parse(input.closesAt) <= Date.parse(input.opensAt)) {
     return { ok: false, error: "Giờ đóng phải sau giờ mở." };
   }
+  const eventRaw = text(input.eventId);
+  if (eventRaw && !UUID.test(eventRaw)) return { ok: false, error: "Sự kiện liên kết không hợp lệ." };
+  const limitRaw = text(input.registrationLimit);
+  const registrationLimit = limitRaw ? Number(limitRaw) : null;
+  if (registrationLimit !== null && (!Number.isInteger(registrationLimit) || registrationLimit < 1 || registrationLimit > REGISTRATION_LIMIT_MAX)) {
+    return { ok: false, error: `Giới hạn số đăng ký phải là số nguyên từ 1 đến ${REGISTRATION_LIMIT_MAX}, hoặc để trống.` };
+  }
   return {
     ok: true,
     settings: {
@@ -271,7 +286,9 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
       autoReplySubject,
       autoReplyBody,
       opensAt: input.opensAt,
-      closesAt: input.closesAt
+      closesAt: input.closesAt,
+      eventId: eventRaw || null,
+      registrationLimit
     }
   };
 }
@@ -281,14 +298,35 @@ export function dedupeEmailField(fields: CustomFormField[]): CustomFormField | n
   return fields.find((f) => f.type === "email" && f.required && !f.hidden) ?? null;
 }
 
+const COMBINING_MARKS = new RegExp(`[${String.fromCharCode(0x300)}-${String.fromCharCode(0x36f)}]`, "g");
+/** Nhãn bỏ dấu, chữ thường — để nhận ra ô "Họ và tên" dù người tạo form gõ thế nào. */
+function foldLabel(value: string): string {
+  return value.normalize("NFD").replace(COMBINING_MARKS, "").replace(/[đĐ]/g, "d").toLowerCase().trim().split(/\s+/).join(" ");
+}
+const NAME_LABEL = /(^|\s)ten(\s|$)|full name|^name$/;
+
+/** Ô họ tên: ô chữ ngắn đầu tiên có nhãn "Họ và tên"/"Họ tên"/"Tên"; không có thì ô chữ ngắn đầu tiên. */
+export function nameField(fields: CustomFormField[]): CustomFormField | null {
+  const shortTexts = fields.filter((f) => f.type === "short_text");
+  return shortTexts.find((f) => NAME_LABEL.test(foldLabel(f.label))) ?? shortTexts[0] ?? null;
+}
+
 /** Thư tự động gửi tới đâu: cùng trường Email với luật chặn trùng — Email bắt buộc đầu tiên đang hiện. */
 export const replyEmailField = dedupeEmailField;
 
 /** Luật giữa cài đặt và danh sách trường. null = hợp lệ. */
 export function checkDefinitionRules(
   fields: CustomFormField[],
-  settings: Pick<CustomFormSettings, "onePerEmail"> & Partial<Pick<CustomFormSettings, "autoReply" | "autoReplyBody">>
+  settings: Pick<CustomFormSettings, "onePerEmail"> & Partial<Pick<CustomFormSettings, "autoReply" | "autoReplyBody" | "eventId">>
 ): string | null {
+  // Form gắn sự kiện ghi người điền vào danh sách người tham gia: cần đúng ba thứ danh sách đó cần —
+  // một Email bắt buộc (khoá chặn trùng của sự kiện), một ô Họ tên, và "mỗi email một lần" để lần gửi
+  // lại đi vào luật trùng của VAM00008 thay vì thành một đăng ký thứ hai.
+  if (settings.eventId) {
+    if (!dedupeEmailField(fields)) return "Form gắn sự kiện cần một trường Email bắt buộc (không ẩn) — đó là email đăng ký sự kiện.";
+    if (!nameField(fields)) return "Form gắn sự kiện cần một ô chữ ngắn “Họ và tên”.";
+    if (!settings.onePerEmail) return "Form gắn sự kiện phải bật “Mỗi email chỉ gửi một lần” — gửi lại sẽ cập nhật đăng ký cũ.";
+  }
   if (settings.onePerEmail && !dedupeEmailField(fields)) {
     return "Đang bật “Mỗi email chỉ gửi một lần” nên form cần một trường Email bắt buộc (không ẩn).";
   }

@@ -195,6 +195,10 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Form tùy chỉnh ↔ Sự kiện (VAM00008): ghi đăng ký / câu trả lời dưới khoá chỗ — migration
+  // 20261030120000_form_su_kien.sql, phải dán Production TRƯỚC khi merge.
+  "vam_custom_form_event_register",
+  "vam_custom_form_insert_response",
   // Vòng 2 — cụm chọn (bảng trống: giữ 9 nhóm) + danh sách mã còn trống cho trang chọn tự cập nhật —
   // migration 20261014190000_vong_2_cum_chon.sql, phải dán Production TRƯỚC khi merge.
   "vam123_round2_available",
