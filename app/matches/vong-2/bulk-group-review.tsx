@@ -2,14 +2,15 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { confirmMenteeGroupsAction, confirmMentorGroupsAction } from "@/app/actions/matching-round2";
+import { confirmMenteeGroupsAction, confirmMentorGroupsAction, confirmRound2GroupsAction } from "@/app/actions/matching-round2";
 import { ROUND2_IDLE } from "@/lib/matching-round2-action-types";
 import { MAX_BULK_APPROVALS, type GroupApproval } from "@/lib/matching-round2-bulk-core";
 import { industryGroupLabel } from "@/lib/matching-round2-groups-core";
 
 /** needsReview chỉ để HIỆN trong hộp xác nhận (người còn cờ "Cần BTC xem"); không đi lên máy chủ. */
-type Item = GroupApproval & { name: string; needsReview?: boolean };
-export type BulkRole = "mentor" | "mentee";
+type Item = GroupApproval & { name: string; needsReview?: boolean; role?: "mentor" | "mentee" };
+/** "all": đang xem cả hai vai trò, duyệt chung một lượt (VAM00005) — mỗi dòng phải mang role của mình. */
+export type BulkRole = "mentor" | "mentee" | "all";
 const Selection = createContext<{ selected: Item[]; toggle: (item: Item) => void } | null>(null);
 
 export function ReviewCheckbox({ item }: { item: Item }) {
@@ -36,11 +37,11 @@ function ConfirmationButtons({ cancel }: { cancel: () => void }) {
 }
 
 export function BulkGroupReview({ items, children, enabled = true, role = "mentor", note }: { items: Item[]; children: React.ReactNode; enabled?: boolean; role?: BulkRole; note?: string }) {
-  const noun = role === "mentee" ? "mentee" : "mentor";
-  const Noun = role === "mentee" ? "Mentee" : "Mentor";
+  const noun = role === "all" ? "mentor/mentee" : role === "mentee" ? "mentee" : "mentor";
+  const Noun = role === "all" ? "Mentor/Mentee" : role === "mentee" ? "Mentee" : "Mentor";
   const [selected, setSelected] = useState<Item[]>([]);
   const [confirmation, setConfirmation] = useState<Item[] | null>(null);
-  const [state, action] = useFormState(role === "mentee" ? confirmMenteeGroupsAction : confirmMentorGroupsAction, ROUND2_IDLE);
+  const [state, action] = useFormState(role === "all" ? confirmRound2GroupsAction : role === "mentee" ? confirmMenteeGroupsAction : confirmMentorGroupsAction, ROUND2_IDLE);
   const root = useRef<HTMLDivElement>(null);
   const all = useRef<HTMLInputElement>(null);
   const dialogForm = useRef<HTMLFormElement>(null);
@@ -110,7 +111,8 @@ export function BulkGroupReview({ items, children, enabled = true, role = "mento
           {confirmation.some((item) => item.needsReview) ? <p className="mb-2 rounded-md bg-amber-50 p-2 text-sm text-amber-800" data-testid="bulk-flagged-warning">
             {confirmation.filter((item) => item.needsReview).length} người trong danh sách đang có cờ “Cần BTC xem” (hệ thống chưa chắc nhóm). Chỉ duyệt khi bạn đã rà hồ sơ của họ.</p> : null}
           <input type="hidden" name="confirmed" value="yes" />
-          <input type="hidden" name="rows" value={JSON.stringify(confirmation.map(({ assignmentId, expectedGroup, expectedDrift }) => ({ assignmentId, expectedGroup, expectedDrift })))} />
+          <input type="hidden" name="rows" value={JSON.stringify(confirmation.map(({ assignmentId, expectedGroup, expectedDrift, role: itemRole }) =>
+            role === "all" ? { assignmentId, expectedGroup, expectedDrift, role: itemRole } : { assignmentId, expectedGroup, expectedDrift }))} />
           <div className="vam-table-frame overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-slate-50 text-left"><th className="p-2">{Noun}</th><th className="p-2">Nhóm được xác nhận</th></tr></thead>
             <tbody>{confirmation.map((item) => <tr key={item.assignmentId} className="border-b"><td className="p-2">{item.name}
               {item.needsReview ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Cần BTC xem</span> : null}</td><td className="p-2">{industryGroupLabel(item.expectedGroup)}

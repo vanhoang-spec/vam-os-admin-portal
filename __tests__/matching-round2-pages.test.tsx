@@ -358,12 +358,21 @@ describe("nút duyệt mentee hàng loạt (BTC 13/10/2026)", () => {
       expect(container.querySelector('[data-testid="bulk-note"]')).toBeNull();
     });
 
-    it("xem cả hai vai trò: giữ như cũ (mentor) và có dòng nhắc chọn Vai trò = Mentee", async () => {
+    it("xem cả hai vai trò: duyệt chung mentor + mentee một lượt, mỗi dòng gửi lên mang vai trò của mình (VAM00005)", async () => {
       seedAssignments();
       const { container } = await view({});
-      expect(container.textContent).toContain("Chọn tất cả mentor chưa duyệt đang hiện (1)");
-      expect(ticks(container)).toEqual(["Duyệt nhóm của Mentor Gia Hạn"]);
-      expect(container.querySelector('[data-testid="bulk-note"]')!.textContent).toContain("Chọn “Vai trò = Mentee”");
+      expect(container.textContent).toContain("Chọn tất cả mentor/mentee chưa duyệt đang hiện (2)");
+      expect([...ticks(container)].sort()).toEqual(["Duyệt nhóm của Mentee Kế Toán", "Duyệt nhóm của Mentor Gia Hạn"]);
+      expect(container.querySelector('[data-testid="bulk-note"]')).toBeNull();
+      // Người BTC đã duyệt vẫn chỉ có nhãn, không có ô tick.
+      expect(personRow(container, "p-new").textContent).toContain("Đã duyệt");
+      fireEvent.click(within(container).getByLabelText(/Chọn tất cả mentor.mentee/));
+      fireEvent.click(within(container).getByRole("button", { name: "Duyệt 2 mentor/mentee đã chọn" }));
+      const rows = JSON.parse(within(container).getByRole("dialog").querySelector<HTMLInputElement>('input[name="rows"]')!.value) as Array<{ assignmentId: string; role: string }>;
+      expect(Object.fromEntries(rows.map((r) => [r.assignmentId, r.role]))).toEqual({
+        "a5000000-0000-4000-8000-000000000002": "mentee",
+        "a5000000-0000-4000-8000-000000000003": "mentor"
+      });
     });
 
     // Thêm một mentee thật (người + đơn đã duyệt + dòng phân nhóm) để dữ liệu mẫu có nhiều hơn một mentee.
@@ -382,9 +391,9 @@ describe("nút duyệt mentee hàng loạt (BTC 13/10/2026)", () => {
       signIn("support_team", "auth-support");
       const menteeView = renderToStaticMarkup(<>{await Round2GroupsPage({ searchParams: Promise.resolve({ vai: "mentee" }) })}</>);
       expect(menteeView).toContain("Chọn tất cả mentee chưa duyệt đang hiện (1)");
-      // Xem cả hai vai trò: thanh chỉ áp cho mentor, nên mentee không được lọt vào đếm.
+      // Xem cả hai vai trò: đếm chung mentor + mentee còn do máy gán (mentee đã rút và mentee đã duyệt vẫn không lọt vào).
       const bothView = renderToStaticMarkup(<>{await Round2GroupsPage({ searchParams: Promise.resolve({}) })}</>);
-      expect(bothView).toContain("Chọn tất cả mentor chưa duyệt đang hiện (1)");
+      expect(bothView).toContain("Chọn tất cả mentor/mentee chưa duyệt đang hiện (2)");
     });
 
     it("chọn tất cả rồi mở hộp xác nhận: người còn cờ 'Cần BTC xem' được cảnh báo và đánh dấu đúng người", async () => {

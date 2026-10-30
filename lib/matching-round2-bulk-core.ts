@@ -17,3 +17,18 @@ export function parseGroupApprovals(value: unknown): GroupApproval[] | null {
   }
   return value.map(({ assignmentId, expectedGroup, expectedDrift }) => ({ assignmentId, expectedGroup, expectedDrift }));
 }
+
+export type RoleGroupApproval = GroupApproval & { role: "mentor" | "mentee" };
+
+/**
+ * Duyệt chung cả mentor lẫn mentee trong một lượt (VAM00005, 28/10/2026): mỗi dòng mang thêm vai trò để máy chủ
+ * chia về đúng hàm duyệt của vai trò đó. Trần 500 tính trên TỔNG cả lượt, như khi duyệt riêng. Vai trò ở đây chỉ
+ * để chia việc — vam115/vam122 vẫn tự kiểm vai trò thật của từng dòng, dòng khai sai vai trò bị hàm SQL từ chối.
+ */
+export function parseRoleGroupApprovals(value: unknown): RoleGroupApproval[] | null {
+  const rows = parseGroupApprovals(value);
+  if (!rows || !Array.isArray(value)) return null;
+  const roles = value.map((row) => (row as { role?: unknown }).role);
+  if (!roles.every((role) => role === "mentor" || role === "mentee")) return null;
+  return rows.map((row, i) => ({ ...row, role: roles[i] as "mentor" | "mentee" }));
+}

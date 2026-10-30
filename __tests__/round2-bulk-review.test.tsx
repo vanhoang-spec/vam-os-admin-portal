@@ -8,8 +8,8 @@ import { parseGroupApprovals } from "@/lib/matching-round2-bulk-core";
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 // Hai hành động khác nhau để biết nút nối đúng hành động của từng vai trò; useFormState ghi lại hành động nó nhận.
-const actions = vi.hoisted(() => ({ mentor: vi.fn(), mentee: vi.fn(), received: [] as unknown[] }));
-vi.mock("@/app/actions/matching-round2", () => ({ confirmMentorGroupsAction: actions.mentor, confirmMenteeGroupsAction: actions.mentee }));
+const actions = vi.hoisted(() => ({ mentor: vi.fn(), mentee: vi.fn(), all: vi.fn(), received: [] as unknown[] }));
+vi.mock("@/app/actions/matching-round2", () => ({ confirmMentorGroupsAction: actions.mentor, confirmMenteeGroupsAction: actions.mentee, confirmRound2GroupsAction: actions.all }));
 vi.mock("react-dom", async (original) => ({ ...await original<typeof import("react-dom")>(),
   useFormState: (action: unknown, initial: unknown) => { actions.received.push(action); return [initial, vi.fn()]; }, useFormStatus: () => ({ pending: false }) }));
 beforeEach(() => { actions.received.length = 0; });
@@ -196,5 +196,32 @@ describe("trần 500 người mỗi lượt duyệt", () => {
     fireEvent.click(view.getByLabelText(/Chọn 500 mentee đầu tiên/));
     expect((view.getByLabelText(/Chọn 500 mentee đầu tiên/) as HTMLInputElement).checked).toBe(false);
     expect(view.getByRole("button", { name: "Duyệt 0 mentee đã chọn" })).toBeTruthy();
+  });
+});
+
+// VAM00005 (28/10/2026): xem cả hai vai trò thì duyệt chung một lượt.
+describe("duyệt chung mentor + mentee", () => {
+  const mixed = [{ ...items[0], role: "mentor" as const }, { ...items[1], role: "mentee" as const }];
+  const setupAll = () => render(<BulkGroupReview items={mixed} role="all"><TableSearch><table><tbody>{mixed.map((item) =>
+    <tr key={item.assignmentId}><td>{item.name}</td><td><MentorReviewCheckbox item={item} /></td></tr>
+  )}</tbody></table></TableSearch></BulkGroupReview>);
+
+  it("nối hành động duyệt chung, không phải hành động của một vai trò", () => {
+    setupAll();
+    expect(actions.received.length).toBeGreaterThan(0);
+    expect(actions.received.every((a) => a === actions.all)).toBe(true);
+  });
+
+  it("lời nói 'mentor/mentee' và mỗi dòng gửi lên mang vai trò của mình", () => {
+    const view = setupAll();
+    expect(view.getByText("Chọn tất cả mentor/mentee chưa duyệt đang hiện (2)")).toBeTruthy();
+    fireEvent.click(view.getByLabelText(/Chọn tất cả/));
+    fireEvent.click(view.getByRole("button", { name: "Duyệt 2 mentor/mentee đã chọn" }));
+    const dialog = view.getByRole("dialog");
+    expect(within(dialog).getByRole("heading").textContent).toBe("Xác nhận duyệt nhóm cho 2 mentor/mentee");
+    expect(JSON.parse(dialog.querySelector<HTMLInputElement>('input[name="rows"]')!.value)).toEqual([
+      { assignmentId: items[0].assignmentId, expectedGroup: 3, expectedDrift: null, role: "mentor" },
+      { assignmentId: items[1].assignmentId, expectedGroup: 4, expectedDrift: null, role: "mentee" }
+    ]);
   });
 });

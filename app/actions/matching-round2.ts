@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { classifyNewPeople, confirmMenteeGroups, confirmMentorGroups, setIndustryGroup, setRound2Window } from "@/lib/matching-round2";
-import { MAX_BULK_APPROVALS, parseGroupApprovals } from "@/lib/matching-round2-bulk-core";
+import { MAX_BULK_APPROVALS, parseGroupApprovals, parseRoleGroupApprovals } from "@/lib/matching-round2-bulk-core";
 import { runRound2Dispatch, runRound2Reminder, sendRound2InviteTest, sendRound2ReminderTest } from "@/lib/matching-round2-dispatch";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
 import type { Round2ActionState } from "@/lib/matching-round2-action-types";
@@ -33,6 +33,35 @@ export async function confirmMentorGroupsAction(_prev: Round2ActionState, form: 
 
 export async function confirmMenteeGroupsAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
   return confirmGroupsFromForm(form, "mentee", confirmMenteeGroups);
+}
+
+/**
+ * Duyệt chung mentor + mentee đang hiện (VAM00005): chia theo vai trò rồi gọi lần lượt hai hàm duyệt sẵn có.
+ * Hai lần gọi không chung một giao dịch: phần mentor đã ghi mà phần mentee hỏng thì báo rõ phần nào đã xong,
+ * để người dùng tải lại và duyệt tiếp phần còn lại (những người đã duyệt không còn ô tick).
+ */
+export async function confirmRound2GroupsAction(_prev: Round2ActionState, form: FormData): Promise<Round2ActionState> {
+  if (form.get("confirmed") !== "yes") return { status: "error", message: "Cần xác nhận danh sách trước khi duyệt." };
+  let rows;
+  try { rows = parseRoleGroupApprovals(JSON.parse(String(form.get("rows") ?? ""))); } catch { rows = null; }
+  if (!rows) return { status: "error", message: `Danh sách không hợp lệ. Chọn từ 1 đến ${MAX_BULK_APPROVALS} người rồi thử lại.` };
+  const approved = rows;
+  const strip = (role: "mentor" | "mentee") =>
+    approved.filter((r) => r.role === role).map(({ assignmentId, expectedGroup, expectedDrift }) => ({ assignmentId, expectedGroup, expectedDrift }));
+  const done: string[] = [];
+  let failure: string | null = null;
+  for (const [role, confirm] of [["mentor", confirmMentorGroups], ["mentee", confirmMenteeGroups]] as const) {
+    const part = strip(role);
+    if (!part.length) continue;
+    const result = await confirm(part);
+    if (!result.ok) { failure = result.message; break; }
+    done.push(`${part.length} ${role}`);
+  }
+  if (done.length) for (const path of PATHS) revalidatePath(path);
+  if (failure) {
+    return { status: "error", message: done.length ? `Đã duyệt ${done.join(" và ")}; phần còn lại chưa duyệt được: ${failure}` : failure };
+  }
+  return { status: "ok", message: `Đã ghi nhận BTC đã duyệt cho ${done.join(" và ")}.` };
 }
 
 export async function classifyNewAction(_prev: Round2ActionState, _formData: FormData): Promise<Round2ActionState> {
