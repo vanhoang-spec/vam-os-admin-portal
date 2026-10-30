@@ -16,7 +16,7 @@
  * Module thuần, không I/O.
  */
 import { foldPersonName } from "@/lib/bulk-mail-core";
-import type { CustomFormAnswers, CustomFormField } from "@/lib/custom-form-core";
+import { nameField, type CustomFormAnswers, type CustomFormField } from "@/lib/custom-form-core";
 
 export type RosterCheckRole = "mentee" | "mentor";
 export const ROSTER_CHECK_ROLES: readonly RosterCheckRole[] = ["mentee", "mentor"];
@@ -75,13 +75,8 @@ export function normalizeMatchPhone(value: unknown): string {
   return digits.length >= 9 ? digits : "";
 }
 
-const NAME_LABEL = /(^|\s)ten(\s|$)|full name|^name$/;
-
-/** Trường họ tên: ô chữ ngắn đầu tiên có nhãn "Họ và tên"/"Họ tên"/"Tên"; không có thì ô chữ ngắn đầu tiên. */
-export function nameField(fields: CustomFormField[]): CustomFormField | null {
-  const shortTexts = fields.filter((f) => f.type === "short_text");
-  return shortTexts.find((f) => NAME_LABEL.test(foldPersonName(f.label))) ?? shortTexts[0] ?? null;
-}
+/** Ô họ tên — một định nghĩa, dùng chung với luật của form gắn sự kiện. */
+export { nameField };
 
 function texts(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => String(v ?? ""));

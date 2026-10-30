@@ -18,7 +18,8 @@ import {
   type CustomFormStatus
 } from "@/lib/custom-form-core";
 import { combineVietnamDateTime, maskVietnamDate, maskVietnamTime, splitVietnamDateTime } from "@/lib/event-datetime";
-import { saveCustomFormAction, sendCustomFormReceiptTestAction, setCustomFormStatusAction } from "../actions";
+import { createEventForFormAction, saveCustomFormAction, sendCustomFormReceiptTestAction, setCustomFormStatusAction } from "../actions";
+import { formatDateTime } from "@/lib/utils";
 
 const BOX =
   "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -41,7 +42,12 @@ export type BuilderForm = {
   autoReplySubject: string;
   autoReplyBody: string;
   fields: CustomFormField[];
+  /** Sự kiện liên kết (VAM00008). */
+  eventId: string | null;
+  registrationLimit: number | null;
 };
+
+export type BuilderEvent = { id: string; name: string; startsAt: string | null; capacity: number | null; status: string; blocker: string | null };
 
 const toEditable = (f: CustomFormField): EditableField => ({ ...f, optionsText: f.options.join("\n") });
 const lines = (value: string) => value.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -54,11 +60,13 @@ const lines = (value: string) => value.split("\n").map((l) => l.trim()).filter(B
 export function FormBuilder({
   form,
   programs,
+  events: initialEvents = [],
   responseCount,
   publicUrl
 }: {
   form: BuilderForm;
   programs: Array<{ id: string; name: string }>;
+  events?: BuilderEvent[];
   responseCount: number;
   publicUrl: string;
 }) {
@@ -69,6 +77,15 @@ export function FormBuilder({
   const [description, setDescription] = useState(form.description);
   const [programId, setProgramId] = useState(form.programId ?? "");
   const [thankYou, setThankYou] = useState(form.thankYou);
+  const [eventId, setEventId] = useState(form.eventId ?? "");
+  const [registrationLimit, setRegistrationLimit] = useState(form.registrationLimit === null ? "" : String(form.registrationLimit));
+  const [events, setEvents] = useState<BuilderEvent[]>(initialEvents);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickDate, setQuickDate] = useState("");
+  const [quickTime, setQuickTime] = useState("");
+  const [quickPlace, setQuickPlace] = useState("");
+  const [quickCapacity, setQuickCapacity] = useState("");
   const [onePerEmail, setOnePerEmail] = useState(form.onePerEmail);
   const [autoReply, setAutoReply] = useState(form.autoReply);
   const [autoReplySubject, setAutoReplySubject] = useState(form.autoReplySubject);
@@ -186,11 +203,31 @@ export function FormBuilder({
           autoReplyBody,
           opensAt,
           closesAt,
+          eventId,
+          registrationLimit,
           fields: fields.map(({ optionsText, ...f }) => ({ ...f, options: CHOICE_TYPES.has(f.type) ? lines(optionsText) : [] }))
         }),
       () => setDirty(false)
     );
   };
+  const createQuickEvent = () => {
+    const startsAt = combineVietnamDateTime(quickDate, quickTime);
+    if (!quickName.trim()) return setReport({ ok: false, message: "Sự kiện mới cần có tên." });
+    if (!startsAt) return setReport({ ok: false, message: "Sự kiện mới cần ngày (DD/MM/YYYY) và giờ (HH:mm) bắt đầu." });
+    void run(async () => {
+      const result = await createEventForFormAction({ name: quickName, startsAt, location: quickPlace, capacity: quickCapacity });
+      if (result.ok && result.event) {
+        const created = result.event;
+        setEvents((prev) => [created, ...prev.filter((e) => e.id !== created.id)]);
+        setEventId(created.id);
+        setOnePerEmail(true);
+        setQuickOpen(false);
+        setDirty(true);
+      }
+      return { ok: result.ok, message: result.message };
+    });
+  };
+  const selectedEvent = events.find((e) => e.id === eventId) ?? null;
   const testReceipt = () => void run(() => sendCustomFormReceiptTestAction(form.id, { subject: autoReplySubject, body: autoReplyBody }));
   const changeStatus = (next: CustomFormStatus) => void run(() => setCustomFormStatusAction(form.id, next), () => setStatus(next));
   const copy = async () => {
@@ -286,6 +323,67 @@ export function FormBuilder({
               ))}
             </select>
           </label>
+          <div className="grid gap-2 rounded-md border border-vam-line p-3" data-testid="event-link">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Đăng ký sự kiện</span>
+              <select
+                className={BOX}
+                data-testid="event-select"
+                value={eventId}
+                disabled={locked}
+                onChange={(e) => {
+                  setEventId(e.target.value);
+                  if (e.target.value) setOnePerEmail(true);
+                  touch();
+                }}
+              >
+                <option value="">— Không gắn sự kiện (form độc lập) —</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id} disabled={Boolean(ev.blocker) && ev.id !== eventId}>
+                    {ev.name}
+                    {ev.startsAt ? ` · ${formatDateTime(ev.startsAt)}` : ""}
+                    {ev.capacity !== null ? ` · ${ev.capacity} chỗ` : ""}
+                    {ev.blocker ? " · không gắn được" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedEvent?.blocker ? <p className="text-xs text-red-700">{selectedEvent.blocker}</p> : null}
+            <p className="text-xs text-slate-600">
+              Gắn sự kiện thì người điền vào thẳng danh sách người tham gia của sự kiện: nhận thư xác nhận kèm vé QR của sự kiện (thay thư tự động của
+              form), check-in và huỷ ở trang Sự kiện. Gửi lại cùng email và họ tên thì cập nhật đăng ký cũ; cùng email mà khác họ tên thì không ghi
+              đè, BTC xem cảnh báo ở trang câu trả lời.
+              {locked ? " Form đã có câu trả lời nên không đổi sự kiện được nữa." : ""}
+            </p>
+            {!locked ? (
+              <div className="grid gap-2">
+                <button type="button" data-testid="quick-event-toggle" className={`${SMALL_BUTTON} justify-self-start`} onClick={() => setQuickOpen((v) => !v)}>
+                  {quickOpen ? "Đóng tạo sự kiện mới" : "+ Tạo sự kiện mới"}
+                </button>
+                {quickOpen ? (
+                  <div className="grid gap-2 sm:grid-cols-2" data-testid="quick-event">
+                    <input className={BOX} aria-label="Tên sự kiện mới" placeholder="Tên sự kiện" value={quickName} onChange={(e) => setQuickName(e.target.value)} />
+                    <input className={BOX} aria-label="Địa điểm" placeholder="Địa điểm (tuỳ chọn)" value={quickPlace} onChange={(e) => setQuickPlace(e.target.value)} />
+                    <div className="flex gap-2">
+                      <input className={BOX} aria-label="Ngày sự kiện" placeholder="DD/MM/YYYY" inputMode="numeric" value={quickDate} onChange={(e) => setQuickDate(maskVietnamDate(e.target.value))} />
+                      <input className={`${BOX} max-w-[6rem]`} aria-label="Giờ sự kiện" placeholder="HH:mm" inputMode="numeric" value={quickTime} onChange={(e) => setQuickTime(maskVietnamTime(e.target.value))} />
+                    </div>
+                    <input className={BOX} aria-label="Sức chứa" placeholder="Sức chứa (để trống = không giới hạn)" inputMode="numeric" value={quickCapacity} onChange={(e) => setQuickCapacity(e.target.value)} />
+                    <button type="button" data-testid="quick-event-create" disabled={busy} className="justify-self-start rounded-md bg-vam-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 sm:col-span-2" onClick={createQuickEvent}>
+                      Tạo sự kiện và chọn cho form
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Giới hạn số đăng ký của form (để trống = không giới hạn)</span>
+              <input className={`${BOX} max-w-[10rem]`} data-testid="registration-limit" inputMode="numeric" value={registrationLimit} onChange={edit(setRegistrationLimit)} />
+              <span className="text-xs text-slate-600">
+                Form gắn sự kiện: giới hạn này không thay sức chứa của sự kiện — form nhận tối đa phần còn trống của cả hai.
+              </span>
+            </label>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1 text-sm">
               <span className="font-medium">Mở nhận câu trả lời (để trống = ngay khi công khai)</span>

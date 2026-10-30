@@ -182,6 +182,8 @@ describe("1. form công khai", () => {
 describe("2. trình tạo form", () => {
   const FORM: BuilderForm = {
     id: "11111111-2222-4333-8444-555555555555",
+    eventId: null,
+    registrationLimit: null,
     publicCode: CODE,
     title: "Tuyển mentee Job Shadowing",
     description: "",
@@ -369,6 +371,8 @@ describe("1b. form nhiều trang (BTC 15/10/2026)", () => {
 describe("2b. trình tạo form — thư tự động, ngắt trang", () => {
   const FORM2: BuilderForm = {
     id: "11111111-2222-4333-8444-555555555555",
+    eventId: null,
+    registrationLimit: null,
     publicCode: CODE,
     title: "Tuyển mentee Job Shadowing",
     description: "",
@@ -450,6 +454,8 @@ describe("1c. lưu nháp khi đang điền (BTC 15/10/2026)", () => {
   });
 
   it("mở lại đúng link trên máy này: câu cũ và trang đang điền dở hiện lại, báo giờ đã lưu; ô đồng ý vẫn phải tích lại", () => {
+    // Ghim đồng hồ: nháp quá 14 ngày tự bỏ, nên để đồng hồ thật thì ca này hỏng từ 29/10/2026.
+    at("2026-10-15T13:10:00Z");
     window.localStorage.setItem(
       KEY,
       JSON.stringify({ v: 1, savedAt: Date.parse("2026-10-15T13:05:00Z"), page: 1, values: { f_nameaaaa: "An", f_mssvaaaa: "31241028261" } })
