@@ -9,11 +9,14 @@ import "server-only";
  * mã form và chỉ thấy form đang công khai, chỉ thấy trường đang hiện.
  */
 import { getCurrentAdminUser } from "@/lib/admin-auth";
-import type { CustomFormAdminResult, CustomFormSavePayload, CustomFormSubmitResult } from "@/lib/custom-form-action-types";
+import type { CustomFormAdminResult, CustomFormSavePayload, CustomFormSubmitResult, FormImageUploadResult } from "@/lib/custom-form-action-types";
+import { capLinkTaiAnhForm, linkXemAnhForm } from "@/lib/custom-form-anh";
 import {
   AUTO_REPLY_DAILY_CAP_PER_FORM,
   AUTO_REPLY_SYSTEM_HEADROOM,
+  CUSTOM_FORM_IMAGE_KINDS,
   CUSTOM_FORM_LIMITS,
+  isFormImagePath,
   nameField,
   replyEmailField,
   checkDefinitionRules,
@@ -31,7 +34,9 @@ import {
   type CustomFormAnswers,
   type CustomFormAvailability,
   type CustomFormField,
-  type CustomFormStatus
+  type CustomFormImageKind,
+  type CustomFormStatus,
+  type LogoPosition
 } from "@/lib/custom-form-core";
 import { KNOWN_PERSON_MESSAGE, isKnownPerson } from "@/lib/custom-form-gate";
 import { checkLinkableEvent, listDuplicateFlags, listLinkableEvents, submitEventLinkedForm, EVENT_FORM_MESSAGES, type DuplicateFlag, type LinkableEvent } from "@/lib/custom-form-event";
@@ -49,7 +54,7 @@ type ServiceClient = NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
 const FORM_COLUMNS =
-  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,created_at,updated_at";
+  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,banner_path,logo_path,logo_position,created_at,updated_at";
 
 export type ProgramOption = { id: string; name: string };
 
@@ -76,6 +81,10 @@ export type CustomFormDetail = {
   requireKnownPerson: boolean;
   /** Màu chủ đạo #rrggbb; null = màu mặc định. */
   themeColor: string | null;
+  /** Đường dẫn trong kho 'form-anh'; null = không có ảnh. */
+  bannerPath: string | null;
+  logoPath: string | null;
+  logoPosition: LogoPosition;
   createdAt: string;
   updatedAt: string;
 };
@@ -87,6 +96,8 @@ export type CustomFormResponse = { id: string; createdAt: string; answers: Custo
 function log(message: string, error?: unknown) {
   console.error(`[custom-forms] ${message}`, error instanceof Error ? error.message : (error as { message?: string })?.message ?? error ?? "");
 }
+
+const logoPositionOf = (value: unknown): LogoPosition => (value === "center" || value === "right" ? value : "left");
 
 function toDetail(row: Row): CustomFormDetail {
   const status = String(row.status);
@@ -109,6 +120,9 @@ function toDetail(row: Row): CustomFormDetail {
     registrationLimit: row.registration_limit === null || row.registration_limit === undefined ? null : Number(row.registration_limit),
     requireKnownPerson: row.require_known_person === true,
     themeColor: row.theme_color ? String(row.theme_color) : null,
+    bannerPath: row.banner_path ? String(row.banner_path) : null,
+    logoPath: row.logo_path ? String(row.logo_path) : null,
+    logoPosition: logoPositionOf(row.logo_position),
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? "")
   };
@@ -175,18 +189,28 @@ export async function listCustomForms(): Promise<FormsResult<{ forms: CustomForm
 
 export async function getCustomFormForEdit(
   id: string
-): Promise<FormsResult<{ form: CustomFormDetail; programs: ProgramOption[]; responseCount: number; events: Array<LinkableEvent & { blocker: string | null }> }>> {
+): Promise<
+  FormsResult<{
+    form: CustomFormDetail;
+    programs: ProgramOption[];
+    responseCount: number;
+    events: Array<LinkableEvent & { blocker: string | null }>;
+    bannerUrl: string;
+    logoUrl: string;
+  }>
+> {
   const op = await operator();
   if (!op) return { ok: false, message: DENIED };
   try {
     const form = await readForm(op.client, id);
     if (!form) return { ok: false, message: "Không tìm thấy form." };
-    const [programs, responseCount, events] = await Promise.all([
+    const [programs, responseCount, events, images] = await Promise.all([
       readPrograms(op.client),
       countResponses(op.client, form.id),
-      listLinkableEvents(op.client, form.eventId)
+      listLinkableEvents(op.client, form.eventId),
+      linkXemAnhForm(form.id, [form.bannerPath, form.logoPath])
     ]);
-    return { ok: true, data: { form, programs, responseCount, events } };
+    return { ok: true, data: { form, programs, responseCount, events, bannerUrl: images[0], logoUrl: images[1] } };
   } catch (error) {
     log("load failed", error);
     return { ok: false, message: SAFE_ERROR };
@@ -246,6 +270,11 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
   if (!settingsParsed.ok) return { ok: false, message: settingsParsed.error };
   const fields = fieldsParsed.fields;
   const settings = settingsParsed.settings;
+  const bannerPath = String(input.bannerPath ?? "").trim() || null;
+  const logoPath = String(input.logoPath ?? "").trim() || null;
+  if ((bannerPath && !isFormImagePath(id, bannerPath, "banner")) || (logoPath && !isFormImagePath(id, logoPath, "logo"))) {
+    return { ok: false, message: "Ảnh không hợp lệ — chọn lại ảnh rồi lưu." };
+  }
   const ruleError = checkDefinitionRules(fields, settings);
   if (ruleError) return { ok: false, message: ruleError };
   try {
@@ -285,6 +314,9 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
         registration_limit: settings.registrationLimit,
         require_known_person: settings.requireKnownPerson,
         theme_color: settings.themeColor,
+        banner_path: bannerPath,
+        logo_path: logoPath,
+        logo_position: settings.logoPosition,
         updated_by: op.adminId,
         updated_at: new Date().toISOString()
       })
@@ -293,6 +325,22 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
     return { ok: true, message: "Đã lưu form." };
   } catch (error) {
     log("save failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+}
+
+/** Cấp link tải một ảnh lên kho, cho đúng thư mục của form này. Không ghi gì vào form: phải bấm "Lưu form". */
+export async function requestFormImageUpload(id: string, kind: string): Promise<FormImageUploadResult> {
+  const op = await operator();
+  if (!op) return { ok: false, message: DENIED };
+  if (!(CUSTOM_FORM_IMAGE_KINDS as readonly string[]).includes(kind)) return { ok: false, message: "Loại ảnh không hợp lệ." };
+  try {
+    const form = await readForm(op.client, id);
+    if (!form) return { ok: false, message: "Không tìm thấy form." };
+    const link = await capLinkTaiAnhForm(form.id, kind as CustomFormImageKind);
+    return link ? { ok: true, ...link } : { ok: false, message: "Chưa tải được ảnh lên — thử lại sau ít phút." };
+  } catch (error) {
+    log("image link failed", error);
     return { ok: false, message: SAFE_ERROR };
   }
 }
@@ -393,12 +441,15 @@ export type PublicCustomForm =
       opensAt: string | null;
       closesAt: string | null;
       themeColor: string | null;
+      bannerUrl: string;
+      logoUrl: string;
+      logoPosition: LogoPosition;
     };
 
 async function readPublicRow(client: ServiceClient, code: string): Promise<Row | null> {
   const { data, error } = await client
     .from("custom_forms")
-    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color")
+    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,banner_path,logo_path,logo_position")
     .eq("public_code", code)
     .maybeSingle();
   if (error) throw error;
@@ -414,7 +465,8 @@ export async function getPublicCustomForm(code: string, nowMs = Date.now()): Pro
     if (!row) return { state: "invalid" };
     const availability = formAvailability({ status: String(row.status), opensAt: row.opens_at ?? null, closesAt: row.closes_at ?? null }, nowMs);
     // Form nháp: không lộ tiêu đề hay câu hỏi cho người đoán trúng mã.
-    if (availability === "draft") return { state: "ready", availability, title: "", description: "", fields: [], opensAt: null, closesAt: null, themeColor: null };
+    if (availability === "draft") return { state: "ready", availability, title: "", description: "", fields: [], opensAt: null, closesAt: null, themeColor: null, bannerUrl: "", logoUrl: "", logoPosition: "left" };
+    const [bannerUrl, logoUrl] = await linkXemAnhForm(String(row.id), [row.banner_path ?? null, row.logo_path ?? null]);
     return {
       state: "ready",
       availability,
@@ -423,7 +475,10 @@ export async function getPublicCustomForm(code: string, nowMs = Date.now()): Pro
       fields: storedFields(row.fields).filter((f) => !f.hidden),
       opensAt: row.opens_at ?? null,
       closesAt: row.closes_at ?? null,
-      themeColor: row.theme_color ? String(row.theme_color) : null
+      themeColor: row.theme_color ? String(row.theme_color) : null,
+      bannerUrl,
+      logoUrl,
+      logoPosition: logoPositionOf(row.logo_position)
     };
   } catch (error) {
     log("public load failed", error);

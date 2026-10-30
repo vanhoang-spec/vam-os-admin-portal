@@ -22,7 +22,7 @@ export default async function CustomFormEditPage(props: { params: Promise<{ id: 
       </div>
     );
   }
-  const { form, programs, responseCount, events } = result.data;
+  const { form, programs, responseCount, events, bannerUrl, logoUrl } = result.data;
   const origin = (await getPublicOrigin()) ?? "";
   return (
     <div className="grid gap-4">
@@ -49,8 +49,13 @@ export default async function CustomFormEditPage(props: { params: Promise<{ id: 
           eventId: form.eventId,
           registrationLimit: form.registrationLimit,
           requireKnownPerson: form.requireKnownPerson,
-          themeColor: form.themeColor
+          themeColor: form.themeColor,
+          bannerPath: form.bannerPath,
+          logoPath: form.logoPath,
+          logoPosition: form.logoPosition
         }}
+        bannerUrl={bannerUrl}
+        logoUrl={logoUrl}
         programs={programs}
         events={events}
         responseCount={responseCount}

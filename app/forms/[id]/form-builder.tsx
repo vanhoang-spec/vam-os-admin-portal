@@ -12,15 +12,19 @@ import {
   CUSTOM_FORM_STATUS_LABELS,
   CUSTOM_FORMS_PATH,
   FIELD_TYPE_LABELS,
+  LOGO_POSITIONS,
+  LOGO_POSITION_LABELS,
   isQuestion,
   newFieldId,
   type CustomFormField,
   type CustomFormFieldType,
-  type CustomFormStatus
+  type CustomFormStatus,
+  type LogoPosition
 } from "@/lib/custom-form-core";
 import { combineVietnamDateTime, maskVietnamDate, maskVietnamTime, splitVietnamDateTime } from "@/lib/event-datetime";
 import { createEventForFormAction, saveCustomFormAction, sendCustomFormReceiptTestAction, setCustomFormStatusAction } from "../actions";
 import { formatDateTime } from "@/lib/utils";
+import { FormImageField } from "./form-image-field";
 
 const BOX =
   "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -49,6 +53,9 @@ export type BuilderForm = {
   /** Chỉ nhận người đã có trên hệ thống (VAM00009). */
   requireKnownPerson: boolean;
   themeColor: string | null;
+  bannerPath: string | null;
+  logoPath: string | null;
+  logoPosition: LogoPosition;
 };
 
 export type BuilderEvent = { id: string; name: string; startsAt: string | null; capacity: number | null; status: string; blocker: string | null };
@@ -66,13 +73,17 @@ export function FormBuilder({
   programs,
   events: initialEvents = [],
   responseCount,
-  publicUrl
+  publicUrl,
+  bannerUrl: initialBannerUrl = "",
+  logoUrl: initialLogoUrl = ""
 }: {
   form: BuilderForm;
   programs: Array<{ id: string; name: string }>;
   events?: BuilderEvent[];
   responseCount: number;
   publicUrl: string;
+  bannerUrl?: string;
+  logoUrl?: string;
 }) {
   const router = useRouter();
   const opens = splitVietnamDateTime(form.opensAt);
@@ -85,6 +96,11 @@ export function FormBuilder({
   const [registrationLimit, setRegistrationLimit] = useState(form.registrationLimit === null ? "" : String(form.registrationLimit));
   const [requireKnownPerson, setRequireKnownPerson] = useState(form.requireKnownPerson);
   const [themeColor, setThemeColor] = useState(form.themeColor ?? "");
+  const [bannerPath, setBannerPath] = useState(form.bannerPath ?? "");
+  const [bannerUrl, setBannerUrl] = useState(initialBannerUrl);
+  const [logoPath, setLogoPath] = useState(form.logoPath ?? "");
+  const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
+  const [logoPosition, setLogoPosition] = useState<LogoPosition>(form.logoPosition);
   const [events, setEvents] = useState<BuilderEvent[]>(initialEvents);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickName, setQuickName] = useState("");
@@ -213,6 +229,9 @@ export function FormBuilder({
           registrationLimit,
           requireKnownPerson,
           themeColor,
+          bannerPath,
+          logoPath,
+          logoPosition,
           fields: fields.map(({ optionsText, ...f }) => ({ ...f, options: CHOICE_TYPES.has(f.type) ? lines(optionsText) : [] }))
         }),
       () => setDirty(false)
@@ -418,6 +437,50 @@ export function FormBuilder({
               onChange={edit(setThankYou)}
             />
           </label>
+          <FormImageField
+            formId={form.id}
+            kind="banner"
+            label="Ảnh banner đầu form"
+            hint="PNG, JPG hoặc WebP, ảnh ngang (khoảng 1600 × 400) nhìn đẹp nhất. Chọn xong bấm “Lưu form”."
+            url={bannerUrl}
+            onChange={(path, url) => {
+              setBannerPath(path);
+              setBannerUrl(url);
+              touch();
+            }}
+          />
+          <FormImageField
+            formId={form.id}
+            kind="logo"
+            label="Logo đơn vị tổ chức"
+            hint="Nên dùng PNG nền trong suốt. Chọn xong bấm “Lưu form”."
+            url={logoUrl}
+            onChange={(path, url) => {
+              setLogoPath(path);
+              setLogoUrl(url);
+              touch();
+            }}
+          />
+          {logoUrl ? (
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Vị trí logo</span>
+              <select
+                className={`${BOX} max-w-[12rem]`}
+                data-testid="logo-position"
+                value={logoPosition}
+                onChange={(e) => {
+                  setLogoPosition(e.target.value as LogoPosition);
+                  touch();
+                }}
+              >
+                {LOGO_POSITIONS.map((p) => (
+                  <option key={p} value={p}>
+                    {LOGO_POSITION_LABELS[p]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <div className="grid gap-1 text-sm">
             <span className="font-medium">Màu chủ đạo của form</span>
             <div className="flex flex-wrap items-center gap-2">

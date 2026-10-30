@@ -34,4 +34,10 @@ export type CustomFormSavePayload = {
   requireKnownPerson?: boolean;
   /** Màu chủ đạo #rrggbb, hoặc chuỗi rỗng (VAM00009). */
   themeColor?: string;
+  /** Đường dẫn ảnh trong kho, hoặc chuỗi rỗng (VAM00009 mục 4.1). */
+  bannerPath?: string;
+  logoPath?: string;
+  logoPosition?: string;
 };
+
+export type FormImageUploadResult = { ok: true; path: string; signedUrl: string } | { ok: false; message: string };

@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { CustomFormAdminResult, CustomFormSavePayload } from "@/lib/custom-form-action-types";
+import type { CustomFormAdminResult, CustomFormSavePayload, FormImageUploadResult } from "@/lib/custom-form-action-types";
 import { CUSTOM_FORMS_PATH } from "@/lib/custom-form-core";
-import { createCustomForm, saveCustomForm, sendCustomFormReceiptTest, setCustomFormStatus } from "@/lib/custom-forms";
+import { createCustomForm, requestFormImageUpload, saveCustomForm, sendCustomFormReceiptTest, setCustomFormStatus } from "@/lib/custom-forms";
 import { createEvent } from "@/lib/events";
 
 /**
@@ -26,6 +26,11 @@ export async function saveCustomFormAction(id: string, payload: CustomFormSavePa
     revalidatePath(`${CUSTOM_FORMS_PATH}/${formId}`);
   }
   return result;
+}
+
+/** Xin link tải banner / logo lên kho (VAM00009). Ảnh đi thẳng từ trình duyệt lên kho, không qua đây. */
+export async function requestFormImageUploadAction(id: string, kind: string): Promise<FormImageUploadResult> {
+  return requestFormImageUpload(String(id ?? ""), String(kind ?? ""));
 }
 
 /** "Gửi thử cho tôi" ở phần thư tự động: gửi cho chính người đang bấm, với chữ đang trên trang. */

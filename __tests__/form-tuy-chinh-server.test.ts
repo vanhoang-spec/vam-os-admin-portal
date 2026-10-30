@@ -149,6 +149,19 @@ describe("2. tạo, lưu, đổi trạng thái", () => {
     expect((inserts[0].rows[0].fields as any[]).map((f) => f.label)).toEqual(["Họ và tên", "Email", "Số điện thoại"]);
   });
 
+  it("ảnh: chỉ nhận ảnh trong thư mục của chính form, đúng loại; bỏ ảnh ghi null (VAM00009)", async () => {
+    db.tables.custom_forms[0].status = "draft";
+    const uuid = "22222222-2222-4222-8222-222222222222";
+    const other = "11111111-1111-4111-8111-111111111111";
+    expect((await saveCustomForm(FORM, payload({ bannerPath: `${other}/banner-${uuid}` }))).message).toContain("Ảnh không hợp lệ");
+    expect((await saveCustomForm(FORM, payload({ logoPath: `${FORM}/banner-${uuid}` }))).message).toContain("Ảnh không hợp lệ");
+    expect(db.writes.filter((w) => w.table === "custom_forms")).toHaveLength(0);
+    expect((await saveCustomForm(FORM, payload({ bannerPath: `${FORM}/banner-${uuid}`, logoPath: "" }))).ok).toBe(true);
+    const row = db.writes.filter((w) => w.table === "custom_forms")[0].rows[0];
+    expect(row.banner_path).toBe(`${FORM}/banner-${uuid}`);
+    expect(row.logo_path).toBeNull();
+  });
+
   it("lưu: đúng một lệnh update cho đúng form; giờ mở/đóng hiểu theo giờ Việt Nam", async () => {
     db.tables.custom_forms[0].status = "draft";
     const result = await saveCustomForm(FORM, payload());
@@ -172,6 +185,9 @@ describe("2. tạo, lưu, đổi trạng thái", () => {
         "registration_limit",
         "require_known_person",
         "theme_color",
+        "banner_path",
+        "logo_path",
+        "logo_position",
         "thank_you",
         "title",
         "updated_at",
@@ -314,7 +330,7 @@ describe("3. gửi công khai /f/<mã>", () => {
     }
     seed("draft");
     const draft = await getPublicCustomForm(CODE, NOW);
-    expect(draft).toEqual({ state: "ready", availability: "draft", title: "", description: "", fields: [], opensAt: null, closesAt: null, themeColor: null });
+    expect(draft).toEqual({ state: "ready", availability: "draft", title: "", description: "", fields: [], opensAt: null, closesAt: null, themeColor: null, bannerUrl: "", logoUrl: "", logoPosition: "left" });
     expect(await getPublicCustomForm("sai", NOW)).toEqual({ state: "invalid" });
   });
 });

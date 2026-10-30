@@ -22,7 +22,7 @@ export default async function CustomFormPreviewPage(props: { params: Promise<{ i
       </div>
     );
   }
-  const { form } = result.data;
+  const { form, bannerUrl, logoUrl } = result.data;
   return (
     <div className="mx-auto grid w-full max-w-2xl gap-4">
       <Link href={`${CUSTOM_FORMS_PATH}/${form.id}`} className="text-sm text-vam-green underline">
@@ -31,7 +31,7 @@ export default async function CustomFormPreviewPage(props: { params: Promise<{ i
       <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="preview-note">
         Bản xem thử của bản đã lưu — người điền sẽ thấy đúng như dưới đây. Bấm “Gửi” chỉ để thử phần kiểm lỗi, không ghi gì.
       </p>
-      <FormHeader title={form.title} description={form.description} closesAt={form.closesAt} themeColor={form.themeColor} />
+      <FormHeader title={form.title} description={form.description} closesAt={form.closesAt} themeColor={form.themeColor} bannerUrl={bannerUrl} logoUrl={logoUrl} logoPosition={form.logoPosition} />
       <div className="rounded-lg border border-vam-line bg-white px-4 py-5">
         <PublicForm code={form.publicCode} fields={form.fields.filter((f) => !f.hidden)} themeColor={form.themeColor} preview />
       </div>
