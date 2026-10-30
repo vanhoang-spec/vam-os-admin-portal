@@ -660,7 +660,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Lọc “Cần BTC xem” để duyệt người hệ thống không đủ căn cứ (tin cậy thấp, thường là nhóm 9 hoặc khối Tài chính còn hoà). Đọc cột “Căn cứ” và “Hồ sơ” (mentor có thêm Công ty). Cần đọc đầy đủ thì bấm vào tên: hồ sơ đăng ký mở ở tab mới, trang đang rà giữ nguyên bộ lọc.",
       "Mở “Đổi / xác nhận nhóm”, chọn nhóm, ghi lý do rồi bấm “Lưu nhóm”. Giữ nguyên nhóm + ghi lý do = xác nhận (gỡ cờ “Cần BTC xem”).",
       "Để duyệt nhiều người đã rà hồ sơ: tích ô “Duyệt” từng dòng hoặc “Chọn tất cả … chưa duyệt đang hiện”, bấm “Duyệt … đã chọn”, kiểm tra tên và nhóm trong bảng xác nhận rồi bấm “Xác nhận duyệt”. Chọn tất cả chỉ lấy những người đang hiện sau bộ lọc và ô tìm kiếm.",
-      "Duyệt hàng loạt làm từng vai trò một: lọc “Vai trò = Mentor” rồi bấm “Lọc” để duyệt mentor, lọc “Vai trò = Mentee” rồi bấm “Lọc” để duyệt mentee. Khi đang xem cả hai vai trò, thanh duyệt chỉ áp cho mentor. Mentee còn cờ “Cần BTC xem” vẫn chọn được, nhưng bảng xác nhận sẽ cảnh báo và đánh dấu từng người — chỉ duyệt khi đã rà hồ sơ.",
+      "Duyệt hàng loạt: tick chọn tất cả người chưa duyệt đang hiện rồi bấm “Duyệt … đã chọn”. Đang xem cả hai vai trò thì duyệt chung mentor và mentee trong một lượt; muốn duyệt riêng thì lọc “Vai trò”. Người đã duyệt có nhãn “BTC đã duyệt”. Mentee còn cờ “Cần BTC xem” vẫn chọn được, nhưng bảng xác nhận sẽ cảnh báo và đánh dấu từng người — chỉ duyệt khi đã rà hồ sơ.",
       "Người đã duyệt hiện nhãn “BTC đã duyệt”. Lần rà tiếp theo chọn bộ lọc “Chưa được BTC duyệt” để bỏ qua những người đã xử lý.",
       "Sau mỗi đợt phỏng vấn có thêm mentee đạt, quay lại bấm “Phân loại … người mới” để họ vào danh sách."
     ],
