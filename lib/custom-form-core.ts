@@ -67,6 +67,9 @@ export const FIELD_FORMAT_HINTS: Partial<Record<CustomFormFieldType, string>> = 
 
 export const CHOICE_TYPES: ReadonlySet<CustomFormFieldType> = new Set<CustomFormFieldType>(["single_choice", "multi_choice", "dropdown"]);
 
+/** Câu chọn một đáp án thì mỗi lựa chọn có thể mang đích riêng; câu chọn nhiều thì không, vì nhiều đáp án là nhiều đích. */
+export const BRANCHING_CHOICE_TYPES: ReadonlySet<CustomFormFieldType> = new Set<CustomFormFieldType>(["single_choice", "dropdown"]);
+
 /** Câu Có/Không (VAM00009 mục 4.3): hai lựa chọn cố định, chỉ đích đến là do người tạo form chọn. */
 export const YES_NO_OPTIONS = ["Có", "Không"] as const;
 /** Đích "kết thúc form": người điền tới thẳng ô đồng ý và nút Gửi. */
@@ -151,12 +154,21 @@ export type CustomFormField = {
    * kế tiếp như thường. Chỉ cho nhảy tới, không cho nhảy lùi: nhờ vậy không thể có vòng lặp trang.
    */
   branches?: { yes: string; no: string };
+  /**
+   * Chỉ có ở câu chọn một / thả xuống: lựa chọn → đích, cùng luật đích với `branches`. Câu Có/Không giữ
+   * `branches` đúng dạng cũ thay vì đổi sang đây: dữ liệu đã lưu không phải viết lại, và bản mã cũ vẫn đọc
+   * được nếu phải quay lui. Mọi nơi đọc đích đi qua `optionTargetsOf`, nên hai dạng không rẽ thành hai luật.
+   */
+  optionTargets?: Record<string, string>;
+  /** Chỉ có ở ngắt trang: đích mặc định khi xong trang mở đầu bằng ngắt trang này. Rỗng = trang kế tiếp. */
+  nextPage?: string;
 };
 
 export type CustomFormAnswerValue = string | string[];
 export type CustomFormAnswers = Record<string, CustomFormAnswerValue>;
 
 const FIELD_ID = /^f_[a-z0-9]{6,16}$/;
+const isTargetValue = (target: string) => !target || target === BRANCH_END || FIELD_ID.test(target);
 const PUBLIC_CODE = /^[a-z0-9]{10,16}$/;
 
 export function isCustomFormCode(value: unknown): boolean {
@@ -227,6 +239,18 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
         return { ok: false, error: `${fieldName(draft, i)}: đích rẽ nhánh không hợp lệ.` };
       }
     }
+    let optionTargets: Record<string, string> | undefined;
+    if (BRANCHING_CHOICE_TYPES.has(type) && item.optionTargets !== undefined && item.optionTargets !== null) {
+      const raw = item.optionTargets;
+      if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: `${fieldName(draft, i)}: đích rẽ nhánh không hợp lệ.` };
+      // Duyệt theo lựa chọn hiện có: đích của lựa chọn đã bỏ tự rơi, và khoá lạ gửi lên không lọt vào định nghĩa.
+      const kept = options.flatMap((option): Array<[string, string]> => (Object.prototype.hasOwnProperty.call(raw, option) ? [[option, text((raw as Record<string, unknown>)[option])]] : []));
+      if (!kept.every(([, target]) => isTargetValue(target))) return { ok: false, error: `${fieldName(draft, i)}: đích rẽ nhánh không hợp lệ.` };
+      const set = kept.filter(([, target]) => target);
+      if (set.length) optionTargets = Object.fromEntries(set);
+    }
+    const nextPage = type === "page_break" ? text(item.nextPage) : "";
+    if (!isTargetValue(nextPage)) return { ok: false, error: `${fieldName(draft, i)}: đích của trang không hợp lệ.` };
     fields.push({
       id,
       type,
@@ -235,7 +259,9 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
       required: isQuestion({ type }) ? item.required === true : false,
       hidden: item.hidden === true,
       options,
-      ...(branches ? { branches } : {})
+      ...(branches ? { branches } : {}),
+      ...(optionTargets ? { optionTargets } : {}),
+      ...(nextPage ? { nextPage } : {})
     });
   }
   return { ok: true, fields };
@@ -405,10 +431,10 @@ export function checkDefinitionRules(
     const pages = splitPages(fields);
     const askedAlways = (field: CustomFormField | null) => !field || pages.findIndex((p) => p.fields.some((f) => f.id === field.id)) <= firstBranch;
     if ((settings.onePerEmail || settings.autoReply || settings.eventId || settings.requireKnownPerson) && !askedAlways(dedupeEmailField(fields))) {
-      return "Form có rẽ nhánh: trường Email phải nằm trước hoặc cùng trang với câu rẽ nhánh đầu tiên, để ai cũng được hỏi.";
+      return "Form có rẽ nhánh: trường Email phải nằm trước hoặc cùng trang với chỗ rẽ nhánh đầu tiên (câu rẽ nhánh, hoặc trang có đặt “Trang tiếp theo”), để ai cũng được hỏi.";
     }
     if ((settings.eventId || settings.requireKnownPerson) && !askedAlways(nameField(fields))) {
-      return "Form có rẽ nhánh: ô “Họ và tên” phải nằm trước hoặc cùng trang với câu rẽ nhánh đầu tiên, để ai cũng được hỏi.";
+      return "Form có rẽ nhánh: ô “Họ và tên” phải nằm trước hoặc cùng trang với chỗ rẽ nhánh đầu tiên (câu rẽ nhánh, hoặc trang có đặt “Trang tiếp theo”), để ai cũng được hỏi.";
     }
   }
   // Form gắn sự kiện ghi người điền vào danh sách người tham gia: cần đúng ba thứ danh sách đó cần —
@@ -430,7 +456,7 @@ export function checkDefinitionRules(
 }
 
 /** id = mã "Ngắt trang" mở đầu trang (đích rẽ nhánh trỏ vào mã này); trang đầu không có ngắt trang nên rỗng. */
-export type CustomFormPage = { id: string; title: string; help: string; fields: CustomFormField[] };
+export type CustomFormPage = { id: string; title: string; help: string; nextPage: string; fields: CustomFormField[] };
 
 /**
  * Chia form thành từng trang tại các “Ngắt trang” đang hiện (BTC 15/10/2026). Tiêu đề và mô tả của
@@ -440,12 +466,12 @@ export type CustomFormPage = { id: string; title: string; help: string; fields: 
  */
 export function splitPages(fields: CustomFormField[]): CustomFormPage[] {
   const pages: CustomFormPage[] = [];
-  let current: CustomFormPage = { id: "", title: "", help: "", fields: [] };
+  let current: CustomFormPage = { id: "", title: "", help: "", nextPage: "", fields: [] };
   for (const field of fields) {
     if (field.hidden) continue;
     if (field.type === "page_break") {
       if (current.fields.length) pages.push(current);
-      current = { id: field.id, title: field.label, help: field.help, fields: [] };
+      current = { id: field.id, title: field.label, help: field.help, nextPage: field.nextPage ?? "", fields: [] };
       continue;
     }
     current.fields.push(field);
@@ -454,52 +480,95 @@ export function splitPages(fields: CustomFormField[]): CustomFormPage[] {
   return pages;
 }
 
-const branchTargets = (field: CustomFormField) => [field.branches?.yes ?? "", field.branches?.no ?? ""].filter(Boolean);
-const isBranching = (field: CustomFormField) => field.type === "yes_no" && !field.hidden && branchTargets(field).length > 0;
-
-/** Form có câu Có/Không nào thật sự rẽ nhánh không. */
-export function hasBranching(fields: CustomFormField[]): boolean {
-  return fields.some(isBranching);
+/**
+ * Lựa chọn → đích của một câu, rỗng = chưa đặt. Là một cửa đọc cho cả `branches` cũ lẫn `optionTargets`.
+ * Trả Map và chỉ gồm lựa chọn còn trên câu hỏi: câu trả lời là chữ người gửi tự đặt, đọc thẳng vào object
+ * thì "constructor" sẽ trả về một hàm và thành đích giả.
+ */
+export function optionTargetsOf(field: CustomFormField): Map<string, string> {
+  if (field.type === "yes_no") return new Map([[YES_NO_OPTIONS[0], field.branches?.yes ?? ""], [YES_NO_OPTIONS[1], field.branches?.no ?? ""]]);
+  if (!BRANCHING_CHOICE_TYPES.has(field.type)) return new Map();
+  const own = (option: string) => (field.optionTargets && Object.prototype.hasOwnProperty.call(field.optionTargets, option) ? field.optionTargets[option] : "");
+  return new Map(field.options.map((option) => [option, own(option)]));
 }
 
-/** Trang của câu rẽ nhánh đầu tiên; null = form không rẽ nhánh. */
+const isBranching = (field: CustomFormField) => !field.hidden && Array.from(optionTargetsOf(field).values()).some(Boolean);
+
+/** Form có đổi đường đi không: câu rẽ nhánh, hoặc trang có đích mặc định. */
+export function hasBranching(fields: CustomFormField[]): boolean {
+  return fields.some(isBranching) || splitPages(fields).some((p) => p.nextPage);
+}
+
+/** Trang rẽ nhánh đầu tiên; null = form không rẽ nhánh. Mọi trang tới đó (kể cả nó) ai cũng đi qua. */
 function firstBranchPage(fields: CustomFormField[]): number | null {
-  const index = splitPages(fields).findIndex((p) => p.fields.some(isBranching));
+  const index = splitPages(fields).findIndex((p) => p.nextPage || p.fields.some(isBranching));
   return index >= 0 ? index : null;
 }
 
-/** Đích nào cũng phải là một trang có thật, đang hiện và nằm SAU câu hỏi. null = hợp lệ. */
-function checkBranches(fields: CustomFormField[]): string | null {
+/** Tên trang trong thông báo cho người tạo form. */
+function pageName(page: CustomFormPage, index: number): string {
+  return page.title ? `Trang “${page.title.slice(0, 60)}”` : `Trang ${index + 1}`;
+}
+
+/** Đích nào cũng phải là một trang có thật, đang hiện và nằm SAU trang đang xét. Trả lý do sai, null = hợp lệ. */
+function targetProblem(fields: CustomFormField[], pages: CustomFormPage[], index: number, target: string): string | null {
+  if (target === BRANCH_END) return null;
+  const at = pages.findIndex((p) => p.id === target);
+  if (at > index) return null;
+  if (at >= 0) return "trang đích nằm trước hoặc chính là trang này, mà form chỉ nhảy tới";
+  const breakField = fields.find((f) => f.id === target && f.type === "page_break");
+  if (!breakField) return "trang đích không còn trên form";
+  return breakField.hidden ? "trang đích đang ẩn" : "trang đích chưa có câu hỏi nào";
+}
+
+/** Mọi đích sai của form. Dùng cho cả lúc lưu lẫn bảng cảnh báo trên trình tạo form, để hai nơi nói một lời. */
+function branchErrors(fields: CustomFormField[]): string[] {
   const pages = splitPages(fields);
-  for (let index = 0; index < pages.length; index += 1) {
-    for (const field of pages[index].fields.filter(isBranching)) {
-      for (const target of branchTargets(field)) {
-        if (target === BRANCH_END) continue;
-        if (pages.findIndex((p) => p.id === target) <= index) {
-          return `Câu “${field.label.slice(0, 60)}”: trang đích không còn trên form hoặc không nằm sau câu này — chọn lại đích đến.`;
-        }
-      }
+  const out: string[] = [];
+  pages.forEach((page, index) => {
+    for (const field of page.fields.filter(isBranching)) {
+      optionTargetsOf(field).forEach((target, option) => {
+        const problem = target ? targetProblem(fields, pages, index, target) : null;
+        if (problem) out.push(`Câu “${field.label.slice(0, 60)}”, lựa chọn “${option.slice(0, 60)}”: ${problem} — chọn lại đích đến.`);
+      });
     }
-  }
-  return null;
+    const problem = page.nextPage ? targetProblem(fields, pages, index, page.nextPage) : null;
+    if (problem) out.push(`${pageName(page, index)}, mục Trang tiếp theo: ${problem} — chọn lại đích đến.`);
+  });
+  return out;
+}
+
+function checkBranches(fields: CustomFormField[]): string | null {
+  return branchErrors(fields)[0] ?? null;
+}
+
+/**
+ * Trang kế theo đích đã chọn; undefined = đích không dùng được (lùi, đã xoá) thì bên gọi đi tiếp theo đường
+ * mặc định. Đích lùi không được phép dù lưu sót: nhờ luôn tiến tới mà form không thể có vòng lặp.
+ */
+function resolveTarget(pages: CustomFormPage[], index: number, target: string): number | null | undefined {
+  if (target === BRANCH_END) return null;
+  const jump = target ? pages.findIndex((p) => p.id === target) : -1;
+  return jump > index ? jump : undefined;
 }
 
 /**
  * Trang kế tiếp sau trang `index` theo câu trả lời; null = đây là trang cuối của lượt điền này (hiện ô
- * đồng ý và nút Gửi). Một trang có nhiều câu rẽ nhánh thì câu đứng sau quyết định. Chưa trả lời hay đích
- * rỗng thì đi trang kế tiếp như thường.
+ * đồng ý và nút Gửi). Thứ tự ưu tiên: đích theo câu trả lời (một trang có nhiều câu rẽ nhánh thì câu đứng
+ * sau quyết định), đích mặc định của trang, rồi trang kế tiếp như thường.
  */
 export function nextPageIndex(pages: CustomFormPage[], index: number, answerOf: (fieldId: string) => string | undefined): number | null {
+  const page = pages[index];
   let target = "";
-  for (const field of pages[index]?.fields ?? []) {
-    if (field.type !== "yes_no" || !field.branches) continue;
-    const answer = answerOf(field.id);
-    const chosen = answer === YES_NO_OPTIONS[0] ? field.branches.yes : answer === YES_NO_OPTIONS[1] ? field.branches.no : "";
+  for (const field of page?.fields ?? []) {
+    // Cắt khoảng trắng như normalizeAnswer: không thì " Có" qua được kiểm tra mà lại né được nhánh của "Có".
+    const chosen = optionTargetsOf(field).get(text(answerOf(field.id)));
     if (chosen) target = chosen;
   }
-  if (target === BRANCH_END) return null;
-  const jump = target ? pages.findIndex((p) => p.id === target) : -1;
-  if (jump > index) return jump;
+  const byAnswer = resolveTarget(pages, index, target);
+  if (byAnswer !== undefined) return byAnswer;
+  const byPage = resolveTarget(pages, index, page?.nextPage ?? "");
+  if (byPage !== undefined) return byPage;
   return index + 1 < pages.length ? index + 1 : null;
 }
 
@@ -510,9 +579,96 @@ export function visitedPages(pages: CustomFormPage[], answerOf: (fieldId: string
   return path;
 }
 
-/** Công khai được khi có ít nhất một câu hỏi đang hiện. */
-export function publishBlocker(fields: CustomFormField[]): string | null {
-  return fields.some((f) => isQuestion(f) && !f.hidden) ? null : "Form chưa có câu hỏi nào đang hiện — thêm câu hỏi trước khi công khai.";
+/**
+ * Các trang có thể đi tới ngay sau trang `index`. Đường mặc định bị loại khi trang có một câu bắt buộc mà
+ * lựa chọn nào cũng có đích: người điền buộc phải đi theo đích đó. Bỏ sót điều này thì trang kế sẽ bị
+ * coi là tới được dù không ai vào, đúng ca kiểm tra này phải bắt.
+ */
+function pageExits(pages: CustomFormPage[], index: number): number[] {
+  const page = pages[index];
+  const exits: number[] = [];
+  let defaultRoute = true;
+  for (const field of page.fields.filter(isBranching)) {
+    const resolved = Array.from(optionTargetsOf(field).values()).map((target) => resolveTarget(pages, index, target));
+    for (const exit of resolved) if (typeof exit === "number") exits.push(exit);
+    if (field.required && resolved.every((exit) => exit !== undefined)) defaultRoute = false;
+  }
+  if (defaultRoute) {
+    const byPage = resolveTarget(pages, index, page.nextPage);
+    if (typeof byPage === "number") exits.push(byPage);
+    else if (byPage === undefined && index + 1 < pages.length) exits.push(index + 1);
+  }
+  return exits;
+}
+
+/** Các trang không câu trả lời nào đi tới được. Đích chỉ trỏ tới nên duyệt một lượt từ đầu là đủ. */
+function unreachablePages(fields: CustomFormField[]): Array<{ page: CustomFormPage; index: number }> {
+  const pages = splitPages(fields);
+  const reached = new Set([0]);
+  pages.forEach((_, index) => {
+    if (reached.has(index)) for (const exit of pageExits(pages, index)) reached.add(exit);
+  });
+  return pages.flatMap((page, index) => (reached.has(index) ? [] : [{ page, index }]));
+}
+
+const unreachableMessage = ({ page, index }: { page: CustomFormPage; index: number }) =>
+  `${pageName(page, index)} không có đường tới: không câu trả lời hay trang nào dẫn tới trang này — đặt đích tới trang, hoặc xoá trang.`;
+
+/** Cảnh báo cho người tạo form: không chặn gì, vì lựa chọn chưa đặt đích vẫn đi được theo đường mặc định. */
+export function branchWarnings(fields: CustomFormField[]): string[] {
+  return fields.filter(isBranching).flatMap((field) => {
+    const unset = Array.from(optionTargetsOf(field).entries()).filter(([, target]) => !target).map(([option]) => `“${option.slice(0, 60)}”`);
+    if (!unset.length) return [];
+    return [`Câu “${field.label.slice(0, 60)}”: lựa chọn ${unset.join(", ")} chưa đặt đích — sẽ đi theo Trang tiếp theo của trang này (chưa đặt thì sang trang kế).`];
+  });
+}
+
+/** Những lỗi sẽ chặn lưu hoặc công khai, để trình tạo form báo trước khi người tạo bấm nút. */
+export function branchBlockers(fields: CustomFormField[]): string[] {
+  return [...branchErrors(fields), ...unreachablePages(fields).map(unreachableMessage)];
+}
+
+/**
+ * Xoá liên kết tới một trang khi xoá trang đó, trả kèm danh sách chỗ bị mất đích để báo người tạo form.
+ * Để liên kết lại thì form bị từ chối lúc lưu với đích không còn nhìn thấy trên trang, và người tạo không
+ * biết phải sửa ở đâu.
+ */
+export function removePageLinks(fields: CustomFormField[], pageId: string): { fields: CustomFormField[]; lost: string[] } {
+  const lost: string[] = [];
+  const kept = fields.filter((f) => f.id !== pageId).map((field): CustomFormField => {
+    const name = field.label.slice(0, 60);
+    if (field.nextPage === pageId) {
+      lost.push(`Trang “${name || "chưa đặt tên"}”, mục Trang tiếp theo`);
+      return { ...field, nextPage: "" };
+    }
+    if (field.branches) {
+      const { yes, no } = field.branches;
+      if (yes === pageId) lost.push(`Câu “${name}”, lựa chọn “${YES_NO_OPTIONS[0]}”`);
+      if (no === pageId) lost.push(`Câu “${name}”, lựa chọn “${YES_NO_OPTIONS[1]}”`);
+      return { ...field, branches: { yes: yes === pageId ? "" : yes, no: no === pageId ? "" : no } };
+    }
+    if (field.optionTargets) {
+      const entries = Object.entries(field.optionTargets);
+      for (const [option, target] of entries) if (target === pageId) lost.push(`Câu “${name}”, lựa chọn “${option.slice(0, 60)}”`);
+      return { ...field, optionTargets: Object.fromEntries(entries.filter(([, target]) => target !== pageId)) };
+    }
+    return field;
+  });
+  return { fields: kept, lost };
+}
+
+/**
+ * Công khai được khi có ít nhất một câu hỏi đang hiện và trang nào cũng có đường tới. Không đặt trong
+ * checkDefinitionRules vì nháp phải lưu được giữa chừng, lúc người tạo chưa nối xong các trang.
+ *
+ * `previous`: định nghĩa đang chạy khi LƯU một form đã công khai. Form rẽ nhánh Có/Không cũ có thể đã sẵn
+ * một trang không ai tới; trang cũ đó không được cản BTC sửa một lỗi chính tả, chỉ trang mới phát sinh mới chặn.
+ */
+export function publishBlocker(fields: CustomFormField[], previous: CustomFormField[] = []): string | null {
+  if (!fields.some((f) => isQuestion(f) && !f.hidden)) return "Form chưa có câu hỏi nào đang hiện — thêm câu hỏi trước khi công khai.";
+  const known = new Set(unreachablePages(previous).map(({ page }) => page.id));
+  const dead = unreachablePages(fields).find(({ page }) => !known.has(page.id));
+  return dead ? unreachableMessage(dead) : null;
 }
 
 /**
@@ -651,7 +807,8 @@ export function validateAnswers(fields: CustomFormField[], read: (fieldId: strin
  */
 export function validateFormAnswers(fields: CustomFormField[], read: (fieldId: string) => string[]): AnswerValidation {
   const pages = splitPages(fields);
-  const path = visitedPages(pages, (id) => read(id)?.[0]);
+  // Lấy giá trị như normalizeAnswer (giá trị khác rỗng đầu tiên): đường đi và câu trả lời phải đọc cùng một thứ.
+  const path = visitedPages(pages, (id) => read(id)?.find((value) => text(value)));
   return validateAnswers(path.flatMap((index) => pages[index].fields), read);
 }
 
