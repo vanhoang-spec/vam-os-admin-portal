@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { CustomFormAdminResult, CustomFormSavePayload, FormImageUploadResult } from "@/lib/custom-form-action-types";
 import { CUSTOM_FORMS_PATH } from "@/lib/custom-form-core";
-import { createCustomForm, requestFormImageUpload, saveCustomForm, sendCustomFormReceiptTest, setCustomFormStatus } from "@/lib/custom-forms";
+import { createCustomForm, requestFormImageUpload, saveCustomForm, sendCustomFormMentorTest, sendCustomFormReceiptTest, sendPendingMentorForwards, setCustomFormStatus } from "@/lib/custom-forms";
 import { createEvent } from "@/lib/events";
 
 /**
@@ -36,6 +36,19 @@ export async function requestFormImageUploadAction(id: string, kind: string): Pr
 /** "Gửi thử cho tôi" ở phần thư tự động: gửi cho chính người đang bấm, với chữ đang trên trang. */
 export async function sendCustomFormReceiptTestAction(id: string, input: { subject: string; body: string }): Promise<CustomFormAdminResult> {
   return sendCustomFormReceiptTest(String(id ?? ""), input ?? { subject: "", body: "" });
+}
+
+/** "Gửi thử cho tôi" ở phần gửi mentor: thư cho chính người đang bấm, câu trả lời là chữ giữ chỗ. */
+export async function sendCustomFormMentorTestAction(id: string, input: { subject: string; body: string }): Promise<CustomFormAdminResult> {
+  return sendCustomFormMentorTest(String(id ?? ""), input ?? { subject: "", body: "" });
+}
+
+/** Nút "Gửi các bản đang chờ" trên trang câu trả lời. Quyền và trạng thái form kiểm lại ở lib. */
+export async function sendPendingMentorForwardsAction(id: string): Promise<CustomFormAdminResult> {
+  const formId = String(id ?? "");
+  const result = await sendPendingMentorForwards(formId);
+  revalidatePath(`${CUSTOM_FORMS_PATH}/${formId}/tra-loi`);
+  return result;
 }
 
 export async function setCustomFormStatusAction(id: string, status: string): Promise<CustomFormAdminResult> {

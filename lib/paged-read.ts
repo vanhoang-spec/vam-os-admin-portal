@@ -153,6 +153,7 @@ export type PageOrder =
  *   mentee_interview_invites      supabase/migrations/20260924190000 create table (id uuid primary key)
  *   custom_forms /
  *   custom_form_responses         supabase/migrations/20261015200000 create table (id uuid primary key)
+ *   custom_form_mentor_sends      supabase/migrations/20261101120000 create table (id uuid primary key)
  *   match_profile_links /
  *   match_result_notices /
  *   match_result_holds            supabase/migrations/20261022120000 create table (id uuid primary key)
@@ -170,6 +171,7 @@ export const PAGE_ORDER = {
   application_decisions: { strategy: "keyset", key: "id" },
   application_reviews: { strategy: "keyset", key: "id" },
   applications: { strategy: "keyset", key: "id" },
+  custom_form_mentor_sends: { strategy: "keyset", key: "id" },
   custom_form_responses: { strategy: "keyset", key: "id" },
   custom_forms: { strategy: "keyset", key: "id" },
   event_links: { strategy: "keyset", key: "id" },
