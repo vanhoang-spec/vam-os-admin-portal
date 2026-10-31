@@ -34,6 +34,7 @@ import {
   type TrangThaiBaoLoi
 } from "@/lib/bao-loi-core";
 import { sendBaoLoiHoiLai } from "@/lib/email";
+import { getPublicOrigin } from "@/lib/public-url";
 import { canManageBaoLoi } from "@/lib/permissions";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -359,7 +360,8 @@ export async function hoiLaiBaoLoi(id: string, cauHoiRaw: string): Promise<KetQu
       baoLoiId: id,
       ma: String(row.ma),
       tieuDe: String(row.tieu_de ?? ""),
-      cauHoi: kiem.value
+      cauHoi: kiem.value,
+      requestOrigin: await getPublicOrigin()
     });
     thu = sent.ok;
   }

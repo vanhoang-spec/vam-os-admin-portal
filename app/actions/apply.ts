@@ -10,6 +10,7 @@ import {
 import { APPLY_TOKEN_FIELD, type ApplyActionState } from "@/lib/apply-types";
 import { sendApplicationConfirmation } from "@/lib/email";
 import { ensureInterviewInviteToken } from "@/lib/interview-schedule";
+import { getPublicOrigin } from "@/lib/public-url";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { CURRENT_APPLICATION_SEASON_LABEL } from "@/lib/season-labels";
 import {
@@ -119,7 +120,8 @@ async function acknowledgeSubmission(input: {
       role: input.role,
       seasonLabel: CURRENT_APPLICATION_SEASON_LABEL,
       applicationId: input.applicationId,
-      bookingToken
+      bookingToken,
+      requestOrigin: await getPublicOrigin()
     });
   } catch (err) {
     console.error("[apply] confirmation email failed (non-fatal)", err);

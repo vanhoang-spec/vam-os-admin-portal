@@ -141,7 +141,8 @@ describe("thư xác nhận sau khi nộp đơn", () => {
       seasonLabel: SEASON_LABEL,
       applicationId: APPLICATION_ID,
       // Mentor được cấp mã đặt lịch phỏng vấn ngay trong thư xác nhận (22/09/2026).
-      bookingToken: "ma-dat-lich-vi-du"
+      bookingToken: "ma-dat-lich-vi-du",
+      requestOrigin: null
     });
     expect(mocks.ensureInterviewInviteToken).toHaveBeenCalledWith(APPLICATION_ID);
   });
@@ -166,7 +167,8 @@ describe("thư xác nhận sau khi nộp đơn", () => {
       role: "mentee",
       seasonLabel: SEASON_LABEL,
       applicationId: APPLICATION_ID,
-      bookingToken: null
+      bookingToken: null,
+      requestOrigin: null
     });
     // Mentee không có vòng đặt lịch — không được phép tốn một dòng invite nào.
     expect(mocks.ensureInterviewInviteToken).not.toHaveBeenCalled();
