@@ -7,7 +7,7 @@
  * Form công khai: thiếu mục bắt buộc / sai định dạng / chưa tích đồng ý thì KHÔNG gọi máy chủ, báo ngay
  * dưới đúng mục; hợp lệ thì gọi đúng một lần với đúng mã form; lỗi máy chủ trả về hiện đúng chỗ; trường
  * ẩn không hiện; bản xem thử không bao giờ gửi.
- * Trình tạo form: thêm câu chọn, lựa chọn mỗi dòng một cái (dòng trống bị bỏ); không công khai khi còn
+ * Trình tạo form: thêm câu chọn, mỗi lựa chọn một dòng nhập (dòng trống bị bỏ); không công khai khi còn
  * thay đổi chưa lưu; form đã có câu trả lời thì câu cũ không xoá / không đổi loại được trên trang.
  * Đường /f/ là trang công khai mang nhãn khung trần; /forms vẫn đòi đăng nhập.
  */
@@ -202,7 +202,7 @@ describe("2. trình tạo form", () => {
     render(<FormBuilder form={FORM} programs={[{ id: "p1", name: "Career Experience Program" }]} responseCount={responseCount} publicUrl={`https://os.test/f/${CODE}`} />);
   const byTestId = (container: HTMLElement, id: string) => container.querySelector(`[data-testid="${id}"]`) as HTMLButtonElement;
 
-  it("thêm câu chọn một: lựa chọn mỗi dòng một cái (bỏ dòng trống, cắt khoảng trắng); Lưu gửi đúng định nghĩa", async () => {
+  it("thêm câu chọn một: mỗi lựa chọn một dòng nhập (bỏ dòng trống, cắt khoảng trắng); Lưu gửi đúng định nghĩa", async () => {
     h.save.mockResolvedValue({ ok: true, message: "Đã lưu form." });
     const { container, getByLabelText } = renderBuilder();
     fireEvent.change(getByLabelText("Loại trường mới"), { target: { value: "single_choice" } });
@@ -211,7 +211,10 @@ describe("2. trình tạo form", () => {
     expect(cards).toHaveLength(3);
     const card = cards[2] as HTMLElement;
     fireEvent.change(card.querySelector('input[aria-label="Câu hỏi"]')!, { target: { value: "Bạn là sinh viên năm mấy?" } });
-    fireEvent.change(card.querySelector("label textarea")!, { target: { value: " Năm 3\n\nNăm 4 \n" } });
+    fireEvent.change(card.querySelector('input[aria-label="Lựa chọn 1"]')!, { target: { value: " Năm 3" } });
+    fireEvent.change(card.querySelector('input[aria-label="Lựa chọn 2"]')!, { target: { value: "" } });
+    fireEvent.click(card.querySelector('[data-testid="add-option"]')!);
+    fireEvent.change(card.querySelector('input[aria-label="Lựa chọn 3"]')!, { target: { value: "Năm 4 " } });
     await act(async () => {
       fireEvent.click(byTestId(container, "save-form"));
     });

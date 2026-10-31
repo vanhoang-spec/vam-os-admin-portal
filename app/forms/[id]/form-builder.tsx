@@ -7,6 +7,7 @@ import { Card } from "@/components/ui";
 import type { CustomFormAdminResult } from "@/lib/custom-form-action-types";
 import {
   BRANCH_END,
+  BRANCHING_CHOICE_TYPES,
   CHOICE_TYPES,
   CUSTOM_FORM_FIELD_TYPES,
   CUSTOM_FORM_STATUS_LABELS,
@@ -14,8 +15,14 @@ import {
   FIELD_TYPE_LABELS,
   LOGO_POSITIONS,
   LOGO_POSITION_LABELS,
+  YES_NO_OPTIONS,
+  branchBlockers,
+  branchWarnings,
+  hasBranching,
   isQuestion,
   newFieldId,
+  optionTargetsOf,
+  removePageLinks,
   type CustomFormField,
   type CustomFormFieldType,
   type CustomFormStatus,
@@ -30,7 +37,11 @@ const BOX =
   "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
 const SMALL_BUTTON = "rounded-md border border-vam-line bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40";
 
-type EditableField = CustomFormField & { optionsText: string };
+/**
+ * `rowTargets[i]` là đích của dòng thứ i trong `optionsText`. Lúc soạn, đích bám theo DÒNG chứ không theo
+ * chữ: `optionTargets` khoá theo chữ lựa chọn, nên giữ dạng đó ở đây thì sửa một chữ là mất đích.
+ */
+type EditableField = CustomFormField & { optionsText: string; rowTargets: string[] };
 
 export type BuilderForm = {
   id: string;
@@ -60,8 +71,52 @@ export type BuilderForm = {
 
 export type BuilderEvent = { id: string; name: string; startsAt: string | null; capacity: number | null; status: string; blocker: string | null };
 
-const toEditable = (f: CustomFormField): EditableField => ({ ...f, optionsText: f.options.join("\n") });
+const toEditable = (f: CustomFormField): EditableField => {
+  const targets = optionTargetsOf(f);
+  return { ...f, optionsText: f.options.join("\n"), rowTargets: f.options.map((o) => targets.get(o) ?? "") };
+};
 const lines = (value: string) => value.split("\n").map((l) => l.trim()).filter(Boolean);
+/** Từ dòng đang soạn về định nghĩa gửi lên máy chủ: đây là chỗ đích được khoá lại theo chữ lựa chọn. */
+const toField = ({ optionsText, rowTargets, ...f }: EditableField): CustomFormField => {
+  const options = CHOICE_TYPES.has(f.type) ? lines(optionsText) : f.type === "yes_no" ? [...YES_NO_OPTIONS] : [];
+  const saved: CustomFormField = { ...f, options };
+  delete saved.optionTargets;
+  if (BRANCHING_CHOICE_TYPES.has(f.type)) {
+    const set = optionsText.split("\n").map((row, i): [string, string] => [row.trim(), rowTargets[i] ?? ""]).filter(([option, target]) => option && target);
+    if (set.length) saved.optionTargets = Object.fromEntries(set);
+  }
+  return saved;
+};
+
+/** Ô chọn đích, dùng chung cho lựa chọn, câu Có/Không và mặc định của trang. Chỉ liệt kê trang nằm sau: nhảy lùi không chọn được. */
+function TargetSelect({
+  label,
+  value,
+  emptyLabel,
+  pages,
+  onChange
+}: {
+  label: string;
+  value: string;
+  emptyLabel: string;
+  pages: EditableField[];
+  onChange: (value: string) => void;
+}) {
+  // Đích đã thành sai (đổi thứ tự, ẩn trang) vẫn phải hiện ra: thiếu dòng này ô chọn tự vẽ dòng đầu, trông như chưa đặt gì.
+  const stale = value && value !== BRANCH_END && !pages.some((f) => f.id === value);
+  return (
+    <select className={BOX} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{emptyLabel}</option>
+      {stale ? <option value={value}>Đích không còn hợp lệ — chọn lại</option> : null}
+      {pages.map((f) => (
+        <option key={f.id} value={f.id}>
+          Trang: {f.label || "(chưa đặt tên)"}
+        </option>
+      ))}
+      <option value={BRANCH_END}>Kết thúc form (tới nút Gửi)</option>
+    </select>
+  );
+}
 
 /**
  * Trình tạo form (BTC 15/10/2026). Mọi thay đổi chỉ nằm trên trang cho tới khi bấm "Lưu form"; máy
@@ -123,6 +178,8 @@ export function FormBuilder({
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<{ ok: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // Lần xoá trang gần đây còn chưa lưu: chỗ nào mất đích phải đọc được, vì ô chọn lúc này chỉ hiện là trống.
+  const [lostLinks, setLostLinks] = useState<Array<{ page: string; lost: string[] }>>([]);
 
   const locked = responseCount > 0;
   // Số thứ tự chỉ đếm câu hỏi: khối tiêu đề và ngắt trang không chiếm số.
@@ -160,8 +217,27 @@ export function FormBuilder({
     });
     touch();
   };
+  /** Bỏ mọi đích trỏ tới một ngắt trang sắp biến mất, và ghi lại những chỗ mất đích. */
+  const dropPageLinks = (list: EditableField[], breakField: EditableField) => {
+    const { lost } = removePageLinks(list.map(toField), breakField.id);
+    if (lost.length) setLostLinks((prev) => [...prev, { page: breakField.label || "(chưa đặt tên)", lost }]);
+    const clear = (target: string | undefined) => (target === breakField.id ? "" : target);
+    return list.map((f) => ({
+      ...f,
+      nextPage: clear(f.nextPage),
+      rowTargets: f.rowTargets.map((t) => (t === breakField.id ? "" : t)),
+      ...(f.branches ? { branches: { yes: clear(f.branches.yes) ?? "", no: clear(f.branches.no) ?? "" } } : {})
+    }));
+  };
   const remove = (id: string) => {
-    setFields((prev) => prev.filter((f) => f.id !== id));
+    const target = fields.find((f) => f.id === id);
+    const rest = fields.filter((f) => f.id !== id);
+    setFields(target?.type === "page_break" ? dropPageLinks(rest, target) : rest);
+    touch();
+  };
+  /** Trang đầu không có ngắt trang nên không có chỗ đặt đích mặc định: chèn một cái là có, không cần đổi dữ liệu. */
+  const addFirstPageBreak = () => {
+    setFields((prev) => [{ id: newFieldId(), type: "page_break", label: "", help: "", required: false, hidden: false, options: [], optionsText: "", rowTargets: [] }, ...prev]);
     touch();
   };
   const addField = () => {
@@ -176,19 +252,27 @@ export function FormBuilder({
         required: newType !== "section",
         hidden: false,
         options: [],
-        optionsText: choice ? "Lựa chọn 1\nLựa chọn 2" : ""
+        optionsText: choice ? "Lựa chọn 1\nLựa chọn 2" : "",
+        rowTargets: []
       }
     ]);
     touch();
   };
   const changeType = (field: EditableField, type: CustomFormFieldType) => {
     const choice = CHOICE_TYPES.has(type);
+    // Đổi ngắt trang sang loại khác cũng là xoá trang đó.
+    if (field.type === "page_break" && type !== "page_break") setFields(dropPageLinks(fields, field));
     updateField(field.id, {
       type,
       required: type === "section" ? false : field.required,
       optionsText: choice && !field.optionsText.trim() ? "Lựa chọn 1\nLựa chọn 2" : field.optionsText
     });
   };
+
+  /** Đặt lại danh sách dòng lựa chọn, giữ `rowTargets` đi cùng từng dòng. */
+  const setRows = (field: EditableField, rows: Array<{ text: string; target: string }>) =>
+    updateField(field.id, { optionsText: rows.map((r) => r.text).join("\n"), rowTargets: rows.map((r) => r.target) });
+  const rowsOf = (field: EditableField) => field.optionsText.split("\n").map((row, i) => ({ text: row, target: field.rowTargets[i] ?? "" }));
 
   const run = async (action: () => Promise<CustomFormAdminResult>, after?: () => void) => {
     setBusy(true);
@@ -232,9 +316,12 @@ export function FormBuilder({
           bannerPath,
           logoPath,
           logoPosition,
-          fields: fields.map(({ optionsText, ...f }) => ({ ...f, options: CHOICE_TYPES.has(f.type) ? lines(optionsText) : [] }))
+          fields: fields.map(toField)
         }),
-      () => setDirty(false)
+      () => {
+        setDirty(false);
+        setLostLinks([]);
+      }
     );
   };
   const createQuickEvent = () => {
@@ -254,6 +341,11 @@ export function FormBuilder({
       return { ok: result.ok, message: result.message };
     });
   };
+  const liveFields = useMemo(() => fields.map(toField), [fields]);
+  const blockers = useMemo(() => branchBlockers(liveFields), [liveFields]);
+  const warnings = useMemo(() => branchWarnings(liveFields), [liveFields]);
+  const firstVisible = fields.find((f) => !f.hidden);
+  const needsFirstBreak = useMemo(() => hasBranching(liveFields) || liveFields.some((f) => f.type === "page_break" && !f.hidden), [liveFields]) && firstVisible?.type !== "page_break";
   const selectedEvent = events.find((e) => e.id === eventId) ?? null;
   const testReceipt = () => void run(() => sendCustomFormReceiptTestAction(form.id, { subject: autoReplySubject, body: autoReplyBody }));
   const changeStatus = (next: CustomFormStatus) => void run(() => setCustomFormStatusAction(form.id, next), () => setStatus(next));
@@ -566,11 +658,62 @@ export function FormBuilder({
         </div>
       </Card>
 
+      {needsFirstBreak ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900" data-testid="first-page-hint">
+          <span>Trang đầu chưa có ngắt trang nên chưa đặt được “Trang tiếp theo” cho trang đầu. Cần thì thêm một ngắt trang ở đầu form; người điền không thấy trang trống nào.</span>
+          <button type="button" data-testid="add-first-break" className={SMALL_BUTTON} onClick={addFirstPageBreak}>
+            Thêm ngắt trang ở đầu form
+          </button>
+        </div>
+      ) : null}
+
+      {lostLinks.length ? (
+        <div className="grid gap-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status" data-testid="lost-links">
+          {lostLinks.map((entry, i) => (
+            <div key={i}>
+              <p className="font-medium">Đã xoá trang “{entry.page}”. Những chỗ sau mất đích, giờ đi theo đường mặc định — đặt lại nếu cần:</p>
+              <ul className="list-disc pl-5">
+                {entry.lost.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {blockers.length || warnings.length ? (
+        <div className="grid gap-2 rounded-md border border-vam-line bg-white px-3 py-2 text-sm" data-testid="branch-report">
+          {blockers.length ? (
+            <div className="text-red-700" data-testid="branch-blockers">
+              <p className="font-medium">Phải sửa trước khi công khai:</p>
+              <ul className="list-disc pl-5">
+                {blockers.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {warnings.length ? (
+            <div className="text-amber-800" data-testid="branch-warnings">
+              <p className="font-medium">Cần xem lại (không chặn công khai):</p>
+              <ul className="list-disc pl-5">
+                {warnings.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid gap-3" data-testid="field-list">
         {fields.map((field, index) => {
           const fieldLocked = lockedIds.has(field.id);
           const question = isQuestion(field);
           const pageBreak = field.type === "page_break";
+          const laterPages = fields.slice(index + 1).filter((f) => f.type === "page_break" && !f.hidden);
+          const savedOptions = lockedOptions.get(field.id) ?? [];
           return (
             <Card key={field.id} className={pageBreak ? "border-dashed bg-slate-50" : undefined}>
               <div className="grid gap-2" data-field={field.id}>
@@ -629,7 +772,60 @@ export function FormBuilder({
                   value={field.help}
                   onChange={(e) => updateField(field.id, { help: e.target.value })}
                 />
-                {CHOICE_TYPES.has(field.type) ? (
+                {pageBreak ? (
+                  <label className="grid gap-1 text-xs text-slate-600" data-testid="page-default-target">
+                    <span>Trang tiếp theo sau khi xong trang này (câu trả lời có đích riêng thì đi theo đích đó)</span>
+                    <TargetSelect
+                      label="Trang tiếp theo"
+                      value={field.nextPage ?? ""}
+                      emptyLabel="Trang kế tiếp (mặc định)"
+                      pages={laterPages}
+                      onChange={(value) => updateField(field.id, { nextPage: value })}
+                    />
+                  </label>
+                ) : null}
+                {BRANCHING_CHOICE_TYPES.has(field.type) ? (
+                  <div className="grid gap-2 rounded-md border border-vam-line p-2" data-testid="option-rows">
+                    <p className="text-xs text-slate-600">
+                      Các lựa chọn và đích đến{fieldLocked && savedOptions.length ? " (đã có câu trả lời: giữ các lựa chọn cũ, chỉ thêm lựa chọn mới)" : ""}. Dán nhiều dòng vào một ô thì tự tách thành nhiều lựa chọn.
+                    </p>
+                    {rowsOf(field).map((row, rowIndex, rows) => {
+                      const rowLocked = fieldLocked && savedOptions.includes(row.text.trim());
+                      return (
+                        <div key={rowIndex} className="grid items-center gap-2 sm:grid-cols-[1fr_1fr_auto]" data-testid="option-row">
+                          <input
+                            className={BOX}
+                            aria-label={`Lựa chọn ${rowIndex + 1}`}
+                            maxLength={200}
+                            readOnly={rowLocked}
+                            value={row.text}
+                            onChange={(e) => setRows(field, rows.map((r, i) => (i === rowIndex ? { ...r, text: e.target.value } : r)))}
+                            onPaste={(e) => {
+                              const pasted = e.clipboardData.getData("text").split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
+                              if (rowLocked || pasted.length < 2) return;
+                              e.preventDefault();
+                              setRows(field, [...rows.slice(0, rowIndex), { text: pasted[0], target: row.target }, ...pasted.slice(1).map((text) => ({ text, target: "" })), ...rows.slice(rowIndex + 1)]);
+                            }}
+                          />
+                          <TargetSelect
+                            label={`Đích của lựa chọn ${rowIndex + 1}`}
+                            value={row.target}
+                            emptyLabel="Theo Trang tiếp theo của trang"
+                            pages={laterPages}
+                            onChange={(value) => setRows(field, rows.map((r, i) => (i === rowIndex ? { ...r, target: value } : r)))}
+                          />
+                          <button type="button" className={SMALL_BUTTON} disabled={rowLocked} aria-label={`Xoá lựa chọn ${rowIndex + 1}`} onClick={() => setRows(field, rows.filter((_, i) => i !== rowIndex))}>
+                            Xoá
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <button type="button" data-testid="add-option" className={`${SMALL_BUTTON} justify-self-start`} onClick={() => setRows(field, [...rowsOf(field), { text: "", target: "" }])}>
+                      + Thêm lựa chọn
+                    </button>
+                    <p className="text-xs text-slate-500">Chỉ đến được các “Ngắt trang” nằm sau câu này. Câu ở trang bị bỏ qua không bắt buộc và không được lưu.</p>
+                  </div>
+                ) : field.type === "multi_choice" ? (
                   <label className="grid gap-1 text-xs text-slate-600">
                     <span>
                       Các lựa chọn — mỗi dòng một lựa chọn
@@ -643,20 +839,13 @@ export function FormBuilder({
                     {(["yes", "no"] as const).map((side) => (
                       <label key={side} className="grid gap-1 text-xs text-slate-600">
                         <span>Trả lời “{side === "yes" ? "Có" : "Không"}” thì đến</span>
-                        <select
-                          className={BOX}
-                          aria-label={`Đích khi trả lời ${side === "yes" ? "Có" : "Không"}`}
+                        <TargetSelect
+                          label={`Đích khi trả lời ${side === "yes" ? "Có" : "Không"}`}
                           value={field.branches?.[side] ?? ""}
-                          onChange={(e) => updateField(field.id, { branches: { yes: field.branches?.yes ?? "", no: field.branches?.no ?? "", [side]: e.target.value } })}
-                        >
-                          <option value="">Trang kế tiếp</option>
-                          {fields.slice(index + 1).filter((f) => f.type === "page_break" && !f.hidden).map((f) => (
-                            <option key={f.id} value={f.id}>
-                              Trang: {f.label || "(chưa đặt tên)"}
-                            </option>
-                          ))}
-                          <option value={BRANCH_END}>Kết thúc form (tới nút Gửi)</option>
-                        </select>
+                          emptyLabel="Theo Trang tiếp theo của trang"
+                          pages={laterPages}
+                          onChange={(value) => updateField(field.id, { branches: { yes: field.branches?.yes ?? "", no: field.branches?.no ?? "", [side]: value } })}
+                        />
                       </label>
                     ))}
                     <p className="text-xs text-slate-500 sm:col-span-2">Chỉ đến được các “Ngắt trang” nằm sau câu này. Câu ở trang bị bỏ qua không bắt buộc và không được lưu.</p>

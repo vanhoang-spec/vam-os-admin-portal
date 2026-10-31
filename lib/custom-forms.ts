@@ -293,7 +293,7 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
       if (linkable) return { ok: false, message: linkable };
     }
     if (current.status === "published") {
-      const blocker = publishBlocker(fields);
+      const blocker = publishBlocker(fields, current.fields);
       if (blocker) return { ok: false, message: blocker };
     }
     const { error } = await op.client
