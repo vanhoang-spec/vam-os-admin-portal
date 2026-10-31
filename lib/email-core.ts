@@ -90,6 +90,9 @@ export type EmailKind =
   // Form tùy chỉnh: thư tự động gửi người điền ngay sau khi gửi form, nội dung do BTC/Support team
   // soạn trong trình tạo form (supabase/migrations/20261015200000_form_tuy_chinh.sql).
   | "custom_form_receipt"
+  // Form tùy chỉnh: câu trả lời của mentee gửi tới mentor đang ghép cặp (VAM00011,
+  // supabase/migrations/20261101120000_form_gui_mentor.sql).
+  | "custom_form_mentor_submission"
   // Ghép cặp Vòng 2: thư nhắc mentor chưa chọn mentee, kèm đúng đường dẫn đã gửi ở thư mời
   // (supabase/migrations/20261016220000_vong_2_thu_nhac.sql).
   | "matching_round2_reminder"
@@ -2203,6 +2206,64 @@ export function buildCustomFormReceiptEmail(input: { formTitle: string; subject?
       ? `<p style="margin:0 0 16px;padding:10px 12px;background:#fff4d6;border:1px solid #e0b84a;border-radius:6px;color:#6b4e00"><strong>THƯ THỬ.</strong> ${escapeHtml(testNote)}</p>`
       : "",
     paragraphs,
+    `<p style="color:#4f6b60;font-size:13px">${escapeHtml(footer)}</p>`,
+    '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Vietnam Alumni Mentoring</p>',
+    "</div>"
+  ].join("");
+  return { to: "", subject, text, html };
+}
+
+/**
+ * Câu trả lời của mentee gửi mentor (VAM00011). Lời nhắn do BTC soạn, là chữ thuần như thư tự động. Bảng câu
+ * trả lời là chữ người điền form công khai tự gõ: mọi ô đều phải thoát HTML, nếu không một mentee (hay ai
+ * đó gõ email của mentee) chèn được link giả vào thư mang tên chương trình gửi tới mentor.
+ */
+export function buildCustomFormMentorSubmissionEmail(input: {
+  formTitle: string;
+  subject?: string;
+  body: string;
+  menteeName: string;
+  answers: Array<{ label: string; value: string }>;
+  test?: boolean;
+}): EmailMessage & { to: string } {
+  const formTitle = safeSentence(input.formTitle, "form");
+  const menteeName = safeSentence(input.menteeName, "mentee");
+  const baseSubject = safeSentence(input.subject) || `Câu trả lời của mentee: ${formTitle}`;
+  const subject = input.test ? `${TEST_EMAIL_SUBJECT_PREFIX}${baseSubject}` : baseSubject;
+  const body = String(input.body ?? "").replace(/\r\n/g, "\n").trim();
+  const heading = `Câu trả lời của ${menteeName} ở form “${formTitle}”`;
+  const footer = "Thư này được gửi tự động vì bạn đang là mentor ghép cặp với mentee trên. Vui lòng không chuyển tiếp thông tin của mentee.";
+  const testNote = "Đây là thư GỬI THỬ cho người soạn form. Thư thật gửi tới mentor đang ghép cặp, kèm câu trả lời thật của mentee.";
+  const text = [
+    ...(input.test ? [`[THƯ THỬ] ${testNote}`, ""] : []),
+    body,
+    "",
+    heading,
+    ...input.answers.map((a) => `- ${safeSentence(a.label)}: ${a.value}`),
+    "",
+    footer,
+    "",
+    "Vietnam Alumni Mentoring"
+  ].join("\n");
+  const paragraphs = body
+    .split(/\n{2,}/)
+    .map((block) => `<p>${escapeHtml(block).split("\n").join("<br />")}</p>`)
+    .join("");
+  const cell = "padding:8px 10px;border:1px solid #d7e3dc;vertical-align:top";
+  const rows = input.answers
+    .map(
+      (a) =>
+        `<tr><th align="left" style="${cell};background:#f2f7f4;font-weight:600;width:40%">${escapeHtml(a.label)}</th><td style="${cell}">${escapeHtml(a.value).split("\n").join("<br />")}</td></tr>`
+    )
+    .join("");
+  const html = [
+    '<div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;color:#14352a">',
+    input.test
+      ? `<p style="margin:0 0 16px;padding:10px 12px;background:#fff4d6;border:1px solid #e0b84a;border-radius:6px;color:#6b4e00"><strong>THƯ THỬ.</strong> ${escapeHtml(testNote)}</p>`
+      : "",
+    paragraphs,
+    `<p><strong>${escapeHtml(heading)}</strong></p>`,
+    `<table style="border-collapse:collapse;width:100%;font-size:14px;line-height:20px">${rows}</table>`,
     `<p style="color:#4f6b60;font-size:13px">${escapeHtml(footer)}</p>`,
     '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Vietnam Alumni Mentoring</p>',
     "</div>"

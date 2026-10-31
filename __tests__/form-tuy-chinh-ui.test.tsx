@@ -195,7 +195,7 @@ describe("2. trình tạo form", () => {
     onePerEmail: true,
     autoReply: false,
     autoReplySubject: "",
-    autoReplyBody: "",
+    autoReplyBody: "", mentorForward: false, mentorForwardSubject: "", mentorForwardBody: "",
     fields: [field("f_nameaaaa", "short_text", { label: "Họ và tên" }), field("f_emailaaa", "email", { label: "Email" })]
   };
   const renderBuilder = (responseCount = 0) =>
@@ -416,7 +416,7 @@ describe("2b. trình tạo form — thư tự động, ngắt trang", () => {
     onePerEmail: true,
     autoReply: false,
     autoReplySubject: "",
-    autoReplyBody: "",
+    autoReplyBody: "", mentorForward: false, mentorForwardSubject: "", mentorForwardBody: "",
     fields: [field("f_nameaaaa", "short_text", { label: "Họ và tên" }), field("f_emailaaa", "email", { label: "Email" })]
   };
   const renderBuilder = () =>

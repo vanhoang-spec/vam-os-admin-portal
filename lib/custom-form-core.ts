@@ -300,6 +300,10 @@ export type CustomFormSettingsInput = {
   themeColor?: unknown;
   /** VAM00009 mục 4.1: vị trí logo. */
   logoPosition?: unknown;
+  /** VAM00011: tự động gửi câu trả lời cho mentor đang ghép cặp. */
+  mentorForward?: unknown;
+  mentorForwardSubject?: unknown;
+  mentorForwardBody?: unknown;
 };
 
 export const REGISTRATION_LIMIT_MAX = 100000;
@@ -321,6 +325,10 @@ export type CustomFormSettings = {
   requireKnownPerson: boolean;
   themeColor: string | null;
   logoPosition: LogoPosition;
+  /** Gửi câu trả lời cho mentor đang ghép cặp (VAM00011). Mặc định tắt. */
+  mentorForward: boolean;
+  mentorForwardSubject: string;
+  mentorForwardBody: string;
 };
 
 const truthy = (value: unknown) => value === true || value === "on" || value === "true";
@@ -349,6 +357,10 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
   if (programRaw && !UUID.test(programRaw)) return { ok: false, error: "Chương trình không hợp lệ." };
   if (autoReplySubject.length > CUSTOM_FORM_LIMITS.autoReplySubject) return { ok: false, error: `Tiêu đề thư tự động tối đa ${CUSTOM_FORM_LIMITS.autoReplySubject} ký tự.` };
   if (autoReplyBody.length > CUSTOM_FORM_LIMITS.autoReplyBody) return { ok: false, error: `Nội dung thư tự động tối đa ${CUSTOM_FORM_LIMITS.autoReplyBody} ký tự.` };
+  const mentorForwardSubject = text(input.mentorForwardSubject).replace(/[\r\n]+/g, " ");
+  const mentorForwardBody = String(input.mentorForwardBody ?? "").replace(/\r\n/g, "\n").trim();
+  if (mentorForwardSubject.length > CUSTOM_FORM_LIMITS.autoReplySubject) return { ok: false, error: `Tiêu đề thư gửi mentor tối đa ${CUSTOM_FORM_LIMITS.autoReplySubject} ký tự.` };
+  if (mentorForwardBody.length > CUSTOM_FORM_LIMITS.autoReplyBody) return { ok: false, error: `Nội dung thư gửi mentor tối đa ${CUSTOM_FORM_LIMITS.autoReplyBody} ký tự.` };
   if (input.opensAt && input.closesAt && Date.parse(input.closesAt) <= Date.parse(input.opensAt)) {
     return { ok: false, error: "Giờ đóng phải sau giờ mở." };
   }
@@ -380,7 +392,10 @@ export function parseFormSettings(input: CustomFormSettingsInput): { ok: true; s
       registrationLimit,
       requireKnownPerson: truthy(input.requireKnownPerson),
       themeColor: themeRaw || null,
-      logoPosition: logoRaw as LogoPosition
+      logoPosition: logoRaw as LogoPosition,
+      mentorForward: truthy(input.mentorForward),
+      mentorForwardSubject,
+      mentorForwardBody
     }
   };
 }
@@ -415,7 +430,7 @@ export const replyEmailField = dedupeEmailField;
 /** Luật giữa cài đặt và danh sách trường. null = hợp lệ. */
 export function checkDefinitionRules(
   fields: CustomFormField[],
-  settings: Pick<CustomFormSettings, "onePerEmail"> & Partial<Pick<CustomFormSettings, "autoReply" | "autoReplyBody" | "eventId" | "requireKnownPerson">>
+  settings: Pick<CustomFormSettings, "onePerEmail"> & Partial<Pick<CustomFormSettings, "autoReply" | "autoReplyBody" | "eventId" | "requireKnownPerson" | "mentorForward" | "mentorForwardBody">>
 ): string | null {
   const branchError = checkBranches(fields);
   if (branchError) return branchError;
@@ -430,7 +445,7 @@ export function checkDefinitionRules(
   if (firstBranch !== null) {
     const pages = splitPages(fields);
     const askedAlways = (field: CustomFormField | null) => !field || pages.findIndex((p) => p.fields.some((f) => f.id === field.id)) <= firstBranch;
-    if ((settings.onePerEmail || settings.autoReply || settings.eventId || settings.requireKnownPerson) && !askedAlways(dedupeEmailField(fields))) {
+    if ((settings.onePerEmail || settings.autoReply || settings.eventId || settings.requireKnownPerson || settings.mentorForward) && !askedAlways(dedupeEmailField(fields))) {
       return "Form có rẽ nhánh: trường Email phải nằm trước hoặc cùng trang với chỗ rẽ nhánh đầu tiên (câu rẽ nhánh, hoặc trang có đặt “Trang tiếp theo”), để ai cũng được hỏi.";
     }
     if ((settings.eventId || settings.requireKnownPerson) && !askedAlways(nameField(fields))) {
@@ -451,6 +466,13 @@ export function checkDefinitionRules(
   if (settings.autoReply) {
     if (!replyEmailField(fields)) return "Đang bật thư tự động nên form cần một trường Email bắt buộc (không ẩn) — thư gửi tới email người điền nhập ở đó.";
     if (!String(settings.autoReplyBody ?? "").trim()) return "Đang bật thư tự động nhưng chưa có nội dung thư.";
+  }
+  if (settings.mentorForward) {
+    // Form gắn sự kiện đi đường ghi riêng, và gửi lại thì SỬA câu trả lời cũ: bản mentor đã nhận sẽ lệch với
+    // bản đang lưu. Chặn bật cùng lúc đơn giản và rõ hơn là dựng thêm luật gửi lại.
+    if (settings.eventId) return "Form gắn sự kiện chưa dùng được “Tự động gửi Submission cho Mentor”: bỏ sự kiện liên kết hoặc tắt tùy chọn này.";
+    if (!dedupeEmailField(fields)) return "Đang bật “Tự động gửi Submission cho Mentor” nên form cần một trường Email bắt buộc (không ẩn): hệ thống nhận ra mentee bằng email đó.";
+    if (!String(settings.mentorForwardBody ?? "").trim()) return "Đang bật “Tự động gửi Submission cho Mentor” nhưng chưa có nội dung thư.";
   }
   return null;
 }

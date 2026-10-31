@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/interview-emails",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/form-gui-mentor",
+      "schedule": "0 3 * * *"
     }
   ]
 }

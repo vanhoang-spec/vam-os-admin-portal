@@ -31,6 +31,7 @@ import {
   buildInterviewSlotInviteEmail,
   buildMatchingRound2InviteEmail,
   buildBaoLoiHoiLaiEmail,
+  buildCustomFormMentorSubmissionEmail,
   buildCustomFormReceiptEmail,
   buildMatchingRound2ReminderEmail,
   buildMatchResultMenteeEmail,
@@ -378,6 +379,27 @@ export const EMAIL_SAMPLES: readonly EmailSample[] = [
       buildCustomFormReceiptEmail({
         formTitle: "Tuyển mentee Job Shadowing",
         body: "Chào bạn,\n\nBan tổ chức đã nhận đơn đăng ký Job Shadowing của bạn. Kết quả vòng hồ sơ sẽ được gửi qua email trước ngày 25/10.\n\nCảm ơn bạn đã quan tâm!"
+      })
+    )
+  },
+  {
+    kind: "custom_form_mentor_submission",
+    group: "Nộp đơn và tuyển chọn",
+    title: "Câu trả lời form tùy chỉnh gửi mentor",
+    audience: "Mentor đang ghép cặp với mentee vừa gửi form",
+    trigger:
+      "Form bật “Tự động gửi Submission cho Mentor”: ngay khi mentee gửi form nếu đã có mentor; chưa có thì gửi sau khi mentee được ghép cặp (lượt quét hằng ngày, hoặc nút “Gửi các bản đang chờ”).",
+    note: "Lời nhắn do người soạn form tự viết; bảng câu trả lời lấy từ câu trả lời thật của mentee, trừ các câu đã ẩn. Mỗi câu trả lời chỉ gửi một lần.",
+    body: built(
+      buildCustomFormMentorSubmissionEmail({
+        formTitle: "Đăng ký mục tiêu đầu kỳ",
+        body: "Kính gửi anh/chị,\n\nMentee của anh/chị vừa hoàn thành form đăng ký mục tiêu. Anh/chị xem trước để chuẩn bị cho buổi gặp đầu tiên nhé.",
+        menteeName: MENTEE,
+        answers: [
+          { label: "Họ và tên", value: MENTEE },
+          { label: "Mục tiêu trong mùa này", value: "Tìm hiểu lộ trình nghề Phân tích dữ liệu" },
+          { label: "Buổi rảnh", value: "Sáng; Tối" }
+        ]
       })
     )
   },

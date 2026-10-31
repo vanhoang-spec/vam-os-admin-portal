@@ -22,6 +22,10 @@ export type CustomFormSavePayload = {
   autoReply: boolean;
   autoReplySubject: string;
   autoReplyBody: string;
+  /** Tự động gửi câu trả lời cho mentor (VAM00011). Thiếu = tắt. */
+  mentorForward?: boolean;
+  mentorForwardSubject?: string;
+  mentorForwardBody?: string;
   /** `YYYY-MM-DDTHH:mm` giờ Việt Nam, hoặc chuỗi rỗng. */
   opensAt: string;
   closesAt: string;

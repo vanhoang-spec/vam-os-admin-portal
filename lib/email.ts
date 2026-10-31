@@ -18,6 +18,7 @@ import {
   buildMenteeSessionConfirmedEmail,
   buildMatchingRound2InviteEmail,
   buildBaoLoiHoiLaiEmail,
+  buildCustomFormMentorSubmissionEmail,
   buildCustomFormReceiptEmail,
   buildMatchingRound2ReminderEmail,
   buildMatchResultMenteeEmail,
@@ -1444,6 +1445,27 @@ export async function sendCustomFormReceipt(input: {
 }): Promise<SendEmailResult> {
   const built = buildCustomFormReceiptEmail({ formTitle: input.formTitle, subject: input.subject, body: input.body, test: input.test });
   return deliver("custom_form_receipt", { ...built, to: input.toEmail }, { table: "custom_forms", id: input.formId });
+}
+
+/**
+ * Câu trả lời của mentee gửi mentor (VAM00011). Ghi sổ theo DÒNG theo dõi để khi tiến trình chết giữa chừng,
+ * lượt quét tra được đúng lá thư của dòng đó. Thư thử không có dòng theo dõi nên ghi theo form. Người nhận,
+ * hạn mức, chống trùng do lib/custom-form-mentor.ts quyết định; hàm này chỉ dựng và gửi.
+ */
+export async function sendCustomFormMentorSubmission(input: {
+  toEmail: string;
+  sendId?: string | null;
+  formId: string;
+  formTitle: string;
+  subject: string;
+  body: string;
+  menteeName: string;
+  answers: Array<{ label: string; value: string }>;
+  test?: boolean;
+}): Promise<SendEmailResult> {
+  const built = buildCustomFormMentorSubmissionEmail(input);
+  const relation = input.sendId ? { table: "custom_form_mentor_sends", id: input.sendId } : { table: "custom_forms", id: input.formId };
+  return deliver("custom_form_mentor_submission", { ...built, to: input.toEmail }, relation);
 }
 
 /**

@@ -47,7 +47,7 @@ const FORM: BuilderForm = {
   onePerEmail: false,
   autoReply: false,
   autoReplySubject: "",
-  autoReplyBody: "",
+  autoReplyBody: "", mentorForward: false, mentorForwardSubject: "", mentorForwardBody: "",
   fields: [field("f_nameaaaa", "short_text", "Họ và tên"), field("f_mailaaaa", "email", "Email")],
   eventId: null,
   registrationLimit: null, requireKnownPerson: false, themeColor: null, bannerPath: null, logoPath: null, logoPosition: "left"

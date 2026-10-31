@@ -353,7 +353,7 @@ describe("trình tạo form", () => {
     id: "11111111-2222-4333-8444-555555555555",
     eventId: null, registrationLimit: null, requireKnownPerson: false, themeColor: null, bannerPath: null, logoPath: null, logoPosition: "left",
     publicCode: "a1b2c3d4e5f6", title: "Thử", description: "", programId: null, status: "draft", opensAt: null, closesAt: null, thankYou: "",
-    onePerEmail: false, autoReply: false, autoReplySubject: "", autoReplyBody: "", fields: []
+    onePerEmail: false, autoReply: false, autoReplySubject: "", autoReplyBody: "", mentorForward: false, mentorForwardSubject: "", mentorForwardBody: "", fields: []
   };
   const open = (fields: CustomFormField[], responseCount = 0) =>
     render(<FormBuilder form={{ ...BASE, fields }} programs={[]} responseCount={responseCount} publicUrl="https://os.test/f/x" />);

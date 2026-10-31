@@ -40,7 +40,9 @@ import {
 } from "@/lib/custom-form-core";
 import { KNOWN_PERSON_MESSAGE, isKnownPerson } from "@/lib/custom-form-gate";
 import { checkLinkableEvent, listDuplicateFlags, listLinkableEvents, submitEventLinkedForm, EVENT_FORM_MESSAGES, type DuplicateFlag, type LinkableEvent } from "@/lib/custom-form-event";
-import { sendCustomFormReceipt } from "@/lib/email";
+import { sampleMentorAnswerRows } from "@/lib/custom-form-mentor-core";
+import { forwardAfterSubmit, listMentorSends, sweepOneForm, type MentorSendView } from "@/lib/custom-form-mentor";
+import { sendCustomFormMentorSubmission, sendCustomFormReceipt } from "@/lib/email";
 import { DAILY_EMAIL_LIMIT, QUOTA_WINDOW_MS } from "@/lib/email-quota-core";
 import { parseVietnamDateTime } from "@/lib/event-datetime";
 import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
@@ -54,7 +56,7 @@ type ServiceClient = NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAFE_ERROR = "Hệ thống đang bận, thử lại sau ít phút.";
 const FORM_COLUMNS =
-  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,banner_path,logo_path,logo_position,created_at,updated_at";
+  "id,public_code,title,description,program_id,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,banner_path,logo_path,logo_position,mentor_forward,mentor_forward_subject,mentor_forward_body,mentor_forward_since,created_at,updated_at";
 
 export type ProgramOption = { id: string; name: string };
 
@@ -85,6 +87,12 @@ export type CustomFormDetail = {
   bannerPath: string | null;
   logoPath: string | null;
   logoPosition: LogoPosition;
+  /** Tự động gửi câu trả lời cho mentor (VAM00011). */
+  mentorForward: boolean;
+  mentorForwardSubject: string;
+  mentorForwardBody: string;
+  /** Mốc bật: câu trả lời trước mốc này không bao giờ được gửi. */
+  mentorForwardSince: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -123,6 +131,10 @@ function toDetail(row: Row): CustomFormDetail {
     bannerPath: row.banner_path ? String(row.banner_path) : null,
     logoPath: row.logo_path ? String(row.logo_path) : null,
     logoPosition: logoPositionOf(row.logo_position),
+    mentorForward: row.mentor_forward === true,
+    mentorForwardSubject: String(row.mentor_forward_subject ?? ""),
+    mentorForwardBody: String(row.mentor_forward_body ?? ""),
+    mentorForwardSince: row.mentor_forward_since ?? null,
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? "")
   };
@@ -265,7 +277,10 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
     eventId: input.eventId,
     registrationLimit: input.registrationLimit,
     requireKnownPerson: input.requireKnownPerson,
-    themeColor: input.themeColor
+    themeColor: input.themeColor,
+    mentorForward: input.mentorForward,
+    mentorForwardSubject: input.mentorForwardSubject,
+    mentorForwardBody: input.mentorForwardBody
   });
   if (!settingsParsed.ok) return { ok: false, message: settingsParsed.error };
   const fields = fieldsParsed.fields;
@@ -317,6 +332,11 @@ export async function saveCustomForm(id: string, payload: CustomFormSavePayload)
         banner_path: bannerPath,
         logo_path: logoPath,
         logo_position: settings.logoPosition,
+        mentor_forward: settings.mentorForward,
+        mentor_forward_subject: settings.mentorForwardSubject,
+        mentor_forward_body: settings.mentorForwardBody,
+        // Mốc tính lại mỗi lần bật: câu trả lời nhận trong lúc tắt không được gửi khi bật lại.
+        mentor_forward_since: settings.mentorForward ? (current.mentorForward ? current.mentorForwardSince : new Date().toISOString()) : null,
         updated_by: op.adminId,
         updated_at: new Date().toISOString()
       })
@@ -404,6 +424,72 @@ export async function sendCustomFormReceiptTest(id: string, input: { subject: un
   }
 }
 
+/**
+ * "Gửi thử cho tôi" ở phần gửi mentor: chữ đang trên trang, câu hỏi của form đã lưu, câu trả lời là chữ giữ
+ * chỗ. Không bao giờ lấy câu trả lời thật: thư thử rời hệ thống như mọi thư khác.
+ */
+export async function sendCustomFormMentorTest(id: string, input: { subject: unknown; body: unknown }): Promise<CustomFormAdminResult> {
+  const op = await operator();
+  if (!op) return { ok: false, message: DENIED };
+  if (!op.adminEmail) return { ok: false, message: "Tài khoản của bạn chưa có email để nhận thư thử." };
+  const subject = String(input?.subject ?? "").trim();
+  const body = String(input?.body ?? "").trim();
+  if (!body) return { ok: false, message: "Chưa có nội dung thư." };
+  if (subject.length > CUSTOM_FORM_LIMITS.autoReplySubject || body.length > CUSTOM_FORM_LIMITS.autoReplyBody) {
+    return { ok: false, message: "Tiêu đề hoặc nội dung thư dài quá giới hạn." };
+  }
+  try {
+    const form = await readForm(op.client, id);
+    if (!form) return { ok: false, message: "Không tìm thấy form." };
+    const sent = await countSentInWindow(op.client, Date.now());
+    if (sent === null) return { ok: false, message: "Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi." };
+    if (sent >= DAILY_EMAIL_LIMIT) return { ok: false, message: "Đã chạm hạn mức thư trong 24 giờ. Thử lại sau vài giờ." };
+    const result = await sendCustomFormMentorSubmission({
+      toEmail: op.adminEmail,
+      formId: form.id,
+      formTitle: form.title,
+      subject,
+      body,
+      menteeName: "Tên mentee",
+      answers: sampleMentorAnswerRows(form.fields),
+      test: true
+    });
+    if (result.skipped) return { ok: false, message: "Môi trường này đang tắt gửi thư — thư thử chưa đi." };
+    if (!result.ok) return { ok: false, message: "Gửi thư thử không thành công. Xem Vận hành → Mail → Nhật ký gửi." };
+    return { ok: true, message: `Đã gửi thư thử tới ${op.adminEmail}.` };
+  } catch (error) {
+    log("test mentor mail failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+}
+
+/** Nút "Gửi các bản đang chờ" trên trang câu trả lời. Tính năng đang tắt thì không gửi gì. */
+export async function sendPendingMentorForwards(id: string): Promise<CustomFormAdminResult> {
+  const op = await operator();
+  if (!op) return { ok: false, message: DENIED };
+  if (!UUID.test(id)) return { ok: false, message: "Không tìm thấy form." };
+  try {
+    const { ok, message } = await sweepOneForm(op.client, id);
+    return { ok, message };
+  } catch (error) {
+    log("pending mentor sweep failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+}
+
+/** Trạng thái gửi mentor của từng câu trả lời. */
+export async function listCustomFormMentorSends(id: string): Promise<FormsResult<MentorSendView[]>> {
+  const op = await operator();
+  if (!op) return { ok: false, message: DENIED };
+  if (!UUID.test(id)) return { ok: false, message: "Không tìm thấy form." };
+  try {
+    return { ok: true, data: await listMentorSends(op.client, id) };
+  } catch (error) {
+    log("mentor sends failed", error);
+    return { ok: false, message: SAFE_ERROR };
+  }
+}
+
 /** Câu trả lời của một form, mới nhất trước. */
 export async function listCustomFormResponses(id: string): Promise<FormsResult<{ form: CustomFormDetail; responses: CustomFormResponse[] }>> {
   const op = await operator();
@@ -449,7 +535,7 @@ export type PublicCustomForm =
 async function readPublicRow(client: ServiceClient, code: string): Promise<Row | null> {
   const { data, error } = await client
     .from("custom_forms")
-    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,banner_path,logo_path,logo_position")
+    .select("id,title,description,status,opens_at,closes_at,thank_you,one_per_email,auto_reply,auto_reply_subject,auto_reply_body,fields,event_id,registration_limit,require_known_person,theme_color,banner_path,logo_path,logo_position,mentor_forward,mentor_forward_subject,mentor_forward_body")
     .eq("public_code", code)
     .maybeSingle();
   if (error) throw error;
@@ -588,6 +674,7 @@ export async function submitPublicCustomForm(
       return fail(message, emailField ? { [emailField.id]: message } : {});
     };
     const row0 = { answers: checked.answers, dedupe_key: dedupeKey, consent_at: new Date(nowMs).toISOString() };
+    let responseId: string | null = null;
     if (row.registration_limit !== null && row.registration_limit !== undefined) {
       // Giới hạn riêng: đếm và ghi dưới khoá theo form, hai người bấm cùng lúc không cùng lấy chỗ cuối.
       const { data, error } = await client.rpc("vam_custom_form_insert_response", {
@@ -600,14 +687,19 @@ export async function submitPublicCustomForm(
       if (status === "full") return fail(EVENT_FORM_MESSAGES.formFull);
       if (status === "duplicate") return duplicate();
       if (status !== "inserted") throw new Error(`insert_response returned ${status}`);
+      responseId = (data as { id?: string } | null)?.id ?? null;
     } else {
-      const { error } = await client.from("custom_form_responses").insert({ form_id: String(row.id), ...row0 });
+      // Chỉ xin lại id khi cần: tắt tính năng thì lệnh ghi y như cũ.
+      const insert = client.from("custom_form_responses").insert({ form_id: String(row.id), ...row0 });
+      const { data, error } = row.mentor_forward === true ? await insert.select("id").maybeSingle() : await insert;
       if (error) {
         if ((error as { code?: string }).code === "23505") return duplicate();
         throw error;
       }
+      responseId = (data as { id?: string } | null)?.id ?? null;
     }
     await sendReceiptAfterSubmit(client, row, fields, checked.answers, nowMs);
+    await forwardAfterSubmit(client, row, fields, checked.answers, responseId, nowMs);
     return { ok: true, message: thanks, errors: {} };
   } catch (error) {
     log("submit failed", error);

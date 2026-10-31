@@ -29,7 +29,7 @@ import {
   type LogoPosition
 } from "@/lib/custom-form-core";
 import { combineVietnamDateTime, maskVietnamDate, maskVietnamTime, splitVietnamDateTime } from "@/lib/event-datetime";
-import { createEventForFormAction, saveCustomFormAction, sendCustomFormReceiptTestAction, setCustomFormStatusAction } from "../actions";
+import { createEventForFormAction, saveCustomFormAction, sendCustomFormMentorTestAction, sendCustomFormReceiptTestAction, setCustomFormStatusAction } from "../actions";
 import { formatDateTime } from "@/lib/utils";
 import { FormImageField } from "./form-image-field";
 
@@ -57,6 +57,10 @@ export type BuilderForm = {
   autoReply: boolean;
   autoReplySubject: string;
   autoReplyBody: string;
+  /** Tự động gửi câu trả lời cho mentor (VAM00011). */
+  mentorForward: boolean;
+  mentorForwardSubject: string;
+  mentorForwardBody: string;
   fields: CustomFormField[];
   /** Sự kiện liên kết (VAM00008). */
   eventId: string | null;
@@ -167,6 +171,9 @@ export function FormBuilder({
   const [autoReply, setAutoReply] = useState(form.autoReply);
   const [autoReplySubject, setAutoReplySubject] = useState(form.autoReplySubject);
   const [autoReplyBody, setAutoReplyBody] = useState(form.autoReplyBody);
+  const [mentorForward, setMentorForward] = useState(form.mentorForward);
+  const [mentorForwardSubject, setMentorForwardSubject] = useState(form.mentorForwardSubject);
+  const [mentorForwardBody, setMentorForwardBody] = useState(form.mentorForwardBody);
   const [opensDate, setOpensDate] = useState(opens.date);
   const [opensTime, setOpensTime] = useState(opens.time);
   const [closesDate, setClosesDate] = useState(closes.date);
@@ -307,6 +314,9 @@ export function FormBuilder({
           autoReply,
           autoReplySubject,
           autoReplyBody,
+          mentorForward,
+          mentorForwardSubject,
+          mentorForwardBody,
           opensAt,
           closesAt,
           eventId,
@@ -348,6 +358,7 @@ export function FormBuilder({
   const needsFirstBreak = useMemo(() => hasBranching(liveFields) || liveFields.some((f) => f.type === "page_break" && !f.hidden), [liveFields]) && firstVisible?.type !== "page_break";
   const selectedEvent = events.find((e) => e.id === eventId) ?? null;
   const testReceipt = () => void run(() => sendCustomFormReceiptTestAction(form.id, { subject: autoReplySubject, body: autoReplyBody }));
+  const testMentorMail = () => void run(() => sendCustomFormMentorTestAction(form.id, { subject: mentorForwardSubject, body: mentorForwardBody }));
   const changeStatus = (next: CustomFormStatus) => void run(() => setCustomFormStatusAction(form.id, next), () => setStatus(next));
   const copy = async () => {
     try {
@@ -651,6 +662,61 @@ export function FormBuilder({
                     Thư thử dùng chữ đang trên trang, gửi tới email của bạn. Mỗi form gửi tối đa 300 lá thư tự động trong 24 giờ; chữ là chữ
                     thường, xuống dòng được giữ nguyên.
                   </span>
+                </div>
+              </>
+            ) : null}
+          </div>
+          <div className="grid gap-2 rounded-md border border-vam-line p-3" data-testid="mentor-forward">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                data-testid="mentor-forward-toggle"
+                className="mt-0.5 h-4 w-4"
+                checked={mentorForward}
+                onChange={(e) => {
+                  setMentorForward(e.target.checked);
+                  touch();
+                }}
+              />
+              <span>
+                <span className="font-medium">Tự động gửi Submission cho Mentor</span> — khi mentee gửi form, câu trả lời được gửi tới mentor đang ghép
+                cặp. Chưa có mentor thì bản này chờ, và tự gửi sau khi mentee được ghép cặp.
+              </span>
+            </label>
+            {mentorForward ? (
+              <>
+                <input
+                  className={BOX}
+                  aria-label="Tiêu đề thư gửi mentor"
+                  maxLength={200}
+                  placeholder={`Câu trả lời của mentee: ${title || "tên form"}`}
+                  value={mentorForwardSubject}
+                  onChange={edit(setMentorForwardSubject)}
+                />
+                <textarea
+                  className={BOX}
+                  rows={6}
+                  aria-label="Nội dung thư gửi mentor"
+                  placeholder={"Kính gửi anh/chị,\n\nMentee của anh/chị vừa gửi form. …"}
+                  value={mentorForwardBody}
+                  onChange={edit(setMentorForwardBody)}
+                />
+                <p className="text-xs text-slate-600">
+                  Không cần đính kèm gì: hệ thống tự thêm bảng câu trả lời của mentee vào cuối thư. Mọi câu đang hiện đều được gửi, kể cả số điện thoại,
+                  CCCD, ngày sinh nếu form có hỏi; câu đã ẩn thì không. Hệ thống nhận ra mentee bằng trường Email bắt buộc đầu tiên, khớp với email trên
+                  hồ sơ. Câu trả lời đã có trước khi bật không được gửi.
+                </p>
+                {liveFields.some((f) => f.type === "citizen_id" && !f.hidden) ? (
+                  <p className="text-xs text-amber-700" data-testid="mentor-forward-cccd">
+                    Form này có hỏi số CCCD: mentor sẽ nhận được số đó trong thư. Ẩn câu này nếu mentor không cần.
+                  </p>
+                ) : null}
+                {eventId ? <p className="text-xs text-red-700">Form gắn sự kiện chưa dùng được tùy chọn này: bỏ sự kiện liên kết hoặc tắt tùy chọn.</p> : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" data-testid="test-mentor-mail" disabled={busy} className={SMALL_BUTTON} onClick={testMentorMail}>
+                    Gửi thử cho tôi
+                  </button>
+                  <span className="text-xs text-slate-500">Thư thử dùng chữ đang trên trang và câu hỏi của form đã lưu, gửi tới email của bạn, không có dữ liệu mentee thật.</span>
                 </div>
               </>
             ) : null}
