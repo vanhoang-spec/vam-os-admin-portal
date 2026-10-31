@@ -1460,6 +1460,9 @@ export async function sendBaoLoiHoiLai(input: {
   requestOrigin?: string | null;
 }): Promise<SendEmailResult> {
   const base = resolveEmailBaseUrl(input.requestOrigin);
+  // Thiếu địa chỉ thì link thành `/bao-loi…`, trình đọc thư mở ra `http:///bao-loi…` (VAM00012). Người hỏi vẫn
+  // còn pop-up trên VAM OS, nên thà không gửi còn hơn gửi một nút bấm không mở được.
+  if (!base) return { ok: false, skipped: false, reason: "Chưa biết địa chỉ VAM OS để đặt link trong thư." };
   const replyUrl = `${base}/bao-loi?ticket=${encodeURIComponent(input.ma)}`;
   const built = buildBaoLoiHoiLaiEmail({ recipientName: input.recipientName, ma: input.ma, tieuDe: input.tieuDe, cauHoi: input.cauHoi, replyUrl });
   return deliver("bao_loi_hoi_lai", { ...built, to: input.toEmail }, { table: "bao_loi", id: input.baoLoiId });
