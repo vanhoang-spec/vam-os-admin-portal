@@ -8,8 +8,8 @@ import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
 import { getSeasonCohortPersonIds } from "@/lib/season-cohort";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
-import { displayMemberCode } from "@/lib/member-code-core";
-import { displayCode, displayOptional, displayText } from "@/lib/utils";
+import { displayCurrentMemberCode, displayYearOfStudy, firstSeasonLabel, firstSeasonOrder, memberCodeOrder } from "@/lib/member-code-core";
+import { displayCode, displayText } from "@/lib/utils";
 import { canBrowseParticipants } from "@/lib/read-access";
 import { redirect } from "next/navigation";
 
@@ -102,11 +102,14 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
       full_name: person?.full_name,
       email_primary: person?.email_primary,
       member_code: person?.member_code,
-      mentee_code_display: displayMemberCode(person?.member_code, mentee.mentee_code) ?? "-",
+      // VAM00017, 00021: chỉ hiện mã mới; mùa & năm đầu tiên đọc từ mã cũ (không hiện mã cũ), chưa có mã cũ thì là mùa 12.
+      mentee_code_display: displayCurrentMemberCode(person?.member_code, mentee.mentee_code) ?? "-",
+      member_code_order: memberCodeOrder(person?.member_code, "SE"),
+      first_season_display: firstSeasonLabel({ legacyCode: mentee.mentee_code, hasMemberCode: Boolean(person?.member_code) }),
+      first_season_order: firstSeasonOrder({ legacyCode: mentee.mentee_code, hasMemberCode: Boolean(person?.member_code) }),
       school_code_display: displayCode(mentee.school_code),
-      school_raw_display: displayText(mentee.school_raw),
+      year_of_study_display: displayYearOfStudy(mentee.year_of_study),
       major_display: displayText(mentee.major),
-      class_cohort_display: displayText(mentee.class_cohort),
       mssv_display: displayText(mentee.mssv),
       mentor,
       mentorProfile,
@@ -114,7 +117,7 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
       mentor_email: mentor?.email_primary,
       mentor_code: mentorProfile?.mentor_code,
       mentor_company: mentorProfile?.company_current,
-      mentor_code_display: displayMemberCode(mentor?.member_code, mentorProfile?.mentor_code) ?? "-",
+      mentor_code_display: displayCurrentMemberCode(mentor?.member_code, mentorProfile?.mentor_code) ?? "-",
       mentor_company_display: displayText(mentorProfile?.company_current),
       mentor_bio_url: mentorProfile?.bio_url,
       mentor_person_id: selectedMatch?.mentor_person_id,
@@ -124,7 +127,6 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
       match_confidence: selectedMatch?.match_confidence,
       match_status_display: displayText(selectedMatch?.status),
       match_type_display: displayText(selectedMatch?.match_type),
-      match_confidence_display: displayOptional(selectedMatch?.match_confidence),
       has_mentor: selectedMatch?.mentor_person_id ? "Có mentor" : "Chưa có mentor",
       has_mentor_filter: selectedMatch?.mentor_person_id ? "yes" : "no",
       intake_batch_code: batch?.code ?? "Chưa gán",
@@ -163,20 +165,22 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
           { key: "intake_batch", label: "Đợt tuyển", valueKey: "intake_batch_code" }
         ]}
         sortOptions={[
+          // VAM00021: mặc định xếp theo mã mới, Support team (UEHS) trước rồi Mentee (UEHE).
+          { label: "Mã thành viên Mentee (Support team rồi Mentee)", key: "member_code_order", direction: "asc", type: "number", secondaryKey: "full_name" },
           { label: "Mã trường A-Z", key: "school_code", direction: "asc", type: "text", emptyLast: true, secondaryKey: "full_name" },
           { label: "Mã trường Z-A", key: "school_code", direction: "desc", type: "text", emptyLast: true, secondaryKey: "full_name" },
           { label: "Tên mentee A-Z", key: "full_name", direction: "asc", type: "text" },
-          { label: "Độ tin cậy giảm dần", key: "match_confidence", direction: "desc", type: "number" }
+          { label: "Mùa & Năm mentoring đầu tiên (sớm nhất trước)", key: "first_season_order", direction: "asc", type: "number", secondaryKey: "full_name" }
         ]}
         getHref={{ prefix: "/people/", key: "person_id" }}
         columns={[
           { key: "full_name", label: "Họ tên" },
           { key: "email_primary", label: "Email" },
-          { key: "mentee_code", label: "Mã thành viên", displayKey: "mentee_code_display" },
+          { key: "mentee_code", label: "Mã thành viên Mentee", displayKey: "mentee_code_display" },
           { key: "school_code", label: "Mã trường", displayKey: "school_code_display" },
-          { key: "school_raw", label: "Trường", displayKey: "school_raw_display" },
+          { key: "year_of_study", label: "Năm học", displayKey: "year_of_study_display" },
           { key: "major", label: "Ngành học", displayKey: "major_display" },
-          { key: "class_cohort", label: "Khóa / Lớp", displayKey: "class_cohort_display" },
+          { key: "first_season_display", label: "Mùa & Năm mentoring đầu tiên" },
           { key: "mssv", label: "MSSV", displayKey: "mssv_display" },
           { key: "mentor_name", label: "Mentor hiện tại" },
           { key: "mentor_email", label: "Email mentor" },
@@ -184,7 +188,6 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
           { key: "mentor_company", label: "Công ty mentor", displayKey: "mentor_company_display" },
           { key: "match_status", label: "Trạng thái match", displayKey: "match_status_display" },
           { key: "match_type", label: "Loại match", displayKey: "match_type_display" },
-          { key: "match_confidence", label: "Độ tin cậy match", displayKey: "match_confidence_display" },
           { key: "match_link", label: "Xem match", internalHrefKey: "match_id", internalHrefPrefix: "/matches/", internalLabel: "Xem match" },
           { key: "mentor_link", label: "Xem mentor", internalHrefKey: "mentor_person_id", internalHrefPrefix: "/people/", internalLabel: "Xem mentor" },
           { key: "mentor_profile", label: "Profile mentor", externalHrefKey: "mentor_bio_url", externalLabel: "Xem profile" }

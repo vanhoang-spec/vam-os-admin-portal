@@ -405,16 +405,17 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Chọn mùa ở ô “Mùa vận hành” trên thanh trên cùng; danh sách đổi theo mùa đó.",
       "Gõ vào ô tìm theo tên, mã mentor, email, công ty, chức danh, ngành hoặc chức năng.",
       "Lọc bằng “Ngành”, “Chức năng”, “Trạng thái mentor”, “Số mentee”, “Mentee phụ trách”, “Công ty”, “Mùa intake”, “Đợt tuyển”; bấm “Xoá bộ lọc” để bỏ lọc.",
-      "Đổi thứ tự ở ô “Sắp xếp” (vd. “Số mentee giảm dần”, “Tên mentor A-Z”, “Công ty A-Z”).",
+      "Đổi thứ tự ở ô “Sắp xếp”: mặc định xếp theo mã thành viên (Core team UEHC rồi Mentor UEHR); còn có “Số mentee giảm dần”, “Mùa & Năm mentoring đầu tiên”, “Tên mentor A-Z”, “Công ty A-Z”.",
       "Bấm vào một dòng để mở hồ sơ người đó; “Xem hồ sơ” mở link hồ sơ mentor bên ngoài.",
       "Core team trở lên: bấm “Tạo mentor mới”, điền “1. Người (person)” và “2. Hồ sơ mentor”, rồi bấm “Tạo hồ sơ mentor”."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, Support team. Nút “Tạo mentor mới” chỉ dành cho Super admin, Admin, Core team.",
       "Hồ sơ vừa tạo chưa là thành viên chính thức của mùa nên chưa hiện ở đây — tìm ở “Cộng đồng VAM”. Email đã có thì bấm “Liên kết với người này” để khỏi tạo trùng.",
-      "“Đang hoạt động” nghĩa là mentor có ít nhất một match đang active. Mentor “Không tham dự” trong mùa sẽ không nằm trong danh sách này."
+      "“Đang hoạt động” nghĩa là mentor có ít nhất một match đang active. Mentor “Không tham dự” trong mùa sẽ không nằm trong danh sách này.",
+      "Cột “Mùa & Năm mentoring đầu tiên” đọc từ mã cũ của mentor (hoặc năm bắt đầu trên hồ sơ); mã cũ không còn hiện trên danh sách nhưng vẫn tìm được bằng ô tìm."
     ],
-    updated: "02/10/2026"
+    updated: "03/11/2026"
   },
   "/mentees": {
     title: "Mentee",
@@ -423,16 +424,17 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Chọn mùa ở ô “Mùa vận hành” trên thanh trên cùng; danh sách đổi theo mùa đó.",
       "Gõ vào ô “Tìm theo tên, email, mã thành viên, MSSV, ngành hoặc mentor”.",
       "Lọc bằng “Mã trường”, “Mentor” (“Có mentor” / “Chưa có mentor”), “Trạng thái match”, “Ngành”, “Mùa intake”, “Đợt tuyển”; bấm “Xoá bộ lọc” để bỏ lọc.",
-      "Đổi thứ tự ở ô “Sắp xếp” (vd. “Mã trường A-Z”, “Tên mentee A-Z”, “Độ tin cậy giảm dần”).",
+      "Đổi thứ tự ở ô “Sắp xếp”: mặc định xếp theo mã thành viên (Support team UEHS rồi Mentee UEHE); còn có “Mã trường A-Z”, “Tên mentee A-Z”, “Mùa & Năm mentoring đầu tiên”.",
       "Bấm vào một dòng để mở hồ sơ mentee; dùng “Xem match”, “Xem mentor”, “Xem profile” trên dòng để sang match, hồ sơ mentor hoặc link profile.",
       "Core team trở lên: bấm “Tạo mentee mới”, điền “1. Người (person)” và “2. Hồ sơ mentee”, rồi bấm “Tạo hồ sơ mentee”."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, Support team. Nút “Tạo mentee mới” chỉ dành cho Super admin, Admin, Core team.",
       "Đổi Tham dự / Không tham dự hoặc xoá một mentee làm trong hồ sơ người đó; với mentee, Support team cũng làm được.",
-      "Hồ sơ vừa tạo chưa là thành viên chính thức của mùa nên chưa hiện ở đây — tìm ở “Cộng đồng VAM”."
+      "Hồ sơ vừa tạo chưa là thành viên chính thức của mùa nên chưa hiện ở đây — tìm ở “Cộng đồng VAM”.",
+      "Cột “Mùa & Năm mentoring đầu tiên” đọc từ mã cũ của mentee; chưa có mã cũ thì là Mùa 12 - Năm 2026. Mã cũ không còn hiện trên danh sách nhưng vẫn tìm được bằng ô tìm."
     ],
-    updated: "02/10/2026"
+    updated: "03/11/2026"
   },
   "/participant-accounts": {
     title: "Tài khoản đăng nhập",
