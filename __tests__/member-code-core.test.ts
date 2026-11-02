@@ -35,6 +35,10 @@ describe("thứ tự cấp số", () => {
     expect(nameSortParts("NGUYỄN  Thị Đào")).toEqual({ ten: "dao", ho: "nguyen", dem: "thi" });
     expect(nameSortParts("Hùng")).toEqual({ ten: "hung", ho: "", dem: "" });
   });
+  it("biệt danh trong ngoặc không phải là tên", () => {
+    expect(nameSortParts("Nguyễn Đặng Trường Huy (Mark)")).toEqual({ ten: "huy", ho: "nguyen", dem: "dang truong" });
+    expect(nameSortParts("Lê Hồng Trường ( Tom Le)")).toEqual({ ten: "truong", ho: "le", dem: "hong" });
+  });
   it("đúng ví dụ của BTC: Hồ Mỹ An, Nguyễn Minh An, Bồ Tùng Anh", () => {
     expect(order([person("Bồ Tùng Anh"), person("Nguyễn Minh An"), person("Hồ Mỹ An")])).toEqual(["Hồ Mỹ An", "Nguyễn Minh An", "Bồ Tùng Anh"]);
   });
