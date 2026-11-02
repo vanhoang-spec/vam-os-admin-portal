@@ -5,6 +5,10 @@
  * trong AppShell), và pop-up lúc mở VAM OS: báo lỗi đang chờ mình bổ sung (hiện TRƯỚC, nút "Trả lời
  * ngay" mở /bao-loi?ticket=…) rồi trả lời mới chưa xem. Ẩn khi đang toàn màn hình (trình chiếu) và ở
  * chính trang /bao-loi (trang đó đã là form).
+ *
+ * Nút CHỈ hiện từ màn hình rộng (lg, chỗ có thanh bên) trở lên: trên điện thoại nó nằm đè lên nội dung
+ * (chủ chương trình 03/11/2026). Người dùng điện thoại vẫn gửi được qua /bao-loi (link ở thẻ "Cần đọc" và
+ * hướng dẫn). Pop-up trả lời / cần bổ sung vẫn hiện ở mọi cỡ màn hình vì đó là việc người ta đang chờ.
  */
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -41,7 +45,7 @@ export function NutBaoLoi() {
           onClick={() => setMo(trangHienTai)}
           aria-haspopup="dialog"
           title="Gặp trục trặc hoặc có góp ý? Báo cho ban xử lý"
-          className="fixed bottom-3 left-3 z-[45] inline-flex min-h-10 items-center gap-1.5 rounded-full border-2 border-white bg-orange-500 py-1.5 pl-2.5 pr-3.5 text-sm font-bold text-white shadow-lg hover:bg-orange-600 print:hidden lg:left-[19.5rem]"
+          className="fixed bottom-3 left-3 z-[45] hidden min-h-10 items-center gap-1.5 rounded-full border-2 border-white bg-orange-500 py-1.5 pl-2.5 pr-3.5 text-sm font-bold text-white shadow-lg hover:bg-orange-600 print:hidden lg:left-[19.5rem] lg:inline-flex"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
             <path fill="currentColor" d="M12 2 1 21h22L12 2Zm0 5.5 7.5 12.5h-15L12 7.5Zm-1 3.5v4h2v-4h-2Zm0 5.5V18h2v-1.5h-2Z" />

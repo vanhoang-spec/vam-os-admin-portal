@@ -576,8 +576,8 @@ export function AppShell({
               </div>
             </div>
           </header>
-          {/* Trên điện thoại nút "Báo lỗi" nằm cố định góc dưới trái: chừa khoảng trống để kéo được nút "Trước" của bảng lên trên nó (VAM00002). */}
-          <main id="main-content" tabIndex={-1} className="px-4 pb-20 pt-6 sm:px-6 lg:px-8 lg:pb-6">
+          {/* Nút "Báo lỗi" chỉ hiện từ lg trở lên (trên điện thoại ẩn, 03/11/2026) nên không còn phải chừa khoảng trống dưới trang cho nó (VAM00002 từng cần pb-20). */}
+          <main id="main-content" tabIndex={-1} className="px-4 pb-6 pt-6 sm:px-6 lg:px-8">
             {children}
           </main>
         </div>

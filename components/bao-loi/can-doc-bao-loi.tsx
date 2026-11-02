@@ -46,8 +46,9 @@ export function CanDocBaoLoi() {
       </div>
       <ul className="ml-5 list-disc space-y-0.5">
         <li>
-          Gặp lỗi, hoặc thấy điểm nào cần làm tốt hơn: bấm nút cam <b>“Báo lỗi”</b> ở góc dưới bên trái mọi trang — chọn loại (có “Đề xuất cải thiện”), ghi
-          tiêu đề, mô tả và dán hình chụp màn hình (Ctrl + V), rồi bấm “Gửi báo lỗi”.
+          Gặp lỗi, hoặc thấy điểm nào cần làm tốt hơn: trên máy tính bấm nút cam <b>“Báo lỗi”</b> ở góc dưới bên trái mọi trang (trên điện thoại
+          nút này được ẩn cho đỡ che nội dung: bấm “Gửi báo lỗi / góp ý ngay” bên dưới) — chọn loại (có “Đề xuất cải thiện”), ghi tiêu đề, mô tả và dán hình chụp màn hình
+          (Ctrl + V), rồi bấm “Gửi báo lỗi”.
         </li>
         <li>
           <b>Những việc còn tồn đọng, chưa xong hoặc chưa ổn từ trước cũng đưa hết vào đây</b> — mỗi việc một báo lỗi, không nhắn rời qua Zalo nữa.
