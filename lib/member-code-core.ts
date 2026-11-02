@@ -80,3 +80,61 @@ export function displayMemberCode(memberCode: string | null | undefined, legacyC
   if (current && legacy) return `${current} (${legacy})`;
   return current || legacy || null;
 }
+
+/**
+ * Danh sách Mentor, Mentee chỉ hiện mã mới, không kèm mã cũ trong ngoặc (VAM00016, VAM00017). Người chưa có mã mới
+ * (mentee các mùa trước, không hồi tố) thì hiện mã cũ để dòng không trống.
+ */
+export function displayCurrentMemberCode(memberCode: string | null | undefined, legacyCode: string | null | undefined) {
+  return memberCode?.trim() || legacyCode?.trim() || null;
+}
+
+const CODE_PARTS = /^UEH([RESC])(\d{4})$/;
+
+/**
+ * Số để xếp theo mã mới (VAM00020, VAM00021). `groups` là thứ tự các nhóm: mentor "CR" (Core team rồi Mentor), mentee
+ * "SE" (Support team rồi Mentee); trong nhóm xếp theo số. Người chưa có mã mới, hoặc mã thuộc nhóm không có trong
+ * `groups`, xuống cuối.
+ */
+export function memberCodeOrder(code: string | null | undefined, groups: string) {
+  const parts = CODE_PARTS.exec((code ?? "").trim().toUpperCase());
+  const rank = parts ? groups.indexOf(parts[1]) : -1;
+  return parts && rank >= 0 ? rank * 10000 + Number(parts[2]) : groups.length * 10000;
+}
+
+export type FirstSeasonInput = { legacyCode?: string | null; startYear?: number | null; hasMemberCode?: boolean };
+
+/**
+ * Mùa và năm mentoring đầu tiên (VAM00016, VAM00017), theo thứ tự tin cậy: mùa đọc từ mã cũ; không có mã cũ thì dùng năm
+ * bắt đầu đã ghi trên hồ sơ (từ 2017 mỗi năm một mùa; 2016 gồm cả mùa 1 lẫn 2 nên chưa biết mùa nào); không có cả hai mà
+ * đã có mã mới thì là người của mùa 12, năm 2026.
+ */
+export function firstSeasonOf(input: FirstSeasonInput): { season: number | null; year: number | null } {
+  const legacySeason = legacyCodeSeason(input.legacyCode);
+  if (legacySeason) return { season: legacySeason, year: seasonStartYear(legacySeason) };
+  const year = Number(input.startYear);
+  if (Number.isInteger(year) && year >= 2017 && year <= 2099) return { season: year - 2014, year };
+  if (year === 2016) return { season: null, year };
+  return input.hasMemberCode ? { season: 12, year: 2026 } : { season: null, year: null };
+}
+
+/** "Mùa 11 - Năm 2025"; chỉ biết năm thì "Năm 2016"; chưa rõ thì "-". */
+export function firstSeasonLabel(input: FirstSeasonInput) {
+  const { season, year } = firstSeasonOf(input);
+  if (season && year) return `Mùa ${String(season).padStart(2, "0")} - Năm ${year}`;
+  return year ? `Năm ${year}` : "-";
+}
+
+/** Số để xếp sớm nhất trước; chưa rõ xuống cuối. */
+export function firstSeasonOrder(input: FirstSeasonInput) {
+  const { season, year } = firstSeasonOf(input);
+  return year ? year * 100 + (season ?? 0) : 999999;
+}
+
+/** Năm học của sinh viên: "1".."4" là năm thứ mấy, "graduated" là đã tốt nghiệp; giá trị lạ giữ nguyên. */
+export function displayYearOfStudy(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) return "-";
+  if (/^[1-9]$/.test(text)) return `Năm ${text}`;
+  return text.toLowerCase() === "graduated" ? "Đã tốt nghiệp" : text;
+}

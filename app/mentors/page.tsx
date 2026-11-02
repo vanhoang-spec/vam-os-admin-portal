@@ -8,7 +8,7 @@ import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
 import { getSeasonCohortPersonIds } from "@/lib/season-cohort";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { Match, MentorProfile, Person } from "@/lib/types";
-import { displayMemberCode } from "@/lib/member-code-core";
+import { displayCurrentMemberCode, firstSeasonLabel, firstSeasonOrder, memberCodeOrder } from "@/lib/member-code-core";
 import { displayOptional, displayText } from "@/lib/utils";
 import { canBrowseParticipants } from "@/lib/read-access";
 import { redirect } from "next/navigation";
@@ -23,8 +23,6 @@ type Row = MentorProfile & {
   mentor_status: string;
   mentor_status_filter: string;
   mentee_count_filter: string;
-  years_in_vam_display: string;
-  years_in_vam_source: string;
   has_assigned_mentees: string;
   /** Phase 043: batch code for filter, "Chưa gán" for legacy S11 rows */
   intake_batch_code: string;
@@ -41,16 +39,6 @@ function menteeCountFilter(count: number) {
   if (count === 1) return "1";
   if (count === 2) return "2";
   return "3_plus";
-}
-
-function vamSeniorityDisplay(mentor: MentorProfile, mentorMatches: Match[]) {
-  const explicitYears = Number(mentor.years_in_vam);
-  if (Number.isFinite(explicitYears) && explicitYears >= 0) {
-    return { value: String(explicitYears), source: "Dữ liệu chính thức" };
-  }
-  const seasons = new Set(mentorMatches.map((match) => match.season_id).filter(Boolean));
-  if (seasons.size > 0) return { value: String(seasons.size), source: "Ước tính từ mùa match" };
-  return { value: "-", source: "Chưa có dữ liệu" };
 }
 
 export default async function MentorsPage(props: { searchParams?: Promise<{ season?: string | string[] }> }) {
@@ -103,7 +91,9 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
       const status = matchStatus(match);
       return status === "completed" || status === "dropped";
     }).length;
-    const vamSeniority = vamSeniorityDisplay(mentor, mentorMatches);
+    // VAM00016: năm bắt đầu đã ghi trên hồ sơ (first_joined_year) khi mã cũ không cho biết mùa.
+    const startYear = Number(mentor.first_joined_year);
+    const firstSeason = { legacyCode: mentor.mentor_code, startYear: Number.isFinite(startYear) ? startYear : null, hasMemberCode: Boolean(person?.member_code) };
     // Phase 043: resolve intake batch → season for filter columns
     const batch = mentor.intake_batch_id ? intakeBatchById.get(mentor.intake_batch_id) : undefined;
     const batchSeason = batch?.season_id ? seasonById.get(batch.season_id) : undefined;
@@ -112,15 +102,15 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
       full_name: person?.full_name,
       email_primary: person?.email_primary,
       member_code: person?.member_code,
-      member_code_display: displayMemberCode(person?.member_code, mentor.mentor_code) ?? "-",
+      member_code_display: displayCurrentMemberCode(person?.member_code, mentor.mentor_code) ?? "-",
+      member_code_order: memberCodeOrder(person?.member_code, "CR"),
+      first_season_display: firstSeasonLabel(firstSeason),
+      first_season_order: firstSeasonOrder(firstSeason),
       company_current_display: displayText(mentor.company_current),
       title_current_display: displayText(mentor.title_current),
       industry_display: displayText(mentor.industry, "Chưa rõ"),
       function_area_display: displayText(mentor.function_area, "Chưa rõ"),
       years_experience_min_display: displayOptional(mentor.years_experience_min),
-      years_experience_text_display: displayText(mentor.years_experience_text),
-      years_in_vam_display: vamSeniority.value,
-      years_in_vam_source: vamSeniority.source,
       assigned_mentee_count: assignedMenteeCount,
       active_match_count: activeMatches.length,
       completed_or_dropped_match_count: completedOrDroppedMatchCount,
@@ -185,8 +175,10 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
           { key: "intake_batch", label: "Đợt tuyển", valueKey: "intake_batch_code" }
         ]}
         sortOptions={[
+          // VAM00020: mặc định xếp theo mã mới, Core team (UEHC) trước rồi Mentor (UEHR).
+          { label: "Mã thành viên Mentor (Core team rồi Mentor)", key: "member_code_order", direction: "asc", type: "number", secondaryKey: "full_name" },
           { label: "Số mentee giảm dần", key: "assigned_mentee_count", direction: "desc", type: "number" },
-          { label: "Số năm mentor VAM giảm dần", key: "years_in_vam_display", direction: "desc", type: "number", secondaryKey: "full_name" },
+          { label: "Mùa & Năm mentoring đầu tiên (sớm nhất trước)", key: "first_season_order", direction: "asc", type: "number", secondaryKey: "full_name" },
           { label: "Tên mentor A-Z", key: "full_name", direction: "asc", type: "text" },
           { label: "Ngành A-Z", key: "industry_display", direction: "asc", type: "text", emptyLast: true },
           { label: "Chức năng A-Z", key: "function_area_display", direction: "asc", type: "text", emptyLast: true },
@@ -196,18 +188,17 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
         columns={[
           { key: "full_name", label: "Họ tên" },
           { key: "email_primary", label: "Email" },
-          { key: "member_code_display", label: "Mã thành viên" },
+          { key: "member_code_display", label: "Mã thành viên Mentor" },
           { key: "assigned_mentee_count", label: "Số mentee" },
           { key: "active_match_count", label: "Match đang hoạt động" },
           { key: "completed_or_dropped_match_count", label: "Hoàn tất/dừng" },
           { key: "mentor_status", label: "Trạng thái" },
           { key: "industry", label: "Ngành", displayKey: "industry_display" },
           { key: "function_area", label: "Chức năng", displayKey: "function_area_display" },
-          { key: "years_in_vam_display", label: "Số năm mentor VAM", secondaryKey: "years_in_vam_source", secondaryLabel: "Nguồn" },
+          { key: "first_season_display", label: "Mùa & Năm mentoring đầu tiên" },
           { key: "company_current", label: "Công ty", displayKey: "company_current_display" },
           { key: "title_current", label: "Chức danh", displayKey: "title_current_display" },
           { key: "years_experience_min", label: "Số năm kinh nghiệm", displayKey: "years_experience_min_display" },
-          { key: "years_experience_text", label: "Kinh nghiệm mô tả", displayKey: "years_experience_text_display" },
           { key: "profile", label: "Hồ sơ", externalHrefKey: "bio_url", externalLabel: "Xem hồ sơ" }
         ]}
       />
