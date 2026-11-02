@@ -8,6 +8,7 @@ import { getBookedInterviewTimes } from "@/lib/interview-schedule";
 import { ErrorBox, PageHeader } from "@/components/ui";
 import { MyWorkClient } from "./my-work-client";
 import { CanDocBaoLoi } from "@/components/bao-loi/can-doc-bao-loi";
+import { CanDocMaThanhVien } from "@/components/can-doc-ma-thanh-vien";
 
 /**
  * CÔNG VIỆC CỦA TÔI — the personal recruitment work inbox.
@@ -90,6 +91,7 @@ export default async function MyWorkPage() {
         title="Công việc của tôi"
         description="Các phân công tuyển chọn đang thuộc về tài khoản của bạn."
       />
+      <CanDocMaThanhVien />
       <CanDocBaoLoi />
       <ErrorBox message={reviewsResult.error ?? applicationsResult.error} />
       <MyWorkClient items={items} />

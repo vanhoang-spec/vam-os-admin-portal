@@ -1,3 +1,4 @@
+import { displayMemberCode } from "@/lib/member-code-core";
 import "server-only";
 
 import { renewalInviteState } from "@/lib/renewal-console";
@@ -88,7 +89,7 @@ export async function createRenewalInviteBatch(
   }
 
   const [peopleResult, profileResult, inviteResult] = await Promise.all([
-    client.from("people").select("id,full_name,email_primary").in("id", personIds),
+    client.from("people").select("id,full_name,email_primary,member_code").in("id", personIds),
     client.from("mentor_profiles").select("id,person_id,mentor_code").in("person_id", personIds),
     client
       .from("person_season_invites")
@@ -134,7 +135,7 @@ export async function createRenewalInviteBatch(
     return {
       personId,
       fullName: String(person?.full_name ?? "Không xác định"),
-      mentorCode: profile?.mentor_code ? String(profile.mentor_code) : null,
+      mentorCode: displayMemberCode(person?.member_code as string | null, profile?.mentor_code as string | null),
       email: person?.email_primary ? String(person.email_primary) : null,
       outcome: "not_eligible",
       expiresAt: null

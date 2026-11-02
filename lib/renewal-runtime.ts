@@ -192,7 +192,7 @@ async function loadPersonAndProfile(client: DbClient, personId: string) {
   const [personResult, profileResult] = await Promise.all([
     client
       .from("people")
-      .select("id,full_name,email_primary,phone_primary")
+      .select("id,full_name,email_primary,phone_primary,member_code")
       .eq("id", personId)
       .maybeSingle(),
     client
@@ -221,7 +221,8 @@ export function buildRenewalPublicDisplayDto(
     fullName: person.full_name,
     emailPrimary: person.email_primary,
     phonePrimary: person.phone_primary,
-    mentorCode: profile.mentor_code,
+    // Mentor chỉ cần thấy mã hiện hành; mã cũ vẫn là khoá nhận diện ở phía máy chủ.
+    mentorCode: person.member_code ?? profile.mentor_code,
     firstVamSeason: profile.first_vam_season ?? null,
     companyCurrent: profile.company_current,
     titleCurrent: profile.title_current,

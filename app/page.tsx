@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CanDocBaoLoi } from "@/components/bao-loi/can-doc-bao-loi";
+import { CanDocMaThanhVien } from "@/components/can-doc-ma-thanh-vien";
 import { BarSummary, DonutSummary } from "@/components/charts";
 import { Card, ErrorBox, InternalLinkButton, KpiCard, PageHeader, SimpleTable } from "@/components/ui";
 import { getDashboardData, getOperationsData, getRestrictedDashboardSummary, keyById } from "@/lib/data";
@@ -118,6 +119,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
     return (
       <>
         <PageHeader title="Tổng quan" description="Tổng quan trạng thái vận hành trong phạm vi được cấp." />
+        <CanDocMaThanhVien />
         <CanDocBaoLoi />
         {/*
           Reviewer-tier accounts land here, and their assignments are the only
@@ -369,6 +371,7 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
   return (
     <>
       <PageHeader title="Tổng quan" description={`Tổng quan vận hành VAM OS. Season đang theo dõi: ${SEASON_CODE}.`} />
+      <CanDocMaThanhVien />
       <CanDocBaoLoi />
       {/*
         Core Team / Admin keep their full dashboard exactly as it was; this

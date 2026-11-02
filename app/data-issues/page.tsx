@@ -8,6 +8,7 @@ import { getApplications, getMatches, getMenteeProfiles, getMentorProfiles, getP
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { createdAtOf, newestFirst } from "@/lib/list-order";
 import type { Application, Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
+import { displayMemberCode } from "@/lib/member-code-core";
 import { displayCode, displayText, formatDate } from "@/lib/utils";
 import { TableSearch } from "@/components/table-search";
 
@@ -174,7 +175,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
         ...mentee,
         full_name_display: displayText(person?.full_name),
         email_primary_display: displayText(person?.email_primary),
-        mentee_code_display: displayCode(mentee.mentee_code),
+        mentee_code_display: displayMemberCode(person?.member_code, mentee.mentee_code) ?? "-",
         school_code_display: displayCode(mentee.school_code),
         school_raw_display: displayText(mentee.school_raw),
         major_display: displayText(mentee.major)
@@ -189,7 +190,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
         ...mentor,
         full_name_display: displayText(person?.full_name),
         email_primary_display: displayText(person?.email_primary),
-        mentor_code_display: displayCode(mentor.mentor_code),
+        mentor_code_display: displayMemberCode(person?.member_code, mentor.mentor_code) ?? "-",
         company_current_display: displayText(mentor.company_current),
         title_current_display: displayText(mentor.title_current)
       };
@@ -203,7 +204,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
         ...mentee,
         full_name_display: displayText(person?.full_name),
         email_primary_display: displayText(person?.email_primary),
-        mentee_code_display: displayCode(mentee.mentee_code),
+        mentee_code_display: displayMemberCode(person?.member_code, mentee.mentee_code) ?? "-",
         school_code_display: displayCode(mentee.school_code),
         major_display: displayText(mentee.major)
       };
@@ -319,7 +320,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
           columns={[
             { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
             { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
-            { key: "mentee_code", label: "Mã Mentee", displayKey: "mentee_code_display" },
+            { key: "mentee_code", label: "Mã thành viên", displayKey: "mentee_code_display" },
             { key: "school_code", label: "Mã trường", displayKey: "school_code_display" },
             { key: "school_raw", label: "Tên trường (gốc)", displayKey: "school_raw_display" },
             { key: "major", label: "Ngành", displayKey: "major_display" },
@@ -335,7 +336,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
           columns={[
             { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
             { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
-            { key: "mentor_code", label: "Mã Mentor", displayKey: "mentor_code_display" },
+            { key: "mentor_code", label: "Mã thành viên", displayKey: "mentor_code_display" },
             { key: "company_current", label: "Công ty", displayKey: "company_current_display" },
             { key: "title_current", label: "Chức vụ", displayKey: "title_current_display" },
             { key: "person_link", label: "Hồ sơ", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem hồ sơ" }
@@ -350,7 +351,7 @@ export default async function DataIssuesPage(props: { searchParams?: Promise<{ i
           columns={[
             { key: "full_name", label: "Họ tên", displayKey: "full_name_display" },
             { key: "email_primary", label: "Email", displayKey: "email_primary_display" },
-            { key: "mentee_code", label: "Mã Mentee", displayKey: "mentee_code_display" },
+            { key: "mentee_code", label: "Mã thành viên", displayKey: "mentee_code_display" },
             { key: "school_code", label: "Mã trường", displayKey: "school_code_display" },
             { key: "major", label: "Ngành", displayKey: "major_display" },
             { key: "person_link", label: "Hồ sơ", internalHrefKey: "person_id", internalHrefPrefix: "/people/", internalLabel: "Xem hồ sơ" }

@@ -120,7 +120,7 @@ export default async function AdminRenewalsPage(props: { searchParams?: Promise<
         <h2 className="text-lg font-semibold text-vam-ink">Danh sách invite</h2>
         <form method="get" className="grid gap-3 rounded-lg border border-vam-line bg-white p-4 sm:grid-cols-[minmax(240px,1fr)_220px_220px_auto] sm:items-end">
           <label className="text-sm font-medium text-vam-ink">Tìm mentor
-            <input name="q" type="search" defaultValue={query} placeholder="Tên, mã mentor hoặc email" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2" />
+            <input name="q" type="search" defaultValue={query} placeholder="Tên, mã thành viên, mã cũ hoặc email" className="mt-1 w-full rounded-md border border-vam-line px-3 py-2" />
           </label>
           <label className="text-sm font-medium text-vam-ink">Trạng thái
             <select name="status" defaultValue={statusFilter} className="mt-1 w-full rounded-md border border-vam-line px-3 py-2">
@@ -156,7 +156,7 @@ export default async function AdminRenewalsPage(props: { searchParams?: Promise<
                 </div>
                 <div className="mt-2 grid gap-1 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
                   <div>Email: {displayText(row.personEmail)}</div>
-                  <div>Mã mentor: {displayText(row.mentorCode)}</div>
+                  <div>Mã thành viên: {displayText(row.mentorCode)}</div>
                   <div>Nguồn: {row.inviteSource === "s11_renewal" ? "S11 renewal" : row.inviteSource === "legacy_coreteam_import" ? "Legacy CSV import" : "Legacy manual entry"}</div>
                   <div>Season: {row.seasonCode}</div>
                   <div>Tạo: {formatDate(row.createdAt)}</div>
