@@ -253,7 +253,7 @@ export function RenewalForm({
         <h2 className="text-lg font-semibold text-vam-ink">Hồ sơ mentor hiện tại</h2>
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
           <div><span className="font-medium">Họ tên:</span> {display.fullName || "—"}</div>
-          <div><span className="font-medium">Mã mentor:</span> {display.mentorCode || "—"}</div>
+          <div><span className="font-medium">Mã thành viên:</span> {display.mentorCode || "—"}</div>
           <div><span className="font-medium">Email:</span> {display.emailPrimary || "—"}</div>
           <div><span className="font-medium">SĐT:</span> {display.phonePrimary || "—"}</div>
           <div><span className="font-medium">Công ty / Tổ chức:</span> {display.companyCurrent || "—"}</div>

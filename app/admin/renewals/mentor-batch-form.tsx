@@ -217,7 +217,7 @@ export function BatchRenewalInviteForm({
       <div>
         <h2 className="text-lg font-semibold text-vam-ink">Tạo link gia hạn hàng loạt</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Tìm mentor theo tên, mã mentor hoặc email. Chọn nhiều mentor rồi tạo link một lượt — tối đa{" "}
+          Tìm mentor theo tên, mã thành viên, mã cũ hoặc email. Chọn nhiều mentor rồi tạo link một lượt — tối đa{" "}
           {RENEWAL_BATCH_MAX_SIZE} mentor mỗi lần. Link vẫn được gửi thủ công.
         </p>
       </div>

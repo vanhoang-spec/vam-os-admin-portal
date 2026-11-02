@@ -35,6 +35,7 @@ export type RenewalPerson = {
   full_name: string | null;
   email_primary: string | null;
   phone_primary: string | null;
+  member_code?: string | null;
 };
 
 export type RenewalMentorProfile = Record<string, unknown> & {
