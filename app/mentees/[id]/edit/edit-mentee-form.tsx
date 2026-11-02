@@ -63,8 +63,8 @@ export function EditMenteeForm({
         <h3 className={sectionTitle}>2. Hồ sơ mentee</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Mã mentee</span>
-            <input name="mentee_code" defaultValue={mentee.mentee_code ?? ""} className={inputClass} placeholder="vd: ME-S12-001" />
+            <span className="text-xs font-medium uppercase text-slate-500">Mã cũ (không sửa)</span>
+            <input value={mentee.mentee_code ?? ""} disabled readOnly className={inputClass} />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Mã trường (school_code)</span>

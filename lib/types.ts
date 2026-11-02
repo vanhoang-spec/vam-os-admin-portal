@@ -8,6 +8,7 @@ export type Person = JsonRecord & {
   gender: string | null;
   source_sheets: string | null;
   data_quality_flags: string | null;
+  member_code?: string | null;
 };
 
 export type MentorProfile = JsonRecord & {
@@ -251,6 +252,7 @@ export type ReviewerPoolRow = {
   full_name: string | null;
   email_primary: string | null;
   mentor_code: string | null;
+  member_code?: string | null;
   intake_batch_id: string | null;
   /** null when no admin_users row exists for this mentor's email. */
   admin_user_id: string | null;

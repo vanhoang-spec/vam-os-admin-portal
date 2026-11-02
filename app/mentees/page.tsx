@@ -8,6 +8,7 @@ import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
 import { getSeasonCohortPersonIds } from "@/lib/season-cohort";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
+import { displayMemberCode } from "@/lib/member-code-core";
 import { displayCode, displayOptional, displayText } from "@/lib/utils";
 import { canBrowseParticipants } from "@/lib/read-access";
 import { redirect } from "next/navigation";
@@ -100,7 +101,8 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
       ...mentee,
       full_name: person?.full_name,
       email_primary: person?.email_primary,
-      mentee_code_display: displayCode(mentee.mentee_code),
+      member_code: person?.member_code,
+      mentee_code_display: displayMemberCode(person?.member_code, mentee.mentee_code) ?? "-",
       school_code_display: displayCode(mentee.school_code),
       school_raw_display: displayText(mentee.school_raw),
       major_display: displayText(mentee.major),
@@ -112,7 +114,7 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
       mentor_email: mentor?.email_primary,
       mentor_code: mentorProfile?.mentor_code,
       mentor_company: mentorProfile?.company_current,
-      mentor_code_display: displayCode(mentorProfile?.mentor_code),
+      mentor_code_display: displayMemberCode(mentor?.member_code, mentorProfile?.mentor_code) ?? "-",
       mentor_company_display: displayText(mentorProfile?.company_current),
       mentor_bio_url: mentorProfile?.bio_url,
       mentor_person_id: selectedMatch?.mentor_person_id,
@@ -142,8 +144,8 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
       <ErrorBox message={cohort.error || mentees.error || people.error || mentors.error || matches.error || intakeBatches.error || seasons.error} />
       <FilterableTable
         rows={rows}
-        searchPlaceholder="Tìm theo tên, email, mentee_code, MSSV, ngành hoặc mentor"
-        searchKeys={["full_name", "email_primary", "mentee_code", "mssv", "major", "mentor_name", "mentor_email"]}
+        searchPlaceholder="Tìm theo tên, email, mã thành viên, MSSV, ngành hoặc mentor"
+        searchKeys={["full_name", "email_primary", "member_code", "mentee_code", "mssv", "major", "mentor_name", "mentor_email"]}
         filters={[
           { key: "school_code", label: "Mã trường", valueKey: "school_code" },
           {
@@ -170,7 +172,7 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
         columns={[
           { key: "full_name", label: "Họ tên" },
           { key: "email_primary", label: "Email" },
-          { key: "mentee_code", label: "Mã mentee", displayKey: "mentee_code_display" },
+          { key: "mentee_code", label: "Mã thành viên", displayKey: "mentee_code_display" },
           { key: "school_code", label: "Mã trường", displayKey: "school_code_display" },
           { key: "school_raw", label: "Trường", displayKey: "school_raw_display" },
           { key: "major", label: "Ngành học", displayKey: "major_display" },
@@ -178,7 +180,7 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
           { key: "mssv", label: "MSSV", displayKey: "mssv_display" },
           { key: "mentor_name", label: "Mentor hiện tại" },
           { key: "mentor_email", label: "Email mentor" },
-          { key: "mentor_code", label: "Mã mentor", displayKey: "mentor_code_display" },
+          { key: "mentor_code", label: "Mã thành viên mentor", displayKey: "mentor_code_display" },
           { key: "mentor_company", label: "Công ty mentor", displayKey: "mentor_company_display" },
           { key: "match_status", label: "Trạng thái match", displayKey: "match_status_display" },
           { key: "match_type", label: "Loại match", displayKey: "match_type_display" },

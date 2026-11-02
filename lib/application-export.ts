@@ -333,6 +333,7 @@ export function buildApplicationExportData(source: ApplicationExportSource): App
   const status = application.status ?? application.final_status;
   const consent = application.consent_data_storage ?? application.consent_pdpa;
 
+  addField(fields, "Thông tin ứng viên", "Mã thành viên", person?.member_code);
   addField(fields, "Thông tin ứng viên", "Họ và tên", fullName);
   addField(fields, "Thông tin ứng viên", "Email", email);
   addField(fields, "Thông tin ứng viên", "Số điện thoại", phone);
@@ -350,7 +351,7 @@ export function buildApplicationExportData(source: ApplicationExportSource): App
   addField(fields, "Thông tin ứng tuyển", "Liên kết hồ sơ ứng viên", application.profile_url);
 
   if (mentorProfile) {
-    addField(fields, "Hồ sơ Mentor", "Mã Mentor", mentorProfile.mentor_code);
+    addField(fields, "Hồ sơ Mentor", "Mã cũ", mentorProfile.mentor_code);
     addField(fields, "Hồ sơ Mentor", "Công ty hiện tại", mentorProfile.company_current);
     addField(fields, "Hồ sơ Mentor", "Chức danh hiện tại", mentorProfile.title_current);
     addField(fields, "Hồ sơ Mentor", "Số năm kinh nghiệm tối thiểu", mentorProfile.years_experience_min);
@@ -361,7 +362,7 @@ export function buildApplicationExportData(source: ApplicationExportSource): App
   }
 
   if (menteeProfile) {
-    addField(fields, "Hồ sơ Mentee", "Mã Mentee", menteeProfile.mentee_code);
+    addField(fields, "Hồ sơ Mentee", "Mã cũ", menteeProfile.mentee_code);
     addField(fields, "Hồ sơ Mentee", "Mã trường", menteeProfile.school_code);
     addField(fields, "Hồ sơ Mentee", "Tên trường", menteeProfile.school_raw);
     addField(fields, "Hồ sơ Mentee", "Ngành học", menteeProfile.major);

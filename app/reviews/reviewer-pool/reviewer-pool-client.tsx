@@ -12,6 +12,7 @@ import type { ReviewerPoolRow } from "@/lib/types";
 import { adminRoleLabel, hasIntrinsicRecruitmentRights } from "@/lib/ui-labels";
 import { PARTICIPATION_GROUPS, participationLabel, type ParticipationRole } from "@/lib/recruitment-permissions-core";
 import { matchesTableQuery } from "@/lib/table-search-core";
+import { displayMemberCode } from "@/lib/member-code-core";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -242,7 +243,7 @@ export function ReviewerPoolClient({
     const bucket = getAccountStatus(row);
     if (statusFilter !== "all" && bucket !== statusFilter) return false;
     // Bỏ dấu, đủ mọi từ — cùng phép tìm với mọi bảng khác của CRM.
-    if (!matchesTableQuery([row.full_name, row.email_primary, row.mentor_code], search)) return false;
+    if (!matchesTableQuery([row.full_name, row.email_primary, row.mentor_code, row.member_code], search)) return false;
     return true;
   });
 
@@ -353,7 +354,7 @@ export function ReviewerPoolClient({
                     </td>
                     <td className="px-4 py-3 text-slate-600">{row.email_primary}</td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                      {row.mentor_code ?? <span className="text-slate-300">—</span>}
+                      {displayMemberCode(row.member_code, row.mentor_code) ?? <span className="text-slate-300">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <span

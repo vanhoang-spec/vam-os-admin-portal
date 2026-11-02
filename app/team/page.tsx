@@ -10,7 +10,8 @@ import {
 } from "@/lib/data";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import type { MenteeProfile, MentorProfile, OperationalTeamAssignment, Person, Season } from "@/lib/types";
-import { displayCode, displayText } from "@/lib/utils";
+import { displayMemberCode } from "@/lib/member-code-core";
+import { displayText } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canBrowseTeam } from "@/lib/read-access";
 import { redirect } from "next/navigation";
@@ -187,7 +188,7 @@ export default async function TeamViewPage(props: { searchParams?: Promise<{ q?:
       email_primary: person?.email_primary ?? null,
       school: mentee?.school_code ?? mentee?.school_raw ?? null,
       major: mentee?.major ?? null,
-      mentee_code: mentee?.mentee_code ?? null
+      mentee_code: displayMemberCode(person?.member_code, mentee?.mentee_code)
     };
   });
 
@@ -412,7 +413,7 @@ export default async function TeamViewPage(props: { searchParams?: Promise<{ q?:
                   <div>
                     <div className="text-sm">{displayText(row.school)}</div>
                     <div className="mt-1 text-xs text-slate-500">{displayText(row.major)}</div>
-                    <div className="mt-1 text-xs text-slate-400">{displayCode(row.mentee_code)}</div>
+                    <div className="mt-1 text-xs text-slate-400">{row.mentee_code ?? "-"}</div>
                   </div>
                 )
               },
