@@ -54,9 +54,9 @@ function fold(value: string) {
   return value.normalize("NFD").replace(COMBINING_MARKS, "").replace(/[đĐ]/g, "d").toLowerCase();
 }
 
-/** Tên là chữ cuối, họ là chữ đầu, phần giữa là tên đệm. So sánh bỏ dấu, bỏ hoa thường. */
+/** Tên là chữ cuối, họ là chữ đầu, phần giữa là tên đệm. So sánh bỏ dấu, bỏ hoa thường, bỏ biệt danh trong ngoặc. */
 export function nameSortParts(fullName: string) {
-  const words = fold(fullName).trim().split(/\s+/).filter(Boolean);
+  const words = fold(fullName).replace(/\([^)]*\)/g, " ").trim().split(/\s+/).filter(Boolean);
   const ten = words.at(-1) ?? "";
   return { ten, ho: words.length > 1 ? words[0] : "", dem: words.slice(1, -1).join(" ") };
 }
