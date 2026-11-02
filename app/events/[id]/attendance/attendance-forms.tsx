@@ -72,14 +72,14 @@ function buildParticipantOptions(
       if (mentor) {
         knownAs = "mentor";
         defaultRole = "mentor";
-        const code = normalize(mentor.mentor_code);
+        const code = normalize(person.member_code) || normalize(mentor.mentor_code);
         const company = normalize(mentor.company_current);
         const title = normalize(mentor.title_current);
         hintParts = ["Mentor", code, [title, company].filter(Boolean).join(" @ ")].filter(Boolean);
       } else if (mentee) {
         knownAs = "mentee";
         defaultRole = "mentee";
-        const code = normalize(mentee.mentee_code);
+        const code = normalize(person.member_code) || normalize(mentee.mentee_code);
         const school = normalize(mentee.school_code) || normalize(mentee.school_raw);
         const major = normalize(mentee.major);
         hintParts = ["Mentee", code, [major, school].filter(Boolean).join(" · ")].filter(Boolean);
@@ -89,6 +89,7 @@ function buildParticipantOptions(
       const searchKey = [
         primary,
         secondary,
+        normalize(person.member_code),
         normalize(mentor?.mentor_code),
         normalize(mentor?.company_current),
         normalize(mentor?.title_current),

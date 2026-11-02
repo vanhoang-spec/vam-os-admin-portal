@@ -13,6 +13,31 @@ export function isMemberCode(value: string | null | undefined) {
   return MEMBER_CODE.test(value ?? "") && !value!.endsWith("0000");
 }
 
+export function isMemberCodeGroup(value: string): value is MemberCodeGroup {
+  return ["R", "E", "S", "C"].includes(value);
+}
+
+const ERROR_MESSAGES: Record<string, string> = {
+  MEMBER_CODE_GROUP_NOT_OPEN: "Nhóm này chưa mở cấp mã. Chờ xong đợt cấp mã ban đầu.",
+  MEMBER_CODE_TAKEN: "Mã này đã có người dùng.",
+  MEMBER_CODE_BAD_FORMAT: "Mã phải có dạng UEH + R/E/S/C + 4 số, ví dụ UEHR0001.",
+  MEMBER_CODE_RANGE_EXHAUSTED: "Nhóm này đã dùng hết dãy số.",
+  MEMBER_CODE_PERSON_NOT_FOUND: "Không tìm thấy hồ sơ người này."
+};
+
+export function memberCodeErrorMessage(raw: string | null | undefined) {
+  const key = Object.keys(ERROR_MESSAGES).find((code) => raw?.includes(code));
+  return key ? ERROR_MESSAGES[key] : "Không lưu được mã. Vui lòng thử lại.";
+}
+
+/** Rỗng là chưa rõ năm; ngoài khoảng là gõ nhầm, vì chương trình bắt đầu từ 2016. */
+export function parseStartYear(value: unknown): { ok: true; value: number | null } | { ok: false } {
+  const text = String(value ?? "").trim();
+  if (!text) return { ok: true, value: null };
+  const year = Number(text);
+  return Number.isInteger(year) && year >= 2016 && year <= 2099 ? { ok: true, value: year } : { ok: false };
+}
+
 export function legacyCodeSeason(code: string | null | undefined): number | null {
   const season = Number(LEGACY_CODE.exec((code ?? "").trim().toUpperCase())?.[1] ?? 0);
   return season > 0 ? season : null;

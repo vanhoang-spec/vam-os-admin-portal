@@ -122,7 +122,7 @@ async function selectPeopleByIds(client: any, ids: string[]) {
   for (let index = 0; index < ids.length; index += step) {
     const chunk = ids.slice(index, index + step);
     if (!chunk.length) continue;
-    const { data, error } = await client.from("people").select("id,full_name,email_primary,phone_primary").in("id", chunk);
+    const { data, error } = await client.from("people").select("id,full_name,email_primary,phone_primary,member_code").in("id", chunk);
     if (error) {
       log("people chunk lookup failed", error);
       continue;

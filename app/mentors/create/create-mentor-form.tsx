@@ -133,8 +133,8 @@ export function CreateMentorForm({
         <h3 className={sectionTitle}>2. Hồ sơ mentor</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Mã mentor</span>
-            <input name="mentor_code" className={inputClass} placeholder="vd: M-S12-001" />
+            <span className="text-xs font-medium uppercase text-slate-500">Năm bắt đầu tham gia chương trình mentoring thuộc VAM</span>
+            <input name="first_joined_year" type="number" min={2016} max={2099} className={inputClass} />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Bio URL</span>

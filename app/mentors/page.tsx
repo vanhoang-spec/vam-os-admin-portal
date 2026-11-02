@@ -8,6 +8,7 @@ import { canOperateAnyScope, getAdminScopeContext } from "@/lib/program-scope";
 import { getSeasonCohortPersonIds } from "@/lib/season-cohort";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
 import { Match, MentorProfile, Person } from "@/lib/types";
+import { displayMemberCode } from "@/lib/member-code-core";
 import { displayOptional, displayText } from "@/lib/utils";
 import { canBrowseParticipants } from "@/lib/read-access";
 import { redirect } from "next/navigation";
@@ -110,6 +111,8 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
       ...mentor,
       full_name: person?.full_name,
       email_primary: person?.email_primary,
+      member_code: person?.member_code,
+      member_code_display: displayMemberCode(person?.member_code, mentor.mentor_code) ?? "-",
       company_current_display: displayText(mentor.company_current),
       title_current_display: displayText(mentor.title_current),
       industry_display: displayText(mentor.industry, "Chưa rõ"),
@@ -143,8 +146,8 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
       <ErrorBox message={cohort.error || mentors.error || people.error || matches.error || intakeBatches.error || seasons.error} />
       <FilterableTable
         rows={rows}
-        searchPlaceholder="Tìm theo tên, mã mentor, email, công ty, chức danh, ngành hoặc chức năng"
-        searchKeys={["full_name", "mentor_code", "email_primary", "company_current", "title_current", "industry", "function_area"]}
+        searchPlaceholder="Tìm theo tên, mã thành viên, mã cũ, email, công ty, chức danh, ngành hoặc chức năng"
+        searchKeys={["full_name", "mentor_code", "email_primary", "member_code", "company_current", "title_current", "industry", "function_area"]}
         filters={[
           { key: "industry", label: "Ngành", valueKey: "industry_display" },
           { key: "function_area", label: "Chức năng", valueKey: "function_area_display" },
@@ -193,7 +196,7 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
         columns={[
           { key: "full_name", label: "Họ tên" },
           { key: "email_primary", label: "Email" },
-          { key: "mentor_code", label: "Mã mentor" },
+          { key: "member_code_display", label: "Mã thành viên" },
           { key: "assigned_mentee_count", label: "Số mentee" },
           { key: "active_match_count", label: "Match đang hoạt động" },
           { key: "completed_or_dropped_match_count", label: "Hoàn tất/dừng" },

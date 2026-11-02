@@ -36,14 +36,14 @@ function buildMentorOptions(people: Person[], mentorProfiles: MentorProfile[]): 
       const secondary = normalize(person.email_primary) || null;
       const company = normalize(profile?.company_current);
       const title = normalize(profile?.title_current);
-      const code = normalize(profile?.mentor_code);
+      const code = normalize(person.member_code) || normalize(profile?.mentor_code);
       const hintParts = [code, [title, company].filter(Boolean).join(" @ ")].filter(Boolean);
       return {
         id: person.id,
         primary,
         secondary,
         hint: hintParts.join(" · ") || null,
-        searchKey: [primary, secondary, code, company, title].filter(Boolean).join(" ").toLowerCase()
+        searchKey: [primary, secondary, code, normalize(profile?.mentor_code), company, title].filter(Boolean).join(" ").toLowerCase()
       };
     })
     .sort((a, b) => a.primary.localeCompare(b.primary, "vi"));
@@ -61,7 +61,7 @@ function buildMenteeOptions(people: Person[], menteeProfiles: MenteeProfile[]): 
       const profile = profileByPersonId.get(person.id);
       const primary = normalize(person.full_name) || normalize(person.email_primary) || person.id;
       const secondary = normalize(person.email_primary) || null;
-      const code = normalize(profile?.mentee_code);
+      const code = normalize(person.member_code) || normalize(profile?.mentee_code);
       const school = normalize(profile?.school_code) || normalize(profile?.school_raw);
       const major = normalize(profile?.major);
       const hintParts = [code, [major, school].filter(Boolean).join(" · ")].filter(Boolean);

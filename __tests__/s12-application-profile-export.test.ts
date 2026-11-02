@@ -82,7 +82,7 @@ describe("S12 targeted application export data", () => {
       // appended only to disambiguate two fields that would otherwise claim to
       // be the same question.
       expect.objectContaining({ section: "Câu trả lời ứng tuyển", label: "Mục tiêu cũ", value: "Dẫn dắt đội ngũ" }),
-      expect.objectContaining({ section: "Hồ sơ Mentor", label: "Mã Mentor", value: "MT-001" })
+      expect.objectContaining({ section: "Hồ sơ Mentor", label: "Mã cũ", value: "MT-001" })
     ]));
     expect(JSON.stringify(exportData)).not.toContain("must_not_export");
     expect(JSON.stringify(exportData)).not.toContain("private");

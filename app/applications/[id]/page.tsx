@@ -52,6 +52,7 @@ import { RestoreWithdrawnForm } from "./restore-withdrawn-form";
 import { ResendInvitePanel } from "./resend-invite-panel";
 import { isApplicationReviewAssignable } from "@/lib/application-review-assignability";
 import { isEditableReviewStatus } from "@/lib/review-status";
+import { displayMemberCode } from "@/lib/member-code-core";
 
 const QUESTION_ORDER = [
   "consent_marketing_email",
@@ -862,7 +863,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           {menteeProfile ? (
             <DetailGrid
               rows={[
-                ["Mã mentee", displayText(menteeProfile.mentee_code)],
+                ["Mã thành viên", displayMemberCode(person?.member_code, menteeProfile.mentee_code) ?? "-"],
                 ["Mã trường", displayText(menteeProfile.school_code)],
                 ["Ngành học", displayText(menteeProfile.major)],
                 ["Khóa / Lớp", displayText(menteeProfile.class_cohort)],
@@ -879,7 +880,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           {mentorProfile ? (
             <DetailGrid
               rows={[
-                ["Mã mentor", displayText(mentorProfile.mentor_code)],
+                ["Mã thành viên", displayMemberCode(person?.member_code, mentorProfile.mentor_code) ?? "-"],
                 ["Công ty hiện tại", displayText(mentorProfile.company_current)],
                 ["Chức danh", displayText(mentorProfile.title_current)]
               ]}
@@ -887,7 +888,7 @@ export default async function ApplicationDetailPage(props: { params: Promise<{ i
           ) : returningMentorProfile ? (
             <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
               <div className="font-semibold">Đã tìm thấy Mentor hiện hữu</div>
-              <div className="mt-1">Mã mentor: {displayText(returningMentorProfile.mentor_code)}</div>
+              <div className="mt-1">Mã cũ: {displayText(returningMentorProfile.mentor_code)}</div>
             </div>
           ) : (
             <EmptyState message="Chưa có mentor profile liên quan." />

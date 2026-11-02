@@ -75,8 +75,8 @@ export function EditMentorForm({
         <h3 className={sectionTitle}>2. Hồ sơ mentor</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Mã mentor</span>
-            <input name="mentor_code" defaultValue={mentor.mentor_code ?? ""} className={inputClass} />
+            <span className="text-xs font-medium uppercase text-slate-500">Mã cũ (không sửa)</span>
+            <input value={mentor.mentor_code ?? ""} disabled readOnly className={inputClass} />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Bio URL</span>
@@ -103,6 +103,10 @@ export function EditMentorForm({
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Mô tả kinh nghiệm</span>
             <input name="years_experience_text" defaultValue={mentor.years_experience_text ?? ""} className={inputClass} />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium uppercase text-slate-500">Năm bắt đầu tham gia chương trình mentoring thuộc VAM</span>
+            <input name="first_joined_year" type="number" min={2016} max={2099} defaultValue={mentor.first_joined_year ?? ""} className={inputClass} />
           </label>
           <label className="block">
             <span className="text-xs font-medium uppercase text-slate-500">Mùa VAM đầu tiên</span>

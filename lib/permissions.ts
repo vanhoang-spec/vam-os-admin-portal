@@ -10,6 +10,11 @@ export function canManageUsers(role?: string | null) {
   return role === "super_admin";
 }
 
+/** Mã đã cấp không đổi trừ khi admin chỉnh (BTC 26/10/2026), nên chỉ admin trở lên được cấp và sửa. */
+export function canManageMemberCode(role?: string | null) {
+  return role === "super_admin" || role === "admin";
+}
+
 export function canEditRecap(adminUser: AdminLike) {
   return ["super_admin", "admin", "core_team"].includes(adminUser?.role || "");
 }

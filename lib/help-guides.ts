@@ -421,7 +421,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     summary: "Danh sách mentee chính thức của mùa đang chọn, kèm thông tin học tập và mentor hiện tại. Dùng để tra cứu mentee và xem ai đã có, ai chưa có mentor.",
     steps: [
       "Chọn mùa ở ô “Mùa vận hành” trên thanh trên cùng; danh sách đổi theo mùa đó.",
-      "Gõ vào ô “Tìm theo tên, email, mentee_code, MSSV, ngành hoặc mentor”.",
+      "Gõ vào ô “Tìm theo tên, email, mã thành viên, MSSV, ngành hoặc mentor”.",
       "Lọc bằng “Mã trường”, “Mentor” (“Có mentor” / “Chưa có mentor”), “Trạng thái match”, “Ngành”, “Mùa intake”, “Đợt tuyển”; bấm “Xoá bộ lọc” để bỏ lọc.",
       "Đổi thứ tự ở ô “Sắp xếp” (vd. “Mã trường A-Z”, “Tên mentee A-Z”, “Độ tin cậy giảm dần”).",
       "Bấm vào một dòng để mở hồ sơ mentee; dùng “Xem match”, “Xem mentor”, “Xem profile” trên dòng để sang match, hồ sơ mentor hoặc link profile.",

@@ -5,6 +5,7 @@ import { getMatchRelatedDisplayData } from "@/lib/matches";
 import { matchingRoundLabel } from "@/lib/matching-round";
 import { canBrowseOperations } from "@/lib/permissions";
 import { getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
+import { displayMemberCode } from "@/lib/member-code-core";
 import { displayCode, displayText } from "@/lib/utils";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { redirect } from "next/navigation";
@@ -71,7 +72,7 @@ export default async function MatchDetailPage(props: { params: Promise<{ id: str
                 ["Họ tên", mentor?.full_name],
                 ["Email", mentor?.email_primary],
                 ["SĐT", mentor?.phone_primary],
-                ["Mã Mentor", displayCode(mentorProfile?.mentor_code)],
+                ["Mã thành viên", displayMemberCode(mentor?.member_code, mentorProfile?.mentor_code) ?? "-"],
                 ["Công ty", displayText(mentorProfile?.company_current)],
                 ["Chức vụ", displayText(mentorProfile?.title_current)]
               ]}
@@ -91,7 +92,7 @@ export default async function MatchDetailPage(props: { params: Promise<{ id: str
               ["Họ tên", mentee?.full_name],
               ["Email", mentee?.email_primary],
               ["SĐT", mentee?.phone_primary],
-              ["Mã Mentee", displayCode(menteeProfile?.mentee_code)],
+              ["Mã thành viên", displayMemberCode(mentee?.member_code, menteeProfile?.mentee_code) ?? "-"],
               ["Trường", displayCode(menteeProfile?.school_code)],
               ["Ngành", displayText(menteeProfile?.major)],
               ["MSSV", displayText(menteeProfile?.mssv)]

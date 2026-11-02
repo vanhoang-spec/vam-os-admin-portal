@@ -12,6 +12,7 @@ import { newestFirst } from "@/lib/list-order";
 import { canBrowseOperations } from "@/lib/permissions";
 import { canOperateAnyScope, canReadSeason, getAdminScopeContext } from "@/lib/program-scope";
 import type { Event, Match, MentoringRecap, Person } from "@/lib/types";
+import { displayMemberCode } from "@/lib/member-code-core";
 import { displayCode, displayText, formatDate, formatMonthVN } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
 import { resolveSeasonContext, SeasonAccessDeniedError } from "@/lib/season-context";
@@ -350,7 +351,7 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
         mentee_id: menteeId,
         mentee_name: mentee?.full_name ?? null,
         mentee_email: mentee?.email_primary ?? null,
-        mentee_code: menteeProfile?.mentee_code ?? null,
+        mentee_code: displayMemberCode(mentee?.member_code, menteeProfile?.mentee_code),
         mentor_name: mentor?.full_name ?? null,
         last_recap_date: lastDate,
         months_silent: lastMonth ? Math.max(0, monthDiff(selectedMonth, lastMonth)) : "Chưa có recap"
@@ -556,7 +557,7 @@ export default async function OperationsPage(props: { searchParams?: Promise<{ m
           columns={[
             { key: "mentee_name", label: "Mentee", render: (row) => displayText(row.mentee_name) },
             { key: "mentee_email", label: "Email" },
-            { key: "mentee_code", label: "Mã mentee", render: (row) => displayCode(row.mentee_code) },
+            { key: "mentee_code", label: "Mã thành viên", render: (row) => row.mentee_code ?? "-" },
             { key: "mentor_name", label: "Mentor", render: (row) => displayText(row.mentor_name) },
             { key: "last_recap_date", label: "Recap gần nhất", render: (row) => (row.last_recap_date ? formatDate(row.last_recap_date) : "Chưa có recap") },
             { key: "months_silent", label: "Số tháng chưa có recap" },

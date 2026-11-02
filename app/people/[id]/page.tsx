@@ -39,7 +39,9 @@ import { setMentorCapacityAction } from "@/app/actions/mentor-capacity";
 import { ROUND2_MENTOR_CAP } from "@/lib/matching-round2-core";
 import { MENTOR_CAPACITY_MAX, mentorCapacityEditState, mentorCapacityView, storedMentorCapacity } from "@/lib/mentor-capacity";
 import { MENTOR_CAPACITY_SEASON_CODE } from "@/lib/mentor-capacity-admin";
-import { canEditMentorCapacity } from "@/lib/permissions";
+import { displayMemberCode } from "@/lib/member-code-core";
+import { canEditMentorCapacity, canManageMemberCode } from "@/lib/permissions";
+import { MemberCodePanel } from "./member-code-panel";
 import type { Event, EventParticipation, FunctionArea, Industry, Match, MenteeProfile, MentorProfile, MentoringRecap, OperationalTeamAssignment, Person, Program, Season } from "@/lib/types";
 import { displayAdminNote, displayCode, displayOptional, displayText, formatDate, text } from "@/lib/utils";
 import { SubmitButton } from "@/components/submit-button";
@@ -448,6 +450,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
     <>
       <PageHeader title={text(person.data.full_name, "Hồ sơ cá nhân")} description={text(person.data.email_primary)} />
       <ErrorBox message={error} />
+      <MemberCodePanel personId={params.id} memberCode={person.data.member_code ?? null} canManage={canManageMemberCode(adminUser?.role)} />
 
       {allowRecapEdit && (menteeProfile || mentorProfile) ? (
         <div className="mb-4 flex flex-wrap gap-2">
@@ -803,7 +806,8 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
               </div>
               <DetailGrid
                 rows={[
-                  ["Mã mentor", mentorProfile.mentor_code],
+                  ["Mã cũ", mentorProfile.mentor_code],
+                  ["Năm bắt đầu tham gia chương trình mentoring thuộc VAM", mentorProfile.first_joined_year],
                   ["Công ty hiện tại", mentorProfile.company_current],
                   ["Chức danh hiện tại", mentorProfile.title_current],
                   ["Số năm kinh nghiệm", mentorProfile.years_experience_min],
@@ -838,7 +842,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
           {menteeProfile ? (
             <DetailGrid
               rows={[
-                ["Mã mentee", menteeProfile.mentee_code],
+                ["Mã cũ", menteeProfile.mentee_code],
                 ["Mã trường", displayCode(menteeProfile.school_code)],
                 ["Trường theo dữ liệu gốc", displayText(menteeProfile.school_raw)],
                 ["Ngành học", displayText(menteeProfile.major)],
@@ -882,7 +886,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
                 columns={[
                   { key: "mentee_name", label: "Tên mentee", render: (row) => displayText(row.mentee?.full_name) },
                   { key: "mentee_email", label: "Email mentee", render: (row) => <TruncatedText value={row.mentee?.email_primary} truncate /> },
-                  { key: "mentee_code", label: "Mã mentee", render: (row) => displayCode(row.menteeProfile?.mentee_code) },
+                  { key: "mentee_code", label: "Mã thành viên", render: (row) => displayMemberCode(row.mentee?.member_code, row.menteeProfile?.mentee_code) ?? "-" },
                   { key: "school_code", label: "Mã trường", render: (row) => displayCode(row.menteeProfile?.school_code) },
                   { key: "major", label: "Ngành học", render: (row) => displayText(row.menteeProfile?.major) },
                   { key: "season_code", label: "Mùa", render: (row) => displayCode(row.season?.code ?? row.season?.name) },
@@ -911,7 +915,7 @@ export default async function PersonDetailPage(props: { params: Promise<{ id: st
                 columns={[
                   { key: "mentor_name", label: "Tên mentor", render: (row) => displayText(row.mentor?.full_name) },
                   { key: "mentor_email", label: "Email mentor", render: (row) => <TruncatedText value={row.mentor?.email_primary} truncate /> },
-                  { key: "mentor_code", label: "Mã mentor", render: (row) => displayCode(row.mentorProfile?.mentor_code) },
+                  { key: "mentor_code", label: "Mã thành viên", render: (row) => displayMemberCode(row.mentor?.member_code, row.mentorProfile?.mentor_code) ?? "-" },
                   { key: "company_current", label: "Công ty hiện tại", render: (row) => displayText(row.mentorProfile?.company_current) },
                   { key: "title_current", label: "Chức danh hiện tại", render: (row) => displayText(row.mentorProfile?.title_current) },
                   { key: "season_code", label: "Mùa", render: (row) => displayCode(row.season?.code ?? row.season?.name) },

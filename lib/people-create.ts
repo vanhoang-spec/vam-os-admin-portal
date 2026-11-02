@@ -3,6 +3,7 @@ import "server-only";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getScopedPersonIds } from "@/lib/data";
+import { parseStartYear } from "@/lib/member-code-core";
 import { isValidUuid } from "@/lib/events";
 import { normalizeEmail } from "@/lib/identity";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter, getAllowedProgramIds, type AdminScopeContext, type ScopeFilter } from "@/lib/program-scope";
@@ -24,7 +25,7 @@ export type CreateMentorInput = {
   phone?: unknown;
   gender?: unknown;
   person_notes?: unknown;
-  mentor_code?: unknown;
+  first_joined_year?: unknown;
   company_current?: unknown;
   title_current?: unknown;
   years_experience_min?: unknown;
@@ -43,7 +44,7 @@ export type UpdateMentorInput = {
   email?: unknown;
   phone?: unknown;
   gender?: unknown;
-  mentor_code?: unknown;
+  first_joined_year?: unknown;
   company_current?: unknown;
   title_current?: unknown;
   years_experience_min?: unknown;
@@ -63,7 +64,6 @@ export type CreateMenteeInput = {
   phone?: unknown;
   gender?: unknown;
   person_notes?: unknown;
-  mentee_code?: unknown;
   school_code?: unknown;
   school_raw?: unknown;
   major?: unknown;
@@ -79,7 +79,6 @@ export type UpdateMenteeInput = {
   email?: unknown;
   phone?: unknown;
   gender?: unknown;
-  mentee_code?: unknown;
   school_code?: unknown;
   school_raw?: unknown;
   major?: unknown;
@@ -402,6 +401,8 @@ async function existingMenteeProfile(client: any, personId: string): Promise<Men
 }
 
 export async function createMentorProfile(input: CreateMentorInput): Promise<MutationResult> {
+  const startYear = parseStartYear(input.first_joined_year);
+  if (!startYear.ok) return { ok: false, message: "Năm bắt đầu phải là số năm từ 2016 trở đi." };
   const access = await requireAdmin();
   if (!access.ok) return { ok: false, message: access.message };
   const { client, error } = clientResult();
@@ -435,7 +436,6 @@ export async function createMentorProfile(input: CreateMentorInput): Promise<Mut
 
   const payload: JsonRecord = {
     person_id: person.person.id,
-    mentor_code: clean(input.mentor_code),
     company_current: clean(input.company_current),
     title_current: clean(input.title_current),
     industry: primaryIndustryName,
@@ -444,6 +444,7 @@ export async function createMentorProfile(input: CreateMentorInput): Promise<Mut
     years_experience_text: clean(input.years_experience_text),
     bio_url: clean(input.bio_url),
     first_vam_season: clean(input.first_vam_season),
+    first_joined_year: startYear.value,
     years_in_vam: cleanInt(input.years_in_vam)
   };
 
@@ -493,6 +494,8 @@ export async function createMentorProfile(input: CreateMentorInput): Promise<Mut
 }
 
 export async function updateMentorProfile(input: UpdateMentorInput): Promise<MutationResult> {
+  const startYear = parseStartYear(input.first_joined_year);
+  if (!startYear.ok) return { ok: false, message: "Năm bắt đầu phải là số năm từ 2016 trở đi." };
   const access = await requireAdmin();
   if (!access.ok) return { ok: false, message: access.message };
   const { client, error } = clientResult();
@@ -586,8 +589,8 @@ export async function updateMentorProfile(input: UpdateMentorInput): Promise<Mut
     personAfter = (updatedPerson as Person) ?? personBefore;
   }
 
+  // Mã cũ không đi qua biểu mẫu này: luồng gia hạn tra mentor_code để nhận ra người cũ.
   const mentorUpdates: JsonRecord = {
-    mentor_code: clean(input.mentor_code),
     company_current: clean(input.company_current),
     title_current: clean(input.title_current),
     industry: primaryIndustryName,
@@ -596,6 +599,7 @@ export async function updateMentorProfile(input: UpdateMentorInput): Promise<Mut
     years_experience_text: clean(input.years_experience_text),
     bio_url: clean(input.bio_url),
     first_vam_season: clean(input.first_vam_season),
+    first_joined_year: startYear.value,
     years_in_vam: cleanInt(input.years_in_vam)
   };
 
@@ -671,7 +675,6 @@ export async function createMenteeProfile(input: CreateMenteeInput): Promise<Mut
 
   const payload: JsonRecord = {
     person_id: person.person.id,
-    mentee_code: clean(input.mentee_code),
     school_code: clean(input.school_code),
     school_raw: clean(input.school_raw),
     major: clean(input.major),
@@ -787,7 +790,6 @@ export async function updateMenteeProfile(input: UpdateMenteeInput): Promise<Mut
   const careerInterests = clean(input.career_interests);
 
   const menteeUpdates: JsonRecord = {
-    mentee_code: clean(input.mentee_code),
     school_code: clean(input.school_code),
     school_raw: clean(input.school_raw),
     major: clean(input.major),

@@ -2812,7 +2812,7 @@ export async function getReviewerPool(filters?: {
       "people",
       "id",
       personIds,
-      "id,full_name,email_primary"
+      "id,full_name,email_primary,member_code"
     ),
     selectInChunks<JsonRecord>(
       "people",
@@ -2835,13 +2835,13 @@ export async function getReviewerPool(filters?: {
 
   const allPeopleRows = [...peopleByIdRes.data, ...peopleByEmailRes.data];
 
-  const peopleById = new Map<string, { id: string; full_name: string | null; email_primary: string | null }>();
+  const peopleById = new Map<string, { id: string; full_name: string | null; email_primary: string | null; member_code?: string | null }>();
   const peopleByEmailPrimary = new Map<string, string>(); // normalized email -> person_id
 
   for (const p of allPeopleRows) {
     const id = p.id as string;
     const email = String((p as any).email_primary ?? "").trim().toLowerCase();
-    peopleById.set(id, p as unknown as { id: string; full_name: string | null; email_primary: string | null });
+    peopleById.set(id, p as unknown as { id: string; full_name: string | null; email_primary: string | null; member_code?: string | null });
     if (email) peopleByEmailPrimary.set(email, id);
   }
 
@@ -2874,6 +2874,7 @@ export async function getReviewerPool(filters?: {
         full_name: displayName || null,
         email_primary: person?.email_primary ?? null,
         mentor_code: mentor.mentor_code,
+        member_code: (person?.member_code as string | null | undefined) ?? null,
         intake_batch_id: mentor.intake_batch_id,
         admin_user_id: adminUser?.id ?? null,
         admin_user_role: adminUser?.role ?? null,

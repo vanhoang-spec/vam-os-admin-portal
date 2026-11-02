@@ -195,6 +195,9 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Mã thành viên UEH: admin cấp và sửa tay — migration 20261101200000_ma_thanh_vien_ueh.sql, đã có trên Production.
+  "vam124_assign_member_code",
+  "vam124_set_member_code",
   // Form tùy chỉnh ↔ Sự kiện (VAM00008): ghi đăng ký / câu trả lời dưới khoá chỗ — migration
   // 20261030120000_form_su_kien.sql, phải dán Production TRƯỚC khi merge.
   "vam_custom_form_event_register",
