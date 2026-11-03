@@ -58,7 +58,8 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Mentor: mục B chọn “Mức độ phù hợp về kỳ vọng của Mentee” và ghi “Concern / Note” (bắt buộc); mục C chọn có muốn nhận bạn này không và ghi chân dung Mentor phù hợp.",
       "Mentor: bấm “Xác nhận kết quả” — lưu là chốt ngay; sửa sau bằng “Sửa kết quả / lựa chọn mentee” (cần lý do sửa).",
       "Support/BTC: quét mã QR (tự check-in) hoặc tìm theo tên/SĐT rồi “Xác nhận check-in”; sau đó chọn Phòng (theo tên phòng của ca, ví dụ B1.504), Bàn, Người phỏng vấn và “Lưu phân bàn”. Mentor thấy tên phòng ngay trên danh sách và trong hồ sơ. Bàn / mentor đang có bạn chưa có kết quả thì hệ thống chỉ nhắc tên bạn đó, vẫn lưu được.",
-      "Support/BTC: trước check-in có thể “Đổi ca phỏng vấn” (kể cả sau hạn tự đổi ca, bắt buộc lý do) hoặc “Huỷ lịch đăng ký”; tick “Phỏng vấn ONLINE” khi mentee không có mặt trực tiếp."
+      "Support/BTC: trước check-in có thể “Đổi ca phỏng vấn” (kể cả sau hạn tự đổi ca, bắt buộc lý do) hoặc “Huỷ lịch đăng ký”; tick “Phỏng vấn ONLINE” khi mentee không có mặt trực tiếp.",
+      "Super admin / Admin / Core team: bấm “Xuất Excel hồ sơ và đánh giá” đầu trang → lọc theo mentee, người đánh giá và kết quả của từng vòng (các điều kiện kết hợp cùng lúc), tick một số bạn hoặc để trống để xuất tất cả bạn đang lọc → “Xuất Excel”. File gồm một sheet, mỗi mentee một dòng, ba nhóm cột có màu riêng (hồ sơ · đánh giá vòng hồ sơ · đánh giá vòng phỏng vấn) và dùng được Filter / Sort của Excel."
     ],
     notes: [
       "Mỗi lần màn hình hiện MỘT đợt phỏng vấn (đợt 1 · 03–04/10, đợt 2 · 10–11/10): mặc định là đợt đang diễn ra hoặc sắp tới; chọn đợt khác bằng các nút đầu trang hoặc mục con dưới “Phỏng vấn mentee trực tiếp” trên menu. “Đổi ca phỏng vấn” vẫn chọn được ca của đợt khác.",
@@ -67,9 +68,10 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Màn hình mentor không hiện tổng điểm — phiếu không cộng tổng, không có điểm sàn. Điểm quy đổi tham khảo chỉ BTC thấy.",
       "Nút “Hướng dẫn phỏng vấn mùa này” đầu trang mở Handbook và toàn bộ phiếu chấm của mùa.",
       "Danh sách xếp theo ca; trong mỗi ca ai check-in trước đứng trước (cùng giờ theo tên), bạn chưa đến đứng sau. Cột “Check-in / Bàn” hiện giờ đến và tài khoản Support/BTC đã check-in.",
-      "Phiếu đang chấm tự lưu nháp trên máy (điện thoại/laptop) của mentor: lỡ chuyển tab, chuyển app hay tải lại trang thì mở lại hồ sơ là thấy “Đã khôi phục bản nháp”. Nháp chỉ là bản tạm — phải bấm “Xác nhận kết quả” mới lưu; lưu thành công thì nháp tự xoá, nháp quá 24 giờ cũng tự xoá."
+      "Phiếu đang chấm tự lưu nháp trên máy (điện thoại/laptop) của mentor: lỡ chuyển tab, chuyển app hay tải lại trang thì mở lại hồ sơ là thấy “Đã khôi phục bản nháp”. Nháp chỉ là bản tạm — phải bấm “Xác nhận kết quả” mới lưu; lưu thành công thì nháp tự xoá, nháp quá 24 giờ cũng tự xoá.",
+      "File Excel chỉ lấy dữ liệu hiện tại và người đánh giá hiện tại (phiếu của người đã được thay không có mặt); vòng nào chưa có phiếu thì để trống; CV và tệp đính kèm xuất dưới dạng đường dẫn. File có họ tên, email, SĐT, MSSV và nhận xét của nhiều người — chỉ dùng nội bộ."
     ],
-    updated: "07/10/2026"
+    updated: "03/11/2026"
   },
   "/interviews/mentee-offline/huong-dan": {
     title: "Hướng dẫn phỏng vấn mùa này",
