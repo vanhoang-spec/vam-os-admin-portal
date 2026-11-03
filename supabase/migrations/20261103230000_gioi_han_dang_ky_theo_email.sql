@@ -42,6 +42,9 @@
 
 begin;
 
+-- Bảng nhỏ, nhưng một lệnh ALTER chờ sau một truy vấn dài sẽ chặn mọi lượt đăng ký phía sau nó.
+set local lock_timeout = '10s';
+
 do $prereq$
 begin
   if to_regclass('public.events') is null then
