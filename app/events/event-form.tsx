@@ -401,6 +401,49 @@ export function EventForm({
           )}
         </div>
 
+        {/* VAM00015: giới hạn số lần một email được đăng ký. Để trống là không giới hạn. */}
+        <div className="mb-4 border-t border-slate-200 pt-4" data-registration-limit>
+          <span className="text-sm font-medium">Giới hạn số lần đăng ký theo email</span>
+          <div className="mt-2 grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-xs text-slate-500">Số lần tối đa mỗi email (để trống = không giới hạn)</span>
+              <input
+                type="number"
+                name="registration_limit_per_email"
+                min={1}
+                step={1}
+                defaultValue={event?.registration_limit_per_email ?? ""}
+                className="mt-1 w-full rounded border px-3 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-slate-500">Tính trong</span>
+              <select
+                name="registration_limit_scope"
+                defaultValue={event?.registration_limit_scope === "series" && event?.series_id ? "series" : "event"}
+                className="mt-1 w-full rounded border px-3 py-1.5 text-sm"
+              >
+                <option value="event">Một sự kiện</option>
+                {mode === "create" || event?.series_id ? <option value="series">Toàn bộ chuỗi sự kiện</option> : null}
+              </select>
+            </label>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Chỉ tính đăng ký qua form công khai; vãng lai và BTC nhập tay không bị giới hạn. Huỷ đăng ký thì được hoàn lượt.
+            Trong một buổi, mỗi email vốn chỉ giữ một đăng ký còn hiệu lực (nộp lại là ghi đè), nên “Một sự kiện” chỉ nhận số 1.
+            “Toàn bộ chuỗi” đếm trên mọi buổi của chuỗi: số 1 nghĩa là chỉ được đăng ký một buổi, số 2 là hai buổi.
+            {mode === "create" ? " “Toàn bộ chuỗi” chỉ dùng được khi bạn tick lặp lại ở trên để tạo chuỗi." : ""}
+          </p>
+          {event?.series_id ? (
+            <label className="mt-2 flex items-start gap-2">
+              <input type="checkbox" name="registration_limit_apply_to_series" value="true" className="mt-1" />
+              <span className="text-xs text-slate-600">
+                Áp giới hạn này cho mọi buổi của chuỗi (giới hạn theo chuỗi chỉ đúng khi các buổi cùng một giá trị).
+              </span>
+            </label>
+          ) : null}
+        </div>
+
         {/* Khung giờ check-in */}
         <div className="mb-4 border-t border-slate-200 pt-4">
           <label className="flex items-start gap-2 mb-2">

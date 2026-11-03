@@ -802,9 +802,10 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     notes: [
       "Support team chỉ xem danh sách; “Chi tiết”, “Quản lý tham gia”, “Tạo sự kiện”, “Sửa” dành cho Super admin, Admin, Core team.",
       "Buổi Orientation cho Mentor có thêm dòng “Cũ … · Mới …” ở cột “Đăng ký”: mentor cũ là email trùng người từng làm mentor ở mùa khác.",
-      "Sự kiện đã hủy chỉ hiện khi chọn “Trạng thái” là “Đã hủy” hoặc “Tất cả”."
+      "Sự kiện đã hủy chỉ hiện khi chọn “Trạng thái” là “Đã hủy” hoặc “Tất cả”.",
+      "Ở form “Tạo sự kiện” / “Sửa”, mục “Giới hạn số lần đăng ký theo email”: để trống là không giới hạn; chọn “Toàn bộ chuỗi” và nhập 1 thì mỗi email chỉ được đăng ký một buổi trong chuỗi, nhập 2 thì hai buổi. Huỷ đăng ký thì được hoàn lượt. Chỉ áp cho đăng ký qua form công khai, không áp cho vãng lai hay BTC nhập tay. Khi sửa một buổi của chuỗi, tick “Áp giới hạn này cho mọi buổi của chuỗi” để các buổi cùng một giá trị."
     ],
-    updated: "02/10/2026"
+    updated: "03/11/2026"
   },
   "/data-issues": {
     title: "Rà soát dữ liệu",

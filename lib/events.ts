@@ -25,6 +25,12 @@ import { checkinCodeUrl, usesQrCheckin } from "@/lib/event-checkin-code";
 import { DEFAULT_CHECKIN_STEPS, parseCheckinStepsInput, type StepsInput } from "@/lib/event-checkin-steps";
 import { chooseSession } from "@/lib/event-session-choice";
 import { findExistingRegistration } from "@/lib/event-registration-match";
+import {
+  isRegistrationLimitError,
+  parseRegistrationLimitInput,
+  readRegistrationLimit,
+  registrationLimitReachedMessage
+} from "@/lib/event-registration-limit-core";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
 import { chronologicalSeriesSlots, seriesRenumberWrites } from "@/lib/event-series-core";
@@ -193,6 +199,11 @@ export type EventInput = {
   capacity_limit_enabled?: unknown;
   capacity_limit?: unknown;
   waitlist_enabled?: unknown;
+  /** VAM00015: một email được đăng ký tối đa bấy nhiêu lần; rỗng là không giới hạn. Xem event-registration-limit-core. */
+  registration_limit_per_email?: unknown;
+  registration_limit_scope?: unknown;
+  /** Chỉ khi sửa một buổi của chuỗi: "true" thì ghi giới hạn này cho mọi buổi của chuỗi. */
+  registration_limit_apply_to_series?: unknown;
   allow_walk_in?: unknown;
   qr_checkin_enabled?: unknown;
   /** Các lần quét mã QR. Chỉ có mặt khi form gửi phần thiết lập — xem `parseCheckinStepsInput`. */
@@ -1238,6 +1249,15 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   if (existing) {
     const { data: updatedRow, error: updateError } = await applyUpdate(existing.row.id);
     if (updateError) {
+      // Khớp bằng số điện thoại nhưng email mới đã đăng ký đủ số lần cho phép của chuỗi (VAM00015).
+      if (isRegistrationLimitError(updateError)) {
+        return {
+          ok: false,
+          status: "limit_reached",
+          message: registrationLimitReachedMessage(readRegistrationLimit(targetEvent as JsonRecord)),
+          eventName: targetEvent.event_name ?? null
+        };
+      }
       // Khớp bằng số điện thoại, nhưng email mới lại trùng một đăng ký KHÁC của
       // cùng buổi: hai người khác nhau, nên không ghi đè ai cả.
       if ((updateError as { code?: string }).code === "23505") {
@@ -1262,6 +1282,17 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
       .maybeSingle();
 
     if (insertError) {
+      // VAM00015: email này đã đăng ký đủ số lần sự kiện (hoặc chuỗi) cho phép. Chốt chặn nằm ở
+      // database, nên hai lần bấm gần nhau ở hai buổi cũng không cùng lọt qua; ở đây chỉ nói lại
+      // cho người đăng ký bằng lời dễ hiểu, không phải "lỗi hệ thống".
+      if (isRegistrationLimitError(insertError)) {
+        return {
+          ok: false,
+          status: "limit_reached",
+          message: registrationLimitReachedMessage(readRegistrationLimit(targetEvent as JsonRecord)),
+          eventName: targetEvent.event_name ?? null
+        };
+      }
       if ((insertError as { code?: string }).code === "23505") {
         // Hai lần bấm gửi gần nhau: dòng kia vừa được tạo giữa lúc đọc và ghi.
         // Ràng buộc một-email-một-buổi là thứ bắt được, và việc đúng vẫn là ghi
@@ -2537,6 +2568,13 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     : { ok: true, steps: DEFAULT_CHECKIN_STEPS.slice() };
   if (!checkinSteps.ok) return { ok: false, message: checkinSteps.message };
 
+  // VAM00015. Một buổi của chuỗi đã mang series_id từ createEventSeries; sự kiện lẻ chưa có chuỗi
+  // thì phạm vi "chuỗi" tự về "sự kiện".
+  const registrationLimit = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope, {
+    inSeries: Boolean(clean(input.series_id))
+  });
+  if (!registrationLimit.ok) return { ok: false, message: registrationLimit.message };
+
   const payload: JsonRecord = {
     season_id: seasonId,
     intake_batch_id: intakeBatchId,
@@ -2559,6 +2597,8 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     capacity_limit_enabled: String(input.capacity_limit_enabled) === "true",
     capacity_limit: input.capacity_limit ? Number(input.capacity_limit) : null,
     waitlist_enabled: String(input.waitlist_enabled) === "true",
+    registration_limit_per_email: registrationLimit.value.limit,
+    registration_limit_scope: registrationLimit.value.scope,
     allow_walk_in: String(input.allow_walk_in) !== "false",
     qr_checkin_enabled: String(input.qr_checkin_enabled) !== "false",
     checkin_steps: checkinSteps.steps,
@@ -2634,6 +2674,11 @@ export async function createEventSeries(
 
   const rule = readRecurrenceInput(input);
   if (!rule.ok) return { ok: false, message: rule.message };
+
+  // Kiểm giới hạn đăng ký MỘT lần trước khi sinh buổi nào, để một ô nhập sai không thành N lời báo lỗi
+  // giống hệt nhau (mỗi buổi gọi lại createEvent và kiểm lại cùng ô đó).
+  const seriesLimit = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope, { inSeries: true });
+  if (!seriesLimit.ok) return { ok: false, message: seriesLimit.message };
 
   const generated = generateOccurrences({
     startsAt,
@@ -2854,6 +2899,19 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
     }
   });
 
+  // VAM00015: đường ghi hẹp. Chỉ khi form có gửi ô này mới đổi giới hạn đăng ký; một lời gọi không có
+  // ô này không được xoá giới hạn BTC đã đặt.
+  let limitWrite: { limit: number | null; scope: "event" | "series" } | null = null;
+  if (Object.prototype.hasOwnProperty.call(input, "registration_limit_per_email")) {
+    const parsed = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope, {
+      inSeries: Boolean(clean(before.series_id))
+    });
+    if (!parsed.ok) return { ok: false, message: parsed.message };
+    limitWrite = parsed.value;
+    updates.registration_limit_per_email = parsed.value.limit;
+    updates.registration_limit_scope = parsed.value.scope;
+  }
+
   const dateFields = ["checkin_opens_at", "checkin_closes_at"];
   dateFields.forEach(f => {
     if (Object.prototype.hasOwnProperty.call(input, f)) {
@@ -2880,11 +2938,26 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   const seriesId = clean(before.series_id);
   if (!seriesId) return { ok: true, message: "Đã cập nhật sự kiện.", data: after };
 
+  // VAM00015: giới hạn theo chuỗi chỉ có nghĩa khi mọi buổi cùng một giá trị, nên người sửa được chọn
+  // áp luôn cho các buổi còn lại. Chỉ ghi đúng hai cột giới hạn, không đụng cột nào khác của các buổi đó.
+  let limitNote = "";
+  if (limitWrite && String(input.registration_limit_apply_to_series) === "true") {
+    const { error: siblingLimitError } = await client
+      .from("events")
+      .update({ registration_limit_per_email: limitWrite.limit, registration_limit_scope: limitWrite.scope })
+      .eq("series_id", seriesId);
+    limitNote = siblingLimitError
+      ? "Giới hạn đăng ký mới được lưu cho buổi này nhưng chưa áp được cho các buổi khác của chuỗi — lưu lại để thử lần nữa."
+      : "Giới hạn đăng ký đã áp cho mọi buổi của chuỗi.";
+    if (siblingLimitError) log("update series registration limit failed", siblingLimitError);
+  }
+  const withNote = (message: string) => (limitNote ? `${message} ${limitNote}` : message);
+
   const renumbered = await renumberSeries(client, seriesId);
   if (!renumbered) {
     return {
       ok: true,
-      message: "Đã cập nhật sự kiện. Chưa sắp lại được thứ tự các buổi trong chuỗi — bấm lưu thêm một lần để hệ thống sắp lại.",
+      message: withNote("Đã cập nhật sự kiện. Chưa sắp lại được thứ tự các buổi trong chuỗi — bấm lưu thêm một lần để hệ thống sắp lại."),
       data: after
     };
   }
@@ -2894,11 +2967,11 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   if (nextIndex && nextIndex !== previousIndex) {
     return {
       ok: true,
-      message: `Đã cập nhật sự kiện. Thứ tự các buổi trong chuỗi đã được sắp lại theo thời gian: buổi này giờ là Buổi ${nextIndex}/${renumbered.total}.`,
+      message: withNote(`Đã cập nhật sự kiện. Thứ tự các buổi trong chuỗi đã được sắp lại theo thời gian: buổi này giờ là Buổi ${nextIndex}/${renumbered.total}.`),
       data: after ? { ...after, series_index: nextIndex, series_total: renumbered.total } : after
     };
   }
-  return { ok: true, message: "Đã cập nhật sự kiện.", data: after };
+  return { ok: true, message: withNote("Đã cập nhật sự kiện."), data: after };
 }
 
 export async function addParticipation(input: ParticipationInput): Promise<MutationResult> {
