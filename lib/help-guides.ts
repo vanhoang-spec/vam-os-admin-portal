@@ -14,9 +14,9 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
   "/bao-loi": {
     title: "Báo lỗi / góp ý cho VAM OS",
     summary:
-      "Gửi cho ban xử lý mọi trục trặc gặp trên VAM OS, hoặc điểm nào cần làm tốt hơn: trên máy tính bấm nút cam “Báo lỗi” ở góc dưới bên trái bất kỳ trang nào; trên điện thoại (nút này được ẩn) mở link os.alumni-mentoring.edu.vn/bao-loi.",
+      "Gửi cho ban xử lý mọi trục trặc gặp trên VAM OS, hoặc điểm nào cần làm tốt hơn: bấm nút cam “Báo lỗi” ở thanh trên cùng, cạnh nút Hướng dẫn sử dụng, ở bất kỳ trang nào; trên điện thoại (nút này được ẩn) mở link os.alumni-mentoring.edu.vn/bao-loi.",
     steps: [
-      "Máy tính: đang ở đúng trang bị lỗi thì bấm nút cam “Báo lỗi” ở góc dưới bên trái — VAM OS tự ghi lại trang bạn đang mở. Điện thoại: mở os.alumni-mentoring.edu.vn/bao-loi và ghi tên trang bị lỗi vào mô tả.",
+      "Máy tính: đang ở đúng trang bị lỗi thì bấm nút cam “Báo lỗi” ở thanh trên cùng, cạnh nút Hướng dẫn sử dụng — VAM OS tự ghi lại trang bạn đang mở. Điện thoại: mở os.alumni-mentoring.edu.vn/bao-loi và ghi tên trang bị lỗi vào mô tả.",
       "Chọn “Vấn đề là gì?”: lỗi trang, hiển thị sai, dữ liệu sai, gửi thư, đăng nhập… hoặc “Đề xuất cải thiện” nếu là điểm cần làm tốt hơn.",
       "Ghi “Tiêu đề” ngắn và “Mô tả”: bạn đang làm gì, bấm vào đâu, thấy gì, đúng ra phải thế nào (góp ý thì ghi điều mong muốn và vì sao).",
       "Thêm tối đa 5 hình chụp màn hình: bấm ô hình, kéo thả, hoặc chụp xong bấm Ctrl + V dán thẳng vào hộp. Máy tính: Windows + Shift + S; điện thoại: nút nguồn + giảm âm lượng.",
