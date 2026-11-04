@@ -361,6 +361,10 @@ export type Event = JsonRecord & {
   capacity_limit?: number | null;
   /** When capacity is full, route new registrations to waitlisted. */
   waitlist_enabled?: boolean | null;
+  /** VAM00015: một email được đăng ký tối đa bấy nhiêu lần; null là không giới hạn. */
+  registration_limit_per_email?: number | null;
+  /** VAM00015: "event" hoặc "series" — đếm trong sự kiện này hay trên cả chuỗi. */
+  registration_limit_scope?: "event" | "series" | string | null;
   /** If false, walk-in check-in is blocked. Default: true (open behaviour). */
   allow_walk_in?: boolean | null;
   /**

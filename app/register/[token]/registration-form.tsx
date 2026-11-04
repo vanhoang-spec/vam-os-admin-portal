@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { keepFormValues } from "@/lib/keep-form-values";
 import { initialPublicRegistrationActionState } from "@/lib/event-action-types";
+import { readRegistrationLimit, registrationLimitNotice } from "@/lib/event-registration-limit-core";
 import { submitEventRegistrationAction } from "./actions";
 import type { SessionOption } from "@/lib/events";
 import { formatTimeRange } from "@/lib/utils";
@@ -88,6 +89,12 @@ export function RegistrationForm({
   const chosenSession =
     sessions?.find((session) => session.id === sessionChoice)?.id ?? fallbackSession?.id ?? "";
 
+  // VAM00015: BTC có thể đặt "một email đăng ký tối đa N lần". Nói trước cho người đăng ký, đừng để
+  // họ chỉ biết khi bị từ chối; chuỗi có giới hạn thì câu "đăng ký cả hai buổi" phía dưới không còn đúng.
+  const registrationLimit = readRegistrationLimit(event as unknown as Record<string, unknown>);
+  const limitNotice = registrationLimitNotice(registrationLimit);
+  const seriesLimited = registrationLimit.limit !== null && registrationLimit.scope === "series";
+
   if (state.status === "success") {
     return (
       <div className="rounded-lg border border-green-200 bg-green-50 p-5 text-green-800">
@@ -118,14 +125,22 @@ export function RegistrationForm({
         </div>
       ) : null}
 
+      {limitNotice ? (
+        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" data-registration-limit-notice>
+          {limitNotice}
+        </p>
+      ) : null}
+
       {sessions && sessions.length ? (
         <fieldset className="rounded-md border border-vam-line bg-slate-50 p-3">
           <legend className="px-1 text-sm font-medium text-slate-700">
             Bạn đăng ký tham dự buổi nào?
           </legend>
           <p className="mb-2 text-xs text-slate-500">
-            Bạn có thể đăng ký cả hai buổi — mỗi lần gửi là một buổi. Đăng ký lại bằng cùng email hoặc
-            cùng số điện thoại sẽ cập nhật đăng ký trước đó của buổi đã chọn.
+            {seriesLimited
+              ? "Mỗi lần gửi là một buổi."
+              : "Bạn có thể đăng ký cả hai buổi — mỗi lần gửi là một buổi."}{" "}
+            Đăng ký lại bằng cùng email hoặc cùng số điện thoại sẽ cập nhật đăng ký trước đó của buổi đã chọn.
           </p>
           <div className="flex flex-col gap-2">
             {sessions.map((session, index) => {

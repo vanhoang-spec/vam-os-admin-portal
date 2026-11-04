@@ -58,7 +58,9 @@ export type RegistrationActionStatus =
   /** Capacity full; registration placed on waitlist (waitlist_enabled = true). */
   | "waitlisted"
   /** Capacity full and waitlist disabled; registration rejected. */
-  | "capacity_full";
+  | "capacity_full"
+  /** VAM00015: email đã đăng ký đủ số lần sự kiện (hoặc chuỗi sự kiện) cho phép. */
+  | "limit_reached";
 
 export type PublicRegistrationActionState = {
   ok: boolean;
