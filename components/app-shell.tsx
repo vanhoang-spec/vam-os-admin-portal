@@ -75,6 +75,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   applications: ClipboardList,
   "sub:mentor": UserRoundCheck,
   "sub:mentee": UserRoundSearch,
+  "sub:matching": Handshake,
   admin: Settings2,
   operations: LineChart,
 };

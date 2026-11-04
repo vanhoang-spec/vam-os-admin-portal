@@ -642,15 +642,15 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Huỷ cặp: bấm “Hủy match” trên dòng đang đồng hành, ghi lý do (tuỳ chọn), bấm “Xác nhận hủy”. Bấm “Chi tiết” để xem thông tin match."
     ],
     notes: [
-      "Trên menu: Tuyển Mentor/Mentee → Ghép cặp — bước cuối của tuyển sinh mỗi mùa (trước 06/10/2026 là mục riêng ở menu chính).",
+      "Trên menu: Tuyển Mentor/Mentee → Ghép cặp → Danh sách cặp — bước cuối của tuyển sinh mỗi mùa (trước 06/10/2026 là mục riêng ở menu chính). Từ 03/11/2026 “Ghép cặp” là một nhánh gập mở được như Tuyển Mentor, Tuyển Mentee, gồm: Danh sách cặp, Phân nhóm ngành, Báo cáo, Kết quả ghép cặp.",
       "Xem: Super admin, Admin, Core team, Support team. Tạo và huỷ match: chỉ Super admin, Admin, Core team.",
       "Mentor và mentee phải được duyệt chính thức trong mùa của đợt tuyển. Mỗi mentee chỉ có một mentor đang active; mentor đã đủ sức nhận hiện “FULL” và không chọn được.",
       "Huỷ match chuyển cặp sang “Đã dừng”, lịch sử không bị xoá. Muốn đổi mentor cho một mentee: huỷ match cũ trước rồi tạo match mới.",
       "Vòng 1 = mentee được người phỏng vấn nhận ngay tại buổi phỏng vấn, ở mọi đợt (03–04/10, 10–11/10, …). Hệ thống tự gắn nhãn lúc người phỏng vấn nộp phiếu “Có – Tôi muốn nhận”; không ai phải gắn tay.",
       "Cặp tạo bằng “Tạo matching thủ công” hiện “Chưa gắn vòng”.",
-      "Vòng 2: mentor tự chọn mentee cùng nhóm ngành — xem hai mục con “Vòng 2 · Phân nhóm ngành” và “Vòng 2 · Báo cáo”."
+      "Vòng 2: mentor tự chọn mentee cùng nhóm ngành — xem hai mục “Phân nhóm ngành” và “Báo cáo” trong nhánh Ghép cặp (tên hai trang là “Vòng 2 · Phân nhóm ngành” và “Vòng 2 · Báo cáo”)."
     ],
-    updated: "07/10/2026"
+    updated: "03/11/2026"
   },
   "/matches/vong-2": {
     title: "Vòng 2 · Phân nhóm ngành",

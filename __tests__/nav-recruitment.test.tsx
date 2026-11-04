@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentAdminUser } from "@/lib/auth-constants";
 import {
+  MATCHING_NAV_KEY,
+  MATCHING_NAV_LABEL,
   MENTEE_RECRUITMENT_LABEL,
   MENTOR_RECRUITMENT_LABEL,
   RECRUITMENT_NAV_LABEL,
@@ -65,7 +67,7 @@ describe("cấu trúc theo vai trò", () => {
         "Phiếu chấm & hướng dẫn mentee", "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee",
         "Phỏng vấn mentee trực tiếp", "Duyệt Mentee S12", "Mentee đặc cách (Support team)", "Điểm cộng theo ngày nộp"
       ]],
-      "Ghép cặp"
+      [MATCHING_NAV_LABEL, ["Danh sách cặp", "Phân nhóm ngành", "Báo cáo", "Kết quả ghép cặp"]]
     ]);
   });
 
@@ -92,13 +94,28 @@ describe("cấu trúc theo vai trò", () => {
     }
   });
 
-  it("“Ghép cặp” gom các trang ghép cặp, mục con không lặp tiền tố “Vòng 2 ·” (VAM00006)", () => {
-    const children = (role: Parameters<typeof recruitment>[0]) => {
-      const entry = (recruitment(role)?.items ?? []).find((e) => !isNavSubGroup(e) && e.href === "/matches");
-      return entry && !isNavSubGroup(entry) ? (entry.children ?? []).map((c) => c.label) : [];
+  it("“Ghép cặp” là nhánh con như Tuyển Mentor, gom các trang ghép cặp, mục không lặp tiền tố “Vòng 2 ·” (VAM00006, VAM00022)", () => {
+    const items = (role: Parameters<typeof recruitment>[0]) => {
+      const entry = (recruitment(role)?.items ?? []).find((e) => isNavSubGroup(e) && e.key === MATCHING_NAV_KEY);
+      return entry && isNavSubGroup(entry) ? entry.items.map((i) => [i.label, i.href]) : [];
     };
-    expect(children("core_team")).toEqual(["Phân nhóm ngành", "Báo cáo", "Kết quả ghép cặp"]);
-    expect(children("support_team")).toEqual(["Phân nhóm ngành", "Báo cáo"]);
+    expect(items("core_team")).toEqual([
+      ["Danh sách cặp", "/matches"],
+      ["Phân nhóm ngành", "/matches/vong-2"],
+      ["Báo cáo", "/matches/vong-2/bao-cao"],
+      ["Kết quả ghép cặp", "/matches/ket-qua"]
+    ]);
+    expect(items("support_team").map(([label]) => label)).toEqual(["Danh sách cặp", "Phân nhóm ngành", "Báo cáo"]);
+    // Không còn mục link "Ghép cặp" kèm children ở tầng ngoài: trang /matches phải tới được từ mục trong nhánh.
+    const loose = (recruitment("core_team")?.items ?? []).filter((e) => !isNavSubGroup(e) && e.label === MATCHING_NAV_LABEL);
+    expect(loose).toEqual([]);
+  });
+
+  it("người không được vào Ghép cặp thì không có nhánh này (reviewer, viewer)", () => {
+    for (const role of ["reviewer", "viewer"] as const) {
+      const entry = (recruitment(role)?.items ?? []).find((e) => isNavSubGroup(e) && e.key === MATCHING_NAV_KEY);
+      expect(entry).toBeUndefined();
+    }
   });
 
   it("mục dùng chung mở đúng bộ lọc vai trò của nhánh chứa nó", () => {
@@ -142,7 +159,7 @@ describe("cấu trúc theo vai trò", () => {
         "Báo cáo", "Hồ sơ mentee", "Giao hồ sơ mentee",
         "Tiến độ phỏng vấn mentee", "Ca phỏng vấn mentee", "Phỏng vấn mentee trực tiếp", "Điểm cộng theo ngày nộp"
       ]],
-      "Ghép cặp"
+      [MATCHING_NAV_LABEL, ["Danh sách cặp", "Phân nhóm ngành", "Báo cáo"]]
     ]);
   });
 
@@ -213,7 +230,9 @@ describe("thanh menu vẽ ba tầng", () => {
     const current = sidebar.getAllByRole("link").filter((a) => a.getAttribute("aria-current") === "page");
     expect(current.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([["Đánh giá mentee", "/reviews?role_applied=mentee"]]);
     expect(sidebar.queryByRole("link", { name: "Hồ sơ mentor" })).toBeNull();
-    expect(sidebar.getByRole("link", { name: "Ghép cặp" })).toBeTruthy();
+    // “Ghép cặp” giờ là nhánh gập mở như Tuyển Mentor (VAM00022): nút, đóng sẵn khi đang ở trang khác.
+    expect(sidebar.getByRole("button", { name: MATCHING_NAV_LABEL }).getAttribute("aria-expanded")).toBe("false");
+    expect(sidebar.queryByRole("link", { name: MATCHING_NAV_LABEL })).toBeNull();
   });
 
   it("bấm nhánh Tuyển Mentor thì mở ra các trang mentor", () => {
@@ -241,5 +260,75 @@ describe("thanh menu vẽ ba tầng", () => {
     const sidebar = renderAt("/", "");
     expect(sidebar.queryByRole("button", { name: "Ứng tuyển" })).toBeNull();
     expect(sidebar.getByRole("button", { name: RECRUITMENT_NAV_LABEL })).toBeTruthy();
+  });
+});
+
+/** Lớp chữ của một link menu, bỏ các lớp màu theo trạng thái sáng / thường. */
+const sizeClasses = (link: HTMLElement) =>
+  (link.getAttribute("class") ?? "")
+    .split(/[ ]+/)
+    .filter((c) => /^(py-|px-|pl-|text-(xs|sm|base)|font-)/.test(c))
+    .sort();
+
+describe("nhánh Ghép cặp trên thanh menu (VAM00022)", () => {
+  beforeEach(() => {
+    nav.pathname = "/";
+    nav.search = "";
+  });
+
+  function renderAt(pathname: string, role: CurrentAdminUser["role"] = "core_team") {
+    nav.pathname = pathname;
+    nav.search = "";
+    render(<AppShell adminUser={user(role)}><p>nội dung</p></AppShell>);
+    return within(screen.getByRole("navigation", { name: "Điều hướng chính" }));
+  }
+
+  it("ở trang Phân nhóm ngành: nhánh Ghép cặp mở sẵn, hai nhánh tuyển sinh đóng, đúng một mục sáng", () => {
+    const sidebar = renderAt("/matches/vong-2");
+    expect(sidebar.getByRole("button", { name: MATCHING_NAV_LABEL }).getAttribute("aria-expanded")).toBe("true");
+    expect(sidebar.getByRole("button", { name: MENTOR_RECRUITMENT_LABEL }).getAttribute("aria-expanded")).toBe("false");
+    expect(sidebar.getByRole("button", { name: MENTEE_RECRUITMENT_LABEL }).getAttribute("aria-expanded")).toBe("false");
+    const current = sidebar.getAllByRole("link").filter((a) => a.getAttribute("aria-current") === "page");
+    expect(current.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([["Phân nhóm ngành", "/matches/vong-2"]]);
+    for (const [name, href] of [["Danh sách cặp", "/matches"], ["Báo cáo", "/matches/vong-2/bao-cao"], ["Kết quả ghép cặp", "/matches/ket-qua"]]) {
+      expect(sidebar.getByRole("link", { name }).getAttribute("href")).toBe(href);
+    }
+  });
+
+  it("ba mục Ghép cặp cùng cỡ chữ và cùng kiểu với mục của Tuyển Mentor, không còn chữ nhỏ text-xs", () => {
+    const sidebar = renderAt("/matches/vong-2");
+    fireEvent.click(sidebar.getByRole("button", { name: MENTOR_RECRUITMENT_LABEL }));
+    const mentorItem = sizeClasses(sidebar.getByRole("link", { name: "Hồ sơ mentor" }));
+    expect(mentorItem).toContain("text-sm");
+    expect(mentorItem).not.toContain("text-xs");
+    // Tìm theo đường dẫn, vì "Báo cáo" cũng là tên một mục của nhánh Mentor đang mở.
+    for (const href of ["/matches", "/matches/vong-2", "/matches/vong-2/bao-cao", "/matches/ket-qua"]) {
+      const link = sidebar.getAllByRole("link").find((a) => a.getAttribute("href") === href);
+      expect(link, href).toBeTruthy();
+      expect(sizeClasses(link!)).toEqual(mentorItem);
+    }
+  });
+
+  it("bấm tiêu đề Ghép cặp thì gập lại và mở ra, như hai nhánh tuyển sinh", () => {
+    const sidebar = renderAt("/matches/vong-2");
+    fireEvent.click(sidebar.getByRole("button", { name: MATCHING_NAV_LABEL }));
+    expect(sidebar.queryByRole("link", { name: "Phân nhóm ngành" })).toBeNull();
+    fireEvent.click(sidebar.getByRole("button", { name: MATCHING_NAV_LABEL }));
+    expect(sidebar.getByRole("link", { name: "Phân nhóm ngành" })).toBeTruthy();
+  });
+
+  it("trang danh sách /matches và trang con /matches/[id] vẫn sáng đúng mục Danh sách cặp", () => {
+    for (const path of ["/matches", "/matches/abc-123"]) {
+      cleanup();
+      const sidebar = renderAt(path);
+      const current = sidebar.getAllByRole("link").filter((a) => a.getAttribute("aria-current") === "page");
+      expect(current.map((a) => a.textContent)).toEqual(["Danh sách cặp"]);
+    }
+  });
+
+  it("Support team thấy Danh sách cặp, Phân nhóm ngành, Báo cáo; không thấy Kết quả ghép cặp", () => {
+    const sidebar = renderAt("/matches", "support_team");
+    expect(sidebar.getByRole("link", { name: "Phân nhóm ngành" })).toBeTruthy();
+    expect(sidebar.queryByRole("link", { name: "Kết quả ghép cặp" })).toBeNull();
   });
 });

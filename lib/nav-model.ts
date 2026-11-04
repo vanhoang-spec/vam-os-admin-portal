@@ -43,6 +43,9 @@ export type NavGroupDef = {
 export const RECRUITMENT_NAV_LABEL = "Tuyển Mentor/Mentee";
 export const MENTOR_RECRUITMENT_LABEL = "Tuyển Mentor";
 export const MENTEE_RECRUITMENT_LABEL = "Tuyển Mentee";
+/** Nhánh "Ghép cặp" (VAM00022): khoá dùng cho biểu tượng và trạng thái gập mở trên thanh menu. */
+export const MATCHING_NAV_KEY = "matching";
+export const MATCHING_NAV_LABEL = "Ghép cặp";
 
 export function isNavSubGroup(entry: NavEntryDef): entry is NavSubGroupDef {
   return "items" in entry;
@@ -218,19 +221,29 @@ function buildRecruitmentGroup(
     ...(mentee.length ? [{ key: "mentee", label: MENTEE_RECRUITMENT_LABEL, items: mentee }] : []),
     // Ghép cặp là bước cuối của tuyển sinh, không còn là mục riêng ở menu chính.
     // Cùng predicate canBrowseOperations như trang /matches.
-    ...when(showOperations, {
-      href: "/matches",
-      label: "Ghép cặp",
-      // Vòng 2 (BTC 07/10/2026): mentor tự chọn mentee cùng nhóm ngành. Mục con bỏ tiền tố "Vòng 2 ·":
-      // đã nằm dưới "Ghép cặp" thì tiền tố chỉ làm dài menu (VAM00006, 28/10/2026).
-      children: [
-        { href: "/matches/vong-2", label: "Phân nhóm ngành" },
-        { href: "/matches/vong-2/bao-cao", label: "Báo cáo" },
-        // Thư kết quả + hồ sơ người đồng hành (BTC 22/10/2026). Có họ tên, email, SĐT của mọi cặp:
-        // cùng khán giả với trang tự gate bằng canManageMatches (Core team trở lên).
-        ...(showAdminTier ? [{ href: "/matches/ket-qua", label: "Kết quả ghép cặp" }] : [])
-      ]
-    })
+    //
+    // VAM00022 (03/11/2026): "Ghép cặp" thành nhánh con gập mở được như Tuyển Mentor / Tuyển Mentee,
+    // các mục con cùng cỡ chữ với mục của hai nhánh đó. Trước đó "Ghép cặp" là một link kèm ba mục con
+    // luôn mở, chữ nhỏ hơn. Vì "Ghép cặp" giờ là tiêu đề nhánh (không còn là link), trang danh sách
+    // /matches phải có một mục riêng ở đầu nhánh, nếu không không còn đường tới từ menu.
+    ...(showOperations
+      ? [
+          {
+            key: MATCHING_NAV_KEY,
+            label: MATCHING_NAV_LABEL,
+            items: [
+              { href: "/matches", label: "Danh sách cặp" },
+              // Vòng 2 (BTC 07/10/2026): mentor tự chọn mentee cùng nhóm ngành. Mục bỏ tiền tố "Vòng 2 ·":
+              // đã nằm dưới "Ghép cặp" thì tiền tố chỉ làm dài menu (VAM00006, 28/10/2026).
+              { href: "/matches/vong-2", label: "Phân nhóm ngành" },
+              { href: "/matches/vong-2/bao-cao", label: "Báo cáo" },
+              // Thư kết quả + hồ sơ người đồng hành (BTC 22/10/2026). Có họ tên, email, SĐT của mọi cặp:
+              // cùng khán giả với trang tự gate bằng canManageMatches (Core team trở lên).
+              ...(showAdminTier ? [{ href: "/matches/ket-qua", label: "Kết quả ghép cặp" }] : [])
+            ]
+          }
+        ]
+      : [])
   ];
   return entries.length ? { key: "applications", label: RECRUITMENT_NAV_LABEL, items: entries } : null;
 }
