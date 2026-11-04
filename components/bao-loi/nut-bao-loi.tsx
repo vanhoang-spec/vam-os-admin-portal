@@ -1,58 +1,42 @@
 "use client";
 
 /**
- * Báo lỗi — nút cam "Báo lỗi" góc dưới trái vùng nội dung cho mọi tài khoản ban tổ chức (gắn một lần
- * trong AppShell), và pop-up lúc mở VAM OS: báo lỗi đang chờ mình bổ sung (hiện TRƯỚC, nút "Trả lời
- * ngay" mở /bao-loi?ticket=…) rồi trả lời mới chưa xem. Ẩn khi đang toàn màn hình (trình chiếu) và ở
- * chính trang /bao-loi (trang đó đã là form).
+ * Báo lỗi — hộp "Báo lỗi" (FormBaoLoi) và pop-up lúc mở VAM OS: báo lỗi đang chờ mình bổ sung (hiện TRƯỚC, nút
+ * "Trả lời ngay" mở /bao-loi?ticket=…) rồi trả lời mới chưa xem. Gắn một lần cuối AppShell cho mọi tài khoản ban tổ chức.
  *
- * Nút CHỈ hiện từ màn hình rộng (lg, chỗ có thanh bên) trở lên: trên điện thoại nó nằm đè lên nội dung
- * (chủ chương trình 03/11/2026). Người dùng điện thoại vẫn gửi được qua /bao-loi (link ở thẻ "Cần đọc" và
- * hướng dẫn). Pop-up trả lời / cần bổ sung vẫn hiện ở mọi cỡ màn hình vì đó là việc người ta đang chờ.
+ * Nút bấm KHÔNG còn ở đây: từ 04/11/2026 nó nằm trên thanh trên cùng, cạnh nút Hướng dẫn sử dụng
+ * (nut-bao-loi-tren-thanh.tsx), vì nút nổi góc dưới trái che nội dung và chỗ bấm của trang (VAM00013). Nút bắn sự kiện
+ * MO_FORM_BAO_LOI, hộp mở ở đây (lib/bao-loi-su-kien.ts giải thích vì sao hộp không nằm trong thanh trên cùng).
+ * Ẩn ở chính trang /bao-loi (trang đó đã là form). Pop-up trả lời / cần bổ sung hiện ở mọi cỡ màn hình vì đó là việc
+ * người ta đang chờ.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { baoLoiCanXemAction, daXemTraLoiAction } from "@/app/actions/bao-loi";
 import type { BaoLoiCanXem } from "@/lib/bao-loi-action-types";
 import { TEN_TRANG_THAI_BAO_LOI } from "@/lib/bao-loi-core";
+import { MO_FORM_BAO_LOI } from "@/lib/bao-loi-su-kien";
 import { formatDate } from "@/lib/utils";
 import { FormBaoLoi } from "@/components/bao-loi/form-bao-loi";
-
-function useToanManHinh() {
-  const [co, setCo] = useState(false);
-  useEffect(() => {
-    const doi = () => setCo(!!document.fullscreenElement);
-    doi();
-    document.addEventListener("fullscreenchange", doi);
-    return () => document.removeEventListener("fullscreenchange", doi);
-  }, []);
-  return co;
-}
 
 export function NutBaoLoi() {
   const pathname = usePathname() ?? "/";
   const search = useSearchParams();
-  const toanManHinh = useToanManHinh();
   const [mo, setMo] = useState<string | null>(null);
+  const trangHienTai = `${pathname}${search?.toString() ? `?${search.toString()}` : ""}`;
+  // Hộp ghi lại đúng trang đang mở lúc bấm nút, không phải trang lúc nghe sự kiện lần đầu.
+  const trangRef = useRef(trangHienTai);
+  trangRef.current = trangHienTai;
+
+  useEffect(() => {
+    const moHop = () => setMo(trangRef.current);
+    window.addEventListener(MO_FORM_BAO_LOI, moHop);
+    return () => window.removeEventListener(MO_FORM_BAO_LOI, moHop);
+  }, []);
 
   if (pathname === "/bao-loi") return null;
-  const trangHienTai = `${pathname}${search?.toString() ? `?${search.toString()}` : ""}`;
   return (
     <>
-      {!toanManHinh && (
-        <button
-          type="button"
-          onClick={() => setMo(trangHienTai)}
-          aria-haspopup="dialog"
-          title="Gặp trục trặc hoặc có góp ý? Báo cho ban xử lý"
-          className="fixed bottom-3 left-3 z-[45] hidden min-h-10 items-center gap-1.5 rounded-full border-2 border-white bg-orange-500 py-1.5 pl-2.5 pr-3.5 text-sm font-bold text-white shadow-lg hover:bg-orange-600 print:hidden lg:left-[19.5rem] lg:inline-flex"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="currentColor" d="M12 2 1 21h22L12 2Zm0 5.5 7.5 12.5h-15L12 7.5Zm-1 3.5v4h2v-4h-2Zm0 5.5V18h2v-1.5h-2Z" />
-          </svg>
-          Báo lỗi
-        </button>
-      )}
       {mo && <FormBaoLoi trang={mo} dong={() => setMo(null)} />}
       <PopupBaoLoi />
     </>

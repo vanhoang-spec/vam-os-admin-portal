@@ -46,8 +46,8 @@ export function CanDocBaoLoi() {
       </div>
       <ul className="ml-5 list-disc space-y-0.5">
         <li>
-          Gặp lỗi, hoặc thấy điểm nào cần làm tốt hơn: trên máy tính bấm nút cam <b>“Báo lỗi”</b> ở góc dưới bên trái mọi trang (trên điện thoại
-          nút này được ẩn cho đỡ che nội dung: bấm “Gửi báo lỗi / góp ý ngay” bên dưới) — chọn loại (có “Đề xuất cải thiện”), ghi tiêu đề, mô tả và dán hình chụp màn hình
+          Gặp lỗi, hoặc thấy điểm nào cần làm tốt hơn: bấm nút cam <b>“Báo lỗi”</b> ở thanh trên cùng, cạnh nút Hướng dẫn sử dụng, ở mọi trang (trên điện thoại
+          nút này được ẩn: bấm “Gửi báo lỗi / góp ý ngay” bên dưới) — chọn loại (có “Đề xuất cải thiện”), ghi tiêu đề, mô tả và dán hình chụp màn hình
           (Ctrl + V), rồi bấm “Gửi báo lỗi”.
         </li>
         <li>

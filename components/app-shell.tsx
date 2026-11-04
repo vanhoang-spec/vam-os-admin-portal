@@ -45,6 +45,7 @@ import {
 } from "@/lib/nav-model";
 import { HelpGuideButton } from "@/components/help-guide-button";
 import { NutBaoLoi } from "@/components/bao-loi/nut-bao-loi";
+import { NutBaoLoiTrenThanh } from "@/components/bao-loi/nut-bao-loi-tren-thanh";
 import { SeasonSelector } from "@/components/season-selector";
 import { isSeasonAwarePath } from "@/lib/season-labels";
 
@@ -550,6 +551,8 @@ export function AppShell({
                   </button>
                   {/* Hướng dẫn sử dụng của đúng trang đang xem — cạnh menu chính (BTC 02/10/2026). */}
                   <HelpGuideButton pathname={pathname} navGroups={navGroups} activeHref={activeHref} />
+                  {/* Nút "Báo lỗi" ngay cạnh nút Hướng dẫn (VAM00013, 04/11/2026); hộp báo lỗi ở NutBaoLoi cuối trang. */}
+                  <NutBaoLoiTrenThanh />
                   <div>
                     <div className="text-xl font-semibold text-vam-ink">VAM OS</div>
                     <div className="text-sm text-slate-500">
@@ -577,13 +580,13 @@ export function AppShell({
               </div>
             </div>
           </header>
-          {/* Nút "Báo lỗi" chỉ hiện từ lg trở lên (trên điện thoại ẩn, 03/11/2026) nên không còn phải chừa khoảng trống dưới trang cho nó (VAM00002 từng cần pb-20). */}
+          {/* Nút "Báo lỗi" nằm trên thanh trên cùng (không còn nổi góc dưới) nên không phải chừa khoảng trống dưới trang cho nó (VAM00002 từng cần pb-20). */}
           <main id="main-content" tabIndex={-1} className="px-4 pb-6 pt-6 sm:px-6 lg:px-8">
             {children}
           </main>
         </div>
       </div>
-      {/* Báo lỗi / góp ý (27/10/2026): nút cam góc dưới trái + pop-up trả lời / cần bổ sung, cho mọi tài khoản ban tổ chức. */}
+      {/* Báo lỗi / góp ý (27/10/2026): hộp báo lỗi + pop-up trả lời / cần bổ sung, cho mọi tài khoản ban tổ chức. Nút mở hộp nằm trên thanh trên cùng. */}
       <Suspense fallback={null}>
         <NutBaoLoi />
       </Suspense>
