@@ -662,3 +662,13 @@ export function canViewAiStatus(role?: string | null) {
 export function canManageBaoLoi(role?: string | null) {
   return ["super_admin", "admin"].includes(role || "");
 }
+
+/**
+ * Xuất Excel hồ sơ + phiếu đánh giá của mentee phỏng vấn trực tiếp (VAM00023). Một file chứa họ tên, email,
+ * SĐT, MSSV, câu trả lời đơn và nhận xét của nhiều người, nên HẸP hơn quyền xem màn hình phỏng vấn (Support
+ * và mentor xem được màn hình nhưng không tải được): chỉ nhóm được xem mọi phiếu, cùng canAssignReview. Người
+ * gọi còn phải có quyền vận hành mùa (canOperateSeason) — kiểm riêng ở máy chủ.
+ */
+export function canExportMenteeOffline(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

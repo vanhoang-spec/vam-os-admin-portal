@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
+import { canExportMenteeOffline } from "@/lib/permissions";
 import { getOfflineDashboard } from "@/lib/mentee-offline";
 import { roomDeskBounds } from "@/lib/mentee-offline-core";
 import { sessionDayLabel, vietnamDateKeyOf } from "@/lib/mentee-interview-core";
@@ -74,12 +76,20 @@ export default async function OfflineInterviewPage({searchParams}:{searchParams:
     todayKey:vietnamDateKey(new Date()) ?? ""
   });
   const data=wave ? dashboardForWave(result.data, wave) : result.data;
+  // VAM00023: nút xuất Excel chỉ hiện cho nhóm được tải (hẹp hơn nhóm xem màn hình); trang đích tự kiểm lại quyền ở máy chủ.
+  const adminUser=await getCurrentAdminUser();
+  const canExport=canExportMenteeOffline(adminUser?.role);
 
   return <div className="grid gap-4">
     <PageHeader
       title="Phỏng vấn mentee trực tiếp"
       description={wave ? `${wave.label} · Mỗi ca 30 phút · ${daySummary(data.sessions)}` : "Chưa có ca phỏng vấn nào."}
     />
+    {canExport ? <div>
+      <Link href={`${PATH}/xuat-excel`} className="inline-flex rounded-md border border-vam-line bg-white px-3 py-1.5 text-sm font-medium text-vam-ink hover:bg-vam-mint">
+        Xuất Excel hồ sơ và đánh giá
+      </Link>
+    </div> : null}
     {wave ? <WaveTabs waves={waves} current={wave} /> : null}
     <OfflineDashboardClient key={wave?.key ?? "all"} data={data} initialApplication={application} />
   </div>;

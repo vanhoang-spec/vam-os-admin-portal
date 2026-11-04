@@ -17,8 +17,10 @@ import {
   waveOfSession
 } from "@/lib/mentee-interview-waves";
 
-const mocks = vi.hoisted(() => ({ dashboard: null as any, clientProps: null as any, bookingPage: null as any, scopes: [] as unknown[] }));
+const mocks = vi.hoisted(() => ({ dashboard: null as any, clientProps: null as any, bookingPage: null as any, scopes: [] as unknown[], role: "admin" as string | null }));
 vi.mock("@/lib/mentee-offline", () => ({ getOfflineDashboard: async (scope: unknown) => { mocks.scopes.push(scope); return mocks.dashboard; } }));
+// Trang đọc vai trò người xem để quyết định có hiện nút "Xuất Excel hồ sơ và đánh giá" (VAM00023).
+vi.mock("@/lib/admin-auth", () => ({ getCurrentAdminUser: async () => (mocks.role ? { id: "admin-1", role: mocks.role } : null) }));
 vi.mock("@/lib/mentee-interview", () => ({
   getMenteeSessionPageData: async () => mocks.bookingPage,
   bookMenteeSession: vi.fn(),
@@ -204,6 +206,19 @@ describe("màn hình Phỏng vấn mentee trực tiếp", () => {
     const tabs = within(screen.getByTestId("wave-tabs"));
     expect(tabs.getByRole("link", { name: "Đợt 2 · 10–11/10/2026" }).getAttribute("aria-current")).toBe("page");
     expect(tabs.getByRole("link", { name: "Đợt 1 · 03–04/10/2026" }).getAttribute("href")).toBe("/interviews/mentee-offline?dot=2026-10-03");
+  });
+
+  it("nút Xuất Excel hồ sơ và đánh giá chỉ hiện cho Super admin, Admin, Core team", async () => {
+    for (const [role, shown] of [["super_admin", true], ["admin", true], ["core_team", true], ["support_team", false], ["reviewer", false], ["viewer", false], [null, false]] as const) {
+      mocks.role = role;
+      mocks.dashboard = { ok: true, data: DASHBOARD };
+      const { unmount } = render(await OfflineInterviewPage({ searchParams: Promise.resolve({ dot: "2026-10-10" }) }));
+      const link = screen.queryByRole("link", { name: "Xuất Excel hồ sơ và đánh giá" });
+      expect(Boolean(link), `vai trò ${role}`).toBe(shown);
+      if (link) expect(link.getAttribute("href")).toBe("/interviews/mentee-offline/xuat-excel");
+      unmount();
+    }
+    mocks.role = "admin";
   });
 
   it("đường dẫn mở thẳng một hồ sơ rơi đúng đợt của hồ sơ đó", async () => {
