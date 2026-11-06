@@ -230,7 +230,7 @@ function roleLabel(value: unknown) {
   return text(value);
 }
 
-function genderLabel(value: unknown) {
+export function genderLabel(value: unknown) {
   const gender = String(value ?? "").toLowerCase();
   if (gender === "male") return "Nam";
   if (gender === "female") return "Nữ";

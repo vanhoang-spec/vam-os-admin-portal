@@ -11,6 +11,8 @@ import { Match, MentorProfile, Person } from "@/lib/types";
 import { displayCurrentMemberCode, firstSeasonLabel, firstSeasonOrder, memberCodeOrder } from "@/lib/member-code-core";
 import { displayOptional, displayText } from "@/lib/utils";
 import { canBrowseParticipants } from "@/lib/read-access";
+import { canShowParticipantExport } from "@/lib/participant-export";
+import { participantExportHref } from "@/lib/participant-export-core";
 import { redirect } from "next/navigation";
 
 type Row = MentorProfile & {
@@ -71,6 +73,8 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
     getCurrentAdminUser()
   ]);
   const allowCreate = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
+  // VAM00025: nút xuất Excel chỉ hiện cho nhóm được tải (hẹp hơn nhóm xem danh sách); đường tải tự kiểm lại ở máy chủ.
+  const allowExport = await canShowParticipantExport(routeUser.role, scopeContext, seasonContext.selectedSeasonId);
   const peopleById = keyById(people.data);
   const intakeBatchById = new Map(intakeBatches.data.map((b) => [b.id, b]));
   const seasonById = new Map(seasons.data.map((s) => [s.id, s]));
@@ -126,11 +130,22 @@ export default async function MentorsPage(props: { searchParams?: Promise<{ seas
   return (
     <>
       <PageHeader title="Mentor" description="Hồ sơ mentor đã được import vào VAM OS." />
-      {allowCreate ? (
+      {allowCreate || allowExport ? (
         <div className="mb-4 flex flex-wrap gap-2">
-          <Link href="/mentors/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
-            Tạo mentor mới
-          </Link>
+          {allowCreate ? (
+            <Link href="/mentors/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+              Tạo mentor mới
+            </Link>
+          ) : null}
+          {allowExport ? (
+            <a
+              href={participantExportHref("mentor", seasonContext.selectedSeasonCode)}
+              data-testid="export-mentor-profiles"
+              className="inline-flex w-fit rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-vam-ink hover:bg-vam-mint"
+            >
+              Xuất Excel hồ sơ Mentor
+            </a>
+          ) : null}
         </div>
       ) : null}
       <ErrorBox message={cohort.error || mentors.error || people.error || matches.error || intakeBatches.error || seasons.error} />
