@@ -4,17 +4,28 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import {
   BULK_AUDIENCE_LABELS,
+  RECIPIENT_ROLE_WORDS,
   confirmBulkSend,
   describeRunResult,
   resolveAudienceChoice
 } from "@/lib/bulk-mail-core";
+import { readCustomListSpec, recipientKey, selectCustomRecipients } from "@/lib/bulk-mail-custom-core";
 import {
+  buildCustomRecipientUniverse,
+  createCustomEmailBatch,
   createEmailBatch,
   listBulkRecipients,
   listEmailBatches,
-  runEmailBatch
+  runEmailBatch,
+  searchCustomListPeople
 } from "@/lib/bulk-mail";
-import type { BulkMailActionState } from "@/lib/bulk-mail-action-types";
+import {
+  initialCustomListPreviewState,
+  initialCustomListSearchState,
+  type BulkMailActionState,
+  type CustomListPreviewState,
+  type CustomListSearchState
+} from "@/lib/bulk-mail-action-types";
 import { getEmailTemplate, getMailSeason } from "@/lib/email-templates";
 import { renderTemplate, sampleValues } from "@/lib/email-templates-core";
 import { sendTemplatedEmail } from "@/lib/email";
@@ -54,6 +65,24 @@ async function authorize(): Promise<
     seasonId: season.id,
     seasonCode: season.code
   };
+}
+
+/** Mẫu thư mở được một lô: có thật, đúng mùa, ĐÃ DUYỆT. Dùng chung cho mọi lệnh mở lô. */
+async function approvedTemplate(
+  templateId: string,
+  seasonId: string
+): Promise<
+  | { ok: true; row: NonNullable<Awaited<ReturnType<typeof getEmailTemplate>>["row"]> }
+  | { ok: false; state: BulkMailActionState }
+> {
+  const { row, error } = await getEmailTemplate(templateId);
+  if (error) return { ok: false, state: fail(error) };
+  if (!row) return { ok: false, state: fail("Không tìm thấy mẫu thư.") };
+  if (row.seasonId !== seasonId) return { ok: false, state: fail("Mẫu thư này thuộc mùa khác.") };
+  if (row.status !== "approved") {
+    return { ok: false, state: fail("Mẫu thư này chưa được duyệt. Chỉ mẫu đã duyệt mới gửi được.") };
+  }
+  return { ok: true, row };
 }
 
 function refresh() {
@@ -152,13 +181,9 @@ export async function startBulkSendAction(
     if (!resolved.ok) return fail(resolved.message);
     const { audience, eventId, coversSeries } = resolved.choice;
 
-    const { row, error } = await getEmailTemplate(templateId);
-    if (error) return fail(error);
-    if (!row) return fail("Không tìm thấy mẫu thư.");
-    if (row.seasonId !== auth.seasonId) return fail("Mẫu thư này thuộc mùa khác.");
-    if (row.status !== "approved") {
-      return fail("Mẫu thư này chưa được duyệt. Chỉ mẫu đã duyệt mới gửi được.");
-    }
+    const template = await approvedTemplate(templateId, auth.seasonId);
+    if (!template.ok) return template.state;
+    const row = template.row;
 
     // Tham số của nhóm `event` chỉ đi kèm khi nhóm là `event`. Nhóm khác nhận
     // đúng hai trường như trước, để không lô nào mang một sự kiện nó không dùng.
@@ -261,6 +286,146 @@ export async function continueBulkSendAction(
     return { ok: true, message: describeRunResult(run), batchId, problems: run.problems };
   } catch (error) {
     console.error("[continueBulkSendAction]", error);
+    return fail("Lỗi hệ thống. Vui lòng thử lại.");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Danh sách tùy chỉnh (VAM00026)
+//
+// Ba lệnh dưới đây qua đúng cổng `authorize()` của các lệnh gửi cũ — chỉ người gửi được thư
+// hàng loạt, trên mùa mình được vận hành. Bản xem trước và ô tìm người cũng qua cổng đó: chúng
+// trả về họ tên và email của hàng trăm người, nên không được rộng hơn nút gửi.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function failPreview(message: string, signature: string | null = null): CustomListPreviewState {
+  return { ...initialCustomListPreviewState, message, signature };
+}
+
+/** Dựng bản xem trước: ai sẽ nhận, tính từ các nguồn đã tick và người thêm tay. Không ghi gì. */
+export async function previewCustomListAction(
+  _previousState: CustomListPreviewState,
+  formData: FormData
+): Promise<CustomListPreviewState> {
+  const signature = String(formData.get("signature") ?? "") || null;
+  try {
+    const auth = await authorize();
+    if (!auth.ok) return failPreview(auth.state.message ?? "Không có quyền.", signature);
+
+    const parsed = readCustomListSpec(formData);
+    if (!parsed.ok) return failPreview(parsed.message, signature);
+
+    const universe = await buildCustomRecipientUniverse({ seasonId: auth.seasonId, spec: parsed.spec });
+    if (universe.error) return failPreview(universe.error, signature);
+
+    return {
+      ok: true,
+      message: null,
+      signature,
+      label: universe.label,
+      rows: universe.partition.sendable.map((row) => ({
+        key: recipientKey(row),
+        fullName: row.fullName,
+        email: row.email,
+        roleWord: RECIPIENT_ROLE_WORDS[row.role]
+      })),
+      unreachable: universe.partition.unreachable.slice(0, 30).map((row) => `${row.fullName}: ${row.reason}`),
+      unreachableCount: universe.partition.unreachable.length
+    };
+  } catch (error) {
+    console.error("[previewCustomListAction]", error);
+    return failPreview("Lỗi hệ thống. Vui lòng thử lại.", signature);
+  }
+}
+
+/** Tìm người trong danh bạ (thuộc mùa) để thêm tay vào danh sách. */
+export async function searchCustomListPeopleAction(
+  _previousState: CustomListSearchState,
+  formData: FormData
+): Promise<CustomListSearchState> {
+  try {
+    const auth = await authorize();
+    if (!auth.ok) return { ...initialCustomListSearchState, message: auth.state.message };
+
+    const found = await searchCustomListPeople({ seasonId: auth.seasonId, query: String(formData.get("q") ?? "") });
+    if (found.error) return { ...initialCustomListSearchState, message: found.error };
+    return {
+      ok: true,
+      message: found.rows.length ? null : "Không tìm thấy ai thuộc mùa này.",
+      results: found.rows.map((row) => ({
+        personId: row.personId,
+        fullName: row.fullName,
+        email: row.email,
+        memberCode: row.memberCode,
+        roleWord: RECIPIENT_ROLE_WORDS[row.role]
+      }))
+    };
+  } catch (error) {
+    console.error("[searchCustomListPeopleAction]", error);
+    return { ...initialCustomListSearchState, message: "Lỗi hệ thống. Vui lòng thử lại." };
+  }
+}
+
+/**
+ * Mở một lô "Danh sách tùy chỉnh", chốt danh sách vào lô, và gửi phần đầu.
+ *
+ * Form gửi lên nguồn, id người thêm tay và khoá của từng dòng còn giữ tick — KHÔNG gửi email.
+ * Máy chủ dựng lại tập ứng viên từ database, và mọi khoá phải nằm trong đó (lib/bulk-mail-custom-core.ts):
+ * id bịa, người ngoài mùa, hay dữ liệu đã đổi từ lúc xem trước đều làm cả lượt bị từ chối.
+ * Con số người bấm gõ phải bằng đúng số dòng sẽ chốt vào lô.
+ */
+export async function startCustomBulkSendAction(
+  _previousState: BulkMailActionState,
+  formData: FormData
+): Promise<BulkMailActionState> {
+  try {
+    const auth = await authorize();
+    if (!auth.ok) return auth.state;
+
+    const templateId = String(formData.get("template_id") ?? "").trim();
+    if (!templateId) return fail("Chưa chọn mẫu thư.");
+
+    const parsed = readCustomListSpec(formData);
+    if (!parsed.ok) return fail(parsed.message);
+
+    const template = await approvedTemplate(templateId, auth.seasonId);
+    if (!template.ok) return template.state;
+    const row = template.row;
+
+    const universe = await buildCustomRecipientUniverse({ seasonId: auth.seasonId, spec: parsed.spec });
+    if (universe.error) return fail(universe.error);
+
+    const selected = selectCustomRecipients(universe.partition.sendable, formData.getAll("recipient_key"));
+    if (!selected.ok) return fail(selected.message);
+
+    const expected = selected.rows.length;
+    const confirmation = confirmBulkSend({ typed: formData.get("confirm_count"), expected });
+    if (!confirmation.ok) return fail(confirmation.message);
+
+    const created = await createCustomEmailBatch({
+      seasonId: auth.seasonId,
+      kind: row.kind,
+      templateId: row.id,
+      recipients: selected.rows,
+      note: `${universe.label} · ${row.name}`,
+      actorAdminUserId: auth.adminUserId
+    });
+    if (created.error || !created.batch) return fail(created.error ?? "Không mở được lô gửi.");
+
+    const run = await runEmailBatch({
+      batch: created.batch,
+      seasonCode: auth.seasonCode,
+      subject: row.subject,
+      body: row.body
+    });
+
+    refresh();
+    if (run.error) {
+      return { ok: false, message: run.error, batchId: created.batch.id, problems: run.problems };
+    }
+    return { ok: true, message: describeRunResult(run), batchId: created.batch.id, problems: run.problems };
+  } catch (error) {
+    console.error("[startCustomBulkSendAction]", error);
     return fail("Lỗi hệ thống. Vui lòng thử lại.");
   }
 }

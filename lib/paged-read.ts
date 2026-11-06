@@ -154,6 +154,7 @@ export type PageOrder =
  *   custom_forms /
  *   custom_form_responses         supabase/migrations/20261015200000 create table (id uuid primary key)
  *   custom_form_mentor_sends      supabase/migrations/20261101120000 create table (id uuid primary key)
+ *   email_batch_recipients        supabase/migrations/20261106120000 create table (id uuid primary key)
  *   match_profile_links /
  *   match_result_notices /
  *   match_result_holds            supabase/migrations/20261022120000 create table (id uuid primary key)
@@ -174,6 +175,7 @@ export const PAGE_ORDER = {
   custom_form_mentor_sends: { strategy: "keyset", key: "id" },
   custom_form_responses: { strategy: "keyset", key: "id" },
   custom_forms: { strategy: "keyset", key: "id" },
+  email_batch_recipients: { strategy: "keyset", key: "id" },
   event_links: { strategy: "keyset", key: "id" },
   event_participations: { strategy: "keyset", key: "id" },
   event_registrations: { strategy: "keyset", key: "id" },

@@ -34,7 +34,8 @@ export const BULK_AUDIENCES = [
   "mentee_cv_rejected",
   "mentee_invite_withdrawn",
   "mentee_interview_rejected",
-  "event"
+  "event",
+  "custom"
 ] as const;
 export type BulkAudience = (typeof BULK_AUDIENCES)[number];
 
@@ -64,7 +65,8 @@ export const BULK_AUDIENCE_LABELS: Record<BulkAudience, string> = {
   mentee_cv_rejected: "Mentee rớt vòng hồ sơ (CV)",
   mentee_invite_withdrawn: "Mentee rớt CV sau khi đã nhận thư mời phỏng vấn",
   mentee_interview_rejected: "Mentee không trúng tuyển vòng phỏng vấn (rớt, không phỏng vấn, không chọn ca)",
-  event: "Người đã đăng ký một sự kiện"
+  event: "Người đã đăng ký một sự kiện",
+  custom: "Danh sách tùy chỉnh"
 };
 
 /** Một câu nói rõ nhóm đang chọn là ai — hiện ngay dưới ô "Gửi cho". */
@@ -248,6 +250,11 @@ export function resolveAudienceChoice(input: {
 }): { ok: true; choice: AudienceChoice } | { ok: false; message: string } {
   const audience = String(input.audience ?? "").trim();
   if (!isBulkAudience(audience)) return { ok: false, message: "Chưa chọn đối tượng nhận thư." };
+  // Danh sách tùy chỉnh không dựng lại được từ tên nhóm: nó đi qua bước xem trước và lệnh gửi
+  // riêng (startCustomBulkSendAction), nơi danh sách được kiểm lại và chốt vào lô.
+  if (audience === "custom") {
+    return { ok: false, message: "Danh sách tùy chỉnh phải xem trước rồi gửi bằng nút của nó." };
+  }
 
   if (audience !== "event") {
     return { ok: true, choice: { audience, eventId: null, coversSeries: false } };
