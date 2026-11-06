@@ -305,9 +305,9 @@ export function CustomListBuilder({
               </ul>
             </details>
           ) : null}
-          <div className="max-h-96 overflow-auto rounded-md border border-vam-line bg-white">
+          <div className="vam-table-frame max-h-96 rounded-md border border-vam-line bg-white">
             <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-slate-100 text-xs text-slate-600">
+              <thead className="text-xs text-slate-600">
                 <tr>
                   <th className="px-2 py-1">Gửi</th>
                   <th className="px-2 py-1">Họ tên</th>
