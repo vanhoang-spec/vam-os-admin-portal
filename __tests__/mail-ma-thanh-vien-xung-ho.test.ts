@@ -264,11 +264,14 @@ describe("mẫu thư đã lưu không dùng ô mới ra đúng từng byte như 
 describe("hướng dẫn sử dụng trang Mail nhắc hai ô mới", () => {
   it("liệt kê Mã thành viên và Xưng hô cạnh ba ô cũ", () => {
     const guide = HELP_GUIDES["/operations/mail"];
-    const text = [...guide.steps, ...(guide.notes ?? [])].join("\n");
+    // Soi đúng bước nói về khung "Chèn thông tin vào thư" — ghi chú bên dưới
+    // cũng nhắc tên hai ô, tìm chung cả hướng dẫn thì bước này thiếu vẫn xanh.
+    const step = guide.steps.find((row) => row.includes("Chèn thông tin vào thư")) ?? "";
     for (const label of ["Tên người nhận", "Tên mùa", "Vai trò", "Mã thành viên", "Xưng hô (Anh/Chị)"]) {
-      expect(text).toContain(label);
+      expect(step).toContain(label);
     }
-    expect(text).toContain("chỉ dành cho Mentor");
+    const notes = (guide.notes ?? []).join("\n");
+    expect(notes).toContain("chỉ dành cho Mentor");
   });
 });
 
