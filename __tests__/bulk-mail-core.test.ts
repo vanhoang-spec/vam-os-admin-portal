@@ -147,9 +147,11 @@ describe("remainingRecipients", () => {
 
 describe("buildRecipientValues", () => {
   it("điền đủ mọi ô mà loại thư khai báo", () => {
+    // Mentor có mã và giới tính: người đủ dữ liệu cho cả hai ô được phép rỗng
+    // (VAM00024), nên ô nào trống ở đây là ô quên chỗ lấy dữ liệu.
     const values = buildRecipientValues({
       kind: "general_announcement",
-      recipient: person(),
+      recipient: person({ role: "mentor", memberCode: "UEHR0012", gender: "female" }),
       seasonCode: "UEHM-S12"
     });
     for (const placeholder of TEMPLATE_SPECS.general_announcement.placeholders) {

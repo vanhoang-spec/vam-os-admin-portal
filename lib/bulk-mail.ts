@@ -25,6 +25,7 @@ import {
 import { escapeIlikePattern } from "@/lib/identity";
 import { readAllPages, readAllPagesIn, readBounded } from "@/lib/paged-read";
 import { formatDate } from "@/lib/utils";
+import { displayCurrentMemberCode } from "@/lib/member-code-core";
 import { renderTemplate, type TemplateKind } from "@/lib/email-templates-core";
 import { sendTemplatedEmail } from "@/lib/email";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -163,7 +164,7 @@ async function peopleRecipients(
     const chunk = personIds.slice(index, index + 500);
     const { data, error } = await client
       .from("people")
-      .select("id, full_name, email_primary")
+      .select("id, full_name, email_primary, member_code, gender")
       .in("id", chunk);
 
     if (error) {
@@ -175,14 +176,66 @@ async function peopleRecipients(
       id: string;
       full_name: string | null;
       email_primary: string | null;
+      member_code?: string | null;
+      gender?: string | null;
     }>) {
       const personId = String(raw.id);
+      const memberCode = String(raw.member_code ?? "").trim();
+      const gender = String(raw.gender ?? "").trim();
       rows.push({
         personId,
         fullName: String(raw.full_name ?? "").trim(),
         email: String(raw.email_primary ?? "").trim(),
-        role: roleByPerson.get(personId) ?? "mentee"
+        role: roleByPerson.get(personId) ?? "mentee",
+        ...(memberCode ? { memberCode } : {}),
+        ...(gender ? { gender } : {})
       });
+    }
+  }
+
+  return attachLegacyCodes(client, rows);
+}
+
+/**
+ * Người chưa có mã mới thì lấy mã cũ trong hồ sơ mentor/mentee, theo đúng vai
+ * trò trong lô — cùng quy tắc `displayCurrentMemberCode` mà trang Mentor, Mentee
+ * đang hiện (VAM00024). Thư và màn hình nói hai mã khác nhau cho một người là
+ * thứ BTC sẽ phải giải thích với từng người nhận.
+ *
+ * Đọc hỏng thì trả lỗi cho cả danh sách, như mọi bước đọc khác ở đây: gửi tiếp
+ * với mã thiếu nghĩa là ô {{ma_thanh_vien}} lặng lẽ trống ở những thư lẽ ra có mã.
+ */
+async function attachLegacyCodes(client: any, rows: BulkRecipient[]): Promise<RecipientRows> {
+  const tables = [
+    { role: "mentor" as const, table: "mentor_profiles", column: "mentor_code" },
+    { role: "mentee" as const, table: "mentee_profiles", column: "mentee_code" }
+  ];
+
+  for (const { role, table, column } of tables) {
+    const needing = rows.filter((row) => row.role === role && !row.memberCode);
+    if (!needing.length) continue;
+
+    const legacyByPerson = new Map<string, string>();
+    const ids = needing.map((row) => row.personId);
+    for (let index = 0; index < ids.length; index += 500) {
+      const { data, error } = await client
+        .from(table)
+        .select(`person_id, ${column}`)
+        .in("person_id", ids.slice(index, index + 500));
+      if (error) {
+        log(`listBulkRecipients:${table}`, error);
+        return { rows: [], error: VI_ERROR };
+      }
+      for (const raw of (data ?? []) as Array<Record<string, string | null>>) {
+        const personId = String(raw.person_id ?? "").trim();
+        const code = String(raw[column] ?? "").trim();
+        if (personId && code && !legacyByPerson.has(personId)) legacyByPerson.set(personId, code);
+      }
+    }
+
+    for (const row of needing) {
+      const code = displayCurrentMemberCode(null, legacyByPerson.get(row.personId));
+      if (code) row.memberCode = code;
     }
   }
 
