@@ -409,15 +409,17 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Lọc bằng “Ngành”, “Chức năng”, “Trạng thái mentor”, “Số mentee”, “Mentee phụ trách”, “Công ty”, “Mùa intake”, “Đợt tuyển”; bấm “Xoá bộ lọc” để bỏ lọc.",
       "Đổi thứ tự ở ô “Sắp xếp”: mặc định xếp theo mã thành viên (Core team UEHC rồi Mentor UEHR); còn có “Số mentee giảm dần”, “Mùa & Năm mentoring đầu tiên”, “Tên mentor A-Z”, “Công ty A-Z”.",
       "Bấm vào một dòng để mở hồ sơ người đó; “Xem hồ sơ” mở link hồ sơ mentor bên ngoài.",
-      "Core team trở lên: bấm “Tạo mentor mới”, điền “1. Người (person)” và “2. Hồ sơ mentor”, rồi bấm “Tạo hồ sơ mentor”."
+      "Core team trở lên: bấm “Tạo mentor mới”, điền “1. Người (person)” và “2. Hồ sơ mentor”, rồi bấm “Tạo hồ sơ mentor”.",
+      "Core team trở lên: bấm “Xuất Excel hồ sơ Mentor” để tải file .xlsx một sheet, mỗi mentor một dòng, đủ mọi trường hồ sơ (kể cả trường trống); CV, ảnh, link hồ sơ là đường dẫn."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, Support team. Nút “Tạo mentor mới” chỉ dành cho Super admin, Admin, Core team.",
       "Hồ sơ vừa tạo chưa là thành viên chính thức của mùa nên chưa hiện ở đây — tìm ở “Cộng đồng VAM”. Email đã có thì bấm “Liên kết với người này” để khỏi tạo trùng.",
       "“Đang hoạt động” nghĩa là mentor có ít nhất một match đang active. Mentor “Không tham dự” trong mùa sẽ không nằm trong danh sách này.",
-      "Cột “Mùa & Năm mentoring đầu tiên” đọc từ mã cũ của mentor (hoặc năm bắt đầu trên hồ sơ); mã cũ không còn hiện trên danh sách nhưng vẫn tìm được bằng ô tìm."
+      "Cột “Mùa & Năm mentoring đầu tiên” đọc từ mã cũ của mentor (hoặc năm bắt đầu trên hồ sơ); mã cũ không còn hiện trên danh sách nhưng vẫn tìm được bằng ô tìm.",
+      "File Excel gồm cả danh sách của mùa đang chọn (ô tìm và bộ lọc trên màn hình không áp vào file). Chỉ Super admin, Admin, Core team có quyền vận hành mùa đó mới tải được; ghi chú admin trên hồ sơ không được xuất."
     ],
-    updated: "03/11/2026"
+    updated: "06/11/2026"
   },
   "/mentees": {
     title: "Mentee",
@@ -428,15 +430,17 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Lọc bằng “Mã trường”, “Mentor” (“Có mentor” / “Chưa có mentor”), “Trạng thái match”, “Ngành”, “Mùa intake”, “Đợt tuyển”; bấm “Xoá bộ lọc” để bỏ lọc.",
       "Đổi thứ tự ở ô “Sắp xếp”: mặc định xếp theo mã thành viên (Support team UEHS rồi Mentee UEHE); còn có “Mã trường A-Z”, “Tên mentee A-Z”, “Mùa & Năm mentoring đầu tiên”.",
       "Bấm vào một dòng để mở hồ sơ mentee; dùng “Xem match”, “Xem mentor”, “Xem profile” trên dòng để sang match, hồ sơ mentor hoặc link profile.",
-      "Core team trở lên: bấm “Tạo mentee mới”, điền “1. Người (person)” và “2. Hồ sơ mentee”, rồi bấm “Tạo hồ sơ mentee”."
+      "Core team trở lên: bấm “Tạo mentee mới”, điền “1. Người (person)” và “2. Hồ sơ mentee”, rồi bấm “Tạo hồ sơ mentee”.",
+      "Core team trở lên: bấm “Xuất Excel hồ sơ Mentee” để tải file .xlsx một sheet, mỗi mentee một dòng, đủ mọi trường hồ sơ (kể cả trường trống); link, tệp đính kèm là đường dẫn."
     ],
     notes: [
       "Mở được: Super admin, Admin, Core team, Support team. Nút “Tạo mentee mới” chỉ dành cho Super admin, Admin, Core team.",
       "Đổi Tham dự / Không tham dự hoặc xoá một mentee làm trong hồ sơ người đó; với mentee, Support team cũng làm được.",
       "Hồ sơ vừa tạo chưa là thành viên chính thức của mùa nên chưa hiện ở đây — tìm ở “Cộng đồng VAM”.",
-      "Cột “Mùa & Năm mentoring đầu tiên” đọc từ mã cũ của mentee; chưa có mã cũ thì là Mùa 12 - Năm 2026. Mã cũ không còn hiện trên danh sách nhưng vẫn tìm được bằng ô tìm."
+      "Cột “Mùa & Năm mentoring đầu tiên” đọc từ mã cũ của mentee; chưa có mã cũ thì là Mùa 12 - Năm 2026. Mã cũ không còn hiện trên danh sách nhưng vẫn tìm được bằng ô tìm.",
+      "File Excel gồm cả danh sách của mùa đang chọn (ô tìm và bộ lọc trên màn hình không áp vào file). Chỉ Super admin, Admin, Core team có quyền vận hành mùa đó mới tải được."
     ],
-    updated: "03/11/2026"
+    updated: "06/11/2026"
   },
   "/participant-accounts": {
     title: "Tài khoản đăng nhập",

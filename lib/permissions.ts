@@ -672,3 +672,13 @@ export function canManageBaoLoi(role?: string | null) {
 export function canExportMenteeOffline(role?: string | null) {
   return ["super_admin", "admin", "core_team"].includes(role || "");
 }
+
+/**
+ * Xuất Excel toàn bộ hồ sơ Mentor / Mentee của mùa (VAM00025, nút trên /mentors và /mentees). Một file chứa họ tên,
+ * email, SĐT, MSSV, ngày sinh của hàng trăm người, nên HẸP hơn quyền xem danh sách (canBrowseParticipants mở cả
+ * Support team): cùng nhóm với các file xuất hồ sơ khác (canAssignReview, canExportMenteeOffline). Người gọi còn phải
+ * có quyền vận hành đúng mùa đang xuất (canOperateSeason) — kiểm riêng ở máy chủ.
+ */
+export function canExportParticipantProfiles(role?: string | null) {
+  return ["super_admin", "admin", "core_team"].includes(role || "");
+}

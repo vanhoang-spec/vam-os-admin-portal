@@ -11,6 +11,8 @@ import { Match, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 import { displayCurrentMemberCode, displayYearOfStudy, firstSeasonLabel, firstSeasonOrder, memberCodeOrder } from "@/lib/member-code-core";
 import { displayCode, displayText } from "@/lib/utils";
 import { canBrowseParticipants } from "@/lib/read-access";
+import { canShowParticipantExport } from "@/lib/participant-export";
+import { participantExportHref } from "@/lib/participant-export-core";
 import { redirect } from "next/navigation";
 
 type Row = MenteeProfile & {
@@ -73,6 +75,8 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
     getCurrentAdminUser()
   ]);
   const allowCreate = canEditRecaps(adminUser) && canOperateAnyScope(scopeContext);
+  // VAM00025: nút xuất Excel chỉ hiện cho nhóm được tải (hẹp hơn nhóm xem danh sách); đường tải tự kiểm lại ở máy chủ.
+  const allowExport = await canShowParticipantExport(routeUser.role, scopeContext, seasonContext.selectedSeasonId);
   const peopleById = keyById(people.data);
   const intakeBatchById = new Map(intakeBatches.data.map((b) => [b.id, b]));
   const seasonById = new Map(seasons.data.map((s) => [s.id, s]));
@@ -136,11 +140,22 @@ export default async function MenteesPage(props: { searchParams?: Promise<{ seas
   return (
     <>
       <PageHeader title="Mentee" description="Hồ sơ mentee và thông tin học tập." />
-      {allowCreate ? (
+      {allowCreate || allowExport ? (
         <div className="mb-4 flex flex-wrap gap-2">
-          <Link href="/mentees/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
-            Tạo mentee mới
-          </Link>
+          {allowCreate ? (
+            <Link href="/mentees/create" className="inline-flex w-fit rounded-md bg-vam-green px-4 py-2 text-sm font-medium text-white hover:bg-vam-green/90">
+              Tạo mentee mới
+            </Link>
+          ) : null}
+          {allowExport ? (
+            <a
+              href={participantExportHref("mentee", seasonContext.selectedSeasonCode)}
+              data-testid="export-mentee-profiles"
+              className="inline-flex w-fit rounded-md border border-vam-line bg-white px-4 py-2 text-sm font-medium text-vam-ink hover:bg-vam-mint"
+            >
+              Xuất Excel hồ sơ Mentee
+            </a>
+          ) : null}
         </div>
       ) : null}
       <ErrorBox message={cohort.error || mentees.error || people.error || mentors.error || matches.error || intakeBatches.error || seasons.error} />
