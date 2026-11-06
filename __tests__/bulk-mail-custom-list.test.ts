@@ -507,7 +507,9 @@ describe("7. Gửi tiếp của lô custom đọc danh sách đã chốt", () =>
     ]);
     expect(calls[1].body).toContain("Chào Khoa BTC, ban tổ chức.");
     for (const call of calls) expect(call.batchId).toBe(BATCH);
-    for (const table of ["person_season_memberships", "people", "admin_users", "event_registrations", "events"]) {
+    // `people` được đọc lúc gửi, nhưng chỉ để lấy mã thành viên và giới tính cho dòng đã chốt
+    // (mục 8) — không bảng nguồn nào được đọc lại để dựng danh sách.
+    for (const table of ["person_season_memberships", "admin_users", "event_registrations", "events", "applications"]) {
       expect(db.reads).not.toContain(table);
     }
   });
@@ -555,5 +557,87 @@ describe("7. Gửi tiếp của lô custom đọc danh sách đã chốt", () =>
     expect(result.ok).toBe(true);
     expect(vi.mocked(sendTemplatedEmail).mock.calls.map((call) => call[0].toEmail).sort()).toEqual(["an@x.org", "chi@x.org"]);
     expect(db.reads).not.toContain("email_batch_recipients");
+  });
+});
+
+describe("8. ô {{ma_thanh_vien}} và {{xung_ho}} của lô custom (VAM00024)", () => {
+  const BATCH = u(73);
+  const P_LEGACY = u(8); // mentor chưa có mã mới, chỉ có mã cũ trong hồ sơ mentor
+  const batch = (requestedCount: number): EmailBatchRow => ({
+    id: BATCH, seasonId: S12, kind: "general_announcement", templateId: u(61), audience: "custom",
+    audienceEventId: null, audienceCoversSeries: false, status: "running", requestedCount,
+    sentCount: 0, skippedCount: 0, failedCount: 0, note: null, createdAt: "", completedAt: null
+  });
+  const frozenRow = (position: number, relation_table: string, relation_id: string, email: string, full_name: string, role: string): Row => ({
+    id: u(200 + position), batch_id: BATCH, position, relation_table, relation_id, email, full_name, role
+  });
+  const tablesWithDetails = () => {
+    const tables = seed();
+    for (const person of tables.people) {
+      if (person.id === P_MENTOR) person.gender = "male";
+      if (person.id === P_MENTEE) person.gender = "female";
+      // BTC có mã mới và giới tính trong danh bạ, nhưng dòng chốt nối về tài khoản BTC.
+      if (person.id === P_STAFF) person.gender = "male";
+    }
+    tables.people.push({ id: P_LEGACY, full_name: "Quỳnh Mã Cũ", email_primary: "quynh@x.org", member_code: null, gender: "female" });
+    tables.mentor_profiles = [{ id: u(301), person_id: P_LEGACY, mentor_code: "MT-S11-007" }];
+    tables.mentee_profiles = [];
+    // Danh sách chốt KHÔNG mang mã hay giới tính — hai ô phải được đọc lúc gửi.
+    tables.email_batch_recipients = [
+      frozenRow(0, "people", P_MENTOR, "an@x.org", "An Mentor", "mentor"),
+      frozenRow(1, "people", P_LEGACY, "quynh@x.org", "Quỳnh Mã Cũ", "mentor"),
+      frozenRow(2, "people", P_MENTEE, "binh@x.org", "Bình Mentee", "mentee"),
+      frozenRow(3, "admin_users", A_ADMIN, "khoa@x.org", "Khoa BTC", "staff"),
+      frozenRow(4, "event_registrations", R_IN, "lan@x.org", "Lan Đã Đến", "attendee")
+    ];
+    return tables;
+  };
+  const run = () =>
+    runEmailBatch({
+      batch: batch(5),
+      seasonCode: "UEHM-S12",
+      subject: "Thông báo {{mua}}",
+      body: "Kính gửi {{xung_ho}} {{ten_nguoi_nhan}} (mã {{ma_thanh_vien}})."
+    });
+  const bodyFor = (email: string) =>
+    vi.mocked(sendTemplatedEmail).mock.calls.map((call) => call[0]).find((call) => call.toEmail === email)?.body ?? "";
+
+  it("mentor: mã thành viên và Anh/Chị; mã cũ khi chưa có mã mới", async () => {
+    use({}, tablesWithDetails());
+    const result = await run();
+    expect(result).toMatchObject({ ok: true, sent: 5, error: null });
+    expect(bodyFor("an@x.org")).toContain("Kính gửi Anh An Mentor (mã UEHR0001).");
+    expect(bodyFor("quynh@x.org")).toContain("Kính gửi Chị Quỳnh Mã Cũ (mã MT-S11-007).");
+  });
+
+  it("mentee: không xưng hô, mã như các nhóm khác; BTC và người tham dự: cả hai ô trống", async () => {
+    use({}, tablesWithDetails());
+    await run();
+    const mentee = bodyFor("binh@x.org");
+    expect(mentee).toContain("Kính gửi Bình Mentee (mã UEHE0002).");
+    expect(mentee).not.toMatch(/Anh|Chị/);
+    for (const [email, name] of [["khoa@x.org", "Khoa BTC"], ["lan@x.org", "Lan Đã Đến"]]) {
+      const body = bodyFor(email);
+      expect(body).toContain(`Kính gửi ${name} (mã`);
+      expect(body).not.toMatch(/Anh |Chị |UEH/);
+    }
+  });
+
+  it("mã đọc lúc gửi: đổi mã sau khi chốt thì thư mang mã mới", async () => {
+    const tables = tablesWithDetails();
+    (tables.people.find((person) => person.id === P_MENTOR) as Row).member_code = "UEHR0100";
+    use({}, tables);
+    await run();
+    expect(bodyFor("an@x.org")).toContain("(mã UEHR0100)");
+  });
+
+  it("đọc danh bạ hoặc mã cũ hỏng: không gửi lá nào", async () => {
+    for (const table of ["people", "mentor_profiles"]) {
+      vi.mocked(sendTemplatedEmail).mockClear();
+      use({ failOn: [table] }, tablesWithDetails());
+      const result = await run();
+      expect(result.ok, table).toBe(false);
+      expect(sendTemplatedEmail).not.toHaveBeenCalled();
+    }
   });
 });

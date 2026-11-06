@@ -1076,7 +1076,49 @@ async function readFrozenRecipients(
       relationTable: source
     });
   }
+  const details = await attachFrozenPeopleDetails(client, sendable);
+  if (details.error) return { partition: empty, error: details.error };
   return { partition: { sendable, unreachable: [] }, error: null };
+}
+
+/**
+ * Mã thành viên và giới tính cho các dòng chốt nối về `people` (VAM00024), đọc LÚC GỬI chứ không
+ * chốt vào lô: mã được cấp hay sửa giữa hai lần "Gửi tiếp" thì thư sau mang mã đúng, và bảng danh
+ * sách chốt không phải giữ thêm dữ liệu cá nhân nào.
+ *
+ * Cùng quy tắc với các nhóm đọc từ danh bạ: mã mới trong `people.member_code`, chưa có thì mã cũ
+ * theo vai trò (attachLegacyCodes). Dòng nối về tài khoản BTC hay phiếu đăng ký sự kiện không có hai
+ * giá trị này — như nhóm "Ban tổ chức" và nhóm sự kiện — nên ô của họ để trống.
+ *
+ * Đọc hỏng thì báo lỗi cho cả lượt, không gửi thư với ô mã lặng lẽ trống.
+ */
+async function attachFrozenPeopleDetails(client: any, rows: BulkRecipient[]): Promise<{ error: string | null }> {
+  const people = rows.filter((row) => (row.relationTable ?? "people") === "people");
+  if (!people.length) return { error: null };
+
+  const read = await readAllPagesIn<{ id: string; member_code: string | null; gender: string | null }>(
+    client,
+    "people",
+    "id",
+    people.map((row) => row.personId),
+    "id, member_code, gender"
+  );
+  if (read.error) {
+    log("runEmailBatch:frozen-people", read.error);
+    return { error: VI_ERROR };
+  }
+  const byId = new Map(read.data.map((row) => [String(row.id), row]));
+  for (const row of people) {
+    const found = byId.get(row.personId);
+    const memberCode = String(found?.member_code ?? "").trim();
+    const gender = String(found?.gender ?? "").trim();
+    if (memberCode) row.memberCode = memberCode;
+    if (gender) row.gender = gender;
+  }
+
+  // Chỉ dòng `people`: id của dòng BTC hay phiếu đăng ký không phải person_id của hồ sơ nào.
+  const legacy = await attachLegacyCodes(client, people);
+  return { error: legacy.error };
 }
 
 /** Mỗi lần ghi danh sách chốt bao nhiêu dòng. */

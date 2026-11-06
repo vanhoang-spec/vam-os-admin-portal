@@ -345,7 +345,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Thư không nhận thẻ HTML (dấu < và >). Sửa một mẫu đã duyệt sẽ đưa nó về “Bản nháp”; lô đang gửi dở cũng phải chờ duyệt lại mới “Gửi tiếp” được.",
       "Thư đã gửi không thu hồi được. Người thiếu email hoặc họ tên không nhận được thư; số người này hiện ngay dưới ô “Gửi cho”.",
       "Danh sách tùy chỉnh: mỗi email chỉ nhận một lá dù có mặt ở nhiều nguồn. Chỉ thêm tay được người đã có trong VAM OS và thuộc mùa này (có tư cách hoặc có đơn trong mùa) hoặc thuộc Ban tổ chức — không gõ được email ngoài hệ thống. Đổi nguồn hay người thêm tay thì phải bấm “Xem danh sách người nhận” lại.",
-      "Danh sách tùy chỉnh được chốt vào lô lúc bấm “Bắt đầu gửi”: “Gửi tiếp” chỉ gửi cho đúng những người đã xem, không thêm người mới đăng ký hay mới vào mùa sau đó. Ô “Vai trò” trong thư: mentor/mentee theo tư cách đang hoạt động, “ban tổ chức”, hoặc “người tham dự” với người đăng ký sự kiện và người không giữ vai trò nào trong mùa."
+      "Danh sách tùy chỉnh được chốt vào lô lúc bấm “Bắt đầu gửi”: “Gửi tiếp” chỉ gửi cho đúng những người đã xem, không thêm người mới đăng ký hay mới vào mùa sau đó. Ô “Vai trò” trong thư: mentor/mentee theo tư cách đang hoạt động, “ban tổ chức”, hoặc “người tham dự” với người đăng ký sự kiện và người không giữ vai trò nào trong mùa. Ô “Mã thành viên” và “Xưng hô” đọc lúc gửi, theo cùng quy tắc với các nhóm khác: người lấy từ danh bạ có mã, mentor có Anh/Chị; người lấy từ tài khoản BTC hay phiếu đăng ký sự kiện thì hai ô để trống."
     ],
     updated: "06/11/2026"
   },
