@@ -60,6 +60,23 @@ describe("danh mục ô điền hiện ra", () => {
     renderEditor();
     expect(screen.getByText("{{ten_nguoi_nhan}}")).toBeTruthy();
   });
+
+  it("có thêm nút Mã thành viên và Xưng hô (VAM00024), bấm là chèn đúng ô", () => {
+    renderEditor();
+    clickField("Mã thành viên");
+    expect(body().value).toBe("{{ma_thanh_vien}}");
+    clickField("Xưng hô");
+    expect(body().value).toBe("{{ma_thanh_vien}}{{xung_ho}}");
+    expect(screen.getByText("{{ma_thanh_vien}}", { selector: "code" })).toBeTruthy();
+    expect(screen.getByText("{{xung_ho}}", { selector: "code" })).toBeTruthy();
+  });
+
+  it("xem trước dùng giá trị mẫu của hai ô mới, không báo thiếu dữ liệu", () => {
+    renderEditor();
+    fireEvent.change(subject(), { target: { value: "Thư" } });
+    fireEvent.change(body(), { target: { value: "Kính gửi {{xung_ho}} {{ten_nguoi_nhan}} ({{ma_thanh_vien}})" } });
+    expect(screen.getByText(/Kính gửi Anh Nguyễn Văn A \(UEHR0012\)/)).toBeTruthy();
+  });
 });
 
 describe("chèn vào đúng chỗ", () => {

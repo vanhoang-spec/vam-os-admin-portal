@@ -47,8 +47,18 @@ export type PlaceholderSpec = {
    *
    * KHÔNG phải là "được phép để trống": một ô đã dùng trong thư mà không có
    * giá trị thì chặn cả bức thư đó, dù `required` là gì — xem `renderTemplate`.
+   * Ngoại lệ duy nhất là ô mang `emptyAllowed`.
    */
   required: boolean;
+  /**
+   * Ô được phép rỗng: không có giá trị thì điền chuỗi rỗng và gộp khoảng trắng
+   * thừa quanh nó, thay vì chặn bức thư (VAM00024).
+   *
+   * Chỉ dành cho ô mà "không có gì" là một câu trả lời đúng: mentee không có
+   * xưng hô Anh/Chị, mentor chưa ghi giới tính thì gọi bằng tên là lịch sự hơn
+   * đoán sai. Đừng đặt cờ này cho tên người nhận — thư "Chào ," vẫn phải bị chặn.
+   */
+  emptyAllowed?: boolean;
   /** Giá trị mẫu, để xem trước thư trước khi có người nhận thật. */
   sample: string;
   /** Câu giải thích hiện dưới nút chèn ô. */
@@ -99,6 +109,22 @@ export const TEMPLATE_SPECS: Record<TemplateKind, TemplateSpec> = {
         required: false,
         sample: "mentee",
         hint: "'mentor', 'mentee', 'ban tổ chức' hoặc 'người tham dự', theo nhóm nhận thư."
+      },
+      {
+        key: "ma_thanh_vien",
+        label: "Mã thành viên",
+        required: false,
+        emptyAllowed: true,
+        sample: "UEHR0012",
+        hint: "Mã thành viên của Mentor/Mentee, ví dụ UEHR0012; chưa có mã mới thì dùng mã cũ. Không có mã (BTC, người tham dự sự kiện, mentee rớt) thì để trống."
+      },
+      {
+        key: "xung_ho",
+        label: "Xưng hô (Anh/Chị)",
+        required: false,
+        emptyAllowed: true,
+        sample: "Anh",
+        hint: "Chỉ cho Mentor: nam là 'Anh', nữ là 'Chị'. Mentee, người nhận khác, hoặc mentor chưa ghi giới tính thì để trống và tự bỏ khoảng trắng thừa (\"Kính gửi {{xung_ho}} {{ten_nguoi_nhan}}\" thành \"Kính gửi Nguyễn Văn A\")."
       }
     ]
   }
@@ -205,6 +231,46 @@ export function validateTemplate(input: {
   return { ok: true, name, subject, body, warnings };
 }
 
+const BLANKABLE_TOKEN = /([ \t]*)\{\{\s*([a-z0-9_]{1,40})\s*\}\}([ \t]*)/g;
+const CLOSING_PUNCTUATION = /[,.;:!?)\]}”’…]/;
+const OPENING_PUNCTUATION = /[(\[{“‘]/;
+
+/**
+ * Xoá các ô được phép rỗng mà người nhận này không có giá trị, cùng khoảng
+ * trắng thừa quanh chúng (VAM00024).
+ *
+ * Chỉ thay chuỗi rỗng thì "Kính gửi {{xung_ho}} Nam" thành "Kính gửi  Nam" —
+ * hai dấu cách — và "{{xung_ho}} Nam" đầu dòng thành " Nam". Nên một ô rỗng
+ * nằm giữa hai chữ để lại đúng một dấu cách; ở đầu dòng, cuối dòng, sát dấu câu
+ * đóng (",", ".", ")") hay ngay sau dấu mở ngoặc thì không để lại gì.
+ *
+ * Xử lý từng ô một và đọc lại chuỗi sau mỗi lần xoá: hai ô rỗng đứng cạnh nhau
+ * ("{{xung_ho}} {{ma_thanh_vien}} Nam") thì ô sau phải thấy bối cảnh ô trước đã
+ * để lại, không phải bối cảnh của chuỗi gốc.
+ *
+ * Ô không nằm trong `keys` — kể cả ô đã có giá trị — đi qua nguyên vẹn, nên một
+ * mẫu thư không dùng ô nào được phép rỗng ra đúng từng byte như trước.
+ */
+function removeBlankPlaceholders(text: string, keys: Set<string>): string {
+  if (!keys.size) return text;
+  let out = text;
+  for (;;) {
+    const match = Array.from(out.matchAll(BLANKABLE_TOKEN)).find((row) => keys.has(row[2]));
+    if (!match || match.index === undefined) return out;
+
+    const start = match.index;
+    const end = start + match[0].length;
+    const before = start > 0 ? out[start - 1] : "";
+    const after = end < out.length ? out[end] : "";
+    const hadSpace = Boolean(match[1] || match[3]);
+    const atEdge = !before || before === "\n" || before === "\r" || !after || after === "\n" || after === "\r";
+    const glue =
+      hadSpace && !atEdge && !CLOSING_PUNCTUATION.test(after) && !OPENING_PUNCTUATION.test(before) ? " " : "";
+
+    out = `${out.slice(0, start)}${glue}${out.slice(end)}`;
+  }
+}
+
 export type RenderResult =
   | { ok: true; subject: string; body: string }
   | { ok: false; missing: string[]; message: string };
@@ -217,6 +283,9 @@ export type RenderResult =
  * dùng rồi thì phải có gì để điền. Người nhận không bao giờ được thấy một chỗ
  * trống ở nơi lẽ ra là tên mình.
  *
+ * Ngoại lệ: ô khai báo `emptyAllowed` (mã thành viên, xưng hô) rỗng thì được
+ * xoá gọn cùng khoảng trắng thừa — xem `removeBlankPlaceholders`.
+ *
  * Bức thư hỏng bị bỏ lại một mình: các thư khác trong cùng lô vẫn đi, và người
  * bị thiếu dữ liệu được báo theo tên ô để còn sửa.
  */
@@ -228,10 +297,19 @@ export function renderTemplate(input: {
 }): RenderResult {
   const missing: string[] = [];
 
+  const valueOf = (key: string) => {
+    const value = input.values[key];
+    return value === null || value === undefined ? "" : String(value).trim();
+  };
+  const blankKeys = new Set(
+    (TEMPLATE_SPECS[input.kind]?.placeholders ?? [])
+      .filter((placeholder) => placeholder.emptyAllowed && !valueOf(placeholder.key))
+      .map((placeholder) => placeholder.key)
+  );
+
   const fill = (text: string) =>
-    String(text ?? "").replace(PLACEHOLDER_PATTERN, (_match, key: string) => {
-      const value = input.values[key];
-      const filled = value === null || value === undefined ? "" : String(value).trim();
+    removeBlankPlaceholders(String(text ?? ""), blankKeys).replace(PLACEHOLDER_PATTERN, (_match, key: string) => {
+      const filled = valueOf(key);
       if (!filled) {
         if (!missing.includes(key)) missing.push(key);
         return "";

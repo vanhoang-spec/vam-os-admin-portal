@@ -325,7 +325,30 @@ export type BulkRecipient = {
   role: RecipientRole;
   /** Vắng mặt nghĩa là `people`, như mọi nhóm trước khi có nhóm BTC và sự kiện. */
   relationTable?: RecipientSource;
+  /**
+   * Mã thành viên để điền ô {{ma_thanh_vien}}: mã mới, chưa có thì mã cũ — đúng
+   * như cột "Mã thành viên" ở trang Mentor/Mentee. Chỉ nhóm đọc từ danh bạ
+   * (mentor, mentee đang tham gia, mentor quay lại) mới có.
+   */
+  memberCode?: string | null;
+  /** `people.gender` nguyên văn, để suy ra ô {{xung_ho}}. */
+  gender?: string | null;
 };
+
+/**
+ * Xưng hô theo giới tính, chỉ cho mentor (VAM00024): nữ là "Chị", nam là "Anh".
+ *
+ * `people.gender` là enum male | female | other | undisclosed, nhưng vẫn nhận
+ * thêm "Nam"/"Nữ" và mọi kiểu hoa thường, khoảng trắng — dữ liệu cũ không chắc
+ * đã đi qua bước chuẩn hoá. Giá trị nào khác (other, undisclosed, trống) trả về
+ * chuỗi rỗng: gọi nhầm "Anh" một chị mentor tệ hơn là chỉ gọi tên.
+ */
+export function formOfAddressForGender(gender: string | null | undefined): string {
+  const value = String(gender ?? "").normalize("NFC").trim().toLowerCase();
+  if (value === "female" || value === "nữ" || value === "nu") return "Chị";
+  if (value === "male" || value === "nam") return "Anh";
+  return "";
+}
 
 /**
  * Giá trị điền vào thư cho MỘT người nhận.
@@ -343,7 +366,12 @@ export function buildRecipientValues(input: {
   const source: Record<string, string> = {
     ten_nguoi_nhan: input.recipient.fullName,
     mua: input.seasonCode,
-    vai_tro: RECIPIENT_ROLE_WORDS[input.recipient.role] ?? RECIPIENT_ROLE_WORDS.mentee
+    vai_tro: RECIPIENT_ROLE_WORDS[input.recipient.role] ?? RECIPIENT_ROLE_WORDS.mentee,
+    ma_thanh_vien: String(input.recipient.memberCode ?? "").trim(),
+    // Mentee được gọi là "Bạn" trong thư; BTC và người tham dự sự kiện không
+    // mang giới tính trong lô. Chỉ mentor có xưng hô — còn lại để trống, và ô
+    // `emptyAllowed` tự gộp khoảng trắng thừa.
+    xung_ho: input.recipient.role === "mentor" ? formOfAddressForGender(input.recipient.gender) : ""
   };
 
   const values: Record<string, string> = {};
@@ -407,7 +435,9 @@ export function partitionRecipients(rows: BulkRecipient[]): RecipientPartition {
       fullName,
       email,
       role: row.role,
-      ...(row.relationTable ? { relationTable: row.relationTable } : {})
+      ...(row.relationTable ? { relationTable: row.relationTable } : {}),
+      ...(row.memberCode ? { memberCode: row.memberCode } : {}),
+      ...(row.gender ? { gender: row.gender } : {})
     });
   }
 

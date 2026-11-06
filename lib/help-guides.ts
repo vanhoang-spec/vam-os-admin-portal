@@ -330,7 +330,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
     summary: "Soạn mẫu thư gửi hàng loạt cho mentor, mentee của mùa đang vận hành; quản trị viên duyệt rồi gửi. Tab “Thư tự động” và “Nhật ký gửi” cho xem thư hệ thống tự gửi và mọi lá thư đã đi.",
     steps: [
       "Ở tab “Mẫu thư”, bấm “Soạn thông báo chung”, điền “Tên mẫu thư” (người nhận không thấy), “Tiêu đề thư” và “Nội dung thư” (văn bản thuần).",
-      "Đặt con trỏ vào tiêu đề hoặc nội dung rồi bấm một nút trong khung “Chèn thông tin vào thư” (Tên người nhận, Tên mùa, Vai trò); kiểm lại ở khung “Xem trước”.",
+      "Đặt con trỏ vào tiêu đề hoặc nội dung rồi bấm một nút trong khung “Chèn thông tin vào thư” (Tên người nhận, Tên mùa, Vai trò, Mã thành viên, Xưng hô (Anh/Chị)); kiểm lại ở khung “Xem trước”.",
       "Bấm “Tạo bản nháp” (hoặc “Lưu thay đổi” khi sửa) rồi báo quản trị viên duyệt. Bấm vào tên một mẫu trong danh sách để mở ra sửa.",
       "Quản trị viên: mở mẫu đang là “Bản nháp”, gõ lại đúng tiêu đề vào ô “Gõ lại tiêu đề ở trên” rồi bấm “Duyệt mẫu thư”.",
       "Quản trị viên: ở “Gửi hàng loạt”, chọn “Mẫu thư” và “Gửi cho” (có cả người đã đăng ký một sự kiện), bấm “Gửi thử cho tôi” và kiểm hộp thư của mình trước.",
@@ -338,11 +338,12 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Gõ lại đúng số người nhận vào ô “Gõ lại số … để xác nhận”, bấm “Bắt đầu gửi”. Mỗi lần chạy gửi tối đa 25 thư; phần còn lại bấm “Gửi tiếp” ở “Lô đang gửi dở”."
     ],
     notes: [
+      "“Mã thành viên” điền mã của Mentor/Mentee (vd. UEHR0012; chưa có mã mới thì mã cũ). “Xưng hô (Anh/Chị)” chỉ dành cho Mentor: nam là “Anh”, nữ là “Chị”. Người không có mã, mentee, hoặc mentor chưa ghi giới tính thì ô đó để trống và khoảng trắng thừa tự được bỏ (“Kính gửi {{xung_ho}} {{ten_nguoi_nhan}}” thành “Kính gửi Nguyễn Văn A”).",
       "Soạn bản nháp: Super admin, Admin, Core team, Support team. Duyệt và gửi hàng loạt: chỉ Super admin, Admin. Tab “Nhật ký gửi”: Super admin, Admin, Core team.",
       "Thư không nhận thẻ HTML (dấu < và >). Sửa một mẫu đã duyệt sẽ đưa nó về “Bản nháp”; lô đang gửi dở cũng phải chờ duyệt lại mới “Gửi tiếp” được.",
       "Thư đã gửi không thu hồi được. Người thiếu email hoặc họ tên không nhận được thư; số người này hiện ngay dưới ô “Gửi cho”."
     ],
-    updated: "02/10/2026"
+    updated: "06/11/2026"
   },
   "/recaps/create": {
     title: "Tạo báo cáo",
