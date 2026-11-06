@@ -335,13 +335,17 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Quản trị viên: mở mẫu đang là “Bản nháp”, gõ lại đúng tiêu đề vào ô “Gõ lại tiêu đề ở trên” rồi bấm “Duyệt mẫu thư”.",
       "Quản trị viên: ở “Gửi hàng loạt”, chọn “Mẫu thư” và “Gửi cho” (có cả người đã đăng ký một sự kiện), bấm “Gửi thử cho tôi” và kiểm hộp thư của mình trước.",
       "Đọc dòng mô tả ngay dưới ô “Gửi cho” trước khi gửi: “Mentee đang tham gia mùa này” là các bạn ĐÃ ĐẬU; thư báo rớt vòng hồ sơ thì chọn “Mentee rớt vòng hồ sơ (CV)”.",
-      "Gõ lại đúng số người nhận vào ô “Gõ lại số … để xác nhận”, bấm “Bắt đầu gửi”. Mỗi lần chạy gửi tối đa 25 thư; phần còn lại bấm “Gửi tiếp” ở “Lô đang gửi dở”."
+      "Gõ lại đúng số người nhận vào ô “Gõ lại số … để xác nhận”, bấm “Bắt đầu gửi”. Mỗi lần chạy gửi tối đa 25 thư; phần còn lại bấm “Gửi tiếp” ở “Lô đang gửi dở”.",
+      "Tự dựng danh sách: ở “Gửi cho” chọn “Danh sách tùy chỉnh…”, tick một hoặc nhiều nguồn (Mentor, Mentee đang tham gia mùa này, Ban tổ chức, Người đăng ký một sự kiện — chọn sự kiện, “Gồm cả các buổi khác trong chuỗi”, và “Check-in”: Tất cả / Đã check-in / Chưa check-in).",
+      "Muốn thêm ai: gõ tên, email hoặc mã thành viên vào ô tìm, bấm “Tìm”, rồi bấm “Thêm …” ở đúng người. Bấm “Xem danh sách người nhận”, bỏ tick người không gửi, gõ lại số người ở ô xác nhận và bấm “Bắt đầu gửi”."
     ],
     notes: [
       "“Mã thành viên” điền mã của Mentor/Mentee (vd. UEHR0012; chưa có mã mới thì mã cũ). “Xưng hô (Anh/Chị)” chỉ dành cho Mentor: nam là “Anh”, nữ là “Chị”. Người không có mã, mentee, hoặc mentor chưa ghi giới tính thì ô đó để trống và khoảng trắng thừa tự được bỏ (“Kính gửi {{xung_ho}} {{ten_nguoi_nhan}}” thành “Kính gửi Nguyễn Văn A”).",
       "Soạn bản nháp: Super admin, Admin, Core team, Support team. Duyệt và gửi hàng loạt: chỉ Super admin, Admin. Tab “Nhật ký gửi”: Super admin, Admin, Core team.",
       "Thư không nhận thẻ HTML (dấu < và >). Sửa một mẫu đã duyệt sẽ đưa nó về “Bản nháp”; lô đang gửi dở cũng phải chờ duyệt lại mới “Gửi tiếp” được.",
-      "Thư đã gửi không thu hồi được. Người thiếu email hoặc họ tên không nhận được thư; số người này hiện ngay dưới ô “Gửi cho”."
+      "Thư đã gửi không thu hồi được. Người thiếu email hoặc họ tên không nhận được thư; số người này hiện ngay dưới ô “Gửi cho”.",
+      "Danh sách tùy chỉnh: mỗi email chỉ nhận một lá dù có mặt ở nhiều nguồn. Chỉ thêm tay được người đã có trong VAM OS và thuộc mùa này (có tư cách hoặc có đơn trong mùa) hoặc thuộc Ban tổ chức — không gõ được email ngoài hệ thống. Đổi nguồn hay người thêm tay thì phải bấm “Xem danh sách người nhận” lại.",
+      "Danh sách tùy chỉnh được chốt vào lô lúc bấm “Bắt đầu gửi”: “Gửi tiếp” chỉ gửi cho đúng những người đã xem, không thêm người mới đăng ký hay mới vào mùa sau đó. Ô “Vai trò” trong thư: mentor/mentee theo tư cách đang hoạt động, “ban tổ chức”, hoặc “người tham dự” với người đăng ký sự kiện và người không giữ vai trò nào trong mùa."
     ],
     updated: "06/11/2026"
   },

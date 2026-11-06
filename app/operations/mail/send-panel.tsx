@@ -20,6 +20,7 @@ import {
   sendTestEmailAction,
   startBulkSendAction
 } from "@/app/actions/bulk-mail";
+import { CustomListBuilder } from "./custom-list-builder";
 
 export type SendableTemplate = { id: string; name: string; subject: string };
 
@@ -176,8 +177,11 @@ export function SendPanel({
   const seriesAvailable = Boolean(selectedEvent && selectedEvent.seriesSendable !== null);
   const useSeries = audience === "event" && seriesAvailable && coversSeries;
 
+  // Danh sách tùy chỉnh tự đếm trong bản xem trước của nó; hai con số này không dùng tới.
   const target =
-    audience === "event"
+    audience === "custom"
+      ? ZERO
+      : audience === "event"
       ? selectedEvent
         ? useSeries
           ? {
@@ -189,7 +193,9 @@ export function SendPanel({
       : counts[audience] ?? ZERO;
 
   const audienceText =
-    audience === "event"
+    audience === "custom"
+      ? ""
+      : audience === "event"
       ? selectedEvent
         ? `người đã đăng ký ${selectedEvent.label}${useSeries ? " (cả chuỗi)" : ""}`
         : "người đã đăng ký sự kiện"
@@ -270,8 +276,13 @@ export function SendPanel({
             {eventOptions.length ? (
               <option value="event">{BULK_AUDIENCE_LABELS.event}…</option>
             ) : null}
+            <option value="custom">{BULK_AUDIENCE_LABELS.custom}…</option>
           </select>
-          {audience !== "event" ? (
+          {audience === "custom" ? (
+            <p className="mt-1 text-xs text-slate-600" data-testid="send-audience-hint">
+              Gộp nhiều nguồn, thêm hoặc bỏ từng người, xem trước rồi mới gửi. Danh sách được chốt vào lô.
+            </p>
+          ) : audience !== "event" ? (
             <p className="mt-1 text-xs text-slate-600" data-testid="send-audience-hint">
               {BULK_AUDIENCE_HINTS[audience]}
             </p>
@@ -332,6 +343,9 @@ export function SendPanel({
       </form>
       <Result state={testState} />
 
+      {audience === "custom" ? <CustomListBuilder templateId={templateId} eventOptions={eventOptions} /> : null}
+
+      {audience !== "custom" ? (
       <form action={sendAction} className="flex flex-col gap-3 border-t border-vam-line pt-4">
         <input type="hidden" name="template_id" value={templateId} />
         <input type="hidden" name="audience" value={audience} />
@@ -367,6 +381,7 @@ export function SendPanel({
           />
         </div>
       </form>
+      ) : null}
       <Result state={sendState} />
 
       {runningBatches.length ? (

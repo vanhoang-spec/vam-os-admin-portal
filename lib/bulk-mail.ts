@@ -20,8 +20,18 @@ import {
   type BulkRecipient,
   type FixedBulkAudience,
   type ProfileReviewVerdict,
-  type RecipientPartition
+  type RecipientPartition,
+  type RecipientRole,
+  type RecipientSource
 } from "@/lib/bulk-mail-core";
+import {
+  EVENT_CHECKIN_FILTER_LABELS,
+  matchesCheckinFilter,
+  mergeCustomSources,
+  type CustomListSpec,
+  type EventCheckinFilter
+} from "@/lib/bulk-mail-custom-core";
+import { normalizeEmailAddress } from "@/lib/email-core";
 import { escapeIlikePattern } from "@/lib/identity";
 import { readAllPages, readAllPagesIn, readBounded } from "@/lib/paged-read";
 import { formatDate } from "@/lib/utils";
@@ -80,6 +90,12 @@ export async function listBulkRecipients(input: {
   const empty: RecipientPartition = { sendable: [], unreachable: [] };
   const client = getSupabaseServiceRoleClient();
   if (!client) return { partition: empty, error: VI_ERROR };
+
+  // Danh sách tùy chỉnh không có câu truy vấn nào dựng lại được — rơi xuống nhánh cuối
+  // là đọc nhầm thành nhóm sự kiện. Lô `custom` đọc danh sách đã chốt (readFrozenRecipients).
+  if (input.audience === "custom") {
+    return { partition: empty, error: "Danh sách tùy chỉnh không dựng lại được từ tên nhóm." };
+  }
 
   let result: RecipientRows;
   if (isMembershipAudience(input.audience)) {
@@ -688,7 +704,10 @@ async function eventRecipients(
   client: any,
   seasonId: string,
   eventId: string | null,
-  coversSeries: boolean
+  coversSeries: boolean,
+  // Chỉ danh sách tùy chỉnh truyền khác "all"; nhóm `event` cũ luôn đi "all", nên danh
+  // sách của nó không đổi (VAM00026).
+  checkin: EventCheckinFilter = "all"
 ): Promise<RecipientRows> {
   if (!eventId) return { rows: [], error: "Chưa chọn sự kiện cho nhóm người đã đăng ký." };
 
@@ -737,7 +756,8 @@ async function eventRecipients(
     full_name: string | null;
     email: string | null;
     registration_status: string | null;
-  }>(client, "event_registrations", "event_id", eventIds, "id, full_name, email, registration_status");
+    attendance_status: string | null;
+  }>(client, "event_registrations", "event_id", eventIds, "id, full_name, email, registration_status, attendance_status");
   if (registrations.error) {
     log("listBulkRecipients:event-registrations", registrations.error);
     return { rows: [], error: VI_ERROR };
@@ -747,6 +767,7 @@ async function eventRecipients(
   for (const row of registrations.data) {
     const status = String(row.registration_status ?? "").trim();
     if (status === "cancelled" || status === "rejected") continue;
+    if (!matchesCheckinFilter(row.attendance_status, checkin)) continue;
     rows.push({
       personId: String(row.id),
       fullName: String(row.full_name ?? "").trim(),
@@ -758,9 +779,362 @@ async function eventRecipients(
 
   const name = String(event.event_name ?? "").trim() || "sự kiện";
   const when = event.starts_at ? formatDate(event.starts_at) : "";
-  const label = `Người đã đăng ký ${name}${when ? ` · ${when}` : ""}${coversSeries && seriesId ? " (cả chuỗi)" : ""}`;
+  const checkinPart = checkin === "all" ? "" : ` · ${EVENT_CHECKIN_FILTER_LABELS[checkin].toLowerCase()}`;
+  const label = `Người đã đăng ký ${name}${when ? ` · ${when}` : ""}${coversSeries && seriesId ? " (cả chuỗi)" : ""}${checkinPart}`;
 
   return { rows, error: null, label };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Danh sách tùy chỉnh (VAM00026)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Tập ứng viên của một danh sách tùy chỉnh: hợp của các nguồn đã tick, cộng người thêm tay,
+ * mỗi email một lá.
+ *
+ * Mỗi nguồn đi qua ĐÚNG hàm đọc của nhóm cũ tương ứng — membershipRecipients, staffRecipients,
+ * eventRecipients — để "Mentor đang tham gia mùa này" ở đây là cùng những người với nhóm cố
+ * định cùng tên, không phải một câu truy vấn thứ hai có thể trôi lệch.
+ *
+ * Thứ tự nguồn quyết định bản giữ lại khi trùng email: mentor/mentee → BTC → người đăng ký sự
+ * kiện → người thêm tay. Một mentor cũng đăng ký sự kiện nhận thư với vai trò "mentor".
+ *
+ * Một nguồn đọc hỏng, sự kiện không thuộc mùa, hay một người thêm tay không thuộc mùa là lỗi
+ * cho cả danh sách — không trả về một danh sách thiếu mà trông như đủ.
+ */
+export async function buildCustomRecipientUniverse(input: {
+  seasonId: string;
+  spec: CustomListSpec;
+}): Promise<{ partition: RecipientPartition; error: string | null; label: string }> {
+  const empty: RecipientPartition = { sendable: [], unreachable: [] };
+  const label = BULK_AUDIENCE_LABELS.custom;
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { partition: empty, error: VI_ERROR, label };
+
+  const { spec, seasonId } = input;
+  const groups: BulkRecipient[][] = [];
+  const parts: string[] = [];
+
+  if (spec.mentor || spec.mentee) {
+    const audience = spec.mentor && spec.mentee ? "both" : spec.mentor ? "mentor" : "mentee";
+    const result = await membershipRecipients(client, seasonId, audience);
+    if (result.error) return { partition: empty, error: result.error, label };
+    groups.push(result.rows);
+    if (spec.mentor) parts.push("mentor");
+    if (spec.mentee) parts.push("mentee");
+  }
+  if (spec.staff) {
+    const result = await staffRecipients(client);
+    if (result.error) return { partition: empty, error: result.error, label };
+    groups.push(result.rows);
+    parts.push("BTC");
+  }
+  if (spec.event) {
+    const result = await eventRecipients(client, seasonId, spec.event.eventId, spec.event.coversSeries, spec.event.checkin);
+    if (result.error) return { partition: empty, error: result.error, label };
+    groups.push(result.rows);
+    parts.push(lowerFirstChar(result.label ?? "người đăng ký sự kiện"));
+  }
+  if (spec.addedPersonIds.length) {
+    const result = await manualPeopleRecipients(client, seasonId, spec.addedPersonIds);
+    if (result.error) return { partition: empty, error: result.error, label };
+    groups.push(result.rows);
+    parts.push(`${spec.addedPersonIds.length} người thêm tay`);
+  }
+
+  return {
+    partition: mergeCustomSources(groups),
+    error: null,
+    label: parts.length ? `${label}: ${parts.join(" + ")}` : label
+  };
+}
+
+function lowerFirstChar(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+export type CustomListPerson = {
+  personId: string;
+  fullName: string;
+  email: string;
+  memberCode: string | null;
+  role: RecipientRole;
+};
+
+/**
+ * Những người trong danh bạ được phép thêm tay vào thư của mùa này.
+ *
+ * "Thuộc mùa" nghĩa là có một dòng membership của mùa (mọi vai trò, mọi trạng thái), có một
+ * đơn của mùa, hoặc là BTC đang hoạt động (cùng email với một tài khoản trong STAFF_ROLES).
+ * Người chỉ có trong danh bạ từ các mùa trước thì không: id là thứ form tự đặt được, và một
+ * id bất kỳ trong danh bạ không được là một đường gửi thư của mùa này tới người không liên quan.
+ *
+ * Vai trò điền vào {{vai_tro}}: mentor/mentee theo membership ĐANG HOẠT ĐỘNG của mùa (mentor
+ * thắng nếu có cả hai); không có thì "ban tổ chức" nếu là BTC; còn lại là "người tham dự" — chữ
+ * trung tính nhất trong RECIPIENT_ROLE_WORDS cho người có liên hệ với mùa mà không đang giữ vai
+ * trò nào (vd. ứng viên, mentor đã rút). Không đoán một vai trò người đó không có.
+ */
+async function seasonScopedPeople(
+  client: any,
+  seasonId: string,
+  personIds: string[]
+): Promise<{ people: Map<string, CustomListPerson>; error: string | null }> {
+  const people = new Map<string, CustomListPerson>();
+  if (!personIds.length) return { people, error: null };
+
+  const [rows, memberships, applications, staff] = await Promise.all([
+    readAllPagesIn<{ id: string; full_name: string | null; email_primary: string | null; member_code: string | null }>(
+      client,
+      "people",
+      "id",
+      personIds,
+      "id, full_name, email_primary, member_code"
+    ),
+    readAllPagesIn<{ id: string; person_id: string; role: string | null; status: string | null }>(
+      client,
+      "person_season_memberships",
+      "person_id",
+      personIds,
+      "id, person_id, role, status",
+      (query) => query.eq("season_id", seasonId)
+    ),
+    readAllPagesIn<{ id: string; person_id: string }>(
+      client,
+      "applications",
+      "person_id",
+      personIds,
+      "id, person_id",
+      (query) => query.eq("season_id", seasonId)
+    ),
+    readBounded<{ id: string; email: string | null }>(
+      "bulk mail custom staff emails",
+      client.from("admin_users").select("id, email").eq("status", "active").in("role", Array.from(STAFF_ROLES))
+    )
+  ]);
+  const failed = [rows, memberships, applications, staff].find((result) => result.error);
+  if (failed) {
+    log("customList:scope", failed.error);
+    return { people: new Map(), error: VI_ERROR };
+  }
+
+  const staffEmails = new Set(staff.data.map((row) => normalizeEmailAddress(row.email)).filter(Boolean) as string[]);
+  const inSeason = new Set<string>([
+    ...memberships.data.map((row) => String(row.person_id)),
+    ...applications.data.map((row) => String(row.person_id))
+  ]);
+  const activeRoles = new Map<string, Set<string>>();
+  for (const row of memberships.data) {
+    if (row.status !== "active") continue;
+    const key = String(row.person_id);
+    activeRoles.set(key, (activeRoles.get(key) ?? new Set()).add(String(row.role ?? "")));
+  }
+
+  for (const row of rows.data) {
+    const personId = String(row.id);
+    const email = String(row.email_primary ?? "").trim();
+    const isStaff = Boolean(normalizeEmailAddress(email) && staffEmails.has(normalizeEmailAddress(email) as string));
+    if (!inSeason.has(personId) && !isStaff) continue;
+    const roles = activeRoles.get(personId);
+    const role: RecipientRole = roles?.has("mentor")
+      ? "mentor"
+      : roles?.has("mentee")
+        ? "mentee"
+        : isStaff
+          ? "staff"
+          : "attendee";
+    people.set(personId, {
+      personId,
+      fullName: String(row.full_name ?? "").trim(),
+      email,
+      memberCode: String(row.member_code ?? "").trim() || null,
+      role
+    });
+  }
+  return { people, error: null };
+}
+
+/**
+ * Người thêm tay. Mọi id phải là một người thuộc mùa — một id lạ là từ chối cả danh sách, vì
+ * người bấm đã thấy người đó trên màn hình, và bỏ đi lặng lẽ là gửi thiếu mà không ai biết.
+ * Họ tên và email lấy từ danh bạ, nối thư về `people`.
+ */
+async function manualPeopleRecipients(client: any, seasonId: string, personIds: string[]): Promise<RecipientRows> {
+  const scoped = await seasonScopedPeople(client, seasonId, personIds);
+  if (scoped.error) return { rows: [], error: scoped.error };
+  const missing = personIds.filter((id) => !scoped.people.has(id)).length;
+  if (missing) {
+    return {
+      rows: [],
+      error: `${missing} người thêm tay không còn trong hệ thống hoặc không thuộc mùa này. Bỏ họ ra rồi xem lại danh sách.`
+    };
+  }
+  return {
+    rows: personIds.map((id) => {
+      const person = scoped.people.get(id) as CustomListPerson;
+      return {
+        personId: person.personId,
+        fullName: person.fullName,
+        email: person.email,
+        role: person.role,
+        relationTable: "people" as const
+      };
+    }),
+    error: null
+  };
+}
+
+/** Bao nhiêu dòng danh bạ quét qua cho một lần tìm, và bao nhiêu người trả về. */
+const PEOPLE_SEARCH_SCAN = 200;
+const PEOPLE_SEARCH_RESULTS = 20;
+
+/**
+ * Tìm người trong danh bạ để thêm tay — theo họ tên, email hoặc mã thành viên.
+ *
+ * Chỉ trả về người thuộc mùa (seasonScopedPeople), để ô tìm không gợi ý người mà lệnh gửi sẽ
+ * từ chối. Bỏ các ký tự có nghĩa trong cú pháp lọc của PostgREST (dấu phẩy, ngoặc, nháy) và ký
+ * tự đại diện của LIKE: chữ người gõ là chữ để tìm, không phải một bộ lọc.
+ */
+export async function searchCustomListPeople(input: {
+  seasonId: string;
+  query: string;
+}): Promise<{ rows: CustomListPerson[]; error: string | null }> {
+  const cleaned = String(input.query ?? "")
+    .replace(/[,()"'%_*:\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length < 2) return { rows: [], error: "Gõ ít nhất 2 ký tự để tìm." };
+
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { rows: [], error: VI_ERROR };
+
+  const pattern = `%${cleaned}%`;
+  const { data, error } = await client
+    .from("people")
+    .select("id")
+    .or(`full_name.ilike.${pattern},email_primary.ilike.${pattern},member_code.ilike.${pattern}`)
+    .limit(PEOPLE_SEARCH_SCAN);
+  if (error) {
+    log("customList:search", error);
+    return { rows: [], error: VI_ERROR };
+  }
+
+  const ids = Array.from(new Set(((data ?? []) as Array<{ id: string }>).map((row) => String(row.id))));
+  const scoped = await seasonScopedPeople(client, input.seasonId, ids);
+  if (scoped.error) return { rows: [], error: scoped.error };
+
+  const rows = Array.from(scoped.people.values())
+    .sort((a, b) => a.fullName.localeCompare(b.fullName, "vi") || a.email.localeCompare(b.email))
+    .slice(0, PEOPLE_SEARCH_RESULTS);
+  return { rows, error: null };
+}
+
+const FROZEN_SOURCES = new Set<RecipientSource>(["people", "admin_users", "event_registrations", "applications"]);
+const FROZEN_ROLES = new Set<RecipientRole>(["mentor", "mentee", "staff", "attendee"]);
+
+/**
+ * Danh sách đã chốt của một lô `custom`, đúng thứ tự lúc chốt.
+ *
+ * Số dòng phải bằng `requested_count` của lô: ít hơn nghĩa là lần ghi danh sách đã hỏng giữa
+ * chừng, và đi tiếp với nửa danh sách là gửi thiếu mà lô vẫn báo "xong".
+ */
+async function readFrozenRecipients(
+  client: any,
+  batch: EmailBatchRow
+): Promise<{ partition: RecipientPartition; error: string | null }> {
+  const empty: RecipientPartition = { sendable: [], unreachable: [] };
+  const result = await readAllPages<{
+    id: string;
+    position: number;
+    relation_table: string;
+    relation_id: string;
+    email: string;
+    full_name: string;
+    role: string;
+  }>("email_batch_recipients", "id, position, relation_table, relation_id, email, full_name, role", (projection) =>
+    client.from("email_batch_recipients").select(projection).eq("batch_id", batch.id)
+  );
+  if (result.error) {
+    log("runEmailBatch:frozen", result.error);
+    return { partition: empty, error: VI_ERROR };
+  }
+
+  const broken = "Danh sách đã chốt của lô này không đầy đủ. Vui lòng mở lô mới.";
+  if (!result.data.length || result.data.length !== batch.requestedCount) return { partition: empty, error: broken };
+
+  const sendable: BulkRecipient[] = [];
+  for (const row of result.data.slice().sort((a, b) => Number(a.position) - Number(b.position))) {
+    const email = normalizeEmailAddress(row.email);
+    const source = row.relation_table as RecipientSource;
+    const role = row.role as RecipientRole;
+    if (!email || !FROZEN_SOURCES.has(source) || !FROZEN_ROLES.has(role)) return { partition: empty, error: broken };
+    sendable.push({
+      personId: String(row.relation_id),
+      fullName: String(row.full_name ?? "").trim(),
+      email,
+      role,
+      relationTable: source
+    });
+  }
+  return { partition: { sendable, unreachable: [] }, error: null };
+}
+
+/** Mỗi lần ghi danh sách chốt bao nhiêu dòng. */
+const FREEZE_CHUNK = 500;
+
+/**
+ * Mở một lô `custom` và chốt danh sách người nhận vào nó.
+ *
+ * Hai bước không nằm trong một transaction (PostgREST), nên bước hai hỏng thì lô bị ĐÓNG
+ * (failed) ngay — chưa lá thư nào đi, và "Gửi tiếp" không bao giờ chạy trên một danh sách
+ * chốt dở. readFrozenRecipients còn kiểm lại số dòng, phòng cả khi lần đóng lô cũng hỏng.
+ */
+export async function createCustomEmailBatch(input: {
+  seasonId: string;
+  kind: TemplateKind;
+  templateId: string;
+  recipients: BulkRecipient[];
+  note: string;
+  actorAdminUserId: string | null;
+}): Promise<{ batch: EmailBatchRow | null; error: string | null }> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { batch: null, error: VI_ERROR };
+  if (!input.recipients.length) return { batch: null, error: "Danh sách chưa có ai được chọn." };
+
+  const created = await createEmailBatch({
+    seasonId: input.seasonId,
+    kind: input.kind,
+    templateId: input.templateId,
+    audience: "custom",
+    requestedCount: input.recipients.length,
+    note: input.note,
+    actorAdminUserId: input.actorAdminUserId
+  });
+  if (created.error || !created.batch) return created;
+  const batch = created.batch;
+
+  for (let start = 0; start < input.recipients.length; start += FREEZE_CHUNK) {
+    const chunk = input.recipients.slice(start, start + FREEZE_CHUNK).map((row, index) => ({
+      batch_id: batch.id,
+      position: start + index,
+      relation_table: row.relationTable ?? "people",
+      relation_id: row.personId,
+      email: row.email,
+      full_name: row.fullName,
+      role: row.role
+    }));
+    const { error } = await client.from("email_batch_recipients").insert(chunk);
+    if (error) {
+      log("createCustomEmailBatch:freeze", error);
+      const { error: closeError } = await client
+        .from("email_batches")
+        .update({ status: "failed", completed_at: new Date().toISOString() })
+        .eq("id", batch.id);
+      if (closeError) log("createCustomEmailBatch:close", closeError);
+      return { batch: null, error: "Không chốt được danh sách người nhận. Lô đã đóng, chưa lá thư nào đi." };
+    }
+  }
+  return { batch, error: null };
 }
 
 export type EmailBatchRow = {
@@ -967,12 +1341,17 @@ export async function runEmailBatch(input: {
     };
   }
 
-  const recipients = await listBulkRecipients({
-    seasonId: input.batch.seasonId,
-    audience,
-    eventId: input.batch.audienceEventId,
-    coversSeries: input.batch.audienceCoversSeries
-  });
+  // Lô `custom` đọc ĐÚNG danh sách đã chốt lúc mở lô, không dựng lại gì: người không nằm
+  // trong bản xem trước thì không nhận thư, kể cả khi dữ liệu nguồn đã đổi.
+  const recipients =
+    audience === "custom"
+      ? await readFrozenRecipients(client, input.batch)
+      : await listBulkRecipients({
+          seasonId: input.batch.seasonId,
+          audience,
+          eventId: input.batch.audienceEventId,
+          coversSeries: input.batch.audienceCoversSeries
+        });
   if (recipients.error) {
     return {
       ok: false,
