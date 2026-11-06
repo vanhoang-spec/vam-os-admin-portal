@@ -26,7 +26,7 @@ export function readSheet(bytes: Buffer | ArrayBuffer | Uint8Array): ReadSheet {
   const sheetXml = zip.file("xl/worksheets/sheet1.xml")!.asText();
   const byRow = new Map<number, Array<string | number | null>>();
   const cell = /<c r="([A-Z]+)(\d+)" s="\d+"(?: t="inlineStr")?(?:\/>|><v>([^<]*)<\/v><\/c>|><is><t xml:space="preserve">([^<]*)<\/t><\/is><\/c>)/g;
-  for (const m of sheetXml.matchAll(cell)) {
+  for (const m of Array.from(sheetXml.matchAll(cell))) {
     const row = Number(m[2]);
     const cells = byRow.get(row) ?? [];
     cells[columnIndex(m[1])] = m[3] !== undefined ? Number(m[3]) : m[4] !== undefined ? unescape(m[4]) : null;
@@ -34,7 +34,7 @@ export function readSheet(bytes: Buffer | ArrayBuffer | Uint8Array): ReadSheet {
   }
   const width = (byRow.get(2) ?? []).length;
   const fill = (cells: Array<string | number | null> | undefined) => Array.from({ length: width }, (_, i) => cells?.[i] ?? null);
-  const lastRow = Math.max(2, ...byRow.keys());
+  const lastRow = Math.max(2, ...Array.from(byRow.keys()));
   const rows: Array<Array<string | number | null>> = [];
   for (let r = 3; r <= lastRow; r++) rows.push(fill(byRow.get(r)));
   return {
