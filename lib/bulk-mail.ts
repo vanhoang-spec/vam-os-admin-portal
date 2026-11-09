@@ -1082,43 +1082,104 @@ async function readFrozenRecipients(
 }
 
 /**
- * Mã thành viên và giới tính cho các dòng chốt nối về `people` (VAM00024), đọc LÚC GỬI chứ không
- * chốt vào lô: mã được cấp hay sửa giữa hai lần "Gửi tiếp" thì thư sau mang mã đúng, và bảng danh
- * sách chốt không phải giữ thêm dữ liệu cá nhân nào.
+ * Mã thành viên và giới tính cho các dòng chốt (VAM00024, VAM00029), đọc LÚC GỬI chứ không chốt vào
+ * lô: mã được cấp hay sửa giữa hai lần "Gửi tiếp" thì thư sau mang mã đúng, và bảng danh sách chốt
+ * không phải giữ thêm dữ liệu cá nhân nào.
  *
- * Cùng quy tắc với các nhóm đọc từ danh bạ: mã mới trong `people.member_code`, chưa có thì mã cũ
- * theo vai trò (attachLegacyCodes). Dòng nối về tài khoản BTC hay phiếu đăng ký sự kiện không có hai
- * giá trị này — như nhóm "Ban tổ chức" và nhóm sự kiện — nên ô của họ để trống.
+ * Dòng nối về `people`: mã mới trong `people.member_code`, chưa có thì mã cũ theo vai trò
+ * (attachLegacyCodes) — cùng quy tắc với các nhóm đọc từ danh bạ.
+ *
+ * Dòng nối về phiếu đăng ký sự kiện: xem attachRegistrationPeopleDetails. Dòng nối về tài khoản BTC
+ * không có hai giá trị này — như nhóm "Ban tổ chức" — nên ô của họ để trống.
  *
  * Đọc hỏng thì báo lỗi cho cả lượt, không gửi thư với ô mã lặng lẽ trống.
  */
 async function attachFrozenPeopleDetails(client: any, rows: BulkRecipient[]): Promise<{ error: string | null }> {
   const people = rows.filter((row) => (row.relationTable ?? "people") === "people");
-  if (!people.length) return { error: null };
+  if (people.length) {
+    const read = await readAllPagesIn<{ id: string; member_code: string | null; gender: string | null }>(
+      client,
+      "people",
+      "id",
+      people.map((row) => row.personId),
+      "id, member_code, gender"
+    );
+    if (read.error) {
+      log("runEmailBatch:frozen-people", read.error);
+      return { error: VI_ERROR };
+    }
+    const byId = new Map(read.data.map((row) => [String(row.id), row]));
+    for (const row of people) {
+      const found = byId.get(row.personId);
+      const memberCode = String(found?.member_code ?? "").trim();
+      const gender = String(found?.gender ?? "").trim();
+      if (memberCode) row.memberCode = memberCode;
+      if (gender) row.gender = gender;
+    }
 
-  const read = await readAllPagesIn<{ id: string; member_code: string | null; gender: string | null }>(
-    client,
+    // Chỉ dòng `people`: id của dòng BTC hay phiếu đăng ký không phải person_id của hồ sơ nào.
+    const legacy = await attachLegacyCodes(client, people);
+    if (legacy.error) return { error: legacy.error };
+  }
+
+  const registrations = rows.filter((row) => row.relationTable === "event_registrations");
+  if (registrations.length) return attachRegistrationPeopleDetails(client, registrations);
+  return { error: null };
+}
+
+/**
+ * Dòng chốt nối về phiếu đăng ký sự kiện (VAM00029): nguồn "người đăng ký sự kiện" của Danh sách
+ * tùy chỉnh. Phần lớn người check-in là mentee đã có mã, nên để trống ô mã của họ là thư sai.
+ *
+ * Nối bằng email đã chuẩn hoá (trim + lowercase, như normalizeEmailAddress), và chỉ khi email khớp
+ * ĐÚNG MỘT hồ sơ `people`. Hai hồ sơ cùng email thì không biết mã nào là của người nhận: để trống,
+ * không đoán. Không khớp hồ sơ nào (khách ngoài chương trình) cũng trống.
+ *
+ * Không dùng `event_registrations.linked_person_id`: cột đó ghi một lần lúc đăng ký bằng phép
+ * `.find()` đầu tiên trên các hồ sơ cùng email (gặp hồ sơ trùng thì lấy bừa một), không cập nhật khi
+ * hồ sơ được tạo sau, và đọc nó là đọc lại một bảng nguồn lúc gửi. Email trong dòng chốt chính là
+ * địa chỉ nhận thư, nên "mã của chính người nhận" là mã của hồ sơ mang đúng địa chỉ đó.
+ *
+ * Chỉ mã mới (`people.member_code`): vai trò trong lô là "người tham dự", không phải mentor hay
+ * mentee, nên không có bảng mã cũ nào đúng vai trò để tra (attachLegacyCodes) — tra mã cũ theo một
+ * vai trò người đó không mang trong lô là lối gán nhầm mã mentor cho mentee. Giới tính gắn vào cho đủ
+ * hồ sơ, nhưng {{xung_ho}} vẫn chỉ có ở vai trò mentor (buildRecipientValues).
+ *
+ * Đọc cả danh bạ một lần thay vì hỏi từng email: so khớp không phân biệt hoa thường mà PostgREST
+ * nhận qua `in` thì phân biệt, còn hỏi từng email là hàng nghìn lời gọi cho một lô lớn. Danh bạ vài
+ * nghìn dòng là vài trang đọc.
+ */
+async function attachRegistrationPeopleDetails(
+  client: any,
+  rows: BulkRecipient[]
+): Promise<{ error: string | null }> {
+  const read = await readAllPages<{ id: string; email_primary: string | null; member_code: string | null; gender: string | null }>(
     "people",
-    "id",
-    people.map((row) => row.personId),
-    "id, member_code, gender"
+    "id, email_primary, member_code, gender",
+    (projection) => client.from("people").select(projection)
   );
   if (read.error) {
-    log("runEmailBatch:frozen-people", read.error);
+    log("runEmailBatch:frozen-registration-people", read.error);
     return { error: VI_ERROR };
   }
-  const byId = new Map(read.data.map((row) => [String(row.id), row]));
-  for (const row of people) {
-    const found = byId.get(row.personId);
-    const memberCode = String(found?.member_code ?? "").trim();
-    const gender = String(found?.gender ?? "").trim();
+
+  const byEmail = new Map<string, Array<{ member_code: string | null; gender: string | null }>>();
+  for (const person of read.data) {
+    const email = normalizeEmailAddress(person.email_primary);
+    if (!email) continue;
+    byEmail.set(email, (byEmail.get(email) ?? []).concat(person));
+  }
+
+  for (const row of rows) {
+    const email = normalizeEmailAddress(row.email);
+    const matches = email ? byEmail.get(email) ?? [] : [];
+    if (matches.length !== 1) continue;
+    const memberCode = String(matches[0].member_code ?? "").trim();
+    const gender = String(matches[0].gender ?? "").trim();
     if (memberCode) row.memberCode = memberCode;
     if (gender) row.gender = gender;
   }
-
-  // Chỉ dòng `people`: id của dòng BTC hay phiếu đăng ký không phải person_id của hồ sơ nào.
-  const legacy = await attachLegacyCodes(client, people);
-  return { error: legacy.error };
+  return { error: null };
 }
 
 /** Mỗi lần ghi danh sách chốt bao nhiêu dòng. */
