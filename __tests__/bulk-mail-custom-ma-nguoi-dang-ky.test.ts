@@ -40,8 +40,17 @@ function fakeDb(tables: Record<string, Row[]>, failOn: string[] = []) {
       let limitN: number | null = null;
       let span: [number, number] | null = null;
       let mode: "read" | "write" = "read";
+      // Đọc đếm (select head) cho bước kiểm hạn mức gửi chung của lô tùy chỉnh (VAM00027).
+      let head = false;
       const chain: any = {
-        select: () => chain,
+        select: (_columns?: string, opts?: { head?: boolean }) => {
+          if (opts?.head) head = true;
+          return chain;
+        },
+        gte: (column: string, value: unknown) => {
+          rows = rows.filter((row) => String(row[column] ?? "") >= String(value));
+          return chain;
+        },
         eq: (column: string, value: unknown) => {
           rows = rows.filter((row) => row[column] === value);
           return chain;
@@ -76,6 +85,7 @@ function fakeDb(tables: Record<string, Row[]>, failOn: string[] = []) {
           if (failOn.includes(table)) {
             return Promise.resolve({ data: null, error: { code: "XX000", message: "boom" } }).then(resolve, reject);
           }
+          if (head) return Promise.resolve({ count: rows.length, data: null, error: null }).then(resolve, reject);
           let out = rows;
           if (span) out = out.slice(span[0], span[1] + 1);
           if (limitN !== null) out = out.slice(0, limitN);
