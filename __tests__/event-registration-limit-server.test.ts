@@ -2,7 +2,8 @@
  * Giới hạn số lần một email được đăng ký sự kiện (VAM00015) ở phía máy chủ ứng dụng:
  *   - tạo và sửa sự kiện GHI đúng hai cột giới hạn, và từ chối ô nhập sai TRƯỚC khi ghi gì;
  *   - sửa là đường ghi hẹp: lời gọi không mang ô này không được xoá giới hạn BTC đã đặt;
- *   - sửa một buổi của chuỗi, khi được chọn, áp giới hạn cho các buổi còn lại và chỉ ghi đúng hai cột đó;
+ *   - VAM00028: giới hạn của buổi thuộc chuỗi là của cả chuỗi — đổi ở một buổi là ghi cho mọi buổi (chỉ hai
+ *     cột đó), lưu mà giữ nguyên giới hạn chung thì không ghi gì, và "Thêm buổi" mang giới hạn chung;
  *   - đăng ký công khai bị trigger từ chối thì người đăng ký đọc một câu rõ ràng, không phải "lỗi hệ thống";
  *   - form tùy chỉnh gắn sự kiện cũng đổi lỗi trigger thành câu trả lời.
  *
@@ -34,7 +35,7 @@ vi.mock("@/lib/email", async (importOriginal) => ({
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canAccessSeason, canOperateAnyScope, canOperateSeason, getAdminScopeContext, getAllowedSeasonIds } from "@/lib/program-scope";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
-import { createEvent, createEventSeries, registerForEvent, updateEvent } from "@/lib/events";
+import { addSessionToSeries, createEvent, createEventSeries, getPublicRegistrationData, registerForEvent, updateEvent } from "@/lib/events";
 import { submitEventLinkedForm } from "@/lib/custom-form-event";
 
 const SESSION_1 = "00000000-0000-4000-8000-0000000000a1";
@@ -78,7 +79,7 @@ const FORM = {
   online_join_url: ""
 };
 
-function makeEventsClient(before: Row, seriesRows: Row[] = []) {
+function makeEventsClient(before: Row, seriesRows: Row[] = [], options: { seriesError?: boolean } = {}) {
   const writes: Write[] = [];
   const from = (table: string) => {
     let write: Write | null = null;
@@ -111,6 +112,7 @@ function makeEventsClient(before: Row, seriesRows: Row[] = []) {
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
         if (write) return Promise.resolve({ data: null, error: null }).then(resolve, reject);
         if (table === "events" && filters.some(([column]) => column === "series_id")) {
+          if (options.seriesError) return Promise.resolve({ data: null, error: { message: "timeout" } }).then(resolve, reject);
           return Promise.resolve({ data: seriesRows, error: null }).then(resolve, reject);
         }
         return Promise.resolve({ data: [], error: null }).then(resolve, reject);
@@ -128,8 +130,8 @@ function makeEventsClient(before: Row, seriesRows: Row[] = []) {
   return { client: { from, rpc: vi.fn(async () => ({ data: null, error: null })) }, writes, eventWrites, formSave, limitOnlyWrites, inserts };
 }
 
-function use(before: Row, seriesRows: Row[] = []) {
-  const fake = makeEventsClient(before, seriesRows);
+function use(before: Row, seriesRows: Row[] = [], options: { seriesError?: boolean } = {}) {
+  const fake = makeEventsClient(before, seriesRows, options);
   vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(fake.client as never);
   return fake;
 }
@@ -167,11 +169,11 @@ describe("1. sửa sự kiện ghi đúng hai cột giới hạn", () => {
     expect(fake.formSave()?.payload).toMatchObject({ registration_limit_per_email: null, registration_limit_scope: "event" });
   });
 
-  it("sự kiện lẻ: chọn phạm vi chuỗi tự về event và nhận số 1", async () => {
+  it("VAM00028: sự kiện lẻ chọn phạm vi chuỗi GIỮ phạm vi chuỗi (có hiệu lực khi được thêm buổi)", async () => {
     const fake = use(SINGLE_EVENT);
     const result = await updateEvent({ ...FORM, id: SESSION_1, registration_limit_per_email: "1", registration_limit_scope: "series" } as never);
     expect(result.ok).toBe(true);
-    expect(fake.formSave()?.payload).toMatchObject({ registration_limit_per_email: 1, registration_limit_scope: "event" });
+    expect(fake.formSave()?.payload).toMatchObject({ registration_limit_per_email: 1, registration_limit_scope: "series" });
   });
 
   it.each([
@@ -197,21 +199,16 @@ describe("1. sửa sự kiện ghi đúng hai cột giới hạn", () => {
   });
 });
 
-describe("2. áp giới hạn cho cả chuỗi", () => {
-  const sessions = [
-    { id: SESSION_1, starts_at: "2026-10-04T01:00:00+00:00", series_index: 1, series_total: 2 },
-    { id: SESSION_2, starts_at: "2026-10-11T01:00:00+00:00", series_index: 2, series_total: 2 }
+describe("2. giới hạn của buổi thuộc chuỗi là của cả chuỗi (VAM00028)", () => {
+  const limits = (limit: number | null, scope: string) => ({ registration_limit_per_email: limit, registration_limit_scope: scope });
+  const sessions = (first: Row, second: Row) => [
+    { id: SESSION_1, starts_at: "2026-10-04T01:00:00+00:00", series_index: 1, series_total: 2, ...first },
+    { id: SESSION_2, starts_at: "2026-10-11T01:00:00+00:00", series_index: 2, series_total: 2, ...second }
   ];
 
-  it("tick 'áp cho mọi buổi': thêm một lệnh ghi chỉ có hai cột giới hạn, lọc theo đúng chuỗi", async () => {
-    const fake = use(SERIES_SESSION, sessions);
-    const result = await updateEvent({
-      ...FORM,
-      id: SESSION_1,
-      registration_limit_per_email: "1",
-      registration_limit_scope: "series",
-      registration_limit_apply_to_series: "true"
-    } as never);
+  it("đổi giới hạn ở một buổi: thêm một lệnh ghi chỉ có hai cột giới hạn cho cả chuỗi, không cần tick gì", async () => {
+    const fake = use(SERIES_SESSION, sessions(limits(null, "event"), limits(null, "event")));
+    const result = await updateEvent({ ...FORM, id: SESSION_1, registration_limit_per_email: "1", registration_limit_scope: "series" } as never);
 
     expect(result.ok).toBe(true);
     expect(result.message).toContain("Giới hạn đăng ký đã áp cho mọi buổi của chuỗi.");
@@ -221,41 +218,56 @@ describe("2. áp giới hạn cho cả chuỗi", () => {
     expect(siblings[0].filters).toContainEqual(["series_id", SERIES]);
   });
 
-  it("không tick: các buổi khác không bị đụng", async () => {
-    const fake = use(SERIES_SESSION, sessions);
-    await updateEvent({
-      ...FORM,
-      id: SESSION_1,
-      registration_limit_per_email: "1",
-      registration_limit_scope: "series",
-      registration_limit_apply_to_series: "false"
-    } as never);
+  it("lưu buổi KHÔNG tự mang giới hạn, form hiện giới hạn chung 1 của chuỗi: không ghi cột giới hạn nào", async () => {
+    // Đây là ca dễ xoá nhầm: ghi theo dòng của riêng buổi này thì giới hạn của cả chuỗi biến mất.
+    const fake = use(SERIES_SESSION, sessions(limits(null, "event"), limits(1, "series")));
+    const result = await updateEvent({ ...FORM, id: SESSION_1, registration_limit_per_email: "1", registration_limit_scope: "series" } as never);
+    expect(result.ok).toBe(true);
     expect(fake.limitOnlyWrites()).toHaveLength(0);
+    expect(fake.formSave()?.payload).not.toHaveProperty("registration_limit_per_email");
+    expect(fake.formSave()?.payload).not.toHaveProperty("registration_limit_scope");
   });
 
-  it("tick mà ô nhập sai: từ chối từ đầu, không buổi nào bị ghi", async () => {
-    const fake = use(SERIES_SESSION, sessions);
-    const result = await updateEvent({
-      ...FORM,
-      id: SESSION_1,
-      registration_limit_per_email: "0",
-      registration_limit_scope: "series",
-      registration_limit_apply_to_series: "true"
-    } as never);
+  it("bỏ giới hạn ở một buổi (buổi khác mới là buổi mang giới hạn): bỏ cho cả chuỗi", async () => {
+    const fake = use(SERIES_SESSION, sessions(limits(null, "event"), limits(1, "series")));
+    await updateEvent({ ...FORM, id: SESSION_1, registration_limit_per_email: "", registration_limit_scope: "series" } as never);
+    const siblings = fake.limitOnlyWrites();
+    expect(siblings).toHaveLength(1);
+    expect(siblings[0].payload).toEqual({ registration_limit_per_email: null, registration_limit_scope: "event" });
+  });
+
+  it("không đọc được giới hạn của chuỗi: từ chối, không ghi gì (không đoán rồi xoá nhầm)", async () => {
+    const fake = use(SERIES_SESSION, [], { seriesError: true });
+    const result = await updateEvent({ ...FORM, id: SESSION_1, registration_limit_per_email: "", registration_limit_scope: "event" } as never);
     expect(result.ok).toBe(false);
     expect(fake.eventWrites()).toHaveLength(0);
   });
 
-  it("sự kiện lẻ: tick cũng không ghi sang buổi nào", async () => {
+  it("ô nhập sai: từ chối từ đầu, không buổi nào bị ghi", async () => {
+    const fake = use(SERIES_SESSION, sessions(limits(null, "event"), limits(null, "event")));
+    const result = await updateEvent({ ...FORM, id: SESSION_1, registration_limit_per_email: "0", registration_limit_scope: "series" } as never);
+    expect(result.ok).toBe(false);
+    expect(fake.eventWrites()).toHaveLength(0);
+  });
+
+  it("sự kiện lẻ: không ghi sang buổi nào", async () => {
     const fake = use(SINGLE_EVENT);
-    await updateEvent({
-      ...FORM,
-      id: SESSION_1,
-      registration_limit_per_email: "1",
-      registration_limit_scope: "series",
-      registration_limit_apply_to_series: "true"
-    } as never);
+    await updateEvent({ ...FORM, id: SESSION_1, registration_limit_per_email: "1", registration_limit_scope: "series" } as never);
     expect(fake.limitOnlyWrites()).toHaveLength(0);
+  });
+
+  it("Thêm buổi từ một buổi KHÔNG mang giới hạn: buổi mới mang giới hạn chung của chuỗi", async () => {
+    const fake = use(SERIES_SESSION, sessions(limits(null, "event"), limits(1, "series")));
+    const result = await addSessionToSeries({ eventId: SESSION_1, starts_at: "2026-10-18T08:00" });
+    expect(result.ok).toBe(true);
+    expect(fake.inserts()).toHaveLength(1);
+    expect(fake.inserts()[0].payload).toMatchObject({ series_id: SERIES, registration_limit_per_email: 1, registration_limit_scope: "series" });
+  });
+
+  it("Thêm buổi vào chuỗi không giới hạn: buổi mới chép nguyên cấu hình như trước", async () => {
+    const fake = use({ ...SERIES_SESSION, ...limits(1, "event") }, sessions(limits(1, "event"), limits(1, "event")));
+    await addSessionToSeries({ eventId: SESSION_1, starts_at: "2026-10-18T08:00" });
+    expect(fake.inserts()[0].payload).toMatchObject({ registration_limit_per_email: 1, registration_limit_scope: "event" });
   });
 });
 
@@ -311,9 +323,16 @@ describe("3. tạo sự kiện và tạo chuỗi", () => {
     expect(fake.inserts()).toHaveLength(0);
   });
 
-  it("tạo sự kiện lẻ với phạm vi chuỗi và số 2: từ chối, không ghi", async () => {
+  it("VAM00028: tạo sự kiện lẻ với phạm vi chuỗi và số 2: giữ nguyên, để buổi thêm sau theo cùng giới hạn", async () => {
     const fake = use(SINGLE_EVENT);
     const result = await createEvent({ ...FORM, registration_limit_per_email: "2", registration_limit_scope: "series" } as never);
+    expect(result.ok).toBe(true);
+    expect(fake.inserts()[0].payload).toMatchObject({ registration_limit_per_email: 2, registration_limit_scope: "series" });
+  });
+
+  it("tạo sự kiện lẻ với phạm vi một sự kiện và số 2: vẫn từ chối, không ghi", async () => {
+    const fake = use(SINGLE_EVENT);
+    const result = await createEvent({ ...FORM, registration_limit_per_email: "2", registration_limit_scope: "event" } as never);
     expect(result.ok).toBe(false);
     expect(fake.inserts()).toHaveLength(0);
   });
@@ -335,8 +354,8 @@ describe("4. đăng ký công khai bị trigger từ chối", () => {
     registration_limit_scope: "series"
   });
 
-  function registrationClient(registrations: Row[], failure: { insert?: Row; update?: Row }) {
-    const sessions = [eventRow(1, SESSION_1), eventRow(2, SESSION_2)];
+  function registrationClient(registrations: Row[], failure: { insert?: Row; update?: Row }, configs: Row[] = [{}, {}]) {
+    const sessions = [{ ...eventRow(1, SESSION_1), ...configs[0] }, { ...eventRow(2, SESSION_2), ...configs[1] }];
     const inserts: Row[] = [];
     const tables: Record<string, Row[]> = {
       event_links: [
@@ -425,6 +444,22 @@ describe("4. đăng ký công khai bị trigger từ chối", () => {
     expect(result.eventName).toBe("Mentee Orientation Mùa 12");
   });
 
+  it("VAM00028: buổi được chọn không tự mang giới hạn — câu báo nói đúng số trigger đã áp cho chuỗi (2 lần)", async () => {
+    const none = { registration_limit_per_email: null, registration_limit_scope: "event" };
+    registrationClient([], { insert: { ...LIMIT_ERROR, details: "scope=series; limit=2; count=2" } }, [none, none]);
+    const result = await submit();
+    expect(result.status).toBe("limit_reached");
+    expect(result.message).toContain("2 lần");
+    expect(result.message).toContain("chuỗi sự kiện");
+  });
+
+  it("VAM00028: form công khai của buổi không tự mang giới hạn vẫn đọc giới hạn chung của chuỗi", async () => {
+    const none = { registration_limit_per_email: null, registration_limit_scope: "event" };
+    registrationClient([], {}, [none, { registration_limit_per_email: 1, registration_limit_scope: "series" }]);
+    const data = await getPublicRegistrationData(TOKEN);
+    expect(data.event).toMatchObject({ id: SESSION_1, registration_limit_per_email: 1, registration_limit_scope: "series" });
+  });
+
   it("lỗi insert KHÁC vẫn là lỗi hệ thống, không bị nuốt thành 'đủ lượt'", async () => {
     registrationClient([], { insert: { code: "XX000", message: "connection reset" } });
     const result = await submit();
@@ -454,7 +489,8 @@ describe("4. đăng ký công khai bị trigger từ chối", () => {
 
 describe("5. form tùy chỉnh gắn sự kiện", () => {
   it("hàm ghi đăng ký ném lỗi trigger: người điền nhận một câu rõ ràng, không bị đổ thành lỗi hệ thống", async () => {
-    const eventRow = { ...SERIES_SESSION, status: "active", registration_limit_per_email: 1, registration_limit_scope: "series" };
+    // VAM00028: buổi gắn form không tự mang giới hạn; số trong câu báo lấy từ lỗi của trigger.
+    const eventRow = { ...SERIES_SESSION, status: "active", registration_limit_per_email: null, registration_limit_scope: "event" };
     const client = {
       from: (table: string) => {
         const chain: any = {
@@ -482,6 +518,7 @@ describe("5. form tùy chỉnh gắn sự kiện", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.message).toContain("chuỗi sự kiện");
+    expect(result.message).toContain("1 lần");
     expect(result.message).not.toContain("bận");
   });
 });

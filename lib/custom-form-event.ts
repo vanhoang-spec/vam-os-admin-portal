@@ -21,7 +21,13 @@ import "server-only";
 import type { CustomFormSubmitResult } from "@/lib/custom-form-action-types";
 import { nameField, type CustomFormAnswers, type CustomFormField } from "@/lib/custom-form-core";
 import { escapeIlikePattern, normalizeEmail } from "@/lib/identity";
-import { isRegistrationLimitError, readRegistrationLimit, registrationLimitReachedMessage } from "@/lib/event-registration-limit-core";
+import {
+  isRegistrationLimitError,
+  readRegistrationLimit,
+  registrationLimitFromError,
+  registrationLimitReachedMessage,
+  type RegistrationLimit
+} from "@/lib/event-registration-limit-core";
 import type { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 type Row = Record<string, any>;
@@ -182,6 +188,8 @@ export async function submitEventLinkedForm(input: {
     }
   };
 
+  // VAM00028: giới hạn trigger đã áp (của cả chuỗi), để câu báo nói đúng số đó.
+  let reachedLimit: RegistrationLimit | null = null;
   const register = async (): Promise<RegisterResult> => {
     const { data: people, error: peopleError } = await client
       .from("people")
@@ -220,7 +228,10 @@ export async function submitEventLinkedForm(input: {
     });
     // VAM00015: email này đã đăng ký đủ số lần chuỗi sự kiện cho phép. Trigger ở database ném lỗi
     // giữa lúc hàm ghi đăng ký; đổi nó thành một câu trả lời, không phải "hệ thống đang bận".
-    if (isRegistrationLimitError(error)) return { status: "limit_reached" };
+    if (isRegistrationLimitError(error)) {
+      reachedLimit = registrationLimitFromError(error);
+      return { status: "limit_reached" };
+    }
     if (error) throw error;
     return (data ?? { status: "error" }) as RegisterResult;
   };
@@ -241,7 +252,7 @@ export async function submitEventLinkedForm(input: {
     if (status === "event_full") return fail(EVENT_FORM_MESSAGES.eventFull);
     if (status === "form_full") return fail(EVENT_FORM_MESSAGES.formFull);
     if (status === "event_closed") return fail(EVENT_FORM_MESSAGES.eventClosed);
-    if (status === "limit_reached") return fail(registrationLimitReachedMessage(readRegistrationLimit(event as Row)));
+    if (status === "limit_reached") return fail(registrationLimitReachedMessage(reachedLimit ?? readRegistrationLimit(event as Row)));
     if (status !== "inserted" && status !== "existing") throw new Error(`register returned ${status}`);
     return null;
   };

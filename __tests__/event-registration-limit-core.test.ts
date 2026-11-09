@@ -10,53 +10,91 @@ import {
   isRegistrationLimitError,
   parseRegistrationLimitInput,
   readRegistrationLimit,
+  effectiveRegistrationLimit,
+  registrationLimitFromError,
   registrationLimitNotice,
-  registrationLimitReachedMessage
+  registrationLimitReachedMessage,
+  seriesRegistrationLimit
 } from "@/lib/event-registration-limit-core";
 
-const parse = (limit: unknown, scope: unknown, inSeries: boolean) => parseRegistrationLimitInput(limit, scope, { inSeries });
+const parse = (limit: unknown, scope: unknown) => parseRegistrationLimitInput(limit, scope);
 
 describe("1. đọc ô nhập", () => {
   it("để trống (kể cả toàn khoảng trắng, null, undefined) là không giới hạn", () => {
     for (const empty of ["", "   ", null, undefined]) {
-      expect(parse(empty, "series", true)).toEqual({ ok: true, value: { limit: null, scope: "event" } });
+      expect(parse(empty, "series")).toEqual({ ok: true, value: { limit: null, scope: "event" } });
     }
   });
 
   it("chuỗi: số nguyên dương với phạm vi series được giữ nguyên", () => {
-    expect(parse("1", "series", true)).toEqual({ ok: true, value: { limit: 1, scope: "series" } });
-    expect(parse(" 2 ", "series", true)).toEqual({ ok: true, value: { limit: 2, scope: "series" } });
-    expect(parse("3", "series", true)).toEqual({ ok: true, value: { limit: 3, scope: "series" } });
+    expect(parse("1", "series")).toEqual({ ok: true, value: { limit: 1, scope: "series" } });
+    expect(parse(" 2 ", "series")).toEqual({ ok: true, value: { limit: 2, scope: "series" } });
+    expect(parse("3", "series")).toEqual({ ok: true, value: { limit: 3, scope: "series" } });
   });
 
   it.each(["0", "-1", "1.5", "1,5", "abc", "1e3", "٣", "+2", "2 buổi", "NaN", "Infinity"])("%s không phải số nguyên dương: bị từ chối với lời nói rõ", (bad) => {
-    const result = parse(bad, "series", true);
+    const result = parse(bad, "series");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.message).toContain("số nguyên dương");
   });
 
   it("chặn trên: số quá lớn là gõ nhầm, không phải một giới hạn", () => {
-    expect(parse(String(REGISTRATION_LIMIT_MAX), "series", true).ok).toBe(true);
-    const over = parse(String(REGISTRATION_LIMIT_MAX + 1), "series", true);
+    expect(parse(String(REGISTRATION_LIMIT_MAX), "series").ok).toBe(true);
+    const over = parse(String(REGISTRATION_LIMIT_MAX + 1), "series");
     expect(over.ok).toBe(false);
     if (!over.ok) expect(over.message).toContain(String(REGISTRATION_LIMIT_MAX));
   });
 
   it("phạm vi một sự kiện chỉ nhận số 1: trong một buổi mỗi email vốn chỉ giữ một đăng ký, số lớn hơn là lời hứa không giữ được", () => {
-    expect(parse("1", "event", true)).toEqual({ ok: true, value: { limit: 1, scope: "event" } });
-    const two = parse("2", "event", true);
+    expect(parse("1", "event")).toEqual({ ok: true, value: { limit: 1, scope: "event" } });
+    const two = parse("2", "event");
     expect(two.ok).toBe(false);
     if (!two.ok) {
       expect(two.message).toContain("Một sự kiện");
       expect(two.message).toContain("Toàn bộ chuỗi");
     }
     // Không gửi phạm vi cũng là "một sự kiện".
-    expect(parse("2", "", true).ok).toBe(false);
+    expect(parse("2", "").ok).toBe(false);
   });
 
-  it("sự kiện lẻ (không thuộc chuỗi) mà chọn phạm vi chuỗi thì tự về một sự kiện, nên số lớn hơn 1 cũng bị từ chối", () => {
-    expect(parse("1", "series", false)).toEqual({ ok: true, value: { limit: 1, scope: "event" } });
-    expect(parse("2", "series", false).ok).toBe(false);
+  it("VAM00028: sự kiện lẻ chọn phạm vi chuỗi GIỮ phạm vi chuỗi, để buổi thêm sau theo cùng giới hạn chung", () => {
+    // Trước đây bị hạ về "event", rồi "Thêm buổi" chép "event" sang buổi mới: mỗi buổi tự giới hạn riêng.
+    expect(parse("1", "series")).toEqual({ ok: true, value: { limit: 1, scope: "series" } });
+    expect(parse("2", "series")).toEqual({ ok: true, value: { limit: 2, scope: "series" } });
+  });
+});
+
+describe("1b. giới hạn chung của chuỗi (VAM00028)", () => {
+  const row = (limit: unknown, scope: unknown) => ({ registration_limit_per_email: limit, registration_limit_scope: scope });
+
+  it("một buổi mang giới hạn theo chuỗi là đủ: cả chuỗi theo nó, bất kể buổi đó đứng thứ mấy", () => {
+    expect(seriesRegistrationLimit([row(null, "event"), row(1, "series"), row(null, "event")])).toEqual({ limit: 1, scope: "series" });
+    expect(seriesRegistrationLimit([row(1, "series"), row(null, "event")])).toEqual({ limit: 1, scope: "series" });
+  });
+
+  it("các buổi lệch số: lấy số nhỏ nhất; phạm vi 'event', số trống, số lạ không góp vào", () => {
+    expect(seriesRegistrationLimit([row(3, "series"), row(2, "series"), row(1, "event")])).toEqual({ limit: 2, scope: "series" });
+    expect(seriesRegistrationLimit([row(0, "series"), row("abc", "series"), row(null, "series")])).toBeNull();
+    expect(seriesRegistrationLimit([row(1, "event"), row(1, "event")])).toBeNull();
+    expect(seriesRegistrationLimit([])).toBeNull();
+  });
+
+  it("giới hạn có hiệu lực của một buổi: thuộc chuỗi có giới hạn chung thì theo chuỗi, dù dòng của buổi ghi gì", () => {
+    const session = { series_id: "s1", ...row(null, "event") };
+    expect(effectiveRegistrationLimit(session, [session, row(1, "series")])).toEqual({ limit: 1, scope: "series" });
+    // Chuỗi không có giới hạn chung: đọc trên chính dòng, như trước.
+    const own = { series_id: "s1", ...row(1, "event") };
+    expect(effectiveRegistrationLimit(own, [own, row(null, "event")])).toEqual({ limit: 1, scope: "event" });
+    // Sự kiện lẻ: không có chuỗi để theo.
+    expect(effectiveRegistrationLimit(row(1, "series"), [row(5, "series")])).toEqual({ limit: 1, scope: "event" });
+  });
+
+  it("đọc số giới hạn từ lỗi của trigger, để câu báo nói đúng số database đã áp", () => {
+    const error = { message: REGISTRATION_LIMIT_ERROR, details: "scope=series; limit=2; count=2" };
+    expect(registrationLimitFromError(error)).toEqual({ limit: 2, scope: "series" });
+    expect(registrationLimitFromError({ message: REGISTRATION_LIMIT_ERROR })).toBeNull();
+    expect(registrationLimitFromError({ message: "khác", details: "limit=2" })).toBeNull();
+    expect(registrationLimitFromError(null)).toBeNull();
   });
 });
 

@@ -3,7 +3,7 @@ import { Card, EmptyState, ErrorBox, PageHeader } from "@/components/ui";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getIntakeBatches, getSeasons } from "@/lib/data";
-import { getEventDetailData, isValidUuid } from "@/lib/events";
+import { getEventDetailData, isValidUuid, withSeriesRegistrationLimit } from "@/lib/events";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter } from "@/lib/program-scope";
 import { EventForm } from "../../event-form";
 import { CancelEventButton } from "./cancel-event-button";
@@ -54,6 +54,8 @@ export default async function EditEventPage(props: { params: Promise<{ id: strin
   const seasonsList = seasons.data || detail.seasons;
 
   const isCancelled = detail.event.status === "cancelled";
+  // VAM00028: buổi của chuỗi hiện giới hạn đăng ký chung của chuỗi, đúng thứ database áp cho buổi này.
+  const formEvent = await withSeriesRegistrationLimit(detail.event);
 
   return (
     <>
@@ -67,7 +69,7 @@ export default async function EditEventPage(props: { params: Promise<{ id: strin
           <h2 className="mb-3 text-base font-semibold text-vam-ink">Biểu mẫu chỉnh sửa</h2>
           <EventForm
             mode="edit"
-            event={detail.event}
+            event={formEvent}
             seasons={seasonsList}
             intakeBatches={intakeBatches.data || []}
           />

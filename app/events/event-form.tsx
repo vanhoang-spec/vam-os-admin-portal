@@ -311,7 +311,7 @@ export function EventForm({
       {event?.series_id ? (
         <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
           Buổi {event.series_index}/{event.series_total} của một chuỗi lặp lại. Thay đổi ở đây chỉ
-          áp dụng cho buổi này.
+          áp dụng cho buổi này, trừ giới hạn số lần đăng ký theo email: giới hạn đó là của cả chuỗi.
         </p>
       ) : null}
 
@@ -420,11 +420,12 @@ export function EventForm({
               <span className="text-xs text-slate-500">Tính trong</span>
               <select
                 name="registration_limit_scope"
-                defaultValue={event?.registration_limit_scope === "series" && event?.series_id ? "series" : "event"}
+                defaultValue={event?.registration_limit_scope === "series" ? "series" : "event"}
                 className="mt-1 w-full rounded border px-3 py-1.5 text-sm"
               >
                 <option value="event">Một sự kiện</option>
-                {mode === "create" || event?.series_id ? <option value="series">Toàn bộ chuỗi sự kiện</option> : null}
+                {/* VAM00028: sự kiện lẻ cũng chọn được, để buổi thêm sau theo cùng giới hạn chung. */}
+                <option value="series">Toàn bộ chuỗi sự kiện</option>
               </select>
             </label>
           </div>
@@ -432,15 +433,12 @@ export function EventForm({
             Chỉ tính đăng ký qua form công khai; vãng lai và BTC nhập tay không bị giới hạn. Huỷ đăng ký thì được hoàn lượt.
             Trong một buổi, mỗi email vốn chỉ giữ một đăng ký còn hiệu lực (nộp lại là ghi đè), nên “Một sự kiện” chỉ nhận số 1.
             “Toàn bộ chuỗi” đếm trên mọi buổi của chuỗi: số 1 nghĩa là chỉ được đăng ký một buổi, số 2 là hai buổi.
-            {mode === "create" ? " “Toàn bộ chuỗi” chỉ dùng được khi bạn tick lặp lại ở trên để tạo chuỗi." : ""}
+            {" "}Giới hạn theo chuỗi áp chung cho mọi buổi, kể cả buổi thêm sau; sự kiện lẻ chọn “Toàn bộ chuỗi” thì giới hạn có hiệu lực khi sự kiện được thêm buổi.
           </p>
           {event?.series_id ? (
-            <label className="mt-2 flex items-start gap-2">
-              <input type="checkbox" name="registration_limit_apply_to_series" value="true" className="mt-1" />
-              <span className="text-xs text-slate-600">
-                Áp giới hạn này cho mọi buổi của chuỗi (giới hạn theo chuỗi chỉ đúng khi các buổi cùng một giá trị).
-              </span>
-            </label>
+            <p className="mt-2 text-xs text-slate-600" data-series-limit-note>
+              Đây là giới hạn của cả chuỗi. Đổi ở đây là đổi cho mọi buổi của chuỗi; giữ nguyên thì không buổi nào bị đổi.
+            </p>
           ) : null}
         </div>
 

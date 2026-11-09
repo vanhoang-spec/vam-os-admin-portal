@@ -37,14 +37,15 @@ function wholeNumber(raw: unknown): number | null {
  *
  * - Ô số để trống: không giới hạn (phạm vi bị bỏ qua, về "event").
  * - Có số: phải là số nguyên dương, tối đa REGISTRATION_LIMIT_MAX.
- * - Phạm vi "series" chỉ có nghĩa với sự kiện thuộc chuỗi; sự kiện lẻ tự về "event".
+ * - Phạm vi "series" được GIỮ cả trên sự kiện lẻ (VAM00028): nó có hiệu lực từ lúc sự kiện được thêm
+ *   buổi. Hạ nó về "event" như trước thì "Thêm buổi" chép "event" sang buổi mới, và mỗi buổi tự giới
+ *   hạn riêng thay vì chung cả chuỗi. Khi còn lẻ, "series" đọc như "event" (`readRegistrationLimit`).
  * - Phạm vi "event" chỉ nhận số 1: trong một buổi mỗi email đã chỉ giữ một đăng ký còn hiệu lực
  *   (nộp lại là ghi đè), nên số lớn hơn sẽ là lời hứa mà hệ thống không giữ.
  */
 export function parseRegistrationLimitInput(
   limitRaw: unknown,
-  scopeRaw: unknown,
-  options: { inSeries: boolean }
+  scopeRaw: unknown
 ): { ok: true; value: RegistrationLimit } | { ok: false; message: string } {
   const text = String(limitRaw ?? "").trim();
   if (text === "") return { ok: true, value: NO_REGISTRATION_LIMIT };
@@ -57,8 +58,7 @@ export function parseRegistrationLimitInput(
     return { ok: false, message: `Giới hạn số lần đăng ký tối đa là ${REGISTRATION_LIMIT_MAX}.` };
   }
 
-  const wantsSeries = String(scopeRaw ?? "").trim() === "series";
-  const scope: RegistrationLimitScope = wantsSeries && options.inSeries ? "series" : "event";
+  const scope: RegistrationLimitScope = String(scopeRaw ?? "").trim() === "series" ? "series" : "event";
   if (scope === "event" && limit > 1) {
     return {
       ok: false,
@@ -76,6 +76,57 @@ export function readRegistrationLimit(event: Record<string, unknown> | null | un
   const inSeries = Boolean(event?.series_id);
   const scope: RegistrationLimitScope = event?.registration_limit_scope === "series" && inSeries ? "series" : "event";
   return { limit, scope };
+}
+
+/**
+ * Giới hạn CHUNG của một chuỗi (VAM00028), từ các dòng `events` cùng `series_id`: số nhỏ nhất trong
+ * các buổi có phạm vi "series" và có số. Một buổi mang giới hạn theo chuỗi là đủ để mọi buổi, kể cả
+ * buổi thêm sau, cùng chịu nó. Phải khớp trigger `vam_enforce_event_registration_limit`
+ * (migration 20261109120000). null: chuỗi không có giới hạn theo chuỗi.
+ */
+export function seriesRegistrationLimit(sessions: ReadonlyArray<Record<string, unknown> | null | undefined>): RegistrationLimit | null {
+  let lowest: number | null = null;
+  for (const row of sessions) {
+    if (row?.registration_limit_scope !== "series") continue;
+    const limit = wholeNumber(row.registration_limit_per_email);
+    if (limit === null || limit < 1) continue;
+    if (lowest === null || limit < lowest) lowest = limit;
+  }
+  return lowest === null ? null : { limit: lowest, scope: "series" };
+}
+
+/**
+ * Giới hạn có hiệu lực cho một buổi: buổi thuộc chuỗi mà chuỗi có giới hạn chung thì theo chuỗi,
+ * bất kể chính dòng của buổi đó ghi gì; còn lại đọc trên chính dòng.
+ */
+export function effectiveRegistrationLimit(
+  event: Record<string, unknown> | null | undefined,
+  seriesSessions: ReadonlyArray<Record<string, unknown> | null | undefined>
+): RegistrationLimit {
+  if (event?.series_id) {
+    const shared = seriesRegistrationLimit(seriesSessions);
+    if (shared) return shared;
+  }
+  return readRegistrationLimit(event);
+}
+
+/**
+ * Giới hạn mà trigger đã dùng để chặn, đọc từ `detail` của lỗi ("scope=series; limit=N; ...").
+ * Câu báo cho người đăng ký lấy số từ đây, vì đó là con số database thật sự áp, không phải số
+ * ghi trên riêng buổi họ chọn.
+ */
+export function registrationLimitFromError(error: unknown): RegistrationLimit | null {
+  if (!isRegistrationLimitError(error)) return null;
+  const shape = error as { message?: unknown; details?: unknown; hint?: unknown };
+  for (const part of [shape.details, shape.message, shape.hint]) {
+    if (typeof part !== "string") continue;
+    const match = /limit=(\d+)/.exec(part);
+    const limit = match ? wholeNumber(match[1]) : null;
+    if (limit !== null && limit >= 1) {
+      return { limit, scope: /scope=event/.test(part) ? "event" : "series" };
+    }
+  }
+  return null;
 }
 
 /** Câu người đăng ký đọc khi email của họ đã đủ lượt. */
