@@ -3,6 +3,7 @@ import "server-only";
 import { canDecide, canDecideApplicationResult } from "@/lib/permissions";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 import type { DirectInviteEvaluation, DirectInviteReason } from "@/lib/direct-interview-eligibility";
+import { isFinalApprovalReason, type FinalApprovalReason } from "@/lib/final-approval-eligibility";
 import {
   INTERVIEW_INVITE_STATUS,
   interviewInviteNotifyMessage,
@@ -221,6 +222,43 @@ export async function getApplicationDecisionEligibility(
   client = getSupabaseServiceRoleClient()
 ): Promise<DirectInviteEvaluation> {
   if (!client) return { eligible: false, reason: "eligibility_unknown" };
+  const answer = await getFinalApprovalEligibility(applicationId, newStatus, client);
+  const known: DirectInviteReason[] = [
+    "eligible",
+    "profile_review_minimum_not_met",
+    "additional_review_not_submitted",
+    "invalid_transition"
+  ];
+  return {
+    eligible: answer.eligible,
+    // An unrecognised reason is still a refusal; it just cannot be explained
+    // more precisely than "unknown".
+    reason: known.includes(answer.reason as DirectInviteReason)
+      ? (answer.reason as DirectInviteReason)
+      : answer.eligible
+        ? "eligible"
+        : "eligibility_unknown"
+  };
+}
+
+/**
+ * Cùng một câu hỏi, giữ nguyên mã lý do mà database trả về.
+ *
+ * `getApplicationDecisionEligibility` ở trên thu hẹp câu trả lời về bốn lý do
+ * của màn hình mời phỏng vấn — đúng cho chỗ đó, nhưng màn hình duyệt chính
+ * thức cần biết chính xác thiếu gì (`interview_review_minimum_not_met` khác
+ * hẳn `invalid_transition` về việc phải làm tiếp). Nên phần đọc nằm ở đây, một
+ * lần, còn chỗ gọi tự chọn từ vựng của mình.
+ *
+ * FAIL CLOSED: đọc không được là `eligibility_unknown`, không bao giờ là cho
+ * phép.
+ */
+export async function getFinalApprovalEligibility(
+  applicationId: string,
+  newStatus: string,
+  client = getSupabaseServiceRoleClient()
+): Promise<{ eligible: boolean; reason: FinalApprovalReason }> {
+  if (!client) return { eligible: false, reason: "eligibility_unknown" };
   const { data, error } = await client.rpc("vam084_application_decision_eligibility", {
     p_application_id: applicationId,
     p_new_status: newStatus
@@ -235,19 +273,11 @@ export async function getApplicationDecisionEligibility(
   if (!row || typeof row.eligible !== "boolean") {
     return { eligible: false, reason: "eligibility_unknown" };
   }
-  const reason = String(row.reason ?? "");
-  const known: DirectInviteReason[] = [
-    "eligible",
-    "profile_review_minimum_not_met",
-    "additional_review_not_submitted",
-    "invalid_transition"
-  ];
+  const reason = row.reason;
   return {
     eligible: row.eligible,
-    // An unrecognised reason is still a refusal; it just cannot be explained
-    // more precisely than "unknown".
-    reason: known.includes(reason as DirectInviteReason)
-      ? (reason as DirectInviteReason)
+    reason: isFinalApprovalReason(reason)
+      ? reason
       : row.eligible
         ? "eligible"
         : "eligibility_unknown"

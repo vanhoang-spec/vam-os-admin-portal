@@ -3,6 +3,10 @@ import "server-only";
 import { emailsEqual, normalizeEmail } from "@/lib/identity";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
+import {
+  finalApprovalNextStep,
+  finalApprovalReasonMessage
+} from "@/lib/final-approval-eligibility";
 import type { JsonRecord, MenteeProfile, MentorProfile, Person } from "@/lib/types";
 
 // -----------------------------------------------------------------------
@@ -391,9 +395,14 @@ export async function approveApplication(
     const gate = Array.isArray(gateRows) ? gateRows[0] : gateRows;
     if (gateError || !(gate as { eligible?: boolean } | null)?.eligible) {
       log("recruitment approval lifecycle preflight rejected", gateError ?? gate);
+      // Nói THIẾU GÌ. Câu "chưa đủ điều kiện vòng đời" gộp cả bảy nhánh từ chối
+      // của hàm SQL vào một dòng; 21/10/2026 BTC phải mở database mới biết hai
+      // đơn mentor kẹt vì chưa có phiếu phỏng vấn nào.
+      const reason = gateError ? null : (gate as { reason?: unknown } | null)?.reason;
+      const nextStep = finalApprovalNextStep(reason);
       return {
         ok: false,
-        message: "Đơn chưa đủ điều kiện vòng đời để duyệt thành viên. Không có thay đổi nào được thực hiện."
+        message: `${finalApprovalReasonMessage(reason)}${nextStep ? ` ${nextStep}` : ""} Không có thay đổi nào được thực hiện.`
       };
     }
   }
