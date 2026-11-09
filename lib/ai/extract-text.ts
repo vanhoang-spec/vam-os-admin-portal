@@ -27,8 +27,11 @@ export type ExtractOptions = {
    * "html" chỉ có nghĩa với .docx (Handbook phỏng vấn): giữ bảng/tiêu đề thay vì
    * chữ trơn. Ảnh KHÔNG bao giờ được đọc — bộ chuyển ảnh trả src rỗng mà không
    * động tới byte ảnh, và lib/handbook-html.ts bỏ thẻ img. HTML ra vẫn là CHỮ.
+   *
+   * "table" chỉ có nghĩa với .xlsx (danh sách email của trang Mail): sheet đầu, giữ
+   * đúng cột — xem xlsxToTable.
    */
-  format?: "text" | "html";
+  format?: "text" | "html" | "table";
 };
 export type ExtractedText = { text: string; truncated: boolean };
 
@@ -148,6 +151,46 @@ async function odtToText(buffer: Buffer): Promise<string> {
  */
 async function xlsxToText(buffer: Buffer, maxChars: number): Promise<string> {
   const zip = await openZip(buffer);
+  const { shared, sheets } = readWorkbook(zip);
+
+  const lines: string[] = [];
+  let size = 0;
+  for (const sheet of sheets) {
+    const sheetXml = readZipText(zip, sheet.path);
+    if (!sheetXml) continue;
+    lines.push(`[Sheet: ${sheet.name}]`);
+
+    const rowPattern = /<row\b[^>]*>([\s\S]*?)<\/row>/g;
+    let row: RegExpExecArray | null;
+    while ((row = rowPattern.exec(sheetXml))) {
+      const cells: string[] = [];
+      const cellPattern = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+      let cell: RegExpExecArray | null;
+      while ((cell = cellPattern.exec(row[1]))) {
+        const value = cellText(cell[1], cell[2] ?? "", shared);
+        if (value.trim()) cells.push(value.trim());
+      }
+      if (cells.length === 0) continue;
+      const line = cells.join("\t");
+      lines.push(line);
+      size += line.length + 1;
+      if (size > maxChars) return lines.join("\n");
+    }
+  }
+  return lines.join("\n");
+}
+
+/** Giá trị chữ của một ô `<c>`: chuỗi chia sẻ, chuỗi inline, hoặc giá trị thô (số, công thức đã tính). */
+function cellText(attributes: string, body: string, shared: string[]): string {
+  const type = xmlAttribute(attributes, "t");
+  const raw = /<v>([\s\S]*?)<\/v>/.exec(body);
+  if (type === "s") return raw ? shared[Number(raw[1])] ?? "" : "";
+  if (type === "inlineStr") return joinTextRuns(body);
+  return raw ? decodeXmlEntities(raw[1]) : "";
+}
+
+/** Chuỗi chia sẻ và các sheet của một workbook, theo đúng thứ tự sheet trong workbook. */
+function readWorkbook(zip: Zip): { shared: string[]; sheets: { name: string; path: string }[] } {
   let match: RegExpExecArray | null;
 
   const shared: string[] = [];
@@ -176,38 +219,78 @@ async function xlsxToText(buffer: Buffer, maxChars: number): Promise<string> {
     const path = relationId ? targets.get(relationId) : undefined;
     if (path) sheets.push({ name: decodeXmlEntities(xmlAttribute(match[1], "name") ?? path), path });
   }
+  return { shared, sheets };
+}
+
+/**
+ * Chế độ "table" (danh sách email của trang Mail, VAM00027): chỉ sheet ĐẦU TIÊN, mỗi dòng có dữ
+ * liệu thành một dòng chữ `số dòng Excel<TAB>ô A<TAB>ô B…`, ô giữ đúng cột theo địa chỉ `r` của nó.
+ *
+ * Khác chế độ chữ thường ở chỗ cột không được dồn: chế độ chữ bỏ ô trống nên "Họ tên" trống làm
+ * email trượt sang cột tên. Số dòng Excel đi kèm để báo lỗi chỉ đúng dòng người dùng mở ra sửa.
+ * Vẫn chỉ là CHỮ: byte không đi đâu khác ngoài bộ đọc này.
+ */
+async function xlsxToTable(buffer: Buffer, maxChars: number): Promise<string> {
+  const zip = await openZip(buffer);
+  // Bom zip: một file 2MB có thể nở ra hàng GB khi giải nén. pizzip giải nén lúc đọc (asText), nên
+  // kiểm cỡ khai báo trong thư mục zip TRƯỚC khi đọc; pizzip tự báo lỗi nếu cỡ thật khác cỡ khai báo.
+  for (const part of ["xl/sharedStrings.xml", "xl/workbook.xml", "xl/_rels/workbook.xml.rels"]) {
+    if (zip.file(part) && zipPartTooLarge(zip, part)) throw new Error(`XLSX: ${part} quá lớn khi giải nén`);
+  }
+  const { shared, sheets } = readWorkbook(zip);
+  const first = sheets[0];
+  if (!first || !zip.file(first.path)) return "";
+  if (zipPartTooLarge(zip, first.path)) throw new Error(`XLSX: ${first.path} quá lớn khi giải nén`);
+  const sheetXml = readZipText(zip, first.path);
 
   const lines: string[] = [];
   let size = 0;
-  for (const sheet of sheets) {
-    const sheetXml = readZipText(zip, sheet.path);
-    if (!sheetXml) continue;
-    lines.push(`[Sheet: ${sheet.name}]`);
-
-    const rowPattern = /<row\b[^>]*>([\s\S]*?)<\/row>/g;
-    let row: RegExpExecArray | null;
-    while ((row = rowPattern.exec(sheetXml))) {
-      const cells: string[] = [];
-      const cellPattern = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
-      let cell: RegExpExecArray | null;
-      while ((cell = cellPattern.exec(row[1]))) {
-        const type = xmlAttribute(cell[1], "t");
-        const body = cell[2] ?? "";
-        const raw = /<v>([\s\S]*?)<\/v>/.exec(body);
-        let value = "";
-        if (type === "s") value = raw ? shared[Number(raw[1])] ?? "" : "";
-        else if (type === "inlineStr") value = joinTextRuns(body);
-        else value = raw ? decodeXmlEntities(raw[1]) : "";
-        if (value.trim()) cells.push(value.trim());
-      }
-      if (cells.length === 0) continue;
-      const line = cells.join("\t");
-      lines.push(line);
-      size += line.length + 1;
-      if (size > maxChars) return lines.join("\n");
+  let previousRow = 0;
+  // Có cả <row r="5"/> tự đóng (dòng chỉ có định dạng): mẫu này không để nó nuốt nội dung dòng sau.
+  const rowPattern = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g;
+  let row: RegExpExecArray | null;
+  while ((row = rowPattern.exec(sheetXml))) {
+    const rowNumber = Number(xmlAttribute(row[1], "r")) || previousRow + 1;
+    previousRow = rowNumber;
+    const cells: string[] = [];
+    let nextColumn = 0;
+    const cellPattern = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    let cell: RegExpExecArray | null;
+    while ((cell = cellPattern.exec(row[2] ?? ""))) {
+      const column = columnIndex(xmlAttribute(cell[1], "r")) ?? nextColumn;
+      nextColumn = column + 1;
+      if (column >= TABLE_MAX_COLUMNS) continue;
+      cells[column] = cellText(cell[1], cell[2] ?? "", shared).replace(/[\t\r\n]+/g, " ").trim();
     }
+    const values = Array.from({ length: cells.length }, (_, index) => cells[index] ?? "");
+    if (!values.some(Boolean)) continue;
+    const line = [String(rowNumber), ...values].join("\t");
+    lines.push(line);
+    size += line.length + 1;
+    // Vượt trần thì dừng và trả về DÀI HƠN trần, để extractTextFromFile đánh dấu truncated và nơi
+    // gọi từ chối cả file — không lặng lẽ cắt một danh sách người nhận làm đôi.
+    if (size > maxChars) break;
   }
   return lines.join("\n");
+}
+
+/** Chế độ bảng chỉ giữ 26 cột đầu (A–Z): một ô lạc ở cột XFD không được thành 16.000 dấu tab. */
+const TABLE_MAX_COLUMNS = 26;
+/** Trần cỡ GIẢI NÉN của một phần trong file ở chế độ bảng. */
+const TABLE_MAX_PART_BYTES = 16 * 1024 * 1024;
+
+function columnIndex(reference: string | null): number | null {
+  const match = /^([A-Z]{1,3})\d+$/.exec(String(reference ?? ""));
+  if (!match) return null;
+  let index = 0;
+  for (let i = 0; i < match[1].length; i++) index = index * 26 + (match[1].charCodeAt(i) - 64);
+  return index - 1;
+}
+
+/** Cỡ giải nén khai báo của một phần. Không đọc được con số thì coi là quá lớn (fail-closed). */
+function zipPartTooLarge(zip: Zip, name: string): boolean {
+  const size = (zip.file(name) as unknown as { _data?: { uncompressedSize?: unknown } } | null)?._data?.uncompressedSize;
+  return typeof size !== "number" || !Number.isFinite(size) || size > TABLE_MAX_PART_BYTES;
 }
 
 /** pdf-parse chèn dòng "-- 1 of 3 --" giữa các trang; một PDF scan chỉ còn lại mấy dòng đó. */
@@ -258,6 +341,7 @@ export async function extractTextFromFile(
       return nonEmpty(result.value);
     }
     if (mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+      if (opts?.format === "table") return nonEmpty(await xlsxToTable(buffer, maxChars));
       return nonEmpty(await xlsxToText(buffer, maxChars));
     }
     if (mime === "text/html" || mime === "application/xhtml+xml") {

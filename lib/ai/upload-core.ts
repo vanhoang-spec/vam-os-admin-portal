@@ -41,6 +41,15 @@ export const AI_UPLOAD_MIME: readonly string[] = Object.values(AI_UPLOAD_KINDS);
 export const MAX_AI_FILE_BYTES = 8 * 1024 * 1024;
 export const MAX_AI_FILES = 3;
 
+/**
+ * Danh sách email ngoài VAM (Mail › Danh sách tùy chỉnh, VAM00027): một file .xlsx tối đa 2MB.
+ * 2MB là hàng chục nghìn dòng email — dư cho trần người nhận ngoài của một lô, và nhỏ hơn
+ * nhiều trần 8MB của Công cụ AI vì file này chỉ cần vài cột chữ.
+ */
+export const MAX_EMAIL_LIST_FILE_BYTES = 2 * 1024 * 1024;
+/** Trần chữ sau khi đọc bảng — vượt là file quá nhiều dữ liệu, từ chối cả file chứ không cắt. */
+export const MAX_EMAIL_LIST_TABLE_CHARS = 400_000;
+
 export type AiUploadRejectReason = "empty" | "too_large" | "too_many" | "extension" | "image" | "signature" | "binary_text" | "unreadable";
 
 export const AI_UPLOAD_REJECT_LABELS: Record<AiUploadRejectReason, string> = {

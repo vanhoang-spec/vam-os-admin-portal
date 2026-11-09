@@ -92,6 +92,11 @@ function fakeDb(tables: Record<string, Row[]>, options: { failOn?: string[]; fai
           rows = rows.filter((row) => String(row[column]) > String(value));
           return chain;
         },
+        // Đếm thư trong 24 giờ (hạn mức chung, VAM00027): lô custom đếm trước khi gửi.
+        gte: (column: string, value: unknown) => {
+          rows = rows.filter((row) => String(row[column] ?? "") >= String(value));
+          return chain;
+        },
         order: (column: string) => {
           rows.sort((a, b) => String(a[column]).localeCompare(String(b[column])));
           return chain;
@@ -132,7 +137,7 @@ function fakeDb(tables: Record<string, Row[]>, options: { failOn?: string[]; fai
           let out = rows;
           if (span) out = out.slice(span[0], span[1] + 1);
           if (limitN !== null) out = out.slice(0, limitN);
-          return Promise.resolve({ data: out, error: null }).then(resolve, reject);
+          return Promise.resolve({ data: out, error: null, count: out.length }).then(resolve, reject);
         }
       };
       return chain;

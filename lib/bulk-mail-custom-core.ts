@@ -31,6 +31,8 @@ import {
   type RecipientPartition,
   type RecipientSource
 } from "@/lib/bulk-mail-core";
+import { normalizeEmailAddress } from "@/lib/email-core";
+import { EXTERNAL_RECIPIENTS_FIELD, externalTextSignature } from "@/lib/bulk-mail-external-core";
 
 /** Lọc người đăng ký sự kiện theo check-in — `event_registrations.attendance_status`. */
 export const EVENT_CHECKIN_FILTERS = ["all", "checked_in", "not_checked_in"] as const;
@@ -116,7 +118,10 @@ export function readCustomListSpec(form: FormLike): { ok: true; spec: CustomList
     event,
     addedPersonIds: added
   };
-  if (!spec.mentor && !spec.mentee && !spec.staff && !spec.event && !spec.addedPersonIds.length) {
+  // Email ngoài VAM (VAM00027) cũng là một nguồn; ô đó được đọc và kiểm riêng ở
+  // lib/bulk-mail-external-core.ts › parseExternalRecipientText.
+  const hasExternal = String(form.get(EXTERNAL_RECIPIENTS_FIELD) ?? "").trim() !== "";
+  if (!spec.mentor && !spec.mentee && !spec.staff && !spec.event && !spec.addedPersonIds.length && !hasExternal) {
     return { ok: false, message: "Chưa chọn nguồn nào và chưa thêm ai vào danh sách." };
   }
   return { ok: true, spec };
@@ -126,18 +131,25 @@ export function readCustomListSpec(form: FormLike): { ok: true; spec: CustomList
  * Chuỗi đại diện cho một bộ nguồn — để màn hình biết bản xem trước đang hiện có còn
  * khớp với các ô đang tick không. Không dùng cho phép kiểm nào phía máy chủ.
  */
-export function customListSignature(spec: CustomListSpec): string {
-  return JSON.stringify([
+export function customListSignature(spec: CustomListSpec, externalText: string = ""): string {
+  const parts: unknown[] = [
     spec.mentor,
     spec.mentee,
     spec.staff,
     spec.event ? [spec.event.eventId, spec.event.coversSeries, spec.event.checkin] : null,
     spec.addedPersonIds.slice().sort()
-  ]);
+  ];
+  const external = externalTextSignature(externalText);
+  if (external) parts.push(external);
+  return JSON.stringify(parts);
 }
 
-/** Khoá của một dòng: bảng nguồn + id. Khoá là thứ duy nhất form gửi lên về từng người. */
-export function recipientKey(row: Pick<BulkRecipient, "personId" | "relationTable">): string {
+/**
+ * Khoá của một dòng: bảng nguồn + id. Khoá là thứ duy nhất form gửi lên về từng người.
+ * Người ngoài VAM không có id nào, nên khoá của họ là `external:<email đã chuẩn hoá>`.
+ */
+export function recipientKey(row: Pick<BulkRecipient, "personId" | "relationTable" | "email">): string {
+  if (row.relationTable === "external") return `external:${row.email}`;
   return `${row.relationTable ?? "people"}:${row.personId}`;
 }
 
@@ -146,7 +158,10 @@ const SOURCES: readonly RecipientSource[] = ["people", "admin_users", "event_reg
 function isWellFormedKey(key: string): boolean {
   const at = key.indexOf(":");
   if (at <= 0) return false;
-  return (SOURCES as readonly string[]).includes(key.slice(0, at)) && UUID_PATTERN.test(key.slice(at + 1));
+  const source = key.slice(0, at);
+  const rest = key.slice(at + 1);
+  if (source === "external") return Boolean(rest) && normalizeEmailAddress(rest) === rest;
+  return (SOURCES as readonly string[]).includes(source) && UUID_PATTERN.test(rest);
 }
 
 /**

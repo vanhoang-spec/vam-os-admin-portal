@@ -302,8 +302,14 @@ export const BULK_SEND_CHUNK = 25;
  */
 export const BULK_TIME_BUDGET_MS = 40_000;
 
-/** Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ. */
-export type RecipientSource = "people" | "admin_users" | "event_registrations" | "applications";
+/**
+ * Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ.
+ *
+ * `external` (VAM00027): email nhập tay hoặc tải từ Excel, KHÔNG có hồ sơ nào trong VAM OS. Dòng
+ * này không trỏ vào bảng nào; sau khi chốt vào lô, sổ thư nối lá thư về chính dòng chốt của nó
+ * (`email_batch_recipients`) — xem lib/bulk-mail-external-core.ts.
+ */
+export type RecipientSource = "people" | "admin_users" | "event_registrations" | "applications" | "external";
 
 /**
  * Vai trò của người nhận trong lô, dùng để điền ô {{vai_tro}}.
@@ -312,13 +318,18 @@ export type RecipientSource = "people" | "admin_users" | "event_registrations" |
  * hay mentee. Ô đã dùng trong thư mà để trống thì cả lá thư bị chặn — nên nhóm
  * nào cũng phải có một chữ để điền vào đó.
  */
-export type RecipientRole = "mentor" | "mentee" | "staff" | "attendee";
+export type RecipientRole = "mentor" | "mentee" | "staff" | "attendee" | "external";
 
+/**
+ * `external` là "khách mời": người nhận ngoài VAM (VAM00027) không giữ vai trò nào trong chương
+ * trình, và "người tham dự" thì nói sai với người chưa đăng ký gì.
+ */
 export const RECIPIENT_ROLE_WORDS: Record<RecipientRole, string> = {
   mentor: "mentor",
   mentee: "mentee",
   staff: "ban tổ chức",
-  attendee: "người tham dự"
+  attendee: "người tham dự",
+  external: "khách mời"
 };
 
 export type BulkRecipient = {

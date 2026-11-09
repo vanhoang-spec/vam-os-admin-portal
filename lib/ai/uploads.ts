@@ -6,6 +6,8 @@ import {
   AI_UPLOAD_REJECT_LABELS,
   MAX_AI_FILE_BYTES,
   MAX_AI_FILES,
+  MAX_EMAIL_LIST_FILE_BYTES,
+  MAX_EMAIL_LIST_TABLE_CHARS,
   displayUploadName,
   sniffAiUpload,
   uploadExtension,
@@ -21,9 +23,10 @@ import { sanitizeHandbookHtml } from "@/lib/handbook-html";
  * kiểm kích thước → kiểm byte đầu (upload-core) → bộ lấy chữ → trả về CHỮ. Không lưu
  * xuống đâu, không trả byte ra ngoài, không đưa cho thư viện ảnh nào.
  *
- * Hai nơi dùng chung đúng một đường đó (`readVerifiedUpload`): Công cụ AI (chữ
- * thuần) và Handbook phỏng vấn mentee (HTML chữ + bảng, ảnh bị bỏ — tái phân loại
- * 02/10/2026 ghi trong test trên).
+ * Ba nơi dùng chung đúng một đường đó (`readVerifiedUpload`): Công cụ AI (chữ
+ * thuần), Handbook phỏng vấn mentee (HTML chữ + bảng, ảnh bị bỏ — tái phân loại
+ * 02/10/2026 ghi trong test trên), và danh sách email ngoài VAM của trang Mail
+ * (bảng chữ từ .xlsx — tái phân loại 09/11/2026, VAM00027).
  *
  * Không bao giờ ném lỗi vì một file hỏng: file bị từ chối được ghi tên kèm lý do để
  * màn hình báo lại, và công cụ vẫn chạy với phần còn lại — bắt người dùng làm lại cả
@@ -37,12 +40,17 @@ type VerifiedRead =
   | { ok: true; name: string; text: string; truncated: boolean }
   | { ok: false; reason: AiUploadRejectReason };
 
-async function readVerifiedUpload(file: File, opts: ExtractOptions & { onlyMime?: string }): Promise<VerifiedRead> {
+async function readVerifiedUpload(
+  file: File,
+  opts: ExtractOptions & { onlyMime?: string; maxBytes?: number }
+): Promise<VerifiedRead> {
   // Kiểm kích thước TRƯỚC khi đọc byte: đọc cả file lớn vào bộ nhớ rồi mới từ chối
   // là tự làm đầy RAM của function.
-  if (file.size > MAX_AI_FILE_BYTES) return { ok: false, reason: "too_large" };
+  const maxBytes = Math.min(opts.maxBytes ?? MAX_AI_FILE_BYTES, MAX_AI_FILE_BYTES);
+  if (file.size > maxBytes) return { ok: false, reason: "too_large" };
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length > maxBytes) return { ok: false, reason: "too_large" };
     const verdict = sniffAiUpload(bytes, file.name);
     if (!verdict.ok) return { ok: false, reason: verdict.reason };
     if (opts.onlyMime && verdict.mime !== opts.onlyMime) return { ok: false, reason: "extension" };
@@ -123,4 +131,45 @@ export async function readHandbookDocx(formData: FormData, field: string): Promi
   const html = sanitizeHandbookHtml(read.text);
   if (!html) return { ok: false, message: `${displayUploadName(file.name)} (không đọc được nội dung)` };
   return { ok: true, name: read.name, html };
+}
+
+export type EmailListUpload = { ok: true; name: string; table: string } | { ok: false; message: string };
+
+const EMAIL_LIST_REJECT_LABELS: Partial<Record<AiUploadRejectReason, string>> = {
+  too_large: "quá 2MB",
+  extension: "chỉ nhận file Excel .xlsx",
+  signature: "nội dung không phải file Excel .xlsx",
+  image: "không nhận file ảnh",
+  unreadable: "không đọc được: file hỏng, trống, hoặc quá lớn khi giải nén"
+};
+
+/**
+ * Danh sách email ngoài VAM (Mail › Danh sách tùy chỉnh, VAM00027): đúng MỘT file .xlsx, tối đa
+ * 2MB, nhận diện bằng byte đầu (chữ ký ZIP; byte ảnh bị từ chối dưới mọi tên), đọc thành bảng
+ * CHỮ ở sheet đầu. Không lưu byte ở đâu cả; nơi gọi chỉ nhận chữ.
+ */
+export async function readEmailListXlsx(formData: FormData, field: string): Promise<EmailListUpload> {
+  const entries = formData.getAll(field).filter((value): value is File => value instanceof File && value.size > 0);
+  if (entries.length !== 1) return { ok: false, message: "Chọn đúng một file Excel (.xlsx)." };
+  const file = entries[0];
+  if (uploadExtension(file.name) !== "xlsx") {
+    return {
+      ok: false,
+      message: `${displayUploadName(file.name)} (chỉ nhận file Excel .xlsx — file .xls hay .csv thì mở bằng Excel rồi lưu lại dạng .xlsx)`
+    };
+  }
+  const read = await readVerifiedUpload(file, {
+    format: "table",
+    maxChars: MAX_EMAIL_LIST_TABLE_CHARS,
+    maxBytes: MAX_EMAIL_LIST_FILE_BYTES,
+    onlyMime: AI_UPLOAD_KINDS.xlsx
+  });
+  if (!read.ok) {
+    const label = EMAIL_LIST_REJECT_LABELS[read.reason] ?? AI_UPLOAD_REJECT_LABELS[read.reason];
+    return { ok: false, message: `${displayUploadName(file.name)} (${label})` };
+  }
+  if (read.truncated) {
+    return { ok: false, message: `${read.name} (quá nhiều dữ liệu — chỉ giữ cột email, họ tên và tách thành file nhỏ hơn)` };
+  }
+  return { ok: true, name: read.name, table: read.text };
 }
