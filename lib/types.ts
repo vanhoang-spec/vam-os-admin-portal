@@ -40,6 +40,8 @@ export type MenteeProfile = JsonRecord & {
   major: string | null;
   class_cohort: string | null;
   mssv: string | null;
+  /** Năm thứ mấy của sinh viên: "1".."4" hoặc "graduated" (mã của đơn ứng tuyển); null là chưa rõ. VAM00030. */
+  year_of_study?: string | null;
   /** Phase 043: which application created this profile (null for S11 legacy rows). */
   source_application_id?: string | null;
   /** Phase 043: intake batch the applicant came from (null for S11 legacy rows). */
