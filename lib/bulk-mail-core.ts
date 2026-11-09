@@ -345,8 +345,9 @@ export type BulkRecipient = {
   relationTable?: RecipientSource;
   /**
    * Mã thành viên để điền ô {{ma_thanh_vien}}: mã mới, chưa có thì mã cũ — đúng
-   * như cột "Mã thành viên" ở trang Mentor/Mentee. Chỉ nhóm đọc từ danh bạ
-   * (mentor, mentee đang tham gia, mentor quay lại) mới có.
+   * như cột "Mã thành viên" ở trang Mentor/Mentee. Nhóm đọc từ danh bạ (mentor,
+   * mentee đang tham gia, mentor quay lại) có; lô Danh sách tùy chỉnh thì đọc lúc gửi,
+   * kể cả dòng đăng ký sự kiện có email khớp đúng một hồ sơ (VAM00029).
    */
   memberCode?: string | null;
   /** `people.gender` nguyên văn, để suy ra ô {{xung_ho}}. */

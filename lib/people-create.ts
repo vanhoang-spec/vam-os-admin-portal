@@ -4,6 +4,7 @@ import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { canEditRecaps } from "@/lib/auth-constants";
 import { getScopedPersonIds } from "@/lib/data";
 import { parseStartYear } from "@/lib/member-code-core";
+import { parseYearOfStudy } from "@/lib/mentee-year-of-study-core";
 import { isValidUuid } from "@/lib/events";
 import { normalizeEmail } from "@/lib/identity";
 import { canOperateAnyScope, getAdminScopeContext, getScopeFilter, getAllowedProgramIds, type AdminScopeContext, type ScopeFilter } from "@/lib/program-scope";
@@ -96,6 +97,13 @@ function log(scope: string, error: unknown) {
     hint: err?.hint,
     details: err?.details
   });
+}
+
+/** Ô văn bản của hồ sơ mentee mà form sửa được ghi. Không có mentee_code: mã cũ không đi qua biểu mẫu. */
+const MENTEE_TEXT_FIELDS = ["school_code", "school_raw", "major", "class_cohort", "mssv"] as const;
+
+function has<T extends object>(input: T, key: string) {
+  return Object.prototype.hasOwnProperty.call(input, key);
 }
 
 function clean(value: unknown) {
@@ -664,13 +672,16 @@ export async function createMenteeProfile(input: CreateMenteeInput): Promise<Mut
   const { client, error } = clientResult();
   if (!client) return { ok: false, message: error ?? SAFE_ERROR };
 
+  // Kiểm năm học TRƯỚC resolvePerson: hàm đó có thể tạo người mới, từ chối sau đó là để lại một người mồ côi.
+  const yearOfStudy = parseYearOfStudy(input.year_of_study);
+  if (!yearOfStudy.ok) return { ok: false, message: yearOfStudy.message };
+
   const person = await resolvePerson(client, input, access.scope);
   if (!person.ok) return { ok: false, message: person.message };
 
   const dup = await existingMenteeProfile(client, person.person.id);
   if (dup) return { ok: false, message: "Người này đã có hồ sơ mentee. Vui lòng mở hồ sơ thay vì tạo mới." };
 
-  const yearOfStudy = clean(input.year_of_study);
   const careerInterests = clean(input.career_interests);
 
   const payload: JsonRecord = {
@@ -678,8 +689,10 @@ export async function createMenteeProfile(input: CreateMenteeInput): Promise<Mut
     school_code: clean(input.school_code),
     school_raw: clean(input.school_raw),
     major: clean(input.major),
-    class_cohort: clean(input.class_cohort) ?? yearOfStudy,
-    mssv: clean(input.mssv)
+    // VAM00030: năm học có cột riêng; trước đây ô trống Khoá bị lấp bằng năm học, giờ hai trường tách hẳn.
+    class_cohort: clean(input.class_cohort),
+    mssv: clean(input.mssv),
+    year_of_study: yearOfStudy.value
   };
 
   const { data, error: insertError } = await client.from("mentee_profiles").insert(payload).select("*").maybeSingle();
@@ -691,10 +704,7 @@ export async function createMenteeProfile(input: CreateMenteeInput): Promise<Mut
   await writeAdminAudit(client, {
     actionType: "create_mentee_profile",
     afterData: { mentee_profile: data, person: person.person, person_created: person.created },
-    details:
-      yearOfStudy || careerInterests
-        ? { note: "year_of_study/career_interests saved as audit only — schema gap", year_of_study: yearOfStudy, career_interests: careerInterests }
-        : null
+    details: careerInterests ? { note: "career_interests saved as audit only — schema gap", career_interests: careerInterests } : null
   });
   return {
     ok: true,
@@ -749,6 +759,10 @@ export async function updateMenteeProfile(input: UpdateMenteeInput): Promise<Mut
     return { ok: false, message: "Ho so mentee khong nam trong pham vi chuong trinh cua ban." };
   }
 
+  // VAM00030: kiểm năm học trước mọi lệnh ghi, để giá trị sai không để lại hồ sơ người đã sửa một nửa.
+  const yearOfStudy = has(input, "year_of_study") ? parseYearOfStudy(input.year_of_study, before.year_of_study) : null;
+  if (yearOfStudy && !yearOfStudy.ok) return { ok: false, message: yearOfStudy.message };
+
   const personUpdates: JsonRecord = {};
   if (Object.prototype.hasOwnProperty.call(input, "full_name")) {
     const fullName = clean(input.full_name);
@@ -786,25 +800,21 @@ export async function updateMenteeProfile(input: UpdateMenteeInput): Promise<Mut
     personAfter = (updatedPerson as Person) ?? personBefore;
   }
 
-  const yearOfStudy = clean(input.year_of_study);
   const careerInterests = clean(input.career_interests);
 
-  const menteeUpdates: JsonRecord = {
-    school_code: clean(input.school_code),
-    school_raw: clean(input.school_raw),
-    major: clean(input.major),
-    class_cohort: clean(input.class_cohort),
-    mssv: clean(input.mssv)
-  };
+  // Đường ghi hẹp: chỉ ghi ô có mặt trong lần gửi. Một lần gửi chỉ có năm học không được xoá trắng
+  // trường, ngành, MSSV đang đúng.
+  const menteeUpdates: JsonRecord = {};
+  for (const key of MENTEE_TEXT_FIELDS) {
+    if (has(input, key)) menteeUpdates[key] = clean(input[key]);
+  }
+  if (yearOfStudy?.ok) menteeUpdates.year_of_study = yearOfStudy.value;
   // DEBUG (temporary)
   console.log("[updateMenteeProfile] about to update", { menteeProfileId, menteeUpdates });
 
-  const { data: after, error: updateError } = await client
-    .from("mentee_profiles")
-    .update(menteeUpdates)
-    .eq("id", menteeProfileId)
-    .select("*")
-    .maybeSingle();
+  const { data: after, error: updateError } = Object.keys(menteeUpdates).length
+    ? await client.from("mentee_profiles").update(menteeUpdates).eq("id", menteeProfileId).select("*").maybeSingle()
+    : { data: before, error: null };
   // DEBUG (temporary)
   console.log("[updateMenteeProfile] update result", {
     menteeProfileId,
@@ -832,10 +842,7 @@ export async function updateMenteeProfile(input: UpdateMenteeInput): Promise<Mut
       person_before: personBefore,
       person_after: personAfter
     },
-    details:
-      yearOfStudy || careerInterests
-        ? { note: "year_of_study/career_interests audit-only — schema gap", year_of_study: yearOfStudy, career_interests: careerInterests }
-        : null
+    details: careerInterests ? { note: "career_interests audit-only — schema gap", career_interests: careerInterests } : null
   });
 
   return {

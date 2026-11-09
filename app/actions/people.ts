@@ -19,6 +19,27 @@ function formText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+/** Chỉ những ô có mặt trong lần gửi; ô vắng mặt không xuất hiện trong kết quả (khác với chuỗi rỗng). */
+function presentTexts<K extends string>(formData: FormData, keys: readonly K[]): Partial<Record<K, string>> {
+  const out: Partial<Record<K, string>> = {};
+  for (const key of keys) if (formData.has(key)) out[key] = formText(formData, key);
+  return out;
+}
+
+const MENTEE_UPDATE_FIELDS = [
+  "full_name",
+  "email",
+  "phone",
+  "gender",
+  "school_code",
+  "school_raw",
+  "major",
+  "class_cohort",
+  "mssv",
+  "year_of_study",
+  "career_interests"
+] as const;
+
 function formArray(formData: FormData, key: string) {
   return formData.getAll(key).map((value) => String(value ?? "").trim()).filter(Boolean);
 }
@@ -156,19 +177,11 @@ export async function updateMenteeAction(_previous: PeopleActionState, formData:
       return { ok: false, message: "Thiếu person_id — biểu mẫu không gửi ID người. Vui lòng tải lại trang." };
     }
 
+    // Đường ghi hẹp (VAM00030): chỉ chuyển ô có trong lần gửi. Ô vắng mặt mà gửi thành chuỗi rỗng thì
+    // hàm cập nhật đọc là "xoá", và một lần gửi thiếu ô sẽ xoá trắng giá trị đang đúng.
     const result = await updateMenteeProfile({
       mentee_profile_id: menteeProfileId,
-      full_name: formText(formData, "full_name"),
-      email: formText(formData, "email"),
-      phone: formText(formData, "phone"),
-      gender: formText(formData, "gender"),
-      school_code: formText(formData, "school_code"),
-      school_raw: formText(formData, "school_raw"),
-      major: formText(formData, "major"),
-      class_cohort: formText(formData, "class_cohort"),
-      mssv: formText(formData, "mssv"),
-      year_of_study: formText(formData, "year_of_study"),
-      career_interests: formText(formData, "career_interests")
+      ...presentTexts(formData, MENTEE_UPDATE_FIELDS)
     });
 
     if (!result.ok) {

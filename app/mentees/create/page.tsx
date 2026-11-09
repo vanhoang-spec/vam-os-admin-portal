@@ -33,7 +33,7 @@ export default async function CreateMenteePage() {
             <p>Nếu email đã tồn tại, hệ thống sẽ gợi ý liên kết với người sẵn có thay vì tạo trùng.</p>
             <p>Mọi thao tác đều ghi vào <code>admin_audit_log</code> kèm thông tin người tạo.</p>
             <p className="text-xs text-amber-700">
-              Schema mentee_profiles chưa có cột year_of_study và career_interests. Các trường này được ghi vào audit log để truy vết.
+              Career interests chưa có chỗ lưu trên hồ sơ mentee, chỉ được ghi vào audit log để truy vết. Năm học được lưu vào hồ sơ.
             </p>
           </div>
         </Card>
