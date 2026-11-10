@@ -31,7 +31,10 @@ import {
   type CustomListSpec,
   type EventCheckinFilter
 } from "@/lib/bulk-mail-custom-core";
+import { customRunAllowance, outboundRelationFor } from "@/lib/bulk-mail-external-core";
 import { normalizeEmailAddress } from "@/lib/email-core";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
+import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import { escapeIlikePattern } from "@/lib/identity";
 import { readAllPages, readAllPagesIn, readBounded } from "@/lib/paged-read";
 import { formatDate } from "@/lib/utils";
@@ -1029,8 +1032,8 @@ export async function searchCustomListPeople(input: {
   return { rows, error: null };
 }
 
-const FROZEN_SOURCES = new Set<RecipientSource>(["people", "admin_users", "event_registrations", "applications"]);
-const FROZEN_ROLES = new Set<RecipientRole>(["mentor", "mentee", "staff", "attendee"]);
+const FROZEN_SOURCES = new Set<RecipientSource>(["people", "admin_users", "event_registrations", "applications", "external"]);
+const FROZEN_ROLES = new Set<RecipientRole>(["mentor", "mentee", "staff", "attendee", "external"]);
 
 /**
  * Danh sách đã chốt của một lô `custom`, đúng thứ tự lúc chốt.
@@ -1047,7 +1050,7 @@ async function readFrozenRecipients(
     id: string;
     position: number;
     relation_table: string;
-    relation_id: string;
+    relation_id: string | null;
     email: string;
     full_name: string;
     role: string;
@@ -1068,8 +1071,12 @@ async function readFrozenRecipients(
     const source = row.relation_table as RecipientSource;
     const role = row.role as RecipientRole;
     if (!email || !FROZEN_SOURCES.has(source) || !FROZEN_ROLES.has(role)) return { partition: empty, error: broken };
+    // Người ngoài VAM (VAM00027) không trỏ vào hồ sơ nào: id của họ là id dòng chốt, để sổ thư nối
+    // lá thư về đúng dòng này. Dòng VAM mà thiếu relation_id, hay dòng ngoài mà lại có, là danh sách hỏng.
+    const external = source === "external";
+    if (external !== (row.relation_id === null || row.relation_id === undefined)) return { partition: empty, error: broken };
     sendable.push({
-      personId: String(row.relation_id),
+      personId: external ? String(row.id) : String(row.relation_id),
       fullName: String(row.full_name ?? "").trim(),
       email,
       role,
@@ -1221,7 +1228,8 @@ export async function createCustomEmailBatch(input: {
       batch_id: batch.id,
       position: start + index,
       relation_table: row.relationTable ?? "people",
-      relation_id: row.personId,
+      // Người ngoài VAM không có hồ sơ để trỏ vào (VAM00027); ràng buộc trong database bắt đúng điều này.
+      relation_id: row.relationTable === "external" ? null : row.personId,
       email: row.email,
       full_name: row.fullName,
       role: row.role
@@ -1474,13 +1482,33 @@ export async function runEmailBatch(input: {
 
   const pending = remainingRecipients(recipients.partition.sendable, handled.emails);
 
+  // Lô Danh sách tùy chỉnh (có thể mang email ngoài VAM, VAM00027) đi trong hạn mức chung 24 giờ
+  // như các bộ gửi khác. Các nhóm cố định giữ nguyên cách chạy cũ. Không đếm được thì không gửi.
+  let runCap = BULK_SEND_CHUNK;
+  if (audience === "custom" && pending.length) {
+    const sentInWindow = await countSentInWindow(client, now());
+    if (sentInWindow === null) {
+      return {
+        ok: false, sent: 0, failed: 0, skipped: 0, remaining: pending.length, problems: [],
+        error: "Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi. Thử lại sau ít phút."
+      };
+    }
+    runCap = customRunAllowance(sentInWindow);
+    if (runCap === 0) {
+      return {
+        ok: false, sent: 0, failed: 0, skipped: 0, remaining: pending.length, problems: [],
+        error: `Đã chạm hạn mức chung: cả hệ thống đã gửi ${sentInWindow}/${DAILY_EMAIL_LIMIT} thư trong 24 giờ qua. Danh sách vẫn nằm trong lô; bấm “Gửi tiếp” sau vài giờ.`
+      };
+    }
+  }
+
   let sent = 0;
   let failed = 0;
   let skipped = 0;
   const problems: string[] = [];
 
   for (const recipient of pending) {
-    if (sent + failed + skipped >= BULK_SEND_CHUNK) break;
+    if (sent + failed + skipped >= runCap) break;
     if (now() - startedAt >= BULK_TIME_BUDGET_MS) break;
 
     const filled = renderTemplate({
@@ -1499,7 +1527,7 @@ export async function runEmailBatch(input: {
       // vào sổ cho nó — nên lần chạy sau sẽ gặp lại đúng người này. Đó là chủ
       // ý: sửa dữ liệu của họ rồi chạy tiếp là xong, không phải làm lô mới.
       failed += 1;
-      if (problems.length < 10) problems.push(`${recipient.fullName}: ${filled.message}`);
+      if (problems.length < 10) problems.push(`${recipient.fullName || recipient.email}: ${filled.message}`);
       continue;
     }
 
@@ -1508,7 +1536,7 @@ export async function runEmailBatch(input: {
       toEmail: recipient.email,
       subject: filled.subject,
       body: filled.body,
-      relation: { table: recipient.relationTable ?? "people", id: recipient.personId },
+      relation: outboundRelationFor(recipient),
       batchId: input.batch.id
     });
 
@@ -1516,7 +1544,7 @@ export async function runEmailBatch(input: {
     else if (result.ok) sent += 1;
     else {
       failed += 1;
-      if (problems.length < 10) problems.push(`${recipient.fullName}: ${result.reason ?? "lỗi gửi"}`);
+      if (problems.length < 10) problems.push(`${recipient.fullName || recipient.email}: ${result.reason ?? "lỗi gửi"}`);
     }
   }
 

@@ -27,6 +27,24 @@ export type CustomListPreviewRow = {
   fullName: string;
   email: string;
   roleWord: string;
+  /** Email ngoài VAM (VAM00027): không có hồ sơ, tên lấy từ chữ người bấm đưa vào (có thể trống). */
+  external?: boolean;
+};
+
+/** Tóm tắt phần email ngoài VAM của một bản xem trước. */
+export type CustomListExternalSummary = {
+  /** Số người ngoài có mặt trong danh sách (đã bỏ trùng với nhau và với người lấy từ VAM). */
+  count: number;
+  /** Dòng lỗi, tối đa vài chục dòng. */
+  problems: string[];
+  /** Số dòng/địa chỉ không nhận vì sai định dạng. */
+  invalidCount: number;
+  /** Số địa chỉ lặp lại trong chính ô email ngoài. */
+  duplicates: number;
+  /** Số email ngoài đã có sẵn trong danh sách lấy từ VAM — gửi theo hồ sơ VAM, một lá. */
+  overlap: number;
+  /** Số người ngoài chưa có tên. */
+  nameless: number;
 };
 
 export type CustomListPreviewState = {
@@ -39,6 +57,12 @@ export type CustomListPreviewState = {
   /** Người không gửi được (thiếu email/họ tên), tối đa vài chục dòng để còn đọc nổi. */
   unreachable: string[];
   unreachableCount: number;
+  /** Có khi danh sách có email ngoài VAM. */
+  external?: CustomListExternalSummary | null;
+  /** Mẫu thư đang chọn dùng {{ten_nguoi_nhan}}: người ngoài trống tên thì không gửi được. */
+  nameRequired?: boolean;
+  /** Mẫu thư mà `nameRequired` được tính theo — đổi mẫu thì phải xem trước lại. */
+  templateId?: string | null;
 };
 
 export const initialCustomListPreviewState: CustomListPreviewState = {
@@ -48,7 +72,39 @@ export const initialCustomListPreviewState: CustomListPreviewState = {
   label: null,
   rows: [],
   unreachable: [],
-  unreachableCount: 0
+  unreachableCount: 0,
+  external: null,
+  nameRequired: false,
+  templateId: null
+};
+
+/** Kết quả đọc một file Excel danh sách email ngoài VAM. */
+export type ExternalFileState = {
+  ok: boolean;
+  message: string | null;
+  /** Mỗi lần đọc một mã mới, để màn hình biết "Bỏ file" đang bỏ lần đọc nào. */
+  token: string | null;
+  fileName: string | null;
+  /** Danh sách đã đọc, viết thành chữ của ô email ngoài: mỗi dòng `email<TAB>Họ tên`. */
+  text: string;
+  count: number;
+  nameless: number;
+  problems: string[];
+  invalidCount: number;
+  duplicates: number;
+};
+
+export const initialExternalFileState: ExternalFileState = {
+  ok: false,
+  message: null,
+  token: null,
+  fileName: null,
+  text: "",
+  count: 0,
+  nameless: 0,
+  problems: [],
+  invalidCount: 0,
+  duplicates: 0
 };
 
 export type CustomListPersonOption = {

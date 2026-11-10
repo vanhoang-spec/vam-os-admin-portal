@@ -103,6 +103,21 @@
  *     signed upload URLs and signed download URLs on that one bucket.
  *
  * Section 3d pins this path. Widening it further is again a new re-classification, not a test update.
+ *
+ * RE-CLASSIFIED 09/11/2026 for the Mail page's external-recipient list (VAM00027: "tải lên file Excel
+ * chứa danh sách email"), PENDING the programme owner's sign-off in the PR. It is the third binary
+ * upload, and it stays outside every image decoder for the same reasons as the Handbook input:
+ *
+ *   - Only super_admin/admin with an operations scope on the season can reach it (the same authorize()
+ *     as the bulk-send button: canSendBulkEmail + canOperateSeason).
+ *   - Only .xlsx is accepted, at most 2 MB, decided from the bytes by the same sniffAiUpload (ZIP
+ *     signature; image signatures refused under any name).
+ *   - The bytes go through the SAME single reader in lib/ai/uploads.ts — still exactly one
+ *     arrayBuffer() and one Buffer.from — into the text extractor, which reads cell TEXT of the first
+ *     sheet only (format "table"). Embedded images and drawings in the workbook are never opened.
+ *   - Only text comes back (email + name lines); nothing is stored or served from the file.
+ *
+ * Section 3 and 3b pin this path.
  */
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -228,6 +243,8 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
       // Form banners and logos — browser-only bytes, pinned in section 3d.
       "app/forms/[id]/form-image-field.tsx",
       "app/interviews/phieu-cham-mentee/handbook-upload.tsx",
+      // Mail › external-recipient Excel list (VAM00027) — pinned in 3b.
+      "app/operations/mail/external-email-file.tsx",
       // Báo lỗi screenshots — browser-only bytes, pinned in section 3c.
       "components/bao-loi/chon-anh.tsx"
     ]);
@@ -307,6 +324,23 @@ describe("3b. AI tool uploads never reach an image decoder", () => {
     // The Handbook reader goes through the shared verified reader, restricted to DOCX, in HTML mode.
     expect(uploads).toMatch(/readVerifiedUpload\(file, \{\s*format: "html",[\s\S]*?onlyMime: AI_UPLOAD_KINDS\.docx/);
     expect(uploads).toContain("sanitizeHandbookHtml(read.text)");
+  });
+
+  it("the Mail external-recipient input accepts only .xlsx and its action reads bytes only through readEmailListXlsx", () => {
+    const input = readFileSync(join(repoRoot, "app/operations/mail/external-email-file.tsx"), "utf8");
+    expect(input).toContain('accept=".xlsx"');
+    expect(input.match(/accept=/g)).toHaveLength(1);
+    const action = readFileSync(join(repoRoot, "app/actions/bulk-mail.ts"), "utf8");
+    expect(action).toContain("readEmailListXlsx(formData, EXTERNAL_FILE_FIELD)");
+    expect(action).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|Buffer\.from\(/);
+    const uploads = readFileSync(join(repoRoot, "lib/ai/uploads.ts"), "utf8");
+    // The list reader goes through the shared verified reader, restricted to XLSX, 2 MB, table text mode.
+    expect(uploads).toMatch(
+      /readVerifiedUpload\(file, \{\s*format: "table",[\s\S]*?maxBytes: MAX_EMAIL_LIST_FILE_BYTES,\s*onlyMime: AI_UPLOAD_KINDS\.xlsx/
+    );
+    const extractor = readFileSync(join(repoRoot, "lib/ai/extract-text.ts"), "utf8");
+    // Table mode reads only the worksheet XML and shared strings — never xl/media or drawings.
+    expect(extractor).not.toMatch(/xl\/media|drawings|\.asUint8Array\(|\.asNodeBuffer\(|\.asArrayBuffer\(/);
   });
 
   it("the HTML mode never reads embedded images, and the Handbook filter allows no <img>", async () => {

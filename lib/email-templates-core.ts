@@ -108,7 +108,7 @@ export const TEMPLATE_SPECS: Record<TemplateKind, TemplateSpec> = {
         label: "Vai trò",
         required: false,
         sample: "mentee",
-        hint: "'mentor', 'mentee', 'ban tổ chức' hoặc 'người tham dự', theo nhóm nhận thư."
+        hint: "'mentor', 'mentee', 'ban tổ chức', 'người tham dự' hoặc 'khách mời' (email ngoài VAM), theo nhóm nhận thư."
       },
       {
         key: "ma_thanh_vien",
