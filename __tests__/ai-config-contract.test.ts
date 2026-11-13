@@ -4,12 +4,17 @@
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { MAX_AI_FILE_BYTES } from "@/lib/ai/upload-core";
 
 const ROOT = join(__dirname, "..");
 const read = (...parts: string[]) => readFileSync(join(ROOT, ...parts), "utf8");
+
+// Nạp bằng đường dẫn tệp thường, không qua pathToFileURL: URL mã hoá dấu cách
+// thành %20 mà bộ nạp của vitest không giải mã lại, nên repo đặt ở thư mục có
+// dấu cách (máy Mac của dự án: "/Volumes/Untitled 2 - Data/...") làm hai ca dưới
+// đỏ dù cấu hình đúng. CI chạy ở đường dẫn không dấu cách nên không thấy.
+const loadNextConfig = async () => (await import(/* @vite-ignore */ join(ROOT, "next.config.mjs"))).default;
 
 type Version = [number, number, number];
 
@@ -53,14 +58,12 @@ function satisfies(version: string, range: string): boolean {
 
 describe("next.config.mjs", () => {
   it("giữ pdf-parse và @napi-rs/canvas ngoài bundle — thiếu dòng này mọi PDF đọc ra rỗng", async () => {
-    const configPath = pathToFileURL(join(ROOT, "next.config.mjs")).href;
-    const config = (await import(/* @vite-ignore */ configPath)).default;
+    const config = await loadNextConfig();
     expect(config.serverExternalPackages).toEqual(expect.arrayContaining(["pdf-parse", "@napi-rs/canvas"]));
   });
 
   it("nới giới hạn thân server action đủ cho một file tối đa, và không hơn nhiều", async () => {
-    const configPath = pathToFileURL(join(ROOT, "next.config.mjs")).href;
-    const config = (await import(/* @vite-ignore */ configPath)).default;
+    const config = await loadNextConfig();
     const limit = String(config.experimental?.serverActions?.bodySizeLimit ?? "");
     const match = /^(\d+)mb$/i.exec(limit);
     expect(match).not.toBeNull();

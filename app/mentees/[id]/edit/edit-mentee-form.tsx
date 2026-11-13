@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useFormState } from "react-dom";
 import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import { updateMenteeAction, type PeopleActionState } from "@/app/actions/people";
+import { yearOfStudyFormOptions } from "@/lib/mentee-year-of-study-core";
 import type { MenteeProfile, Person } from "@/lib/types";
 
 const initialState: PeopleActionState = { ok: false, message: null };
@@ -87,11 +88,17 @@ export function EditMenteeForm({
             <input name="mssv" defaultValue={mentee.mssv ?? ""} className={inputClass} />
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Năm học (year of study)</span>
-            <input name="year_of_study" defaultValue="" className={inputClass} placeholder="vd: 2024-2025" />
-            <span className="mt-1 block text-[11px] text-amber-700">
-              Schema chưa có cột riêng cho year_of_study. Giá trị này được ghi vào audit log.
-            </span>
+            <span className="text-xs font-medium uppercase text-slate-500">Năm học</span>
+            {/* VAM00030: mở form phải thấy đúng giá trị đang lưu; ô trống mặc định sẽ xoá năm học khi bấm Lưu. */}
+            <select name="year_of_study" defaultValue={mentee.year_of_study ?? ""} className={inputClass}>
+              <option value="">-- Chưa rõ --</option>
+              {yearOfStudyFormOptions(mentee.year_of_study).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[11px] text-slate-500">Sinh viên đang học năm thứ mấy, như câu &quot;Năm học hiện tại&quot; của đơn ứng tuyển.</span>
           </label>
         </div>
 

@@ -31,7 +31,10 @@ import {
   type CustomListSpec,
   type EventCheckinFilter
 } from "@/lib/bulk-mail-custom-core";
+import { customRunAllowance, outboundRelationFor } from "@/lib/bulk-mail-external-core";
 import { normalizeEmailAddress } from "@/lib/email-core";
+import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
+import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import { escapeIlikePattern } from "@/lib/identity";
 import { readAllPages, readAllPagesIn, readBounded } from "@/lib/paged-read";
 import { formatDate } from "@/lib/utils";
@@ -1029,8 +1032,8 @@ export async function searchCustomListPeople(input: {
   return { rows, error: null };
 }
 
-const FROZEN_SOURCES = new Set<RecipientSource>(["people", "admin_users", "event_registrations", "applications"]);
-const FROZEN_ROLES = new Set<RecipientRole>(["mentor", "mentee", "staff", "attendee"]);
+const FROZEN_SOURCES = new Set<RecipientSource>(["people", "admin_users", "event_registrations", "applications", "external"]);
+const FROZEN_ROLES = new Set<RecipientRole>(["mentor", "mentee", "staff", "attendee", "external"]);
 
 /**
  * Danh sách đã chốt của một lô `custom`, đúng thứ tự lúc chốt.
@@ -1047,7 +1050,7 @@ async function readFrozenRecipients(
     id: string;
     position: number;
     relation_table: string;
-    relation_id: string;
+    relation_id: string | null;
     email: string;
     full_name: string;
     role: string;
@@ -1068,8 +1071,12 @@ async function readFrozenRecipients(
     const source = row.relation_table as RecipientSource;
     const role = row.role as RecipientRole;
     if (!email || !FROZEN_SOURCES.has(source) || !FROZEN_ROLES.has(role)) return { partition: empty, error: broken };
+    // Người ngoài VAM (VAM00027) không trỏ vào hồ sơ nào: id của họ là id dòng chốt, để sổ thư nối
+    // lá thư về đúng dòng này. Dòng VAM mà thiếu relation_id, hay dòng ngoài mà lại có, là danh sách hỏng.
+    const external = source === "external";
+    if (external !== (row.relation_id === null || row.relation_id === undefined)) return { partition: empty, error: broken };
     sendable.push({
-      personId: String(row.relation_id),
+      personId: external ? String(row.id) : String(row.relation_id),
       fullName: String(row.full_name ?? "").trim(),
       email,
       role,
@@ -1082,43 +1089,104 @@ async function readFrozenRecipients(
 }
 
 /**
- * Mã thành viên và giới tính cho các dòng chốt nối về `people` (VAM00024), đọc LÚC GỬI chứ không
- * chốt vào lô: mã được cấp hay sửa giữa hai lần "Gửi tiếp" thì thư sau mang mã đúng, và bảng danh
- * sách chốt không phải giữ thêm dữ liệu cá nhân nào.
+ * Mã thành viên và giới tính cho các dòng chốt (VAM00024, VAM00029), đọc LÚC GỬI chứ không chốt vào
+ * lô: mã được cấp hay sửa giữa hai lần "Gửi tiếp" thì thư sau mang mã đúng, và bảng danh sách chốt
+ * không phải giữ thêm dữ liệu cá nhân nào.
  *
- * Cùng quy tắc với các nhóm đọc từ danh bạ: mã mới trong `people.member_code`, chưa có thì mã cũ
- * theo vai trò (attachLegacyCodes). Dòng nối về tài khoản BTC hay phiếu đăng ký sự kiện không có hai
- * giá trị này — như nhóm "Ban tổ chức" và nhóm sự kiện — nên ô của họ để trống.
+ * Dòng nối về `people`: mã mới trong `people.member_code`, chưa có thì mã cũ theo vai trò
+ * (attachLegacyCodes) — cùng quy tắc với các nhóm đọc từ danh bạ.
+ *
+ * Dòng nối về phiếu đăng ký sự kiện: xem attachRegistrationPeopleDetails. Dòng nối về tài khoản BTC
+ * không có hai giá trị này — như nhóm "Ban tổ chức" — nên ô của họ để trống.
  *
  * Đọc hỏng thì báo lỗi cho cả lượt, không gửi thư với ô mã lặng lẽ trống.
  */
 async function attachFrozenPeopleDetails(client: any, rows: BulkRecipient[]): Promise<{ error: string | null }> {
   const people = rows.filter((row) => (row.relationTable ?? "people") === "people");
-  if (!people.length) return { error: null };
+  if (people.length) {
+    const read = await readAllPagesIn<{ id: string; member_code: string | null; gender: string | null }>(
+      client,
+      "people",
+      "id",
+      people.map((row) => row.personId),
+      "id, member_code, gender"
+    );
+    if (read.error) {
+      log("runEmailBatch:frozen-people", read.error);
+      return { error: VI_ERROR };
+    }
+    const byId = new Map(read.data.map((row) => [String(row.id), row]));
+    for (const row of people) {
+      const found = byId.get(row.personId);
+      const memberCode = String(found?.member_code ?? "").trim();
+      const gender = String(found?.gender ?? "").trim();
+      if (memberCode) row.memberCode = memberCode;
+      if (gender) row.gender = gender;
+    }
 
-  const read = await readAllPagesIn<{ id: string; member_code: string | null; gender: string | null }>(
-    client,
+    // Chỉ dòng `people`: id của dòng BTC hay phiếu đăng ký không phải person_id của hồ sơ nào.
+    const legacy = await attachLegacyCodes(client, people);
+    if (legacy.error) return { error: legacy.error };
+  }
+
+  const registrations = rows.filter((row) => row.relationTable === "event_registrations");
+  if (registrations.length) return attachRegistrationPeopleDetails(client, registrations);
+  return { error: null };
+}
+
+/**
+ * Dòng chốt nối về phiếu đăng ký sự kiện (VAM00029): nguồn "người đăng ký sự kiện" của Danh sách
+ * tùy chỉnh. Phần lớn người check-in là mentee đã có mã, nên để trống ô mã của họ là thư sai.
+ *
+ * Nối bằng email đã chuẩn hoá (trim + lowercase, như normalizeEmailAddress), và chỉ khi email khớp
+ * ĐÚNG MỘT hồ sơ `people`. Hai hồ sơ cùng email thì không biết mã nào là của người nhận: để trống,
+ * không đoán. Không khớp hồ sơ nào (khách ngoài chương trình) cũng trống.
+ *
+ * Không dùng `event_registrations.linked_person_id`: cột đó ghi một lần lúc đăng ký bằng phép
+ * `.find()` đầu tiên trên các hồ sơ cùng email (gặp hồ sơ trùng thì lấy bừa một), không cập nhật khi
+ * hồ sơ được tạo sau, và đọc nó là đọc lại một bảng nguồn lúc gửi. Email trong dòng chốt chính là
+ * địa chỉ nhận thư, nên "mã của chính người nhận" là mã của hồ sơ mang đúng địa chỉ đó.
+ *
+ * Chỉ mã mới (`people.member_code`): vai trò trong lô là "người tham dự", không phải mentor hay
+ * mentee, nên không có bảng mã cũ nào đúng vai trò để tra (attachLegacyCodes) — tra mã cũ theo một
+ * vai trò người đó không mang trong lô là lối gán nhầm mã mentor cho mentee. Giới tính gắn vào cho đủ
+ * hồ sơ, nhưng {{xung_ho}} vẫn chỉ có ở vai trò mentor (buildRecipientValues).
+ *
+ * Đọc cả danh bạ một lần thay vì hỏi từng email: so khớp không phân biệt hoa thường mà PostgREST
+ * nhận qua `in` thì phân biệt, còn hỏi từng email là hàng nghìn lời gọi cho một lô lớn. Danh bạ vài
+ * nghìn dòng là vài trang đọc.
+ */
+async function attachRegistrationPeopleDetails(
+  client: any,
+  rows: BulkRecipient[]
+): Promise<{ error: string | null }> {
+  const read = await readAllPages<{ id: string; email_primary: string | null; member_code: string | null; gender: string | null }>(
     "people",
-    "id",
-    people.map((row) => row.personId),
-    "id, member_code, gender"
+    "id, email_primary, member_code, gender",
+    (projection) => client.from("people").select(projection)
   );
   if (read.error) {
-    log("runEmailBatch:frozen-people", read.error);
+    log("runEmailBatch:frozen-registration-people", read.error);
     return { error: VI_ERROR };
   }
-  const byId = new Map(read.data.map((row) => [String(row.id), row]));
-  for (const row of people) {
-    const found = byId.get(row.personId);
-    const memberCode = String(found?.member_code ?? "").trim();
-    const gender = String(found?.gender ?? "").trim();
+
+  const byEmail = new Map<string, Array<{ member_code: string | null; gender: string | null }>>();
+  for (const person of read.data) {
+    const email = normalizeEmailAddress(person.email_primary);
+    if (!email) continue;
+    byEmail.set(email, (byEmail.get(email) ?? []).concat(person));
+  }
+
+  for (const row of rows) {
+    const email = normalizeEmailAddress(row.email);
+    const matches = email ? byEmail.get(email) ?? [] : [];
+    if (matches.length !== 1) continue;
+    const memberCode = String(matches[0].member_code ?? "").trim();
+    const gender = String(matches[0].gender ?? "").trim();
     if (memberCode) row.memberCode = memberCode;
     if (gender) row.gender = gender;
   }
-
-  // Chỉ dòng `people`: id của dòng BTC hay phiếu đăng ký không phải person_id của hồ sơ nào.
-  const legacy = await attachLegacyCodes(client, people);
-  return { error: legacy.error };
+  return { error: null };
 }
 
 /** Mỗi lần ghi danh sách chốt bao nhiêu dòng. */
@@ -1160,7 +1228,8 @@ export async function createCustomEmailBatch(input: {
       batch_id: batch.id,
       position: start + index,
       relation_table: row.relationTable ?? "people",
-      relation_id: row.personId,
+      // Người ngoài VAM không có hồ sơ để trỏ vào (VAM00027); ràng buộc trong database bắt đúng điều này.
+      relation_id: row.relationTable === "external" ? null : row.personId,
       email: row.email,
       full_name: row.fullName,
       role: row.role
@@ -1413,13 +1482,33 @@ export async function runEmailBatch(input: {
 
   const pending = remainingRecipients(recipients.partition.sendable, handled.emails);
 
+  // Lô Danh sách tùy chỉnh (có thể mang email ngoài VAM, VAM00027) đi trong hạn mức chung 24 giờ
+  // như các bộ gửi khác. Các nhóm cố định giữ nguyên cách chạy cũ. Không đếm được thì không gửi.
+  let runCap = BULK_SEND_CHUNK;
+  if (audience === "custom" && pending.length) {
+    const sentInWindow = await countSentInWindow(client, now());
+    if (sentInWindow === null) {
+      return {
+        ok: false, sent: 0, failed: 0, skipped: 0, remaining: pending.length, problems: [],
+        error: "Không đếm được số thư đã gửi trong 24 giờ qua, nên chưa gửi. Thử lại sau ít phút."
+      };
+    }
+    runCap = customRunAllowance(sentInWindow);
+    if (runCap === 0) {
+      return {
+        ok: false, sent: 0, failed: 0, skipped: 0, remaining: pending.length, problems: [],
+        error: `Đã chạm hạn mức chung: cả hệ thống đã gửi ${sentInWindow}/${DAILY_EMAIL_LIMIT} thư trong 24 giờ qua. Danh sách vẫn nằm trong lô; bấm “Gửi tiếp” sau vài giờ.`
+      };
+    }
+  }
+
   let sent = 0;
   let failed = 0;
   let skipped = 0;
   const problems: string[] = [];
 
   for (const recipient of pending) {
-    if (sent + failed + skipped >= BULK_SEND_CHUNK) break;
+    if (sent + failed + skipped >= runCap) break;
     if (now() - startedAt >= BULK_TIME_BUDGET_MS) break;
 
     const filled = renderTemplate({
@@ -1438,7 +1527,7 @@ export async function runEmailBatch(input: {
       // vào sổ cho nó — nên lần chạy sau sẽ gặp lại đúng người này. Đó là chủ
       // ý: sửa dữ liệu của họ rồi chạy tiếp là xong, không phải làm lô mới.
       failed += 1;
-      if (problems.length < 10) problems.push(`${recipient.fullName}: ${filled.message}`);
+      if (problems.length < 10) problems.push(`${recipient.fullName || recipient.email}: ${filled.message}`);
       continue;
     }
 
@@ -1447,7 +1536,7 @@ export async function runEmailBatch(input: {
       toEmail: recipient.email,
       subject: filled.subject,
       body: filled.body,
-      relation: { table: recipient.relationTable ?? "people", id: recipient.personId },
+      relation: outboundRelationFor(recipient),
       batchId: input.batch.id
     });
 
@@ -1455,7 +1544,7 @@ export async function runEmailBatch(input: {
     else if (result.ok) sent += 1;
     else {
       failed += 1;
-      if (problems.length < 10) problems.push(`${recipient.fullName}: ${result.reason ?? "lỗi gửi"}`);
+      if (problems.length < 10) problems.push(`${recipient.fullName || recipient.email}: ${result.reason ?? "lỗi gửi"}`);
     }
   }
 

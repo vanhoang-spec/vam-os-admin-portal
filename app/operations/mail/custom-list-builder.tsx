@@ -11,17 +11,25 @@ import {
   type EventCheckinFilter
 } from "@/lib/bulk-mail-custom-core";
 import {
+  EXTERNAL_CONFIRM_FIELD,
+  EXTERNAL_MAX_PER_BATCH,
+  EXTERNAL_RECIPIENTS_FIELD
+} from "@/lib/bulk-mail-external-core";
+import {
   initialBulkMailActionState,
   initialCustomListPreviewState,
   initialCustomListSearchState,
+  initialExternalFileState,
   type BulkMailActionState,
   type CustomListPersonOption
 } from "@/lib/bulk-mail-action-types";
 import {
   previewCustomListAction,
+  readExternalEmailFileAction,
   searchCustomListPeopleAction,
   startCustomBulkSendAction
 } from "@/app/actions/bulk-mail";
+import { ExternalEmailFileForm } from "./external-email-file";
 
 function Button({ label, busyLabel, disabled, quiet }: { label: string; busyLabel: string; disabled?: boolean; quiet?: boolean }) {
   const { pending } = useFormStatus();
@@ -58,9 +66,10 @@ function Message({ ok, text }: { ok: boolean; text: string | null }) {
  * ô này, vì máy chủ dựng lại tập ứng viên từ chúng ở cả hai lần — lệch nhau là lệnh gửi từ
  * chối danh sách người bấm vừa xem.
  */
-function SpecFields({ spec, signature }: { spec: CustomListSpec; signature: string }) {
+function SpecFields({ spec, signature, externalText }: { spec: CustomListSpec; signature: string; externalText: string }) {
   return (
     <>
+      {externalText ? <input type="hidden" name={EXTERNAL_RECIPIENTS_FIELD} value={externalText} /> : null}
       <input type="hidden" name="signature" value={signature} />
       <input type="hidden" name="src_mentor" value={spec.mentor ? "true" : "false"} />
       <input type="hidden" name="src_mentee" value={spec.mentee ? "true" : "false"} />
@@ -104,10 +113,18 @@ export function CustomListBuilder({
   const [checkin, setCheckin] = useState<EventCheckinFilter>("all");
   const [added, setAdded] = useState<CustomListPersonOption[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
+  const [externalTyped, setExternalTyped] = useState("");
+  const [dismissedFile, setDismissedFile] = useState<string | null>(null);
 
   const [searchState, searchAction] = useFormState(searchCustomListPeopleAction, initialCustomListSearchState);
   const [previewState, previewAction] = useFormState(previewCustomListAction, initialCustomListPreviewState);
   const [sendState, sendAction] = useFormState(startCustomBulkSendAction, initialBulkMailActionState);
+  const [fileState, fileAction] = useFormState(readExternalEmailFileAction, initialExternalFileState);
+
+  // Email ngoài VAM (VAM00027) = chữ gõ tay + danh sách đọc từ file Excel gần nhất (chưa bị bỏ).
+  // Máy chủ đọc lại ĐÚNG chữ này ở cả bước xem trước và bước gửi.
+  const fileActive = fileState.ok && Boolean(fileState.token) && fileState.token !== dismissedFile;
+  const externalText = [externalTyped.trim(), fileActive ? fileState.text : ""].filter(Boolean).join("\n");
 
   // Sự kiện suy ra từ danh sách hiện có, như ô chọn sự kiện của nhóm cũ: một id không còn
   // trong danh sách rơi về sự kiện đầu, không rơi về rỗng.
@@ -124,12 +141,20 @@ export function CustomListBuilder({
         : null,
     addedPersonIds: added.map((row) => row.personId)
   };
-  const signature = customListSignature(spec);
-  const hasSource = mentor || mentee || staff || Boolean(spec.event) || added.length > 0;
+  const signature = customListSignature(spec, externalText);
+  const hasSource = mentor || mentee || staff || Boolean(spec.event) || added.length > 0 || Boolean(externalText);
 
-  const fresh = previewState.ok && previewState.signature === signature;
+  // Có người ngoài thì bản xem trước còn gắn với mẫu thư (mẫu có dùng ô tên không): đổi mẫu là xem lại.
+  const templateMatches = !previewState.external || (previewState.templateId ?? null) === (templateId || null);
+  const fresh = previewState.ok && previewState.signature === signature && templateMatches;
   const included = fresh ? previewState.rows.filter((row) => !excluded.has(row.key)) : [];
   const stale = previewState.ok && !fresh;
+  const includedExternal = included.filter((row) => row.external).length;
+  const blockedNameless = previewState.nameRequired ? included.filter((row) => row.external && !row.fullName.trim()).length : 0;
+  // Ô xác nhận người ngoài gắn với ĐÚNG danh sách lúc tick: đổi nguồn hay bỏ tick ai thì phải tick lại.
+  const externalCheckKey = `${signature}|${included.map((row) => row.key).join(",")}`;
+  const [externalCheckedFor, setExternalCheckedFor] = useState<string | null>(null);
+  const externalChecked = externalCheckedFor === externalCheckKey;
 
   const toggle = (key: string) =>
     setExcluded((current) => {
@@ -236,7 +261,7 @@ export function CustomListBuilder({
           <Button label="Tìm" busyLabel="Đang tìm…" quiet />
         </form>
         <p className="text-xs text-slate-500">
-          Chỉ tìm được người thuộc mùa này (có tư cách, có đơn trong mùa) hoặc thuộc Ban tổ chức. Không gõ được email ngoài hệ thống.
+          Chỉ tìm được người thuộc mùa này (có tư cách, có đơn trong mùa) hoặc thuộc Ban tổ chức. Người chưa có trong VAM OS thì thêm ở mục 3.
         </p>
         {searchState.message ? <p className="text-xs text-slate-600">{searchState.message}</p> : null}
         {searchState.results.length ? (
@@ -278,12 +303,60 @@ export function CustomListBuilder({
         ) : null}
       </div>
 
+      <div className="grid gap-2" data-testid="custom-external">
+        <p className="text-sm font-medium text-vam-ink">3. Email ngoài VAM — chưa có hồ sơ trong VAM OS (không bắt buộc)</p>
+        <label htmlFor="custom-external-text" className="text-xs text-slate-600">
+          Mỗi dòng một người: <code>email</code>, <code>email, Họ tên</code> hoặc <code>Họ tên &lt;email&gt;</code>. Không tạo hồ sơ
+          thành viên. Tối đa {EXTERNAL_MAX_PER_BATCH} email ngoài VAM một lô.
+        </label>
+        <textarea
+          id="custom-external-text"
+          aria-label="Email ngoài VAM, mỗi dòng một người"
+          value={externalTyped}
+          onChange={(e) => setExternalTyped(e.target.value)}
+          rows={4}
+          spellCheck={false}
+          className="w-full rounded-md border border-vam-line bg-white px-3 py-2 font-mono text-xs"
+          placeholder={"khach@congty.vn, Nguyễn Văn A\nban@truong.edu.vn"}
+        />
+        <p className="text-xs text-slate-600">
+          Hoặc tải file Excel (.xlsx, tối đa 2MB): sheet đầu, dòng đầu là tiêu đề có cột “Email” (và “Họ tên” nếu có). Không có
+          tiêu đề thì mỗi dòng lấy ô đầu tiên có dấu @, tên để trống.
+        </p>
+        <ExternalEmailFileForm action={fileAction} />
+        {fileState.message && (!fileState.ok || fileActive) ? <Message ok={fileState.ok} text={fileState.message} /> : null}
+        {fileActive ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700" data-testid="external-file-summary">
+            <span>
+              Từ file {fileState.fileName}: {fileState.count} email
+              {fileState.nameless ? `, ${fileState.nameless} người chưa có tên` : ""}
+              {fileState.duplicates ? `, ${fileState.duplicates} dòng trùng đã gộp` : ""}.
+            </span>
+            <button
+              type="button"
+              onClick={() => setDismissedFile(fileState.token)}
+              className="rounded border border-vam-line bg-white px-2 py-0.5 font-medium hover:text-red-700"
+            >
+              Bỏ danh sách từ file
+            </button>
+          </div>
+        ) : null}
+        {fileState.problems.length && (!fileState.ok || fileActive) ? (
+          <ProblemList
+            title={`${fileState.invalidCount} dòng trong file không nhận`}
+            lines={fileState.problems}
+            testId="external-file-problems"
+          />
+        ) : null}
+      </div>
+
       <form action={previewAction} className="flex flex-wrap items-center gap-3">
-        <SpecFields spec={spec} signature={signature} />
+        <input type="hidden" name="template_id" value={templateId} />
+        <SpecFields spec={spec} signature={signature} externalText={externalText} />
         <Button label="Xem danh sách người nhận" busyLabel="Đang dựng danh sách…" quiet disabled={!hasSource} />
         {stale ? (
           <span className="text-xs text-amber-800" data-testid="custom-stale">
-            Bạn vừa đổi nguồn hoặc người thêm tay — bấm “Xem danh sách người nhận” để cập nhật.
+            Bạn vừa đổi nguồn, người thêm tay, email ngoài VAM hoặc mẫu thư — bấm “Xem danh sách người nhận” để cập nhật.
           </span>
         ) : null}
       </form>
@@ -292,9 +365,10 @@ export function CustomListBuilder({
       {fresh ? (
         <div className="grid gap-3" data-testid="custom-preview">
           <p className="text-sm text-vam-ink">
-            3. Danh sách cuối cùng: <strong data-testid="custom-count">{included.length}</strong> / {previewState.rows.length} người
+            4. Danh sách cuối cùng: <strong data-testid="custom-count">{included.length}</strong> / {previewState.rows.length} người
             (mỗi email một lá). Bỏ tick người không gửi.
           </p>
+          {previewState.external ? <ExternalSummary preview={previewState} /> : null}
           {previewState.unreachableCount ? (
             <details className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <summary className="cursor-pointer">{previewState.unreachableCount} người không nhận được: thiếu email hoặc họ tên</summary>
@@ -322,14 +396,24 @@ export function CustomListBuilder({
                       <input
                         type="checkbox"
                         className={checkboxClass}
-                        aria-label={`Gửi cho ${row.fullName}`}
+                        aria-label={`Gửi cho ${row.fullName || row.email}`}
                         checked={!excluded.has(row.key)}
                         onChange={() => toggle(row.key)}
                       />
                     </td>
-                    <td className="px-2 py-1">{row.fullName}</td>
+                    <td className="px-2 py-1">
+                      {row.fullName ||
+                        (row.external ? (
+                          <span className={previewState.nameRequired ? "font-medium text-red-700" : "text-slate-500"}>(chưa có tên)</span>
+                        ) : null)}
+                    </td>
                     <td className="px-2 py-1">{row.email}</td>
-                    <td className="px-2 py-1">{row.roleWord}</td>
+                    <td className="px-2 py-1">
+                      {row.roleWord}
+                      {row.external ? (
+                        <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">ngoài VAM</span>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -339,7 +423,7 @@ export function CustomListBuilder({
           <form action={sendAction} className="flex flex-col gap-3 border-t border-vam-line pt-3" data-testid="custom-send-form">
             <input type="hidden" name="template_id" value={templateId} />
             <input type="hidden" name="audience" value="custom" />
-            <SpecFields spec={spec} signature={signature} />
+            <SpecFields spec={spec} signature={signature} externalText={externalText} />
             {included.map((row) => (
               <input key={row.key} type="hidden" name="recipient_key" value={row.key} />
             ))}
@@ -347,6 +431,28 @@ export function CustomListBuilder({
               Sắp gửi <strong className="text-vam-green">{included.length}</strong> lá thư cho danh sách tùy chỉnh. Danh sách
               này được chốt vào lô: “Gửi tiếp” chỉ gửi cho đúng những người trên. Thư đã gửi không thu hồi được.
             </p>
+            {blockedNameless ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="custom-nameless-block">
+                {blockedNameless} email ngoài VAM chưa có tên, mà mẫu thư dùng ô Tên người nhận. Thêm tên (“email, Họ tên” hoặc cột
+                “Họ tên” trong Excel), bỏ tick họ, hoặc chọn mẫu thư không có ô tên.
+              </p>
+            ) : null}
+            {includedExternal ? (
+              <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <input
+                  type="checkbox"
+                  name={EXTERNAL_CONFIRM_FIELD}
+                  value={String(includedExternal)}
+                  checked={externalChecked}
+                  onChange={(e) => setExternalCheckedFor(e.target.checked ? externalCheckKey : null)}
+                  className={checkboxClass}
+                />
+                <span>
+                  Tôi đã kiểm <strong>{includedExternal}</strong> email ngoài VAM ở bảng trên. Đây là người không có hồ sơ trong VAM
+                  OS — thư gửi nhầm cho người lạ không rút lại được.
+                </span>
+              </label>
+            ) : null}
             <div className="flex flex-wrap items-end gap-3">
               <div>
                 <label htmlFor="custom-confirm-count" className="mb-1 block text-xs font-medium text-vam-ink">
@@ -360,12 +466,61 @@ export function CustomListBuilder({
                   className="w-40 rounded-md border border-vam-line bg-white px-3 py-2 text-sm tabular-nums"
                 />
               </div>
-              <Button label="Bắt đầu gửi" busyLabel="Đang gửi…" disabled={included.length === 0} />
+              <Button
+                label="Bắt đầu gửi"
+                busyLabel="Đang gửi…"
+                disabled={included.length === 0 || blockedNameless > 0 || (includedExternal > 0 && !externalChecked)}
+              />
             </div>
           </form>
         </div>
       ) : null}
       <SendResult state={sendState} />
+    </div>
+  );
+}
+
+function ProblemList({ title, lines, testId }: { title: string; lines: string[]; testId: string }) {
+  return (
+    <details className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid={testId} open>
+      <summary className="cursor-pointer font-medium">{title}</summary>
+      <ul className="mt-1">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** Phần email ngoài VAM của bản xem trước: bao nhiêu người, ai sai, ai trùng, ai chưa có tên. */
+function ExternalSummary({ preview }: { preview: typeof initialCustomListPreviewState }) {
+  const external = preview.external;
+  if (!external) return null;
+  const notes: string[] = [`${external.count} email ngoài VAM (không có hồ sơ, vai trò “khách mời”, không có mã thành viên).`];
+  if (external.overlap) notes.push(`${external.overlap} email ngoài đã có trong danh sách lấy từ VAM — gửi theo hồ sơ VAM, một lá.`);
+  if (external.duplicates) notes.push(`${external.duplicates} email nhập lặp lại — chỉ gửi một lá.`);
+  if (external.nameless) {
+    notes.push(
+      preview.nameRequired
+        ? `${external.nameless} người chưa có tên: mẫu thư dùng ô Tên người nhận nên KHÔNG gửi được cho họ.`
+        : `${external.nameless} người chưa có tên: mẫu thư không dùng ô Tên người nhận, thư vẫn gửi được.`
+    );
+  }
+  return (
+    <div className="grid gap-2" data-testid="custom-external-summary">
+      <ul className="rounded-md border border-vam-line bg-white px-3 py-2 text-xs text-slate-700">
+        {notes.map((note) => (
+          <li key={note}>{note}</li>
+        ))}
+      </ul>
+      {external.problems.length ? (
+        <ProblemList
+          title={`${external.invalidCount} dòng email ngoài VAM không hợp lệ — sẽ không gửi`}
+          lines={external.problems}
+          testId="custom-external-problems"
+        />
+      ) : null}
     </div>
   );
 }

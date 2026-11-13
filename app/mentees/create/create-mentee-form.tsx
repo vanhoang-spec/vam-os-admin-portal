@@ -5,6 +5,7 @@ import { useFormState } from "react-dom";
 import { InlineActionMessage, LoadingButton, useActionTiming } from "@/components/action-feedback";
 import { useMemo, useState } from "react";
 import { createMenteeAction, type PeopleActionState } from "@/app/actions/people";
+import { MENTEE_YEAR_OF_STUDY_OPTIONS } from "@/lib/mentee-year-of-study-core";
 import type { Person } from "@/lib/types";
 
 const initialState: PeopleActionState = { ok: false, message: null };
@@ -142,11 +143,15 @@ export function CreateMenteeForm({ people }: { people: Person[] }) {
             <input name="mssv" className={inputClass} />
           </label>
           <label className="block">
-            <span className="text-xs font-medium uppercase text-slate-500">Năm học (year of study)</span>
-            <input name="year_of_study" className={inputClass} placeholder="vd: 2024-2025" />
-            <span className="mt-1 block text-[11px] text-amber-700">
-              Schema chưa có cột riêng cho year_of_study; nếu để trống thì class_cohort sẽ được dùng. Giá trị này được ghi vào audit.
-            </span>
+            <span className="text-xs font-medium uppercase text-slate-500">Năm học</span>
+            <select name="year_of_study" defaultValue="" className={inputClass}>
+              <option value="">-- Chưa rõ --</option>
+              {MENTEE_YEAR_OF_STUDY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 

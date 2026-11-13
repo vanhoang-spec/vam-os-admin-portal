@@ -21,7 +21,8 @@ vi.mock("@/app/actions/bulk-mail", () => ({
   continueBulkSendAction: vi.fn(),
   previewCustomListAction: vi.fn(),
   searchCustomListPeopleAction: vi.fn(),
-  startCustomBulkSendAction: vi.fn()
+  startCustomBulkSendAction: vi.fn(),
+  readExternalEmailFileAction: vi.fn()
 }));
 
 const dispatchers = new Map<unknown, (formData: FormData) => Promise<void>>();

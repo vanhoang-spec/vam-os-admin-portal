@@ -108,7 +108,7 @@ export const TEMPLATE_SPECS: Record<TemplateKind, TemplateSpec> = {
         label: "Vai trò",
         required: false,
         sample: "mentee",
-        hint: "'mentor', 'mentee', 'ban tổ chức' hoặc 'người tham dự', theo nhóm nhận thư."
+        hint: "'mentor', 'mentee', 'ban tổ chức', 'người tham dự' hoặc 'khách mời' (email ngoài VAM), theo nhóm nhận thư."
       },
       {
         key: "ma_thanh_vien",
@@ -116,7 +116,7 @@ export const TEMPLATE_SPECS: Record<TemplateKind, TemplateSpec> = {
         required: false,
         emptyAllowed: true,
         sample: "UEHR0012",
-        hint: "Mã thành viên của Mentor/Mentee, ví dụ UEHR0012; chưa có mã mới thì dùng mã cũ. Không có mã (BTC, người tham dự sự kiện, mentee rớt) thì để trống."
+        hint: "Mã thành viên của Mentor/Mentee, ví dụ UEHR0012; chưa có mã mới thì dùng mã cũ. Người tham dự sự kiện có mã khi email đăng ký khớp đúng một hồ sơ có mã mới. Không có mã (BTC, khách ngoài chương trình, mentee rớt) thì để trống."
       },
       {
         key: "xung_ho",
